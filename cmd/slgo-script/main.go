@@ -1,9 +1,13 @@
-// Command slgo-script puts a script inside a prim and then replaces it
-// with one that will not compile, to see what the simulator says.
+// Command slgo-script saves scripts that will not compile, to see what
+// the simulator says about them.
 //
-// A script in agent inventory is only stored; it is compiled when it
-// goes into a prim, so UpdateScriptTask is the capability that has an
-// opinion about whether the source is any good.
+// Both capabilities compile.  UpdateScriptAgent, which saves the copy
+// in agent inventory, answers exactly what UpdateScriptTask answers for
+// the copy inside a prim -- same verdict, same message, same position,
+// case for case.  Saving to inventory is not merely storing text, and
+// nothing has to be rezzed to find out whether source is good.
+//
+// Both are asked to compile for Mono.  LSL2 is not interesting.
 //
 // What the simulator answers, observed against the test region:
 //
@@ -53,8 +57,10 @@ var (
 	addr    = flag.String("server", "127.0.0.1:7807", "slgod address")
 	profile = flag.String("agent", "example", "hosted agent")
 	at      = flag.String("at", "200,213,27", "where to rez, region local")
-	target  = flag.String("target", "mono", "compile target: mono or lsl2")
 )
+
+// target is the compile target.  Mono is the only one that matters.
+const target = "mono"
 
 const (
 	assetScript = 10
@@ -178,10 +184,42 @@ func main() {
 	}
 	fmt.Printf("prim %s  local %d\n\n", prim.id, prim.local)
 
-	// A script in inventory, then inside the prim.
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"a script that compiles", goodScript},
+		{"an unterminated string", syntaxError},
+		{"a type error and an unknown function", semanticError},
+		{"one error at a known line and column", positionProbe},
+		{"two independent errors", twoErrors},
+		{"undefined name 1 char, starts col 13", nameProbe("x")},
+		{"undefined name 2 chars, starts col 13", nameProbe("xy")},
+		{"undefined name 8 chars, starts col 13", nameProbe("abcdefgh")},
+	}
+
+	// The copy in agent inventory.  Saving there compiles too, so the
+	// same answers should come back without a prim being involved at
+	// all.
 	item := r.createScript(ctx, "slgo compile test")
-	fmt.Printf("script item %s\n", item.ItemID)
-	if _, err := r.upload(ctx, "UpdateScriptAgent", nil, item.ItemID, msg.UUID{}, []byte(goodScript)); err != nil {
+	fmt.Printf("script item %s\n\n", item.ItemID)
+	fmt.Println("--- UpdateScriptAgent: the copy in inventory ---")
+	for _, c := range cases {
+		fmt.Printf("\n=== %s ===\n", c.name)
+		body, err := r.upload(ctx, "UpdateScriptAgent",
+			map[string]any{"target": target}, item.ItemID, msg.UUID{}, []byte(c.src))
+		if err != nil {
+			fmt.Printf("  request failed: %v\n", err)
+			continue
+		}
+		report(body)
+		time.Sleep(2 * time.Second)
+	}
+
+	// Leave inventory holding something that compiles, then put it in
+	// the prim.
+	if _, err := r.upload(ctx, "UpdateScriptAgent",
+		map[string]any{"target": target}, item.ItemID, msg.UUID{}, []byte(goodScript)); err != nil {
 		log.Fatalf("uploading to inventory: %v", err)
 	}
 	r.intoTask(ctx, prim.local, item)
@@ -202,25 +240,14 @@ func main() {
 	}
 	fmt.Printf("in the prim as item %s\n", task.ItemID)
 
-	// Now compile things at it.
-	for _, c := range []struct {
-		name string
-		src  string
-	}{
-		{"a script that compiles", goodScript},
-		{"an unterminated string", syntaxError},
-		{"a type error and an unknown function", semanticError},
-		{"one error at a known line and column", positionProbe},
-		{"two independent errors", twoErrors},
-		{"undefined name 1 char, starts col 13", nameProbe("x")},
-		{"undefined name 2 chars, starts col 13", nameProbe("xy")},
-		{"undefined name 8 chars, starts col 13", nameProbe("abcdefgh")},
-	} {
+	// The copy inside the prim.
+	fmt.Println("\n--- UpdateScriptTask: the copy inside the prim ---")
+	for _, c := range cases {
 		fmt.Printf("\n=== %s ===\n", c.name)
 		extra := map[string]any{
 			"task_id":           prim.id.String(),
 			"is_script_running": true,
-			"target":            *target,
+			"target":            target,
 		}
 		body, err := r.upload(ctx, "UpdateScriptTask", extra, task.ItemID, prim.id, []byte(c.src))
 		if err != nil {
