@@ -557,7 +557,17 @@ transfer: `RequestTaskInventory` answers with a *filename*, and
 acknowledged before the next is sent.  `client.Xfers` reassembles them.
 It is client side, being nothing but messages.
 
-Three things that cost time here:
+Reading an asset's bytes is a third mechanism again.  `ViewerAsset`
+serves the content delivery network -- textures, meshes, sounds -- and
+answers 403 for a notecard, so those come over the UDP asset transfer:
+`TransferRequest` names the item and the asset, the simulator answers
+with a `TransferInfo` carrying the size, and then a run of
+`TransferPacket`.  Nothing is acknowledged, so packets arrive in any
+order and the last is marked by its *status* rather than its number.
+`client.Transfers` reassembles them.  This is the path the C client's
+cache.c uses.
+
+Four things that cost time here:
 
 - **An item copied into a prim gets a new item id.**  The agent
   inventory id does not address it, and using it gets a `NotFound` from
@@ -568,18 +578,15 @@ Three things that cost time here:
 - The first xfer packet carries a four byte length prefix that is not
   part of the file, and the top bit of the packet number marks the
   last one.
+- **A newly rezzed prim has to be confirmed as yours.**  Objects stream
+  in continuously, so the first local id you have not seen before is
+  often a stranger's -- which is how a notecard was once offered to
+  someone else's prim, answered with "Unable to edit this!".
 
 ## Not done
 
 No region crossing, no teleport, no appearance, and inventory is read
 only -- nothing creates, moves or deletes.
-
-Asset *contents* cannot be read back yet.  The `ViewerAsset`
-capability serves the asset CDN -- textures, meshes, sounds -- and
-answers 403 for a notecard.  Reading one needs the UDP asset transfer
-(`TransferRequest`, `TransferInfo`, `TransferPacket`), which is the C
-client's cache.c path and is not built here.  An edit made in world can
-still be confirmed without it: the asset id changes.
 
 The sender writes to an `io.Writer`, which suits the connected socket a
 single simulator needs. Neighbouring simulators at once will want a

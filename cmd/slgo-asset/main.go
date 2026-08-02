@@ -60,7 +60,9 @@ type run struct {
 	byName  map[string]itemRef
 	seen    map[msg.UUID]uint32
 	taskInv map[msg.UUID]string // task id -> inventory filename
+	owners  map[msg.UUID]msg.UUID
 	xfers   *client.Xfers
+	assets  *client.Transfers
 }
 
 func main() {
@@ -76,7 +78,7 @@ func main() {
 	info, err := c.Attach(ctx, *profile,
 		"UpdateCreateInventoryItem", "ObjectUpdate", "ObjectPropertiesFamily",
 		"ReplyTaskInventory", "SendXferPacket", "AbortXfer",
-		"BulkUpdateInventory",
+		"BulkUpdateInventory", "TransferInfo", "TransferPacket",
 		"ChatFromSimulator", "AlertMessage")
 	if err != nil {
 		log.Fatal(err)
@@ -90,8 +92,10 @@ func main() {
 		byName:  map[string]itemRef{},
 		seen:    map[msg.UUID]uint32{},
 		taskInv: map[msg.UUID]string{},
+		owners:  map[msg.UUID]msg.UUID{},
 	}
 	r.xfers = client.NewXfers(c)
+	r.assets = client.NewTransfers(c)
 	fmt.Printf("%s in %s\n\n", info.AvatarName, info.Region)
 
 	go r.read(ctx)
@@ -182,7 +186,7 @@ func main() {
 	}
 	fmt.Printf("  back as item %s, asset %s\n", back.item, back.asset)
 
-	body, err := r.fetchAsset(ctx, back.asset, "notecard")
+	body, err := r.fetchAsset(ctx, back.item, back.asset, client.AssetNotecard)
 	if err != nil {
 		fmt.Printf("  could not read it: %v\n", err)
 		fmt.Println("\ndone")
@@ -234,7 +238,7 @@ type found struct {
 
 func (r *run) read(ctx context.Context) {
 	for m := range r.c.Messages() {
-		if r.xfers.Handle(ctx, m) {
+		if r.xfers.Handle(ctx, m) || r.assets.Handle(m) {
 			continue
 		}
 		v, err := m.Decode()
@@ -264,6 +268,10 @@ func (r *run) read(ctx context.Context) {
 				d := t.ItemData[i]
 				r.byName[nul(d.Name)] = itemRef{d.ItemID, d.AssetID}
 			}
+			r.mu.Unlock()
+		case *msg.ObjectPropertiesFamily:
+			r.mu.Lock()
+			r.owners[t.ObjectData.ObjectID] = t.ObjectData.OwnerID
 			r.mu.Unlock()
 		case *msg.ReplyTaskInventory:
 			r.mu.Lock()
@@ -303,12 +311,37 @@ func (r *run) rez(ctx context.Context, at msg.Vector3) *found {
 	r.send(ctx, m)
 	time.Sleep(6 * time.Second)
 
+	// Objects stream in the whole time, so "new to us" is not the
+	// same as "ours".  Taking the first unseen local id picked up a
+	// stranger's prim and tried to put a notecard in it, which the
+	// simulator answered with "Unable to edit this!".
+	var fresh []found
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	for id, local := range r.seen {
 		if local != 0 && !before[local] {
-			return &found{id: id, local: local}
+			fresh = append(fresh, found{id: id, local: local})
 		}
+	}
+	r.mu.Unlock()
+
+	for _, f := range fresh {
+		q := &msg.RequestObjectPropertiesFamily{}
+		q.AgentData.AgentID, q.AgentData.SessionID = r.me, r.sess
+		q.ObjectData.ObjectID = f.id
+		r.send(ctx, q)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		r.mu.Lock()
+		for _, f := range fresh {
+			if r.owners[f.id] == r.me {
+				r.mu.Unlock()
+				return &f
+			}
+		}
+		r.mu.Unlock()
+		time.Sleep(200 * time.Millisecond)
 	}
 	return nil
 }
@@ -396,19 +429,19 @@ func (r *run) upload(ctx context.Context, capName string, item, task msg.UUID, b
 	return asset, nil
 }
 
-// fetchAsset reads an asset's bytes through the ViewerAsset capability.
-func (r *run) fetchAsset(ctx context.Context, asset msg.UUID, kind string) ([]byte, error) {
-	resp, err := r.c.DoCap(ctx, agent.CapRequest{
-		Cap:  "ViewerAsset",
-		Path: "/?" + kind + "_id=" + asset.String(),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if !resp.OK() {
-		return nil, fmt.Errorf("ViewerAsset: status %d: %s", resp.Status, snippet(resp.Body))
-	}
-	return resp.Body, nil
+// fetchAsset reads an asset's bytes over the UDP asset transfer.
+//
+// The ViewerAsset capability will not do: it serves the content
+// delivery network -- textures, meshes, sounds -- and answers 403 for a
+// notecard.  A notecard or a script has to come this way, which is also
+// the path the C client uses.
+func (r *run) fetchAsset(ctx context.Context, item, asset msg.UUID, aType int32) ([]byte, error) {
+	return r.assets.Fetch(ctx, r.me, r.sess, client.AssetRef{
+		Owner: r.me,
+		Item:  item,
+		Asset: asset,
+		Type:  aType,
+	}, 45*time.Second)
 }
 
 // notecardText pulls the text back out of the notecard container.
