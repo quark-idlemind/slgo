@@ -686,7 +686,7 @@ func TestReconnect(t *testing.T) {
 
 	// The client should hear about it...
 	select {
-	case ev := <-c.Events():
+	case ev := <-c.Notices():
 		if ev.Kind != pb.AgentEvent_DISCONNECTED {
 			t.Errorf("first event was %v", ev.Kind)
 		}

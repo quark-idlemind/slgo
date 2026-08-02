@@ -125,6 +125,7 @@ func (s *Server) Host(ctx context.Context, name string, login agent.Login, opts 
 	// message it does not understand.
 	opts.Recv = append(opts.Recv, msg.KeepBody())
 	opts.Tap = func(p *msg.Packet) { h.relay(p) }
+	opts.OnEvent = func(name string, body []byte) { h.relayEvent(name, body) }
 	h.opts = opts
 
 	a, err := agent.Connect(ctx, acct, opts)
@@ -217,8 +218,8 @@ func (h *Hosted) reconnect(ctx context.Context) (*agent.Agent, error) {
 // notify tells every attached client something happened to the
 // connection under them.
 func (h *Hosted) notify(kind pb.AgentEvent_Kind, detail string) {
-	ev := &pb.ServerPacket{Body: &pb.ServerPacket_Event{
-		Event: &pb.AgentEvent{Kind: kind, Detail: detail},
+	ev := &pb.ServerPacket{Body: &pb.ServerPacket_Notice{
+		Notice: &pb.AgentEvent{Kind: kind, Detail: detail},
 	}}
 	h.mu.RLock()
 	defer h.mu.RUnlock()

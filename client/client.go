@@ -8,6 +8,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"slgo/agent"
+	"slgo/llsd"
 	"slgo/msg"
 	pb "slgo/proto/slgov1"
 )
@@ -36,7 +38,8 @@ type Conn struct {
 
 	stream   pb.Grid_StreamClient
 	messages chan *Message
-	events   chan *pb.AgentEvent
+	events   chan *Event
+	notices  chan *pb.AgentEvent
 
 	closeOnce sync.Once
 	done      chan struct{}
@@ -71,6 +74,22 @@ func (m *Message) Decode() (msg.Message, error) {
 // server has already done it.
 func (m *Message) Reliable() bool { return m.Flags&msg.FlagReliable != 0 }
 
+// Event is one entry from the grid's event queue.
+type Event struct {
+	Name string
+	Body []byte // LLSD encoded
+	At   time.Time
+}
+
+// Decode parses the event body.
+func (e *Event) Decode() (map[string]any, error) {
+	v, err := llsd.Decode(bytes.NewReader(e.Body))
+	if err != nil {
+		return nil, err
+	}
+	return llsd.Map(v), nil
+}
+
 // Dial connects to a server without opening a stream.  Use Attach to
 // start receiving messages.
 func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, error) {
@@ -86,7 +105,8 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 		grid:     pb.NewGridClient(cc),
 		caps:     map[string]bool{},
 		messages: make(chan *Message, 1024),
-		events:   make(chan *pb.AgentEvent, 32),
+		events:   make(chan *Event, 256),
+		notices:  make(chan *pb.AgentEvent, 32),
 		done:     make(chan struct{}),
 	}, nil
 }
@@ -105,6 +125,7 @@ func (c *Conn) finish(err error) {
 		close(c.done)
 		close(c.messages)
 		close(c.events)
+		close(c.notices)
 	})
 }
 
@@ -123,8 +144,14 @@ func (c *Conn) Err() error {
 // ends.
 func (c *Conn) Messages() <-chan *Message { return c.messages }
 
-// Events yields notices about the grid connection itself.
-func (c *Conn) Events() <-chan *pb.AgentEvent { return c.events }
+// Events yields what arrived on the grid's event queue: the messages
+// that no longer come over UDP.  Their bodies are LLSD, not the binary
+// message encoding, which is why they are not on Messages.
+func (c *Conn) Events() <-chan *Event { return c.events }
+
+// Notices yields word about the grid connection itself -- it went
+// away, it came back -- rather than anything the grid said.
+func (c *Conn) Notices() <-chan *pb.AgentEvent { return c.notices }
 
 // Attach opens the packet stream against one of the server's agents and
 // subscribes to the named messages.  "*" means everything; naming
@@ -189,8 +216,17 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 			default: // a client that stops reading loses messages
 			}
 		case *pb.ServerPacket_Event:
+			e := &Event{Name: b.Event.Message, Body: b.Event.Body}
+			if b.Event.ReceivedAt != 0 {
+				e.At = time.UnixMicro(b.Event.ReceivedAt)
+			}
 			select {
-			case c.events <- b.Event:
+			case c.events <- e:
+			default:
+			}
+		case *pb.ServerPacket_Notice:
+			select {
+			case c.notices <- b.Notice:
 			default:
 			}
 		}

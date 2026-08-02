@@ -83,7 +83,7 @@ func (x AgentEvent_Kind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AgentEvent_Kind.Descriptor instead.
 func (AgentEvent_Kind) EnumDescriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{7, 0}
+	return file_slgo_proto_rawDescGZIP(), []int{8, 0}
 }
 
 // ClientPacket is a message the client wants put on the circuit, or the
@@ -388,6 +388,7 @@ type ServerPacket struct {
 	//
 	//	*ServerPacket_Message
 	//	*ServerPacket_Attached
+	//	*ServerPacket_Notice
 	//	*ServerPacket_Event
 	Body          isServerPacket_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
@@ -449,7 +450,16 @@ func (x *ServerPacket) GetAttached() *Attached {
 	return nil
 }
 
-func (x *ServerPacket) GetEvent() *AgentEvent {
+func (x *ServerPacket) GetNotice() *AgentEvent {
+	if x != nil {
+		if x, ok := x.Body.(*ServerPacket_Notice); ok {
+			return x.Notice
+		}
+	}
+	return nil
+}
+
+func (x *ServerPacket) GetEvent() *InboundEvent {
 	if x != nil {
 		if x, ok := x.Body.(*ServerPacket_Event); ok {
 			return x.Event
@@ -470,15 +480,96 @@ type ServerPacket_Attached struct {
 	Attached *Attached `protobuf:"bytes,2,opt,name=attached,proto3,oneof"`
 }
 
+type ServerPacket_Notice struct {
+	// A note about the grid connection itself: it went away, it came
+	// back.  Not grid traffic.
+	Notice *AgentEvent `protobuf:"bytes,3,opt,name=notice,proto3,oneof"`
+}
+
 type ServerPacket_Event struct {
-	Event *AgentEvent `protobuf:"bytes,3,opt,name=event,proto3,oneof"`
+	// Something that arrived on the event queue rather than the UDP
+	// circuit.  Its body is LLSD, not the binary message encoding, so
+	// it cannot share InboundMessage.
+	Event *InboundEvent `protobuf:"bytes,4,opt,name=event,proto3,oneof"`
 }
 
 func (*ServerPacket_Message) isServerPacket_Body() {}
 
 func (*ServerPacket_Attached) isServerPacket_Body() {}
 
+func (*ServerPacket_Notice) isServerPacket_Body() {}
+
 func (*ServerPacket_Event) isServerPacket_Body() {}
+
+// InboundEvent is one entry from EventQueueGet.
+//
+// The queue carries what UDP no longer does: ParcelProperties,
+// TeleportFinish, EstablishAgentCommunication and the rest.  A poll
+// must be kept running continuously and its sequence acknowledged, so
+// it belongs on the server for the same reason the circuit does -- a
+// client restart would lose the sequence and drop events.
+type InboundEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The event name, as the queue gives it.  Some match a template
+	// message and some have no UDP equivalent at all.
+	Message string `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	// The event body, LLSD encoded.  The server does not look inside.
+	Body          []byte `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	ReceivedAt    int64  `protobuf:"varint,3,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InboundEvent) Reset() {
+	*x = InboundEvent{}
+	mi := &file_slgo_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InboundEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InboundEvent) ProtoMessage() {}
+
+func (x *InboundEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InboundEvent.ProtoReflect.Descriptor instead.
+func (*InboundEvent) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *InboundEvent) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *InboundEvent) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *InboundEvent) GetReceivedAt() int64 {
+	if x != nil {
+		return x.ReceivedAt
+	}
+	return 0
+}
 
 type Attached struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -489,7 +580,7 @@ type Attached struct {
 
 func (x *Attached) Reset() {
 	*x = Attached{}
-	mi := &file_slgo_proto_msgTypes[5]
+	mi := &file_slgo_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +592,7 @@ func (x *Attached) String() string {
 func (*Attached) ProtoMessage() {}
 
 func (x *Attached) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[5]
+	mi := &file_slgo_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +605,7 @@ func (x *Attached) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attached.ProtoReflect.Descriptor instead.
 func (*Attached) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{5}
+	return file_slgo_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Attached) GetAgent() *AgentInfo {
@@ -541,7 +632,7 @@ type InboundMessage struct {
 
 func (x *InboundMessage) Reset() {
 	*x = InboundMessage{}
-	mi := &file_slgo_proto_msgTypes[6]
+	mi := &file_slgo_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -553,7 +644,7 @@ func (x *InboundMessage) String() string {
 func (*InboundMessage) ProtoMessage() {}
 
 func (x *InboundMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[6]
+	mi := &file_slgo_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -566,7 +657,7 @@ func (x *InboundMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InboundMessage.ProtoReflect.Descriptor instead.
 func (*InboundMessage) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{6}
+	return file_slgo_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *InboundMessage) GetId() uint32 {
@@ -622,7 +713,7 @@ type AgentEvent struct {
 
 func (x *AgentEvent) Reset() {
 	*x = AgentEvent{}
-	mi := &file_slgo_proto_msgTypes[7]
+	mi := &file_slgo_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -634,7 +725,7 @@ func (x *AgentEvent) String() string {
 func (*AgentEvent) ProtoMessage() {}
 
 func (x *AgentEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[7]
+	mi := &file_slgo_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -647,7 +738,7 @@ func (x *AgentEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentEvent.ProtoReflect.Descriptor instead.
 func (*AgentEvent) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{7}
+	return file_slgo_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AgentEvent) GetKind() AgentEvent_Kind {
@@ -681,7 +772,7 @@ type AgentInfo struct {
 
 func (x *AgentInfo) Reset() {
 	*x = AgentInfo{}
-	mi := &file_slgo_proto_msgTypes[8]
+	mi := &file_slgo_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -693,7 +784,7 @@ func (x *AgentInfo) String() string {
 func (*AgentInfo) ProtoMessage() {}
 
 func (x *AgentInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[8]
+	mi := &file_slgo_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -706,7 +797,7 @@ func (x *AgentInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentInfo.ProtoReflect.Descriptor instead.
 func (*AgentInfo) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{8}
+	return file_slgo_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *AgentInfo) GetName() string {
@@ -780,7 +871,7 @@ type ListAgentsRequest struct {
 
 func (x *ListAgentsRequest) Reset() {
 	*x = ListAgentsRequest{}
-	mi := &file_slgo_proto_msgTypes[9]
+	mi := &file_slgo_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -792,7 +883,7 @@ func (x *ListAgentsRequest) String() string {
 func (*ListAgentsRequest) ProtoMessage() {}
 
 func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[9]
+	mi := &file_slgo_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -805,7 +896,7 @@ func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentsRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{9}
+	return file_slgo_proto_rawDescGZIP(), []int{10}
 }
 
 type ListAgentsResponse struct {
@@ -817,7 +908,7 @@ type ListAgentsResponse struct {
 
 func (x *ListAgentsResponse) Reset() {
 	*x = ListAgentsResponse{}
-	mi := &file_slgo_proto_msgTypes[10]
+	mi := &file_slgo_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -829,7 +920,7 @@ func (x *ListAgentsResponse) String() string {
 func (*ListAgentsResponse) ProtoMessage() {}
 
 func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[10]
+	mi := &file_slgo_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -842,7 +933,7 @@ func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentsResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{10}
+	return file_slgo_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListAgentsResponse) GetAgents() []*AgentInfo {
@@ -861,7 +952,7 @@ type StatusRequest struct {
 
 func (x *StatusRequest) Reset() {
 	*x = StatusRequest{}
-	mi := &file_slgo_proto_msgTypes[11]
+	mi := &file_slgo_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -873,7 +964,7 @@ func (x *StatusRequest) String() string {
 func (*StatusRequest) ProtoMessage() {}
 
 func (x *StatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[11]
+	mi := &file_slgo_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -886,7 +977,7 @@ func (x *StatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusRequest.ProtoReflect.Descriptor instead.
 func (*StatusRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{11}
+	return file_slgo_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *StatusRequest) GetAgent() string {
@@ -918,7 +1009,7 @@ type StatusResponse struct {
 
 func (x *StatusResponse) Reset() {
 	*x = StatusResponse{}
-	mi := &file_slgo_proto_msgTypes[12]
+	mi := &file_slgo_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -930,7 +1021,7 @@ func (x *StatusResponse) String() string {
 func (*StatusResponse) ProtoMessage() {}
 
 func (x *StatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[12]
+	mi := &file_slgo_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -943,7 +1034,7 @@ func (x *StatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusResponse.ProtoReflect.Descriptor instead.
 func (*StatusResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{12}
+	return file_slgo_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StatusResponse) GetAgent() *AgentInfo {
@@ -1044,7 +1135,7 @@ type CapRequest struct {
 
 func (x *CapRequest) Reset() {
 	*x = CapRequest{}
-	mi := &file_slgo_proto_msgTypes[13]
+	mi := &file_slgo_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1056,7 +1147,7 @@ func (x *CapRequest) String() string {
 func (*CapRequest) ProtoMessage() {}
 
 func (x *CapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[13]
+	mi := &file_slgo_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1069,7 +1160,7 @@ func (x *CapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CapRequest.ProtoReflect.Descriptor instead.
 func (*CapRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{13}
+	return file_slgo_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CapRequest) GetAgent() string {
@@ -1124,7 +1215,7 @@ type CapResponse struct {
 
 func (x *CapResponse) Reset() {
 	*x = CapResponse{}
-	mi := &file_slgo_proto_msgTypes[14]
+	mi := &file_slgo_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1136,7 +1227,7 @@ func (x *CapResponse) String() string {
 func (*CapResponse) ProtoMessage() {}
 
 func (x *CapResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[14]
+	mi := &file_slgo_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1149,7 +1240,7 @@ func (x *CapResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CapResponse.ProtoReflect.Descriptor instead.
 func (*CapResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{14}
+	return file_slgo_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CapResponse) GetStatus() int32 {
@@ -1176,7 +1267,7 @@ type SendRequest struct {
 
 func (x *SendRequest) Reset() {
 	*x = SendRequest{}
-	mi := &file_slgo_proto_msgTypes[15]
+	mi := &file_slgo_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1188,7 +1279,7 @@ func (x *SendRequest) String() string {
 func (*SendRequest) ProtoMessage() {}
 
 func (x *SendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[15]
+	mi := &file_slgo_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1201,7 +1292,7 @@ func (x *SendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendRequest.ProtoReflect.Descriptor instead.
 func (*SendRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{15}
+	return file_slgo_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SendRequest) GetAgent() string {
@@ -1226,7 +1317,7 @@ type SendResponse struct {
 
 func (x *SendResponse) Reset() {
 	*x = SendResponse{}
-	mi := &file_slgo_proto_msgTypes[16]
+	mi := &file_slgo_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1238,7 +1329,7 @@ func (x *SendResponse) String() string {
 func (*SendResponse) ProtoMessage() {}
 
 func (x *SendResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[16]
+	mi := &file_slgo_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1251,7 +1342,7 @@ func (x *SendResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendResponse.ProtoReflect.Descriptor instead.
 func (*SendResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{16}
+	return file_slgo_proto_rawDescGZIP(), []int{17}
 }
 
 var File_slgo_proto protoreflect.FileDescriptor
@@ -1276,12 +1367,18 @@ const file_slgo_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\fR\x04body\x12\x1a\n" +
-	"\breliable\x18\x04 \x01(\bR\breliable\"\xa9\x01\n" +
+	"\breliable\x18\x04 \x01(\bR\breliable\"\xda\x01\n" +
 	"\fServerPacket\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x17.slgo.v1.InboundMessageH\x00R\amessage\x12/\n" +
-	"\battached\x18\x02 \x01(\v2\x11.slgo.v1.AttachedH\x00R\battached\x12+\n" +
-	"\x05event\x18\x03 \x01(\v2\x13.slgo.v1.AgentEventH\x00R\x05eventB\x06\n" +
-	"\x04body\"4\n" +
+	"\battached\x18\x02 \x01(\v2\x11.slgo.v1.AttachedH\x00R\battached\x12-\n" +
+	"\x06notice\x18\x03 \x01(\v2\x13.slgo.v1.AgentEventH\x00R\x06notice\x12-\n" +
+	"\x05event\x18\x04 \x01(\v2\x15.slgo.v1.InboundEventH\x00R\x05eventB\x06\n" +
+	"\x04body\"]\n" +
+	"\fInboundEvent\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
+	"\x04body\x18\x02 \x01(\fR\x04body\x12\x1f\n" +
+	"\vreceived_at\x18\x03 \x01(\x03R\n" +
+	"receivedAt\"4\n" +
 	"\bAttached\x12(\n" +
 	"\x05agent\x18\x01 \x01(\v2\x12.slgo.v1.AgentInfoR\x05agent\"\x9b\x01\n" +
 	"\x0eInboundMessage\x12\x0e\n" +
@@ -1376,7 +1473,7 @@ func file_slgo_proto_rawDescGZIP() []byte {
 }
 
 var file_slgo_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_slgo_proto_goTypes = []any{
 	(AgentEvent_Kind)(0),       // 0: slgo.v1.AgentEvent.Kind
 	(*ClientPacket)(nil),       // 1: slgo.v1.ClientPacket
@@ -1384,48 +1481,50 @@ var file_slgo_proto_goTypes = []any{
 	(*Attach)(nil),             // 3: slgo.v1.Attach
 	(*OutboundMessage)(nil),    // 4: slgo.v1.OutboundMessage
 	(*ServerPacket)(nil),       // 5: slgo.v1.ServerPacket
-	(*Attached)(nil),           // 6: slgo.v1.Attached
-	(*InboundMessage)(nil),     // 7: slgo.v1.InboundMessage
-	(*AgentEvent)(nil),         // 8: slgo.v1.AgentEvent
-	(*AgentInfo)(nil),          // 9: slgo.v1.AgentInfo
-	(*ListAgentsRequest)(nil),  // 10: slgo.v1.ListAgentsRequest
-	(*ListAgentsResponse)(nil), // 11: slgo.v1.ListAgentsResponse
-	(*StatusRequest)(nil),      // 12: slgo.v1.StatusRequest
-	(*StatusResponse)(nil),     // 13: slgo.v1.StatusResponse
-	(*CapRequest)(nil),         // 14: slgo.v1.CapRequest
-	(*CapResponse)(nil),        // 15: slgo.v1.CapResponse
-	(*SendRequest)(nil),        // 16: slgo.v1.SendRequest
-	(*SendResponse)(nil),       // 17: slgo.v1.SendResponse
-	nil,                        // 18: slgo.v1.StatusResponse.UnhandledEntry
+	(*InboundEvent)(nil),       // 6: slgo.v1.InboundEvent
+	(*Attached)(nil),           // 7: slgo.v1.Attached
+	(*InboundMessage)(nil),     // 8: slgo.v1.InboundMessage
+	(*AgentEvent)(nil),         // 9: slgo.v1.AgentEvent
+	(*AgentInfo)(nil),          // 10: slgo.v1.AgentInfo
+	(*ListAgentsRequest)(nil),  // 11: slgo.v1.ListAgentsRequest
+	(*ListAgentsResponse)(nil), // 12: slgo.v1.ListAgentsResponse
+	(*StatusRequest)(nil),      // 13: slgo.v1.StatusRequest
+	(*StatusResponse)(nil),     // 14: slgo.v1.StatusResponse
+	(*CapRequest)(nil),         // 15: slgo.v1.CapRequest
+	(*CapResponse)(nil),        // 16: slgo.v1.CapResponse
+	(*SendRequest)(nil),        // 17: slgo.v1.SendRequest
+	(*SendResponse)(nil),       // 18: slgo.v1.SendResponse
+	nil,                        // 19: slgo.v1.StatusResponse.UnhandledEntry
 }
 var file_slgo_proto_depIdxs = []int32{
 	3,  // 0: slgo.v1.ClientPacket.attach:type_name -> slgo.v1.Attach
 	4,  // 1: slgo.v1.ClientPacket.message:type_name -> slgo.v1.OutboundMessage
 	2,  // 2: slgo.v1.ClientPacket.subscribe:type_name -> slgo.v1.Subscribe
-	7,  // 3: slgo.v1.ServerPacket.message:type_name -> slgo.v1.InboundMessage
-	6,  // 4: slgo.v1.ServerPacket.attached:type_name -> slgo.v1.Attached
-	8,  // 5: slgo.v1.ServerPacket.event:type_name -> slgo.v1.AgentEvent
-	9,  // 6: slgo.v1.Attached.agent:type_name -> slgo.v1.AgentInfo
-	0,  // 7: slgo.v1.AgentEvent.kind:type_name -> slgo.v1.AgentEvent.Kind
-	9,  // 8: slgo.v1.ListAgentsResponse.agents:type_name -> slgo.v1.AgentInfo
-	9,  // 9: slgo.v1.StatusResponse.agent:type_name -> slgo.v1.AgentInfo
-	18, // 10: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
-	4,  // 11: slgo.v1.SendRequest.message:type_name -> slgo.v1.OutboundMessage
-	1,  // 12: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
-	10, // 13: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
-	12, // 14: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
-	14, // 15: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
-	16, // 16: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
-	5,  // 17: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
-	11, // 18: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
-	13, // 19: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
-	15, // 20: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
-	17, // 21: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
-	17, // [17:22] is the sub-list for method output_type
-	12, // [12:17] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	8,  // 3: slgo.v1.ServerPacket.message:type_name -> slgo.v1.InboundMessage
+	7,  // 4: slgo.v1.ServerPacket.attached:type_name -> slgo.v1.Attached
+	9,  // 5: slgo.v1.ServerPacket.notice:type_name -> slgo.v1.AgentEvent
+	6,  // 6: slgo.v1.ServerPacket.event:type_name -> slgo.v1.InboundEvent
+	10, // 7: slgo.v1.Attached.agent:type_name -> slgo.v1.AgentInfo
+	0,  // 8: slgo.v1.AgentEvent.kind:type_name -> slgo.v1.AgentEvent.Kind
+	10, // 9: slgo.v1.ListAgentsResponse.agents:type_name -> slgo.v1.AgentInfo
+	10, // 10: slgo.v1.StatusResponse.agent:type_name -> slgo.v1.AgentInfo
+	19, // 11: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
+	4,  // 12: slgo.v1.SendRequest.message:type_name -> slgo.v1.OutboundMessage
+	1,  // 13: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
+	11, // 14: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
+	13, // 15: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
+	15, // 16: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
+	17, // 17: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
+	5,  // 18: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
+	12, // 19: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
+	14, // 20: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
+	16, // 21: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
+	18, // 22: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
+	18, // [18:23] is the sub-list for method output_type
+	13, // [13:18] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_slgo_proto_init() }
@@ -1441,6 +1540,7 @@ func file_slgo_proto_init() {
 	file_slgo_proto_msgTypes[4].OneofWrappers = []any{
 		(*ServerPacket_Message)(nil),
 		(*ServerPacket_Attached)(nil),
+		(*ServerPacket_Notice)(nil),
 		(*ServerPacket_Event)(nil),
 	}
 	type x struct{}
@@ -1449,7 +1549,7 @@ func file_slgo_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_slgo_proto_rawDesc), len(file_slgo_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   18,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

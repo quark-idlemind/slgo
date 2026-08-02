@@ -461,9 +461,39 @@ checks neither leaks into the other. They exist so that a package level
 cache added later fails a test instead of being discovered in
 production.
 
+## The event queue
+
+Some messages no longer come over UDP.  The template marks them
+`UDPDeprecated` and the simulator simply does not answer them on the
+circuit: `ParcelProperties`, `TeleportFinish`,
+`EstablishAgentCommunication` and a growing list.  They arrive on
+`EventQueueGet`, a long poll whose replies carry an id that the next
+poll acknowledges.
+
+That poll lives in the server, beside the circuit, for the same reason
+the circuit does: it has to run continuously, and a client restart
+would lose the sequence and drop whatever arrived in the gap.  This is
+the one place where "do it in the client" does not work.
+
+Events reach clients on their own channel, because their bodies are
+LLSD rather than the binary message encoding:
+
+    c.Attach(ctx, "example", "ParcelProperties")
+    for e := range c.Events() {
+        body, _ := e.Decode()   // map[string]any
+    }
+
+Subscriptions are by name and cover both, so `ParcelProperties` gets
+you the event whether it arrives on the circuit or the queue.
+
+One trap worth knowing: the queue sends packed fields as `<binary>`,
+not `<integer>`.  `ParcelFlags` arrives as four big endian bytes.
+`llsd.Int` decodes those, because the alternative -- returning zero --
+reads as a confident "every permission is off" rather than as "I could
+not tell", and that is exactly the wrong way for this to fail.
+
 ## Not done
 
-No event queue, so nothing that arrives over `EventQueueGet` is seen.
 No region crossing, no teleport, no asset transfer, no appearance, and
 inventory is read only -- nothing creates, moves or deletes.
 

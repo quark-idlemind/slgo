@@ -52,6 +52,8 @@ type Agent struct {
 	handshook signal
 	loggedOut signal
 
+	eq eventQueue
+
 	// lastPacket is when anything last arrived from the simulator,
 	// as unix nanoseconds.  The watchdog reads it; the tap writes
 	// it.
@@ -109,6 +111,11 @@ type Options struct {
 	// Recv is passed through to the receiver.  A relay wants
 	// msg.KeepBody so it can pass on a message it cannot decode.
 	Recv []msg.ReceiverOption
+
+	// OnEvent receives what arrives on the event queue.  Nil turns
+	// the poll off, which is the right thing for a one-shot client
+	// that does not care.
+	OnEvent EventHandler
 
 	// Idle ends the session when nothing has arrived from the
 	// simulator for this long.  Default 60s; a negative value
@@ -206,6 +213,12 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 			return nil, err
 		}
 		a.Caps = caps
+	}
+
+	// The queue needs the capability, so it starts after the
+	// capabilities have been fetched rather than with the circuit.
+	if opts.OnEvent != nil {
+		a.spawn(func() error { a.runEventQueue(runCtx, opts.OnEvent); return nil })
 	}
 	return a, nil
 }

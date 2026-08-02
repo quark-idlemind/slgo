@@ -299,7 +299,13 @@ func String(m map[string]any, key string) string {
 	return ""
 }
 
-// Int reads an integer field, accepting a number that arrived as text.
+// Int reads an integer field.
+//
+// It accepts a number that arrived as text, and one that arrived as
+// <binary>, which is how the event queue sends packed fields such as
+// ParcelFlags -- big endian, as LLSD binary always is.  Returning zero
+// for those would be worse than useless: a flags word of zero reads as
+// a definite "everything is off" rather than as "I could not tell".
 func Int(m map[string]any, key string) int64 {
 	switch v := m[key].(type) {
 	case int64:
@@ -311,6 +317,10 @@ func Int(m map[string]any, key string) int64 {
 			return 1
 		}
 		return 0
+	case []byte:
+		if n, ok := binInt(v); ok {
+			return n
+		}
 	case string:
 		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
 		if err == nil {
@@ -318,4 +328,40 @@ func Int(m map[string]any, key string) int64 {
 		}
 	}
 	return 0
+}
+
+// binInt reads a big endian unsigned integer of 1, 2, 4 or 8 bytes.
+func binInt(b []byte) (int64, bool) {
+	switch len(b) {
+	case 1, 2, 4, 8:
+	default:
+		return 0, false
+	}
+	var n uint64
+	for _, c := range b {
+		n = n<<8 | uint64(c)
+	}
+	return int64(n), true
+}
+
+// Bytes reads a binary field, or nil.
+func Bytes(m map[string]any, key string) []byte {
+	b, _ := m[key].([]byte)
+	return b
+}
+
+// Bool reads a boolean field, accepting the integer and text forms.
+func Bool(m map[string]any, key string) bool {
+	switch v := m[key].(type) {
+	case bool:
+		return v
+	case int64:
+		return v != 0
+	case []byte:
+		n, ok := binInt(v)
+		return ok && n != 0
+	case string:
+		return v == "1" || strings.EqualFold(v, "true")
+	}
+	return false
 }

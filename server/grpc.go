@@ -30,9 +30,10 @@ type Client struct {
 	host *Hosted
 	out  chan *pb.ServerPacket
 
-	mu   sync.RWMutex
-	subs map[msg.ID]bool
-	all  bool
+	mu    sync.RWMutex
+	subs  map[msg.ID]bool
+	names map[string]bool // event queue events, which have no number
+	all   bool
 
 	closed  atomic.Bool
 	dropped atomic.Uint64
@@ -44,6 +45,15 @@ func (c *Client) wants(id msg.ID) bool {
 	return c.all || c.subs[id]
 }
 
+// wantsEvent gates event queue events, which are named rather than
+// numbered: some match a template message and some have no UDP
+// equivalent at all, so the name is all there is to go on.
+func (c *Client) wantsEvent(name string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.all || c.names[name]
+}
+
 // setSubs applies a subscription change.  A name this build's template
 // does not have is ignored rather than refused: the client may know
 // something we do not, and the number it wants will still relay.
@@ -53,13 +63,27 @@ func (c *Client) setSubs(s *pb.Subscribe) []string {
 
 	if s.Set != nil {
 		c.subs = map[msg.ID]bool{}
+		c.names = map[string]bool{}
 		c.all = false
+	}
+	if c.names == nil {
+		c.names = map[string]bool{}
 	}
 	apply := func(names []string, on bool) {
 		for _, n := range names {
 			if n == "*" {
 				c.all = on
 				continue
+			}
+			// A name goes in both maps.  It may be a
+			// template message, an event queue event, or --
+			// like ParcelProperties -- a message that used
+			// to arrive on the circuit and now arrives on
+			// the queue.
+			if on {
+				c.names[n] = true
+			} else {
+				delete(c.names, n)
 			}
 			if info := msg.LookupName(n); info != nil {
 				if on {
@@ -74,14 +98,12 @@ func (c *Client) setSubs(s *pb.Subscribe) []string {
 	apply(s.Add, true)
 	apply(s.Remove, false)
 
-	out := make([]string, 0, len(c.subs))
+	out := make([]string, 0, len(c.names))
 	if c.all {
 		out = append(out, "*")
 	}
-	for id := range c.subs {
-		if info := msg.Lookup(id); info != nil {
-			out = append(out, info.Name)
-		}
+	for n := range c.names {
+		out = append(out, n)
 	}
 	return out
 }
@@ -152,6 +174,33 @@ func (h *Hosted) relay(p *msg.Packet) {
 	h.relayed.Add(1)
 }
 
+// relayEvent hands an event queue event to every client that asked for
+// it by name.  As with a circuit message, the server does not look
+// inside: the body crosses as the LLSD bytes it arrived as.
+func (h *Hosted) relayEvent(name string, body []byte) {
+	h.mu.RLock()
+	var want []*Client
+	for c := range h.clients {
+		if c.wantsEvent(name) {
+			want = append(want, c)
+		}
+	}
+	h.mu.RUnlock()
+	if len(want) == 0 {
+		return
+	}
+
+	sp := &pb.ServerPacket{Body: &pb.ServerPacket_Event{Event: &pb.InboundEvent{
+		Message:    name,
+		Body:       body,
+		ReceivedAt: time.Now().UnixMicro(),
+	}}}
+	for _, c := range want {
+		c.send(sp)
+	}
+	h.relayed.Add(1)
+}
+
 // ------------------------------------------------------------- stream
 
 // Stream is the packet channel.  The first frame must be an Attach.
@@ -172,9 +221,10 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	}
 
 	c := &Client{
-		host: h,
-		out:  make(chan *pb.ServerPacket, streamDepth),
-		subs: map[msg.ID]bool{},
+		host:  h,
+		out:   make(chan *pb.ServerPacket, streamDepth),
+		subs:  map[msg.ID]bool{},
+		names: map[string]bool{},
 	}
 	if len(att.Subscribe) > 0 {
 		c.setSubs(&pb.Subscribe{Set: att.Subscribe})

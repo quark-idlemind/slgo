@@ -92,8 +92,34 @@ message ServerPacket {
   oneof body {
     InboundMessage message = 1;
     Attached attached = 2;
-    AgentEvent event = 3;
+
+    // A note about the grid connection itself: it went away, it came
+    // back.  Not grid traffic.
+    AgentEvent notice = 3;
+
+    // Something that arrived on the event queue rather than the UDP
+    // circuit.  Its body is LLSD, not the binary message encoding, so
+    // it cannot share InboundMessage.
+    InboundEvent event = 4;
   }
+}
+
+// InboundEvent is one entry from EventQueueGet.
+//
+// The queue carries what UDP no longer does: ParcelProperties,
+// TeleportFinish, EstablishAgentCommunication and the rest.  A poll
+// must be kept running continuously and its sequence acknowledged, so
+// it belongs on the server for the same reason the circuit does -- a
+// client restart would lose the sequence and drop events.
+message InboundEvent {
+  // The event name, as the queue gives it.  Some match a template
+  // message and some have no UDP equivalent at all.
+  string message = 1;
+
+  // The event body, LLSD encoded.  The server does not look inside.
+  bytes body = 2;
+
+  int64 received_at = 3;
 }
 
 message Attached {
