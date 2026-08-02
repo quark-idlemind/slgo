@@ -122,7 +122,7 @@ func main() {
 
 	// 3. A script, with contents.  It will not run: the no-script parcel has
 	//    ALLOW_OTHER_SCRIPTS off.
-	const scriptText = "default\n{\n    state_entry()\n    {\n        llSay(0, \"slgo script\");\n    }\n}\n"
+	const scriptText = "default\n{\n    state_entry()\n    {\n        llOwnerSay(\"slgo script\");\n    }\n}\n"
 	script := r.createItem(ctx, "slgo script alpha", "written by slgo", assetScript, invScript)
 	fmt.Printf("script item   %s\n", script.ItemID)
 	if _, err := r.upload(ctx, "UpdateScriptAgent", script.ItemID, msg.UUID{}, []byte(scriptText)); err != nil {

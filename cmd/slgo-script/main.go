@@ -71,7 +71,7 @@ const goodScript = `default
 {
     state_entry()
     {
-        llSay(0, "slgo script alpha");
+        llOwnerSay("slgo script alpha");
     }
 }
 `
@@ -82,7 +82,7 @@ const syntaxError = `default
 {
     state_entry()
     {
-        llSay(0, "unterminated
+        llOwnerSay("unterminated
     }
 }
 `
