@@ -70,6 +70,24 @@ var specs = []spec{
 		"    }\n" +
 		"}\n"},
 
+	// Setting face 0 to a texture that is not there.  llSetTexture
+	// takes either a key or the name of something in the object's own
+	// inventory, and "no texture" is neither: the HUD holds two
+	// scripts and nothing else.  It reports what the face holds
+	// afterwards, and whether the line after the failure ran at all,
+	// which is the interesting difference from the math error below.
+	{"slgo texture", `default
+{
+    state_entry()
+    {
+        string me = llGetScriptName();
+        llOwnerSay(me + ": face 0 starts as " + llGetTexture(0));
+        llSetTexture("no texture", 0);
+        llOwnerSay(me + ": still running, face 0 is now " + llGetTexture(0));
+    }
+}
+`},
+
 	// An integer divided by zero.  The divisor is a variable so the
 	// compiler cannot fold it away and refuse at compile time: the
 	// question is what happens at run time, which is a different
