@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"slgo/client"
@@ -22,15 +23,46 @@ const (
 	ChatDirect  = 9
 )
 
+// Chat source types, from the viewer's LLChatSourceType.
+const (
+	SourceSystem = 0
+	SourceAgent  = 1
+	SourceObject = 2
+)
+
 // Line is something heard.
+//
+// It carries everything that distinguishes one utterance from another,
+// because a subscription may be hearing several sources at once and
+// the channel is the only thing they arrive on.  Source says who,
+// SourceType says what kind of thing that is, and Type says which
+// channel it came in on -- open chat and the debug channel are the
+// same message with a different Type.
 type Line struct {
 	At       time.Time
 	Sequence uint32 // the packet it arrived in
-	Source   msg.UUID
-	From     string
-	Type     uint8
-	Text     string
+
+	// Source is the object or avatar that spoke; Owner is who owns it
+	// when it is an object, and From is the name shown.
+	Source msg.UUID
+	Owner  msg.UUID
+	From   string
+
+	SourceType uint8
+	Type       uint8
+
+	// Audible is whether the simulator thought we could hear it.
+	Audible uint8
+
+	// Position is where it was said.
+	Position msg.Vector3
+
+	Text string
 }
+
+// FromObject and FromAgent say what kind of thing spoke.
+func (l Line) FromObject() bool { return l.SourceType == SourceObject }
+func (l Line) FromAgent() bool  { return l.SourceType == SourceAgent }
 
 // Debug reports whether the line is on the channel the simulator puts
 // script errors on.
@@ -195,12 +227,16 @@ func (c *collector) collected() []Line {
 func (w *World) chat(raw *client.Message, m *msg.ChatFromSimulator) {
 	d := &m.ChatData
 	l := Line{
-		At:       raw.At,
-		Sequence: raw.Sequence,
-		Source:   d.SourceID,
-		From:     trimNul(d.FromName),
-		Type:     d.ChatType,
-		Text:     trimNul(d.Message),
+		At:         raw.At,
+		Sequence:   raw.Sequence,
+		Source:     d.SourceID,
+		Owner:      d.OwnerID,
+		From:       trimNul(d.FromName),
+		SourceType: d.SourceType,
+		Type:       d.ChatType,
+		Audible:    d.Audible,
+		Position:   d.Position,
+		Text:       trimNul(d.Message),
 	}
 	w.mu.Lock()
 	cs := make([]*collector, len(w.collectors))
@@ -213,6 +249,7 @@ func (w *World) chat(raw *client.Message, m *msg.ChatFromSimulator) {
 		}
 		c.add(l)
 	}
+	w.deliver(l)
 }
 
 func (w *World) startCollector(c *collector) {
@@ -235,20 +272,172 @@ func (w *World) stopCollector(c *collector) {
 	w.mu.Unlock()
 }
 
-// Listen gathers chat until the returned function is called, which
-// returns what was heard.
-//
-// Source narrows it to one object; a zero id hears everything.  Start
-// listening before doing the thing that causes the talking: a script
-// says what it has to say the moment it is compiled, and a listener
-// started afterwards has already missed it.
-func (w *World) Listen(source msg.UUID, onLine func(Line)) (stop func() []Line) {
-	c := &collector{source: source, fn: onLine}
-	w.startCollector(c)
-	return func() []Line {
-		w.stopCollector(c)
-		return c.collected()
+// ChatFilter narrows what a subscription hears.  The zero value hears
+// everything.
+type ChatFilter struct {
+	// Source, if set, hears only this object or avatar.
+	Source msg.UUID
+
+	// SourceTypes, if non-empty, hears only these kinds of speaker:
+	// SourceObject, SourceAgent, SourceSystem.
+	SourceTypes []uint8
+
+	// Types, if non-empty, hears only these chat types.  This is how
+	// to ask for the debug channel and nothing else.
+	Types []uint8
+}
+
+func (f *ChatFilter) match(l Line) bool {
+	if !f.Source.IsZero() && f.Source != l.Source {
+		return false
 	}
+	if len(f.SourceTypes) > 0 && !hasU8(f.SourceTypes, l.SourceType) {
+		return false
+	}
+	if len(f.Types) > 0 && !hasU8(f.Types, l.Type) {
+		return false
+	}
+	return true
+}
+
+func hasU8(xs []uint8, x uint8) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
+}
+
+// DefaultChatDepth is the buffer a subscription gets when none is
+// asked for.
+const DefaultChatDepth = 64
+
+// chatSub is one subscription.
+type chatSub struct {
+	ch      chan Line
+	filter  ChatFilter
+	dropped atomic.Uint64
+}
+
+// chatCmd adds or removes a subscription.
+//
+// Both go through the goroutine that reads the relay, so that
+// goroutine is the only one that ever touches a subscription's
+// channel.  It is the only writer and the only closer, which is what
+// makes closing safe: with any other arrangement a close can land
+// between a sender deciding to send and sending.
+type chatCmd struct {
+	add    *chatSub
+	remove <-chan Line
+	done   chan struct{}
+}
+
+// Chat returns a channel of everything heard that matches the filter,
+// and it is closed when StopChat is called or the connection ends.
+//
+// The channel is buffered to depth, and the reader never blocks on it:
+// a subscription whose buffer is full has lines dropped rather than
+// holding up the relay for everything else.  ChatDropped says how many
+// went that way.
+//
+// A line matching several subscriptions is delivered to all of them.
+func (w *World) Chat(filter ChatFilter, depth int) <-chan Line {
+	if depth <= 0 {
+		depth = DefaultChatDepth
+	}
+	sub := &chatSub{ch: make(chan Line, depth), filter: filter}
+	done := make(chan struct{})
+	select {
+	case w.chatCtl <- chatCmd{add: sub, done: done}:
+		<-done
+	case <-w.readDone:
+		// The reader has stopped, so nothing will ever be delivered.
+		// Hand back a closed channel rather than one that stays empty
+		// for ever.
+		close(sub.ch)
+	}
+	return sub.ch
+}
+
+// StopChat closes a subscription.
+//
+// It returns once the channel has been closed, so a caller ranging
+// over it will see the range end.  Stopping something already stopped
+// does nothing.
+func (w *World) StopChat(ch <-chan Line) {
+	done := make(chan struct{})
+	select {
+	case w.chatCtl <- chatCmd{remove: ch, done: done}:
+		<-done
+	case <-w.readDone:
+	}
+}
+
+// ChatDropped is how many lines a subscription missed because its
+// buffer was full.
+func (w *World) ChatDropped(ch <-chan Line) uint64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if s := w.chatSubs[ch]; s != nil {
+		return s.dropped.Load()
+	}
+	return 0
+}
+
+// deliver hands a line to every subscription that wants it.
+//
+// Called from the reader goroutine only.  The send is non-blocking:
+// one slow consumer must not stop the relay, and the protocol has no
+// way to ask for chat again, so the choice is between dropping for
+// that subscriber and stalling for everyone.
+func (w *World) deliver(l Line) {
+	w.mu.Lock()
+	subs := make([]*chatSub, 0, len(w.chatSubs))
+	for _, s := range w.chatSubs {
+		subs = append(subs, s)
+	}
+	w.mu.Unlock()
+
+	for _, s := range subs {
+		if !s.filter.match(l) {
+			continue
+		}
+		select {
+		case s.ch <- l:
+		default:
+			s.dropped.Add(1)
+		}
+	}
+}
+
+// applyChat runs one subscription command, in the reader goroutine.
+func (w *World) applyChat(c chatCmd) {
+	w.mu.Lock()
+	switch {
+	case c.add != nil:
+		w.chatSubs[c.add.ch] = c.add
+	case c.remove != nil:
+		if s := w.chatSubs[c.remove]; s != nil {
+			delete(w.chatSubs, c.remove)
+			close(s.ch)
+		}
+	}
+	w.mu.Unlock()
+	if c.done != nil {
+		close(c.done)
+	}
+}
+
+// closeChat shuts every subscription down, which is what tells a
+// caller ranging over one that there will be no more.
+func (w *World) closeChat() {
+	w.mu.Lock()
+	for ch, s := range w.chatSubs {
+		delete(w.chatSubs, ch)
+		close(s.ch)
+	}
+	w.mu.Unlock()
 }
 
 // onProperties is a small internal subscription used by Properties.

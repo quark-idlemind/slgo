@@ -90,6 +90,16 @@ type World struct {
 	taskInv  map[msg.UUID]string
 	taskSeen map[msg.UUID]bool
 
+	// Chat subscriptions, and the channel that adds and removes them.
+	//
+	// Both go through the reader goroutine so that it is the only
+	// thing that ever touches a subscription's channel: the only
+	// writer and the only closer.  Closing from anywhere else races
+	// with a send no matter how it is locked.
+	chatSubs map[<-chan Line]*chatSub
+	chatCtl  chan chatCmd
+	readDone chan struct{}
+
 	// Chat collectors, and everything heard, in arrival order.
 	collectors []*collector
 	alerts     []string
@@ -146,6 +156,9 @@ func New(c *client.Conn, info *pb.AgentInfo) (*World, error) {
 		created:  map[uint32]*msg.UpdateCreateInventoryItem_InventoryData{},
 		taskInv:  map[msg.UUID]string{},
 		taskSeen: map[msg.UUID]bool{},
+		chatSubs: map[<-chan Line]*chatSub{},
+		chatCtl:  make(chan chatCmd),
+		readDone: make(chan struct{}),
 	}
 	w.xfers = client.NewXfers(c)
 	w.transfers = client.NewTransfers(c)
@@ -203,19 +216,42 @@ func (w *World) Alerts() []string {
 }
 
 // read is the one goroutine that consumes the relay.
+//
+// It also owns the chat subscriptions, which is why it selects rather
+// than ranging: adding and removing one has to happen here, in between
+// deliveries, so that nothing can be closed while a delivery is in
+// flight.
 func (w *World) read(ctx context.Context) {
-	for m := range w.c.Messages() {
-		if w.xfers.Handle(ctx, m) {
-			continue
+	msgs := w.c.Messages()
+	defer func() {
+		close(w.readDone)
+		w.closeChat()
+	}()
+
+	for {
+		select {
+		case c := <-w.chatCtl:
+			w.applyChat(c)
+
+		case <-ctx.Done():
+			return
+
+		case m, ok := <-msgs:
+			if !ok {
+				return
+			}
+			if w.xfers.Handle(ctx, m) {
+				continue
+			}
+			if w.transfers.Handle(m) {
+				continue
+			}
+			v, err := m.Decode()
+			if err != nil || v == nil {
+				continue
+			}
+			w.handle(m, v)
 		}
-		if w.transfers.Handle(m) {
-			continue
-		}
-		v, err := m.Decode()
-		if err != nil || v == nil {
-			continue
-		}
-		w.handle(m, v)
 	}
 }
 
