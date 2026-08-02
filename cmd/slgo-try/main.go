@@ -70,6 +70,22 @@ var tries = []try{
 }
 `, "compiles, then faults and never reaches the sentinel"},
 
+	{"slgo try stack", `integer deep(integer n)
+{
+    return deep(n + 1);
+}
+
+default
+{
+    state_entry()
+    {
+        llOwnerSay("recursing");
+        deep(0);
+        llOwnerSay("` + done + `");
+    }
+}
+`, "compiles, then collides and never reaches the sentinel"},
+
 	{"slgo try texture", `default
 {
     state_entry()
@@ -138,6 +154,9 @@ func main() {
 
 		fmt.Printf("  compiled %v, finished %v, %s\n",
 			res.Compiled, res.Finished, res.Elapsed.Round(time.Millisecond))
+		if res.Fault != nil {
+			fmt.Printf("  FAULT: %s\n", res.Fault)
+		}
 		for _, e := range res.Errors {
 			fmt.Printf("  compile error: %s\n", e)
 		}

@@ -47,7 +47,24 @@ type Script struct {
 	// Running sets whether the script is started.  The zero value
 	// starts it, which is what running a script means.
 	NotRunning bool
+
+	// IgnoreFault stops a run-time fault ending the run.
+	//
+	// By default a fault the simulator blames on this script ends the
+	// run at once: the script has stopped, so the sentinel is never
+	// coming and waiting out the timeout only delays the answer.  Set
+	// this when something else in the object is expected to carry on
+	// talking and is worth hearing.
+	IgnoreFault bool
 }
+
+// faultGrace is how long to keep listening after a fault header, so
+// the reason arrives before the run returns.
+//
+// The simulator reports a fault as two messages: the header naming the
+// script, then the reason.  Returning on the header alone would report
+// that the script died without saying what of.
+const faultGrace = 3 * time.Second
 
 // Result is what happened.
 type Result struct {
@@ -65,12 +82,25 @@ type Result struct {
 	// the debug channel the simulator reports run-time errors on.
 	Lines []Line
 
-	// Finished says the sentinel was seen.  When false, Elapsed is the
-	// timeout and the script either was still going or had already
-	// stopped without saying so.
+	// Finished says the sentinel was seen.
 	Finished bool
-	Elapsed  time.Duration
+
+	// Fault is set when the simulator blamed a run-time error on this
+	// script, which means it stopped where it was.  A run that faults
+	// returns as soon as the reason has been heard rather than waiting
+	// out the timeout, so Elapsed is short and Finished is false.
+	//
+	// Only the fatal kind appears here.  "Could not find texture" and
+	// its relatives are complaints the script survives; they are in
+	// Lines, on the debug channel, and the script runs on.
+	Fault *Fault
+
+	Elapsed time.Duration
 }
+
+// Failed reports whether the script did not get to the end: it either
+// would not compile, or it faulted, or it never said it had finished.
+func (r *Result) Failed() bool { return !r.Compiled || r.Fault != nil || !r.Finished }
 
 // Said returns the text of every line, which is usually what a test
 // wants to assert against.
@@ -152,7 +182,12 @@ func (w *World) Run(ctx context.Context, s Script) (*Result, error) {
 	}
 
 	// Listen before compiling.
-	col := &collector{source: s.In.ID, sentinel: s.Done, fn: s.OnLine}
+	// The fault watch is by script name: the header the simulator
+	// sends names the script, and an object may hold several.  Another
+	// script in the same object faulting is not this run's business.
+	col := &collector{
+		source: s.In.ID, sentinel: s.Done, fn: s.OnLine, faultFor: s.Name,
+	}
 	w.startCollector(col)
 	defer w.stopCollector(col)
 
@@ -186,9 +221,26 @@ func (w *World) Run(ctx context.Context, s Script) (*Result, error) {
 		}
 	} else {
 		t := time.NewTimer(s.Timeout)
+		faulted := col.faulted
+		if s.IgnoreFault {
+			faulted = nil // a nil channel never fires
+		}
 		select {
 		case <-col.found:
 			res.Finished = true
+		case <-faulted:
+			// The script has stopped, so the sentinel is not coming.
+			// Wait only long enough for the reason, which is a second
+			// message, and for a sentinel that may already be in
+			// flight -- a script can fault after saying it is done.
+			g := time.NewTimer(faultGrace)
+			select {
+			case <-col.found:
+				res.Finished = true
+			case <-g.C:
+			case <-ctx.Done():
+			}
+			g.Stop()
 		case <-t.C:
 		case <-ctx.Done():
 			t.Stop()
@@ -198,6 +250,7 @@ func (w *World) Run(ctx context.Context, s Script) (*Result, error) {
 		}
 		t.Stop()
 	}
+	res.Fault = col.faultSeen()
 
 	res.Lines = col.collected()
 	res.Elapsed = time.Since(start)

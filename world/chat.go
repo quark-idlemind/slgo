@@ -75,18 +75,63 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
+// Fault is a run-time error the simulator blamed on a named script.
+//
+// This is the fatal kind, and the only kind that can be recognised.
+// The simulator reports it as two messages: a header naming the object
+// and the script, then the reason on its own.  A script that hits one
+// stops, so there is no point waiting for anything more from it.
+//
+// The other kind of run-time complaint -- "Could not find texture" and
+// its relatives -- is a single line naming nothing, and the script
+// carries on afterwards.  Those are not faults and must not end a run.
+type Fault struct {
+	Script string // the script the simulator named
+	Reason string // "Math Error", "Stack-Heap Collision"
+	Line   Line   // the header line it was recognised from
+}
+
+func (f *Fault) String() string {
+	if f.Reason == "" {
+		return f.Script + ": run-time error"
+	}
+	return f.Script + ": " + f.Reason
+}
+
+// faultScript recognises the header of a script fault and returns the
+// script it names:
+//
+//	Test HUD [script:slgo try divzero] Script run-time error
+func faultScript(text string) (string, bool) {
+	const open = "[script:"
+	i := strings.Index(text, open)
+	if i < 0 {
+		return "", false
+	}
+	rest := text[i+len(open):]
+	j := strings.Index(rest, "]")
+	if j < 0 || !strings.Contains(rest[j:], "Script run-time error") {
+		return "", false
+	}
+	return rest[:j], true
+}
+
 // collector gathers chat, optionally from one object, and fires when a
-// sentinel appears.
+// sentinel appears or the named script faults.
 type collector struct {
 	source   msg.UUID // zero means anything
 	sentinel string
+	faultFor string // script name to watch for faults in; empty disables
 
 	mu    sync.Mutex
 	lines []Line
 	fn    func(Line)
+	fault *Fault
 
-	found chan struct{}
-	once  sync.Once
+	found   chan struct{}
+	faulted chan struct{}
+	once    sync.Once
+	onceF   sync.Once
 }
 
 func (c *collector) add(l Line) {
@@ -94,6 +139,21 @@ func (c *collector) add(l Line) {
 	c.lines = append(c.lines, l)
 	fn := c.fn
 	hit := c.sentinel != "" && strings.Contains(l.Text, c.sentinel)
+
+	// A fault is two messages.  The header names the script, and the
+	// reason arrives on its own straight after, so the first debug
+	// line following the header is taken as the reason.
+	fired := false
+	if c.faultFor != "" && c.fault == nil {
+		if name, ok := faultScript(l.Text); ok && name == c.faultFor {
+			c.fault = &Fault{Script: name, Line: l}
+			fired = true
+		}
+	} else if c.fault != nil && c.fault.Reason == "" && l.Debug() {
+		if _, isHeader := faultScript(l.Text); !isHeader {
+			c.fault.Reason = l.Text
+		}
+	}
 	c.mu.Unlock()
 
 	if fn != nil {
@@ -102,6 +162,20 @@ func (c *collector) add(l Line) {
 	if hit {
 		c.once.Do(func() { close(c.found) })
 	}
+	if fired {
+		c.onceF.Do(func() { close(c.faulted) })
+	}
+}
+
+// faultSeen returns the fault, if one was recognised.
+func (c *collector) faultSeen() *Fault {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.fault == nil {
+		return nil
+	}
+	f := *c.fault
+	return &f
 }
 
 func (c *collector) collected() []Line {
@@ -136,6 +210,7 @@ func (w *World) chat(raw *client.Message, m *msg.ChatFromSimulator) {
 
 func (w *World) startCollector(c *collector) {
 	c.found = make(chan struct{})
+	c.faulted = make(chan struct{})
 	w.mu.Lock()
 	w.collectors = append(w.collectors, c)
 	w.mu.Unlock()
