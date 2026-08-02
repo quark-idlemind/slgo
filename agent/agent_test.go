@@ -388,3 +388,103 @@ func TestSessionHandlerRegistration(t *testing.T) {
 		t.Error("expected an error for an unknown message name")
 	}
 }
+
+// TestWatchdogEndsSilentSession: a circuit that has quietly died must
+// say so.  Without this it looks exactly like an idle one and reports
+// itself healthy forever, which is the worst failure mode for a
+// connection meant to be left running.
+func TestWatchdogEndsSilentSession(t *testing.T) {
+	sim := newFakeSim(t)
+	defer sim.close()
+	go sim.run()
+
+	a, err := Connect(context.Background(), testAccount(sim), Options{
+		Timeout: 5 * time.Second,
+		Idle:    300 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	// The simulator stops answering but keeps its socket, which is
+	// what a lost circuit actually looks like.  Closing it instead
+	// would draw an ICMP port unreachable and the read would fail
+	// outright, which is a different failure and already handled.
+	sim.mu.Lock()
+	sim.silent = true
+	sim.mu.Unlock()
+
+	select {
+	case <-a.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watchdog did not notice a silent simulator")
+	}
+	if err := a.Err(); err == nil || !strings.Contains(err.Error(), "silent") {
+		t.Errorf("Err = %v, want something about silence", err)
+	}
+}
+
+// TestWatchdogToleratesTraffic: an active simulator must never trip it.
+func TestWatchdogToleratesTraffic(t *testing.T) {
+	sim := newFakeSim(t)
+	defer sim.close()
+	go sim.run()
+
+	a, err := Connect(context.Background(), testAccount(sim), Options{
+		Timeout: 5 * time.Second,
+		Idle:    300 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(50 * time.Millisecond):
+				ping := &msg.StartPingCheck{}
+				sim.send(ping, 0)
+			}
+		}
+	}()
+	defer close(stop)
+
+	select {
+	case <-a.Done():
+		t.Fatalf("the watchdog fired on a busy connection: %v", a.Err())
+	case <-time.After(1200 * time.Millisecond):
+	}
+	if d := a.Idle(); d > 300*time.Millisecond {
+		t.Errorf("Idle = %s while traffic was flowing", d)
+	}
+}
+
+func TestWatchdogCanBeDisabled(t *testing.T) {
+	sim := newFakeSim(t)
+	defer sim.close()
+	go sim.run()
+
+	a, err := Connect(context.Background(), testAccount(sim), Options{
+		Timeout: 5 * time.Second,
+		Idle:    -1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	sim.mu.Lock()
+	sim.silent = true
+	sim.mu.Unlock()
+
+	select {
+	case <-a.Done():
+		t.Errorf("session ended with the watchdog disabled: %v", a.Err())
+	case <-time.After(600 * time.Millisecond):
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"slgo/msg"
@@ -50,6 +51,11 @@ type Agent struct {
 	inRegion  signal
 	handshook signal
 	loggedOut signal
+
+	// lastPacket is when anything last arrived from the simulator,
+	// as unix nanoseconds.  The watchdog reads it; the tap writes
+	// it.
+	lastPacket atomic.Int64
 
 	mu          sync.RWMutex
 	regionName  string
@@ -103,6 +109,17 @@ type Options struct {
 	// Recv is passed through to the receiver.  A relay wants
 	// msg.KeepBody so it can pass on a message it cannot decode.
 	Recv []msg.ReceiverOption
+
+	// Idle ends the session when nothing has arrived from the
+	// simulator for this long.  Default 60s; a negative value
+	// disables it.
+	//
+	// Something like this is not optional for a connection meant to
+	// be left running.  A circuit that has quietly died looks
+	// exactly like an idle one, and without a deadline the session
+	// reports itself healthy forever.  The C client has the same
+	// check at s.c:618, on a fifteen second ping deadline.
+	Idle time.Duration
 }
 
 // Connect opens the circuit and completes the handshake.
@@ -142,6 +159,7 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 		msg.WithSender(a.Send),
 		msg.WithConcurrency(opts.Concurrency),
 		msg.WithTap(func(p *msg.Packet) {
+			a.lastPacket.Store(time.Now().UnixNano())
 			a.anyPacket.fire()
 			if opts.Tap != nil {
 				opts.Tap(p)
@@ -159,6 +177,14 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	a.cancel = cancel
+
+	a.lastPacket.Store(time.Now().UnixNano())
+	if opts.Idle == 0 {
+		opts.Idle = 60 * time.Second
+	}
+	if opts.Idle > 0 {
+		a.spawn(func() error { a.watchdog(runCtx, opts.Idle); return nil })
+	}
 
 	a.spawn(func() error { return a.Send.Run(runCtx) })
 	a.spawn(func() error { return a.Recv.Run(runCtx) })
@@ -182,6 +208,45 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 		a.Caps = caps
 	}
 	return a, nil
+}
+
+// LastPacket is when anything last arrived from the simulator.
+func (a *Agent) LastPacket() time.Time {
+	return time.Unix(0, a.lastPacket.Load())
+}
+
+// Idle is how long the simulator has been silent.
+func (a *Agent) Idle() time.Duration { return time.Since(a.LastPacket()) }
+
+// watchdog ends the session when the simulator stops talking.
+//
+// A live simulator is never quiet for long: it pings every few seconds
+// and sends time and location updates besides.  Silence means the
+// circuit is gone, and saying so is the whole point -- a connection
+// that has died without anyone noticing is worse than one that
+// reported the failure.
+func (a *Agent) watchdog(ctx context.Context, idle time.Duration) {
+	tick := idle / 4
+	if tick < time.Second {
+		tick = time.Second
+	}
+	t := time.NewTicker(tick)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-a.done:
+			return
+		case <-t.C:
+			if since := a.Idle(); since > idle {
+				a.fail(fmt.Errorf(
+					"agent: simulator silent for %s", since.Round(time.Second)))
+				return
+			}
+		}
+	}
 }
 
 func (a *Agent) spawn(fn func() error) {

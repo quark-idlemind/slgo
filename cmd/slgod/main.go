@@ -76,16 +76,38 @@ func main() {
 		if err != nil {
 			log.Fatalf("%s: %v", name, err)
 		}
-		a := h.Agent
+		a := h.Agent()
 		log.Printf("%s: %s in %s, %d capabilities",
 			name, a.Account.Name(), orUnknown(a.RegionName()), len(a.Caps))
 
+		// The server re-establishes a session that ends; this
+		// just says so.
 		go func(name string, h *server.Hosted) {
-			<-h.Agent.Done()
-			if err := h.Agent.Err(); err != nil {
-				log.Printf("%s: connection ended: %v", name, err)
-			} else {
-				log.Printf("%s: connection ended", name)
+			for {
+				a := h.Agent()
+				if a == nil {
+					return
+				}
+				<-a.Done()
+				if err := a.Err(); err != nil {
+					log.Printf("%s: connection ended: %v", name, err)
+				} else {
+					log.Printf("%s: connection ended", name)
+					return // a clean logout is not retried
+				}
+				// Wait for the supervisor to put a new
+				// one in place.
+				for h.Agent() == a {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(time.Second):
+					}
+				}
+				if a2 := h.Agent(); a2 != nil {
+					log.Printf("%s: reconnected, %s in %s",
+						name, a2.Account.Name(), orUnknown(a2.RegionName()))
+				}
 			}
 		}(name, h)
 	}

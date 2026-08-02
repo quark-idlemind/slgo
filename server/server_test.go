@@ -8,12 +8,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"slgo/agent"
 	"slgo/client"
 	"slgo/msg"
+	pb "slgo/proto/slgov1"
 )
 
 // ---------------------------------------------------------------- a sim
@@ -178,7 +180,7 @@ func newRig(t *testing.T, caps agent.Caps) *rig {
 	if caps != nil {
 		a.Caps = caps
 	}
-	h.Agent = a
+	h.setAgent(a)
 	srv.mu.Lock()
 	srv.agents["example"] = h
 	srv.mu.Unlock()
@@ -405,7 +407,7 @@ func TestNoClientStillAcks(t *testing.T) {
 	h, _ := r.srv.Agent("example")
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if h.Agent.Send.Stats().AcksQueued > 0 {
+		if h.Agent().Send.Stats().AcksQueued > 0 {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -420,8 +422,8 @@ func TestClientRestartLeavesAgentUp(t *testing.T) {
 	r := newRig(t, nil)
 	h, _ := r.srv.Agent("example")
 
-	before := h.Agent.Recv.Stats().Packets
-	region := h.Agent.RegionName()
+	before := h.Agent().Recv.Stats().Packets
+	region := h.Agent().RegionName()
 
 	for i := 0; i < 5; i++ {
 		c := r.dial(t)
@@ -438,16 +440,16 @@ func TestClientRestartLeavesAgentUp(t *testing.T) {
 
 		// The client is gone; the agent must not be.
 		select {
-		case <-h.Agent.Done():
-			t.Fatalf("the agent ended when client %d disconnected: %v", i, h.Agent.Err())
+		case <-h.Agent().Done():
+			t.Fatalf("the agent ended when client %d disconnected: %v", i, h.Agent().Err())
 		default:
 		}
 	}
 
-	if h.Agent.RegionName() != region {
+	if h.Agent().RegionName() != region {
 		t.Error("the agent lost its region across client restarts")
 	}
-	if h.Agent.Recv.Stats().Packets <= before {
+	if h.Agent().Recv.Stats().Packets <= before {
 		t.Error("the agent stopped receiving")
 	}
 	deadline := time.Now().Add(2 * time.Second)
@@ -616,4 +618,162 @@ func ifElse(cond bool, a, b string) string {
 		return a
 	}
 	return b
+}
+
+// TestReconnect is the other half of leaving a server running: when the
+// session dies the server must get it back, and clients must keep their
+// streams and their subscriptions across it.
+func TestReconnect(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+
+	// A login server that always answers, pointing at the sim.
+	var logins atomic.Int64
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logins.Add(1)
+		fmt.Fprintf(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
+		  <member><name>login</name><value><string>true</string></value></member>
+		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</string></value></member>
+		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-f4f4-19d29d124acf</string></value></member>
+		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-d169-d9847afe641e</string></value></member>
+		  <member><name>circuit_code</name><value><int>%d</int></value></member>
+		  <member><name>sim_ip</name><value><string>%s</string></value></member>
+		  <member><name>sim_port</name><value><int>%d</int></value></member>
+		  <member><name>first_name</name><value><string>"Example"</string></value></member>
+		  <member><name>last_name</name><value><string>Resident</string></value></member>
+		</struct></value></param></params></methodResponse>`,
+			4000+logins.Load(), sim.addr().IP, sim.addr().Port)
+	}))
+	defer hs.Close()
+
+	// Retry fast, so the test does not take a minute.
+	saved := ReconnectDelays
+	ReconnectDelays = []time.Duration{20 * time.Millisecond}
+	defer func() { ReconnectDelays = saved }()
+
+	srv := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h, err := srv.Host(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { defer close(done); srv.Serve(ctx, ln) }()
+	defer func() { cancel(); <-done }()
+
+	c, err := client.Dial(context.Background(), ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Attach(context.Background(), "example", "ChatFromSimulator"); err != nil {
+		t.Fatal(err)
+	}
+
+	first := h.Agent()
+
+	// The session dies the way a lost circuit does.
+	first.Close()
+
+	// The client should hear about it...
+	select {
+	case ev := <-c.Events():
+		if ev.Kind != pb.AgentEvent_DISCONNECTED {
+			t.Errorf("first event was %v", ev.Kind)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the client was not told the session ended")
+	}
+
+	// ... and the server should get it back.
+	deadline := time.Now().Add(10 * time.Second)
+	for h.Agent() == first || h.Agent() == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the session was not re-established")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if logins.Load() < 2 {
+		t.Errorf("%d logins, expected a second", logins.Load())
+	}
+	if st := srv.Stats(); st.Reconnects != 1 {
+		t.Errorf("stats = %+v", st)
+	}
+
+	// The client kept its stream and its subscription: a message on
+	// the new circuit still reaches it.
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		chat := &msg.ChatFromSimulator{}
+		chat.ChatData.Message = []byte("after the reconnect\x00")
+		sim.send(chat, 0)
+
+		select {
+		case m, ok := <-c.Messages():
+			if !ok {
+				t.Fatalf("stream ended: %v", c.Err())
+			}
+			if m.Name == "ChatFromSimulator" {
+				return
+			}
+		case <-time.After(200 * time.Millisecond):
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the client's subscription did not survive the reconnect")
+		}
+	}
+}
+
+// TestNoReconnectAfterLogout: a deliberate shutdown must not be treated
+// as a failure to recover from.
+func TestNoReconnectAfterLogout(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+
+	var logins atomic.Int64
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logins.Add(1)
+		fmt.Fprintf(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
+		  <member><name>login</name><value><string>true</string></value></member>
+		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</string></value></member>
+		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-f4f4-19d29d124acf</string></value></member>
+		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-d169-d9847afe641e</string></value></member>
+		  <member><name>circuit_code</name><value><int>77</int></value></member>
+		  <member><name>sim_ip</name><value><string>%s</string></value></member>
+		  <member><name>sim_port</name><value><int>%d</int></value></member>
+		  <member><name>first_name</name><value><string>Example</string></value></member>
+		  <member><name>last_name</name><value><string>Resident</string></value></member>
+		</struct></value></param></params></methodResponse>`, sim.addr().IP, sim.addr().Port)
+	}))
+	defer hs.Close()
+
+	saved := ReconnectDelays
+	ReconnectDelays = []time.Duration{20 * time.Millisecond}
+	defer func() { ReconnectDelays = saved }()
+
+	srv := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if _, err := srv.Host(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv.Close(context.Background())
+	time.Sleep(300 * time.Millisecond)
+
+	if n := logins.Load(); n != 1 {
+		t.Errorf("%d logins after a deliberate shutdown, want 1", n)
+	}
 }

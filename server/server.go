@@ -52,15 +52,40 @@ type Server struct {
 }
 
 // Hosted is one grid connection and the clients watching it.
+//
+// The connection behind it is replaced when it has to be re-established,
+// so it is reached through Agent() rather than being a field.  Clients
+// keep their streams and their subscriptions across that; only the
+// circuit underneath changes.
 type Hosted struct {
-	Name  string
-	Agent *agent.Agent
+	Name string
+
+	login agent.Login
+	opts  agent.Options
 
 	mu      sync.RWMutex
+	agent   *agent.Agent
 	clients map[*Client]bool
 
-	relayed atomic.Uint64
-	dropped atomic.Uint64
+	stopped  atomic.Bool
+	attempts atomic.Uint64
+	reconns  atomic.Uint64
+	relayed  atomic.Uint64
+	dropped  atomic.Uint64
+}
+
+// Agent is the current grid connection.  It changes when the session
+// has to be re-established.
+func (h *Hosted) Agent() *agent.Agent {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.agent
+}
+
+func (h *Hosted) setAgent(a *agent.Agent) {
+	h.mu.Lock()
+	h.agent = a
+	h.mu.Unlock()
 }
 
 // New makes an empty server.
@@ -94,24 +119,112 @@ func (s *Server) Host(ctx context.Context, name string, login agent.Login, opts 
 		return nil, err
 	}
 
-	h := &Hosted{Name: name, clients: map[*Client]bool{}}
+	h := &Hosted{Name: name, login: login, clients: map[*Client]bool{}}
 
 	// Keeping the undecoded body is what lets the relay pass on a
 	// message it does not understand.
 	opts.Recv = append(opts.Recv, msg.KeepBody())
 	opts.Tap = func(p *msg.Packet) { h.relay(p) }
+	h.opts = opts
 
 	a, err := agent.Connect(ctx, acct, opts)
 	if err != nil {
 		undo()
 		return nil, err
 	}
-	h.Agent = a
+	h.setAgent(a)
 
 	s.mu.Lock()
 	s.agents[name] = h
 	s.mu.Unlock()
+
+	go h.supervise(ctx)
 	return h, nil
+}
+
+// ReconnectDelays are the waits before each attempt to re-establish a
+// session, the last repeating.  They are generous on purpose: a login
+// server will throttle a client that hammers it, and a failure here is
+// usually something that takes a while to clear.
+var ReconnectDelays = []time.Duration{
+	5 * time.Second,
+	15 * time.Second,
+	30 * time.Second,
+	time.Minute,
+	2 * time.Minute,
+}
+
+// supervise re-establishes the session when it ends, unless it was
+// stopped deliberately.
+func (h *Hosted) supervise(ctx context.Context) {
+	for {
+		a := h.Agent()
+		if a == nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-a.Done():
+		}
+		if ctx.Err() != nil || h.stopped.Load() {
+			return
+		}
+
+		h.notify(pb.AgentEvent_DISCONNECTED, errText(a.Err()))
+
+		for attempt := 0; ; attempt++ {
+			delay := ReconnectDelays[len(ReconnectDelays)-1]
+			if attempt < len(ReconnectDelays) {
+				delay = ReconnectDelays[attempt]
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(delay):
+			}
+			if h.stopped.Load() {
+				return
+			}
+
+			h.attempts.Add(1)
+			next, err := h.reconnect(ctx)
+			if err != nil {
+				h.notify(pb.AgentEvent_DISCONNECTED,
+					fmt.Sprintf("reconnect attempt %d: %v", attempt+1, err))
+				continue
+			}
+			h.setAgent(next)
+			h.reconns.Add(1)
+			// The identity is the same avatar but a new
+			// session: a different session id, circuit code
+			// and set of capability URLs.  Clients holding
+			// any of those need to ask again.
+			h.notify(pb.AgentEvent_REGION_CHANGED, "session re-established")
+			break
+		}
+	}
+}
+
+func (h *Hosted) reconnect(ctx context.Context) (*agent.Agent, error) {
+	acct, err := h.login.Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return agent.Connect(ctx, acct, h.opts)
+}
+
+// notify tells every attached client something happened to the
+// connection under them.
+func (h *Hosted) notify(kind pb.AgentEvent_Kind, detail string) {
+	ev := &pb.ServerPacket{Body: &pb.ServerPacket_Event{
+		Event: &pb.AgentEvent{Kind: kind, Detail: detail},
+	}}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.clients {
+		c.send(ev)
+	}
 }
 
 // Add hosts an already connected agent.
@@ -121,7 +234,7 @@ func (s *Server) Add(name string, a *agent.Agent) (*Hosted, error) {
 	if _, dup := s.agents[name]; dup {
 		return nil, fmt.Errorf("server: %q is already hosted", name)
 	}
-	h := &Hosted{Name: name, Agent: a, clients: map[*Client]bool{}}
+	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}}
 	s.agents[name] = h
 	return h, nil
 }
@@ -161,15 +274,23 @@ func (s *Server) Close(ctx context.Context) {
 	s.mu.Unlock()
 
 	for _, h := range hosted {
-		_ = h.Agent.Logout(ctx, 10*time.Second)
+		// Mark it stopped first, so the supervisor does not
+		// treat a deliberate logout as a failure to recover
+		// from.
+		h.stopped.Store(true)
+		if a := h.Agent(); a != nil {
+			_ = a.Logout(ctx, 10*time.Second)
+		}
 	}
 }
 
 // Stats reports what the relay has done.
 type Stats struct {
-	Clients int64
-	Relayed uint64 // messages handed to at least one client
-	Dropped uint64 // relays skipped because a client was not keeping up
+	Clients     int64
+	Relayed     uint64 // messages handed to at least one client
+	Dropped     uint64 // relays skipped because a client was not keeping up
+	Reconnects  uint64 // sessions re-established
+	ReconnectAt uint64 // attempts made, successful or not
 }
 
 // Stats sums across the hosted connections.  The counters live on each
@@ -183,6 +304,8 @@ func (s *Server) Stats() Stats {
 		if h != nil {
 			out.Relayed += h.relayed.Load()
 			out.Dropped += h.dropped.Load()
+			out.Reconnects += h.reconns.Load()
+			out.ReconnectAt += h.attempts.Load()
 		}
 	}
 	return out

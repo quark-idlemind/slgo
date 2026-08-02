@@ -195,6 +195,11 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 		return err
 	}
 
+	// The stream deliberately does not watch the agent.  A session
+	// that ends is re-established under it, and the client keeps
+	// its stream and its subscriptions across that; it learns what
+	// happened from the events Hosted.notify sends.
+	//
 	// One goroutine reads what the client sends; this one writes.
 	errc := make(chan error, 1)
 	go func() { errc <- s.streamRecv(ctx, stream, c, h) }()
@@ -208,14 +213,6 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 				return nil
 			}
 			return err
-		case <-h.Agent.Done():
-			_ = stream.Send(&pb.ServerPacket{Body: &pb.ServerPacket_Event{
-				Event: &pb.AgentEvent{
-					Kind:   pb.AgentEvent_DISCONNECTED,
-					Detail: errText(h.Agent.Err()),
-				},
-			}})
-			return nil
 		case p := <-c.out:
 			if err := stream.Send(p); err != nil {
 				return err
@@ -265,9 +262,9 @@ func sendMessage(ctx context.Context, h *Hosted, m *pb.OutboundMessage) error {
 	raw := msg.NewRaw(id, m.Body)
 	var err error
 	if m.Reliable {
-		err = h.Agent.Send.SendReliable(ctx, raw)
+		err = h.Agent().Send.SendReliable(ctx, raw)
 	} else {
-		err = h.Agent.Send.Send(ctx, raw)
+		err = h.Agent().Send.Send(ctx, raw)
 	}
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "send: %v", err)
@@ -292,7 +289,7 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	if err != nil {
 		return nil, err
 	}
-	a := h.Agent
+	a := h.Agent()
 	rs := a.Recv.Stats()
 	ss := a.Send.Stats()
 	ds := a.Disp.Stats()
@@ -325,7 +322,7 @@ func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, 
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	resp, err := h.Agent.DoCap(ctx, agent.CapRequest{
+	resp, err := h.Agent().DoCap(ctx, agent.CapRequest{
 		Cap:    req.Cap,
 		Method: req.Method,
 		Path:   req.Path,
@@ -368,7 +365,10 @@ func (s *Server) lookup(name string) (*Hosted, error) {
 }
 
 func (h *Hosted) info() *pb.AgentInfo {
-	a := h.Agent
+	a := h.Agent()
+	if a == nil {
+		return &pb.AgentInfo{Name: h.Name}
+	}
 	connected := true
 	select {
 	case <-a.Done():
