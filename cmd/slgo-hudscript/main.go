@@ -149,6 +149,81 @@ var specs = []spec{
 		"                if (i % 2)\n" + fastRule("TEXTURE_BLANK") +
 			"                else\n" + fastRule("TEXTURE_PLYWOOD"))},
 
+	// Fifty fast sets, each to a differently named texture that does
+	// not exist, each announced first.
+	//
+	// The complaint quotes the name it could not find, and the
+	// announcement says which one was about to be asked for, so every
+	// error can be paired with the exact call that caused it rather
+	// than assumed to line up.  What is being watched is whether the
+	// pairing survives fifty of them arriving as fast as the script
+	// can issue them.
+	{"slgo time missfast", `default
+{
+    state_entry()
+    {
+        string me = llGetScriptName();
+        integer i;
+        for (i = 1; i <= 50; ++i)
+        {
+            string t = "no texture " + (string)i;
+            llOwnerSay(me + ": setting " + t);
+            llSetLinkPrimitiveParamsFast(LINK_THIS,
+                [PRIM_TEXTURE, 0, t, <1.0,1.0,0.0>, <0.0,0.0,0.0>, 0.0]);
+        }
+        llOwnerSay(me + ": done");
+    }
+}
+`},
+
+	// The same fifty, through llSetTexture instead.
+	//
+	// This is the control for the run above.  If that one is silent it
+	// is either because the fast call does not complain, or because
+	// fifty complaints in a fraction of a second went missing
+	// somewhere between the simulator and here.  The same loop through
+	// a call already known to complain tells those apart, and shows
+	// how the two channels interleave when they do both arrive.
+	{"slgo time missslow", `default
+{
+    state_entry()
+    {
+        string me = llGetScriptName();
+        integer i;
+        for (i = 1; i <= 50; ++i)
+        {
+            string t = "no texture " + (string)i;
+            llOwnerSay(me + ": setting " + t);
+            llSetTexture(t, 0);
+        }
+        llOwnerSay(me + ": done");
+    }
+}
+`},
+
+	// One missing texture through each call, in that order.
+	//
+	// The fifty-at-once run cannot settle whether the fast call is
+	// silent, because the simulator gags the debug channel after eight
+	// errors and a gag from an earlier run could still be in force.
+	// Two errors is far under that threshold, and putting both calls
+	// in one script means they face identical conditions.  If only the
+	// llSetTexture one is reported, the fast call does not report.
+	{"slgo time missone", `default
+{
+    state_entry()
+    {
+        string me = llGetScriptName();
+        llOwnerSay(me + ": fast, about to set 'missing A'");
+        llSetLinkPrimitiveParamsFast(LINK_THIS,
+            [PRIM_TEXTURE, 0, "missing A", <1.0,1.0,0.0>, <0.0,0.0,0.0>, 0.0]);
+        llOwnerSay(me + ": slow, about to set 'missing B'");
+        llSetTexture("missing B", 0);
+        llOwnerSay(me + ": done");
+    }
+}
+`},
+
 	// Fifty of these may finish inside a single frame, in which case
 	// the clock says zero and the cost per call is unknown rather than
 	// nothing.  A thousand gives it something to measure.
@@ -379,8 +454,8 @@ func (r *run) read(ctx context.Context) {
 			if mine {
 				from = "our HUD"
 			}
-			fmt.Printf("  [%s %s] %s: %s\n",
-				from, chatType(d.ChatType), nul(d.FromName), nul(d.Message))
+			fmt.Printf("  #%-6d [%s %s] %s\n",
+				m.Sequence, from, chatType(d.ChatType), nul(d.Message))
 		case *msg.AlertMessage:
 			fmt.Printf("  [alert] %s\n", nul(t.AlertData.Message))
 		case *msg.ScriptRunningReply:
