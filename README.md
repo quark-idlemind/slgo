@@ -106,15 +106,26 @@ Three places where this deliberately differs from the C:
    `messages/q_AgentUpdate.c` writes `queueVector3` — so it cannot
    settle the question on its own.
 
-   The grid can, and does. Uncommenting the `queueAgentUpdate` call at
-   `s.c:1267` and logging in gets a `CameraConstraint` (High 22) back
-   from the simulator; the same run without it gets none. The simulator
-   only computes a camera constraint from the camera fields in
-   `AgentUpdate`, so the packet was accepted and acted on. That settles
-   the width by arithmetic: three float quaternions make the body 114
-   bytes, four float ones make it 122, and a 114 byte message would be
-   eight bytes short of a 122 byte template and be dropped as truncated
-   rather than answered.
+   The grid cannot settle it either, and it is worth recording why the
+   obvious experiment fails. Uncommenting the `queueAgentUpdate` call at
+   `s.c:1267` does draw a `CameraConstraint` (High 22) back from the
+   simulator where the same run without it draws none, so a 114 byte
+   `AgentUpdate` is certainly accepted and acted on. But that proves
+   nothing about the width, for two reasons:
+
+   - `LLTemplateMessageReader::decodeData` does not discard a short
+     message. It calls `logRanOffEndOfPacket` and zero fills the
+     missing fields. A 114 byte body against a 122 byte template would
+     have been accepted just the same.
+   - The message was almost entirely zeros, so a misread would have
+     found zeros wherever it looked. `Far` was the only non-zero field
+     in it.
+
+   A conclusive test needs a value after both quaternions whose effect
+   is observable: send `Far` large and again small, with non-degenerate
+   camera axes, and compare inbound object traffic. If the two runs
+   differ, `Far` is landing at offset 105 and everything ahead of it,
+   both quaternions included, is the width claimed here.
 
 2. **Medium messages frame as `FF nn`.** `allocPacket` takes the marker
    byte from bits 8..15 of a code whose `0xFF` lives at bits 24..31, so
@@ -142,6 +153,17 @@ Two rules in `Unmarshal`, both learned from the C client's failure mode:
   rather than an error. The live grid accepts an `ImprovedInstantMessage`
   that stops before `MetaData` — verified by sending one and having it
   delivered — so we extend the same courtesy in the other direction.
+
+Both rules turn out to match `LLTemplateMessageReader` exactly: at the
+packet boundary it sets a Variable block's `repeat_number = 0` rather
+than failing.
+
+Where this package is *stricter* than Linden Lab: a truncated
+fixed-size field is an error here, whereas `decodeData` logs
+`logRanOffEndOfPacket` and substitutes zeros. Matching them would buy
+interoperability on malformed packets at the cost of turning a real
+bug into silent zeros, so this errors instead. Worth revisiting if a
+message the grid genuinely sends ever trips it.
 
 Any other short read is an error, and the error names the message,
 block and field. Nothing in this package calls `panic`, `os.Exit` or
