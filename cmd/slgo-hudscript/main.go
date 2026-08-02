@@ -29,6 +29,12 @@ var (
 	profile = flag.String("agent", "example", "hosted agent")
 	wear    = flag.String("hud", "Test HUD", "name of the attachment to script")
 	listen  = flag.Duration("listen", 45*time.Second, "how long to listen after")
+
+	// only narrows the run to the scripts whose names contain this.
+	// Timing wants it: two timed scripts left in the object run at
+	// once, and a script that shares a simulator with another doing
+	// the same work is not measuring what it looks like it is.
+	only = flag.String("only", "", "only scripts whose name contains this")
 )
 
 const (
@@ -95,7 +101,20 @@ const (
 )
 
 func timingScript(inner string) string {
-	return fmt.Sprintf(timingTemplate, timingN, timingR, inner)
+	return timingScriptN(timingN, inner)
+}
+
+func timingScriptN(n int, inner string) string {
+	return fmt.Sprintf(timingTemplate, n, timingR, inner)
+}
+
+// fastRule sets face 0 through llSetLinkPrimitiveParamsFast, which is
+// the call that exists because llSetTexture sleeps.  PRIM_TEXTURE
+// wants the face, the texture, then repeats, offsets and rotation.
+func fastRule(texture string) string {
+	return "                llSetLinkPrimitiveParamsFast(LINK_THIS,\n" +
+		"                    [PRIM_TEXTURE, 0, " + texture +
+		", <1.0,1.0,0.0>, <0.0,0.0,0.0>, 0.0]);\n"
 }
 
 // Every script names itself with llGetScriptName, because nothing else
@@ -120,6 +139,20 @@ var specs = []spec{
 	{"slgo time alt", timingScript(
 		"                if (i % 2) llSetTexture(TEXTURE_BLANK, 0);\n" +
 			"                else llSetTexture(TEXTURE_PLYWOOD, 0);\n")},
+
+	// The same fifty sets through the call that does not sleep.
+	{"slgo time fast", timingScript(fastRule("TEXTURE_BLANK"))},
+
+	// And alternating, so this one is not measuring a simulator
+	// declining to do the work either.
+	{"slgo time fastalt", timingScript(
+		"                if (i % 2)\n" + fastRule("TEXTURE_BLANK") +
+			"                else\n" + fastRule("TEXTURE_PLYWOOD"))},
+
+	// Fifty of these may finish inside a single frame, in which case
+	// the clock says zero and the cost per call is unknown rather than
+	// nothing.  A thousand gives it something to measure.
+	{"slgo time fast1k", timingScriptN(1000, fastRule("TEXTURE_BLANK"))},
 }
 
 type run struct {
@@ -155,6 +188,19 @@ type taskItem struct {
 func main() {
 	flag.Parse()
 	ctx := context.Background()
+
+	if *only != "" {
+		var keep []spec
+		for _, s := range specs {
+			if strings.Contains(s.name, *only) {
+				keep = append(keep, s)
+			}
+		}
+		if len(keep) == 0 {
+			log.Fatalf("no script name contains %q", *only)
+		}
+		specs = keep
+	}
 
 	c, err := client.Dial(ctx, *addr)
 	if err != nil {
