@@ -5,6 +5,7 @@ import (
 	"net"
 	"os/exec"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -152,10 +153,19 @@ func TestDumpParsesAsYAML(t *testing.T) {
 		t.Skipf("no YAML parser available: %s", why)
 	}
 
+	// Sort so the random data lands in the same fields every run:
+	// map iteration order varies, and a test that only fails one
+	// time in ten is worse than one that never does.
+	ids := make([]int, 0, len(infoByID))
+	for id := range infoByID {
+		ids = append(ids, int(id))
+	}
+	sort.Ints(ids)
+
 	r := rand.New(rand.NewSource(3))
 	var sb strings.Builder
-	for id := range infoByID {
-		m := New(id)
+	for _, id := range ids {
+		m := New(ID(id))
 		fillMessage(t, m, r)
 		sb.WriteString("---\n")
 		sb.Write(AppendMessageYAML(nil, m))
@@ -226,5 +236,31 @@ func BenchmarkDumpMessage(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		buf = AppendMessageYAML(buf[:0], m)
+	}
+}
+
+// TestDumpEscapedBytesParse feeds the same awkward values through a
+// real parser.
+func TestDumpEscapedBytesParse(t *testing.T) {
+	cmd, why := yamlCounter()
+	if cmd == nil {
+		t.Skipf("no YAML parser available: %s", why)
+	}
+	var sb strings.Builder
+	for r := rune(0); r < 0x300; r++ {
+		m := &ChatFromViewer{}
+		m.ChatData.Message = []byte("x" + string(r) + "y")
+		sb.WriteString("---\n")
+		sb.Write(AppendMessageYAML(nil, m))
+	}
+	for _, r := range []rune{0x2028, 0x2029, 0xfffd} {
+		m := &ChatFromViewer{}
+		m.ChatData.Message = []byte("x" + string(r) + "y")
+		sb.WriteString("---\n")
+		sb.Write(AppendMessageYAML(nil, m))
+	}
+	cmd.Stdin = strings.NewReader(sb.String())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("YAML parse failed: %v\n%s", err, out)
 	}
 }

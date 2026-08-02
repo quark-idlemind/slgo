@@ -16,6 +16,7 @@ and decode themselves.
     msg/framing.go      message numbers, packet header, zero coding
     msg/receive.go      the read goroutine
     msg/send.go         the write goroutine
+    msg/dispatch.go     the routing goroutine
     msg/dump.go         YAML packet dumps
     msg/messages_gen.go generated: 483 messages, ~14700 lines
 
@@ -264,6 +265,50 @@ Reliable messages are retransmitted with the resent bit set and the
 original sequence number, backing off each time, and are abandoned after
 `maxTries` with a counter to say so. The C retried forever, which is why
 its `acktime` only ever grew.
+
+## Dispatching
+
+`Dispatcher` consumes the receiver's channel, routes each packet, and
+does the acknowledgement bookkeeping in between:
+
+    send := msg.NewSender(conn)
+    d := msg.NewDispatcher(
+        msg.WithSender(send),                 // wire up acknowledgements
+        msg.WithConcurrency(8),
+        msg.OnUnhandled(func(p *msg.Packet) { log.Print(msg.DumpPacket(p)) }),
+    )
+    d.MustHandle("ChatFromSimulator", onChat)
+    d.MustHandle("TransferInfo", onInfo, msg.Inline())
+    go d.Run(ctx, recv.C())
+
+Handlers run in their own goroutine, throttled by a counting semaphore:
+acquire a slot, spawn, release on the way out. Concurrency is bounded,
+so a slow handler backs pressure up into the receive channel and then
+into the kernel rather than growing the heap without limit. The same
+semaphore doubles as the shutdown barrier — collecting all N permits
+after the loop waits for every handler still running.
+
+Handlers registered `Inline()` run on the dispatch goroutine instead,
+in arrival order. UDP does not guarantee order, but the protocol layers
+it back on: `TransferInfo` carries the size that `TransferPacket`
+assembles against, and `RegionHandshake`, the teleport sequence and
+inventory descent all care. Those want `Inline()`; everything else does
+not.
+
+Acknowledgement bookkeeping happens for *every* packet, before anything
+else and including duplicates and ones that failed to decode. A
+duplicate arrived precisely because our previous acknowledgement did
+not get through, so it needs another one.
+
+Duplicates are then suppressed by sequence number over a ring of the
+last 4096, because a retransmission means the same message is handled
+twice otherwise. The C client has no such check.
+
+Nothing is dropped silently. Unhandled messages are counted per ID and
+reported by `Unhandled()`, with `OnUnhandled` for logging. That is not
+hypothetical bookkeeping: the only reason anyone noticed the simulator
+answers `AgentUpdate` with a `CameraConstraint` is that the C client
+dumps messages it has no callback for.
 
 ## Dumping
 

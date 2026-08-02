@@ -290,9 +290,25 @@ func isText(b []byte) bool {
 		if r == '\n' || r == '\t' || r == '\r' {
 			continue
 		}
-		if r < 0x20 || r == 0x7f {
+		if !printableInYAML(r) {
 			return false
 		}
+	}
+	return true
+}
+
+// printableInYAML reports whether a rune may appear literally in a YAML
+// scalar.  The C0 controls and DEL are the obvious ones; the C1 range
+// and the line and paragraph separators are the ones that are easy to
+// miss, because Go is perfectly happy to call them printable text.
+func printableInYAML(r rune) bool {
+	switch {
+	case r < 0x20, r == 0x7f:
+		return false
+	case r >= 0x80 && r <= 0x9f:
+		return false
+	case r == 0x2028 || r == 0x2029:
+		return false
 	}
 	return true
 }
@@ -325,10 +341,17 @@ func appendYAMLString(dst []byte, s string) []byte {
 		case '\t':
 			dst = append(dst, '\\', 't')
 		default:
-			if r < 0x20 || r == 0x7f {
-				dst = append(dst, fmt.Sprintf(`\x%02x`, r)...)
-			} else {
+			// Escape anything YAML will not take literally.
+			// This path also carries error strings and
+			// addresses, which we do not control, so it
+			// checks rather than assumes.
+			switch {
+			case printableInYAML(r):
 				dst = utf8.AppendRune(dst, r)
+			case r <= 0xff:
+				dst = append(dst, fmt.Sprintf(`\x%02x`, r)...)
+			default:
+				dst = append(dst, fmt.Sprintf(`\u%04x`, r)...)
 			}
 		}
 	}

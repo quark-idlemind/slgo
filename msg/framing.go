@@ -186,8 +186,9 @@ func DecodeID(b []byte) (ID, int, error) {
 
 // The registry is filled by the generated file.
 var (
-	infoByID = map[ID]*Info{}
-	newByID  = map[ID]func() Message{}
+	infoByID   = map[ID]*Info{}
+	newByID    = map[ID]func() Message{}
+	infoByName = map[string]*Info{}
 )
 
 func register(info *Info, mk func() Message) {
@@ -196,10 +197,17 @@ func register(info *Info, mk func() Message) {
 	}
 	infoByID[info.ID] = info
 	newByID[info.ID] = mk
+	infoByName[info.Name] = info
 }
 
 // Lookup returns the template metadata for a message number, or nil.
 func Lookup(id ID) *Info { return infoByID[id] }
+
+// LookupName returns the template metadata for a message name, or nil.
+func LookupName(name string) *Info { return infoByName[name] }
+
+// IDOf is a shorthand for m.MsgInfo().ID.
+func IDOf(m Message) ID { return m.MsgInfo().ID }
 
 // New allocates a zero value of the message with this number.  It
 // returns nil for a number that is not in the template.

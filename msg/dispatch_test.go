@@ -1,0 +1,344 @@
+package msg
+
+import (
+	"context"
+	"net"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+// feed runs a dispatcher over a channel of packets and returns once the
+// channel has been consumed and every handler has finished.
+func feed(t *testing.T, d *Dispatcher, pkts ...*Packet) {
+	t.Helper()
+	in := make(chan *Packet, len(pkts))
+	for _, p := range pkts {
+		in <- p
+	}
+	close(in)
+
+	done := make(chan error, 1)
+	go func() { done <- d.Run(context.Background(), in) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("dispatcher did not finish")
+	}
+}
+
+func pkt(seq uint32, m Message) *Packet {
+	return &Packet{
+		Header:  Header{Sequence: seq, Flags: FlagReliable},
+		ID:      IDOf(m),
+		Message: m,
+	}
+}
+
+func TestDispatchToHandler(t *testing.T) {
+	d := NewDispatcher()
+	var got atomic.Int64
+	d.MustHandle("CompletePingCheck", func(p *Packet) {
+		got.Add(int64(p.Message.(*CompletePingCheck).PingID.PingID))
+	})
+
+	m1, m2 := &CompletePingCheck{}, &CompletePingCheck{}
+	m1.PingID.PingID = 3
+	m2.PingID.PingID = 4
+	feed(t, d, pkt(1, m1), pkt(2, m2))
+
+	if got.Load() != 7 {
+		t.Errorf("handlers saw %d, want 7", got.Load())
+	}
+	if st := d.Stats(); st.Dispatched != 2 || st.Async != 2 || st.Inline != 0 {
+		t.Errorf("stats = %+v", st)
+	}
+}
+
+func TestDispatchInlinePreservesOrder(t *testing.T) {
+	d := NewDispatcher()
+	var mu sync.Mutex
+	var order []uint8
+	d.MustHandle("CompletePingCheck", func(p *Packet) {
+		mu.Lock()
+		order = append(order, p.Message.(*CompletePingCheck).PingID.PingID)
+		mu.Unlock()
+	}, Inline())
+
+	var pkts []*Packet
+	for i := 1; i <= 20; i++ {
+		m := &CompletePingCheck{}
+		m.PingID.PingID = uint8(i)
+		pkts = append(pkts, pkt(uint32(i), m))
+	}
+	feed(t, d, pkts...)
+
+	for i, v := range order {
+		if v != uint8(i+1) {
+			t.Fatalf("inline handlers ran out of order: %v", order)
+		}
+	}
+	if st := d.Stats(); st.Inline != 20 || st.Async != 0 {
+		t.Errorf("stats = %+v", st)
+	}
+}
+
+// TestDispatchConcurrencyBounded is the point of the semaphore: no more
+// than N handlers are ever in flight, however many packets arrive.
+func TestDispatchConcurrencyBounded(t *testing.T) {
+	const limit = 4
+	d := NewDispatcher(WithConcurrency(limit))
+
+	var live, peak atomic.Int64
+	d.MustHandle("CompletePingCheck", func(p *Packet) {
+		n := live.Add(1)
+		for {
+			old := peak.Load()
+			if n <= old || peak.CompareAndSwap(old, n) {
+				break
+			}
+		}
+		time.Sleep(time.Millisecond)
+		live.Add(-1)
+	})
+
+	var pkts []*Packet
+	for i := 1; i <= 100; i++ {
+		pkts = append(pkts, pkt(uint32(i), &CompletePingCheck{}))
+	}
+	feed(t, d, pkts...)
+
+	if peak.Load() > limit {
+		t.Errorf("%d handlers ran at once, limit is %d", peak.Load(), limit)
+	}
+	if peak.Load() < 2 {
+		t.Errorf("peak concurrency was %d, so nothing ran in parallel", peak.Load())
+	}
+	if live.Load() != 0 {
+		t.Errorf("%d handlers still running after Run returned", live.Load())
+	}
+}
+
+// TestDispatchWaitsForHandlers: Run must not return while a handler is
+// still going, or a caller that shuts down cleanly loses work.
+func TestDispatchWaitsForHandlers(t *testing.T) {
+	d := NewDispatcher()
+	var finished atomic.Bool
+	d.MustHandle("CompletePingCheck", func(p *Packet) {
+		time.Sleep(50 * time.Millisecond)
+		finished.Store(true)
+	})
+	feed(t, d, pkt(1, &CompletePingCheck{}))
+	if !finished.Load() {
+		t.Error("Run returned before the handler finished")
+	}
+}
+
+func TestDispatchSuppressesDuplicates(t *testing.T) {
+	d := NewDispatcher()
+	var n atomic.Int64
+	d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
+
+	// The same sequence number three times, as a retransmission
+	// would arrive.
+	feed(t, d,
+		pkt(7, &CompletePingCheck{}),
+		pkt(7, &CompletePingCheck{}),
+		pkt(8, &CompletePingCheck{}),
+		pkt(7, &CompletePingCheck{}),
+	)
+	if n.Load() != 2 {
+		t.Errorf("handler ran %d times, want 2", n.Load())
+	}
+	if st := d.Stats(); st.Duplicates != 2 {
+		t.Errorf("stats = %+v", st)
+	}
+}
+
+func TestDispatchDedupeEvicts(t *testing.T) {
+	d := NewDispatcher(WithDedupe(4))
+	var n atomic.Int64
+	d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
+
+	// Sequence 1 falls out of a four entry window before it repeats.
+	feed(t, d,
+		pkt(1, &CompletePingCheck{}),
+		pkt(2, &CompletePingCheck{}),
+		pkt(3, &CompletePingCheck{}),
+		pkt(4, &CompletePingCheck{}),
+		pkt(5, &CompletePingCheck{}),
+		pkt(1, &CompletePingCheck{}),
+	)
+	if n.Load() != 6 {
+		t.Errorf("handler ran %d times, want 6 once 1 has been evicted", n.Load())
+	}
+}
+
+func TestDispatchDedupeDisabled(t *testing.T) {
+	d := NewDispatcher(WithDedupe(0))
+	var n atomic.Int64
+	d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
+	feed(t, d, pkt(1, &CompletePingCheck{}), pkt(1, &CompletePingCheck{}))
+	if n.Load() != 2 {
+		t.Errorf("handler ran %d times, want 2 with dedupe off", n.Load())
+	}
+}
+
+func TestDispatchUnhandledCounted(t *testing.T) {
+	var seen []string
+	d := NewDispatcher(OnUnhandled(func(p *Packet) {
+		seen = append(seen, p.ID.String())
+	}))
+
+	feed(t, d,
+		pkt(1, &CompletePingCheck{}),
+		pkt(2, &CompletePingCheck{}),
+		pkt(3, &ChatFromViewer{}),
+	)
+
+	if st := d.Stats(); st.Unhandled != 3 || st.Dispatched != 0 {
+		t.Errorf("stats = %+v", st)
+	}
+	un := d.Unhandled()
+	if un[IDOf(&CompletePingCheck{})] != 2 || un[IDOf(&ChatFromViewer{})] != 1 {
+		t.Errorf("per-message counts = %v", un)
+	}
+	if len(seen) != 3 || seen[0] != "CompletePingCheck" {
+		t.Errorf("hook saw %v", seen)
+	}
+}
+
+func TestDispatchErrorHook(t *testing.T) {
+	var got *Packet
+	d := NewDispatcher(OnError(func(p *Packet) { got = p }))
+
+	feed(t, d, &Packet{
+		Header: Header{Sequence: 1},
+		ID:     MakeID(FreqHigh, 253),
+		Err:    ErrUnknownMessage,
+		Body:   []byte{0xde, 0xad},
+	})
+
+	if got == nil {
+		t.Fatal("error hook not called")
+	}
+	if st := d.Stats(); st.Errors != 1 {
+		t.Errorf("stats = %+v", st)
+	}
+	// An unknown number is still worth counting per message, so a
+	// build that predates a message can say which one it is missing.
+	if d.Unhandled()[MakeID(FreqHigh, 253)] != 1 {
+		t.Errorf("unknown message not counted: %v", d.Unhandled())
+	}
+}
+
+func TestDispatchAckOnlyPacket(t *testing.T) {
+	d := NewDispatcher()
+	feed(t, d, &Packet{Header: Header{Sequence: 1}, Acks: []uint32{5}})
+	if st := d.Stats(); st.AckOnly != 1 || st.Dispatched != 0 {
+		t.Errorf("stats = %+v", st)
+	}
+}
+
+func TestHandleRejectsBadName(t *testing.T) {
+	d := NewDispatcher()
+	if err := d.Handle("NoSuchMessage", func(*Packet) {}); err == nil {
+		t.Error("expected an error for an unknown message name")
+	} else if !strings.Contains(err.Error(), "NoSuchMessage") {
+		t.Errorf("error should name the message: %v", err)
+	}
+	if err := d.Handle("CompletePingCheck", func(*Packet) {}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Handle("CompletePingCheck", func(*Packet) {}); err == nil {
+		t.Error("expected an error registering a second handler")
+	}
+}
+
+func TestDispatchStopsOnCancel(t *testing.T) {
+	d := NewDispatcher()
+	in := make(chan *Packet)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx, in) }()
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not stop on cancellation")
+	}
+}
+
+// TestDispatchAckWiring runs receiver, dispatcher and sender together
+// over loopback UDP and checks the acknowledgement bookkeeping: an
+// inbound reliable packet gets acknowledged, and an inbound
+// acknowledgement stops a retransmission.
+func TestDispatchAckWiring(t *testing.T) {
+	// The peer we are talking to.
+	peer, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("no loopback UDP: %v", err)
+	}
+	defer peer.Close()
+
+	out, err := net.Dial("udp", peer.LocalAddr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+
+	sender := NewSender(out, WithAckDelay(10*time.Millisecond), WithRetransmit(30*time.Millisecond, 5))
+	sctx, scancel := context.WithCancel(context.Background())
+	sdone := make(chan error, 1)
+	go func() { sdone <- sender.Run(sctx) }()
+	defer func() { scancel(); <-sdone }()
+
+	d := NewDispatcher(WithSender(sender))
+	in := make(chan *Packet, 4)
+	dctx, dcancel := context.WithCancel(context.Background())
+	ddone := make(chan error, 1)
+	go func() { ddone <- d.Run(dctx, in) }()
+	defer func() { dcancel(); <-ddone }()
+
+	// Something of ours is in flight and awaiting acknowledgement.
+	if err := sender.SendReliable(context.Background(), &CompletePingCheck{}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "our packet to go out", func() bool { return sender.Stats().Sent >= 1 })
+
+	// A reliable packet arrives carrying an acknowledgement of it.
+	in <- &Packet{
+		Header:  Header{Sequence: 500, Flags: FlagReliable},
+		ID:      IDOf(&CompletePingCheck{}),
+		Message: &CompletePingCheck{},
+		Acks:    []uint32{1},
+	}
+
+	// It should be acknowledged in turn...
+	waitFor(t, "our acknowledgement", func() bool { return sender.Stats().AcksQueued >= 1 })
+	// ... and ours should stop being retransmitted.
+	time.Sleep(150 * time.Millisecond)
+	if st := sender.Stats(); st.Resent != 0 {
+		t.Errorf("resent %d times despite being acknowledged", st.Resent)
+	}
+}
+
+func BenchmarkDispatch(b *testing.B) {
+	d := NewDispatcher(WithConcurrency(8), WithDedupe(0))
+	d.MustHandle("CompletePingCheck", func(p *Packet) {}, Inline())
+	p := pkt(1, &CompletePingCheck{})
+	ctx := context.Background()
+	b.ReportAllocs()
+	for b.Loop() {
+		d.one(ctx, p)
+	}
+}
