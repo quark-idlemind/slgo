@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -19,6 +21,15 @@ type CapRequest struct {
 	Path   string // appended to the capability URL
 	Body   []byte
 	Type   string // content type of Body
+
+	// URL is an absolute address to use instead of a named
+	// capability.  Asset upload needs it: the first step posts to a
+	// capability and the simulator answers with a one-shot uploader
+	// URL to post the bytes to.
+	//
+	// Only a URL the simulator has handed us is accepted; see
+	// Agent.RememberURL.
+	URL string
 }
 
 // CapResponse is what came back.
@@ -61,15 +72,24 @@ func (a *Agent) HasCap(name string) bool {
 
 // DoCap makes the request against the capability's URL.
 func (a *Agent) DoCap(ctx context.Context, r CapRequest) (*CapResponse, error) {
-	base, ok := a.Caps.Get(r.Cap)
-	if !ok {
-		return nil, fmt.Errorf("agent: no %s capability", r.Cap)
+	var url string
+	switch {
+	case r.URL != "":
+		if !a.knownURL(r.URL) {
+			return nil, fmt.Errorf("agent: %s is not a URL this simulator gave us", r.URL)
+		}
+		url = r.URL
+	default:
+		base, ok := a.Caps.Get(r.Cap)
+		if !ok {
+			return nil, fmt.Errorf("agent: no %s capability", r.Cap)
+		}
+		url = strings.TrimRight(base, "/") + r.Path
 	}
 	method := r.Method
 	if method == "" {
 		method = http.MethodGet
 	}
-	url := strings.TrimRight(base, "/") + r.Path
 
 	var body io.Reader
 	if len(r.Body) > 0 {
@@ -98,5 +118,83 @@ func (a *Agent) DoCap(ctx context.Context, r CapRequest) (*CapResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("agent: %s%s: %w", r.Cap, r.Path, err)
 	}
+
+	// A reply may hand back a URL to post to next.  Remember those,
+	// so a later request naming one is recognisable as something the
+	// simulator offered rather than anywhere at all.
+	a.rememberURLs(b)
+
 	return &CapResponse{Status: resp.StatusCode, Body: b}, nil
+}
+
+// uploaderPattern finds the URLs a capability reply offers.  They are
+// always on a host the simulator already gave us a capability for, so
+// that is what makes one acceptable rather than the pattern itself.
+var uploaderPattern = regexp.MustCompile(`https?://[^\s"'<>]+`)
+
+// rememberURLs records the addresses in a capability reply.
+func (a *Agent) rememberURLs(body []byte) {
+	if len(body) == 0 || len(body) > 1<<20 {
+		return
+	}
+	found := uploaderPattern.FindAll(body, 32)
+	if found == nil {
+		return
+	}
+	a.urlMu.Lock()
+	defer a.urlMu.Unlock()
+	if a.urls == nil {
+		a.urls = map[string]bool{}
+	}
+	for _, u := range found {
+		s := string(u)
+		if a.sameHostAsACap(s) {
+			a.urls[s] = true
+		}
+	}
+	// Keep the set from growing without bound over a long session.
+	if len(a.urls) > 4096 {
+		a.urls = map[string]bool{}
+	}
+}
+
+// RememberURL marks a URL as one the simulator offered, for a caller
+// that got it from somewhere this package did not see.
+func (a *Agent) RememberURL(u string) {
+	a.urlMu.Lock()
+	defer a.urlMu.Unlock()
+	if a.urls == nil {
+		a.urls = map[string]bool{}
+	}
+	if a.sameHostAsACap(u) {
+		a.urls[u] = true
+	}
+}
+
+func (a *Agent) knownURL(u string) bool {
+	a.urlMu.Lock()
+	if a.urls[u] {
+		a.urlMu.Unlock()
+		return true
+	}
+	a.urlMu.Unlock()
+	// A URL on the same host as a capability is one the simulator
+	// serves, which is the property that matters.
+	return a.sameHostAsACap(u)
+}
+
+// sameHostAsACap reports whether u is served by a host the simulator
+// gave us a capability on.
+func (a *Agent) sameHostAsACap(u string) bool {
+	pu, err := neturl.Parse(u)
+	if err != nil || pu.Host == "" {
+		return false
+	}
+	for _, c := range a.Caps {
+		pc, err := neturl.Parse(c)
+		if err == nil && pc.Host == pu.Host {
+			return true
+		}
+	}
+	return false
 }

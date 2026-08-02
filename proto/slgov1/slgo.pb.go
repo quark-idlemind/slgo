@@ -1122,13 +1122,23 @@ func (x *StatusResponse) GetUnhandled() map[string]uint64 {
 }
 
 type CapRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Agent         string                 `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
-	Cap           string                 `protobuf:"bytes,2,opt,name=cap,proto3" json:"cap,omitempty"`       // capability name, e.g. "InventoryAPIv3"
-	Method        string                 `protobuf:"bytes,3,opt,name=method,proto3" json:"method,omitempty"` // default GET
-	Path          string                 `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`     // appended to the capability URL
-	Body          []byte                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
-	ContentType   string                 `protobuf:"bytes,6,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Agent       string                 `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
+	Cap         string                 `protobuf:"bytes,2,opt,name=cap,proto3" json:"cap,omitempty"`       // capability name, e.g. "InventoryAPIv3"
+	Method      string                 `protobuf:"bytes,3,opt,name=method,proto3" json:"method,omitempty"` // default GET
+	Path        string                 `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`     // appended to the capability URL
+	Body        []byte                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
+	ContentType string                 `protobuf:"bytes,6,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	// An absolute URL to use instead of a named capability.
+	//
+	// Asset upload needs this: the first step posts to a capability and
+	// the simulator answers with a one-shot uploader URL to post the
+	// bytes to.  Without it a client would have to reach the simulator
+	// itself, which is exactly the coupling the server exists to avoid.
+	//
+	// Only URLs the simulator has handed us are accepted, so this cannot
+	// be used to make the server fetch something arbitrary.
+	Url           string `protobuf:"bytes,7,opt,name=url,proto3" json:"url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1201,6 +1211,13 @@ func (x *CapRequest) GetBody() []byte {
 func (x *CapRequest) GetContentType() string {
 	if x != nil {
 		return x.ContentType
+	}
+	return ""
+}
+
+func (x *CapRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
 	}
 	return ""
 }
@@ -1436,7 +1453,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\tunhandled\x18\f \x03(\v2&.slgo.v1.StatusResponse.UnhandledEntryR\tunhandled\x1a<\n" +
 	"\x0eUnhandledEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x04R\x05value:\x028\x01\"\x97\x01\n" +
+	"\x05value\x18\x02 \x01(\x04R\x05value:\x028\x01\"\xa9\x01\n" +
 	"\n" +
 	"CapRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x10\n" +
@@ -1444,7 +1461,8 @@ const file_slgo_proto_rawDesc = "" +
 	"\x06method\x18\x03 \x01(\tR\x06method\x12\x12\n" +
 	"\x04path\x18\x04 \x01(\tR\x04path\x12\x12\n" +
 	"\x04body\x18\x05 \x01(\fR\x04body\x12!\n" +
-	"\fcontent_type\x18\x06 \x01(\tR\vcontentType\"9\n" +
+	"\fcontent_type\x18\x06 \x01(\tR\vcontentType\x12\x10\n" +
+	"\x03url\x18\a \x01(\tR\x03url\"9\n" +
 	"\vCapResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\fR\x04body\"W\n" +

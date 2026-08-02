@@ -54,6 +54,9 @@ type Agent struct {
 
 	eq eventQueue
 
+	urlMu sync.Mutex
+	urls  map[string]bool
+
 	// lastPacket is when anything last arrived from the simulator,
 	// as unix nanoseconds.  The watchdog reads it; the tap writes
 	// it.

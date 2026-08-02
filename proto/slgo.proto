@@ -203,6 +203,17 @@ message CapRequest {
   string path = 4;   // appended to the capability URL
   bytes body = 5;
   string content_type = 6;
+
+  // An absolute URL to use instead of a named capability.
+  //
+  // Asset upload needs this: the first step posts to a capability and
+  // the simulator answers with a one-shot uploader URL to post the
+  // bytes to.  Without it a client would have to reach the simulator
+  // itself, which is exactly the coupling the server exists to avoid.
+  //
+  // Only URLs the simulator has handed us are accepted, so this cannot
+  // be used to make the server fetch something arbitrary.
+  string url = 7;
 }
 
 message CapResponse {

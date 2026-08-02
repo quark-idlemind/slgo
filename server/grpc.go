@@ -378,6 +378,7 @@ func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, 
 		Path:   req.Path,
 		Body:   req.Body,
 		Type:   req.ContentType,
+		URL:    req.Url,
 	})
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "%v", err)

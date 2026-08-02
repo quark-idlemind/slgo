@@ -536,19 +536,50 @@ Public chat is channel 0 by definition -- the simulator only sends
 another channel never reaches a viewer -- so subscribing to that
 message is the whole of listening to channel 0.
 
+## Assets and object inventory
+
+`slgo-asset` runs the whole chain against a live simulator: rez a prim,
+create a notecard and a script in inventory, upload their contents, put
+both inside the prim, read the prim's inventory back, edit the notecard
+where it sits, and pull a copy out again.
+
+Uploading an asset is two steps.  The first posts the item id to a
+capability and the simulator answers with a one-shot uploader URL; the
+second posts the bytes there.  That second step is why `CapRequest` has
+a `URL` field -- without it a client would have to reach the simulator
+itself, which is the coupling the server exists to remove.  Only a URL
+on a host the simulator already serves a capability on is accepted, so
+it cannot be used to make the server fetch anything at all.
+
+Reading a prim's inventory goes over **xfer**, the old UDP file
+transfer: `RequestTaskInventory` answers with a *filename*, and
+`RequestXfer` pulls the file down in packets that each have to be
+acknowledged before the next is sent.  `client.Xfers` reassembles them.
+It is client side, being nothing but messages.
+
+Three things that cost time here:
+
+- **An item copied into a prim gets a new item id.**  The agent
+  inventory id does not address it, and using it gets a `NotFound` from
+  the capability.  The task's ids are in the inventory file.
+- A notecard is not stored as plain text.  It is wrapped in a
+  `Linden text version 2` container with a `Text length` header, and a
+  notecard without it will not open.
+- The first xfer packet carries a four byte length prefix that is not
+  part of the file, and the top bit of the packet number marks the
+  last one.
+
 ## Not done
 
 No region crossing, no teleport, no appearance, and inventory is read
 only -- nothing creates, moves or deletes.
 
-Object inventory is not reachable yet.  `RequestTaskInventory` answers
-with a *filename* rather than the contents, and fetching it needs the
-xfer protocol (`RequestXfer`, `SendXferPacket`, `ConfirmXferPacket`),
-which is not built.  Putting an asset into an object needs the two step
-upload: the first step is a capability the proxy already handles, but
-the second posts to an uploader URL the simulator hands back, and the
-Cap RPC only addresses capabilities by name.  Adding an absolute URL to
-it is the small missing piece.
+Asset *contents* cannot be read back yet.  The `ViewerAsset`
+capability serves the asset CDN -- textures, meshes, sounds -- and
+answers 403 for a notecard.  Reading one needs the UDP asset transfer
+(`TransferRequest`, `TransferInfo`, `TransferPacket`), which is the C
+client's cache.c path and is not built here.  An edit made in world can
+still be confirmed without it: the asset id changes.
 
 The sender writes to an `io.Writer`, which suits the connected socket a
 single simulator needs. Neighbouring simulators at once will want a

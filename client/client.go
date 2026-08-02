@@ -361,6 +361,7 @@ func (c *Conn) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapRespons
 		Path:        r.Path,
 		Body:        r.Body,
 		ContentType: r.Type,
+		Url:         r.URL,
 	}, grpc.MaxCallRecvMsgSize(64<<20))
 	if err != nil {
 		return nil, err

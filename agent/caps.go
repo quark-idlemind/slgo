@@ -23,6 +23,11 @@ var DefaultCaps = []string{
 	"GetDisplayNames",
 	"UpdateNotecardAgentInventory",
 	"UpdateScriptAgent",
+	// The Task variants edit the copy inside a prim rather than the
+	// one in inventory.  Same two step upload, one more field.
+	"UpdateNotecardTaskInventory",
+	"UpdateScriptTask",
+	"NewFileAgentInventory",
 	"ViewerAsset",
 	"GetTexture",
 	"GetMesh2",
