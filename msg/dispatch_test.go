@@ -342,3 +342,84 @@ func BenchmarkDispatch(b *testing.B) {
 		d.one(ctx, p)
 	}
 }
+
+// TestDispatchConfirmsPacketAckMessages is the bug the live login
+// found: a simulator sends most acknowledgements as a PacketAck message
+// in its own datagram, not on the tail of another packet.  Confirming
+// only p.Acks meant every reliable message we sent retransmitted until
+// it was abandoned.
+func TestDispatchConfirmsPacketAckMessages(t *testing.T) {
+	c := newCapture()
+	s, stop := runSender(t, c, WithRetransmit(30*time.Millisecond, 5))
+	defer stop()
+
+	d := NewDispatcher(WithSender(s))
+
+	if err := s.SendReliable(context.Background(), &CompletePingCheck{}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the first send", func() bool { return c.count() == 1 })
+	h, _, _ := DecodeHeader(c.all()[0])
+
+	// The acknowledgement arrives as a message, with nothing in
+	// Packet.Acks at all.
+	in := make(chan *Packet, 1)
+	in <- &Packet{
+		Header:  Header{Sequence: 900},
+		ID:      IDOf(&PacketAck{}),
+		Message: &PacketAck{Packets: []PacketAck_Packets{{ID: h.Sequence}}},
+	}
+	close(in)
+
+	done := make(chan error, 1)
+	go func() { done <- d.Run(context.Background(), in) }()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(150 * time.Millisecond)
+	if st := s.Stats(); st.Resent != 0 {
+		t.Errorf("resent %d times despite a PacketAck confirming it", st.Resent)
+	}
+	if st := d.Stats(); st.AcksSeen != 1 {
+		t.Errorf("dispatch stats = %+v, want one acknowledgement seen", st)
+	}
+	// It was acted on, so it is not unhandled.
+	if st := d.Stats(); st.Unhandled != 0 {
+		t.Errorf("PacketAck counted as unhandled: %+v", st)
+	}
+}
+
+// TestDispatchPacketAckStillReachesAHandler: consuming it for
+// bookkeeping must not hide it from someone who registered for it.
+func TestDispatchPacketAckStillReachesAHandler(t *testing.T) {
+	c := newCapture()
+	s, stop := runSender(t, c)
+	defer stop()
+
+	d := NewDispatcher(WithSender(s))
+	seen := make(chan int, 1)
+	d.MustHandle("PacketAck", func(p *Packet) {
+		seen <- len(p.Message.(*PacketAck).Packets)
+	}, Inline())
+
+	in := make(chan *Packet, 1)
+	in <- &Packet{
+		Header:  Header{Sequence: 1},
+		ID:      IDOf(&PacketAck{}),
+		Message: &PacketAck{Packets: []PacketAck_Packets{{ID: 5}, {ID: 6}}},
+	}
+	close(in)
+	if err := d.Run(context.Background(), in); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case n := <-seen:
+		if n != 2 {
+			t.Errorf("handler saw %d acks", n)
+		}
+	default:
+		t.Error("a registered PacketAck handler never ran")
+	}
+}

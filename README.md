@@ -10,6 +10,10 @@ and decode themselves.
 ## Layout
 
     cmd/msggen/         reads message_template.msg, writes Go
+    client/profile.go   credentials under ~/.config/slgo
+    client/xmlrpc.go    XML-RPC decoding
+    client/login.go     login_to_simulator
+    client/session.go   the UDP circuit and its handshake
     msg/types.go        UUID, Vector3, Quaternion, IPAddr, Info, ...
     msg/buffer.go       little endian read/write primitives
     msg/codec.go        the generic tag-driven encoder and decoder
@@ -358,15 +362,64 @@ all 483 messages through Ruby's Psych to check the subset is real.
 - generator parse errors: 15 malformed templates, each expected to fail
   with a specific message
 
+## Logging in
+
+Credentials live one file per account under a private directory:
+
+    ~/.config/slgo/          mode 700
+    ~/.config/slgo/example      mode 600
+
+    # slgo profile "example"
+    first    = Example
+    last     = Resident
+    password = $1$00157e577e57c0de028f000000000000
+    start    = last
+
+and a session is three calls:
+
+    acct, err := client.LoginAs(ctx, "example")
+    s, err := client.Connect(ctx, acct, client.Options{})
+    defer s.Logout(ctx, 10*time.Second)
+
+`LoadProfile` refuses a profile anyone but its owner can read, and a
+directory anyone but its owner can list, the way ssh does. An unknown
+setting is an error rather than a line that silently does nothing.
+`SaveProfile` writes the `$1$` digest rather than the password: it is
+the only form that goes over the wire, so nothing is lost, and a
+password that may be used elsewhere stays off the disk. Plain text in
+the file works too and is hashed on the way out.
+
+`Connect` dials the simulator, starts the receiver, sender and
+dispatcher, and runs the handshake: `UseCircuitCode` to open the
+circuit, then `CompleteAgentMovement`, which the simulator answers with
+`AgentMovementComplete`. For the life of the session it answers
+`StartPingCheck` and replies to `RegionHandshake`; everything else is
+yours through `Handle`.
+
+The XML-RPC decoder maps `<int>` to int64, `<struct>` to a map and so
+on, and — the part that matters — renders a type it has never seen as
+the text inside it rather than failing. That is the exact thing that
+stopped the C client logging in when Linden Lab's response grew `<int>`
+fields. The test fixture is a real 29KB response from the live grid,
+348 members deep, with the identifiers scrubbed.
+
+Nothing the response contains is discarded: `Account.Raw` holds the
+whole decoded tree, so a field this code does not model is still
+reachable.
+
 ## Not done
 
-No session and no dispatcher: nothing wires the receiver's packets to
-the sender's acknowledgements, suppresses duplicate sequence numbers, or
-notices a circuit going away. No XML-RPC login and no AIS.
+No capabilities: the seed capability arrives in the login response and
+nothing asks it for anything, so no AIS inventory, no event queue. No
+region crossing, no teleport, no asset transfer, no appearance.
 
-The sender writes to an `io.Writer`, which suits the connected socket
-the C client uses. Talking to neighbouring simulators at once will want
-a `WriteTo` variant.
+The sender writes to an `io.Writer`, which suits the connected socket a
+single simulator needs. Neighbouring simulators at once will want a
+`WriteTo` variant and a session per circuit.
+
+`AgentUpdate` is not sent. Nothing needs it yet, and sending it once is
+worse than not at all — see the note above about what it does and does
+not prove.
 
 `Receiver` allocates a message per packet through `New`. At the packet
 rates in the C client's stats — 600k in a long session — that is worth

@@ -41,6 +41,7 @@ type Dispatcher struct {
 
 	onUnhandled Handler
 	onError     Handler
+	tap         Handler
 
 	dispatched atomic.Uint64
 	inline     atomic.Uint64
@@ -49,6 +50,7 @@ type Dispatcher struct {
 	unhandled  atomic.Uint64
 	errors     atomic.Uint64
 	ackOnly    atomic.Uint64
+	acksSeen   atomic.Uint64
 
 	unmu          sync.Mutex
 	unhandledByID map[ID]uint64
@@ -68,6 +70,7 @@ type DispatchStats struct {
 	Unhandled  uint64 // decoded, but nothing registered for it
 	Errors     uint64 // packets the receiver could not decode
 	AckOnly    uint64
+	AcksSeen   uint64 // acknowledgements of ours the peer sent back
 }
 
 // DispatcherOption configures a Dispatcher.
@@ -113,6 +116,14 @@ func OnUnhandled(fn Handler) DispatcherOption {
 // OnError is called for a packet the receiver could not decode.
 func OnError(fn Handler) DispatcherOption {
 	return func(d *Dispatcher) { d.onError = fn }
+}
+
+// WithTap calls fn for every packet, before routing and before
+// duplicate suppression, on the dispatch goroutine.  It is meant for
+// capture and for noticing that anything at all has arrived; keep it
+// quick, because it runs in the path of every packet.
+func WithTap(fn Handler) DispatcherOption {
+	return func(d *Dispatcher) { d.tap = fn }
 }
 
 // NewDispatcher prepares a Dispatcher.
@@ -178,6 +189,7 @@ func (d *Dispatcher) Stats() DispatchStats {
 		Unhandled:  d.unhandled.Load(),
 		Errors:     d.errors.Load(),
 		AckOnly:    d.ackOnly.Load(),
+		AcksSeen:   d.acksSeen.Load(),
 	}
 }
 
@@ -219,13 +231,32 @@ func (d *Dispatcher) Run(ctx context.Context, in <-chan *Packet) error {
 }
 
 func (d *Dispatcher) one(ctx context.Context, p *Packet) {
+	if d.tap != nil {
+		d.tap(p)
+	}
+
 	// Acknowledgement bookkeeping comes first and happens for every
 	// packet, including duplicates and ones that failed to decode.
 	// A duplicate arrived precisely because our previous
 	// acknowledgement did not get through, so it needs another.
+	consumed := false
 	if d.sender != nil {
+		// Acknowledgements reach us two ways.  Some ride on the
+		// tail of another packet, and those are in p.Acks.  The
+		// rest arrive as a PacketAck message in their own
+		// datagram, which is how a simulator sends most of them
+		// -- miss those and every reliable message we send
+		// retransmits until it is abandoned.
 		for _, a := range p.Acks {
 			d.sender.ConfirmAck(a)
+			d.acksSeen.Add(1)
+		}
+		if ack, ok := p.Message.(*PacketAck); ok {
+			for i := range ack.Packets {
+				d.sender.ConfirmAck(ack.Packets[i].ID)
+				d.acksSeen.Add(1)
+			}
+			consumed = true
 		}
 		if p.Header.Reliable() {
 			d.sender.QueueAck(p.Header.Sequence)
@@ -257,6 +288,11 @@ func (d *Dispatcher) one(ctx context.Context, p *Packet) {
 	d.mu.RUnlock()
 
 	if r == nil {
+		// A PacketAck the bookkeeping above has already acted on
+		// is not unhandled, it is done with.
+		if consumed {
+			return
+		}
 		d.unhandled.Add(1)
 		d.countUnhandled(p.ID)
 		if d.onUnhandled != nil {
