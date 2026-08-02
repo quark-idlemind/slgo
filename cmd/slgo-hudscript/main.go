@@ -41,23 +41,26 @@ const (
 	hudCenter1 = 35
 )
 
-// script reports through llOwnerSay, which only the owner hears.
-// llSay would put this in open chat, where everyone within twenty
-// metres has to read our test output.
-const script = `default
-{
-    state_entry()
-    {
-        llOwnerSay("slgo: state_entry ran in the HUD");
-        llSetTimerEvent(10.0);
-    }
-
-    timer()
-    {
-        llOwnerSay("slgo: timer fired, so it is still running");
-    }
-}
-`
+// script asks how long a string with a tab in it is.
+//
+// The tab between the A and the B is a real tab.  A round trip through
+// the asset store keeps one, but that says nothing about what the
+// compiler makes of it: a tab expanded to spaces on the way in would
+// still come back as whatever it was expanded to.  Asking the running
+// script for the length settles what the compiled program actually
+// holds, and llOrd names the character rather than leaving it to be
+// inferred from a count.
+//
+// It reports through llOwnerSay, which only the owner hears.  llSay
+// would put this in open chat, where everyone nearby has to read it.
+const script = "default\n" +
+	"{\n" +
+	"    state_entry()\n" +
+	"    {\n" +
+	"        llOwnerSay((string)llStringLength(\"A\tB\"));\n" +
+	"        llOwnerSay(\"middle character code: \" + (string)llOrd(\"A\tB\", 1));\n" +
+	"    }\n" +
+	"}\n"
 
 type run struct {
 	c    *client.Conn
@@ -148,6 +151,7 @@ func main() {
 	// If the script is already in there, reuse it.  Copying one in
 	// every run piles up "slgo hud script 1", "2", "3": an object
 	// keeps every copy and renames the duplicates.
+	r.removeDuplicates(ctx, hud)
 	task := r.findTaskItem(ctx, hud, scriptName)
 	if task == nil {
 		item := r.createScript(ctx, scriptName)
@@ -275,6 +279,37 @@ func (r *run) findAttachment(item msg.UUID, timeout time.Duration) *attachment {
 	return nil
 }
 
+// removeDuplicates deletes the numbered copies an object accumulates.
+//
+// Copying an item into an object that already holds one of that name
+// keeps both and renames the newcomer, so repeated runs leave a trail
+// of "slgo hud script 1", "2", "3".  Only the numbered ones go: the
+// unsuffixed one is the script being worked on.
+func (r *run) removeDuplicates(ctx context.Context, hud *attachment) {
+	items := r.taskItems(ctx, hud)
+	n := 0
+	for _, it := range items {
+		if !strings.HasPrefix(it.Name, scriptName+" ") {
+			continue
+		}
+		m := &msg.RemoveTaskInventory{}
+		m.AgentData.AgentID, m.AgentData.SessionID = r.me, r.sess
+		m.InventoryData.LocalID = hud.local
+		m.InventoryData.ItemID = it.ItemID
+		r.send(ctx, m)
+		fmt.Printf("  removing %q %s\n", it.Name, it.ItemID)
+		n++
+	}
+	if n > 0 {
+		// The listing is cached against the object id, so drop it or
+		// the next read returns the removed items.
+		r.mu.Lock()
+		delete(r.taskInv, hud.object)
+		r.mu.Unlock()
+		time.Sleep(6 * time.Second)
+	}
+}
+
 // inventoryItem finds an item by name in the Objects folder.
 func (r *run) inventoryItem(ctx context.Context, root msg.UUID, want string) *agent.Item {
 	inv := agent.NewInventory(root)
@@ -322,6 +357,18 @@ func (r *run) reattach(ctx context.Context, it *agent.Item) {
 }
 
 func (r *run) findTaskItem(ctx context.Context, hud *attachment, want string) *taskItem {
+	for _, it := range r.taskItems(ctx, hud) {
+		if it.Name == want {
+			return &it
+		}
+	}
+	return nil
+}
+
+// taskItems reads what an object holds.  RequestTaskInventory answers
+// with a filename rather than the contents, and the file comes over
+// xfer.
+func (r *run) taskItems(ctx context.Context, hud *attachment) []taskItem {
 	req := &msg.RequestTaskInventory{}
 	req.AgentData.AgentID, req.AgentData.SessionID = r.me, r.sess
 	req.InventoryData.LocalID = hud.local
@@ -352,12 +399,7 @@ func (r *run) findTaskItem(ctx context.Context, hud *attachment, want string) *t
 	for _, it := range items {
 		fmt.Printf("    %-24s %-10s %s\n", it.Name, it.Type, it.ItemID)
 	}
-	for _, it := range items {
-		if it.Name == want {
-			return &it
-		}
-	}
-	return nil
+	return items
 }
 
 func (r *run) send(ctx context.Context, m msg.Message) {
