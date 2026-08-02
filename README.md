@@ -12,8 +12,11 @@ and decode themselves.
     cmd/msggen/         reads message_template.msg, writes Go
     client/profile.go   credentials under ~/.config/slgo
     client/xmlrpc.go    XML-RPC decoding
+    client/llsd.go      LLSD decoding and encoding
     client/login.go     login_to_simulator
     client/session.go   the UDP circuit and its handshake
+    client/caps.go      the seed capability
+    client/inventory.go the folder tree, over AIS v3
     msg/types.go        UUID, Vector3, Quaternion, IPAddr, Info, ...
     msg/buffer.go       little endian read/write primitives
     msg/codec.go        the generic tag-driven encoder and decoder
@@ -407,11 +410,62 @@ Nothing the response contains is discarded: `Account.Raw` holds the
 whole decoded tree, so a field this code does not model is still
 reachable.
 
+## Capabilities and inventory
+
+`Connect` asks the seed capability for `DefaultCaps` and leaves the
+result on the session, because almost everything above the circuit
+needs them:
+
+    url, ok := s.Caps.Get("InventoryAPIv3")
+
+Inventory comes over AIS v3, an HTTPS GET per folder:
+
+    err := s.FetchInventory(ctx, client.FetchOptions{Concurrency: 8})
+    for _, f := range s.Inventory.Children(s.Inventory.Root()) {
+        fmt.Println(f.Name, len(s.Inventory.Contents(f.ID)))
+    }
+
+The UDP `FetchInventoryDescendents` the C client uses was retired by
+Linden Lab -- the simulator accepts it and never answers -- so this is
+the only way to get an inventory now.
+
+Folders are fetched concurrently, bounded by `Concurrency`. On a real
+account of 119 folders and 1248 items that is **1.8 seconds** against
+about **50** for the C client doing the same 119 requests one at a
+time. One folder failing does not lose the tree; the walk gives up
+after `MaxFailures` so a broken capability cannot spin.
+
+`Inventory` is safe to read while a fetch is running, which is what the
+`OnFolder` progress callback invites. Links are recorded as items with
+`IsLink` set and `linked_id` in `AssetID`, which is where the UDP
+message used to put it.
+
+## More than one account at a time
+
+Nothing in either package keeps per-connection state at package level.
+The message registry and the codec's plan cache are read-only after
+init and shared safely; everything else -- sockets, sequence numbers,
+retransmission queues, duplicate windows, capabilities, inventories,
+every counter -- hangs off a `Session`.
+
+    a, _ := client.LoginAs(ctx, "example")
+    b, _ := client.LoginAs(ctx, "builder")
+    sa, _ := client.Connect(ctx, a, client.Options{})
+    sb, _ := client.Connect(ctx, b, client.Options{})
+
+`TestManySessionsAtOnce` connects five sessions to five simulators
+simultaneously and checks each lands in its own region with its own
+identity and socket, and that no simulator sees another's circuit.
+`TestSessionsHaveSeparateInventories` fetches two trees at once and
+checks neither leaks into the other. They exist so that a package level
+cache added later fails a test instead of being discovered in
+production.
+
 ## Not done
 
-No capabilities: the seed capability arrives in the login response and
-nothing asks it for anything, so no AIS inventory, no event queue. No
-region crossing, no teleport, no asset transfer, no appearance.
+No event queue, so nothing that arrives over `EventQueueGet` is seen.
+No region crossing, no teleport, no asset transfer, no appearance, and
+inventory is read only -- nothing creates, moves or deletes.
 
 The sender writes to an `io.Writer`, which suits the connected socket a
 single simulator needs. Neighbouring simulators at once will want a

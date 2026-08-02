@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -24,6 +25,17 @@ type Session struct {
 	Recv *msg.Receiver
 	Send *msg.Sender
 	Disp *msg.Dispatcher
+
+	// Caps are the capability URLs the simulator offered, and
+	// Inventory is this agent's folder tree.  Both belong to the
+	// session: nothing here is package level, so one process can
+	// hold as many sessions as it likes.
+	Caps      Caps
+	Inventory *Inventory
+
+	// HTTP is used for capability and inventory requests.  A nil
+	// client gets a default with a sixty second timeout.
+	HTTP *http.Client
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -79,6 +91,14 @@ type Options struct {
 
 	// OnError sees packets that would not decode.
 	OnError msg.Handler
+
+	// Caps names the capabilities to ask the seed capability for.
+	// Empty means DefaultCaps; SkipCaps skips the request.
+	Caps     []string
+	SkipCaps bool
+
+	// HTTP is used for capability and inventory requests.
+	HTTP *http.Client
 }
 
 // Connect opens the circuit and completes the handshake.
@@ -101,6 +121,9 @@ func Connect(ctx context.Context, a *Account, opts Options) (*Session, error) {
 	s := &Session{
 		Account:   a,
 		Conn:      conn,
+		HTTP:      opts.HTTP,
+		Inventory: newInventory(a.InventoryRoot),
+		Caps:      Caps{},
 		done:      make(chan struct{}),
 		anyPacket: newSignal(),
 		inRegion:  newSignal(),
@@ -140,6 +163,19 @@ func Connect(ctx context.Context, a *Account, opts Options) (*Session, error) {
 	if err := s.handshake(ctx, opts.Timeout); err != nil {
 		s.Close()
 		return nil, err
+	}
+
+	// Capabilities are HTTP and have nothing to do with the
+	// circuit, but almost everything above this layer needs them,
+	// so they are fetched here rather than left for the caller to
+	// remember.
+	if !opts.SkipCaps && a.SeedCapability != "" {
+		caps, err := RequestCaps(ctx, a.SeedCapability, opts.Caps, s.http())
+		if err != nil {
+			s.Close()
+			return nil, err
+		}
+		s.Caps = caps
 	}
 	return s, nil
 }

@@ -60,6 +60,28 @@ func TestLiveLogin(t *testing.T) {
 	}
 	t.Logf("in region %q at %+v", s.RegionName(), s.Position())
 	t.Logf("simulator build %q", s.ChannelVersion())
+	t.Logf("capabilities: %d offered", len(s.Caps))
+	if _, ok := s.Caps.Get("InventoryAPIv3"); !ok {
+		t.Errorf("no InventoryAPIv3 among %v", s.Caps.Names())
+	}
+
+	// Fetch the whole inventory tree over AIS.
+	invStart := time.Now()
+	if err := s.FetchInventory(ctx, FetchOptions{Concurrency: 8}); err != nil {
+		t.Errorf("inventory: %v", err)
+	}
+	folders, items := s.Inventory.Counts()
+	t.Logf("inventory: %d folders, %d items in %s", folders, items, time.Since(invStart).Round(time.Millisecond))
+	if folders == 0 {
+		t.Error("no inventory")
+	}
+
+	// Show the top of the tree, as ls would.
+	for _, f := range s.Inventory.Children(s.Inventory.Root()) {
+		kids := s.Inventory.Children(f.ID)
+		its := s.Inventory.Contents(f.ID)
+		t.Logf("  %-44s %2d folders %3d items", f.Name, len(kids), len(its))
+	}
 
 	// Watch a few seconds of traffic.
 	chat := 0
