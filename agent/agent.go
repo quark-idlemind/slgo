@@ -341,7 +341,43 @@ func (a *Agent) register() {
 		a.handle = m.Data.RegionHandle
 		a.channel = trimNul(m.SimData.ChannelVersion)
 		a.mu.Unlock()
+		a.setCenter(m.Data.Position)
 		a.inRegion.fire()
+	}, msg.Inline())
+
+	// Keep the camera on the avatar.  AgentUpdate is what puts a
+	// session in the simulator's interest list, and the interest list
+	// is worked out from the camera rather than from where the avatar
+	// actually is.  Leave the camera behind and the simulator stops
+	// describing everything around the avatar -- including the
+	// avatar's own attachments -- while cheerfully reporting that the
+	// teleport succeeded.
+	a.Disp.MustHandle("TeleportLocal", func(p *msg.Packet) {
+		m := p.Message.(*msg.TeleportLocal)
+		a.mu.Lock()
+		a.position = m.Info.Position
+		a.lookAt = m.Info.LookAt
+		a.mu.Unlock()
+		a.setCenter(m.Info.Position)
+	}, msg.Inline())
+
+	// CoarseLocationUpdate is the only thing that keeps arriving as an
+	// avatar walks, so it is what stops the camera drifting away from
+	// one that moved without teleporting.  It is coarse -- whole
+	// metres, and four of them vertically -- which is ample for
+	// deciding what is nearby.
+	a.Disp.MustHandle("CoarseLocationUpdate", func(p *msg.Packet) {
+		m := p.Message.(*msg.CoarseLocationUpdate)
+		i := int(m.Index.You)
+		if i < 0 || i >= len(m.Location) {
+			return
+		}
+		l := m.Location[i]
+		at := msg.Vector3{X: float32(l.X), Y: float32(l.Y), Z: float32(l.Z) * 4}
+		a.mu.Lock()
+		a.position = at
+		a.mu.Unlock()
+		a.setCenter(at)
 	}, msg.Inline())
 
 	a.Disp.MustHandle("LogoutReply", func(p *msg.Packet) {

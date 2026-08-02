@@ -56,6 +56,21 @@ func (a *Agent) Look() Look {
 	return a.look
 }
 
+// setCenter moves the camera without disturbing the rest of the view.
+//
+// This follows the avatar, and it is the server's job rather than a
+// client's: a client that exits leaves the camera wherever it was, and
+// a camera in the wrong place quietly empties the interest list for
+// every client that connects afterwards.
+func (a *Agent) setCenter(at msg.Vector3) {
+	a.mu.Lock()
+	a.look.Center = at
+	if a.look.Far <= 0 {
+		a.look.Far = DefaultDrawDistance
+	}
+	a.mu.Unlock()
+}
+
 // SetLook changes it.  The next update carries it.
 func (a *Agent) SetLook(l Look) {
 	if l.Far <= 0 {
