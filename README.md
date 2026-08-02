@@ -507,10 +507,48 @@ not `<integer>`.  `ParcelFlags` arrives as four big endian bytes.
 reads as a confident "every permission is off" rather than as "I could
 not tell", and that is exactly the wrong way for this to fail.
 
+## Building, from the client
+
+`slgo chat` records public chat; `slgo-build` rezzes two prims, links
+them and reads back what the simulator says.  Both are client side --
+the server relays bytes and knows nothing about prims or chat.
+
+    slgo -for 1h -log chat.log chat
+    slgo-build -at 193,206,27 -chatlog chat.log
+
+Three things that cost time and are not written down anywhere obvious:
+
+- **`ObjectUpdate.OwnerID` is not the object's owner.**  It carries
+  sound ownership and is usually zero.  To know who owns something you
+  ask `RequestObjectPropertiesFamily` and read the owner off the reply.
+- **A newly rezzed prim is found by its local id, not by diffing the
+  set of objects you own.**  The interest list fills gradually, so an
+  attachment worn all along looks new the moment the simulator first
+  mentions it.  Attachments have local id 0.
+- **`ObjectProperties.CreationDate` is microseconds**, not seconds.
+  Read as seconds it dates a fresh prim to the year 56 million.
+
+`ObjectLink` makes the *first* id in the list the root; the rest become
+children, which shows up as their `ParentID`.
+
+Public chat is channel 0 by definition -- the simulator only sends
+`ChatFromSimulator` for what an avatar could hear, and anything on
+another channel never reaches a viewer -- so subscribing to that
+message is the whole of listening to channel 0.
+
 ## Not done
 
-No region crossing, no teleport, no asset transfer, no appearance, and
-inventory is read only -- nothing creates, moves or deletes.
+No region crossing, no teleport, no appearance, and inventory is read
+only -- nothing creates, moves or deletes.
+
+Object inventory is not reachable yet.  `RequestTaskInventory` answers
+with a *filename* rather than the contents, and fetching it needs the
+xfer protocol (`RequestXfer`, `SendXferPacket`, `ConfirmXferPacket`),
+which is not built.  Putting an asset into an object needs the two step
+upload: the first step is a capability the proxy already handles, but
+the second posts to an uploader URL the simulator hands back, and the
+Cap RPC only addresses capabilities by name.  Adding an absolute URL to
+it is the small missing piece.
 
 The sender writes to an `io.Writer`, which suits the connected socket a
 single simulator needs. Neighbouring simulators at once will want a

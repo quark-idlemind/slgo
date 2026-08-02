@@ -9,6 +9,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"sort"
@@ -22,13 +23,14 @@ import (
 
 func main() {
 	var (
-		addr  = flag.String("server", "127.0.0.1:7778", "slgod address")
-		name  = flag.String("agent", "", "which hosted agent (default: the only one)")
-		limit = flag.Duration("for", 30*time.Second, "how long to watch")
+		addr    = flag.String("server", "127.0.0.1:7778", "slgod address")
+		name    = flag.String("agent", "", "which hosted agent (default: the only one)")
+		limit   = flag.Duration("for", 30*time.Second, "how long to watch")
+		logfile = flag.String("log", "", "append chat to this file instead of stdout")
 	)
 	flag.Parse()
 	if flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "usage: slgo [-server addr] [-agent name] {agents|status|watch [message...]|inventory}")
+		fmt.Fprintln(os.Stderr, "usage: slgo [-server addr] [-agent name] {agents|status|chat|watch [message...]|inventory}")
 		os.Exit(2)
 	}
 
@@ -71,6 +73,40 @@ func main() {
 			fmt.Println("  no handler for:")
 			for _, k := range keys {
 				fmt.Printf("    %-32s %d\n", k, st.Unhandled[k])
+			}
+		}
+
+	case "chat":
+		// Public chat is channel 0 by definition: the simulator
+		// only sends ChatFromSimulator for what an avatar could
+		// hear, and anything on another channel never reaches a
+		// viewer at all.
+		mustAttach(ctx, c, *name, "ChatFromSimulator")
+		w := os.Stdout
+		if *logfile != "" {
+			f, err := os.OpenFile(*logfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+			if err != nil {
+				log.Fatal(err)
+			}
+			defer f.Close()
+			w = f
+			fmt.Printf("logging chat to %s\n", *logfile)
+		}
+		fmt.Fprintf(w, "# chat log opened %s\n", time.Now().Format(time.RFC3339))
+		deadline := time.After(*limit)
+		for {
+			select {
+			case m, ok := <-c.Messages():
+				if !ok {
+					log.Fatalf("stream ended: %v", c.Err())
+				}
+				v, err := m.Decode()
+				if err != nil || v == nil {
+					continue
+				}
+				logChat(w, v.(*msg.ChatFromSimulator))
+			case <-deadline:
+				return
 			}
 		}
 
@@ -133,6 +169,41 @@ func mustAttach(ctx context.Context, c *client.Conn, name string, subscribe ...s
 		log.Fatalf("attach: %v", err)
 	}
 	return info
+}
+
+// chatTypes and sourceTypes name the codes ChatFromSimulator carries.
+var chatTypes = map[uint8]string{
+	0: "whisper", 1: "say", 2: "shout", 3: "typing-start",
+	4: "typing-stop", 5: "debug", 8: "owner-say", 9: "region-say",
+}
+
+var sourceTypes = map[uint8]string{0: "system", 1: "agent", 2: "object"}
+
+func logChat(w io.Writer, m *msg.ChatFromSimulator) {
+	d := &m.ChatData
+	// Typing notifications carry no text and are noise in a log.
+	if d.ChatType == 3 || d.ChatType == 4 {
+		return
+	}
+	kind := chatTypes[d.ChatType]
+	if kind == "" {
+		kind = fmt.Sprintf("type%d", d.ChatType)
+	}
+	src := sourceTypes[d.SourceType]
+	if src == "" {
+		src = fmt.Sprintf("src%d", d.SourceType)
+	}
+	fmt.Fprintf(w, "%s [%s/%s] %s: %s\n",
+		time.Now().Format("15:04:05"), src, kind,
+		nul(d.FromName), nul(d.Message))
+}
+
+// nul drops the terminator the protocol puts on its strings.
+func nul(b []byte) string {
+	if n := len(b); n > 0 && b[n-1] == 0 {
+		b = b[:n-1]
+	}
+	return string(b)
 }
 
 func show(m *client.Message) {
