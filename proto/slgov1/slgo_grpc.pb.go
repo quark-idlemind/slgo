@@ -37,6 +37,8 @@ const (
 	Grid_Status_FullMethodName     = "/slgo.v1.Grid/Status"
 	Grid_Presence_FullMethodName   = "/slgo.v1.Grid/Presence"
 	Grid_Objects_FullMethodName    = "/slgo.v1.Grid/Objects"
+	Grid_Region_FullMethodName     = "/slgo.v1.Grid/Region"
+	Grid_Flush_FullMethodName      = "/slgo.v1.Grid/Flush"
 	Grid_Cap_FullMethodName        = "/slgo.v1.Grid/Cap"
 	Grid_Send_FullMethodName       = "/slgo.v1.Grid/Send"
 )
@@ -69,6 +71,15 @@ type GridClient interface {
 	// server was there to hear it, so the server remembers.  It still
 	// has no idea what any of the objects are for.
 	Objects(ctx context.Context, in *ObjectsRequest, opts ...grpc.CallOption) (*ObjectsResponse, error)
+	// Region is what the simulator said about itself in the handshake,
+	// which happens once, before any client is listening.
+	Region(ctx context.Context, in *RegionRequest, opts ...grpc.CallOption) (*RegionInfo, error)
+	// Flush empties the object cache.
+	//
+	// It is done automatically when the region changes, since everything
+	// cached then describes somewhere else.  This is for a client that
+	// knows the cache is wrong for a reason the server cannot see.
+	Flush(ctx context.Context, in *FlushRequest, opts ...grpc.CallOption) (*FlushResponse, error)
 	// Cap makes an HTTP request against one of the agent's
 	// capabilities.  The server holds the URLs and does the request; it
 	// has no idea what any of them mean.  This is what keeps inventory,
@@ -140,6 +151,26 @@ func (c *gridClient) Objects(ctx context.Context, in *ObjectsRequest, opts ...gr
 	return out, nil
 }
 
+func (c *gridClient) Region(ctx context.Context, in *RegionRequest, opts ...grpc.CallOption) (*RegionInfo, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegionInfo)
+	err := c.cc.Invoke(ctx, Grid_Region_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridClient) Flush(ctx context.Context, in *FlushRequest, opts ...grpc.CallOption) (*FlushResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FlushResponse)
+	err := c.cc.Invoke(ctx, Grid_Flush_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Cap(ctx context.Context, in *CapRequest, opts ...grpc.CallOption) (*CapResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CapResponse)
@@ -188,6 +219,15 @@ type GridServer interface {
 	// server was there to hear it, so the server remembers.  It still
 	// has no idea what any of the objects are for.
 	Objects(context.Context, *ObjectsRequest) (*ObjectsResponse, error)
+	// Region is what the simulator said about itself in the handshake,
+	// which happens once, before any client is listening.
+	Region(context.Context, *RegionRequest) (*RegionInfo, error)
+	// Flush empties the object cache.
+	//
+	// It is done automatically when the region changes, since everything
+	// cached then describes somewhere else.  This is for a client that
+	// knows the cache is wrong for a reason the server cannot see.
+	Flush(context.Context, *FlushRequest) (*FlushResponse, error)
 	// Cap makes an HTTP request against one of the agent's
 	// capabilities.  The server holds the URLs and does the request; it
 	// has no idea what any of them mean.  This is what keeps inventory,
@@ -220,6 +260,12 @@ func (UnimplementedGridServer) Presence(context.Context, *PresenceRequest) (*Pre
 }
 func (UnimplementedGridServer) Objects(context.Context, *ObjectsRequest) (*ObjectsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Objects not implemented")
+}
+func (UnimplementedGridServer) Region(context.Context, *RegionRequest) (*RegionInfo, error) {
+	return nil, status.Error(codes.Unimplemented, "method Region not implemented")
+}
+func (UnimplementedGridServer) Flush(context.Context, *FlushRequest) (*FlushResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Flush not implemented")
 }
 func (UnimplementedGridServer) Cap(context.Context, *CapRequest) (*CapResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Cap not implemented")
@@ -327,6 +373,42 @@ func _Grid_Objects_Handler(srv interface{}, ctx context.Context, dec func(interf
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Region_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Region(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Region_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Region(ctx, req.(*RegionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_Flush_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FlushRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Flush(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Flush_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Flush(ctx, req.(*FlushRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_Cap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CapRequest)
 	if err := dec(in); err != nil {
@@ -385,6 +467,14 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Objects",
 			Handler:    _Grid_Objects_Handler,
+		},
+		{
+			MethodName: "Region",
+			Handler:    _Grid_Region_Handler,
+		},
+		{
+			MethodName: "Flush",
+			Handler:    _Grid_Flush_Handler,
 		},
 		{
 			MethodName: "Cap",

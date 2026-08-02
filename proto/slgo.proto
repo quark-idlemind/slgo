@@ -48,6 +48,17 @@ service Grid {
   // has no idea what any of the objects are for.
   rpc Objects(ObjectsRequest) returns (ObjectsResponse);
 
+  // Region is what the simulator said about itself in the handshake,
+  // which happens once, before any client is listening.
+  rpc Region(RegionRequest) returns (RegionInfo);
+
+  // Flush empties the object cache.
+  //
+  // It is done automatically when the region changes, since everything
+  // cached then describes somewhere else.  This is for a client that
+  // knows the cache is wrong for a reason the server cannot see.
+  rpc Flush(FlushRequest) returns (FlushResponse);
+
   // Cap makes an HTTP request against one of the agent's
   // capabilities.  The server holds the URLs and does the request; it
   // has no idea what any of them mean.  This is what keeps inventory,
@@ -322,4 +333,41 @@ message ObjectsResponse {
   // Known is how many objects the session has heard about in total,
   // which is what the filtered list was drawn from.
   int32 known = 2;
+}
+
+// -------------------------------------------------------------- region
+
+message RegionRequest { string agent = 1; }
+
+message RegionInfo {
+  string id = 1;
+  uint64 handle = 2;
+  string name = 3;
+
+  uint32 flags = 4;
+  uint64 flags_extended = 5;
+
+  // Access is the maturity rating; owner is the estate owner.
+  uint32 access = 6;
+  string owner = 7;
+  bool estate_manager = 8;
+
+  float water_height = 9;
+
+  string product_name = 10;
+  string product_sku = 11;
+  string colo_name = 12;
+  int32 cpu_class = 13;
+  int32 cpu_ratio = 14;
+  uint64 protocols = 15;
+
+  // Known is false until the handshake has arrived.
+  bool known = 16;
+}
+
+message FlushRequest { string agent = 1; }
+
+message FlushResponse {
+  // Forgotten is how many objects the cache held.
+  int32 forgotten = 1;
 }

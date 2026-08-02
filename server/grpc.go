@@ -428,6 +428,36 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 	return out, nil
 }
 
+// Region answers what the simulator said about itself.
+func (s *Server) Region(ctx context.Context, req *pb.RegionRequest) (*pb.RegionInfo, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	r, known := h.Agent().Region()
+	return &pb.RegionInfo{
+		Id: r.ID.String(), Handle: r.Handle, Name: r.Name,
+		Flags: r.Flags, FlagsExtended: r.Extended,
+		Access: uint32(r.Access), Owner: r.Owner.String(),
+		EstateManager: r.EstateManager,
+		WaterHeight:   r.WaterHeight,
+		ProductName:   r.ProductName, ProductSku: r.ProductSKU,
+		ColoName: r.ColoName,
+		CpuClass: r.CPUClass, CpuRatio: r.CPURatio,
+		Protocols: r.Protocols,
+		Known:     known,
+	}, nil
+}
+
+// Flush empties the object cache.
+func (s *Server) Flush(ctx context.Context, req *pb.FlushRequest) (*pb.FlushResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.FlushResponse{Forgotten: int32(h.Agent().Objects.Flush())}, nil
+}
+
 func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, error) {
 	h, err := s.lookup(req.Agent)
 	if err != nil {

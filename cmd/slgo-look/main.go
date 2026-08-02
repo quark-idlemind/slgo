@@ -20,6 +20,8 @@ var (
 	named   = flag.String("named", "", "list objects with this name")
 	id      = flag.String("id", "", "describe one object by uuid")
 	inv     = flag.Bool("inventory", false, "list inventory")
+	region  = flag.Bool("region", false, "describe the region")
+	flush   = flag.Bool("flush", false, "empty the server's object cache")
 	all     = flag.Bool("all", false, "list every object nearby")
 	settle  = flag.Duration("settle", 15*time.Second, "how long to let the region arrive")
 )
@@ -52,6 +54,33 @@ func main() {
 	fmt.Printf("  looking at     %s\n", vec(p.LookAt))
 	fmt.Printf("  draw distance  %.0f m\n", p.DrawDistance)
 	fmt.Printf("  region handle  %d\n", p.RegionHandle)
+
+	if *region {
+		r, err := w.Region(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("\nregion %q\n", r.Name)
+		fmt.Printf("  id             %s\n", r.ID)
+		fmt.Printf("  handle         %d\n", r.Handle)
+		fmt.Printf("  flags          %#08x (extended %#x)\n", r.Flags, r.Extended)
+		fmt.Printf("  access         %d\n", r.Access)
+		fmt.Printf("  owner          %s\n", r.Owner)
+		fmt.Printf("  estate manager %v\n", r.EstateManager)
+		fmt.Printf("  water height   %.1f m\n", r.WaterHeight)
+		fmt.Printf("  product        %q (sku %s)\n", r.ProductName, r.ProductSKU)
+		fmt.Printf("  hosted at      %s, cpu class %d, ratio %d\n",
+			r.ColoName, r.CPUClass, r.CPURatio)
+		fmt.Printf("  protocols      %#x\n", r.Protocols)
+	}
+
+	if *flush {
+		n, err := w.Flush(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("\nflushed %d objects from the cache\n", n)
+	}
 
 	if *inv {
 		start := time.Now()

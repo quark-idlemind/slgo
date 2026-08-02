@@ -354,6 +354,20 @@ func (c *Conn) Objects(ctx context.Context, named, id string) (*pb.ObjectsRespon
 	})
 }
 
+// Region asks what the simulator said about itself.
+func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
+	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agent})
+}
+
+// Flush empties the server's object cache.
+func (c *Conn) Flush(ctx context.Context) (int, error) {
+	r, err := c.grid.Flush(ctx, &pb.FlushRequest{Agent: c.agent})
+	if err != nil {
+		return 0, err
+	}
+	return int(r.Forgotten), nil
+}
+
 func (c *Conn) HasCap(name string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

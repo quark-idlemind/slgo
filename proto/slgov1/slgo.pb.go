@@ -1789,6 +1789,305 @@ func (x *ObjectsResponse) GetKnown() int32 {
 	return 0
 }
 
+type RegionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Agent         string                 `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegionRequest) Reset() {
+	*x = RegionRequest{}
+	mi := &file_slgo_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegionRequest) ProtoMessage() {}
+
+func (x *RegionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegionRequest.ProtoReflect.Descriptor instead.
+func (*RegionRequest) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RegionRequest) GetAgent() string {
+	if x != nil {
+		return x.Agent
+	}
+	return ""
+}
+
+type RegionInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Handle        uint64                 `protobuf:"varint,2,opt,name=handle,proto3" json:"handle,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Flags         uint32                 `protobuf:"varint,4,opt,name=flags,proto3" json:"flags,omitempty"`
+	FlagsExtended uint64                 `protobuf:"varint,5,opt,name=flags_extended,json=flagsExtended,proto3" json:"flags_extended,omitempty"`
+	// Access is the maturity rating; owner is the estate owner.
+	Access        uint32  `protobuf:"varint,6,opt,name=access,proto3" json:"access,omitempty"`
+	Owner         string  `protobuf:"bytes,7,opt,name=owner,proto3" json:"owner,omitempty"`
+	EstateManager bool    `protobuf:"varint,8,opt,name=estate_manager,json=estateManager,proto3" json:"estate_manager,omitempty"`
+	WaterHeight   float32 `protobuf:"fixed32,9,opt,name=water_height,json=waterHeight,proto3" json:"water_height,omitempty"`
+	ProductName   string  `protobuf:"bytes,10,opt,name=product_name,json=productName,proto3" json:"product_name,omitempty"`
+	ProductSku    string  `protobuf:"bytes,11,opt,name=product_sku,json=productSku,proto3" json:"product_sku,omitempty"`
+	ColoName      string  `protobuf:"bytes,12,opt,name=colo_name,json=coloName,proto3" json:"colo_name,omitempty"`
+	CpuClass      int32   `protobuf:"varint,13,opt,name=cpu_class,json=cpuClass,proto3" json:"cpu_class,omitempty"`
+	CpuRatio      int32   `protobuf:"varint,14,opt,name=cpu_ratio,json=cpuRatio,proto3" json:"cpu_ratio,omitempty"`
+	Protocols     uint64  `protobuf:"varint,15,opt,name=protocols,proto3" json:"protocols,omitempty"`
+	// Known is false until the handshake has arrived.
+	Known         bool `protobuf:"varint,16,opt,name=known,proto3" json:"known,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegionInfo) Reset() {
+	*x = RegionInfo{}
+	mi := &file_slgo_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegionInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegionInfo) ProtoMessage() {}
+
+func (x *RegionInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegionInfo.ProtoReflect.Descriptor instead.
+func (*RegionInfo) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RegionInfo) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RegionInfo) GetHandle() uint64 {
+	if x != nil {
+		return x.Handle
+	}
+	return 0
+}
+
+func (x *RegionInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *RegionInfo) GetFlags() uint32 {
+	if x != nil {
+		return x.Flags
+	}
+	return 0
+}
+
+func (x *RegionInfo) GetFlagsExtended() uint64 {
+	if x != nil {
+		return x.FlagsExtended
+	}
+	return 0
+}
+
+func (x *RegionInfo) GetAccess() uint32 {
+	if x != nil {
+		return x.Access
+	}
+	return 0
+}
+
+func (x *RegionInfo) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *RegionInfo) GetEstateManager() bool {
+	if x != nil {
+		return x.EstateManager
+	}
+	return false
+}
+
+func (x *RegionInfo) GetWaterHeight() float32 {
+	if x != nil {
+		return x.WaterHeight
+	}
+	return 0
+}
+
+func (x *RegionInfo) GetProductName() string {
+	if x != nil {
+		return x.ProductName
+	}
+	return ""
+}
+
+func (x *RegionInfo) GetProductSku() string {
+	if x != nil {
+		return x.ProductSku
+	}
+	return ""
+}
+
+func (x *RegionInfo) GetColoName() string {
+	if x != nil {
+		return x.ColoName
+	}
+	return ""
+}
+
+func (x *RegionInfo) GetCpuClass() int32 {
+	if x != nil {
+		return x.CpuClass
+	}
+	return 0
+}
+
+func (x *RegionInfo) GetCpuRatio() int32 {
+	if x != nil {
+		return x.CpuRatio
+	}
+	return 0
+}
+
+func (x *RegionInfo) GetProtocols() uint64 {
+	if x != nil {
+		return x.Protocols
+	}
+	return 0
+}
+
+func (x *RegionInfo) GetKnown() bool {
+	if x != nil {
+		return x.Known
+	}
+	return false
+}
+
+type FlushRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Agent         string                 `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FlushRequest) Reset() {
+	*x = FlushRequest{}
+	mi := &file_slgo_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlushRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlushRequest) ProtoMessage() {}
+
+func (x *FlushRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlushRequest.ProtoReflect.Descriptor instead.
+func (*FlushRequest) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *FlushRequest) GetAgent() string {
+	if x != nil {
+		return x.Agent
+	}
+	return ""
+}
+
+type FlushResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Forgotten is how many objects the cache held.
+	Forgotten     int32 `protobuf:"varint,1,opt,name=forgotten,proto3" json:"forgotten,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FlushResponse) Reset() {
+	*x = FlushResponse{}
+	mi := &file_slgo_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FlushResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FlushResponse) ProtoMessage() {}
+
+func (x *FlushResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FlushResponse.ProtoReflect.Descriptor instead.
+func (*FlushResponse) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *FlushResponse) GetForgotten() int32 {
+	if x != nil {
+		return x.Forgotten
+	}
+	return 0
+}
+
 var File_slgo_proto protoreflect.FileDescriptor
 
 const file_slgo_proto_rawDesc = "" +
@@ -1927,14 +2226,42 @@ const file_slgo_proto_rawDesc = "" +
 	"\x05owner\x18\b \x01(\tR\x05owner\"V\n" +
 	"\x0fObjectsResponse\x12-\n" +
 	"\aobjects\x18\x01 \x03(\v2\x13.slgo.v1.ObjectInfoR\aobjects\x12\x14\n" +
-	"\x05known\x18\x02 \x01(\x05R\x05known2\xaa\x03\n" +
+	"\x05known\x18\x02 \x01(\x05R\x05known\"%\n" +
+	"\rRegionRequest\x12\x14\n" +
+	"\x05agent\x18\x01 \x01(\tR\x05agent\"\xcc\x03\n" +
+	"\n" +
+	"RegionInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06handle\x18\x02 \x01(\x04R\x06handle\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x14\n" +
+	"\x05flags\x18\x04 \x01(\rR\x05flags\x12%\n" +
+	"\x0eflags_extended\x18\x05 \x01(\x04R\rflagsExtended\x12\x16\n" +
+	"\x06access\x18\x06 \x01(\rR\x06access\x12\x14\n" +
+	"\x05owner\x18\a \x01(\tR\x05owner\x12%\n" +
+	"\x0eestate_manager\x18\b \x01(\bR\restateManager\x12!\n" +
+	"\fwater_height\x18\t \x01(\x02R\vwaterHeight\x12!\n" +
+	"\fproduct_name\x18\n" +
+	" \x01(\tR\vproductName\x12\x1f\n" +
+	"\vproduct_sku\x18\v \x01(\tR\n" +
+	"productSku\x12\x1b\n" +
+	"\tcolo_name\x18\f \x01(\tR\bcoloName\x12\x1b\n" +
+	"\tcpu_class\x18\r \x01(\x05R\bcpuClass\x12\x1b\n" +
+	"\tcpu_ratio\x18\x0e \x01(\x05R\bcpuRatio\x12\x1c\n" +
+	"\tprotocols\x18\x0f \x01(\x04R\tprotocols\x12\x14\n" +
+	"\x05known\x18\x10 \x01(\bR\x05known\"$\n" +
+	"\fFlushRequest\x12\x14\n" +
+	"\x05agent\x18\x01 \x01(\tR\x05agent\"-\n" +
+	"\rFlushResponse\x12\x1c\n" +
+	"\tforgotten\x18\x01 \x01(\x05R\tforgotten2\x99\x04\n" +
 	"\x04Grid\x12:\n" +
 	"\x06Stream\x12\x15.slgo.v1.ClientPacket\x1a\x15.slgo.v1.ServerPacket(\x010\x01\x12E\n" +
 	"\n" +
 	"ListAgents\x12\x1a.slgo.v1.ListAgentsRequest\x1a\x1b.slgo.v1.ListAgentsResponse\x129\n" +
 	"\x06Status\x12\x16.slgo.v1.StatusRequest\x1a\x17.slgo.v1.StatusResponse\x12?\n" +
 	"\bPresence\x12\x18.slgo.v1.PresenceRequest\x1a\x19.slgo.v1.PresenceResponse\x12<\n" +
-	"\aObjects\x12\x17.slgo.v1.ObjectsRequest\x1a\x18.slgo.v1.ObjectsResponse\x120\n" +
+	"\aObjects\x12\x17.slgo.v1.ObjectsRequest\x1a\x18.slgo.v1.ObjectsResponse\x125\n" +
+	"\x06Region\x12\x16.slgo.v1.RegionRequest\x1a\x13.slgo.v1.RegionInfo\x126\n" +
+	"\x05Flush\x12\x15.slgo.v1.FlushRequest\x1a\x16.slgo.v1.FlushResponse\x120\n" +
 	"\x03Cap\x12\x13.slgo.v1.CapRequest\x1a\x14.slgo.v1.CapResponse\x123\n" +
 	"\x04Send\x12\x14.slgo.v1.SendRequest\x1a\x15.slgo.v1.SendResponseB\x13Z\x11slgo/proto/slgov1b\x06proto3"
 
@@ -1951,7 +2278,7 @@ func file_slgo_proto_rawDescGZIP() []byte {
 }
 
 var file_slgo_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_slgo_proto_goTypes = []any{
 	(AgentEvent_Kind)(0),       // 0: slgo.v1.AgentEvent.Kind
 	(*ClientPacket)(nil),       // 1: slgo.v1.ClientPacket
@@ -1978,7 +2305,11 @@ var file_slgo_proto_goTypes = []any{
 	(*ObjectsRequest)(nil),     // 22: slgo.v1.ObjectsRequest
 	(*ObjectInfo)(nil),         // 23: slgo.v1.ObjectInfo
 	(*ObjectsResponse)(nil),    // 24: slgo.v1.ObjectsResponse
-	nil,                        // 25: slgo.v1.StatusResponse.UnhandledEntry
+	(*RegionRequest)(nil),      // 25: slgo.v1.RegionRequest
+	(*RegionInfo)(nil),         // 26: slgo.v1.RegionInfo
+	(*FlushRequest)(nil),       // 27: slgo.v1.FlushRequest
+	(*FlushResponse)(nil),      // 28: slgo.v1.FlushResponse
+	nil,                        // 29: slgo.v1.StatusResponse.UnhandledEntry
 }
 var file_slgo_proto_depIdxs = []int32{
 	3,  // 0: slgo.v1.ClientPacket.attach:type_name -> slgo.v1.Attach
@@ -1992,7 +2323,7 @@ var file_slgo_proto_depIdxs = []int32{
 	0,  // 8: slgo.v1.AgentEvent.kind:type_name -> slgo.v1.AgentEvent.Kind
 	10, // 9: slgo.v1.ListAgentsResponse.agents:type_name -> slgo.v1.AgentInfo
 	10, // 10: slgo.v1.StatusResponse.agent:type_name -> slgo.v1.AgentInfo
-	25, // 11: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
+	29, // 11: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
 	4,  // 12: slgo.v1.SendRequest.message:type_name -> slgo.v1.OutboundMessage
 	19, // 13: slgo.v1.PresenceResponse.position:type_name -> slgo.v1.Vector3
 	19, // 14: slgo.v1.PresenceResponse.look_at:type_name -> slgo.v1.Vector3
@@ -2005,17 +2336,21 @@ var file_slgo_proto_depIdxs = []int32{
 	13, // 21: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
 	20, // 22: slgo.v1.Grid.Presence:input_type -> slgo.v1.PresenceRequest
 	22, // 23: slgo.v1.Grid.Objects:input_type -> slgo.v1.ObjectsRequest
-	15, // 24: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
-	17, // 25: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
-	5,  // 26: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
-	12, // 27: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
-	14, // 28: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
-	21, // 29: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
-	24, // 30: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
-	16, // 31: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
-	18, // 32: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
-	26, // [26:33] is the sub-list for method output_type
-	19, // [19:26] is the sub-list for method input_type
+	25, // 24: slgo.v1.Grid.Region:input_type -> slgo.v1.RegionRequest
+	27, // 25: slgo.v1.Grid.Flush:input_type -> slgo.v1.FlushRequest
+	15, // 26: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
+	17, // 27: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
+	5,  // 28: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
+	12, // 29: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
+	14, // 30: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
+	21, // 31: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
+	24, // 32: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
+	26, // 33: slgo.v1.Grid.Region:output_type -> slgo.v1.RegionInfo
+	28, // 34: slgo.v1.Grid.Flush:output_type -> slgo.v1.FlushResponse
+	16, // 35: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
+	18, // 36: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
+	28, // [28:37] is the sub-list for method output_type
+	19, // [19:28] is the sub-list for method input_type
 	19, // [19:19] is the sub-list for extension type_name
 	19, // [19:19] is the sub-list for extension extendee
 	0,  // [0:19] is the sub-list for field type_name
@@ -2043,7 +2378,7 @@ func file_slgo_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_slgo_proto_rawDesc), len(file_slgo_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   25,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

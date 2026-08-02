@@ -116,3 +116,33 @@ func (a *Agent) sendPresence(ctx context.Context, every time.Duration) {
 		}
 	}
 }
+
+// TrimInterval is how often the object cache is trimmed to the draw
+// distance.
+//
+// It is not urgent work.  A stale entry is wrong about where something
+// is, not about whether it exists, and the cost of holding one is a
+// map entry.
+const TrimInterval = 15 * time.Second
+
+// trimObjects keeps the cache to what is within the draw distance.
+//
+// It runs here rather than being asked for because the thing that
+// makes the cache stale -- the avatar moving -- is not something a
+// client is told about, and because the camera and the cache are both
+// on this side.
+func (a *Agent) trimObjects(ctx context.Context, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-a.done:
+			return
+		case <-t.C:
+			l := a.Look()
+			a.Objects.Trim(l.Center, l.Far)
+		}
+	}
+}

@@ -71,6 +71,8 @@ type Agent struct {
 	// and a client that attaches later is never told.
 	Objects *Objects
 
+	region regionState
+
 	position msg.Vector3
 	lookAt   msg.Vector3
 	handle   uint64
@@ -233,6 +235,7 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	}
 	if opts.Presence > 0 {
 		a.spawn(func() error { a.sendPresence(runCtx, opts.Presence); return nil })
+		a.spawn(func() error { a.trimObjects(runCtx, TrimInterval); return nil })
 	}
 
 	// Capabilities are HTTP and have nothing to do with the
@@ -333,6 +336,14 @@ func (a *Agent) register() {
 		a.regionName = trimNul(m.RegionInfo.SimName)
 		a.regionFlags = m.RegionInfo.RegionFlags
 		a.mu.Unlock()
+
+		r := regionFromHandshake(m)
+		if a.setRegion(r) {
+			// A different region: everything cached describes
+			// somewhere else now.  Nothing says so, and nothing
+			// will, so this handshake is the notice.
+			a.Objects.Flush()
+		}
 
 		reply := &msg.RegionHandshakeReply{}
 		reply.AgentData.AgentID = a.Account.AgentID

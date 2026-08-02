@@ -295,3 +295,64 @@ func (w *World) resolve(ctx context.Context, want []msg.UUID, timeout time.Durat
 	}
 	return nil
 }
+
+// Region is what the simulator said about itself when the avatar
+// arrived.
+type Region struct {
+	ID     msg.UUID
+	Handle uint64
+	Name   string
+
+	Flags    uint32
+	Extended uint64
+
+	Access        uint8
+	Owner         msg.UUID
+	EstateManager bool
+
+	WaterHeight float32
+
+	ProductName string
+	ProductSKU  string
+	ColoName    string
+	CPUClass    int32
+	CPURatio    int32
+	Protocols   uint64
+}
+
+// Region reports what the simulator said about itself.
+//
+// It says it once, in the handshake, before any client is listening,
+// so this comes from the server rather than from anything a client
+// could have heard.
+func (w *World) Region(ctx context.Context) (*Region, error) {
+	r, err := w.c.Region(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !r.Known {
+		return nil, fmt.Errorf("world: the region handshake has not arrived")
+	}
+	id, _ := msg.ParseUUID(r.Id)
+	owner, _ := msg.ParseUUID(r.Owner)
+	return &Region{
+		ID: id, Handle: r.Handle, Name: r.Name,
+		Flags: r.Flags, Extended: r.FlagsExtended,
+		Access: uint8(r.Access), Owner: owner,
+		EstateManager: r.EstateManager,
+		WaterHeight:   r.WaterHeight,
+		ProductName:   r.ProductName, ProductSKU: r.ProductSku,
+		ColoName: r.ColoName,
+		CPUClass: r.CpuClass, CPURatio: r.CpuRatio,
+		Protocols: r.Protocols,
+	}, nil
+}
+
+// Flush empties the server's object cache.
+//
+// The server does this itself when the region changes.  This is for a
+// client that knows the cache is wrong for a reason the server cannot
+// see.
+func (w *World) Flush(ctx context.Context) (int, error) {
+	return w.c.Flush(ctx)
+}

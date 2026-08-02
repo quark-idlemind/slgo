@@ -2,6 +2,7 @@ package agent
 
 import (
 	"sync"
+	"time"
 
 	"slgo/msg"
 )
@@ -37,6 +38,12 @@ type Object struct {
 	// ObjectUpdate carries neither.
 	Name  string
 	Owner msg.UUID
+
+	// First and Last are when the simulator first and last said
+	// anything about this object.  Last is what an age based sweep
+	// would work from, if one turns out to be needed.
+	First time.Time
+	Last  time.Time
 }
 
 // Objects is what the session has been told about the region.
@@ -90,21 +97,152 @@ func (o *Objects) Count() int {
 
 func (o *Objects) seen(id msg.UUID) *Object {
 	v := o.byID[id]
+	now := time.Now()
 	if v == nil {
-		v = &Object{ID: id}
+		v = &Object{ID: id, First: now}
 		o.byID[id] = v
 	}
+	v.Last = now
 	return v
 }
 
-func (o *Objects) update(d *msg.ObjectUpdate_ObjectData) {
+// Flush forgets everything.
+//
+// A region's objects are described once on arrival, so the cache is
+// only correct for the region it was filled in.  Crossing to another
+// one leaves it describing somewhere else entirely, and there is no
+// message that says "forget all that".
+func (o *Objects) Flush() int {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	n := len(o.byID)
+	o.byID = map[msg.UUID]*Object{}
+	return n
+}
+
+// TrimMargin is how far past the draw distance an object is kept.
+//
+// Trimming at exactly the draw distance would fight the simulator over
+// anything sitting on the boundary: dropped, described again, dropped
+// again.  The margin costs a few entries and stops the flapping.
+const TrimMargin = 32
+
+// orphanGrace is how long a child is kept whose root has not been
+// described.  Object updates arrive in no particular order, so a child
+// can genuinely precede its root by a moment.
+const orphanGrace = time.Minute
+
+// Trim forgets objects further from the camera than the draw distance,
+// and returns how many went.
+//
+// This is what keeps the cache honest, and age would not do it.  The
+// simulator says when an object has been destroyed, so nothing that
+// still exists needs ageing out -- but it says nothing at all when one
+// is merely left behind, and an object sitting still is never
+// mentioned again either.  Ageing would throw away the quiet ones and
+// keep the distant ones, which is exactly backwards.  Distance is the
+// thing actually being asked about, and both positions are known.
+//
+// A child's position is relative to its root, so children are judged
+// by where their root is and go with it.  An orphan whose root never
+// turned up goes once it is old enough to be sure the root is not
+// coming.
+func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
+	if drawDistance <= 0 {
+		return 0
+	}
+	limit := drawDistance + TrimMargin
+	limit2 := limit * limit
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	roots := make(map[uint32]msg.Vector3, len(o.byID))
+	for _, v := range o.byID {
+		if v.Parent == 0 {
+			roots[v.Local] = v.Position
+		}
+	}
+
+	n := 0
+	for id, v := range o.byID {
+		at := v.Position
+		if v.Parent != 0 {
+			p, ok := roots[v.Parent]
+			if !ok {
+				// An orphan: its root has not been described.  Give
+				// it a grace period, since updates arrive in no
+				// particular order, and then let it go -- a root that
+				// has not turned up by now is one that was refused
+				// for being out of range, and its children are out of
+				// range too.
+				if time.Since(v.First) > orphanGrace {
+					delete(o.byID, id)
+					n++
+				}
+				continue
+			}
+			at = p
+		}
+		if dist2(at, camera) > limit2 {
+			delete(o.byID, id)
+			n++
+		}
+	}
+	return n
+}
+
+func dist2(a, b msg.Vector3) float32 {
+	dx, dy, dz := a.X-b.X, a.Y-b.Y, a.Z-b.Z
+	return dx*dx + dy*dy + dz*dz
+}
+
+// update records what an ObjectUpdate said, unless it is about
+// something beyond the draw distance.
+//
+// Refusing it here as well as trimming later is worth the check.  The
+// simulator does not describe what is out of range, so most of the
+// time this rejects nothing -- but after the avatar has moved it stops
+// the far end of the old view being taken back in from a stray update
+// before the next trim comes round.
+//
+// A child is judged by its root, and a child whose root is not known
+// yet is taken in: object updates arrive in no particular order, and a
+// child that turns up first would otherwise be thrown away and never
+// mentioned again.  Trim clears up the ones whose root never came.
+func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, drawDistance float32) {
+	pos, rot, havePos := msg.DecodePlacement(d.ObjectData)
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if drawDistance > 0 && havePos {
+		limit := drawDistance + TrimMargin
+		at, judge := pos, true
+		if d.ParentID != 0 {
+			at, judge = o.rootPosLocked(d.ParentID)
+		}
+		if judge && dist2(at, camera) > limit*limit {
+			delete(o.byID, d.FullID)
+			return
+		}
+	}
+
 	v := o.seen(d.FullID)
 	v.Local, v.Parent, v.PCode, v.Scale = d.ID, d.ParentID, d.PCode, d.Scale
-	if pos, rot, ok := msg.DecodePlacement(d.ObjectData); ok {
+	if havePos {
 		v.Position, v.Rotation = pos, rot
 	}
+}
+
+// rootPosLocked finds where a root is by its local id.
+func (o *Objects) rootPosLocked(local uint32) (msg.Vector3, bool) {
+	for _, v := range o.byID {
+		if v.Local == local && v.Parent == 0 {
+			return v.Position, true
+		}
+	}
+	return msg.Vector3{}, false
 }
 
 func (o *Objects) named(id msg.UUID, name string, owner msg.UUID) {
@@ -136,8 +274,9 @@ func (o *Objects) kill(local uint32) {
 func (a *Agent) trackObjects() {
 	a.Disp.MustHandle("ObjectUpdate", func(p *msg.Packet) {
 		m := p.Message.(*msg.ObjectUpdate)
+		l := a.Look()
 		for i := range m.ObjectData {
-			a.Objects.update(&m.ObjectData[i])
+			a.Objects.update(&m.ObjectData[i], l.Center, l.Far)
 		}
 	}, msg.Inline())
 
