@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +41,26 @@ type TaskItem struct {
 	Asset msg.UUID
 	Name  string
 	Type  string
+
+	// The rest of what the contents file says. It is read because
+	// changing an item in an object means sending the whole item back,
+	// so anything not read here would be silently reset to zero.
+	InvType   string
+	Desc      string
+	Flags     uint32
+	Created   int64
+	CreatorID msg.UUID
+	OwnerID   msg.UUID
+	GroupID   msg.UUID
+
+	BaseMask      uint32
+	OwnerMask     uint32
+	GroupMask     uint32
+	EveryoneMask  uint32
+	NextOwnerMask uint32
+
+	SaleType  string
+	SalePrice int32
 }
 
 // Folder finds a folder by name under the inventory root.
@@ -348,6 +369,34 @@ func parseTaskInventory(b []byte) []TaskItem {
 			}
 		case "name":
 			cur.Name = val
+		case "inv_type":
+			cur.InvType = val
+		case "desc":
+			cur.Desc = val
+		case "flags":
+			cur.Flags = uint32(hexOrDec(val))
+		case "creation_date":
+			cur.Created = int64(hexOrDec(val))
+		case "creator_id":
+			cur.CreatorID, _ = msg.ParseUUID(val)
+		case "owner_id":
+			cur.OwnerID, _ = msg.ParseUUID(val)
+		case "group_id":
+			cur.GroupID, _ = msg.ParseUUID(val)
+		case "base_mask":
+			cur.BaseMask = uint32(hexOrDec(val))
+		case "owner_mask":
+			cur.OwnerMask = uint32(hexOrDec(val))
+		case "group_mask":
+			cur.GroupMask = uint32(hexOrDec(val))
+		case "everyone_mask":
+			cur.EveryoneMask = uint32(hexOrDec(val))
+		case "next_owner_mask":
+			cur.NextOwnerMask = uint32(hexOrDec(val))
+		case "sale_type":
+			cur.SaleType = val
+		case "sale_price":
+			cur.SalePrice = int32(hexOrDec(val))
 		}
 	}
 	return out
@@ -382,4 +431,103 @@ func notecardAsset(text string) []byte {
 	fmt.Fprintf(&b, "Linden text version 2\n{\nLLEmbeddedItems version 1\n{\ncount 0\n}\n")
 	fmt.Fprintf(&b, "Text length %d\n%s}\n", len(text), text)
 	return b.Bytes()
+}
+
+// hexOrDec reads a number from the contents file.
+//
+// The masks are written in hex without an 0x, the dates and prices in
+// decimal, and nothing in the file says which is which -- so hex is
+// tried first, since every decimal string of digits is also a valid hex
+// one and the masks are the values a wrong reading would corrupt.
+func hexOrDec(s string) uint64 {
+	s = strings.TrimSpace(s)
+	if n, err := strconv.ParseUint(s, 16, 64); err == nil {
+		return n
+	}
+	n, _ := strconv.ParseUint(s, 10, 64)
+	return n
+}
+
+// RenameInObject renames an item inside a rezzed object.
+//
+// This is what makes an object reusable under a different name: the same
+// prim and the same scripts, called something else, rather than building
+// again. The object's own name is SetName; this is for what is inside
+// it.
+//
+// The whole item goes back, not just the name, because that is what the
+// message carries -- anything left out is set to zero, which for a
+// permission mask means taking the rights away.
+func (w *World) RenameInObject(ctx context.Context, o *Object, it TaskItem, name string) error {
+	if name == "" {
+		return fmt.Errorf("world: a name is needed")
+	}
+	m := &msg.UpdateTaskInventory{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.UpdateData.LocalID = o.Local
+	m.UpdateData.Key = 0 // 0 selects the object's inventory
+
+	d := &m.InventoryData
+	d.ItemID = it.ID
+	d.CreatorID, d.OwnerID, d.GroupID = it.CreatorID, it.OwnerID, it.GroupID
+	d.BaseMask, d.OwnerMask = it.BaseMask, it.OwnerMask
+	d.GroupMask, d.EveryoneMask = it.GroupMask, it.EveryoneMask
+	d.NextOwnerMask = it.NextOwnerMask
+	d.Type, d.InvType = assetTypeNumber(it.Type), assetTypeNumber(firstNonEmptyStr(it.InvType, it.Type))
+	d.Flags = it.Flags
+	d.CreationDate = int32(it.Created)
+	d.SalePrice = it.SalePrice
+	d.Name = append([]byte(name), 0)
+	d.Description = append([]byte(it.Desc), 0)
+	return w.Send(ctx, m)
+}
+
+// assetTypeNumber turns the word the contents file uses back into the
+// number the protocol wants. An unknown word is reported as -1, which is
+// Second Life's own "unknown".
+func assetTypeNumber(word string) int8 {
+	switch word {
+	case "texture":
+		return 0
+	case "sound":
+		return 1
+	case "callcard":
+		return 2
+	case "landmark":
+		return 3
+	case "script":
+		return 4
+	case "clothing":
+		return 5
+	case "object":
+		return 6
+	case "notecard":
+		return 7
+	case "category", "root":
+		return 8
+	case "lsltext", "lsl":
+		return 10
+	case "bodypart":
+		return 13
+	case "snapshot":
+		return 15
+	case "attach":
+		return 17
+	case "wearable":
+		return 18
+	case "animatn", "animation":
+		return 20
+	case "gesture":
+		return 21
+	case "mesh":
+		return 49
+	}
+	return -1
+}
+
+func firstNonEmptyStr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }

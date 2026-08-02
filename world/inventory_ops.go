@@ -446,3 +446,22 @@ func uuidCRC(u msg.UUID) uint32 {
 	}
 	return sum
 }
+
+// MoveItem puts an item in a different folder.
+//
+// Over AIS, like the other edits: the UDP MoveInventoryItem is accepted
+// and does nothing, which is the same trap the delete path found.
+func (w *World) MoveItem(ctx context.Context, item, folder msg.UUID) error {
+	enc, err := llsd.Encode(map[string]any{"parent_id": folder.String()})
+	if err != nil {
+		return err
+	}
+	_, err = w.capDo(ctx, agent.CapRequest{
+		Cap:    agent.InventoryCap,
+		Method: "PATCH",
+		Path:   "/item/" + item.String(),
+		Body:   enc,
+		Type:   "application/llsd+xml",
+	})
+	return err
+}
