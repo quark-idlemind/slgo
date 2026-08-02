@@ -1,6 +1,6 @@
 // Command slgod holds grid connections and serves clients.
 //
-//	slgod -listen 127.0.0.1:7778 example builder
+//	slgod -listen :7807 example builder
 //
 // Each argument names a profile under ~/.config/slgo.  The connections
 // stay up until the process is signalled; clients attach and detach
@@ -15,20 +15,24 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"slgo/agent"
+	"slgo/auth"
 	"slgo/msg"
 	"slgo/server"
 )
 
 func main() {
 	var (
-		listen  = flag.String("listen", "127.0.0.1:7778", "address to serve clients on")
+		listen  = flag.String("listen", ":7807", "address to serve clients on")
+		noAuth  = flag.Bool("no-auth", false, "serve without authentication; loopback only, and it is not checked")
 		verbose = flag.Bool("v", false, "log every message the grid sends")
 		start   = flag.String("start", "", "override the profile's start location")
+		group   = flag.String("group", "", "group to act as, by name or uuid; the only one joined, by default")
 	)
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: slgod [-listen addr] [-v] profile [profile...]\n")
@@ -112,6 +116,62 @@ func main() {
 		}(name, h)
 	}
 
+	// The active group, which decides whether a parcel lets this avatar
+	// build at all.
+	//
+	// A parcel usually grants "create objects" to a GROUP rather than to
+	// individuals, and a login starts with NONE active. A viewer hides
+	// this by storing the group in its settings and re-sending it every
+	// time, which makes it feel permanent; headless it is not. So an
+	// avatar that builds happily through a viewer cannot rez a thing
+	// here, and the refusal blames the land -- the wrong place to look.
+	//
+	// This belongs to the session rather than to a client: it is settled
+	// once, at login, and every client attached to the agent shares it.
+	// A restarted slgod is a fresh login, so it must be settled again.
+	for _, name := range srv.Names() {
+		h, ok := srv.Agent(name)
+		if !ok {
+			continue
+		}
+		a := h.Agent()
+		g, why, err := chooseGroup(ctx, a, *group)
+		if err != nil {
+			log.Fatalf("%s: %v", name, err)
+		}
+		if g.IsZero() {
+			log.Printf("%s: no active group (%s); parcels that only let a group build will refuse", name, why)
+			continue
+		}
+		if err := activateGroup(a, g); err != nil {
+			log.Printf("%s: could not activate group: %v", name, err)
+		} else {
+			log.Printf("%s: acting as group %s (%s)", name, why, g)
+		}
+	}
+
+	// slgod holds a live Second Life session, so an unauthenticated one
+	// reachable off this machine lets anyone drive the avatar. On by
+	// default for that reason; --no-auth is for a loopback-only run.
+	if !*noAuth {
+		secret, err := auth.LoadSecret("")
+		if err != nil {
+			log.Fatalf("cannot start: %v\n"+
+				"Create one with:  (umask 077; mkdir -p ~/.config/slrun; "+
+				"openssl rand -hex 32 > ~/.config/slrun/secret)\n"+
+				"Or pass -no-auth to serve loopback without it.", err)
+		}
+		a, err := auth.New(secret)
+		if err != nil {
+			log.Fatalf("cannot start: %v", err)
+		}
+		srv.SetAuth(a)
+		log.Print("TLS on, certificate self-signed and unverified; " +
+			"authentication is mutual and bound to the TLS session")
+	} else {
+		log.Print("WARNING: serving without authentication")
+	}
+
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		log.Fatal(err)
@@ -139,4 +199,71 @@ func orUnknown(s string) string {
 		return "an unnamed region"
 	}
 	return s
+}
+
+// chooseGroup decides which group to act as, and says why.
+//
+// The simulator lists every group the avatar has joined, so the choice
+// can usually be made without being told: one group means there is no
+// ambiguity to resolve. Several means the answer is not derivable and
+// the operator has to name it -- guessing there would silently pick the
+// wrong land rights, and building nothing is better than building in
+// the wrong place under the wrong group.
+func chooseGroup(ctx context.Context, a *agent.Agent, want string) (msg.UUID, string, error) {
+	// A uuid needs no list, so it works even if the list never arrives.
+	if id, err := msg.ParseUUID(want); want != "" && err == nil {
+		return id, want, nil
+	}
+
+	joined := a.WaitGroups(ctx, 15*time.Second)
+
+	if want != "" {
+		var match []agent.Group
+		for _, g := range joined {
+			if strings.EqualFold(g.Name, want) {
+				match = append(match, g)
+			}
+		}
+		switch len(match) {
+		case 1:
+			return match[0].ID, match[0].Name, nil
+		case 0:
+			return msg.UUID{}, "", fmt.Errorf("no group named %q; joined: %s", want, groupNames(joined))
+		default:
+			return msg.UUID{}, "", fmt.Errorf("%q names %d groups; use the uuid", want, len(match))
+		}
+	}
+
+	switch len(joined) {
+	case 1:
+		return joined[0].ID, joined[0].Name, nil
+	case 0:
+		return msg.UUID{}, "none joined", nil
+	default:
+		return msg.UUID{}, fmt.Sprintf("%d joined, none chosen: %s", len(joined), groupNames(joined)), nil
+	}
+}
+
+func groupNames(gs []agent.Group) string {
+	var names []string
+	for _, g := range gs {
+		names = append(names, strconv.Quote(g.Name))
+	}
+	if len(names) == 0 {
+		return "(none)"
+	}
+	return strings.Join(names, ", ")
+}
+
+// activateGroup makes a group the avatar's active one.
+//
+// Fire and forget, like most of this protocol: the simulator answers
+// with an AgentDataUpdate, which the agent records, and there is nothing
+// to wait for here.
+func activateGroup(a *agent.Agent, group msg.UUID) error {
+	m := &msg.ActivateGroup{}
+	m.AgentData.AgentID = a.Account.AgentID
+	m.AgentData.SessionID = a.Account.SessionID
+	m.AgentData.GroupID = group
+	return a.Send.Send(context.Background(), m)
 }

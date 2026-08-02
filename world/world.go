@@ -26,6 +26,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -208,6 +210,20 @@ func (w *World) Settle(ctx context.Context, d time.Duration) error {
 	}
 }
 
+// alertsSince renders the alerts heard after a mark, for an error.
+func (w *World) alertsSince(mark int) string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if mark >= len(w.alerts) {
+		return ""
+	}
+	said := w.alerts[mark:]
+	for i, a := range said {
+		said[i] = strconv.Quote(a)
+	}
+	return "; the simulator said " + strings.Join(said, ", ")
+}
+
 // Alerts returns the AlertMessage text heard so far.  A simulator that
 // refuses something often says so only here.
 func (w *World) Alerts() []string {
@@ -361,6 +377,18 @@ func (w *World) handle(raw *client.Message, v msg.Message) {
 // condition variable per fact would not.
 func (w *World) await(ctx context.Context, timeout time.Duration, what string, ok func() bool) error {
 	deadline := time.Now().Add(timeout)
+
+	// Where the alert log stood when the wait began, so a timeout can
+	// quote what the simulator said while we were waiting.
+	//
+	// A refusal usually arrives as an AlertMessage and NOT as a reply to
+	// the thing refused, so without this every refusal is indistinguishable
+	// from a slow simulator: the caller is told only that nothing happened,
+	// which is the one fact that never explains anything.
+	w.mu.Lock()
+	mark := len(w.alerts)
+	w.mu.Unlock()
+
 	for {
 		w.mu.Lock()
 		done := ok()
@@ -369,7 +397,7 @@ func (w *World) await(ctx context.Context, timeout time.Duration, what string, o
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("%w: %s (after %s)", ErrTimeout, what, timeout)
+			return fmt.Errorf("%w: %s (after %s)%s", ErrTimeout, what, timeout, w.alertsSince(mark))
 		}
 		t := time.NewTimer(100 * time.Millisecond)
 		select {

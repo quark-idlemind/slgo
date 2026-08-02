@@ -25,6 +25,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slgo/auth"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -49,7 +50,15 @@ type Server struct {
 	agents map[string]*Hosted
 
 	clients atomic.Int64
+
+	// auth is nil when the server runs without authentication, which is
+	// only reasonable bound to loopback.
+	auth *auth.Server
 }
+
+// SetAuth turns authentication on. Every method but Login is then
+// refused on a connection that has not proved it knows the secret.
+func (s *Server) SetAuth(a *auth.Server) { s.auth = a }
 
 // Hosted is one grid connection and the clients watching it.
 //
@@ -333,7 +342,22 @@ func (h *Hosted) ClientCount() int {
 
 // Serve accepts clients on ln until ctx is cancelled.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	g := grpc.NewServer()
+	opts := []grpc.ServerOption{}
+	if s.auth != nil {
+		creds, err := auth.ServerTLS()
+		if err != nil {
+			return fmt.Errorf("server: cannot make a TLS certificate: %w", err)
+		}
+		unary, stream := AuthInterceptors(s.auth)
+		opts = append(opts,
+			grpc.Creds(creds),
+			grpc.UnaryInterceptor(unary),
+			grpc.StreamInterceptor(stream),
+			// Per-connection state, which is what authentication hangs on.
+			grpc.StatsHandler(ConnTracker{}),
+		)
+	}
+	g := grpc.NewServer(opts...)
 	pb.RegisterGridServer(g, s)
 
 	done := make(chan struct{})

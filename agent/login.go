@@ -191,6 +191,11 @@ func (l Login) body() ([]byte, error) {
 		}
 	}
 
+	// The login server answers only what it is asked, and a field it was
+	// not asked for comes back missing rather than empty -- which reads
+	// exactly like a real "you have none". Group membership is NOT
+	// available here at all, asked for or not; it arrives later, on the
+	// event queue. See noteEvent.
 	opts := append([]string{"inventory-root"}, l.Options...)
 	b.WriteString("<member><name>options</name><value><array><data>\n")
 	for _, o := range opts {

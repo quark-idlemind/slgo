@@ -66,6 +66,7 @@ type Agent struct {
 	look        Look
 	regionName  string
 	activeGroup msg.UUID
+	groups      []Group
 	regionFlags uint32
 	// Objects is what the region has said about itself.  It lives here
 	// because a region describes itself once, when the avatar arrives,
@@ -334,6 +335,29 @@ func (a *Agent) register() {
 		a.mu.Unlock()
 	}, msg.Inline())
 
+	// AgentGroupDataUpdate carries every group the avatar has joined.
+	//
+	// This, and not the login response, is where the membership list
+	// comes from: login answers only what its options ask for, and
+	// "groups" is not among the ones this server honours -- so asking
+	// there gets a missing field, which reads exactly like belonging to
+	// none. The simulator volunteers the real list moments after the
+	// handshake and again whenever it changes.
+	a.Disp.MustHandle("AgentGroupDataUpdate", func(p *msg.Packet) {
+		m := p.Message.(*msg.AgentGroupDataUpdate)
+		gs := make([]Group, 0, len(m.GroupData))
+		for _, g := range m.GroupData {
+			gs = append(gs, Group{
+				ID:     g.GroupID,
+				Name:   trimNulBytes(g.GroupName),
+				Powers: g.GroupPowers,
+			})
+		}
+		a.mu.Lock()
+		a.groups = gs
+		a.mu.Unlock()
+	}, msg.Inline())
+
 	a.Disp.MustHandle("StartPingCheck", func(p *msg.Packet) {
 		m := p.Message.(*msg.StartPingCheck)
 		reply := &msg.CompletePingCheck{}
@@ -481,6 +505,50 @@ func (a *Agent) Done() <-chan struct{} { return a.done }
 func (a *Agent) Err() error { return a.err }
 
 // RegionName is the simulator'a name, once RegionHandshake has arrived.
+// Group is one of the avatar's memberships.
+type Group struct {
+	ID     msg.UUID
+	Name   string
+	Powers uint64
+}
+
+// Groups is every group the avatar has joined.
+//
+// Empty until the simulator sends the list, which is shortly after the
+// handshake -- so an empty answer immediately after login means "not
+// told yet" rather than "none", and callers that must know should wait
+// with WaitGroups.
+func (a *Agent) Groups() []Group {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]Group(nil), a.groups...)
+}
+
+// WaitGroups waits for the membership list to arrive.
+//
+// Belonging to no groups is indistinguishable from not having been told
+// yet, so this returns whatever it has when the time runs out rather
+// than failing: no groups is a perfectly ordinary state, and refusing
+// to proceed on account of it would be wrong.
+func (a *Agent) WaitGroups(ctx context.Context, timeout time.Duration) []Group {
+	deadline := time.Now().Add(timeout)
+	for {
+		if gs := a.Groups(); len(gs) > 0 {
+			return gs
+		}
+		if time.Now().After(deadline) {
+			return nil
+		}
+		t := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			t.Stop()
+			return a.Groups()
+		}
+	}
+}
+
 // ActiveGroup is the group the avatar is acting as, or zero for none.
 func (a *Agent) ActiveGroup() msg.UUID {
 	a.mu.RLock()
@@ -553,6 +621,14 @@ func (a *Agent) Close() {
 
 // trimNul drops the terminator the protocol puts on its strings.
 func trimNul(b []byte) string {
+	if n := len(b); n > 0 && b[n-1] == 0 {
+		b = b[:n-1]
+	}
+	return string(b)
+}
+
+// trimNulBytes makes a Go string of a wire string, which is nul ended.
+func trimNulBytes(b []byte) string {
 	if n := len(b); n > 0 && b[n-1] == 0 {
 		b = b[:n-1]
 	}

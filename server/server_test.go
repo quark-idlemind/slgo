@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -205,7 +207,7 @@ func newRig(t *testing.T, caps agent.Caps) *rig {
 
 func (r *rig) dial(t *testing.T, subscribe ...string) *client.Conn {
 	t.Helper()
-	c, err := client.Dial(context.Background(), r.ln.Addr().String())
+	c, err := client.Dial(context.Background(), r.ln.Addr().String(), plaintext())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +262,7 @@ func TestAttachAndWelcome(t *testing.T) {
 
 func TestAttachUnknownAgent(t *testing.T) {
 	r := newRig(t, nil)
-	c, err := client.Dial(context.Background(), r.ln.Addr().String())
+	c, err := client.Dial(context.Background(), r.ln.Addr().String(), plaintext())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -670,7 +672,7 @@ func TestReconnect(t *testing.T) {
 	go func() { defer close(done); srv.Serve(ctx, ln) }()
 	defer func() { cancel(); <-done }()
 
-	c, err := client.Dial(context.Background(), ln.Addr().String())
+	c, err := client.Dial(context.Background(), ln.Addr().String(), plaintext())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -776,4 +778,14 @@ func TestNoReconnectAfterLogout(t *testing.T) {
 	if n := logins.Load(); n != 1 {
 		t.Errorf("%d logins after a deliberate shutdown, want 1", n)
 	}
+}
+
+// plaintext dials without TLS or authentication.
+//
+// Dial authenticates by default, which is right for a client reaching a
+// slgod that might be on another machine and wrong for a test that
+// brought the server up in this process a microsecond ago. Passing any
+// dial option is the documented way to say so.
+func plaintext() grpc.DialOption {
+	return grpc.WithTransportCredentials(insecure.NewCredentials())
 }

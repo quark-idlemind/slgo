@@ -10,14 +10,17 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/credentials"
+	"slgo/auth"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"slgo/agent"
 	"slgo/llsd"
@@ -92,13 +95,32 @@ func (e *Event) Decode() (map[string]any, error) {
 
 // Dial connects to a server without opening a stream.  Use Attach to
 // start receiving messages.
+// Dial connects to slgod over TLS and authenticates both ways.
+//
+// One connection, used for the handshake and everything after, because
+// the connection is what the handshake proves. The certificate is not
+// checked and is not meant to be: it proves nothing, and what proves the
+// server is its half of the exchange, tied to this TLS session.
+//
+// Passing explicit dial options skips all of it, which is for tests that
+// bring up a server in the same process.
 func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, error) {
-	if len(opts) == 0 {
-		opts = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	authenticate := len(opts) == 0
+	var binding func() ([]byte, error)
+	if authenticate {
+		var creds credentials.TransportCredentials
+		creds, binding = auth.ClientTLS()
+		opts = []grpc.DialOption{grpc.WithTransportCredentials(creds)}
 	}
 	cc, err := grpc.NewClient(addr, opts...)
 	if err != nil {
 		return nil, err
+	}
+	if authenticate {
+		if err := login(ctx, cc, binding); err != nil {
+			cc.Close()
+			return nil, err
+		}
 	}
 	return &Conn{
 		cc:       cc,
@@ -112,6 +134,45 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 }
 
 // Close ends the connection.
+// login runs the two-call handshake on this connection.
+func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, error)) error {
+	secret, err := auth.LoadSecret("")
+	if err != nil {
+		return fmt.Errorf("%w\nThe client and slgod share this file", err)
+	}
+	g := pb.NewGridClient(cc)
+
+	begun, err := g.Login(ctx, &pb.LoginRequest{Client: "slgo"})
+	if err != nil {
+		return fmt.Errorf("login: %w", err)
+	}
+	schal := begun.GetChallenge()
+	if len(schal) != auth.ChallengeSize {
+		return fmt.Errorf("login: the server offered a %d byte challenge", len(schal))
+	}
+	bind, err := binding()
+	if err != nil {
+		return fmt.Errorf("login: %w", err)
+	}
+
+	cchal := make([]byte, auth.ChallengeSize)
+	if _, err := rand.Read(cchal); err != nil {
+		return err
+	}
+	done, err := g.Login(ctx, &pb.LoginRequest{
+		Client: "slgo", Challenge: cchal, Proof: auth.ClientProof(secret, schal, bind),
+	})
+	if err != nil {
+		return fmt.Errorf("login refused: %w", err)
+	}
+	// The server's half. A server that cannot prove it knows the secret
+	// is not the server, whatever else it says.
+	if subtle.ConstantTimeCompare(auth.ServerProof(secret, cchal, bind), done.GetProof()) != 1 {
+		return fmt.Errorf("slgod did not prove it knows the shared secret; refusing to talk to it")
+	}
+	return nil
+}
+
 func (c *Conn) Close() error {
 	c.finish(nil)
 	return c.cc.Close()

@@ -32,6 +32,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	Grid_Login_FullMethodName      = "/slgo.v1.Grid/Login"
 	Grid_Stream_FullMethodName     = "/slgo.v1.Grid/Stream"
 	Grid_ListAgents_FullMethodName = "/slgo.v1.Grid/ListAgents"
 	Grid_Status_FullMethodName     = "/slgo.v1.Grid/Status"
@@ -47,6 +48,14 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GridClient interface {
+	// Login authenticates a caller, BOTH WAYS, before anything else is
+	// accepted. Two calls of one message type; see LoginRequest.
+	//
+	// slgod holds a live Second Life session, so an unauthenticated one
+	// reachable off this machine is an open invitation to drive somebody
+	// else's avatar. The exchange is the same one slrund uses, from the
+	// same package.
+	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	// Stream is the packet channel.  The client sends messages to put on
 	// the circuit and receives the ones it has subscribed to.  Nothing
 	// that is not a grid packet belongs here.
@@ -96,6 +105,16 @@ type gridClient struct {
 
 func NewGridClient(cc grpc.ClientConnInterface) GridClient {
 	return &gridClient{cc}
+}
+
+func (c *gridClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LoginResponse)
+	err := c.cc.Invoke(ctx, Grid_Login_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *gridClient) Stream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientPacket, ServerPacket], error) {
@@ -195,6 +214,14 @@ func (c *gridClient) Send(ctx context.Context, in *SendRequest, opts ...grpc.Cal
 // All implementations must embed UnimplementedGridServer
 // for forward compatibility.
 type GridServer interface {
+	// Login authenticates a caller, BOTH WAYS, before anything else is
+	// accepted. Two calls of one message type; see LoginRequest.
+	//
+	// slgod holds a live Second Life session, so an unauthenticated one
+	// reachable off this machine is an open invitation to drive somebody
+	// else's avatar. The exchange is the same one slrund uses, from the
+	// same package.
+	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	// Stream is the packet channel.  The client sends messages to put on
 	// the circuit and receives the ones it has subscribed to.  Nothing
 	// that is not a grid packet belongs here.
@@ -246,6 +273,9 @@ type GridServer interface {
 // pointer dereference when methods are called.
 type UnimplementedGridServer struct{}
 
+func (UnimplementedGridServer) Login(context.Context, *LoginRequest) (*LoginResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Login not implemented")
+}
 func (UnimplementedGridServer) Stream(grpc.BidiStreamingServer[ClientPacket, ServerPacket]) error {
 	return status.Error(codes.Unimplemented, "method Stream not implemented")
 }
@@ -292,6 +322,24 @@ func RegisterGridServer(s grpc.ServiceRegistrar, srv GridServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&Grid_ServiceDesc, srv)
+}
+
+func _Grid_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LoginRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Login(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Login_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Login(ctx, req.(*LoginRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Grid_Stream_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -452,6 +500,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "slgo.v1.Grid",
 	HandlerType: (*GridServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Login",
+			Handler:    _Grid_Login_Handler,
+		},
 		{
 			MethodName: "ListAgents",
 			Handler:    _Grid_ListAgents_Handler,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"slgo/llsd"
+	"slgo/msg"
 )
 
 // The event queue is a long poll against a capability, carrying what
@@ -200,6 +201,11 @@ func (a *Agent) deliver(body []byte, fn EventHandler) (any, int) {
 		}
 		a.eq.events.Add(1)
 		n++
+		// The agent reads its own session state off the queue before
+		// anything else sees it. A relay hands events to whichever
+		// client is attached, and a client may be attached late, or
+		// never -- so state the session owns cannot be learned there.
+		a.noteEvent(name, em["body"])
 		if fn != nil {
 			fn(name, out)
 		}
@@ -225,4 +231,44 @@ func (a *Agent) closeEventQueue(ack any) {
 		Body:   body,
 		Type:   "application/llsd+xml",
 	})
+}
+
+// noteEvent records session state carried by an event.
+//
+// Only what belongs to the session goes here. Everything else is the
+// clients' business and is passed through untouched.
+func (a *Agent) noteEvent(name string, body any) {
+	if name != "AgentGroupDataUpdate" {
+		return
+	}
+	m := llsd.Map(body)
+	if m == nil {
+		return
+	}
+	rows, _ := m["GroupData"].([]any)
+	gs := make([]Group, 0, len(rows))
+	for _, r := range rows {
+		rm := llsd.Map(r)
+		if rm == nil {
+			continue
+		}
+		// A uuid arrives as text here: llsd renders <uuid> as a
+		// string, so asking for a msg.UUID would quietly match
+		// nothing and leave the list empty.
+		id, err := msg.ParseUUID(llsd.String(rm, "GroupID"))
+		if err != nil {
+			continue
+		}
+		gs = append(gs, Group{
+			ID:     id,
+			Name:   llsd.String(rm, "GroupName"),
+			Powers: uint64(llsd.Int(rm, "GroupPowers")),
+		})
+	}
+	if len(gs) == 0 {
+		return
+	}
+	a.mu.Lock()
+	a.groups = gs
+	a.mu.Unlock()
 }

@@ -17,6 +17,15 @@ package slgo.v1;
 option go_package = "slgo/proto/slgov1";
 
 service Grid {
+  // Login authenticates a caller, BOTH WAYS, before anything else is
+  // accepted. Two calls of one message type; see LoginRequest.
+  //
+  // slgod holds a live Second Life session, so an unauthenticated one
+  // reachable off this machine is an open invitation to drive somebody
+  // else's avatar. The exchange is the same one slrund uses, from the
+  // same package.
+  rpc Login(LoginRequest) returns (LoginResponse);
+
   // Stream is the packet channel.  The client sends messages to put on
   // the circuit and receives the ones it has subscribed to.  Nothing
   // that is not a grid packet belongs here.
@@ -74,6 +83,30 @@ service Grid {
 
 // ClientPacket is a message the client wants put on the circuit, or the
 // opening frame naming the agent to attach to.
+// Login is one message type used twice.
+//
+//   client -> server   (empty)
+//   server -> client   SCHAL, 16 random bytes
+//   client -> server   CCHAL, HMAC(secret, SCHAL || "CLIENT" || binding)
+//   server -> client   HMAC(secret, CCHAL || "SERVER" || binding)
+//
+// Mutual, so neither side proceeds until the other has shown it knows
+// the shared secret, and bound to the TLS session so that the whole
+// exchange cannot simply be relayed by something in the middle.
+//
+// Success authenticates the CONNECTION. There is no token: TLS already
+// made a session and this proved who is on the far end of it.
+message LoginRequest {
+  string client = 1;
+  bytes challenge = 2;
+  bytes proof = 3;
+}
+
+message LoginResponse {
+  bytes challenge = 1;
+  bytes proof = 2;
+}
+
 message ClientPacket {
   oneof body {
     Attach attach = 1;
