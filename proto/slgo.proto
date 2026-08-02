@@ -322,9 +322,17 @@ message ObjectInfo {
   Vector3 scale = 5;
   Vector3 position = 6;
 
-  // Name and owner are empty until something has asked for them.
+  // Name is empty until something has asked for it.  Owner is filled
+  // in by a compressed update as well as by asking.
   string name = 7;
   string owner = 8;
+
+  // TextureEntry is the packed per face appearance, when one has been
+  // seen.  It usually arrives only in a compressed update.
+  bytes texture_entry = 9;
+
+  // Text is the floating text above the object.
+  string text = 10;
 }
 
 message ObjectsResponse {

@@ -415,14 +415,16 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			continue
 		}
 		out.Objects = append(out.Objects, &pb.ObjectInfo{
-			Id:       o.ID.String(),
-			Local:    o.Local,
-			Parent:   o.Parent,
-			Pcode:    uint32(o.PCode),
-			Scale:    vec(o.Scale),
-			Position: vec(o.Position),
-			Name:     o.Name,
-			Owner:    o.Owner.String(),
+			Id:           o.ID.String(),
+			Local:        o.Local,
+			Parent:       o.Parent,
+			Pcode:        uint32(o.PCode),
+			Scale:        vec(o.Scale),
+			Position:     vec(o.Position),
+			Name:         o.Name,
+			Owner:        o.Owner.String(),
+			TextureEntry: o.TextureEntry,
+			Text:         o.Text,
 		})
 	}
 	return out, nil

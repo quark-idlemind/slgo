@@ -111,6 +111,21 @@ type Seen struct {
 
 	// PCode says what kind of thing it is: 9 is a prim, 47 an avatar.
 	PCode uint8
+
+	// TextureEntry is the packed per face appearance, when one has
+	// been seen.  DecodeTextureEntry unpacks it.
+	TextureEntry []byte
+
+	// Text is the floating text above the object.
+	Text string
+}
+
+// Faces unpacks the appearance, if any has been seen.
+func (s *Seen) Faces(count int) ([]Face, error) {
+	if len(s.TextureEntry) == 0 {
+		return nil, fmt.Errorf("world: nothing has described the faces of %s", s.ID)
+	}
+	return DecodeTextureEntry(s.TextureEntry, count)
 }
 
 // IsAvatar reports whether this is an avatar rather than a prim.
@@ -220,12 +235,14 @@ func (w *World) fetch(ctx context.Context, named, id string) ([]*Seen, error) {
 		}
 		owner, _ := msg.ParseUUID(o.Owner)
 		out = append(out, &Seen{
-			Object:   Object{ID: oid, Local: o.Local, Name: o.Name},
-			Owner:    owner,
-			Position: fromPB(o.Position),
-			Scale:    fromPB(o.Scale),
-			Parent:   o.Parent,
-			PCode:    uint8(o.Pcode),
+			Object:       Object{ID: oid, Local: o.Local, Name: o.Name},
+			Owner:        owner,
+			Position:     fromPB(o.Position),
+			Scale:        fromPB(o.Scale),
+			Parent:       o.Parent,
+			PCode:        uint8(o.Pcode),
+			TextureEntry: o.TextureEntry,
+			Text:         o.Text,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Local < out[j].Local })

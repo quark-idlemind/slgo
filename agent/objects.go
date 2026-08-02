@@ -34,10 +34,20 @@ type Object struct {
 	Position msg.Vector3
 	Rotation msg.Quaternion
 
-	// Name and Owner are only known if something asked.  An
-	// ObjectUpdate carries neither.
+	// Name is only known if something asked; an ObjectUpdate carries
+	// none.  Owner comes either from asking or from a compressed
+	// update, which does carry it.
 	Name  string
 	Owner msg.UUID
+
+	// TextureEntry is the per face appearance, still packed.  Most of
+	// the time it arrives only in a compressed update, since a full
+	// ObjectUpdate is sent when an object first appears and appearance
+	// changes after that come the compressed way.
+	TextureEntry []byte
+
+	// Text is the floating text above the object, when it has any.
+	Text string
 
 	// First and Last are when the simulator first and last said
 	// anything about this object.  Last is what an age based sweep
@@ -235,6 +245,63 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	}
 }
 
+// compressed records what a compressed update said.
+//
+// It carries more than a full update does -- the owner, the floating
+// text, the appearance -- so this fills in things nothing else would.
+func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance float32) {
+	parent := uint32(0)
+	if c.ParentID != nil {
+		parent = *c.ParentID
+	}
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if drawDistance > 0 {
+		limit := drawDistance + TrimMargin
+		at, judge := c.Position, true
+		if parent != 0 {
+			at, judge = o.rootPosLocked(parent)
+		}
+		if judge && dist2(at, camera) > limit*limit {
+			delete(o.byID, c.FullID)
+			return
+		}
+	}
+
+	v := o.seen(c.FullID)
+	v.Local, v.Parent, v.PCode = c.LocalID, parent, c.PCode
+	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
+	if !c.Owner.IsZero() {
+		v.Owner = c.Owner
+	}
+	if len(c.TextureEntry) > 0 {
+		v.TextureEntry = c.TextureEntry
+	}
+	if c.Text != "" {
+		v.Text = c.Text
+	}
+}
+
+// moved records a terse update.
+//
+// It only updates something already known.  A terse update names an
+// object by local id alone, so one for something never described is
+// not enough to make an entry with -- there would be nothing to say
+// what it is.
+func (o *Objects) moved(t *msg.Terse) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, v := range o.byID {
+		if v.Local == t.LocalID {
+			v.Position, v.Rotation = t.Position, t.Rotation
+			v.Last = time.Now()
+			return
+		}
+	}
+}
+
 // rootPosLocked finds where a root is by its local id.
 func (o *Objects) rootPosLocked(local uint32) (msg.Vector3, bool) {
 	for _, v := range o.byID {
@@ -277,6 +344,40 @@ func (a *Agent) trackObjects() {
 		l := a.Look()
 		for i := range m.ObjectData {
 			a.Objects.update(&m.ObjectData[i], l.Center, l.Far)
+		}
+	}, msg.Inline())
+
+	// ObjectUpdateCompressed is how most updates arrive after an
+	// object has first been described.  A session that ignores it sees
+	// the world as it was on arrival and never learns otherwise.
+	a.Disp.MustHandle("ObjectUpdateCompressed", func(p *msg.Packet) {
+		m := p.Message.(*msg.ObjectUpdateCompressed)
+		l := a.Look()
+		for i := range m.ObjectData {
+			c, err := msg.DecodeCompressed(m.ObjectData[i].Data)
+			if c == nil {
+				continue
+			}
+			// A partly decoded object still says where it is and what
+			// it is, which is what the cache is for.  The error is
+			// worth nothing here beyond not trusting the tail.
+			_ = err
+			a.Objects.compressed(c, l.Center, l.Far)
+		}
+	}, msg.Inline())
+
+	// ImprovedTerseObjectUpdate is the message the simulator sends
+	// most: everything that moves, several times a second.  It carries
+	// only a local id and a position, so it updates what is already
+	// known rather than introducing anything.
+	a.Disp.MustHandle("ImprovedTerseObjectUpdate", func(p *msg.Packet) {
+		m := p.Message.(*msg.ImprovedTerseObjectUpdate)
+		for i := range m.ObjectData {
+			t, err := msg.DecodeTerse(m.ObjectData[i].Data)
+			if err != nil {
+				continue
+			}
+			a.Objects.moved(t)
 		}
 	}, msg.Inline())
 

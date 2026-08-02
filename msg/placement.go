@@ -2,6 +2,7 @@ package msg
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 )
 
@@ -79,4 +80,107 @@ func u16f(b []byte, lo, hi float32) float32 {
 
 func u8f(b uint8, lo, hi float32) float32 {
 	return lo + (hi-lo)*(float32(b)/255)
+}
+
+// Terse is one object out of an ImprovedTerseObjectUpdate.
+//
+// This is the message the simulator sends most: everything that is
+// moving, several times a second.  It carries no identity beyond the
+// local id and no appearance at all -- only where something is and
+// where it is going, quantised to sixteen bits over the region.
+type Terse struct {
+	LocalID uint32
+	State   uint8
+
+	// Avatar says whether the blob began with a collision plane,
+	// which is the only thing distinguishing the two layouts.
+	Avatar bool
+
+	// CollisionPlane is where an avatar is standing, and is present
+	// only for one.
+	CollisionPlane [4]float32
+
+	Position     Vector3
+	Velocity     Vector3
+	Acceleration Vector3
+	Rotation     Quaternion
+	AngularVel   Vector3
+}
+
+// DecodeTerse reads the packed blob in ImprovedTerseObjectUpdate.
+//
+// The layout was read off real blobs rather than assumed, and the
+// assumption was wrong: the position is three plain floats, not the
+// quantised pair of bytes per axis that everything after it uses.
+// Decoding it as quantised gave positions that looked like positions
+// -- in range, stable, changing plausibly -- while being nowhere near
+// where the objects actually were, which is the kind of wrong that
+// does not announce itself.
+//
+//	0  local id, four bytes
+//	4  state
+//	5  whether an avatar, and so whether a collision plane follows
+//	6  collision plane, sixteen bytes, avatars only
+//	   position, three floats
+//	   velocity, three sixteen bit fractions
+//	   acceleration, three
+//	   rotation, four
+//	   angular velocity, three
+//
+// Forty-four bytes for a prim, sixty for an avatar.
+func DecodeTerse(b []byte) (*Terse, error) {
+	if len(b) < 6 {
+		return nil, fmt.Errorf("msg: terse update is %d bytes, too short for a header", len(b))
+	}
+
+	t := &Terse{
+		LocalID: binary.LittleEndian.Uint32(b),
+		State:   b[4],
+		Avatar:  b[5] != 0,
+	}
+	i := 6
+	if t.Avatar {
+		if len(b) < i+16 {
+			return nil, fmt.Errorf("msg: terse update for an avatar is missing its collision plane")
+		}
+		for j := range 4 {
+			t.CollisionPlane[j] = lef32(b[i+j*4:])
+		}
+		i += 16
+	}
+
+	// position 12, velocity 6, acceleration 6, rotation 8, angular 6
+	if len(b) < i+38 {
+		return nil, fmt.Errorf("msg: terse update has %d bytes of body, wanted 38", len(b)-i)
+	}
+
+	t.Position = Vector3{X: lef32(b[i:]), Y: lef32(b[i+4:]), Z: lef32(b[i+8:])}
+	i += 12
+
+	// The rest are sixteen bit fractions of a range.  Rotation runs
+	// from minus one to one and all four components are sent here,
+	// unlike the three float form elsewhere.  The span used for
+	// velocity and acceleration has only ever been seen holding the
+	// midpoint, so the value below is the conventional one rather than
+	// something this package has confirmed.
+	rd3 := func(lo, hi float32) Vector3 {
+		v := Vector3{
+			X: u16f(b[i:], lo, hi),
+			Y: u16f(b[i+2:], lo, hi),
+			Z: u16f(b[i+4:], lo, hi),
+		}
+		i += 6
+		return v
+	}
+	const velMax = 128.0
+	t.Velocity = rd3(-velMax, velMax)
+	t.Acceleration = rd3(-velMax, velMax)
+	t.Rotation = Quaternion{
+		X: u16f(b[i:], -1, 1),
+		Y: u16f(b[i+2:], -1, 1),
+		Z: u16f(b[i+4:], -1, 1),
+	}
+	i += 8 // four components on the wire; W is recovered by normalising
+	t.AngularVel = rd3(-velMax, velMax)
+	return t, nil
 }

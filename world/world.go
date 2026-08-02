@@ -45,7 +45,8 @@ var ErrTimeout = errors.New("world: timed out waiting for the simulator")
 // Passing anything less to Attach leaves it waiting for confirmations
 // that will not arrive.
 var Subscriptions = []string{
-	"ObjectUpdate", "ObjectProperties", "ObjectPropertiesFamily", "KillObject",
+	"ObjectUpdate", "ObjectUpdateCompressed", "ObjectProperties",
+	"ObjectPropertiesFamily", "KillObject",
 	"UpdateCreateInventoryItem", "ReplyTaskInventory",
 	"SendXferPacket", "AbortXfer", "TransferInfo", "TransferPacket",
 	"ChatFromSimulator", "AlertMessage",

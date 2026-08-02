@@ -1642,9 +1642,15 @@ type ObjectInfo struct {
 	Pcode    uint32   `protobuf:"varint,4,opt,name=pcode,proto3" json:"pcode,omitempty"`
 	Scale    *Vector3 `protobuf:"bytes,5,opt,name=scale,proto3" json:"scale,omitempty"`
 	Position *Vector3 `protobuf:"bytes,6,opt,name=position,proto3" json:"position,omitempty"`
-	// Name and owner are empty until something has asked for them.
-	Name          string `protobuf:"bytes,7,opt,name=name,proto3" json:"name,omitempty"`
-	Owner         string `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
+	// Name is empty until something has asked for it.  Owner is filled
+	// in by a compressed update as well as by asking.
+	Name  string `protobuf:"bytes,7,opt,name=name,proto3" json:"name,omitempty"`
+	Owner string `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
+	// TextureEntry is the packed per face appearance, when one has been
+	// seen.  It usually arrives only in a compressed update.
+	TextureEntry []byte `protobuf:"bytes,9,opt,name=texture_entry,json=textureEntry,proto3" json:"texture_entry,omitempty"`
+	// Text is the floating text above the object.
+	Text          string `protobuf:"bytes,10,opt,name=text,proto3" json:"text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1731,6 +1737,20 @@ func (x *ObjectInfo) GetName() string {
 func (x *ObjectInfo) GetOwner() string {
 	if x != nil {
 		return x.Owner
+	}
+	return ""
+}
+
+func (x *ObjectInfo) GetTextureEntry() []byte {
+	if x != nil {
+		return x.TextureEntry
+	}
+	return nil
+}
+
+func (x *ObjectInfo) GetText() string {
+	if x != nil {
+		return x.Text
 	}
 	return ""
 }
@@ -2213,7 +2233,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x0eObjectsRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id\"\xe0\x01\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\x99\x02\n" +
 	"\n" +
 	"ObjectInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -2223,7 +2243,10 @@ const file_slgo_proto_rawDesc = "" +
 	"\x05scale\x18\x05 \x01(\v2\x10.slgo.v1.Vector3R\x05scale\x12,\n" +
 	"\bposition\x18\x06 \x01(\v2\x10.slgo.v1.Vector3R\bposition\x12\x12\n" +
 	"\x04name\x18\a \x01(\tR\x04name\x12\x14\n" +
-	"\x05owner\x18\b \x01(\tR\x05owner\"V\n" +
+	"\x05owner\x18\b \x01(\tR\x05owner\x12#\n" +
+	"\rtexture_entry\x18\t \x01(\fR\ftextureEntry\x12\x12\n" +
+	"\x04text\x18\n" +
+	" \x01(\tR\x04text\"V\n" +
 	"\x0fObjectsResponse\x12-\n" +
 	"\aobjects\x18\x01 \x03(\v2\x13.slgo.v1.ObjectInfoR\aobjects\x12\x14\n" +
 	"\x05known\x18\x02 \x01(\x05R\x05known\"%\n" +
