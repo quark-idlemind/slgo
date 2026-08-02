@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -388,6 +389,34 @@ func (a *Agent) trackObjects() {
 		}
 	}, msg.Inline())
 
+	// ObjectUpdateCached is the simulator saying "you have these
+	// already": local ids and CRCs, and no content whatsoever.  A
+	// viewer with a disk cache checks each CRC against what it stored
+	// last visit and asks only for what it is missing.  This client has
+	// no cache, so every one of them is a miss and every one has to be
+	// asked for.
+	//
+	// Ignoring it costs almost everything that was in the region before
+	// we arrived, while leaving freshly rezzed objects working
+	// perfectly -- those arrive as full ObjectUpdates.  That asymmetry
+	// is why it went unnoticed: every experiment written here rezzes
+	// the object it works on.  Pointed at a prim that was already
+	// there, the session could not see it at all.
+	//
+	// It is also why counting unhandled MESSAGES made this look
+	// trivial.  ObjectData is a variable block, so the whole region can
+	// arrive in one packet, and one packet is what the count showed.
+	a.Disp.MustHandle("ObjectUpdateCached", func(p *msg.Packet) {
+		m := p.Message.(*msg.ObjectUpdateCached)
+		ids := make([]uint32, len(m.ObjectData))
+		for i := range m.ObjectData {
+			ids[i] = m.ObjectData[i].ID
+		}
+		// Off the dispatch goroutine: this can be several packets and
+		// nothing else can be decoded while it sends.
+		go a.requestCachedObjects(ids)
+	}, msg.Inline())
+
 	// Names and owners come only from asking, and any client may be
 	// the one that asked.  Remembering the answers means the next
 	// client does not have to ask again.
@@ -404,4 +433,33 @@ func (a *Agent) trackObjects() {
 			a.Objects.named(d.ObjectID, trimNul(d.Name), d.OwnerID)
 		}
 	}, msg.Inline())
+}
+
+// requestCachedObjects asks the simulator to describe objects it
+// believes we already hold.
+//
+// The cache miss type says what we have: 0 is nothing at all, 1 is a
+// copy whose CRC disagrees.  This client caches nothing between
+// sessions, so it is always 0.
+//
+// Sent in batches because the request has to fit in a datagram.  Each
+// block is five bytes, so a hundred is comfortable, and a simulator
+// that cannot parse an oversized request answers none of it rather than
+// the part that fitted.
+func (a *Agent) requestCachedObjects(ids []uint32) {
+	const batch = 100
+	for len(ids) > 0 {
+		n := min(batch, len(ids))
+		req := &msg.RequestMultipleObjects{}
+		req.AgentData.AgentID = a.Account.AgentID
+		req.AgentData.SessionID = a.Account.SessionID
+		req.ObjectData = make([]msg.RequestMultipleObjects_ObjectData, n)
+		for i, id := range ids[:n] {
+			req.ObjectData[i] = msg.RequestMultipleObjects_ObjectData{CacheMissType: 0, ID: id}
+		}
+		if err := a.Send.Send(context.Background(), req); err != nil {
+			return
+		}
+		ids = ids[n:]
+	}
 }
