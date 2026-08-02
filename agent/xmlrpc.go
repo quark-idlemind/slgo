@@ -1,7 +1,12 @@
-// Package client logs in to Second Life and brings up a session: the
-// XML-RPC exchange with the login server, then the UDP circuit to the
-// simulator it hands you.
-package client
+// Package agent is one avatar's connection to the grid: the XML-RPC
+// exchange with the login server, then the UDP circuit to the simulator
+// it hands you.
+//
+// An Agent is what the C client calls scommon_t -- the state shared by
+// everything talking to one logged-in avatar.  It is deliberately not
+// called a session: in this tree a session is an attached client, which
+// is what package server serves.
+package agent
 
 import (
 	"encoding/xml"

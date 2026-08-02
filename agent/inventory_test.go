@@ -1,4 +1,4 @@
-package client
+package agent
 
 import (
 	"context"
@@ -160,10 +160,10 @@ func (a *aisServer) handler() http.Handler {
 	})
 }
 
-// invSession makes a Session with only the HTTP parts wired up, which
+// invSession makes a Agent with only the HTTP parts wired up, which
 // is all the inventory needs.
-func invSession(base string, root msg.UUID) *Session {
-	return &Session{
+func invSession(base string, root msg.UUID) *Agent {
+	return &Agent{
 		Account:   &Account{InventoryRoot: root},
 		Caps:      Caps{"InventoryAPIv3": base},
 		Inventory: newInventory(root),
@@ -356,7 +356,7 @@ func TestFetchInventoryGivesUp(t *testing.T) {
 }
 
 func TestFetchInventoryNeedsTheCapability(t *testing.T) {
-	s := &Session{Account: &Account{}, Caps: Caps{}, Inventory: newInventory(msg.UUID{})}
+	s := &Agent{Account: &Account{}, Caps: Caps{}, Inventory: newInventory(msg.UUID{})}
 	err := s.FetchInventory(context.Background(), FetchOptions{})
 	if err == nil || !strings.Contains(err.Error(), "InventoryAPIv3") {
 		t.Errorf("err = %v", err)

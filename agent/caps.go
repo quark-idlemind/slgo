@@ -1,4 +1,4 @@
-package client
+package agent
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slgo/llsd"
 	"sort"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func (c Caps) Names() []string {
 // log fills with "Unknown capability: Metadata.account_level_benefits".
 func RequestCaps(ctx context.Context, seed string, names []string, hc *http.Client) (Caps, error) {
 	if seed == "" {
-		return nil, fmt.Errorf("client: no seed capability")
+		return nil, fmt.Errorf("agent: no seed capability")
 	}
 	if len(names) == 0 {
 		names = DefaultCaps
@@ -68,7 +69,7 @@ func RequestCaps(ctx context.Context, seed string, names []string, hc *http.Clie
 		hc = &http.Client{Timeout: 60 * time.Second}
 	}
 
-	body, err := EncodeLLSD(names)
+	body, err := llsd.Encode(names)
 	if err != nil {
 		return nil, err
 	}
@@ -81,22 +82,22 @@ func RequestCaps(ctx context.Context, seed string, names []string, hc *http.Clie
 
 	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("client: seed capability: %w", err)
+		return nil, fmt.Errorf("agent: seed capability: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
-		return nil, fmt.Errorf("client: seed capability returned %s: %s",
+		return nil, fmt.Errorf("agent: seed capability returned %s: %s",
 			resp.Status, strings.TrimSpace(string(snippet)))
 	}
 
-	v, err := DecodeLLSD(resp.Body)
+	v, err := llsd.Decode(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("client: seed capability: %w", err)
+		return nil, fmt.Errorf("agent: seed capability: %w", err)
 	}
-	m := llsdMap(v)
+	m := llsd.Map(v)
 	if m == nil {
-		return nil, fmt.Errorf("client: seed capability returned %T, wanted a map", v)
+		return nil, fmt.Errorf("agent: seed capability returned %T, wanted a map", v)
 	}
 
 	caps := Caps{}

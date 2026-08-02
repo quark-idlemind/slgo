@@ -1,0 +1,192 @@
+syntax = "proto3";
+
+// Package slgo.v1 is the link between a server holding grid connections
+// and the clients attached to it.
+//
+// The division is that the server owns whatever breaks if a client
+// restarts -- the circuit, its sequence numbers, retransmission,
+// acknowledgements, the login and the capability URLs -- and nothing
+// else.  It does not decode message bodies, hold an inventory,
+// understand chat or know what a script is.
+//
+// A grid message crosses as its number and its undecoded bytes, so the
+// server relays a message type it has never heard of and a client can
+// be restarted as often as you like without the grid noticing.
+package slgo.v1;
+
+option go_package = "slgo/proto/slgov1";
+
+service Grid {
+  // Stream is the packet channel.  The client sends messages to put on
+  // the circuit and receives the ones it has subscribed to.  Nothing
+  // that is not a grid packet belongs here.
+  rpc Stream(stream ClientPacket) returns (stream ServerPacket);
+
+  // Everything below is the server answering for itself rather than
+  // relaying the grid.
+
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  rpc Status(StatusRequest) returns (StatusResponse);
+
+  // Cap makes an HTTP request against one of the agent's
+  // capabilities.  The server holds the URLs and does the request; it
+  // has no idea what any of them mean.  This is what keeps inventory,
+  // asset upload and script compilation out of the server.
+  rpc Cap(CapRequest) returns (CapResponse);
+
+  // Send puts one message on the circuit without opening a stream, for
+  // a client that only wants to say one thing.
+  rpc Send(SendRequest) returns (SendResponse);
+}
+
+// ------------------------------------------------------------ packets
+
+// ClientPacket is a message the client wants put on the circuit, or the
+// opening frame naming the agent to attach to.
+message ClientPacket {
+  oneof body {
+    Attach attach = 1;
+    OutboundMessage message = 2;
+
+    // Which messages to relay is state of this stream, so it is
+    // adjusted on the stream rather than by an RPC that would have no
+    // way to say which stream it meant.
+    Subscribe subscribe = 3;
+  }
+}
+
+// Subscribe adjusts what this stream relays.  Exactly one field is
+// used: set replaces the subscription, add and remove adjust it.
+message Subscribe {
+  repeated string set = 1;
+  repeated string add = 2;
+  repeated string remove = 3;
+}
+
+// Attach must be the first frame on a stream.
+message Attach {
+  string agent = 1;
+
+  // Messages to relay, by template name.  "*" means everything.  Empty
+  // means nothing until Subscribe says otherwise, which is the default
+  // because a busy region will otherwise flood the link.
+  repeated string subscribe = 2;
+}
+
+message OutboundMessage {
+  // The message number, as slgo's msg.ID.  Name may be given instead
+  // and is looked up in the template.
+  uint32 id = 1;
+  string name = 2;
+
+  // The encoded message body, without the packet header or the message
+  // number.  The server frames it: sequence numbers and reliability
+  // are circuit state and are not the client's to choose.
+  bytes body = 3;
+  bool reliable = 4;
+}
+
+// ServerPacket is a message that arrived from the simulator, or a note
+// about the connection.
+message ServerPacket {
+  oneof body {
+    InboundMessage message = 1;
+    Attached attached = 2;
+    AgentEvent event = 3;
+  }
+}
+
+message Attached {
+  AgentInfo agent = 1;
+}
+
+message InboundMessage {
+  uint32 id = 1;
+
+  // The template's name for the message, empty when the number is not
+  // in this server's template.  The body is relayed either way.
+  string name = 2;
+
+  bytes body = 3;
+  uint32 sequence = 4;
+  uint32 flags = 5;
+
+  // Microseconds since the epoch, when the datagram was read.
+  int64 received_at = 6;
+}
+
+// AgentEvent is something that happened to the grid connection itself.
+message AgentEvent {
+  enum Kind {
+    UNKNOWN = 0;
+    REGION_CHANGED = 1;
+    DISCONNECTED = 2;
+    KICKED = 3;
+  }
+  Kind kind = 1;
+  string detail = 2;
+}
+
+// ------------------------------------------------------------ control
+
+message AgentInfo {
+  string name = 1; // the profile name the server hosts it under
+  string agent_id = 2;
+  string session_id = 3;
+  string avatar_name = 4;
+  string region = 5;
+  string channel_version = 6;
+  string inventory_root = 7;
+  repeated string caps = 8;
+  bool connected = 9;
+}
+
+message ListAgentsRequest {}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
+
+message StatusRequest {
+  string agent = 1;
+}
+
+message StatusResponse {
+  AgentInfo agent = 1;
+
+  uint64 packets_in = 2;
+  uint64 packets_out = 3;
+  uint64 bytes_in = 4;
+  uint64 bytes_out = 5;
+  uint64 resent = 6;
+  uint64 abandoned = 7;
+  uint64 duplicates = 8;
+  uint64 undecodable = 9;
+  uint64 unknown_messages = 10;
+  int32 clients = 11;
+
+  // Messages nobody has registered for, by template name.  This is how
+  // a protocol change announces itself.
+  map<string, uint64> unhandled = 12;
+}
+
+message CapRequest {
+  string agent = 1;
+  string cap = 2;    // capability name, e.g. "InventoryAPIv3"
+  string method = 3; // default GET
+  string path = 4;   // appended to the capability URL
+  bytes body = 5;
+  string content_type = 6;
+}
+
+message CapResponse {
+  int32 status = 1;
+  bytes body = 2;
+}
+
+message SendRequest {
+  string agent = 1;
+  OutboundMessage message = 2;
+}
+
+message SendResponse {}

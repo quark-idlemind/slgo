@@ -65,6 +65,7 @@ type Receiver struct {
 	conn PacketSource
 	ch   chan *Packet
 	drop bool
+	keep bool
 
 	// Owned by the Run goroutine.
 	buf  []byte
@@ -89,6 +90,14 @@ func WithBuffer(n int) ReceiverOption {
 		}
 		r.ch = make(chan *Packet, n)
 	}
+}
+
+// KeepBody makes every packet carry its undecoded body, not just the
+// ones that failed.  A relay needs the original bytes so it can pass on
+// a message without understanding it; nothing else does, so it is off
+// by default and costs one copy per packet when on.
+func KeepBody() ReceiverOption {
+	return func(r *Receiver) { r.keep = true }
 }
 
 // DropWhenFull discards packets instead of blocking when the channel is
@@ -264,17 +273,25 @@ func (r *Receiver) parse(b []byte, addr net.Addr, at time.Time) *Packet {
 	p.ID = id
 	body = body[k:]
 
+	if r.keep {
+		p.Body = append([]byte(nil), body...)
+	}
+
 	m := New(id)
 	if m == nil {
 		r.unknown.Add(1)
 		p.Err = fmt.Errorf("%w %v", ErrUnknownMessage, id)
-		p.Body = append([]byte(nil), body...)
+		if p.Body == nil {
+			p.Body = append([]byte(nil), body...)
+		}
 		return p
 	}
 	if err := m.Decode(body); err != nil {
 		r.failed.Add(1)
 		p.Err = err
-		p.Body = append([]byte(nil), body...)
+		if p.Body == nil {
+			p.Body = append([]byte(nil), body...)
+		}
 		return p
 	}
 	p.Message = m

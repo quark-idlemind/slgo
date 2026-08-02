@@ -1,15 +1,14 @@
-package client
+package agent
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
+	"slgo/llsd"
 	"slgo/msg"
 )
 
@@ -72,6 +71,11 @@ type Inventory struct {
 	children map[msg.UUID][]msg.UUID // folder -> child folders
 	contents map[msg.UUID][]msg.UUID // folder -> items
 }
+
+// NewInventory makes an empty tree rooted at a folder.  A client
+// building its own from the far end of a link needs this; an Agent gets
+// one made for it.
+func NewInventory(root msg.UUID) *Inventory { return newInventory(root) }
 
 func newInventory(root msg.UUID) *Inventory {
 	return &Inventory{
@@ -240,25 +244,40 @@ type FetchOptions struct {
 	OnFolder func(f *Folder, folders, items int)
 }
 
+// InventoryCap is the capability inventory is read through.
+const InventoryCap = "InventoryAPIv3"
+
 // FetchInventory walks the whole tree from the root.
-func (s *Session) FetchInventory(ctx context.Context, opts FetchOptions) error {
-	return s.fetchFrom(ctx, s.Inventory.Root(), opts)
+//
+// It takes a CapDoer rather than reaching for the Agent's HTTP client,
+// so the identical code runs in the process holding the grid connection
+// or in a client on the far end of a link to it.
+func FetchInventory(ctx context.Context, d CapDoer, inv *Inventory, opts FetchOptions) error {
+	return fetchFrom(ctx, d, inv, inv.Root(), opts)
 }
 
 // FetchFolder fetches one folder's children, without descending.
-func (s *Session) FetchFolder(ctx context.Context, id msg.UUID) error {
-	base, ok := s.Caps.Get("InventoryAPIv3")
-	if !ok {
-		return fmt.Errorf("client: the simulator offers no InventoryAPIv3 capability")
+func FetchFolder(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID) error {
+	if !d.HasCap(InventoryCap) {
+		return fmt.Errorf("agent: no %s capability", InventoryCap)
 	}
-	_, err := s.fetchOne(ctx, base, id)
+	_, err := fetchOne(ctx, d, inv, id)
 	return err
 }
 
-func (s *Session) fetchFrom(ctx context.Context, root msg.UUID, opts FetchOptions) error {
-	base, ok := s.Caps.Get("InventoryAPIv3")
-	if !ok {
-		return fmt.Errorf("client: the simulator offers no InventoryAPIv3 capability")
+// FetchInventory fills the agent's own tree.
+func (a *Agent) FetchInventory(ctx context.Context, opts FetchOptions) error {
+	return FetchInventory(ctx, a, a.Inventory, opts)
+}
+
+// FetchFolder fetches one folder of the agent's own tree.
+func (a *Agent) FetchFolder(ctx context.Context, id msg.UUID) error {
+	return FetchFolder(ctx, a, a.Inventory, id)
+}
+
+func fetchFrom(ctx context.Context, d CapDoer, inv *Inventory, root msg.UUID, opts FetchOptions) error {
+	if !d.HasCap(InventoryCap) {
+		return fmt.Errorf("agent: no %s capability", InventoryCap)
 	}
 	if opts.Concurrency <= 0 {
 		opts.Concurrency = 8
@@ -268,8 +287,8 @@ func (s *Session) fetchFrom(ctx context.Context, root msg.UUID, opts FetchOption
 	}
 
 	w := &invWalk{
-		s:    s,
-		base: base,
+		d:    d,
+		inv:  inv,
 		opts: opts,
 		sem:  make(chan struct{}, opts.Concurrency),
 		seen: map[msg.UUID]bool{root: true},
@@ -287,8 +306,8 @@ func (s *Session) fetchFrom(ctx context.Context, root msg.UUID, opts FetchOption
 }
 
 type invWalk struct {
-	s      *Session
-	base   string
+	d      CapDoer
+	inv    *Inventory
 	opts   FetchOptions
 	sem    chan struct{}
 	wg     sync.WaitGroup
@@ -316,7 +335,7 @@ func (w *invWalk) walk(ctx context.Context, id msg.UUID) {
 		}
 		defer func() { <-w.sem }()
 
-		kids, err := w.s.fetchOne(ctx, w.base, id)
+		kids, err := fetchOne(ctx, w.d, w.inv, id)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -335,8 +354,8 @@ func (w *invWalk) walk(ctx context.Context, id msg.UUID) {
 		}
 
 		if w.opts.OnFolder != nil {
-			f, _ := w.s.Inventory.Folder(id)
-			nf, ni := w.s.Inventory.Counts()
+			f, _ := w.inv.Folder(id)
+			nf, ni := w.inv.Counts()
 			w.opts.OnFolder(f, nf, ni)
 		}
 
@@ -354,48 +373,45 @@ func (w *invWalk) walk(ctx context.Context, id msg.UUID) {
 
 // fetchOne requests one folder's children and records them, returning
 // the child folders found.
-func (s *Session) fetchOne(ctx context.Context, base string, id msg.UUID) ([]msg.UUID, error) {
-	url := strings.TrimRight(base, "/") + "/category/" + id.String() + "/children"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func fetchOne(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID) ([]msg.UUID, error) {
+	resp, err := d.DoCap(ctx, CapRequest{
+		Cap:  InventoryCap,
+		Path: "/category/" + id.String() + "/children",
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("agent: inventory %s: %w", id, err)
 	}
-	req.Header.Set("Accept", "application/llsd+xml")
-
-	resp, err := s.http().Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("client: inventory %s: %w", id, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
-		return nil, fmt.Errorf("client: inventory %s: %s: %s",
+	if !resp.OK() {
+		snippet := resp.Body
+		if len(snippet) > 256 {
+			snippet = snippet[:256]
+		}
+		return nil, fmt.Errorf("agent: inventory %s: status %d: %s",
 			id, resp.Status, strings.TrimSpace(string(snippet)))
 	}
 
-	v, err := DecodeLLSD(resp.Body)
+	v, err := llsd.Decode(bytes.NewReader(resp.Body))
 	if err != nil {
-		return nil, fmt.Errorf("client: inventory %s: %w", id, err)
+		return nil, fmt.Errorf("agent: inventory %s: %w", id, err)
 	}
-	m := llsdMap(v)
+	m := llsd.Map(v)
 	if m == nil {
-		return nil, fmt.Errorf("client: inventory %s: reply was %T, wanted a map", id, v)
+		return nil, fmt.Errorf("agent: inventory %s: reply was %T, wanted a map", id, v)
 	}
 
 	// The folder describes itself at the top level.
 	if self := folderFrom(m); self != nil && !self.ID.IsZero() {
-		s.Inventory.addFolder(self)
+		inv.addFolder(self)
 	}
 
-	emb := llsdMap(m["_embedded"])
+	emb := llsd.Map(m["_embedded"])
 	if emb == nil {
 		return nil, nil
 	}
 
 	var kids []msg.UUID
-	for cid, cv := range llsdMap(emb["categories"]) {
-		cm := llsdMap(cv)
+	for cid, cv := range llsd.Map(emb["categories"]) {
+		cm := llsd.Map(cv)
 		if cm == nil {
 			continue
 		}
@@ -411,7 +427,7 @@ func (s *Session) fetchOne(ctx context.Context, base string, id msg.UUID) ([]msg
 		if f.ID.IsZero() {
 			continue
 		}
-		s.Inventory.addFolder(f)
+		inv.addFolder(f)
 		kids = append(kids, f.ID)
 	}
 
@@ -419,8 +435,8 @@ func (s *Session) fetchOne(ctx context.Context, base string, id msg.UUID) ([]msg
 	// whose asset is what it points at, which is how the UDP
 	// message delivered them too.
 	for _, key := range []string{"items", "links"} {
-		for iid, iv := range llsdMap(emb[key]) {
-			im := llsdMap(iv)
+		for iid, iv := range llsd.Map(emb[key]) {
+			im := llsd.Map(iv)
 			if im == nil {
 				continue
 			}
@@ -434,7 +450,7 @@ func (s *Session) fetchOne(ctx context.Context, base string, id msg.UUID) ([]msg
 				continue
 			}
 			it.IsLink = key == "links"
-			s.Inventory.addItem(it)
+			inv.addItem(it)
 		}
 	}
 	return kids, nil
@@ -442,12 +458,12 @@ func (s *Session) fetchOne(ctx context.Context, base string, id msg.UUID) ([]msg
 
 func folderFrom(m map[string]any) *Folder {
 	f := &Folder{
-		Name:    llsdString(m, "name"),
-		Type:    int(llsdInt(m, "type_default")),
-		Version: int(llsdInt(m, "version")),
+		Name:    llsd.String(m, "name"),
+		Type:    int(llsd.Int(m, "type_default")),
+		Version: int(llsd.Int(m, "version")),
 	}
-	f.ID, _ = msg.ParseUUID(llsdString(m, "category_id"))
-	f.ParentID, _ = msg.ParseUUID(llsdString(m, "parent_id"))
+	f.ID, _ = msg.ParseUUID(llsd.String(m, "category_id"))
+	f.ParentID, _ = msg.ParseUUID(llsd.String(m, "parent_id"))
 	if f.ID.IsZero() {
 		return nil
 	}
@@ -456,42 +472,35 @@ func folderFrom(m map[string]any) *Folder {
 
 func itemFrom(m map[string]any) *Item {
 	it := &Item{
-		Name:    llsdString(m, "name"),
-		Desc:    llsdString(m, "desc"),
-		Type:    int(llsdInt(m, "type")),
-		InvType: int(llsdInt(m, "inv_type")),
-		Flags:   uint32(llsdInt(m, "flags")),
-		Created: llsdInt(m, "created_at"),
+		Name:    llsd.String(m, "name"),
+		Desc:    llsd.String(m, "desc"),
+		Type:    int(llsd.Int(m, "type")),
+		InvType: int(llsd.Int(m, "inv_type")),
+		Flags:   uint32(llsd.Int(m, "flags")),
+		Created: llsd.Int(m, "created_at"),
 	}
-	it.ID, _ = msg.ParseUUID(llsdString(m, "item_id"))
-	it.ParentID, _ = msg.ParseUUID(llsdString(m, "parent_id"))
-	it.AssetID, _ = msg.ParseUUID(llsdString(m, "asset_id"))
+	it.ID, _ = msg.ParseUUID(llsd.String(m, "item_id"))
+	it.ParentID, _ = msg.ParseUUID(llsd.String(m, "parent_id"))
+	it.AssetID, _ = msg.ParseUUID(llsd.String(m, "asset_id"))
 
 	// A link carries linked_id instead of asset_id.
 	if it.AssetID.IsZero() {
-		it.AssetID, _ = msg.ParseUUID(llsdString(m, "linked_id"))
+		it.AssetID, _ = msg.ParseUUID(llsd.String(m, "linked_id"))
 	}
 
-	if p := llsdMap(m["permissions"]); p != nil {
-		it.CreatorID, _ = msg.ParseUUID(llsdString(p, "creator_id"))
-		it.OwnerID, _ = msg.ParseUUID(llsdString(p, "owner_id"))
-		it.GroupID, _ = msg.ParseUUID(llsdString(p, "group_id"))
-		it.BaseMask = uint32(llsdInt(p, "base_mask"))
-		it.OwnerMask = uint32(llsdInt(p, "owner_mask"))
-		it.GroupMask = uint32(llsdInt(p, "group_mask"))
-		it.EveryoneMask = uint32(llsdInt(p, "everyone_mask"))
-		it.NextOwnerMask = uint32(llsdInt(p, "next_owner_mask"))
+	if p := llsd.Map(m["permissions"]); p != nil {
+		it.CreatorID, _ = msg.ParseUUID(llsd.String(p, "creator_id"))
+		it.OwnerID, _ = msg.ParseUUID(llsd.String(p, "owner_id"))
+		it.GroupID, _ = msg.ParseUUID(llsd.String(p, "group_id"))
+		it.BaseMask = uint32(llsd.Int(p, "base_mask"))
+		it.OwnerMask = uint32(llsd.Int(p, "owner_mask"))
+		it.GroupMask = uint32(llsd.Int(p, "group_mask"))
+		it.EveryoneMask = uint32(llsd.Int(p, "everyone_mask"))
+		it.NextOwnerMask = uint32(llsd.Int(p, "next_owner_mask"))
 	}
-	if sale := llsdMap(m["sale_info"]); sale != nil {
-		it.SaleType = int(llsdInt(sale, "sale_type"))
-		it.SalePrice = int(llsdInt(sale, "sale_price"))
+	if sale := llsd.Map(m["sale_info"]); sale != nil {
+		it.SaleType = int(llsd.Int(sale, "sale_type"))
+		it.SalePrice = int(llsd.Int(sale, "sale_price"))
 	}
 	return it
-}
-
-func (s *Session) http() *http.Client {
-	if s.HTTP != nil {
-		return s.HTTP
-	}
-	return &http.Client{Timeout: 60 * time.Second}
 }

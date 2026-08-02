@@ -1,4 +1,4 @@
-package client
+package agent
 
 import (
 	"bytes"
@@ -209,7 +209,7 @@ func (l Login) body() ([]byte, error) {
 // Do performs the login.
 func (l Login) Do(ctx context.Context) (*Account, error) {
 	if l.First == "" || l.Last == "" {
-		return nil, fmt.Errorf("client: login needs a first and last name")
+		return nil, fmt.Errorf("agent: login needs a first and last name")
 	}
 	url := l.URL
 	if url == "" {
@@ -233,21 +233,21 @@ func (l Login) Do(ctx context.Context) (*Account, error) {
 
 	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("client: login request: %w", err)
+		return nil, fmt.Errorf("agent: login request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("client: login returned %s: %s", resp.Status, strings.TrimSpace(string(snippet)))
+		return nil, fmt.Errorf("agent: login returned %s: %s", resp.Status, strings.TrimSpace(string(snippet)))
 	}
 
 	v, err := decodeResponse(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("client: login response: %w", err)
+		return nil, fmt.Errorf("agent: login response: %w", err)
 	}
 	m, ok := v.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("client: login response was %T, wanted a struct", v)
+		return nil, fmt.Errorf("agent: login response was %T, wanted a struct", v)
 	}
 	return accountFrom(m)
 }
@@ -278,17 +278,17 @@ func accountFrom(m map[string]any) (*Account, error) {
 
 	code, ok := getInt(m, "circuit_code")
 	if !ok {
-		return a, fmt.Errorf("client: login response has no usable circuit_code")
+		return a, fmt.Errorf("agent: login response has no usable circuit_code")
 	}
 	a.CircuitCode = uint32(code)
 
 	ip := getString(m, "sim_ip")
 	if a.SimIP = net.ParseIP(ip); a.SimIP == nil {
-		return a, fmt.Errorf("client: sim_ip %q is not an address", ip)
+		return a, fmt.Errorf("agent: sim_ip %q is not an address", ip)
 	}
 	port, ok := getInt(m, "sim_port")
 	if !ok || port <= 0 || port > 65535 {
-		return a, fmt.Errorf("client: sim_port %v is not a port", m["sim_port"])
+		return a, fmt.Errorf("agent: sim_port %v is not a port", m["sim_port"])
 	}
 	a.SimPort = int(port)
 
@@ -318,7 +318,7 @@ func uuidField(m map[string]any, key string) (msg.UUID, error) {
 	s := getString(m, key)
 	u, err := msg.ParseUUID(s)
 	if err != nil {
-		return msg.UUID{}, fmt.Errorf("client: %s: %w", key, err)
+		return msg.UUID{}, fmt.Errorf("agent: %s: %w", key, err)
 	}
 	return u, nil
 }

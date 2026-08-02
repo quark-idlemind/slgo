@@ -1,4 +1,4 @@
-package client
+package agent
 
 import (
 	"bufio"
@@ -45,7 +45,7 @@ func ConfigDir() (string, error) {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("client: no home directory: %w", err)
+		return "", fmt.Errorf("agent: no home directory: %w", err)
 	}
 	return filepath.Join(home, ".config", "slgo"), nil
 }
@@ -53,11 +53,11 @@ func ConfigDir() (string, error) {
 // ProfilePath is where the named profile lives.
 func ProfilePath(name string) (string, error) {
 	if name == "" {
-		return "", fmt.Errorf("client: profile needs a name")
+		return "", fmt.Errorf("agent: profile needs a name")
 	}
 	// A profile is one file in one directory, never a path.
 	if strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
-		return "", fmt.Errorf("client: %q is not a profile name", name)
+		return "", fmt.Errorf("agent: %q is not a profile name", name)
 	}
 	dir, err := ConfigDir()
 	if err != nil {
@@ -81,13 +81,13 @@ func LoadProfile(name string) (Login, error) {
 	if fi, err := os.Stat(dir); err == nil {
 		if m := fi.Mode().Perm(); m&0o077 != 0 {
 			return Login{}, fmt.Errorf(
-				"client: %s is mode %04o, wanted 0700: chmod 700 %s", dir, m, dir)
+				"agent: %s is mode %04o, wanted 0700: chmod 700 %s", dir, m, dir)
 		}
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return Login{}, fmt.Errorf("client: profile %q: %w", name, err)
+		return Login{}, fmt.Errorf("agent: profile %q: %w", name, err)
 	}
 	defer f.Close()
 
@@ -97,18 +97,18 @@ func LoadProfile(name string) (Login, error) {
 	}
 	if m := fi.Mode().Perm(); m&0o077 != 0 {
 		return Login{}, fmt.Errorf(
-			"client: %s is mode %04o, wanted 0600: chmod 600 %s", path, m, path)
+			"agent: %s is mode %04o, wanted 0600: chmod 600 %s", path, m, path)
 	}
 
 	l, err := parseProfile(f)
 	if err != nil {
-		return Login{}, fmt.Errorf("client: %s: %w", path, err)
+		return Login{}, fmt.Errorf("agent: %s: %w", path, err)
 	}
 	if l.First == "" || l.Last == "" {
-		return Login{}, fmt.Errorf("client: %s: needs first and last", path)
+		return Login{}, fmt.Errorf("agent: %s: needs first and last", path)
 	}
 	if l.Password == "" {
-		return Login{}, fmt.Errorf("client: %s: needs password", path)
+		return Login{}, fmt.Errorf("agent: %s: needs password", path)
 	}
 	return l, nil
 }

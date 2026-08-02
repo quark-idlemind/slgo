@@ -1,4 +1,4 @@
-package client
+package llsd
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// LLSD in its XML form, decoded to plain Go values:
+// Package llsd decodes and encodes LLSD in its XML form,, decoded to plain Go values:
 //
 //	<map>              map[string]any
 //	<array>            []any
@@ -28,8 +28,8 @@ import (
 // what the capability and inventory servers speak, and they gain types
 // and fields over time.
 
-// DecodeLLSD reads one LLSD document.
-func DecodeLLSD(r io.Reader) (any, error) {
+// Decode reads one LLSD document.
+func Decode(r io.Reader) (any, error) {
 	d := xml.NewDecoder(r)
 	for {
 		tok, err := d.Token()
@@ -46,11 +46,11 @@ func DecodeLLSD(r io.Reader) (any, error) {
 		if start.Name.Local != "llsd" {
 			return nil, fmt.Errorf("llsd: expected <llsd>, got <%s>", start.Name.Local)
 		}
-		return decodeLLSDBody(d)
+		return decodeBody(d)
 	}
 }
 
-func decodeLLSDBody(d *xml.Decoder) (any, error) {
+func decodeBody(d *xml.Decoder) (any, error) {
 	for {
 		tok, err := d.Token()
 		if err != nil {
@@ -58,7 +58,7 @@ func decodeLLSDBody(d *xml.Decoder) (any, error) {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			return decodeLLSDValue(d, t)
+			return decodeValue(d, t)
 		case xml.EndElement:
 			if t.Name.Local == "llsd" {
 				return nil, nil
@@ -67,14 +67,14 @@ func decodeLLSDBody(d *xml.Decoder) (any, error) {
 	}
 }
 
-// decodeLLSDValue is called just after a value's start element and
+// decodeValue is called just after a value's start element and
 // returns once that element has been consumed.
-func decodeLLSDValue(d *xml.Decoder, start xml.StartElement) (any, error) {
+func decodeValue(d *xml.Decoder, start xml.StartElement) (any, error) {
 	switch start.Name.Local {
 	case "map":
-		return decodeLLSDMap(d)
+		return decodeMap(d)
 	case "array":
-		return decodeLLSDArray(d)
+		return decodeArray(d)
 	}
 
 	s, err := readText(d, start.Name.Local)
@@ -118,7 +118,33 @@ func decodeLLSDValue(d *xml.Decoder, start xml.StartElement) (any, error) {
 	}
 }
 
-func decodeLLSDMap(d *xml.Decoder) (any, error) {
+// readText accumulates the character data of an element, skipping any
+// nested elements, and consumes the closing tag.
+func readText(d *xml.Decoder, name string) (string, error) {
+	var sb strings.Builder
+	depth := 0
+	for {
+		tok, err := d.Token()
+		if err != nil {
+			return "", err
+		}
+		switch t := tok.(type) {
+		case xml.CharData:
+			if depth == 0 {
+				sb.Write(t)
+			}
+		case xml.StartElement:
+			depth++
+		case xml.EndElement:
+			if depth == 0 && t.Name.Local == name {
+				return sb.String(), nil
+			}
+			depth--
+		}
+	}
+}
+
+func decodeMap(d *xml.Decoder) (any, error) {
 	out := map[string]any{}
 	var key string
 	haveKey := false
@@ -137,7 +163,7 @@ func decodeLLSDMap(d *xml.Decoder) (any, error) {
 				key, haveKey = strings.TrimSpace(s), true
 				continue
 			}
-			v, err := decodeLLSDValue(d, t)
+			v, err := decodeValue(d, t)
 			if err != nil {
 				return nil, err
 			}
@@ -153,7 +179,7 @@ func decodeLLSDMap(d *xml.Decoder) (any, error) {
 	}
 }
 
-func decodeLLSDArray(d *xml.Decoder) (any, error) {
+func decodeArray(d *xml.Decoder) (any, error) {
 	out := []any{}
 	for {
 		tok, err := d.Token()
@@ -162,7 +188,7 @@ func decodeLLSDArray(d *xml.Decoder) (any, error) {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			v, err := decodeLLSDValue(d, t)
+			v, err := decodeValue(d, t)
 			if err != nil {
 				return nil, err
 			}
@@ -175,18 +201,18 @@ func decodeLLSDArray(d *xml.Decoder) (any, error) {
 	}
 }
 
-// EncodeLLSD writes v as an LLSD document.
-func EncodeLLSD(v any) ([]byte, error) {
+// Encode writes v as an LLSD document.
+func Encode(v any) ([]byte, error) {
 	var b bytes.Buffer
 	b.WriteString("<llsd>")
-	if err := encodeLLSDValue(&b, v); err != nil {
+	if err := encodeValue(&b, v); err != nil {
 		return nil, err
 	}
 	b.WriteString("</llsd>")
 	return b.Bytes(), nil
 }
 
-func encodeLLSDValue(b *bytes.Buffer, v any) error {
+func encodeValue(b *bytes.Buffer, v any) error {
 	switch t := v.(type) {
 	case nil:
 		b.WriteString("<undef/>")
@@ -213,7 +239,7 @@ func encodeLLSDValue(b *bytes.Buffer, v any) error {
 	case []string:
 		b.WriteString("<array>")
 		for _, e := range t {
-			if err := encodeLLSDValue(b, e); err != nil {
+			if err := encodeValue(b, e); err != nil {
 				return err
 			}
 		}
@@ -221,7 +247,7 @@ func encodeLLSDValue(b *bytes.Buffer, v any) error {
 	case []any:
 		b.WriteString("<array>")
 		for _, e := range t {
-			if err := encodeLLSDValue(b, e); err != nil {
+			if err := encodeValue(b, e); err != nil {
 				return err
 			}
 		}
@@ -234,7 +260,7 @@ func encodeLLSDValue(b *bytes.Buffer, v any) error {
 				return err
 			}
 			b.WriteString("</key>")
-			if err := encodeLLSDValue(b, e); err != nil {
+			if err := encodeValue(b, e); err != nil {
 				return err
 			}
 		}
@@ -247,14 +273,16 @@ func encodeLLSDValue(b *bytes.Buffer, v any) error {
 
 // ------------------------------------------------------------- accessors
 
-func llsdMap(v any) map[string]any {
+// Map returns v as a map, or nil.
+func Map(v any) map[string]any {
 	if m, ok := v.(map[string]any); ok {
 		return m
 	}
 	return nil
 }
 
-func llsdString(m map[string]any, key string) string {
+// String reads a string field, converting numbers and booleans.
+func String(m map[string]any, key string) string {
 	switch v := m[key].(type) {
 	case string:
 		return v
@@ -271,7 +299,8 @@ func llsdString(m map[string]any, key string) string {
 	return ""
 }
 
-func llsdInt(m map[string]any, key string) int64 {
+// Int reads an integer field, accepting a number that arrived as text.
+func Int(m map[string]any, key string) int64 {
 	switch v := m[key].(type) {
 	case int64:
 		return v

@@ -1,4 +1,4 @@
-package client
+package agent
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func TestManySessionsAtOnce(t *testing.T) {
 
 	type rig struct {
 		sim  *fakeSim
-		sess *Session
+		sess *Agent
 		acct *Account
 	}
 	rigs := make([]*rig, n)
