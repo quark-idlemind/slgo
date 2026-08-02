@@ -1,7 +1,7 @@
 // Command msggen turns Linden Lab's message_template.msg into Go
 // structures with Encode and Decode methods.
 //
-//	msggen -template ../message_template.msg -out msg/messages_gen.go
+//	msggen -template message_template.msg -out msg/messages_gen.go
 //
 // The wire behaviour lives in package msg, not here: the generated
 // structs carry the template's own type names in `ll` struct tags and
@@ -517,7 +517,7 @@ func formatNumber(m Message) string {
 
 func main() {
 	var (
-		src  = flag.String("template", "../message_template.msg", "path to message_template.msg")
+		src  = flag.String("template", "message_template.msg", "path to message_template.msg")
 		out  = flag.String("out", "msg/messages_gen.go", "file to write, or - for stdout")
 		pkg  = flag.String("package", "msg", "package name for the generated file")
 		stat = flag.Bool("stats", false, "print a summary of what was parsed")

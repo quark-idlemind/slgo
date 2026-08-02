@@ -156,7 +156,7 @@ func TestParseErrors(t *testing.T) {
 
 // TestParseRealTemplate is the one that matters: the actual file.
 func TestParseRealTemplate(t *testing.T) {
-	src, err := os.ReadFile("../../../message_template.msg")
+	src, err := os.ReadFile("../../message_template.msg")
 	if err != nil {
 		t.Skipf("template not available: %v", err)
 	}
