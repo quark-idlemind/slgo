@@ -177,8 +177,8 @@ to ask again.  Taking one off and putting it back on is how you learn an
 attachment's local id.  Match it by the `AttachItemID` in its
 `NameValue` -- the object id is new every attach.
 
-**Scripts run per parcel, not per region.**  the no-script parcel has
-`ALLOW_OTHER_SCRIPTS` off; eleven of the test region's fourteen parcels have it
+**Scripts run per parcel, not per region.**  One parcel of the test
+region had `ALLOW_OTHER_SCRIPTS` off while eleven of its fourteen had it
 on.  Attachments are *not* exempt: the same HUD with the same script is
 silent on one parcel and runs on the next.  This is the single most
 common reason a script "does not work".
@@ -355,15 +355,27 @@ every copy of an item put into it and renames the duplicates
 quietly remove your test objects between sessions.
 
 
-## State of the test account
+## What a test account needs
 
-Example Resident, in the test region, on the build parcel at roughly
-`<24, 248>` -- a parcel that allows both building and scripts.  the test region
-Park, a short walk away, does not run scripts, and moving there is the
-usual reason something stops working.
+Deliberately no names here.  Which avatar and which parcel are local
+facts that change with whoever is working, and a repository is the wrong
+place to record either -- keep them with the credentials, outside the
+tree.
 
-He is wearing a HUD called "Test HUD" on HUD Center 1, containing
-several leftover `slgo *` scripts from experiments.  `slgo-hudscript`
-removes ones it does not recognise.  There are stray prims named
-`slgo te3` and similar around the build parcel; Linden land will return them in
-its own time.
+What the account has to *be* is worth recording, because each of these
+was learnt by it not being true:
+
+- **A parcel that allows building and running scripts.**  Both, and both
+  checked: scripts are a parcel setting, so an avatar that can build
+  where it stands may still be somewhere its scripts stay silent.
+- **Somewhere its objects will not be returned.**  Linden land
+  auto-returns, which quietly removes test objects between sessions.
+- **A HUD to run scripts in**, if attachment behaviour is being tested.
+  An attachment belongs to the avatar rather than to the ground under
+  it, which is what makes it useful -- though not exempt from the parcel
+  rule above.
+
+Experiments leave litter: stray prims, and leftover scripts inside any
+HUD used for them.  An object keeps every copy of an item put into it
+and renames the duplicates, so the same script run twice becomes
+`thing`, `thing 1`, `thing 2`.  Clean up as you go.

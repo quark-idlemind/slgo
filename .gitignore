@@ -1,2 +1,13 @@
+# Go leaves a binary next to its source when built inside a cmd
+# directory, named after the directory.  None of them belong in git.
+/cmd/*/slgo
+/cmd/*/slgo-*
+/cmd/*/slgod
+/cmd/*/msggen
 /msggen
+
+# Anything else built here.
+*.o
+*.a
 *.test
+*.out
