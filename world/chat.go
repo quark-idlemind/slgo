@@ -460,10 +460,15 @@ func (w *World) onProperties(fn func(*Properties)) (stop func()) {
 // Prefer a script's llOwnerSay for test output: this is for when open
 // chat is the thing being tested.
 func (w *World) Say(ctx context.Context, text string, channel int32) error {
+	return w.SayAs(ctx, text, channel, ChatSay)
+}
+
+// SayAs is Say with the chat type chosen: whisper, normal or shout.
+func (w *World) SayAs(ctx context.Context, text string, channel int32, chatType uint8) error {
 	m := &msg.ChatFromViewer{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ChatData.Message = append([]byte(text), 0)
-	m.ChatData.Type = ChatSay
+	m.ChatData.Type = chatType
 	m.ChatData.Channel = channel
 	return w.Send(ctx, m)
 }

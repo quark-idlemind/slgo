@@ -1,6 +1,12 @@
 // Command slgo-inv exercises every inventory operation against the live
 // grid, in one pass, and cleans up after itself.
 //
+// It CHANGES THINGS: it makes a folder, a notecard and a script, takes
+// the object it is pointed at and rezzes it again. So it does nothing at
+// all without -run, because a name like "inv" reads as "show me the
+// inventory" and running it to find out what it does is exactly the
+// mistake the flag prevents. To LIST inventory, use slinv ls.
+//
 // It exists to answer one question: can this client do everything the
 // C# one built on LibreMetaverse does? Each step is a thing that took a
 // day to get right over there, so each is checked here rather than
@@ -31,7 +37,18 @@ func main() {
 	give := flag.String("give-to", "", "avatar uuid to offer an item to, if any")
 	groupID := flag.String("group", "", "group to activate first; a parcel usually grants building to one")
 	clean := flag.String("clean", "", "remove items whose name starts with this from the object, and stop")
+	run := flag.Bool("run", false, "actually run the battery, which creates and deletes things")
 	flag.Parse()
+
+	if !*run && *clean == "" {
+		fmt.Fprintln(os.Stderr,
+			"slgo-inv changes things: it creates a folder, a notecard and a script,\n"+
+				"and takes and re-rezzes the object it is pointed at.\n\n"+
+				"  -run           do that\n"+
+				"  -clean PREFIX  only remove matching items from the object\n\n"+
+				"To LIST an avatar's inventory, use:  slinv ls -l -R")
+		os.Exit(2)
+	}
 
 	ctx := context.Background()
 	w, err := world.Dial(ctx, *server, *agent)

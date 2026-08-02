@@ -16,6 +16,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"slgo/world"
@@ -46,6 +48,9 @@ func main() {
 	wear := flag.Bool("wear", false, "then take it and wear it")
 	listen := flag.Duration("listen", 20*time.Second, "how long to listen after each step")
 	say := flag.String("say", "", "send this on the channel first, then listen")
+	script := flag.String("script", "", "install this LSL file instead of the built-in hello")
+	hammer := flag.String("hammer", "", "comma separated commands to send one after another, 10s apart")
+	sweep := flag.String("sweep", "", "comma separated CHANNELS to say a marker on, one after another")
 	channel := flag.Int("channel", -1701, "channel to say it on")
 	flag.Parse()
 
@@ -88,13 +93,57 @@ func main() {
 	lines := w.Chat(world.ChatFilter{}, 64)
 	defer w.StopChat(lines)
 
-	up, err := w.InstallScript(ctx, built.Root, "slgo hello script", hello, true)
+	source := hello
+	if *script != "" {
+		b, err := os.ReadFile(*script)
+		if err != nil {
+			die("%v", err)
+		}
+		source = string(b)
+	}
+
+	up, err := w.InstallScript(ctx, built.Root, "slgo hello script", source, true)
 	if err != nil {
 		die("install: %v", err)
 	}
 	fmt.Printf("installed, compiled=%v errors=%v\n", up.Compiled, up.Errors)
 
 	drain(lines, *listen, "rezzed")
+
+	if *sweep != "" {
+		for _, c := range strings.Split(*sweep, ",") {
+			c = strings.TrimSpace(c)
+			n, err := strconv.ParseInt(c, 10, 64)
+			if err != nil {
+				die("bad channel %q: %v", c, err)
+			}
+			ch := int32(n)
+			fmt.Printf(">>> channel %d (int32 %d)\n", n, ch)
+			// Every chat type, because "which of whisper, normal and
+			// shout does the simulator accept here" is one of the few
+			// things left that could differ.
+			for _, t := range []uint8{0, 1, 2} {
+				if err := w.SayAs(ctx, fmt.Sprintf("mark%s-type%d", c, t), ch, t); err != nil {
+					die("say: %v", err)
+				}
+			}
+			drain(lines, 6*time.Second, "channel "+c)
+		}
+		return
+	}
+
+	// Hammer it: the register answered once and then went quiet, so what
+	// matters is not whether it replies but whether it keeps replying.
+	if *hammer != "" {
+		for _, cmd := range strings.Split(*hammer, ",") {
+			cmd = strings.TrimSpace(cmd)
+			fmt.Printf(">>> %s\n", cmd)
+			if err := w.Say(ctx, cmd, int32(*channel)); err != nil {
+				die("say: %v", err)
+			}
+			drain(lines, 10*time.Second, cmd)
+		}
+	}
 
 	if *wear {
 		objects, err := w.ObjectsFolder(ctx)
