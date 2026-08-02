@@ -224,6 +224,40 @@ var specs = []spec{
 }
 `},
 
+	// Five fast sets to names that do not exist, then a five second
+	// sleep, then one last word.
+	//
+	// This is the question the fifty-at-once run could not answer.
+	// Five errors is well under the eight the simulator will send
+	// before it gags itself, so nothing is lost to the flood limit,
+	// and the sleep holds the script open long enough for a complaint
+	// that is raised late to still arrive.  The line after the sleep
+	// marks the boundary: anything before it was reported while the
+	// script was running, anything after it was not reported at all.
+	//
+	// If the channel stays empty through both, the fast call really
+	// does not complain.  If complaints turn up during the sleep, it
+	// complains but not in step with the call, which is the thing
+	// llSetTexture does differently.
+	{"slgo time fastdefer", `default
+{
+    state_entry()
+    {
+        string me = llGetScriptName();
+        integer i;
+        for (i = 1; i <= 5; ++i)
+        {
+            string t = "fastmiss " + (string)i;
+            llOwnerSay(me + ": setting " + t);
+            llSetLinkPrimitiveParamsFast(LINK_THIS,
+                [PRIM_TEXTURE, 0, t, <1.0,1.0,0.0>, <0.0,0.0,0.0>, 0.0]);
+        }
+        llSleep(5.0);
+        llOwnerSay(me + ": awake after 5 s sleep");
+    }
+}
+`},
+
 	// Fifty of these may finish inside a single frame, in which case
 	// the clock says zero and the cost per call is unknown rather than
 	// nothing.  A thousand gives it something to measure.
