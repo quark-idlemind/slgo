@@ -14,6 +14,7 @@ and decode themselves.
     msg/buffer.go       little endian read/write primitives
     msg/codec.go        the generic tag-driven encoder and decoder
     msg/framing.go      message numbers, packet header, zero coding
+    msg/receive.go      the read goroutine
     msg/messages_gen.go generated: 483 messages, ~14700 lines
 
 ## How it works
@@ -176,6 +177,55 @@ block and field. Nothing in this package calls `panic`, `os.Exit` or
 different from the C, where an unknown XML value type called `err(1,...)`
 and took the whole client down.
 
+## Receiving
+
+`Receiver` reads datagrams and puts decoded packets on a channel:
+
+    recv := msg.NewReceiver(conn)          // conn is a *net.UDPConn
+    go func() { err = recv.Run(ctx) }()
+
+    for p := range recv.C() {
+        switch m := p.Message.(type) {
+        case *msg.ChatFromSimulator:
+            ...
+        }
+    }
+
+`Run` blocks, so the caller decides where the goroutine lives. It
+closes the channel on return, so `range` terminates. Cancelling the
+context unblocks a read in progress via `SetReadDeadline`, which
+`*net.UDPConn` supports; a cancelled `Run` returns nil rather than the
+resulting timeout.
+
+Each `Packet` is one of three things, and the doc comment says so:
+`Message` set means it decoded, `Err` set means it did not and `Body`
+holds the raw bytes, and both nil means the datagram carried only
+acknowledgements. `Acks` is filled in either way — a packet whose body
+is corrupt still releases whatever it was acknowledging, which is not
+true of the C, where a bad body means the acks in the same datagram are
+processed but the packet is then dropped on the floor.
+
+Failures are delivered rather than swallowed. An unknown message number
+produces a packet whose `Err` wraps `ErrUnknownMessage` with the raw
+body attached, so a caller that meets a message this build predates can
+see it, log it and continue. Only runt datagrams are dropped outright,
+and they are counted.
+
+The receiver deliberately does *not* acknowledge anything or track
+sequence numbers. It hands `Header.Reliable` and `Header.Sequence` up
+and lets the session layer decide, because retransmission and duplicate
+suppression need state this layer has no business owning.
+
+One read buffer is reused forever. That is safe because nothing in a
+delivered `Packet` aliases it: the codec copies `Variable` fields, and
+the header's extra bytes and any raw body are copied on the way out.
+`TestReceiveNoAliasing` guards it.
+
+When the channel is full the default is to block, which pushes back on
+the network and lets the kernel drop datagrams — honest for UDP, but it
+also stalls the caller's acknowledgements behind a slow consumer.
+`DropWhenFull()` inverts that and counts what it discards.
+
 ## Tests
 
 `go test ./...` covers:
@@ -194,7 +244,10 @@ and took the whole client down.
 
 ## Not done
 
-This is the message layer only. There is no session, no circuit, no
-retransmission, no XML-RPC login and no AIS. The zero coding and packet
-header helpers are here because a message codec you cannot point at a
-real packet is hard to trust, not because the packet layer is finished.
+No send path yet, and no session: nothing acknowledges, retransmits,
+suppresses duplicates, assigns sequence numbers or notices a circuit
+going away. No XML-RPC login and no AIS.
+
+`Receiver` allocates a message per packet through `New`. At the packet
+rates in the C client's stats — 600k in a long session — that is worth
+a pool eventually, but not before there is something to measure.
