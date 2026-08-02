@@ -45,103 +45,81 @@ type spec struct {
 	src  string
 }
 
+// Timing.
+//
+// The variants are generated from one template so that the only
+// difference between them is the line inside the loop.  Writing them
+// out separately would leave the comparison resting on two pieces of
+// source being the same everywhere else, which is exactly the sort of
+// thing that quietly stops being true.
+//
+// The accumulator is there so the loop cannot be optimised away when
+// the body is otherwise empty, and it is reported so we can see it
+// ran.  llResetTime and llGetTime bracket only the loop; the
+// llOwnerSay that reports a run happens after the clock is read.
+//
+// Each script times the loop several times.  One measurement of a
+// script sharing a simulator with everything else in the region is
+// not worth much.
+const timingTemplate = `integer N = %d;
+integer R = %d;
+
+default
+{
+    state_entry()
+    {
+        string me = llGetScriptName();
+        integer r;
+        integer i;
+        integer acc;
+        float t;
+        for (r = 0; r < R; ++r)
+        {
+            acc = 0;
+            llResetTime();
+            for (i = 0; i < N; ++i)
+            {
+                acc = acc + i;
+%s            }
+            t = llGetTime();
+            llOwnerSay(me + ": run " + (string)r + ": " + (string)t + " s");
+        }
+        llOwnerSay(me + ": done, acc " + (string)acc);
+    }
+}
+`
+
+const (
+	timingN = 50
+	timingR = 5
+)
+
+func timingScript(inner string) string {
+	return fmt.Sprintf(timingTemplate, timingN, timingR, inner)
+}
+
 // Every script names itself with llGetScriptName, because nothing else
 // will.  ChatFromSimulator identifies the object a line came from and
 // not the script inside it, so with more than one script running there
 // is no way to tell from the protocol which one spoke.  Saying so in
 // the message is the only attribution there is.
 var specs = []spec{
-	// What a tab inside a string literal compiles to.  The tab between
-	// the A and the B is a real tab.  A round trip through the asset
-	// store keeps one, but that says nothing about what the compiler
-	// makes of it, so the running program has to be asked.  llOrd
-	// names the character rather than leaving it inferred from a count.
-	{"slgo tab", "default\n" +
-		"{\n" +
-		"    state_entry()\n" +
-		"    {\n" +
-		"        string me = llGetScriptName();\n" +
-		"        llOwnerSay(me + \": length \" + (string)llStringLength(\"A\tB\"));\n" +
-		"        llOwnerSay(me + \": middle code \" + (string)llOrd(\"A\tB\", 1));\n" +
-		"    }\n" +
-		"}\n"},
+	// The loop with nothing in it, which is what "sends none" means.
+	{"slgo time none", timingScript("")},
 
-	// Setting face 0 to a texture that is not there, then counting.
+	// The same loop, setting a texture each time round.
+	{"slgo time set", timingScript(
+		"                llSetTexture(TEXTURE_BLANK, 0);\n")},
+
+	// The same loop again, alternating between two textures.
 	//
-	// The counting is the experiment.  If the complaint is raised by
-	// the call itself it lands before mark 0; if some other part of
-	// the simulator notices later and says so while the script carries
-	// on, it lands among the marks.  Where it falls is the difference
-	// between a diagnostic that could name the script and one that
-	// could not.
-	{"slgo texture", `default
-{
-    state_entry()
-    {
-        string me = llGetScriptName();
-        llOwnerSay(me + ": face 0 starts as " + llGetTexture(0));
-        llSetTexture("no texture", 0);
-        integer i;
-        for (i = 0; i < 8; ++i)
-        {
-            llOwnerSay(me + ": mark " + (string)i);
-        }
-        llOwnerSay(me + ": done, face 0 is " + llGetTexture(0));
-    }
-}
-`},
-
-	// A sound that is not there either.  A second lookup of the same
-	// shape, to tell a rule about missing assets from a quirk of
-	// llSetTexture.
-	{"slgo sound", `default
-{
-    state_entry()
-    {
-        string me = llGetScriptName();
-        llOwnerSay(me + ": before");
-        llPlaySound("no sound", 1.0);
-        llOwnerSay(me + ": after");
-    }
-}
-`},
-
-	// Recursion with no bottom, to reach the other fault the virtual
-	// machine raises itself.  If the theory is right this should look
-	// like the math error -- named and fatal -- and not like the
-	// missing texture.
-	{"slgo stack", `integer deep(integer n)
-{
-    return deep(n + 1);
-}
-
-default
-{
-    state_entry()
-    {
-        llOwnerSay(llGetScriptName() + ": recursing");
-        deep(0);
-        llOwnerSay(llGetScriptName() + ": survived");
-    }
-}
-`},
-
-	// An integer divided by zero.  The divisor is a variable so the
-	// compiler cannot fold it away and refuse at compile time: the
-	// question is what happens at run time, which is a different
-	// reporting path from the compile errors.
-	{"slgo divzero", `default
-{
-    state_entry()
-    {
-        string me = llGetScriptName();
-        integer d = 0;
-        llOwnerSay(me + ": about to divide by zero");
-        integer n = 1 / d;
-        llOwnerSay(me + ": survived, got " + (string)n);
-    }
-}
-`},
+	// Setting a face to what it already holds may cost nothing, in
+	// which case the run above would be measuring a simulator
+	// declining to do any work rather than the price of doing it.
+	// Alternating guarantees every call is a real change.
+	{"slgo time alt", timingScript(
+		"                if (i % 2) llSetTexture(TEXTURE_BLANK, 0);\n" +
+			"                else llSetTexture(TEXTURE_PLYWOOD, 0);\n")},
 }
 
 type run struct {
