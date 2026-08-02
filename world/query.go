@@ -28,6 +28,11 @@ type Presence struct {
 
 	RegionHandle uint64
 	Region       string
+
+	// ActiveGroup is the group the avatar is acting as. Zero means
+	// none, which is what a headless login starts with -- and what
+	// makes a parcel refuse to let it build.
+	ActiveGroup msg.UUID
 }
 
 // Where reports the avatar's position and view.
@@ -70,6 +75,7 @@ func (w *World) presence(ctx context.Context, set float32) (*Presence, error) {
 		DrawDistance: r.DrawDistance,
 		RegionHandle: r.RegionHandle,
 		Region:       r.Region,
+		ActiveGroup:  parseUUIDOrZero(r.ActiveGroup),
 	}, nil
 }
 
@@ -372,4 +378,24 @@ func (w *World) Region(ctx context.Context) (*Region, error) {
 // see.
 func (w *World) Flush(ctx context.Context) (int, error) {
 	return w.c.Flush(ctx)
+}
+
+// parseUUIDOrZero reads a uuid, treating anything unreadable as none.
+// The wire carries it as a string because a zero uuid and an absent one
+// mean the same thing here: no group.
+func parseUUIDOrZero(s string) msg.UUID {
+	id, err := msg.ParseUUID(s)
+	if err != nil {
+		return msg.UUID{}
+	}
+	return id
+}
+
+// ActiveGroup is the group the avatar is acting as.
+func (w *World) ActiveGroup(ctx context.Context) (msg.UUID, error) {
+	p, err := w.Where(ctx)
+	if err != nil {
+		return msg.UUID{}, err
+	}
+	return p.ActiveGroup, nil
 }

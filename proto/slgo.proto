@@ -292,6 +292,12 @@ message PresenceResponse {
   float draw_distance = 4;
   uint64 region_handle = 5;
   string region = 6;
+
+  // The group the avatar is acting as, which a parcel's build and
+  // script rights are usually granted to rather than to individuals.
+  // It arrives at login and whenever it changes, so a client that
+  // attached later would never have heard it.
+  string active_group = 7;
 }
 
 // ------------------------------------------------------------- objects

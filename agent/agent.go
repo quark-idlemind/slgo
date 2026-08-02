@@ -65,6 +65,7 @@ type Agent struct {
 	mu          sync.RWMutex
 	look        Look
 	regionName  string
+	activeGroup msg.UUID
 	regionFlags uint32
 	// Objects is what the region has said about itself.  It lives here
 	// because a region describes itself once, when the avatar arrives,
@@ -323,6 +324,16 @@ func (a *Agent) register() {
 	a.Objects = newObjects()
 	a.trackObjects()
 
+	// AgentDataUpdate carries the active group, which decides whether a
+	// parcel lets this avatar build. It is sent at login and when the
+	// group changes, so nothing that attaches later can learn it.
+	a.Disp.MustHandle("AgentDataUpdate", func(p *msg.Packet) {
+		m := p.Message.(*msg.AgentDataUpdate)
+		a.mu.Lock()
+		a.activeGroup = m.AgentData.ActiveGroupID
+		a.mu.Unlock()
+	}, msg.Inline())
+
 	a.Disp.MustHandle("StartPingCheck", func(p *msg.Packet) {
 		m := p.Message.(*msg.StartPingCheck)
 		reply := &msg.CompletePingCheck{}
@@ -470,6 +481,13 @@ func (a *Agent) Done() <-chan struct{} { return a.done }
 func (a *Agent) Err() error { return a.err }
 
 // RegionName is the simulator'a name, once RegionHandshake has arrived.
+// ActiveGroup is the group the avatar is acting as, or zero for none.
+func (a *Agent) ActiveGroup() msg.UUID {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.activeGroup
+}
+
 func (a *Agent) RegionName() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()

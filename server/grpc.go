@@ -391,6 +391,7 @@ func (s *Server) Presence(ctx context.Context, req *pb.PresenceRequest) (*pb.Pre
 		DrawDistance: l.Far,
 		RegionHandle: a.RegionHandle(),
 		Region:       a.RegionName(),
+		ActiveGroup:  a.ActiveGroup().String(),
 	}, nil
 }
 
