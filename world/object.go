@@ -42,6 +42,13 @@ func (w *World) Rez(ctx context.Context, opt RezOptions) (*Object, error) {
 	if opt.Scale == (msg.Vector3{}) {
 		opt.Scale = msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}
 	}
+	p, err := w.Where(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := inRange(p, opt.At); err != nil {
+		return nil, err
+	}
 	return w.rezAt(ctx, opt.At, opt.Scale, msg.Quaternion{})
 }
 

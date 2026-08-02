@@ -3,12 +3,17 @@ package world
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"time"
 
 	"slgo/msg"
 )
+
+// ErrOutOfRange is reported for a position the simulator would not
+// describe back to us.
+var ErrOutOfRange = errors.New("world: beyond the draw distance")
 
 // Prim describes one prim of an object to build.
 //
@@ -69,6 +74,20 @@ const (
 func (w *World) Build(ctx context.Context, prims []Prim) (*Built, error) {
 	if len(prims) == 0 {
 		return nil, fmt.Errorf("world: Build needs at least one prim")
+	}
+
+	// Check every position before rezzing any of them.  Checking as we
+	// go would leave the prims built so far standing where nothing can
+	// see them, which is a worse place to stop than not having started.
+	p, err := w.Where(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range prims {
+		if err := inRange(p, prims[i].Position); err != nil {
+			return nil, fmt.Errorf("world: prim %d of %d (%q): %w",
+				i+1, len(prims), prims[i].Name, err)
+		}
 	}
 
 	b := &Built{Parts: make([]*Object, 0, len(prims))}
@@ -174,6 +193,30 @@ func (w *World) SetDescription(ctx context.Context, o *Object, desc string) erro
 	}
 	return fmt.Errorf("%w: the description of %s, which still reads %q",
 		ErrTimeout, o.ID, last)
+}
+
+// inRange refuses a position the simulator would not describe.
+//
+// Rezzing out there is not refused by the simulator -- the prim gets
+// made, and then nothing is ever said about it, so the rez cannot be
+// confirmed and cannot be told from a failure.  Better to refuse at
+// once and say why than to build something invisible and time out
+// looking for it.
+func inRange(p *Presence, at msg.Vector3) error {
+	if p.DrawDistance <= 0 {
+		return nil
+	}
+	d := distance(at, p.Camera)
+	if d <= p.DrawDistance {
+		return nil
+	}
+	return fmt.Errorf("%w: %v is %.0f m from the camera at %v, and the draw distance is %.0f m",
+		ErrOutOfRange, at, d, p.Camera, p.DrawDistance)
+}
+
+func distance(a, b msg.Vector3) float32 {
+	dx, dy, dz := a.X-b.X, a.Y-b.Y, a.Z-b.Z
+	return float32(math.Sqrt(float64(dx*dx + dy*dy + dz*dz)))
 }
 
 // rezAt is Rez with the scale and rotation given, and is what Build
