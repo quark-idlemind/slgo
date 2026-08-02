@@ -35,32 +35,58 @@ const (
 	assetScript = 10
 	invScript   = 10
 	target      = "mono"
-	scriptName  = "slgo hud script"
+	// legacyName is what these scripts used to be called; a leftover
+	// copy would keep running its old source and muddle the output.
+	legacyName = "slgo hud script"
 
 	// hudCenter1 is where slgo-hud put it.
 	hudCenter1 = 35
 )
 
-// script asks how long a string with a tab in it is.
-//
-// The tab between the A and the B is a real tab.  A round trip through
-// the asset store keeps one, but that says nothing about what the
-// compiler makes of it: a tab expanded to spaces on the way in would
-// still come back as whatever it was expanded to.  Asking the running
-// script for the length settles what the compiled program actually
-// holds, and llOrd names the character rather than leaving it to be
-// inferred from a count.
-//
-// It reports through llOwnerSay, which only the owner hears.  llSay
-// would put this in open chat, where everyone nearby has to read it.
-const script = "default\n" +
-	"{\n" +
-	"    state_entry()\n" +
-	"    {\n" +
-	"        llOwnerSay((string)llStringLength(\"A\tB\"));\n" +
-	"        llOwnerSay(\"middle character code: \" + (string)llOrd(\"A\tB\", 1));\n" +
-	"    }\n" +
-	"}\n"
+// spec is a script to put in the attachment.
+type spec struct {
+	name string
+	src  string
+}
+
+// Every script names itself with llGetScriptName, because nothing else
+// will.  ChatFromSimulator identifies the object a line came from and
+// not the script inside it, so with more than one script running there
+// is no way to tell from the protocol which one spoke.  Saying so in
+// the message is the only attribution there is.
+var specs = []spec{
+	// What a tab inside a string literal compiles to.  The tab between
+	// the A and the B is a real tab.  A round trip through the asset
+	// store keeps one, but that says nothing about what the compiler
+	// makes of it, so the running program has to be asked.  llOrd
+	// names the character rather than leaving it inferred from a count.
+	{"slgo tab", "default\n" +
+		"{\n" +
+		"    state_entry()\n" +
+		"    {\n" +
+		"        string me = llGetScriptName();\n" +
+		"        llOwnerSay(me + \": length \" + (string)llStringLength(\"A\tB\"));\n" +
+		"        llOwnerSay(me + \": middle code \" + (string)llOrd(\"A\tB\", 1));\n" +
+		"    }\n" +
+		"}\n"},
+
+	// An integer divided by zero.  The divisor is a variable so the
+	// compiler cannot fold it away and refuse at compile time: the
+	// question is what happens at run time, which is a different
+	// reporting path from the compile errors.
+	{"slgo divzero", `default
+{
+    state_entry()
+    {
+        string me = llGetScriptName();
+        integer d = 0;
+        llOwnerSay(me + ": about to divide by zero");
+        integer n = 1 / d;
+        llOwnerSay(me + ": survived, got " + (string)n);
+    }
+}
+`},
+}
 
 type run struct {
 	c    *client.Conn
@@ -73,6 +99,10 @@ type run struct {
 	names    map[msg.UUID]string
 	taskInv  map[msg.UUID]string
 	xfers    *client.Xfers
+
+	// hud is the attachment object, so a chat line can be checked
+	// against it rather than trusted because the name looked right.
+	hud msg.UUID
 }
 
 type attachment struct {
@@ -148,56 +178,69 @@ func main() {
 	fmt.Printf("  object %s\n  local  %d\n  item   %s\n",
 		hud.object, hud.local, hud.item)
 
-	// If the script is already in there, reuse it.  Copying one in
-	// every run piles up "slgo hud script 1", "2", "3": an object
-	// keeps every copy and renames the duplicates.
+	r.mu.Lock()
+	r.hud = hud.object
+	r.mu.Unlock()
+
+	// An object keeps every copy of an item put into it and renames
+	// the newcomer, so repeated runs pile up "slgo tab 1", "2", "3".
 	r.removeDuplicates(ctx, hud)
-	task := r.findTaskItem(ctx, hud, scriptName)
-	if task == nil {
-		item := r.createScript(ctx, scriptName)
-		fmt.Printf("\nscript item %s\n", item.ItemID)
+
+	// Make sure each script is in there, reusing what is already
+	// present.
+	for _, s := range specs {
+		if r.findTaskItem(ctx, hud, s.name) != nil {
+			continue
+		}
+		item := r.createScript(ctx, s.name)
+		fmt.Printf("  %q: new inventory item %s\n", s.name, item.ItemID)
 		if _, err := r.upload(ctx, "UpdateScriptAgent",
-			map[string]any{"target": target}, item.ItemID, []byte(script)); err != nil {
-			log.Fatalf("saving to inventory: %v", err)
+			map[string]any{"target": target}, item.ItemID, []byte(s.src)); err != nil {
+			log.Fatalf("saving %q to inventory: %v", s.name, err)
 		}
 		r.intoTask(ctx, hud.local, item)
 		time.Sleep(6 * time.Second)
+	}
 
-		// The copy inside the object has its own item id, which is
-		// what the script capability wants.
-		task = r.findTaskItem(ctx, hud, scriptName)
+	// The copy inside the object has its own item id, which is what
+	// the script capability wants.
+	items := r.taskItems(ctx, hud)
+	fmt.Printf("\nthe HUD holds %d items:\n", len(items))
+	for _, it := range items {
+		fmt.Printf("  %-24s %-10s %s\n", it.Name, it.Type, it.ItemID)
 	}
-	if task == nil {
-		log.Fatal("the script did not land in the attachment")
+	inside := map[string]*taskItem{}
+	for _, it := range items {
+		inside[it.Name] = &taskItem{ItemID: it.ItemID, Name: it.Name, Type: it.Type}
 	}
-	fmt.Printf("in the HUD as item %s\n", task.ItemID)
 
-	fmt.Println("\ncompiling it in place, set to run")
-	body, err := r.upload(ctx, "UpdateScriptTask", map[string]any{
-		"task_id":           hud.object.String(),
-		"is_script_running": true,
-		"target":            target,
-	}, task.ItemID, []byte(script))
-	if err != nil {
-		log.Fatalf("compiling: %v", err)
-	}
-	m := llsd.Map(mustLLSD(body))
-	fmt.Printf("  compiled %v\n", llsd.Bool(m, "compiled"))
-	if errs, ok := m["errors"].([]any); ok {
-		for _, e := range errs {
-			fmt.Printf("  %v\n", e)
+	fmt.Println("\ncompiling each in place, set to run")
+	for _, s := range specs {
+		task := inside[s.name]
+		if task == nil {
+			log.Fatalf("%q did not land in the attachment", s.name)
 		}
+		body, err := r.upload(ctx, "UpdateScriptTask", map[string]any{
+			"task_id":           hud.object.String(),
+			"is_script_running": true,
+			"target":            target,
+		}, task.ItemID, []byte(s.src))
+		if err != nil {
+			log.Fatalf("compiling %q: %v", s.name, err)
+		}
+		m := llsd.Map(mustLLSD(body))
+		fmt.Printf("  %-16s item %s  compiled %v\n",
+			s.name, task.ItemID, llsd.Bool(m, "compiled"))
+		if errs, ok := m["errors"].([]any); ok {
+			for _, e := range errs {
+				fmt.Printf("    %v\n", e)
+			}
+		}
+		if !llsd.Bool(m, "compiled") {
+			log.Fatalf("%q did not compile", s.name)
+		}
+		time.Sleep(2 * time.Second)
 	}
-	if !llsd.Bool(m, "compiled") {
-		log.Fatal("it did not compile, so nothing can be concluded about running")
-	}
-
-	// Ask the simulator whether it considers the script running, which
-	// is a different question from whether it says anything.
-	q := &msg.GetScriptRunning{}
-	q.Script.ObjectID = hud.object
-	q.Script.ItemID = task.ItemID
-	r.send(ctx, q)
 
 	fmt.Printf("\nlistening for %s\n", *listen)
 	fmt.Println("-----")
@@ -244,8 +287,20 @@ func (r *run) read(ctx context.Context) {
 			r.taskInv[t.InventoryData.TaskID] = nul(t.InventoryData.Filename)
 			r.mu.Unlock()
 		case *msg.ChatFromSimulator:
-			fmt.Printf("  [chat/%d] %s: %s\n", t.ChatData.ChatType,
-				nul(t.ChatData.FromName), nul(t.ChatData.Message))
+			d := &t.ChatData
+			// Say which object this came from, and whether it is ours.
+			// The message names no script -- the protocol has no field
+			// for one -- so anything beyond "the HUD said it" has to
+			// come from the text itself.
+			r.mu.Lock()
+			mine := d.SourceID == r.hud
+			r.mu.Unlock()
+			from := "elsewhere"
+			if mine {
+				from = "our HUD"
+			}
+			fmt.Printf("  [%s %s] %s: %s\n",
+				from, chatType(d.ChatType), nul(d.FromName), nul(d.Message))
 		case *msg.AlertMessage:
 			fmt.Printf("  [alert] %s\n", nul(t.AlertData.Message))
 		case *msg.ScriptRunningReply:
@@ -279,6 +334,28 @@ func (r *run) findAttachment(item msg.UUID, timeout time.Duration) *attachment {
 	return nil
 }
 
+// chatType names the chat types, from the viewer's LLChatType.  A
+// script's runtime errors come in on the debug one.
+func chatType(t uint8) string {
+	switch t {
+	case 0:
+		return "whisper"
+	case 1:
+		return "say"
+	case 2:
+		return "shout"
+	case 6:
+		return "DEBUG"
+	case 7:
+		return "region"
+	case 8:
+		return "owner"
+	case 9:
+		return "direct"
+	}
+	return fmt.Sprintf("type %d", t)
+}
+
 // removeDuplicates deletes the numbered copies an object accumulates.
 //
 // Copying an item into an object that already holds one of that name
@@ -289,7 +366,7 @@ func (r *run) removeDuplicates(ctx context.Context, hud *attachment) {
 	items := r.taskItems(ctx, hud)
 	n := 0
 	for _, it := range items {
-		if !strings.HasPrefix(it.Name, scriptName+" ") {
+		if !isDuplicate(it.Name) {
 			continue
 		}
 		m := &msg.RemoveTaskInventory{}
@@ -369,6 +446,14 @@ func (r *run) findTaskItem(ctx context.Context, hud *attachment, want string) *t
 // with a filename rather than the contents, and the file comes over
 // xfer.
 func (r *run) taskItems(ctx context.Context, hud *attachment) []taskItem {
+	// Forget the last filename first.  Each ReplyTaskInventory names a
+	// fresh file and the xfer deletes it on completion, so reading the
+	// remembered name a second time asks for something that no longer
+	// exists and the transfer is aborted with result -43.
+	r.mu.Lock()
+	delete(r.taskInv, hud.object)
+	r.mu.Unlock()
+
 	req := &msg.RequestTaskInventory{}
 	req.AgentData.AgentID, req.AgentData.SessionID = r.me, r.sess
 	req.InventoryData.LocalID = hud.local
@@ -394,12 +479,7 @@ func (r *run) taskItems(ctx context.Context, hud *attachment) []taskItem {
 		log.Printf("reading the HUD inventory: %v", err)
 		return nil
 	}
-	items := parseTaskInventory(body)
-	fmt.Printf("  the HUD holds %d items:\n", len(items))
-	for _, it := range items {
-		fmt.Printf("    %-24s %-10s %s\n", it.Name, it.Type, it.ItemID)
-	}
-	return items
+	return parseTaskInventory(body)
 }
 
 func (r *run) send(ctx context.Context, m msg.Message) {
@@ -566,4 +646,18 @@ func nul(b []byte) string {
 		b = b[:n-1]
 	}
 	return string(b)
+}
+
+// isDuplicate reports whether a name is a numbered copy of one of our
+// scripts, which is what an object calls the second one it is given.
+func isDuplicate(name string) bool {
+	if name == legacyName || strings.HasPrefix(name, legacyName+" ") {
+		return true
+	}
+	for _, s := range specs {
+		if strings.HasPrefix(name, s.name+" ") {
+			return true
+		}
+	}
+	return false
 }
