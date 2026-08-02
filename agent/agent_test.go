@@ -488,3 +488,77 @@ func TestWatchdogCanBeDisabled(t *testing.T) {
 	case <-time.After(600 * time.Millisecond):
 	}
 }
+
+// TestPresenceIsSent: the simulator streams no object data to a session
+// that never sends AgentUpdate, so it must go out without a client
+// asking.  Found by rezzing a prim on the live grid and watching the
+// simulator never mention it.
+func TestPresenceIsSent(t *testing.T) {
+	sim := newFakeSim(t)
+	defer sim.close()
+	go sim.run()
+
+	a, err := Connect(context.Background(), testAccount(sim), Options{
+		Timeout:  5 * time.Second,
+		Presence: 50 * time.Millisecond,
+
+		DrawDistance: 64,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		n := 0
+		for _, name := range sim.got() {
+			if name == "AgentUpdate" {
+				n++
+			}
+		}
+		if n >= 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("AgentUpdate was not sent; simulator saw %v", sim.got())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if l := a.Look(); l.Far != 64 {
+		t.Errorf("draw distance = %v, want 64", l.Far)
+	}
+	// The camera starts where the avatar arrived.
+	if l := a.Look(); l.Center != a.Position() {
+		t.Errorf("camera at %v, avatar at %v", l.Center, a.Position())
+	}
+
+	// A client can move it.
+	a.SetLook(Look{Center: msg.Vector3{X: 9}, At: msg.Vector3{X: 1}, Far: 200})
+	if l := a.Look(); l.Center.X != 9 || l.Far != 200 {
+		t.Errorf("SetLook did not take: %+v", l)
+	}
+}
+
+func TestPresenceCanBeDisabled(t *testing.T) {
+	sim := newFakeSim(t)
+	defer sim.close()
+	go sim.run()
+
+	a, err := Connect(context.Background(), testAccount(sim), Options{
+		Timeout:  5 * time.Second,
+		Presence: -1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	time.Sleep(300 * time.Millisecond)
+	for _, name := range sim.got() {
+		if name == "AgentUpdate" {
+			t.Fatal("AgentUpdate was sent with presence disabled")
+		}
+	}
+}

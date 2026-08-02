@@ -60,6 +60,7 @@ type Agent struct {
 	lastPacket atomic.Int64
 
 	mu          sync.RWMutex
+	look        Look
 	regionName  string
 	regionFlags uint32
 	position    msg.Vector3
@@ -116,6 +117,16 @@ type Options struct {
 	// the poll off, which is the right thing for a one-shot client
 	// that does not care.
 	OnEvent EventHandler
+
+	// Presence is how often AgentUpdate is sent.  Default one
+	// second; a negative value stops it, which also stops the
+	// simulator streaming any object data.
+	Presence time.Duration
+
+	// DrawDistance is the Far value in those updates.  It decides
+	// how much the simulator sends, so it is worth setting low for
+	// a client that does not care about objects.
+	DrawDistance float32
 
 	// Idle ends the session when nothing has arrived from the
 	// simulator for this long.  Default 60s; a negative value
@@ -200,6 +211,20 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	if err := a.handshake(ctx, opts.Timeout); err != nil {
 		a.Close()
 		return nil, err
+	}
+
+	// The avatar has arrived, so there is a position to look from.
+	a.SetLook(defaultLook(a.Position()))
+	if opts.DrawDistance > 0 {
+		l := a.Look()
+		l.Far = opts.DrawDistance
+		a.SetLook(l)
+	}
+	if opts.Presence == 0 {
+		opts.Presence = time.Second
+	}
+	if opts.Presence > 0 {
+		a.spawn(func() error { a.sendPresence(runCtx, opts.Presence); return nil })
 	}
 
 	// Capabilities are HTTP and have nothing to do with the

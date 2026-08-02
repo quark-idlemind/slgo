@@ -461,6 +461,21 @@ checks neither leaks into the other. They exist so that a package level
 cache added later fails a test instead of being discovered in
 production.
 
+## Presence
+
+`AgentUpdate` is not optional, in a way that is not obvious. A session
+that never sends one is in nobody's interest list: the simulator
+streams no `ObjectUpdate` at all, so nothing can be seen, selected or
+built on. Rezzing a prim and waiting for it to appear is how that was
+found -- the object really was created, and the simulator simply never
+mentioned it.
+
+So the server sends it, once a second, from wherever the avatar
+arrived. It belongs there for the reason the circuit does: it has to
+keep being sent, and a client that stopped would silently take object
+streaming with it. A client that wants to move the camera or set a
+draw distance uses `Agent.SetLook`; `Options.Presence` turns it off.
+
 ## The event queue
 
 Some messages no longer come over UDP.  The template marks them
