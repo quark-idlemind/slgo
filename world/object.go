@@ -28,81 +28,21 @@ func (o Object) String() string {
 	return fmt.Sprintf("%s (local %d)", o.ID, o.Local)
 }
 
-// RezOptions tune what gets built.
+// RezOptions tune what gets rezzed.
 type RezOptions struct {
 	At    msg.Vector3
-	Scale msg.Vector3   // zero means half a metre cubed
-	Wait  time.Duration // zero means fifteen seconds
+	Scale msg.Vector3 // zero means half a metre cubed
 }
 
-// Rez creates a prim and returns it, having confirmed we own it.
+// Rez creates a single prim and returns it, having confirmed we own it.
 //
-// Confirming ownership is not caution for its own sake.  Objects stream
-// in continuously, so a local id that is new to this session is not
-// necessarily one we just made -- it may be somebody else's prim that
-// the simulator has only now got round to mentioning.  Building on that
-// mistake means editing a stranger's object, which the simulator then
-// refuses in ways that look like bugs elsewhere.
+// Build does this and more; this is the short way to get one prim when
+// none of the rest is wanted.
 func (w *World) Rez(ctx context.Context, opt RezOptions) (*Object, error) {
 	if opt.Scale == (msg.Vector3{}) {
 		opt.Scale = msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}
 	}
-	if opt.Wait == 0 {
-		opt.Wait = 15 * time.Second
-	}
-
-	w.mu.Lock()
-	before := make(map[uint32]bool, len(w.locals))
-	for _, l := range w.locals {
-		before[l] = true
-	}
-	w.mu.Unlock()
-
-	m := &msg.ObjectAdd{}
-	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
-	d := &m.ObjectData
-	d.PCode, d.Material, d.AddFlags = 9, 3, 2
-	d.PathCurve, d.ProfileCurve = 16, 1
-	d.PathScaleX, d.PathScaleY = 100, 100
-	d.BypassRaycast = 1
-	d.RayStart, d.RayEnd = opt.At, opt.At
-	d.Scale = opt.Scale
-	if err := w.Send(ctx, m); err != nil {
-		return nil, err
-	}
-
-	// Wait for something new, ask who owns each candidate, and keep
-	// the one that is ours.  Local id 0 is an attachment and is never
-	// what was just rezzed.
-	var found *Object
-	asked := map[msg.UUID]bool{}
-	err := w.await(ctx, opt.Wait, "a prim of ours to appear", func() bool {
-		var toAsk []msg.UUID
-		for id, local := range w.locals {
-			if local == 0 || before[local] {
-				continue
-			}
-			if w.owners[id] == w.me {
-				found = &Object{ID: id, Local: local}
-				return true
-			}
-			if !asked[id] {
-				asked[id] = true
-				toAsk = append(toAsk, id)
-			}
-		}
-		for _, id := range toAsk {
-			q := &msg.RequestObjectPropertiesFamily{}
-			q.AgentData.AgentID, q.AgentData.SessionID = w.me, w.sess
-			q.ObjectData.ObjectID = id
-			_ = w.c.Send(ctx, q, true)
-		}
-		return false
-	})
-	if err != nil {
-		return nil, err
-	}
-	return found, nil
+	return w.rezAt(ctx, opt.At, opt.Scale, msg.Quaternion{})
 }
 
 // SetName renames an object and reads the name back.
