@@ -101,13 +101,20 @@ Three places where this deliberately differs from the C:
    memory-versus-wire split is presumably how `Misc/genproc.c` came to
    map it to `readVector4`.
 
-   The C tree disagrees with itself here and cannot settle it: the
-   generated skeleton in `protos/q_AgentUpdate.c` writes `queueVector4`,
-   the hand edited `messages/q_AgentUpdate.c` writes `queueVector3`, and
-   `AgentUpdate` is the only implemented message containing a quaternion
-   — with its one call site commented out at `s.c:1267`. So no
-   quaternion has ever gone over the wire from this codebase in either
-   form. The wiki is the source here, not the C.
+   The C tree disagrees with itself — the generated skeleton in
+   `protos/q_AgentUpdate.c` writes `queueVector4`, the hand edited
+   `messages/q_AgentUpdate.c` writes `queueVector3` — so it cannot
+   settle the question on its own.
+
+   The grid can, and does. Uncommenting the `queueAgentUpdate` call at
+   `s.c:1267` and logging in gets a `CameraConstraint` (High 22) back
+   from the simulator; the same run without it gets none. The simulator
+   only computes a camera constraint from the camera fields in
+   `AgentUpdate`, so the packet was accepted and acted on. That settles
+   the width by arithmetic: three float quaternions make the body 114
+   bytes, four float ones make it 122, and a 114 byte message would be
+   eight bytes short of a 122 byte template and be dropped as truncated
+   rather than answered.
 
 2. **Medium messages frame as `FF nn`.** `allocPacket` takes the marker
    byte from bits 8..15 of a code whose `0xFF` lives at bits 24..31, so
