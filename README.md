@@ -95,12 +95,19 @@ Read out of the working C client rather than assumed:
 
 Three places where this deliberately differs from the C:
 
-1. **`LLQuaternion` is 12 bytes, not 16.** `Misc/genproc.c` maps it to
-   `readVector4`, but the hand written `messages/q_AgentUpdate.c` writes
-   `queueVector3` for `BodyRotation` and `HeadRotation` and sizes the
-   packet `sizeof(luuid_t) * 2 + 6 * 12 + 10` = 114 bytes. That total
-   only works if a quaternion is three floats. `TestAgentUpdateSize`
-   pins it.
+1. **`LLQuaternion` is 12 bytes, not 16.** The wiki is explicit:
+   "transmitted in messages as a triplet of floats, 12 bytes wide
+   (represented in memory as a quad of floats, 16 bytes wide)". That
+   memory-versus-wire split is presumably how `Misc/genproc.c` came to
+   map it to `readVector4`.
+
+   The C tree disagrees with itself here and cannot settle it: the
+   generated skeleton in `protos/q_AgentUpdate.c` writes `queueVector4`,
+   the hand edited `messages/q_AgentUpdate.c` writes `queueVector3`, and
+   `AgentUpdate` is the only implemented message containing a quaternion
+   — with its one call site commented out at `s.c:1267`. So no
+   quaternion has ever gone over the wire from this codebase in either
+   form. The wiki is the source here, not the C.
 
 2. **Medium messages frame as `FF nn`.** `allocPacket` takes the marker
    byte from bits 8..15 of a code whose `0xFF` lives at bits 24..31, so
@@ -110,10 +117,12 @@ Three places where this deliberately differs from the C:
 
 3. **`IPPORT` is network order.** `genproc.c` maps it to `read16`
    (little endian). Linden Lab's `addIPPort` does `htons`, so big endian
-   is correct — but no message using `IPPORT` is implemented in the C
-   client, so there is no working code here to check against. This is
-   the one mapping in the table that is reasoned rather than observed.
-   Flagging it rather than burying it.
+   should be right — but no message using `IPPORT` is implemented in the
+   C client, and the wiki gives the width (two bytes) while saying
+   nothing about order; it states little endian only for the plain
+   integer types. So this one is reasoned, not observed. Flagging it
+   rather than burying it: if something using `IPPORT` ever misbehaves,
+   look here first.
 
 ## Decoding is deliberately forgiving
 

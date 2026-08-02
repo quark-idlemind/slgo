@@ -141,22 +141,80 @@ func TestRoundTripAll(t *testing.T) {
 	}
 }
 
-// TestAgentUpdateSize cross-checks the wire size against the hand
-// written C encoder, which allocates
+// TestWireSizes pins the width of every template type, from the sizes
+// documented at https://wiki.secondlife.com/wiki/Message.
 //
-//	sizeof(luuid_t) * 2 + 6 * 12 + 10
+// LLQuaternion is the one worth stating out loud: it is "transmitted in
+// messages as a triplet of floats, 12 bytes wide (represented in memory
+// as a quad of floats, 16 bytes wide)".  Twelve on the wire, sixteen in
+// memory, which is the trap the C generator fell into by mapping it to
+// a four component read.
+func TestWireSizes(t *testing.T) {
+	cases := []struct {
+		tmpl string
+		zero any
+		size int
+		want int
+	}{
+		{"U8", uint8(0), 0, 1},
+		{"U16", uint16(0), 0, 2},
+		{"U32", uint32(0), 0, 4},
+		{"U64", uint64(0), 0, 8},
+		{"S8", int8(0), 0, 1},
+		{"S16", int16(0), 0, 2},
+		{"S32", int32(0), 0, 4},
+		{"S64", int64(0), 0, 8},
+		{"F32", float32(0), 0, 4},
+		{"F64", float64(0), 0, 8},
+		{"BOOL", false, 0, 1},
+		{"LLUUID", UUID{}, 0, 16},
+		{"LLVector3", Vector3{}, 0, 12},
+		{"LLVector3d", Vector3d{}, 0, 24},
+		{"LLVector4", Vector4{}, 0, 16},
+		{"LLQuaternion", Quaternion{}, 0, 12},
+		{"IPADDR", IPAddr{}, 0, 4},
+		{"IPPORT", IPPort(0), 0, 2},
+		{"Fixed", [32]byte{}, 32, 32},
+		{"Variable", []byte(nil), 1, 1}, // just the length prefix
+		{"Variable", []byte(nil), 2, 2},
+		{"Variable", []byte(nil), 4, 4},
+	}
+	for _, c := range cases {
+		k, ok := kindByName[c.tmpl]
+		if !ok {
+			t.Errorf("%s: not in kindByName", c.tmpl)
+			continue
+		}
+		f := fieldPlan{name: c.tmpl, kind: k, size: c.size}
+		v := reflect.New(reflect.TypeOf(c.zero)).Elem()
+		w := &buf{}
+		if err := encodeField(w, v, &f); err != nil {
+			t.Errorf("%s: %v", c.tmpl, err)
+			continue
+		}
+		if len(w.b) != c.want {
+			t.Errorf("%s encodes to %d bytes, want %d", c.tmpl, len(w.b), c.want)
+		}
+	}
+}
+
+// TestAgentUpdateSize records that the whole message comes to 114
+// bytes, which is what messages/q_AgentUpdate.c allocates with
+// sizeof(luuid_t) * 2 + 6 * 12 + 10.
 //
-// in messages/q_AgentUpdate.c.  That is 114 bytes, and it only comes
-// out to 114 if LLQuaternion is twelve bytes rather than sixteen.
+// Treat that agreement as a curiosity, not as evidence: the only call
+// to queueAgentUpdate is commented out at s.c:1267, so this message has
+// never been sent and the C was never validated against a sim.  The
+// authority for the field widths is TestWireSizes above.
 func TestAgentUpdateSize(t *testing.T) {
 	var m AgentUpdate
 	b, err := m.Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = 16*2 + 6*12 + 10
+	const want = 16*2 + 12*2 + 1 + 12*4 + 4 + 4 + 1
 	if len(b) != want {
-		t.Errorf("AgentUpdate encodes to %d bytes, C allocates %d", len(b), want)
+		t.Errorf("AgentUpdate encodes to %d bytes, want %d", len(b), want)
 	}
 }
 
