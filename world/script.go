@@ -58,12 +58,14 @@ type Script struct {
 	IgnoreFault bool
 }
 
-// faultGrace is how long to keep listening after a fault header, so
-// the reason arrives before the run returns.
+// faultGrace bounds the wait for the reason after a fault header.
 //
-// The simulator reports a fault as two messages: the header naming the
-// script, then the reason.  Returning on the header alone would report
-// that the script died without saying what of.
+// A fault is two messages: the header naming the script, then exactly
+// one line with the reason.  Returning on the header alone would say
+// the script died without saying what of, so the run waits -- but only
+// until that line arrives, which is the usual case and takes
+// milliseconds.  This is the cap for when it does not come at all,
+// not the pause a fault normally costs.
 const faultGrace = 3 * time.Second
 
 // Result is what happened.
@@ -230,11 +232,12 @@ func (w *World) Run(ctx context.Context, s Script) (*Result, error) {
 			res.Finished = true
 		case <-faulted:
 			// The script has stopped, so the sentinel is not coming.
-			// Wait only long enough for the reason, which is a second
-			// message, and for a sentinel that may already be in
-			// flight -- a script can fault after saying it is done.
+			// One more line carries the reason; return as soon as it
+			// does.  The sentinel is still watched for because a
+			// script can fault after saying it had finished.
 			g := time.NewTimer(faultGrace)
 			select {
+			case <-col.reasoned:
 			case <-col.found:
 				res.Finished = true
 			case <-g.C:

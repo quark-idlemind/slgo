@@ -128,10 +128,12 @@ type collector struct {
 	fn    func(Line)
 	fault *Fault
 
-	found   chan struct{}
-	faulted chan struct{}
-	once    sync.Once
-	onceF   sync.Once
+	found    chan struct{}
+	faulted  chan struct{}
+	reasoned chan struct{}
+	once     sync.Once
+	onceF    sync.Once
+	onceR    sync.Once
 }
 
 func (c *collector) add(l Line) {
@@ -140,10 +142,11 @@ func (c *collector) add(l Line) {
 	fn := c.fn
 	hit := c.sentinel != "" && strings.Contains(l.Text, c.sentinel)
 
-	// A fault is two messages.  The header names the script, and the
-	// reason arrives on its own straight after, so the first debug
-	// line following the header is taken as the reason.
+	// A fault is two messages.  The header names the script, and
+	// exactly one debug line follows it with the reason, so the run
+	// can end the moment that arrives.
 	fired := false
+	gotReason := false
 	if c.faultFor != "" && c.fault == nil {
 		if name, ok := faultScript(l.Text); ok && name == c.faultFor {
 			c.fault = &Fault{Script: name, Line: l}
@@ -152,6 +155,7 @@ func (c *collector) add(l Line) {
 	} else if c.fault != nil && c.fault.Reason == "" && l.Debug() {
 		if _, isHeader := faultScript(l.Text); !isHeader {
 			c.fault.Reason = l.Text
+			gotReason = true
 		}
 	}
 	c.mu.Unlock()
@@ -164,6 +168,9 @@ func (c *collector) add(l Line) {
 	}
 	if fired {
 		c.onceF.Do(func() { close(c.faulted) })
+	}
+	if gotReason {
+		c.onceR.Do(func() { close(c.reasoned) })
 	}
 }
 
@@ -211,6 +218,7 @@ func (w *World) chat(raw *client.Message, m *msg.ChatFromSimulator) {
 func (w *World) startCollector(c *collector) {
 	c.found = make(chan struct{})
 	c.faulted = make(chan struct{})
+	c.reasoned = make(chan struct{})
 	w.mu.Lock()
 	w.collectors = append(w.collectors, c)
 	w.mu.Unlock()
