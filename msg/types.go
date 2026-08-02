@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 )
 
 // UUID is an LLUUID.  Sixteen bytes, sent verbatim.
@@ -67,12 +68,51 @@ type Vector3d struct{ X, Y, Z float64 }
 // Vector4 is an LLVector4: four little endian float32.
 type Vector4 struct{ X, Y, Z, W float32 }
 
-// Quaternion is an LLQuaternion.  Only X, Y and Z travel: the wire form
-// is twelve bytes, not sixteen, and W is recovered from the constraint
-// that the quaternion is a unit.  (The C generator in Misc/genproc.c
-// maps this to a four component read, which the hand written
-// queueAgentUpdate corrects back to three.)
+// Quaternion is an LLQuaternion in its wire form.  Only X, Y and Z
+// travel -- twelve bytes, not sixteen -- because the quaternion is a
+// unit and W can be recovered from the other three.  From
+// LLTemplateMessageBuilder::addQuat:
+//
+//	addData(varname, quat.packToVector3().mV, MVT_LLQuaternion, sizeof(LLVector3))
+//
+// The zero value is the identity rotation, since W() of {0,0,0} is 1.
+// Use PackQuaternion and W to convert to and from a full quaternion.
 type Quaternion struct{ X, Y, Z float32 }
+
+// Linden Lab's FP_MAG_THRESHOLD: below this a quaternion is treated as
+// degenerate and left unscaled.
+const fpMagThreshold = 1e-7
+
+// PackQuaternion reduces a full quaternion to the three components that
+// travel, following LLQuaternion::packToVector3.  The quaternion is
+// normalized, and if W is negative the vector part is negated instead
+// -- q and -q are the same rotation, so this costs nothing and lets the
+// receiver assume W is non-negative.
+func PackQuaternion(x, y, z, w float32) Quaternion {
+	mag := float32(math.Sqrt(float64(x*x + y*y + z*z + w*w)))
+	if mag > fpMagThreshold {
+		x /= mag
+		y /= mag
+		z /= mag
+		// w is deliberately not scaled: it is not sent, and
+		// only its sign is used below.
+	}
+	if w >= 0 {
+		return Quaternion{x, y, z}
+	}
+	return Quaternion{-x, -y, -z}
+}
+
+// W recovers the fourth component, following
+// LLQuaternion::unpackFromVector3.  It is never negative: PackQuaternion
+// arranges the sign so it does not need to be.
+func (q Quaternion) W() float32 {
+	t := 1 - (q.X*q.X + q.Y*q.Y + q.Z*q.Z)
+	if t <= 0 {
+		return 0
+	}
+	return float32(math.Sqrt(float64(t)))
+}
 
 // IPAddr is an IPADDR: four bytes in network order, held here exactly
 // as they appear on the wire so there is no byte order to get wrong.

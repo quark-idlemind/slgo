@@ -93,39 +93,44 @@ Read out of the working C client rather than assumed:
 - Appended acks are stripped from the tail *before* zero expansion,
   per `s.c`.
 
+One trap when reading viewer source against the template: field order
+on the wire is the *template's*, not the order of the `add*()` calls.
+`LLAgent::sendAgentUpdate` adds `Flags` right after `State`, but the
+template puts `Flags` last and that is where it goes —
+`nextBlock()` lays the block out from `template_data->mMemberVariables`
+and `addData` fills it in by name.
+
 Three places where this deliberately differs from the C:
 
-1. **`LLQuaternion` is 12 bytes, not 16.** The wiki is explicit:
-   "transmitted in messages as a triplet of floats, 12 bytes wide
-   (represented in memory as a quad of floats, 16 bytes wide)". That
-   memory-versus-wire split is presumably how `Misc/genproc.c` came to
-   map it to `readVector4`.
+1. **`LLQuaternion` is 12 bytes, not 16.** Settled by the viewer source:
 
-   The C tree disagrees with itself — the generated skeleton in
-   `protos/q_AgentUpdate.c` writes `queueVector4`, the hand edited
-   `messages/q_AgentUpdate.c` writes `queueVector3` — so it cannot
-   settle the question on its own.
+       void LLTemplateMessageBuilder::addQuat(const char *varname, const LLQuaternion& quat)
+       {
+           addData(varname, quat.packToVector3().mV, MVT_LLQuaternion, sizeof(LLVector3));
+       }
 
-   The grid cannot settle it either, and it is worth recording why the
-   obvious experiment fails. Uncommenting the `queueAgentUpdate` call at
-   `s.c:1267` does draw a `CameraConstraint` (High 22) back from the
+   `sizeof(LLVector3)`, three floats. `packToVector3` normalizes and
+   then negates the vector part when W is negative, so the receiver can
+   assume W is non-negative and recover it as sqrt(1 - x² - y² - z²).
+   `PackQuaternion` and `Quaternion.W` in `msg/types.go` implement both
+   halves.
+
+   `Misc/genproc.c` maps it to `readVector4` — an easy mistake, since
+   the type really is four floats *in memory* and only three on the
+   wire. The C tree disagrees with itself about it: the generated
+   `protos/q_AgentUpdate.c` writes `queueVector4` while the hand edited
+   `messages/q_AgentUpdate.c` writes `queueVector3`.
+
+   Worth recording that the obvious live experiment cannot decide this,
+   because it looks like it can. Uncommenting the `queueAgentUpdate`
+   call at `s.c:1267` draws a `CameraConstraint` (High 22) back from the
    simulator where the same run without it draws none, so a 114 byte
-   `AgentUpdate` is certainly accepted and acted on. But that proves
-   nothing about the width, for two reasons:
-
-   - `LLTemplateMessageReader::decodeData` does not discard a short
-     message. It calls `logRanOffEndOfPacket` and zero fills the
-     missing fields. A 114 byte body against a 122 byte template would
-     have been accepted just the same.
-   - The message was almost entirely zeros, so a misread would have
-     found zeros wherever it looked. `Far` was the only non-zero field
-     in it.
-
-   A conclusive test needs a value after both quaternions whose effect
-   is observable: send `Far` large and again small, with non-degenerate
-   camera axes, and compare inbound object traffic. If the two runs
-   differ, `Far` is landing at offset 105 and everything ahead of it,
-   both quaternions included, is the width claimed here.
+   `AgentUpdate` is accepted and acted on. That still proves nothing
+   about the width: `LLTemplateMessageReader::decodeData` does not
+   discard a short message, it calls `logRanOffEndOfPacket` and zero
+   fills, so a 114 byte body against a 122 byte template would have
+   been accepted identically. The message was also nearly all zeros, so
+   a misread would have found zeros wherever it looked.
 
 2. **Medium messages frame as `FF nn`.** `allocPacket` takes the marker
    byte from bits 8..15 of a code whose `0xFF` lives at bits 24..31, so

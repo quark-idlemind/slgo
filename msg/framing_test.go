@@ -281,3 +281,71 @@ func TestIDString(t *testing.T) {
 		t.Errorf("unknown ID.String() = %q", got)
 	}
 }
+
+// TestQuaternionPacking follows LLQuaternion::packToVector3 and
+// unpackFromVector3.
+func TestQuaternionPacking(t *testing.T) {
+	// The zero value is the identity rotation.
+	if w := (Quaternion{}).W(); w != 1 {
+		t.Errorf("identity W() = %v, want 1", w)
+	}
+
+	const eps = 1e-6
+	cases := []struct{ x, y, z, w float32 }{
+		{0, 0, 0, 1},                 // identity
+		{0, 0, 0.7071068, 0.7071068}, // 90 degrees about Z
+		{0.5, 0.5, 0.5, 0.5},
+		{0, 0.7071068, 0, -0.7071068}, // negative W
+		{-0.5, 0.5, -0.5, -0.5},
+	}
+	for _, c := range cases {
+		q := PackQuaternion(c.x, c.y, c.z, c.w)
+		if q.W() < 0 {
+			t.Errorf("%v: recovered W is negative", c)
+		}
+		// q and -q are the same rotation, so compare after
+		// normalising the sign of the input the way LL does.
+		wx, wy, wz, ww := c.x, c.y, c.z, c.w
+		if ww < 0 {
+			wx, wy, wz, ww = -wx, -wy, -wz, -ww
+		}
+		if absf(q.X-wx) > eps || absf(q.Y-wy) > eps || absf(q.Z-wz) > eps {
+			t.Errorf("%v packed to %v", c, q)
+		}
+		if absf(q.W()-ww) > eps {
+			t.Errorf("%v recovered W = %v, want %v", c, q.W(), ww)
+		}
+	}
+}
+
+// TestQuaternionNormalizes checks that a non-unit input is scaled, as
+// packToVector3 does before packing.
+func TestQuaternionNormalizes(t *testing.T) {
+	q := PackQuaternion(0, 0, 2, 2) // magnitude 2*sqrt(2)
+	want := float32(0.7071068)
+	if absf(q.Z-want) > 1e-6 {
+		t.Errorf("Z = %v, want %v", q.Z, want)
+	}
+	if absf(q.W()-want) > 1e-6 {
+		t.Errorf("W() = %v, want %v", q.W(), want)
+	}
+}
+
+// TestQuaternionDegenerate must not divide by zero.
+func TestQuaternionDegenerate(t *testing.T) {
+	q := PackQuaternion(0, 0, 0, 0)
+	if q != (Quaternion{}) {
+		t.Errorf("degenerate quaternion packed to %v", q)
+	}
+	// An over-long vector part cannot yield a real W; clamp to 0.
+	if w := (Quaternion{1, 1, 1}).W(); w != 0 {
+		t.Errorf("over-long W() = %v, want 0", w)
+	}
+}
+
+func absf(f float32) float32 {
+	if f < 0 {
+		return -f
+	}
+	return f
+}
