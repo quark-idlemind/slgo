@@ -294,3 +294,59 @@ func (w *World) SetScriptRunning(ctx context.Context, o *Object, item msg.UUID, 
 	m.Script.Running = running
 	return w.Send(ctx, m)
 }
+
+// InstallScript puts a script into an object and starts it, returning
+// what the compiler said.
+//
+// Use this rather than NewScript and PutInObject for anything that has
+// to RUN. Copying an inventory script into an object over the protocol
+// leaves it there and does not start it -- and SetScriptRunning does not
+// start it either, because there is nothing compiled to start. Dropping
+// a script in by hand looks like one action and is really two: the copy,
+// and the save that compiles it into the object.
+//
+// This is the second half. The source is uploaded through
+// UpdateScriptTask, which compiles it inside the object and starts it,
+// and is the same call Run makes -- which is why running a script always
+// worked while installing a listener never did.
+//
+// Reusing the name replaces that script rather than adding another: an
+// object keeps every copy it is given and renames the newcomer.
+func (w *World) InstallScript(ctx context.Context, o *Object, name, source string, running bool) (*UploadResult, error) {
+	if o == nil {
+		return nil, fmt.Errorf("world: InstallScript needs an object")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("world: InstallScript needs a name")
+	}
+
+	task, err := w.FindInObject(ctx, o, name)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		it, _, err := w.NewScript(ctx, name, source)
+		if err != nil {
+			return nil, err
+		}
+		if err := w.PutInObject(ctx, o, it); err != nil {
+			return nil, err
+		}
+		if err := w.Settle(ctx, 6*time.Second); err != nil {
+			return nil, err
+		}
+		if task, err = w.FindInObject(ctx, o, name); err != nil {
+			return nil, err
+		}
+		if task == nil {
+			return nil, fmt.Errorf("world: %q never turned up inside %s", name, o)
+		}
+	}
+
+	return w.upload(ctx, "UpdateScriptTask", map[string]any{
+		"item_id":           task.ID.String(),
+		"task_id":           o.ID.String(),
+		"is_script_running": running,
+		"target":            "mono",
+	}, []byte(source))
+}

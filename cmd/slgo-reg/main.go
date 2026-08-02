@@ -1,52 +1,138 @@
-// Command slgo-reg talks to the register attachment directly, to find
-// out whether it is listening at all.
+// Command slgo-reg finds out whether a script put into an object over
+// the protocol actually runs, and whether what it says comes back.
+//
+// The smallest possible script: it says one thing when it starts, and
+// starts again when it is rezzed or attached. If that is heard from a
+// rezzed prim but not from a worn one, the problem is attachments; if it
+// is silent both ways, the problem is putting the script in or starting
+// it. Either answer halves what is left to look at.
+//
+//	slgo-reg -rez          build a prim, put the script in, listen
+//	slgo-reg -rez -wear    ...then take it and wear it, and listen again
 package main
 
 import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"time"
 
 	"slgo/world"
 )
 
+const hello = `default
+{
+    state_entry()
+    {
+        llOwnerSay("Hello World");
+    }
+
+    on_rez(integer param)
+    {
+        llResetScript();
+    }
+
+    attach(key id)
+    {
+        if (id != NULL_KEY) llResetScript();
+    }
+}`
+
 func main() {
 	server := flag.String("server", "127.0.0.1:7807", "slgod")
 	agent := flag.String("agent", "example", "hosted agent")
-	say := flag.String("say", "count", "what to send on the channel")
-	channel := flag.Int("channel", -1701, "channel")
+	rez := flag.Bool("rez", false, "build a prim and put the script in it")
+	wear := flag.Bool("wear", false, "then take it and wear it")
+	listen := flag.Duration("listen", 20*time.Second, "how long to listen after each step")
+	say := flag.String("say", "", "send this on the channel first, then listen")
+	channel := flag.Int("channel", -1701, "channel to say it on")
 	flag.Parse()
 
 	ctx := context.Background()
 	w, err := world.Dial(ctx, *server, *agent)
 	if err != nil {
-		fmt.Println("attach:", err)
-		return
+		die("attach: %v", err)
 	}
 	defer w.Close()
 
-	for _, a := range w.Attachments() {
-		fmt.Printf("attached: %-28s point %d  %s\n", a.Object.Name, a.Point, a.Object.ID)
+	if !*rez {
+		lines := w.Chat(world.ChatFilter{}, 64)
+		defer w.StopChat(lines)
+		if *say != "" {
+			if err := w.Say(ctx, *say, int32(*channel)); err != nil {
+				die("say: %v", err)
+			}
+			fmt.Printf("said %q on %d\n", *say, *channel)
+		}
+		drain(lines, *listen, "listening")
+		return
 	}
 
+	where, err := w.Where(ctx)
+	if err != nil {
+		die("where: %v", err)
+	}
+	at := where.Position
+	at.X += 2
+
+	built, err := w.Build(ctx, []world.Prim{{Name: "slgo hello", Position: at}})
+	if err != nil {
+		die("build: %v", err)
+	}
+	fmt.Printf("built %s at %v\n", built.Root.Name, at)
+
+	// Listen from BEFORE the script goes in: state_entry runs the moment
+	// it starts, and a subscription made afterwards would miss the one
+	// line the whole test is about.
 	lines := w.Chat(world.ChatFilter{}, 64)
 	defer w.StopChat(lines)
 
-	if err := w.Say(ctx, *say, int32(*channel)); err != nil {
-		fmt.Println("say:", err)
-		return
+	up, err := w.InstallScript(ctx, built.Root, "slgo hello script", hello, true)
+	if err != nil {
+		die("install: %v", err)
 	}
-	fmt.Printf("said %q on %d; listening 15s for anything at all\n", *say, *channel)
+	fmt.Printf("installed, compiled=%v errors=%v\n", up.Compiled, up.Errors)
 
-	deadline := time.After(15 * time.Second)
+	drain(lines, *listen, "rezzed")
+
+	if *wear {
+		objects, err := w.ObjectsFolder(ctx)
+		if err != nil {
+			die("objects folder: %v", err)
+		}
+		if _, err := w.Take(ctx, built.Root, objects, 60*time.Second); err != nil {
+			die("take: %v", err)
+		}
+		fmt.Println("taken into inventory")
+
+		if _, err := w.Worn(ctx, objects, "slgo hello", 31); err != nil {
+			die("wear: %v", err)
+		}
+		fmt.Println("worn on HUD Center 2")
+		drain(lines, *listen, "worn")
+	}
+}
+
+func drain(lines <-chan world.Line, d time.Duration, why string) {
+	fmt.Printf("--- listening %v (%s)\n", d, why)
+	deadline := time.After(d)
+	heard := 0
 	for {
 		select {
 		case l := <-lines:
-			fmt.Printf("  heard [type %d from %s] %q\n", l.Type, l.Source, l.Text)
+			heard++
+			fmt.Printf("    [type %d from %s] %q\n", l.Type, l.Source, l.Text)
 		case <-deadline:
-			fmt.Println("(done)")
+			if heard == 0 {
+				fmt.Println("    (nothing at all)")
+			}
 			return
 		}
 	}
+}
+
+func die(format string, v ...any) {
+	fmt.Fprintf(os.Stderr, "slgo-reg: "+format+"\n", v...)
+	os.Exit(1)
 }

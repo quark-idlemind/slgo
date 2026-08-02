@@ -184,9 +184,9 @@ func TestHashPassword(t *testing.T) {
 
 func TestStartLocation(t *testing.T) {
 	cases := map[string]string{
-		"":                   "last",
-		"last":               "last",
-		"home":               "home",
+		"":                           "last",
+		"last":                       "last",
+		"home":                       "home",
 		"the test region":            "uri:the test region&128&128&21",
 		"the test region/188/203/28": "uri:the test region&188&203&28",
 		"the test region/188":        "uri:the test region&188&128&21",
