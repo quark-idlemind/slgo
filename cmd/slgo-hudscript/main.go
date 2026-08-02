@@ -35,10 +35,6 @@ const (
 	assetScript = 10
 	invScript   = 10
 	target      = "mono"
-	// legacyName is what these scripts used to be called; a leftover
-	// copy would keep running its old source and muddle the output.
-	legacyName = "slgo hud script"
-
 	// hudCenter1 is where slgo-hud put it.
 	hudCenter1 = 35
 )
@@ -70,12 +66,14 @@ var specs = []spec{
 		"    }\n" +
 		"}\n"},
 
-	// Setting face 0 to a texture that is not there.  llSetTexture
-	// takes either a key or the name of something in the object's own
-	// inventory, and "no texture" is neither: the HUD holds two
-	// scripts and nothing else.  It reports what the face holds
-	// afterwards, and whether the line after the failure ran at all,
-	// which is the interesting difference from the math error below.
+	// Setting face 0 to a texture that is not there, then counting.
+	//
+	// The counting is the experiment.  If the complaint is raised by
+	// the call itself it lands before mark 0; if some other part of
+	// the simulator notices later and says so while the script carries
+	// on, it lands among the marks.  Where it falls is the difference
+	// between a diagnostic that could name the script and one that
+	// could not.
 	{"slgo texture", `default
 {
     state_entry()
@@ -83,7 +81,47 @@ var specs = []spec{
         string me = llGetScriptName();
         llOwnerSay(me + ": face 0 starts as " + llGetTexture(0));
         llSetTexture("no texture", 0);
-        llOwnerSay(me + ": still running, face 0 is now " + llGetTexture(0));
+        integer i;
+        for (i = 0; i < 8; ++i)
+        {
+            llOwnerSay(me + ": mark " + (string)i);
+        }
+        llOwnerSay(me + ": done, face 0 is " + llGetTexture(0));
+    }
+}
+`},
+
+	// A sound that is not there either.  A second lookup of the same
+	// shape, to tell a rule about missing assets from a quirk of
+	// llSetTexture.
+	{"slgo sound", `default
+{
+    state_entry()
+    {
+        string me = llGetScriptName();
+        llOwnerSay(me + ": before");
+        llPlaySound("no sound", 1.0);
+        llOwnerSay(me + ": after");
+    }
+}
+`},
+
+	// Recursion with no bottom, to reach the other fault the virtual
+	// machine raises itself.  If the theory is right this should look
+	// like the math error -- named and fatal -- and not like the
+	// missing texture.
+	{"slgo stack", `integer deep(integer n)
+{
+    return deep(n + 1);
+}
+
+default
+{
+    state_entry()
+    {
+        llOwnerSay(llGetScriptName() + ": recursing");
+        deep(0);
+        llOwnerSay(llGetScriptName() + ": survived");
     }
 }
 `},
@@ -669,13 +707,14 @@ func nul(b []byte) string {
 // isDuplicate reports whether a name is a numbered copy of one of our
 // scripts, which is what an object calls the second one it is given.
 func isDuplicate(name string) bool {
-	if name == legacyName || strings.HasPrefix(name, legacyName+" ") {
-		return true
-	}
 	for _, s := range specs {
-		if strings.HasPrefix(name, s.name+" ") {
-			return true
+		if name == s.name {
+			return false // the one being worked on
 		}
 	}
-	return false
+	// Anything else of ours is left over: a numbered copy, or a script
+	// from a previous run that is no longer wanted.  Left in place it
+	// would keep running and its output would be mixed in with this
+	// run's.
+	return strings.HasPrefix(name, "slgo ")
 }
