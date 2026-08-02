@@ -331,6 +331,29 @@ func (c *Conn) Status(ctx context.Context) (*pb.StatusResponse, error) {
 var _ agent.CapDoer = (*Conn)(nil)
 
 // HasCap reports whether the attached agent offered a capability.
+// Presence reads where the avatar is and what it can see.  A draw
+// distance above zero sets it; zero leaves it alone.
+//
+// It goes to the server because the server owns the camera: AgentUpdate
+// has to keep being sent, and the simulator works its interest list out
+// from the camera rather than from where the avatar is.
+func (c *Conn) Presence(ctx context.Context, drawDistance float32) (*pb.PresenceResponse, error) {
+	return c.grid.Presence(ctx, &pb.PresenceRequest{
+		Agent:        c.agent,
+		DrawDistance: drawDistance,
+	})
+}
+
+// Objects asks the server what the region has said about itself.
+//
+// The server holds this because a region describes itself once, when
+// the avatar arrives, and a client that attaches later never hears it.
+func (c *Conn) Objects(ctx context.Context, named, id string) (*pb.ObjectsResponse, error) {
+	return c.grid.Objects(ctx, &pb.ObjectsRequest{
+		Agent: c.agent, Named: named, Id: id,
+	})
+}
+
 func (c *Conn) HasCap(name string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

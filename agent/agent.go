@@ -66,11 +66,16 @@ type Agent struct {
 	look        Look
 	regionName  string
 	regionFlags uint32
-	position    msg.Vector3
-	lookAt      msg.Vector3
-	handle      uint64
-	channel     string
-	kicked      string
+	// Objects is what the region has said about itself.  It lives here
+	// because a region describes itself once, when the avatar arrives,
+	// and a client that attaches later is never told.
+	Objects *Objects
+
+	position msg.Vector3
+	lookAt   msg.Vector3
+	handle   uint64
+	channel  string
+	kicked   string
 }
 
 // signal is a channel closed at most once.
@@ -312,6 +317,9 @@ func (a *Agent) fail(err error) {
 // are Inline: they are trivial, and running them in order keeps the
 // handshake deterministic.
 func (a *Agent) register() {
+	a.Objects = newObjects()
+	a.trackObjects()
+
 	a.Disp.MustHandle("StartPingCheck", func(p *msg.Packet) {
 		m := p.Message.(*msg.StartPingCheck)
 		reply := &msg.CompletePingCheck{}

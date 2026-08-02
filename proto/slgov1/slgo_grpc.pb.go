@@ -35,6 +35,8 @@ const (
 	Grid_Stream_FullMethodName     = "/slgo.v1.Grid/Stream"
 	Grid_ListAgents_FullMethodName = "/slgo.v1.Grid/ListAgents"
 	Grid_Status_FullMethodName     = "/slgo.v1.Grid/Status"
+	Grid_Presence_FullMethodName   = "/slgo.v1.Grid/Presence"
+	Grid_Objects_FullMethodName    = "/slgo.v1.Grid/Objects"
 	Grid_Cap_FullMethodName        = "/slgo.v1.Grid/Cap"
 	Grid_Send_FullMethodName       = "/slgo.v1.Grid/Send"
 )
@@ -49,6 +51,24 @@ type GridClient interface {
 	Stream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientPacket, ServerPacket], error)
 	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
 	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// Presence reads where the avatar is and what it can see, and can
+	// change the draw distance.
+	//
+	// Both belong to the server.  AgentUpdate is what puts a session in
+	// the simulator's interest list, it has to keep being sent, and the
+	// interest list is worked out from the camera rather than from where
+	// the avatar is -- so a client that owned this would empty the
+	// interest list for every other client by exiting.  A client can ask
+	// what it is and ask for it to be changed; it cannot hold it.
+	Presence(ctx context.Context, in *PresenceRequest, opts ...grpc.CallOption) (*PresenceResponse, error)
+	// Objects is what the region has told the session about itself.
+	//
+	// The server holds this for the same reason it holds the camera: a
+	// region describes itself once, when the avatar arrives, and a
+	// client that attaches a minute later is never told any of it.  The
+	// server was there to hear it, so the server remembers.  It still
+	// has no idea what any of the objects are for.
+	Objects(ctx context.Context, in *ObjectsRequest, opts ...grpc.CallOption) (*ObjectsResponse, error)
 	// Cap makes an HTTP request against one of the agent's
 	// capabilities.  The server holds the URLs and does the request; it
 	// has no idea what any of them mean.  This is what keeps inventory,
@@ -100,6 +120,26 @@ func (c *gridClient) Status(ctx context.Context, in *StatusRequest, opts ...grpc
 	return out, nil
 }
 
+func (c *gridClient) Presence(ctx context.Context, in *PresenceRequest, opts ...grpc.CallOption) (*PresenceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PresenceResponse)
+	err := c.cc.Invoke(ctx, Grid_Presence_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridClient) Objects(ctx context.Context, in *ObjectsRequest, opts ...grpc.CallOption) (*ObjectsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ObjectsResponse)
+	err := c.cc.Invoke(ctx, Grid_Objects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Cap(ctx context.Context, in *CapRequest, opts ...grpc.CallOption) (*CapResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CapResponse)
@@ -130,6 +170,24 @@ type GridServer interface {
 	Stream(grpc.BidiStreamingServer[ClientPacket, ServerPacket]) error
 	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
 	Status(context.Context, *StatusRequest) (*StatusResponse, error)
+	// Presence reads where the avatar is and what it can see, and can
+	// change the draw distance.
+	//
+	// Both belong to the server.  AgentUpdate is what puts a session in
+	// the simulator's interest list, it has to keep being sent, and the
+	// interest list is worked out from the camera rather than from where
+	// the avatar is -- so a client that owned this would empty the
+	// interest list for every other client by exiting.  A client can ask
+	// what it is and ask for it to be changed; it cannot hold it.
+	Presence(context.Context, *PresenceRequest) (*PresenceResponse, error)
+	// Objects is what the region has told the session about itself.
+	//
+	// The server holds this for the same reason it holds the camera: a
+	// region describes itself once, when the avatar arrives, and a
+	// client that attaches a minute later is never told any of it.  The
+	// server was there to hear it, so the server remembers.  It still
+	// has no idea what any of the objects are for.
+	Objects(context.Context, *ObjectsRequest) (*ObjectsResponse, error)
 	// Cap makes an HTTP request against one of the agent's
 	// capabilities.  The server holds the URLs and does the request; it
 	// has no idea what any of them mean.  This is what keeps inventory,
@@ -156,6 +214,12 @@ func (UnimplementedGridServer) ListAgents(context.Context, *ListAgentsRequest) (
 }
 func (UnimplementedGridServer) Status(context.Context, *StatusRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Status not implemented")
+}
+func (UnimplementedGridServer) Presence(context.Context, *PresenceRequest) (*PresenceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Presence not implemented")
+}
+func (UnimplementedGridServer) Objects(context.Context, *ObjectsRequest) (*ObjectsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Objects not implemented")
 }
 func (UnimplementedGridServer) Cap(context.Context, *CapRequest) (*CapResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Cap not implemented")
@@ -227,6 +291,42 @@ func _Grid_Status_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Presence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PresenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Presence(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Presence_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Presence(ctx, req.(*PresenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_Objects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ObjectsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Objects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Objects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Objects(ctx, req.(*ObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_Cap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CapRequest)
 	if err := dec(in); err != nil {
@@ -277,6 +377,14 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Status",
 			Handler:    _Grid_Status_Handler,
+		},
+		{
+			MethodName: "Presence",
+			Handler:    _Grid_Presence_Handler,
+		},
+		{
+			MethodName: "Objects",
+			Handler:    _Grid_Objects_Handler,
 		},
 		{
 			MethodName: "Cap",

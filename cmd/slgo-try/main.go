@@ -109,7 +109,7 @@ func main() {
 	defer w.Close()
 	fmt.Printf("%s in %s\n\n", w.Info().AvatarName, w.Info().Region)
 
-	objects, err := w.Objects(ctx)
+	objects, err := w.ObjectsFolder(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}

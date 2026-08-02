@@ -364,6 +364,70 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	return out, nil
 }
 
+// Presence answers where the avatar is and optionally changes how far
+// it is asked to see.
+//
+// The draw distance goes out on every AgentUpdate, which the server
+// sends because it has to keep being sent.  A client changes it here
+// and the next update carries it.
+func (s *Server) Presence(ctx context.Context, req *pb.PresenceRequest) (*pb.PresenceResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	a := h.Agent()
+
+	if req.DrawDistance > 0 {
+		l := a.Look()
+		l.Far = req.DrawDistance
+		a.SetLook(l)
+	}
+
+	l := a.Look()
+	return &pb.PresenceResponse{
+		Position:     vec(a.Position()),
+		LookAt:       vec(l.At),
+		Camera:       vec(l.Center),
+		DrawDistance: l.Far,
+		RegionHandle: a.RegionHandle(),
+		Region:       a.RegionName(),
+	}, nil
+}
+
+func vec(v msg.Vector3) *pb.Vector3 {
+	return &pb.Vector3{X: v.X, Y: v.Y, Z: v.Z}
+}
+
+// Objects returns what the region has told this session about itself.
+func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.ObjectsResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	all := h.Agent().Objects.All()
+
+	out := &pb.ObjectsResponse{Known: int32(len(all))}
+	for _, o := range all {
+		if req.Named != "" && o.Name != req.Named {
+			continue
+		}
+		if req.Id != "" && o.ID.String() != req.Id {
+			continue
+		}
+		out.Objects = append(out.Objects, &pb.ObjectInfo{
+			Id:       o.ID.String(),
+			Local:    o.Local,
+			Parent:   o.Parent,
+			Pcode:    uint32(o.PCode),
+			Scale:    vec(o.Scale),
+			Position: vec(o.Position),
+			Name:     o.Name,
+			Owner:    o.Owner.String(),
+		})
+	}
+	return out, nil
+}
+
 func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, error) {
 	h, err := s.lookup(req.Agent)
 	if err != nil {

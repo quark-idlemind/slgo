@@ -23,8 +23,11 @@ const (
 	AssetScript   = 10
 )
 
-// Item is something in agent inventory.
-type Item = agent.Item
+// Item is something in agent inventory, and Folder a category.
+type (
+	Item   = agent.Item
+	Folder = agent.Folder
+)
 
 // TaskItem is something inside an object.
 //
@@ -52,8 +55,10 @@ func (w *World) Folder(ctx context.Context, name string) (msg.UUID, error) {
 	return f.ID, nil
 }
 
-// Objects is the folder a take lands in.
-func (w *World) Objects(ctx context.Context) (msg.UUID, error) {
+// ObjectsFolder is the inventory folder a take lands in.  It is
+// named for the folder, not for objects in the region: see AllObjects
+// for those.
+func (w *World) ObjectsFolder(ctx context.Context) (msg.UUID, error) {
 	return w.Folder(ctx, "Objects")
 }
 

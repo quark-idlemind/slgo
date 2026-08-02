@@ -1362,6 +1362,433 @@ func (*SendResponse) Descriptor() ([]byte, []int) {
 	return file_slgo_proto_rawDescGZIP(), []int{17}
 }
 
+type Vector3 struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	X             float32                `protobuf:"fixed32,1,opt,name=x,proto3" json:"x,omitempty"`
+	Y             float32                `protobuf:"fixed32,2,opt,name=y,proto3" json:"y,omitempty"`
+	Z             float32                `protobuf:"fixed32,3,opt,name=z,proto3" json:"z,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Vector3) Reset() {
+	*x = Vector3{}
+	mi := &file_slgo_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Vector3) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Vector3) ProtoMessage() {}
+
+func (x *Vector3) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Vector3.ProtoReflect.Descriptor instead.
+func (*Vector3) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *Vector3) GetX() float32 {
+	if x != nil {
+		return x.X
+	}
+	return 0
+}
+
+func (x *Vector3) GetY() float32 {
+	if x != nil {
+		return x.Y
+	}
+	return 0
+}
+
+func (x *Vector3) GetZ() float32 {
+	if x != nil {
+		return x.Z
+	}
+	return 0
+}
+
+type PresenceRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Agent string                 `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
+	// Draw distance in metres, which is how far the simulator is asked
+	// to describe things.  Zero leaves it as it is; anything else sets
+	// it, and the response reports what it ended up as.
+	DrawDistance  float32 `protobuf:"fixed32,2,opt,name=draw_distance,json=drawDistance,proto3" json:"draw_distance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PresenceRequest) Reset() {
+	*x = PresenceRequest{}
+	mi := &file_slgo_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PresenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PresenceRequest) ProtoMessage() {}
+
+func (x *PresenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PresenceRequest.ProtoReflect.Descriptor instead.
+func (*PresenceRequest) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *PresenceRequest) GetAgent() string {
+	if x != nil {
+		return x.Agent
+	}
+	return ""
+}
+
+func (x *PresenceRequest) GetDrawDistance() float32 {
+	if x != nil {
+		return x.DrawDistance
+	}
+	return 0
+}
+
+type PresenceResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Where the avatar is, in region coordinates, as last reported by
+	// the simulator.  Precise after a teleport or a region entry, and to
+	// the nearest metre while walking, which is all
+	// CoarseLocationUpdate carries.
+	Position *Vector3 `protobuf:"bytes,1,opt,name=position,proto3" json:"position,omitempty"`
+	// Where it is looking.
+	LookAt *Vector3 `protobuf:"bytes,2,opt,name=look_at,json=lookAt,proto3" json:"look_at,omitempty"`
+	// The camera the simulator is told about.  It follows the avatar.
+	Camera        *Vector3 `protobuf:"bytes,3,opt,name=camera,proto3" json:"camera,omitempty"`
+	DrawDistance  float32  `protobuf:"fixed32,4,opt,name=draw_distance,json=drawDistance,proto3" json:"draw_distance,omitempty"`
+	RegionHandle  uint64   `protobuf:"varint,5,opt,name=region_handle,json=regionHandle,proto3" json:"region_handle,omitempty"`
+	Region        string   `protobuf:"bytes,6,opt,name=region,proto3" json:"region,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PresenceResponse) Reset() {
+	*x = PresenceResponse{}
+	mi := &file_slgo_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PresenceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PresenceResponse) ProtoMessage() {}
+
+func (x *PresenceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PresenceResponse.ProtoReflect.Descriptor instead.
+func (*PresenceResponse) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *PresenceResponse) GetPosition() *Vector3 {
+	if x != nil {
+		return x.Position
+	}
+	return nil
+}
+
+func (x *PresenceResponse) GetLookAt() *Vector3 {
+	if x != nil {
+		return x.LookAt
+	}
+	return nil
+}
+
+func (x *PresenceResponse) GetCamera() *Vector3 {
+	if x != nil {
+		return x.Camera
+	}
+	return nil
+}
+
+func (x *PresenceResponse) GetDrawDistance() float32 {
+	if x != nil {
+		return x.DrawDistance
+	}
+	return 0
+}
+
+func (x *PresenceResponse) GetRegionHandle() uint64 {
+	if x != nil {
+		return x.RegionHandle
+	}
+	return 0
+}
+
+func (x *PresenceResponse) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+type ObjectsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Agent string                 `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
+	// Named, if set, returns only objects with this name.  A name is
+	// only known if something has asked for it, so an object whose name
+	// has never been requested does not match anything.
+	Named string `protobuf:"bytes,2,opt,name=named,proto3" json:"named,omitempty"`
+	// Id, if set, returns just that object.
+	Id            string `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObjectsRequest) Reset() {
+	*x = ObjectsRequest{}
+	mi := &file_slgo_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectsRequest) ProtoMessage() {}
+
+func (x *ObjectsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectsRequest.ProtoReflect.Descriptor instead.
+func (*ObjectsRequest) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ObjectsRequest) GetAgent() string {
+	if x != nil {
+		return x.Agent
+	}
+	return ""
+}
+
+func (x *ObjectsRequest) GetNamed() string {
+	if x != nil {
+		return x.Named
+	}
+	return ""
+}
+
+func (x *ObjectsRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type ObjectInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Local uint32                 `protobuf:"varint,2,opt,name=local,proto3" json:"local,omitempty"`
+	// Parent is the local id of the root this is linked under, zero for
+	// a root.
+	Parent uint32 `protobuf:"varint,3,opt,name=parent,proto3" json:"parent,omitempty"`
+	// Pcode is 9 for a prim and 47 for an avatar.
+	Pcode    uint32   `protobuf:"varint,4,opt,name=pcode,proto3" json:"pcode,omitempty"`
+	Scale    *Vector3 `protobuf:"bytes,5,opt,name=scale,proto3" json:"scale,omitempty"`
+	Position *Vector3 `protobuf:"bytes,6,opt,name=position,proto3" json:"position,omitempty"`
+	// Name and owner are empty until something has asked for them.
+	Name          string `protobuf:"bytes,7,opt,name=name,proto3" json:"name,omitempty"`
+	Owner         string `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObjectInfo) Reset() {
+	*x = ObjectInfo{}
+	mi := &file_slgo_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectInfo) ProtoMessage() {}
+
+func (x *ObjectInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectInfo.ProtoReflect.Descriptor instead.
+func (*ObjectInfo) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ObjectInfo) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ObjectInfo) GetLocal() uint32 {
+	if x != nil {
+		return x.Local
+	}
+	return 0
+}
+
+func (x *ObjectInfo) GetParent() uint32 {
+	if x != nil {
+		return x.Parent
+	}
+	return 0
+}
+
+func (x *ObjectInfo) GetPcode() uint32 {
+	if x != nil {
+		return x.Pcode
+	}
+	return 0
+}
+
+func (x *ObjectInfo) GetScale() *Vector3 {
+	if x != nil {
+		return x.Scale
+	}
+	return nil
+}
+
+func (x *ObjectInfo) GetPosition() *Vector3 {
+	if x != nil {
+		return x.Position
+	}
+	return nil
+}
+
+func (x *ObjectInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ObjectInfo) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+type ObjectsResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Objects []*ObjectInfo          `protobuf:"bytes,1,rep,name=objects,proto3" json:"objects,omitempty"`
+	// Known is how many objects the session has heard about in total,
+	// which is what the filtered list was drawn from.
+	Known         int32 `protobuf:"varint,2,opt,name=known,proto3" json:"known,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObjectsResponse) Reset() {
+	*x = ObjectsResponse{}
+	mi := &file_slgo_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectsResponse) ProtoMessage() {}
+
+func (x *ObjectsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectsResponse.ProtoReflect.Descriptor instead.
+func (*ObjectsResponse) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ObjectsResponse) GetObjects() []*ObjectInfo {
+	if x != nil {
+		return x.Objects
+	}
+	return nil
+}
+
+func (x *ObjectsResponse) GetKnown() int32 {
+	if x != nil {
+		return x.Known
+	}
+	return 0
+}
+
 var File_slgo_proto protoreflect.FileDescriptor
 
 const file_slgo_proto_rawDesc = "" +
@@ -1469,12 +1896,45 @@ const file_slgo_proto_rawDesc = "" +
 	"\vSendRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x122\n" +
 	"\amessage\x18\x02 \x01(\v2\x18.slgo.v1.OutboundMessageR\amessage\"\x0e\n" +
-	"\fSendResponse2\xab\x02\n" +
+	"\fSendResponse\"3\n" +
+	"\aVector3\x12\f\n" +
+	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +
+	"\x01y\x18\x02 \x01(\x02R\x01y\x12\f\n" +
+	"\x01z\x18\x03 \x01(\x02R\x01z\"L\n" +
+	"\x0fPresenceRequest\x12\x14\n" +
+	"\x05agent\x18\x01 \x01(\tR\x05agent\x12#\n" +
+	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\xf7\x01\n" +
+	"\x10PresenceResponse\x12,\n" +
+	"\bposition\x18\x01 \x01(\v2\x10.slgo.v1.Vector3R\bposition\x12)\n" +
+	"\alook_at\x18\x02 \x01(\v2\x10.slgo.v1.Vector3R\x06lookAt\x12(\n" +
+	"\x06camera\x18\x03 \x01(\v2\x10.slgo.v1.Vector3R\x06camera\x12#\n" +
+	"\rdraw_distance\x18\x04 \x01(\x02R\fdrawDistance\x12#\n" +
+	"\rregion_handle\x18\x05 \x01(\x04R\fregionHandle\x12\x16\n" +
+	"\x06region\x18\x06 \x01(\tR\x06region\"L\n" +
+	"\x0eObjectsRequest\x12\x14\n" +
+	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
+	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\xe0\x01\n" +
+	"\n" +
+	"ObjectInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05local\x18\x02 \x01(\rR\x05local\x12\x16\n" +
+	"\x06parent\x18\x03 \x01(\rR\x06parent\x12\x14\n" +
+	"\x05pcode\x18\x04 \x01(\rR\x05pcode\x12&\n" +
+	"\x05scale\x18\x05 \x01(\v2\x10.slgo.v1.Vector3R\x05scale\x12,\n" +
+	"\bposition\x18\x06 \x01(\v2\x10.slgo.v1.Vector3R\bposition\x12\x12\n" +
+	"\x04name\x18\a \x01(\tR\x04name\x12\x14\n" +
+	"\x05owner\x18\b \x01(\tR\x05owner\"V\n" +
+	"\x0fObjectsResponse\x12-\n" +
+	"\aobjects\x18\x01 \x03(\v2\x13.slgo.v1.ObjectInfoR\aobjects\x12\x14\n" +
+	"\x05known\x18\x02 \x01(\x05R\x05known2\xaa\x03\n" +
 	"\x04Grid\x12:\n" +
 	"\x06Stream\x12\x15.slgo.v1.ClientPacket\x1a\x15.slgo.v1.ServerPacket(\x010\x01\x12E\n" +
 	"\n" +
 	"ListAgents\x12\x1a.slgo.v1.ListAgentsRequest\x1a\x1b.slgo.v1.ListAgentsResponse\x129\n" +
-	"\x06Status\x12\x16.slgo.v1.StatusRequest\x1a\x17.slgo.v1.StatusResponse\x120\n" +
+	"\x06Status\x12\x16.slgo.v1.StatusRequest\x1a\x17.slgo.v1.StatusResponse\x12?\n" +
+	"\bPresence\x12\x18.slgo.v1.PresenceRequest\x1a\x19.slgo.v1.PresenceResponse\x12<\n" +
+	"\aObjects\x12\x17.slgo.v1.ObjectsRequest\x1a\x18.slgo.v1.ObjectsResponse\x120\n" +
 	"\x03Cap\x12\x13.slgo.v1.CapRequest\x1a\x14.slgo.v1.CapResponse\x123\n" +
 	"\x04Send\x12\x14.slgo.v1.SendRequest\x1a\x15.slgo.v1.SendResponseB\x13Z\x11slgo/proto/slgov1b\x06proto3"
 
@@ -1491,7 +1951,7 @@ func file_slgo_proto_rawDescGZIP() []byte {
 }
 
 var file_slgo_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_slgo_proto_goTypes = []any{
 	(AgentEvent_Kind)(0),       // 0: slgo.v1.AgentEvent.Kind
 	(*ClientPacket)(nil),       // 1: slgo.v1.ClientPacket
@@ -1512,7 +1972,13 @@ var file_slgo_proto_goTypes = []any{
 	(*CapResponse)(nil),        // 16: slgo.v1.CapResponse
 	(*SendRequest)(nil),        // 17: slgo.v1.SendRequest
 	(*SendResponse)(nil),       // 18: slgo.v1.SendResponse
-	nil,                        // 19: slgo.v1.StatusResponse.UnhandledEntry
+	(*Vector3)(nil),            // 19: slgo.v1.Vector3
+	(*PresenceRequest)(nil),    // 20: slgo.v1.PresenceRequest
+	(*PresenceResponse)(nil),   // 21: slgo.v1.PresenceResponse
+	(*ObjectsRequest)(nil),     // 22: slgo.v1.ObjectsRequest
+	(*ObjectInfo)(nil),         // 23: slgo.v1.ObjectInfo
+	(*ObjectsResponse)(nil),    // 24: slgo.v1.ObjectsResponse
+	nil,                        // 25: slgo.v1.StatusResponse.UnhandledEntry
 }
 var file_slgo_proto_depIdxs = []int32{
 	3,  // 0: slgo.v1.ClientPacket.attach:type_name -> slgo.v1.Attach
@@ -1526,23 +1992,33 @@ var file_slgo_proto_depIdxs = []int32{
 	0,  // 8: slgo.v1.AgentEvent.kind:type_name -> slgo.v1.AgentEvent.Kind
 	10, // 9: slgo.v1.ListAgentsResponse.agents:type_name -> slgo.v1.AgentInfo
 	10, // 10: slgo.v1.StatusResponse.agent:type_name -> slgo.v1.AgentInfo
-	19, // 11: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
+	25, // 11: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
 	4,  // 12: slgo.v1.SendRequest.message:type_name -> slgo.v1.OutboundMessage
-	1,  // 13: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
-	11, // 14: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
-	13, // 15: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
-	15, // 16: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
-	17, // 17: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
-	5,  // 18: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
-	12, // 19: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
-	14, // 20: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
-	16, // 21: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
-	18, // 22: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
-	18, // [18:23] is the sub-list for method output_type
-	13, // [13:18] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	19, // 13: slgo.v1.PresenceResponse.position:type_name -> slgo.v1.Vector3
+	19, // 14: slgo.v1.PresenceResponse.look_at:type_name -> slgo.v1.Vector3
+	19, // 15: slgo.v1.PresenceResponse.camera:type_name -> slgo.v1.Vector3
+	19, // 16: slgo.v1.ObjectInfo.scale:type_name -> slgo.v1.Vector3
+	19, // 17: slgo.v1.ObjectInfo.position:type_name -> slgo.v1.Vector3
+	23, // 18: slgo.v1.ObjectsResponse.objects:type_name -> slgo.v1.ObjectInfo
+	1,  // 19: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
+	11, // 20: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
+	13, // 21: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
+	20, // 22: slgo.v1.Grid.Presence:input_type -> slgo.v1.PresenceRequest
+	22, // 23: slgo.v1.Grid.Objects:input_type -> slgo.v1.ObjectsRequest
+	15, // 24: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
+	17, // 25: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
+	5,  // 26: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
+	12, // 27: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
+	14, // 28: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
+	21, // 29: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
+	24, // 30: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
+	16, // 31: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
+	18, // 32: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
+	26, // [26:33] is the sub-list for method output_type
+	19, // [19:26] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_slgo_proto_init() }
@@ -1567,7 +2043,7 @@ func file_slgo_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_slgo_proto_rawDesc), len(file_slgo_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   19,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -122,7 +122,7 @@ func main() {
 	}
 
 	if *take {
-		objects, err := w.Objects(ctx)
+		objects, err := w.ObjectsFolder(ctx)
 		if err != nil {
 			log.Fatal(err)
 		}

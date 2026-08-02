@@ -28,6 +28,26 @@ service Grid {
   rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
   rpc Status(StatusRequest) returns (StatusResponse);
 
+  // Presence reads where the avatar is and what it can see, and can
+  // change the draw distance.
+  //
+  // Both belong to the server.  AgentUpdate is what puts a session in
+  // the simulator's interest list, it has to keep being sent, and the
+  // interest list is worked out from the camera rather than from where
+  // the avatar is -- so a client that owned this would empty the
+  // interest list for every other client by exiting.  A client can ask
+  // what it is and ask for it to be changed; it cannot hold it.
+  rpc Presence(PresenceRequest) returns (PresenceResponse);
+
+  // Objects is what the region has told the session about itself.
+  //
+  // The server holds this for the same reason it holds the camera: a
+  // region describes itself once, when the avatar arrives, and a
+  // client that attaches a minute later is never told any of it.  The
+  // server was there to hear it, so the server remembers.  It still
+  // has no idea what any of the objects are for.
+  rpc Objects(ObjectsRequest) returns (ObjectsResponse);
+
   // Cap makes an HTTP request against one of the agent's
   // capabilities.  The server holds the URLs and does the request; it
   // has no idea what any of them mean.  This is what keeps inventory,
@@ -227,3 +247,79 @@ message SendRequest {
 }
 
 message SendResponse {}
+
+// ------------------------------------------------------------ presence
+
+message Vector3 {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+message PresenceRequest {
+  string agent = 1;
+
+  // Draw distance in metres, which is how far the simulator is asked
+  // to describe things.  Zero leaves it as it is; anything else sets
+  // it, and the response reports what it ended up as.
+  float draw_distance = 2;
+}
+
+message PresenceResponse {
+  // Where the avatar is, in region coordinates, as last reported by
+  // the simulator.  Precise after a teleport or a region entry, and to
+  // the nearest metre while walking, which is all
+  // CoarseLocationUpdate carries.
+  Vector3 position = 1;
+
+  // Where it is looking.
+  Vector3 look_at = 2;
+
+  // The camera the simulator is told about.  It follows the avatar.
+  Vector3 camera = 3;
+
+  float draw_distance = 4;
+  uint64 region_handle = 5;
+  string region = 6;
+}
+
+// ------------------------------------------------------------- objects
+
+message ObjectsRequest {
+  string agent = 1;
+
+  // Named, if set, returns only objects with this name.  A name is
+  // only known if something has asked for it, so an object whose name
+  // has never been requested does not match anything.
+  string named = 2;
+
+  // Id, if set, returns just that object.
+  string id = 3;
+}
+
+message ObjectInfo {
+  string id = 1;
+  uint32 local = 2;
+
+  // Parent is the local id of the root this is linked under, zero for
+  // a root.
+  uint32 parent = 3;
+
+  // Pcode is 9 for a prim and 47 for an avatar.
+  uint32 pcode = 4;
+
+  Vector3 scale = 5;
+  Vector3 position = 6;
+
+  // Name and owner are empty until something has asked for them.
+  string name = 7;
+  string owner = 8;
+}
+
+message ObjectsResponse {
+  repeated ObjectInfo objects = 1;
+
+  // Known is how many objects the session has heard about in total,
+  // which is what the filtered list was drawn from.
+  int32 known = 2;
+}
