@@ -15,6 +15,8 @@ and decode themselves.
     msg/codec.go        the generic tag-driven encoder and decoder
     msg/framing.go      message numbers, packet header, zero coding
     msg/receive.go      the read goroutine
+    msg/send.go         the write goroutine
+    msg/dump.go         YAML packet dumps
     msg/messages_gen.go generated: 483 messages, ~14700 lines
 
 ## How it works
@@ -226,6 +228,75 @@ the network and lets the kernel drop datagrams — honest for UDP, but it
 also stalls the caller's acknowledgements behind a slow consumer.
 `DropWhenFull()` inverts that and counts what it discards.
 
+## Sending
+
+`Sender` owns the write end and is the only thing that assigns sequence
+numbers, so neither needs a lock. It takes messages on one channel and
+acknowledgements on another, and selects on both:
+
+    send := msg.NewSender(conn)
+    go func() { err = send.Run(ctx) }()
+
+    send.SendReliable(ctx, &msg.UseCircuitCode{...})
+    send.QueueAck(inbound.Header.Sequence)   // never blocks
+    send.ConfirmAck(seq)                     // from Packet.Acks
+
+The two channels are the whole point. When a message goes out, whatever
+acknowledgements have piled up ride on its tail — `FlagAck`, four bytes
+each, a count byte — so they cost no datagram at all. If nothing goes
+out within `AckDelay` (100ms by default) they are flushed as a batched
+`PacketAck` instead, so they never wait indefinitely for traffic that
+may not come.
+
+Both halves of that are things the C client leaves on the table.
+`LL_ACK_FLAG` is read at `s.c:471` and never set on anything outbound,
+so nothing is ever piggybacked; and `queuePacketAck` writes a count of
+exactly one, so a session that acknowledged 23,371 packets sent 23,371
+datagrams to do it. `PacketAck.Packets` is a `Variable` block that holds
+255.
+
+`QueueAck` never blocks. Dropping an acknowledgement under pressure
+costs one retransmission from the peer, which is a much better trade
+than stalling the receive loop — and it means the receiver can hand acks
+to the sender without the two being able to deadlock on each other.
+
+Reliable messages are retransmitted with the resent bit set and the
+original sequence number, backing off each time, and are abandoned after
+`maxTries` with a counter to say so. The C retried forever, which is why
+its `acktime` only ever grew.
+
+## Dumping
+
+`DumpPacket` and `DumpMessage` render YAML, driven by the same plan
+machinery as the codec so they cannot drift from the wire format:
+
+    from: "198.51.100.7:13010"
+    at: "2026-08-01T20:34:12.000000Z"
+    sequence: 1234
+    flags: [zerocoded, reliable]
+    acks: [1201, 1202]
+    message: ImprovedInstantMessage
+    id: {freq: Low, number: 254}
+    blocks:
+      MessageBlock:
+        Position: {x: 188.429, y: 202.836, z: 26.3564}
+        FromAgentName: "Example Resident"
+        Message: "Self IM test one"
+        BinaryBucket: "0x07c0b380"
+      MetaData: []
+
+A `Single` block is a mapping and `Multiple`/`Variable` blocks are
+sequences; the template says which, so nothing is ambiguous. `Variable`
+fields render as text when the bytes are text — dropping the NUL that
+`queueString1` appends — and as a quoted `0x...` string when they are
+not. Quaternions show the recovered `W` alongside the three components
+that actually travel, because that is what the value means.
+
+Every scalar is quoted, so nothing is read back as an accidental number
+or boolean. There is no YAML dependency: the emitter is a hundred lines
+against a deliberately small subset, and `TestDumpParsesAsYAML` feeds
+all 483 messages through Ruby's Psych to check the subset is real.
+
 ## Tests
 
 `go test ./...` covers:
@@ -244,9 +315,13 @@ also stalls the caller's acknowledgements behind a slow consumer.
 
 ## Not done
 
-No send path yet, and no session: nothing acknowledges, retransmits,
-suppresses duplicates, assigns sequence numbers or notices a circuit
-going away. No XML-RPC login and no AIS.
+No session and no dispatcher: nothing wires the receiver's packets to
+the sender's acknowledgements, suppresses duplicate sequence numbers, or
+notices a circuit going away. No XML-RPC login and no AIS.
+
+The sender writes to an `io.Writer`, which suits the connected socket
+the C client uses. Talking to neighbouring simulators at once will want
+a `WriteTo` variant.
 
 `Receiver` allocates a message per packet through `New`. At the packet
 rates in the C client's stats — 600k in a long session — that is worth
