@@ -8,7 +8,7 @@ import (
 	"math"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // ErrOutOfRange is reported for a position the simulator would not

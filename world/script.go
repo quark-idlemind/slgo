@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // Script says what to run, where, and how to know it has finished.

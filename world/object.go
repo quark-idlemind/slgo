@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // Object is something in the region.

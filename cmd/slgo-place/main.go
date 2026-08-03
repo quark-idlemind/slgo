@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"slgo/msg"
-	"slgo/world"
+	"github.com/quark-idlemind/slgo/msg"
+	"github.com/quark-idlemind/slgo/world"
 )
 
 func main() {

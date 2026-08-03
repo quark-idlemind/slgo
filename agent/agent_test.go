@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // fakeSim answers the handshake the way a simulator does, so the

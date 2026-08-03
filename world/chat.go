@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"slgo/client"
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // Chat types, from the viewer's LLChatType.  A script's run-time

@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // Asset transfer is how the bytes behind an inventory item are read.

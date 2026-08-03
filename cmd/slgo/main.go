@@ -15,10 +15,10 @@ import (
 	"sort"
 	"time"
 
-	"slgo/agent"
-	"slgo/client"
-	"slgo/msg"
-	slgov1 "slgo/proto/slgov1"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/msg"
+	slgov1 "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 func main() {

@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"slgo/llsd"
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/llsd"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // The event queue is a long poll against a capability, carrying what

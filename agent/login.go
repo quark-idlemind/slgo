@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // DefaultLoginURL is the Agni (main grid) login endpoint.

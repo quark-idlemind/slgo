@@ -31,10 +31,10 @@ import (
 	"sync"
 	"time"
 
-	"slgo/agent"
-	"slgo/client"
-	"slgo/msg"
-	pb "slgo/proto/slgov1"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // ErrTimeout is reported when the simulator never confirmed something.

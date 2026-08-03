@@ -24,8 +24,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/quark-idlemind/slgo/auth"
 	"net"
-	"slgo/auth"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -33,9 +33,9 @@ import (
 
 	"google.golang.org/grpc"
 
-	"slgo/agent"
-	"slgo/msg"
-	pb "slgo/proto/slgov1"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // Server hosts any number of grid connections and serves clients.

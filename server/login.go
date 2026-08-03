@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 
-	"slgo/auth"
-	pb "slgo/proto/slgov1"
+	"github.com/quark-idlemind/slgo/auth"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // Authentication for slgod, which holds a live Second Life session.

@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"slgo/world"
+	"github.com/quark-idlemind/slgo/world"
 )
 
 const hello = `default

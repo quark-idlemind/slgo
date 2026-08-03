@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"slgo/llsd"
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/llsd"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // Inventory over the AIS v3 capability.

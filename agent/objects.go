@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // What the simulator says about the objects around the avatar is said

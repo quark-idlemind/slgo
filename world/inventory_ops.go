@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"slgo/llsd"
+	"github.com/quark-idlemind/slgo/llsd"
 
-	"slgo/agent"
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // Inventory operations that change something, as opposed to reading it.

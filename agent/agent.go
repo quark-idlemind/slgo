@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // An Agent is a live UDP circuit to one simulator.

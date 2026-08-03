@@ -14,7 +14,7 @@ syntax = "proto3";
 // be restarted as often as you like without the grid noticing.
 package slgo.v1;
 
-option go_package = "slgo/proto/slgov1";
+option go_package = "github.com/quark-idlemind/slgo/proto/slgov1";
 
 service Grid {
   // Login authenticates a caller, BOTH WAYS, before anything else is

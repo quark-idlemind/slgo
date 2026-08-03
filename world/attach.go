@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // Attachment points.  Body points are 1 to 30; the HUD points carry on

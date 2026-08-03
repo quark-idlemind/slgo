@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // TextureEntry is how an object's appearance travels: one blob in

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"slgo/llsd"
+	"github.com/quark-idlemind/slgo/llsd"
 )
 
 // eqServer is a simulator's end of the event queue: it holds a poll

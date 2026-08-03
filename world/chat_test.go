@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // newTestWorld builds enough of a World to exercise the subscription

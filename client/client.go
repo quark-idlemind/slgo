@@ -14,18 +14,18 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"github.com/quark-idlemind/slgo/auth"
 	"google.golang.org/grpc/credentials"
-	"slgo/auth"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
 
-	"slgo/agent"
-	"slgo/llsd"
-	"slgo/msg"
-	pb "slgo/proto/slgov1"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/llsd"
+	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // Conn is a connection to a server.

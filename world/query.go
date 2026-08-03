@@ -6,9 +6,9 @@ import (
 	"sort"
 	"time"
 
-	"slgo/agent"
-	"slgo/msg"
-	pb "slgo/proto/slgov1"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // Presence is where the avatar is and how far it is being asked to

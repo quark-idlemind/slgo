@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // Nothing in msg or client keeps per-connection state at package

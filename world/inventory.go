@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"slgo/agent"
-	"slgo/client"
-	"slgo/llsd"
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/llsd"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // Asset and inventory type numbers, from the viewer's llassettype.h

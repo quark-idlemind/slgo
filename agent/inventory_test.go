@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // aisServer serves a synthetic inventory tree over the AIS v3 shape.

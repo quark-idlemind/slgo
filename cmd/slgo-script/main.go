@@ -47,10 +47,10 @@ import (
 	"sync"
 	"time"
 
-	"slgo/agent"
-	"slgo/client"
-	"slgo/llsd"
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/llsd"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 var (

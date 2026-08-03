@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // sendXfer builds the message a simulator would send for one packet.

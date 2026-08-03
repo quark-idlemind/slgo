@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // TestLiveLogin logs in to a real grid, stays a moment, and logs out.

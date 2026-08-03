@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // AgentUpdate is how the simulator learns where the avatar is looking

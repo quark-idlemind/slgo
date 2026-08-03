@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"slgo/agent"
-	"slgo/client"
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 var (

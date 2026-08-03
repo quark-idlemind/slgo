@@ -2432,7 +2432,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x06Region\x12\x16.slgo.v1.RegionRequest\x1a\x13.slgo.v1.RegionInfo\x126\n" +
 	"\x05Flush\x12\x15.slgo.v1.FlushRequest\x1a\x16.slgo.v1.FlushResponse\x120\n" +
 	"\x03Cap\x12\x13.slgo.v1.CapRequest\x1a\x14.slgo.v1.CapResponse\x123\n" +
-	"\x04Send\x12\x14.slgo.v1.SendRequest\x1a\x15.slgo.v1.SendResponseB\x13Z\x11slgo/proto/slgov1b\x06proto3"
+	"\x04Send\x12\x14.slgo.v1.SendRequest\x1a\x15.slgo.v1.SendResponseB-Z+github.com/quark-idlemind/slgo/proto/slgov1b\x06proto3"
 
 var (
 	file_slgo_proto_rawDescOnce sync.Once

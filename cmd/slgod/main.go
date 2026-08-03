@@ -20,10 +20,10 @@ import (
 	"syscall"
 	"time"
 
-	"slgo/agent"
-	"slgo/auth"
-	"slgo/msg"
-	"slgo/server"
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/auth"
+	"github.com/quark-idlemind/slgo/msg"
+	"github.com/quark-idlemind/slgo/server"
 )
 
 func main() {

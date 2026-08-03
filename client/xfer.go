@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // The xfer protocol is how a file is pulled off a simulator over UDP.

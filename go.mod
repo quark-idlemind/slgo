@@ -1,4 +1,4 @@
-module slgo
+module github.com/quark-idlemind/slgo
 
 go 1.26.1
 

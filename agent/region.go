@@ -3,7 +3,7 @@ package agent
 import (
 	"sync"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // The region introduces itself once, in RegionHandshake, and never

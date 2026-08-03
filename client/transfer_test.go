@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"slgo/msg"
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 func infoMsg(id msg.UUID, size, status int32) *Message {

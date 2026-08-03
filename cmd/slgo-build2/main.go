@@ -9,8 +9,8 @@ import (
 	"log"
 	"time"
 
-	"slgo/msg"
-	"slgo/world"
+	"github.com/quark-idlemind/slgo/msg"
+	"github.com/quark-idlemind/slgo/world"
 )
 
 var (

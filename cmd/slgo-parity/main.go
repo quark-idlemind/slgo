@@ -22,7 +22,7 @@ import (
 	"os"
 	"time"
 
-	"slgo/world"
+	"github.com/quark-idlemind/slgo/world"
 )
 
 const source = `default {
