@@ -154,6 +154,8 @@ func parseProfile(r *os.File) (Login, error) {
 			l.Version = value
 		case "mac":
 			l.MAC = value
+		case "id0":
+			l.ID0 = value
 		case "platform":
 			l.Platform = value
 		case "options":
@@ -206,6 +208,7 @@ func SaveProfile(name string, l Login) error {
 	write("channel", l.Channel)
 	write("version", l.Version)
 	write("mac", l.MAC)
+	write("id0", l.ID0)
 	write("platform", l.Platform)
 	if len(l.Options) > 0 {
 		write("options", strings.Join(l.Options, ", "))

@@ -230,6 +230,42 @@ func TestLoginBodyIsWellFormedXML(t *testing.T) {
 	}
 }
 
+// TestLoginBodyCarriesMachine: the login server wants to know which
+// computer this is, and a missing id0 is not the same as a blank one.
+func TestLoginBodyCarriesMachine(t *testing.T) {
+	l := Login{
+		First: "Example", Last: "Resident", Password: "secret",
+		MAC: "02:1B:9C:4E:77:A3",
+		ID0: "5e027e577e57c0deb52d5fd2dded42e5",
+	}
+	b, err := l.body()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := decodeMethodCallForTest(b)
+	if err != nil {
+		t.Fatalf("generated body does not parse: %v\n%s", err, b)
+	}
+	if v["mac"] != l.MAC {
+		t.Errorf("mac = %v, want %q", v["mac"], l.MAC)
+	}
+	if v["id0"] != l.ID0 {
+		t.Errorf("id0 = %v, want %q", v["id0"], l.ID0)
+	}
+
+	l.ID0 = ""
+	b, err = l.body()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, err = decodeMethodCallForTest(b); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := v["id0"]; ok {
+		t.Errorf("an unset id0 was sent anyway: %v", v["id0"])
+	}
+}
+
 func TestLoginAgainstServer(t *testing.T) {
 	body := fixture(t)
 	var gotBody []byte

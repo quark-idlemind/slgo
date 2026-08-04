@@ -392,6 +392,27 @@ the only form that goes over the wire, so nothing is lost, and a
 password that may be used elsewhere stays off the disk. Plain text in
 the file works too and is hashed on the way out.
 
+The login server also asks which computer this is: `mac`, the network
+card's address, and `id0`, a digest of the first disk's serial number.
+A viewer reads both off the hardware. slgod has none to read -- and
+reading this host's would hand Linden Lab an identifier shared with
+every other program on the machine -- so it invents a pair on its first
+run and keeps it in its own directory, separate from the profiles
+because it describes the machine rather than an account:
+
+    ~/.config/slgod/config      mode 600
+
+    mac = 02:1B:9C:4E:77:A3
+    id0 = 5e027e577e57c0deb52d5fd2dded42e5
+
+Keeping it matters more than what it is. A pair that changes every
+login looks like a different computer every time, which is what an
+abuser looks like; one that never changes looks like an ordinary
+resident with one computer. The address is drawn from the locally
+administered range, so no real card can ever have it. A profile may set
+`mac` and `id0` of its own for an account that has always logged in from
+somewhere else, and those win.
+
 `Connect` dials the simulator, starts the receiver, sender and
 dispatcher, and runs the handshake: `UseCircuitCode` to open the
 circuit, then `CompleteAgentMovement`, which the simulator answers with

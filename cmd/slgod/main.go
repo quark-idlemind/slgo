@@ -5,6 +5,9 @@
 // Each argument names a profile under ~/.config/slgo.  The connections
 // stay up until the process is signalled; clients attach and detach
 // freely without the grid noticing.
+//
+// slgod's own settings -- the machine identity it presents to the login
+// server -- live in ~/.config/slgod/config, written on the first run.
 package main
 
 import (
@@ -50,6 +53,15 @@ func main() {
 
 	srv := server.New()
 
+	// Which computer the login server is told this is.  Made up once
+	// and kept, so every login comes from the same machine; see
+	// machine.go.
+	mach, machPath, err := loadMachineID()
+	if err != nil {
+		log.Fatalf("cannot start: %v", err)
+	}
+	log.Printf("machine %s, id0 %s (from %s)", mach.MAC, mach.ID0, machPath)
+
 	for _, name := range flag.Args() {
 		login, err := agent.LoadProfile(name)
 		if err != nil {
@@ -60,6 +72,14 @@ func main() {
 		}
 		if login.Channel == "" {
 			login.Channel = "slgo"
+		}
+		// A profile may name its own, for an account that has
+		// always logged in from somewhere else.
+		if login.MAC == "" {
+			login.MAC = mach.MAC
+		}
+		if login.ID0 == "" {
+			login.ID0 = mach.ID0
 		}
 
 		opts := agent.Options{

@@ -34,7 +34,16 @@ type Login struct {
 	Channel string
 	Version string
 
+	// MAC and ID0 are the machine the login server is told this is.
+	// A viewer reads them off the hardware -- the MAC address, and a
+	// digest of the first disk's serial number -- and Linden Lab
+	// takes the pair as the identity of the computer.  Headless
+	// there is no hardware to read, so they are made up; what counts
+	// is that they do not change from one login to the next.  ID0 is
+	// left out of the request when it is empty rather than sent
+	// blank.  slgod keeps a pair for this; see cmd/slgod/machine.go.
 	MAC      string
+	ID0      string
 	Platform string
 
 	// URL defaults to DefaultLoginURL.
@@ -174,7 +183,7 @@ func (l Login) body() ([]byte, error) {
 		platform = "lnx"
 	}
 
-	for _, kv := range [][2]string{
+	fields := [][2]string{
 		{"first", l.First},
 		{"last", l.Last},
 		{"passwd", hashPassword(l.Password)},
@@ -185,7 +194,14 @@ func (l Login) body() ([]byte, error) {
 		{"platform", platform},
 		{"agree_to_tos", "true"},
 		{"read_critical", "true"},
-	} {
+	}
+	// An empty id0 is not the same as no id0: it says the machine has
+	// no identity, which no viewer ever reports.
+	if l.ID0 != "" {
+		fields = append(fields, [2]string{"id0", l.ID0})
+	}
+
+	for _, kv := range fields {
 		if err := member(kv[0], kv[1]); err != nil {
 			return nil, err
 		}
