@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"strconv"
 )
 
 // decodeMethodCallForTest reads a methodCall of the shape Login.body
@@ -32,6 +33,10 @@ func decodeMethodCallForTest(b []byte) (map[string]string, error) {
 		switch t := v.(type) {
 		case string:
 			out[k] = t
+		case int64:
+			// <int> members, such as address_size, are
+			// compared as the digits they were sent as.
+			out[k] = strconv.FormatInt(t, 10)
 		case []any:
 			for i, e := range t {
 				out[fmt.Sprintf("%s[%d]", k, i)] = fmt.Sprint(e)

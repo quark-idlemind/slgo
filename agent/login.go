@@ -42,9 +42,22 @@ type Login struct {
 	// is that they do not change from one login to the next.  ID0 is
 	// left out of the request when it is empty rather than sent
 	// blank.  slgod keeps a pair for this; see cmd/slgod/machine.go.
-	MAC      string
-	ID0      string
-	Platform string
+	MAC string
+	ID0 string
+
+	// Platform is "mac", "win" or "lnx", and the two that follow
+	// describe the operating system: a dotted version, and the name
+	// a human would recognise -- "15.7.7" and "macOS 15.7.7".  All
+	// three default to the host this is running on, since claiming
+	// one system in Platform and another in PlatformString is a
+	// worse answer than claiming nothing.
+	Platform        string
+	PlatformVersion string
+	PlatformString  string
+
+	// AddressSize is the pointer width, 32 or 64, and defaults to
+	// this build's.
+	AddressSize int
 
 	// URL defaults to DefaultLoginURL.
 	URL string
@@ -94,14 +107,38 @@ func (a *Account) SimAddr() *net.UDPAddr {
 }
 
 // LoginError is a refusal from the login server.
+//
+// Reason is the coarse class -- "key" for a wrong password, "presence"
+// for a session that has not finished ending, "tos", "critical",
+// "update" -- and Message is a sentence written for a person.
+//
+// MessageID and MessageArgs are the same refusal in a form a program
+// can act on, and arrive because the login asked for extended_errors:
+// an identifier such as "LoginFailedAccountSuspended", and the values
+// that would fill in the blanks of its sentence, such as TIME for a
+// suspension or VERSION for a client too old to let in.  The login
+// server does not name every refusal, so both may be empty even when
+// Message is not.
 type LoginError struct {
-	Reason  string
-	Message string
+	Reason      string
+	Message     string
+	MessageID   string
+	MessageArgs map[string]any
 }
 
 func (e *LoginError) Error() string {
-	if e.Reason != "" {
-		return fmt.Sprintf("login refused (%s): %s", e.Reason, e.Message)
+	// The identifier goes first when there is one: it is the part
+	// worth matching on, and the sentence can be long.
+	what := e.Reason
+	if e.MessageID != "" {
+		if what == "" {
+			what = e.MessageID
+		} else {
+			what += ", " + e.MessageID
+		}
+	}
+	if what != "" {
+		return fmt.Sprintf("login refused (%s): %s", what, e.Message)
 	}
 	return "login refused: " + e.Message
 }
@@ -166,6 +203,12 @@ func (l Login) body() ([]byte, error) {
 		return nil
 	}
 
+	// A viewer sends numbers as <int>, and booleans as <int> too --
+	// its LLSD layer turns true into 1 on the way out.
+	intMember := func(name string, value int) {
+		fmt.Fprintf(&b, "<member><name>%s</name><value><int>%d</int></value></member>\n", name, value)
+	}
+
 	version := l.Version
 	if version == "" {
 		version = "slgo 0.1"
@@ -178,9 +221,23 @@ func (l Login) body() ([]byte, error) {
 	if mac == "" {
 		mac = "00:EA:7C:A7:DE:AD"
 	}
+
+	hostKey, hostVersion, hostName := hostPlatform()
 	platform := l.Platform
 	if platform == "" {
-		platform = "lnx"
+		platform = hostKey
+	}
+	platformVersion := l.PlatformVersion
+	platformString := l.PlatformString
+	// The two descriptions of the operating system travel together:
+	// filling in one from the host while the other was set by hand
+	// would describe two different computers.
+	if platformVersion == "" && platformString == "" {
+		platformVersion, platformString = hostVersion, hostName
+	}
+	size := l.AddressSize
+	if size == 0 {
+		size = addressSize()
 	}
 
 	fields := [][2]string{
@@ -196,9 +253,16 @@ func (l Login) body() ([]byte, error) {
 		{"read_critical", "true"},
 	}
 	// An empty id0 is not the same as no id0: it says the machine has
-	// no identity, which no viewer ever reports.
+	// no identity, which no viewer ever reports.  The same goes for
+	// an operating system nobody could name.
 	if l.ID0 != "" {
 		fields = append(fields, [2]string{"id0", l.ID0})
+	}
+	if platformVersion != "" {
+		fields = append(fields, [2]string{"platform_version", platformVersion})
+	}
+	if platformString != "" {
+		fields = append(fields, [2]string{"platform_string", platformString})
 	}
 
 	for _, kv := range fields {
@@ -206,6 +270,13 @@ func (l Login) body() ([]byte, error) {
 			return nil, err
 		}
 	}
+
+	intMember("address_size", size)
+
+	// extended_errors asks the login server to name a refusal --
+	// message_id and message_args -- rather than only describe it in
+	// a sentence meant for a human.  See LoginError.
+	intMember("extended_errors", 1)
 
 	// The login server answers only what it is asked, and a field it was
 	// not asked for comes back missing rather than empty -- which reads
@@ -283,7 +354,15 @@ func accountFrom(m map[string]any) (*Account, error) {
 	}
 
 	if getString(m, "login") != "true" {
-		return a, &LoginError{Reason: a.Reason, Message: a.Message}
+		e := &LoginError{
+			Reason:    a.Reason,
+			Message:   a.Message,
+			MessageID: getString(m, "message_id"),
+		}
+		if v, ok := lookup(m, "message_args"); ok {
+			e.MessageArgs, _ = v.(map[string]any)
+		}
+		return a, e
 	}
 
 	var err error

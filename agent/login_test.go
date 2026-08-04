@@ -2,10 +2,12 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -263,6 +265,109 @@ func TestLoginBodyCarriesMachine(t *testing.T) {
 	}
 	if _, ok := v["id0"]; ok {
 		t.Errorf("an unset id0 was sent anyway: %v", v["id0"])
+	}
+}
+
+// TestLoginBodyDescribesTheOS: the operating system fields default to
+// the host, and describe one computer rather than two.
+func TestLoginBodyDescribesTheOS(t *testing.T) {
+	b, err := Login{First: "A", Last: "B", Password: "x"}.body()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := decodeMethodCallForTest(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key, version, name := hostPlatform()
+	if v["platform"] != key {
+		t.Errorf("platform = %q, want %q", v["platform"], key)
+	}
+	if v["platform_version"] != version {
+		t.Errorf("platform_version = %q, want %q", v["platform_version"], version)
+	}
+	if v["platform_string"] != name {
+		t.Errorf("platform_string = %q, want %q", v["platform_string"], name)
+	}
+	if v["address_size"] != strconv.Itoa(addressSize()) {
+		t.Errorf("address_size = %q, want %d", v["address_size"], addressSize())
+	}
+	// A viewer always asks for these, so a refusal can be named.
+	if v["extended_errors"] != "1" {
+		t.Errorf("extended_errors = %q, want 1", v["extended_errors"])
+	}
+
+	// Set by hand, both halves are kept.
+	b, err = Login{
+		First: "A", Last: "B", Password: "x",
+		Platform: "win", PlatformVersion: "10.0.19045", PlatformString: "Microsoft Windows 10 64-bit",
+		AddressSize: 32,
+	}.body()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, err = decodeMethodCallForTest(b); err != nil {
+		t.Fatal(err)
+	}
+	if v["platform"] != "win" || v["platform_version"] != "10.0.19045" ||
+		v["platform_string"] != "Microsoft Windows 10 64-bit" || v["address_size"] != "32" {
+		t.Errorf("hand written platform not kept: %v", v)
+	}
+}
+
+func TestDottedVersion(t *testing.T) {
+	cases := map[string]string{
+		"15.7.7":           "15.7.7",
+		"15.7":             "15.7.0",
+		"15":               "15.0.0",
+		"6.8.0-45-generic": "6.8.0",
+		"6.8.0":            "6.8.0",
+		"5.15.0-generic":   "5.15.0",
+		"24.6.0":           "24.6.0",
+		"":                 "",
+		"unknown":          "",
+	}
+	for in, want := range cases {
+		if got := dottedVersion(in); got != want {
+			t.Errorf("dottedVersion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestLoginRefusedNamesTheReason: what extended_errors is for.  A
+// refusal that carries a message_id is one a program can act on, rather
+// than a sentence it would have to match.
+func TestLoginRefusedNamesTheReason(t *testing.T) {
+	const refused = `<?xml version="1.0"?><methodResponse><params><param><value><struct>
+	  <member><name>login</name><value><string>false</string></value></member>
+	  <member><name>reason</name><value><string>presence</string></value></member>
+	  <member><name>message</name><value><string>Your account is suspended until 2026-08-05.</string></value></member>
+	  <member><name>message_id</name><value><string>LoginFailedAccountSuspended</string></value></member>
+	  <member><name>message_args</name><value><struct>
+	    <member><name>TIME</name><value><string>2026-08-05T00:00:00Z</string></value></member>
+	  </struct></value></member>
+	</struct></value></param></params></methodResponse>`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, refused)
+	}))
+	defer srv.Close()
+
+	_, err := Login{First: "A", Last: "B", Password: "x", URL: srv.URL}.Do(context.Background())
+	var le *LoginError
+	if !errors.As(err, &le) {
+		t.Fatalf("error was %T: %v", err, err)
+	}
+	if le.MessageID != "LoginFailedAccountSuspended" {
+		t.Errorf("message_id = %q", le.MessageID)
+	}
+	if le.MessageArgs["TIME"] != "2026-08-05T00:00:00Z" {
+		t.Errorf("message_args = %v", le.MessageArgs)
+	}
+	// The identifier is the part worth reading first.
+	if !strings.Contains(le.Error(), "presence, LoginFailedAccountSuspended") {
+		t.Errorf("error should name both: %v", le)
 	}
 }
 

@@ -413,6 +413,24 @@ administered range, so no real card can ever have it. A profile may set
 `mac` and `id0` of its own for an account that has always logged in from
 somewhere else, and those win.
 
+The operating system is described the way a viewer describes it --
+`platform`, `platform_version`, `platform_string` and `address_size`,
+so `mac`, `15.7.7`, `macOS 15.7.7`, `64` -- all four taken from the host
+this is running on, since naming one system in `platform` and another
+in `platform_string` would be a worse answer than naming none. A profile
+may override them, as a set.
+
+The login also asks for `extended_errors`, which is what makes a refusal
+answerable in code: alongside the sentence meant for a person, the
+server names it, and `LoginError.MessageID` and `.MessageArgs` carry
+that -- `LoginFailedAccountSuspended` with the `TIME` it ends, rather
+than a string to match on.
+
+[doc/login-parameters.md](doc/login-parameters.md) is the full catalogue
+of what a viewer sends, read out of the Firestorm source: every
+parameter, the options array, the refusal reasons, and which of them we
+deliberately do not send.
+
 `Connect` dials the simulator, starts the receiver, sender and
 dispatcher, and runs the handshake: `UseCircuitCode` to open the
 circuit, then `CompleteAgentMovement`, which the simulator answers with

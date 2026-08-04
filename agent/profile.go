@@ -158,6 +158,10 @@ func parseProfile(r *os.File) (Login, error) {
 			l.ID0 = value
 		case "platform":
 			l.Platform = value
+		case "platform_version":
+			l.PlatformVersion = value
+		case "platform_string":
+			l.PlatformString = value
 		case "options":
 			for _, o := range strings.Split(value, ",") {
 				if o = strings.TrimSpace(o); o != "" {
@@ -210,6 +214,8 @@ func SaveProfile(name string, l Login) error {
 	write("mac", l.MAC)
 	write("id0", l.ID0)
 	write("platform", l.Platform)
+	write("platform_version", l.PlatformVersion)
+	write("platform_string", l.PlatformString)
 	if len(l.Options) > 0 {
 		write("options", strings.Join(l.Options, ", "))
 	}
