@@ -35,13 +35,19 @@ type Login struct {
 	Version string
 
 	// MAC and ID0 are the machine the login server is told this is.
-	// A viewer reads them off the hardware -- the MAC address, and a
-	// digest of the first disk's serial number -- and Linden Lab
-	// takes the pair as the identity of the computer.  Headless
-	// there is no hardware to read, so they are made up; what counts
-	// is that they do not change from one login to the next.  ID0 is
-	// left out of the request when it is empty rather than sent
-	// blank.  slgod keeps a pair for this; see cmd/slgod/machine.go.
+	// A viewer reads them off the hardware -- the MAC address, and
+	// the first disk's serial number -- and Linden Lab takes the
+	// pair as the identity of the computer.  Headless there is no
+	// hardware to read, so they are made up; what counts is that
+	// they do not change from one login to the next.  slgod keeps a
+	// pair for this; see cmd/slgod/machine.go.
+	//
+	// Neither is sent as it stands.  A viewer sends the md5 hex of
+	// each, so MAC is hashed on the way out -- an address here, a
+	// digest on the wire -- and ID0 is expected to be a digest
+	// already, since the serial it is made from never leaves the
+	// machine that has one.  ID0 is left out of the request when it
+	// is empty rather than sent blank.
 	MAC string
 	ID0 string
 
@@ -141,6 +147,30 @@ func (e *LoginError) Error() string {
 		return fmt.Sprintf("login refused (%s): %s", what, e.Message)
 	}
 	return "login refused: " + e.Message
+}
+
+// hashMAC returns the form the login server is actually sent, which is
+// not an address: a viewer md5s the six bytes and sends the 32 hex
+// digit digest, so the field named "mac" has never held one.  See
+// llhasheduniqueid.cpp, and doc/login-parameters.md.
+//
+// A digest passes through, the way hashPassword passes through a "$1$"
+// that is already a digest, so a value copied out of a viewer's log
+// works.  Anything that is neither is hashed as it stands, so that
+// whatever is configured, what goes over the wire has the shape a
+// viewer's does.
+func hashMAC(s string) string {
+	if len(s) == 32 {
+		if _, err := hex.DecodeString(s); err == nil {
+			return strings.ToLower(s)
+		}
+	}
+	if hw, err := net.ParseMAC(s); err == nil && len(hw) == 6 {
+		sum := md5.Sum(hw)
+		return hex.EncodeToString(sum[:])
+	}
+	sum := md5.Sum([]byte(s))
+	return hex.EncodeToString(sum[:])
 }
 
 // hashPassword returns the "$1$" + md5 form the login server wants,
@@ -247,7 +277,7 @@ func (l Login) body() ([]byte, error) {
 		{"start", startLocation(l.Start)},
 		{"version", version},
 		{"channel", channel},
-		{"mac", mac},
+		{"mac", hashMAC(mac)},
 		{"platform", platform},
 		{"agree_to_tos", "true"},
 		{"read_critical", "true"},

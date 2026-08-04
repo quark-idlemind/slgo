@@ -33,7 +33,7 @@ The "slgo" column is what `agent.Login.body` sends today.
 | `platform_version` | dotted OS version, `LLOSInfo::getOSVersionString` | yes, from the host |
 | `platform_string` | readable OS name, `LLOSInfo::getOSStringSimple` | yes, from the host |
 | `address_size` | `32` or `64`, the build's pointer width | yes |
-| `mac` | **md5 hex of the machine's unique id** -- not a MAC address | yes, but see below |
+| `mac` | **md5 hex of the machine's unique id** -- not a MAC address | yes, hashed on the way out |
 | `id0` | **md5 hex of the hardware serial number** | yes |
 | `agree_to_tos` | `0` at first; `1` only after the user accepts the dialog | yes, always `true` |
 | `read_critical` | `0` at first; `1` only after the user reads the notice | yes, always `true` |
@@ -69,13 +69,17 @@ the md5 of `IOPlatformSerialNumber`; on Windows
 (`llappviewerwin32.cpp:1266`) the volume serial. Same shape: 32 hex
 digits.
 
-So a real viewer's pair is two md5 digests. **We send a colon-form MAC**
-(`7E:52:2B:3C:57:06`) and a correctly shaped `id0`. It works -- the
-login server accepts it -- but it is a shape no viewer produces, and it
-is the one field that still marks our logins as not-a-viewer. Changing
-it is a one-line change to `randomMAC` in `cmd/slgod/machine.go`, and it
-could only be done once: the pair is the identity of the computer, and
-changing it later reads as the accounts moving to a new machine. See
+So a real viewer's pair is two md5 digests, and so is ours. `agent.Login`
+hashes `MAC` on the way out (`hashMAC`), which puts the split in the
+useful place: `~/.config/slgod/config` keeps the invented address
+`7E:52:2B:3C:57:06`, which a person can read and check, and the wire
+carries `3d877e577e57c0de5ee847431f341bc5`, which is what a viewer would
+carry. A value that is already 32 hex digits passes straight through, so
+a digest lifted out of a viewer's log can be used as it stands.
+
+We sent the colon form until August 2026. Correcting it moved the
+accounts to a new computer once, as any change to the pair does -- which
+is why it is worth getting right early and then never touching. See
 [the machine identity](../cmd/slgod/machine.go).
 
 ## Types

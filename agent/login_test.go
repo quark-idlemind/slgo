@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -248,8 +249,10 @@ func TestLoginBodyCarriesMachine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generated body does not parse: %v\n%s", err, b)
 	}
-	if v["mac"] != l.MAC {
-		t.Errorf("mac = %v, want %q", v["mac"], l.MAC)
+	// The address is hashed on the way out; TestHashMAC checks the
+	// digest itself.
+	if v["mac"] != hashMAC(l.MAC) {
+		t.Errorf("mac = %v, want %q", v["mac"], hashMAC(l.MAC))
 	}
 	if v["id0"] != l.ID0 {
 		t.Errorf("id0 = %v, want %q", v["id0"], l.ID0)
@@ -265,6 +268,55 @@ func TestLoginBodyCarriesMachine(t *testing.T) {
 	}
 	if _, ok := v["id0"]; ok {
 		t.Errorf("an unset id0 was sent anyway: %v", v["id0"])
+	}
+}
+
+// TestHashMAC: the field named "mac" carries a digest, never an
+// address.  The expected values were produced outside this package, by
+// piping the six raw bytes through md5(1).
+func TestHashMAC(t *testing.T) {
+	cases := map[string]string{
+		"7E:52:2B:3C:57:06": "3d877e577e57c0de5ee847431f341bc5",
+		"7e:52:2b:3c:57:06": "3d877e577e57c0de5ee847431f341bc5", // case of the address does not matter
+		"7E-52-2B-3C-57-06": "3d877e577e57c0de5ee847431f341bc5", // nor does its separator
+		"00:EA:7C:A7:DE:AD": "ef427e577e57c0de79bee7a6c8f7dd25", // the built in default
+		// A digest passes through, lowercased.
+		"3d877e577e57c0de5ee847431f341bc5": "3d877e577e57c0de5ee847431f341bc5",
+		"3D877E577E57C0DE5EE847431F341BC5": "3d877e577e57c0de5ee847431f341bc5",
+	}
+	for in, want := range cases {
+		if got := hashMAC(in); got != want {
+			t.Errorf("hashMAC(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	// Whatever it is handed, what comes out is viewer shaped.
+	for _, in := range []string{"", "not an address", "00:11:22"} {
+		got := hashMAC(in)
+		if len(got) != 32 {
+			t.Errorf("hashMAC(%q) = %q, want 32 hex digits", in, got)
+		}
+		if _, err := hex.DecodeString(got); err != nil {
+			t.Errorf("hashMAC(%q) = %q, not hex", in, got)
+		}
+	}
+}
+
+// TestLoginBodySendsHashedMAC: what actually goes over the wire.
+func TestLoginBodySendsHashedMAC(t *testing.T) {
+	b, err := Login{
+		First: "A", Last: "B", Password: "x",
+		MAC: "7E:52:2B:3C:57:06",
+	}.body()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := decodeMethodCallForTest(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v["mac"] != "3d877e577e57c0de5ee847431f341bc5" {
+		t.Errorf("mac = %q, want the digest, not the address", v["mac"])
 	}
 }
 

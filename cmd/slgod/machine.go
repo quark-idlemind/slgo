@@ -1,8 +1,11 @@
 package main
 
 // The login server asks a client which computer it is running on: "mac",
-// the network card's address, and "id0", a digest of the first disk's
-// serial number.  A viewer reads both off the hardware.
+// from the network card's address, and "id0", from the first disk's
+// serial number.  A viewer reads both off the hardware and sends the
+// md5 of each, so what travels is a pair of digests -- the hashing
+// happens in agent.Login, and what is kept here is the address itself,
+// which is the readable half and the one worth being able to check.
 //
 // slgod has no hardware to read -- and reading this host's would hand
 // Linden Lab an identifier that follows the operator to every other
@@ -28,7 +31,7 @@ import (
 
 // machineID is the computer slgod claims to be.
 type machineID struct {
-	MAC string // 02:xx:xx:xx:xx:xx
+	MAC string // 02:xx:xx:xx:xx:xx, hashed before it is sent
 	ID0 string // 32 hex digits, the shape a viewer's serial digest has
 }
 

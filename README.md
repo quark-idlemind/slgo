@@ -413,6 +413,14 @@ administered range, so no real card can ever have it. A profile may set
 `mac` and `id0` of its own for an account that has always logged in from
 somewhere else, and those win.
 
+Neither is sent as it stands. Despite the name, the `mac` a viewer sends
+is not an address but the md5 of one, and `id0` is the md5 of a disk
+serial, so both are 32 hex digits on the wire. The address is hashed on
+the way out, which leaves the file holding the half a person can read
+and check while the grid sees the half a viewer would send. A value that
+is already a digest passes through untouched, the way an already hashed
+password does.
+
 The operating system is described the way a viewer describes it --
 `platform`, `platform_version`, `platform_string` and `address_size`,
 so `mac`, `15.7.7`, `macOS 15.7.7`, `64` -- all four taken from the host
