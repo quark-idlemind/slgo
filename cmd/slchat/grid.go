@@ -504,10 +504,35 @@ type found struct {
 // name message when it is not, since an exact match is better than a
 // refusal.
 func (a *App) Lookup(ctx context.Context, want string) ([]found, error) {
+	var (
+		out []found
+		err error
+	)
 	if a.conn.HasCap(capAvatarPicker) {
-		return a.lookupByCap(ctx, want)
+		out, err = a.lookupByCap(ctx, want)
+	} else {
+		out, err = a.lookupByName(ctx, want)
 	}
-	return a.lookupByName(ctx, want)
+	sortFound(out)
+	return out, err
+}
+
+// sortFound puts the results in the order they will be read in.
+//
+// What comes back is in whatever order the search felt like -- ninety
+// five people called Quark arrived as Ling, Sabra, Blister, Yifu --
+// which is no order at all to look a name up in.  Case is ignored,
+// since "quark" and "QuArK" are the same name to anybody reading the
+// list, and a tie is settled by the name as written so that two
+// spellings of it never swap places between one search and the next.
+func sortFound(fs []found) {
+	sort.Slice(fs, func(i, j int) bool {
+		li, lj := strings.ToLower(fs[i].Name), strings.ToLower(fs[j].Name)
+		if li != lj {
+			return li < lj
+		}
+		return fs[i].Name < fs[j].Name
+	})
 }
 
 const capAvatarPicker = "AvatarPickerSearch"

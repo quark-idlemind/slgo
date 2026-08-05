@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -184,7 +185,9 @@ func (g *fakeGrid) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapRes
 	}
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" ?><llsd><map><key>agents</key><array>`)
-	for i := 0; i < n; i++ {
+	// Backwards, the way a real search hands them over: in no order
+	// at all.  What is shown has to be sorted regardless.
+	for i := n - 1; i >= 0; i-- {
 		fmt.Fprintf(&b, `<map>`+
 			`<key>id</key><uuid>%s</uuid>`+
 			`<key>legacy_first_name</key><string>Match%02d</string>`+
@@ -574,5 +577,33 @@ func TestPTYShortListingDoesNotPage(t *testing.T) {
 	s.waitPrompt("Local> ")
 	if strings.Contains(s.text(), "--more--") {
 		t.Errorf("a short listing paged:\n%s", s.text())
+	}
+}
+
+// TestPTYLookupIsSorted: the search answers in whatever order it likes,
+// and the list has to be readable.
+func TestPTYLookupIsSorted(t *testing.T) {
+	s := start(t, 24, 80)
+
+	s.send("\x1blookup 8\r")
+	s.waitText("8 matching")
+	s.waitPrompt("Local> ")
+
+	// The names as they appear down the screen, in screen order.
+	var seen []string
+	for _, line := range s.lines() {
+		if i := strings.Index(line, "Match"); i >= 0 {
+			seen = append(seen, line[i:i+7])
+		}
+	}
+	if len(seen) != 8 {
+		t.Fatalf("saw %d names, want 8:\n%s", len(seen), s.text())
+	}
+	if !sort.StringsAreSorted(seen) {
+		t.Errorf("the listing is not in order: %v", seen)
+	}
+	// And the numbering follows it, so "im 1" is the first line.
+	if seen[0] != "Match00" || seen[7] != "Match07" {
+		t.Errorf("listing runs %v", seen)
 	}
 }
