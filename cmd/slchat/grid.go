@@ -415,20 +415,31 @@ func (a *App) instantMessage(m *msg.ImprovedInstantMessage) {
 }
 
 // friendChanged is a friend coming or going.
+//
+// The burst of these arrives seconds after logging in, before anybody
+// has had reason to ask who the ids belong to, so the name usually has
+// to be fetched before there is anything worth printing.  That happens
+// on its own goroutine: this runs on the relay, and a second spent
+// waiting here is a second of chat not being shown.
 func (a *App) friendChanged(id msg.UUID, online bool) {
-	name := a.roster.Name(id)
-	if name == "" {
-		// Ask, so the next one reads as a name, and say what we
-		// can now.
-		a.AskNames(context.Background(), []msg.UUID{id})
-		a.waitNames(context.Background(), []msg.UUID{id}, time.Second)
-		name = a.roster.NameOr(id)
+	say := func(name string) {
+		if online {
+			a.notice("%s is online", name)
+		} else {
+			a.notice("%s went offline", name)
+		}
 	}
-	if online {
-		a.notice("%s is online", name)
-	} else {
-		a.notice("%s went offline", name)
+	if name := a.roster.Name(id); name != "" {
+		say(name)
+		return
 	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		a.AskNames(ctx, []msg.UUID{id})
+		a.waitNames(ctx, []msg.UUID{id}, 10*time.Second)
+		say(a.roster.NameOr(id))
+	}()
 }
 
 // track keeps the position and region an instant message carries.

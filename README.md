@@ -636,11 +636,39 @@ Four things that cost time here:
 
 A shell for talking, on top of a session slgod is already holding:
 
-    slchat [-addr localhost:7807] [-agent example] [-prefix ESC]
+    slchat [--addr localhost:7807] [--agent example] [--prefix ESC]
 
 It starts instantly, can be stopped and started as often as you like,
 and leaves the avatar logged in when it exits, because the session is
 not its to lose.
+
+Or without the daemon at all:
+
+    slchat --direct [--first Quark] [--last Idlemind] [--start last]
+
+`--direct` (`-d`) logs in and holds the session for as long as slchat
+runs, which needs nothing set up beforehand and costs exactly what the
+daemon was for: quitting logs the avatar out, and everything the
+session learned is learned again next time. The two modes are the same
+program -- `App` talks to a `Grid`, which is either a connection to
+slgod or an `agent.Agent` in this process.
+
+Credentials are looked for before they are asked for. A profile named
+with `--agent` settles it; failing that, a profile whose `first` and
+`last` match the names given is found and used, since profiles are
+filed under a short name of your choosing rather than under the
+avatar's; failing that, one profile and no instructions means there is
+nothing to choose between. Whatever is left over is asked for, and the
+password without echo:
+
+    $ slchat --direct --first Nosuchavatar
+    Password for Nosuchavatar Resident:
+    logging in as Nosuchavatar Resident...
+    slchat: login refused (key, LoginFailedAuthenticationFailed): Sorry! ...
+
+Options are getopt style, from `github.com/pborman/options`: `-d` and
+`--direct` are the same flag, `--addr=HOST` and `--addr HOST` are the
+same argument, and short flags bundle.
 
 What is typed goes to the current session -- the region's open chat, or
 one person -- and the prompt is the name of that session, since the

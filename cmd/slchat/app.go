@@ -422,7 +422,11 @@ func (a *App) banner() {
 	if where == "" {
 		where = "an unnamed region"
 	}
-	a.term.Printf("slchat: %s in %s, through %s", a.myName, where, a.cfg.Addr)
+	if a.cfg.Direct {
+		a.term.Printf("slchat: %s in %s, logged in directly -- quitting logs out", a.myName, where)
+	} else {
+		a.term.Printf("slchat: %s in %s, through %s", a.myName, where, a.cfg.Addr)
+	}
 	a.term.Printf("        %s for a command, %s help for the list, tab to change who you are talking to",
 		KeyName(a.cfg.Prefix), KeyName(a.cfg.Prefix))
 }

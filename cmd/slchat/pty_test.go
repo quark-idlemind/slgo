@@ -36,12 +36,33 @@ import (
 // it.
 const harnessEnv = "SLCHAT_PTY_HARNESS"
 
+// askHarnessEnv runs the credential prompts instead, so that the one
+// thing only a terminal can show -- that the password is not echoed --
+// can be looked at.  It never logs in and never touches the network.
+const askHarnessEnv = "SLCHAT_ASK_HARNESS"
+
 func TestMain(m *testing.M) {
 	if os.Getenv(harnessEnv) == "1" {
 		harness()
 		return
 	}
+	if os.Getenv(askHarnessEnv) == "1" {
+		askHarness()
+		return
+	}
 	os.Exit(m.Run())
+}
+
+// askHarness prompts for credentials and prints what it was given, so
+// the test can check both what appeared on the screen and what was
+// actually read.
+func askHarness() {
+	l, err := credentials(os.Stdin, os.Stdout, "", "Nobody", "Resident", "last")
+	if err != nil {
+		fmt.Println("ERROR", err)
+		return
+	}
+	fmt.Printf("GOT first=%s last=%s password=%s\n", l.First, l.Last, l.Password)
 }
 
 var (
@@ -605,5 +626,49 @@ func TestPTYLookupIsSorted(t *testing.T) {
 	// And the numbering follows it, so "im 1" is the first line.
 	if seen[0] != "Match00" || seen[7] != "Match07" {
 		t.Errorf("listing runs %v", seen)
+	}
+}
+
+// TestPTYPasswordIsNotEchoed: the password prompt, on a terminal.
+//
+// What is typed must not appear -- not while typing and not after --
+// because a terminal that shows it leaves it in the scrollback for
+// whoever walks past, and in whatever the window was recorded into.
+func TestPTYPasswordIsNotEchoed(t *testing.T) {
+	t.Setenv(askHarnessEnv, "1")
+	// No profiles, so there is nothing on disk to answer with.
+	t.Setenv("SLGO_CONFIG_DIR", t.TempDir())
+
+	tm := goterm.New(12, 80)
+	if err := tm.Start(os.Args[0]); err != nil {
+		t.Fatalf("could not start the harness on a pty: %v", err)
+	}
+	t.Cleanup(func() { tm.Close() })
+	s := &screen{t: t, tm: tm}
+
+	// The names were given, so only the password is asked for, and the
+	// prompt says who it is for.
+	s.waitText("Password for Nobody Resident:")
+
+	const secret = "hunter2"
+	s.send(secret)
+	// Give it time to have echoed, if it were going to.
+	time.Sleep(300 * time.Millisecond)
+	if strings.Contains(s.text(), secret) {
+		t.Errorf("the password was echoed while typing:\n%s", s.text())
+	}
+
+	s.send("\r")
+	s.waitText("GOT first=Nobody")
+
+	// It was read correctly even though none of it was shown.
+	if !strings.Contains(s.text(), "password="+secret) {
+		t.Errorf("the password did not arrive:\n%s", s.text())
+	}
+	// And the prompt line never held it.
+	for _, line := range s.lines() {
+		if strings.Contains(line, "Password for") && strings.Contains(line, secret) {
+			t.Errorf("the password is on the prompt line: %q", line)
+		}
 	}
 }

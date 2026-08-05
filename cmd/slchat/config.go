@@ -21,8 +21,12 @@ import (
 // Config is what slchat needs to know before it can start.
 type Config struct {
 	Addr   string // the slgod to attach to
-	Agent  string // the profile it hosts; empty means the only one
+	Agent  string // the profile: hosted by slgod, or on disk for --direct
 	Prefix rune   // the key that starts a command
+
+	// Direct is set when this process holds the session itself,
+	// which is worth saying out loud: quitting logs the avatar out.
+	Direct bool
 }
 
 // DefaultConfig is what an empty file leaves you with.
