@@ -68,8 +68,8 @@ type Login struct {
 	// URL defaults to DefaultLoginURL.
 	URL string
 
-	// Options are the extra blocks to ask for.  inventory-root is
-	// requested by default.
+	// Options are the extra blocks to ask for.  inventory-root and
+	// buddy-list are requested by default.
 	Options []string
 
 	HTTP *http.Client
@@ -95,6 +95,11 @@ type Account struct {
 	// is set when it refuses.
 	Message string
 	Reason  string
+
+	// Buddies is the friend list, which arrives here and nowhere
+	// else.  Online status is not part of it; that comes later, as
+	// OnlineNotification.  See friends.go.
+	Buddies []Buddy
 
 	RegionX uint32
 	RegionY uint32
@@ -313,7 +318,12 @@ func (l Login) body() ([]byte, error) {
 	// exactly like a real "you have none". Group membership is NOT
 	// available here at all, asked for or not; it arrives later, on the
 	// event queue. See noteEvent.
-	opts := append([]string{"inventory-root"}, l.Options...)
+	//
+	// buddy-list is asked for always, because this is the only place it
+	// is ever offered: who your friends are is not on the circuit and
+	// cannot be asked for later, so a login that does not take it here
+	// can never know. It costs a few dozen uuids.
+	opts := append([]string{"inventory-root", "buddy-list"}, l.Options...)
 	b.WriteString("<member><name>options</name><value><array><data>\n")
 	for _, o := range opts {
 		b.WriteString("<value><string>")
@@ -429,6 +439,8 @@ func accountFrom(m map[string]any) (*Account, error) {
 	if y, ok := getInt(m, "region_y"); ok {
 		a.RegionY = uint32(y)
 	}
+
+	a.Buddies = buddiesFrom(m)
 
 	// inventory-root is an array holding one struct with a
 	// folder_id.

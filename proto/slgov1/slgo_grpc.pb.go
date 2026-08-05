@@ -42,6 +42,8 @@ const (
 	Grid_Flush_FullMethodName      = "/slgo.v1.Grid/Flush"
 	Grid_Cap_FullMethodName        = "/slgo.v1.Grid/Cap"
 	Grid_Send_FullMethodName       = "/slgo.v1.Grid/Send"
+	Grid_Friends_FullMethodName    = "/slgo.v1.Grid/Friends"
+	Grid_NoteFriend_FullMethodName = "/slgo.v1.Grid/NoteFriend"
 )
 
 // GridClient is the client API for Grid service.
@@ -97,6 +99,29 @@ type GridClient interface {
 	// Send puts one message on the circuit without opening a stream, for
 	// a client that only wants to say one thing.
 	Send(ctx context.Context, in *SendRequest, opts ...grpc.CallOption) (*SendResponse, error)
+	// Friends is who this avatar's friends are and which of them are
+	// logged in.
+	//
+	// The server holds this for the same reason it holds the region's
+	// objects: the grid says it once, to whoever was there. The list
+	// itself arrives only in the login response -- it is on no message
+	// the simulator ever sends -- and online status arrives as a burst
+	// of OnlineNotification seconds after the handshake, long before a
+	// client can attach. Neither can be asked for again.
+	Friends(ctx context.Context, in *FriendsRequest, opts ...grpc.CallOption) (*FriendsResponse, error)
+	// NoteFriend records a friendship the client watched being formed.
+	//
+	// Accepting an offer is the one case the grid never reports. The
+	// side that offers is told twice -- an instant message saying so
+	// and an OnlineNotification -- and the side that accepts is told
+	// nothing whatsoever, because it was the one that did it. A viewer
+	// has the same hole and fills it the same way, by adding the friend
+	// to its own list (LLAvatarTracker::formFriendship).
+	//
+	// So the client, which understands what it just sent, tells the
+	// server, which holds what a client restart would lose. The server
+	// still decodes nothing.
+	NoteFriend(ctx context.Context, in *NoteFriendRequest, opts ...grpc.CallOption) (*NoteFriendResponse, error)
 }
 
 type gridClient struct {
@@ -210,6 +235,26 @@ func (c *gridClient) Send(ctx context.Context, in *SendRequest, opts ...grpc.Cal
 	return out, nil
 }
 
+func (c *gridClient) Friends(ctx context.Context, in *FriendsRequest, opts ...grpc.CallOption) (*FriendsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FriendsResponse)
+	err := c.cc.Invoke(ctx, Grid_Friends_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridClient) NoteFriend(ctx context.Context, in *NoteFriendRequest, opts ...grpc.CallOption) (*NoteFriendResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(NoteFriendResponse)
+	err := c.cc.Invoke(ctx, Grid_NoteFriend_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GridServer is the server API for Grid service.
 // All implementations must embed UnimplementedGridServer
 // for forward compatibility.
@@ -263,6 +308,29 @@ type GridServer interface {
 	// Send puts one message on the circuit without opening a stream, for
 	// a client that only wants to say one thing.
 	Send(context.Context, *SendRequest) (*SendResponse, error)
+	// Friends is who this avatar's friends are and which of them are
+	// logged in.
+	//
+	// The server holds this for the same reason it holds the region's
+	// objects: the grid says it once, to whoever was there. The list
+	// itself arrives only in the login response -- it is on no message
+	// the simulator ever sends -- and online status arrives as a burst
+	// of OnlineNotification seconds after the handshake, long before a
+	// client can attach. Neither can be asked for again.
+	Friends(context.Context, *FriendsRequest) (*FriendsResponse, error)
+	// NoteFriend records a friendship the client watched being formed.
+	//
+	// Accepting an offer is the one case the grid never reports. The
+	// side that offers is told twice -- an instant message saying so
+	// and an OnlineNotification -- and the side that accepts is told
+	// nothing whatsoever, because it was the one that did it. A viewer
+	// has the same hole and fills it the same way, by adding the friend
+	// to its own list (LLAvatarTracker::formFriendship).
+	//
+	// So the client, which understands what it just sent, tells the
+	// server, which holds what a client restart would lose. The server
+	// still decodes nothing.
+	NoteFriend(context.Context, *NoteFriendRequest) (*NoteFriendResponse, error)
 	mustEmbedUnimplementedGridServer()
 }
 
@@ -302,6 +370,12 @@ func (UnimplementedGridServer) Cap(context.Context, *CapRequest) (*CapResponse, 
 }
 func (UnimplementedGridServer) Send(context.Context, *SendRequest) (*SendResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Send not implemented")
+}
+func (UnimplementedGridServer) Friends(context.Context, *FriendsRequest) (*FriendsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Friends not implemented")
+}
+func (UnimplementedGridServer) NoteFriend(context.Context, *NoteFriendRequest) (*NoteFriendResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method NoteFriend not implemented")
 }
 func (UnimplementedGridServer) mustEmbedUnimplementedGridServer() {}
 func (UnimplementedGridServer) testEmbeddedByValue()              {}
@@ -493,6 +567,42 @@ func _Grid_Send_Handler(srv interface{}, ctx context.Context, dec func(interface
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Friends_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FriendsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Friends(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Friends_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Friends(ctx, req.(*FriendsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_NoteFriend_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NoteFriendRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).NoteFriend(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_NoteFriend_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).NoteFriend(ctx, req.(*NoteFriendRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Grid_ServiceDesc is the grpc.ServiceDesc for Grid service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -535,6 +645,14 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Send",
 			Handler:    _Grid_Send_Handler,
+		},
+		{
+			MethodName: "Friends",
+			Handler:    _Grid_Friends_Handler,
+		},
+		{
+			MethodName: "NoteFriend",
+			Handler:    _Grid_NoteFriend_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

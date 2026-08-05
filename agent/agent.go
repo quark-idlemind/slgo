@@ -63,6 +63,7 @@ type Agent struct {
 	lastPacket atomic.Int64
 
 	mu          sync.RWMutex
+	friends     map[msg.UUID]*Friend
 	look        Look
 	regionName  string
 	activeGroup msg.UUID
@@ -181,6 +182,8 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 		handshook: newSignal(),
 		loggedOut: newSignal(),
 	}
+
+	a.seedFriends(acct.Buddies)
 
 	a.Send = msg.NewSender(conn)
 	a.Recv = msg.NewReceiver(conn, opts.Recv...)
@@ -432,6 +435,27 @@ func (a *Agent) register() {
 		a.position = at
 		a.mu.Unlock()
 		a.setCenter(at)
+	}, msg.Inline())
+
+	// Who is logged in arrives as one burst a few seconds after the
+	// handshake and then only as people come and go, so a session that
+	// does not keep it can never be told again.  See friends.go.
+	a.Disp.MustHandle("OnlineNotification", func(p *msg.Packet) {
+		m := p.Message.(*msg.OnlineNotification)
+		ids := make([]msg.UUID, 0, len(m.AgentBlock))
+		for _, b := range m.AgentBlock {
+			ids = append(ids, b.AgentID)
+		}
+		a.setOnline(ids, true)
+	}, msg.Inline())
+
+	a.Disp.MustHandle("OfflineNotification", func(p *msg.Packet) {
+		m := p.Message.(*msg.OfflineNotification)
+		ids := make([]msg.UUID, 0, len(m.AgentBlock))
+		for _, b := range m.AgentBlock {
+			ids = append(ids, b.AgentID)
+		}
+		a.setOnline(ids, false)
 	}, msg.Inline())
 
 	a.Disp.MustHandle("LogoutReply", func(p *msg.Packet) {

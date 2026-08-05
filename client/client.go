@@ -415,6 +415,34 @@ func (c *Conn) Objects(ctx context.Context, named, id string) (*pb.ObjectsRespon
 	})
 }
 
+// Friends asks who this avatar's friends are and which are logged in.
+//
+// The server holds it for the same reason it holds the objects: the
+// list arrives only in the login response and online status only as a
+// burst just after the handshake, so a client that attached later was
+// not there for either.
+func (c *Conn) Friends(ctx context.Context) ([]*pb.Friend, error) {
+	r, err := c.grid.Friends(ctx, &pb.FriendsRequest{Agent: c.agent})
+	if err != nil {
+		return nil, err
+	}
+	return r.Friends, nil
+}
+
+// NoteFriend tells the server about a friendship just formed.
+//
+// Accepting an offer is the one thing the grid never reports back: the
+// side that offered is told, and the side that accepted -- which is the
+// side that knows -- is told nothing.  Whoever accepts is expected to
+// remember, so this is where the remembering is put, alongside the rest
+// of what a client restart must not lose.
+func (c *Conn) NoteFriend(ctx context.Context, id msg.UUID, online bool) error {
+	_, err := c.grid.NoteFriend(ctx, &pb.NoteFriendRequest{
+		Agent: c.agent, Id: id.String(), Online: online,
+	})
+	return err
+}
+
 // Region asks what the simulator said about itself.
 func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
 	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agent})

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -450,6 +451,47 @@ func (s *Server) Region(ctx context.Context, req *pb.RegionRequest) (*pb.RegionI
 		Protocols: r.Protocols,
 		Known:     known,
 	}, nil
+}
+
+// Friends is the friend list and who is logged in.
+//
+// Held here because the grid says both once and to whoever was there:
+// the list only in the login response, online status in a burst that
+// arrives before any client can have attached.
+func (s *Server) Friends(ctx context.Context, req *pb.FriendsRequest) (*pb.FriendsResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	fs := h.Agent().Friends()
+	out := &pb.FriendsResponse{Friends: make([]*pb.Friend, 0, len(fs))}
+	for _, f := range fs {
+		out.Friends = append(out.Friends, &pb.Friend{
+			Id:          f.ID.String(),
+			Online:      f.Online,
+			RightsGiven: f.RightsGiven,
+			RightsHas:   f.RightsHas,
+		})
+	}
+	return out, nil
+}
+
+// NoteFriend records a friendship the client saw formed.
+//
+// The one thing the grid never reports is your own acceptance of an
+// offer, so this is the client handing over a fact only it was in a
+// position to know.  Nothing is decoded here; an id is an id.
+func (s *Server) NoteFriend(ctx context.Context, req *pb.NoteFriendRequest) (*pb.NoteFriendResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	id, err := msg.ParseUUID(req.Id)
+	if err != nil {
+		return nil, fmt.Errorf("server: %q is not a uuid: %w", req.Id, err)
+	}
+	h.Agent().NoteFriend(id, req.Online)
+	return &pb.NoteFriendResponse{}, nil
 }
 
 // Flush empties the object cache.

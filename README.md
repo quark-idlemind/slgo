@@ -10,6 +10,8 @@ and decode themselves.
 ## Layout
 
     cmd/msggen/         reads message_template.msg, writes Go
+    cmd/slgod/          holds grid connections, serves clients
+    cmd/slchat/         a shell for chat and instant messages
     client/profile.go   credentials under ~/.config/slgo
     client/xmlrpc.go    XML-RPC decoding
     client/llsd.go      LLSD decoding and encoding
@@ -629,6 +631,71 @@ Four things that cost time here:
   in continuously, so the first local id you have not seen before is
   often a stranger's -- which is how a notecard was once offered to
   someone else's prim, answered with "Unable to edit this!".
+
+## slchat
+
+A shell for talking, on top of a session slgod is already holding:
+
+    slchat [-addr localhost:7807] [-agent example] [-prefix ESC]
+
+It starts instantly, can be stopped and started as often as you like,
+and leaves the avatar logged in when it exits, because the session is
+not its to lose.
+
+What is typed goes to the current session -- the region's open chat, or
+one person -- and the prompt is the name of that session, since the
+prompt is the only thing standing between a private remark and a public
+one. Tab on an empty line moves to the next session; with anything
+typed it does nothing, because sending half a sentence to the wrong
+person is worse than not cycling. An instant message from somebody new
+opens a session on its own, so answering is a tab away.
+
+Everything heard is printed above the line being typed, and everything
+said is printed alongside it with the arrow the other way round:
+
+    23:56:07 < [Local] Example Resident: hello from example
+    23:56:11 > [Local] hello yourself
+    23:56:18 < [IM Quark Idlemind] are you free?
+    23:56:22 > [IM Quark Idlemind] on my way
+    23:56:30 * Quark Idlemind is online
+
+The prefix key -- ESC by default -- starts a command, and says so by
+rewriting the prompt to `command> `. Whatever was half typed is put
+aside and comes back afterwards. Any key can be the prefix, including
+a control key, since on a busy keyboard those are what is left:
+
+    ~/.config/slchat/config
+
+    addr   = localhost:7807
+    agent  = example
+    prefix = ^G
+
+The commands are `who`, `friends`, `im`, `close`, `sessions`, `local`,
+`offer`, `offers`, `accept`, `decline`, `where` and `quit`. Anything
+naming a person takes a name, part of one, a uuid, or the number from
+the last listing.
+
+### What had to move to the daemon
+
+Two things slchat cannot know for itself, because the grid says them
+once and to whoever was listening at the time:
+
+*Who your friends are* is in the login response and on no message the
+simulator ever sends, so `agent.Login` always asks for the `buddy-list`
+block. *Which of them are online* arrives as a burst of
+`OnlineNotification` seconds after the handshake, long before a client
+could have attached. Both are held by the session and read back with
+the `Friends` rpc.
+
+Forming a friendship needed one more thing, and the reason is worth
+recording. When an offer is accepted, the grid tells the side that
+*offered* -- an instant message with dialog 39, then an
+`OnlineNotification` -- and tells the side that *accepted* absolutely
+nothing, on the grounds that it was the one that did it. A viewer has
+the same hole and fills it by adding the friend to its own list
+(`LLAvatarTracker::formFriendship`). So does slchat, through the
+`NoteFriend` rpc: the client understood what it sent, the server holds
+what a client restart would lose, and the server still decodes nothing.
 
 ## Not done
 

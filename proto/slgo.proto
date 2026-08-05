@@ -77,6 +77,31 @@ service Grid {
   // Send puts one message on the circuit without opening a stream, for
   // a client that only wants to say one thing.
   rpc Send(SendRequest) returns (SendResponse);
+
+  // Friends is who this avatar's friends are and which of them are
+  // logged in.
+  //
+  // The server holds this for the same reason it holds the region's
+  // objects: the grid says it once, to whoever was there. The list
+  // itself arrives only in the login response -- it is on no message
+  // the simulator ever sends -- and online status arrives as a burst
+  // of OnlineNotification seconds after the handshake, long before a
+  // client can attach. Neither can be asked for again.
+  rpc Friends(FriendsRequest) returns (FriendsResponse);
+
+  // NoteFriend records a friendship the client watched being formed.
+  //
+  // Accepting an offer is the one case the grid never reports. The
+  // side that offers is told twice -- an instant message saying so
+  // and an OnlineNotification -- and the side that accepts is told
+  // nothing whatsoever, because it was the one that did it. A viewer
+  // has the same hole and fills it the same way, by adding the friend
+  // to its own list (LLAvatarTracker::formFriendship).
+  //
+  // So the client, which understands what it just sent, tells the
+  // server, which holds what a client restart would lose. The server
+  // still decodes nothing.
+  rpc NoteFriend(NoteFriendRequest) returns (NoteFriendResponse);
 }
 
 // ------------------------------------------------------------ packets
@@ -411,6 +436,40 @@ message RegionInfo {
   // Known is false until the handshake has arrived.
   bool known = 16;
 }
+
+message FriendsRequest { string agent = 1; }
+
+message Friend {
+  string id = 1;
+
+  // Online is what the last notification said.  It is false for a
+  // friend nobody has said anything about, which is the same answer as
+  // a friend known to be logged out -- the grid does not distinguish
+  // them either.
+  bool online = 2;
+
+  // Rights are bit masks: 1 see me online, 2 see me on the map, 4 edit
+  // my objects.  Given is what this avatar granted the friend, has is
+  // what the friend granted back.  Both are zero for a friendship
+  // formed during the session, which arrives as a notification rather
+  // than in the login response.
+  int32 rights_given = 3;
+  int32 rights_has = 4;
+}
+
+message FriendsResponse { repeated Friend friends = 1; }
+
+message NoteFriendRequest {
+  string agent = 1;
+
+  // Id is the new friend.  Online is what the client knows: somebody
+  // whose offer was just accepted, or who just accepted ours, was
+  // logged in a moment ago.
+  string id = 2;
+  bool online = 3;
+}
+
+message NoteFriendResponse {}
 
 message FlushRequest { string agent = 1; }
 
