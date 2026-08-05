@@ -675,6 +675,37 @@ The commands are `who`, `friends`, `im`, `close`, `sessions`, `local`,
 naming a person takes a name, part of one, a uuid, or the number from
 the last listing.
 
+### Testing a terminal
+
+The interesting part of slchat is the screen, and the screen is the
+part a unit test cannot see. `cmd/slchat/pty_test.go` runs it on a real
+pseudo-terminal with [goterm](https://github.com/goexvi-ctrl/goterm),
+which renders the output and hands back the rows, so the tests read the
+display the way a person does:
+
+    s := start(t, 24, 80)
+    s.send("ping\r")
+    s.waitText("> [Local] ping")
+    s.send("half a sentence")      // start typing before the answer
+    s.waitText("< [Local] Someone Else: you said ping")
+    if got := s.prompt(); got != "Local> half a sentence" {
+        t.Errorf("the typed line did not survive the message: %q", got)
+    }
+
+What runs on the terminal is this test binary, re-executed with
+`SLCHAT_PTY_HARNESS=1`, so the code under test is the real `Term` and
+`App` rather than a copy of them. The grid behind it is a fake --
+`App` takes a `Grid` interface for that reason -- which answers name
+lookups and says something back whenever the avatar speaks, after a
+delay, so that a message reliably arrives in the middle of the next
+thing being typed.
+
+That covers what nothing else could: raw mode, ESC told apart from the
+arrow key that begins with it, the cursor landing where the next
+keystroke will go, the prompt rewritten by the prefix key, tab cycling,
+and a line too long for the terminal scrolling sideways instead of
+wrapping into the message above it.
+
 ### What had to move to the daemon
 
 Two things slchat cannot know for itself, because the grid says them

@@ -26,11 +26,32 @@ const (
 	modeCommand
 )
 
+// Grid is what slchat needs from the connection to slgod.
+//
+// It is an interface rather than the connection itself so that the
+// terminal can be driven without a grid behind it: the display rules --
+// a message landing above the line being typed, the prompt naming who
+// is being talked to -- are what this program is, and they are worth
+// testing without two live avatars and a region to stand in.
+// *client.Conn is the real one.
+type Grid interface {
+	Send(ctx context.Context, m msg.Message, reliable bool) error
+	Messages() <-chan *client.Message
+	Done() <-chan struct{}
+	Err() error
+
+	Objects(ctx context.Context, named, id string) (*pb.ObjectsResponse, error)
+	Presence(ctx context.Context, drawDistance float32) (*pb.PresenceResponse, error)
+	Region(ctx context.Context) (*pb.RegionInfo, error)
+	Friends(ctx context.Context) ([]*pb.Friend, error)
+	NoteFriend(ctx context.Context, id msg.UUID, online bool) error
+}
+
 // App is one running slchat.
 type App struct {
 	cfg  Config
 	term *Term
-	conn *client.Conn
+	conn Grid
 	info *pb.AgentInfo
 
 	me     msg.UUID
@@ -53,7 +74,7 @@ type App struct {
 }
 
 // NewApp wires a connection and a terminal together.
-func NewApp(cfg Config, t *Term, c *client.Conn, info *pb.AgentInfo) (*App, error) {
+func NewApp(cfg Config, t *Term, c Grid, info *pb.AgentInfo) (*App, error) {
 	me, err := msg.ParseUUID(info.AgentId)
 	if err != nil {
 		return nil, fmt.Errorf("slchat: the server gave a bad agent id: %w", err)

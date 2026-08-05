@@ -1,3 +1,13 @@
+github.com/clipperhouse/uax29/v2 v2.2.0 h1:ChwIKnQN3kcZteTXMgb1wztSgaU+ZemkgWdohwgs8tY=
+github.com/clipperhouse/uax29/v2 v2.2.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
+github.com/creack/pty v1.1.24 h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=
+github.com/creack/pty v1.1.24/go.mod h1:08sCNb52WyoAwi2QDyzUCTgcvVFhUzewun7wtTfvcwE=
+github.com/goexvi-ctrl/goterm v1.0.0 h1:naYH95U2G1oESF6sT1lV68bBU0agkbI57U/UTgonBuI=
+github.com/goexvi-ctrl/goterm v1.0.0/go.mod h1:bVMs6HbozS/OsSLf0qAJ1Iq17ofUpU5BwjkZJStU9hw=
+github.com/mattn/go-runewidth v0.0.24 h1:cpokDiIn0MGnhdHwuWnJBITySJ20QyNGnY2kR/ay2DU=
+github.com/mattn/go-runewidth v0.0.24/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
+github.com/pborman/ansi v1.2.0 h1:b/yyMaZaNbmsxHxDJsIv2EwzLmIZPrCl4mbVudFf4Wk=
+github.com/pborman/ansi v1.2.0/go.mod h1:b2vwWf2ghGKNBvWEWCNuITd/lLQNse9XtCQpJMFK3wk=
 golang.org/x/net v0.55.0 h1:bcvxaJn3e1U6InsFWt1JUq1aSjnRxLzT2rtD2KfkDF8=
 golang.org/x/net v0.55.0/go.mod h1:L5U2KuzuOe1lY7Z+aWVIKK6qEeJXnXV9yzGA+WCHJww=
 golang.org/x/sys v0.45.0 h1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=
