@@ -65,6 +65,7 @@ type Term struct {
 	line    []rune
 	pos     int // cursor, as an index into line
 	width   int
+	height  int
 	restore func() error
 	closed  bool
 
@@ -81,11 +82,12 @@ type Term struct {
 // redrawing.  The rest of the program does not know the difference.
 func NewTerm(in *os.File, out io.Writer) (*Term, error) {
 	t := &Term{
-		in:    in,
-		out:   out,
-		keys:  make(chan rune, 64),
-		done:  make(chan struct{}),
-		width: 80,
+		in:     in,
+		out:    out,
+		keys:   make(chan rune, 64),
+		done:   make(chan struct{}),
+		width:  80,
+		height: 24,
 	}
 
 	fd := int(in.Fd())
@@ -100,8 +102,8 @@ func NewTerm(in *os.File, out io.Writer) (*Term, error) {
 		return nil, fmt.Errorf("slchat: cannot put the terminal in raw mode: %w", err)
 	}
 	t.restore = func() error { return term.Restore(fd, state) }
-	if w, _, err := term.GetSize(fd); err == nil && w > 0 {
-		t.width = w
+	if w, h, err := term.GetSize(fd); err == nil && w > 0 {
+		t.width, t.height = w, h
 	}
 	go t.watchSize(fd)
 
@@ -113,6 +115,14 @@ func NewTerm(in *os.File, out io.Writer) (*Term, error) {
 
 // Plain reports whether this is a pipe rather than a terminal.
 func (t *Term) Plain() bool { return t.plain }
+
+// Rows is how many lines the terminal has, which is what decides how
+// much of a long listing fits on one page.
+func (t *Term) Rows() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.height
+}
 
 // Keys is the decoded keystrokes.  It is closed when input ends.
 func (t *Term) Keys() <-chan rune { return t.keys }
@@ -318,9 +328,9 @@ func (t *Term) watchSize(fd int) {
 	for {
 		select {
 		case <-ch:
-			if w, _, err := term.GetSize(fd); err == nil && w > 0 {
+			if w, h, err := term.GetSize(fd); err == nil && w > 0 {
 				t.mu.Lock()
-				t.width = w
+				t.width, t.height = w, h
 				t.redrawLocked()
 				t.mu.Unlock()
 			}

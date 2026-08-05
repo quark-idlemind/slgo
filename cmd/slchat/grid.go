@@ -10,14 +10,19 @@ package main
 // the two arrive down the same pipe and are told apart here.
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"fmt"
 	"math"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -27,6 +32,7 @@ var subscriptions = []string{
 	"ChatFromSimulator",
 	"ImprovedInstantMessage",
 	"UUIDNameReply",
+	"AvatarPickerReply",
 	"OnlineNotification",
 	"OfflineNotification",
 	"ChangeUserRights",
@@ -313,6 +319,8 @@ func (a *App) handle(raw *client.Message) {
 		a.heard(m)
 	case *msg.ImprovedInstantMessage:
 		a.instantMessage(m)
+	case *msg.AvatarPickerReply:
+		a.pickerReply(m)
 	case *msg.UUIDNameReply:
 		for _, b := range m.UUIDNameBlock {
 			name := strings.TrimSpace(trimNul(b.FirstName) + " " + trimNul(b.LastName))
@@ -472,3 +480,144 @@ func sortPeople(ps []person) {
 }
 
 func sqrt(f float32) float32 { return float32(math.Sqrt(float64(f))) }
+
+// found is somebody a search turned up.
+type found struct {
+	ID       msg.UUID
+	Name     string // the legacy first-and-last name, which is what everything else here uses
+	Display  string // what they call themselves, when it differs
+	Username string // the login name, for telling two similar people apart
+}
+
+// Lookup searches for people by part of their name.
+//
+// There are two ways to ask and they are not equivalent. The UDP
+// AvatarPickerRequest is still answered, but only ever matches a whole
+// name: asking it for "Quark Idlemind" finds them and asking it for
+// "quark" comes back with one row holding a zero uuid and no name,
+// which is its way of saying nothing matched. Measured against the live
+// grid, not assumed.
+//
+// The AvatarPickerSearch capability is the one that searches, over
+// display names as well as login names, which is why the session asks
+// for it at login. So: the capability when it is there, and the whole
+// name message when it is not, since an exact match is better than a
+// refusal.
+func (a *App) Lookup(ctx context.Context, want string) ([]found, error) {
+	if a.conn.HasCap(capAvatarPicker) {
+		return a.lookupByCap(ctx, want)
+	}
+	return a.lookupByName(ctx, want)
+}
+
+const capAvatarPicker = "AvatarPickerSearch"
+
+func (a *App) lookupByCap(ctx context.Context, want string) ([]found, error) {
+	// The viewer turns dots into spaces before asking, so that a
+	// username typed as "first.last" searches as a name.
+	query := strings.ReplaceAll(want, ".", " ")
+	resp, err := a.conn.DoCap(ctx, agent.CapRequest{
+		Cap:    capAvatarPicker,
+		Method: "GET",
+		Path:   "/?page_size=100&names=" + url.QueryEscape(query),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.OK() {
+		return nil, fmt.Errorf("the search returned status %d", resp.Status)
+	}
+	v, err := llsd.Decode(bytes.NewReader(resp.Body))
+	if err != nil {
+		return nil, fmt.Errorf("the search answered with something unreadable: %w", err)
+	}
+	agents, _ := llsd.Map(v)["agents"].([]any)
+
+	var out []found
+	for _, e := range agents {
+		m, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, err := msg.ParseUUID(llsdString(m["id"]))
+		if err != nil || id.IsZero() {
+			continue
+		}
+		f := found{
+			ID:       id,
+			Display:  llsdString(m["display_name"]),
+			Username: llsdString(m["username"]),
+		}
+		f.Name = strings.TrimSpace(llsdString(m["legacy_first_name"]) + " " + llsdString(m["legacy_last_name"]))
+		if f.Name == "" {
+			// Some accounts have no legacy name; the username is
+			// then the only thing to call them.
+			f.Name = f.Username
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
+
+// lookupByName is the whole-name fallback.  One reply arrives per
+// query; a row with a zero uuid is the simulator saying nothing
+// matched.
+func (a *App) lookupByName(ctx context.Context, want string) ([]found, error) {
+	query := randomUUID()
+	replies := make(chan []found, 1)
+
+	a.mu.Lock()
+	a.pickers[query] = replies
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		delete(a.pickers, query)
+		a.mu.Unlock()
+	}()
+
+	m := &msg.AvatarPickerRequest{}
+	m.AgentData.AgentID, m.AgentData.SessionID = a.me, a.sess
+	m.AgentData.QueryID = query
+	m.Data.Name = nulTerm(want)
+	if err := a.conn.Send(ctx, m, true); err != nil {
+		return nil, err
+	}
+
+	select {
+	case out := <-replies:
+		return out, nil
+	case <-time.After(15 * time.Second):
+		return nil, fmt.Errorf("the simulator did not answer the search")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// pickerReply routes one AvatarPickerReply to whoever asked.
+func (a *App) pickerReply(m *msg.AvatarPickerReply) {
+	var out []found
+	for _, d := range m.Data {
+		// The zero uuid row is "nothing matched", not somebody.
+		if d.AvatarID.IsZero() {
+			continue
+		}
+		name := strings.TrimSpace(trimNul(d.FirstName) + " " + trimNul(d.LastName))
+		out = append(out, found{ID: d.AvatarID, Name: name})
+		a.roster.Learn(d.AvatarID, name)
+	}
+
+	a.mu.Lock()
+	ch := a.pickers[m.AgentData.QueryID]
+	a.mu.Unlock()
+	if ch != nil {
+		select {
+		case ch <- out:
+		default:
+		}
+	}
+}
+
+func llsdString(v any) string {
+	s, _ := v.(string)
+	return s
+}

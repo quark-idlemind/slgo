@@ -28,6 +28,8 @@ func (a *App) command(ctx context.Context, line string) {
 		a.help()
 	case "who", "nearby":
 		a.cmdNearby(ctx)
+	case "lookup", "find", "search":
+		a.cmdLookup(ctx, rest)
 	case "friends":
 		a.cmdFriends(ctx)
 	case "im", "msg":
@@ -57,10 +59,11 @@ func (a *App) command(ctx context.Context, line string) {
 
 func (a *App) help() {
 	key := KeyName(a.cfg.Prefix)
-	a.term.Print(strings.Join([]string{
+	a.page([]string{
 		"commands (" + key + " first, then the command):",
 		"  who                 who else is in the region, nearest first",
 		"  friends             which friends are online",
+		"  lookup <text>       search for people whose name contains <text>",
 		"  im <who>            start or switch to an instant message session",
 		"  close               close the current instant message session",
 		"  sessions            list the sessions; tab cycles them",
@@ -74,7 +77,8 @@ func (a *App) help() {
 		"",
 		"<who> is a name, part of one, a uuid, or the number from the last listing.",
 		"tab on an empty line moves to the next session.",
-	}, "\n"))
+		"a long listing pages: space shows more, q stops it.",
+	})
 }
 
 // listed remembers the last listing, so that "im 2" means what it just
@@ -99,12 +103,11 @@ func (a *App) cmdNearby(ctx context.Context) {
 		return
 	}
 	a.setListed(ps)
-	var b strings.Builder
-	fmt.Fprintf(&b, "%d nearby:", len(ps))
+	lines := []string{fmt.Sprintf("%d nearby:", len(ps))}
 	for i, p := range ps {
-		fmt.Fprintf(&b, "\n  %2d  %-28s %6.1fm", i+1, p.Name, p.Distance)
+		lines = append(lines, fmt.Sprintf("  %2d  %-28s %6.1fm", i+1, p.Name, p.Distance))
 	}
-	a.term.Print(b.String())
+	a.page(lines)
 }
 
 func (a *App) cmdFriends(ctx context.Context) {
@@ -121,12 +124,59 @@ func (a *App) cmdFriends(ctx context.Context) {
 		return
 	}
 	a.setListed(online)
-	var b strings.Builder
-	fmt.Fprintf(&b, "%d friends online (%d offline):", len(online), len(offline))
+	lines := []string{fmt.Sprintf("%d friends online (%d offline):", len(online), len(offline))}
 	for i, p := range online {
-		fmt.Fprintf(&b, "\n  %2d  %s", i+1, p.Name)
+		lines = append(lines, fmt.Sprintf("  %2d  %s", i+1, p.Name))
 	}
-	a.term.Print(b.String())
+	a.page(lines)
+}
+
+// cmdLookup searches for people by part of their name.
+//
+// What comes back is put in the roster and in the numbered list, so the
+// answer is usable straight away: lookup, then "im 3".
+func (a *App) cmdLookup(ctx context.Context, want string) {
+	want = strings.TrimSpace(want)
+	if want == "" {
+		a.notice("lookup what? part of a name is enough")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	hits, err := a.Lookup(ctx, want)
+	if err != nil {
+		a.notice("could not search: %v", err)
+		return
+	}
+	if len(hits) == 0 {
+		a.notice("nobody found matching %q", want)
+		return
+	}
+
+	ps := make([]person, 0, len(hits))
+	for _, h := range hits {
+		a.roster.Learn(h.ID, h.Name)
+		ps = append(ps, person{ID: h.ID, Name: h.Name})
+	}
+	a.setListed(ps)
+
+	lines := []string{fmt.Sprintf("%d matching %q:", len(hits), want)}
+	for i, h := range hits {
+		line := fmt.Sprintf("  %2d  %-28s", i+1, h.Name)
+		// The display name is worth showing when it is not simply
+		// the name again, since it is what they are called in
+		// conversation.
+		if h.Display != "" && !strings.EqualFold(h.Display, h.Name) {
+			line += "  " + h.Display
+		}
+		if h.Username != "" && !strings.EqualFold(h.Username, strings.ReplaceAll(strings.ToLower(h.Name), " ", ".")) {
+			line += "  (" + h.Username + ")"
+		}
+		lines = append(lines, strings.TrimRight(line, " "))
+	}
+	a.page(lines)
 }
 
 func (a *App) cmdIM(ctx context.Context, who string) {
@@ -174,7 +224,7 @@ func (a *App) cmdSessions() {
 		}
 		fmt.Fprintf(&b, "\n %s %2d  %s", mark, i+1, s.Label())
 	}
-	a.term.Print(b.String())
+	a.page(strings.Split(b.String(), "\n"))
 }
 
 func (a *App) cmdLocal() {
@@ -302,7 +352,7 @@ func (a *App) cmdOffers() {
 	for _, o := range list {
 		fmt.Fprintf(&b, "\n  %-28s %s ago", o.Name, time.Since(o.At).Round(time.Second))
 	}
-	a.term.Print(b.String())
+	a.page(strings.Split(b.String(), "\n"))
 }
 
 func (a *App) cmdWhere(ctx context.Context) {

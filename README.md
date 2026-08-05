@@ -670,10 +670,37 @@ a control key, since on a busy keyboard those are what is left:
     agent  = example
     prefix = ^G
 
-The commands are `who`, `friends`, `im`, `close`, `sessions`, `local`,
-`offer`, `offers`, `accept`, `decline`, `where` and `quit`. Anything
-naming a person takes a name, part of one, a uuid, or the number from
-the last listing.
+The commands are `who`, `friends`, `lookup`, `im`, `close`, `sessions`,
+`local`, `offer`, `offers`, `accept`, `decline`, `where` and `quit`.
+Anything naming a person takes a name, part of one, a uuid, or the
+number from the last listing -- so `lookup smith` and then `im 3` is the
+usual way to reach somebody who is neither nearby nor a friend.
+
+A listing longer than the screen stops at the bottom and waits:
+
+    13  Quark Islander
+    --more-- (82 more, space, q)
+
+Space shows the next screenful and `q` gives up on the rest, saying how
+many were dropped rather than pretending that was all of them. Whatever
+was half typed when the listing started comes back afterwards. Down a
+pipe nothing pages, since there is nobody there to press space.
+
+### Searching for somebody by name
+
+There are two ways to ask and they are not the same, which is worth
+knowing before reaching for the obvious one. The UDP
+`AvatarPickerRequest` is still answered, but only ever matches a *whole*
+name: asking it for "Quark Idlemind" finds them, and asking it for
+"quark" comes back with a single row holding a zero uuid and no name,
+which is how it says nothing matched. Measured against the live grid,
+not assumed.
+
+Searching over part of a name is the `AvatarPickerSearch` capability,
+which also covers display names, so the session now asks for it at
+login -- `lookup quark` finds 95 people. slchat uses the capability when
+the simulator offers it and falls back to the whole-name message when it
+does not, since an exact match beats a refusal.
 
 ### Testing a terminal
 

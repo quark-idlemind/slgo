@@ -14,13 +14,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/goexvi-ctrl/goterm"
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
@@ -163,6 +166,43 @@ func (g *fakeGrid) Friends(ctx context.Context) ([]*pb.Friend, error) {
 }
 
 func (g *fakeGrid) NoteFriend(ctx context.Context, id msg.UUID, online bool) error { return nil }
+
+// The search capability, answering with as many people as were asked
+// for: "lookup 30" produces thirty, which is what a pager needs.
+func (g *fakeGrid) HasCap(name string) bool { return name == capAvatarPicker }
+
+func (g *fakeGrid) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
+	u, err := url.Parse(r.Path)
+	if err != nil {
+		return nil, err
+	}
+	want := u.Query().Get("names")
+
+	n := 3
+	if k, err := strconv.Atoi(strings.TrimSpace(want)); err == nil {
+		n = k
+	}
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" ?><llsd><map><key>agents</key><array>`)
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, `<map>`+
+			`<key>id</key><uuid>%s</uuid>`+
+			`<key>legacy_first_name</key><string>Match%02d</string>`+
+			`<key>legacy_last_name</key><string>Resident</string>`+
+			`<key>display_name</key><string>Match%02d</string>`+
+			`<key>username</key><string>match%02d</string>`+
+			`</map>`, searchID(i), i, i, i)
+	}
+	b.WriteString(`</array></map></llsd>`)
+	return &agent.CapResponse{Status: 200, Body: []byte(b.String())}, nil
+}
+
+// searchID makes a distinct uuid per result.
+func searchID(i int) msg.UUID {
+	var u msg.UUID
+	u[0], u[15] = 0xAA, byte(i)
+	return u
+}
 
 // ------------------------------------------------------------- the tests
 
@@ -451,5 +491,88 @@ func TestPTYNarrowTerminalScrolls(t *testing.T) {
 	s.waitFlat("you said")
 	if got := s.prompt(); got != "Local>" {
 		t.Errorf("prompt after sending = %q", got)
+	}
+}
+
+// TestPTYLookupPages: a listing longer than the screen stops at the
+// bottom and waits, space shows the next screenful, and the listing
+// ends by giving the prompt back.
+func TestPTYLookupPages(t *testing.T) {
+	s := start(t, 12, 80)
+
+	// The fake answers "30" with thirty people, which is more than a
+	// twelve row terminal can hold.
+	s.send("\x1blookup 30\r")
+	s.waitText("30 matching")
+	s.waitPrompt("--more--")
+
+	// The first page is on screen and the last name is not.
+	if !strings.Contains(s.text(), "Match00") {
+		t.Errorf("the first result is missing:\n%s", s.text())
+	}
+	if strings.Contains(s.text(), "Match29") {
+		t.Errorf("the whole listing was shown at once:\n%s", s.text())
+	}
+
+	// Space shows more.
+	s.send(" ")
+	s.waitText("Match11")
+	s.waitPrompt("--more--")
+
+	// Keep going to the end; the pager then hands the prompt back on
+	// its own.
+	for i := 0; i < 4 && strings.HasPrefix(s.prompt(), "--more--"); i++ {
+		s.send(" ")
+		time.Sleep(150 * time.Millisecond)
+	}
+	s.waitPrompt("Local> ")
+	if !strings.Contains(s.text(), "Match29") {
+		t.Errorf("the last result never appeared:\n%s", s.text())
+	}
+}
+
+// TestPTYPagerQuits: q stops a long listing, and says how much was
+// dropped rather than pretending that was all of it.
+func TestPTYPagerQuits(t *testing.T) {
+	s := start(t, 12, 80)
+
+	s.send("\x1blookup 40\r")
+	s.waitPrompt("--more--")
+
+	s.send("q")
+	s.waitPrompt("Local> ")
+	s.waitText("more not shown")
+
+	// And the keyboard is back: typing goes to the session again
+	// rather than to the pager.
+	s.send("back to normal")
+	s.waitPrompt("Local> back to normal")
+}
+
+// TestPTYPagerKeepsTheTypedLine: paging is a pause, not a prompt.  What
+// was half typed when a listing started must come back afterwards.
+func TestPTYPagerKeepsTheTypedLine(t *testing.T) {
+	s := start(t, 12, 80)
+
+	s.send("half typed")
+	s.waitPrompt("Local> half typed")
+
+	s.send("\x1blookup 30\r")
+	s.waitPrompt("--more--")
+	s.send("q")
+
+	s.waitPrompt("Local> half typed")
+}
+
+// TestPTYShortListingDoesNotPage: three results fit, so nothing waits
+// for a keystroke.
+func TestPTYShortListingDoesNotPage(t *testing.T) {
+	s := start(t, 24, 80)
+
+	s.send("\x1blookup someone\r")
+	s.waitText("3 matching")
+	s.waitPrompt("Local> ")
+	if strings.Contains(s.text(), "--more--") {
+		t.Errorf("a short listing paged:\n%s", s.text())
 	}
 }

@@ -28,6 +28,11 @@ var DefaultCaps = []string{
 	"UpdateNotecardTaskInventory",
 	"UpdateScriptTask",
 	"NewFileAgentInventory",
+	// Searching for somebody by part of their name.  The UDP
+	// AvatarPickerRequest is still answered but only ever matches a
+	// whole name: "Quark Idlemind" finds them and "quark" finds
+	// nothing, so anything that means to search has to come here.
+	"AvatarPickerSearch",
 	"ViewerAsset",
 	"GetTexture",
 	"GetMesh2",

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
@@ -24,6 +25,7 @@ import (
 const (
 	modeChat = iota
 	modeCommand
+	modePager
 )
 
 // Grid is what slchat needs from the connection to slgod.
@@ -45,6 +47,11 @@ type Grid interface {
 	Region(ctx context.Context) (*pb.RegionInfo, error)
 	Friends(ctx context.Context) ([]*pb.Friend, error)
 	NoteFriend(ctx context.Context, id msg.UUID, online bool) error
+
+	// HasCap and DoCap reach the simulator's http capabilities, which
+	// is where searching for somebody by name lives.
+	HasCap(name string) bool
+	DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error)
 }
 
 // App is one running slchat.
@@ -65,7 +72,9 @@ type App struct {
 	mode     int
 	held     string // the chat line put aside while a command is typed
 	offers   map[msg.UUID]offer
-	listed   []person // the last listing, so "im 2" means what it showed
+	listed   []person                  // the last listing, so "im 2" means what it showed
+	pickers  map[msg.UUID]chan []found // searches waiting for a reply
+	pager    []string                  // what a long listing has left to show
 	regionID msg.UUID
 	position msg.Vector3
 
@@ -89,6 +98,7 @@ func NewApp(cfg Config, t *Term, c Grid, info *pb.AgentInfo) (*App, error) {
 		roster:   NewRoster(),
 		sessions: NewSessions(),
 		offers:   map[msg.UUID]offer{},
+		pickers:  map[msg.UUID]chan []found{},
 		quit:     make(chan struct{}),
 	}, nil
 }
@@ -142,6 +152,13 @@ func (a *App) relay(ctx context.Context) {
 
 // key is one keystroke.
 func (a *App) key(ctx context.Context, r rune) {
+	// A listing being paged owns the keyboard until it is done with
+	// it: space for the next page, q to stop.
+	if a.paging() {
+		a.pagerKey(r)
+		return
+	}
+
 	switch r {
 	case '\r', '\n':
 		a.enter(ctx)
@@ -273,6 +290,100 @@ func (a *App) refreshPrompt() {
 
 // Quit stops the loop.  Safe to call from anywhere and more than once.
 func (a *App) Quit() { a.once.Do(func() { close(a.quit) }) }
+
+// --------------------------------------------------------------- paging
+
+// pageSize is how many lines of a listing go on one page: the terminal,
+// less the line the "--more--" prompt sits on and one for the message
+// that may arrive while it is up.
+func (a *App) pageSize() int {
+	n := a.term.Rows() - 2
+	if n < 4 {
+		n = 4
+	}
+	return n
+}
+
+func (a *App) paging() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.mode == modePager
+}
+
+// page shows a listing, a screenful at a time.
+//
+// A short one is simply printed.  A long one stops at the bottom of the
+// screen and waits, because a list that scrolls past faster than it can
+// be read has not been shown to anybody.
+//
+// Down a pipe there is nobody to press space and a wait would hang a
+// script, so everything goes at once.
+func (a *App) page(lines []string) {
+	if a.term.Plain() || len(lines) <= a.pageSize() {
+		a.term.Print(strings.Join(lines, "\n"))
+		return
+	}
+
+	a.mu.Lock()
+	a.mode = modePager
+	a.held = a.term.Line()
+	a.pager = lines
+	a.mu.Unlock()
+
+	a.term.SetLine("")
+	a.nextPage()
+}
+
+// nextPage shows the next screenful and leaves the pager if that was
+// the last of it.
+func (a *App) nextPage() {
+	a.mu.Lock()
+	n := len(a.pager)
+	if n > a.pageSize() {
+		n = a.pageSize()
+	}
+	shown := a.pager[:n]
+	a.pager = a.pager[n:]
+	left := len(a.pager)
+	a.mu.Unlock()
+
+	a.term.Print(strings.Join(shown, "\n"))
+	if left == 0 {
+		a.stopPaging()
+		return
+	}
+	a.term.SetPrompt(fmt.Sprintf("--more-- (%d more, space, q) ", left))
+}
+
+// pagerKey is a keystroke while a listing is being paged.
+func (a *App) pagerKey(r rune) {
+	switch r {
+	case ' ':
+		a.nextPage()
+	case 'q', 'Q', 3, 27: // q, Ctrl-C, ESC
+		a.mu.Lock()
+		left := len(a.pager)
+		a.pager = nil
+		a.mu.Unlock()
+		a.stopPaging()
+		if left > 0 {
+			a.notice("%d more not shown", left)
+		}
+	}
+	// Every other key is ignored: this is a pause, not a prompt, and
+	// a stray keystroke should not send anything anywhere.
+}
+
+// stopPaging puts the chat prompt and the half typed line back.
+func (a *App) stopPaging() {
+	a.mu.Lock()
+	held := a.held
+	a.mode, a.held, a.pager = modeChat, "", nil
+	a.mu.Unlock()
+
+	a.term.SetLine(held)
+	a.refreshPrompt()
+}
 
 // ---------------------------------------------------------------- output
 
