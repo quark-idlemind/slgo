@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
-	"github.com/quark-idlemind/slgo/world"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 var (
@@ -25,7 +25,7 @@ func main() {
 	flag.Parse()
 	ctx := context.Background()
 
-	w, err := world.Dial(ctx, *addr, *profile)
+	w, err := sl.Dial(ctx, *addr, *profile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func main() {
 	}
 
 	// A little tower: a wide base, a middle, and a turned cap.
-	prims := []world.Prim{
+	prims := []sl.Prim{
 		{
 			Name:        "slgo tower base",
 			Description: "the root",

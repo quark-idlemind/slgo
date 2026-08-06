@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
-	"github.com/quark-idlemind/slgo/world"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 var (
@@ -30,7 +30,7 @@ func main() {
 	flag.Parse()
 	ctx := context.Background()
 
-	w, err := world.Dial(ctx, *addr, *profile)
+	w, err := sl.Dial(ctx, *addr, *profile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func main() {
 		fmt.Printf("\ninventory: %d folders, %d items in %s\n",
 			folders, items, time.Since(start).Round(time.Millisecond))
 		n := 0
-		tree.Walk(func(f *world.Folder, depth int) bool {
+		tree.Walk(func(f *sl.Folder, depth int) bool {
 			if n++; n > 12 {
 				return false
 			}
@@ -178,7 +178,7 @@ func main() {
 	}
 }
 
-func describe(s *world.Seen) {
+func describe(s *sl.Seen) {
 	fmt.Printf("\n%s\n", s.Object)
 	fmt.Printf("  owner     %s\n", s.Owner)
 	fmt.Printf("  position  %s\n", vec(s.Position))

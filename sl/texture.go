@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"encoding/binary"
@@ -89,7 +89,7 @@ func (f Face) Bumpiness() uint8 { return f.Bump & 0x1f }
 // one of the ones left on the default.
 func DecodeTextureEntry(b []byte, faces int) ([]Face, error) {
 	if len(b) == 0 {
-		return nil, fmt.Errorf("world: empty TextureEntry")
+		return nil, fmt.Errorf("sl: empty TextureEntry")
 	}
 	if faces <= 0 {
 		n, err := textureEntryFaces(b)
@@ -105,44 +105,44 @@ func DecodeTextureEntry(b []byte, faces int) ([]Face, error) {
 	if err := r.section(16, faces, func(i int, v []byte) {
 		copy(out[i].Texture[:], v)
 	}); err != nil {
-		return nil, fmt.Errorf("world: TextureEntry texture: %w", err)
+		return nil, fmt.Errorf("sl: TextureEntry texture: %w", err)
 	}
 	if err := r.section(4, faces, func(i int, v []byte) {
 		// Stored inverted: an opaque white face travels as four zero
 		// bytes.
 		out[i].Colour = [4]uint8{255 - v[0], 255 - v[1], 255 - v[2], 255 - v[3]}
 	}); err != nil {
-		return nil, fmt.Errorf("world: TextureEntry colour: %w", err)
+		return nil, fmt.Errorf("sl: TextureEntry colour: %w", err)
 	}
 	if err := r.section(4, faces, func(i int, v []byte) {
 		out[i].ScaleS = f32le(v)
 	}); err != nil {
-		return nil, fmt.Errorf("world: TextureEntry scale S: %w", err)
+		return nil, fmt.Errorf("sl: TextureEntry scale S: %w", err)
 	}
 	if err := r.section(4, faces, func(i int, v []byte) {
 		out[i].ScaleT = f32le(v)
 	}); err != nil {
-		return nil, fmt.Errorf("world: TextureEntry scale T: %w", err)
+		return nil, fmt.Errorf("sl: TextureEntry scale T: %w", err)
 	}
 	if err := r.section(2, faces, func(i int, v []byte) {
 		out[i].OffsetS = int16(binary.LittleEndian.Uint16(v))
 	}); err != nil {
-		return nil, fmt.Errorf("world: TextureEntry offset S: %w", err)
+		return nil, fmt.Errorf("sl: TextureEntry offset S: %w", err)
 	}
 	if err := r.section(2, faces, func(i int, v []byte) {
 		out[i].OffsetT = int16(binary.LittleEndian.Uint16(v))
 	}); err != nil {
-		return nil, fmt.Errorf("world: TextureEntry offset T: %w", err)
+		return nil, fmt.Errorf("sl: TextureEntry offset T: %w", err)
 	}
 	if err := r.section(2, faces, func(i int, v []byte) {
 		out[i].Rotation = int16(binary.LittleEndian.Uint16(v))
 	}); err != nil {
-		return nil, fmt.Errorf("world: TextureEntry rotation: %w", err)
+		return nil, fmt.Errorf("sl: TextureEntry rotation: %w", err)
 	}
 	if err := r.section(1, faces, func(i int, v []byte) {
 		out[i].Bump = v[0]
 	}); err != nil {
-		return nil, fmt.Errorf("world: TextureEntry bump: %w", err)
+		return nil, fmt.Errorf("sl: TextureEntry bump: %w", err)
 	}
 	// What follows may be absent on an older simulator, so running out
 	// of bytes here is the end rather than a fault.

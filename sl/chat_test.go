@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"strings"
@@ -9,13 +9,13 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// newTestWorld builds enough of a World to exercise the subscription
+// newTestSession builds enough of a Session to exercise the subscription
 // machinery, and runs the part of the reader goroutine that owns it.
 //
-// The rest of a World needs a connection; none of this does.
-func newTestWorld(t *testing.T) (*World, func()) {
+// The rest of a Session needs a connection; none of this does.
+func newTestSession(t *testing.T) (*Session, func()) {
 	t.Helper()
-	w := &World{
+	w := &Session{
 		chatSubs: map[<-chan Line]*chatSub{},
 		permSubs: map[<-chan *Permission]*permSub{},
 		chatCtl:  make(chan chatCmd),
@@ -86,7 +86,7 @@ func TestChatFilter(t *testing.T) {
 // worth having: two callers watching for different things must not
 // have to agree with each other about who consumes what.
 func TestChatDeliversToEverySubscriber(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	defer stop()
 
 	obj := msg.UUID{9}
@@ -113,7 +113,7 @@ func TestChatDeliversToEverySubscriber(t *testing.T) {
 // anything.  There is no way to ask the simulator to say it again, so
 // the alternative to dropping is stalling the relay for everyone.
 func TestChatDropsWhenFull(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	defer stop()
 
 	obj := msg.UUID{9}
@@ -141,7 +141,7 @@ func TestChatDropsWhenFull(t *testing.T) {
 // Stopping must close the channel, so a caller ranging over it stops
 // ranging rather than blocking for ever.
 func TestStopChatCloses(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	defer stop()
 
 	ch := w.Chat(ChatFilter{}, 4)
@@ -166,7 +166,7 @@ func TestStopChatCloses(t *testing.T) {
 // When the reader stops, every subscription closes: a caller waiting
 // on one has to find out that nothing more is coming.
 func TestChatClosesWhenReaderStops(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	a := w.Chat(ChatFilter{}, 4)
 	b := w.Chat(ChatFilter{}, 4)
 	stop()
@@ -199,7 +199,7 @@ func TestChatClosesWhenReaderStops(t *testing.T) {
 // dialog reply, because ChatFromViewer from this client does not carry
 // one.  A positive channel still goes as chat.
 func TestSayRoutesNegativeChannels(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	defer stop()
 	w.me = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
 
@@ -241,7 +241,7 @@ func TestSayRoutesNegativeChannels(t *testing.T) {
 // TestSayNegativeLimits: the two things the dialog reply path cannot
 // do, refused rather than quietly done wrong.
 func TestSayNegativeLimits(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	defer stop()
 	w.sendFn = func(m msg.Message) error { return nil }
 

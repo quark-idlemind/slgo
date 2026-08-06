@@ -1,4 +1,4 @@
-package world
+package sl
 
 // The LSL this simulator implements, from the simulator.
 //
@@ -124,7 +124,7 @@ func sortedKeys[T any](m map[string]T) []string {
 
 // LSLSyntax fetches the language, or returns the copy already held when
 // the simulator says it has not changed.
-func (w *World) LSLSyntax(ctx context.Context) (*Syntax, error) {
+func (w *Session) LSLSyntax(ctx context.Context) (*Syntax, error) {
 	// The id is cheap and says whether the expensive half is needed.
 	var id msg.UUID
 	if f, err := w.Features(ctx); err == nil {
@@ -144,11 +144,11 @@ func (w *World) LSLSyntax(ctx context.Context) (*Syntax, error) {
 	}
 	v, err := llsd.Decode(bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("world: LSLSyntax: %w", err)
+		return nil, fmt.Errorf("sl: LSLSyntax: %w", err)
 	}
 	m := llsd.Map(v)
 	if m == nil {
-		return nil, fmt.Errorf("world: LSLSyntax answered with %T, wanted a map", v)
+		return nil, fmt.Errorf("sl: LSLSyntax answered with %T, wanted a map", v)
 	}
 
 	s := parseSyntax(m)

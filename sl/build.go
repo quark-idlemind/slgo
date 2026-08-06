@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 
 // ErrOutOfRange is reported for a position the simulator would not
 // describe back to us.
-var ErrOutOfRange = errors.New("world: beyond the draw distance")
+var ErrOutOfRange = errors.New("sl: beyond the draw distance")
 
 // Prim describes one prim of an object to build.
 //
@@ -71,9 +71,9 @@ const (
 // batch means matching answers to intentions with nothing to match on
 // -- two prims of the same size at the same place are indistinguishable
 // once both exist.
-func (w *World) Build(ctx context.Context, prims []Prim) (*Built, error) {
+func (w *Session) Build(ctx context.Context, prims []Prim) (*Built, error) {
 	if len(prims) == 0 {
-		return nil, fmt.Errorf("world: Build needs at least one prim")
+		return nil, fmt.Errorf("sl: Build needs at least one prim")
 	}
 
 	// Check every position before rezzing any of them.  Checking as we
@@ -85,7 +85,7 @@ func (w *World) Build(ctx context.Context, prims []Prim) (*Built, error) {
 	}
 	for i := range prims {
 		if err := inRange(p, prims[i].Position); err != nil {
-			return nil, fmt.Errorf("world: prim %d of %d (%q): %w",
+			return nil, fmt.Errorf("sl: prim %d of %d (%q): %w",
 				i+1, len(prims), prims[i].Name, err)
 		}
 	}
@@ -94,7 +94,7 @@ func (w *World) Build(ctx context.Context, prims []Prim) (*Built, error) {
 	for i, p := range prims {
 		o, err := w.buildOne(ctx, p)
 		if err != nil {
-			return nil, fmt.Errorf("world: prim %d of %d (%q): %w",
+			return nil, fmt.Errorf("sl: prim %d of %d (%q): %w",
 				i+1, len(prims), p.Name, err)
 		}
 		b.Parts = append(b.Parts, o)
@@ -105,14 +105,14 @@ func (w *World) Build(ctx context.Context, prims []Prim) (*Built, error) {
 		return b, nil
 	}
 	if err := w.Link(ctx, b.Root, b.Parts[1:]...); err != nil {
-		return b, fmt.Errorf("world: linking %d prims onto %s: %w",
+		return b, fmt.Errorf("sl: linking %d prims onto %s: %w",
 			len(b.Parts)-1, b.Root, err)
 	}
 	return b, nil
 }
 
 // buildOne rezzes a prim and makes it match its description.
-func (w *World) buildOne(ctx context.Context, p Prim) (*Object, error) {
+func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 	size := p.Size
 	if size == (msg.Vector3{}) {
 		size = msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}
@@ -144,7 +144,7 @@ func (w *World) buildOne(ctx context.Context, p Prim) (*Object, error) {
 }
 
 // Place sets an object's position, rotation and scale in one message.
-func (w *World) Place(ctx context.Context, o *Object, at msg.Vector3, rot msg.Quaternion, scale msg.Vector3) error {
+func (w *Session) Place(ctx context.Context, o *Object, at msg.Vector3, rot msg.Quaternion, scale msg.Vector3) error {
 	data := make([]byte, 0, 36)
 	data = appendVector(data, at)
 	data = appendQuaternion(data, rot)
@@ -169,7 +169,7 @@ func (w *World) Place(ctx context.Context, o *Object, at msg.Vector3, rot msg.Qu
 // afterwards reported an empty description, because the read overtook
 // the write.  Building three hid it, since the other two took long
 // enough for the value to land.
-func (w *World) SetDescription(ctx context.Context, o *Object, desc string) error {
+func (w *Session) SetDescription(ctx context.Context, o *Object, desc string) error {
 	m := &msg.ObjectDescription{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ObjectData = []msg.ObjectDescription_ObjectData{
@@ -221,7 +221,7 @@ func distance(a, b msg.Vector3) float32 {
 
 // rezAt is Rez with the scale and rotation given, and is what Build
 // uses.
-func (w *World) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quaternion) (*Object, error) {
+func (w *Session) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quaternion) (*Object, error) {
 	w.mu.Lock()
 	before := make(map[uint32]bool, len(w.locals))
 	for _, l := range w.locals {
@@ -251,7 +251,7 @@ func (w *World) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quater
 // to this session is not necessarily one we just made: objects stream
 // in the whole time, and building on somebody else's prim by mistake
 // fails later in ways that look like something else.
-func (w *World) findOurs(ctx context.Context, before map[uint32]bool, timeout time.Duration) (*Object, error) {
+func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, timeout time.Duration) (*Object, error) {
 	var found *Object
 	asked := map[msg.UUID]bool{}
 	err := w.await(ctx, timeout, "a prim of ours to appear", func() bool {

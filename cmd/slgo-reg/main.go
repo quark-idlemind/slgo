@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/quark-idlemind/slgo/world"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 const hello = `default
@@ -55,14 +55,14 @@ func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	w, err := world.Dial(ctx, *server, *agent)
+	w, err := sl.Dial(ctx, *server, *agent)
 	if err != nil {
 		die("attach: %v", err)
 	}
 	defer w.Close()
 
 	if !*rez {
-		lines := w.Chat(world.ChatFilter{}, 64)
+		lines := w.Chat(sl.ChatFilter{}, 64)
 		defer w.StopChat(lines)
 		if *say != "" {
 			if err := w.Say(ctx, *say, int32(*channel)); err != nil {
@@ -81,7 +81,7 @@ func main() {
 	at := where.Position
 	at.X += 2
 
-	built, err := w.Build(ctx, []world.Prim{{Name: "slgo hello", Position: at}})
+	built, err := w.Build(ctx, []sl.Prim{{Name: "slgo hello", Position: at}})
 	if err != nil {
 		die("build: %v", err)
 	}
@@ -90,7 +90,7 @@ func main() {
 	// Listen from BEFORE the script goes in: state_entry runs the moment
 	// it starts, and a subscription made afterwards would miss the one
 	// line the whole test is about.
-	lines := w.Chat(world.ChatFilter{}, 64)
+	lines := w.Chat(sl.ChatFilter{}, 64)
 	defer w.StopChat(lines)
 
 	source := hello
@@ -163,7 +163,7 @@ func main() {
 	}
 }
 
-func drain(lines <-chan world.Line, d time.Duration, why string) {
+func drain(lines <-chan sl.Line, d time.Duration, why string) {
 	fmt.Printf("--- listening %v (%s)\n", d, why)
 	deadline := time.After(d)
 	heard := 0

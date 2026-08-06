@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"context"
@@ -48,9 +48,9 @@ const (
 // The id is chosen HERE rather than by the simulator, which is how the
 // protocol works: the message carries the id the folder is to have. That
 // is also what makes it confirmable, since we know what to look for.
-func (w *World) CreateFolder(ctx context.Context, parent msg.UUID, name string) (msg.UUID, error) {
+func (w *Session) CreateFolder(ctx context.Context, parent msg.UUID, name string) (msg.UUID, error) {
 	if name == "" {
-		return msg.UUID{}, fmt.Errorf("world: a folder needs a name")
+		return msg.UUID{}, fmt.Errorf("sl: a folder needs a name")
 	}
 	if parent.IsZero() {
 		parent = w.InventoryRoot()
@@ -77,7 +77,7 @@ func (w *World) CreateFolder(ctx context.Context, parent msg.UUID, name string) 
 			}
 		}
 		if time.Now().After(deadline) {
-			return msg.UUID{}, fmt.Errorf("world: folder %q was asked for but never appeared: %w", name, ErrTimeout)
+			return msg.UUID{}, fmt.Errorf("sl: folder %q was asked for but never appeared: %w", name, ErrTimeout)
 		}
 		time.Sleep(time.Second)
 	}
@@ -91,19 +91,19 @@ func (w *World) CreateFolder(ctx context.Context, parent msg.UUID, name string) 
 // afterwards, which was checked rather than assumed. There is therefore
 // no gentler option to offer, and pretending otherwise would be worse
 // than saying so.
-func (w *World) DeleteItem(ctx context.Context, item msg.UUID) error {
+func (w *Session) DeleteItem(ctx context.Context, item msg.UUID) error {
 	return w.aisDelete(ctx, "item", item)
 }
 
 // DeleteFolder removes a folder and everything in it, permanently.
-func (w *World) DeleteFolder(ctx context.Context, folder msg.UUID) error {
+func (w *Session) DeleteFolder(ctx context.Context, folder msg.UUID) error {
 	if folder == w.InventoryRoot() {
-		return fmt.Errorf("world: that is the root of inventory")
+		return fmt.Errorf("sl: that is the root of inventory")
 	}
 	return w.aisDelete(ctx, "category", folder)
 }
 
-func (w *World) aisDelete(ctx context.Context, kind string, id msg.UUID) error {
+func (w *Session) aisDelete(ctx context.Context, kind string, id msg.UUID) error {
 	_, err := w.capDo(ctx, agent.CapRequest{
 		Cap:    agent.InventoryCap,
 		Method: "DELETE",
@@ -119,14 +119,14 @@ func (w *World) aisDelete(ctx context.Context, kind string, id msg.UUID) error {
 // returned, because Second Life narrows what it will not grant -- you
 // cannot hand out more than the base mask allows -- so what was asked
 // for and what now holds are different questions.
-func (w *World) SetItem(ctx context.Context, item msg.UUID, name, desc string, next *uint32) (*Item, error) {
+func (w *Session) SetItem(ctx context.Context, item msg.UUID, name, desc string, next *uint32) (*Item, error) {
 	inv, err := w.Inventory(ctx)
 	if err != nil {
 		return nil, err
 	}
 	it, ok := inv.Item(item)
 	if !ok {
-		return nil, fmt.Errorf("world: no item %s in inventory", item)
+		return nil, fmt.Errorf("sl: no item %s in inventory", item)
 	}
 
 	want := *it
@@ -185,7 +185,7 @@ func (w *World) SetItem(ctx context.Context, item msg.UUID, name, desc string, n
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("world: %s did not change: %w", item, ErrTimeout)
+			return nil, fmt.Errorf("sl: %s did not change: %w", item, ErrTimeout)
 		}
 	}
 }
@@ -196,7 +196,7 @@ func (w *World) SetItem(ctx context.Context, item msg.UUID, name, desc string, n
 // It takes two messages, because the protocol turns bits on or off and
 // does not assign: sending only the "on" half leaves a bit the caller
 // cleared still set.
-func (w *World) SetObjectPermissions(ctx context.Context, o *Object, who uint8, mask uint32) error {
+func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8, mask uint32) error {
 	on := mask & PermAll
 	off := PermAll &^ on
 
@@ -233,9 +233,9 @@ func (w *World) SetObjectPermissions(ctx context.Context, o *Object, who uint8, 
 //     Beside the avatar something usually is, so it appears to work;
 //     aimed at open sky the request is dropped with no object and no
 //     complaint.
-func (w *World) RezFromInventory(ctx context.Context, it *Item, at msg.Vector3, group msg.UUID, timeout time.Duration) (*Object, error) {
+func (w *Session) RezFromInventory(ctx context.Context, it *Item, at msg.Vector3, group msg.UUID, timeout time.Duration) (*Object, error) {
 	if it == nil {
-		return nil, fmt.Errorf("world: nothing to rez")
+		return nil, fmt.Errorf("sl: nothing to rez")
 	}
 	if timeout == 0 {
 		timeout = 60 * time.Second
@@ -301,7 +301,7 @@ func (w *World) RezFromInventory(ctx context.Context, it *Item, at msg.Vector3, 
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("world: %q was asked for at %v and nothing appeared there: %w",
+			return nil, fmt.Errorf("sl: %q was asked for at %v and nothing appeared there: %w",
 				it.Name, at, ErrTimeout)
 		}
 		time.Sleep(time.Second)
@@ -322,7 +322,7 @@ const rezRadius = 10
 // There is no message for this. It is an instant message whose bucket
 // carries the asset type and the id, which is the whole of the protocol
 // for giving something away.
-func (w *World) GiveToAvatar(ctx context.Context, to msg.UUID, id msg.UUID, name string, assetType int8) error {
+func (w *Session) GiveToAvatar(ctx context.Context, to msg.UUID, id msg.UUID, name string, assetType int8) error {
 	bucket := make([]byte, 17)
 	bucket[0] = byte(assetType)
 	copy(bucket[1:], id[:])
@@ -347,7 +347,7 @@ func (w *World) GiveToAvatar(ctx context.Context, to msg.UUID, id msg.UUID, name
 
 // localIDs is what is in the region now, so a new arrival can be told
 // from what was already there.
-func (w *World) localIDs(ctx context.Context) (map[uint32]bool, error) {
+func (w *Session) localIDs(ctx context.Context) (map[uint32]bool, error) {
 	all, err := w.AllObjects(ctx, 30*time.Second)
 	if err != nil {
 		return nil, err
@@ -361,7 +361,7 @@ func (w *World) localIDs(ctx context.Context) (map[uint32]bool, error) {
 
 // mustWhere is Where without the error, for a range check that should
 // not fail a rez on its own account.
-func mustWhere(ctx context.Context, w *World) *Presence {
+func mustWhere(ctx context.Context, w *Session) *Presence {
 	p, err := w.Where(ctx)
 	if err != nil {
 		return &Presence{}
@@ -378,7 +378,7 @@ func mustWhere(ctx context.Context, w *World) *Presence {
 // always been able to build somewhere is suddenly refused here, with a
 // message saying the land does not allow it. It does; the request simply
 // arrived from nobody in particular.
-func (w *World) ActivateGroup(ctx context.Context, group msg.UUID, timeout time.Duration) error {
+func (w *Session) ActivateGroup(ctx context.Context, group msg.UUID, timeout time.Duration) error {
 	if timeout == 0 {
 		timeout = 15 * time.Second
 	}
@@ -395,7 +395,7 @@ func (w *World) ActivateGroup(ctx context.Context, group msg.UUID, timeout time.
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("world: group %s never became active, "+
+			return fmt.Errorf("sl: group %s never became active, "+
 				"which usually means this avatar is not a member: %w", group, ErrTimeout)
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -451,7 +451,7 @@ func uuidCRC(u msg.UUID) uint32 {
 //
 // Over AIS, like the other edits: the UDP MoveInventoryItem is accepted
 // and does nothing, which is the same trap the delete path found.
-func (w *World) MoveItem(ctx context.Context, item, folder msg.UUID) error {
+func (w *Session) MoveItem(ctx context.Context, item, folder msg.UUID) error {
 	enc, err := llsd.Encode(map[string]any{"parent_id": folder.String()})
 	if err != nil {
 		return err

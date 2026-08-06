@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"context"
@@ -68,7 +68,7 @@ func attachItem(nv []byte) (msg.UUID, bool) {
 // An attachment is described when it goes on, and a client that
 // connected afterwards will never have been told about it, so an empty
 // result does not mean nothing is worn.  Wear will say so.
-func (w *World) Attachments() []*Attached {
+func (w *Session) Attachments() []*Attached {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	out := make([]*Attached, 0, len(w.attach))
@@ -80,7 +80,7 @@ func (w *World) Attachments() []*Attached {
 
 // WornFrom returns the worn object that came from an inventory item, if
 // the simulator has mentioned it.
-func (w *World) WornFrom(item msg.UUID) (*Attached, bool) {
+func (w *Session) WornFrom(item msg.UUID) (*Attached, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	a, ok := w.attach[item]
@@ -92,7 +92,7 @@ func (w *World) WornFrom(item msg.UUID) (*Attached, bool) {
 // It is matched on the AttachItemID rather than on being a new object,
 // which is exact: attaching produces a brand new object id, and other
 // objects arrive continuously.
-func (w *World) Wear(ctx context.Context, it *Item, point int, timeout time.Duration) (*Attached, error) {
+func (w *Session) Wear(ctx context.Context, it *Item, point int, timeout time.Duration) (*Attached, error) {
 	if timeout == 0 {
 		timeout = 40 * time.Second
 	}
@@ -126,7 +126,7 @@ func (w *World) Wear(ctx context.Context, it *Item, point int, timeout time.Dura
 }
 
 // TakeOff detaches a worn item back into inventory.
-func (w *World) TakeOff(ctx context.Context, item msg.UUID) error {
+func (w *Session) TakeOff(ctx context.Context, item msg.UUID) error {
 	m := &msg.DetachAttachmentIntoInv{}
 	m.ObjectData.AgentID = w.me
 	m.ObjectData.ItemID = item
@@ -147,7 +147,7 @@ func (w *World) TakeOff(ctx context.Context, item msg.UUID) error {
 // connects, so anything put on before this program started has never
 // been mentioned and its local id is unknown.  Taking it off and
 // putting it back on is the way to be told.
-func (w *World) Worn(ctx context.Context, folder msg.UUID, name string, point int) (*Attached, error) {
+func (w *Session) Worn(ctx context.Context, folder msg.UUID, name string, point int) (*Attached, error) {
 	it, err := w.FindItem(ctx, folder, name)
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func (w *World) Worn(ctx context.Context, folder msg.UUID, name string, point in
 	}
 	a, err := w.Wear(ctx, it, point, 40*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("world: putting %q back on: %w", name, err)
+		return nil, fmt.Errorf("sl: putting %q back on: %w", name, err)
 	}
 	return a, nil
 }

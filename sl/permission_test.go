@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"strings"
@@ -47,7 +47,7 @@ func TestPermsNames(t *testing.T) {
 // TestPermissionsSubscription: a request reaches every listener, and
 // the channel closes when the subscription stops.
 func TestPermissionsSubscription(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	defer stop()
 
 	a := w.Permissions(4)
@@ -91,7 +91,7 @@ func TestPermissionsSubscription(t *testing.T) {
 // TestPermissionsDropRatherThanBlock: the relay must not be held up by
 // somebody who has stopped reading.
 func TestPermissionsDropRatherThanBlock(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	defer stop()
 
 	ch := w.Permissions(2)
@@ -110,7 +110,7 @@ func TestPermissionsDropRatherThanBlock(t *testing.T) {
 // requested must not be reported as granted, since the simulator has
 // nothing pending to match it against.
 func TestGrantKeepsToWhatWasAsked(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	defer stop()
 	sent := make(chan *msg.ScriptAnswerYes, 4)
 	w.sendFn = func(m msg.Message) error {
@@ -150,7 +150,7 @@ func TestGrantKeepsToWhatWasAsked(t *testing.T) {
 // TestAnswerIdentifiesTheScript: the object and the script inside it
 // both go back, because that pair is what the request is filed under.
 func TestAnswerIdentifiesTheScript(t *testing.T) {
-	w, stop := newTestWorld(t)
+	w, stop := newTestSession(t)
 	defer stop()
 	sent := make(chan *msg.ScriptAnswerYes, 1)
 	w.sendFn = func(m msg.Message) error {

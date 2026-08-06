@@ -1,4 +1,4 @@
-package world
+package sl
 
 // What the simulator says it supports.
 //
@@ -35,18 +35,18 @@ type Features struct {
 }
 
 // Features asks the simulator what it supports.
-func (w *World) Features(ctx context.Context) (*Features, error) {
+func (w *Session) Features(ctx context.Context) (*Features, error) {
 	body, err := w.capDo(ctx, agent.CapRequest{Cap: "SimulatorFeatures", Method: "GET"})
 	if err != nil {
 		return nil, err
 	}
 	v, err := llsd.Decode(bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("world: SimulatorFeatures: %w", err)
+		return nil, fmt.Errorf("sl: SimulatorFeatures: %w", err)
 	}
 	m := llsd.Map(v)
 	if m == nil {
-		return nil, fmt.Errorf("world: SimulatorFeatures answered with %T, wanted a map", v)
+		return nil, fmt.Errorf("sl: SimulatorFeatures answered with %T, wanted a map", v)
 	}
 	return &Features{Raw: m}, nil
 }

@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"context"
@@ -225,7 +225,7 @@ func (c *collector) collected() []Line {
 }
 
 // chat routes one heard line to whoever is listening.
-func (w *World) chat(raw *client.Message, m *msg.ChatFromSimulator) {
+func (w *Session) chat(raw *client.Message, m *msg.ChatFromSimulator) {
 	d := &m.ChatData
 	l := Line{
 		At:         raw.At,
@@ -253,7 +253,7 @@ func (w *World) chat(raw *client.Message, m *msg.ChatFromSimulator) {
 	w.deliver(l)
 }
 
-func (w *World) startCollector(c *collector) {
+func (w *Session) startCollector(c *collector) {
 	c.found = make(chan struct{})
 	c.faulted = make(chan struct{})
 	c.reasoned = make(chan struct{})
@@ -262,7 +262,7 @@ func (w *World) startCollector(c *collector) {
 	w.mu.Unlock()
 }
 
-func (w *World) stopCollector(c *collector) {
+func (w *Session) stopCollector(c *collector) {
 	w.mu.Lock()
 	for i, x := range w.collectors {
 		if x == c {
@@ -356,7 +356,7 @@ type permSub struct {
 // went that way.
 //
 // A line matching several subscriptions is delivered to all of them.
-func (w *World) Chat(filter ChatFilter, depth int) <-chan Line {
+func (w *Session) Chat(filter ChatFilter, depth int) <-chan Line {
 	if depth <= 0 {
 		depth = DefaultChatDepth
 	}
@@ -379,7 +379,7 @@ func (w *World) Chat(filter ChatFilter, depth int) <-chan Line {
 // It returns once the channel has been closed, so a caller ranging
 // over it will see the range end.  Stopping something already stopped
 // does nothing.
-func (w *World) StopChat(ch <-chan Line) {
+func (w *Session) StopChat(ch <-chan Line) {
 	done := make(chan struct{})
 	select {
 	case w.chatCtl <- chatCmd{remove: ch, done: done}:
@@ -390,7 +390,7 @@ func (w *World) StopChat(ch <-chan Line) {
 
 // ChatDropped is how many lines a subscription missed because its
 // buffer was full.
-func (w *World) ChatDropped(ch <-chan Line) uint64 {
+func (w *Session) ChatDropped(ch <-chan Line) uint64 {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if s := w.chatSubs[ch]; s != nil {
@@ -405,7 +405,7 @@ func (w *World) ChatDropped(ch <-chan Line) uint64 {
 // one slow consumer must not stop the relay, and the protocol has no
 // way to ask for chat again, so the choice is between dropping for
 // that subscriber and stalling for everyone.
-func (w *World) deliver(l Line) {
+func (w *Session) deliver(l Line) {
 	w.mu.Lock()
 	subs := make([]*chatSub, 0, len(w.chatSubs))
 	for _, s := range w.chatSubs {
@@ -426,7 +426,7 @@ func (w *World) deliver(l Line) {
 }
 
 // applyChat runs one subscription command, in the reader goroutine.
-func (w *World) applyChat(c chatCmd) {
+func (w *Session) applyChat(c chatCmd) {
 	w.mu.Lock()
 	switch {
 	case c.add != nil:
@@ -452,7 +452,7 @@ func (w *World) applyChat(c chatCmd) {
 
 // closeChat shuts every subscription down, which is what tells a
 // caller ranging over one that there will be no more.
-func (w *World) closeChat() {
+func (w *Session) closeChat() {
 	w.mu.Lock()
 	for ch, s := range w.chatSubs {
 		delete(w.chatSubs, ch)
@@ -466,7 +466,7 @@ func (w *World) closeChat() {
 }
 
 // onProperties is a small internal subscription used by Properties.
-func (w *World) onProperties(fn func(*Properties)) (stop func()) {
+func (w *Session) onProperties(fn func(*Properties)) (stop func()) {
 	w.mu.Lock()
 	w.propsFns = append(w.propsFns, fn)
 	i := len(w.propsFns) - 1
@@ -484,7 +484,7 @@ func (w *World) onProperties(fn func(*Properties)) (stop func()) {
 //
 // Prefer a script's llOwnerSay for test output: this is for when open
 // chat is the thing being tested.
-func (w *World) Say(ctx context.Context, text string, channel int32) error {
+func (w *Session) Say(ctx context.Context, text string, channel int32) error {
 	return w.SayAs(ctx, text, channel, ChatSay)
 }
 
@@ -493,10 +493,10 @@ func (w *World) Say(ctx context.Context, text string, channel int32) error {
 // A negative channel goes a different way; see sayNegative.  The volume
 // cannot be carried on that path, so asking to whisper or shout on one
 // is refused rather than quietly sent at ordinary range.
-func (w *World) SayAs(ctx context.Context, text string, channel int32, chatType uint8) error {
+func (w *Session) SayAs(ctx context.Context, text string, channel int32, chatType uint8) error {
 	if channel < 0 {
 		if chatType != ChatSay {
-			return fmt.Errorf("world: %s cannot be carried on channel %d; "+
+			return fmt.Errorf("sl: %s cannot be carried on channel %d; "+
 				"a negative channel goes as a script dialog reply, which has no volume",
 				ChatTypeName(chatType), channel)
 		}
@@ -535,9 +535,9 @@ const maxDialogReply = 254
 // When the ChatFromViewer path is fixed this should become a fallback
 // rather than the only route, since it costs a length limit the real
 // one does not have.
-func (w *World) sayNegative(ctx context.Context, text string, channel int32) error {
+func (w *Session) sayNegative(ctx context.Context, text string, channel int32) error {
 	if len(text) > maxDialogReply {
-		return fmt.Errorf("world: %d bytes is too long for channel %d; "+
+		return fmt.Errorf("sl: %d bytes is too long for channel %d; "+
 			"a negative channel carries at most %d", len(text), channel, maxDialogReply)
 	}
 	m := &msg.ScriptDialogReply{}

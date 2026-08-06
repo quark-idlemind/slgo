@@ -1,4 +1,4 @@
-package world
+package sl
 
 // Scripts asking to act on this avatar's behalf.
 //
@@ -134,7 +134,7 @@ type Permission struct {
 	// Wants is what was asked for.
 	Wants Perms
 
-	w *World
+	w *Session
 }
 
 func (q *Permission) String() string {
@@ -168,7 +168,7 @@ func (q *Permission) Deny(ctx context.Context) error { return q.answer(ctx, 0) }
 
 func (q *Permission) answer(ctx context.Context, granted Perms) error {
 	if q.w == nil {
-		return fmt.Errorf("world: this permission request has no session to answer on")
+		return fmt.Errorf("sl: this permission request has no session to answer on")
 	}
 	m := &msg.ScriptAnswerYes{}
 	m.AgentData.AgentID, m.AgentData.SessionID = q.w.agentBlock()
@@ -179,7 +179,7 @@ func (q *Permission) answer(ctx context.Context, granted Perms) error {
 }
 
 // permission builds one and hands it to whoever is listening.
-func (w *World) permission(m *msg.ScriptQuestion) {
+func (w *Session) permission(m *msg.ScriptQuestion) {
 	q := &Permission{
 		At:         time.Now(),
 		Object:     m.Data.TaskID,
@@ -210,7 +210,7 @@ func (w *World) permission(m *msg.ScriptQuestion) {
 
 // Asked returns the permission requests seen so far, oldest first,
 // answered or not.
-func (w *World) Asked() []*Permission {
+func (w *Session) Asked() []*Permission {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return append([]*Permission(nil), w.asked...)
@@ -223,7 +223,7 @@ func (w *World) Asked() []*Permission {
 // buffer is full has requests dropped rather than holding up the
 // relay.  Requests are rare enough that a full buffer means nobody is
 // reading; PermissionsDropped says how many went that way.
-func (w *World) Permissions(depth int) <-chan *Permission {
+func (w *Session) Permissions(depth int) <-chan *Permission {
 	if depth <= 0 {
 		depth = DefaultPermissionDepth
 	}
@@ -243,7 +243,7 @@ func (w *World) Permissions(depth int) <-chan *Permission {
 const DefaultPermissionDepth = 16
 
 // StopPermissions closes a subscription, and returns once it is closed.
-func (w *World) StopPermissions(ch <-chan *Permission) {
+func (w *Session) StopPermissions(ch <-chan *Permission) {
 	done := make(chan struct{})
 	select {
 	case w.chatCtl <- chatCmd{removePerm: ch, done: done}:
@@ -254,7 +254,7 @@ func (w *World) StopPermissions(ch <-chan *Permission) {
 
 // PermissionsDropped is how many requests a subscription missed
 // because its buffer was full.
-func (w *World) PermissionsDropped(ch <-chan *Permission) uint64 {
+func (w *Session) PermissionsDropped(ch <-chan *Permission) uint64 {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if s := w.permSubs[ch]; s != nil {

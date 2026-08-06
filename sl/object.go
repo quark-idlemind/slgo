@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"context"
@@ -38,7 +38,7 @@ type RezOptions struct {
 //
 // Build does this and more; this is the short way to get one prim when
 // none of the rest is wanted.
-func (w *World) Rez(ctx context.Context, opt RezOptions) (*Object, error) {
+func (w *Session) Rez(ctx context.Context, opt RezOptions) (*Object, error) {
 	if opt.Scale == (msg.Vector3{}) {
 		opt.Scale = msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}
 	}
@@ -55,7 +55,7 @@ func (w *World) Rez(ctx context.Context, opt RezOptions) (*Object, error) {
 // SetName renames an object and reads the name back.
 //
 // ObjectName has no reply, so the only way to know it took is to ask.
-func (w *World) SetName(ctx context.Context, o *Object, name string) error {
+func (w *Session) SetName(ctx context.Context, o *Object, name string) error {
 	m := &msg.ObjectName{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ObjectData = []msg.ObjectName_ObjectData{
@@ -86,13 +86,13 @@ func (w *World) SetName(ctx context.Context, o *Object, name string) error {
 			return nil
 		}
 		if got != "" {
-			return fmt.Errorf("world: renaming %s to %q left it named %q", o.ID, name, got)
+			return fmt.Errorf("sl: renaming %s to %q left it named %q", o.ID, name, got)
 		}
 	}
 	return fmt.Errorf("%w: the name of %s after renaming it", ErrTimeout, o.ID)
 }
 
-func (w *World) familyRequest(id msg.UUID) *msg.RequestObjectPropertiesFamily {
+func (w *Session) familyRequest(id msg.UUID) *msg.RequestObjectPropertiesFamily {
 	m := &msg.RequestObjectPropertiesFamily{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ObjectData.ObjectID = id
@@ -120,7 +120,7 @@ type Properties struct {
 
 // Properties selects an object and reads its full properties, which is
 // where the permission masks live.
-func (w *World) Properties(ctx context.Context, o *Object, timeout time.Duration) (*Properties, error) {
+func (w *Session) Properties(ctx context.Context, o *Object, timeout time.Duration) (*Properties, error) {
 	if timeout == 0 {
 		timeout = 15 * time.Second
 	}
@@ -150,7 +150,7 @@ func (w *World) Properties(ctx context.Context, o *Object, timeout time.Duration
 	}
 }
 
-func (w *World) selectMsg(locals ...uint32) *msg.ObjectSelect {
+func (w *Session) selectMsg(locals ...uint32) *msg.ObjectSelect {
 	m := &msg.ObjectSelect{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	for _, l := range locals {
@@ -161,7 +161,7 @@ func (w *World) selectMsg(locals ...uint32) *msg.ObjectSelect {
 
 // Select tells the simulator we are editing these objects, which some
 // operations require.
-func (w *World) Select(ctx context.Context, objs ...*Object) error {
+func (w *Session) Select(ctx context.Context, objs ...*Object) error {
 	locals := make([]uint32, 0, len(objs))
 	for _, o := range objs {
 		locals = append(locals, o.Local)
@@ -171,9 +171,9 @@ func (w *World) Select(ctx context.Context, objs ...*Object) error {
 
 // Link joins objects into one, with root as the root, and waits until
 // the simulator agrees they are linked.
-func (w *World) Link(ctx context.Context, root *Object, children ...*Object) error {
+func (w *Session) Link(ctx context.Context, root *Object, children ...*Object) error {
 	if len(children) == 0 {
-		return fmt.Errorf("world: linking needs something to link")
+		return fmt.Errorf("sl: linking needs something to link")
 	}
 	all := append([]*Object{root}, children...)
 	if err := w.Select(ctx, all...); err != nil {
@@ -207,7 +207,7 @@ func (w *World) Link(ctx context.Context, root *Object, children ...*Object) err
 
 // Parent reports the local id an object says is its parent, and
 // whether the simulator has mentioned it at all.
-func (w *World) Parent(o *Object) (uint32, bool) {
+func (w *Session) Parent(o *Object) (uint32, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	p, ok := w.parents[o.Local]
@@ -225,7 +225,7 @@ const (
 // Nothing answers a take over UDP: the item turns up in the folder
 // over AIS some seconds later, so this polls the folder for something
 // that was not there before rather than waiting for a message.
-func (w *World) Take(ctx context.Context, o *Object, folder msg.UUID, timeout time.Duration) (*Item, error) {
+func (w *Session) Take(ctx context.Context, o *Object, folder msg.UUID, timeout time.Duration) (*Item, error) {
 	if timeout == 0 {
 		timeout = 40 * time.Second
 	}
@@ -275,7 +275,7 @@ func (w *World) Take(ctx context.Context, o *Object, folder msg.UUID, timeout ti
 }
 
 // Delete sends an object to the trash.
-func (w *World) Delete(ctx context.Context, o *Object, trash msg.UUID) error {
+func (w *Session) Delete(ctx context.Context, o *Object, trash msg.UUID) error {
 	if err := w.Select(ctx, o); err != nil {
 		return err
 	}

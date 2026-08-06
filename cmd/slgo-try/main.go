@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/quark-idlemind/slgo/world"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 var (
@@ -102,7 +102,7 @@ func main() {
 	flag.Parse()
 	ctx := context.Background()
 
-	w, err := world.Dial(ctx, *addr, *profile)
+	w, err := sl.Dial(ctx, *addr, *profile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	worn, err := w.Worn(ctx, objects, *hud, world.HUDCenter1)
+	worn, err := w.Worn(ctx, objects, *hud, sl.HUDCenter1)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func main() {
 	for _, t := range tries {
 		fmt.Printf("\n=== %s (%s) ===\n", t.name, t.expect)
 
-		res, err := w.Run(ctx, world.Script{
+		res, err := w.Run(ctx, sl.Script{
 			In:      obj,
 			Name:    t.name,
 			Source:  t.source,
@@ -161,7 +161,7 @@ func main() {
 			fmt.Printf("  compile error: %s\n", e)
 		}
 		for _, l := range res.Lines {
-			fmt.Printf("  [%s] %s\n", world.ChatTypeName(l.Type), l.Text)
+			fmt.Printf("  [%s] %s\n", sl.ChatTypeName(l.Type), l.Text)
 		}
 	}
 

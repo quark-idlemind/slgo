@@ -1,26 +1,4 @@
-// Package world does things in Second Life and waits for them to have
-// happened.
-//
-// The layer below deals in messages: send one, then watch a channel for
-// whichever of several replies means it worked, keeping enough state to
-// recognise it when it comes.  Almost nothing in this protocol answers
-// the question it was asked -- rezzing a prim produces no reply naming
-// the prim, taking one into inventory produces no reply at all, and a
-// script's output arrives as chat minutes later or not at all.  Every
-// command written against that layer grew its own copy of the same
-// bookkeeping, and each copy got a slightly different set of the
-// lessons.
-//
-// So this package owns the reading, and offers functions that return
-// when the thing has been observed to happen or report why it did not.
-// Rez returns the prim it rezzed, having confirmed we own it.  Take
-// returns the inventory item, having found it in the folder.  Run
-// returns what a script said, having watched for a sentinel.
-//
-// What it does not do is pretend the grid is reliable.  Everything here
-// takes a timeout, everything can fail, and a function that could not
-// confirm what it did says so rather than returning as though it had.
-package world
+package sl
 
 import (
 	"context"
@@ -41,7 +19,7 @@ import (
 // It is worth distinguishing: it means the request may well have taken
 // effect and we did not see it, which is a different situation from a
 // refusal.
-var ErrTimeout = errors.New("world: timed out waiting for the simulator")
+var ErrTimeout = errors.New("sl: timed out waiting for the simulator")
 
 // Subscriptions are the messages this package needs relayed to it.
 // Passing anything less to Attach leaves it waiting for confirmations
@@ -57,12 +35,12 @@ var Subscriptions = []string{
 	"AgentMovementComplete", "ParcelProperties",
 }
 
-// World is a connection to a hosted agent, with the bookkeeping needed
+// Session is a connection to a hosted agent, with the bookkeeping needed
 // to tell whether anything asked for actually happened.
 //
 // It is safe for concurrent use.  It reads the relay in one goroutine
 // and everything else takes the lock.
-type World struct {
+type Session struct {
 	c    *client.Conn
 	info *pb.AgentInfo
 
@@ -136,7 +114,7 @@ type World struct {
 }
 
 // Dial connects to a server and attaches to one of its agents.
-func Dial(ctx context.Context, addr, agentName string) (*World, error) {
+func Dial(ctx context.Context, addr, agentName string) (*Session, error) {
 	c, err := client.Dial(ctx, addr)
 	if err != nil {
 		return nil, err
@@ -150,7 +128,7 @@ func Dial(ctx context.Context, addr, agentName string) (*World, error) {
 }
 
 // Attach starts on an existing connection.
-func Attach(ctx context.Context, c *client.Conn, agentName string) (*World, error) {
+func Attach(ctx context.Context, c *client.Conn, agentName string) (*Session, error) {
 	info, err := c.Attach(ctx, agentName, Subscriptions...)
 	if err != nil {
 		return nil, err
@@ -159,18 +137,18 @@ func Attach(ctx context.Context, c *client.Conn, agentName string) (*World, erro
 }
 
 // New wraps a connection that is already attached.
-func New(c *client.Conn, info *pb.AgentInfo) (*World, error) {
+func New(c *client.Conn, info *pb.AgentInfo) (*Session, error) {
 	me, err := msg.ParseUUID(info.AgentId)
 	if err != nil {
-		return nil, fmt.Errorf("world: bad agent id: %w", err)
+		return nil, fmt.Errorf("sl: bad agent id: %w", err)
 	}
 	sess, err := msg.ParseUUID(info.SessionId)
 	if err != nil {
-		return nil, fmt.Errorf("world: bad session id: %w", err)
+		return nil, fmt.Errorf("sl: bad session id: %w", err)
 	}
 	root, _ := msg.ParseUUID(info.InventoryRoot)
 
-	w := &World{
+	w := &Session{
 		c: c, info: info, me: me, sess: sess, invRoot: root,
 		locals:   map[msg.UUID]uint32{},
 		owners:   map[msg.UUID]msg.UUID{},
@@ -194,20 +172,20 @@ func New(c *client.Conn, info *pb.AgentInfo) (*World, error) {
 
 // Conn is the connection underneath, for anything this package does
 // not cover.  A message sent through it still reaches the same reader.
-func (w *World) Conn() *client.Conn { return w.c }
+func (w *Session) Conn() *client.Conn { return w.c }
 
 // Me is the avatar's id, Session the session id, and Info what the
 // server said when we attached.
-func (w *World) Me() msg.UUID            { return w.me }
-func (w *World) Session() msg.UUID       { return w.sess }
-func (w *World) Info() *pb.AgentInfo     { return w.info }
-func (w *World) InventoryRoot() msg.UUID { return w.invRoot }
+func (w *Session) Me() msg.UUID            { return w.me }
+func (w *Session) Session() msg.UUID       { return w.sess }
+func (w *Session) Info() *pb.AgentInfo     { return w.info }
+func (w *Session) InventoryRoot() msg.UUID { return w.invRoot }
 
 // Close hangs up.
-func (w *World) Close() error { return w.c.Close() }
+func (w *Session) Close() error { return w.c.Close() }
 
 // Send puts a message on the wire, reliably.
-func (w *World) Send(ctx context.Context, m msg.Message) error {
+func (w *Session) Send(ctx context.Context, m msg.Message) error {
 	if w.sendFn != nil {
 		return w.sendFn(m)
 	}
@@ -216,7 +194,7 @@ func (w *World) Send(ctx context.Context, m msg.Message) error {
 
 // agentBlock fills the AgentID and SessionID that nearly every message
 // starts with.
-func (w *World) agentBlock() (msg.UUID, msg.UUID) { return w.me, w.sess }
+func (w *Session) agentBlock() (msg.UUID, msg.UUID) { return w.me, w.sess }
 
 // Settle waits, doing nothing, so the simulator's interest list can
 // fill.
@@ -225,7 +203,7 @@ func (w *World) agentBlock() (msg.UUID, msg.UUID) { return w.me, w.sess }
 // Rezzing immediately and then looking for the new object finds every
 // object in the region looking new, because none of them had been
 // mentioned before.
-func (w *World) Settle(ctx context.Context, d time.Duration) error {
+func (w *Session) Settle(ctx context.Context, d time.Duration) error {
 	t := time.NewTimer(d)
 	defer t.Stop()
 	select {
@@ -237,7 +215,7 @@ func (w *World) Settle(ctx context.Context, d time.Duration) error {
 }
 
 // alertsSince renders the alerts heard after a mark, for an error.
-func (w *World) alertsSince(mark int) string {
+func (w *Session) alertsSince(mark int) string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if mark >= len(w.alerts) {
@@ -252,7 +230,7 @@ func (w *World) alertsSince(mark int) string {
 
 // Alerts returns the AlertMessage text heard so far.  A simulator that
 // refuses something often says so only here.
-func (w *World) Alerts() []string {
+func (w *Session) Alerts() []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return append([]string(nil), w.alerts...)
@@ -264,7 +242,7 @@ func (w *World) Alerts() []string {
 // than ranging: adding and removing one has to happen here, in between
 // deliveries, so that nothing can be closed while a delivery is in
 // flight.
-func (w *World) read(ctx context.Context) {
+func (w *Session) read(ctx context.Context) {
 	msgs := w.c.Messages()
 	defer func() {
 		close(w.readDone)
@@ -298,7 +276,7 @@ func (w *World) read(ctx context.Context) {
 	}
 }
 
-func (w *World) handle(raw *client.Message, v msg.Message) {
+func (w *Session) handle(raw *client.Message, v msg.Message) {
 	switch t := v.(type) {
 	case *msg.ObjectUpdate:
 		w.mu.Lock()
@@ -407,7 +385,7 @@ func (w *World) handle(raw *client.Message, v msg.Message) {
 // other -- an object update and a properties reply, say -- and a
 // predicate over the accumulated state says that plainly where a
 // condition variable per fact would not.
-func (w *World) await(ctx context.Context, timeout time.Duration, what string, ok func() bool) error {
+func (w *Session) await(ctx context.Context, timeout time.Duration, what string, ok func() bool) error {
 	deadline := time.Now().Add(timeout)
 
 	// Where the alert log stood when the wait began, so a timeout can
@@ -449,7 +427,7 @@ func trimNul(b []byte) string {
 }
 
 // capDo runs a capability request and insists on a 2xx.
-func (w *World) capDo(ctx context.Context, r agent.CapRequest) ([]byte, error) {
+func (w *Session) capDo(ctx context.Context, r agent.CapRequest) ([]byte, error) {
 	resp, err := w.c.DoCap(ctx, r)
 	if err != nil {
 		return nil, err
@@ -459,7 +437,7 @@ func (w *World) capDo(ctx context.Context, r agent.CapRequest) ([]byte, error) {
 		if name == "" {
 			name = r.URL
 		}
-		return nil, fmt.Errorf("world: %s: status %d: %s", name, resp.Status, snippet(resp.Body))
+		return nil, fmt.Errorf("sl: %s: status %d: %s", name, resp.Status, snippet(resp.Body))
 	}
 	return resp.Body, nil
 }

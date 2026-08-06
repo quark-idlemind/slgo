@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"bytes"
@@ -64,14 +64,14 @@ type TaskItem struct {
 }
 
 // Folder finds a folder by name under the inventory root.
-func (w *World) Folder(ctx context.Context, name string) (msg.UUID, error) {
+func (w *Session) Folder(ctx context.Context, name string) (msg.UUID, error) {
 	inv := agent.NewInventory(w.invRoot)
 	if err := agent.FetchFolder(ctx, w.c, inv, w.invRoot); err != nil {
-		return msg.UUID{}, fmt.Errorf("world: reading the inventory root: %w", err)
+		return msg.UUID{}, fmt.Errorf("sl: reading the inventory root: %w", err)
 	}
 	f, ok := inv.FindFolder(name)
 	if !ok {
-		return msg.UUID{}, fmt.Errorf("world: no inventory folder named %q", name)
+		return msg.UUID{}, fmt.Errorf("sl: no inventory folder named %q", name)
 	}
 	return f.ID, nil
 }
@@ -79,21 +79,21 @@ func (w *World) Folder(ctx context.Context, name string) (msg.UUID, error) {
 // ObjectsFolder is the inventory folder a take lands in.  It is
 // named for the folder, not for objects in the region: see AllObjects
 // for those.
-func (w *World) ObjectsFolder(ctx context.Context) (msg.UUID, error) {
+func (w *Session) ObjectsFolder(ctx context.Context) (msg.UUID, error) {
 	return w.Folder(ctx, "Objects")
 }
 
 // FolderItems lists what a folder holds, freshly fetched.
-func (w *World) FolderItems(ctx context.Context, folder msg.UUID) ([]*Item, error) {
+func (w *Session) FolderItems(ctx context.Context, folder msg.UUID) ([]*Item, error) {
 	inv := agent.NewInventory(w.invRoot)
 	if err := agent.FetchFolder(ctx, w.c, inv, folder); err != nil {
-		return nil, fmt.Errorf("world: reading folder %s: %w", folder, err)
+		return nil, fmt.Errorf("sl: reading folder %s: %w", folder, err)
 	}
 	return inv.Contents(folder), nil
 }
 
 // FindItem looks for an item by name in a folder.
-func (w *World) FindItem(ctx context.Context, folder msg.UUID, name string) (*Item, error) {
+func (w *Session) FindItem(ctx context.Context, folder msg.UUID, name string) (*Item, error) {
 	items, err := w.FolderItems(ctx, folder)
 	if err != nil {
 		return nil, err
@@ -103,12 +103,12 @@ func (w *World) FindItem(ctx context.Context, folder msg.UUID, name string) (*It
 			return it, nil
 		}
 	}
-	return nil, fmt.Errorf("world: no item named %q in folder %s", name, folder)
+	return nil, fmt.Errorf("sl: no item named %q in folder %s", name, folder)
 }
 
 // CreateItem makes an empty inventory item and waits for the simulator
 // to confirm it, which it does by echoing back a callback id.
-func (w *World) CreateItem(ctx context.Context, name, desc string, assetType, invType int8) (*Item, error) {
+func (w *Session) CreateItem(ctx context.Context, name, desc string, assetType, invType int8) (*Item, error) {
 	cb := uint32(time.Now().UnixNano() & 0x7fffffff)
 	m := &msg.CreateInventoryItem{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
@@ -160,7 +160,7 @@ type UploadResult struct {
 
 // upload runs the two step asset upload: describe what is being
 // written, then write it to the URL that comes back.
-func (w *World) upload(ctx context.Context, capName string, fields map[string]any, body []byte) (*UploadResult, error) {
+func (w *Session) upload(ctx context.Context, capName string, fields map[string]any, body []byte) (*UploadResult, error) {
 	req, err := llsd.Encode(fields)
 	if err != nil {
 		return nil, err
@@ -173,7 +173,7 @@ func (w *World) upload(ctx context.Context, capName string, fields map[string]an
 	}
 	uploader := llsd.String(llsd.Map(decodeLLSD(first)), "uploader")
 	if uploader == "" {
-		return nil, fmt.Errorf("world: %s gave no uploader: %s", capName, snippet(first))
+		return nil, fmt.Errorf("sl: %s gave no uploader: %s", capName, snippet(first))
 	}
 
 	second, err := w.capDo(ctx, agent.CapRequest{
@@ -210,7 +210,7 @@ func decodeLLSD(b []byte) any {
 //
 // Saving to inventory compiles, so the result carries the verdict even
 // though no object is involved.
-func (w *World) SaveScript(ctx context.Context, item msg.UUID, source string) (*UploadResult, error) {
+func (w *Session) SaveScript(ctx context.Context, item msg.UUID, source string) (*UploadResult, error) {
 	return w.upload(ctx, "UpdateScriptAgent", map[string]any{
 		"item_id": item.String(),
 		"target":  "mono",
@@ -218,13 +218,13 @@ func (w *World) SaveScript(ctx context.Context, item msg.UUID, source string) (*
 }
 
 // SaveNotecard writes a notecard in agent inventory.
-func (w *World) SaveNotecard(ctx context.Context, item msg.UUID, text string) (*UploadResult, error) {
+func (w *Session) SaveNotecard(ctx context.Context, item msg.UUID, text string) (*UploadResult, error) {
 	return w.upload(ctx, "UpdateNotecardAgentInventory",
 		map[string]any{"item_id": item.String()}, notecardAsset(text))
 }
 
 // NewScript creates a script in inventory and saves source to it.
-func (w *World) NewScript(ctx context.Context, name, source string) (*Item, *UploadResult, error) {
+func (w *Session) NewScript(ctx context.Context, name, source string) (*Item, *UploadResult, error) {
 	it, err := w.CreateItem(ctx, name, "created by slgo", AssetScript, AssetScript)
 	if err != nil {
 		return nil, nil, err
@@ -240,7 +240,7 @@ func (w *World) NewScript(ctx context.Context, name, source string) (*Item, *Upl
 //
 // An object keeps every copy it is given and renames the newcomer, so
 // putting the same item in twice leaves "thing" and "thing 1".
-func (w *World) PutInObject(ctx context.Context, o *Object, it *Item) error {
+func (w *Session) PutInObject(ctx context.Context, o *Object, it *Item) error {
 	m := &msg.UpdateTaskInventory{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.UpdateData.LocalID = o.Local
@@ -259,7 +259,7 @@ func (w *World) PutInObject(ctx context.Context, o *Object, it *Item) error {
 }
 
 // RemoveFromObject deletes an item from inside an object.
-func (w *World) RemoveFromObject(ctx context.Context, o *Object, item msg.UUID) error {
+func (w *Session) RemoveFromObject(ctx context.Context, o *Object, item msg.UUID) error {
 	m := &msg.RemoveTaskInventory{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.InventoryData.LocalID = o.Local
@@ -274,7 +274,7 @@ func (w *World) RemoveFromObject(ctx context.Context, o *Object, item msg.UUID) 
 // names a fresh file which the transfer deletes when it completes, so
 // the remembered name is dropped first: reading it twice asks for a
 // file that is gone and the transfer aborts.
-func (w *World) TaskInventory(ctx context.Context, o *Object) ([]TaskItem, error) {
+func (w *Session) TaskInventory(ctx context.Context, o *Object) ([]TaskItem, error) {
 	w.mu.Lock()
 	delete(w.taskInv, o.ID)
 	delete(w.taskSeen, o.ID)
@@ -305,13 +305,13 @@ func (w *World) TaskInventory(ctx context.Context, o *Object) ([]TaskItem, error
 	body, err := w.xfers.Fetch(ctx, w.me, w.sess, filename,
 		client.FilePathTaskInventory, 30*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("world: reading the inventory of %s: %w", o, err)
+		return nil, fmt.Errorf("sl: reading the inventory of %s: %w", o, err)
 	}
 	return parseTaskInventory(body), nil
 }
 
 // FindInObject looks for something inside an object by name.
-func (w *World) FindInObject(ctx context.Context, o *Object, name string) (*TaskItem, error) {
+func (w *Session) FindInObject(ctx context.Context, o *Object, name string) (*TaskItem, error) {
 	items, err := w.TaskInventory(ctx, o)
 	if err != nil {
 		return nil, err
@@ -408,7 +408,7 @@ func parseTaskInventory(b []byte) []TaskItem {
 // answers 403 for a notecard or a script, so these come over the UDP
 // transfer protocol instead.  Task is zero for something in agent
 // inventory.
-func (w *World) ReadAsset(ctx context.Context, ref client.AssetRef, timeout time.Duration) ([]byte, error) {
+func (w *Session) ReadAsset(ctx context.Context, ref client.AssetRef, timeout time.Duration) ([]byte, error) {
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
@@ -419,7 +419,7 @@ func (w *World) ReadAsset(ctx context.Context, ref client.AssetRef, timeout time
 }
 
 // ReadTaskAsset fetches the bytes of something inside an object.
-func (w *World) ReadTaskAsset(ctx context.Context, o *Object, it *TaskItem, assetType int32, timeout time.Duration) ([]byte, error) {
+func (w *Session) ReadTaskAsset(ctx context.Context, o *Object, it *TaskItem, assetType int32, timeout time.Duration) ([]byte, error) {
 	return w.ReadAsset(ctx, client.AssetRef{
 		Owner: w.me, Task: o.ID, Item: it.ID, Asset: it.Asset, Type: assetType,
 	}, timeout)
@@ -458,9 +458,9 @@ func hexOrDec(s string) uint64 {
 // The whole item goes back, not just the name, because that is what the
 // message carries -- anything left out is set to zero, which for a
 // permission mask means taking the rights away.
-func (w *World) RenameInObject(ctx context.Context, o *Object, it TaskItem, name string) error {
+func (w *Session) RenameInObject(ctx context.Context, o *Object, it TaskItem, name string) error {
 	if name == "" {
-		return fmt.Errorf("world: a name is needed")
+		return fmt.Errorf("sl: a name is needed")
 	}
 	m := &msg.UpdateTaskInventory{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()

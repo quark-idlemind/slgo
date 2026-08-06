@@ -22,7 +22,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/quark-idlemind/slgo/world"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 const source = `default {
@@ -44,7 +44,7 @@ func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	w, err := world.Dial(ctx, *server, *agent)
+	w, err := sl.Dial(ctx, *server, *agent)
 	if err != nil {
 		die("attach: %v", err)
 	}
@@ -95,7 +95,7 @@ func main() {
 	fmt.Printf("found:    %s %s at %v\n", target.Name, target.ID, target.Position)
 
 	start := time.Now()
-	res, err := w.Run(ctx, world.Script{
+	res, err := w.Run(ctx, sl.Script{
 		In: &target.Object, Name: *name, Source: source,
 		Done: "SLGO-DONE", Timeout: *timeout,
 	})

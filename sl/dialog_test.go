@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"strings"
@@ -27,7 +27,7 @@ func testScriptDialog() *msg.ScriptDialog {
 }
 
 func TestDialogDecoding(t *testing.T) {
-	w := &World{}
+	w := &Session{}
 	w.dialog(testScriptDialog())
 
 	ds := w.Dialogs()
@@ -54,7 +54,7 @@ func TestDialogDecoding(t *testing.T) {
 }
 
 func TestDialogButtonLookup(t *testing.T) {
-	w := &World{}
+	w := &Session{}
 	w.dialog(testScriptDialog())
 	d := w.Dialogs()[0]
 
@@ -76,7 +76,7 @@ func TestDialogButtonLookup(t *testing.T) {
 // the script as well as the index, so answering with a label the dialog
 // never showed would tell the script something impossible.
 func TestAnswerRefusesUnknownButtons(t *testing.T) {
-	w := &World{}
+	w := &Session{}
 	w.dialog(testScriptDialog())
 	d := w.Dialogs()[0]
 
@@ -97,7 +97,7 @@ func TestAnswerRefusesUnknownButtons(t *testing.T) {
 // without polling.
 func TestOnDialogIsCalled(t *testing.T) {
 	var got Dialog
-	w := &World{}
+	w := &Session{}
 	w.OnDialog = func(d Dialog) { got = d }
 	w.dialog(testScriptDialog())
 	if got.Message != "pick one" {

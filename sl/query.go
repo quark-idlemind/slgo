@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"context"
@@ -40,7 +40,7 @@ type Presence struct {
 // Position is exact after a teleport or entering a region, and to the
 // nearest metre while walking, which is all CoarseLocationUpdate
 // carries.
-func (w *World) Where(ctx context.Context) (*Presence, error) {
+func (w *Session) Where(ctx context.Context) (*Presence, error) {
 	return w.presence(ctx, 0)
 }
 
@@ -56,14 +56,14 @@ func (w *World) Where(ctx context.Context) (*Presence, error) {
 // Lowering it does not take anything away, because what has already
 // been described has already been heard: 32 metres left the count at
 // 193.  Treat it as a floor on what can be found, not a filter.
-func (w *World) SetDrawDistance(ctx context.Context, metres float32) (*Presence, error) {
+func (w *Session) SetDrawDistance(ctx context.Context, metres float32) (*Presence, error) {
 	if metres <= 0 {
-		return nil, fmt.Errorf("world: draw distance must be positive, got %v", metres)
+		return nil, fmt.Errorf("sl: draw distance must be positive, got %v", metres)
 	}
 	return w.presence(ctx, metres)
 }
 
-func (w *World) presence(ctx context.Context, set float32) (*Presence, error) {
+func (w *Session) presence(ctx context.Context, set float32) (*Presence, error) {
 	r, err := w.c.Presence(ctx, set)
 	if err != nil {
 		return nil, err
@@ -90,10 +90,10 @@ func fromPB(v *pb.Vector3) msg.Vector3 {
 //
 // The UDP FetchInventoryDescendents this replaces was retired: the
 // simulator accepts the request and never answers.
-func (w *World) Inventory(ctx context.Context) (*agent.Inventory, error) {
+func (w *Session) Inventory(ctx context.Context) (*agent.Inventory, error) {
 	inv := agent.NewInventory(w.invRoot)
 	if err := agent.FetchInventory(ctx, w.c, inv, agent.FetchOptions{}); err != nil {
-		return nil, fmt.Errorf("world: reading inventory: %w", err)
+		return nil, fmt.Errorf("sl: reading inventory: %w", err)
 	}
 	return inv, nil
 }
@@ -129,7 +129,7 @@ type Seen struct {
 // Faces unpacks the appearance, if any has been seen.
 func (s *Seen) Faces(count int) ([]Face, error) {
 	if len(s.TextureEntry) == 0 {
-		return nil, fmt.Errorf("world: nothing has described the faces of %s", s.ID)
+		return nil, fmt.Errorf("sl: nothing has described the faces of %s", s.ID)
 	}
 	return DecodeTextureEntry(s.TextureEntry, count)
 }
@@ -150,7 +150,7 @@ const (
 // The name is asked for if nobody has asked before, which is a round
 // trip: an ObjectUpdate carries no name, so a name is only ever had by
 // asking.
-func (w *World) ObjectByID(ctx context.Context, id msg.UUID, timeout time.Duration) (*Seen, error) {
+func (w *Session) ObjectByID(ctx context.Context, id msg.UUID, timeout time.Duration) (*Seen, error) {
 	if timeout == 0 {
 		timeout = 20 * time.Second
 	}
@@ -159,7 +159,7 @@ func (w *World) ObjectByID(ctx context.Context, id msg.UUID, timeout time.Durati
 		return nil, err
 	}
 	if len(found) == 0 {
-		return nil, fmt.Errorf("world: %s is not in the region, or is beyond the draw distance", id)
+		return nil, fmt.Errorf("sl: %s is not in the region, or is beyond the draw distance", id)
 	}
 	if found[0].Name == "" {
 		if err := w.resolve(ctx, []msg.UUID{id}, timeout); err != nil {
@@ -180,7 +180,7 @@ func (w *World) ObjectByID(ctx context.Context, id msg.UUID, timeout time.Durati
 // them.  They are asked for in batches so a scan does not go out as a
 // flood, and the answers are remembered by the server, so the second
 // caller pays nothing.
-func (w *World) AllObjects(ctx context.Context, timeout time.Duration) ([]*Seen, error) {
+func (w *Session) AllObjects(ctx context.Context, timeout time.Duration) ([]*Seen, error) {
 	if timeout == 0 {
 		timeout = 90 * time.Second
 	}
@@ -210,7 +210,7 @@ func (w *World) AllObjects(ctx context.Context, timeout time.Duration) ([]*Seen,
 // so the first call costs what AllObjects costs.  A region with
 // nothing of that name in it is not distinguishable from one where the
 // thing is beyond the draw distance.
-func (w *World) ObjectsNamed(ctx context.Context, name string, timeout time.Duration) ([]*Seen, error) {
+func (w *Session) ObjectsNamed(ctx context.Context, name string, timeout time.Duration) ([]*Seen, error) {
 	if _, err := w.AllObjects(ctx, timeout); err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (w *World) ObjectsNamed(ctx context.Context, name string, timeout time.Dura
 
 // Known is how many objects the session has heard about, without
 // naming any of them.
-func (w *World) Known(ctx context.Context) (int, error) {
+func (w *Session) Known(ctx context.Context) (int, error) {
 	r, err := w.c.Objects(ctx, "", "")
 	if err != nil {
 		return 0, err
@@ -228,7 +228,7 @@ func (w *World) Known(ctx context.Context) (int, error) {
 }
 
 // fetch asks the server for its picture of the region.
-func (w *World) fetch(ctx context.Context, named, id string) ([]*Seen, error) {
+func (w *Session) fetch(ctx context.Context, named, id string) ([]*Seen, error) {
 	r, err := w.c.Objects(ctx, named, id)
 	if err != nil {
 		return nil, err
@@ -262,7 +262,7 @@ const resolveBatch = 40
 
 // resolve asks for the names of these objects and waits for the
 // answers to stop arriving.
-func (w *World) resolve(ctx context.Context, want []msg.UUID, timeout time.Duration) error {
+func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Duration) error {
 	if len(want) == 0 {
 		return nil
 	}
@@ -348,13 +348,13 @@ type Region struct {
 // It says it once, in the handshake, before any client is listening,
 // so this comes from the server rather than from anything a client
 // could have heard.
-func (w *World) Region(ctx context.Context) (*Region, error) {
+func (w *Session) Region(ctx context.Context) (*Region, error) {
 	r, err := w.c.Region(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if !r.Known {
-		return nil, fmt.Errorf("world: the region handshake has not arrived")
+		return nil, fmt.Errorf("sl: the region handshake has not arrived")
 	}
 	id, _ := msg.ParseUUID(r.Id)
 	owner, _ := msg.ParseUUID(r.Owner)
@@ -376,7 +376,7 @@ func (w *World) Region(ctx context.Context) (*Region, error) {
 // The server does this itself when the region changes.  This is for a
 // client that knows the cache is wrong for a reason the server cannot
 // see.
-func (w *World) Flush(ctx context.Context) (int, error) {
+func (w *Session) Flush(ctx context.Context) (int, error) {
 	return w.c.Flush(ctx)
 }
 
@@ -392,7 +392,7 @@ func parseUUIDOrZero(s string) msg.UUID {
 }
 
 // ActiveGroup is the group the avatar is acting as.
-func (w *World) ActiveGroup(ctx context.Context) (msg.UUID, error) {
+func (w *Session) ActiveGroup(ctx context.Context) (msg.UUID, error) {
 	p, err := w.Where(ctx)
 	if err != nil {
 		return msg.UUID{}, err

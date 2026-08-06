@@ -1,4 +1,4 @@
-package world
+package sl
 
 import (
 	"context"
@@ -147,12 +147,12 @@ func (r *Result) Contains(s string) bool {
 // capability wants.  And the compile result is checked before waiting,
 // because waiting a minute for output from something that did not
 // compile is a slow way to learn nothing.
-func (w *World) Run(ctx context.Context, s Script) (*Result, error) {
+func (w *Session) Run(ctx context.Context, s Script) (*Result, error) {
 	if s.In == nil {
-		return nil, fmt.Errorf("world: Run needs an object to run in")
+		return nil, fmt.Errorf("sl: Run needs an object to run in")
 	}
 	if s.Name == "" {
-		return nil, fmt.Errorf("world: Run needs a name for the script")
+		return nil, fmt.Errorf("sl: Run needs a name for the script")
 	}
 	if s.Timeout == 0 {
 		s.Timeout = 60 * time.Second
@@ -179,7 +179,7 @@ func (w *World) Run(ctx context.Context, s Script) (*Result, error) {
 			return nil, err
 		}
 		if task == nil {
-			return nil, fmt.Errorf("world: %q never turned up inside %s", s.Name, s.In)
+			return nil, fmt.Errorf("sl: %q never turned up inside %s", s.Name, s.In)
 		}
 	}
 
@@ -262,7 +262,7 @@ func (w *World) Run(ctx context.Context, s Script) (*Result, error) {
 
 // RemoveScripts deletes scripts from an object whose names match, which
 // is how to stop leftovers from an earlier run talking over this one.
-func (w *World) RemoveScripts(ctx context.Context, o *Object, match func(name string) bool) (int, error) {
+func (w *Session) RemoveScripts(ctx context.Context, o *Object, match func(name string) bool) (int, error) {
 	items, err := w.TaskInventory(ctx, o)
 	if err != nil {
 		return 0, err
@@ -286,7 +286,7 @@ func (w *World) RemoveScripts(ctx context.Context, o *Object, match func(name st
 }
 
 // SetScriptRunning starts or stops a script already inside an object.
-func (w *World) SetScriptRunning(ctx context.Context, o *Object, item msg.UUID, running bool) error {
+func (w *Session) SetScriptRunning(ctx context.Context, o *Object, item msg.UUID, running bool) error {
 	m := &msg.SetScriptRunning{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.Script.ObjectID = o.ID
@@ -312,12 +312,12 @@ func (w *World) SetScriptRunning(ctx context.Context, o *Object, item msg.UUID, 
 //
 // Reusing the name replaces that script rather than adding another: an
 // object keeps every copy it is given and renames the newcomer.
-func (w *World) InstallScript(ctx context.Context, o *Object, name, source string, running bool) (*UploadResult, error) {
+func (w *Session) InstallScript(ctx context.Context, o *Object, name, source string, running bool) (*UploadResult, error) {
 	if o == nil {
-		return nil, fmt.Errorf("world: InstallScript needs an object")
+		return nil, fmt.Errorf("sl: InstallScript needs an object")
 	}
 	if name == "" {
-		return nil, fmt.Errorf("world: InstallScript needs a name")
+		return nil, fmt.Errorf("sl: InstallScript needs a name")
 	}
 
 	task, err := w.FindInObject(ctx, o, name)
@@ -339,7 +339,7 @@ func (w *World) InstallScript(ctx context.Context, o *Object, name, source strin
 			return nil, err
 		}
 		if task == nil {
-			return nil, fmt.Errorf("world: %q never turned up inside %s", name, o)
+			return nil, fmt.Errorf("sl: %q never turned up inside %s", name, o)
 		}
 	}
 

@@ -12,6 +12,7 @@ and decode themselves.
     cmd/msggen/         reads message_template.msg, writes Go
     cmd/slgod/          holds grid connections, serves clients
     cmd/slchat/         a shell for chat and instant messages
+    sl/                 the client library: everything an avatar can do
     client/profile.go   credentials under ~/.config/slgo
     client/xmlrpc.go    XML-RPC decoding
     client/llsd.go      LLSD decoding and encoding

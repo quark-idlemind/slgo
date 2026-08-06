@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
-	"github.com/quark-idlemind/slgo/world"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	w, err := world.Dial(ctx, *server, *agent)
+	w, err := sl.Dial(ctx, *server, *agent)
 	if err != nil {
 		die("attach: %v", err)
 	}

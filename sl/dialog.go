@@ -1,4 +1,4 @@
-package world
+package sl
 
 // Answering the dialogs a script puts on the screen.
 //
@@ -65,7 +65,7 @@ func (d Dialog) String() string {
 }
 
 // dialog records one and tells whoever is waiting.
-func (w *World) dialog(m *msg.ScriptDialog) {
+func (w *Session) dialog(m *msg.ScriptDialog) {
 	d := Dialog{
 		At:         time.Now(),
 		Object:     m.Data.ObjectID,
@@ -92,7 +92,7 @@ func (w *World) dialog(m *msg.ScriptDialog) {
 }
 
 // Dialogs returns the dialogs seen so far, oldest first.
-func (w *World) Dialogs() []Dialog {
+func (w *Session) Dialogs() []Dialog {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return append([]Dialog(nil), w.dialogs...)
@@ -103,7 +103,7 @@ func (w *World) Dialogs() []Dialog {
 // A nil match takes the next one.  Dialogs already seen count: a script
 // that opens one the instant it is rezzed would otherwise be a race
 // nobody can win.
-func (w *World) WaitDialog(ctx context.Context, timeout time.Duration, match func(Dialog) bool) (Dialog, error) {
+func (w *Session) WaitDialog(ctx context.Context, timeout time.Duration, match func(Dialog) bool) (Dialog, error) {
 	if match == nil {
 		match = func(Dialog) bool { return true }
 	}
@@ -128,23 +128,23 @@ func (w *World) WaitDialog(ctx context.Context, timeout time.Duration, match fun
 // The label has to be one the dialog offered: the simulator passes both
 // the index and the label to the script, and a script that switches on
 // the label would be told something it never displayed.
-func (w *World) Answer(ctx context.Context, d Dialog, label string) error {
+func (w *Session) Answer(ctx context.Context, d Dialog, label string) error {
 	i, ok := d.Button(label)
 	if !ok {
-		return fmt.Errorf("world: %q is not one of the buttons: %v", label, d.Buttons)
+		return fmt.Errorf("sl: %q is not one of the buttons: %v", label, d.Buttons)
 	}
 	return w.answer(ctx, d, i, d.Buttons[i])
 }
 
 // AnswerIndex presses the button at a position, counting from zero.
-func (w *World) AnswerIndex(ctx context.Context, d Dialog, i int) error {
+func (w *Session) AnswerIndex(ctx context.Context, d Dialog, i int) error {
 	if i < 0 || i >= len(d.Buttons) {
-		return fmt.Errorf("world: there is no button %d; the dialog has %d", i, len(d.Buttons))
+		return fmt.Errorf("sl: there is no button %d; the dialog has %d", i, len(d.Buttons))
 	}
 	return w.answer(ctx, d, i, d.Buttons[i])
 }
 
-func (w *World) answer(ctx context.Context, d Dialog, index int, label string) error {
+func (w *Session) answer(ctx context.Context, d Dialog, index int, label string) error {
 	m := &msg.ScriptDialogReply{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.Data.ObjectID = d.Object

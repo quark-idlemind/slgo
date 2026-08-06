@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
-	"github.com/quark-idlemind/slgo/world"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 const notecardText = "Hello from slgo.\nSecond line.\n"
@@ -51,7 +51,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	w, err := world.Dial(ctx, *server, *agent)
+	w, err := sl.Dial(ctx, *server, *agent)
 	if err != nil {
 		die("attach: %v", err)
 	}
@@ -133,7 +133,7 @@ func main() {
 
 	// ---- renaming and permissions
 
-	after, err := w.SetItem(ctx, note.ID, "README", "", u32(world.PermCopy|world.PermModify|world.PermTransfer))
+	after, err := w.SetItem(ctx, note.ID, "README", "", u32(sl.PermCopy|sl.PermModify|sl.PermTransfer))
 	if err != nil {
 		die("set item: %v", err)
 	}
@@ -189,8 +189,8 @@ func main() {
 	if err := w.SetDescription(ctx, target, "touched by slgo-inv"); err != nil {
 		die("set description: %v", err)
 	}
-	if err := w.SetObjectPermissions(ctx, target, world.WhoNextOwner,
-		world.PermCopy|world.PermModify|world.PermTransfer); err != nil {
+	if err := w.SetObjectPermissions(ctx, target, sl.WhoNextOwner,
+		sl.PermCopy|sl.PermModify|sl.PermTransfer); err != nil {
 		die("set object permissions: %v", err)
 	}
 	props, err := w.Properties(ctx, target, 20*time.Second)
