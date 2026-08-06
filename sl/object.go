@@ -78,7 +78,7 @@ func (w *Session) SetName(ctx context.Context, o *Object, name string) error {
 		}
 		var got string
 		_ = w.await(ctx, 3*time.Second, "the new name", func() bool {
-			got = w.names[o.ID]
+			got = w.objectNames[o.ID]
 			return got != ""
 		})
 		if got == name {

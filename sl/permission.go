@@ -228,13 +228,7 @@ func (w *Session) Permissions(depth int) <-chan *Permission {
 		depth = DefaultPermissionDepth
 	}
 	sub := &permSub{ch: make(chan *Permission, depth)}
-	done := make(chan struct{})
-	select {
-	case w.chatCtl <- chatCmd{addPerm: sub, done: done}:
-		<-done
-	case <-w.readDone:
-		close(sub.ch)
-	}
+	w.onReader(func() { w.permSubs[sub.ch] = sub })
 	return sub.ch
 }
 
@@ -244,12 +238,12 @@ const DefaultPermissionDepth = 16
 
 // StopPermissions closes a subscription, and returns once it is closed.
 func (w *Session) StopPermissions(ch <-chan *Permission) {
-	done := make(chan struct{})
-	select {
-	case w.chatCtl <- chatCmd{removePerm: ch, done: done}:
-		<-done
-	case <-w.readDone:
-	}
+	w.onReader(func() {
+		if s := w.permSubs[ch]; s != nil {
+			delete(w.permSubs, ch)
+			close(s.ch)
+		}
+	})
 }
 
 // PermissionsDropped is how many requests a subscription missed

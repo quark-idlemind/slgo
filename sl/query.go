@@ -262,7 +262,7 @@ func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Dur
 		w.mu.Lock()
 		have := 0
 		for _, id := range want {
-			if _, ok := w.names[id]; ok {
+			if _, ok := w.objectNames[id]; ok {
 				have++
 			}
 		}

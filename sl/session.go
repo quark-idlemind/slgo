@@ -29,6 +29,8 @@ var Subscriptions = []string{
 	"UpdateCreateInventoryItem", "ReplyTaskInventory",
 	"SendXferPacket", "AbortXfer", "TransferInfo", "TransferPacket",
 	"ChatFromSimulator", "AlertMessage",
+	"ImprovedInstantMessage", "UUIDNameReply", "AvatarPickerReply",
+	"OnlineNotification", "OfflineNotification",
 	"ScriptRunningReply", "ScriptQuestion", "ScriptDialog",
 	"TeleportLocal", "TeleportFailed", "TeleportFinish",
 	"AgentMovementComplete", "ParcelProperties",
@@ -53,12 +55,12 @@ type Session struct {
 	mu sync.Mutex
 
 	// What the simulator has said about objects.
-	locals  map[msg.UUID]uint32   // object id to local id
-	owners  map[msg.UUID]msg.UUID // object id to owner
-	names   map[msg.UUID]string   // object id to name
-	parents map[uint32]uint32     // local id to parent local id
-	attach  map[msg.UUID]*Attached
-	killed  map[uint32]bool
+	locals      map[msg.UUID]uint32   // object id to local id
+	owners      map[msg.UUID]msg.UUID // object id to owner
+	objectNames map[msg.UUID]string   // object id to name
+	parents     map[uint32]uint32     // local id to parent local id
+	attach      map[msg.UUID]*Attached
+	killed      map[uint32]bool
 
 	// Replies keyed by what was asked.
 	created map[uint32]*msg.UpdateCreateInventoryItem_InventoryData
@@ -78,6 +80,7 @@ type Session struct {
 	// with a send no matter how it is locked.
 	chatSubs map[<-chan Line]*chatSub
 	permSubs map[<-chan *Permission]*permSub
+	imSubs   map[<-chan *IM]*imSub
 	chatCtl  chan chatCmd
 	readDone chan struct{}
 
@@ -88,6 +91,13 @@ type Session struct {
 
 	// Permission requests seen, answered or not, in arrival order.
 	asked []*Permission
+
+	// Who is who: names learned or asked for, the questions still
+	// out, and the friendship offers waiting for an answer.
+	names   map[msg.UUID]string
+	asking  map[msg.UUID]bool
+	offers  map[msg.UUID]*Offer
+	pickers map[msg.UUID]chan []Found
 
 	// Dialogs a script has put up, in arrival order.  Kept rather
 	// than only delivered, because a dialog that appears the instant
@@ -161,19 +171,24 @@ func New(b Backend) (*Session, error) {
 
 	w := &Session{
 		b: b, info: info, me: info.AgentID, sess: info.SessionID, invRoot: info.InventoryRoot,
-		locals:   map[msg.UUID]uint32{},
-		owners:   map[msg.UUID]msg.UUID{},
-		names:    map[msg.UUID]string{},
-		parents:  map[uint32]uint32{},
-		attach:   map[msg.UUID]*Attached{},
-		killed:   map[uint32]bool{},
-		created:  map[uint32]*msg.UpdateCreateInventoryItem_InventoryData{},
-		taskInv:  map[msg.UUID]string{},
-		taskSeen: map[msg.UUID]bool{},
-		chatSubs: map[<-chan Line]*chatSub{},
-		permSubs: map[<-chan *Permission]*permSub{},
-		chatCtl:  make(chan chatCmd),
-		readDone: make(chan struct{}),
+		locals:      map[msg.UUID]uint32{},
+		owners:      map[msg.UUID]msg.UUID{},
+		objectNames: map[msg.UUID]string{},
+		parents:     map[uint32]uint32{},
+		attach:      map[msg.UUID]*Attached{},
+		killed:      map[uint32]bool{},
+		created:     map[uint32]*msg.UpdateCreateInventoryItem_InventoryData{},
+		taskInv:     map[msg.UUID]string{},
+		taskSeen:    map[msg.UUID]bool{},
+		chatSubs:    map[<-chan Line]*chatSub{},
+		permSubs:    map[<-chan *Permission]*permSub{},
+		imSubs:      map[<-chan *IM]*imSub{},
+		names:       map[msg.UUID]string{},
+		asking:      map[msg.UUID]bool{},
+		offers:      map[msg.UUID]*Offer{},
+		pickers:     map[msg.UUID]chan []Found{},
+		chatCtl:     make(chan chatCmd),
+		readDone:    make(chan struct{}),
 	}
 	w.xfers = client.NewXfers(b)
 	w.transfers = client.NewTransfers(b)
@@ -317,7 +332,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 	case *msg.ObjectPropertiesFamily:
 		w.mu.Lock()
 		w.owners[t.ObjectData.ObjectID] = t.ObjectData.OwnerID
-		w.names[t.ObjectData.ObjectID] = trimNul(t.ObjectData.Name)
+		w.objectNames[t.ObjectData.ObjectID] = trimNul(t.ObjectData.Name)
 		w.mu.Unlock()
 
 	case *msg.ObjectProperties:
@@ -326,7 +341,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		for i := range t.ObjectData {
 			o := &t.ObjectData[i]
 			w.owners[o.ObjectID] = o.OwnerID
-			w.names[o.ObjectID] = trimNul(o.Name)
+			w.objectNames[o.ObjectID] = trimNul(o.Name)
 			out = append(out, &Properties{
 				Object: o.ObjectID, Name: trimNul(o.Name),
 				Description: trimNul(o.Description),
@@ -376,6 +391,15 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 
 	case *msg.ScriptQuestion:
 		w.permission(t)
+
+	case *msg.ImprovedInstantMessage:
+		w.instantMessage(t)
+
+	case *msg.UUIDNameReply:
+		w.nameReply(t)
+
+	case *msg.AvatarPickerReply:
+		w.pickerReply(t)
 
 	case *msg.AlertMessage:
 		s := trimNul(t.AlertData.Message)

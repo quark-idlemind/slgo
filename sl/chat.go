@@ -328,17 +328,19 @@ type chatSub struct {
 // channel.  It is the only writer and the only closer, which is what
 // makes closing safe: with any other arrangement a close can land
 // between a sender deciding to send and sending.
-// chatCmd adds or removes a subscription of either kind.  Both go
-// through the reader goroutine so that it stays the only thing that
-// ever touches a subscription's channel: the only writer and the only
-// closer.  Closing from anywhere else races with a send no matter how
-// it is locked.
+// chatCmd is work to run on the reader goroutine.
+//
+// Every subscription -- chat, permissions, instant messages, friendship
+// offers -- is added and removed this way, so that the reader stays the
+// only thing that ever touches a subscription's channel: the only
+// writer and the only closer.  Closing from anywhere else races with a
+// send no matter how it is locked.
+//
+// A closure rather than a field per kind, because there are four kinds
+// now and the next one should cost nothing.
 type chatCmd struct {
-	add        *chatSub
-	remove     <-chan Line
-	addPerm    *permSub
-	removePerm <-chan *Permission
-	done       chan struct{}
+	apply func()
+	done  chan struct{}
 }
 
 // permSub is a subscription to permission requests.
@@ -361,16 +363,19 @@ func (w *Session) Chat(filter ChatFilter, depth int) <-chan Line {
 		depth = DefaultChatDepth
 	}
 	sub := &chatSub{ch: make(chan Line, depth), filter: filter}
-	done := make(chan struct{})
+	// A reader that has already stopped will never deliver anything,
+	// so the channel is closed rather than left empty for ever.
+	stopped := true
 	select {
-	case w.chatCtl <- chatCmd{add: sub, done: done}:
-		<-done
 	case <-w.readDone:
-		// The reader has stopped, so nothing will ever be delivered.
-		// Hand back a closed channel rather than one that stays empty
-		// for ever.
-		close(sub.ch)
+	default:
+		stopped = false
 	}
+	if stopped {
+		close(sub.ch)
+		return sub.ch
+	}
+	w.onReader(func() { w.chatSubs[sub.ch] = sub })
 	return sub.ch
 }
 
@@ -380,12 +385,12 @@ func (w *Session) Chat(filter ChatFilter, depth int) <-chan Line {
 // over it will see the range end.  Stopping something already stopped
 // does nothing.
 func (w *Session) StopChat(ch <-chan Line) {
-	done := make(chan struct{})
-	select {
-	case w.chatCtl <- chatCmd{remove: ch, done: done}:
-		<-done
-	case <-w.readDone:
-	}
+	w.onReader(func() {
+		if s := w.chatSubs[ch]; s != nil {
+			delete(w.chatSubs, ch)
+			close(s.ch)
+		}
+	})
 }
 
 // ChatDropped is how many lines a subscription missed because its
@@ -427,26 +432,31 @@ func (w *Session) deliver(l Line) {
 
 // applyChat runs one subscription command, in the reader goroutine.
 func (w *Session) applyChat(c chatCmd) {
-	w.mu.Lock()
-	switch {
-	case c.add != nil:
-		w.chatSubs[c.add.ch] = c.add
-	case c.remove != nil:
-		if s := w.chatSubs[c.remove]; s != nil {
-			delete(w.chatSubs, c.remove)
-			close(s.ch)
-		}
-	case c.addPerm != nil:
-		w.permSubs[c.addPerm.ch] = c.addPerm
-	case c.removePerm != nil:
-		if s := w.permSubs[c.removePerm]; s != nil {
-			delete(w.permSubs, c.removePerm)
-			close(s.ch)
-		}
+	if c.apply != nil {
+		w.mu.Lock()
+		c.apply()
+		w.mu.Unlock()
 	}
-	w.mu.Unlock()
 	if c.done != nil {
 		close(c.done)
+	}
+}
+
+// onReader runs fn on the reader goroutine, with the lock held, and
+// waits for it.  This is how a subscription is added or removed.
+//
+// A session whose reader has already stopped runs fn here instead: the
+// caller is owed the same effect, and there is no longer anything to
+// race with.
+func (w *Session) onReader(fn func()) {
+	done := make(chan struct{})
+	select {
+	case w.chatCtl <- chatCmd{apply: fn, done: done}:
+		<-done
+	case <-w.readDone:
+		w.mu.Lock()
+		fn()
+		w.mu.Unlock()
 	}
 }
 
