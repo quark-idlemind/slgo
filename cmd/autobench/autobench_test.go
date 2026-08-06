@@ -1,0 +1,576 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"testing"
+)
+
+// These tests drive the measurement machinery with useTestInfo set, so no
+// Second Life and no viewer are involved.  runScript short-circuits before it
+// touches the Bench, so every call here passes a nil *runner.
+//
+// What the model says.  With useTestInfo set, runScript reports
+//
+//	mem(cnt, pad) = 5412 + blockSize*(floor(x/blockSize) + 1),
+//	           x  = pad - useTestInfo.pad + cnt*useTestInfo.codeSize
+//
+// which is a staircase in pad with one blockSize step every blockSize bytes,
+// exactly what live SL does.  The step for cnt=0 falls AT pad ==
+// useTestInfo.pad: that pad is one byte into a fresh block and pad-1 is the
+// last pad still inside the old one.
+//
+// So useTestInfo.pad is the CROSSING pad, and the padding autobench names --
+// what Padding: prints, what --ipad takes and what --check-ipad confirms -- is
+// one less.  The tests below spell that out as `crossing` rather than `pad` to
+// keep the two apart, because getting them confused is precisely the bug A11
+// fixed against live SL.
+//
+// The anchor case is the live Agni reference, measured 2026-08-03 with
+// --code 'foo_CNT(){llDie();}': Padding: 473, Size: 368, and the base script
+// reads 5412 bytes at pad 473 and 5924 at pad 474.  That is {crossing: 474,
+// codeSize: 368} here.
+
+// setTestInfo installs the model for one case and removes it afterwards.
+// crossing is the pad at which the copy-free base script first tips into the
+// next block; codeSize is the cost of one copy of CODE.
+func setTestInfo(t *testing.T, crossing, codeSize int) {
+	t.Helper()
+	useTestInfo = &testInfo{pad: crossing, codeSize: codeSize, limit: defaultTestLimit}
+	flags.IPad = 0
+	flags.ICheck = false
+	// The copy search starts AT --max, so a case that left it where the
+	// previous case put it would measure a different copy count.  blockSize is
+	// the default the flag block sets.
+	flags.Max = blockSize
+	// The run cache is keyed on {count, pad} only, so a reading taken under one
+	// model would be served to the next.  Each case starts with an empty one,
+	// which is also what a fresh process gives the real thing.  testBaseMem is
+	// the model's linkset data and goes with it: leaving one case's base reading
+	// standing would let the next case's first copy run be divided against it.
+	clear(cache)
+	testBaseMem = 0
+	t.Cleanup(func() {
+		useTestInfo = nil
+		flags.IPad = 0
+		flags.ICheck = false
+		flags.Max = blockSize
+		clear(cache)
+		testBaseMem = 0
+	})
+}
+
+// cases used by more than one test.  Each is a (crossing, codeSize) pair the
+// machinery has to reproduce.
+var modelCases = []struct {
+	name     string
+	crossing int
+	codeSize int
+}{
+	{"live reference --code foo_CNT(){llDie();}", 474, 368},
+	{"live --globals g --code f_CNT(){}", 446, 44},
+	{"live --globals g --statement g = g;", 406, 16},
+	{"live --globals g --statement g = (integer)g;", 406, 44},
+	{"smallest expressible padding", minpad + 1, 100},
+	{"one-byte construct", 300, 1},
+	{"construct just under a block", 300, 511},
+	{"padding a whole block up", 986, 368},
+}
+
+// TestModelIsAStaircase checks the model itself before anything is measured
+// against it: memory must be flat below the crossing pad, jump by exactly one
+// block at it, and stay flat for the rest of that block.
+func TestModelIsAStaircase(t *testing.T) {
+	const crossing = 474
+	setTestInfo(t, crossing, 368)
+
+	var r Results
+	read := func(pad int) int {
+		mustRun(nil, 0, pad, &r)
+		return r.Base
+	}
+
+	below := read(crossing - 1)
+	at := read(crossing)
+	if at-below != blockSize {
+		t.Fatalf("pad %d -> %d, pad %d -> %d: want a %d-byte step, got %d",
+			crossing-1, below, crossing, at, blockSize, at-below)
+	}
+	if got := read(crossing - blockSize); got != below {
+		t.Errorf("pad %d = %d, want %d (same block as pad %d)",
+			crossing-blockSize, got, below, crossing-1)
+	}
+	if got := read(crossing + blockSize - 1); got != at {
+		t.Errorf("pad %d = %d, want %d (same block as pad %d)",
+			crossing+blockSize-1, got, at, crossing)
+	}
+	if got := read(crossing + blockSize); got != at+blockSize {
+		t.Errorf("pad %d = %d, want %d (the next crossing)",
+			crossing+blockSize, got, at+blockSize)
+	}
+}
+
+// lowestCrossing is the boundary the cnt=0 search will actually land on.  The
+// staircase repeats every blockSize, so a shape whose crossing is named 986 also
+// crosses at 474 and at -38; the search starts from minpad and climbs, so it
+// finds the lowest crossing above minpad.  That is why the padding a search
+// REPORTS is always under a block, while a padding --ipad ACCEPTS need not be.
+func lowestCrossing(crossing int) int {
+	for crossing-blockSize > minpad {
+		crossing -= blockSize
+	}
+	return crossing
+}
+
+// TestFindPaddingFindsTheLastPadInside pins findPadding's return convention:
+// the offset of the last pad that is still inside the block, so that offset+1
+// is the crossing.
+func TestFindPaddingFindsTheLastPadInside(t *testing.T) {
+	for _, tc := range modelCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setTestInfo(t, tc.crossing, tc.codeSize)
+			var r Results
+			want := lowestCrossing(tc.crossing) - minpad - 1
+			got, base := findPadding(nil, 0, minpad, &r)
+			if got != want {
+				t.Errorf("findPadding(0, %d) = %d, want %d (crossing %d)",
+					minpad, got, want, lowestCrossing(tc.crossing))
+			}
+			// The base comes back so that a caller measuring a step against it
+			// gets the reading the search actually used, not one taken before
+			// the search that a re-read may since have corrected.
+			if want := testMem(0, minpad); base != want {
+				t.Errorf("findPadding returned base %d, want the reading at pad %d, %d",
+					base, minpad, want)
+			}
+		})
+	}
+}
+
+// TestBasePaddingNamesTheLastPadInside is A11's rule stated as a test: a
+// padding is the largest pad that still fits inside its block, so one more byte
+// crosses.  basePadding must return crossing-1, never the crossing itself.
+func TestBasePaddingNamesTheLastPadInside(t *testing.T) {
+	for _, tc := range modelCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setTestInfo(t, tc.crossing, tc.codeSize)
+			var r Results
+			want := lowestCrossing(tc.crossing) - 1
+			if got := basePadding(nil, &r); got != want {
+				t.Errorf("basePadding() = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+// TestBasePaddingTakesIPadOnTrust is A1's rule: a supplied --ipad is an
+// assertion the caller already measured, used exactly as given, with no search
+// and no audit unless --check-ipad asks for one.
+func TestBasePaddingTakesIPadOnTrust(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	flags.IPad = 985
+	var r Results
+	if got := basePadding(nil, &r); got != 985 {
+		t.Errorf("basePadding() with --ipad 985 = %d, want 985", got)
+	}
+}
+
+// TestOneModeReportsTheCodeSize is the whole point of -1 mode: hand it a model
+// whose code costs codeSize bytes and it has to say so, and it has to name the
+// padding by A11's convention while doing it.
+func TestOneModeReportsTheCodeSize(t *testing.T) {
+	for _, tc := range modelCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setTestInfo(t, tc.crossing, tc.codeSize)
+			var r Results
+			size, padding, _ := oneMode(nil, &r)
+			if size != tc.codeSize {
+				t.Errorf("Size: %d, want %d", size, tc.codeSize)
+			}
+			if want := lowestCrossing(tc.crossing) - 1; padding != want {
+				t.Errorf("Padding: %d, want %d", padding, want)
+			}
+		})
+	}
+}
+
+// TestOneModeIsPaddingIndependent is the property that makes --ipad safe to
+// reuse across shapes: the answer must not depend on WHICH boundary the base
+// script was lifted to.  Verified live on 2026-08-03 with --ipad 473 and
+// --ipad 985 both giving Size: 368.
+// The search only ever lands on the lowest boundary, so the way to reach a
+// higher one is --ipad, which is exactly how it was checked live: --ipad 473 and
+// --ipad 985 are the same boundary a block apart and both gave Size: 368.
+func TestOneModeIsPaddingIndependent(t *testing.T) {
+	const codeSize = 368
+	for _, ipad := range []int{0, 473, 473 + blockSize, 473 + 2*blockSize} {
+		t.Run(fmt.Sprintf("ipad=%d", ipad), func(t *testing.T) {
+			setTestInfo(t, 474, codeSize)
+			flags.IPad = ipad
+			var r Results
+			size, padding, _ := oneMode(nil, &r)
+			if size != codeSize {
+				t.Errorf("Size: %d, want %d", size, codeSize)
+			}
+			want := ipad
+			if ipad == 0 {
+				want = 473
+			}
+			if padding != want {
+				t.Errorf("Padding: %d, want %d", padding, want)
+			}
+		})
+	}
+}
+
+// TestCopyModeReportsTheCodeSize is the copy-mode counterpart of
+// TestOneModeReportsTheCodeSize, and until 2026-08-03 there was none: copy mode
+// lived inside main and could not be driven offline.  Copy mode divides a
+// memory difference by a copy count, so unlike -1 mode it is only exact to the
+// quantisation it prints as ±N -- which is the bound this asserts, because that
+// is the promise the output makes.
+func TestCopyModeReportsTheCodeSize(t *testing.T) {
+	for _, tc := range modelCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setTestInfo(t, tc.crossing, tc.codeSize)
+			var r Results
+			padding, cnt := copyMode(nil, &r)
+			if want := lowestCrossing(tc.crossing) - 1; padding != want {
+				t.Errorf("Padding: %d, want %d", padding, want)
+			}
+			tol := 511 / cnt
+			if got := int(r.Size); got < tc.codeSize-tol || got > tc.codeSize+tol {
+				t.Errorf("Size: %d ±%d over %d copies, want %d within the ±",
+					got, tol, cnt, tc.codeSize)
+			}
+		})
+	}
+}
+
+// TestCopyModeAnchorsOnTheRunPad is the regression for the bug this file could
+// not previously see.  Copy mode's base does not come from a Go variable; the
+// benchmark script divides by what it reads out of linkset data, which only a
+// cnt=0 script that ACTUALLY RAN writes.  The run cache serves readings without
+// sending a script, and the padding search meets the crossing partway through
+// its bisection and then narrows below it -- so the base run at runPad was a
+// cache hit and the world was left anchored one block down, putting exactly
+// +blockSize/count on the reported Size.
+//
+// It fired on every odd crossing and no even one, i.e. half of all shapes.  The
+// live reference (crossing 474) is in the unaffected half, which is why every
+// published figure survived it -- and why an exhaustive sweep, not a
+// hand-picked case, is what pins it.
+//
+// The invariant asserted is the one that matters to a caller: the answer must
+// not depend on HOW the padding was arrived at.  Searching for it and being
+// told it with --ipad must give the same Size.
+func TestCopyModeAnchorsOnTheRunPad(t *testing.T) {
+	const codeSize = 368
+	for crossing := minpad + 1; crossing < minpad+1+blockSize; crossing++ {
+		setTestInfo(t, crossing, codeSize)
+		var searched Results
+		padding, cnt := copyMode(nil, &searched)
+
+		// Same shape, same padding, but handed over instead of searched for.
+		setTestInfo(t, crossing, codeSize)
+		flags.IPad = padding
+		var told Results
+		toldPadding, toldCnt := copyMode(nil, &told)
+
+		if toldPadding != padding || toldCnt != cnt || told.Size != searched.Size {
+			t.Errorf("crossing %d: searched Padding: %d Size: %v over %d copies, "+
+				"--ipad %d gave Padding: %d Size: %v over %d copies",
+				crossing, padding, searched.Size, cnt,
+				padding, toldPadding, told.Size, toldCnt)
+		}
+		if want := crossing - 1; padding != want {
+			t.Errorf("crossing %d: Padding: %d, want %d", crossing, padding, want)
+		}
+		if tol := 511 / cnt; int(searched.Size) < codeSize-tol || int(searched.Size) > codeSize+tol {
+			t.Errorf("crossing %d: Size: %v ±%d over %d copies, want %d within the ±",
+				crossing, searched.Size, tol, cnt, codeSize)
+		}
+	}
+}
+
+// TestTestRunDividesByTheBaseRun pins the model itself, which had the same
+// shape of fault as the code it is used to test: SIZE is computed in the
+// benchmark script as (mem - old)/count, and old is the cnt=0 reading, not the
+// model's internal anchor.  Anchoring on the constant put +blockSize/count on
+// every copy-mode Size and hid the linkset-data bug underneath it.
+func TestTestRunDividesByTheBaseRun(t *testing.T) {
+	const crossing, codeSize, cnt = 474, 368, 128
+	setTestInfo(t, crossing, codeSize)
+
+	var r Results
+	mustRun(nil, 0, crossing, &r) // the base run, at runPad
+	base := r.Base
+	mustRun(nil, cnt, crossing, &r)
+	if want := float64(r.Test-base) / cnt; r.Size != want {
+		t.Errorf("Size = %v, want %v ((%d - %d)/%d)", r.Size, want, r.Test, base, cnt)
+	}
+	if r.Size != codeSize {
+		t.Errorf("Size = %v, want %d", r.Size, codeSize)
+	}
+}
+
+// TestExpressiblePadding pins the one rule --ipad enforces: not "is this a
+// boundary" -- the caller asserts that -- but "can the filler emit exactly this
+// many bytes, and one more".  In particular a padding a whole block up is
+// perfectly real, so there is no upper bound to enforce.
+func TestExpressiblePadding(t *testing.T) {
+	for _, tc := range []struct {
+		pad  int
+		want bool
+	}{
+		{-4, false},
+		{1, false},
+		{2, false},
+		{3, false},
+		{4, true}, // i+i, with its runs at minpad's jump/label pair
+		{minpad, true},
+		{6, true},
+		{473, true},
+		{blockSize + minpad, true}, // A11 checked --ipad 985 live
+		{985, true},
+		{1497, true},
+	} {
+		if got := expressiblePadding(tc.pad); got != tc.want {
+			t.Errorf("expressiblePadding(%d) = %v, want %v", tc.pad, got, tc.want)
+		}
+	}
+}
+
+// --- a script Second Life will not compile -------------------------------
+
+// setLimit gives the model a size SL would refuse above, standing in for the
+// compiler.  See runScript's --test branch.
+func setLimit(t *testing.T, limit int) {
+	t.Helper()
+	useTestInfo.limit = limit
+	oneCopyVerdict = nil
+	spentRuns, spentCompiles = 0, 0
+	t.Cleanup(func() { oneCopyVerdict = nil })
+}
+
+// TestRunShrinkBacksOffOnACompileRefusal is the case that used to end a
+// benchmark outright.  SL refuses a script that is too big to COMPILE, which is
+// a different and looser limit than the Stack-Heap Collision that ends one that
+// is too big to RUN -- measured live 2026-08-03, 256 copies of the reference
+// shape compiled and then collided, and 512 were refused.  Either way a smaller
+// count is the thing to try.
+func TestRunShrinkBacksOffOnACompileRefusal(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	// One copy is well under this and 128 copies are well over it, so the
+	// refusal is unambiguously about size.
+	setLimit(t, 30*1024)
+
+	var r Results
+	got := runShrink(nil, 128, 474, &r)
+	if got != 64 {
+		t.Errorf("runShrink(128) = %d, want 64 (128 refused, 64 taken)", got)
+	}
+	if testMem(got, 474) > useTestInfo.limit {
+		t.Errorf("runShrink returned %d, which the model refuses", got)
+	}
+	// Exactly one compile: the diagnosis is about the code, which does not
+	// change, so asking twice is asking the same question twice.
+	if spentCompiles != 1 {
+		t.Errorf("spent %d compiles, want 1", spentCompiles)
+	}
+}
+
+// TestRunShrinkAsksOnceAboutOneCopy pins the caching across separate calls,
+// which is where a benchmark actually makes them: the probe loop calls
+// runShrink and then the measuring run calls it again.
+func TestRunShrinkAsksOnceAboutOneCopy(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	setLimit(t, 30*1024)
+
+	var r Results
+	runShrink(nil, 128, 474, &r)
+	runShrink(nil, 128, 480, &r)
+	if spentCompiles != 1 {
+		t.Errorf("spent %d compiles over two calls, want 1", spentCompiles)
+	}
+}
+
+// TestCompileRefusalIsNotAStackHeapCollision keeps the two apart, because
+// conflating them is the mistake A9 named: runtimeError.StackHeap models
+// a RUN-TIME fault, and a compile-time refusal wearing that name would make a
+// limit that stopped the script from ever starting look like one it hit while
+// running.
+func TestCompileRefusalIsNotAStackHeapCollision(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	setLimit(t, 30*1024)
+
+	err := runScript(nil, 128, 474, &Results{})
+	if err == nil {
+		t.Fatal("128 copies over the model's limit must be refused")
+	}
+	var ce *compileError
+	if !errors.As(err, &ce) {
+		t.Errorf("refusal is %T, want *compileError", err)
+	}
+	var re *runtimeError
+	if errors.As(err, &re) {
+		t.Error("a compile refusal must not present as a run-time error")
+	}
+}
+
+// TestRefusedRunIsNotCached is the reason the model's refusal returns before
+// testRun: a refusal is not a reading, and caching one would serve it back as a
+// memory figure to whatever asked next.
+func TestRefusedRunIsNotCached(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	setLimit(t, 30*1024)
+
+	if err := runScript(nil, 128, 474, &Results{}); err == nil {
+		t.Fatal("want a refusal")
+	}
+	if _, ok := cache[Cache{Count: 128, Padding: 474}]; ok {
+		t.Error("a refused run left a reading in the cache")
+	}
+}
+
+// The A12 tests.  A padding search is a chain of comparisons between readings of
+// llGetUsedMemory, and on 2026-08-03 one of those readings came back exactly one
+// block high.  These drive the same event through the model.
+//
+// The live fault has been seen ONCE, in one reading, and 45 later asks at that
+// pad all agreed with each other (TestLiveReadingIsStable, 10 runs at each of
+// four pads, plus five earlier). So it cannot be provoked live to order, and a
+// hook is the only way to write these at all.
+
+// noiseOnce makes the model answer wrong the first time it is asked about
+// (cnt, pad) and truthfully every time after, which is the live event exactly:
+// one bad reading, cached, and served back to the rest of the search.
+//
+// It returns a pointer to the fire count, so a test can insist the fault it
+// arranged actually happened -- a hook that never fires makes every assertion
+// after it vacuous, and a silent no-op is how a mutation test passes for the
+// wrong reason.
+func noiseOnce(t *testing.T, cnt, pad, delta int) *int {
+	t.Helper()
+	fired := 0
+	testNoise = func(c, p, mem int) int {
+		if c == cnt && p == pad && fired == 0 {
+			fired++
+			return mem + delta
+		}
+		return mem
+	}
+	t.Cleanup(func() { testNoise = nil })
+	return &fired
+}
+
+// TestOneModeSurvivesAReadingOneBlockHigh replays the incident.
+//
+// The live shape is the model's reference case: the base script crosses at 474,
+// one copy of CODE costs 368 bytes, and the one-copy script therefore crosses at
+// 618 -- confirmed live, where pad 602 reads 5924 and pad 618 reads 6436.  At
+// 20:01 the one-copy script at pad 602 read 6436, one block high, and the search
+// took that for the crossing.
+//
+// The numbers below are the two live runs, to the byte:
+//
+//	20:01  Result pad: 128  Size: 384   <- the anomaly believed
+//	20:36  Result pad: 144  Size: 368   <- the published figure
+//
+// So this fails without the confirmation, and it fails with the exact wrong
+// answer that was published, not merely with some wrong answer.
+func TestOneModeSurvivesAReadingOneBlockHigh(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	fired := noiseOnce(t, 1, 602, blockSize)
+
+	var r Results
+	size, padding, pad := oneMode(nil, &r)
+	if *fired != 1 {
+		t.Fatalf("the bad reading was never taken (%d times); pad 602 is not on the "+
+			"search's path any more and this test is asserting nothing", *fired)
+	}
+	if size != 368 || padding != 473 || pad != 144 {
+		t.Errorf("Size: %d Padding: %d Result pad: %d, want 368/473/144 "+
+			"(384/473/128 is the anomaly being believed)", size, padding, pad)
+	}
+}
+
+// TestOneModeSurvivesAReadingOneBlockLow is the other direction, which has not
+// been seen live and is exactly as plausible as the one that has: the anomaly
+// was one block, and a block is a block whichever way it goes.
+//
+// A spuriously LOW reading above the crossing reads as "still inside the block",
+// so the bisection settles ABOVE the real crossing and the walk finds a step at
+// the first pad it tries.  Confirming the pad that crossed is not enough to
+// catch that -- it really does read high -- which is why confirmCrossing also
+// re-reads the pad BELOW, the one the search accepted as inside.
+func TestOneModeSurvivesAReadingOneBlockLow(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	// 730 is the bisection's first probe above the crossing at 618.
+	fired := noiseOnce(t, 1, 730, -blockSize)
+
+	var r Results
+	size, padding, pad := oneMode(nil, &r)
+	if *fired != 1 {
+		t.Fatalf("the bad reading was never taken (%d times)", *fired)
+	}
+	if size != 368 || padding != 473 || pad != 144 {
+		t.Errorf("Size: %d Padding: %d Result pad: %d, want 368/473/144", size, padding, pad)
+	}
+}
+
+// TestOneModeSurvivesAMisreadBase is the case the crossing confirmation cannot
+// reach on its own.  Everything a search decides is a comparison against the
+// base, so a base read one block high makes every pad below the real crossing
+// look like it crossed and every pad above it look like it did not -- an
+// inverted staircase, in which the step the walk eventually finds is real,
+// reproducible, and in the wrong place.
+//
+// Two things have to work for this to come out right: the walk has to give up
+// after a block rather than chase the next boundary a run per byte, and the
+// search has to be run again against the corrected base instead of reporting
+// the answer it had.
+func TestOneModeSurvivesAMisreadBase(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	fired := noiseOnce(t, 1, 474, blockSize)
+
+	spentRuns, spentRereads = 0, 0
+	var r Results
+	size, padding, pad := oneMode(nil, &r)
+	if *fired != 1 {
+		t.Fatalf("the bad reading was never taken (%d times)", *fired)
+	}
+	if size != 368 || padding != 473 || pad != 144 {
+		t.Errorf("Size: %d Padding: %d Result pad: %d, want 368/473/144", size, padding, pad)
+	}
+	// The bound is the point.  Without it the walk climbs from the bogus base to
+	// the next boundary, which is 512 runs -- instant here and an hour live.
+	if spentRuns > 60 {
+		t.Errorf("recovering from one misread base cost %d runs (%d re-reads); "+
+			"the walk is not being bounded at a block", spentRuns, spentRereads)
+	}
+}
+
+// TestConfirmationCostsAHandfulOfRuns is the other half of the bargain: the
+// confirmation has to be cheap enough that it is always on.  A run is an upload,
+// a compile, an execution and a wait, so this is the only unit that matters.
+//
+// -1 mode searches twice, and each search ends by re-reading three things: the
+// pad that crossed, the base, and the pad below.  Six runs, on a benchmark that
+// spends about two dozen.
+func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	spentRuns, spentRereads = 0, 0
+
+	var r Results
+	if size, _, _ := oneMode(nil, &r); size != 368 {
+		t.Fatalf("Size: %d, want 368", size)
+	}
+	if spentRereads != 6 {
+		t.Errorf("%d re-reads, want 6: two searches confirming three readings each", spentRereads)
+	}
+	if spentRuns > 40 {
+		t.Errorf("a clean -1 benchmark spent %d runs; confirmation is meant to add "+
+			"a handful, not a search", spentRuns)
+	}
+}

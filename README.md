@@ -12,6 +12,10 @@ and decode themselves.
     cmd/msggen/         reads message_template.msg, writes Go
     cmd/slgod/          holds grid connections, serves clients
     cmd/slsh/           the shell: inventory, the world, and chat
+    cmd/automate/       runs LSL scripts, prints what they said
+    cmd/autobench/      measures what LSL constructs cost in memory
+    internal/session/   get a session, and an object to run scripts in
+    internal/slhost/    where slgod is, asking sl-host when it is there
     sl/                 the client library: everything an avatar can do
     sl/backend.go       one interface, two ways to be connected
     client/profile.go   credentials under ~/.config/slgo
@@ -691,6 +695,68 @@ inventory paths use it to escape a separator.
 ways for the same reason as before: a rename is an AIS `PATCH`, and a
 move is UDP, because AIS refuses to change a parent. A folder renamed
 to `odd / name \ here` comes back with exactly that name.
+
+## Where slgod is
+
+slgod does not always run on the machine talking to it, and the machine
+it does run on moves between networks, so no client hardcodes an
+address. In order:
+
+1. `--addr HOST:PORT` (or `-server`), if given;
+2. `addr = ...` in `~/.config/slsh/config`, for slsh;
+3. what the `sl-host` command prints, if it is on `$PATH`, with port
+   7807 joined to it -- sl-host prints a bare host and no port;
+4. this machine, when sl-host is not installed.
+
+Not being installed is the ordinary case on a machine that runs its own
+slgod, so it is a default rather than a failure. sl-host being there and
+*failing* is reported instead:
+
+    $ slsh -c where
+    slsh: cannot find the host slgod is on: sl-host failed: exit status 1: no host configured
+            --addr HOST:PORT overrides
+
+Falling back to localhost there would turn "sl-host is misconfigured"
+into a connection refused against this machine, which points the reader
+at the wrong problem entirely.
+
+## Running scripts: automate and autobench
+
+Two programs that came from the elsl project, where they reached Second
+Life through slrund and a viewer. They run on `sl` now, so the only
+thing between them and the grid is a session.
+
+    automate a.lsl b.lsl
+    automate --object "Test HUD" a.lsl
+    autobench -1 --title "global integer" --code "integer g;"
+
+A script needs an object to run in, so both find one or make one:
+`--object` names one already in the region, and without it a prim is
+rezzed beside the avatar and trashed afterwards. `--keep` leaves it.
+
+The contract with a script is one line: it says `DONE` when it has
+finished. Without a sentinel there is nothing to wait for but the
+clock, and every run costs the whole timeout.
+
+`automate` prints what each script said, prefixed with the file it came
+from, and exits non-zero if any of them would not compile, faulted, or
+never finished. `autobench` measures the memory a construct costs by
+finding the 512-byte block boundary it crosses; the measurement
+machinery came over unchanged, because it is about LSL and not about
+how a script reaches the grid.
+
+What did not come over is what belongs to elsl: `--sim` (the eLSL
+simulator), `-O` and `--std` (its compiler's flags), and the
+compile-and-compare machinery. The compiler here is the grid's -- the
+source goes up through `UpdateScriptTask` and comes back compiled or
+refused. slgo does not depend on elsl, and this is where that shows.
+
+Measured against the grid on 2026-08-06: creating a script item costs
+about 8.1s -- the create, the copy into the object, and the settle --
+and updating one that already exists costs about 0.9s. That is why both
+programs hold one object and one script name for their whole run, and
+why every figure that looks like "what compiling costs" has an item
+creation hiding in it the first time.
 
 ## Inventory names, and paths that survive them
 
