@@ -696,6 +696,9 @@ ways for the same reason as before: a rename is an AIS `PATCH`, and a
 move is UDP, because AIS refuses to change a parent. A folder renamed
 to `odd / name \ here` comes back with exactly that name.
 
+For how to use the commands rather than how they work, see
+[doc/guide.md](doc/guide.md).
+
 ## Where slgod is
 
 slgod does not always run on the machine talking to it, and the machine
