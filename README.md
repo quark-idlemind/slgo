@@ -787,6 +787,38 @@ the same hole and fills it by adding the friend to its own list
 `NoteFriend` rpc: the client understood what it sent, the server holds
 what a client restart would lose, and the server still decodes nothing.
 
+## Inventory names, and paths that survive them
+
+An inventory name may hold very nearly any printable character, so a
+path made of names needs escaping to be readable back: `/` separates,
+`\/` is a slash inside a name, and `\\` is a backslash. `SplitPath` and
+`JoinPath` are inverses.
+
+What the grid accepts was measured rather than assumed. An item was
+created for every character from space to tilde, all hundred listed
+back, and every one returned byte for byte -- including `/` and `\`.
+The only exceptions are at the edges: a name given a leading or
+trailing space comes back trimmed. So a name may contain anything
+printable and may not begin or end with a space.
+
+The probe found three bugs, which is what probes are for:
+
+  - Listing a folder by path escaped the paths a second time, so
+    `Notecards/thing` came back as `Notecards\/thing`. Every entry in
+    every listing was affected and the unit tests had not caught it,
+    because they tested splitting and joining but never the composition
+    a listing does.
+  - `MoveItem` had never worked. It used an AIS `PATCH` with a new
+    `parent_id`, and the grid answers `400` with `Cannot change
+    parent_id.  Use MOVE method.` -- so it moves over UDP now, the way
+    a viewer does, which also carries a new name and makes moving and
+    renaming one round trip.
+  - `CreateFolder` sent the name without its terminating NUL, so the
+    simulator read the length and took the last byte for the
+    terminator. Every folder made through this package was one
+    character short of its name, and nothing found it afterwards by
+    the name it was asked for.
+
 ## Reading inventory, and fetching an asset
 
     es, err := s.ListInventory(ctx, "Objects", 1)

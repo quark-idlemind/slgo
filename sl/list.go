@@ -77,28 +77,101 @@ func (e Entry) IsFolder() bool { return e.Folder }
 
 func (e Entry) String() string {
 	if e.Folder {
-		return e.Path + "/"
+		return e.Path + string(PathSeparator)
 	}
 	return e.Path
 }
 
-// PathSeparator is what separates folder names in a path.
+// PathSeparator is what separates names in a path, and PathEscape is
+// what puts one inside a name.
 //
-// An inventory name may itself contain a slash, so a path is not always
-// reversible.  Where that matters, ListFolder takes the folder's id and
-// asks nothing of names.
-const PathSeparator = "/"
+// An inventory name may hold very nearly any printable character,
+// including both of these, so a path is only reversible if they are
+// escaped: \/ is a slash in a name and \\ is a backslash.  SplitPath
+// and JoinPath are inverses over every name the grid accepts, which is
+// what lets a listing be written to a file, edited, and read back.
+//
+// What the grid accepts was measured rather than assumed: an item was
+// created for each character from space to tilde, all hundred listed
+// back, and every one came back byte for byte -- including / and \.
+// The two exceptions are at the edges, where the grid trims: a name
+// given a leading or a trailing space comes back without it.  So a name
+// can contain anything printable, and cannot begin or end with a
+// space.
+const (
+	PathSeparator = '/'
+	PathEscape    = '\\'
+)
 
-// SplitPath breaks a path into folder names, ignoring empty segments so
-// that "", "/", "Objects" and "/Objects/" all mean what they look like.
+// SplitPath breaks a path into the names it holds.
+//
+// Empty segments are dropped, so "", "/", "Objects" and "/Objects/" all
+// mean what they look like.  Nothing else is touched: a name of one
+// space is a name of one space, and trimming it here would make a
+// listing that cannot be read back.  A shell that wants to be forgiving
+// about what somebody typed should be forgiving before calling this.
+//
+// A backslash takes the next character literally.  Before anything but
+// a separator or another backslash it is itself, so a name written with
+// a stray backslash still means what it looks like.
 func SplitPath(path string) []string {
 	var out []string
-	for _, s := range strings.Split(path, PathSeparator) {
-		if s = strings.TrimSpace(s); s != "" {
-			out = append(out, s)
+	var cur []rune
+	started := false
+
+	rs := []rune(path)
+	for i := 0; i < len(rs); i++ {
+		switch c := rs[i]; c {
+		case PathEscape:
+			started = true
+			if i+1 < len(rs) && (rs[i+1] == PathSeparator || rs[i+1] == PathEscape) {
+				cur = append(cur, rs[i+1])
+				i++
+				continue
+			}
+			cur = append(cur, c) // a backslash before anything else
+		case PathSeparator:
+			if started {
+				out = append(out, string(cur))
+			}
+			cur, started = nil, false
+		default:
+			started = true
+			cur = append(cur, c)
 		}
 	}
+	if started {
+		out = append(out, string(cur))
+	}
 	return out
+}
+
+// JoinPath turns names into a path, escaping what would otherwise be
+// read as structure.
+func JoinPath(names ...string) string {
+	var b strings.Builder
+	for i, n := range names {
+		if i > 0 {
+			b.WriteRune(PathSeparator)
+		}
+		b.WriteString(EscapeName(n))
+	}
+	return b.String()
+}
+
+// EscapeName is one name as it appears inside a path.
+func EscapeName(name string) string {
+	if !strings.ContainsRune(name, PathSeparator) && !strings.ContainsRune(name, PathEscape) {
+		return name
+	}
+	var b strings.Builder
+	for _, c := range name {
+		if c == PathSeparator || c == PathEscape {
+			b.WriteRune(PathEscape)
+		}
+		b.WriteRune(c)
+	}
+	return b.String()
 }
 
 // ListInventory lists what is in a folder, by path from the inventory
@@ -150,7 +223,7 @@ func (w *Session) resolvePath(ctx context.Context, path string) (msg.UUID, strin
 			}
 		}
 		if next.IsZero() {
-			where := strings.Join(walked, PathSeparator)
+			where := JoinPath(walked...)
 			if where == "" {
 				where = "the inventory root"
 			}
@@ -158,7 +231,7 @@ func (w *Session) resolvePath(ctx context.Context, path string) (msg.UUID, strin
 		}
 		id, walked = next, append(walked, name)
 	}
-	return id, strings.Join(walked, PathSeparator), nil
+	return id, JoinPath(walked...), nil
 }
 
 func (w *Session) listFolder(ctx context.Context, folder msg.UUID, at string, depth uint) ([]Entry, error) {
@@ -169,8 +242,14 @@ func (w *Session) listFolder(ctx context.Context, folder msg.UUID, at string, de
 	if err != nil {
 		return nil, err
 	}
-	for i := range out {
-		out[i].Path = join(at, out[i].Path)
+	// The entries already carry paths built from escaped names, so
+	// the prefix is put in front rather than joined: join escapes what
+	// it is given, and escaping a path turns its separators into
+	// literal characters.
+	if at != "" {
+		for i := range out {
+			out[i].Path = at + string(PathSeparator) + out[i].Path
+		}
 	}
 	sortEntries(out)
 	return out, nil
@@ -218,11 +297,13 @@ func (w *Session) children(ctx context.Context, folder msg.UUID, depth uint) ([]
 	return out, nil
 }
 
+// join adds a name to a path, escaping it on the way in so the result
+// splits back into the names it was built from.
 func join(prefix, name string) string {
 	if prefix == "" {
-		return name
+		return EscapeName(name)
 	}
-	return prefix + PathSeparator + name
+	return prefix + string(PathSeparator) + EscapeName(name)
 }
 
 // sortEntries puts a listing in tree order: every folder immediately

@@ -62,7 +62,12 @@ func (w *Session) CreateFolder(ctx context.Context, parent msg.UUID, name string
 	m.FolderData.FolderID = id
 	m.FolderData.ParentID = parent
 	m.FolderData.Type = -1 // -1 is "no preferred type", an ordinary folder
-	m.FolderData.Name = []byte(name)
+	// Terminated, like every other string on this protocol.  Without
+	// the NUL the simulator reads the length and takes the last byte
+	// for the terminator, so "slgo path probe" becomes "slgo path
+	// prob" -- a folder one character short of what was asked for,
+	// which nothing then finds by name.
+	m.FolderData.Name = append([]byte(name), 0)
 	if err := w.Send(ctx, m); err != nil {
 		return msg.UUID{}, err
 	}
@@ -447,21 +452,44 @@ func uuidCRC(u msg.UUID) uint32 {
 	return sum
 }
 
-// MoveItem puts an item in a different folder.
+// MoveItem puts an item in a different folder, and renames it on the
+// way if a name is given.
 //
-// Over AIS, like the other edits: the UDP MoveInventoryItem is accepted
-// and does nothing, which is the same trap the delete path found.
-func (w *Session) MoveItem(ctx context.Context, item, folder msg.UUID) error {
-	enc, err := llsd.Encode(map[string]any{"parent_id": folder.String()})
-	if err != nil {
-		return err
+// Over UDP, which is what a viewer still does.  The AIS route refuses
+// outright: PATCHing an item with a new parent_id answers 400 and says
+// so in as many words --
+//
+//	Cannot change parent_id.  Use MOVE method.
+//
+// -- which is a better error than most, and was worth the round trip to
+// read.  This package believed the other way round until the grid said
+// otherwise, so the belief is written down here now rather than in a
+// comment that turned out to be wrong.
+//
+// The rename comes free: the message carries a new name, so moving and
+// renaming in one is one round trip rather than two.  An empty name
+// leaves the name alone.
+func (w *Session) MoveItem(ctx context.Context, item, folder msg.UUID, newName ...string) error {
+	var name string
+	if len(newName) > 0 {
+		name = newName[0]
 	}
-	_, err = w.capDo(ctx, agent.CapRequest{
-		Cap:    agent.InventoryCap,
-		Method: "PATCH",
-		Path:   "/item/" + item.String(),
-		Body:   enc,
-		Type:   "application/llsd+xml",
-	})
-	return err
+	m := &msg.MoveInventoryItem{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.AgentData.Stamp = false // true would re-date the item
+	m.InventoryData = []msg.MoveInventoryItem_InventoryData{{
+		ItemID: item, FolderID: folder, NewName: append([]byte(name), 0),
+	}}
+	return w.Send(ctx, m)
+}
+
+// MoveFolder puts a folder inside another one.
+func (w *Session) MoveFolder(ctx context.Context, folder, parent msg.UUID) error {
+	m := &msg.MoveInventoryFolder{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.AgentData.Stamp = false
+	m.InventoryData = []msg.MoveInventoryFolder_InventoryData{{
+		FolderID: folder, ParentID: parent,
+	}}
+	return w.Send(ctx, m)
 }
