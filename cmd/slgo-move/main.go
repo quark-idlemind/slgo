@@ -23,12 +23,13 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
 var (
-	addr    = flag.String("server", "127.0.0.1:7807", "slgod address")
+	addr    = flag.String("server", "", "slgod address (default: sl-host, port 7807)")
 	profile = flag.String("agent", "example", "hosted agent")
 	step    = flag.Int("step", 16, "survey grid spacing in metres")
 	move    = flag.Bool("move", false, "teleport to the parcel found")
@@ -125,7 +126,7 @@ func main() {
 	flag.Parse()
 	ctx := context.Background()
 
-	c, err := client.Dial(ctx, *addr)
+	c, err := client.Dial(ctx, slhost.MustAddr(*addr))
 	if err != nil {
 		log.Fatal(err)
 	}

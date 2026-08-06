@@ -1,6 +1,6 @@
 // Command slsh is a shell for Second Life.
 //
-//	slsh [--addr localhost:7807] [--agent example]
+//	slsh [--addr HOST:PORT] [--agent example]
 //	slsh --direct [--first Quark] [--last Idlemind]
 //	slsh -c "ls -l Objects"
 //
@@ -31,12 +31,14 @@ import (
 
 	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
+	"github.com/quark-idlemind/slgo/internal/creds"
+	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
 type opts struct {
 	Direct  bool   `getopt:"--direct -d        log in to Second Life directly, without slgod"`
-	Addr    string `getopt:"--addr=HOSTPORT    the slgod to attach to"`
+	Addr    string `getopt:"--addr=HOSTPORT    the slgod to attach to; default sl-host, or this machine"`
 	Agent   string `getopt:"--agent=NAME -a    the profile to use; the only one, by default"`
 	First   string `getopt:"--first=NAME       the avatar's first name, for --direct"`
 	Last    string `getopt:"--last=NAME        the avatar's last name, for --direct"`
@@ -84,7 +86,7 @@ func run() error {
 	// same either way.
 	var s *sl.Session
 	if o.Direct {
-		login, err := credentials(os.Stdin, os.Stdout, cfg.Agent, o.First, o.Last, o.Start)
+		login, err := creds.Resolve(os.Stdin, os.Stdout, cfg.Agent, o.First, o.Last, o.Start)
 		if err != nil {
 			return err
 		}
@@ -101,6 +103,12 @@ func run() error {
 	} else {
 		if o.First != "" || o.Last != "" {
 			return fmt.Errorf("--first and --last are for --direct; through slgod the session knows who it is")
+		}
+		// Nothing said on the command line and nothing in the file
+		// leaves the question to sl-host, which is how one config
+		// works on a machine whose slgod is somewhere else.
+		if cfg.Addr, err = slhost.Resolve(cfg.Addr); err != nil {
+			return err
 		}
 		dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()

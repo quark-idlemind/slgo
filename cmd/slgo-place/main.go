@@ -17,12 +17,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
 func main() {
-	server := flag.String("server", "127.0.0.1:7807", "slgod to attach to")
+	server := flag.String("server", "", "slgod to attach to (default: sl-host, port 7807)")
 	agent := flag.String("agent", "example", "which hosted agent")
 	object := flag.String("object", "", "object to move, by name")
 	at := flag.String("at", "", "where to put it, x,y,z in region coordinates")
@@ -38,7 +39,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	w, err := sl.Dial(ctx, *server, *agent)
+	w, err := sl.Dial(ctx, slhost.MustAddr(*server), *agent)
 	if err != nil {
 		die("attach: %v", err)
 	}

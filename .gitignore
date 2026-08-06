@@ -3,13 +3,17 @@
 /cmd/*/slgo
 /cmd/*/slgo-*
 /cmd/*/slgod
-/cmd/*/slchat
+/cmd/*/slsh
+/cmd/*/automate
+/cmd/*/autobench
 /cmd/*/msggen
 /msggen
 
-# And in the root, which is where "go build ./cmd/slchat" leaves it.
-/slchat
+# And in the root, which is where "go build ./cmd/slsh" leaves it.
+/slsh
 /slgod
+/automate
+/autobench
 
 # Anything else built here.
 *.o

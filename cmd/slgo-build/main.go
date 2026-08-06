@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -39,7 +40,7 @@ func main() {
 	flag.Parse()
 	ctx := context.Background()
 
-	c, err := client.Dial(ctx, *addr)
+	c, err := client.Dial(ctx, slhost.MustAddr(*addr))
 	if err != nil {
 		log.Fatal(err)
 	}

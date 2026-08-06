@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -35,7 +36,7 @@ const source = `default {
 }`
 
 func main() {
-	server := flag.String("server", "127.0.0.1:7807", "slgod to attach to")
+	server := flag.String("server", "", "slgod to attach to (default: sl-host, port 7807)")
 	agent := flag.String("agent", "example", "which hosted agent")
 	object := flag.String("object", "Box1", "object to run the script in")
 	name := flag.String("name", "slgo-parity", "what to call the script inside it")
@@ -44,7 +45,7 @@ func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	w, err := sl.Dial(ctx, *server, *agent)
+	w, err := sl.Dial(ctx, slhost.MustAddr(*server), *agent)
 	if err != nil {
 		die("attach: %v", err)
 	}

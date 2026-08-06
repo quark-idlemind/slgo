@@ -1,4 +1,4 @@
-package main
+package creds
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 )
 
 // tempProfiles points the profile directory at a fresh one and writes
-// the profiles given, which is where credentials() looks first.
+// the profiles given, which is where Resolve() looks first.
 func tempProfiles(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "slgo")
@@ -53,7 +53,7 @@ func TestCredentialsFromNamedProfile(t *testing.T) {
 	tempProfiles(t, map[string]string{"qi": qiProfile})
 	var out bytes.Buffer
 
-	l, err := credentials(pipeStdin(t, ""), &out, "qi", "", "", "last")
+	l, err := Resolve(pipeStdin(t, ""), &out, "qi", "", "", "last")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestCredentialsFindsProfileByName(t *testing.T) {
 	})
 	var out bytes.Buffer
 
-	l, err := credentials(pipeStdin(t, ""), &out, "", "quark", "IDLEMIND", "last")
+	l, err := Resolve(pipeStdin(t, ""), &out, "", "quark", "IDLEMIND", "last")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestCredentialsAsksForWhatIsMissing(t *testing.T) {
 	tempProfiles(t, nil)
 	var out bytes.Buffer
 
-	l, err := credentials(pipeStdin(t, "Nobody\nResident\nhunter2\n"), &out, "", "", "", "home")
+	l, err := Resolve(pipeStdin(t, "Nobody\nResident\nhunter2\n"), &out, "", "", "", "home")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestCredentialsAsksOnlyForThePassword(t *testing.T) {
 	tempProfiles(t, nil)
 	var out bytes.Buffer
 
-	l, err := credentials(pipeStdin(t, "hunter2\n"), &out, "", "Nobody", "Resident", "last")
+	l, err := Resolve(pipeStdin(t, "hunter2\n"), &out, "", "Nobody", "Resident", "last")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestCredentialsDefaultsLastNameToResident(t *testing.T) {
 	tempProfiles(t, nil)
 	var out bytes.Buffer
 
-	l, err := credentials(pipeStdin(t, "Nobody\n\nhunter2\n"), &out, "", "", "", "last")
+	l, err := Resolve(pipeStdin(t, "Nobody\n\nhunter2\n"), &out, "", "", "", "last")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestCredentialsUsesTheOnlyProfile(t *testing.T) {
 	tempProfiles(t, map[string]string{"qi": qiProfile})
 	var out bytes.Buffer
 
-	l, err := credentials(pipeStdin(t, ""), &out, "", "", "", "last")
+	l, err := Resolve(pipeStdin(t, ""), &out, "", "", "", "last")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestCredentialsRefusesAMissingProfile(t *testing.T) {
 	tempProfiles(t, map[string]string{"qi": qiProfile})
 	var out bytes.Buffer
 
-	if _, err := credentials(pipeStdin(t, ""), &out, "nosuch", "", "", "last"); err == nil {
+	if _, err := Resolve(pipeStdin(t, ""), &out, "nosuch", "", "", "last"); err == nil {
 		t.Fatal("expected a refusal for a profile that does not exist")
 	}
 }

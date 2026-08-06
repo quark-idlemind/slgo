@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -31,7 +32,7 @@ import (
 const notecardText = "Hello from slgo.\nSecond line.\n"
 
 func main() {
-	server := flag.String("server", "127.0.0.1:7807", "slgod to attach to")
+	server := flag.String("server", "", "slgod to attach to (default: sl-host, port 7807)")
 	agent := flag.String("agent", "example", "which hosted agent")
 	object := flag.String("object", "Box1", "a rezzed object to work with")
 	give := flag.String("give-to", "", "avatar uuid to offer an item to, if any")
@@ -51,7 +52,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	w, err := sl.Dial(ctx, *server, *agent)
+	w, err := sl.Dial(ctx, slhost.MustAddr(*server), *agent)
 	if err != nil {
 		die("attach: %v", err)
 	}

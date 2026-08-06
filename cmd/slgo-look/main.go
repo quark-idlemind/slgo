@@ -9,12 +9,13 @@ import (
 	"log"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
 var (
-	addr    = flag.String("server", "127.0.0.1:7807", "slgod address")
+	addr    = flag.String("server", "", "slgod address (default: sl-host, port 7807)")
 	profile = flag.String("agent", "example", "hosted agent")
 	draw    = flag.Float64("draw", 0, "set the draw distance in metres")
 	named   = flag.String("named", "", "list objects with this name")
@@ -30,7 +31,7 @@ func main() {
 	flag.Parse()
 	ctx := context.Background()
 
-	w, err := sl.Dial(ctx, *addr, *profile)
+	w, err := sl.Dial(ctx, slhost.MustAddr(*addr), *profile)
 	if err != nil {
 		log.Fatal(err)
 	}

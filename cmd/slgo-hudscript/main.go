@@ -20,12 +20,13 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
 var (
-	addr    = flag.String("server", "127.0.0.1:7807", "slgod address")
+	addr    = flag.String("server", "", "slgod address (default: sl-host, port 7807)")
 	profile = flag.String("agent", "example", "hosted agent")
 	wear    = flag.String("hud", "Test HUD", "name of the attachment to script")
 	listen  = flag.Duration("listen", 45*time.Second, "how long to listen after")
@@ -311,7 +312,7 @@ func main() {
 		specs = keep
 	}
 
-	c, err := client.Dial(ctx, *addr)
+	c, err := client.Dial(ctx, slhost.MustAddr(*addr))
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -1,6 +1,7 @@
-package main
+package creds
 
-// Working out who to log in as, when slsh is doing the logging in.
+// Package creds works out who to log in as, when a program is doing
+// the logging in itself rather than attaching to slgod.
 //
 // The credentials may already be on disk: profiles live one file per
 // account under ~/.config/slgo, and one of them may be named outright
@@ -19,7 +20,7 @@ import (
 	"golang.org/x/term"
 )
 
-// credentials assembles a login from what was asked for, what is on
+// Resolve assembles a login from what was asked for, what is on
 // disk, and what the person at the keyboard can be asked.
 //
 // Order matters and is the order of least surprise: an explicitly named
@@ -27,7 +28,7 @@ import (
 // what is typed in.  A password already stored is used as it stands --
 // it is the "$1$" digest, which is the only form that ever goes over
 // the wire anyway.
-func credentials(in *os.File, out io.Writer, profile, first, last, start string) (agent.Login, error) {
+func Resolve(in *os.File, out io.Writer, profile, first, last, start string) (agent.Login, error) {
 	var l agent.Login
 
 	switch {

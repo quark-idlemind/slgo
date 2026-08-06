@@ -20,7 +20,9 @@ import (
 
 // Config is what slsh needs to know before it can start.
 type Config struct {
-	Addr   string // the slgod to attach to
+	// Addr is the slgod to attach to.  Empty means nobody has said,
+	// which is what lets sl-host be asked -- see internal/slhost.
+	Addr   string
 	Agent  string // the profile: hosted by slgod, or on disk for --direct
 	Prefix rune   // the key that starts a command
 
@@ -33,8 +35,12 @@ type Config struct {
 }
 
 // DefaultConfig is what an empty file leaves you with.
+//
+// Addr is deliberately empty rather than localhost: with nothing said
+// in a file and nothing on the command line, where slgod runs is a
+// question for sl-host, and a default here would answer it first.
 func DefaultConfig() Config {
-	return Config{Addr: "localhost:7807", Prefix: 27}
+	return Config{Prefix: 27}
 }
 
 // ConfigDir is where slchat keeps its settings.  SLSH_CONFIG_DIR
