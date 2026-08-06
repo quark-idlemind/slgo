@@ -29,6 +29,7 @@ and decode themselves.
     msg/dump.go         YAML packet dumps
     msg/messages_gen.go generated: 483 messages, ~14700 lines
     doc/messages.txt    what each of those 483 is for, and which way it goes
+    doc/capabilities.txt the http capabilities that can be asked for
 
 ## How it works
 

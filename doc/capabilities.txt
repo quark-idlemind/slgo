@@ -1,0 +1,162 @@
+# Every capability a viewer asks the seed capability for, one per line.
+#
+#   name                          verb  what it is for
+#
+# A capability is a URL the simulator hands out, and the seed capability
+# is the one URL you are given at login.  Post it a list of names and it
+# answers with a URL for each one it has.  Asking for a name that does
+# not exist is harmless: the reply simply leaves it out, which is also
+# how a capability that has been retired disappears.  Nothing here can
+# be reached without asking for it first.
+#
+# The list is the 119 names Firestorm asks for.  116 of them are
+# literals in llviewerregion.cpp; the other three are added elsewhere
+# through named constants -- InventoryAPIv3 and LibraryAPIv3 from
+# llaisapi.cpp, on a differently named list, and VETPBR from a constexpr
+# in llviewerregion.cpp.  Grepping for the literals alone finds 116 and
+# looks complete, which is how the two that slgo depends on most went
+# missing from the first draft of this file.
+#
+# A simulator may offer more than this; it will not offer any of them
+# unless they are asked for.
+#
+# verb is the http method, and is marked "?" where I could not establish
+# it.  The viewer reaches many of these through helpers that take the
+# verb from somewhere else, so guessing from the name would have been
+# guessing.  The ones marked are either visible at the call site or have
+# been exercised from this tree.
+#
+# slgo asks for nineteen of them at login, in agent.DefaultCaps:
+#
+#   AvatarPickerSearch  EventQueueGet  FetchInventory2
+#   FetchInventoryDescendents2  GetDisplayNames  GetMesh2  GetTexture
+#   InventoryAPIv3  LibraryAPIv3  NewFileAgentInventory  ObjectMedia
+#   ParcelPropertiesUpdate  RemoteParcelRequest  UpdateNotecardAgentInventory
+#   UpdateNotecardTaskInventory  UpdateScriptAgent  UpdateScriptTask
+#   ViewerAsset  ViewerStats
+#
+# The two-step upload used by everything called Update...Inventory or
+# ...UploadFlag is worth knowing once: post an LLSD description of the
+# item, get back a one-shot uploader URL, then post the bytes to that.
+# The second URL is not a capability and is good once.
+
+AbuseCategories                   GET   the list of abuse report categories, localised
+AcceptFriendship                  POST  accepts a friendship offer that arrived while you were offline
+AcceptGroupInvite                 GET   accepts a group invitation that arrived while you were offline
+AgentExperiences                  GET   the experiences this avatar has agreed to
+AgentPreferences                  POST  default permissions for things you create, and other preferences
+AgentProfile                      GET   somebody's profile, the modern replacement for the udp messages
+AgentState                        GET   whether this avatar may edit the region's navigation mesh
+AttachmentResources               GET   what each attachment costs in script time and memory
+AvatarPickerSearch                GET   search for people by part of a name, over display names too
+AvatarRenderInfo                  POST  how expensive other avatars are to draw, reported back
+CharacterProperties               ?     pathfinding character settings on an object
+ChatSessionRequest                POST  starts or joins a group or conference chat session
+CopyInventoryFromNotecard         POST  takes an item out of a notecard into inventory
+CreateInventoryCategory           POST  makes an inventory folder and gets its id back at once
+DeclineFriendship                 POST  refuses an offline friendship offer
+DeclineGroupInvite                GET   refuses an offline group invitation
+DirectDelivery                    POST  the marketplace listings this avatar owns
+DispatchOpenRegionSettings        POST  writes the settings on the region's Open Region panel
+DispatchRegionInfo                POST  writes the region's settings: prims, agents, terrain, flags
+EnvironmentSettings               ?     the region's windlight, before the extended day cycle existed
+EstateAccess                      GET   the estate's allow, ban and manager lists
+EstateChangeInfo                  POST  writes the estate's name, flags and abuse address
+EventQueueGet                     POST  the long poll: everything with no udp message of its own
+ExperiencePreferences             GET   which experiences this avatar has allowed or blocked
+ExperienceQuery                   ?     asks about experiences by key
+ExtEnvironment                    POST  the region or parcel day cycle, in its current form
+FetchInventory2                   GET   fetches particular inventory items by id
+FetchInventoryDescendents2        GET   fetches the contents of an inventory folder
+FetchLib2                         GET   the same, for the library rather than your own inventory
+FetchLibDescendents2              GET   library folder contents
+FindExperienceByName              GET   searches for an experience by name
+GetAdminExperiences               GET   the experiences this avatar administers
+GetCreatorExperiences             GET   the experiences this avatar created
+GetDisplayNames                   GET   display names and usernames for a list of ids
+GetExperienceInfo                 GET   the metadata for one experience
+GetExperiences                    GET   the experiences an avatar is involved with
+GetMesh                           GET   fetches a mesh asset -- superseded by GetMesh2
+GetMesh2                          GET   fetches a mesh asset, by id and range
+GetMetadata                       POST  the experience a script is running under
+GetObjectCost                     POST  the land impact of objects, by id
+GetObjectPhysicsData              POST  the physics shape and cost of objects, by id
+GetTexture                        GET   fetches a texture -- superseded by ViewerAsset
+GroupAPIv1                        GET   group membership and roles over http
+GroupExperiences                  GET   the experiences a group owns
+GroupMemberData                   POST  a group's member list, which can be very long
+GroupProposalBallot               POST  casts a vote in a group proposal
+HomeLocation                      POST  sets where home is
+IncrementCOFVersion               GET   bumps the version of the current outfit folder
+InterestList                      POST  asks the region for more or less detail about what is around
+InventoryAPIv3                    GET   the whole inventory tree, and the only way to read it now
+
+InventoryThumbnailUpload          POST  uploads a thumbnail image for an inventory item
+IsExperienceAdmin                 GET   whether this avatar administers an experience
+IsExperienceContributor           GET   whether this avatar may contribute to one
+LandResources                     POST  what the objects on a parcel cost, itemised by owner
+LibraryAPIv3                      GET   the same, for the library rather than your own inventory
+LSLSyntax                         GET   the keywords and functions this simulator's LSL understands
+MapLayer                          POST  the world map's background tiles
+MapLayerGod                       POST  the same, with everything visible, for administrators
+MeshUploadFlag                    GET   whether this region allows mesh uploads at all
+ModifyMaterialParams              POST  edits a gltf material on a face
+ModifyRegion                      GET   writes the region's terrain textures and heights
+NavMeshGenerationStatus           GET   how the region's navigation mesh rebuild is going
+NewFileAgentInventory             POST  uploads a new asset into inventory, the two-step way
+ObjectAnimation                   ?     animations played on an object rather than an avatar
+ObjectMedia                       POST  the media playing on each face of an object
+ObjectMediaNavigate               POST  points that media somewhere else
+ObjectNavMeshProperties           GET   an object's part in the navigation mesh
+ParcelPropertiesUpdate            POST  writes a parcel's settings, replacing the udp message
+ParcelVoiceInfoRequest            POST  the voice channel for the parcel you are standing on
+ProductInfoRequest                GET   what the maturity ratings and land products are called
+ProvisionVoiceAccountRequest      POST  credentials for the voice server
+ReadOfflineMsgs                   GET   the instant messages saved while you were logged out
+RegionExperiences                 POST  which experiences the region allows or blocks
+RegionObjects                     GET   the objects the region holds, for pathfinding
+RegionSchedule                    GET   when the region is set to restart
+RemoteParcelRequest               POST  turns a position into a parcel id, anywhere on the grid
+RenderMaterials                   POST  legacy per-face material settings
+RequestTaskInventory              GET   what is inside an object, replacing the udp reply
+RequestTextureDownload            ?     asks for a texture by another route
+ResourceCostSelected              POST  the land impact of the current selection
+RetrieveNavMeshSrc                POST  the region's navigation mesh itself
+SearchStatRequest                 POST  how a classified advertisement is performing
+SearchStatTracking                POST  records a click on a search result
+SendPostcard                      POST  emails a snapshot
+SendUserReport                    POST  files an abuse report
+SendUserReportWithScreenshot      POST  files one with a picture attached
+ServerReleaseNotes                GET   the release notes for the simulator you are standing on
+SetDisplayName                    POST  changes your display name
+SimConsoleAsync                   POST  runs a console command on the region, for administrators
+SimulatorFeatures                 GET   what this simulator supports: mesh, physics, limits, urls
+SpatialVoiceModerationRequest     POST  moderates nearby voice, for those who may
+StartGroupProposal                POST  puts something to a group vote
+TerrainNavMeshProperties          GET   the terrain's part in the navigation mesh
+TextureStats                      POST  reports texture use back to Linden Lab
+UntrustedSimulatorMessage         POST  sends a udp message over http, for hosts that cannot send udp
+UpdateAgentInformation            POST  the maturity rating this avatar wants to see
+UpdateAgentLanguage               POST  the language this avatar reads
+UpdateAvatarAppearance            POST  the current outfit's baked textures, server side
+UpdateExperience                  POST  writes an experience's own settings
+UpdateGestureAgentInventory       POST  uploads a gesture in inventory
+UpdateGestureTaskInventory        POST  uploads a gesture inside an object
+UpdateMaterialAgentInventory      POST  uploads a gltf material in inventory
+UpdateMaterialTaskInventory       POST  uploads one inside an object
+UpdateNotecardAgentInventory      POST  uploads a notecard in inventory
+UpdateNotecardTaskInventory       POST  uploads a notecard inside an object
+UpdateScriptAgent                 POST  compiles and saves a script in inventory
+UpdateScriptTask                  POST  compiles and saves a script inside an object
+UpdateSettingsAgentInventory      POST  uploads an environment setting in inventory
+UpdateSettingsTaskInventory       POST  uploads one inside an object
+UploadAgentProfileImage           POST  uploads a profile picture
+UploadBakedTexture                POST  uploads a baked avatar texture
+UserInfo                          GET   your email address and whether it may be shown
+VETPBR                            ?     pbr terrain on OpenSim; Second Life does not offer it
+ViewerAsset                       GET   fetches any asset by id and type, the one that replaced the rest
+ViewerBenefits                    GET   what this account's membership level is entitled to
+ViewerMetrics                     POST  timing and failure statistics, reported back
+ViewerStartAuction                POST  starts an auction on a parcel
+ViewerStats                       POST  session statistics: frame rate, memory, network
+VoiceSignalingRequest             POST  the webrtc voice signalling channel
