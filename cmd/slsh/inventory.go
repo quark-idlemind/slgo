@@ -51,7 +51,7 @@ var inventoryCommands = map[string]*command{
 	},
 	"mv": {
 		usage: "mv PATH DEST",
-		brief: "move into a folder, or rename if DEST is a plain name",
+		brief: "move into a folder, or rename if DEST is a plain name; folders too",
 		run:   cmdMv,
 	},
 	"rm": {
@@ -406,7 +406,7 @@ func cmdMv(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		return fmt.Errorf("no folder %q, and %q is not a plain name to rename to", args[1], args[1])
 	}
 	if e.Folder {
-		return fmt.Errorf("renaming a folder is not implemented; make one and move things into it")
+		return sh.s.RenameFolder(ctx, e.ID, dest[0])
 	}
 	_, err = sh.s.SetItem(ctx, e.ID, dest[0], "", nil)
 	return err

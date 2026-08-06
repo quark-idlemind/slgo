@@ -483,7 +483,43 @@ func (w *Session) MoveItem(ctx context.Context, item, folder msg.UUID, newName .
 	return w.Send(ctx, m)
 }
 
+// RenameFolder changes a folder's name.
+//
+// Over AIS, which is the opposite of the item path and worth saying
+// why: the refusal there was specifically about parent_id, not about
+// PATCH, so a category takes a new name this way and the viewer
+// prefers it too.  Moving is the part AIS will not do.
+//
+// A system folder -- Objects, Notecards, Trash, anything with a
+// preferred type -- is another matter: the viewer refuses to ask at
+// all (LLFolderType::lookupIsProtectedType), and what the grid would
+// say has not been tested here, because finding out means renaming
+// somebody's Objects folder to see whether it comes back.
+func (w *Session) RenameFolder(ctx context.Context, folder msg.UUID, name string) error {
+	if name == "" {
+		return fmt.Errorf("sl: a folder needs a name")
+	}
+	if folder == w.invRoot {
+		return fmt.Errorf("sl: the inventory root cannot be renamed")
+	}
+	enc, err := llsd.Encode(map[string]any{"name": name})
+	if err != nil {
+		return err
+	}
+	_, err = w.capDo(ctx, agent.CapRequest{
+		Cap:    agent.InventoryCap,
+		Method: "PATCH",
+		Path:   "/category/" + folder.String(),
+		Body:   enc,
+		Type:   "application/llsd+xml",
+	})
+	return err
+}
+
 // MoveFolder puts a folder inside another one.
+//
+// Over UDP, for the same reason MoveItem is: AIS refuses to change a
+// parent.  A system folder cannot be moved either.
 func (w *Session) MoveFolder(ctx context.Context, folder, parent msg.UUID) error {
 	m := &msg.MoveInventoryFolder{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()

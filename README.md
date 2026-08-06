@@ -687,6 +687,11 @@ editable into commands that each mean one thing.
 Paths quote with `"` and `'`, and a backslash is left alone, since
 inventory paths use it to escape a separator.
 
+`mv` handles folders as well as items, and the two halves go different
+ways for the same reason as before: a rename is an AIS `PATCH`, and a
+move is UDP, because AIS refuses to change a parent. A folder renamed
+to `odd / name \ here` comes back with exactly that name.
+
 ## Inventory names, and paths that survive them
 
 An inventory name may hold very nearly any printable character, so a
