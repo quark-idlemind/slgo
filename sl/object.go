@@ -66,9 +66,12 @@ func (w *Session) SetName(ctx context.Context, o *Object, name string) error {
 	}
 
 	// Clear what we think the name is, so a stale answer cannot pass
-	// for a fresh one.
+	// for a fresh one.  This is objectNames, where the names of objects
+	// are: names is the avatar cache, and clearing that one left the
+	// old object name in place to be read straight back, so renaming a
+	// freshly rezzed prim always reported that it was still "Object".
 	w.mu.Lock()
-	delete(w.names, o.ID)
+	delete(w.objectNames, o.ID)
 	w.mu.Unlock()
 
 	deadline := time.Now().Add(20 * time.Second)
