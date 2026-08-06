@@ -1,0 +1,510 @@
+# Every message in message_template.msg, one per line, in the order the
+# template lists them.
+#
+#   name                          dir  what it is for
+#
+# dir says which way it travels on a viewer's circuit:
+#
+#   out    viewer -> simulator
+#   in     simulator -> viewer
+#   both   goes both ways, or is sent by whichever end has something to say
+#   int    Linden Lab's own machinery -- simulator to dataserver, space
+#          server, launcher -- and never seen on a viewer's circuit
+#
+# Where the directions came from, in order of preference: the template's
+# own "viewer -> sim" annotations, then where the viewer builds the
+# message and where it registers a handler for it, then the Trusted flag,
+# which says the simulator will not accept the message from a viewer at
+# all.  The last resort was knowing the protocol, and that is also what
+# settled the cases where the first three disagreed -- the viewer source
+# contains both ends of some conversations, so grepping it alone will
+# tell you the viewer "sends" UUIDNameReply.
+#
+# "retired" means the message is marked Deprecated, UDPDeprecated or
+# UDPBlackListed in the template: the simulator will either ignore it or
+# never send it, and the traffic has moved to a capability or the event
+# queue.  Sending one is a way to be quietly ignored.
+
+TestMessage                       both  test traffic, and the template's own worked example
+PacketAck                         both  acknowledges packets that were sent reliably
+OpenCircuit                       both  asks the far end to open a circuit to an address and port
+CloseCircuit                      both  asks the far end to shut the circuit down
+StartPingCheck                    both  ping, carrying the oldest packet the sender has not had acked
+CompletePingCheck                 both  the answer to a ping
+AddCircuitCode                    int   tells a server that a circuit code it will see is legitimate
+UseCircuitCode                    out   opens the circuit with the code, session and agent from login
+NeighborList                      int   the simulators next to this one, whenever that changes
+AvatarTextureUpdate               int   baked avatar textures on their way to be stored
+SimulatorMapUpdate                int   a region's map tile has changed
+SimulatorSetMap                   int   uploads a region's map image, for land that is for sale
+SubscribeLoad                     int   the space server asks a simulator for load reports
+UnsubscribeLoad                   int   stops those load reports
+SimulatorReady                    int   the simulator has loaded its state and can take updates
+TelehubInfo                       in    the telehub and its spawn points, for the estate tools
+SimulatorPresentAtLocation        int   a simulator claims a grid location and names its neighbours
+SimulatorLoad                     int   how busy a simulator is, and how many agents it holds
+SimulatorShutdownRequest          int   a simulator asking permission to shut down
+RegionPresenceRequestByRegionID   int   which host is running this region, asked by id
+RegionPresenceRequestByHandle     int   the same question, asked by region handle
+RegionPresenceResponse            int   the host and port a region is running on
+UpdateSimulator                   int   sets a region's name, estate and maturity in the database
+LogDwellTime                      int   records how long an avatar stayed on a parcel
+FeatureDisabled                   in    the thing you asked for is switched off here
+LogFailedMoneyTransaction         int   records a money transfer that went wrong
+UserReportInternal                int   an abuse report on its way to the dataserver
+SetSimStatusInDatabase            int   writes a simulator's row in the status table
+SetSimPresenceInDatabase          int   writes a simulator's row in the presence table
+EconomyDataRequest                out   asks what things cost here
+EconomyData                       in    upload prices, group creation cost, teleport minimum
+AvatarPickerRequest               out   search for a person by name; only ever matches a whole name
+AvatarPickerRequestBackend        int   that search on its way to the dataserver, with god level
+AvatarPickerReply                 in    who the search matched; one row with a zero id means nobody
+PlacesQuery                       out   the parcels an avatar or a group owns
+PlacesReply                       in    those parcels, with area, dwell, and asking price
+DirFindQuery                      out   search the directory for people, groups or events
+DirFindQueryBackend               int   that search on its way to the dataserver
+DirPlacesQuery                    out   search the directory for places
+DirPlacesQueryBackend             int   that search on its way to the dataserver
+DirPlacesReply                    in    the places a directory search matched
+DirPeopleReply                    in    the people a directory search matched
+DirEventsReply                    in    the events a directory search matched
+DirGroupsReply                    in    the groups a directory search matched
+DirClassifiedQuery                out   search the classified advertisements
+DirClassifiedQueryBackend         int   that search on its way to the dataserver
+DirClassifiedReply                in    the classified advertisements that matched
+AvatarClassifiedReply             in    the classified advertisements one avatar has placed
+ClassifiedInfoRequest             out   asks for the full text of one classified advertisement
+ClassifiedInfoReply               in    that advertisement: text, price, category, location
+ClassifiedInfoUpdate              out   writes or rewrites one of your classified advertisements
+ClassifiedDelete                  out   removes one of your classified advertisements
+ClassifiedGodDelete               out   removes somebody else's, which takes god powers
+DirLandQuery                      out   search the land that is for sale or at auction
+DirLandQueryBackend               int   that search on its way to the dataserver
+DirLandReply                      in    the land for sale that matched -- retired
+DirPopularQuery                   out   search the places by how busy they are -- retired
+DirPopularQueryBackend            int   that search on its way to the dataserver -- retired
+DirPopularReply                   in    the popular places that matched -- retired
+ParcelInfoRequest                 out   asks about one parcel, by its id
+ParcelInfoReply                   in    that parcel's name, description, owner, size and price
+ParcelObjectOwnersRequest         out   who owns the objects sitting on a parcel
+ParcelObjectOwnersReply           in    the owners and how many objects each has -- retired
+GroupNoticesListRequest           out   asks for the notices a group has posted
+GroupNoticesListReply             in    those notices, as headers only
+GroupNoticeRequest                out   asks for the body of one group notice
+GroupNoticeAdd                    both  posts a group notice, and carries one being delivered
+TeleportRequest                   out   teleport to a place named by region id and position
+TeleportLocationRequest           out   teleport to a global position on the grid
+TeleportLocal                     in    you have been moved within this same region
+TeleportLandmarkRequest           out   teleport to a landmark, or home when the id is zero
+TeleportProgress                  in    how a teleport in progress is getting on
+DataHomeLocationRequest           int   asks the dataserver where an agent's home is
+DataHomeLocationReply             int   the answer: where home is
+TeleportFinish                    in    the destination is ready: address, port and seed capability -- retired
+StartLure                         out   offers to teleport somebody to where you are
+TeleportLureRequest               out   accepts such an offer and starts the teleport
+TeleportCancel                    out   changed my mind about the teleport
+TeleportStart                     in    the teleport was accepted and is beginning
+TeleportFailed                    in    the teleport will not happen, and why
+Undo                              out   undo the last edit to the selected objects
+Redo                              out   put back what Undo took away
+UndoLand                          out   undo the last terrain edit
+AgentPause                        out   the viewer is about to block; hold the updates
+AgentResume                       out   the viewer is listening again
+AgentUpdate                       out   camera, controls and body rotation, sent continuously
+ChatFromViewer                    out   says something: the text, the channel, and whisper/say/shout
+AgentThrottle                     out   how many bits per second to spend on each kind of traffic
+AgentFOV                          out   the vertical angle of the viewer's field of view
+AgentHeightWidth                  out   the size of the window, so the simulator can size its updates
+AgentSetAppearance                out   the avatar's shape and the textures baked for it
+AgentAnimation                    out   start or stop an animation on your own avatar
+AgentRequestSit                   out   asks to sit on an object
+AgentSit                          out   actually sits, once the request was allowed
+AgentQuitCopy                     out   tells neighbouring regions to drop your child agent as you go
+RequestImage                      out   asks for a texture, at a priority and a discard level
+ImageNotInDatabase                in    that texture does not exist and never will
+RebakeAvatarTextures              in    your baked textures were rejected; bake them again
+SetAlwaysRun                      out   walk or run from now on
+ObjectAdd                         out   rez a new prim into the world
+ObjectDelete                      out   delete the selected objects, or send them to the trash
+ObjectDuplicate                   out   copy the selected objects, offset by a given amount
+ObjectDuplicateOnRay              out   copy an object and drop the copy against whatever is under it
+MultipleObjectUpdate              out   position, rotation and scale for several objects at once
+RequestMultipleObjects            out   asks for full data on objects the cache does not have
+ObjectPosition                    out   move objects -- retired, superseded by MultipleObjectUpdate
+ObjectScale                       out   resize objects -- retired, superseded by MultipleObjectUpdate
+ObjectRotation                    out   turn objects; the modern viewer no longer sends it
+ObjectFlagUpdate                  out   physical, temporary, phantom and the rest, per object
+ObjectClickAction                 out   what a click on this object should do
+ObjectImage                       out   the texture entry: what is on each face
+ObjectBypassModUpdate             out   lets an owner edit fields modify permissions would protect
+ObjectMaterial                    out   stone, metal, glass, wood -- what it sounds and behaves like
+ObjectShape                       out   the prim's own geometry: cut, twist, hollow, taper
+ObjectExtraParams                 out   sculpt, flexible, light and the other optional parameters
+ObjectOwner                       out   hand objects to another owner, which takes god powers
+ObjectGroup                       out   set or clear the group an object is shared with
+ObjectBuy                         out   buy an object that is for sale
+BuyObjectInventory                out   buy one item out of an object's contents
+DerezContainer                    in    the container an object was bought in, for the viewer to open
+ObjectPermissions                 out   turn permission bits on or off for the selection
+ObjectSaleInfo                    out   put an object up for sale, or take it off sale
+ObjectName                        out   rename objects
+ObjectDescription                 out   rewrite object descriptions
+ObjectCategory                    out   set the search category an object is listed under
+ObjectSelect                      out   select objects, which is what makes properties arrive
+ObjectDeselect                    out   deselect them again
+ObjectAttach                      out   wear an object at an attachment point
+ObjectDetach                      out   take an attachment off and mark it not worn
+ObjectDrop                        out   drop an attachment on the ground where you stand
+ObjectLink                        out   link the selected objects into one
+ObjectDelink                      out   break a linkset apart
+ObjectGrab                        out   the start of dragging or touching an object
+ObjectGrabUpdate                  out   the drag continuing, with where the pointer is
+ObjectDeGrab                      out   letting go
+ObjectSpinStart                   out   the start of spinning an object with the mouse
+ObjectSpinUpdate                  out   the spin continuing
+ObjectSpinStop                    out   the end of the spin
+ObjectExportSelected              out   export the selection, for the few accounts allowed to
+ModifyLand                        out   raise, lower, flatten, roughen or revert the terrain
+VelocityInterpolateOn             out   interpolate object movement between updates
+VelocityInterpolateOff            out   stop interpolating
+StateSave                         out   asks the simulator to save its state, which takes god powers
+ReportAutosaveCrash               int   a simulator reporting that its autosave failed
+SimWideDeletes                    out   delete every object on the region owned by one avatar
+RequestObjectPropertiesFamily     out   asks for an object's owner, permissions and price
+TrackAgent                        out   follow somebody on the map, if they allow it
+ViewerStats                       out   session statistics: frame rate, memory, network -- retired
+ScriptAnswerYes                   out   grants a script the permissions it asked for
+UserReport                        out   an abuse report, with an optional screenshot
+AlertMessage                      in    text for a dialog, and how a refusal usually arrives
+AgentAlertMessage                 in    the same, aimed at one named agent
+MeanCollisionAlert                in    somebody bumped into you hard enough to be worth saying
+ViewerFrozenMessage               in    you have been frozen, or unfrozen
+HealthMessage                     in    the avatar's health, where damage is enabled
+ChatFromSimulator                 in    something was said within earshot, and by what kind of thing
+SimStats                          in    the region's frame time, agent count and physics load
+RequestRegionInfo                 out   asks for the region's settings
+RegionInfo                        in    the region's flags, prices, water height and limits
+GodUpdateRegionInfo               out   writes those settings back, which takes god powers
+NearestLandingRegionRequest       int   asks the dataserver where arrivals should land
+NearestLandingRegionReply         int   the answer
+NearestLandingRegionUpdated       int   a region telling the dataserver its landing point moved
+TeleportLandingStatusChanged      int   a region's teleport landing rules have changed
+RegionHandshake                   in    the region introducing itself: name, owner, terrain, flags
+RegionHandshakeReply              out   the viewer saying it has taken all that in
+CoarseLocationUpdate              in    where everybody in the region is, to the nearest metre
+ImageData                         in    the first packet of a texture, with its size and codec
+ImagePacket                       in    the rest of that texture
+LayerData                         in    terrain, wind, cloud and water, as packed layers
+ObjectUpdate                      in    the full description of objects that have come into view
+ObjectUpdateCompressed            in    the same, packed smaller
+ObjectUpdateCached                in    just ids and checksums, so the viewer can use its cache
+ImprovedTerseObjectUpdate         in    position, rotation and velocity only, for things moving
+KillObject                        in    those objects have gone
+CrossedRegion                     in    you have walked into the next region -- retired
+SimulatorViewerTimeMessage        in    the region's time of day, sun and moon
+EnableSimulator                   in    open a circuit to this neighbouring region -- retired
+DisableSimulator                  in    close the circuit to a region you can no longer see
+ConfirmEnableSimulator            out   the viewer confirming it opened that circuit
+TransferRequest                   both  asks for an asset or a file, over the transfer machinery
+TransferInfo                      both  what is about to be sent: size, type and status
+TransferPacket                    both  one chunk of it
+TransferAbort                     both  stop sending, from either end
+RequestXfer                       both  asks for a named file over the older xfer machinery
+SendXferPacket                    both  one packet of that file
+ConfirmXferPacket                 both  acknowledges a packet, which is what asks for the next
+AbortXfer                         both  stop the xfer, from either end
+AvatarAnimation                   in    which animations an avatar is playing now
+AvatarAppearance                  in    another avatar's shape and baked textures
+AvatarSitResponse                 in    where sitting on that object will put you
+SetFollowCamProperties            in    a script taking control of the camera
+ClearFollowCamProperties          in    a script giving the camera back
+CameraConstraint                  in    how far the camera may pull back before something is in the way
+ObjectProperties                  in    creator, owner, permissions, sale price, for selected objects
+ObjectPropertiesFamily            in    the cheaper subset of that, for things the mouse is over
+RequestPayPrice                   out   asks what an object wants to be paid
+PayPriceReply                     in    the default price and the quick-pay buttons to show
+KickUser                          in    you are being logged out, and why
+KickUserAck                       int   the acknowledgement that lets a login continue elsewhere
+GodKickUser                       out   log somebody else out, which takes god powers
+SystemKickUser                    int   the same, from Linden Lab's own machinery
+EjectUser                         out   throw somebody off your land
+FreezeUser                        out   freeze somebody on your land
+AvatarPropertiesRequest           out   asks for somebody's profile
+AvatarPropertiesRequestBackend    int   that request on its way to the dataserver
+AvatarPropertiesReply             in    the profile: about text, picture, partner, born on
+AvatarInterestsReply              in    the interests section of that profile
+AvatarGroupsReply                 in    the groups shown in that profile
+AvatarPropertiesUpdate            out   writes your own profile back
+AvatarInterestsUpdate             out   writes your own interests back
+AvatarNotesReply                  in    the private notes you kept about somebody
+AvatarNotesUpdate                 out   writes those notes back
+AvatarPicksReply                  in    the picks on somebody's profile, as headers
+EventInfoRequest                  out   asks about one event in the directory
+EventInfoReply                    in    that event: name, time, place, description
+EventNotificationAddRequest       out   remind me about this event
+EventNotificationRemoveRequest    out   stop reminding me
+EventGodDelete                    out   removes an event, which takes god powers
+PickInfoReply                     in    one pick from a profile, in full
+PickInfoUpdate                    out   writes one of your own picks back
+PickDelete                        out   removes one of your picks
+PickGodDelete                     out   removes somebody else's, which takes god powers
+ScriptQuestion                    in    a script asking for permissions, and what it wants them for
+ScriptControlChange               in    a script has taken or released the movement controls
+ScriptDialog                      in    a script putting a dialog with buttons on your screen
+ScriptDialogReply                 out   which button was pressed
+ForceScriptControlRelease         out   take the controls back from whatever script has them
+RevokePermissions                 out   withdraw permissions previously granted to a script
+LoadURL                           in    a script offering to open a web page
+ScriptTeleportRequest             in    a script asking the viewer to show a place on the map
+ParcelOverlay                     in    the parcel boundaries and ownership colours for the region
+ParcelPropertiesRequest           out   asks about the parcel covering a rectangle
+ParcelPropertiesRequestByID       out   asks about a parcel by its local id
+ParcelProperties                  in    everything about a parcel: owner, area, flags, media -- retired
+ParcelPropertiesUpdate            out   writes a parcel's settings back
+ParcelReturnObjects               out   return objects on a parcel to their owners
+ParcelSetOtherCleanTime           out   how long other people's objects may sit here
+ParcelDisableObjects              out   stop the scripts on objects and make them non-physical
+ParcelSelectObjects               out   select objects on a parcel, by owner or by kind
+EstateCovenantRequest             out   asks for the estate's covenant
+EstateCovenantReply               in    the covenant text and who the estate belongs to
+ForceObjectSelect                 in    the simulator telling the viewer what is now selected
+ParcelBuyPass                     out   buy a temporary pass onto a parcel
+ParcelDeedToGroup                 out   give a parcel to a group
+ParcelReclaim                     out   an estate owner taking a parcel back
+ParcelClaim                       out   claim land that has no owner
+ParcelJoin                        out   merge the parcels inside a rectangle into one
+ParcelDivide                      out   cut a piece out of a parcel to make a new one
+ParcelRelease                     out   abandon a parcel to the estate
+ParcelBuy                         out   buy a parcel that is for sale
+ParcelGodForceOwner               out   set a parcel's owner outright, which takes god powers
+ParcelAccessListRequest           out   asks for a parcel's allow, ban or access list
+ParcelAccessListReply             in    that list, with when each entry expires
+ParcelAccessListUpdate            out   writes one of those lists back
+ParcelDwellRequest                out   asks how much traffic a parcel gets
+ParcelDwellReply                  in    the dwell figure
+RequestParcelTransfer             int   checks whether a land purchase may go ahead
+UpdateParcel                      int   a parcel's full state, on its way to be stored
+RemoveParcel                      int   a parcel has ceased to exist
+MergeParcel                       int   two parcels became one, so their dwell must be merged
+LogParcelChanges                  int   records what changed about a parcel, and who did it
+CheckParcelSales                  int   asks whether any land sales are ready to complete
+ParcelSales                       int   tells a simulator to finish a land sale
+ParcelGodMarkAsContent            out   marks a parcel as Linden content, which takes god powers
+ViewerStartAuction                out   start an auction on a parcel
+StartAuction                      int   the auction being set up behind the scenes
+ConfirmAuctionStart               int   the confirmation that it started
+CompleteAuction                   int   the auction has finished
+CancelAuction                     int   the auction was called off
+CheckParcelAuctions               int   asks whether any auctions are ready to finish
+ParcelAuctions                    int   tells a simulator to finish an auction
+UUIDNameRequest                   out   who do these ids belong to
+UUIDNameReply                     in    the first and last names for those ids
+UUIDGroupNameRequest              out   what are these groups called
+UUIDGroupNameReply                in    the group names
+ChatPass                          int   chat crossing to a neighbouring simulator so it can be heard
+EdgeDataPacket                    int   terrain along a region edge, so neighbours agree about it
+SimStatus                         int   a simulator's condition, sent when it changes
+ChildAgentUpdate                  int   your presence being kept up to date on a neighbouring region
+ChildAgentAlive                   int   a keepalive for that presence
+ChildAgentPositionUpdate          int   where you are, for that neighbouring region
+ChildAgentDying                   int   that presence has ended
+ChildAgentUnknown                 int   a presence that was never fully accepted
+AtomicPassObject                  int   an object handed from one region to the next
+KillChildAgents                   int   clear out stale presences when an agent connects afresh
+GetScriptRunning                  out   is this script running
+ScriptRunningReply                in    whether it is running, and whether it is mono -- retired
+SetScriptRunning                  out   start or stop a script inside an object
+ScriptReset                       out   reset a script to its first state
+ScriptSensorRequest               int   a sensor being run on behalf of a script
+ScriptSensorReply                 int   what that sensor found
+CompleteAgentMovement             out   the viewer arriving: the handshake that puts you in the region
+AgentMovementComplete             in    you have arrived, and here is where you are standing
+DataServerLogout                  int   an agent logging out, on its way to the dataserver
+LogoutRequest                     out   asks to log out cleanly
+LogoutReply                       in    logging out is agreed; the viewer may quit
+ImprovedInstantMessage            both  instant messages, and everything that rides on them: friendship
+RetrieveInstantMessages           out   asks for the messages saved while you were away
+FindAgent                         both  where in the world is this agent
+RequestGodlikePowers              out   asks to become, or stop being, an administrator
+GrantGodlikePowers                in    the answer, and the level granted
+GodlikeMessage                    out   a general purpose command for administrators
+EstateOwnerMessage                both  estate management: bans, restarts, terrain, and their replies
+GenericMessage                    both  a general purpose command, no privileges required
+GenericStreamingMessage           both  the same, shaped for streaming data at a viewer
+LargeGenericMessage               in    the same again, for payloads too big for the others -- retired
+MuteListRequest                   out   asks for the mute list, if it has changed
+UpdateMuteListEntry               out   mutes somebody or something
+RemoveMuteListEntry               out   unmutes them
+CopyInventoryFromNotecard         out   takes an item out of a notecard into inventory -- retired
+UpdateInventoryItem               out   writes an inventory item's name, permissions or asset back
+UpdateCreateInventoryItem         in    an item was created or changed; here is what it now is
+MoveInventoryItem                 out   moves items into another folder, and renames them
+CopyInventoryItem                 out   copies items, possibly from somebody else's inventory
+RemoveInventoryItem               out   deletes items outright
+ChangeInventoryItemFlags          out   sets the flags on an item
+SaveAssetIntoInventory            in    the asset an item points at has been saved
+CreateInventoryFolder             out   makes a folder
+UpdateInventoryFolder             out   renames a folder or moves it
+MoveInventoryFolder               out   moves folders into another parent
+RemoveInventoryFolder             out   deletes folders
+FetchInventoryDescendents         out   asks what is inside a folder -- answered over http now
+InventoryDescendents              in    what was inside it
+FetchInventory                    out   asks for particular items by id
+FetchInventoryReply               in    those items
+BulkUpdateInventory               in    a batch of folders and items that have changed
+RequestInventoryAsset             int   may this agent have the asset behind that item
+InventoryAssetResponse            int   the answer, with the asset id or nothing
+RemoveInventoryObjects            both  deletes folders and items together, as emptying trash does
+PurgeInventoryDescendents         out   empties a folder without needing to know what is in it
+UpdateTaskInventory               out   puts an item into an object's contents, or changes one there
+RemoveTaskInventory               out   takes an item out of an object's contents
+MoveTaskInventory                 out   moves an item from an object into your inventory
+RequestTaskInventory              out   asks what is inside an object
+ReplyTaskInventory                in    the name of a file holding that list, fetched separately
+DeRezObject                       out   takes objects out of the world: to inventory, trash or return
+DeRezAck                          in    that take succeeded, since nothing else would say so
+RezObject                         out   rezzes an item from inventory into the world
+RezObjectFromNotecard             out   rezzes an object that was inside a notecard
+TransferInventory                 int   inventory passing from one agent to another
+TransferInventoryAck              int   the acknowledgement of that transfer
+AcceptFriendship                  out   accepts a friendship offer, by the id the offer carried
+DeclineFriendship                 out   refuses one, so the offer stops being pending
+FormFriendship                    int   the friendship being written down once both sides agree
+TerminateFriendship               both  ends a friendship, from either side
+OfferCallingCard                  both  offers a calling card, and carries the offer being delivered
+AcceptCallingCard                 both  accepts one
+DeclineCallingCard                both  refuses one
+RezScript                         out   puts a script into an object
+CreateInventoryItem               out   makes a new item: a notecard, a script, a gesture
+CreateLandmarkForEvent            out   makes a landmark for an event in the directory
+EventLocationRequest              int   where is this event being held
+EventLocationReply                int   the answer
+RegionHandleRequest               out   turns a region id into a region handle
+RegionIDAndHandleReply            in    the handle for that region
+MoneyTransferRequest              out   pays somebody, or an object
+MoneyTransferBackend              int   that payment going through the money system
+MoneyBalanceRequest               out   asks what your balance is
+MoneyBalanceReply                 in    the balance, and what the last transaction was
+RoutedMoneyBalanceReply           int   a balance update routed back through a simulator -- retired
+ActivateGestures                  out   these gestures are now active
+DeactivateGestures                out   these gestures no longer are
+MuteListUpdate                    in    the name of a file holding the mute list, fetched separately
+UseCachedMuteList                 in    the cached mute list is still good
+GrantUserRights                   out   grants a friend rights over you: map, online status, editing
+ChangeUserRights                  in    somebody changed what rights they grant you
+OnlineNotification                in    these friends have come online, including the burst at login
+OfflineNotification               in    these friends have gone
+SetStartLocationRequest           out   set home, or the place you will arrive next time
+SetStartLocation                  int   that setting on its way to be stored
+NetTest                           int   measures the network path between two of Linden Lab's hosts
+SetCPURatio                       int   tells a launcher how many simulators to run per machine
+SimCrashed                        int   a simulator reporting that it fell over
+NameValuePair                     in    a name-value pair on an object, added or changed
+RemoveNameValuePair               both  one of those pairs removed
+UpdateAttachment                  int   an attachment or its asset has changed, on its way to be stored
+RemoveAttachment                  int   an attachment has been taken off
+SoundTrigger                      in    play a sound once at a place, with no object to attach it to
+AttachedSound                     in    play a sound on an object, possibly looping
+AttachedSoundGainChange           in    change how loud that sound is
+PreloadSound                      in    fetch this sound now, it is about to be needed
+ObjectAnimation                   in    which animations an object is playing
+AssetUploadRequest                out   offers an asset for upload -- answered over http now
+AssetUploadComplete               in    the upload finished, with the id the asset was given
+EmailMessageRequest               int   a script asking whether it has email waiting
+EmailMessageReply                 int   the oldest message in its queue, and how many are left
+InternalScriptMail                int   a script sending mail to another script
+ScriptDataRequest                 int   a script asking the dataserver something
+ScriptDataReply                   int   the answer
+CreateGroupRequest                out   creates a group
+CreateGroupReply                  in    whether it worked, and the new group's id
+UpdateGroupInfo                   out   changes a group's charter, insignia or joining rules
+GroupRoleChanges                  out   adds or removes members from roles
+JoinGroupRequest                  out   joins a group
+JoinGroupReply                    in    whether you are in
+EjectGroupMemberRequest           out   throws somebody out of a group
+EjectGroupMemberReply             in    whether that worked
+LeaveGroupRequest                 out   leaves a group
+LeaveGroupReply                   in    whether that worked
+InviteGroupRequest                out   invites somebody to a group, at a role
+InviteGroupResponse               int   that invitation being recorded
+GroupProfileRequest               out   asks for a group's profile
+GroupProfileReply                 in    the charter, insignia, membership count and fees
+GroupAccountSummaryRequest        out   asks for a group's finances in summary
+GroupAccountSummaryReply          in    the balance, income and expenditure
+GroupAccountDetailsRequest        out   asks for the detail behind those figures
+GroupAccountDetailsReply          in    the itemised amounts
+GroupAccountTransactionsRequest   out   asks for a group's transactions
+GroupAccountTransactionsReply     in    those transactions
+GroupActiveProposalsRequest       out   asks what a group is currently voting on
+GroupActiveProposalItemReply      in    one proposal, and how the voting stands
+GroupVoteHistoryRequest           out   asks what a group has voted on before
+GroupVoteHistoryItemReply         in    one past vote and its result
+StartGroupProposal                out   puts something to a group vote -- retired
+GroupProposalBallot               out   casts a vote -- retired
+TallyVotes                        int   counts the votes when a proposal closes
+GroupMembersRequest               out   asks who is in a group
+GroupMembersReply                 in    the members, their titles and contributions
+ActivateGroup                     out   act as this group from now on, which decides what land allows
+SetGroupContribution              out   how much land credit you give a group
+SetGroupAcceptNotices             out   whether to receive that group's notices
+GroupRoleDataRequest              out   asks what roles a group has
+GroupRoleDataReply                in    those roles, with their powers and titles
+GroupRoleMembersRequest           out   asks who holds which role
+GroupRoleMembersReply             in    the role and member pairs
+GroupTitlesRequest                out   asks what titles you may wear in a group
+GroupTitlesReply                  in    those titles, and which is current
+GroupTitleUpdate                  out   wear a different title
+GroupRoleUpdate                   out   creates, changes or deletes a role
+LiveHelpGroupRequest              int   which group answers help requests
+LiveHelpGroupReply                int   the answer
+AgentWearablesRequest             out   asks what this avatar is wearing
+AgentWearablesUpdate              in    what it should be wearing, item by item
+AgentIsNowWearing                 out   this is what I am wearing now
+AgentCachedTexture                out   asks whether baked textures for these are already stored
+AgentCachedTextureResponse        in    the ones that were, so they need not be baked again
+AgentDataUpdateRequest            out   asks for the agent data below without changing anything
+AgentDataUpdate                   in    your name, group title and active group
+GroupDataUpdate                   int   group membership changes being routed to those who need them
+AgentGroupDataUpdate              in    the groups you are in, and your powers in each -- retired
+AgentDropGroup                    in    you are no longer in that group -- retired
+LogTextMessage                    int   chat and instant messages on their way to be logged
+ViewerEffect                      both  beams, pointing, selection glow and the rest, between viewers
+CreateTrustedCircuit              both  establishes trust between two of Linden Lab's components
+DenyTrustedCircuit                both  refuses that, or tears an existing trust down
+RequestTrustedCircuit             both  asks for trust to be established
+RezSingleAttachmentFromInv        out   wears one item straight from inventory
+RezMultipleAttachmentsFromInv     out   wears several at once, as an outfit does
+DetachAttachmentIntoInv           out   takes an attachment off and puts it away
+CreateNewOutfitAttachments        out   copies the worn attachments into a new outfit folder
+UserInfoRequest                   out   asks for your email address and its settings
+UserInfoReply                     in    that address, and whether it may be given out
+UpdateUserInfo                    out   changes them
+ParcelRename                      int   renames a parcel, from the space server
+InitiateDownload                  in    the simulator offering a file for the viewer to fetch
+SystemMessage                     int   a general purpose message between Linden Lab's components
+MapLayerRequest                   out   asks for the map's background layers
+MapLayerReply                     in    those layers, as image ids and the area each covers
+MapBlockRequest                   out   asks which regions exist in a rectangle of the grid
+MapNameRequest                    out   asks which regions have a name like this
+MapBlockReply                     in    the regions found, with their names and map images
+MapItemRequest                    out   asks what is on the map here: avatars, events, land for sale
+MapItemReply                      in    those items and where they are
+SendPostcard                      out   emails a snapshot
+RpcChannelRequest                 int   a script asking for a channel to an external rpc server
+RpcChannelReply                   int   the channel it was given
+RpcScriptRequestInbound           int   an rpc call arriving for a script
+RpcScriptRequestInboundForward    int   that call being forwarded to the right simulator -- retired
+RpcScriptReplyInbound             int   the script's answer going back out
+ScriptMailRegistration            int   registers an address so a script can be mailed
+ParcelMediaCommandMessage         in    play, pause or stop the media on a parcel
+ParcelMediaUpdate                 in    a change to that media, aimed at one viewer
+LandStatRequest                   out   asks which objects are using the most time or memory
+LandStatReply                     in    those objects, with their owners and scores -- retired
+Error                             both  something went wrong, with a code and a description
+ObjectIncludeInSearch             out   whether an object should appear in search
+RezRestoreToWorld                 out   puts an object back where it was taken from -- retired
+LinkInventoryItem                 out   makes a link to an item rather than a copy of it
+RetrieveIMsExtended               int   the saved instant message request, with more room in it
+JoinGroupRequestExtended          int   a group join being passed on to the dataserver
+CreateGroupRequestExtended        int   a group creation being passed on to the dataserver
+GameControlInput                  out   axis and button state from a joystick or game controller
