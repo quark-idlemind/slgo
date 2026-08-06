@@ -108,9 +108,22 @@ type World struct {
 	alerts     []string
 	propsFns   []func(*Properties)
 
+	// Dialogs a script has put up, in arrival order.  Kept rather
+	// than only delivered, because a dialog that appears the instant
+	// a script starts would otherwise be a race nobody can win.
+	dialogs []Dialog
+
+	// syntax is the LSL the region implements, which is half a
+	// megabyte and changes only when Linden Lab changes the language.
+	syntax *Syntax
+
 	// OnAlert, if set, is called for every AlertMessage.  Alerts are
 	// how a simulator refuses something it has no reply for.
 	OnAlert func(string)
+
+	// OnDialog, if set, is called for every script dialog.  See
+	// WaitDialog for the other way to catch one.
+	OnDialog func(Dialog)
 }
 
 // Dial connects to a server and attaches to one of its agents.
@@ -354,6 +367,9 @@ func (w *World) handle(raw *client.Message, v msg.Message) {
 
 	case *msg.ChatFromSimulator:
 		w.chat(raw, t)
+
+	case *msg.ScriptDialog:
+		w.dialog(t)
 
 	case *msg.AlertMessage:
 		s := trimNul(t.AlertData.Message)

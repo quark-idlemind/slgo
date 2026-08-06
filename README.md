@@ -785,6 +785,45 @@ the same hole and fills it by adding the friend to its own list
 `NoteFriend` rpc: the client understood what it sent, the server holds
 what a client restart would lose, and the server still decodes nothing.
 
+## Answering scripts, and asking the simulator about itself
+
+Three things a probe kept needing.
+
+`Answer` presses a button on a dialog a script put up. `WaitDialog`
+catches one, `OnDialog` sees them as they arrive, and the dialogs
+already seen count -- a script that opens one the instant it is rezzed
+would otherwise be a race nobody can win:
+
+    d, err := w.WaitDialog(ctx, 30*time.Second, nil)
+    err = w.Answer(ctx, d, "Beta")
+
+Worth recording where it lands: the reply goes on whichever channel the
+script chose, and those are usually negative. Measured against a script
+listening on -4242, the reply arrived -- `HEARD [Beta] on -4242` --
+while ordinary chat from this client on a negative channel still goes
+nowhere. Until that bug is found, this is the way to reach one.
+
+`Features` is one GET that answers what the region supports: whether
+mesh may be rezzed, how many attachments and groups an avatar may have,
+which voice server runs, and the id of the LSL it implements. The set
+of keys is Linden Lab's to grow, so the map is the truth and the named
+accessors are conveniences over it.
+
+`LSLSyntax` is the language itself, from the machine that runs it: 519
+functions with their arguments, return types, energy and sleep, 1007
+constants with their values, 43 events, and the types and control
+keywords. For anything checking a compiler against Second Life that is
+the oracle -- a function this does not list does not exist here, and a
+constant whose value differs is a bug in the compiler:
+
+    s, _ := w.LSLSyntax(ctx)
+    s.Functions["llDialog"].Signature()
+    // void llDialog(key AvatarID, string Text, list Buttons, integer Channel)
+
+It is half a megabyte, so it is kept and keyed by the id in `Features`.
+Asking again costs one small GET for that id and, when it has not
+moved, nothing else.
+
 ## Not done
 
 No region crossing, no teleport, no appearance, and inventory is read

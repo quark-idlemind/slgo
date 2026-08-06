@@ -33,6 +33,12 @@ var DefaultCaps = []string{
 	// whole name: "Quark Idlemind" finds them and "quark" finds
 	// nothing, so anything that means to search has to come here.
 	"AvatarPickerSearch",
+	// What this simulator supports and which LSL it implements.  The
+	// second is the authoritative list of functions, constants and
+	// events, straight from the machine that will run them, and the
+	// first carries the id that says when it last changed.
+	"SimulatorFeatures",
+	"LSLSyntax",
 	"ViewerAsset",
 	"GetTexture",
 	"GetMesh2",
