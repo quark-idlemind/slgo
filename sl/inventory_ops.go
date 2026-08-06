@@ -339,7 +339,7 @@ func (w *Session) GiveToAvatar(ctx context.Context, to msg.UUID, id msg.UUID, na
 	m.MessageBlock.Offline = 0
 	m.MessageBlock.ID = randomUUID()
 	m.MessageBlock.Position = where.Position
-	m.MessageBlock.FromAgentName = []byte(w.Info().GetAvatarName())
+	m.MessageBlock.FromAgentName = []byte(w.Info().AvatarName)
 	m.MessageBlock.Message = []byte(name)
 	m.MessageBlock.BinaryBucket = bucket
 	return w.Send(ctx, m)

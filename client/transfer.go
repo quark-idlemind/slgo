@@ -48,7 +48,7 @@ var ErrTransferDenied = errors.New("client: transfer refused")
 
 // Transfers reassembles assets arriving over the transfer protocol.
 type Transfers struct {
-	c *Conn
+	c Sender
 
 	mu      sync.Mutex
 	pending map[msg.UUID]*transfer
@@ -65,7 +65,7 @@ type transfer struct {
 }
 
 // NewTransfers prepares a reassembler on a connection.
-func NewTransfers(c *Conn) *Transfers {
+func NewTransfers(c Sender) *Transfers {
 	return &Transfers{c: c, pending: map[msg.UUID]*transfer{}}
 }
 

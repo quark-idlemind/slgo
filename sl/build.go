@@ -274,7 +274,7 @@ func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, timeout 
 			q := &msg.RequestObjectPropertiesFamily{}
 			q.AgentData.AgentID, q.AgentData.SessionID = w.me, w.sess
 			q.ObjectData.ObjectID = id
-			_ = w.c.Send(ctx, q, true)
+			_ = w.b.Send(ctx, q, true)
 		}
 		return false
 	})

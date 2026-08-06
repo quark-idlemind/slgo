@@ -40,7 +40,7 @@ var ErrXferAborted = errors.New("client: transfer aborted")
 // A client makes one, feeds it every SendXferPacket and AbortXfer it
 // receives, and asks it for a file by id.
 type Xfers struct {
-	c *Conn
+	c Sender
 
 	mu      sync.Mutex
 	pending map[uint64]*xfer
@@ -56,8 +56,16 @@ type xfer struct {
 	once     sync.Once
 }
 
-// NewXfers prepares a reassembler on a connection.
-func NewXfers(c *Conn) *Xfers {
+// Sender is what a reassembler needs from a connection: somewhere to
+// put a message.  An interface rather than *Conn so that a session
+// holding its own grid connection, with no server in between, can use
+// the same machinery.
+type Sender interface {
+	Send(ctx context.Context, m msg.Message, reliable bool) error
+}
+
+// NewXfers prepares a reassembler on anything that can send.
+func NewXfers(c Sender) *Xfers {
 	return &Xfers{
 		c:       c,
 		pending: map[uint64]*xfer{},

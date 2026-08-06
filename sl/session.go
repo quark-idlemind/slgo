@@ -12,7 +12,6 @@ import (
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
-	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // ErrTimeout is reported when the simulator never confirmed something.
@@ -41,8 +40,8 @@ var Subscriptions = []string{
 // It is safe for concurrent use.  It reads the relay in one goroutine
 // and everything else takes the lock.
 type Session struct {
-	c    *client.Conn
-	info *pb.AgentInfo
+	b    Backend
+	info *Info
 
 	me      msg.UUID
 	sess    msg.UUID
@@ -113,43 +112,55 @@ type Session struct {
 	sendFn func(msg.Message) error
 }
 
-// Dial connects to a server and attaches to one of its agents.
+// Dial attaches to a session slgod is holding.
+//
+// An empty name takes the only session the daemon has.  For a session
+// this process holds instead, see LoginDirect; everything after that
+// call is the same either way.
 func Dial(ctx context.Context, addr, agentName string) (*Session, error) {
-	c, err := client.Dial(ctx, addr)
+	h, err := Attach(ctx, addr, agentName, Subscriptions...)
 	if err != nil {
 		return nil, err
 	}
-	w, err := Attach(ctx, c, agentName)
+	s, err := New(h)
 	if err != nil {
-		c.Close()
+		h.Close()
 		return nil, err
 	}
-	return w, nil
+	return s, nil
 }
 
-// Attach starts on an existing connection.
-func Attach(ctx context.Context, c *client.Conn, agentName string) (*Session, error) {
-	info, err := c.Attach(ctx, agentName, Subscriptions...)
+// LoginDirect logs in and holds the session in this process.
+//
+// It also settles the active group, as slgod does at startup, since a
+// parcel usually grants building to a group rather than to individuals
+// and a fresh login has none active.
+func LoginDirect(ctx context.Context, l agent.Login) (*Session, error) {
+	d, err := Login(ctx, l)
 	if err != nil {
 		return nil, err
 	}
-	return New(c, info)
+	d.activeGroup(ctx)
+	s, err := New(d)
+	if err != nil {
+		d.Close()
+		return nil, err
+	}
+	return s, nil
 }
 
-// New wraps a connection that is already attached.
-func New(c *client.Conn, info *pb.AgentInfo) (*Session, error) {
-	me, err := msg.ParseUUID(info.AgentId)
-	if err != nil {
-		return nil, fmt.Errorf("sl: bad agent id: %w", err)
+// New wraps a backend that is already connected.
+func New(b Backend) (*Session, error) {
+	info := b.Info()
+	if info.AgentID.IsZero() {
+		return nil, fmt.Errorf("sl: the backend gave no agent id")
 	}
-	sess, err := msg.ParseUUID(info.SessionId)
-	if err != nil {
-		return nil, fmt.Errorf("sl: bad session id: %w", err)
+	if info.SessionID.IsZero() {
+		return nil, fmt.Errorf("sl: the backend gave no session id")
 	}
-	root, _ := msg.ParseUUID(info.InventoryRoot)
 
 	w := &Session{
-		c: c, info: info, me: me, sess: sess, invRoot: root,
+		b: b, info: info, me: info.AgentID, sess: info.SessionID, invRoot: info.InventoryRoot,
 		locals:   map[msg.UUID]uint32{},
 		owners:   map[msg.UUID]msg.UUID{},
 		names:    map[msg.UUID]string{},
@@ -164,32 +175,33 @@ func New(c *client.Conn, info *pb.AgentInfo) (*Session, error) {
 		chatCtl:  make(chan chatCmd),
 		readDone: make(chan struct{}),
 	}
-	w.xfers = client.NewXfers(c)
-	w.transfers = client.NewTransfers(c)
+	w.xfers = client.NewXfers(b)
+	w.transfers = client.NewTransfers(b)
 	go w.read(context.Background())
 	return w, nil
 }
 
-// Conn is the connection underneath, for anything this package does
-// not cover.  A message sent through it still reaches the same reader.
-func (w *Session) Conn() *client.Conn { return w.c }
+// Backend is what this session runs against, for the few things that
+// only one kind can do: Hosted.Sessions, Direct.Logout.  A message sent
+// through it still reaches the same reader.
+func (w *Session) Backend() Backend { return w.b }
 
 // Me is the avatar's id, Session the session id, and Info what the
 // server said when we attached.
 func (w *Session) Me() msg.UUID            { return w.me }
 func (w *Session) Session() msg.UUID       { return w.sess }
-func (w *Session) Info() *pb.AgentInfo     { return w.info }
+func (w *Session) Info() *Info             { return w.info }
 func (w *Session) InventoryRoot() msg.UUID { return w.invRoot }
 
 // Close hangs up.
-func (w *Session) Close() error { return w.c.Close() }
+func (w *Session) Close() error { return w.b.Close() }
 
 // Send puts a message on the wire, reliably.
 func (w *Session) Send(ctx context.Context, m msg.Message) error {
 	if w.sendFn != nil {
 		return w.sendFn(m)
 	}
-	return w.c.Send(ctx, m, true)
+	return w.b.Send(ctx, m, true)
 }
 
 // agentBlock fills the AgentID and SessionID that nearly every message
@@ -243,7 +255,7 @@ func (w *Session) Alerts() []string {
 // deliveries, so that nothing can be closed while a delivery is in
 // flight.
 func (w *Session) read(ctx context.Context) {
-	msgs := w.c.Messages()
+	msgs := w.b.Messages()
 	defer func() {
 		close(w.readDone)
 		w.closeChat()
@@ -428,7 +440,7 @@ func trimNul(b []byte) string {
 
 // capDo runs a capability request and insists on a 2xx.
 func (w *Session) capDo(ctx context.Context, r agent.CapRequest) ([]byte, error) {
-	resp, err := w.c.DoCap(ctx, r)
+	resp, err := w.b.DoCap(ctx, r)
 	if err != nil {
 		return nil, err
 	}

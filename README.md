@@ -13,6 +13,7 @@ and decode themselves.
     cmd/slgod/          holds grid connections, serves clients
     cmd/slchat/         a shell for chat and instant messages
     sl/                 the client library: everything an avatar can do
+    sl/backend.go       one interface, two ways to be connected
     client/profile.go   credentials under ~/.config/slgo
     client/xmlrpc.go    XML-RPC decoding
     client/llsd.go      LLSD decoding and encoding
@@ -785,6 +786,35 @@ the same hole and fills it by adding the friend to its own list
 (`LLAvatarTracker::formFriendship`). So does slchat, through the
 `NoteFriend` rpc: the client understood what it sent, the server holds
 what a client restart would lose, and the server still decodes nothing.
+
+## Two ways to be connected
+
+A session runs against a Backend, and there are two of them:
+
+    s, err := sl.Dial(ctx, "localhost:7807", "example")   // through slgod
+    s, err := sl.LoginDirect(ctx, login)              // this process holds it
+
+Everything above that line is the same either way. Through slgod the
+session outlives the program, so a client can be restarted, rebuilt and
+debugged without the grid noticing, and several programs can share one
+avatar. Direct needs nothing set up, and the avatar logs out when the
+program exits.
+
+The interface is in this package's own types rather than the protobuf
+ones. If it spoke protobuf, the direct backend would have to build
+protobuf for a wire it is not using and the server's conversions would
+be mirrored here; instead each side converts once, in its own
+direction. `pb` appears in exactly one file.
+
+`sl/backend_test.go` runs one suite against both, because two
+implementations answering from different sources is exactly the shape
+that drifts. It cannot use one avatar for both -- Second Life allows a
+single session per account, so an account slgod is holding cannot also
+be logged in here -- so it compares what belongs to the region rather
+than to either session: id, name, handle, owner, water height. Run it
+with SLGO_TEST_ADDR and SLGO_TEST_PROFILE set; without them it checks
+the part that needs no grid, including that Session holds a Backend and
+has not quietly grown a connection again.
 
 ## Answering scripts, and asking the simulator about itself
 

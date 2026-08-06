@@ -66,7 +66,7 @@ type TaskItem struct {
 // Folder finds a folder by name under the inventory root.
 func (w *Session) Folder(ctx context.Context, name string) (msg.UUID, error) {
 	inv := agent.NewInventory(w.invRoot)
-	if err := agent.FetchFolder(ctx, w.c, inv, w.invRoot); err != nil {
+	if err := agent.FetchFolder(ctx, w.b, inv, w.invRoot); err != nil {
 		return msg.UUID{}, fmt.Errorf("sl: reading the inventory root: %w", err)
 	}
 	f, ok := inv.FindFolder(name)
@@ -86,7 +86,7 @@ func (w *Session) ObjectsFolder(ctx context.Context) (msg.UUID, error) {
 // FolderItems lists what a folder holds, freshly fetched.
 func (w *Session) FolderItems(ctx context.Context, folder msg.UUID) ([]*Item, error) {
 	inv := agent.NewInventory(w.invRoot)
-	if err := agent.FetchFolder(ctx, w.c, inv, folder); err != nil {
+	if err := agent.FetchFolder(ctx, w.b, inv, folder); err != nil {
 		return nil, fmt.Errorf("sl: reading folder %s: %w", folder, err)
 	}
 	return inv.Contents(folder), nil

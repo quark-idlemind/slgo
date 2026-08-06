@@ -8,7 +8,6 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
-	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // Presence is where the avatar is and how far it is being asked to
@@ -64,26 +63,7 @@ func (w *Session) SetDrawDistance(ctx context.Context, metres float32) (*Presenc
 }
 
 func (w *Session) presence(ctx context.Context, set float32) (*Presence, error) {
-	r, err := w.c.Presence(ctx, set)
-	if err != nil {
-		return nil, err
-	}
-	return &Presence{
-		Position:     fromPB(r.Position),
-		LookAt:       fromPB(r.LookAt),
-		Camera:       fromPB(r.Camera),
-		DrawDistance: r.DrawDistance,
-		RegionHandle: r.RegionHandle,
-		Region:       r.Region,
-		ActiveGroup:  parseUUIDOrZero(r.ActiveGroup),
-	}, nil
-}
-
-func fromPB(v *pb.Vector3) msg.Vector3 {
-	if v == nil {
-		return msg.Vector3{}
-	}
-	return msg.Vector3{X: v.X, Y: v.Y, Z: v.Z}
+	return w.b.Presence(ctx, set)
 }
 
 // Inventory fetches the whole inventory tree over AIS.
@@ -92,7 +72,7 @@ func fromPB(v *pb.Vector3) msg.Vector3 {
 // simulator accepts the request and never answers.
 func (w *Session) Inventory(ctx context.Context) (*agent.Inventory, error) {
 	inv := agent.NewInventory(w.invRoot)
-	if err := agent.FetchInventory(ctx, w.c, inv, agent.FetchOptions{}); err != nil {
+	if err := agent.FetchInventory(ctx, w.b, inv, agent.FetchOptions{}); err != nil {
 		return nil, fmt.Errorf("sl: reading inventory: %w", err)
 	}
 	return inv, nil
@@ -220,36 +200,22 @@ func (w *Session) ObjectsNamed(ctx context.Context, name string, timeout time.Du
 // Known is how many objects the session has heard about, without
 // naming any of them.
 func (w *Session) Known(ctx context.Context) (int, error) {
-	r, err := w.c.Objects(ctx, "", "")
+	all, err := w.b.Objects(ctx, "", "")
 	if err != nil {
 		return 0, err
 	}
-	return int(r.Known), nil
+	return len(all), nil
 }
 
-// fetch asks the server for its picture of the region.
+// fetch asks whoever holds the session for its picture of the region.
+//
+// The order is settled here rather than left to the backend, so that
+// the two answer alike: a map has no order, and one of them iterates a
+// map to build the list.
 func (w *Session) fetch(ctx context.Context, named, id string) ([]*Seen, error) {
-	r, err := w.c.Objects(ctx, named, id)
+	out, err := w.b.Objects(ctx, named, id)
 	if err != nil {
 		return nil, err
-	}
-	out := make([]*Seen, 0, len(r.Objects))
-	for _, o := range r.Objects {
-		oid, err := msg.ParseUUID(o.Id)
-		if err != nil {
-			continue
-		}
-		owner, _ := msg.ParseUUID(o.Owner)
-		out = append(out, &Seen{
-			Object:       Object{ID: oid, Local: o.Local, Name: o.Name},
-			Owner:        owner,
-			Position:     fromPB(o.Position),
-			Scale:        fromPB(o.Scale),
-			Parent:       o.Parent,
-			PCode:        uint8(o.Pcode),
-			TextureEntry: o.TextureEntry,
-			Text:         o.Text,
-		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Local < out[j].Local })
 	return out, nil
@@ -349,26 +315,14 @@ type Region struct {
 // so this comes from the server rather than from anything a client
 // could have heard.
 func (w *Session) Region(ctx context.Context) (*Region, error) {
-	r, err := w.c.Region(ctx)
+	r, known, err := w.b.Region(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if !r.Known {
+	if !known {
 		return nil, fmt.Errorf("sl: the region handshake has not arrived")
 	}
-	id, _ := msg.ParseUUID(r.Id)
-	owner, _ := msg.ParseUUID(r.Owner)
-	return &Region{
-		ID: id, Handle: r.Handle, Name: r.Name,
-		Flags: r.Flags, Extended: r.FlagsExtended,
-		Access: uint8(r.Access), Owner: owner,
-		EstateManager: r.EstateManager,
-		WaterHeight:   r.WaterHeight,
-		ProductName:   r.ProductName, ProductSKU: r.ProductSku,
-		ColoName: r.ColoName,
-		CPUClass: r.CpuClass, CPURatio: r.CpuRatio,
-		Protocols: r.Protocols,
-	}, nil
+	return r, nil
 }
 
 // Flush empties the server's object cache.
@@ -377,7 +331,7 @@ func (w *Session) Region(ctx context.Context) (*Region, error) {
 // client that knows the cache is wrong for a reason the server cannot
 // see.
 func (w *Session) Flush(ctx context.Context) (int, error) {
-	return w.c.Flush(ctx)
+	return w.b.Flush(ctx)
 }
 
 // parseUUIDOrZero reads a uuid, treating anything unreadable as none.
