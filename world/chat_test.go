@@ -1,6 +1,7 @@
 package world
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ func newTestWorld(t *testing.T) (*World, func()) {
 	t.Helper()
 	w := &World{
 		chatSubs: map[<-chan Line]*chatSub{},
+		permSubs: map[<-chan *Permission]*permSub{},
 		chatCtl:  make(chan chatCmd),
 		readDone: make(chan struct{}),
 	}
@@ -190,5 +192,81 @@ func TestChatClosesWhenReaderStops(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Error("a late subscription was not closed")
+	}
+}
+
+// TestSayRoutesNegativeChannels: a negative channel goes as a script
+// dialog reply, because ChatFromViewer from this client does not carry
+// one.  A positive channel still goes as chat.
+func TestSayRoutesNegativeChannels(t *testing.T) {
+	w, stop := newTestWorld(t)
+	defer stop()
+	w.me = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
+
+	sent := make(chan msg.Message, 4)
+	w.sendFn = func(m msg.Message) error { sent <- m; return nil }
+
+	if err := w.Say(nil, "on zero", 0); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := (<-sent).(*msg.ChatFromViewer); !ok {
+		t.Errorf("channel 0 went as %T", m)
+	}
+	if err := w.Say(nil, "on 42", 42); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := (<-sent).(*msg.ChatFromViewer); !ok {
+		t.Errorf("channel 42 went as %T", m)
+	}
+
+	if err := w.Say(nil, "on minus", -4242); err != nil {
+		t.Fatal(err)
+	}
+	m, ok := (<-sent).(*msg.ScriptDialogReply)
+	if !ok {
+		t.Fatalf("a negative channel went as %T", m)
+	}
+	if m.Data.ChatChannel != -4242 {
+		t.Errorf("channel = %d", m.Data.ChatChannel)
+	}
+	if trimNul(m.Data.ButtonLabel) != "on minus" {
+		t.Errorf("text = %q", trimNul(m.Data.ButtonLabel))
+	}
+	// The id has to name something real, and this avatar certainly is.
+	if m.Data.ObjectID != w.me {
+		t.Errorf("object id = %s, want this avatar", m.Data.ObjectID)
+	}
+}
+
+// TestSayNegativeLimits: the two things the dialog reply path cannot
+// do, refused rather than quietly done wrong.
+func TestSayNegativeLimits(t *testing.T) {
+	w, stop := newTestWorld(t)
+	defer stop()
+	w.sendFn = func(m msg.Message) error { return nil }
+
+	// Volume cannot be carried.
+	if err := w.SayAs(nil, "quietly", -1, ChatWhisper); err == nil {
+		t.Error("whispering on a negative channel should be refused")
+	}
+	if err := w.SayAs(nil, "loudly", -1, ChatShout); err == nil {
+		t.Error("shouting on a negative channel should be refused")
+	}
+	// But shouting on a positive one is fine.
+	if err := w.SayAs(nil, "loudly", 1, ChatShout); err != nil {
+		t.Errorf("shouting on a positive channel: %v", err)
+	}
+
+	// The label has a one byte length prefix, so there is a ceiling.
+	long := strings.Repeat("x", maxDialogReply+1)
+	err := w.SayAs(nil, long, -1, ChatSay)
+	if err == nil {
+		t.Fatal("a message past the limit should be refused")
+	}
+	if !strings.Contains(err.Error(), "254") {
+		t.Errorf("the error should say the limit: %v", err)
+	}
+	if err := w.SayAs(nil, strings.Repeat("x", maxDialogReply), -1, ChatSay); err != nil {
+		t.Errorf("a message at the limit should be sent: %v", err)
 	}
 }

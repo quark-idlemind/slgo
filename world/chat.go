@@ -2,6 +2,7 @@ package world
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -327,10 +328,23 @@ type chatSub struct {
 // channel.  It is the only writer and the only closer, which is what
 // makes closing safe: with any other arrangement a close can land
 // between a sender deciding to send and sending.
+// chatCmd adds or removes a subscription of either kind.  Both go
+// through the reader goroutine so that it stays the only thing that
+// ever touches a subscription's channel: the only writer and the only
+// closer.  Closing from anywhere else races with a send no matter how
+// it is locked.
 type chatCmd struct {
-	add    *chatSub
-	remove <-chan Line
-	done   chan struct{}
+	add        *chatSub
+	remove     <-chan Line
+	addPerm    *permSub
+	removePerm <-chan *Permission
+	done       chan struct{}
+}
+
+// permSub is a subscription to permission requests.
+type permSub struct {
+	ch      chan *Permission
+	dropped atomic.Uint64
 }
 
 // Chat returns a channel of everything heard that matches the filter,
@@ -422,6 +436,13 @@ func (w *World) applyChat(c chatCmd) {
 			delete(w.chatSubs, c.remove)
 			close(s.ch)
 		}
+	case c.addPerm != nil:
+		w.permSubs[c.addPerm.ch] = c.addPerm
+	case c.removePerm != nil:
+		if s := w.permSubs[c.removePerm]; s != nil {
+			delete(w.permSubs, c.removePerm)
+			close(s.ch)
+		}
 	}
 	w.mu.Unlock()
 	if c.done != nil {
@@ -435,6 +456,10 @@ func (w *World) closeChat() {
 	w.mu.Lock()
 	for ch, s := range w.chatSubs {
 		delete(w.chatSubs, ch)
+		close(s.ch)
+	}
+	for ch, s := range w.permSubs {
+		delete(w.permSubs, ch)
 		close(s.ch)
 	}
 	w.mu.Unlock()
@@ -464,11 +489,64 @@ func (w *World) Say(ctx context.Context, text string, channel int32) error {
 }
 
 // SayAs is Say with the chat type chosen: whisper, normal or shout.
+//
+// A negative channel goes a different way; see sayNegative.  The volume
+// cannot be carried on that path, so asking to whisper or shout on one
+// is refused rather than quietly sent at ordinary range.
 func (w *World) SayAs(ctx context.Context, text string, channel int32, chatType uint8) error {
+	if channel < 0 {
+		if chatType != ChatSay {
+			return fmt.Errorf("world: %s cannot be carried on channel %d; "+
+				"a negative channel goes as a script dialog reply, which has no volume",
+				ChatTypeName(chatType), channel)
+		}
+		return w.sayNegative(ctx, text, channel)
+	}
 	m := &msg.ChatFromViewer{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ChatData.Message = append([]byte(text), 0)
 	m.ChatData.Type = chatType
 	m.ChatData.Channel = channel
+	return w.Send(ctx, m)
+}
+
+// maxDialogReply is how much text a script dialog reply can carry.  The
+// template gives ButtonLabel a one byte length prefix, so 255 bytes
+// including the terminator.
+const maxDialogReply = 254
+
+// sayNegative speaks on a negative channel, which ChatFromViewer from
+// this client does not manage.
+//
+// The message that does manage it is ScriptDialogReply, which needs no
+// dialog to have been opened: the simulator checks only that the object
+// id names something real, and delivers the text to whatever is
+// listening.  A viewer does the same thing for its own purposes --
+// Firestorm reports collisions to scripts this way, on a channel from
+// its settings, with no dialog anywhere.
+//
+// Measured against a script listening on -4242: the text arrives
+// verbatim, the script sees this avatar as the speaker exactly as it
+// would for chat, and the reach is chat's reach -- heard at two metres,
+// not heard with the listener a hundred metres up, heard again when it
+// came back.  So this is a say, not a shout and not a region-wide
+// backdoor.
+//
+// When the ChatFromViewer path is fixed this should become a fallback
+// rather than the only route, since it costs a length limit the real
+// one does not have.
+func (w *World) sayNegative(ctx context.Context, text string, channel int32) error {
+	if len(text) > maxDialogReply {
+		return fmt.Errorf("world: %d bytes is too long for channel %d; "+
+			"a negative channel carries at most %d", len(text), channel, maxDialogReply)
+	}
+	m := &msg.ScriptDialogReply{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	// Any id that names something real will do, and this avatar is
+	// the thing most certainly there.
+	m.Data.ObjectID = w.me
+	m.Data.ChatChannel = channel
+	m.Data.ButtonIndex = 0
+	m.Data.ButtonLabel = append([]byte(text), 0)
 	return w.Send(ctx, m)
 }

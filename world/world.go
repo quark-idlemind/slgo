@@ -100,6 +100,7 @@ type World struct {
 	// writer and the only closer.  Closing from anywhere else races
 	// with a send no matter how it is locked.
 	chatSubs map[<-chan Line]*chatSub
+	permSubs map[<-chan *Permission]*permSub
 	chatCtl  chan chatCmd
 	readDone chan struct{}
 
@@ -107,6 +108,9 @@ type World struct {
 	collectors []*collector
 	alerts     []string
 	propsFns   []func(*Properties)
+
+	// Permission requests seen, answered or not, in arrival order.
+	asked []*Permission
 
 	// Dialogs a script has put up, in arrival order.  Kept rather
 	// than only delivered, because a dialog that appears the instant
@@ -124,6 +128,11 @@ type World struct {
 	// OnDialog, if set, is called for every script dialog.  See
 	// WaitDialog for the other way to catch one.
 	OnDialog func(Dialog)
+
+	// sendFn stands in for the connection, so that what a call puts
+	// on the wire can be read back without a grid to put it on.  Set
+	// by tests and by nothing else.
+	sendFn func(msg.Message) error
 }
 
 // Dial connects to a server and attaches to one of its agents.
@@ -173,6 +182,7 @@ func New(c *client.Conn, info *pb.AgentInfo) (*World, error) {
 		taskInv:  map[msg.UUID]string{},
 		taskSeen: map[msg.UUID]bool{},
 		chatSubs: map[<-chan Line]*chatSub{},
+		permSubs: map[<-chan *Permission]*permSub{},
 		chatCtl:  make(chan chatCmd),
 		readDone: make(chan struct{}),
 	}
@@ -198,6 +208,9 @@ func (w *World) Close() error { return w.c.Close() }
 
 // Send puts a message on the wire, reliably.
 func (w *World) Send(ctx context.Context, m msg.Message) error {
+	if w.sendFn != nil {
+		return w.sendFn(m)
+	}
 	return w.c.Send(ctx, m, true)
 }
 
@@ -370,6 +383,9 @@ func (w *World) handle(raw *client.Message, v msg.Message) {
 
 	case *msg.ScriptDialog:
 		w.dialog(t)
+
+	case *msg.ScriptQuestion:
+		w.permission(t)
 
 	case *msg.AlertMessage:
 		s := trimNul(t.AlertData.Message)

@@ -824,6 +824,54 @@ It is half a megabyte, so it is kept and keyed by the id in `Features`.
 Asking again costs one small GET for that id and, when it has not
 moved, nothing else.
 
+## Scripts asking for permission
+
+llRequestPermissions puts a ScriptQuestion on the wire and then waits.
+A client asks for a channel of them and answers on the request itself:
+
+    asks := w.Permissions(0)
+    for q := range asks {
+        if q.Wants.Any(world.PermissionDebit | world.PermissionTeleport) {
+            q.Deny(ctx)
+            continue
+        }
+        q.Grant(ctx, world.PermissionTriggerAnimation)
+    }
+
+Grant sends only the bits named, and drops any that were not asked for.
+Nothing is granted by default, because some of these bits hand over real
+authority: `PermissionDebit` spends the avatar's money,
+`PermissionTeleport` moves it, `PermissionTakeControls` reads the
+keyboard.
+
+Two things the message names hide, both measured rather than assumed.
+There is no ScriptAnswerNo -- refusing is the same message with no bits
+set, which is what `Deny` sends. And a request for several things can be
+answered with one of them: a script that asked for debit and animation,
+answered with animation alone, saw `run_time_permissions` fire with
+`mask=16, anim=1, debit=0`. A viewer cannot send that, since its dialog
+has one accept button, so it is worth knowing the simulator honours it.
+
+## Saying things on a negative channel
+
+`Say` takes a channel, and a negative one goes a different way:
+
+    w.Say(ctx, "hello", 42)      // ChatFromViewer
+    w.Say(ctx, "hello", -7001)   // ScriptDialogReply
+
+ChatFromViewer from this client does not reach a negative channel --
+that bug is still open -- and ScriptDialogReply does, with no dialog
+needing to have been opened: the simulator checks only that the object
+id names something real. Firestorm uses the same trick to report
+collisions to scripts.
+
+What it costs, measured: at most 254 bytes, since the template gives
+ButtonLabel a one byte length prefix, and no volume, so whispering or
+shouting on a negative channel is refused rather than quietly sent at
+ordinary range. The reach is chat's reach -- heard at two metres, not
+heard with the listener a hundred metres up, heard again when it came
+back down.
+
 ## Not done
 
 No region crossing, no teleport, no appearance, and inventory is read

@@ -173,7 +173,7 @@ SimWideDeletes                    out   delete every object on the region owned 
 RequestObjectPropertiesFamily     out   asks for an object's owner, permissions and price
 TrackAgent                        out   follow somebody on the map, if they allow it
 ViewerStats                       out   session statistics: frame rate, memory, network -- retired
-ScriptAnswerYes                   out   grants a script the permissions it asked for
+ScriptAnswerYes                   out   the answer to ScriptQuestion: the bits granted, or none to refuse
 UserReport                        out   an abuse report, with an optional screenshot
 AlertMessage                      in    text for a dialog, and how a refusal usually arrives
 AgentAlertMessage                 in    the same, aimed at one named agent
@@ -251,7 +251,7 @@ PickGodDelete                     out   removes somebody else's, which takes god
 ScriptQuestion                    in    a script asking for permissions, and what it wants them for
 ScriptControlChange               in    a script has taken or released the movement controls
 ScriptDialog                      in    a script putting a dialog with buttons on your screen
-ScriptDialogReply                 out   which button was pressed
+ScriptDialogReply                 out   which button was pressed, or text on any channel with no dialog open
 ForceScriptControlRelease         out   take the controls back from whatever script has them
 RevokePermissions                 out   withdraw permissions previously granted to a script
 LoadURL                           in    a script offering to open a web page
