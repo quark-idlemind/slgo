@@ -99,7 +99,7 @@ func NewTerm(in *os.File, out io.Writer) (*Term, error) {
 
 	state, err := term.MakeRaw(fd)
 	if err != nil {
-		return nil, fmt.Errorf("slchat: cannot put the terminal in raw mode: %w", err)
+		return nil, fmt.Errorf("slsh: cannot put the terminal in raw mode: %w", err)
 	}
 	t.restore = func() error { return term.Restore(fd, state) }
 	if w, h, err := term.GetSize(fd); err == nil && w > 0 {

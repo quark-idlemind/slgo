@@ -211,6 +211,12 @@ func (w *Session) InventoryRoot() msg.UUID { return w.invRoot }
 // Close hangs up.
 func (w *Session) Close() error { return w.b.Close() }
 
+// Done closes when the session ends, and Err says why.  Both come
+// straight from the backend: the session ends when the thing holding it
+// does.
+func (w *Session) Done() <-chan struct{} { return w.b.Done() }
+func (w *Session) Err() error            { return w.b.Err() }
+
 // Send puts a message on the wire, reliably.
 func (w *Session) Send(ctx context.Context, m msg.Message) error {
 	if w.sendFn != nil {

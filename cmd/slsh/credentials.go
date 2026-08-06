@@ -1,6 +1,6 @@
 package main
 
-// Working out who to log in as, when slchat is doing the logging in.
+// Working out who to log in as, when slsh is doing the logging in.
 //
 // The credentials may already be on disk: profiles live one file per
 // account under ~/.config/slgo, and one of them may be named outright

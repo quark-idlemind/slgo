@@ -1,11 +1,11 @@
 package main
 
-// Settings live in ~/.config/slchat/config, in the same key = value
+// Settings live in ~/.config/slsh/config, in the same key = value
 // form as everything else in this tree:
 //
 //	addr   = localhost:7807
 //	agent  = example
-//	prefix = ESC
+//	escape = ESC
 //
 // Flags win over the file, and the file over the defaults.
 
@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-// Config is what slchat needs to know before it can start.
+// Config is what slsh needs to know before it can start.
 type Config struct {
 	Addr   string // the slgod to attach to
 	Agent  string // the profile: hosted by slgod, or on disk for --direct
@@ -27,6 +27,9 @@ type Config struct {
 	// Direct is set when this process holds the session itself,
 	// which is worth saying out loud: quitting logs the avatar out.
 	Direct bool
+
+	// Chat starts in chat mode rather than at a command prompt.
+	Chat bool
 }
 
 // DefaultConfig is what an empty file leaves you with.
@@ -34,22 +37,22 @@ func DefaultConfig() Config {
 	return Config{Addr: "localhost:7807", Prefix: 27}
 }
 
-// ConfigDir is where slchat keeps its settings.  SLCHAT_CONFIG_DIR
+// ConfigDir is where slchat keeps its settings.  SLSH_CONFIG_DIR
 // names it outright; otherwise it is slchat under XDG_CONFIG_HOME, or
 // under ~/.config when that is unset -- the same rule the profiles
 // follow.
 func ConfigDir() (string, error) {
-	if d := os.Getenv("SLCHAT_CONFIG_DIR"); d != "" {
+	if d := os.Getenv("SLSH_CONFIG_DIR"); d != "" {
 		return d, nil
 	}
 	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
-		return filepath.Join(d, "slchat"), nil
+		return filepath.Join(d, "slsh"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("slchat: no home directory: %w", err)
+		return "", fmt.Errorf("slsh: no home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "slchat"), nil
+	return filepath.Join(home, ".config", "slsh"), nil
 }
 
 // LoadConfig reads the settings file, treating a missing one as empty.
@@ -65,7 +68,7 @@ func LoadConfig() (Config, error) {
 		if os.IsNotExist(err) {
 			return c, nil
 		}
-		return c, fmt.Errorf("slchat: %s: %w", path, err)
+		return c, fmt.Errorf("slsh: %s: %w", path, err)
 	}
 	defer f.Close()
 
@@ -77,7 +80,7 @@ func LoadConfig() (Config, error) {
 		}
 		key, value, ok := strings.Cut(line, "=")
 		if !ok {
-			return c, fmt.Errorf("slchat: %s line %d: want key = value, got %q", path, n, line)
+			return c, fmt.Errorf("slsh: %s line %d: want key = value, got %q", path, n, line)
 		}
 		key = strings.ToLower(strings.TrimSpace(key))
 		value = strings.TrimSpace(value)
@@ -86,16 +89,16 @@ func LoadConfig() (Config, error) {
 			c.Addr = value
 		case "agent", "profile":
 			c.Agent = value
-		case "prefix", "prefix_key":
+		case "escape", "prefix", "prefix_key":
 			r, err := ParseKey(value)
 			if err != nil {
-				return c, fmt.Errorf("slchat: %s line %d: %w", path, n, err)
+				return c, fmt.Errorf("slsh: %s line %d: %w", path, n, err)
 			}
 			c.Prefix = r
 		default:
 			// A misspelled key would otherwise be a setting that
 			// silently does nothing.
-			return c, fmt.Errorf("slchat: %s line %d: unknown setting %q", path, n, key)
+			return c, fmt.Errorf("slsh: %s line %d: unknown setting %q", path, n, key)
 		}
 	}
 	return c, sc.Err()

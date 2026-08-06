@@ -11,7 +11,7 @@ and decode themselves.
 
     cmd/msggen/         reads message_template.msg, writes Go
     cmd/slgod/          holds grid connections, serves clients
-    cmd/slchat/         a shell for chat and instant messages
+    cmd/slsh/           the shell: inventory, the world, and chat
     sl/                 the client library: everything an avatar can do
     sl/backend.go       one interface, two ways to be connected
     client/profile.go   credentials under ~/.config/slgo
@@ -636,156 +636,56 @@ Four things that cost time here:
   often a stranger's -- which is how a notecard was once offered to
   someone else's prim, answered with "Unable to edit this!".
 
-## slchat
+## slsh
 
-A shell for talking, on top of a session slgod is already holding:
+A shell for Second Life, on the sl package, against either backend:
 
-    slchat [--addr localhost:7807] [--agent example] [--prefix ESC]
+    slsh [--addr localhost:7807] [--agent example]
+    slsh --direct [--first Quark] [--last Idlemind]
+    slsh -c "ls -l Objects"
 
-It starts instantly, can be stopped and started as often as you like,
-and leaves the avatar logged in when it exits, because the session is
-not its to lose.
+Commands are the outer mode, because that is what the keyboard is
+mostly for: chat arrives whatever mode is in force, and cd and ls are
+wanted more often than talking. `chat` goes the other way and the
+escape key comes back, with each mode keeping the line that was half
+typed in it. The prompt says which mode and where:
 
-Or without the daemon at all:
+    /Objects$ ls
+    /Objects$ chat
+    Local> hello everyone
+    (ESC)
+    /Objects$
 
-    slchat --direct [--first Quark] [--last Idlemind] [--start last]
+Inventory is a filesystem: `cd`, `ls`, `pwd`, `cat`, `mkdir`, `mv`,
+`rm`, `find`. The world is `who`, `where`, `look`, `objects`. The
+simulator will describe itself with `caps`, `features` and `lsl`.
+Talking is `chat`, `say`, `im`, `friends`, `lookup`, `offer`, `offers`,
+`accept`, `decline` and `talk`.
 
-`--direct` (`-d`) logs in and holds the session for as long as slchat
-runs, which needs nothing set up beforehand and costs exactly what the
-daemon was for: quitting logs the avatar out, and everything the
-session learned is learned again next time. The two modes are the same
-program -- `App` talks to a `Grid`, which is either a connection to
-slgod or an `agent.Agent` in this process.
+Tab completes commands and inventory paths in command mode, and moves
+between conversations in chat mode -- which is the argument for having
+modes at all, since the same key then means the obvious thing in both
+places. Up and down walk the history.
 
-Credentials are looked for before they are asked for. A profile named
-with `--agent` settles it; failing that, a profile whose `first` and
-`last` match the names given is found and used, since profiles are
-filed under a short name of your choosing rather than under the
-avatar's; failing that, one profile and no instructions means there is
-nothing to choose between. Whatever is left over is asked for, and the
-password without echo:
+### Listing, editing, running
 
-    $ slchat --direct --first Nosuchavatar
-    Password for Nosuchavatar Resident:
-    logging in as Nosuchavatar Resident...
-    slchat: login refused (key, LoginFailedAuthenticationFailed): Sorry! ...
+Output redirects with `>` and `>>`, and `. file` runs a file of
+commands, which together are the point:
 
-Options are getopt style, from `github.com/pborman/options`: `-d` and
-`--direct` are the same flag, `--addr=HOST` and `--addr HOST` are the
-same argument, and short flags bundle.
+    $ slsh -c "ls -l /Objects" > listing
+    $ awk '{print "mv " $3 " /Objects/sorted"}' listing > moves
+    $ slsh -f moves
 
-What is typed goes to the current session -- the region's open chat, or
-one person -- and the prompt is the name of that session, since the
-prompt is the only thing standing between a private remark and a public
-one. Tab on an empty line moves to the next session; with anything
-typed it does nothing, because sending half a sentence to the wrong
-person is worse than not cycling. An instant message from somebody new
-opens a session on its own, so answering is a tab away.
+`ls` prints one bare path per line so a listing can be cut up by
+anything; `ls -l` adds the kind, the date and the id. A folder has no
+date, so that column holds a `-` rather than collapsing and moving
+every column after it. Names are not unique -- one folder here holds
+eighteen things of the same name -- so `mv`, `rm` and `cat` take an id
+wherever they take a path, which is what makes a listing of duplicates
+editable into commands that each mean one thing.
 
-Everything heard is printed above the line being typed, and everything
-said is printed alongside it with the arrow the other way round:
-
-    23:56:07 < [Local] Example Resident: hello from example
-    23:56:11 > [Local] hello yourself
-    23:56:18 < [IM Quark Idlemind] are you free?
-    23:56:22 > [IM Quark Idlemind] on my way
-    23:56:30 * Quark Idlemind is online
-
-The prefix key -- ESC by default -- starts a command, and says so by
-rewriting the prompt to `command> `. Whatever was half typed is put
-aside and comes back afterwards. Any key can be the prefix, including
-a control key, since on a busy keyboard those are what is left:
-
-    ~/.config/slchat/config
-
-    addr   = localhost:7807
-    agent  = example
-    prefix = ^G
-
-The commands are `who`, `friends`, `lookup`, `im`, `close`, `sessions`,
-`local`, `offer`, `offers`, `accept`, `decline`, `where` and `quit`.
-Anything naming a person takes a name, part of one, a uuid, or the
-number from the last listing -- so `lookup smith` and then `im 3` is the
-usual way to reach somebody who is neither nearby nor a friend.
-
-A listing longer than the screen stops at the bottom and waits:
-
-    13  Quark Islander
-    --more-- (82 more, space, q)
-
-Space shows the next screenful and `q` gives up on the rest, saying how
-many were dropped rather than pretending that was all of them. Whatever
-was half typed when the listing started comes back afterwards. Down a
-pipe nothing pages, since there is nobody there to press space.
-
-### Searching for somebody by name
-
-There are two ways to ask and they are not the same, which is worth
-knowing before reaching for the obvious one. The UDP
-`AvatarPickerRequest` is still answered, but only ever matches a *whole*
-name: asking it for "Quark Idlemind" finds them, and asking it for
-"quark" comes back with a single row holding a zero uuid and no name,
-which is how it says nothing matched. Measured against the live grid,
-not assumed.
-
-Searching over part of a name is the `AvatarPickerSearch` capability,
-which also covers display names, so the session now asks for it at
-login -- `lookup quark` finds 95 people. slchat uses the capability when
-the simulator offers it and falls back to the whole-name message when it
-does not, since an exact match beats a refusal.
-
-### Testing a terminal
-
-The interesting part of slchat is the screen, and the screen is the
-part a unit test cannot see. `cmd/slchat/pty_test.go` runs it on a real
-pseudo-terminal with [goterm](https://github.com/goexvi-ctrl/goterm),
-which renders the output and hands back the rows, so the tests read the
-display the way a person does:
-
-    s := start(t, 24, 80)
-    s.send("ping\r")
-    s.waitText("> [Local] ping")
-    s.send("half a sentence")      // start typing before the answer
-    s.waitText("< [Local] Someone Else: you said ping")
-    if got := s.prompt(); got != "Local> half a sentence" {
-        t.Errorf("the typed line did not survive the message: %q", got)
-    }
-
-What runs on the terminal is this test binary, re-executed with
-`SLCHAT_PTY_HARNESS=1`, so the code under test is the real `Term` and
-`App` rather than a copy of them. The grid behind it is a fake --
-`App` takes a `Grid` interface for that reason -- which answers name
-lookups and says something back whenever the avatar speaks, after a
-delay, so that a message reliably arrives in the middle of the next
-thing being typed.
-
-That covers what nothing else could: raw mode, ESC told apart from the
-arrow key that begins with it, the cursor landing where the next
-keystroke will go, the prompt rewritten by the prefix key, tab cycling,
-and a line too long for the terminal scrolling sideways instead of
-wrapping into the message above it.
-
-### What had to move to the daemon
-
-Two things slchat cannot know for itself, because the grid says them
-once and to whoever was listening at the time:
-
-*Who your friends are* is in the login response and on no message the
-simulator ever sends, so `agent.Login` always asks for the `buddy-list`
-block. *Which of them are online* arrives as a burst of
-`OnlineNotification` seconds after the handshake, long before a client
-could have attached. Both are held by the session and read back with
-the `Friends` rpc.
-
-Forming a friendship needed one more thing, and the reason is worth
-recording. When an offer is accepted, the grid tells the side that
-*offered* -- an instant message with dialog 39, then an
-`OnlineNotification` -- and tells the side that *accepted* absolutely
-nothing, on the grounds that it was the one that did it. A viewer has
-the same hole and fills it by adding the friend to its own list
-(`LLAvatarTracker::formFriendship`). So does slchat, through the
-`NoteFriend` rpc: the client understood what it sent, the server holds
-what a client restart would lose, and the server still decodes nothing.
+Paths quote with `"` and `'`, and a backslash is left alone, since
+inventory paths use it to escape a separator.
 
 ## Inventory names, and paths that survive them
 
