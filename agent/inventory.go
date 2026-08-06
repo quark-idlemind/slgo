@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -258,10 +259,27 @@ func FetchInventory(ctx context.Context, d CapDoer, inv *Inventory, opts FetchOp
 
 // FetchFolder fetches one folder's children, without descending.
 func FetchFolder(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID) error {
+	return FetchFolderDepth(ctx, d, inv, id, 0)
+}
+
+// FetchFolderDepth fetches a folder and, with a depth above zero, what
+// is inside its folders as well.
+//
+// The depth goes on the request, so this is one round trip however deep
+// it goes.  Walking instead costs a request per folder, which is what
+// makes reading a whole inventory take the better part of a minute.
+//
+// The simulator caps how deep it will go and says so by answering with
+// less than was asked for; nothing here treats that as an error, since
+// a short answer is still an answer.
+func FetchFolderDepth(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID, depth int) error {
 	if !d.HasCap(InventoryCap) {
 		return fmt.Errorf("agent: no %s capability", InventoryCap)
 	}
-	_, err := fetchOne(ctx, d, inv, id)
+	if depth < 0 {
+		depth = 0
+	}
+	_, err := fetchDepth(ctx, d, inv, id, depth)
 	return err
 }
 
@@ -374,9 +392,17 @@ func (w *invWalk) walk(ctx context.Context, id msg.UUID) {
 // fetchOne requests one folder's children and records them, returning
 // the child folders found.
 func fetchOne(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID) ([]msg.UUID, error) {
+	return fetchDepth(ctx, d, inv, id, 0)
+}
+
+func fetchDepth(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID, depth int) ([]msg.UUID, error) {
+	path := "/category/" + id.String() + "/children"
+	if depth > 0 {
+		path += "?depth=" + strconv.Itoa(depth)
+	}
 	resp, err := d.DoCap(ctx, CapRequest{
 		Cap:  InventoryCap,
-		Path: "/category/" + id.String() + "/children",
+		Path: path,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agent: inventory %s: %w", id, err)
@@ -404,9 +430,21 @@ func fetchOne(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID) ([]ms
 		inv.addFolder(self)
 	}
 
-	emb := llsd.Map(m["_embedded"])
+	kids := absorb(inv, llsd.Map(m["_embedded"]))
+	return kids, nil
+}
+
+// absorb records what an _embedded map holds and returns the child
+// folders found at this level.
+//
+// It recurses, which is the whole point of asking for a depth: a reply
+// to depth=2 nests each child category's own _embedded inside it, and
+// reading only the outer one throws away everything the extra round
+// trip was avoided for.  The request costs the same either way; the
+// difference is only whether the answer is kept.
+func absorb(inv *Inventory, emb map[string]any) []msg.UUID {
 	if emb == nil {
-		return nil, nil
+		return nil
 	}
 
 	var kids []msg.UUID
@@ -429,6 +467,9 @@ func fetchOne(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID) ([]ms
 		}
 		inv.addFolder(f)
 		kids = append(kids, f.ID)
+
+		// Whatever came down with it, however deep.
+		absorb(inv, llsd.Map(cm["_embedded"]))
 	}
 
 	// Items and links are the same thing to us: a link is an item
@@ -453,7 +494,7 @@ func fetchOne(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID) ([]ms
 			inv.addItem(it)
 		}
 	}
-	return kids, nil
+	return kids
 }
 
 func folderFrom(m map[string]any) *Folder {

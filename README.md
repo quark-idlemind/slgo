@@ -787,6 +787,41 @@ the same hole and fills it by adding the friend to its own list
 `NoteFriend` rpc: the client understood what it sent, the server holds
 what a client restart would lose, and the server still decodes nothing.
 
+## Reading inventory, and fetching an asset
+
+    es, err := s.ListInventory(ctx, "Objects", 1)
+
+An empty path is the root, and depth is how far to descend: 0 is what is
+directly in the folder, 1 adds what is in those folders. Folders come
+back alongside items, in tree order -- each folder immediately followed
+by what is inside it -- so a listing shows the shape rather than only
+the leaves.
+
+The depth goes on the AIS request, which is the difference between one
+round trip and a hundred. Against a real inventory: 25 entries at depth
+0 in 260ms, and 766 entries at depth 1 in 630ms. Walking the same tree
+a folder at a time is 119 requests and the better part of a minute.
+
+That took a fix underneath. A reply to depth=1 nests each child
+folder's own `_embedded` map inside it, and the parser was reading only
+the outer one -- so the deeper request cost the extra time on the
+server, sent the extra bytes, and threw the answer away. The parse
+recurses now.
+
+Assets come by id and type:
+
+    b, err := s.Texture(ctx, id)              // 98k of jpeg 2000, 197ms
+    b, err := s.Asset(ctx, id, sl.AssetMesh)
+
+`Asset` is the ViewerAsset capability, which is the content delivery
+network: textures, meshes, sounds, animations, clothing. It answers 403
+for a notecard or a script, so those are refused here with a message
+saying to use `ReadAsset`, which goes over the transfer protocol and
+needs to know which item is being asked about rather than just which
+asset. Nothing guesses between the two, because a call that is
+sometimes an http fetch and sometimes a UDP transfer, with no way to
+tell which happened, is worse than being told.
+
 ## Two ways to be connected
 
 A session runs against a Backend, and there are two of them:

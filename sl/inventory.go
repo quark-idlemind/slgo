@@ -14,16 +14,6 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// Asset and inventory type numbers, from the viewer's llassettype.h
-// and llinventorytype.h.
-const (
-	AssetTexture  = 0
-	AssetSound    = 1
-	AssetNotecard = 7
-	AssetObject   = 6
-	AssetScript   = 10
-)
-
 // Item is something in agent inventory, and Folder a category.
 type (
 	Item   = agent.Item
@@ -225,7 +215,7 @@ func (w *Session) SaveNotecard(ctx context.Context, item msg.UUID, text string) 
 
 // NewScript creates a script in inventory and saves source to it.
 func (w *Session) NewScript(ctx context.Context, name, source string) (*Item, *UploadResult, error) {
-	it, err := w.CreateItem(ctx, name, "created by slgo", AssetScript, AssetScript)
+	it, err := w.CreateItem(ctx, name, "created by slgo", int8(AssetLSLText), int8(AssetLSLText))
 	if err != nil {
 		return nil, nil, err
 	}
