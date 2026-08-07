@@ -17,7 +17,6 @@ import (
 
 	"github.com/quark-idlemind/slgo/internal/creds"
 	"github.com/quark-idlemind/slgo/internal/slhost"
-	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -142,7 +141,7 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 		// A fresh context: the run's may well be why we are here.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		trash, err := trashFolder(ctx, s)
+		trash, err := s.TrashFolder(ctx)
 		if err == nil {
 			err = s.Delete(ctx, obj, trash)
 		}
@@ -150,18 +149,4 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 			fmt.Fprintf(os.Stderr, "%s is still there: %v\n", obj, err)
 		}
 	}, nil
-}
-
-// trashFolder finds the trash, which Delete needs told.
-func trashFolder(ctx context.Context, s *sl.Session) (msg.UUID, error) {
-	top, err := s.ListInventory(ctx, "/", 0)
-	if err != nil {
-		return msg.UUID{}, err
-	}
-	for _, e := range top {
-		if e.IsFolder() && e.Name == "Trash" {
-			return e.ID, nil
-		}
-	}
-	return msg.UUID{}, fmt.Errorf("no Trash folder in inventory")
 }

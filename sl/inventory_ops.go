@@ -100,6 +100,49 @@ func (w *Session) DeleteItem(ctx context.Context, item msg.UUID) error {
 	return w.aisDelete(ctx, "item", item)
 }
 
+// FolderTrash is the preferred type the grid gives the trash.
+//
+// A folder is the trash because of its preferred type, not its name: it
+// can be renamed, and an account made through a viewer in another
+// language never called it "Trash" in the first place.
+const FolderTrash = 14
+
+// TrashFolder finds the trash.
+func (w *Session) TrashFolder(ctx context.Context) (msg.UUID, error) {
+	es, err := w.ListFolder(ctx, w.InventoryRoot(), 0)
+	if err != nil {
+		return msg.UUID{}, err
+	}
+	for _, e := range es {
+		if e.Folder && e.Type == FolderTrash {
+			return e.ID, nil
+		}
+	}
+	return msg.UUID{}, fmt.Errorf("sl: this inventory has no trash folder")
+}
+
+// PurgeFolder throws away everything inside a folder, permanently,
+// leaving the folder itself.
+//
+// This is what emptying the trash is: the trash is a folder like any
+// other and is not meant to be deleted, only emptied.  It works on any
+// folder, because the grid makes no distinction -- so it will empty
+// Objects as readily as Trash, and there is no undo.
+func (w *Session) PurgeFolder(ctx context.Context, folder msg.UUID) error {
+	if folder.IsZero() {
+		return fmt.Errorf("sl: no folder to empty")
+	}
+	if folder == w.InventoryRoot() {
+		return fmt.Errorf("sl: that is the root of inventory")
+	}
+	_, err := w.capDo(ctx, agent.CapRequest{
+		Cap:    agent.InventoryCap,
+		Method: "DELETE",
+		Path:   "/category/" + folder.String() + "/children",
+	})
+	return err
+}
+
 // DeleteFolder removes a folder and everything in it, permanently.
 func (w *Session) DeleteFolder(ctx context.Context, folder msg.UUID) error {
 	if folder == w.InventoryRoot() {

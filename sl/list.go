@@ -9,6 +9,7 @@ package sl
 // are about one folder.
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -336,7 +337,24 @@ func lessPath(a, b Entry) bool {
 	if len(as) != len(bs) {
 		return len(as) < len(bs)
 	}
-	// The same path twice, which only a folder and an item of one
-	// name can be.  The folder first, so its contents follow it.
-	return a.Folder && !b.Folder
+	// The same path twice, which a folder and an item of one name can
+	// be -- and so can two items, since a folder may hold a dozen
+	// things called the same thing.  The folder first, so its contents
+	// follow it.
+	if a.Folder != b.Folder {
+		return a.Folder
+	}
+	// Then newest first, and then the id.
+	//
+	// The id is not for the reader; it is so that the order is an
+	// order.  AIS hands the contents of a folder over in a map, and a
+	// map has no order, so anything left tied here came out differently
+	// on every listing: fifteen listings of one folder of same-named
+	// notecards gave five different orders.  A listing is meant to be
+	// written to a file and edited into commands, and two listings of
+	// an unchanged folder have to match for that to be worth anything.
+	if a.Created != b.Created {
+		return a.Created > b.Created
+	}
+	return bytes.Compare(a.ID[:], b.ID[:]) < 0
 }
