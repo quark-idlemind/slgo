@@ -18,6 +18,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -35,8 +36,10 @@ func main() {
 		noAuth  = flag.Bool("no-auth", false, "serve without authentication; loopback only, and it is not checked")
 		verbose = flag.Bool("v", false, "log every message the grid sends")
 		start   = flag.String("start", "", "override the profile's start location")
-		group   = flag.String("group", "", "group to act as, by name or uuid; the only one joined, by default")
+		group   groupFlag
 	)
+	flag.Var(&group, "group",
+		"group to act as, by name or uuid, or PROFILE=GROUP; overrides the profile's own")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: slgod [-listen addr] [-v] profile [profile...]\n")
 		flag.PrintDefaults()
@@ -62,10 +65,15 @@ func main() {
 	}
 	log.Printf("machine %s, id0 %s (from %s)", mach.MAC, mach.ID0, machPath)
 
+	// The logins that came up, so that the group loop below knows which
+	// profile each hosted session was made from.
+	hosted := map[string]agent.Login{}
+
 	for _, name := range flag.Args() {
 		login, err := agent.LoadProfile(name)
 		if err != nil {
-			log.Fatalf("%s: %v", name, err)
+			log.Printf("%s: NOT hosted: %v", name, err)
+			continue
 		}
 		if *start != "" {
 			login.Start = *start
@@ -98,8 +106,14 @@ func main() {
 		log.Printf("%s: logging in...", name)
 		h, err := srv.Host(ctx, name, login, opts)
 		if err != nil {
-			log.Fatalf("%s: %v", name, err)
+			// Not fatal.  One expired password should not take down
+			// the sessions that did come up, which are somebody's
+			// benchmark in progress.
+			log.Printf("%s: NOT hosted: %v", name, err)
+			continue
 		}
+		h.Log = log.Printf
+		hosted[name] = login
 		a := h.Agent()
 		log.Printf("%s: %s in %s, %d capabilities",
 			name, a.Account.Name(), orUnknown(a.RegionName()), len(a.Caps))
@@ -147,23 +161,36 @@ func main() {
 	// here, and the refusal blames the land -- the wrong place to look.
 	//
 	// This belongs to the session rather than to a client: it is settled
-	// once, at login, and every client attached to the agent shares it.
-	// A restarted slgod is a fresh login, so it must be settled again.
+	// here, and every client attached to the agent shares it.  A
+	// restarted slgod is a fresh login, so it must be settled again --
+	// and so is a RECONNECT, which is why the answer is handed to the
+	// server to remember rather than sent from here.  See server/group.go.
+	if len(hosted) == 0 {
+		log.Fatal("no session came up; nothing to serve")
+	}
+
 	for _, name := range srv.Names() {
 		h, ok := srv.Agent(name)
 		if !ok {
 			continue
 		}
 		a := h.Agent()
-		g, why, err := chooseGroup(ctx, a, *group)
+		g, why, err := chooseGroup(ctx, a, group.For(name, hosted[name].Group))
 		if err != nil {
-			log.Fatalf("%s: %v", name, err)
+			// Not fatal either: an ambiguous group name is a reason
+			// this avatar cannot build, not a reason to take the
+			// other avatars down with it.
+			log.Printf("%s: no active group: %v", name, err)
+			continue
 		}
 		if g.IsZero() {
 			log.Printf("%s: no active group (%s); parcels that only let a group build will refuse", name, why)
 			continue
 		}
-		if err := activateGroup(a, g); err != nil {
+		// Through the server, which remembers it and puts it back
+		// after a reconnect -- a fresh login has no active group, and
+		// losing it is otherwise silent.
+		if err := h.SetGroup(ctx, g); err != nil {
 			log.Printf("%s: could not activate group: %v", name, err)
 		} else {
 			log.Printf("%s: acting as group %s (%s)", name, why, g)
@@ -275,15 +302,60 @@ func groupNames(gs []agent.Group) string {
 	return strings.Join(names, ", ")
 }
 
-// activateGroup makes a group the avatar's active one.
+// groupFlag is -group, which may be given once for every session.
 //
-// Fire and forget, like most of this protocol: the simulator answers
-// with an AgentDataUpdate, which the agent records, and there is nothing
-// to wait for here.
-func activateGroup(a *agent.Agent, group msg.UUID) error {
-	m := &msg.ActivateGroup{}
-	m.AgentData.AgentID = a.Account.AgentID
-	m.AgentData.SessionID = a.Account.SessionID
-	m.AgentData.GroupID = group
-	return a.Send.Send(context.Background(), m)
+// A bare value applies to every profile, which is what it has always
+// meant and is unambiguous while only one avatar is hosted.  With
+// several, a value has to say which:
+//
+//	slgod -group Builders example
+//	slgod -group example=Builders -group qi=Testers example qi
+//
+// The ordinary place for this is the profile's "group =" line.  The
+// flag is for a one-off, and it wins.
+type groupFlag struct {
+	all  string
+	each map[string]string
+}
+
+func (g *groupFlag) String() string {
+	if g == nil || (g.all == "" && len(g.each) == 0) {
+		return ""
+	}
+	if g.all != "" {
+		return g.all
+	}
+	var parts []string
+	for k, v := range g.each {
+		parts = append(parts, k+"="+v)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
+}
+
+func (g *groupFlag) Set(s string) error {
+	// A group NAME may contain an "=" in principle, so only a
+	// left-hand side that looks like a profile name is taken as one.
+	name, want, ok := strings.Cut(s, "=")
+	if !ok {
+		g.all = s
+		return nil
+	}
+	if g.each == nil {
+		g.each = map[string]string{}
+	}
+	g.each[strings.TrimSpace(name)] = strings.TrimSpace(want)
+	return nil
+}
+
+// For is the group this profile should act as: the flag if it names
+// one, otherwise whatever the profile itself asked for.
+func (g *groupFlag) For(name, fromProfile string) string {
+	if want, ok := g.each[name]; ok {
+		return want
+	}
+	if g.all != "" {
+		return g.all
+	}
+	return fromProfile
 }
