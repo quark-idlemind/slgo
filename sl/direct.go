@@ -207,6 +207,11 @@ func (d *Direct) Region(ctx context.Context) (*Region, bool, error) {
 // contend with and nothing to wait for.
 func (d *Direct) Lock(ctx context.Context, name string) error { return nil }
 
+// TryLock always succeeds, for the same reason Lock does nothing.
+func (d *Direct) TryLock(ctx context.Context, name string) (bool, string, error) {
+	return true, "", nil
+}
+
 // Unlock likewise.
 func (d *Direct) Unlock(name string) error { return nil }
 

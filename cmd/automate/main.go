@@ -104,20 +104,17 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	s, err := session.Connect(ctx, session.Options{
+	opts := session.Options{
 		Addr: flags.Addr, Agent: flags.Agent, Direct: flags.Direct,
 		First: flags.First, Last: flags.Last, Start: flags.Start,
 		Channel: "automate",
-	})
+	}
+
+	s, obj, cleanup, err := runIn(ctx, opts)
 	if err != nil {
 		return err
 	}
 	defer s.Close()
-
-	obj, cleanup, err := runIn(ctx, s)
-	if err != nil {
-		return err
-	}
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -197,9 +194,30 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 // that matter.  --object names a different one, and --rez goes back to
 // a throwaway prim per run, which is what to use when the shared object
 // is wanted by something else and waiting will not do.
-func runIn(ctx context.Context, s *sl.Session) (*sl.Object, func(), error) {
+func runIn(ctx context.Context, o session.Options) (*sl.Session, *sl.Object, func(), error) {
 	if flags.Object != "" || flags.Rez {
-		return session.RunIn(ctx, s, flags.Object, flags.Keep)
+		s, err := session.Connect(ctx, o)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		obj, cleanup, err := session.RunIn(ctx, s, flags.Object, flags.Keep)
+		if err != nil {
+			s.Close()
+			return nil, nil, nil, err
+		}
+		return s, obj, cleanup, nil
 	}
-	return session.UseAuto(ctx, s, sl.HUDBottomLeft)
+
+	// One object is all a script needs, but it is taken as a whole
+	// GROUP: the group is the unit of exclusion, and taking a single
+	// object out of one would let a benchmark holding that group use it
+	// at the same time.
+	a, err := session.UseAutoAnywhere(ctx, o, 1)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if o.Agent == "" {
+		fmt.Fprintf(os.Stderr, "running as %s\n", a.Agent)
+	}
+	return a.Session, a.Objects[0], a.Release, nil
 }

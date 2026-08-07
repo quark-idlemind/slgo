@@ -127,6 +127,14 @@ type Backend interface {
 	Lock(ctx context.Context, name string) error
 	Unlock(name string) error
 
+	// TryLock takes one only if it is free, and says whether it got
+	// it and who holds it otherwise.  This is what lets a caller pick
+	// among several interchangeable things -- one of a pool of
+	// objects, one of several avatars -- without queueing on the
+	// first and without the deadlock that asking for several at once
+	// invites.
+	TryLock(ctx context.Context, name string) (bool, string, error)
+
 	// Flush empties the object cache, and says how much it held.
 	Flush(ctx context.Context) (int, error)
 

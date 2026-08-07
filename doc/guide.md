@@ -354,16 +354,39 @@ no cache to go stale.
     --rez            rez a throwaway prim for this run, as before
     --keep           leave a rezzed prim behind
 
-### One run at a time
+### Several runs at once
 
-`automate` and `autobench` share that one object, so they take a lock
-on it and wait their turn. Nothing has to be done about this: a second
-run blocks until the first is finished and then goes.
+A run takes a **group** of four objects and holds it until it
+finishes. An avatar wears twelve, so three runs fit on one avatar, and
+if slgod is holding several avatars a run that finds them all busy
+moves on to the next avatar rather than queueing.
 
-It is not politeness. A benchmark carries its base reading in the
-object's linkset data, which belongs to the object rather than to the
-script, and the script is installed under a fixed name -- so two runs
-at once would overwrite each other's reading and each other's script.
+That order is the daemon's, not alphabetical: the default avatar first,
+then the rest. So nine runs started together against three avatars
+simply spread out, three apiece. Only when every group on every avatar
+is busy does anything wait.
+
+    $ autobench --statement "i += 1;" --locals i     # no avatar named
+    running as example, objects 0-3
+
+Whenever you do not name an avatar, the run says which one it used.
+Worth reading: with several hosted, the choice is the daemon's, and a
+benchmark attributed to the wrong avatar is not an error -- it is a
+plausible number.
+
+Why a whole group rather than one object at a time: a benchmark carries
+its base reading in the object's linkset data, which belongs to the
+object rather than to the script, and the script is installed under a
+fixed name -- so two runs sharing an object would overwrite each
+other's reading and each other's script. Taking objects one at a time
+would let two runs each hold some and wait for the rest, which is a
+deadlock; taking a whole group cannot deadlock, because nothing ever
+holds one group while waiting for another.
+
+Set an avatar up with `slgo-auto -n 12`, once per account. An avatar
+that is not allowed to build can still be set up, provided somebody who
+can gives it one object: everything after the first is a copy, and
+copying something already owned asks the land nothing.
 
 The lock is held by slgod for as long as the program holds its
 connection, so a run that crashes or is killed gives it back at once;
@@ -505,8 +528,8 @@ to invalidate by hand.
 Those two readings are taken at the same time, in two objects. Nothing
 a script says identifies the script that said it -- chat carries the
 object and no more -- so two scripts in one object cannot be told
-apart, but two objects can. `--objects N` sets how many to use; the
-extra ones are worn and kept like the first.
+apart, but two objects can. `--objects N` sets how many to use, up to
+the four in a group; the extra ones are worn and kept like the first.
 
 When a padding does have to be searched for, three pads are tried at
 once and the range is quartered rather than halved: four or five rounds

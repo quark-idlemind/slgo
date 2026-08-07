@@ -761,17 +761,13 @@ func main() {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
-		s, err := session.Connect(ctx, session.Options{
+		opts := session.Options{
 			Addr: flags.Addr, Agent: flags.Agent, Direct: flags.Direct,
 			First: flags.First, Last: flags.Last, Start: flags.Start,
 			Channel: "autobench",
-		})
-		if err != nil {
-			errf("%v\n", err)
 		}
-		obj, spare, cleanup, err := runIn(ctx, s)
+		s, obj, spare, cleanup, err := runIn(ctx, opts)
 		if err != nil {
-			s.Close()
 			errf("%v\n", err)
 		}
 		if flags.Keep {
@@ -1233,7 +1229,11 @@ copies of CODE, then the harness, then the padding.
 `, one.Error())
 			}
 			if cnt > 1 {
-				debugf("compile refused at %d copies; retrying at %d\n", cnt, cnt/2)
+				// With the reason: "too big" and "not valid LSL"
+				// arrive as the same event, and halving blindly
+				// hides which one is happening.
+				debugf("compile refused at %d copies (%v); retrying at %d\n",
+					cnt, ce, cnt/2)
 				cnt /= 2
 				continue
 			}
@@ -1521,14 +1521,32 @@ func mkVar(s string) (string, error) {
 // this program's own: a padding search is a dozen readings of one
 // script that do not depend on each other, and two objects can take two
 // of them at once.
-func runIn(ctx context.Context, s *sl.Session) (*sl.Object, []*sl.Object, func(), error) {
+func runIn(ctx context.Context, o session.Options) (*sl.Session, *sl.Object, []*sl.Object, func(), error) {
 	if flags.Object != "" || flags.Rez {
+		s, err := session.Connect(ctx, o)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
 		obj, cleanup, err := session.RunIn(ctx, s, flags.Object, flags.Keep)
-		return obj, nil, cleanup, err
+		if err != nil {
+			s.Close()
+			return nil, nil, nil, nil, err
+		}
+		return s, obj, nil, func() { cleanup(); s.Close() }, nil
 	}
-	objs, cleanup, err := session.UseAutoN(ctx, s, flags.Objects)
+
+	a, err := session.UseAutoAnywhere(ctx, o, flags.Objects)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	return objs[0], objs[1:], cleanup, nil
+	// Which avatar, when nobody said.  With several hosted this is the
+	// daemon's choice and the reader cannot work it out; and a benchmark
+	// attributed to the wrong avatar is not an error, it is a plausible
+	// number.
+	if o.Agent == "" {
+		fmt.Fprintf(os.Stderr, "running as %s, objects %d-%d\n",
+			a.Agent, a.Group*session.AutoGroupSize,
+			a.Group*session.AutoGroupSize+len(a.Objects)-1)
+	}
+	return a.Session, a.Objects[0], a.Objects[1:], a.Release, nil
 }

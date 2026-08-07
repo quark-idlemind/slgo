@@ -165,6 +165,11 @@ func (w *Session) Lock(ctx context.Context, name string) error {
 	return w.b.Lock(ctx, name)
 }
 
+// TryLock takes one only if it is free, and says who holds it if not.
+func (w *Session) TryLock(ctx context.Context, name string) (bool, string, error) {
+	return w.b.TryLock(ctx, name)
+}
+
 // Unlock gives a lock back.
 func (w *Session) Unlock(name string) error { return w.b.Unlock(name) }
 

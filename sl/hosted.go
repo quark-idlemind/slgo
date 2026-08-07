@@ -96,6 +96,11 @@ func (h *Hosted) Lock(ctx context.Context, name string) error {
 	return h.conn.Lock(ctx, name)
 }
 
+// TryLock takes one only if it is free.
+func (h *Hosted) TryLock(ctx context.Context, name string) (bool, string, error) {
+	return h.conn.TryLock(ctx, name)
+}
+
 // Unlock gives one back.
 func (h *Hosted) Unlock(name string) error { return h.conn.Unlock(name) }
 

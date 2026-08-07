@@ -98,12 +98,29 @@ const (
 	AutoLock   = "auto"
 )
 
-// AutoPoints are where the auto objects are worn, one each.
+// AutoPoints are where the auto objects are worn.
 //
-// An attachment point holds one object, so more objects means more
-// points; the HUD ones are used because nothing else wants them and
-// they are not part of how the avatar looks.
-var AutoPoints = []int{sl.HUDBottomLeft, sl.HUDBottom, sl.HUDBottomRight, sl.HUDTopLeft}
+// The HUD points are used because nothing else wants them and they are
+// not part of how the avatar looks.  There are only EIGHT of them, so
+// the first eight entries are one each and the rest double up: a point
+// holds several objects when the attach asks to add rather than to
+// replace, which was measured rather than assumed (cmd/slgo-multiattach)
+// and puts the real ceiling at the 38-attachment total.
+//
+// THIS LIST IS APPEND-ONLY AND MUST NEVER BE REORDERED.  A slot is
+// identified by its INDEX -- that is what a lock is taken on, and what
+// one program tells another -- so moving an entry makes two versions
+// disagree about which object slot 5 is.  Nothing detects that: two
+// benchmarks quietly share an object and both report plausible numbers.
+// Adding to the end is safe; anything else is not.
+var AutoPoints = []int{
+	// The original four.
+	sl.HUDBottomLeft, sl.HUDBottom, sl.HUDBottomRight, sl.HUDTopLeft,
+	// The remaining HUD points, one object each.
+	sl.HUDTop, sl.HUDTopRight, sl.HUDCenter1, sl.HUDCenter2,
+	// Doubling up, which is what takes this past eight.
+	sl.HUDBottomLeft, sl.HUDBottom, sl.HUDBottomRight, sl.HUDTopLeft,
+}
 
 // AutoName is what the nth auto object is called.  The first keeps the
 // bare name, so an account that has only ever run one at a time is not
@@ -115,18 +132,113 @@ func AutoName(n int) string {
 	return fmt.Sprintf("%s %d", AutoObject, n+1)
 }
 
-// UseAutoN gets several auto objects, for work that can be done in
-// parallel: a script in one object cannot be told from a script in the
-// same object by anything it says, but two objects are two speakers.
+// AutoGroupSize is how many objects one benchmark takes at once.
 //
-// One lock covers the set.  Locking them one by one would let two
-// benchmarks each hold some and wait for the rest, which is a deadlock
-// where the present arrangement is a queue.
+// The pool is divided into fixed groups of this size and a run takes a
+// WHOLE group, which is what makes several runs at once safe.  Taking
+// slots one at a time would let two runs each hold some and wait for the
+// rest, which is a deadlock; one lock per group cannot deadlock because
+// nothing ever holds one while waiting for another.
 //
-// Fewer objects than asked for is not an error.  The caller can do less
-// at once, which is slower and not wrong -- and there is a limit on how
-// many attachments this is prepared to make.
-func UseAutoN(ctx context.Context, s *sl.Session, n int) ([]*sl.Object, func(), error) {
+// Four because that is what the search uses: quarterSearch takes three
+// readings at once alongside the measured object.  A bigger group would
+// idle, and a smaller one would slow the search down.
+const AutoGroupSize = 4
+
+// AutoGroups is how many benchmarks one avatar can run at once.
+func AutoGroups() int { return len(AutoPoints) / AutoGroupSize }
+
+// AutoGroupLock names the lock covering one group.
+//
+// NOT the old bare "auto", deliberately: a client old enough to lock
+// that name would not exclude against these, and the two would quietly
+// share objects.  A different name makes the mismatch visible -- the old
+// client takes a lock nobody else wants -- rather than silent.
+func AutoGroupLock(g int) string { return fmt.Sprintf("%s/%d", AutoLock, g) }
+
+// autoGroupSlots is which slots belong to a group.
+func autoGroupSlots(g, n int) []int {
+	out := make([]int, 0, n)
+	for i := 0; i < n && g*AutoGroupSize+i < len(AutoPoints); i++ {
+		out = append(out, g*AutoGroupSize+i)
+	}
+	return out
+}
+
+// EnsureAutoItems makes sure the first n auto items exist in inventory,
+// by COPYING the first one rather than building each.
+//
+// Two reasons, and the first is not an optimisation:
+//
+//   - An avatar may not be allowed to rez.  A parcel grants "create
+//     objects" to a group, and an avatar in no group is refused -- with
+//     a message blaming the land.  Such an avatar can still be given one
+//     object by somebody who can build, and from that one it can make
+//     all the others, because copying an item it already owns asks the
+//     land nothing at all.
+//   - It is quicker even when rezzing is allowed.  Rez, name, take is
+//     eight seconds and change; a copy is under two.
+//
+// Only the first has to be built, and only if the account has never had
+// one.  Everything after it is a copy, which means every auto object is
+// the same object -- exactly what a benchmark wants.
+func EnsureAutoItems(ctx context.Context, s *sl.Session, folder msg.UUID, n int) error {
+	items, err := s.FolderItems(ctx, folder)
+	if err != nil {
+		return err
+	}
+
+	have := make(map[string]bool, len(items))
+	var seed *sl.Item
+	for _, it := range items {
+		have[it.Name] = true
+		if it.Name == AutoObject {
+			seed = it
+		}
+	}
+
+	// Nothing to copy from.  EnsureAttached will build the first one
+	// the slow way, and then there is a seed for the rest.
+	if seed == nil {
+		if n <= 1 {
+			return nil
+		}
+		a, err := s.EnsureAttached(ctx, folder, AutoObject, AutoPoints[0]|sl.AttachAdd)
+		if err != nil {
+			return fmt.Errorf("making the first %s object: %w\n"+
+				"        (an avatar that may not rez needs one given to it by one that may)",
+				AutoObject, err)
+		}
+		if seed, err = s.FindItem(ctx, folder, AutoObject); err != nil {
+			return err
+		}
+		_ = a
+	}
+
+	for i := 1; i < n; i++ {
+		name := AutoName(i)
+		if have[name] {
+			continue
+		}
+		if _, err := s.CopyItem(ctx, seed.ID, folder, name, 60*time.Second); err != nil {
+			// Not fatal: fewer objects is slower, not wrong, and the
+			// caller already copes with getting fewer than it asked
+			// for.
+			fmt.Fprintf(os.Stderr, "could not make %q: %v\n", name, err)
+			return nil
+		}
+	}
+	return nil
+}
+
+// SetupAuto makes an avatar ready for benchmarking: the items exist
+// and are worn, so that the first run of the day does not pay for it.
+//
+// It takes EVERY group first, and refuses if any is busy.  Wearing
+// things is not something to do underneath a benchmark: an attach
+// replaces what is on the point, and a run whose object went away
+// reports nothing useful about why.
+func SetupAuto(ctx context.Context, s *sl.Session, n int) ([]*sl.Object, error) {
 	if n < 1 {
 		n = 1
 	}
@@ -134,88 +246,58 @@ func UseAutoN(ctx context.Context, s *sl.Session, n int) ([]*sl.Object, func(), 
 		n = len(AutoPoints)
 	}
 
-	lockCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
-	defer cancel()
-	if err := s.Lock(lockCtx, AutoLock); err != nil {
-		return nil, nil, fmt.Errorf("waiting for the %s objects: %w\n"+
-			"        (an slgod older than the lock does not answer; --rez avoids it)",
-			AutoObject, err)
+	var held []string
+	defer func() {
+		for _, name := range held {
+			s.Unlock(name)
+		}
+	}()
+	for g := 0; g < AutoGroups(); g++ {
+		name := AutoGroupLock(g)
+		got, holder, err := s.TryLock(ctx, name)
+		if err != nil {
+			return nil, fmt.Errorf("asking for the %s objects: %w", AutoObject, err)
+		}
+		if !got {
+			return nil, fmt.Errorf("group %d is in use by %s; "+
+				"setting up moves attachments about and cannot be done under a running benchmark",
+				g, holderOr(holder))
+		}
+		held = append(held, name)
 	}
-	unlock := func() { s.Unlock(AutoLock) }
 
 	folder, err := objectsFolder(ctx, s)
 	if err != nil {
-		unlock()
-		return nil, nil, err
+		return nil, err
+	}
+	if err := EnsureAutoItems(ctx, s, folder, n); err != nil {
+		return nil, err
 	}
 
 	var objs []*sl.Object
 	for i := 0; i < n; i++ {
-		a, err := s.EnsureAttached(ctx, folder, AutoName(i), AutoPoints[i])
+		// AttachAdd, because past the eighth slot two objects share a
+		// point and a bare attach would throw the first one off.
+		a, err := s.EnsureAttached(ctx, folder, AutoName(i), AutoPoints[i]|sl.AttachAdd)
 		if err != nil {
 			if i == 0 {
-				unlock()
-				return nil, nil, err
+				return nil, err
 			}
-			// One is enough to work with; the rest only make it
-			// quicker.  Say so and carry on rather than fail a
-			// benchmark over an attachment point.
 			fmt.Fprintf(os.Stderr, "only %d of %d objects: %v\n", i, n, err)
 			break
 		}
 		obj := a.Object
 		objs = append(objs, &obj)
 	}
-	return objs, unlock, nil
+	return objs, nil
 }
 
-// UseAuto gets the shared auto object, waiting for its turn.
-//
-// The lock is not politeness.  A benchmark carries its base reading in
-// the OBJECT's linkset data, which belongs to the object and not to the
-// script, and the script inside is installed under a fixed name -- so
-// two runs at once would overwrite each other's reading and each
-// other's script.  Labelling the output would not help; the clash is
-// over the data.
-//
-// The returned function gives the lock back.  So does going away: slgod
-// frees what a client holds when its stream ends, so a run that panics
-// or is killed does not leave the object locked.
-func UseAuto(ctx context.Context, s *sl.Session, point int) (*sl.Object, func(), error) {
-	// Bounded, and generously: a benchmark ahead of us in the queue can
-	// legitimately take minutes.  The bound is not for that -- it is so
-	// that an slgod too old to know about locks fails with something a
-	// reader can act on instead of waiting for ever.  It answers
-	// nothing at all, since an unknown frame on the stream is ignored.
-	lockCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
-	defer cancel()
-	if err := s.Lock(lockCtx, AutoLock); err != nil {
-		return nil, nil, fmt.Errorf("waiting for the %s object: %w\n"+
-			"        (an slgod older than the lock does not answer; --rez avoids it)",
-			AutoObject, err)
+// holderOr names whoever holds a lock, when the daemon said.
+func holderOr(holder string) string {
+	if holder == "" {
+		return "something else"
 	}
-	unlock := func() { s.Unlock(AutoLock) }
-
-	folder, err := objectsFolder(ctx, s)
-	if err != nil {
-		unlock()
-		return nil, nil, err
-	}
-	// EnsureAttached asks slgod what is worn before touching anything,
-	// so the ordinary case -- already on -- costs one question and no
-	// seconds.  Nothing is written down here: the object's id changes
-	// every time it is put on and every time the avatar logs in, so a
-	// remembered id is wrong after every relog, and it would be wrong
-	// per machine besides.  The inventory item is what does not change,
-	// and slgod is what heard the attachment described.
-	a, err := s.EnsureAttached(ctx, folder, AutoObject, point)
-	if err != nil {
-		unlock()
-		return nil, nil, err
-	}
-
-	obj := a.Object
-	return &obj, unlock, nil
+	return holder
 }
 
 // objectsFolder is where a taken object lands, and so where the auto
