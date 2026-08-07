@@ -563,6 +563,30 @@ than measurements.
 | `-v` | print each script before running it |
 | `--probe` | check the connection and exit |
 
+### What -1 mode cannot measure
+
+`-1` mode measures one copy as the distance between two block
+boundaries, so the largest size it can express is one block less a
+byte. A copy bigger than that carries itself over a boundary, and what
+is left to measure is the remainder -- which looks like a perfectly
+ordinary small answer.
+
+It is refused rather than reported. Measured live, a 250-character
+string is 542 bytes and `-1` mode would have said 20; a 500-character
+one is 1066 and it would have said 4.
+
+    $ autobench -1 --code 'string sCNT = "...250 characters...";'
+    one copy of this code is a 512-byte block or more, which -1 mode cannot measure.
+    ...
+    Copy mode measures a difference of two readings and has no such limit.  Drop
+    the -1.
+
+So use copy mode for anything large. It divides a difference of two
+readings by the copy count and nothing about a block bounds it:
+
+    $ autobench --code 'string sCNT = "...250 characters...";'
+    Size: 542 ±7
+
 ### Reading the numbers honestly
 
 `Size: 22 ±0` and `Size: 24` are not two answers to the same question.

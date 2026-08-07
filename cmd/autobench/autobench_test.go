@@ -77,6 +77,34 @@ var modelCases = []struct {
 	{"padding a whole block up", 986, 368},
 }
 
+// bigModelCases are constructs of a block or more.
+//
+// They are apart from modelCases because -1 mode cannot express them:
+// it measures a copy as the distance between two block boundaries, so a
+// copy that carries itself over a boundary leaves a remainder rather
+// than an answer.  Copy mode has no such limit and must still be right.
+//
+// The alignments matter and are chosen for it: a size that is exactly a
+// block leaves nothing over, one byte more leaves one byte, and the two
+// measured live -- 542 and 1066 -- leave 30 and 42.  The crossing is
+// varied as well, since where the base script sits in its block decides
+// where a copy lands in the next.
+var bigModelCases = []struct {
+	name     string
+	crossing int
+	codeSize int
+}{
+	{"exactly one block", 474, blockSize},
+	{"one byte over a block", 474, blockSize + 1},
+	{"the 250-character string, measured live", 474, 542},
+	{"the 500-character string, measured live", 474, 1066},
+	{"exactly two blocks", 300, 2 * blockSize},
+	{"two blocks and a byte", 300, 2*blockSize + 1},
+	{"a block over, crossing low in its block", minpad + 1, 600},
+	{"a block over, crossing high in its block", 986, 900},
+	{"far over: eight blocks", 406, 8 * blockSize},
+}
+
 // TestModelIsAStaircase checks the model itself before anything is measured
 // against it: memory must be flat below the crossing pad, jump by exactly one
 // block at it, and stay flat for the rest of that block.
@@ -572,5 +600,67 @@ func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
 	if spentRuns > 40 {
 		t.Errorf("a clean -1 benchmark spent %d runs; confirmation is meant to add "+
 			"a handful, not a search", spentRuns)
+	}
+}
+
+// TestCopyModeMeasuresMoreThanABlock: copy mode takes a difference of
+// two readings and divides, so nothing about a block bounds what it can
+// report.  This is the mode to use for anything large, and the reason
+// -1 mode refuses them rather than guessing.
+func TestCopyModeMeasuresMoreThanABlock(t *testing.T) {
+	for _, tc := range bigModelCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setTestInfo(t, tc.crossing, tc.codeSize)
+			var r Results
+			padding, cnt := copyMode(nil, &r)
+			if want := lowestCrossing(tc.crossing) - 1; padding != want {
+				t.Errorf("Padding: %d, want %d", padding, want)
+			}
+			tol := 511 / cnt
+			if got := int(r.Size); got < tc.codeSize-tol || got > tc.codeSize+tol {
+				t.Errorf("Size: %d ±%d over %d copies, want %d within the ±",
+					got, tol, cnt, tc.codeSize)
+			}
+		})
+	}
+}
+
+// TestOneModeSeesWhatItCannotMeasure drives the detection the way
+// oneMode does -- find the base padding, search with one copy, compare
+// the two readings -- and requires it to fire for everything over a
+// block and for nothing under one.
+//
+// Driven through the model rather than by seeding a reading, because
+// what is being tested is whether the comparison holds up over
+// different alignments of padding against code size, and only the model
+// lines those up honestly.
+func TestOneModeSeesWhatItCannotMeasure(t *testing.T) {
+	seen := func(t *testing.T, crossing, codeSize int) (int, bool) {
+		t.Helper()
+		setTestInfo(t, crossing, codeSize)
+		var r Results
+		basePad := basePadding(nil, &r) + 1
+		_, oneCopyMem := findPadding(nil, 1, basePad, &r)
+		return biggerThanABlock(basePad, oneCopyMem)
+	}
+
+	for _, tc := range bigModelCases {
+		t.Run("over/"+tc.name, func(t *testing.T) {
+			added, over := seen(t, tc.crossing, tc.codeSize)
+			if !over {
+				t.Errorf("a %d-byte copy added %d and was not noticed as over a block",
+					tc.codeSize, added)
+			}
+		})
+	}
+
+	for _, tc := range modelCases {
+		t.Run("under/"+tc.name, func(t *testing.T) {
+			added, over := seen(t, tc.crossing, tc.codeSize)
+			if over {
+				t.Errorf("a %d-byte copy added %d and was wrongly called over a block",
+					tc.codeSize, added)
+			}
+		})
 	}
 }

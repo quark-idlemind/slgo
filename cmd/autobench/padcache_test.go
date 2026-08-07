@@ -134,3 +134,44 @@ func TestPadCacheSurvivesRubbish(t *testing.T) {
 		t.Errorf("the good line did not survive: %+v", m["good"])
 	}
 }
+
+// TestBiggerThanABlock: -1 mode measures a copy as the distance between
+// two block boundaries, so a copy bigger than a block leaves a
+// remainder -- a small, plausible number that is not a size.
+//
+// Measured live, which is why this is here: a 500-character string is
+// 1066 bytes in copy mode and came out of -1 mode as 4, and a
+// 250-character one is 542 and came out as 20.
+func TestBiggerThanABlock(t *testing.T) {
+	const base = 5924
+
+	cache = map[Cache]Results{}
+	probeTest = map[Cache]int{}
+
+	// With no base reading to compare against it says nothing, rather
+	// than guessing at an answer it has no evidence for.
+	if _, over := biggerThanABlock(378, base+9999); over {
+		t.Error("fired with nothing to compare against")
+	}
+
+	cache[Cache{Count: 0, Padding: 378}] = Results{Base: base}
+
+	// The numbers are the ones measured live against this same base.
+	for _, c := range []struct {
+		what string
+		mem  int
+		over bool
+	}{
+		{"a 24-byte integer, which added 8", base + 8, false},
+		{"442 bytes of string, which added 422", base + 422, false},
+		{"one byte under a block", base + blockSize - 1, false},
+		{"542 bytes of string, which added 1034", base + 1034, true},
+		{"1066 bytes of string, which added 2046", base + 2046, true},
+		{"exactly a block", base + blockSize, true},
+	} {
+		added, over := biggerThanABlock(378, c.mem)
+		if over != c.over {
+			t.Errorf("%s: added %d, over = %v, want %v", c.what, added, over, c.over)
+		}
+	}
+}
