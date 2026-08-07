@@ -17,6 +17,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/internal/creds"
 	"github.com/quark-idlemind/slgo/internal/slhost"
+	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -83,6 +84,83 @@ func Connect(ctx context.Context, o Options) (*sl.Session, error) {
 	loginCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	return sl.LoginDirect(loginCtx, l)
+}
+
+// AutoObject is the object automate and autobench run their scripts in,
+// and AutoLock is the lock that says whose turn it is.
+//
+// One object, kept and worn, because making one costs seconds every run
+// and -- far more -- because the script inside it then already exists:
+// installing a script into an object that has never held one takes
+// about eight seconds, and replacing one that is there takes under one.
+const (
+	AutoObject = "auto"
+	AutoLock   = "auto"
+)
+
+// UseAuto gets the shared auto object, waiting for its turn.
+//
+// The lock is not politeness.  A benchmark carries its base reading in
+// the OBJECT's linkset data, which belongs to the object and not to the
+// script, and the script inside is installed under a fixed name -- so
+// two runs at once would overwrite each other's reading and each
+// other's script.  Labelling the output would not help; the clash is
+// over the data.
+//
+// The returned function gives the lock back.  So does going away: slgod
+// frees what a client holds when its stream ends, so a run that panics
+// or is killed does not leave the object locked.
+func UseAuto(ctx context.Context, s *sl.Session, point int) (*sl.Object, func(), error) {
+	// Bounded, and generously: a benchmark ahead of us in the queue can
+	// legitimately take minutes.  The bound is not for that -- it is so
+	// that an slgod too old to know about locks fails with something a
+	// reader can act on instead of waiting for ever.  It answers
+	// nothing at all, since an unknown frame on the stream is ignored.
+	lockCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	defer cancel()
+	if err := s.Lock(lockCtx, AutoLock); err != nil {
+		return nil, nil, fmt.Errorf("waiting for the %s object: %w\n"+
+			"        (an slgod older than the lock does not answer; --rez avoids it)",
+			AutoObject, err)
+	}
+	unlock := func() { s.Unlock(AutoLock) }
+
+	folder, err := objectsFolder(ctx, s)
+	if err != nil {
+		unlock()
+		return nil, nil, err
+	}
+	// EnsureAttached asks slgod what is worn before touching anything,
+	// so the ordinary case -- already on -- costs one question and no
+	// seconds.  Nothing is written down here: the object's id changes
+	// every time it is put on and every time the avatar logs in, so a
+	// remembered id is wrong after every relog, and it would be wrong
+	// per machine besides.  The inventory item is what does not change,
+	// and slgod is what heard the attachment described.
+	a, err := s.EnsureAttached(ctx, folder, AutoObject, point)
+	if err != nil {
+		unlock()
+		return nil, nil, err
+	}
+
+	obj := a.Object
+	return &obj, unlock, nil
+}
+
+// objectsFolder is where a taken object lands, and so where the auto
+// object is kept.
+func objectsFolder(ctx context.Context, s *sl.Session) (msg.UUID, error) {
+	top, err := s.ListInventory(ctx, "/", 0)
+	if err != nil {
+		return msg.UUID{}, err
+	}
+	for _, e := range top {
+		if e.IsFolder() && e.Name == "Objects" {
+			return e.ID, nil
+		}
+	}
+	// Not a failure worth stopping for: the root will do.
+	return s.InventoryRoot(), nil
 }
 
 // RunIn returns an object to run scripts in, and a function that undoes

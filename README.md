@@ -15,6 +15,7 @@ and decode themselves.
     cmd/automate/       runs LSL scripts, prints what they said
     cmd/autobench/      measures what LSL constructs cost in memory
     internal/session/   get a session, and an object to run scripts in
+    server/lock.go      exclusive use of a named thing, for as long as a client lives
     internal/slhost/    where slgod is, asking sl-host when it is there
     sl/                 the client library: everything an avatar can do
     sl/backend.go       one interface, two ways to be connected

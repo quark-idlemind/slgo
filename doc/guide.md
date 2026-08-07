@@ -316,14 +316,41 @@ The `DONE` line itself is not printed -- it is the script talking to
 
 ### Where the script runs
 
-A script needs an object to run in. By default a prim is rezzed beside
-your avatar, used, and put in the trash afterwards. Use `--keep` to
-leave it, or `--object NAME` to run in an object already in the region.
+A script needs an object to run in, and by default that is `auto`: one
+prim, worn, kept. If it is not being worn it is put on; if it does not
+exist it is made, taken into inventory and put on. That happens once.
 
-Naming an object you use again and again is worth doing for anything
-repetitive. The first script `automate` puts in an object takes several
-seconds to appear; replacing one that is already there takes well under
-a second, and a named object keeps that saving across runs.
+Keeping it is what makes runs quick. The first script put into an
+object takes several seconds to appear; replacing one already there
+takes well under a second. Measured here: about **1 to 2 seconds** a
+run, against about 10 seconds when every run rezzed its own prim.
+
+That holds across logins. A worn object is rezzed afresh, with a new
+key, every time it is put on and every time the avatar logs in, so its
+key is worth nothing between sessions -- but the inventory item it was
+worn from does not change, and slgod remembers which worn object came
+from which item. Nothing is written down on your machine, and there is
+no cache to go stale.
+
+    --object NAME    run in some other object already in the region
+    --rez            rez a throwaway prim for this run, as before
+    --keep           leave a rezzed prim behind
+
+### One run at a time
+
+`automate` and `autobench` share that one object, so they take a lock
+on it and wait their turn. Nothing has to be done about this: a second
+run blocks until the first is finished and then goes.
+
+It is not politeness. A benchmark carries its base reading in the
+object's linkset data, which belongs to the object rather than to the
+script, and the script is installed under a fixed name -- so two runs
+at once would overwrite each other's reading and each other's script.
+
+The lock is held by slgod for as long as the program holds its
+connection, so a run that crashes or is killed gives it back at once;
+there is nothing to clean up and no stale lock to break. Use `--rez` to
+take a prim of your own and not queue at all.
 
 ### What can go wrong
 

@@ -46,6 +46,7 @@ import (
 	"github.com/pborman/options"
 
 	"github.com/quark-idlemind/slgo/internal/session"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 var flags = struct {
@@ -60,7 +61,8 @@ var flags = struct {
 	First     string        `getopt:"--first=NAME the avatar's first name, for --direct"`
 	Last      string        `getopt:"--last=NAME the avatar's last name, for --direct"`
 	Start     string        `getopt:"--start=WHERE where to arrive: last, home, or a region, for --direct"`
-	Object    string        `getopt:"--object=NAME run in this object, instead of rezzing one"`
+	Object    string        `getopt:"--object=NAME run in this object, instead of the shared one"`
+	Rez       bool          `getopt:"--rez rez a throwaway prim instead of using the shared auto object"`
 	Keep      bool          `getopt:"--keep leave the rezzed object behind"`
 	Show      bool          `getopt:"-v show the source before each execution"`
 	Title     string        `getopt:"--title=NAME name of benchmark"`
@@ -552,7 +554,7 @@ func main() {
 		if err != nil {
 			errf("%v\n", err)
 		}
-		obj, cleanup, err := session.RunIn(ctx, s, flags.Object, flags.Keep)
+		obj, cleanup, err := runIn(ctx, s)
 		if err != nil {
 			s.Close()
 			errf("%v\n", err)
@@ -1289,4 +1291,13 @@ func mkVar(s string) (string, error) {
 	default:
 		return "", fmt.Errorf("%s: invalid variable name", s)
 	}
+}
+
+// runIn gets somewhere to run scripts.  See automate's, which is the
+// same decision for the same reasons.
+func runIn(ctx context.Context, s *sl.Session) (*sl.Object, func(), error) {
+	if flags.Object != "" || flags.Rez {
+		return session.RunIn(ctx, s, flags.Object, flags.Keep)
+	}
+	return session.UseAuto(ctx, s, sl.HUDBottomLeft)
 }

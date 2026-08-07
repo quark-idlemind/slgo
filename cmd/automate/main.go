@@ -51,7 +51,8 @@ var flags = struct {
 	First   string        `getopt:"--first=NAME      the avatar's first name, for --direct"`
 	Last    string        `getopt:"--last=NAME       the avatar's last name, for --direct"`
 	Start   string        `getopt:"--start=WHERE     where to arrive: last, home, or a region, for --direct"`
-	Object  string        `getopt:"--object=NAME     run in an object of this name, instead of rezzing one"`
+	Object  string        `getopt:"--object=NAME     run in an object of this name, instead of the shared one"`
+	Rez     bool          `getopt:"--rez             rez a throwaway prim instead of using the shared auto object"`
 	Script  string        `getopt:"--script=NAME     what to call the script inside the object"`
 	Done    string        `getopt:"--done=TEXT       the text that means the script has finished"`
 	Timeout time.Duration `getopt:"--timeout=DUR     how long to wait for it"`
@@ -113,7 +114,7 @@ func run() error {
 	}
 	defer s.Close()
 
-	obj, cleanup, err := session.RunIn(ctx, s, flags.Object, flags.Keep)
+	obj, cleanup, err := runIn(ctx, s)
 	if err != nil {
 		return err
 	}
@@ -187,4 +188,18 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 		return false
 	}
 	return true
+}
+
+// runIn gets somewhere to run scripts.
+//
+// The shared auto object by default: it is worn, so it costs nothing to
+// find, and the script inside it already exists, which is the seconds
+// that matter.  --object names a different one, and --rez goes back to
+// a throwaway prim per run, which is what to use when the shared object
+// is wanted by something else and waiting will not do.
+func runIn(ctx context.Context, s *sl.Session) (*sl.Object, func(), error) {
+	if flags.Object != "" || flags.Rez {
+		return session.RunIn(ctx, s, flags.Object, flags.Keep)
+	}
+	return session.UseAuto(ctx, s, sl.HUDBottomLeft)
 }
