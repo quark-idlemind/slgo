@@ -498,6 +498,12 @@ that has stopped holding -- because Second Life's compiler changed
 under it -- is thrown away and searched for again. So there is nothing
 to invalidate by hand.
 
+Those two readings are taken at the same time, in two objects. Nothing
+a script says identifies the script that said it -- chat carries the
+object and no more -- so two scripts in one object cannot be told
+apart, but two objects can. `--objects N` sets how many to use; the
+extra ones are worn and kept like the first.
+
 `--ipad N` still asserts a padding outright and skips all of this,
 `--check-ipad` confirms it, and `--no-cache` neither reads nor writes
 the file. Nothing measured with `--test` is ever remembered: the
@@ -522,6 +528,7 @@ than measurements.
 | `--ipad N` | a padding from an earlier run |
 | `--check-ipad` | confirm `--ipad` before trusting it |
 | `--no-cache` | do not remember or reuse the padding |
+| `--objects N` | how many objects to take readings in at once (default 3) |
 | `--fast` | skip the padding search |
 | `--max N` | most copies to use (default 512) |
 | `--object NAME`, `--keep` | as for `automate` |

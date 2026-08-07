@@ -77,12 +77,17 @@ var flags = struct {
 	Debug     bool          `getopt:"--debug enable debugging"`
 	Probe     bool          `getopt:"--probe send a simple script to LSL as a probe"`
 	NoCache   bool          `getopt:"--no-cache do not remember or reuse the padding for this base script"`
+	Objects   int           `getopt:"--objects=N how many objects to take readings in at once"`
 	Timeout   time.Duration `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
 	Test      string        `getopt:"--test=PAD,SIZE[,LIMIT] for testing, see the source code"`
 }{
 	Start:   "last",
 	Timeout: time.Minute,
 	Max:     512,
+	// Three: one to measure in and two to take readings in, which is
+	// what a padding search wants -- it asks a question, then another
+	// that depends on the answer, and two at a time halves the rounds.
+	Objects: 3,
 }
 
 // testInfo describes what a test would return
@@ -190,6 +195,18 @@ func searchPadding(b *runner, cnt, pad int, r *Results, getBase func() int) (off
 	var mid int
 	low := 0
 	high := blockSize
+
+	// The bisection is NOT done in parallel, and that was measured
+	// rather than assumed.  Probing several pads at once narrows the
+	// range in fewer rounds but spends more readings doing it, and a
+	// reading is the variable cost here: a dozen sequential searches
+	// took 36.7s twice running, and the same search with two probes a
+	// round took 42.2s and 31.4s.  Fewer rounds, no less time, and a
+	// spread that made the answer harder to trust.
+	//
+	// What does pay is paddingHolds, where the two readings are known
+	// in advance and there is nothing to narrow.
+
 	for high-low > 1 {
 		mid = low + (high-low)/2
 		mustRun(b, cnt, mid+pad, r)
@@ -412,17 +429,17 @@ func basePadding(b *runner, r *Results) int {
 // whether it is one: the largest pad still inside a 512-byte block, so
 // that one more byte crosses and memory grows.
 //
-// The two runs are independent and could be taken at the same time in
-// two objects; they are taken one after the other here because that is
-// all the machinery there is so far.
+// The two runs are independent, so they are taken at the same time in
+// two objects when there are two to take them in.
 func paddingHolds(b *runner, pad int) (held bool, at, above int) {
 	if !expressiblePadding(pad) {
 		return false, 0, 0
 	}
-	var below, over Results
-	mustRun(b, 0, pad, &below)
-	mustRun(b, 0, pad+1, &over)
-	return over.Base > below.Base, below.Base, over.Base
+	// Both at once when there is somewhere to put them: they are two
+	// independent readings of the base script and neither depends on
+	// the other.
+	mem := probeBase(b, []int{pad, pad + 1})
+	return mem[1] > mem[0], mem[0], mem[1]
 }
 
 // checkIPad confirms that a supplied --ipad names a padding boundary, and is
@@ -597,7 +614,7 @@ func main() {
 		if err != nil {
 			errf("%v\n", err)
 		}
-		obj, cleanup, err := runIn(ctx, s)
+		obj, spare, cleanup, err := runIn(ctx, s)
 		if err != nil {
 			s.Close()
 			errf("%v\n", err)
@@ -606,7 +623,7 @@ func main() {
 			fmt.Printf("running in %s\n", obj)
 		}
 		b = &runner{
-			s: s, obj: obj, cleanup: cleanup,
+			s: s, obj: obj, spare: spare, cleanup: cleanup,
 			Timeout: flags.Timeout,
 			Info:    flags.Show, // -v: surface INFO: chat lines (COUNT/PADDING/*_MEM)
 		}
@@ -1248,6 +1265,18 @@ func runScript(b *runner, cnt, pad int, r *Results) error {
 			fmt.Println("INFO:", s)
 		}
 	}
+	absorbResults(results, r)
+	cache[key] = *r
+	return nil
+}
+
+// absorbResults reads what the script reported into a Results.
+//
+// The runner returns EVERY line the script said, not just the RESULT:
+// ones, so the convention is applied here.  It belongs in the benchmark
+// and not in the transport: nothing else about running a script
+// requires a script to label its output.
+func absorbResults(results []string, r *Results) {
 	const (
 		BM    = "BASE_MEM="
 		TM    = "TEST_MEM="
@@ -1255,10 +1284,6 @@ func runScript(b *runner, cnt, pad int, r *Results) error {
 		TITLE = "TITLE="
 	)
 	for _, raw := range results {
-		// The runner returns EVERY line the script said, not just the
-		// RESULT: ones, so the convention is applied here. It belongs in the
-		// benchmark, not in the transport: nothing else about running a script
-		// requires a script to label its output.
 		s, ok := resultPayload(raw)
 		if !ok {
 			continue
@@ -1274,8 +1299,6 @@ func runScript(b *runner, cnt, pad int, r *Results) error {
 			r.Title = s[len(TITLE):]
 		}
 	}
-	cache[key] = *r
-	return nil
 }
 
 // code is the boilerplate for autobench.  It is printed with 4 positional
@@ -1336,11 +1359,21 @@ func mkVar(s string) (string, error) {
 	}
 }
 
-// runIn gets somewhere to run scripts.  See automate's, which is the
-// same decision for the same reasons.
-func runIn(ctx context.Context, s *sl.Session) (*sl.Object, func(), error) {
+// runIn gets somewhere to run scripts: the measured object, and any
+// spare objects to take readings in alongside it.
+//
+// See automate's for why the object is worn and kept.  The spares are
+// this program's own: a padding search is a dozen readings of one
+// script that do not depend on each other, and two objects can take two
+// of them at once.
+func runIn(ctx context.Context, s *sl.Session) (*sl.Object, []*sl.Object, func(), error) {
 	if flags.Object != "" || flags.Rez {
-		return session.RunIn(ctx, s, flags.Object, flags.Keep)
+		obj, cleanup, err := session.RunIn(ctx, s, flags.Object, flags.Keep)
+		return obj, nil, cleanup, err
 	}
-	return session.UseAuto(ctx, s, sl.HUDBottomLeft)
+	objs, cleanup, err := session.UseAutoN(ctx, s, flags.Objects)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return objs[0], objs[1:], cleanup, nil
 }

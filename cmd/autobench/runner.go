@@ -40,6 +40,13 @@ type runner struct {
 	s   *sl.Session
 	obj *sl.Object
 
+	// spare are further objects to run in, for probes that can be
+	// taken at the same time.  They are never obj: obj is the object
+	// the measured sequence runs in, and its LINKSET DATA carries the
+	// base reading from the cnt=0 script to the cnt>0 ones.  A probe
+	// dropped into it would overwrite that.
+	spare []*sl.Object
+
 	// Timeout bounds one run.  Zero means sl's own default.
 	Timeout time.Duration
 
@@ -125,7 +132,13 @@ func (e *runtimeError) StackHeap() bool {
 // that crashed as *runtimeError, because a benchmark does different
 // things about them: the first means try a smaller script, the second
 // may mean the reading is the limit being looked for.
+// Send runs the script in the measured object.
 func (r *runner) Send(src string) (results, info []string, err error) {
+	return r.sendIn(r.obj, src)
+}
+
+// sendIn runs a script in a named object.
+func (r *runner) sendIn(obj *sl.Object, src string) (results, info []string, err error) {
 	ctx := context.Background()
 	if r.Timeout > 0 {
 		// Room for sl to report its own overrun rather than having the
@@ -136,7 +149,7 @@ func (r *runner) Send(src string) (results, info []string, err error) {
 	}
 
 	res, err := r.s.Run(ctx, sl.Script{
-		In:      r.obj,
+		In:      obj,
 		Name:    scriptName,
 		Source:  src,
 		Done:    "DONE",
@@ -169,7 +182,7 @@ func (r *runner) Send(src string) (results, info []string, err error) {
 	// the crash loses the one detail a caller acts on.
 	if res.Fault != nil {
 		return results, info, &runtimeError{
-			Object: r.obj.Name, Script: res.Fault.Script, Detail: res.Fault.Reason,
+			Object: obj.Name, Script: res.Fault.Script, Detail: res.Fault.Reason,
 		}
 	}
 	if !res.Finished {

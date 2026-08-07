@@ -98,6 +98,77 @@ const (
 	AutoLock   = "auto"
 )
 
+// AutoPoints are where the auto objects are worn, one each.
+//
+// An attachment point holds one object, so more objects means more
+// points; the HUD ones are used because nothing else wants them and
+// they are not part of how the avatar looks.
+var AutoPoints = []int{sl.HUDBottomLeft, sl.HUDBottom, sl.HUDBottomRight, sl.HUDTopLeft}
+
+// AutoName is what the nth auto object is called.  The first keeps the
+// bare name, so an account that has only ever run one at a time is not
+// asked to grow a second object it will not use.
+func AutoName(n int) string {
+	if n == 0 {
+		return AutoObject
+	}
+	return fmt.Sprintf("%s %d", AutoObject, n+1)
+}
+
+// UseAutoN gets several auto objects, for work that can be done in
+// parallel: a script in one object cannot be told from a script in the
+// same object by anything it says, but two objects are two speakers.
+//
+// One lock covers the set.  Locking them one by one would let two
+// benchmarks each hold some and wait for the rest, which is a deadlock
+// where the present arrangement is a queue.
+//
+// Fewer objects than asked for is not an error.  The caller can do less
+// at once, which is slower and not wrong -- and there is a limit on how
+// many attachments this is prepared to make.
+func UseAutoN(ctx context.Context, s *sl.Session, n int) ([]*sl.Object, func(), error) {
+	if n < 1 {
+		n = 1
+	}
+	if n > len(AutoPoints) {
+		n = len(AutoPoints)
+	}
+
+	lockCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+	defer cancel()
+	if err := s.Lock(lockCtx, AutoLock); err != nil {
+		return nil, nil, fmt.Errorf("waiting for the %s objects: %w\n"+
+			"        (an slgod older than the lock does not answer; --rez avoids it)",
+			AutoObject, err)
+	}
+	unlock := func() { s.Unlock(AutoLock) }
+
+	folder, err := objectsFolder(ctx, s)
+	if err != nil {
+		unlock()
+		return nil, nil, err
+	}
+
+	var objs []*sl.Object
+	for i := 0; i < n; i++ {
+		a, err := s.EnsureAttached(ctx, folder, AutoName(i), AutoPoints[i])
+		if err != nil {
+			if i == 0 {
+				unlock()
+				return nil, nil, err
+			}
+			// One is enough to work with; the rest only make it
+			// quicker.  Say so and carry on rather than fail a
+			// benchmark over an attachment point.
+			fmt.Fprintf(os.Stderr, "only %d of %d objects: %v\n", i, n, err)
+			break
+		}
+		obj := a.Object
+		objs = append(objs, &obj)
+	}
+	return objs, unlock, nil
+}
+
 // UseAuto gets the shared auto object, waiting for its turn.
 //
 // The lock is not politeness.  A benchmark carries its base reading in
