@@ -202,10 +202,10 @@ func findPadding(b *runner, cnt, pad int, r *Results) (offset, base int) {
 // ever -- so the last few bytes go to the bisection, which is one or
 // two more rounds and has the walk and the confirmation after it.
 //
-// Only for the base script, and never in the measured object: see
-// probe.go for both.
+// Never in the measured object: see probe.go for why that is safe for a
+// script with copies in it as well as for the base.
 func quarterSearch(b *runner, cnt, pad, base, low, high int) (int, int) {
-	if cnt != 0 || b == nil || len(b.spare) < 3 {
+	if b == nil || len(b.spare) < 3 {
 		return low, high
 	}
 
@@ -213,7 +213,7 @@ func quarterSearch(b *runner, cnt, pad, base, low, high int) (int, int) {
 		q := (high - low) / 4
 		p := []int{low + q, low + 2*q, low + 3*q}
 
-		mem := probeBase(b, []int{p[0] + pad, p[1] + pad, p[2] + pad})
+		mem := probeAt(b, cnt, []int{p[0] + pad, p[1] + pad, p[2] + pad})
 
 		switch {
 		case mem[0] > base:

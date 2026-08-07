@@ -504,12 +504,26 @@ object and no more -- so two scripts in one object cannot be told
 apart, but two objects can. `--objects N` sets how many to use; the
 extra ones are worn and kept like the first.
 
-When the padding does have to be searched for, three pads are tried at
-once and the range is quartered rather than halved, which takes four or
-five rounds where a bisection takes nine. Measured over six runs each,
-the median went from 32.4s to 29.0s. Three readings taken together
-cost about what one costs, since they are three round trips in flight
-rather than three in a row.
+When a padding does have to be searched for, three pads are tried at
+once and the range is quartered rather than halved: four or five rounds
+where a bisection takes nine. Three readings taken together cost about
+what one costs, being three round trips in flight rather than three in
+a row.
+
+Both searches work that way -- the base script's and, in `-1` mode, the
+one-copy script's. Median times, with one object against four:
+
+    -1, padding remembered      19.3s -> 15.4s
+    -1, searched from scratch   32.0s -> 25.7s
+    copy mode, searched         34.2s -> 16.5s
+    copy mode, remembered                 5.7s
+
+A script reports its own memory before it reads anything, so the number
+a search compares means the same in any object. What a script works out
+*afterwards* does not: it divides against a base held in its object's
+linkset data, which a spare object has none of. So only the memory
+reading travels, and the measured sequence still runs where the base
+is.
 
 `--ipad N` still asserts a padding outright and skips all of this,
 `--check-ipad` confirms it, and `--no-cache` neither reads nor writes

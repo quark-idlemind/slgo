@@ -17,19 +17,27 @@ package main
 //
 // # What may be probed, and what may not
 //
-// Only the base script, and never in the measured object.
+// Never the measured object, and never for anything but the memory
+// reading the search compares.
 //
-// A cnt=0 script writes its reading into its object's LINKSET DATA,
-// which is what the cnt>0 scripts divide against.  A probe dropped into
-// the measured object would overwrite that; a probe in another object
-// writes into another object's data, where nothing reads it.
+// The harness measures before it reads anything: the script calls
+// result(llGetUsedMemory(), ...) as its first act, so the number it
+// reports is the script's own memory and does not depend on which
+// object it ran in.  That is what makes a probe in another object mean
+// the same thing as a run in this one, for cnt>0 as much as for cnt=0.
 //
-// So probes are cnt=0, in spare objects, and their readings go into the
-// run cache like any other.  They deliberately do not touch lsdPad,
-// which names the last cnt=0 script that ran IN THE MEASURED OBJECT --
-// and copyMode already forces a real run there when what it wants is
-// not what lsdPad names, which is what keeps a probe's cache entry from
-// being mistaken for the base in world.
+// What DOES depend on the object is everything the script works out
+// afterwards.  A cnt>0 script divides against the base reading its
+// object holds in LINKSET DATA, and a spare object holds none, so its
+// SIZE and BASE_MEM are arithmetic on a zero.  Those must not be
+// allowed anywhere near the run cache, which copy mode reads Size from
+// -- so a cnt>0 probe is kept in a cache of its own that only the
+// search consults, holding the one number that travels.
+//
+// Probes also leave lsdPad alone, which names the last cnt=0 script to
+// run IN THE MEASURED OBJECT.  copyMode forces a real run there when
+// what it wants is not what lsdPad names, and that is what keeps a
+// probe's reading from being mistaken for the base in world.
 
 import (
 	"sync"
@@ -38,9 +46,17 @@ import (
 // probeJob is one reading to take: which pad, and where its answer goes.
 type probeJob struct{ at, pad int }
 
-// probeMu guards the run cache and the counters while probes run
-// alongside each other.  Everything else in this program is sequential.
+// probeMu guards the caches and the counters while probes run alongside
+// each other.  Everything else in this program is sequential.
 var probeMu sync.Mutex
+
+// probeTest holds TEST_MEM for cnt>0 probes taken in spare objects.
+//
+// Apart from the run cache on purpose.  Everything else in that
+// Results -- Size, Base -- is what the script worked out from linkset
+// data the spare object does not have, and copy mode reads Size from
+// the run cache.  Only the memory reading travels, so only it is kept.
+var probeTest = map[Cache]int{}
 
 // probeBase measures the base script at each of several pads, taking as
 // many at a time as there are spare objects.
@@ -50,13 +66,18 @@ var probeMu sync.Mutex
 // anything a probe could not do -- under --test, with no spare objects,
 // or when a probe failed, which puts the error in front of the code
 // that already knows what to do about it.
-func probeBase(b *runner, pads []int) []int {
+func probeBase(b *runner, pads []int) []int { return probeAt(b, 0, pads) }
+
+// probeAt measures a script of a given copy count at several pads at
+// once, and returns the reading the search compares: BASE_MEM for the
+// base script, TEST_MEM for one with copies in it.
+func probeAt(b *runner, cnt int, pads []int) []int {
 	out := make([]int, len(pads))
 
 	var todo []probeJob
 	for i, pad := range pads {
-		if r, ok := cachedRun(0, pad); ok {
-			out[i] = r.Base
+		if m, ok := probed(cnt, pad); ok {
+			out[i] = m
 			continue
 		}
 		todo = append(todo, probeJob{i, pad})
@@ -66,22 +87,45 @@ func probeBase(b *runner, pads []int) []int {
 	}
 
 	if useTestInfo == nil && len(b.spare) > 0 {
-		todo = probeConcurrently(b, todo, out)
+		todo = probeConcurrently(b, cnt, todo, out)
 	}
 
 	// Whatever is left goes the ordinary way: the model, a run that
 	// failed, or a benchmark with nowhere to run in parallel.
 	for _, j := range todo {
 		var r Results
-		mustRun(b, 0, j.pad, &r)
-		out[j.at] = r.Base
+		mustRun(b, cnt, j.pad, &r)
+		out[j.at] = reading(cnt, r)
 	}
 	return out
 }
 
+// reading is what a search compares for this copy count.
+func reading(cnt int, r Results) int {
+	if cnt == 0 {
+		return r.Base
+	}
+	return r.Test
+}
+
+// probed answers from whichever cache holds this count.
+func probed(cnt, pad int) (int, bool) {
+	probeMu.Lock()
+	defer probeMu.Unlock()
+	key := Cache{Count: cnt, Padding: pad}
+	if r, ok := cache[key]; ok {
+		return reading(cnt, r), true
+	}
+	if cnt != 0 {
+		m, ok := probeTest[key]
+		return m, ok
+	}
+	return 0, false
+}
+
 // probeConcurrently runs what it can in the spare objects and returns
 // the jobs it did not manage.
-func probeConcurrently(b *runner, todo []probeJob, out []int) []probeJob {
+func probeConcurrently(b *runner, cnt int, todo []probeJob, out []int) []probeJob {
 	var left []probeJob
 
 	for start := 0; start < len(todo); start += len(b.spare) {
@@ -97,7 +141,7 @@ func probeConcurrently(b *runner, todo []probeJob, out []int) []probeJob {
 			wg.Add(1)
 			go func(slot int) {
 				defer wg.Done()
-				src := buildScript(0, j.pad)
+				src := buildScript(cnt, j.pad)
 				results, _, err := b.sendIn(obj, src)
 				if err != nil {
 					// Not reported here.  Running it again the ordinary
@@ -111,10 +155,16 @@ func probeConcurrently(b *runner, todo []probeJob, out []int) []probeJob {
 
 				probeMu.Lock()
 				spentRuns++
-				cache[Cache{Count: 0, Padding: j.pad}] = r
+				if cnt == 0 {
+					// A base script reports its own memory and nothing
+					// else, so all of it travels.
+					cache[Cache{Count: 0, Padding: j.pad}] = r
+				} else {
+					probeTest[Cache{Count: cnt, Padding: j.pad}] = r.Test
+				}
 				probeMu.Unlock()
 
-				out[j.at] = r.Base
+				out[j.at] = reading(cnt, r)
 			}(k - start)
 		}
 		wg.Wait()
@@ -126,12 +176,4 @@ func probeConcurrently(b *runner, todo []probeJob, out []int) []probeJob {
 		}
 	}
 	return left
-}
-
-// cachedRun reads the run cache under the probe lock.
-func cachedRun(cnt, pad int) (Results, bool) {
-	probeMu.Lock()
-	defer probeMu.Unlock()
-	r, ok := cache[Cache{Count: cnt, Padding: pad}]
-	return r, ok
 }
