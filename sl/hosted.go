@@ -97,6 +97,16 @@ func (h *Hosted) Done() <-chan struct{}     { return h.conn.Done() }
 func (h *Hosted) Err() error                { return h.conn.Err() }
 func (h *Hosted) Close() error              { return h.conn.Close() }
 func (h *Hosted) HasCap(name string) bool   { return h.conn.HasCap(name) }
+
+// Lock takes a lock through slgod, which holds it for as long as this
+// client's stream lasts.
+func (h *Hosted) Lock(ctx context.Context, name string) error {
+	return h.conn.Lock(ctx, name)
+}
+
+// Unlock gives one back.
+func (h *Hosted) Unlock(name string) error { return h.conn.Unlock(name) }
+
 func (h *Hosted) Flush(ctx context.Context) (int, error) {
 	return h.conn.Flush(ctx)
 }
@@ -147,6 +157,8 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Text:         o.Text,
 		}
 		s.Object.Name = o.Name
+		s.AttachPoint = int(o.AttachPoint)
+		s.AttachItem = parseUUIDOrZero(o.AttachItem)
 		out = append(out, s)
 	}
 	return out, nil

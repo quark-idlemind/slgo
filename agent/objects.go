@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,6 +50,20 @@ type Object struct {
 
 	// Text is the floating text above the object, when it has any.
 	Text string
+
+	// AttachPoint is where a worn object is attached, and zero when it
+	// is not worn.  AttachItem is the inventory item it was worn from.
+	//
+	// The item is the only stable name a worn object has.  The object
+	// itself is rezzed afresh -- with a new id -- every time it is put
+	// on, and again every time the avatar logs in, so anything that
+	// wants to find the same attachment twice has to look for the item
+	// it came from.  Both are read from the ObjectUpdate that describes
+	// an attachment, which is sent when it goes on and again at login;
+	// a program that connected afterwards never heard it, which is why
+	// it is worth remembering here.
+	AttachPoint int
+	AttachItem  msg.UUID
 
 	// First and Last are when the simulator first and last said
 	// anything about this object.  Last is what an age based sweep
@@ -244,6 +259,50 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	if havePos {
 		v.Position, v.Rotation = pos, rot
 	}
+	// An AttachItemID in the NameValue is what says this is worn;
+	// State means other things on an object that is not.
+	if item, ok := attachItem(d.NameValue); ok {
+		v.AttachItem, v.AttachPoint = item, attachPoint(d.State)
+	}
+}
+
+// attachPoint pulls the point out of an ObjectUpdate's State byte,
+// which stores it with its nibbles swapped: point 35 arrives as 0x32.
+func attachPoint(state uint8) int {
+	return int((state&0xf0)>>4 | (state&0x0f)<<4)
+}
+
+// attachItem reads the AttachItemID out of an object's NameValue,
+// which is lines of the form
+//
+//	AttachItemID STRING RW DS <uuid>
+func attachItem(nv []byte) (msg.UUID, bool) {
+	for _, line := range strings.Split(strings.TrimRight(string(nv), "\x00"), "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 || f[0] != "AttachItemID" {
+			continue
+		}
+		u, err := msg.ParseUUID(f[len(f)-1])
+		if err != nil || u.IsZero() {
+			continue
+		}
+		return u, true
+	}
+	return msg.UUID{}, false
+}
+
+// Attachments is everything known to be worn.
+func (o *Objects) Attachments() []*Object {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	var out []*Object
+	for _, v := range o.byID {
+		if !v.AttachItem.IsZero() {
+			c := *v
+			out = append(out, &c)
+		}
+	}
+	return out
 }
 
 // compressed records what a compressed update said.

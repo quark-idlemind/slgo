@@ -159,6 +159,15 @@ func LoginDirect(ctx context.Context, l agent.Login) (*Session, error) {
 	return s, nil
 }
 
+// Lock takes exclusive use of something named, waiting until it is
+// this session's, and Unlock gives it back.  See Backend.Lock.
+func (w *Session) Lock(ctx context.Context, name string) error {
+	return w.b.Lock(ctx, name)
+}
+
+// Unlock gives a lock back.
+func (w *Session) Unlock(name string) error { return w.b.Unlock(name) }
+
 // New wraps a backend that is already connected.
 func New(b Backend) (*Session, error) {
 	info := b.Info()

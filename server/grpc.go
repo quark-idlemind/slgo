@@ -40,6 +40,46 @@ type Client struct {
 	dropped atomic.Uint64
 }
 
+// lock answers a client asking for one, waiting for its turn if it
+// asked to wait.
+//
+// Waiting happens in a goroutine of its own so that the stream keeps
+// being read: a client that is queued still sends and receives, and
+// blocking the reader here would stop relaying its grid traffic while
+// it waited.
+func (c *Client) lock(ctx context.Context, h *Hosted, req *pb.Lock) {
+	name := req.GetName()
+	if name == "" {
+		c.send(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
+			Locked: &pb.Locked{Held: false, Holder: "a lock needs a name"},
+		}})
+		return
+	}
+
+	if req.GetTry() {
+		ok, holder := h.lockSet().acquire(name, c)
+		c.send(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
+			Locked: &pb.Locked{Name: name, Held: ok, Holder: holderName(holder)},
+		}})
+		return
+	}
+
+	ready := h.lockSet().queue(name, c)
+	go func() {
+		select {
+		case <-ready:
+			c.send(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
+				Locked: &pb.Locked{Name: name, Held: true},
+			}})
+		case <-ctx.Done():
+			// Gone before its turn came.  Leaving it in the queue
+			// would hand the lock to nobody and stall everyone behind
+			// it.
+			h.lockSet().giveUp(name, c)
+		}
+	}()
+}
+
 func (c *Client) wants(id msg.ID) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -285,10 +325,24 @@ func (s *Server) streamRecv(ctx context.Context, stream pb.Grid_StreamServer, c 
 			if err := sendMessage(ctx, h, b.Message); err != nil {
 				return err
 			}
+		case *pb.ClientPacket_Lock:
+			c.lock(ctx, h, b.Lock)
+		case *pb.ClientPacket_Unlock:
+			h.lockSet().giveUp(b.Unlock.GetName(), c)
 		case *pb.ClientPacket_Attach:
 			return status.Error(codes.InvalidArgument, "attach may only be the first frame")
 		}
 	}
+}
+
+// attachItemString leaves a not-worn object's item empty rather than
+// spelling out a zero uuid, so that "is it worn" is a test on the
+// field being set.
+func attachItemString(id msg.UUID) string {
+	if id.IsZero() {
+		return ""
+	}
+	return id.String()
 }
 
 // sendMessage puts a client's message on the circuit.  The client
@@ -427,6 +481,8 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			Owner:        o.Owner.String(),
 			TextureEntry: o.TextureEntry,
 			Text:         o.Text,
+			AttachPoint:  uint32(o.AttachPoint),
+			AttachItem:   attachItemString(o.AttachItem),
 		})
 	}
 	return out, nil

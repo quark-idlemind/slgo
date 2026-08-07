@@ -104,6 +104,12 @@ type Seen struct {
 
 	// Text is the floating text above the object.
 	Text string
+
+	// AttachPoint is where a worn object is attached and AttachItem
+	// the inventory item it was worn from; both are zero when it is
+	// not worn.  See Session.WornFromItem.
+	AttachPoint int
+	AttachItem  msg.UUID
 }
 
 // Faces unpacks the appearance, if any has been seen.

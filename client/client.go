@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/llsd"
@@ -43,6 +44,10 @@ type Conn struct {
 	messages chan *Message
 	events   chan *Event
 	notices  chan *pb.AgentEvent
+
+	// locks is what this connection has asked slgod for exclusive use
+	// of.  See lock.go.
+	locks locking
 
 	closeOnce sync.Once
 	done      chan struct{}
@@ -112,6 +117,15 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 		creds, binding = auth.ClientTLS()
 		opts = []grpc.DialOption{grpc.WithTransportCredentials(creds)}
 	}
+	// Ping an idle connection, so that a server or a network that has
+	// gone away is noticed in seconds rather than whenever TCP says
+	// so.  It matters most for locks: slgod frees what this client
+	// holds when the stream ends, and this is what ends it.
+	opts = append(opts, grpc.WithKeepaliveParams(keepalive.ClientParameters{
+		Time:                20 * time.Second,
+		Timeout:             10 * time.Second,
+		PermitWithoutStream: true,
+	}))
 	cc, err := grpc.NewClient(addr, opts...)
 	if err != nil {
 		return nil, err
@@ -290,6 +304,11 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 			case c.notices <- b.Notice:
 			default:
 			}
+		case *pb.ServerPacket_Locked:
+			// Never dropped: somebody is waiting on this, and losing
+			// it would leave them waiting for a lock they have been
+			// given.
+			c.locks.deliver(b.Locked)
 		}
 	}
 }

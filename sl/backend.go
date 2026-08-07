@@ -112,6 +112,21 @@ type Backend interface {
 	// whether it has arrived at all.
 	Region(ctx context.Context) (*Region, bool, error)
 
+	// Lock takes exclusive use of something named, waiting for it,
+	// and Unlock gives it back.  Going away gives it back too.
+	//
+	// The name means nothing to the backend; it is whatever the
+	// programs sharing the thing agree to call it.  What it is FOR is
+	// a resource in the world that two programs cannot share -- the
+	// object automate and autobench run scripts in, whose linkset data
+	// belongs to the object and not to the script.
+	//
+	// A direct session holds it trivially: one avatar cannot be logged
+	// in twice, so a process that logged in itself has no one to
+	// contend with.
+	Lock(ctx context.Context, name string) error
+	Unlock(name string) error
+
 	// Flush empties the object cache, and says how much it held.
 	Flush(ctx context.Context) (int, error)
 

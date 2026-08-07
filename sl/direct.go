@@ -176,6 +176,8 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			PCode:        o.PCode,
 			TextureEntry: o.TextureEntry,
 			Text:         o.Text,
+			AttachPoint:  o.AttachPoint,
+			AttachItem:   o.AttachItem,
 		}
 		out = append(out, s)
 	}
@@ -196,6 +198,17 @@ func (d *Direct) Region(ctx context.Context) (*Region, bool, error) {
 		Protocols: r.Protocols,
 	}, known, nil
 }
+
+// Lock is nothing to do here.
+//
+// A lock exists so that two clients of one slgod do not use the same
+// object at once.  A direct session IS the only client -- Second Life
+// will not have one avatar logged in twice -- so there is nobody to
+// contend with and nothing to wait for.
+func (d *Direct) Lock(ctx context.Context, name string) error { return nil }
+
+// Unlock likewise.
+func (d *Direct) Unlock(name string) error { return nil }
 
 func (d *Direct) Flush(ctx context.Context) (int, error) {
 	return d.a.Objects.Flush(), nil

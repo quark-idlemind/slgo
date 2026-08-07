@@ -141,7 +141,53 @@ message ClientPacket {
     // adjusted on the stream rather than by an RPC that would have no
     // way to say which stream it meant.
     Subscribe subscribe = 3;
+
+    // Asking for and giving up a lock.  On the stream for the same
+    // reason: a lock belongs to the client holding it, and the stream
+    // is what says which client that is -- and, more to the point,
+    // when it has gone away.  A lease held by a stream is released
+    // when the stream ends, whether the client exited, crashed or was
+    // unplugged, and that needs no heartbeat of its own.
+    Lock lock = 4;
+    Unlock unlock = 5;
   }
+}
+
+// Lock asks for exclusive use of something named.
+//
+// The name is whatever the clients agree it is; slgod attaches no
+// meaning to it and only ever compares it. "auto" is the object
+// automate and autobench run their scripts in, which one client must
+// have to itself: a benchmark carries its base reading in that object's
+// linkset data, which belongs to the object and not to the script, so
+// two runs at once would divide by each other's numbers.
+message Lock {
+  string name = 1;
+
+  // Try asks for an answer now rather than a turn: held comes back
+  // false if somebody else has it. Waiting is the default, because a
+  // program that wants the lock almost always wants to get on with the
+  // work once it has it, and the alternative it would otherwise write
+  // for itself is a sleep and another ask.
+  bool try = 2;
+}
+
+// Unlock gives one back.  Ending the stream does the same thing.
+message Unlock {
+  string name = 1;
+}
+
+// Locked answers a Lock: held says whether it is now this client's.
+// For a waiting Lock it does not arrive until the lock is this
+// client's, so held is true; for a trying one it comes straight back
+// either way.
+message Locked {
+  string name = 1;
+  bool held = 2;
+
+  // Who has it, when held is false and somebody else does. It is for a
+  // person to read, not to act on.
+  string holder = 3;
 }
 
 // Subscribe adjusts what this stream relays.  Exactly one field is
@@ -190,6 +236,9 @@ message ServerPacket {
     // circuit.  Its body is LLSD, not the binary message encoding, so
     // it cannot share InboundMessage.
     InboundEvent event = 4;
+
+    // The answer to a Lock.
+    Locked locked = 5;
   }
 }
 
@@ -397,6 +446,17 @@ message ObjectInfo {
 
   // Text is the floating text above the object.
   string text = 10;
+
+  // Where a worn object is attached, and the inventory item it was
+  // worn from; both zero when it is not worn.
+  //
+  // The item is the only stable name a worn object has: it is rezzed
+  // afresh, with a new id, every time it is put on and every time the
+  // avatar logs in. A program that wants to find the same attachment
+  // twice must look for the item it came from, and must ask whoever
+  // was connected when it was described -- which is this server.
+  uint32 attach_point = 11;
+  string attach_item = 12;
 }
 
 message ObjectsResponse {

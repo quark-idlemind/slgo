@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
@@ -75,6 +76,10 @@ type Hosted struct {
 	mu      sync.RWMutex
 	agent   *agent.Agent
 	clients map[*Client]bool
+
+	// locks is exclusive use of named things, held for as long as the
+	// client holding one keeps its stream.  See lock.go.
+	locks *locks
 
 	stopped  atomic.Bool
 	attempts atomic.Uint64
@@ -331,6 +336,11 @@ func (h *Hosted) detach(c *Client) {
 	h.mu.Lock()
 	delete(h.clients, c)
 	h.mu.Unlock()
+
+	// Whatever it held is free now.  This is the whole of lock
+	// revocation: the stream ending is the client going away, however
+	// it went.
+	h.lockSet().releaseAll(c)
 }
 
 // ClientCount is how many clients are watching.
@@ -342,7 +352,28 @@ func (h *Hosted) ClientCount() int {
 
 // Serve accepts clients on ln until ctx is cancelled.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	opts := []grpc.ServerOption{}
+	// Keepalive, which is what makes a lock safe to hold.
+	//
+	// A stream ending gives back the locks its client held, and a
+	// client that exits or crashes ends its stream at once.  What does
+	// not is a machine that is switched off or falls off the network:
+	// the connection stays open as far as this end is concerned, and
+	// the lock would be held by nobody until TCP gave up, which can be
+	// hours.  Pinging an idle connection and dropping it when the ping
+	// is not answered puts a bound on that of about half a minute.
+	opts := []grpc.ServerOption{
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    20 * time.Second, // ping an idle connection
+			Timeout: 10 * time.Second, // and give up if nothing comes back
+		}),
+		// Clients ping too, and the default policy would call a client
+		// that pings more often than every two hours abusive and
+		// disconnect it.
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             10 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	}
 	if s.auth != nil {
 		creds, err := auth.ServerTLS()
 		if err != nil {

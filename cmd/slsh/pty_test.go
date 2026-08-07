@@ -113,6 +113,8 @@ func (b *fakeBackend) Friends(ctx context.Context) ([]sl.Friend, error) {
 	return []sl.Friend{{ID: harnessOther, Online: true}}, nil
 }
 func (b *fakeBackend) NoteFriend(ctx context.Context, id msg.UUID, online bool) error { return nil }
+func (b *fakeBackend) Lock(ctx context.Context, name string) error                    { return nil }
+func (b *fakeBackend) Unlock(name string) error                                       { return nil }
 
 // DoCap answers an inventory listing for the root and nothing else, so
 // ls and cd have something to walk.
