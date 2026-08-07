@@ -207,7 +207,11 @@ func TestBasePaddingTakesIPadOnTrust(t *testing.T) {
 // whose code costs codeSize bytes and it has to say so, and it has to name the
 // padding by A11's convention while doing it.
 func TestOneModeReportsTheCodeSize(t *testing.T) {
-	for _, tc := range modelCases {
+	for _, tc := range append(append([]struct {
+		name     string
+		crossing int
+		codeSize int
+	}{}, modelCases...), bigModelCases...) {
 		t.Run(tc.name, func(t *testing.T) {
 			setTestInfo(t, tc.crossing, tc.codeSize)
 			var r Results
@@ -620,46 +624,6 @@ func TestCopyModeMeasuresMoreThanABlock(t *testing.T) {
 			if got := int(r.Size); got < tc.codeSize-tol || got > tc.codeSize+tol {
 				t.Errorf("Size: %d ±%d over %d copies, want %d within the ±",
 					got, tol, cnt, tc.codeSize)
-			}
-		})
-	}
-}
-
-// TestOneModeSeesWhatItCannotMeasure drives the detection the way
-// oneMode does -- find the base padding, search with one copy, compare
-// the two readings -- and requires it to fire for everything over a
-// block and for nothing under one.
-//
-// Driven through the model rather than by seeding a reading, because
-// what is being tested is whether the comparison holds up over
-// different alignments of padding against code size, and only the model
-// lines those up honestly.
-func TestOneModeSeesWhatItCannotMeasure(t *testing.T) {
-	seen := func(t *testing.T, crossing, codeSize int) (int, bool) {
-		t.Helper()
-		setTestInfo(t, crossing, codeSize)
-		var r Results
-		basePad := basePadding(nil, &r) + 1
-		_, oneCopyMem := findPadding(nil, 1, basePad, &r)
-		return biggerThanABlock(basePad, oneCopyMem)
-	}
-
-	for _, tc := range bigModelCases {
-		t.Run("over/"+tc.name, func(t *testing.T) {
-			added, over := seen(t, tc.crossing, tc.codeSize)
-			if !over {
-				t.Errorf("a %d-byte copy added %d and was not noticed as over a block",
-					tc.codeSize, added)
-			}
-		})
-	}
-
-	for _, tc := range modelCases {
-		t.Run("under/"+tc.name, func(t *testing.T) {
-			added, over := seen(t, tc.crossing, tc.codeSize)
-			if over {
-				t.Errorf("a %d-byte copy added %d and was wrongly called over a block",
-					tc.codeSize, added)
 			}
 		})
 	}

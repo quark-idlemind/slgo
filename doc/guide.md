@@ -563,36 +563,24 @@ than measurements.
 | `-v` | print each script before running it |
 | `--probe` | check the connection and exit |
 
-### What -1 mode cannot measure
-
-`-1` mode measures one copy as the distance between two block
-boundaries, so the largest size it can express is one block less a
-byte. A copy bigger than that carries itself over a boundary, and what
-is left to measure is the remainder -- which looks like a perfectly
-ordinary small answer.
-
-It is refused rather than reported. Measured live, a 250-character
-string is 542 bytes and `-1` mode would have said 20; a 500-character
-one is 1066 and it would have said 4.
-
-    $ autobench -1 --code 'string sCNT = "...250 characters...";'
-    one copy of this code is a 512-byte block or more, which -1 mode cannot measure.
-    ...
-    Copy mode measures a difference of two readings and has no such limit.  Drop
-    the -1.
-
-So use copy mode for anything large. It divides a difference of two
-readings by the copy count and nothing about a block bounds it:
-
-    $ autobench --code 'string sCNT = "...250 characters...";'
-    Size: 542 ±7
-
 ### Reading the numbers honestly
 
 `Size: 22 ±0` and `Size: 24` are not two answers to the same question.
-Copy mode measures what an **additional** copy costs; padding mode
-measures a single one, including whatever fixed cost comes with it. When
-comparing two constructs, compare them in the same mode.
+Copy mode measures what an **additional** copy costs; `-1` mode measures
+one copy outright. Compare two constructs in the same mode.
+
+The gap can be large, and when it is, it is telling you something.
+Measured: `string sCNT = "<250 identical characters>";` is 1044 bytes in
+`-1` mode and 542 in copy mode. Give each copy a *different* literal --
+put `CNT` inside the string -- and copy mode says 1030, agreeing with
+`-1`. Identical literals are shared, so an extra copy pays only for what
+it cannot share. That is a real property of the construct rather than a
+disagreement between the modes, and it is only visible because the two
+measure different things.
+
+`-1` mode handles constructs of any size, including those larger than a
+512-byte block: it counts the whole blocks a copy occupies as well as
+the distance to the next boundary.
 
 Second Life's own numbers move about a little from run to run. If an
 answer matters, take it twice.

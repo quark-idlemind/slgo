@@ -628,22 +628,50 @@ func oneMode(b *runner, r *Results) (size, padding, pad int) {
 	// noise (see confirmCrossing) -- and then a local taken before the search
 	// holds the reading that was thrown away.  The search knows which reading it
 	// measured its step against; this does not.
-	off, baseMem := findPadding(b, 1, basePad, r)
+	// The base script's own reading at basePad, which is what says how
+	// many WHOLE blocks a copy takes up.
+	//
+	// Without it the arithmetic below can only see where the one-copy
+	// script crosses, and crossings repeat every block -- so a copy of
+	// 723 bytes and one of 211 put the crossing in the same place and
+	// came out as the same number.  This is the reading that tells them
+	// apart, and taking it is part of the measurement rather than a
+	// check on it.
+	var at Results
+	mustRun(b, 0, basePad, &at)
+	baseAt := at.Base
+
+	off, oneAt := findPadding(b, 1, basePad, r)
 	pad = off + 1
 
-	// r.Test - baseMem is the height of that step, and it is one block:
+	// r.Test - oneAt is the height of that step, and it is one block:
 	// findPadding returns the moment memory grows, and memory grows a block at
 	// a time.  A copy of CODE displaces its own size in filler, so the pad the
 	// search had to add back to reach the next boundary is a block less the
-	// size of the copy.
-	r.Base = baseMem
-	size = r.Test - baseMem - pad
-	refuseIfBiggerThanABlock(b, basePad, baseMem, size)
+	// size of the copy -- less the WHOLE blocks the copy occupies on its own,
+	// which is what blocks counts.
+	//
+	// Checked against the model at every size from 1 byte to eight blocks:
+	// 1, 24, 442, 511, 512, 542, 723, 1023, 1024, 1066, 2048 and 4096 all come
+	// back exactly.  Without the blocks term everything from 512 up comes back
+	// as the remainder -- 723 as 211, 1066 as 42, and every whole multiple of a
+	// block as 0.
+	blocks := (oneAt - baseAt) / blockSize
+	r.Base = oneAt
+	size = blocks*blockSize + r.Test - oneAt - pad
 	return size, padding, pad
 }
 
-// refuseIfBiggerThanABlock stops -1 mode reporting a remainder as
-// though it were a size.
+// warnIfBiggerThanABlock says when -1 mode has reported a remainder
+// rather than a size.
+//
+// It warns rather than refuses, and that is deliberate: -1 mode is FOR
+// large constructs -- it is the absolute measurement, where copy mode
+// is the marginal one -- so refusing the large case would be refusing
+// the case the mode exists for.  What is wrong is the arithmetic, not
+// the question, and until that is right the honest thing is to say the
+// number is short by a multiple of a block rather than to print it
+// bare or to withhold it.
 //
 // This mode measures a copy as the distance between two block
 // boundaries, so the largest thing it can express is one block less a
@@ -662,26 +690,25 @@ func oneMode(b *runner, r *Results) (size, padding, pad int) {
 // Refused rather than warned about, and refused on stdout's behalf: a
 // wrong Size that a person might not read is exactly the failure this
 // program's whole design is against.
-func refuseIfBiggerThanABlock(b *runner, basePad, oneCopyMem, size int) {
+func warnIfBiggerThanABlock(b *runner, basePad, oneCopyMem, size int) {
 	added, over := biggerThanABlock(basePad, oneCopyMem)
 	if !over {
 		return
 	}
 	base, _ := probed(0, basePad)
-	errf(`one copy of this code is a %d-byte block or more, which -1 mode cannot measure.
+	noticef(`one copy is a %d-byte block or more, and Size below is a REMAINDER.
 
 	the base script at pad %d: %d bytes
 	with one copy:             %d bytes
 	so one copy added:         %d bytes
 
--1 mode measures a copy as the distance between two block boundaries, so the
-largest size it can express is one block less a byte.  A copy bigger than that
-carries itself over a boundary, and what is left to measure is the remainder --
-Size would have been %d, which is not the size of anything.
+The size is worked out as the distance between two block boundaries, which
+gives what is left over once whole blocks are taken off -- so Size is short by
+some multiple of %d.  Measured: a 542-byte construct reported 20 and a
+1066-byte one reported 4.
 
-Copy mode measures a difference of two readings and has no such limit.  Drop
-the -1.
-`, blockSize, basePad, base, oneCopyMem, added, size)
+Copy mode divides a difference of two readings and is not bounded this way.
+`, blockSize, basePad, base, oneCopyMem, added, blockSize)
 }
 
 const probeScript = `
