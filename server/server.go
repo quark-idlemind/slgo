@@ -51,6 +51,10 @@ type Server struct {
 	mu     sync.RWMutex
 	agents map[string]*Hosted
 
+	// ranked counts sessions as they come up, so that the default is
+	// the one that has been hosted longest.  See Default.
+	ranked uint64
+
 	clients atomic.Int64
 
 	// auth is nil when the server runs without authentication, which is
@@ -85,6 +89,10 @@ type Hosted struct {
 	// group is the group to act as, reapplied after every reconnect.
 	// See group.go.  Guarded by mu.
 	group msg.UUID
+
+	// rank is the order this session came up in, lowest first.  It is
+	// what makes the default deterministic; see Server.Default.
+	rank uint64
 
 	// Log is where anything worth a person's attention goes.  Nil is
 	// silence, which is what a test wants; cmd/slgod sets it.
@@ -171,11 +179,55 @@ func (s *Server) Host(ctx context.Context, name string, login agent.Login, opts 
 	h.setAgent(a)
 
 	s.mu.Lock()
+	s.ranked++
+	h.rank = s.ranked
 	s.agents[name] = h
 	s.mu.Unlock()
 
 	go h.supervise(ctx)
 	return h, nil
+}
+
+// Default is the session a client gets when it names none: of those
+// hosted, the one that has been hosted LONGEST.
+//
+// Stated as the property it gives rather than the procedure:
+//
+//	the default changes only when the default itself goes away.
+//
+// Adding an avatar never moves it, a client attaching never moves it,
+// and a reconnect never moves it -- the rank belongs to the Hosted,
+// which survives reconnection, and not to the agent underneath, which
+// does not.  Nothing a person does casually can change which avatar a
+// bare command drives, which is the entire point: a benchmark run
+// against the wrong avatar is not an error, it is a plausible number.
+//
+// The rank is taken when a session comes UP rather than when it was
+// asked for.  Stamping at request time looks tidier and quietly breaks
+// the property: ask for a slow login first and a fast one second, and
+// the fast one is the default until the slow one arrives and takes it
+// away from a session that never went anywhere.  On arrival, a new
+// session always has the highest rank and so always slots in behind.
+//
+// Startup logins are serial, so this is command-line order, which is
+// what a person naming profiles in an order expects.
+func (s *Server) Default() (*Hosted, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.defaultLocked()
+}
+
+func (s *Server) defaultLocked() (*Hosted, bool) {
+	var best *Hosted
+	for _, h := range s.agents {
+		if h == nil {
+			continue
+		}
+		if best == nil || h.rank < best.rank {
+			best = h
+		}
+	}
+	return best, best != nil
 }
 
 // ReconnectDelays are the waits before each attempt to re-establish a
@@ -274,9 +326,29 @@ func (s *Server) Add(name string, a *agent.Agent) (*Hosted, error) {
 	if _, dup := s.agents[name]; dup {
 		return nil, fmt.Errorf("server: %q is already hosted", name)
 	}
-	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}}
+	s.ranked++
+	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}, rank: s.ranked}
 	s.agents[name] = h
 	return h, nil
+}
+
+// Remove stops hosting a session and returns it.
+//
+// It does NOT log the avatar out -- that is the caller's to do, and to
+// decide about, since a session with clients attached is somebody's work
+// in progress.  What it does settle is the default: a removed session
+// gives up its rank, so it comes back at the END of the queue if it is
+// hosted again rather than reclaiming a default it used to hold.
+func (s *Server) Remove(name string) (*Hosted, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, ok := s.agents[name]
+	if !ok || h == nil {
+		return nil, false
+	}
+	delete(s.agents, name)
+	h.rank = 0
+	return h, true
 }
 
 // Agent returns a hosted connection by name.
@@ -285,6 +357,22 @@ func (s *Server) Agent(name string) (*Hosted, bool) {
 	defer s.mu.RUnlock()
 	h, ok := s.agents[name]
 	return h, ok && h != nil
+}
+
+// Ranked lists the hosted sessions oldest first, which is the order a
+// client should prefer them in: the first is the default, and a client
+// that cannot be satisfied by one tries the next.
+func (s *Server) Ranked() []*Hosted {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]*Hosted, 0, len(s.agents))
+	for _, h := range s.agents {
+		if h != nil {
+			out = append(out, h)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].rank < out[j].rank })
+	return out
 }
 
 // Names lists the hosted connections.

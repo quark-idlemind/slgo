@@ -256,9 +256,12 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	if att == nil {
 		return status.Error(codes.InvalidArgument, "the first frame must be an attach")
 	}
-	h, ok := s.Agent(att.Agent)
-	if !ok {
-		return status.Errorf(codes.NotFound, "no agent named %q", att.Agent)
+	// An empty name takes the default, the same as every other method:
+	// the resolution lives here rather than in the client, so that all
+	// clients agree about which session "none named" means.
+	h, err := s.lookup(att.Agent)
+	if err != nil {
+		return err
 	}
 
 	c := &Client{
@@ -380,11 +383,12 @@ func sendMessage(ctx context.Context, h *Hosted, m *pb.OutboundMessage) error {
 // ------------------------------------------------------------- unary
 
 func (s *Server) ListAgents(ctx context.Context, _ *pb.ListAgentsRequest) (*pb.ListAgentsResponse, error) {
+	// Oldest first, not alphabetical: the order IS information.  The
+	// first is the default, and a client looking for an agent that can
+	// satisfy it should try them in this order.
 	out := &pb.ListAgentsResponse{}
-	for _, n := range s.Names() {
-		if h, ok := s.Agent(n); ok {
-			out.Agents = append(out.Agents, h.info())
-		}
+	for _, h := range s.Ranked() {
+		out.Agents = append(out.Agents, h.info())
 	}
 	return out, nil
 }
@@ -592,16 +596,15 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	return &pb.SendResponse{}, nil
 }
 
-// lookup resolves an agent name, defaulting to the only one when the
-// server hosts exactly one.
+// lookup resolves an agent name, defaulting to the session that has
+// been hosted longest.  See Server.Default for why that one.
 func (s *Server) lookup(name string) (*Hosted, error) {
 	if name == "" {
-		if names := s.Names(); len(names) == 1 {
-			name = names[0]
-		} else {
-			return nil, status.Error(codes.InvalidArgument,
-				"this server hosts several agents, so one must be named")
+		h, ok := s.Default()
+		if !ok {
+			return nil, status.Error(codes.NotFound, "this server holds no sessions")
 		}
+		return h, nil
 	}
 	h, ok := s.Agent(name)
 	if !ok {

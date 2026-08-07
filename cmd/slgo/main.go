@@ -154,16 +154,9 @@ func main() {
 }
 
 func mustAttach(ctx context.Context, c *client.Conn, name string, subscribe ...string) *slgov1.AgentInfo {
-	if name == "" {
-		agents, err := c.ListAgents(ctx)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if len(agents) != 1 {
-			log.Fatalf("the server hosts %d agents; name one with -agent", len(agents))
-		}
-		name = agents[0].Name
-	}
+	// An empty name goes through: the daemon picks the session it has
+	// held longest.  Resolving it here would make this program's idea of
+	// the default differ from every other client's.
 	info, err := c.Attach(ctx, name, subscribe...)
 	if err != nil {
 		log.Fatalf("attach: %v", err)

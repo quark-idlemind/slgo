@@ -156,3 +156,67 @@ func TestNoGroupSendsNothing(t *testing.T) {
 		t.Errorf("%d ActivateGroup sent for no group, want none", n)
 	}
 }
+
+// TestDefaultIsTheOldestSession pins the rule a bare command relies on:
+// of the sessions hosted, the default is the one hosted LONGEST, and it
+// changes only when that one goes away.
+//
+// The property matters more than the mechanism.  A default that moved
+// when an avatar was added would silently point an unchanged script at
+// a different avatar, and a benchmark run against the wrong avatar is
+// not an error -- it is a plausible number.
+func TestDefaultIsTheOldestSession(t *testing.T) {
+	srv := New()
+
+	if _, ok := srv.Default(); ok {
+		t.Fatal("an empty server has a default")
+	}
+
+	// Hosted directly rather than logged in: this is about ranking.
+	add := func(name string) *Hosted {
+		t.Helper()
+		h, err := srv.Add(name, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+
+	first := add("example")
+	if d, _ := srv.Default(); d != first {
+		t.Fatal("the only session is not the default")
+	}
+
+	second := add("qi")
+	third := add("helper")
+
+	// Adding never moves it, however the names sort -- "helper"
+	// sorts first alphabetically and must not win.
+	if d, _ := srv.Default(); d != first {
+		t.Errorf("default moved to %q when sessions were added", d.Name)
+	}
+
+	// Nor does a reconnect: the rank is the Hosted's, and the agent
+	// underneath is replaced on every reconnect.
+	first.setAgent(nil)
+	if d, _ := srv.Default(); d != first {
+		t.Errorf("default moved to %q after the agent underneath changed", d.Name)
+	}
+
+	// It moves when the default itself goes, and then to the next
+	// oldest rather than to whatever sorts first.
+	_, _ = srv.Remove("example")
+	if d, _ := srv.Default(); d != second {
+		t.Errorf("after the default went, default is %v, want qi", d)
+	}
+
+	_, _ = srv.Remove("qi")
+	if d, _ := srv.Default(); d != third {
+		t.Errorf("after two went, default is %v, want helper", d)
+	}
+
+	_, _ = srv.Remove("helper")
+	if _, ok := srv.Default(); ok {
+		t.Error("a server holding nothing still has a default")
+	}
+}

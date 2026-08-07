@@ -27,9 +27,11 @@ var _ Backend = (*Hosted)(nil)
 
 // Attach connects to a slgod and attaches to one of its sessions.
 //
-// An empty name takes the only session the daemon holds, since with
-// one there is nothing to choose and with several there is nothing to
-// guess.
+// An empty name takes the daemon's default: of the sessions it holds,
+// the one it has held longest.  Which one that was is in the returned
+// info, and a client that did not name a session should say so, since
+// the default depends on the daemon's history and nothing on disk
+// records it.
 func Attach(ctx context.Context, addr, name string, subscribe ...string) (*Hosted, error) {
 	conn, err := client.Dial(ctx, addr)
 	if err != nil {
@@ -45,29 +47,19 @@ func Attach(ctx context.Context, addr, name string, subscribe ...string) (*Hoste
 
 // AttachConn attaches on a connection the caller already has.
 func AttachConn(ctx context.Context, conn *client.Conn, name string, subscribe ...string) (*Hosted, error) {
-	if name == "" {
-		agents, err := conn.ListAgents(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("sl: cannot list the hosted sessions: %w", err)
-		}
-		switch len(agents) {
-		case 1:
-			name = agents[0].Name
-		case 0:
-			return nil, fmt.Errorf("sl: that slgod is holding no sessions")
-		default:
-			names := make([]string, 0, len(agents))
-			for _, a := range agents {
-				names = append(names, a.Name)
-			}
-			return nil, fmt.Errorf("sl: that slgod holds %d sessions (%v); name one", len(agents), names)
-		}
-	}
+	// An empty name is passed THROUGH rather than resolved here.  The
+	// daemon picks -- the session it has held longest -- and the
+	// Attached frame says which, so every client agrees about what "none
+	// named" means and a client too old to know the rule cannot disagree
+	// with one that does.
 	if len(subscribe) == 0 {
 		subscribe = Subscriptions
 	}
 	info, err := conn.Attach(ctx, name, subscribe...)
 	if err != nil {
+		if name == "" {
+			return nil, fmt.Errorf("sl: cannot attach to that slgod's default session: %w", err)
+		}
 		return nil, fmt.Errorf("sl: cannot attach to %q: %w", name, err)
 	}
 	return &Hosted{conn: conn, info: infoFromPB(info)}, nil
