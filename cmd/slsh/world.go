@@ -42,8 +42,8 @@ var worldCommands = map[string]*command{
 		run:   cmdFeatures,
 	},
 	"lsl": {
-		usage: "lsl [TEXT]",
-		brief: "the LSL this simulator implements: functions, constants, events",
+		usage: "lsl [-fcetam] [TEXT]",
+		brief: "the LSL this simulator implements: functions, constants, events, types",
 		run:   cmdLSL,
 	},
 	"worn": {
@@ -144,53 +144,6 @@ func cmdFeatures(ctx context.Context, sh *Shell, out io.Writer, args []string) e
 		default:
 			fmt.Fprintf(out, "%-30s %v\n", n, v)
 		}
-	}
-	return nil
-}
-
-func cmdLSL(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	s, err := sh.s.LSLSyntax(ctx)
-	if err != nil {
-		return err
-	}
-	if len(args) == 0 {
-		fmt.Fprintf(out, "version %d: %d functions, %d constants, %d events, %d types\n",
-			s.Version, len(s.Functions), len(s.Constants), len(s.Events), len(s.Types))
-		return nil
-	}
-
-	want := strings.ToLower(args[0])
-	for _, n := range s.FunctionNames() {
-		if !strings.Contains(strings.ToLower(n), want) {
-			continue
-		}
-		f := s.Functions[n]
-		line := f.Signature()
-		if f.Energy != 0 || f.Sleep != 0 {
-			line += fmt.Sprintf("   energy %g, sleep %g", f.Energy, f.Sleep)
-		}
-		if f.Deprecated {
-			line += "   [deprecated]"
-		}
-		fmt.Fprintln(out, line)
-	}
-	for _, n := range s.ConstantNames() {
-		if !strings.Contains(strings.ToLower(n), want) {
-			continue
-		}
-		c := s.Constants[n]
-		fmt.Fprintf(out, "%s %s = %s\n", c.Type, c.Name, c.Value)
-	}
-	for _, n := range s.EventNames() {
-		if !strings.Contains(strings.ToLower(n), want) {
-			continue
-		}
-		e := s.Events[n]
-		var as []string
-		for _, a := range e.Arguments {
-			as = append(as, a.Type+" "+a.Name)
-		}
-		fmt.Fprintf(out, "%s(%s)\n", e.Name, strings.Join(as, ", "))
 	}
 	return nil
 }
