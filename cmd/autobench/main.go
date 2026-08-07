@@ -76,6 +76,7 @@ var flags = struct {
 	Fast      bool          `getopt:"--fast skip looking for pad"`
 	Debug     bool          `getopt:"--debug enable debugging"`
 	Probe     bool          `getopt:"--probe send a simple script to LSL as a probe"`
+	NoCache   bool          `getopt:"--no-cache do not remember or reuse the padding for this base script"`
 	Timeout   time.Duration `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
 	Test      string        `getopt:"--test=PAD,SIZE[,LIMIT] for testing, see the source code"`
 }{
@@ -363,22 +364,65 @@ func noticef(format string, v ...any) {
 // This is the padding autobench *names*.  The pad it *runs* at is one byte
 // more; both callers add that themselves.
 func basePadding(b *runner, r *Results) int {
-	if flags.IPad == 0 {
-		// findPadding searches from minpad and returns an offset, so add
-		// minpad back: the sum is the last pad the base script still fits in,
-		// which is the padding.  Nothing is subtracted here -- findPadding has
-		// already stepped back off the crossing.
-		off, _ := findPadding(b, 0, minpad, r)
-		return off + minpad
-	}
 	// --ipad is an assertion, not a hint: the caller has run this shape before
 	// and is telling us what it measured.  Take it.  Verification costs two
 	// live runs and is available on request (--check-ipad), but it is the
 	// caller's call to spend them, not ours to spend on their behalf.
-	if flags.ICheck {
-		checkIPad(b, flags.IPad)
+	if flags.IPad != 0 {
+		if flags.ICheck {
+			checkIPad(b, flags.IPad)
+		}
+		return flags.IPad
 	}
-	return flags.IPad
+
+	// A padding already found for this base script is worth two runs to
+	// confirm and saves about a dozen.  It is confirmed rather than trusted:
+	// what SL's compiler does can change, and a padding that is wrong by k
+	// reports every Size wrong by k with nothing in the output to show it.
+	// Never under --test.  The model has no compiler and no memory
+	// limit; its paddings are arithmetic, not measurements, and writing
+	// them to the same file a live run reads would poison every later
+	// benchmark with numbers that never came from Second Life.
+	key := baseKey()
+	if !flags.NoCache && useTestInfo == nil {
+		if e, ok := loadPadCache()[key]; ok {
+			if held, at, above := paddingHolds(b, e.Padding); held {
+				debugf("padding %d remembered and confirmed (%d -> %d)\n",
+					e.Padding, at, above)
+				return e.Padding
+			}
+			noticef("the remembered padding %d no longer holds; searching again", e.Padding)
+			forgetPadding(key)
+		}
+	}
+
+	// findPadding searches from minpad and returns an offset, so add
+	// minpad back: the sum is the last pad the base script still fits in,
+	// which is the padding.  Nothing is subtracted here -- findPadding has
+	// already stepped back off the crossing.
+	off, _ := findPadding(b, 0, minpad, r)
+	pad := off + minpad
+	if !flags.NoCache && useTestInfo == nil {
+		rememberPadding(key, pad, r.Base)
+	}
+	return pad
+}
+
+// paddingHolds runs the base script either side of a padding and says
+// whether it is one: the largest pad still inside a 512-byte block, so
+// that one more byte crosses and memory grows.
+//
+// The two runs are independent and could be taken at the same time in
+// two objects; they are taken one after the other here because that is
+// all the machinery there is so far.
+func paddingHolds(b *runner, pad int) (held bool, at, above int) {
+	if !expressiblePadding(pad) {
+		return false, 0, 0
+	}
+	var below, over Results
+	mustRun(b, 0, pad, &below)
+	mustRun(b, 0, pad+1, &over)
+	return over.Base > below.Base, below.Base, over.Base
 }
 
 // checkIPad confirms that a supplied --ipad names a padding boundary, and is
@@ -393,13 +437,12 @@ func basePadding(b *runner, r *Results) int {
 // confirms is the value Padding: prints: hand a reported padding straight back
 // to --ipad --check-ipad and it passes.
 func checkIPad(b *runner, pad int) {
-	var above, at Results
-	mustRun(b, 0, pad, &at)
-	mustRun(b, 0, pad+1, &above)
-	debugf("IPad[%d] %d : %d, %d : %d\n", pad, pad, at.Base, pad+1, above.Base)
-	if above.Base > at.Base {
+	held, atMem, aboveMem := paddingHolds(b, pad)
+	debugf("IPad[%d] %d : %d, %d : %d\n", pad, pad, atMem, pad+1, aboveMem)
+	if held {
 		return
 	}
+	at, above := Results{Base: atMem}, Results{Base: aboveMem}
 	errf(`--ipad %d is not confirmed as a padding boundary.
 
 	pad %d: %d bytes

@@ -477,14 +477,32 @@ say what it is.
 ### Reusing the padding
 
 Both modes print a `Padding:` line. Finding that number costs about a
-dozen runs, and it is a property of the shape of the script rather than
-of the code being measured -- so when you benchmark the same shape
-again, hand it back and skip the search:
+dozen runs, and it is a property of the base script -- the harness with
+no copies of your code in it -- rather than of the code being measured.
 
-    autobench -1 --ipad 377 --code "integer gCNT;"
+You do not have to do anything about that: it is remembered, in
+`~/.config/slgo/autobench-padding`, and looked up by what the base
+script is. The code under test is not in the base script at all, so a
+benchmark of new code reuses the answer, and so does a different
+benchmark whose title is the same length -- a title is a string
+literal, and what it costs is its length.
 
-Add `--check-ipad` to spend two runs confirming it first. `--fast` skips
-the padding search altogether, which is quicker and less exact.
+    cold, nothing remembered   33s
+    the same benchmark again   20s
+    a different benchmark      19s
+
+An entry is confirmed rather than trusted. Using one runs the base
+script at that padding and one byte past it and requires memory to grow
+between them: two runs against the dozen a search costs, and an answer
+that has stopped holding -- because Second Life's compiler changed
+under it -- is thrown away and searched for again. So there is nothing
+to invalidate by hand.
+
+`--ipad N` still asserts a padding outright and skips all of this,
+`--check-ipad` confirms it, and `--no-cache` neither reads nor writes
+the file. Nothing measured with `--test` is ever remembered: the
+offline model has no compiler, and its paddings are arithmetic rather
+than measurements.
 
 ### Checking your connection
 
@@ -503,6 +521,7 @@ the padding search altogether, which is quicker and less exact.
 | `--title NAME` | name the benchmark, echoed in the output |
 | `--ipad N` | a padding from an earlier run |
 | `--check-ipad` | confirm `--ipad` before trusting it |
+| `--no-cache` | do not remember or reuse the padding |
 | `--fast` | skip the padding search |
 | `--max N` | most copies to use (default 512) |
 | `--object NAME`, `--keep` | as for `automate` |
