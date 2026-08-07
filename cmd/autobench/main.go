@@ -84,10 +84,10 @@ var flags = struct {
 	Start:   "last",
 	Timeout: time.Minute,
 	Max:     512,
-	// Three: one to measure in and two to take readings in, which is
-	// what a padding search wants -- it asks a question, then another
-	// that depends on the answer, and two at a time halves the rounds.
-	Objects: 3,
+	// Four: one to measure in and three to take readings in.  Three is
+	// what quarters a range, and quartering is what turns the nine
+	// rounds of a bisection into four or five.
+	Objects: 4,
 }
 
 // testInfo describes what a test would return
@@ -182,6 +182,54 @@ func findPadding(b *runner, cnt, pad int, r *Results) (offset, base int) {
 	}
 }
 
+// quarterSearch narrows the range by asking three pads at once instead
+// of one at a time.
+//
+// A bisection halves the range per round and spends one reading doing
+// it.  This quarters it and spends three -- and three readings taken
+// together cost about what one costs, since they are three round trips
+// in flight rather than three in a row.  Nine rounds become four or
+// five.
+//
+// The three answers are read in order, which is the whole of the logic:
+// the first pad whose memory has grown is above the crossing and puts
+// the ceiling there, and everything below the last pad that has NOT
+// grown is settled.
+//
+// It stops while the range is still wider than the probes can usefully
+// split.  Below that the quarters collide -- at a range of one they are
+// all the same pad, and a round that learns nothing would repeat for
+// ever -- so the last few bytes go to the bisection, which is one or
+// two more rounds and has the walk and the confirmation after it.
+//
+// Only for the base script, and never in the measured object: see
+// probe.go for both.
+func quarterSearch(b *runner, cnt, pad, base, low, high int) (int, int) {
+	if cnt != 0 || b == nil || len(b.spare) < 3 {
+		return low, high
+	}
+
+	for high-low >= 8 {
+		q := (high - low) / 4
+		p := []int{low + q, low + 2*q, low + 3*q}
+
+		mem := probeBase(b, []int{p[0] + pad, p[1] + pad, p[2] + pad})
+
+		switch {
+		case mem[0] > base:
+			high = p[0]
+		case mem[1] > base:
+			low, high = p[0], p[1]
+		case mem[2] > base:
+			low, high = p[1], p[2]
+		default:
+			low = p[2]
+		}
+		debugf("Quarter[%d] %d < ... < %d\n", cnt, low, high)
+	}
+	return low, high
+}
+
 // searchPadding is one attempt at findPadding: bisect the block, walk to the
 // exact byte, confirm.  ok is false when the confirmation found the base itself
 // to have been misread, in which case base is the corrected reading and the
@@ -196,16 +244,9 @@ func searchPadding(b *runner, cnt, pad int, r *Results, getBase func() int) (off
 	low := 0
 	high := blockSize
 
-	// The bisection is NOT done in parallel, and that was measured
-	// rather than assumed.  Probing several pads at once narrows the
-	// range in fewer rounds but spends more readings doing it, and a
-	// reading is the variable cost here: a dozen sequential searches
-	// took 36.7s twice running, and the same search with two probes a
-	// round took 42.2s and 31.4s.  Fewer rounds, no less time, and a
-	// spread that made the answer harder to trust.
-	//
-	// What does pay is paddingHolds, where the two readings are known
-	// in advance and there is nothing to narrow.
+	// Quarter the range while there is enough of it to quarter, asking
+	// three pads at once.  What is left is bisected below.
+	low, high = quarterSearch(b, cnt, pad, base, low, high)
 
 	for high-low > 1 {
 		mid = low + (high-low)/2
