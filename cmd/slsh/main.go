@@ -32,6 +32,7 @@ import (
 	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
 	"github.com/quark-idlemind/slgo/internal/creds"
+	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -39,7 +40,7 @@ import (
 type opts struct {
 	Direct  bool   `getopt:"--direct -d        log in to Second Life directly, without slgod"`
 	Addr    string `getopt:"--addr=HOSTPORT    the slgod to attach to; default sl-host, or this machine"`
-	Agent   string `getopt:"--agent=NAME -a    the profile to use; the only one, by default"`
+	Agent   string `getopt:"--agent=NAME -a    the profile to use; $SLGO_AGENT, or the daemon's default"`
 	First   string `getopt:"--first=NAME       the avatar's first name, for --direct"`
 	Last    string `getopt:"--last=NAME        the avatar's last name, for --direct"`
 	Start   string `getopt:"--start=WHERE      where to arrive: last, home, or a region, for --direct"`
@@ -63,7 +64,15 @@ func run() error {
 		return err
 	}
 
-	o := &opts{Addr: cfg.Addr, Agent: cfg.Agent, Start: "last"}
+	// SLGO_AGENT sits between the flag and the file: it describes this
+	// shell, where the file describes the machine, and --agent is the
+	// deliberate statement that beats both.  Using it as the flag's
+	// DEFAULT is what gives that order, since a flag actually given
+	// then overrides it.
+	o := &opts{Addr: cfg.Addr, Agent: session.AgentName(""), Start: "last"}
+	if o.Agent == "" {
+		o.Agent = cfg.Agent
+	}
 	args := options.RegisterAndParse(o)
 	if o.Help {
 		getopt.PrintUsage(os.Stdout)

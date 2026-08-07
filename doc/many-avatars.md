@@ -5,8 +5,10 @@ Written 2026-08-07, at commit `4be5a9d`.
 **Status.**  Stages 1, 2, 4 and 8 are built and running; the daemon
 holds example, qi and helper with example as the default, twelve auto objects
 apiece, and nine concurrent benchmarks have been run across the three.
-Stages 3, 5, 6 and 7 are still a plan -- and stage 7, not fighting the
-viewer, is the one that matters most of what is left.
+Stage 4 is complete including `SLGO_AGENT` and the sweep of hardcoded
+`-agent` defaults.  Stages 3, 5, 6 and 7 are still a plan -- and stage
+7, not fighting the viewer, is the one that matters most of what is
+left.
 
 slgod has been able to hold several sessions since it was written --
 `slgod -listen :7807 example qi` works today, every RPC carries the agent

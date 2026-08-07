@@ -17,6 +17,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/msg"
 	slgov1 "github.com/quark-idlemind/slgo/proto/slgov1"
 )
@@ -24,7 +25,7 @@ import (
 func main() {
 	var (
 		addr    = flag.String("server", "127.0.0.1:7778", "slgod address")
-		name    = flag.String("agent", "", "which hosted agent (default: the only one)")
+		name    = flag.String("agent", "", "which hosted agent ($SLGO_AGENT, or the daemon's default)")
 		limit   = flag.Duration("for", 30*time.Second, "how long to watch")
 		logfile = flag.String("log", "", "append chat to this file instead of stdout")
 	)
@@ -154,6 +155,7 @@ func main() {
 }
 
 func mustAttach(ctx context.Context, c *client.Conn, name string, subscribe ...string) *slgov1.AgentInfo {
+	name = session.AgentName(name)
 	// An empty name goes through: the daemon picks the session it has
 	// held longest.  Resolving it here would make this program's idea of
 	// the default differ from every other client's.

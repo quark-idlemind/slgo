@@ -44,7 +44,7 @@ const hello = `default
 
 func main() {
 	server := flag.String("server", "", "slgod (default: sl-host, port 7807)")
-	agent := flag.String("agent", "example", "hosted agent")
+	agent := flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	rez := flag.Bool("rez", false, "build a prim and put the script in it")
 	wear := flag.Bool("wear", false, "then take it and wear it")
 	listen := flag.Duration("listen", 20*time.Second, "how long to listen after each step")

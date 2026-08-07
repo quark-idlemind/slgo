@@ -86,6 +86,11 @@ func (a *Auto) Release() {
 // it.  Sessions opened to avatars that turned out to be busy are closed
 // here.
 func UseAutoAnywhere(ctx context.Context, o Options, n int) (*Auto, error) {
+	// Before the branch below, because an avatar named by the
+	// environment is still a named avatar: falling over to a different
+	// one would be ignoring what somebody asked for.
+	o.Agent = AgentName(o.Agent)
+
 	if n < 1 {
 		n = 1
 	}

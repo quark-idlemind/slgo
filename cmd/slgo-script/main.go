@@ -56,7 +56,7 @@ import (
 
 var (
 	addr    = flag.String("server", "", "slgod address (default: sl-host, port 7807)")
-	profile = flag.String("agent", "example", "hosted agent")
+	profile = flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	at      = flag.String("at", "200,213,27", "where to rez, region local")
 )
 

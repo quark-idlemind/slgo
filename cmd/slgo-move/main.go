@@ -30,7 +30,7 @@ import (
 
 var (
 	addr    = flag.String("server", "", "slgod address (default: sl-host, port 7807)")
-	profile = flag.String("agent", "example", "hosted agent")
+	profile = flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	step    = flag.Int("step", 16, "survey grid spacing in metres")
 	move    = flag.Bool("move", false, "teleport to the parcel found")
 	// Parcel properties do not carry the ground height, so the target

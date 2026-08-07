@@ -10,6 +10,8 @@ package sl
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
@@ -45,8 +47,36 @@ func Attach(ctx context.Context, addr, name string, subscribe ...string) (*Hoste
 	return h, nil
 }
 
+// EnvAgent names the session to use when nothing else does.
+//
+// It exists so the choice can be made once for a shell rather than
+// repeated on every command.  With one avatar hosted there was nothing
+// to choose; with several, every command that does not care still has
+// to be pointed somewhere, and pointing it by hand each time is how the
+// wrong avatar gets used.
+//
+// Read here rather than in each command, so that they cannot disagree
+// about what it means -- the same reason ConfigDir reads
+// SLGO_CONFIG_DIR rather than every caller doing it.
+const EnvAgent = "SLGO_AGENT"
+
+// AgentName resolves which session was asked for: what was named, or
+// the environment's answer, or empty to leave it to the daemon.
+//
+// A caller that treats "named" differently from "any will do" -- one
+// that would otherwise move on to another avatar when this one is busy
+// -- must ask THIS rather than test the string, because an avatar named
+// by the environment is still a named avatar.
+func AgentName(named string) string {
+	if named != "" {
+		return named
+	}
+	return strings.TrimSpace(os.Getenv(EnvAgent))
+}
+
 // AttachConn attaches on a connection the caller already has.
 func AttachConn(ctx context.Context, conn *client.Conn, name string, subscribe ...string) (*Hosted, error) {
+	name = AgentName(name)
 	// An empty name is passed THROUGH rather than resolved here.  The
 	// daemon picks -- the session it has held longest -- and the
 	// Attached frame says which, so every client agrees about what "none

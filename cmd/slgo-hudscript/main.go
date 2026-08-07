@@ -27,7 +27,7 @@ import (
 
 var (
 	addr    = flag.String("server", "", "slgod address (default: sl-host, port 7807)")
-	profile = flag.String("agent", "example", "hosted agent")
+	profile = flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	wear    = flag.String("hud", "Test HUD", "name of the attachment to script")
 	listen  = flag.Duration("listen", 45*time.Second, "how long to listen after")
 

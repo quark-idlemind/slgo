@@ -48,8 +48,14 @@ type Options struct {
 	Out io.Writer
 }
 
+// AgentName resolves which session was asked for.  See sl.AgentName:
+// the environment is read in one place so that no two commands can
+// disagree about what it means.
+func AgentName(named string) string { return sl.AgentName(named) }
+
 // Connect gets a session, through slgod or by logging in.
 func Connect(ctx context.Context, o Options) (*sl.Session, error) {
+	o.Agent = AgentName(o.Agent)
 	if !o.Direct {
 		if o.First != "" || o.Last != "" {
 			return nil, fmt.Errorf("--first and --last are for --direct; through slgod the session knows who it is")

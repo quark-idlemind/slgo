@@ -22,7 +22,7 @@ import (
 
 var (
 	addr  = flag.String("server", "127.0.0.1:7805", "slgod address")
-	agent = flag.String("agent", "example", "hosted agent")
+	agent = flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	at    = flag.String("at", "192,205,27", "where to rez, region local")
 	chat  = flag.String("chatlog", "", "append heard chat to this file")
 )

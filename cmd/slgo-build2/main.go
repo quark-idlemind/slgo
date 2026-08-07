@@ -16,7 +16,7 @@ import (
 
 var (
 	addr    = flag.String("server", "", "slgod address (default: sl-host, port 7807)")
-	profile = flag.String("agent", "example", "hosted agent")
+	profile = flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	at      = flag.String("at", "24,248,30", "where to build, region local")
 	take    = flag.Bool("take", false, "take it into inventory afterwards")
 	n       = flag.Int("n", 3, "how many of the prims to build")

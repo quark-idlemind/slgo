@@ -300,6 +300,22 @@ one object given to it and can make the rest itself.
 is what a command that names no avatar gets, and it is also the order a
 benchmark looks in for free objects.
 
+#### Which avatar a command uses
+
+    --agent NAME     this command, and nothing else
+    SLGO_AGENT       every command in this shell
+    agent = NAME     in the config file, for this machine
+    (nothing)        the daemon's default: the session it has held longest
+
+In that order of strength.  The daemon's default changes only when that
+session itself goes away -- adding an avatar never moves it, and neither
+does a reconnect -- so a script that worked yesterday drives the same
+avatar today.
+
+Whenever a command does not name one, it says which it used.  Worth
+reading: the default depends on the daemon's history and there is
+nothing on disk that records it.
+
 ### Talking
 
     say hello               one line to local chat, without leaving command mode

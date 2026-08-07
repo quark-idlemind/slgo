@@ -16,7 +16,7 @@ import (
 
 var (
 	addr    = flag.String("server", "", "slgod address (default: sl-host, port 7807)")
-	profile = flag.String("agent", "example", "hosted agent")
+	profile = flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	draw    = flag.Float64("draw", 0, "set the draw distance in metres")
 	named   = flag.String("named", "", "list objects with this name")
 	id      = flag.String("id", "", "describe one object by uuid")

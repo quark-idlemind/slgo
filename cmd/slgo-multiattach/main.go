@@ -23,7 +23,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:7809", "the slgod to attach to")
-	name := flag.String("agent", "helper", "which hosted agent")
+	name := flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	point := flag.Int("point", sl.HUDBottomLeft, "the attachment point to pile onto")
 	first := flag.String("first", "auto", "item already worn there")
 	second := flag.String("second", "auto probe", "item to add alongside it")

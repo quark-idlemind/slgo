@@ -24,7 +24,7 @@ import (
 
 func main() {
 	server := flag.String("server", "", "slgod to attach to (default: sl-host, port 7807)")
-	agent := flag.String("agent", "example", "which hosted agent")
+	agent := flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	object := flag.String("object", "", "object to move, by name")
 	at := flag.String("at", "", "where to put it, x,y,z in region coordinates")
 	desc := flag.String("desc", "", "also set the description; \"-\" clears it")

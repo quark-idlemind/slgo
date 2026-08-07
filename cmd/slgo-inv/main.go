@@ -33,7 +33,7 @@ const notecardText = "Hello from slgo.\nSecond line.\n"
 
 func main() {
 	server := flag.String("server", "", "slgod to attach to (default: sl-host, port 7807)")
-	agent := flag.String("agent", "example", "which hosted agent")
+	agent := flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	object := flag.String("object", "Box1", "a rezzed object to work with")
 	give := flag.String("give-to", "", "avatar uuid to offer an item to, if any")
 	groupID := flag.String("group", "", "group to activate first; a parcel usually grants building to one")
