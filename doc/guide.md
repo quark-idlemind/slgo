@@ -105,6 +105,8 @@ you expect.
     /$ cd Objects
     /Objects$ ls
     /Objects$ ls -l                 kind, date and id as well
+    /Objects$ ls -lT                the time of day too
+    /Objects$ ls -lt                newest first
     /Objects$ ls -r Textures        descend into subfolders
     /Objects$ find lantern          names containing "lantern", from here down
     /Objects$ cat "my notecard"     print a notecard or a script
@@ -112,6 +114,9 @@ you expect.
     /Objects$ mv "old lamp" sorted  move into a folder
     /Objects$ mv "old lamp" "lamp"  a plain name renames instead
     /Objects$ rm "old lamp"         permanent; there is no undo
+    /Objects$ rm --remove-all-copies "old lamp"
+    /Objects$ rm --remove-all-copies *      every item here
+    /Objects$ emptytrash
 
 `cd` with no path goes to the root, and `..` goes up.
 
@@ -122,6 +127,74 @@ backslash. Quote with `"` or `'` as well.
 Names are **not** unique -- one folder can hold a dozen things with the
 same name -- so `mv`, `rm` and `cat` accept an item's id anywhere they
 accept a path. That is what makes a listing of duplicates usable.
+
+A listing is in tree order: siblings by name, and things of the same
+name newest first, with every folder followed by what is inside it.
+`-t` sorts by time instead -- newest first across the whole listing,
+and by name for things made in the same second. A folder has no date
+and sorts last under `-t`.
+
+`rm` takes the first thing of the name it is given, which is the
+careful default when a name may mean a dozen items. `--remove-all-copies`
+takes all of them and says how many it took:
+
+    /Scripts$ rm --remove-all-copies /Scripts/slrun-bench
+    removed 431 of 645 copies          <- counting up, in place
+    /Scripts/slrun-bench: removed 645
+
+Each removal is a round trip, so six hundred of them take minutes. The
+count says it is working and roughly how much longer; it is written to
+the terminal and never to a file, so a redirect catches the result and
+not the flicker.
+
+`*` means every **item** in the folder, never its subfolders. It is not
+a glob -- it is the one pattern `rm` needs -- and it is refused without
+`--remove-all-copies`, so that the sweeping form has to be asked for:
+
+    /Scripts$ rm *
+    *: means every item in this folder: say rm --remove-all-copies * if that is what you want
+    /Scripts$ rm --remove-all-copies *
+    *: removed 645 items
+
+An item may itself be named `*`, since the grid allows nearly any
+character. Such an item can no longer be named at the prompt, but its
+id still names it -- which is what `ls -l` prints ids for.
+
+While a command runs there is no prompt. A prompt means the shell is
+ready for the next line, and during a long command it is not -- what
+you type then waits its turn and arrives when the command is done.
+
+`emptytrash` throws away everything in the trash, permanently, and says
+how much it threw:
+
+    /$ emptytrash
+    emptied the trash: 325
+
+The trash is found by what it is rather than what it is called, so it
+works on an account whose viewer named it something else.
+
+`ls -l` is four columns: kind, date, id, path. `-T` gives the time as
+well, joined to the date rather than put in a column of its own:
+
+    notecard   2026-08-02T15:09:30 3ae17e57-...-cbd3405daadf /Notecards/README
+
+so it is still four columns and anything reading the id out of the
+third field works either way. A folder has no date and shows a dash.
+
+Two listings of a folder that has not changed are identical, which is
+what makes them worth diffing and worth editing into commands.
+
+`help` lists every command, and `help CMD` describes one. The commands
+that take options -- `ls`, `say`, `friends` -- also answer `--help`
+with their own option list:
+
+    /$ ls --help
+    Usage: ls [-hlrTt] [PATH]
+     -h, --help  show what this command takes
+     -l          the columns: kind, date, id and path
+     -r          descend into the folders below
+     -T          the time of day as well as the date
+     -t          newest first, rather than by name
 
 ### The world around you
 
@@ -178,6 +251,19 @@ then run it:
 or from inside `slsh`:
 
     /$ . moves
+
+A file stops at the first command that fails, naming the line it gave
+up on and how much it did not run:
+
+    $ slsh -f moves
+    slsh: cd: no folder "sorted"
+    slsh: moves:1: cd sorted
+    slsh: stopped; 43 lines were not run
+
+That matters because such a file usually begins by changing folder, and
+carrying on after that failed would run every line that follows
+somewhere else. A one-shot run exits non-zero when anything failed, so
+a script wrapping slsh can tell without reading the output.
 
 `echo` prints its arguments, which is how you write a note into a file
 you are building.

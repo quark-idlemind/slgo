@@ -9,9 +9,11 @@ package main
 // for ls -l.
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,8 +37,8 @@ var inventoryCommands = map[string]*command{
 		run:   cmdCd,
 	},
 	"ls": {
-		usage: "ls [-l] [-r] [PATH]",
-		brief: "list a folder; -l for detail, -r to descend",
+		usage: "ls [-l] [-r] [-t] [-T] [PATH]",
+		brief: "list a folder; -l for detail, -T the time as well, -t newest first, -r to descend",
 		run:   cmdLs,
 	},
 	"cat": {
@@ -55,9 +57,14 @@ var inventoryCommands = map[string]*command{
 		run:   cmdMv,
 	},
 	"rm": {
-		usage: "rm PATH...",
-		brief: "delete items, permanently",
+		usage: "rm [--remove-all-copies] PATH...",
+		brief: "delete items, permanently; --remove-all-copies for every one of a name",
 		run:   cmdRm,
+	},
+	"emptytrash": {
+		usage: "emptytrash",
+		brief: "throw away everything in the trash, permanently",
+		run:   cmdEmptyTrash,
 	},
 	"find": {
 		usage: "find TEXT [PATH]",
@@ -124,12 +131,29 @@ func (sh *Shell) folderAt(ctx context.Context, names []string) (msg.UUID, error)
 // a listing of duplicates can still be edited into commands that mean
 // one each.
 func (sh *Shell) entryAt(ctx context.Context, path string) (sl.Entry, error) {
+	es, err := sh.entriesAt(ctx, path)
+	if err != nil {
+		return sl.Entry{}, err
+	}
+	return es[0], nil
+}
+
+// entriesAt is entryAt for everything the path names, in listing order.
+//
+// A path can name more than one thing, since a folder may hold a dozen
+// items called the same thing -- which is what rm --remove-all-copies
+// is for.  An id names exactly one, so that form returns the one.
+func (sh *Shell) entriesAt(ctx context.Context, path string) ([]sl.Entry, error) {
 	if id, err := msg.ParseUUID(strings.TrimSpace(path)); err == nil {
-		return sh.entryByID(ctx, id)
+		e, err := sh.entryByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return []sl.Entry{e}, nil
 	}
 	names := sl.SplitPath(path)
 	if len(names) == 0 {
-		return sl.Entry{}, fmt.Errorf("no path given")
+		return nil, fmt.Errorf("no path given")
 	}
 	dir := strings.Join([]string{}, "")
 	if strings.HasPrefix(path, "/") {
@@ -139,19 +163,36 @@ func (sh *Shell) entryAt(ctx context.Context, path string) (sl.Entry, error) {
 
 	_, id, err := sh.resolveDir(ctx, dir)
 	if err != nil {
-		return sl.Entry{}, err
+		return nil, err
 	}
 	es, err := sh.s.ListFolder(ctx, id, 0)
 	if err != nil {
-		return sl.Entry{}, err
+		return nil, err
 	}
 	want := names[len(names)-1]
+	found := matchName(es, want)
+	if len(found) == 0 {
+		return nil, fmt.Errorf("nothing called %q here", want)
+	}
+	return found, nil
+}
+
+// matchName picks out everything of a name, keeping the listing order
+// so that the first is the one a path without --remove-all-copies
+// means.
+//
+// The comparison ignores case, as the rest of the shell does: the grid
+// keeps the case a name was given but does not make two names that
+// differ only in case into two different names worth telling apart at a
+// prompt.
+func matchName(es []sl.Entry, want string) []sl.Entry {
+	var found []sl.Entry
 	for _, e := range es {
 		if strings.EqualFold(e.Name, want) {
-			return e, nil
+			found = append(found, e)
 		}
 	}
-	return sl.Entry{}, fmt.Errorf("nothing called %q here", want)
+	return found
 }
 
 // entryByID looks for an id here, then anywhere below the root.
@@ -201,23 +242,72 @@ func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	return nil
 }
 
-func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	long, deep := false, false
-	var path string
-	for _, a := range args {
-		switch {
-		case a == "-l":
-			long = true
-		case a == "-r":
-			deep = true
-		case a == "-lr" || a == "-rl":
-			long, deep = true, true
-		case strings.HasPrefix(a, "-"):
-			return fmt.Errorf("unknown option %q", a)
-		default:
-			path = a
-		}
+// lsOptions is what ls was asked for.
+//
+// The path is not an option and is unexported so that options leaves it
+// alone: it registers every field it can set, and a field with no tag
+// would become a flag named after itself.
+type lsOptions struct {
+	Long   bool `getopt:"-l          the columns: kind, date, id and path"`
+	Deep   bool `getopt:"-r          descend into the folders below"`
+	ByTime bool `getopt:"-t          newest first, rather than by name"`
+	Exact  bool `getopt:"-T          the time of day as well as the date"`
+	Help   bool `getopt:"--help -h   show what this command takes"`
+
+	path string
+	done bool
+}
+
+func readLsOptions(out io.Writer, args []string) (lsOptions, error) {
+	var o lsOptions
+	rest, done, err := subOptions("ls", "[PATH]", &o, out, args)
+	if err != nil {
+		return o, err
 	}
+	if o.done = done; done {
+		return o, nil
+	}
+	if len(rest) > 1 {
+		return o, fmt.Errorf("only one folder at a time")
+	}
+	if len(rest) == 1 {
+		o.path = rest[0]
+	}
+	// The time is detail, and detail is what -l is, so asking for it
+	// asks for the long form too.
+	if o.Exact {
+		o.Long = true
+	}
+	return o, nil
+}
+
+// lsWhen formats the date column.
+//
+// -T widens this column rather than adding one, and joins the time to
+// the date with a T rather than a space, so that a listing has four
+// columns whether or not the time was asked for: a script that reads
+// the id out of the third field goes on working either way, which is
+// the whole reason the listing is laid out in columns at all.
+//
+// A folder has no date, and an empty column would move every column
+// after it, so it gets a dash.
+func lsWhen(created int64, exact bool) string {
+	layout := "2006-01-02"
+	if exact {
+		layout = "2006-01-02T15:04:05"
+	}
+	if created <= 0 {
+		return "-"
+	}
+	return time.Unix(created, 0).Format(layout)
+}
+
+func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	o, err := readLsOptions(out, args)
+	if err != nil || o.done {
+		return err
+	}
+	long, deep, exact, path := o.Long, o.Deep, o.Exact, o.path
 
 	names, id, err := sh.resolveDir(ctx, path)
 	if err != nil {
@@ -232,6 +322,10 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		return err
 	}
 
+	if o.ByTime {
+		sortByTime(es)
+	}
+
 	prefix := "/" + sl.JoinPath(names...)
 	if len(names) == 0 {
 		prefix = ""
@@ -244,18 +338,41 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			fmt.Fprintln(out, full)
 			continue
 		}
-		kind := kindOf(e)
-		// A folder has no date, and an empty column would move
-		// every column after it -- which matters, because the
-		// point of this listing is that it can be cut up by a
-		// program.
-		when := "-"
-		if e.Created > 0 {
-			when = time.Unix(e.Created, 0).Format("2006-01-02")
+		width := 10
+		if exact {
+			width = 19
 		}
-		fmt.Fprintf(out, "%-10s %-10s %-36s %s\n", kind, when, e.ID, full)
+		fmt.Fprintf(out, "%-10s %-*s %-36s %s\n",
+			kindOf(e), width, lsWhen(e.Created, exact), e.ID, full)
 	}
 	return nil
+}
+
+// sortByTime puts a listing newest first, and things made in the same
+// second by name.
+//
+// This is a flat order and not a tree one: it is asked for to see what
+// was made recently, and grouping by folder would bury a thing made a
+// minute ago under whichever folder it happens to live in.  Without it
+// a listing is in tree order, siblings by name.
+//
+// A folder has no date and sorts as the oldest thing there is, which
+// puts folders at the end where they are out of the way.
+func sortByTime(es []sl.Entry) {
+	sort.SliceStable(es, func(i, j int) bool {
+		a, b := es[i], es[j]
+		if a.Created != b.Created {
+			return a.Created > b.Created
+		}
+		if x, y := strings.ToLower(a.Name), strings.ToLower(b.Name); x != y {
+			return x < y
+		}
+		if a.Name != b.Name {
+			return a.Name < b.Name
+		}
+		// So that the same folder listed twice reads the same twice.
+		return bytes.Compare(a.ID[:], b.ID[:]) < 0
+	})
 }
 
 // kindOf names what an entry is, in a word.
@@ -423,25 +540,153 @@ func cmdMv(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	return err
 }
 
+// allItems is the path that means every item in this folder.
+//
+// It is not a glob: the shell has no pattern matching, and this is the
+// one pattern rm needs.  Folders are never included -- emptying a
+// folder of its items is a thing to want, and taking its subfolders
+// with them is not.
+//
+// An item may be named "*", since the grid allows nearly any printable
+// character in a name.  Such an item cannot be named at a prompt any
+// more; its id still names it, which is what ls -l prints ids for.
+const allItems = "*"
+
+// rmOptions is what rm was asked for.
+type rmOptions struct {
+	AllCopies bool `getopt:"--remove-all-copies  delete everything of that name, not just the first"`
+	Help      bool `getopt:"--help -h            show what this command takes"`
+}
+
 func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o rmOptions
+	args, done, err := subOptions("rm", "PATH ...", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	if len(args) == 0 {
-		return fmt.Errorf("usage: rm PATH...")
+		return fmt.Errorf("usage: rm [--remove-all-copies] PATH...")
 	}
 	for _, path := range args {
-		e, err := sh.entryAt(ctx, path)
+		// One name, and a folder may hold a dozen things wearing it.
+		// Without the flag rm takes the first, which is the careful
+		// thing to do by default: deleting is permanent here, and a
+		// path that turns out to mean twelve items is not something to
+		// discover afterwards.
+		var targets []sl.Entry
+		switch {
+		case path == allItems:
+			// Refused rather than guessed at.  Taking it to mean one
+			// arbitrary item would be surprising, and taking it to mean
+			// all of them without being asked is not something to
+			// discover after the fact.
+			if !o.AllCopies {
+				return fmt.Errorf("%s means every item in this folder: "+
+					"say rm --remove-all-copies %s if that is what you want", allItems, allItems)
+			}
+			targets, err = sh.itemsHere(ctx)
+		case o.AllCopies:
+			targets, err = sh.entriesAt(ctx, path)
+		default:
+			var e sl.Entry
+			if e, err = sh.entryAt(ctx, path); err == nil {
+				targets = []sl.Entry{e}
+			}
+		}
 		if err != nil {
 			return err
 		}
-		if e.Folder {
-			if err := sh.s.DeleteFolder(ctx, e.ID); err != nil {
+
+		// What they are called, which is not "copies" when the path
+		// was * and they only have being here in common.
+		noun := "copies"
+		if path == allItems {
+			noun = "items"
+		}
+		// Six hundred deletions is six hundred round trips and takes
+		// minutes.  Counting up in place says it is working and roughly
+		// how much longer, which the alternative -- a silent terminal
+		// and then one line -- does not.  It goes to the terminal and
+		// not to out: it is not output, and a redirect must catch the
+		// result rather than a flickering count.
+		many := len(targets) > 1
+		for i, e := range targets {
+			if e.Folder {
+				if err := sh.s.DeleteFolder(ctx, e.ID); err != nil {
+					sh.term.Status("")
+					return fmt.Errorf("%s: %w", path, err)
+				}
+			} else if err := sh.s.DeleteItem(ctx, e.ID); err != nil {
+				sh.term.Status("")
 				return fmt.Errorf("%s: %w", path, err)
 			}
-			continue
+			if many {
+				sh.term.Status(fmt.Sprintf("removed %d of %d %s", i+1, len(targets), noun))
+			}
 		}
-		if err := sh.s.DeleteItem(ctx, e.ID); err != nil {
-			return fmt.Errorf("%s: %w", path, err)
+		// Say so when one path meant many things: the count is the
+		// only evidence that the flag did what was wanted.
+		if many {
+			sh.term.Status("")
+			fmt.Fprintf(out, "%s: removed %d %s\n", path, len(targets), noun)
 		}
 	}
+	return nil
+}
+
+// itemsHere is every item in the working folder, and no folders.
+func (sh *Shell) itemsHere(ctx context.Context) ([]sl.Entry, error) {
+	sh.mu.Lock()
+	cwd := sh.cwdID
+	sh.mu.Unlock()
+
+	es, err := sh.s.ListFolder(ctx, cwd, 0)
+	if err != nil {
+		return nil, err
+	}
+	var items []sl.Entry
+	for _, e := range es {
+		if !e.Folder {
+			items = append(items, e)
+		}
+	}
+	return items, nil
+}
+
+// emptyTrashOptions is what emptytrash was asked for, which is nothing
+// but the usual --help.
+type emptyTrashOptions struct {
+	Help bool `getopt:"--help -h  show what this command takes"`
+}
+
+func cmdEmptyTrash(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o emptyTrashOptions
+	rest, done, err := subOptions("emptytrash", "", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(rest) > 0 {
+		return fmt.Errorf("usage: emptytrash")
+	}
+
+	trash, err := sh.s.TrashFolder(ctx)
+	if err != nil {
+		return err
+	}
+	// Counted first, because the count is the only report there will
+	// be: afterwards there is nothing left to count.
+	es, err := sh.s.ListFolder(ctx, trash, 0)
+	if err != nil {
+		return err
+	}
+	if len(es) == 0 {
+		fmt.Fprintln(out, "the trash is already empty")
+		return nil
+	}
+	if err := sh.s.PurgeFolder(ctx, trash); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "emptied the trash: %d\n", len(es))
 	return nil
 }
 
@@ -462,6 +707,7 @@ func cmdFind(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if err != nil {
 		return err
 	}
+
 	prefix := "/" + sl.JoinPath(names...)
 	if len(names) == 0 {
 		prefix = ""

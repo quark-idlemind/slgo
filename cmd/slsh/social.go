@@ -255,15 +255,19 @@ func cmdChat(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	return nil
 }
 
+// sayOptions is what say was asked for.
+type sayOptions struct {
+	Channel int  `getopt:"-c=CHANNEL  the channel to say it on; negative ones reach scripts"`
+	Help    bool `getopt:"--help -h   show what this command takes"`
+}
+
 func cmdSay(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	channel := int32(0)
-	if len(args) >= 2 && args[0] == "-c" {
-		n, err := strconv.Atoi(args[1])
-		if err != nil {
-			return fmt.Errorf("%q is not a channel", args[1])
-		}
-		channel, args = int32(n), args[2:]
+	var o sayOptions
+	args, done, err := subOptions("say", "TEXT ...", &o, out, args)
+	if err != nil || done {
+		return err
 	}
+	channel := int32(o.Channel)
 	if len(args) == 0 {
 		return fmt.Errorf("usage: say [-c CHANNEL] TEXT")
 	}
@@ -304,8 +308,18 @@ func cmdIM(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	return nil
 }
 
+// friendsOptions is what friends was asked for.
+type friendsOptions struct {
+	All  bool `getopt:"-a          everyone, not only whoever is online"`
+	Help bool `getopt:"--help -h   show what this command takes"`
+}
+
 func cmdFriends(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	all := len(args) > 0 && args[0] == "-a"
+	var o friendsOptions
+	if _, done, err := subOptions("friends", "", &o, out, args); err != nil || done {
+		return err
+	}
+	all := o.All
 	var ps []sl.Person
 	var err error
 	if all {

@@ -15,6 +15,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -174,13 +175,27 @@ func (sh *Shell) enter(ctx context.Context) {
 	// Leave the command on the screen before running it, so that the
 	// output underneath says what it is the output of.
 	sh.term.Echo()
+
+	// No prompt until the command has returned.  Drawing one first said
+	// the shell was ready when it was not: a command that takes ten
+	// seconds -- removing six hundred items, walking the whole tree --
+	// left a prompt sitting there that would not take a keystroke, and
+	// the only way to tell that from a finished command was to try.
+	//
+	// Deferred so that it comes back however the command leaves, panic
+	// included; a shell with no prompt is a shell that looks hung.
+	sh.term.SetBusy(true)
 	line := sh.term.Take()
+	defer func() {
+		sh.term.SetBusy(false)
+		sh.prompt()
+	}()
+
 	if strings.TrimSpace(line) == "" {
 		return
 	}
 	sh.remember(line)
 	sh.Do(ctx, line)
-	sh.prompt()
 }
 
 // recall walks the history.
@@ -263,20 +278,30 @@ func (sh *Shell) Pwd() string {
 
 // ---------------------------------------------------------------- running
 
+// errStopped says a file of commands gave up because one of them
+// failed.  What failed has already been reported where it happened, so
+// whatever sees this must not report it a second time; it only says not
+// to carry on.
+var errStopped = errors.New("stopped")
+
 // Do runs one command line: tokens, redirection, and the command.
-func (sh *Shell) Do(ctx context.Context, line string) {
+//
+// The error is for a caller that has to decide whether to go on -- a
+// file of commands does -- and is reported here either way, since the
+// person watching wants to know at the moment it happens.
+func (sh *Shell) Do(ctx context.Context, line string) error {
 	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, "#") {
-		return
+		return nil
 	}
 
 	words, redirect, appending, err := parse(line)
 	if err != nil {
 		sh.errorf("%v", err)
-		return
+		return err
 	}
 	if len(words) == 0 {
-		return
+		return nil
 	}
 
 	out := io.Writer(sh.stdout())
@@ -290,26 +315,33 @@ func (sh *Shell) Do(ctx context.Context, line string) {
 		f, err := os.OpenFile(redirect, flags, 0o644)
 		if err != nil {
 			sh.errorf("%v", err)
-			return
+			return err
 		}
 		defer f.Close()
 		out = f
 	}
 
-	sh.run(ctx, out, words)
+	return sh.run(ctx, out, words)
 }
 
 // run dispatches one already-parsed command.
-func (sh *Shell) run(ctx context.Context, out io.Writer, words []string) {
+func (sh *Shell) run(ctx context.Context, out io.Writer, words []string) error {
 	name, args := words[0], words[1:]
 	c, ok := commands[name]
 	if !ok {
 		sh.errorf("%s: no such command; try help", name)
-		return
+		return fmt.Errorf("no such command: %s", name)
 	}
-	if err := c.run(ctx, sh, out, args); err != nil {
+	err := c.run(ctx, sh, out, args)
+	switch {
+	case err == nil:
+	case errors.Is(err, errStopped):
+		// A sourced file that stopped.  Where and why is already on
+		// the screen; saying "stopped" again adds nothing.
+	default:
 		sh.errorf("%s: %v", name, err)
 	}
+	return err
 }
 
 // Source reads commands from a file, one per line.
@@ -342,9 +374,42 @@ func (sh *Shell) Source(ctx context.Context, path string) error {
 			return nil
 		default:
 		}
-		sh.Do(ctx, line)
+		if err := sh.Do(ctx, line); err != nil {
+			// Stop here rather than running the rest against a state
+			// nobody intended.  A file of moves usually begins by
+			// changing folder, and carrying on after that failed runs
+			// every remaining line somewhere else -- which, when the
+			// lines are removals, is not a thing to find out about
+			// afterwards.
+			sh.errorf("%s:%d: %s", path, n, line)
+			left := remaining(sc)
+			sh.errorf("stopped; %d %s not run", left, plural(left, "line was", "lines were"))
+			return errStopped
+		}
 	}
 	return sc.Err()
+}
+
+// plural picks the wording, because "1 lines were not run" reads like a
+// bug in the thing reporting the bug.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+// remaining counts what is left in a file that has stopped, so the
+// report can say how much did not happen.
+func remaining(sc *bufio.Scanner) int {
+	n := 0
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line != "" && !strings.HasPrefix(line, "#") {
+			n++
+		}
+	}
+	return n
 }
 
 // ---------------------------------------------------------------- output

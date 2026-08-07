@@ -69,6 +69,12 @@ type Term struct {
 	restore func() error
 	closed  bool
 
+	// busy says a command is running.  While it is, the prompt is not
+	// drawn: a prompt means the shell is ready for the next line, and
+	// it is not -- keys typed at it wait in the queue until the command
+	// returns.  Output still prints; only the prompt waits.
+	busy bool
+
 	// plain is a terminal that is not one: a pipe, in a test or a
 	// script.  Nothing is redrawn and no key is special, because
 	// there is nobody watching and no raw mode to read them in.
@@ -366,6 +372,30 @@ func (t *Term) Print(s string) {
 	t.redrawLocked()
 }
 
+// Status writes a line in place, over whatever Status wrote last.
+//
+// It is for progress: something worth watching while it happens and not
+// worth keeping afterwards, so it is overwritten rather than scrolled
+// and it never reaches a file.  A command's real output goes to its
+// writer, which may be a redirect; this goes to the terminal or
+// nowhere.  Status("") clears the line.
+func (t *Term) Status(s string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.plain || t.closed {
+		return
+	}
+	fmt.Fprint(t.out, "\r\x1b[K"+s)
+}
+
+// SetBusy says whether a command is running, and so whether a prompt
+// would be telling the truth.
+func (t *Term) SetBusy(busy bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.busy = busy
+}
+
 // SetPrompt changes the prompt and redraws it.
 func (t *Term) SetPrompt(p string) {
 	t.mu.Lock()
@@ -489,7 +519,7 @@ func (t *Term) Echo() {
 // screen.  A wrapped line would leave the display a mess after the next
 // message arrives above it.
 func (t *Term) redrawLocked() {
-	if t.plain || t.closed {
+	if t.plain || t.closed || t.busy {
 		return
 	}
 	avail := t.width - len([]rune(t.prompt)) - 1

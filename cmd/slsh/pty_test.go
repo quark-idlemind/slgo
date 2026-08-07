@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -38,7 +39,16 @@ var (
 	harnessMe    = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
 	harnessOther = msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")
 	harnessRoot  = msg.MustParseUUID("12b57e57-7e57-c0de-efe3-b327af5dfe62")
+
+	// harnessSlow is a folder the fake takes its time over, so that a
+	// test can look at the screen WHILE a command is still running.
+	harnessSlow = msg.MustParseUUID("47687e57-7e57-c0de-8baf-656f9f67e24b")
 )
+
+// slowListing is how long the fake dawdles over harnessSlow.  Long
+// enough to look at the screen in the middle of it, short enough not to
+// be felt in a test run.
+const slowListing = 900 * time.Millisecond
 
 // harness is the program goterm launches: the real terminal and the
 // real shell, over a backend that answers from nothing.
@@ -110,6 +120,9 @@ func (b *fakeBackend) DoCap(ctx context.Context, r agent.CapRequest) (*agent.Cap
 	if !strings.HasPrefix(r.Path, "/category/") {
 		return &agent.CapResponse{Status: 404}, nil
 	}
+	if strings.Contains(r.Path, harnessSlow.String()) {
+		time.Sleep(slowListing)
+	}
 	body := `<?xml version="1.0" ?><llsd><map>
 	  <key>category_id</key><uuid>` + harnessRoot.String() + `</uuid>
 	  <key>_embedded</key><map>
@@ -118,6 +131,11 @@ func (b *fakeBackend) DoCap(ctx context.Context, r agent.CapRequest) (*agent.Cap
 	        <key>category_id</key><uuid>35517e57-7e57-c0de-220b-d980670cf2d2</uuid>
 	        <key>parent_id</key><uuid>` + harnessRoot.String() + `</uuid>
 	        <key>name</key><string>Objects</string>
+	      </map>
+	      <key>` + harnessSlow.String() + `</key><map>
+	        <key>category_id</key><uuid>` + harnessSlow.String() + `</uuid>
+	        <key>parent_id</key><uuid>` + harnessRoot.String() + `</uuid>
+	        <key>name</key><string>slow</string>
 	      </map>
 	    </map>
 	    <key>items</key><map>
@@ -332,6 +350,77 @@ func TestPTYChatDoesNotEchoTheRawLine(t *testing.T) {
 	if strings.Contains(s.text(), "Local> hello everyone\n") {
 		t.Errorf("chat echoed the line as well as marking it:\n%s", s.text())
 	}
+}
+
+// TestPTYPromptWaitsForTheCommand.
+//
+// A prompt says the shell is ready for the next line.  It used to be
+// drawn as soon as the line was taken, so a command that took ten
+// seconds left a prompt sitting there that would not accept a
+// keystroke, and the only way to tell it from a finished command was to
+// try typing at it.
+func TestPTYPromptWaitsForTheCommand(t *testing.T) {
+	s := start(t, 24, 80)
+
+	s.send("ls slow\r")
+
+	// Partway through: the command is on the screen, and there is no
+	// prompt under it, because there is nothing to type at yet.
+	time.Sleep(slowListing / 3)
+	if got := s.prompt(); got != "/$ ls slow" {
+		t.Errorf("during the command the last line should still be the command, got %q\nscreen:\n%s",
+			got, s.text())
+	}
+
+	// And it comes back when the command is done.
+	s.waitPrompt("/$")
+}
+
+// TestPTYSourceStopsAtTheFirstFailure.
+//
+// A file of commands usually begins by changing folder, and carrying on
+// after that failed would run every line that follows somewhere else --
+// which, when the lines are removals, is not a thing to find out about
+// afterwards.
+func TestPTYSourceStopsAtTheFirstFailure(t *testing.T) {
+	s := start(t, 24, 80)
+
+	path := filepath.Join(t.TempDir(), "moves")
+	script := "cd Objects\n" +
+		"cd nowhere at all\n" + // fails: no such folder
+		"echo THIS-MUST-NOT-RUN\n"
+	if err := os.WriteFile(path, []byte(script), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s.send(". " + path + "\r")
+	s.waitText("stopped")
+	s.waitPrompt("/Objects$")
+
+	if strings.Contains(s.text(), "THIS-MUST-NOT-RUN") {
+		t.Errorf("the file carried on after a failure:\n%s", s.text())
+	}
+	// It says where it gave up and how much did not happen.
+	if !strings.Contains(s.text(), "moves:2") {
+		t.Errorf("the report should name the line that failed:\n%s", s.text())
+	}
+	if !strings.Contains(s.text(), "1 line was not run") {
+		t.Errorf("the report should say how much was skipped:\n%s", s.text())
+	}
+	// The first line did run: we are in Objects.
+}
+
+// TestPTYSourceRunsRightThroughWhenNothingFails
+func TestPTYSourceRunsRightThroughWhenNothingFails(t *testing.T) {
+	s := start(t, 24, 80)
+
+	path := filepath.Join(t.TempDir(), "fine")
+	if err := os.WriteFile(path, []byte("cd Objects\necho ALL-THE-WAY\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.send(". " + path + "\r")
+	s.waitText("ALL-THE-WAY")
+	s.waitPrompt("/Objects$")
 }
 
 // TestPTYUnknownCommandSaysSo: and does not leave the shell.

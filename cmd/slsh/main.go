@@ -145,13 +145,21 @@ func run() error {
 	// printed, so it cannot land in the middle of the output.
 	if oneShot {
 		go sh.watchQuietly(ctx)
+		// A failed command is a failed run.  Exiting 0 either way left
+		// anything driving slsh from a script no way to tell without
+		// scraping the output.
+		var err error
 		switch {
 		case o.Command != "":
-			sh.Do(ctx, o.Command)
+			err = sh.Do(ctx, o.Command)
 		case o.File != "":
-			return sh.Source(ctx, o.File)
+			err = sh.Source(ctx, o.File)
 		default:
-			sh.Do(ctx, strings.Join(args, " "))
+			err = sh.Do(ctx, strings.Join(args, " "))
+		}
+		if err != nil {
+			// Already reported where it happened.
+			os.Exit(1)
 		}
 		return nil
 	}
