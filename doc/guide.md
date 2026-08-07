@@ -184,6 +184,9 @@ third field works either way. A folder has no date and shows a dash.
 Two listings of a folder that has not changed are identical, which is
 what makes them worth diffing and worth editing into commands.
 
+`quit` leaves, and so does Ctrl-D on an empty line; through slgod that
+leaves the avatar logged in, and with `--direct` it does not.
+
 `help` lists every command, and `help CMD` describes one. The commands
 that take options -- `ls`, `say`, `friends` -- also answer `--help`
 with their own option list:
@@ -383,8 +386,9 @@ compiled, ran and finished.
 
 | | |
 |---|---|
-| `--object NAME` | run in this object instead of rezzing one |
-| `--keep` | leave the rezzed object behind |
+| `--object NAME` | run in this object instead of the shared `auto` one |
+| `--rez` | rez a throwaway prim for this run, and do not queue |
+| `--keep` | leave a rezzed prim behind |
 | `--done TEXT` | the text that means "finished" (default `DONE`) |
 | `--timeout DUR` | how long to wait for it (default `1m`) |
 | `--script NAME` | what to call the script inside the object |
@@ -549,10 +553,12 @@ than measurements.
 | `--ipad N` | a padding from an earlier run |
 | `--check-ipad` | confirm `--ipad` before trusting it |
 | `--no-cache` | do not remember or reuse the padding |
-| `--objects N` | how many objects to take readings in at once (default 3) |
+| `--objects N` | how many objects to run in at once (default 4: one to measure in, three to probe with) |
 | `--fast` | skip the padding search |
 | `--max N` | most copies to use (default 512) |
-| `--object NAME`, `--keep` | as for `automate` |
+| `--object NAME`, `--rez`, `--keep` | as for `automate` |
+| `--pad PAD` | extra filler in the base script |
+| `--debug` | say what the search is doing |
 | `--timeout DUR` | how long one script may take |
 | `-v` | print each script before running it |
 | `--probe` | check the connection and exit |
