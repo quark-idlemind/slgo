@@ -100,6 +100,73 @@ func (w *Session) DeleteItem(ctx context.Context, item msg.UUID) error {
 	return w.aisDelete(ctx, "item", item)
 }
 
+// CopyItem duplicates an inventory item under a new name and returns
+// the copy.
+//
+// This is how an avatar that may not rez still gets more objects: an
+// object it already owns can be duplicated in inventory and worn,
+// without the land ever being asked whether a new one may be created.
+// The item has to be copyable -- a no-copy item has nothing to
+// duplicate, and the grid simply does not answer.
+//
+// The new id is the grid's to choose, unlike a folder's, so the copy is
+// found by looking for its name rather than by knowing it in advance.
+// An empty name means the same name as the original, which inside one
+// folder gives two items a person cannot tell apart; it is allowed
+// because the protocol allows it, but naming the copy is better.
+func (w *Session) CopyItem(ctx context.Context, item, folder msg.UUID, name string, timeout time.Duration) (*Item, error) {
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	if folder.IsZero() {
+		return nil, fmt.Errorf("sl: a copy needs a folder to go in")
+	}
+
+	before, err := w.FolderItems(ctx, folder)
+	if err != nil {
+		return nil, err
+	}
+	had := make(map[msg.UUID]bool, len(before))
+	for _, it := range before {
+		had[it.ID] = true
+	}
+
+	m := &msg.CopyInventoryItem{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.InventoryData = []msg.CopyInventoryItem_InventoryData{{
+		OldAgentID:  w.me,
+		OldItemID:   item,
+		NewFolderID: folder,
+		NewName:     append([]byte(name), 0),
+	}}
+	if err := w.Send(ctx, m); err != nil {
+		return nil, err
+	}
+
+	// Read it back rather than believe the send: nothing in this file
+	// reports success on the strength of no error.
+	deadline := time.Now().Add(timeout)
+	for {
+		items, err := w.FolderItems(ctx, folder)
+		if err == nil {
+			for _, it := range items {
+				if had[it.ID] {
+					continue
+				}
+				if name == "" || it.Name == name {
+					copied := it
+					return copied, nil
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("sl: the copy of %s never appeared "+
+				"(a no-copy item cannot be duplicated): %w", item, ErrTimeout)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
 // FolderTrash is the preferred type the grid gives the trash.
 //
 // A folder is the trash because of its preferred type, not its name: it
@@ -387,8 +454,14 @@ func (w *Session) GiveToAvatar(ctx context.Context, to msg.UUID, id msg.UUID, na
 	m.MessageBlock.Offline = 0
 	m.MessageBlock.ID = randomUUID()
 	m.MessageBlock.Position = where.Position
-	m.MessageBlock.FromAgentName = []byte(w.Info().AvatarName)
-	m.MessageBlock.Message = []byte(name)
+	// Nul-terminated, like every other string on this protocol.  Sent
+	// without it the simulator takes the last character AS the
+	// terminator, and the offer arrives naming "aut" -- observed, not
+	// theorised.  The item itself is unharmed, since its name travels
+	// with the asset and not in this field, so the damage is confined
+	// to what the recipient is shown.
+	m.MessageBlock.FromAgentName = append([]byte(w.Info().AvatarName), 0)
+	m.MessageBlock.Message = append([]byte(name), 0)
 	m.MessageBlock.BinaryBucket = bucket
 	return w.Send(ctx, m)
 }

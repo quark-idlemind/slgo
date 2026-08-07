@@ -227,6 +227,85 @@ func (o *Offer) Decline(ctx context.Context) error {
 	return nil
 }
 
+// ------------------------------------------------------------ inventory
+
+// InventoryOffer is somebody offering an item or a folder.
+//
+// GiveToAvatar makes one of these on the other side.  Nothing arrives
+// in inventory until it is accepted: the offer is an instant message
+// and the answer is another one, quoting the same transaction.
+type InventoryOffer struct {
+	From     msg.UUID
+	FromName string
+
+	// Name is what the giver called it, which is the message text.
+	Name string
+
+	// Asset is the kind of thing, and Item its id, both read out of
+	// the binary bucket.  A FOLDER is offered as AssetCategory, and
+	// then Item is the folder.
+	Asset AssetType
+	Item  msg.UUID
+
+	// Transaction is the offer's id, which the answer has to quote or
+	// the simulator will not match it to anything.
+	Transaction msg.UUID
+}
+
+func (o *InventoryOffer) String() string {
+	return fmt.Sprintf("%s offers %q", o.FromName, o.Name)
+}
+
+// InventoryOfferFrom reads an offer out of an instant message, and says
+// whether it was one.
+func InventoryOfferFrom(im *IM) (*InventoryOffer, bool) {
+	if im.Dialog != DialogInventoryOffered || len(im.Bucket) < 17 {
+		return nil, false
+	}
+	o := &InventoryOffer{
+		From:        im.From,
+		FromName:    im.FromName,
+		Name:        im.Text,
+		Asset:       AssetType(int8(im.Bucket[0])),
+		Transaction: im.ID,
+	}
+	copy(o.Item[:], im.Bucket[1:17])
+	return o, true
+}
+
+// AcceptInventoryOffer takes an offer up, putting what arrives in a
+// folder of our choosing.
+//
+// The answer has to quote the offer's transaction id, which is the only
+// thing tying it to the offer; an answer with a fresh id is ignored and
+// the offer stays open for ever.  A zero folder means the default one
+// for that kind of thing, which is what a viewer does when the person
+// clicks Accept rather than dragging it somewhere.
+//
+// Whether the item actually arrives is a separate question -- the
+// simulator does the moving, and says nothing about it -- so a caller
+// that needs to know looks in inventory afterwards.
+func (w *Session) AcceptInventoryOffer(ctx context.Context, o *InventoryOffer, into msg.UUID) error {
+	dialog := uint8(DialogInventoryAccepted)
+	m := w.im(o.From, dialog, "")
+	// The transaction is the offer's, not a new one.
+	m.MessageBlock.ID = o.Transaction
+	if !into.IsZero() {
+		m.MessageBlock.BinaryBucket = into[:]
+	}
+	return w.Send(ctx, m)
+}
+
+// DeclineInventoryOffer refuses one.  Saying so matters: an offer left
+// unanswered stays pending, and the giver is told nothing either way.
+func (w *Session) DeclineInventoryOffer(ctx context.Context, o *InventoryOffer) error {
+	m := w.im(o.From, DialogInventoryDeclined, "")
+	m.MessageBlock.ID = o.Transaction
+	return w.Send(ctx, m)
+}
+
+// ------------------------------------------------------------ friendship
+
 // OfferFriendship asks somebody to be a friend.
 func (w *Session) OfferFriendship(ctx context.Context, to msg.UUID, text string) error {
 	if text == "" {
