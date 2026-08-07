@@ -160,13 +160,21 @@ func (sh *Shell) key(ctx context.Context, r rune) {
 }
 
 func (sh *Shell) enter(ctx context.Context) {
-	line := sh.term.Take()
 	if sh.chatting() {
+		// Chat does not echo the line here: send prints it in its own
+		// marked form, so that what was said and what was heard can be
+		// told apart.
+		line := sh.term.Take()
 		if strings.TrimSpace(line) != "" {
 			sh.send(ctx, line)
 		}
 		return
 	}
+
+	// Leave the command on the screen before running it, so that the
+	// output underneath says what it is the output of.
+	sh.term.Echo()
+	line := sh.term.Take()
 	if strings.TrimSpace(line) == "" {
 		return
 	}

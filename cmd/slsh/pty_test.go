@@ -295,6 +295,45 @@ func TestPTYOutputLandsAboveThePrompt(t *testing.T) {
 	s.waitPrompt("/$")
 }
 
+// TestPTYCommandsStayOnTheScreen: output is no use if what was asked
+// has scrolled away unrecorded, so the prompt and the command stay
+// above it, the way a shell leaves them.
+func TestPTYCommandsStayOnTheScreen(t *testing.T) {
+	s := start(t, 24, 80)
+
+	s.send("pwd\r")
+	s.waitText("/$ pwd")
+	s.send("help quit\r")
+	s.waitText("leave slsh")
+	s.waitPrompt("/$")
+
+	// In that order: the command, and then what it printed.
+	txt := s.text()
+	cmd, out := strings.Index(txt, "/$ help quit"), strings.Index(txt, "leave slsh")
+	switch {
+	case cmd < 0:
+		t.Errorf("the command did not stay on the screen:\n%s", txt)
+	case out < cmd:
+		t.Errorf("the output came out above its command:\n%s", txt)
+	}
+}
+
+// TestPTYChatDoesNotEchoTheRawLine: an outgoing line is printed in its
+// own marked form, so echoing it as well would say it twice and lose
+// which of the two was the one that went.
+func TestPTYChatDoesNotEchoTheRawLine(t *testing.T) {
+	s := start(t, 24, 80)
+
+	s.send("chat\r")
+	s.waitPrompt("Local>")
+	s.send("hello everyone\r")
+	s.waitText("> [Local] hello everyone")
+
+	if strings.Contains(s.text(), "Local> hello everyone\n") {
+		t.Errorf("chat echoed the line as well as marking it:\n%s", s.text())
+	}
+}
+
 // TestPTYUnknownCommandSaysSo: and does not leave the shell.
 func TestPTYUnknownCommandSaysSo(t *testing.T) {
 	s := start(t, 24, 80)

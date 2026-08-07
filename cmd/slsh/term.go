@@ -462,15 +462,26 @@ func (t *Term) Take() string {
 	return s
 }
 
-// Echo writes the line as it stands and starts a fresh one, the way a
-// terminal does when Enter is pressed.
+// Echo writes the prompt and the line as it stands and starts a fresh
+// one, the way a terminal does when Enter is pressed, so that what
+// follows reads as a transcript: the command, then its output, then the
+// next command.
+//
+// It writes the text out rather than leaving what is already drawn.  A
+// line wider than the terminal is drawn as a window on to it, scrolled
+// sideways to keep the cursor in view, so keeping the drawn version
+// would record a fragment of the command instead of the command.
+//
+// A pipe is not a terminal and nothing was drawn on it, so there is
+// nothing to leave behind: echoing there would put the commands in the
+// middle of output that is on its way to a file.
 func (t *Term) Echo() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.plain || t.closed {
 		return
 	}
-	fmt.Fprint(t.out, "\r\n")
+	fmt.Fprint(t.out, "\r\x1b[K"+t.prompt+string(t.line)+"\r\n")
 }
 
 // redrawLocked paints the prompt and the line, scrolling sideways when
