@@ -30,6 +30,22 @@ type Login struct {
 	// "the test region/128/128/25".
 	Start string
 
+	// Group is the group to act as, by name or uuid, and empty means
+	// to work it out: the only one joined, or none.
+	//
+	// It is per account and not per invocation, which is why it lives
+	// with the credentials.  A login starts with NO group active and a
+	// parcel usually grants building to a group rather than to
+	// individuals, so an avatar that builds happily through a viewer
+	// cannot rez a thing here -- and the refusal blames the land,
+	// which is the wrong place to look.
+	//
+	// Nothing in this package acts on it.  Group membership is not in
+	// the login response at all; it arrives later on the event queue,
+	// so whoever holds the session settles this after connecting.  See
+	// cmd/slgod.
+	Group string
+
 	// Channel and Version identify the client to Linden Lab.
 	Channel string
 	Version string

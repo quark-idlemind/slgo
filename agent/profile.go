@@ -24,6 +24,7 @@ import (
 //	last     = Resident
 //	password = $1$00157e577e57c0de028f000000000000
 //	start    = last
+//	group    = Builders
 //
 // Storing the "$1$" digest rather than the plain password is worth
 // doing.  It is the only form that ever goes over the wire, so it loses
@@ -146,6 +147,8 @@ func parseProfile(r *os.File) (Login, error) {
 			l.Password = value
 		case "start":
 			l.Start = value
+		case "group":
+			l.Group = value
 		case "url", "login_url":
 			l.URL = value
 		case "channel":
@@ -208,6 +211,7 @@ func SaveProfile(name string, l Login) error {
 		write("password", hashPassword(l.Password))
 	}
 	write("start", l.Start)
+	write("group", l.Group)
 	write("url", l.URL)
 	write("channel", l.Channel)
 	write("version", l.Version)

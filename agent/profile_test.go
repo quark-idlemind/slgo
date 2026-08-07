@@ -37,6 +37,7 @@ first    = Example
 last     = Resident
 password = $1$00157e577e57c0de028f000000000000
 start    = the test region/188/203/28
+group    = Builders
 channel  = slgo
 options  = login-flags, global-textures
 `, 0o600)
@@ -53,6 +54,12 @@ options  = login-flags, global-textures
 	}
 	if l.Start != "the test region/188/203/28" || l.Channel != "slgo" {
 		t.Errorf("profile = %+v", l)
+	}
+	// The group belongs to the account, not to the invocation: a
+	// login starts with none active, and a parcel that grants
+	// building to a group refuses an avatar that has none.
+	if l.Group != "Builders" {
+		t.Errorf("group = %q, want %q", l.Group, "Builders")
 	}
 	if len(l.Options) != 2 || l.Options[1] != "global-textures" {
 		t.Errorf("options = %v", l.Options)
@@ -140,6 +147,7 @@ func TestSaveProfileRoundTrip(t *testing.T) {
 		Last:     "Resident",
 		Password: "example-password", // plain text going in
 		Start:    "last",
+		Group:    "Builders",
 		Channel:  "slgo",
 	}
 	if err := SaveProfile("example", in); err != nil {
@@ -180,6 +188,9 @@ func TestSaveProfileRoundTrip(t *testing.T) {
 	}
 	if out.First != in.First || out.Last != in.Last || out.Start != in.Start {
 		t.Errorf("round trip = %+v", out)
+	}
+	if out.Group != in.Group {
+		t.Errorf("group round trip = %q, want %q", out.Group, in.Group)
 	}
 	// A saved digest logs in identically.
 	if hashPassword(out.Password) != hashPassword(in.Password) {
