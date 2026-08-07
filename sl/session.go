@@ -94,10 +94,14 @@ type Session struct {
 
 	// Who is who: names learned or asked for, the questions still
 	// out, and the friendship offers waiting for an answer.
-	names   map[msg.UUID]string
-	asking  map[msg.UUID]bool
-	offers  map[msg.UUID]*Offer
-	pickers map[msg.UUID]chan []Found
+	names  map[msg.UUID]string
+	asking map[msg.UUID]bool
+	offers map[msg.UUID]*Offer
+	// invOffers are inventory offers waiting, keyed by transaction:
+	// two people may offer at once, and the transaction is what tells
+	// the answers apart.
+	invOffers map[msg.UUID]*InventoryOffer
+	pickers   map[msg.UUID]chan []Found
 
 	// Dialogs a script has put up, in arrival order.  Kept rather
 	// than only delivered, because a dialog that appears the instant

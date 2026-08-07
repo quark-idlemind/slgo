@@ -15,6 +15,7 @@ package sl
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -235,6 +236,7 @@ func (o *Offer) Decline(ctx context.Context) error {
 // in inventory until it is accepted: the offer is an instant message
 // and the answer is another one, quoting the same transaction.
 type InventoryOffer struct {
+	At       time.Time
 	From     msg.UUID
 	FromName string
 
@@ -250,6 +252,8 @@ type InventoryOffer struct {
 	// Transaction is the offer's id, which the answer has to quote or
 	// the simulator will not match it to anything.
 	Transaction msg.UUID
+
+	w *Session
 }
 
 func (o *InventoryOffer) String() string {
@@ -263,6 +267,7 @@ func InventoryOfferFrom(im *IM) (*InventoryOffer, bool) {
 		return nil, false
 	}
 	o := &InventoryOffer{
+		At:          im.At,
 		From:        im.From,
 		FromName:    im.FromName,
 		Name:        im.Text,
@@ -271,6 +276,75 @@ func InventoryOfferFrom(im *IM) (*InventoryOffer, bool) {
 	}
 	copy(o.Item[:], im.Bucket[1:17])
 	return o, true
+}
+
+// InventoryOffers are the offers waiting for an answer, oldest first.
+//
+// Kept rather than only delivered, for the same reason friendship
+// offers are: whoever is listening may not be ready to answer, and the
+// transaction id cannot be recovered afterwards.  An offer nobody kept
+// the id of can never be accepted.
+func (w *Session) InventoryOffers() []*InventoryOffer {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := make([]*InventoryOffer, 0, len(w.invOffers))
+	for _, o := range w.invOffers {
+		out = append(out, o)
+	}
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j].At.Before(out[j-1].At); j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	return out
+}
+
+// InventoryOfferFor returns a waiting offer by the name it was offered
+// under, or the only one waiting.
+func (w *Session) InventoryOfferFor(name string) (*InventoryOffer, bool) {
+	os := w.InventoryOffers()
+	if name == "" {
+		if len(os) == 1 {
+			return os[0], true
+		}
+		return nil, false
+	}
+	lower := strings.ToLower(name)
+	for _, o := range os {
+		if strings.EqualFold(o.Name, name) || strings.EqualFold(o.FromName, name) ||
+			strings.Contains(strings.ToLower(o.Name), lower) {
+			return o, true
+		}
+	}
+	return nil, false
+}
+
+// forgetOffer drops one that has been answered.
+func (w *Session) forgetOffer(t msg.UUID) {
+	w.mu.Lock()
+	delete(w.invOffers, t)
+	w.mu.Unlock()
+}
+
+// Accept takes the offer up, putting what arrives in a folder of our
+// choosing.  A zero folder means the default one for that kind of
+// thing, which is what a viewer does when the person clicks Accept
+// rather than dragging it somewhere.
+func (o *InventoryOffer) Accept(ctx context.Context, into msg.UUID) error {
+	if err := o.w.AcceptInventoryOffer(ctx, o, into); err != nil {
+		return err
+	}
+	o.w.forgetOffer(o.Transaction)
+	return nil
+}
+
+// Decline refuses it.
+func (o *InventoryOffer) Decline(ctx context.Context) error {
+	if err := o.w.DeclineInventoryOffer(ctx, o); err != nil {
+		return err
+	}
+	o.w.forgetOffer(o.Transaction)
+	return nil
 }
 
 // AcceptInventoryOffer takes an offer up, putting what arrives in a
@@ -415,6 +489,21 @@ func (w *Session) instantMessage(m *msg.ImprovedInstantMessage) {
 		w.offers[im.From] = &Offer{
 			At: im.At, From: im.From, Name: name, Transaction: b.ID, w: w,
 		}
+		w.mu.Unlock()
+	}
+
+	// An inventory offer is kept for the same reason: the transaction
+	// id is the only thing that can answer it, and it is not derivable.
+	if o, ok := InventoryOfferFrom(im); ok {
+		o.w = w
+		if o.FromName == "" {
+			o.FromName = w.NameOr(o.From)
+		}
+		w.mu.Lock()
+		if w.invOffers == nil {
+			w.invOffers = map[msg.UUID]*InventoryOffer{}
+		}
+		w.invOffers[o.Transaction] = o
 		w.mu.Unlock()
 	}
 
