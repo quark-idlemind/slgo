@@ -113,3 +113,20 @@ func TestSortByTime(t *testing.T) {
 		t.Errorf("ties should fall out by id, got %v first", same[0].ID)
 	}
 }
+
+// TestAttachPointNames: worn prints where a thing is worn, so the
+// points have to be named -- and an unknown one has to say so rather
+// than be invented.
+func TestAttachPointNames(t *testing.T) {
+	for point, want := range map[int]string{
+		1:                "chest",
+		sl.HUDBottomLeft: "HUD bottom left",
+		sl.HUDTop:        "HUD top",
+		40:               "avatar centre",
+		250:              "point 250", // no such point; say the number
+	} {
+		if got := sl.AttachPointName(point); got != want {
+			t.Errorf("AttachPointName(%d) = %q, want %q", point, got, want)
+		}
+	}
+}

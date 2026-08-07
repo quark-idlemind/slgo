@@ -199,6 +199,7 @@ with their own option list:
 ### The world around you
 
     who         who else is in the region, nearest first
+    worn        what this avatar is wearing, and where
     where       the region and position you are at
     look        what the simulator says about the region
     objects     objects the region has described, by name
@@ -208,6 +209,20 @@ with their own option list:
 
 `objects`, `caps`, `features` and `lsl` all take optional text to filter
 by, e.g. `lsl llGetUsed`.
+
+`worn` lists the attachments by where they are worn, and `-l` adds the
+ids:
+
+    /$ worn
+    HUD bottom left    auto
+    HUD centre 1       Worn
+
+The names are the inventory items', not the objects'. A worn object
+will not answer a request for its own name, and the item is the better
+answer anyway: the object is rezzed afresh with a new key every time it
+goes on and every time you log in, while the item does not change.
+Something worn whose item cannot be found is listed by that item's id,
+which is the only handle it has.
 
 ### Talking
 

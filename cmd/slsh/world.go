@@ -10,6 +10,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/quark-idlemind/slgo/msg"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 var worldCommands = map[string]*command{
@@ -42,6 +45,11 @@ var worldCommands = map[string]*command{
 		usage: "lsl [TEXT]",
 		brief: "the LSL this simulator implements: functions, constants, events",
 		run:   cmdLSL,
+	},
+	"worn": {
+		usage: "worn [-l] [TEXT]",
+		brief: "the objects being worn, and where; -l for the ids",
+		run:   cmdWorn,
 	},
 	"objects": {
 		usage: "objects [TEXT]",
@@ -185,6 +193,111 @@ func cmdLSL(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		fmt.Fprintf(out, "%s(%s)\n", e.Name, strings.Join(as, ", "))
 	}
 	return nil
+}
+
+// wornOptions is what worn was asked for.
+type wornOptions struct {
+	Long bool `getopt:"-l          the item and object ids as well"`
+	Help bool `getopt:"--help -h   show what this command takes"`
+}
+
+// cmdWorn lists the attachments.
+//
+// slgod knows these because it was connected when they were described:
+// an attachment is announced when it goes on and again at every login,
+// so a program that started later never heard it and has to ask.
+//
+// The names come from inventory, not from the objects.  A worn object
+// will not answer a request for its properties, and the name worth
+// printing is the one in inventory anyway -- it is what the thing is
+// called, and unlike the object it does not change.
+func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o wornOptions
+	rest, done, err := subOptions("worn", "[TEXT]", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	want := ""
+	if len(rest) > 0 {
+		want = strings.ToLower(strings.Join(rest, " "))
+	}
+
+	worn, err := sh.s.WornObjects(ctx)
+	if err != nil {
+		return err
+	}
+	names := sh.itemNames(ctx)
+
+	type row struct {
+		point int
+		name  string
+		item  msg.UUID
+		obj   msg.UUID
+	}
+	rows := make([]row, 0, len(worn))
+	for _, a := range worn {
+		// Not everything worn can be named.  The item may sit deeper
+		// than the listing went, or have been deleted while still
+		// worn, which Second Life allows.  The item id is then the
+		// only handle there is, so print that rather than a word that
+		// claims to know more.
+		name, ok := names[a.Item]
+		if !ok {
+			name = a.Item.String()
+		}
+		if want != "" && !strings.Contains(strings.ToLower(name), want) {
+			continue
+		}
+		rows = append(rows, row{a.Point, name, a.Item, a.Object.ID})
+	}
+	// By where they are worn, so the HUD ones group together.
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].point != rows[j].point {
+			return rows[i].point < rows[j].point
+		}
+		return rows[i].name < rows[j].name
+	})
+
+	if len(rows) == 0 {
+		if want != "" {
+			fmt.Fprintln(out, "nothing worn matched")
+		} else {
+			fmt.Fprintln(out, "nothing worn")
+		}
+		return nil
+	}
+	for _, r := range rows {
+		if o.Long {
+			// The item first: it is the one that does not change.  A
+			// worn object is rezzed afresh, with a new key, every time
+			// it goes on and every time the avatar logs in.
+			fmt.Fprintf(out, "%-18s %-30s %-36s %s\n",
+				sl.AttachPointName(r.point), r.name, r.item, r.obj)
+			continue
+		}
+		fmt.Fprintf(out, "%-18s %s\n", sl.AttachPointName(r.point), r.name)
+	}
+	return nil
+}
+
+// itemNames maps inventory item ids to their names, for naming things
+// that are known only by id.
+//
+// Depth-limited, because the whole tree is a hundred requests and this
+// is wanted for a listing of eight things.  Anything not found is
+// reported as such rather than guessed at.
+func (sh *Shell) itemNames(ctx context.Context) map[msg.UUID]string {
+	out := map[msg.UUID]string{}
+	es, err := sh.s.ListInventory(ctx, "", 4)
+	if err != nil {
+		return out
+	}
+	for _, e := range es {
+		if !e.Folder {
+			out[e.ID] = e.Name
+		}
+	}
+	return out
 }
 
 func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

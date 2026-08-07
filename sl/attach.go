@@ -22,6 +22,41 @@ const (
 	HUDBottomRight
 )
 
+// attachPointNames are what the points are called, as the viewer names
+// them.  Body points run to 30 and the HUD points carry on from there.
+var attachPointNames = map[int]string{
+	1: "chest", 2: "head", 3: "left shoulder", 4: "right shoulder",
+	5: "left hand", 6: "right hand", 7: "left foot", 8: "right foot",
+	9: "back", 10: "pelvis", 11: "mouth", 12: "chin",
+	13: "left ear", 14: "right ear", 15: "left eye", 16: "right eye",
+	17: "nose", 18: "right upper arm", 19: "right lower arm",
+	20: "left upper arm", 21: "left lower arm", 22: "right hip",
+	23: "right upper leg", 24: "right lower leg", 25: "left hip",
+	26: "left upper leg", 27: "left lower leg", 28: "belly",
+	29: "left pec", 30: "right pec",
+
+	HUDCenter2: "HUD centre 2", HUDTopRight: "HUD top right",
+	HUDTop: "HUD top", HUDTopLeft: "HUD top left",
+	HUDCenter1: "HUD centre 1", HUDBottomLeft: "HUD bottom left",
+	HUDBottom: "HUD bottom", HUDBottomRight: "HUD bottom right",
+
+	39: "neck", 40: "avatar centre", 41: "left ring finger",
+	42: "right ring finger", 43: "tail base", 44: "tail tip",
+	45: "left wing", 46: "right wing", 47: "jaw", 48: "alt left ear",
+	49: "alt right ear", 50: "alt left eye", 51: "alt right eye",
+	52: "tongue", 53: "groin", 54: "left hind foot", 55: "right hind foot",
+}
+
+// AttachPointName is what an attachment point is called.  An unknown
+// one is given as its number, since a name invented here would be
+// worse than the number.
+func AttachPointName(point int) string {
+	if n, ok := attachPointNames[point]; ok {
+		return n
+	}
+	return fmt.Sprintf("point %d", point)
+}
+
 // AttachAdd asks for an attachment to be added rather than to replace
 // whatever is on the point.
 const AttachAdd = 0x80
@@ -123,6 +158,34 @@ func (w *Session) Wear(ctx context.Context, it *Item, point int, timeout time.Du
 		return nil, err
 	}
 	return got, nil
+}
+
+// WornObjects asks what is being worn, of whoever was connected when
+// it was put on.
+//
+// Attachments is what THIS session has been told since it connected,
+// which for a program that started afterwards is nothing at all: an
+// attachment is described when it goes on and at login, and neither is
+// likely to have happened since.  This asks the backend instead.
+//
+// The objects come back unnamed, and that is not an oversight: a worn
+// object does not answer a request for its properties -- selecting one
+// and waiting fifteen seconds gets nothing -- so the name a person
+// knows it by is the name of the inventory item it was worn from,
+// which is what AttachItem is for.
+func (w *Session) WornObjects(ctx context.Context) ([]*Attached, error) {
+	seen, err := w.b.Objects(ctx, "", "")
+	if err != nil {
+		return nil, err
+	}
+	var out []*Attached
+	for _, s := range seen {
+		if s.AttachItem.IsZero() {
+			continue
+		}
+		out = append(out, &Attached{Object: s.Object, Item: s.AttachItem, Point: s.AttachPoint})
+	}
+	return out, nil
 }
 
 // WornFromItem finds the worn object that an inventory item is being
