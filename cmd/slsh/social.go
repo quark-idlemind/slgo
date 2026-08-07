@@ -54,16 +54,16 @@ var socialCommands = map[string]*command{
 	},
 	"offers": {
 		usage: "offers",
-		brief: "friendship offers waiting for an answer",
+		brief: "friendship and inventory offers waiting for an answer",
 		run:   cmdOffers,
 	},
 	"accept": {
-		usage: "accept [WHO]",
-		brief: "accept a friendship offer",
+		usage: "accept [WHO|NAME]",
+		brief: "accept an offer of friendship, or of an inventory item",
 		run:   cmdAccept,
 	},
 	"decline": {
-		usage: "decline [WHO]",
+		usage: "decline [WHO|NAME]",
 		brief: "refuse one",
 		run:   cmdDecline,
 	},
@@ -383,19 +383,50 @@ func cmdOffer(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	return nil
 }
 
+// cmdOffers lists both kinds waiting.
+//
+// Both, in one list, because from where a person sits they are the same
+// thing -- something somebody offered that has not been answered --
+// and because an offer nobody answers stays pending for ever while the
+// other side is told nothing.
 func cmdOffers(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	os := sh.s.Offers()
-	if len(os) == 0 {
+	friends := sh.s.Offers()
+	items := sh.s.InventoryOffers()
+	if len(friends) == 0 && len(items) == 0 {
 		fmt.Fprintln(out, "no offers waiting")
 		return nil
 	}
-	for _, o := range os {
-		fmt.Fprintf(out, "%-32s %s ago\n", o.Name, time.Since(o.At).Round(time.Second))
+	for _, o := range friends {
+		fmt.Fprintf(out, "friendship  %-28s %s ago\n",
+			o.Name, time.Since(o.At).Round(time.Second))
+	}
+	for _, o := range items {
+		fmt.Fprintf(out, "%-11s %-28s %s ago   from %s\n",
+			o.Asset.String(), o.Name,
+			time.Since(o.At).Round(time.Second), o.FromName)
 	}
 	return nil
 }
 
 func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	// An inventory offer is looked for first, and only by an argument
+	// that names one, so "accept" with a friendship offer waiting still
+	// means what it always did.
+	if o, ok := sh.inventoryOffer(args); ok {
+		// Into the folder the shell is in, so that "cd Objects; accept"
+		// puts it where it was wanted.  A zero folder would let the
+		// grid choose.
+		_, folder, err := sh.resolveDir(ctx, ".")
+		if err != nil {
+			return err
+		}
+		if err := o.Accept(ctx, folder); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "accepted %q from %s\n", o.Name, o.FromName)
+		return nil
+	}
+
 	o, err := sh.offer(args)
 	if err != nil {
 		return err
@@ -408,6 +439,14 @@ func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 }
 
 func cmdDecline(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	if o, ok := sh.inventoryOffer(args); ok {
+		if err := o.Decline(ctx); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "declined %q from %s\n", o.Name, o.FromName)
+		return nil
+	}
+
 	o, err := sh.offer(args)
 	if err != nil {
 		return err
@@ -417,6 +456,29 @@ func cmdDecline(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	}
 	fmt.Fprintf(out, "declined %s\n", o.Name)
 	return nil
+}
+
+// inventoryOffer finds the inventory offer a command means.
+//
+// With no argument it answers only when an inventory offer is the ONLY
+// thing waiting, so that "accept" with a friendship offer pending keeps
+// meaning the friendship offer.  Ambiguity is resolved by naming.
+func (sh *Shell) inventoryOffer(args []string) (*sl.InventoryOffer, bool) {
+	items := sh.s.InventoryOffers()
+	if len(items) == 0 {
+		return nil, false
+	}
+	want := strings.TrimSpace(strings.Join(args, " "))
+	if want == "" {
+		if len(sh.s.Offers()) > 0 {
+			return nil, false // a friendship offer is waiting too; say which
+		}
+		if len(items) == 1 {
+			return items[0], true
+		}
+		return nil, false
+	}
+	return sh.s.InventoryOfferFor(want)
 }
 
 func cmdTalk(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

@@ -213,6 +213,48 @@ with their own option list:
 `objects`, `caps`, `features` and `lsl` all take optional text to filter
 by, e.g. `lsl llGetUsed`.
 
+`tp X Y Z` moves within the region.  Only within: another region is a
+different simulator, needing a new circuit and a new set of
+capabilities, which slgod does not yet do -- so arriving somewhere else
+is still a matter of logging in there.
+
+#### What LSL this simulator implements
+
+The simulator publishes its own syntax, which makes it the authority on
+what a script may say -- better than documentation, which drifts.
+
+    lsl               how many of each there are
+    lsl -f            the functions
+    lsl -c            the constants
+    lsl -e            the events
+    lsl -t            the types
+    lsl -a            all of it
+    lsl -m ...        one record a line, tab separated, for a program
+
+The `-m` form is for a compiler that targets this grid and needs to know
+two things it cannot work out for itself: which functions it knows about
+will fail if called here, and which exist here that it has never heard
+of.  Both are set differences against this list.
+
+    $ slsh -c "lsl -m -f"
+    function        llAbs   integer 10      0               integer
+    function        llSay   void    10      0.1             integer,string
+
+The first field always names the kind, so `lsl -m -a` reads with the
+same loop as `lsl -m -f`, and a reader that meets a kind it does not
+know can skip the line rather than misparse it.  The layouts:
+
+    function  NAME  RETURN  ENERGY  SLEEP  FLAGS  ARGTYPE,...
+    constant  NAME  TYPE    VALUE
+    event     NAME  ARGTYPE,...
+    type      NAME
+
+RETURN is `void` when nothing is returned.  FLAGS may be empty and today
+holds `deprecated` and `godmode`.  Argument lists are types only, comma
+separated, and may be empty.  Fields are never reordered or removed;
+anything new goes on the end, so a reader that takes the first few
+fields keeps working.
+
 `worn` lists the attachments by where they are worn, and `-l` adds the
 ids:
 
@@ -226,6 +268,37 @@ answer anyway: the object is rezzed afresh with a new key every time it
 goes on and every time you log in, while the item does not change.
 Something worn whose item cannot be found is listed by that item's id,
 which is the only handle it has.
+
+### Giving things away, and taking them
+
+    give SOMEONE PATH       offer them an inventory item
+    offers                  what is waiting for an answer, of either kind
+    accept [NAME]           take an offer up
+    decline [NAME]          refuse it
+    cp PATH NAME            copy an item under a new name
+
+An offer is not a transfer: nothing moves until it is accepted, and
+nothing here can tell whether it was.  `accept` puts what arrives in the
+folder you are in, so `cd Objects` first if that is where it belongs.
+
+An offer only reaches a client that is attached when it arrives -- slgod
+relays it and does not keep it -- so a shell started afterwards will not
+see it.
+
+`cp` matters more than it looks.  An avatar that may not rez cannot make
+an object at all, but it can copy one it already owns, because copying
+asks the land nothing.  So an avatar with no build rights needs exactly
+one object given to it and can make the rest itself.
+
+### The daemon and its avatars
+
+    agents                  the sessions slgod holds, oldest first
+    auto                    how many benchmark objects are worn
+    auto -n 12              set that many up
+
+`agents` lists in the daemon's own order, not alphabetically: the first
+is what a command that names no avatar gets, and it is also the order a
+benchmark looks in for free objects.
 
 ### Talking
 
