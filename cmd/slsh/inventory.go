@@ -297,6 +297,29 @@ func kindOf(e sl.Entry) string {
 	return fmt.Sprintf("type%d", e.Type)
 }
 
+// catReadable says whether cat can read an entry, and why not when it
+// cannot.
+//
+// What it does NOT look at is the asset id, and that is the point. The
+// grid leaves a script's asset id out of an inventory listing -- it
+// sends all zeroes, whatever the permissions say -- and an asset is
+// asked for by ITEM anyway, with the simulator resolving it. Refusing
+// an entry for having no asset id therefore refused every script there
+// is, which is what this used to do.
+func catReadable(e sl.Entry) error {
+	if e.Folder {
+		return fmt.Errorf("%q is a folder", e.Name)
+	}
+	// Notecards and scripts come over the transfer protocol; the
+	// content delivery network refuses them. Anything it does serve is
+	// not text, so this only offers the ones that are.
+	switch sl.AssetType(e.Type) {
+	case sl.AssetNotecard, sl.AssetLSLText, sl.AssetScriptLegacy:
+		return nil
+	}
+	return fmt.Errorf("%s is not text; asset fetches it", kindOf(e))
+}
+
 func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: cat PATH")
@@ -305,20 +328,8 @@ func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if err != nil {
 		return err
 	}
-	if e.Folder {
-		return fmt.Errorf("%q is a folder", e.Name)
-	}
-	if e.Asset.IsZero() {
-		return fmt.Errorf("%q has no asset to read", e.Name)
-	}
-
-	// Notecards and scripts come over the transfer protocol; the
-	// content delivery network refuses them.  Anything it does serve
-	// is not text, so this only offers the two that are.
-	switch sl.AssetType(e.Type) {
-	case sl.AssetNotecard, sl.AssetLSLText:
-	default:
-		return fmt.Errorf("%s is not text; %s fetches it", kindOf(e), "asset")
+	if err := catReadable(e); err != nil {
+		return err
 	}
 
 	b, err := sh.s.ReadAsset(ctx, client.AssetRef{
