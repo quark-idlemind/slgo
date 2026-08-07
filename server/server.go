@@ -23,6 +23,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/quark-idlemind/slgo/auth"
 	"net"
@@ -81,11 +82,31 @@ type Hosted struct {
 	// client holding one keeps its stream.  See lock.go.
 	locks *locks
 
+	// group is the group to act as, reapplied after every reconnect.
+	// See group.go.  Guarded by mu.
+	group msg.UUID
+
+	// Log is where anything worth a person's attention goes.  Nil is
+	// silence, which is what a test wants; cmd/slgod sets it.
+	Log func(format string, v ...any)
+
 	stopped  atomic.Bool
 	attempts atomic.Uint64
 	reconns  atomic.Uint64
 	relayed  atomic.Uint64
 	dropped  atomic.Uint64
+}
+
+// errNoSession is a request made of a connection that is not up.
+var errNoSession = errors.New("server: no session")
+
+// logf says something to whoever is running the daemon.  Silent when
+// nobody is listening, which is what a test wants.
+func (h *Hosted) logf(format string, v ...any) {
+	if h.Log == nil {
+		return
+	}
+	h.Log(h.Name+": "+format, v...)
 }
 
 // Agent is the current grid connection.  It changes when the session
@@ -211,6 +232,10 @@ func (h *Hosted) supervise(ctx context.Context) {
 			}
 			h.setAgent(next)
 			h.reconns.Add(1)
+			// A fresh login has no active group, so whatever was
+			// settled at startup has to be settled again.  See
+			// group.go.
+			h.restoreGroup(ctx, next)
 			// The identity is the same avatar but a new
 			// session: a different session id, circuit code
 			// and set of capability URLs.  Clients holding
