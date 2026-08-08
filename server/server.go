@@ -55,6 +55,27 @@ type Server struct {
 	// the one that has been hosted longest.  See Default.
 	ranked uint64
 
+	// profiles and loginFor are how the server learns what it could
+	// start and how; see state.go.  Both nil means it knows only what
+	// it was given.
+	profiles Profiles
+	loginFor LoginFor
+
+	// failures and inflight cover starting agents on demand: what did
+	// not work, and what is already being tried.
+	starts agentState
+
+	// ctx is the daemon's own lifetime.  A session started on request
+	// outlives the request: cancelling the call that asked for it must
+	// not take the avatar back out of the world.
+	ctx context.Context
+
+	// log and onStart are what the daemon does with a session it did
+	// not start itself -- say so, and settle its group -- so that one
+	// started on demand is set up exactly like one named at startup.
+	log     func(string, ...any)
+	onStart func(*Hosted)
+
 	clients atomic.Int64
 
 	// auth is nil when the server runs without authentication, which is
@@ -133,12 +154,37 @@ func (h *Hosted) setAgent(a *agent.Agent) {
 
 // New makes an empty server.
 func New() *Server {
-	return &Server{agents: map[string]*Hosted{}}
+	return &Server{agents: map[string]*Hosted{}, ctx: context.Background()}
 }
 
-// Host logs in and brings up a circuit, then keeps it.  The name is how
-// clients ask for it.
-func (s *Server) Host(ctx context.Context, name string, login agent.Login, opts agent.Options) (*Hosted, error) {
+// SetBase gives the server the lifetime its sessions should have, and
+// what to do with one it starts itself.
+//
+// Without this a session started on demand would take the lifetime of
+// the request that asked for it, and hanging up would log the avatar
+// out.
+func (s *Server) SetBase(ctx context.Context, log func(string, ...any), onStart func(*Hosted)) {
+	s.mu.Lock()
+	s.ctx, s.log, s.onStart = ctx, log, onStart
+	s.mu.Unlock()
+}
+
+// base is the lifetime a new session gets.
+func (s *Server) base() context.Context {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.ctx == nil {
+		return context.Background()
+	}
+	return s.ctx
+}
+
+// StartAgent logs in and brings up a circuit, then keeps it.  The name
+// is how clients ask for it.
+//
+// Named for what it does rather than Host, which is the RPC's name: the
+// wire contract owns that word.
+func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login, opts agent.Options) (*Hosted, error) {
 	s.mu.Lock()
 	if _, dup := s.agents[name]; dup {
 		s.mu.Unlock()
@@ -415,7 +461,22 @@ func (s *Server) Ranked() []*Hosted {
 			out = append(out, h)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].rank < out[j].rank })
+	// Rank 0 means "gave up its place" -- a session that was stopped --
+	// and must sort LAST rather than first, which is where a plain
+	// numeric compare would put it.  It is still listed; it is simply
+	// not at the head of a list whose head means "the default".
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i].rank, out[j].rank
+		switch {
+		case a == 0 && b == 0:
+			return out[i].Name < out[j].Name
+		case a == 0:
+			return false
+		case b == 0:
+			return true
+		}
+		return a < b
+	})
 	return out
 }
 

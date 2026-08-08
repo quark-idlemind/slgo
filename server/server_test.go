@@ -657,7 +657,7 @@ func TestReconnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h, err := srv.Host(ctx, "example",
+	h, err := srv.StartAgent(ctx, "example",
 		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
 		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
 	if err != nil {
@@ -766,7 +766,7 @@ func TestNoReconnectAfterLogout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if _, err := srv.Host(ctx, "example",
+	if _, err := srv.StartAgent(ctx, "example",
 		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
 		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1}); err != nil {
 		t.Fatal(err)

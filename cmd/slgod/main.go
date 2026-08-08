@@ -104,7 +104,7 @@ func main() {
 		}
 
 		log.Printf("%s: logging in...", name)
-		h, err := srv.Host(ctx, name, login, opts)
+		h, err := srv.StartAgent(ctx, name, login, opts)
 		if err != nil {
 			// Not fatal.  One expired password should not take down
 			// the sessions that did come up, which are somebody's

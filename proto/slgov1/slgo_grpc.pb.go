@@ -36,6 +36,8 @@ const (
 	Grid_Stream_FullMethodName     = "/slgo.v1.Grid/Stream"
 	Grid_ListAgents_FullMethodName = "/slgo.v1.Grid/ListAgents"
 	Grid_Status_FullMethodName     = "/slgo.v1.Grid/Status"
+	Grid_Host_FullMethodName       = "/slgo.v1.Grid/Host"
+	Grid_Logout_FullMethodName     = "/slgo.v1.Grid/Logout"
 	Grid_Presence_FullMethodName   = "/slgo.v1.Grid/Presence"
 	Grid_Objects_FullMethodName    = "/slgo.v1.Grid/Objects"
 	Grid_Region_FullMethodName     = "/slgo.v1.Grid/Region"
@@ -64,6 +66,21 @@ type GridClient interface {
 	Stream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientPacket, ServerPacket], error)
 	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
 	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// Host brings a session up that is not running, and Logout puts one
+	// down and keeps it down.
+	//
+	// Both are deliberate acts by a person, which is why they are their
+	// own methods rather than something that happens as a side effect of
+	// attaching.  Logging an avatar in is visible on the grid -- an
+	// arrival, a presence, a notice to whoever is watching -- and should
+	// not follow from a typo in a stale config file.
+	//
+	// Logout is remembered.  A session that was told to stop stays
+	// stopped, so that somebody using that avatar in a viewer is not
+	// fighting the daemon for it, and comes back only when asked for by
+	// name.
+	Host(ctx context.Context, in *HostRequest, opts ...grpc.CallOption) (*HostResponse, error)
+	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
 	// Presence reads where the avatar is and what it can see, and can
 	// change the draw distance.
 	//
@@ -175,6 +192,26 @@ func (c *gridClient) Status(ctx context.Context, in *StatusRequest, opts ...grpc
 	return out, nil
 }
 
+func (c *gridClient) Host(ctx context.Context, in *HostRequest, opts ...grpc.CallOption) (*HostResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HostResponse)
+	err := c.cc.Invoke(ctx, Grid_Host_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridClient) Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LogoutResponse)
+	err := c.cc.Invoke(ctx, Grid_Logout_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Presence(ctx context.Context, in *PresenceRequest, opts ...grpc.CallOption) (*PresenceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PresenceResponse)
@@ -273,6 +310,21 @@ type GridServer interface {
 	Stream(grpc.BidiStreamingServer[ClientPacket, ServerPacket]) error
 	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
 	Status(context.Context, *StatusRequest) (*StatusResponse, error)
+	// Host brings a session up that is not running, and Logout puts one
+	// down and keeps it down.
+	//
+	// Both are deliberate acts by a person, which is why they are their
+	// own methods rather than something that happens as a side effect of
+	// attaching.  Logging an avatar in is visible on the grid -- an
+	// arrival, a presence, a notice to whoever is watching -- and should
+	// not follow from a typo in a stale config file.
+	//
+	// Logout is remembered.  A session that was told to stop stays
+	// stopped, so that somebody using that avatar in a viewer is not
+	// fighting the daemon for it, and comes back only when asked for by
+	// name.
+	Host(context.Context, *HostRequest) (*HostResponse, error)
+	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
 	// Presence reads where the avatar is and what it can see, and can
 	// change the draw distance.
 	//
@@ -352,6 +404,12 @@ func (UnimplementedGridServer) ListAgents(context.Context, *ListAgentsRequest) (
 }
 func (UnimplementedGridServer) Status(context.Context, *StatusRequest) (*StatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Status not implemented")
+}
+func (UnimplementedGridServer) Host(context.Context, *HostRequest) (*HostResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Host not implemented")
+}
+func (UnimplementedGridServer) Logout(context.Context, *LogoutRequest) (*LogoutResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Logout not implemented")
 }
 func (UnimplementedGridServer) Presence(context.Context, *PresenceRequest) (*PresenceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Presence not implemented")
@@ -455,6 +513,42 @@ func _Grid_Status_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridServer).Status(ctx, req.(*StatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_Host_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HostRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Host(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Host_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Host(ctx, req.(*HostRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LogoutRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Logout(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Logout_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Logout(ctx, req.(*LogoutRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -621,6 +715,14 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Status",
 			Handler:    _Grid_Status_Handler,
+		},
+		{
+			MethodName: "Host",
+			Handler:    _Grid_Host_Handler,
+		},
+		{
+			MethodName: "Logout",
+			Handler:    _Grid_Logout_Handler,
 		},
 		{
 			MethodName: "Presence",

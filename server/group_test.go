@@ -77,7 +77,7 @@ func TestReconnectRestoresTheActiveGroup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h, err := srv.Host(ctx, "example",
+	h, err := srv.StartAgent(ctx, "example",
 		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
 		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
 	if err != nil {
@@ -143,7 +143,7 @@ func TestNoGroupSendsNothing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h, err := srv.Host(ctx, "example",
+	h, err := srv.StartAgent(ctx, "example",
 		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
 		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
 	if err != nil {
@@ -267,7 +267,7 @@ func TestKickedSessionStaysDown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h, err := srv.Host(ctx, "example",
+	h, err := srv.StartAgent(ctx, "example",
 		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
 		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
 	if err != nil {

@@ -37,6 +37,22 @@ service Grid {
   rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
   rpc Status(StatusRequest) returns (StatusResponse);
 
+  // Host brings a session up that is not running, and Logout puts one
+  // down and keeps it down.
+  //
+  // Both are deliberate acts by a person, which is why they are their
+  // own methods rather than something that happens as a side effect of
+  // attaching.  Logging an avatar in is visible on the grid -- an
+  // arrival, a presence, a notice to whoever is watching -- and should
+  // not follow from a typo in a stale config file.
+  //
+  // Logout is remembered.  A session that was told to stop stays
+  // stopped, so that somebody using that avatar in a viewer is not
+  // fighting the daemon for it, and comes back only when asked for by
+  // name.
+  rpc Host(HostRequest) returns (HostResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
   // Presence reads where the avatar is and what it can see, and can
   // change the draw distance.
   //
@@ -303,6 +319,65 @@ message AgentInfo {
   string inventory_root = 7;
   repeated string caps = 8;
   bool connected = 9;
+
+  // State is what can be done with this agent, which is not the same
+  // question as whether a circuit is up.
+  //
+  // The distinctions earn their keep by being different actions: a
+  // CONFIGURED agent can be started, a STOPPED one deliberately should
+  // not be started unless asked for by name, and a FAILED one will
+  // waste a login attempt if asked too soon.  Without them, "I have
+  // never heard of qi" and "qi is deliberately down" look identical,
+  // and the second is not an error at all.
+  enum State {
+    UNKNOWN = 0;
+    HOSTED = 1;      // logged in and serving
+    CONNECTING = 2;  // a login is in flight
+    CONFIGURED = 3;  // a profile exists; nothing has asked for it
+    STOPPED = 4;     // deliberately down; do not start unasked
+    FAILED = 5;      // tried and could not; see detail
+  }
+  State state = 10;
+
+  // Detail says why, for the states where why is the useful part:
+  // the grid's own words for a kick, or the login server's for a
+  // refusal.  Meant for a person.
+  string detail = 11;
+}
+
+message HostRequest {
+  // Agent names the profile to bring up.  It must be named: this is
+  // the one call where "whichever" cannot mean anything.
+  string agent = 1;
+
+  // Force starts one that was deliberately stopped.  Without it a
+  // STOPPED agent is left alone, since something stopped it on
+  // purpose -- most likely a person now using that avatar elsewhere.
+  bool force = 2;
+}
+
+message HostResponse {
+  AgentInfo agent = 1;
+
+  // Already is true when it was up before the call, which makes Host
+  // safe to repeat.
+  bool already = 2;
+}
+
+message LogoutRequest {
+  string agent = 1;
+
+  // Force logs out even with clients attached.  Without it, a session
+  // somebody is using is left alone and their names come back in the
+  // error: a benchmark mid-run has a script installed and a reading
+  // half-taken, and losing it should be somebody's decision.
+  bool force = 2;
+}
+
+message LogoutResponse {
+  // Clients is who was attached when this was refused, empty when it
+  // was not refused.
+  repeated string clients = 1;
 }
 
 message ListAgentsRequest {}

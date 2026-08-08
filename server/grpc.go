@@ -29,6 +29,9 @@ const streamDepth = 1024
 // session_t.
 type Client struct {
 	host *Hosted
+	// name is what this client authenticated as, so that a message
+	// about what is attached can say which program rather than a count.
+	name string
 	out  chan *pb.ServerPacket
 
 	mu    sync.RWMutex
@@ -274,6 +277,7 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 
 	c := &Client{
 		host:  h,
+		name:  clientName(ctx),
 		out:   make(chan *pb.ServerPacket, streamDepth),
 		subs:  map[msg.ID]bool{},
 		names: map[string]bool{},
@@ -395,8 +399,20 @@ func (s *Server) ListAgents(ctx context.Context, _ *pb.ListAgentsRequest) (*pb.L
 	// first is the default, and a client looking for an agent that can
 	// satisfy it should try them in this order.
 	out := &pb.ListAgentsResponse{}
+	held := map[string]bool{}
 	for _, h := range s.Ranked() {
+		held[h.Name] = true
 		out.Agents = append(out.Agents, h.info())
+	}
+
+	// Then what could be started but is not.  Listing these is the
+	// difference between "I have never heard of qi" and "qi is down",
+	// which are different problems with different answers.
+	for _, name := range s.knownProfiles() {
+		if held[name] {
+			continue
+		}
+		out.Agents = append(out.Agents, s.notHosted(name))
 	}
 	return out, nil
 }
@@ -621,16 +637,50 @@ func (s *Server) lookup(name string) (*Hosted, error) {
 	return h, nil
 }
 
+// clientName is what this connection proved it was, or "" when the
+// server runs without authentication.
+func clientName(ctx context.Context) string {
+	if c, ok := connFrom(ctx); ok {
+		name, _ := c.ok()
+		return name
+	}
+	return ""
+}
+
+// knownProfiles is what the daemon said could be started.
+func (s *Server) knownProfiles() []string {
+	s.mu.RLock()
+	list := s.profiles
+	s.mu.RUnlock()
+	if list == nil {
+		return nil
+	}
+	return list()
+}
+
+// notHosted describes an agent the server is not holding: one that has
+// never been asked for, or one whose login failed.
+func (s *Server) notHosted(name string) *pb.AgentInfo {
+	info := &pb.AgentInfo{Name: name, State: pb.AgentInfo_CONFIGURED}
+
+	s.starts.mu.Lock()
+	f := s.starts.failures[name]
+	s.starts.mu.Unlock()
+	if f != nil {
+		info.State = pb.AgentInfo_FAILED
+		info.Detail = errText(f.err)
+		if wait := time.Until(f.before); wait > 0 {
+			info.Detail += " (not retrying for " + wait.Round(time.Second).String() + ")"
+		}
+	}
+	return info
+}
+
 func (h *Hosted) info() *pb.AgentInfo {
+	state, detail := h.state()
 	a := h.Agent()
 	if a == nil {
-		return &pb.AgentInfo{Name: h.Name}
-	}
-	connected := true
-	select {
-	case <-a.Done():
-		connected = false
-	default:
+		return &pb.AgentInfo{Name: h.Name, State: state, Detail: detail}
 	}
 	return &pb.AgentInfo{
 		Name:           h.Name,
@@ -641,7 +691,13 @@ func (h *Hosted) info() *pb.AgentInfo {
 		ChannelVersion: a.ChannelVersion(),
 		InventoryRoot:  a.Account.InventoryRoot.String(),
 		Caps:           a.Caps.Names(),
-		Connected:      connected,
+		// Connected and State answer different questions and are both
+		// kept: Connected is whether a circuit is up this instant,
+		// State is what may be done about it.  A client too old to know
+		// about State still gets a right answer from Connected.
+		Connected: state == pb.AgentInfo_HOSTED,
+		State:     state,
+		Detail:    detail,
 	}
 }
 
