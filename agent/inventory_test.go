@@ -638,18 +638,16 @@ func TestAnEntryThatOnlyItsKeyNames(t *testing.T) {
 	}
 }
 
-// TestAFolderNamedOnlyByItsKeyIsLost: absorb has a fallback for exactly
-// this -- a category whose body omits category_id takes its id from the
-// key it is filed under -- and the fallback can never run, because
-// folderFrom has already returned nil for the same reason.  An item in
-// that position is kept, because itemFrom does not do the same thing,
-// so the two halves of the reply are treated differently by accident.
+// TestAFolderNamedOnlyByItsKeyIsKept: a category whose body omits
+// category_id takes its id from the key it is filed under, which is
+// what absorb's fallback was written for.
 //
-// The correct behaviour is the one absorb was written for: the key names
-// the folder when the body does not.
-func TestAFolderNamedOnlyByItsKeyIsLost(t *testing.T) {
-	t.Skip("demonstrates the dead fallback in absorb; see coverage-notes/agent.md")
-
+// The fallback could not run.  folderFrom refused a category with no
+// category_id before the caller ever got the chance, so such a folder
+// was dropped -- while an item in the same position was kept, because
+// itemFrom refuses nothing.  Two halves of one reply treated
+// differently by accident.
+func TestAFolderNamedOnlyByItsKeyIsKept(t *testing.T) {
 	root, keyed := uid(0), uid(2)
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `<llsd><map>

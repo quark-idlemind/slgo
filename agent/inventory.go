@@ -425,8 +425,10 @@ func fetchDepth(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID, dep
 		return nil, fmt.Errorf("agent: inventory %s: reply was %T, wanted a map", id, v)
 	}
 
-	// The folder describes itself at the top level.
-	if self := folderFrom(m); self != nil && !self.ID.IsZero() {
+	// The folder describes itself at the top level.  There is no key to
+	// fall back on here -- this is the body of the reply, not an entry
+	// in a map -- so one that does not name itself is passed over.
+	if self := folderFrom(m); !self.ID.IsZero() {
 		inv.addFolder(self)
 	}
 
@@ -454,9 +456,6 @@ func absorb(inv *Inventory, emb map[string]any) []msg.UUID {
 			continue
 		}
 		f := folderFrom(cm)
-		if f == nil {
-			continue
-		}
 		if f.ID.IsZero() {
 			if u, err := msg.ParseUUID(cid); err == nil {
 				f.ID = u
@@ -497,6 +496,15 @@ func absorb(inv *Inventory, emb map[string]any) []msg.UUID {
 	return kids
 }
 
+// folderFrom reads one category, whether or not it names itself.
+//
+// A zero ID is left for the caller to deal with rather than turned into
+// a nil here.  AIS sometimes names a category only by the key it is
+// filed under and omits category_id from the body, and refusing here
+// meant the caller's fallback to that key could never run -- so such a
+// folder was dropped, while an item in the same position was kept,
+// because itemFrom does not refuse either.  Two halves of one reply
+// treated differently by accident.
 func folderFrom(m map[string]any) *Folder {
 	f := &Folder{
 		Name:    llsd.String(m, "name"),
@@ -505,9 +513,6 @@ func folderFrom(m map[string]any) *Folder {
 	}
 	f.ID, _ = msg.ParseUUID(llsd.String(m, "category_id"))
 	f.ParentID, _ = msg.ParseUUID(llsd.String(m, "parent_id"))
-	if f.ID.IsZero() {
-		return nil
-	}
 	return f
 }
 
