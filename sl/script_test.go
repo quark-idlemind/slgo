@@ -1,0 +1,965 @@
+package sl
+
+// Running a script inside an object, which is what this package was
+// built for.
+//
+// Run is the one call here that has to get an ordering right rather
+// than a message right, and the ordering is the whole point: the
+// listener has to be open before the compile, because a script says
+// what it has to say the instant it is started; the script has to be
+// looked up INSIDE the object first, because the copy in there has its
+// own item id and that is what the capability wants; and the verdict
+// has to be read before the wait, because waiting a minute for output
+// from something that did not compile is a slow way to learn nothing.
+// Each of those was got wrong at some point, and none of them shows up
+// as a wrong message on the wire -- only as a run that hangs, or one
+// that returns having heard nothing.
+//
+// Reaching any of it means standing in for three protocols at once: the
+// object's contents arrive over xfer, the compile is an http upload to a
+// capability, and the output is chat relayed back.  The calls wait, so
+// they run aside; see fake_test.go.
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/quark-idlemind/slgo/msg"
+)
+
+// objectSaid is one line of chat from an object, which is the only way a
+// script says anything.
+func objectSaid(from msg.UUID, chatType uint8, text string) *msg.ChatFromSimulator {
+	m := &msg.ChatFromSimulator{}
+	m.ChatData.SourceID = from
+	m.ChatData.OwnerID = testAgentID
+	m.ChatData.FromName = append([]byte("a prim"), 0)
+	m.ChatData.SourceType = SourceObject
+	m.ChatData.ChatType = chatType
+	m.ChatData.Message = append([]byte(text), 0)
+	return m
+}
+
+// contents stands in for the simulator's side of reading what an object
+// holds: the request is answered with the name of a file, and the file
+// comes over xfer.
+//
+// It counts the rounds because Run reads the contents twice when the
+// script has to be put in first, and the two answers differ -- the first
+// says the script is not in there.  Answering the second read as though
+// it were the first hands the call an answer it has already had.  The
+// two counts are kept apart because a read that says the object holds
+// nothing has no transfer after it.
+type contents struct {
+	f    *fakeBackend
+	task msg.UUID
+
+	reads, xfers int
+}
+
+func objectHolding(f *fakeBackend, task msg.UUID) *contents {
+	return &contents{f: f, task: task}
+}
+
+// answer plays one read.  An empty file is the object holding nothing.
+func (c *contents) answer(t *testing.T, file string) {
+	t.Helper()
+	c.reads++
+	waitSentN[*msg.RequestTaskInventory](t, c.f, c.reads)
+	if file == "" {
+		c.f.Relay(t, replyTaskInventory(c.task, ""))
+		return
+	}
+	c.f.Relay(t, replyTaskInventory(c.task, "inventory_37c9.tmp"))
+	c.xfers++
+	x := waitSentN[*msg.RequestXfer](t, c.f, c.xfers)
+	c.f.Relay(t, xferPacket(x.XferID.ID, 0, true, []byte(file)))
+}
+
+// answerContents is one read of an object that holds the usual file,
+// for a call that only reads once.
+func answerContents(t *testing.T, f *fakeBackend, task msg.UUID, file string) {
+	t.Helper()
+	objectHolding(f, task).answer(t, file)
+}
+
+// compiles is an upload that says the source compiled, which is what
+// UpdateScriptTask answers for a script the simulator accepted.
+func compiles() (int, string) {
+	return 200, `<llsd><map><key>state</key><string>complete</string>` +
+		`<key>compiled</key><boolean>1</boolean></map></llsd>`
+}
+
+// TestAResultSaysWhichWayTheRunEnded: a run has three ways of not
+// getting to the end and a caller that treated them alike would report
+// a compile error as a timeout.
+func TestAResultSaysWhichWayTheRunEnded(t *testing.T) {
+	finished := &Result{Compiled: true, Finished: true}
+	if finished.Failed() {
+		t.Error("a script that compiled and said it had finished was reported as failed")
+	}
+	for name, r := range map[string]*Result{
+		"did not compile": {Compiled: false, Finished: true},
+		"faulted":         {Compiled: true, Finished: true, Fault: &Fault{Script: "s"}},
+		"never finished":  {Compiled: true},
+	} {
+		if !r.Failed() {
+			t.Errorf("a run that %s was reported as having got to the end", name)
+		}
+	}
+}
+
+// TestAResultReadsBackWhatWasHeard: the lines are what a probe asserts
+// against, and the debug channel is where the simulator puts the
+// complaints a script survives -- so a reader that could not separate
+// them would have to grep.
+func TestAResultReadsBackWhatWasHeard(t *testing.T) {
+	r := &Result{Lines: []Line{
+		{Text: "starting", Type: ChatSay},
+		{Text: "Could not find texture", Type: ChatDebug},
+		{Text: "FINISHED", Type: ChatSay},
+	}}
+	if got := r.Said(); len(got) != 3 || got[0] != "starting" || got[2] != "FINISHED" {
+		t.Errorf("Said = %q", got)
+	}
+	d := r.Debug()
+	if len(d) != 1 || d[0].Text != "Could not find texture" {
+		t.Errorf("Debug = %v", d)
+	}
+	if !r.Contains("FINISH") {
+		t.Error("Contains missed a line it was given part of")
+	}
+	if r.Contains("never said") {
+		t.Error("Contains found something nothing said")
+	}
+}
+
+// TestRunListensBeforeItCompiles: a script says what it has to say the
+// instant it is started, so a listener opened after the upload has
+// already missed the first line -- which is usually the one that says
+// what the script is.
+func TestRunListensBeforeItCompiles(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+	o := &Object{ID: thePrim, Local: 77}
+
+	var mu sync.Mutex
+	var heard []string
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: o, Name: "a script", Source: "default {}", Done: "FINISHED",
+			OnLine: func(l Line) {
+				mu.Lock()
+				heard = append(heard, l.Text)
+				mu.Unlock()
+			},
+		})
+	})
+
+	answerContents(t, f, thePrim, theContentsFile)
+
+	// The upload names the copy inside the object rather than the
+	// inventory item it came from: the capability compiles into a task,
+	// and the task's item id is the one the contents file gave.
+	if got := string(<-up.asked); !strings.Contains(got, theChild.String()) ||
+		!strings.Contains(got, thePrim.String()) || !strings.Contains(got, "mono") {
+		t.Errorf("the capability was asked %q", got)
+	}
+	if got := string(<-up.body); got != "default {}" {
+		t.Errorf("uploaded %q", got)
+	}
+
+	// Something else in the region talking is not this run's business,
+	// and a transcript that held it would report lines the script never
+	// said.
+	f.Relay(t, objectSaid(theOther, ChatSay, "not from the script"))
+	f.Relay(t, objectSaid(thePrim, ChatSay, "starting"))
+	f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+
+	res, err := wait()
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.Compiled || !res.Finished || res.Fault != nil {
+		t.Errorf("Run = %+v", res)
+	}
+	if res.Item != theChild {
+		t.Errorf("the run names item %s, want the copy inside the object", res.Item)
+	}
+	if got := res.Said(); len(got) != 2 || got[0] != "starting" {
+		t.Errorf("the transcript is %q", got)
+	}
+	if res.Elapsed <= 0 {
+		t.Error("the run took no measurable time at all")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(heard) != 2 {
+		t.Errorf("OnLine was called with %q", heard)
+	}
+}
+
+// TestRunWillNotWaitForOutputFromSomethingThatDidNotCompile: nothing is
+// going to be said, so waiting out the timeout only delays an answer
+// that is already known.
+func TestRunWillNotWaitForOutputFromSomethingThatDidNotCompile(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
+		return 200, `<llsd><map><key>state</key><string>complete</string>` +
+			`<key>compiled</key><boolean>0</boolean>` +
+			`<key>errors</key><array><string>(1,1) : ERROR : Syntax error</string></array>` +
+			`</map></llsd>`
+	})
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+
+	res, err := wait()
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Compiled || res.Finished {
+		t.Errorf("Run = %+v", res)
+	}
+	if len(res.Errors) != 1 || !strings.Contains(res.Errors[0], "Syntax error") {
+		t.Errorf("the compiler said %q", res.Errors)
+	}
+}
+
+// TestRunStopsWhenTheScriptFaults: a run-time fault stops the script
+// where it is, so the sentinel is never coming and the whole timeout
+// would be spent waiting for it.  The reason arrives as a second line
+// and is worth the moment it takes.
+func TestRunStopsWhenTheScriptFaults(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+	<-up.body
+
+	f.Relay(t, objectSaid(thePrim, ChatDebug,
+		"Test HUD [script:a script] Script run-time error"))
+	f.Relay(t, objectSaid(thePrim, ChatDebug, "Math Error"))
+
+	res, err := wait()
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Fault == nil {
+		t.Fatalf("a faulted script came back with no fault: %+v", res)
+	}
+	if res.Fault.Script != "a script" || res.Fault.Reason != "Math Error" {
+		t.Errorf("fault = %+v", res.Fault)
+	}
+	if !res.Failed() || res.Finished {
+		t.Error("a faulted run was reported as having got to the end")
+	}
+	if res.Elapsed > 30*time.Second {
+		t.Errorf("the run waited %s for a script that had already stopped", res.Elapsed)
+	}
+}
+
+// TestRunCarriesOnPastAFaultWhenAskedTo: the object may hold other
+// scripts, and one of them dying is not a reason to stop listening to
+// the rest.
+func TestRunCarriesOnPastAFaultWhenAskedTo(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {}", Done: "FINISHED", IgnoreFault: true,
+			Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+	<-up.body
+
+	f.Relay(t, objectSaid(thePrim, ChatDebug,
+		"Test HUD [script:a script] Script run-time error"))
+	f.Relay(t, objectSaid(thePrim, ChatDebug, "Math Error"))
+	// The fault did not end the run, so the sentinel still does.
+	f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+
+	res, err := wait()
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.Finished {
+		t.Error("a run told to ignore faults stopped at one anyway")
+	}
+	if res.Fault == nil {
+		t.Error("the fault was ignored so thoroughly it was not even reported")
+	}
+}
+
+// TestRunWithNoSentinelHasNothingToWaitForButTheClock: a script that
+// never says it has finished cannot be told from one about to speak, so
+// the timeout is spent rather than shortened -- and reaching it is a
+// result rather than an error.
+func TestRunWithNoSentinelHasNothingToWaitForButTheClock(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no sentinel", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		up := serveUpload(t, f, "UpdateScriptTask", compiles)
+
+		wait := aside(t, func() (*Result, error) {
+			return w.Run(context.Background(), Script{
+				In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+				Source: "default {}", Timeout: 50 * time.Millisecond,
+			})
+		})
+		answerContents(t, f, thePrim, theContentsFile)
+		<-up.body
+
+		res, err := wait()
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if res.Finished {
+			t.Error("a run with nothing to look for said it had found it")
+		}
+	})
+
+	t.Run("a sentinel nobody said", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		up := serveUpload(t, f, "UpdateScriptTask", compiles)
+
+		wait := aside(t, func() (*Result, error) {
+			return w.Run(context.Background(), Script{
+				In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+				Source: "default {}", Done: "FINISHED",
+				Timeout: 50 * time.Millisecond,
+			})
+		})
+		answerContents(t, f, thePrim, theContentsFile)
+		<-up.body
+
+		res, err := wait()
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if res.Finished || res.Failed() != true {
+			t.Errorf("Run = %+v, want a run that timed out", res)
+		}
+	})
+}
+
+// TestRunReportsWhatDidNotHappen: every step of a run is somewhere it
+// can stop, and a caller told only that the run failed cannot tell a
+// missing object from a compile that never went out.
+func TestRunReportsWhatDidNotHappen(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	if _, err := w.Run(context.Background(), Script{Name: "a script"}); err == nil {
+		t.Error("Run ran a script in no object at all")
+	}
+	if _, err := w.Run(context.Background(), Script{In: &Object{ID: thePrim}}); err == nil {
+		t.Error("Run ran a script with no name")
+	}
+
+	t.Run("the object could not be read", func(t *testing.T) {
+		f.FailSends(errors.New("the circuit is gone"))
+		_, err := w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script", Source: "default {}",
+		})
+		if err == nil {
+			t.Error("Run compiled into an object it could not read")
+		}
+	})
+
+	t.Run("there is nowhere to compile", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		// No UpdateScriptTask capability, which is what a session that
+		// never asked for one looks like.
+		wait := aside(t, func() (*Result, error) {
+			return w.Run(context.Background(), Script{
+				In: &Object{ID: thePrim, Local: 77}, Name: "a script", Source: "default {}",
+			})
+		})
+		answerContents(t, f, thePrim, theContentsFile)
+		if _, err := wait(); err == nil {
+			t.Error("Run reported a result without compiling anything")
+		}
+	})
+
+	t.Run("the caller gave up while listening", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		up := serveUpload(t, f, "UpdateScriptTask", compiles)
+		// A deadline rather than a cancel from here, because giving up
+		// while the compile is still in flight is a different branch:
+		// this one has to land while the run is listening.
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+
+		wait := aside(t, func() (*Result, error) {
+			return w.Run(ctx, Script{
+				In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+				Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+			})
+		})
+		answerContents(t, f, thePrim, theContentsFile)
+		<-up.body
+
+		res, err := wait()
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("Run = %v, want the context's reason", err)
+		}
+		// The lines heard before giving up are still worth having.
+		if res == nil {
+			t.Error("a cancelled run came back with no transcript at all")
+		}
+	})
+}
+
+// TestRunPutsTheScriptInWhenItIsNotThere: copying an inventory script
+// into an object does not start it, so the copy is made and then
+// compiled through the same capability a rerun uses.  Getting the item
+// id from the second read rather than the first is the point: the copy
+// inside the object has its own, and the inventory item's is no use to
+// the capability.
+func TestRunPutsTheScriptInWhenItIsNotThere(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	serveUpload(t, f, "UpdateScriptAgent", compiles)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+
+	// Not in the object: the read answers with a file holding nothing.
+	held := objectHolding(f, thePrim)
+	held.answer(t, "")
+
+	m := waitSent[*msg.CreateInventoryItem](t, f)
+	relayCreated(t, f, m.InventoryBlock.CallbackID)
+	put := waitSent[*msg.UpdateTaskInventory](t, f)
+	if put.UpdateData.LocalID != 77 || put.InventoryData.ItemID != theChild {
+		t.Errorf("the copy went into %+v", put.UpdateData)
+	}
+
+	// Then the settle, and the read that finds it.
+	held.answer(t, theContentsFile)
+	<-up.body
+	f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+
+	res, err := wait()
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Item != theChild || !res.Finished {
+		t.Errorf("Run = %+v", res)
+	}
+}
+
+// TestRunSaysWhenTheCopyNeverArrived: an object keeps what it is given,
+// so a script that is still not in there after a copy and a settle means
+// the copy was refused -- and compiling against a nil item would be a
+// nil dereference rather than a message.
+func TestRunSaysWhenTheCopyNeverArrived(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	serveUpload(t, f, "UpdateScriptAgent", compiles)
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script", Source: "default {}",
+		})
+	})
+	held := objectHolding(f, thePrim)
+	held.answer(t, "")
+	m := waitSent[*msg.CreateInventoryItem](t, f)
+	relayCreated(t, f, m.InventoryBlock.CallbackID)
+	waitSent[*msg.UpdateTaskInventory](t, f)
+	held.answer(t, "")
+
+	_, err := wait()
+	if err == nil || !strings.Contains(err.Error(), "never turned up") {
+		t.Errorf("Run = %v, want it to say the copy did not arrive", err)
+	}
+}
+
+// TestInstallScriptIsTheHalfThatCompiles: copying a script into an
+// object leaves it there and does not start it, and SetScriptRunning
+// cannot start it either because there is nothing compiled to start.
+// This is the save that compiles it in place, which is why running a
+// script always worked while installing a listener never did.
+func TestInstallScriptIsTheHalfThatCompiles(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+	o := &Object{ID: thePrim, Local: 77}
+
+	wait := aside(t, func() (*UploadResult, error) {
+		return w.InstallScript(context.Background(), o, "a script", "default {}", true)
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+
+	if got := string(<-up.asked); !strings.Contains(got, theChild.String()) {
+		t.Errorf("the capability was asked %q, want the item inside the object", got)
+	}
+	res, err := wait()
+	if err != nil {
+		t.Fatalf("InstallScript: %v", err)
+	}
+	if !res.Compiled {
+		t.Errorf("InstallScript = %+v", res)
+	}
+}
+
+// TestInstallScriptCopiesItInFirstWhenItHasTo: the same two steps Run
+// takes, and for the same reason -- there is nothing to compile into
+// until the object holds a copy.
+func TestInstallScriptCopiesItInFirstWhenItHasTo(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	serveUpload(t, f, "UpdateScriptAgent", compiles)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+	o := &Object{ID: thePrim, Local: 77}
+
+	wait := aside(t, func() (*UploadResult, error) {
+		return w.InstallScript(context.Background(), o, "a script", "default {}", false)
+	})
+	held := objectHolding(f, thePrim)
+	held.answer(t, "")
+	m := waitSent[*msg.CreateInventoryItem](t, f)
+	relayCreated(t, f, m.InventoryBlock.CallbackID)
+	waitSent[*msg.UpdateTaskInventory](t, f)
+	held.answer(t, theContentsFile)
+
+	if got := string(<-up.asked); !strings.Contains(got, "is_script_running") {
+		t.Errorf("the capability was asked %q", got)
+	}
+	if _, err := wait(); err != nil {
+		t.Fatalf("InstallScript: %v", err)
+	}
+}
+
+// TestInstallScriptRefusesWhatItCannotDo: the object and the name are
+// what the whole call is addressed to, and a missing one would be a
+// message about an item id rather than about the argument.
+func TestInstallScriptRefusesWhatItCannotDo(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	if _, err := w.InstallScript(context.Background(), nil, "a script", "", true); err == nil {
+		t.Error("InstallScript installed into no object")
+	}
+	o := &Object{ID: thePrim, Local: 77}
+	if _, err := w.InstallScript(context.Background(), o, "", "", true); err == nil {
+		t.Error("InstallScript installed something with no name")
+	}
+
+	f.FailSends(errors.New("the circuit is gone"))
+	if _, err := w.InstallScript(context.Background(), o, "a script", "", true); err == nil {
+		t.Error("InstallScript compiled into an object it could not read")
+	}
+
+	t.Run("the copy never arrived", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		serveUpload(t, f, "UpdateScriptAgent", compiles)
+		wait := aside(t, func() (*UploadResult, error) {
+			return w.InstallScript(context.Background(), &Object{ID: thePrim, Local: 77},
+				"a script", "default {}", true)
+		})
+		held := objectHolding(f, thePrim)
+		held.answer(t, "")
+		m := waitSent[*msg.CreateInventoryItem](t, f)
+		relayCreated(t, f, m.InventoryBlock.CallbackID)
+		waitSent[*msg.UpdateTaskInventory](t, f)
+		held.answer(t, "")
+		if _, err := wait(); err == nil || !strings.Contains(err.Error(), "never turned up") {
+			t.Errorf("InstallScript = %v", err)
+		}
+	})
+}
+
+// TestRemoveScriptsTakesOutOnlyTheScripts: an object holds textures and
+// notecards as well, and a run that cleared everything matching a name
+// would take out whatever the object needs to work.
+func TestRemoveScriptsTakesOutOnlyTheScripts(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	wait := aside(t, func() (int, error) {
+		return w.RemoveScripts(context.Background(), o, func(name string) bool {
+			return strings.HasPrefix(name, "a ")
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+
+	rm := waitSent[*msg.RemoveTaskInventory](t, f)
+	if rm.InventoryData.ItemID != theChild || rm.InventoryData.LocalID != 77 {
+		t.Errorf("removed %+v", rm.InventoryData)
+	}
+
+	n, err := wait()
+	if err != nil {
+		t.Fatalf("RemoveScripts: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("removed %d scripts, want 1", n)
+	}
+}
+
+// TestRemoveScriptsLeavesWhatDoesNotMatch: a match that says no is the
+// ordinary case -- most of what an object holds is not the leftover
+// being cleared -- and it must not cost a settle either.
+func TestRemoveScriptsLeavesWhatDoesNotMatch(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	wait := aside(t, func() (int, error) {
+		return w.RemoveScripts(context.Background(), o, func(string) bool { return false })
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+
+	n, err := wait()
+	if err != nil {
+		t.Fatalf("RemoveScripts: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("removed %d scripts from an object nothing matched in", n)
+	}
+	if got := sentOf[*msg.RemoveTaskInventory](f); len(got) != 0 {
+		t.Errorf("%d removals went out for a match that said no", len(got))
+	}
+}
+
+// TestRemoveScriptsReportsWhatDidNotHappen: it reads over one protocol
+// and removes over another, and a caller told nothing was removed would
+// go looking for the scripts.
+func TestRemoveScriptsReportsWhatDidNotHappen(t *testing.T) {
+	t.Parallel()
+	o := &Object{ID: thePrim, Local: 77}
+
+	t.Run("the object could not be read", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.FailSends(errors.New("the circuit is gone"))
+		if _, err := w.RemoveScripts(context.Background(), o, func(string) bool { return true }); err == nil {
+			t.Error("RemoveScripts reported on an object it could not read")
+		}
+	})
+
+	t.Run("the removal never went", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		wait := aside(t, func() (int, error) {
+			return w.RemoveScripts(context.Background(), o, func(string) bool { return true })
+		})
+		answerContents(t, f, thePrim, theContentsFile)
+		f.FailSends(errors.New("the circuit is gone"))
+
+		n, err := wait()
+		if err == nil {
+			t.Error("RemoveScripts reported a removal that never went out")
+		}
+		if n != 0 {
+			t.Errorf("counted %d removed", n)
+		}
+	})
+}
+
+// TestSetScriptRunningNamesBothTheObjectAndTheScript: an object may hold
+// several scripts, so the pair is what says which one to start.
+func TestSetScriptRunningNamesBothTheObjectAndTheScript(t *testing.T) {
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	if err := w.SetScriptRunning(context.Background(), o, theChild, true); err != nil {
+		t.Fatalf("SetScriptRunning: %v", err)
+	}
+	m := onlySent[*msg.SetScriptRunning](t, f)
+	if m.Script.ObjectID != thePrim || m.Script.ItemID != theChild || !m.Script.Running {
+		t.Errorf("SetScriptRunning sent %+v", m.Script)
+	}
+	if m.AgentData.AgentID != testAgentID || m.AgentData.SessionID != testSessionID {
+		t.Errorf("the message names %s", m.AgentData.AgentID)
+	}
+
+	f.Forget()
+	f.FailSends(errors.New("the circuit is gone"))
+	if err := w.SetScriptRunning(context.Background(), o, theChild, false); err == nil {
+		t.Error("SetScriptRunning reported a stop that never went out")
+	}
+}
+
+// TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed: getting a
+// script into an object is four things -- create the item, upload the
+// source, copy it in, and read the object again -- and a caller told
+// only that the run failed cannot tell which of them to look at.
+func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
+	t.Parallel()
+	o := &Object{ID: thePrim, Local: 77}
+	gone := errors.New("the circuit is gone")
+
+	t.Run("the item was never created", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		failSendsAfter[*msg.RequestTaskInventory](f, gone)
+		wait := aside(t, func() (*Result, error) {
+			return w.Run(context.Background(), Script{In: o, Name: "a script"})
+		})
+		objectHolding(f, thePrim).answer(t, "")
+		if _, err := wait(); err == nil {
+			t.Error("Run compiled into an object with no script in it")
+		}
+	})
+
+	t.Run("the copy never went in", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		serveUpload(t, f, "UpdateScriptAgent", compiles)
+		failSendsAfter[*msg.CreateInventoryItem](f, gone)
+		wait := aside(t, func() (*Result, error) {
+			return w.Run(context.Background(), Script{In: o, Name: "a script"})
+		})
+		held := objectHolding(f, thePrim)
+		held.answer(t, "")
+		m := waitSent[*msg.CreateInventoryItem](t, f)
+		relayCreated(t, f, m.InventoryBlock.CallbackID)
+		if _, err := wait(); err == nil {
+			t.Error("Run compiled into an object the copy never reached")
+		}
+	})
+
+	t.Run("the caller gave up while it settled", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		serveUpload(t, f, "UpdateScriptAgent", compiles)
+		// The settle after a copy is six seconds, so a caller with less
+		// patience than that gives up inside it.
+		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		defer cancel()
+		wait := aside(t, func() (*Result, error) {
+			return w.Run(ctx, Script{In: o, Name: "a script"})
+		})
+		held := objectHolding(f, thePrim)
+		held.answer(t, "")
+		m := waitSent[*msg.CreateInventoryItem](t, f)
+		relayCreated(t, f, m.InventoryBlock.CallbackID)
+		waitSent[*msg.UpdateTaskInventory](t, f)
+		if _, err := wait(); !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("Run = %v, want the context's reason", err)
+		}
+	})
+
+	t.Run("the object could not be read again", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		serveUpload(t, f, "UpdateScriptAgent", compiles)
+		failSendsAfter[*msg.UpdateTaskInventory](f, gone)
+		wait := aside(t, func() (*Result, error) {
+			return w.Run(context.Background(), Script{In: o, Name: "a script"})
+		})
+		held := objectHolding(f, thePrim)
+		held.answer(t, "")
+		m := waitSent[*msg.CreateInventoryItem](t, f)
+		relayCreated(t, f, m.InventoryBlock.CallbackID)
+		if _, err := wait(); err == nil {
+			t.Error("Run reported a result for an object it could not read")
+		}
+	})
+}
+
+// TestInstallScriptStopsAtTheSameStepsForTheSameReasons: it is Run's
+// first half without the listening, so the ways it can stop are the same
+// ones -- and a caller of this is usually installing something another
+// call is about to depend on.
+func TestInstallScriptStopsAtTheSameStepsForTheSameReasons(t *testing.T) {
+	t.Parallel()
+	o := &Object{ID: thePrim, Local: 77}
+	gone := errors.New("the circuit is gone")
+
+	t.Run("the item was never created", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		failSendsAfter[*msg.RequestTaskInventory](f, gone)
+		wait := aside(t, func() (*UploadResult, error) {
+			return w.InstallScript(context.Background(), o, "a script", "default {}", true)
+		})
+		objectHolding(f, thePrim).answer(t, "")
+		if _, err := wait(); err == nil {
+			t.Error("InstallScript compiled into an object with no script in it")
+		}
+	})
+
+	t.Run("the copy never went in", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		serveUpload(t, f, "UpdateScriptAgent", compiles)
+		failSendsAfter[*msg.CreateInventoryItem](f, gone)
+		wait := aside(t, func() (*UploadResult, error) {
+			return w.InstallScript(context.Background(), o, "a script", "default {}", true)
+		})
+		objectHolding(f, thePrim).answer(t, "")
+		m := waitSent[*msg.CreateInventoryItem](t, f)
+		relayCreated(t, f, m.InventoryBlock.CallbackID)
+		if _, err := wait(); err == nil {
+			t.Error("InstallScript compiled into an object the copy never reached")
+		}
+	})
+
+	t.Run("the caller gave up while it settled", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		serveUpload(t, f, "UpdateScriptAgent", compiles)
+		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		defer cancel()
+		wait := aside(t, func() (*UploadResult, error) {
+			return w.InstallScript(ctx, o, "a script", "default {}", true)
+		})
+		objectHolding(f, thePrim).answer(t, "")
+		m := waitSent[*msg.CreateInventoryItem](t, f)
+		relayCreated(t, f, m.InventoryBlock.CallbackID)
+		waitSent[*msg.UpdateTaskInventory](t, f)
+		if _, err := wait(); !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("InstallScript = %v, want the context's reason", err)
+		}
+	})
+
+	t.Run("the object could not be read again", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		serveUpload(t, f, "UpdateScriptAgent", compiles)
+		failSendsAfter[*msg.UpdateTaskInventory](f, gone)
+		wait := aside(t, func() (*UploadResult, error) {
+			return w.InstallScript(context.Background(), o, "a script", "default {}", true)
+		})
+		objectHolding(f, thePrim).answer(t, "")
+		m := waitSent[*msg.CreateInventoryItem](t, f)
+		relayCreated(t, f, m.InventoryBlock.CallbackID)
+		if _, err := wait(); err == nil {
+			t.Error("InstallScript reported a result for an object it could not read")
+		}
+	})
+}
+
+// TestARunWithNoSentinelStillAnswersToTheCaller: there is nothing to
+// wait for but the clock, and a caller that has changed its mind must
+// not have to wait out a timeout it no longer cares about.
+func TestARunWithNoSentinelStillAnswersToTheCaller(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+	ctx, cancel := context.WithTimeout(context.Background(), 700*time.Millisecond)
+	defer cancel()
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(ctx, Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {}", Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+	<-up.body
+
+	if _, err := wait(); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Run = %v, want the context's reason", err)
+	}
+}
+
+// TestAScriptCanFaultAfterSayingItHadFinished: the sentinel is still
+// watched for during the grace after a fault, because a script that says
+// it is done and then dies on the way out of the handler has still done
+// what it was asked.
+func TestAScriptCanFaultAfterSayingItHadFinished(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+	<-up.body
+
+	// The fault first, and then the sentinel rather than a reason.
+	//
+	// The pause is what makes this the branch it is meant to be.  Both
+	// the fault and the sentinel end the wait, so a sentinel relayed
+	// straight after the fault leaves the run choosing between two
+	// things that are both ready -- and half the time it would take the
+	// sentinel without ever entering the grace.  The grace is three
+	// seconds, so a tenth of one inside it is not a race.
+	f.Relay(t, objectSaid(thePrim, ChatDebug,
+		"Test HUD [script:a script] Script run-time error"))
+	time.Sleep(100 * time.Millisecond)
+	f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+
+	res, err := wait()
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.Finished {
+		t.Error("a sentinel said during the fault grace was not counted")
+	}
+	if res.Fault == nil || res.Fault.Reason != "" {
+		t.Errorf("fault = %+v, want one that never said why", res.Fault)
+	}
+}
+
+// TestRemoveScriptsSettlesBeforeSayingItIsDone: an object's contents
+// take a moment to catch up with a removal, so a caller that read them
+// straight afterwards would see the script it had just taken out.
+func TestRemoveScriptsSettlesBeforeSayingItIsDone(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+	// Less patience than the settle takes, which is where a caller that
+	// has given up lands.
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	wait := aside(t, func() (int, error) {
+		return w.RemoveScripts(ctx, o, func(string) bool { return true })
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+	waitSent[*msg.RemoveTaskInventory](t, f)
+
+	n, err := wait()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("RemoveScripts = %v, want the context's reason", err)
+	}
+	// The count is still the truth: the script was removed, and only
+	// the wait for it to take effect was cut short.
+	if n != 1 {
+		t.Errorf("RemoveScripts counted %d removed", n)
+	}
+}

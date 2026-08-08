@@ -2,7 +2,11 @@ package sl
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/quark-idlemind/slgo/llsd"
@@ -222,5 +226,141 @@ func TestFeatures(t *testing.T) {
 	}
 	if got := f.Names(); len(got) != 7 || got[0] != "HostName" {
 		t.Errorf("Names = %v", got)
+	}
+}
+
+// TestLSLSyntaxIsFetchedOnceAndKeptByItsId: the document is half a
+// megabyte and changes only when Linden Lab changes the language, so it
+// is fetched once and kept -- and the id in SimulatorFeatures is what
+// makes keeping it safe.  Asking again costs one small GET for the id
+// and, when it has not moved, nothing else.
+func TestLSLSyntaxIsFetchedOnceAndKeptByItsId(t *testing.T) {
+	w, f := newFakeSession(t)
+	const id = "c9767e57-7e57-c0de-6bd6-02d6d9429743"
+
+	var fetches atomic.Int32
+	f.ServeCap(t, "SimulatorFeatures", func(rw http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(rw, `<llsd><map><key>LSLSyntaxId</key><string>%s</string></map></llsd>`, id)
+	})
+	f.ServeCap(t, "LSLSyntax", func(rw http.ResponseWriter, r *http.Request) {
+		fetches.Add(1)
+		fmt.Fprint(rw, syntaxDocument)
+	})
+
+	s, err := w.LSLSyntax(context.Background())
+	if err != nil {
+		t.Fatalf("LSLSyntax: %v", err)
+	}
+	if s.ID.String() != id {
+		t.Errorf("the syntax is filed under %s", s.ID)
+	}
+	if len(s.FunctionNames()) == 0 || len(s.ConstantNames()) == 0 || len(s.EventNames()) == 0 {
+		t.Errorf("the language came back with %d functions, %d constants, %d events",
+			len(s.Functions), len(s.Constants), len(s.Events))
+	}
+
+	again, err := w.LSLSyntax(context.Background())
+	if err != nil {
+		t.Fatalf("the second LSLSyntax: %v", err)
+	}
+	if again != s {
+		t.Error("the syntax was parsed again for an id that had not moved")
+	}
+	if n := fetches.Load(); n != 1 {
+		t.Errorf("the document was fetched %d times", n)
+	}
+}
+
+// TestLSLSyntaxIsFetchedAgainWhenTheLanguageMoves: the id changing is
+// the day Linden Lab added something, and a cached copy from before that
+// would report a function that no longer exists.
+func TestLSLSyntaxIsFetchedAgainWhenTheLanguageMoves(t *testing.T) {
+	w, f := newFakeSession(t)
+
+	var which atomic.Int32
+	f.ServeCap(t, "SimulatorFeatures", func(rw http.ResponseWriter, r *http.Request) {
+		ids := []string{
+			"c9767e57-7e57-c0de-6bd6-02d6d9429743",
+			"85da7e57-7e57-c0de-356c-34f772e38626",
+		}
+		fmt.Fprintf(rw, `<llsd><map><key>LSLSyntaxId</key><string>%s</string></map></llsd>`,
+			ids[which.Load()])
+	})
+	var fetches atomic.Int32
+	f.ServeCap(t, "LSLSyntax", func(rw http.ResponseWriter, r *http.Request) {
+		fetches.Add(1)
+		fmt.Fprint(rw, syntaxDocument)
+	})
+
+	if _, err := w.LSLSyntax(context.Background()); err != nil {
+		t.Fatalf("LSLSyntax: %v", err)
+	}
+	which.Store(1)
+	s, err := w.LSLSyntax(context.Background())
+	if err != nil {
+		t.Fatalf("LSLSyntax: %v", err)
+	}
+	if s.ID.String() != "85da7e57-7e57-c0de-356c-34f772e38626" {
+		t.Errorf("the cached copy was kept under the new id: %s", s.ID)
+	}
+	if n := fetches.Load(); n != 2 {
+		t.Errorf("the document was fetched %d times, want one per id", n)
+	}
+}
+
+// TestLSLSyntaxSaysWhichHalfFailed: it is two capabilities, and the one
+// that answers with the language is the expensive one -- so a caller
+// told only that it failed cannot tell a region that does not offer it
+// from one that answered with rubbish.
+func TestLSLSyntaxSaysWhichHalfFailed(t *testing.T) {
+	t.Run("no capability to ask", func(t *testing.T) {
+		// SimulatorFeatures is missing too, which is why the id is
+		// looked up with its error ignored: a region without it still
+		// has a language.
+		w, _ := newFakeSession(t)
+		if _, err := w.LSLSyntax(context.Background()); err == nil {
+			t.Error("LSLSyntax answered without asking anything")
+		}
+	})
+
+	t.Run("an answer that is not LLSD", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.ServeCap(t, "LSLSyntax", func(rw http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(rw, "not llsd at all")
+		})
+		if _, err := w.LSLSyntax(context.Background()); err == nil {
+			t.Error("LSLSyntax parsed something that is not a document")
+		}
+	})
+
+	t.Run("LLSD that is not a map", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.ServeCap(t, "LSLSyntax", func(rw http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(rw, `<llsd><array><string>x</string></array></llsd>`)
+		})
+		_, err := w.LSLSyntax(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "wanted a map") {
+			t.Errorf("LSLSyntax = %v, want it to say what it got", err)
+		}
+	})
+}
+
+// TestTheSyntaxVersionMayArriveAsEitherKindOfNumber: LLSD has an integer
+// and a real and the document has been seen using both, so a parser that
+// only read one would report version zero for the other -- and version
+// zero is what "this is not a syntax document" looks like.
+func TestTheSyntaxVersionMayArriveAsEitherKindOfNumber(t *testing.T) {
+	for _, form := range []string{
+		`<integer>2</integer>`,
+		`<real>2.0</real>`,
+	} {
+		v, err := llsd.Decode(strings.NewReader(
+			`<llsd><map><key>llsd-lsl-syntax-version</key>` + form + `</map></llsd>`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := parseSyntax(llsd.Map(v)).Version; got != 2 {
+			t.Errorf("a version written as %s read as %d", form, got)
+		}
 	}
 }

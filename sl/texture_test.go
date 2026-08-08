@@ -181,3 +181,208 @@ func TestDecodeTextureEntryRejectsRubbish(t *testing.T) {
 		t.Error("a three byte TextureEntry decoded without complaint")
 	}
 }
+
+// TestTheConventionalReadingsOfAFace: the offsets and the rotation
+// travel as signed fractions of their range, and the bump byte holds
+// three separate things -- so a caller reading the fields raw would have
+// a rotation of 8192 and no idea whether the face is fullbright.
+//
+// The scaling is not something this package has confirmed against a
+// simulator: the sections it comes from have only ever been seen holding
+// zero.  It is here as the conventional reading and is documented as
+// such in texture.go.
+func TestTheConventionalReadingsOfAFace(t *testing.T) {
+	f := Face{OffsetS: 32767, OffsetT: -32767, Rotation: 16384}
+	s, tt := f.OffsetsF()
+	if s != 1 || tt != -1 {
+		t.Errorf("OffsetsF = %v, %v, want the ends of the range", s, tt)
+	}
+	if got := f.RotationRad(); got < 3.14 || got > 3.15 {
+		t.Errorf("RotationRad = %v, want half a turn", got)
+	}
+
+	// Bumpiness in the bottom five bits, fullbright at 0x20, shininess
+	// in the top two.
+	f = Face{Bump: 0x20 | 0x03}
+	if !f.Fullbright() || f.Shiny() != 0 || f.Bumpiness() != 3 {
+		t.Errorf("bump %#x reads as fullbright %v, shiny %d, bumpiness %d",
+			f.Bump, f.Fullbright(), f.Shiny(), f.Bumpiness())
+	}
+	f = Face{Bump: 0xc0}
+	if f.Fullbright() || f.Shiny() != 3 || f.Bumpiness() != 0 {
+		t.Errorf("bump %#x reads as fullbright %v, shiny %d, bumpiness %d",
+			f.Bump, f.Fullbright(), f.Shiny(), f.Bumpiness())
+	}
+}
+
+// TestAFaceCountOfZeroIsGuessedFromWhatIsMentioned: nothing in the blob
+// says how many faces the object has, so a caller that does not know
+// either is documented to get the highest face any exception names.
+//
+// It does not.  textureEntryFaces asks section to fill thirty-two faces
+// with the default before any exception is read, and the fill calls set
+// for every one of them -- so the highest face "mentioned" is always the
+// thirty-second, whatever the blob says.  The right answer for the box
+// captured above is five: its exception set names faces 0 to 4 and
+// leaves face 5 on the default, which is exactly the case the doc
+// comment warns is unreliable.  Instead every prim guesses 32, and every
+// caller that passes a count of zero gets twenty-six faces that do not
+// exist.
+//
+// The fix is for the guess to ignore the default fill and look only at
+// the exception sets, which is what "the sets mentioned" in
+// textureEntryFaces means.
+func TestAFaceCountOfZeroIsGuessedFromWhatIsMentioned(t *testing.T) {
+	t.Skip("demonstrates the face count guess counting the default fill; " +
+		"see coverage-notes/sl-rest.md")
+
+	faces, err := DecodeTextureEntry(teBytes(t, defaultBoxTE), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(faces) != 5 {
+		t.Errorf("guessed %d faces from a six faced box, want the 5 it mentions", len(faces))
+	}
+
+	// A blob whose first section has no exceptions at all mentions no
+	// face, and one face is the smallest answer that is not nonsense.
+	n, err := textureEntryFaces(teBytes(t, `
+		89556747 24cb43ed 920b47ca ed15465f
+		00`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("guessed %d faces from a blob mentioning none", n)
+	}
+}
+
+// TestAFaceCountOfZeroStillDecodes: whatever the guess comes out at, a
+// caller that does not know how many faces the object has must get
+// something back rather than an error -- and a blob too short to guess
+// from is a different answer from a blob that mentions nothing.
+func TestAFaceCountOfZeroStillDecodes(t *testing.T) {
+	faces, err := DecodeTextureEntry(teBytes(t, defaultBoxTE), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(faces) == 0 {
+		t.Fatal("guessing the face count came back with no faces at all")
+	}
+	const plywood = "89556747-24cb-43ed-920b-47caed15465f"
+	if got := faces[0].Texture.String(); got != plywood {
+		t.Errorf("face 0 texture = %s", got)
+	}
+}
+
+// TestDecodingRefusesWhatItCannotFinish: the blob is packed by exception
+// and every section can run out in the middle, which is not the same as
+// a prim whose faces are all on the default -- and a decoder that
+// returned what it had would describe a face nothing said anything
+// about.
+func TestDecodingRefusesWhatItCannotFinish(t *testing.T) {
+	if _, err := DecodeTextureEntry(nil, 6); err == nil {
+		t.Error("an empty TextureEntry decoded to something")
+	}
+
+	// A count of zero on a blob too short to guess from.
+	if _, err := DecodeTextureEntry([]byte{1, 2, 3}, 0); err == nil {
+		t.Error("a truncated TextureEntry was guessed at")
+	}
+
+	// The default of a later section missing, which is where an older
+	// simulator's blob genuinely ends -- but this one stops in the
+	// colour, which is not optional.
+	short := teBytes(t, `
+		89556747 24cb43ed 920b47ca ed15465f
+		00
+		0000`)
+	if _, err := DecodeTextureEntry(short, 6); err == nil {
+		t.Error("a TextureEntry that stops inside the colour decoded")
+	}
+
+	// A face set that never ends: the top bit says another byte
+	// follows, and there is not one.
+	unterminated := teBytes(t, `
+		89556747 24cb43ed 920b47ca ed15465f
+		ff`)
+	if _, err := DecodeTextureEntry(unterminated, 6); err == nil {
+		t.Error("a TextureEntry with an unterminated face set decoded")
+	}
+
+	// An exception naming faces with no value after it.
+	dangling := teBytes(t, `
+		89556747 24cb43ed 920b47ca ed15465f
+		1f 8955`)
+	if _, err := DecodeTextureEntry(dangling, 6); err == nil {
+		t.Error("a TextureEntry whose exception has no value decoded")
+	}
+}
+
+// TestEverySectionSaysWhichOneRanOut: the blob is eleven sections read
+// the same way, and a decoder that reported them all alike would leave
+// somebody guessing which property the simulator's bytes stopped in --
+// the first eight are not optional and each has to name itself.
+func TestEverySectionSaysWhichOneRanOut(t *testing.T) {
+	// One section at a time, each blob stopping in the next: a default
+	// and a terminating zero is one whole section.
+	const (
+		texture = `89556747 24cb43ed 920b47ca ed15465f 00`
+		colour  = `00000000 00`
+		scale   = `0000803f 00`
+		offset  = `0000 00`
+		one     = `00 00`
+	)
+	for _, c := range []struct {
+		want string
+		blob string
+	}{
+		{"texture", ``},
+		{"colour", texture},
+		{"scale S", texture + colour},
+		{"scale T", texture + colour + scale},
+		{"offset S", texture + colour + scale + scale},
+		{"offset T", texture + colour + scale + scale + offset},
+		{"rotation", texture + colour + scale + scale + offset + offset},
+		{"bump", texture + colour + scale + scale + offset + offset + offset},
+	} {
+		// A byte of the next section's default, which is not enough of
+		// it -- an empty tail would be the blob ending cleanly.
+		_, err := DecodeTextureEntry(teBytes(t, c.blob+`00`), 6)
+		if err == nil {
+			t.Errorf("a blob stopping in the %s decoded", c.want)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.want) {
+			t.Errorf("a blob stopping in the %s said %v", c.want, err)
+		}
+	}
+}
+
+// TestWhatComesAfterTheBumpByteMayNotBeThere: media, glow and the
+// material were added after the format was, so an older simulator's blob
+// ends at the bump -- running out there is the end rather than a fault,
+// and a decoder that refused it would report every such prim as corrupt.
+func TestWhatComesAfterTheBumpByteMayNotBeThere(t *testing.T) {
+	const upToBump = `
+		89556747 24cb43ed 920b47ca ed15465f 00
+		00000000 00
+		0000803f 00
+		0000803f 00
+		0000 00
+		0000 00
+		0000 00
+		00 00`
+	faces, err := DecodeTextureEntry(teBytes(t, upToBump), 6)
+	if err != nil {
+		t.Fatalf("a blob that ends at the bump byte was refused: %v", err)
+	}
+	if len(faces) != 6 {
+		t.Fatalf("got %d faces", len(faces))
+	}
+	for i, f := range faces {
+		if f.Media != 0 || f.Glow != 0 || !f.Material.IsZero() {
+			t.Errorf("face %d has what the blob never said: %+v", i, f)
+		}
+	}
+}

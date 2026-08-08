@@ -734,3 +734,20 @@ func (f *fakeBackend) Close() error {
 	})
 	return nil
 }
+
+// failSendsAfter makes every send from the one after a message of this
+// kind onwards fail.
+//
+// A test that watches for a message and then calls FailSends is racing
+// the call it is driving, which is usually already several messages
+// further on.  This trips on the way past instead, so the failure lands
+// at exactly the step being tested.
+func failSendsAfter[T msg.Message](f *fakeBackend, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(T); ok {
+			f.FailSends(err)
+		}
+	}
+}

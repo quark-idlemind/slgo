@@ -1,6 +1,8 @@
 package sl
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -250,5 +252,218 @@ func TestListingPathsSplitBack(t *testing.T) {
 				break
 			}
 		}
+	}
+}
+
+// TestListingAFolderByPathWalksTheNamesDown: a path is names and AIS
+// answers about ids, so there is no call that takes a path -- every
+// segment is a fetch, and the id form exists because a deep path costs
+// one request per level.
+func TestListingAFolderByPathWalksTheNamesDown(t *testing.T) {
+	w, f := newFakeSession(t)
+	inner := mustUUID("61f67e57-7e57-c0de-96da-77d676865c11")
+
+	f.ServeInventoryTree(t, func(id msg.UUID) ([]*Folder, []*Item) {
+		switch id {
+		case testInvRoot:
+			return []*Folder{{ID: aFolder, ParentID: testInvRoot, Name: "Objects", Type: 6}}, nil
+		case aFolder:
+			return []*Folder{{ID: inner, ParentID: aFolder, Name: "Tools", Type: -1}},
+				[]*Item{anItem(theChild, "workbench")}
+		case inner:
+			return nil, []*Item{anItem(theOther, "anvil")}
+		}
+		return nil, nil
+	})
+
+	// The root itself, which is what an empty path means.
+	got, err := w.ListInventory(context.Background(), "", 0)
+	if err != nil {
+		t.Fatalf("ListInventory: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "Objects" || !got[0].IsFolder() {
+		t.Fatalf("the root holds %v", got)
+	}
+
+	// A folder named rather than the root, with the path of the folder
+	// that was asked about on the front of everything inside it, and in
+	// tree order: the folder, then what is in it, then its siblings.
+	got, err = w.ListInventory(context.Background(), "/Objects/", 1)
+	if err != nil {
+		t.Fatalf("ListInventory: %v", err)
+	}
+	want := []string{"Objects/Tools/", "Objects/workbench"}
+	if len(got) != len(want) {
+		t.Fatalf("listed %v, want %v", paths(got), want)
+	}
+	for i, p := range want {
+		if got[i].String() != p {
+			t.Errorf("entry %d is %q, want %q", i, got[i].String(), p)
+		}
+	}
+	// The depth counts from the folder that was asked about, not from
+	// the root.
+	if got[0].Depth != 0 || got[1].Depth != 0 {
+		t.Errorf("depths came out as %d and %d", got[0].Depth, got[1].Depth)
+	}
+	if got[1].ID != theChild || got[1].IsFolder() || got[1].InvType != 6 {
+		t.Errorf("the item came out as %+v", got[1])
+	}
+	if got[0].Parent != aFolder || got[0].Type != -1 {
+		t.Errorf("the folder came out as %+v", got[0])
+	}
+}
+
+// TestListingByIdIsForFoldersAPathCannotName: an inventory name may hold
+// a separator, and a folder called "a/b" cannot be reached by walking
+// names -- so the id form is the way in rather than a convenience.
+func TestListingByIdIsForFoldersAPathCannotName(t *testing.T) {
+	w, f := newFakeSession(t)
+	f.ServeInventory(t, func(id msg.UUID) []*Item {
+		if id != aFolder {
+			return nil
+		}
+		return []*Item{anItem(theChild, "workbench")}
+	})
+
+	got, err := w.ListFolder(context.Background(), aFolder, 0)
+	if err != nil {
+		t.Fatalf("ListFolder: %v", err)
+	}
+	// No prefix, because nothing said where this folder sits.
+	if len(got) != 1 || got[0].Path != "workbench" {
+		t.Errorf("listed %v", paths(got))
+	}
+}
+
+// TestListingSaysWhichPartOfThePathWasNotThere: a path that stops
+// halfway is the ordinary mistake, and a caller told only "no such
+// folder" would not know how far it got.
+func TestListingSaysWhichPartOfThePathWasNotThere(t *testing.T) {
+	w, f := newFakeSession(t)
+	f.ServeInventoryTree(t, func(id msg.UUID) ([]*Folder, []*Item) {
+		if id != testInvRoot {
+			return nil, nil
+		}
+		return []*Folder{{ID: aFolder, ParentID: testInvRoot, Name: "Objects", Type: 6}}, nil
+	})
+
+	_, err := w.ListInventory(context.Background(), "Landmarks", 0)
+	if err == nil || !strings.Contains(err.Error(), "the inventory root") {
+		t.Errorf("ListInventory = %v, want it to say it looked in the root", err)
+	}
+	_, err = w.ListInventory(context.Background(), "Objects/Tools", 0)
+	if err == nil || !strings.Contains(err.Error(), `"Tools"`) ||
+		!strings.Contains(err.Error(), "Objects") {
+		t.Errorf("ListInventory = %v, want it to say where it got to", err)
+	}
+
+	// A folder that is not a folder: a path segment matching an item is
+	// not a way down, since only folders have children.
+	if _, err := w.ListFolder(context.Background(), msgZero(), 0); err == nil {
+		t.Error("ListFolder listed a folder with no id")
+	}
+}
+
+// TestListingPassesOnAnInventoryItCouldNotRead: a folder that answered
+// nothing and a folder with nothing in it are different, and a listing
+// that returned empty for both would have a caller believe the grid.
+func TestListingPassesOnAnInventoryItCouldNotRead(t *testing.T) {
+	w, f := newFakeSession(t)
+
+	// No capability at all, which is what a session that never got one
+	// looks like.
+	if _, err := w.ListFolder(context.Background(), aFolder, 0); err == nil {
+		t.Error("ListFolder listed a folder it could not read")
+	}
+	if _, err := w.ListInventory(context.Background(), "Objects", 0); err == nil {
+		t.Error("ListInventory walked a path it could not read")
+	}
+
+	f.mu.Lock()
+	f.capErr = errors.New("the capability is gone")
+	f.mu.Unlock()
+	if _, err := w.ListFolder(context.Background(), aFolder, 0); err == nil {
+		t.Error("ListFolder listed a folder whose read failed")
+	}
+}
+
+// TestASessionWithNoInventoryRootCannotWalkAPath: the root is where
+// every path starts, and a session that was given none would otherwise
+// ask the grid about the zero uuid.
+func TestASessionWithNoInventoryRootCannotWalkAPath(t *testing.T) {
+	f := newFake(t)
+	f.info.InventoryRoot = msg.UUID{}
+	w, err := New(f)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { f.Close() })
+
+	if _, err := w.ListInventory(context.Background(), "Objects", 0); err == nil {
+		t.Error("ListInventory walked down from a root the session does not have")
+	}
+}
+
+// paths is what a listing looks like, for a failure that has to show the
+// shape it came out in.
+func paths(es []Entry) []string {
+	out := make([]string, 0, len(es))
+	for _, e := range es {
+		out = append(out, e.String())
+	}
+	return out
+}
+
+// TestTreeOrderIsSegmentBySegmentAndNeverATie: comparing whole strings
+// sorts "Alpha Two" between "Alpha" and "Alpha/Deep", because a space is
+// below a slash -- so a sibling folder lands in the middle of another
+// folder's contents.  And AIS hands a folder's contents over in a map,
+// which has no order, so anything left tied comes out differently on
+// every listing.
+func TestTreeOrderIsSegmentBySegmentAndNeverATie(t *testing.T) {
+	older := mustUUID("13787e57-7e57-c0de-3700-d712e533b4ec")
+	newer := mustUUID("1e117e57-7e57-c0de-504c-02f254bdc125")
+
+	// Two names differing only in case sort by the case, but only after
+	// the case-insensitive comparison has said they are the same word.
+	es := []Entry{
+		{Path: "beta", Name: "beta"},
+		{Path: "Beta", Name: "Beta"},
+	}
+	sortEntries(es)
+	if es[0].Path != "Beta" {
+		t.Errorf("case order came out as %v", paths(es))
+	}
+
+	// The same path twice, which a folder and an item of one name can
+	// be: the folder first, so its contents follow it.
+	es = []Entry{
+		{Path: "thing", Name: "thing"},
+		{Path: "thing", Name: "thing", Folder: true},
+	}
+	sortEntries(es)
+	if !es[0].Folder {
+		t.Error("an item of the same name sorted above the folder")
+	}
+
+	// Two items of one name in one folder, which is allowed: newest
+	// first, and then by id so that two listings of an unchanged folder
+	// match.
+	es = []Entry{
+		{Path: "note", ID: newer, Created: 100},
+		{Path: "note", ID: older, Created: 200},
+	}
+	sortEntries(es)
+	if es[0].Created != 200 {
+		t.Errorf("the older copy sorted first: %+v", es)
+	}
+	es = []Entry{
+		{Path: "note", ID: newer, Created: 100},
+		{Path: "note", ID: older, Created: 100},
+	}
+	sortEntries(es)
+	if es[0].ID != older {
+		t.Error("two entries tied on everything came out in map order")
 	}
 }

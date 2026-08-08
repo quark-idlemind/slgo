@@ -1,6 +1,7 @@
 package sl
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -167,5 +168,91 @@ func TestAnswerIdentifiesTheScript(t *testing.T) {
 	if out.Data.TaskID != in.Data.TaskID || out.Data.ItemID != in.Data.ItemID {
 		t.Errorf("answer identifies %s/%s, asked by %s/%s",
 			out.Data.TaskID, out.Data.ItemID, in.Data.TaskID, in.Data.ItemID)
+	}
+}
+
+// TestAPermissionRequestPrintsAsSomethingWorthDeciding: some of these
+// bits hand over real authority -- money, movement, the keyboard -- so
+// whoever is being asked has to see what is being asked for rather than
+// a number.
+func TestAPermissionRequestPrintsAsSomethingWorthDeciding(t *testing.T) {
+	w := &Session{}
+	w.permission(testScriptQuestion(PermissionDebit | PermissionTakeControls))
+	q := w.Asked()[0]
+
+	got := q.String()
+	for _, want := range []string{"Grabby Box", "Quark Idlemind", "debit", "take controls"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("String = %q, want it to carry %q", got, want)
+		}
+	}
+}
+
+// TestAPermissionWithNoSessionCannotBeAnswered: a Permission built by
+// hand, or one kept past the end of the session it came from, has
+// nowhere to send the answer -- and a nil dereference here would be a
+// panic in whatever was holding it.
+func TestAPermissionWithNoSessionCannotBeAnswered(t *testing.T) {
+	q := &Permission{Wants: PermissionDebit}
+	if err := q.GrantAll(context.Background()); err == nil {
+		t.Error("a request with no session reported that it had answered")
+	}
+	if err := q.Deny(context.Background()); err == nil {
+		t.Error("a refusal with no session reported that it had gone out")
+	}
+}
+
+// TestASubscriptionWithNoDepthGetsTheDefault: a caller that does not
+// care how deep the buffer is still needs one, and a channel of zero
+// would drop every request the moment the reader looked away.
+func TestASubscriptionWithNoDepthGetsTheDefault(t *testing.T) {
+	w, stop := newTestSession(t)
+	defer stop()
+
+	ch := w.Permissions(0)
+	defer w.StopPermissions(ch)
+	if got := cap(ch); got != DefaultPermissionDepth {
+		t.Errorf("the buffer is %d deep, want the default of %d", got, DefaultPermissionDepth)
+	}
+
+	chat := w.Chat(ChatFilter{}, -1)
+	defer w.StopChat(chat)
+	if got := cap(chat); got != DefaultChatDepth {
+		t.Errorf("the chat buffer is %d deep, want the default of %d", got, DefaultChatDepth)
+	}
+}
+
+// TestDroppedIsZeroForSomethingNeverSubscribed: the answer is a count,
+// so a channel nobody knows about has to read as none missed rather than
+// as something the caller must handle.
+func TestDroppedIsZeroForSomethingNeverSubscribed(t *testing.T) {
+	w, stop := newTestSession(t)
+	defer stop()
+	ch := make(chan *Permission)
+	if n := w.PermissionsDropped((<-chan *Permission)(ch)); n != 0 {
+		t.Errorf("PermissionsDropped = %d for a channel never subscribed", n)
+	}
+}
+
+// TestAScriptQuestionOffTheWireReachesWhoeverIsListening: the request
+// arrives as an ordinary message on the relay, so the reader has to
+// recognise it -- a subscription that only ever saw hand-built requests
+// would pass while nothing real reached it.
+func TestAScriptQuestionOffTheWireReachesWhoeverIsListening(t *testing.T) {
+	w, f := newFakeSession(t)
+	ch := w.Permissions(4)
+	defer w.StopPermissions(ch)
+
+	f.Relay(t, testScriptQuestion(PermissionTakeControls))
+	select {
+	case q := <-ch:
+		if q.Wants != PermissionTakeControls || q.ObjectName != "Grabby Box" {
+			t.Errorf("the request came out as %+v", q)
+		}
+	default:
+		t.Fatal("a ScriptQuestion off the relay reached nobody")
+	}
+	if len(w.Asked()) != 1 {
+		t.Errorf("Asked = %d", len(w.Asked()))
 	}
 }

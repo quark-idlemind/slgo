@@ -1,8 +1,11 @@
 package sl
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -102,5 +105,122 @@ func TestOnDialogIsCalled(t *testing.T) {
 	w.dialog(testScriptDialog())
 	if got.Message != "pick one" {
 		t.Errorf("the callback saw %+v", got)
+	}
+}
+
+// TestADialogPrintsAsSomethingAPersonCanAnswer: a dialog is put in front
+// of somebody deciding, and a caller that had to reach into the struct
+// to show it would show a different thing each time.
+func TestADialogPrintsAsSomethingAPersonCanAnswer(t *testing.T) {
+	w := &Session{}
+	w.dialog(testScriptDialog())
+	d := w.Dialogs()[0]
+
+	got := d.String()
+	for _, want := range []string{"Test Object", "-4242", `"pick one"`, "Yes"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("String = %q, want it to carry %q", got, want)
+		}
+	}
+}
+
+// TestWaitDialogCountsTheOnesAlreadySeen: a script that opens a dialog
+// the instant it is rezzed would otherwise be a race nobody can win --
+// the dialog arrives before anything has had a chance to wait for it.
+func TestWaitDialogCountsTheOnesAlreadySeen(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	f.Relay(t, testScriptDialog())
+	d, err := w.WaitDialog(context.Background(), time.Second, nil)
+	if err != nil {
+		t.Fatalf("WaitDialog: %v", err)
+	}
+	if d.Message != "pick one" {
+		t.Errorf("WaitDialog = %+v", d)
+	}
+
+	// A match that picks one out of several, since a probe usually
+	// cares about one particular script.
+	other := testScriptDialog()
+	other.Data.Message = []byte("something else\x00")
+	f.Relay(t, other)
+	d, err = w.WaitDialog(context.Background(), time.Second, func(d Dialog) bool {
+		return d.Message == "something else"
+	})
+	if err != nil || d.Message != "something else" {
+		t.Errorf("WaitDialog = %+v, %v", d, err)
+	}
+}
+
+// TestWaitDialogGivesUpRatherThanHangs: a dialog cannot be declined --
+// there is no message for the close box -- so one nobody answers simply
+// expires, and a wait for the wrong thing has to end by itself.
+func TestWaitDialogGivesUpRatherThanHangs(t *testing.T) {
+	t.Parallel()
+	w, _ := newFakeSession(t)
+
+	if _, err := w.WaitDialog(context.Background(), 200*time.Millisecond, nil); !errors.Is(err, ErrTimeout) {
+		t.Errorf("WaitDialog = %v, want a timeout", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := w.WaitDialog(ctx, time.Hour, nil); !errors.Is(err, context.Canceled) {
+		t.Errorf("WaitDialog = %v, want the context's reason", err)
+	}
+}
+
+// TestAnsweringPressesTheButtonTheDialogOffered: the simulator passes
+// both the index and the label to the script, so a script that switches
+// on the label would be told something it never displayed.
+func TestAnsweringPressesTheButtonTheDialogOffered(t *testing.T) {
+	w, f := newFakeSession(t)
+	f.Relay(t, testScriptDialog())
+	d := w.Dialogs()[0]
+
+	if err := w.Answer(context.Background(), d, " maybe "); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	m := onlySent[*msg.ScriptDialogReply](t, f)
+	if m.Data.ButtonIndex != 2 || trimNul(m.Data.ButtonLabel) != "Maybe" {
+		t.Errorf("answered %+v, want the label as the dialog spelled it", m.Data)
+	}
+	// The answer goes on whichever channel the script chose, which is
+	// usually negative precisely so an avatar cannot fake it by typing.
+	if m.Data.ChatChannel != -4242 || m.Data.ObjectID != d.Object {
+		t.Errorf("answered on %+v", m.Data)
+	}
+
+	f.Forget()
+	if err := w.AnswerIndex(context.Background(), d, 0); err != nil {
+		t.Fatalf("AnswerIndex: %v", err)
+	}
+	if got := onlySent[*msg.ScriptDialogReply](t, f); trimNul(got.Data.ButtonLabel) != "Yes" {
+		t.Errorf("AnswerIndex pressed %q", trimNul(got.Data.ButtonLabel))
+	}
+
+	f.Forget()
+	f.FailSends(errors.New("the circuit is gone"))
+	if err := w.AnswerIndex(context.Background(), d, 1); err == nil {
+		t.Error("AnswerIndex reported an answer that never went out")
+	}
+}
+
+// TestAnsweringRefusesAButtonThatIsNotThere: a dialog has at most twelve
+// buttons and the simulator matches the reply against them, so an index
+// off the end would be a reply the script cannot make sense of.
+func TestAnsweringRefusesAButtonThatIsNotThere(t *testing.T) {
+	w, f := newFakeSession(t)
+	f.Relay(t, testScriptDialog())
+	d := w.Dialogs()[0]
+
+	for _, i := range []int{-1, 3} {
+		if err := w.AnswerIndex(context.Background(), d, i); err == nil {
+			t.Errorf("AnswerIndex pressed button %d of three", i)
+		}
+	}
+	if got := f.Sent(); len(got) != 0 {
+		t.Errorf("a reply went out for a button that does not exist: %s", f.describe())
 	}
 }

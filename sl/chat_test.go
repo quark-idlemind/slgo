@@ -270,3 +270,236 @@ func TestSayNegativeLimits(t *testing.T) {
 		t.Errorf("a message at the limit should be sent: %v", err)
 	}
 }
+
+// TestALineSaysWhoSpokeAndOnWhatChannel: a subscription may be hearing
+// several sources at once and the channel is the only thing they arrive
+// on, so everything that tells one utterance from another has to be on
+// the line itself.
+func TestALineSaysWhoSpokeAndOnWhatChannel(t *testing.T) {
+	l := Line{From: "a prim", Text: "hello", SourceType: SourceObject, Type: ChatSay}
+	if !l.FromObject() || l.FromAgent() || l.Debug() {
+		t.Errorf("a line from an object reads as %+v", l)
+	}
+	if got := l.String(); got != "a prim: hello" {
+		t.Errorf("String = %q", got)
+	}
+
+	// Open chat and the debug channel are the same message with a
+	// different type, which is how a script's run-time errors arrive.
+	l.SourceType, l.Type = SourceAgent, ChatDebug
+	if l.FromObject() || !l.FromAgent() || !l.Debug() {
+		t.Errorf("a debug line from an avatar reads as %+v", l)
+	}
+}
+
+// TestEveryChatTypeHasAName: these are printed for a person to read, and
+// a type nobody here has heard of still has to say something rather than
+// come out blank.
+func TestEveryChatTypeHasAName(t *testing.T) {
+	for _, c := range []struct {
+		t    uint8
+		want string
+	}{
+		{ChatWhisper, "whisper"}, {ChatSay, "say"}, {ChatShout, "shout"},
+		{ChatDebug, "debug"}, {ChatRegion, "region"}, {ChatOwner, "owner"},
+		{ChatDirect, "direct"},
+	} {
+		if got := ChatTypeName(c.t); got != c.want {
+			t.Errorf("ChatTypeName(%d) = %q, want %q", c.t, got, c.want)
+		}
+	}
+	if got := ChatTypeName(0); got != "whisper" {
+		t.Errorf("ChatTypeName(0) = %q", got)
+	}
+	// The two the switch does not know: one of them is zero, which the
+	// digit loop would otherwise render as nothing at all.
+	if got := ChatTypeName(42); got != "type 42" {
+		t.Errorf("ChatTypeName(42) = %q", got)
+	}
+	if got := itoa(0); got != "0" {
+		t.Errorf("itoa(0) = %q", got)
+	}
+}
+
+// TestAFaultIsRecognisedFromItsHeaderAndNothingElse: the simulator
+// reports a fatal run-time error as a header naming the script and then
+// the reason on its own line.  Everything else on the debug channel --
+// "Could not find texture" and its relatives -- is a complaint the
+// script survives, and treating one as a fault would end a run that was
+// still going.
+func TestAFaultIsRecognisedFromItsHeaderAndNothingElse(t *testing.T) {
+	name, ok := faultScript("Test HUD [script:slgo try divzero] Script run-time error")
+	if !ok || name != "slgo try divzero" {
+		t.Errorf("faultScript = %q, %v", name, ok)
+	}
+	for _, text := range []string{
+		"Could not find texture",
+		"Test HUD [script:unterminated Script run-time error",
+		"Test HUD [script:a script] said something else",
+	} {
+		if name, ok := faultScript(text); ok {
+			t.Errorf("faultScript(%q) took it for a fault by %q", text, name)
+		}
+	}
+}
+
+// TestAFaultPrintsWhatItKnows: the header arrives before the reason, so
+// a fault has to be printable with only half of itself.
+func TestAFaultPrintsWhatItKnows(t *testing.T) {
+	f := &Fault{Script: "a script"}
+	if got := f.String(); got != "a script: run-time error" {
+		t.Errorf("String = %q", got)
+	}
+	f.Reason = "Stack-Heap Collision"
+	if got := f.String(); got != "a script: Stack-Heap Collision" {
+		t.Errorf("String = %q", got)
+	}
+}
+
+// TestACollectorHearsOnlyTheObjectItWasPointedAt: a region has other
+// things talking in it, and a run whose transcript held them would
+// report lines the script never said.
+func TestACollectorHearsOnlyTheObjectItWasPointedAt(t *testing.T) {
+	w, f := newFakeSession(t)
+	col := &collector{source: thePrim, sentinel: "FINISHED", faultFor: "a script"}
+	w.startCollector(col)
+
+	f.Relay(t, objectSaid(theOther, ChatSay, "somebody else"))
+	f.Relay(t, objectSaid(thePrim, ChatSay, "mine"))
+	if got := col.collected(); len(got) != 1 || got[0].Text != "mine" {
+		t.Errorf("the collector heard %v", got)
+	}
+	if col.faultSeen() != nil {
+		t.Error("a collector that heard no fault reported one")
+	}
+
+	// The fault is two messages, and the reason is only taken from a
+	// debug line that is not itself another header.
+	f.Relay(t, objectSaid(thePrim, ChatDebug, "Test HUD [script:a script] Script run-time error"))
+	<-col.faulted
+	f.Relay(t, objectSaid(thePrim, ChatDebug, "Math Error"))
+	<-col.reasoned
+	if fault := col.faultSeen(); fault == nil || fault.Reason != "Math Error" {
+		t.Errorf("fault = %+v", col.faultSeen())
+	}
+
+	f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+	<-col.found
+
+	// Stopped, it hears nothing more -- which is what makes a second run
+	// in the same session a transcript of its own.
+	w.stopCollector(col)
+	before := len(col.collected())
+	f.Relay(t, objectSaid(thePrim, ChatSay, "after the run"))
+	if got := col.collected(); len(got) != before {
+		t.Errorf("a stopped collector went on hearing: %v", got)
+	}
+}
+
+// TestACollectorIgnoresAFaultInAnotherScript: an object may hold several
+// scripts, and one of the others dying is not this run's business.
+func TestACollectorIgnoresAFaultInAnotherScript(t *testing.T) {
+	w, f := newFakeSession(t)
+	col := &collector{source: thePrim, faultFor: "a script"}
+	w.startCollector(col)
+	defer w.stopCollector(col)
+
+	f.Relay(t, objectSaid(thePrim, ChatDebug,
+		"Test HUD [script:something else] Script run-time error"))
+	if col.faultSeen() != nil {
+		t.Error("a fault in another script was blamed on this one")
+	}
+	select {
+	case <-col.faulted:
+		t.Error("the run ended on another script's fault")
+	default:
+	}
+}
+
+// TestACollectorWithNoSentinelNeverFires: a run without one has nothing
+// to wait for but the clock, and a collector that fired on any line at
+// all would end it at the first thing said.
+func TestACollectorWithNoSentinelNeverFires(t *testing.T) {
+	w, f := newFakeSession(t)
+	col := &collector{}
+	w.startCollector(col)
+	defer w.stopCollector(col)
+
+	f.Relay(t, objectSaid(thePrim, ChatSay, "anything"))
+	select {
+	case <-col.found:
+		t.Error("a collector with no sentinel said it had found one")
+	default:
+	}
+	if got := col.collected(); len(got) != 1 {
+		t.Errorf("a collector with a zero source heard %v, want everything", got)
+	}
+}
+
+// TestChatCarriesEverythingTheMessageSaid: a line is built once, here,
+// and anything dropped on the way is gone -- there is no asking the
+// simulator what was said a moment ago.
+func TestChatCarriesEverythingTheMessageSaid(t *testing.T) {
+	w, f := newFakeSession(t)
+	ch := w.Chat(ChatFilter{}, 4)
+
+	m := objectSaid(thePrim, ChatShout, "over here")
+	m.ChatData.Audible = 1
+	m.ChatData.Position = msg.Vector3{X: 128, Y: 129, Z: 25}
+	f.Relay(t, m)
+
+	select {
+	case l := <-ch:
+		if l.Source != thePrim || l.Owner != testAgentID || l.From != "a prim" {
+			t.Errorf("who said it came out as %+v", l)
+		}
+		if l.Type != ChatShout || l.SourceType != SourceObject || l.Audible != 1 {
+			t.Errorf("how it was said came out as %+v", l)
+		}
+		if l.Position != (msg.Vector3{X: 128, Y: 129, Z: 25}) {
+			t.Errorf("where it was said came out as %v", l.Position)
+		}
+		if l.At.IsZero() {
+			t.Error("the line carries no arrival time")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing was delivered to the subscription")
+	}
+}
+
+// TestStoppingASubscriptionAfterTheReaderHasGoneStillCloses: the caller
+// is owed the same effect either way, and one left ranging over a
+// channel nobody will ever close is a hang rather than an error.
+func TestStoppingASubscriptionAfterTheReaderHasGoneStillCloses(t *testing.T) {
+	w, f := newFakeSession(t)
+	ch := w.Chat(ChatFilter{}, 1)
+
+	f.Close()
+	select {
+	case <-w.readDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the reader did not stop")
+	}
+
+	// Already closed by the reader on its way out, so this is the path
+	// where the work runs here instead of on a goroutine that is gone.
+	w.StopChat(ch)
+	if _, open := <-ch; open {
+		t.Error("the subscription is still open after the session ended")
+	}
+	if n := w.ChatDropped(ch); n != 0 {
+		t.Errorf("a subscription that no longer exists reported %d dropped", n)
+	}
+}
+
+// TestChatDroppedIsZeroForSomethingNeverSubscribed: the answer is a
+// count, so a channel nobody knows about has to read as none missed
+// rather than as a failure the caller has to handle.
+func TestChatDroppedIsZeroForSomethingNeverSubscribed(t *testing.T) {
+	w, stop := newTestSession(t)
+	defer stop()
+	ch := make(chan Line)
+	if n := w.ChatDropped((<-chan Line)(ch)); n != 0 {
+		t.Errorf("ChatDropped = %d for a channel that was never subscribed", n)
+	}
+}
