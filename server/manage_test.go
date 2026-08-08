@@ -11,6 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/quark-idlemind/slgo/agent"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
@@ -137,6 +140,64 @@ func TestHostIsSingleFlight(t *testing.T) {
 	}
 }
 
+// TestACallerThatGivesUpWaitingLeavesTheLoginRunning: the single
+// flight belongs to the daemon, not to the caller that happened to
+// start it.  One client pressing ctrl-c must not take the login away
+// from the others waiting on it, and must not be told it succeeded
+// either.
+func TestACallerThatGivesUpWaitingLeavesTheLoginRunning(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+
+	// A login server slow enough that the second caller is certain to
+	// arrive while the first is still waiting.
+	var logins atomic.Int64
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		logins.Add(1)
+		fmt.Fprintf(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
+		  <member><name>login</name><value><string>true</string></value></member>
+		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</string></value></member>
+		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-f4f4-19d29d124acf</string></value></member>
+		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-d169-d9847afe641e</string></value></member>
+		  <member><name>circuit_code</name><value><int>4242</int></value></member>
+		  <member><name>sim_ip</name><value><string>%s</string></value></member>
+		  <member><name>sim_port</name><value><int>%d</int></value></member>
+		  <member><name>first_name</name><value><string>Example</string></value></member>
+		  <member><name>last_name</name><value><string>Resident</string></value></member>
+		</struct></value></param></params></methodResponse>`, sim.addr().IP, sim.addr().Port)
+	}))
+	defer slow.Close()
+	srv := startable(t, slow)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv.SetBase(ctx, nil, nil)
+
+	first := make(chan error, 1)
+	go func() {
+		_, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"})
+		first <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+
+	impatient, giveUp := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer giveUp()
+	if _, err := srv.Host(impatient, &pb.HostRequest{Agent: "example"}); err == nil {
+		t.Error("a caller that gave up waiting was told the session was up")
+	}
+
+	if err := <-first; err != nil {
+		t.Fatalf("the login the first caller started: %v", err)
+	}
+	if _, ok := srv.Agent("example"); !ok {
+		t.Error("the session was abandoned when one of the callers left")
+	}
+	if n := logins.Load(); n != 1 {
+		t.Errorf("%d logins, want the one both callers shared", n)
+	}
+}
+
 // TestFailedLoginBacksOff: a refusal must not turn every ask into
 // another login attempt.  A login server throttles a client that
 // hammers it, and the throttle then presents as a different fault
@@ -231,6 +292,128 @@ func TestListAgentsShowsWhatCouldBeStarted(t *testing.T) {
 		if a.GetState() != want {
 			t.Errorf("%s is %v, want %v", a.GetName(), a.GetState(), want)
 		}
+	}
+}
+
+// TestStartingAndStoppingNeedAName: there is a sensible default for
+// which session to TALK to and deliberately none for which to start or
+// stop, because both are visible on the grid and should follow from
+// somebody meaning them.
+func TestStartingAndStoppingNeedAName(t *testing.T) {
+	t.Parallel()
+
+	srv := New()
+	ctx := context.Background()
+
+	if _, err := srv.Host(ctx, &pb.HostRequest{}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("starting with no name = %v; want InvalidArgument", err)
+	}
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("logging out with no name = %v; want InvalidArgument", err)
+	}
+
+	// A name nobody has heard of is not the same fault, and says so.
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: "qi"}); status.Code(err) != codes.NotFound {
+		t.Errorf("logging out an unknown agent = %v; want NotFound", err)
+	}
+
+	// A server given no way to start anything says that rather than
+	// pretending the profile is missing: naming them on its command
+	// line is the fix, and it is a different one.
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"}); status.Code(err) != codes.Unimplemented {
+		t.Errorf("starting on a server with no profiles = %v; want Unimplemented", err)
+	}
+}
+
+// TestLoggingOutTwiceIsNotAnError: the second ask is somebody making
+// sure, and the state they wanted is the state it is in.
+func TestLoggingOutTwiceIsNotAnError(t *testing.T) {
+	t.Parallel()
+
+	srv := New()
+	if _, err := srv.Add("example", nil); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: "example"}); err != nil {
+		t.Errorf("logging out a session that was already down: %v", err)
+	}
+}
+
+// TestAProfileThatIsNotThereIsNotFound: "qi is down" and "there is no
+// qi" are different answers to the same request, and only the second is
+// a typo.
+func TestAProfileThatIsNotThereIsNotFound(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+	var logins atomic.Int64
+	srv := startable(t, loginServer(t, sim, &logins, nil))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv.SetBase(ctx, nil, nil)
+
+	// "other" is listed as a profile and has no login behind it, which
+	// is what a config file naming something that was deleted looks
+	// like.
+	_, err := srv.Host(ctx, &pb.HostRequest{Agent: "other"})
+	if status.Code(err) != codes.NotFound {
+		t.Errorf("starting a profile that will not load = %v; want NotFound", err)
+	}
+	if n := logins.Load(); n != 0 {
+		t.Errorf("%d login attempts for a profile that would not load", n)
+	}
+}
+
+// TestASessionStartedOnRequestIsSettledLikeTheRest is why the daemon
+// hands the server a callback at all: a session brought up by a client
+// needs the same settling as one named on the command line -- the
+// active group above all -- or an avatar can build or not depending on
+// how its session happened to come into being.
+func TestASessionStartedOnRequestIsSettledLikeTheRest(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+	var logins atomic.Int64
+	srv := startable(t, loginServer(t, sim, &logins, nil))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	settled := make(chan string, 1)
+	var mu sync.Mutex
+	var logged []string
+	srv.SetBase(ctx, func(format string, v ...any) {
+		mu.Lock()
+		logged = append(logged, fmt.Sprintf(format, v...))
+		mu.Unlock()
+	}, func(h *Hosted) { settled <- h.Name })
+
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case name := <-settled:
+		if name != "example" {
+			t.Errorf("settled %q", name)
+		}
+	default:
+		t.Fatal("a session started on request was not handed to the daemon to settle")
+	}
+
+	// And it was given somewhere to say things, so that what happens to
+	// it afterwards is not silent.
+	h, _ := srv.Agent("example")
+	if h.Log == nil {
+		t.Fatal("a session started on request has nowhere to log")
+	}
+	h.logf("something happened")
+	mu.Lock()
+	defer mu.Unlock()
+	if len(logged) != 1 || !strings.Contains(logged[0], "example: something happened") {
+		t.Errorf("logged %v, want the session's name in front of it", logged)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -235,6 +236,85 @@ func TestLoadSecretRefusesLooseMode(t *testing.T) {
 	}
 	if _, err := LoadSecret(path); err == nil {
 		t.Error("a secret in a world-readable directory was accepted")
+	}
+}
+
+// One file for the whole lab, found the same way by every program that
+// uses this package -- so where it is has to be settled here rather
+// than passed in, and a caller that names nothing must land on it.
+func TestTheDefaultSecretPathIsUnderTheHomeDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	want := filepath.Join(home, ".config", "slrun", "secret")
+	if got := DefaultSecretPath(); got != want {
+		t.Errorf("DefaultSecretPath = %q, want %q", got, want)
+	}
+
+	// And LoadSecret with no path reads that file, which is how both
+	// slgod and every client find the same secret.
+	dir := filepath.Dir(want)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(want, []byte("\t hunter2 \t\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadSecret("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "hunter2" {
+		t.Errorf("secret = %q; surrounding whitespace should be trimmed", got)
+	}
+}
+
+// With no home directory there is nowhere for the file to be, and
+// saying so as an empty path is what turns into a plain "no such file"
+// further up rather than a panic.
+func TestNoHomeDirectoryMeansNoDefaultPath(t *testing.T) {
+	t.Setenv("HOME", "")
+	if got := DefaultSecretPath(); got != "" {
+		t.Errorf("DefaultSecretPath = %q with no home directory, want empty", got)
+	}
+}
+
+// The ways a secret file can be there and still be no use.  Each is a
+// different thing for the operator to do, which is why they are
+// distinct errors and not one.
+func TestLoadSecretRefusesWhatItCannotUse(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Nothing there at all.
+	if _, err := LoadSecret(filepath.Join(dir, "absent")); err == nil {
+		t.Error("a secret that does not exist was accepted")
+	}
+
+	// A file holding only a note about itself is empty as far as this
+	// is concerned, and an empty secret would authenticate anybody who
+	// also had nothing.
+	comments := filepath.Join(dir, "comments")
+	if err := os.WriteFile(comments, []byte("# what this is for\n\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadSecret(comments); err == nil {
+		t.Error("a file with nothing but comments was accepted as a secret")
+	} else if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("the refusal does not say it is empty: %v", err)
+	}
+
+	// The right mode on something that cannot be read as a file.  The
+	// mode check passes and the read is what fails, which is a
+	// different sentence for the operator than "chmod it".
+	notAFile := filepath.Join(dir, "adirectory")
+	if err := os.Mkdir(notAFile, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadSecret(notAFile); err == nil {
+		t.Error("a directory was read as a secret")
 	}
 }
 

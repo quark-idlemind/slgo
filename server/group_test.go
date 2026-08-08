@@ -160,6 +160,43 @@ func TestNoGroupSendsNothing(t *testing.T) {
 	}
 }
 
+// TestLosingTheGroupIsSaidOutLoud: putting the group back can fail --
+// the reconnect may have produced a session that is already gone -- and
+// the one thing that must not happen then is silence, because a silent
+// loss is the exact fault this machinery was built for.  The session
+// stays up: it is usable for everything that does not need land
+// rights, and taking it down would trade a building problem for no
+// session at all.
+func TestLosingTheGroupIsSaidOutLoud(t *testing.T) {
+	t.Parallel()
+
+	var said []string
+	h := &Hosted{
+		Name: "example",
+		Log:  func(format string, v ...any) { said = append(said, fmt.Sprintf(format, v...)) },
+	}
+	h.group = msg.MustParseUUID("33a57e57-7e57-c0de-e7ea-9cad48757549")
+
+	// No session to send it on, which is what activating a group
+	// without one amounts to.
+	h.restoreGroup(context.Background(), nil)
+	if len(said) != 1 || !strings.Contains(said[0], "could not put the active group back") {
+		t.Errorf("said %v; want one complaint about the group", said)
+	}
+
+	// And a session that never had a group has nothing to put back, so
+	// it says nothing at all rather than reporting the zero uuid.
+	said = nil
+	h.group = msg.UUID{}
+	h.restoreGroup(context.Background(), nil)
+	if len(said) != 0 {
+		t.Errorf("said %v for a session that was never acting as a group", said)
+	}
+	if err := activateGroup(context.Background(), nil, msg.MustParseUUID("33a57e57-7e57-c0de-e7ea-9cad48757549")); err == nil {
+		t.Error("activating a group with no session was reported as success")
+	}
+}
+
 // TestDefaultIsTheOldestSession pins the rule a bare command relies on:
 // of the sessions hosted, the default is the one hosted LONGEST, and it
 // changes only when that one goes away.

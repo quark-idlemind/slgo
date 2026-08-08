@@ -153,7 +153,30 @@ type rig struct {
 	done chan struct{}
 }
 
+// newRig brings a session up and serves it, without authentication.
 func newRig(t *testing.T, caps agent.Caps) *rig {
+	t.Helper()
+	r := newSession(t, caps)
+	r.serve(t)
+	return r
+}
+
+// newSession is newRig without the listener, for the tests that have to
+// settle something on the server -- whether it authenticates, above all
+// -- before anything may be listening.  Serve reads those fields, so
+// setting one under a server already serving is a race whatever it
+// says.
+func newSession(t *testing.T, caps agent.Caps) *rig {
+	t.Helper()
+	return newSessionWith(t, caps, 0)
+}
+
+// newSessionWith is newSession with an idle timeout, for the tests
+// about a session that ends on its own.  There is a real difference:
+// a session that FAILS records why and then says it has ended, while
+// one that is closed from outside says it has ended straight away, so
+// only the first can have the reason read off it by anything watching.
+func newSessionWith(t *testing.T, caps agent.Caps, idle time.Duration) *rig {
 	t.Helper()
 	sim := newSim(t)
 
@@ -173,6 +196,7 @@ func newRig(t *testing.T, caps agent.Caps) *rig {
 	a, err := agent.Connect(context.Background(), acct, agent.Options{
 		Timeout:  10 * time.Second,
 		SkipCaps: true,
+		Idle:     idle,
 		Recv:     []msg.ReceiverOption{msg.KeepBody()},
 		Tap:      func(p *msg.Packet) { h.relay(p) },
 	})
@@ -187,22 +211,30 @@ func newRig(t *testing.T, caps agent.Caps) *rig {
 	srv.agents["example"] = h
 	srv.mu.Unlock()
 
+	t.Cleanup(func() {
+		a.Close()
+		sim.close()
+	})
+	return &rig{sim: sim, srv: srv}
+}
+
+// serve puts the session's server on loopback and takes it down again
+// when the test ends.
+func (r *rig) serve(t *testing.T) {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { defer close(done); srv.Serve(ctx, ln) }()
+	go func() { defer close(done); r.srv.Serve(ctx, ln) }()
 
-	r := &rig{sim: sim, srv: srv, ln: ln, stop: cancel, done: done}
+	r.ln, r.stop, r.done = ln, cancel, done
 	t.Cleanup(func() {
 		cancel()
 		<-done
-		a.Close()
-		sim.close()
 	})
-	return r
 }
 
 func (r *rig) dial(t *testing.T, subscribe ...string) *client.Conn {
@@ -777,6 +809,427 @@ func TestNoReconnectAfterLogout(t *testing.T) {
 
 	if n := logins.Load(); n != 1 {
 		t.Errorf("%d logins after a deliberate shutdown, want 1", n)
+	}
+}
+
+// ------------------------------------------------- holding sessions
+
+// TestHostingTheSameNameTwiceIsRefused: a second login to the same
+// account makes the grid kick the first, so a name that is taken has to
+// be refused rather than raced for.
+func TestHostingTheSameNameTwiceIsRefused(t *testing.T) {
+	t.Parallel()
+
+	srv := New()
+	if _, err := srv.Add("example", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.Add("example", nil); err == nil {
+		t.Error("the same name was hosted twice")
+	}
+	if _, err := srv.StartAgent(context.Background(), "example",
+		agent.Login{}, agent.Options{}); err == nil {
+		t.Error("a login was attempted for a name already hosted")
+	}
+
+	// And removing something that was never there is not an error to
+	// report, it is nothing to do.
+	if _, ok := srv.Remove("qi"); ok {
+		t.Error("removing a name nobody hosts reported success")
+	}
+}
+
+// TestASessionWithNoLifetimeGetsOne: a server nobody told about the
+// daemon's lifetime still has to give a new session one, or a login
+// started on request would belong to nothing at all.
+func TestASessionWithNoLifetimeGetsOne(t *testing.T) {
+	t.Parallel()
+
+	if (&Server{}).base() == nil {
+		t.Error("a server with no base context answered with nothing")
+	}
+}
+
+// TestALoginThatCannotReachTheCircuitIsNotHosted: the account came back
+// and the simulator did not, which must leave the name free rather than
+// reserved by a session that never existed.
+func TestALoginThatCannotReachTheCircuitIsNotHosted(t *testing.T) {
+	t.Parallel()
+
+	// A login server that answers, pointing at a port nothing is on.
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
+		  <member><name>login</name><value><string>true</string></value></member>
+		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</string></value></member>
+		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-f4f4-19d29d124acf</string></value></member>
+		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-d169-d9847afe641e</string></value></member>
+		  <member><name>circuit_code</name><value><int>4242</int></value></member>
+		  <member><name>sim_ip</name><value><string>127.0.0.1</string></value></member>
+		  <member><name>sim_port</name><value><int>1</int></value></member>
+		  <member><name>first_name</name><value><string>Example</string></value></member>
+		  <member><name>last_name</name><value><string>Resident</string></value></member>
+		</struct></value></param></params></methodResponse>`)
+	}))
+	defer hs.Close()
+
+	srv := New()
+	_, err := srv.StartAgent(context.Background(), "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{Timeout: 300 * time.Millisecond, SkipCaps: true, Idle: -1})
+	if err == nil {
+		t.Fatal("a session with no simulator behind it was hosted")
+	}
+	if _, ok := srv.Agent("example"); ok {
+		t.Error("the name is still reserved by a session that never came up")
+	}
+	if names := srv.Names(); len(names) != 0 {
+		t.Errorf("Names() = %v after a failed login", names)
+	}
+}
+
+// TestStoppedSessionsSortLast: the head of Ranked means "the default",
+// so a session that gave up its rank must not sort to the front of a
+// list whose front has that meaning.
+func TestStoppedSessionsSortLast(t *testing.T) {
+	t.Parallel()
+
+	srv := New()
+	ctx := context.Background()
+	for _, name := range []string{"example", "qi", "helper", "spare"} {
+		if _, err := srv.Add(name, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := srv.Names(); len(got) != 4 || got[0] != "example" {
+		t.Errorf("Names() = %v, want all four sorted", got)
+	}
+
+	// Two of them give up their place, which is what logging out does.
+	for _, name := range []string{"example", "qi"} {
+		if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: name}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var order []string
+	for _, h := range srv.Ranked() {
+		order = append(order, h.Name)
+	}
+	// The two still running keep the order they came up in; the two
+	// that stopped follow in name order, having no rank to sort by.
+	want := []string{"helper", "spare", "example", "qi"}
+	for i := range want {
+		if i >= len(order) || order[i] != want[i] {
+			t.Fatalf("Ranked() = %v, want %v", order, want)
+		}
+	}
+}
+
+// TestStartAgentWiresTheRelayIntoTheSession: the session is told to
+// hand everything to the Hosted, which is what makes a client able to
+// see a message -- or an event -- the server itself knows nothing
+// about.
+func TestStartAgentWiresTheRelayIntoTheSession(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+	var logins atomic.Int64
+	hs := loginServer(t, sim, &logins, nil)
+
+	srv := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h, err := srv.StartAgent(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.opts.Tap == nil || h.opts.OnEvent == nil {
+		t.Fatal("the session was not told where to send what it receives")
+	}
+	// Both go to this Hosted, which is what a reconnect keeps and the
+	// agent underneath does not.
+	h.opts.OnEvent("TeleportFinish", []byte("<llsd><map/></llsd>"))
+	h.opts.Tap(&msg.Packet{})
+}
+
+// TestSupervisingASessionThatIsNotThere: nothing to watch is not a
+// fault, it is a Hosted whose login never produced one.
+func TestSupervisingASessionThatIsNotThere(t *testing.T) {
+	t.Parallel()
+
+	done := make(chan struct{})
+	go func() { defer close(done); (&Hosted{}).supervise(context.Background()) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("supervising a session with no agent did not return")
+	}
+}
+
+// TestAFailedReconnectIsSaidAndTriedAgain: the login server being down
+// is the ordinary case -- it is usually why the session went -- so an
+// attempt that fails must be reported to whoever is attached and
+// followed by another, not treated as the end of the session.
+func TestAFailedReconnectIsSaidAndTriedAgain(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+
+	var logins atomic.Int64
+	var refuse atomic.Bool
+	hs := loginServer(t, sim, &logins, &refuse)
+
+	saved := ReconnectDelays
+	ReconnectDelays = []time.Duration{20 * time.Millisecond}
+	defer func() { ReconnectDelays = saved }()
+
+	srv := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h, err := srv.StartAgent(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serving := make(chan struct{})
+	go func() { defer close(serving); srv.Serve(ctx, ln) }()
+
+	c, err := client.Dial(context.Background(), ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Attach(context.Background(), "example"); err != nil {
+		t.Fatal(err)
+	}
+
+	// The login server refuses from here on, and the session dies.
+	refuse.Store(true)
+	first := h.Agent()
+	first.Close()
+
+	// The client is told the attempts are failing, and told which
+	// attempt it was -- one notice with no number would look like the
+	// session had gone for good.
+	deadline := time.After(10 * time.Second)
+	sawAttempt := false
+	for !sawAttempt {
+		select {
+		case ev := <-c.Notices():
+			if strings.Contains(ev.GetDetail(), "reconnect attempt") {
+				sawAttempt = true
+			}
+		case <-deadline:
+			t.Fatal("no failed reconnect was reported to the client")
+		}
+	}
+	if h.attempts.Load() == 0 {
+		t.Error("a failed attempt was not counted")
+	}
+
+	// And when the login server comes back, so does the session, which
+	// the client is told about as well: the avatar is the same one and
+	// the session is not, so anything holding a session id or a
+	// capability URL has to ask again.
+	refuse.Store(false)
+	deadline = time.After(20 * time.Second)
+	back := false
+	for !back {
+		select {
+		case ev := <-c.Notices():
+			back = strings.Contains(ev.GetDetail(), "session re-established")
+		case <-deadline:
+			t.Fatal("the client was not told the session came back")
+		}
+	}
+	if a := h.Agent(); a == nil || a == first {
+		t.Error("the session was reported as re-established and is not")
+	}
+	if st := srv.Stats(); st.ReconnectAt <= st.Reconnects {
+		t.Errorf("stats = %+v; attempts should exceed the successes", st)
+	}
+
+	// Hung up on in this order on purpose.  Nothing more is sent to
+	// this client once the session is back, so closing now cannot
+	// overlap a relay -- and closing one that IS being relayed to
+	// races inside the client, which closes the channels its own
+	// receiving goroutine sends on.  See coverage-notes/daemon.md.
+	// The daemon goes second because a graceful stop waits for the
+	// streams its clients still hold.
+	c.Close()
+	cancel()
+	<-serving
+}
+
+// TestAShutdownDuringTheReconnectWaitIsHonoured: the waits between
+// attempts are minutes long, so the daemon exiting -- or the session
+// being told to stay down -- has to be noticed during one rather than
+// after it.
+func TestAShutdownDuringTheReconnectWaitIsHonoured(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		delay time.Duration
+		// stop ends the wait, either by taking the daemon down or by
+		// marking the session as one that should stay down.
+		stop func(h *Hosted, cancel context.CancelFunc)
+	}{
+		{
+			// Noticed at once: the daemon exiting must not wait out a
+			// two minute backoff before the process can end.
+			name:  "the daemon is going down",
+			delay: 30 * time.Second,
+			stop:  func(_ *Hosted, cancel context.CancelFunc) { cancel() },
+		},
+		{
+			// Noticed when the wait ends, which is enough: nothing has
+			// been done to the grid in the meantime.
+			name:  "the session was told to stay down",
+			delay: 300 * time.Millisecond,
+			stop:  func(h *Hosted, _ context.CancelFunc) { h.stopped.Store(true) },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The supervisor is run here rather than by StartAgent, so
+			// that the test can WAIT for it to have finished.  Without
+			// that there is no moment at which putting the delays back
+			// is safe: they are a package variable and the supervisor
+			// reads them every time round.
+			//
+			// The session is left to die of a simulator that says
+			// nothing rather than closed from outside, because that is
+			// the ending a supervisor can read the reason off.
+			r := newSessionWith(t, agent.Caps{}, 200*time.Millisecond)
+			h, _ := r.srv.Agent("example")
+
+			saved := ReconnectDelays
+			ReconnectDelays = []time.Duration{tc.delay}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			supervising := make(chan struct{})
+			first := h.Agent()
+			go func() { defer close(supervising); h.supervise(ctx) }()
+
+			select {
+			case <-first.Done():
+			case <-time.After(10 * time.Second):
+				t.Fatal("the session outlived a simulator that said nothing")
+			}
+			// Long enough to be inside the wait, short enough to be
+			// well before it ends.
+			time.Sleep(100 * time.Millisecond)
+			tc.stop(h, cancel)
+
+			select {
+			case <-supervising:
+			case <-time.After(10 * time.Second):
+				t.Fatal("the supervisor sat out its wait to the end")
+			}
+			ReconnectDelays = saved
+
+			if n := h.attempts.Load(); n != 0 {
+				t.Errorf("%d reconnect attempt(s) were made after the wait should have been abandoned", n)
+			}
+			if a := h.Agent(); a != first {
+				t.Error("the session was re-established anyway")
+			}
+		})
+	}
+}
+
+// TestASessionThatEndedSaysWhyItCannotBeUsed: a client handed a session
+// that is down would talk to something answering out of what it last
+// heard and sending into nothing, so the refusal has to carry the
+// reason -- and the reason is usually only in the error the circuit
+// died of.
+func TestASessionThatEndedSaysWhyItCannotBeUsed(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	h, _ := r.srv.Agent("example")
+
+	if why := h.Down(); why != "" {
+		t.Errorf("a running session says it is down: %q", why)
+	}
+
+	// Stopped first, so the supervisor reads this as deliberate, which
+	// is what Close on a hosted session means.
+	h.stopped.Store(true)
+	h.Agent().Close()
+	if why := h.Down(); why == "" {
+		t.Error("a stopped session gives no reason at all")
+	}
+
+	// One that was stopped without any session under it at all still
+	// answers, because "logged out" is the reason then.
+	empty := &Hosted{Name: "example"}
+	empty.stopped.Store(true)
+	if why := empty.Down(); why != "logged out" {
+		t.Errorf("Down() = %q for a session with no agent, want logged out", why)
+	}
+
+	// And a session that fell over for a reason keeps the reason: a
+	// simulator that went quiet is a different problem from a logout,
+	// and the difference is only in the error.
+	var logins atomic.Int64
+	hs := loginServer(t, r.sim, &logins, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	quiet, err := New().StartAgent(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		// The simulator answers the handshake and then says nothing,
+		// which is what a circuit going away looks like from here.
+		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: 200 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	quiet.stopped.Store(true)
+	// Waited for rather than polled: the session sets its error and
+	// then closes this channel, so receiving from it is what makes the
+	// error safe to read from another goroutine.
+	select {
+	case <-quiet.Agent().Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the session outlived a simulator that said nothing")
+	}
+	if why := quiet.Down(); !strings.Contains(why, "silent") {
+		t.Errorf("Down() = %q, want the error the circuit died of", why)
+	}
+}
+
+// TestServeReportsAListenerThatFails demonstrates a fault rather than
+// pinning behaviour: Serve waits for the goroutine that stops the gRPC
+// server before it looks at the error, and that goroutine waits for the
+// context, so a listener that fails leaves Serve blocked for ever and
+// its error is never returned.  cmd/slgod calls it in a goroutine that
+// means to log the failure and never gets the chance.
+//
+// The right behaviour is to return the error as soon as it happens.
+// See coverage-notes/daemon.md.
+func TestServeReportsAListenerThatFails(t *testing.T) {
+	t.Skip("demonstrates Serve hanging when its listener fails; see coverage-notes/daemon.md")
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	got := make(chan error, 1)
+	go func() { got <- New().Serve(ctx, ln) }()
+	select {
+	case err := <-got:
+		if err == nil {
+			t.Error("a listener that cannot accept was reported as a clean stop")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve never returned from a listener that cannot accept")
 	}
 }
 
