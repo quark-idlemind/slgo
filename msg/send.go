@@ -212,10 +212,12 @@ func (s *Sender) Run(ctx context.Context) error {
 	}
 
 	// Disarmed until an acknowledgement is waiting.
+	//
+	// No draining after Stop.  Go 1.23 took the one-element buffer off
+	// a timer's channel, so a stopped timer has nothing left in it to
+	// receive and the drain that used to be here could never run.
 	flush := time.NewTimer(time.Hour)
-	if !flush.Stop() {
-		<-flush.C
-	}
+	flush.Stop()
 	defer flush.Stop()
 	armed := false
 
@@ -233,12 +235,7 @@ func (s *Sender) Run(ctx context.Context) error {
 			}
 			// Whatever was waiting went with it.
 			if armed && len(s.pending) == 0 {
-				if !flush.Stop() {
-					select {
-					case <-flush.C:
-					default:
-					}
-				}
+				flush.Stop()
 				armed = false
 			}
 

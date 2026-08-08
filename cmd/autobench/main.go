@@ -558,43 +558,6 @@ Drop --check-ipad to use %d anyway.
 // block apart and both reported Size: 368.
 func expressiblePadding(pad int) bool { return pad >= minpad-1 }
 
-// biggerThanABlock says whether one copy is a block or more, by how
-// much memory it added at the same pad.
-//
-// The threshold is a whole block, and it is where it is because of what
-// was measured rather than what seemed likely.  Live, at the same pad,
-// against a base of 5924:
-//
-//	a 24-byte integer       added     8   -1 said 24, right
-//	442 bytes of string     added   422   -1 said 432, right
-//	542 bytes of string     added  1034   -1 said 20, wrong
-//	1066 bytes of string    added  2046   -1 said 8, wrong
-//
-// So a copy that -1 mode can measure adds something near its own size,
-// and one that cannot adds well over a block.  Nothing between 422 and
-// 1034 has been seen, and a block sits in the gap.
-//
-// Two other rules were tried and are wrong, which is worth recording
-// because both look reasonable.  "More than a block" lets a 542-byte
-// copy through, since it adds one block and not more, and prints the
-// remainder as a size.  "More than nothing" refuses everything: it
-// assumes memory is quantised so that a copy fitting in the rest of the
-// block costs zero, and the readings above say it is not -- 24 bytes
-// added 8.
-//
-// Separate from the refusal so that it can be asked without exiting.
-// With no base reading in hand it says no: that is not evidence of a
-// small copy, but inventing a comparison would be worse than declining
-// to make one.
-func biggerThanABlock(basePad, oneCopyMem int) (added int, over bool) {
-	base, ok := probed(0, basePad)
-	if !ok || base == 0 {
-		return 0, false
-	}
-	added = oneCopyMem - base
-	return added, added >= blockSize
-}
-
 // oneMode is the whole of -1 mode: one copy of CODE, measured as a distance
 // between two block boundaries rather than as a difference of two memory
 // readings.  It returns the size to report, the padding to report, and the
@@ -660,55 +623,6 @@ func oneMode(b *runner, r *Results) (size, padding, pad int) {
 	r.Base = oneAt
 	size = blocks*blockSize + r.Test - oneAt - pad
 	return size, padding, pad
-}
-
-// warnIfBiggerThanABlock says when -1 mode has reported a remainder
-// rather than a size.
-//
-// It warns rather than refuses, and that is deliberate: -1 mode is FOR
-// large constructs -- it is the absolute measurement, where copy mode
-// is the marginal one -- so refusing the large case would be refusing
-// the case the mode exists for.  What is wrong is the arithmetic, not
-// the question, and until that is right the honest thing is to say the
-// number is short by a multiple of a block rather than to print it
-// bare or to withhold it.
-//
-// This mode measures a copy as the distance between two block
-// boundaries, so the largest thing it can express is one block less a
-// byte.  A copy bigger than that carries itself over a boundary and the
-// distance left to the next one is what is left over -- a small,
-// plausible number with nothing about it to say it is wrong.  Measured:
-// a 500-character string is 1066 bytes in copy mode and came out as 4
-// here, and a 250-character one is 542 and came out as 20.
-//
-// It is detectable without spending a run.  The base script and the
-// one-copy script at the same pad differ by the whole blocks the copy
-// added, and the base reading is already in hand -- the search takes it,
-// and so does confirming a remembered padding.  More than one block
-// between them and the answer is a remainder.
-//
-// Refused rather than warned about, and refused on stdout's behalf: a
-// wrong Size that a person might not read is exactly the failure this
-// program's whole design is against.
-func warnIfBiggerThanABlock(b *runner, basePad, oneCopyMem, size int) {
-	added, over := biggerThanABlock(basePad, oneCopyMem)
-	if !over {
-		return
-	}
-	base, _ := probed(0, basePad)
-	noticef(`one copy is a %d-byte block or more, and Size below is a REMAINDER.
-
-	the base script at pad %d: %d bytes
-	with one copy:             %d bytes
-	so one copy added:         %d bytes
-
-The size is worked out as the distance between two block boundaries, which
-gives what is left over once whole blocks are taken off -- so Size is short by
-some multiple of %d.  Measured: a 542-byte construct reported 20 and a
-1066-byte one reported 4.
-
-Copy mode divides a difference of two readings and is not bounded this way.
-`, blockSize, basePad, base, oneCopyMem, added, blockSize)
 }
 
 const probeScript = `
