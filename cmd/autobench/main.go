@@ -558,71 +558,72 @@ Drop --check-ipad to use %d anyway.
 // block apart and both reported Size: 368.
 func expressiblePadding(pad int) bool { return pad >= minpad-1 }
 
-// oneMode is the whole of -1 mode: one copy of CODE, measured as a distance
-// between two block boundaries rather than as a difference of two memory
-// readings.  It returns the size to report, the padding to report, and the
-// filler the second search had to add back to reach the next boundary, which is
-// blockSize-size and is printed as "Result pad:".
+// oneMode is the whole of -1 mode: one copy of CODE, measured as the memory it
+// added rounded up to a whole block, less the part of that last block it did
+// not use.  It returns the size to report, the padding to report, and the
+// headroom left above the copy, which is printed as "Result pad:".
+//
+// # Why this is only three readings
+//
+// A padding is the most filler a script can carry WITHOUT spilling into the
+// next block.  So base-plus-BASEPAD sits exactly ON a boundary, and BASEMEM is
+// where that boundary is.  Everything follows from that one fact:
+//
+//   - TESTMEM - BASEMEM is the copy rounded UP to a whole block.  It can only
+//     be a whole number of blocks, because the measurement started on one.
+//   - the headroom above the copy -- the most filler IT can carry without
+//     spilling -- is exactly how much of that last block the copy did not use.
+//   - so the copy is the one less the other, to the byte, at any size.
+//
+// There is one pad in this mode and the runs happen AT it.  An earlier version
+// ran a byte past the padding, which put the base script a block up and needed
+// a third reading and a count of whole blocks to take the offset back out
+// again.  Measured against the model, both answer the same thing everywhere;
+// this one is shorter and says why it works.
 //
 // It is a function rather than a block inside main so that a test can drive it
 // with useTestInfo set and no Second Life at hand; b is untouched in that case.
 // See autobench_test.go.
-func oneMode(b *runner, r *Results) (size, padding, pad int) {
-	// Step 1, find out how much padding we need to just get to the next
-	// block of memory to be allocated.  basePad - 1 return 512 bytes less
-	// memory used than basePad.
-	//
-	// padding is the last pad still inside the block, which is the number
-	// Padding: reports and --ipad takes; basePad is one further on, which is
-	// where the runs are taken.  Keeping the two apart is what lets a reported
-	// padding be handed straight back to --ipad.
+func oneMode(b *runner, r *Results) (size, padding, headroom int) {
+	// BASEPAD: the most filler the base script carries without spilling.
+	// This is the number Padding: reports and --ipad takes, and the runs
+	// happen at it rather than a byte past it -- there is one pad in this
+	// mode and it is the one the answer is defined against.
 	padding = basePadding(b, r)
-	basePad := padding + 1
 
-	// Now find out how many additional bytes are needed once we add our code to
-	// get to the next block up.  The bottom of that step -- the one-copy script
-	// at basePad -- comes back from the search rather than being read here.
+	// BASEMEM: where the boundary under that padding is.
 	//
-	// Two reasons, and both have been bugs.  Every run round-trips r through the
-	// cache, and a cache hit assigns the WHOLE struct back, so a field set here
-	// is reverted by the first cached run inside findPadding; keeping the
-	// reading in a local fixed that.  A local is not enough on its own, though,
-	// because the search may re-read the base and find the first reading was
-	// noise (see confirmCrossing) -- and then a local taken before the search
-	// holds the reading that was thrown away.  The search knows which reading it
-	// measured its step against; this does not.
-	// The base script's own reading at basePad, which is what says how
-	// many WHOLE blocks a copy takes up.
+	// Into a Results of its own, not r.  Every run round-trips r through
+	// the cache and a hit assigns the WHOLE struct back, so a reading kept
+	// in r would be overwritten by the first cached run of the search
+	// below.  That has been a bug twice.
 	//
-	// Without it the arithmetic below can only see where the one-copy
-	// script crosses, and crossings repeat every block -- so a copy of
-	// 723 bytes and one of 211 put the crossing in the same place and
-	// came out as the same number.  This is the reading that tells them
-	// apart, and taking it is part of the measurement rather than a
-	// check on it.
+	// The search that found the padding has already read this pad on its
+	// way to the crossing, so this is usually free; with --ipad, where
+	// there was no search, it is the one run that establishes the
+	// boundary.
 	var at Results
-	mustRun(b, 0, basePad, &at)
-	baseAt := at.Base
+	mustRun(b, 0, padding, &at)
+	baseMem := at.Base
 
-	off, oneAt := findPadding(b, 1, basePad, r)
-	pad = off + 1
-
-	// r.Test - oneAt is the height of that step, and it is one block:
-	// findPadding returns the moment memory grows, and memory grows a block at
-	// a time.  A copy of CODE displaces its own size in filler, so the pad the
-	// search had to add back to reach the next boundary is a block less the
-	// size of the copy -- less the WHOLE blocks the copy occupies on its own,
-	// which is what blocks counts.
+	// TESTMEM, and the headroom above the copy.
 	//
-	// Checked against the model at every size from 1 byte to eight blocks:
-	// 1, 24, 442, 511, 512, 542, 723, 1023, 1024, 1066, 2048 and 4096 all come
-	// back exactly.  Without the blocks term everything from 512 up comes back
-	// as the remainder -- 723 as 211, 1066 as 42, and every whole multiple of a
-	// block as 0.
-	blocks := (oneAt - baseAt) / blockSize
-	r.Base = oneAt
-	size = blocks*blockSize + r.Test - oneAt - pad
-	return size, padding, pad
+	// findPadding answers both: the reading at the pad it starts from,
+	// and the most that can be added to it before memory grows.
+	headroom, testMem := findPadding(b, 1, padding, r)
+
+	// The base sat exactly on a boundary, so testMem - baseMem can only be
+	// a whole number of blocks: the copy rounded up.  headroom is the part
+	// of the last block the copy left unused.  The difference is the copy,
+	// to the byte, whatever its size.
+	size = (testMem - baseMem) - headroom
+
+	// What the two labelled lines report, said outright rather than left
+	// to whichever run happened to write r last.  They now mean what they
+	// have always been called: the base script's memory, and the one-copy
+	// script's.
+	r.Base, r.Test = baseMem, testMem
+	return size, padding, headroom
 }
 
 const probeScript = `
@@ -801,10 +802,10 @@ func main() {
 		if r.Title != "" {
 			fmt.Printf("Title: %s\n", r.Title)
 		}
-		// The two ends of the step the second search climbed: the one-copy
-		// script at basePad, and the same script at the pad where it crossed.
-		// They are one block apart by construction.  Neither is the copy-free
-		// base script's memory, despite the label.
+		// The two readings the size is the difference of: the base script
+		// at the padding, sitting exactly on a block boundary, and the
+		// one-copy script at the same padding.  Result pad is the filler
+		// that copy can still carry without spilling into the next block.
 		fmt.Printf("Base mem: %d\n", r.Base)
 		fmt.Printf("Result mem: %d\n", r.Test)
 		fmt.Printf("Result pad: %d\n", pad)

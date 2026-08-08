@@ -606,14 +606,19 @@ exactly. It costs more runs and gives an exact answer:
 
     $ autobench -1 --title "global integer" --code "integer gCNT;"
     Title: global integer
-    Base mem: 5932
-    Result mem: 6444
+    Base mem: 5420
+    Result mem: 5932
     Result pad: 488
     Size: 24
     Padding: 377
 
-`Size` is the answer. `Padding` is described below. The other lines are
-the readings behind the answer.
+`Size` is the answer. `Padding` is described below. The other three are
+the readings behind it: the base script at that padding, sitting exactly
+on a block boundary; the same script with one copy of the code in it;
+and the filler that copy can still carry before it spills into the next
+block. The size is the difference of the two readings less that filler --
+one block was allocated, and 488 bytes of it went unused, so the code
+cost 24.
 
 ### Describing the code to measure
 

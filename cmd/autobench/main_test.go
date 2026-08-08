@@ -378,8 +378,8 @@ func readBack(t *testing.T, path string) string {
 func TestTheProgramPrintsWhatTheModeMeasured(t *testing.T) {
 	out, _ := autobench(t, "--test=474,368", "-1", "--code", "foo_CNT(){llDie();}")
 	for _, want := range []string{
-		"Base mem: 5924\n",
-		"Result mem: 6436\n",
+		"Base mem: 5412\n",
+		"Result mem: 5924\n",
 		"Result pad: 144\n",
 		"Size: 368\n",
 		"Padding: 473\n",

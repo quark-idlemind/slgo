@@ -80,10 +80,12 @@ var modelCases = []struct {
 
 // bigModelCases are constructs of a block or more.
 //
-// They are apart from modelCases because -1 mode cannot express them:
-// it measures a copy as the distance between two block boundaries, so a
-// copy that carries itself over a boundary leaves a remainder rather
-// than an answer.  Copy mode has no such limit and must still be right.
+// They are apart from modelCases because they were once the hard half:
+// -1 mode measured a copy as the distance between two block boundaries,
+// so a copy that carried itself over a boundary left a remainder rather
+// than an answer -- 1066 bytes reported as 8.  Both modes are held to
+// them now, and -1 mode is exact on them, but they stay named because a
+// size that spans a boundary is the case to break first.
 //
 // The alignments matter and are chosen for it: a size that is exactly a
 // block leaves nothing over, one byte more leaves one byte, and the two
@@ -505,6 +507,11 @@ func noiseOnce(t *testing.T, cnt, pad, delta int) *int {
 // 20:01 the one-copy script at pad 602 read 6436, one block high, and the search
 // took that for the crossing.
 //
+// The injected pad is 601 rather than the 602 of the incident: the search now
+// starts at the padding rather than a byte past it, so every probe it makes has
+// moved down by one.  What is being replayed is a reading one block high on the
+// search's path below the crossing, which is what 601 now is.
+//
 // The numbers below are the two live runs, to the byte:
 //
 //	20:01  Result pad: 128  Size: 384   <- the anomaly believed
@@ -514,12 +521,12 @@ func noiseOnce(t *testing.T, cnt, pad, delta int) *int {
 // answer that was published, not merely with some wrong answer.
 func TestOneModeSurvivesAReadingOneBlockHigh(t *testing.T) {
 	setTestInfo(t, 474, 368)
-	fired := noiseOnce(t, 1, 602, blockSize)
+	fired := noiseOnce(t, 1, 601, blockSize)
 
 	var r Results
 	size, padding, pad := oneMode(nil, &r)
 	if *fired != 1 {
-		t.Fatalf("the bad reading was never taken (%d times); pad 602 is not on the "+
+		t.Fatalf("the bad reading was never taken (%d times); pad 601 is not on the "+
 			"search's path any more and this test is asserting nothing", *fired)
 	}
 	if size != 368 || padding != 473 || pad != 144 {
@@ -539,8 +546,8 @@ func TestOneModeSurvivesAReadingOneBlockHigh(t *testing.T) {
 // re-reads the pad BELOW, the one the search accepted as inside.
 func TestOneModeSurvivesAReadingOneBlockLow(t *testing.T) {
 	setTestInfo(t, 474, 368)
-	// 730 is the bisection's first probe above the crossing at 618.
-	fired := noiseOnce(t, 1, 730, -blockSize)
+	// 729 is the bisection's first probe above the crossing at 618.
+	fired := noiseOnce(t, 1, 729, -blockSize)
 
 	var r Results
 	size, padding, pad := oneMode(nil, &r)
@@ -565,7 +572,7 @@ func TestOneModeSurvivesAReadingOneBlockLow(t *testing.T) {
 // the answer it had.
 func TestOneModeSurvivesAMisreadBase(t *testing.T) {
 	setTestInfo(t, 474, 368)
-	fired := noiseOnce(t, 1, 474, blockSize)
+	fired := noiseOnce(t, 1, 473, blockSize)
 
 	spentRuns, spentRereads = 0, 0
 	var r Results
@@ -610,8 +617,9 @@ func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
 
 // TestCopyModeMeasuresMoreThanABlock: copy mode takes a difference of
 // two readings and divides, so nothing about a block bounds what it can
-// report.  This is the mode to use for anything large, and the reason
-// -1 mode refuses them rather than guessing.
+// report.  Neither mode is bounded that way any more -- see
+// TestOneModeReportsTheCodeSize, which is held to the same cases -- but
+// copy mode reaches them by different arithmetic and has to be shown to.
 func TestCopyModeMeasuresMoreThanABlock(t *testing.T) {
 	for _, tc := range bigModelCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -810,5 +818,56 @@ func TestOneCopyIsWhatTellsTheTwoRefusalsApart(t *testing.T) {
 	}
 	if spentCompiles != 1 {
 		t.Errorf("spent %d compiles asking one question", spentCompiles)
+	}
+}
+
+// TestOneModeIsExactEverywhere sweeps the whole space the model can
+// express, rather than the dozen shapes named above.
+//
+// It is here because the arithmetic changed and the old arithmetic was
+// wrong in a way no hand-picked case caught for months: it reported a
+// remainder, which is a small plausible number, for every construct of a
+// block or more.  A sweep is what turns "the cases we thought of" into
+// "the cases there are".
+//
+// Two passes, because the two axes fail differently: a size wrong by a
+// block is the arithmetic, and a crossing wrong by anything is where the
+// base script happened to sit in its block.
+func TestOneModeIsExactEverywhere(t *testing.T) {
+	run := func(crossing, size int) int {
+		useTestInfo = &testInfo{pad: crossing, codeSize: size, limit: 1 << 30}
+		flags.IPad, flags.ICheck, flags.Max = 0, false, blockSize
+		clear(cache)
+		testBaseMem = 0
+		got, _, _ := oneMode(nil, &Results{})
+		return got
+	}
+	t.Cleanup(func() {
+		useTestInfo = nil
+		clear(cache)
+		testBaseMem = 0
+	})
+
+	// Every size from nothing to two blocks, at crossings low, middling
+	// and high in their own block.
+	bad := 0
+	for _, crossing := range []int{minpad + 1, 300, 474, 511, 512, 513, 986} {
+		for size := 0; size <= 2*blockSize && bad < 10; size++ {
+			if got := run(crossing, size); got != size {
+				t.Errorf("crossing %d, size %d: Size %d", crossing, size, got)
+				bad++
+			}
+		}
+	}
+
+	// And every crossing over two blocks, at sizes chosen to sit either
+	// side of a boundary.
+	for _, size := range []int{0, 1, 368, 511, 512, 513, 1066} {
+		for crossing := 1; crossing <= 2*blockSize && bad < 10; crossing++ {
+			if got := run(crossing, size); got != size {
+				t.Errorf("crossing %d, size %d: Size %d", crossing, size, got)
+				bad++
+			}
+		}
 	}
 }
