@@ -106,6 +106,16 @@ type testInfo struct {
 	// cannot share.  A model that cannot express that asserts the two
 	// are equal, and every test written against it silently assumes so.
 	marginal int
+
+	// drift adds one byte every drift copies, for a construct whose
+	// per-copy cost is not perfectly constant.  Zero is off.
+	//
+	// Live, copies are not quite constant: 32 of one construct cost 11008
+	// bytes and 16 cost 5516, which works out at 343.25 each.  Copy mode
+	// has a guard for exactly that -- the per-copy total not dividing by
+	// the count -- and with an affine model the guard cannot fire, which
+	// is the same gap that let the older fault hide.
+	drift int
 	// limit is where the model stops accepting a script, standing in for
 	// Second Life's compiler refusing one that is too large.  It is a model of
 	// a limit and not a measurement of one: the live refusal is the compiler's
@@ -850,18 +860,23 @@ func main() {
 		// mode paid for it as surely as padding mode did.
 		fmt.Printf("Padding: %d\n", padding)
 	}
-	if first == 0 {
-		// --fast, which has no boundary to measure against and so still
-		// reports the blend, to the quantisation it earned.
+	if flags.Fast {
+		// No boundary to measure against, so this is still the blend of
+		// the two costs, to the quantisation it earned.
 		fmt.Printf("Size: %d %s%d\n", int(r.Size), plusminus, 511/cnt)
 		return
 	}
 	// Size is what each copy after the first costs, which is what copy
-	// mode has always been for and is now exact.  First copy is what one
-	// costs outright, and the two differ by whatever the construct pays
-	// once and shares -- nothing, for most things.
+	// mode has always been for.
 	fmt.Printf("Size: %d\n", int(r.Size))
-	fmt.Printf("First copy: %d\n", first)
+	// And what one costs outright, when the two could be told apart.
+	// They differ by whatever the construct pays once and shares, which
+	// is nothing for most things -- and when it is small it is below what
+	// these readings can resolve, so copyMode withholds it rather than
+	// print a number that moves with the copy count.
+	if first > 0 {
+		fmt.Printf("First copy: %d\n", first)
+	}
 }
 
 // copyMode is the whole of copy mode: many copies of CODE at one pad, measured
@@ -1060,17 +1075,27 @@ func copyMode(b *runner, r *Results) (padding, cnt, first int) {
 	// things and large for anything with a literal in it: a 250-character
 	// string is 1044 bytes for one copy and 542 for each after.
 	initial := 2*half - full
-	if (full-initial)%cnt != 0 {
-		// C*m has to divide by C.  That it does not means the copies are
-		// not an initial cost plus a constant marginal one -- so the two
-		// numbers below are a fit to a shape the construct does not have,
-		// and saying so is worth more than a rounded answer.
-		noticef("%d copies cost %d bytes and %d cost %d, which does not resolve "+
-			"into an initial cost and a constant one per copy; Size is rounded\n",
-			cnt, full, cnt/2, half)
-	}
 	size := (full - initial) / cnt
 	r.Size = float64(size)
+
+	// C*m has to divide by C.  That it does not means the copies are not
+	// an initial cost plus a constant marginal one, so the split is a fit
+	// to a shape the construct does not have.
+	//
+	// The marginal cost survives that -- it is a difference of two
+	// readings and the first-order term -- but the initial cost does not.
+	// It is the SECOND-order term, and measured live it moves with the
+	// copy count when it should not: for one construct 371, 367 and 344
+	// at three counts, and negative with a preamble.  So it is reported
+	// only when the arithmetic says the shape fits, and withheld
+	// otherwise.  A number nobody can rely on is worse than no number.
+	if (full-initial)%cnt != 0 {
+		noticef("%d copies cost %d bytes and %d cost %d, which does not resolve "+
+			"into an initial cost and a constant one per copy; Size is rounded and "+
+			"what one copy costs on its own is not reported -- -1 mode measures it "+
+			"directly\n", cnt, full, cnt/2, half)
+		return pad, cnt, 0
+	}
 	return pad, cnt, initial + size
 }
 
@@ -1323,7 +1348,11 @@ func testUsed(cnt int) int {
 	if marginal == 0 {
 		marginal = useTestInfo.codeSize
 	}
-	return useTestInfo.codeSize + (cnt-1)*marginal
+	used := useTestInfo.codeSize + (cnt-1)*marginal
+	if useTestInfo.drift > 0 {
+		used += cnt / useTestInfo.drift
+	}
+	return used
 }
 
 // testRun answers a run from useTestInfo's model instead of from Second Life.

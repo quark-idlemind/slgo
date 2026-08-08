@@ -587,35 +587,35 @@ Measures how many bytes of script memory an LSL construct costs.
     autobench --title "global integer" --code "integer gCNT;"
     autobench -1 --title "global integer" --code "integer gCNT;"
 
-A script has a fixed memory budget, and Second Life only reports memory
-in 512-byte blocks -- so you cannot simply ask what one variable costs.
-`autobench` has two ways around that.
+A script has a fixed memory budget, and Second Life allocates script
+code in 512-byte blocks -- so you cannot simply ask what one variable
+costs. `autobench` has two ways around that. What it is working around
+is written up in [doc/memory.md](memory.md).
 
 **Copy mode** (the default) puts many copies of the code in one script
 and measures them at two counts, which separates what the code pays
 once from what each copy costs:
 
-    $ autobench --title "global integer" --code "integer gCNT;"
-    Title: global integer
-    Padding: 377
+    $ autobench --code "integer gCNT;"
+    Padding: 473
     Size: 22
-    First copy: 24
+    First copy: 34
 
 `Size` is what an **additional** copy costs; `First copy` is what one
 costs outright. They differ by whatever the construct pays once and then
-shares -- two bytes here, and nothing at all for most things.
+shares. `First copy` appears only when the two could be told apart --
+see "Reading the numbers honestly" below.
 
 **Padding mode** (`-1`) uses a single copy and adds filler a byte at a
 time until memory steps to the next block, which locates the boundary
-exactly. It costs more runs and gives an exact answer:
+exactly. It costs more runs:
 
-    $ autobench -1 --title "global integer" --code "integer gCNT;"
-    Title: global integer
-    Base mem: 5420
+    $ autobench -1 --code "integer gCNT;"
+    Base mem: 5412
     Result mem: 5932
     Result pad: 488
-    Size: 24
-    Padding: 377
+    Size: 32
+    Padding: 473
 
 `Size` is the answer. `Padding` is described below. The other three are
 the readings behind it: the base script at that padding, sitting exactly
@@ -760,24 +760,33 @@ than measurements.
 
 ### Reading the numbers honestly
 
-`Size: 22` and `First copy: 24` are not two answers to the same
-question. One is what an **additional** copy costs, the other what one
-copy costs outright. `-1` mode measures the second directly, which is
-why it says 24 for the same construct.
+`Size: 22` and `Size: 32` are not two answers to the same question. Copy
+mode's `Size` is what an **additional** copy costs; `-1` mode measures
+one copy outright, and reports 32 for the same construct.
 
 The gap can be large, and when it is, it is telling you something.
-Measured: `string sCNT = "<250 identical characters>";` costs 1044 bytes
-for one copy and 542 for each after it. Give each copy a *different*
-literal -- put `CNT` inside the string -- and the two converge on 1030.
-Identical literals are shared, so an extra copy pays only for what it
-cannot share. That is a real property of the construct, and copy mode
-reports both halves of it from one benchmark.
+Measured live: `string sCNT = "<250 identical characters>";` costs 1054
+bytes for one copy and 540 for each after it. Identical literals are
+shared, so an extra copy pays only for what it cannot share. That is a
+real property of the construct, and copy mode reports both halves of it
+from one benchmark.
 
-Copy mode used to divide a single reading by the copy count, which gave
-the marginal cost with the once-paid cost spread over however many
-copies it happened to use -- so the answer moved with a number nobody
-chose for its arithmetic. Measuring at two counts removes both the
-uncertainty and the blend, which is why there is no longer a `±`.
+**Precision.** `-1` mode answers `4n + k`, where `k` is the heap the
+construct allocates -- 0 for anything that declares no globals, 2 for a
+construct declaring one string, whatever its literal. Code is 4-aligned,
+so two measurements of the same construct that differ by 4 differ by one
+quantum. Measured across a dozen live runs, the same construct came back
+364 or 368 depending on what unrelated globals the script carried, so 4
+bytes is the resolution to expect rather than the exact byte.
+
+**`First copy` is withheld when it cannot be resolved.** It is the
+second-order term -- the difference of two differences -- and live it
+moves with the copy count in a way it should not: for one construct 371,
+367 and 344 at three counts. Copy mode checks whether the readings
+really do resolve into an initial cost plus a constant one per copy, and
+if they do not it says so and reports only `Size`. `-1` mode measures
+one copy outright and is the thing to use when that is the number you
+want.
 
 Both modes handle constructs of any size, including those larger than a
 512-byte block.

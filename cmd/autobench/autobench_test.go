@@ -987,3 +987,46 @@ func TestCopyModeIsExactAtEveryCount(t *testing.T) {
 		})
 	}
 }
+
+// TestCopyModeWithholdsAFirstCopyItCannotResolve: the marginal cost is a
+// difference of two readings and survives a construct that does not fit
+// the shape; the initial cost is the second-order term and does not.
+//
+// Live, for one construct, it came back 371, 367 and 344 at three copy
+// counts and negative with a preamble.  So when the arithmetic says the
+// shape does not fit -- the per-copy total not dividing by the count --
+// the split is not reported at all.  A number that moves with a copy
+// count nobody chose is worse than no number.
+func TestCopyModeWithholdsAFirstCopyItCannotResolve(t *testing.T) {
+	// A construct whose per-copy cost is not perfectly constant, which
+	// is what live readings look like.
+	setTestInfo(t, 474, 100)
+	useTestInfo.marginal = 33
+	useTestInfo.drift = 4
+	flags.Max = 8
+
+	var r Results
+	said := stderrOf(t, func() {
+		_, _, first := copyMode(nil, &r)
+		if first != 0 {
+			t.Errorf("First copy reported as %d for a shape that does not fit", first)
+		}
+	})
+	if !strings.Contains(said, "does not resolve") {
+		t.Errorf("nothing was said about the shape not fitting:\n%s", said)
+	}
+}
+
+// TestCopyModeReportsAFirstCopyItCanResolve is the other half: when the
+// construct really is an initial cost plus a constant one per copy, both
+// numbers are reported.
+func TestCopyModeReportsAFirstCopyItCanResolve(t *testing.T) {
+	setTestInfo(t, 474, 1044)
+	useTestInfo.marginal = 542
+
+	var r Results
+	_, _, first := copyMode(nil, &r)
+	if int(r.Size) != 542 || first != 1044 {
+		t.Errorf("Size %d First copy %d, want 542 and 1044", int(r.Size), first)
+	}
+}

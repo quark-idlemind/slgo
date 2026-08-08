@@ -760,8 +760,12 @@ clock, and every run costs the whole timeout.
 from, and exits non-zero if any of them would not compile, faulted, or
 never finished. `autobench` measures the memory a construct costs by
 finding the 512-byte block boundary it crosses; the measurement
-machinery came over unchanged, because it is about LSL and not about
-how a script reaches the grid.
+machinery is about LSL and not about how a script reaches the grid.
+
+What it is working around -- that a reading is `512·ceil(code/512) +
+heap`, that code is 4-aligned, and what a function and a library call
+actually cost -- is written up in [doc/memory.md](doc/memory.md), from
+measurements against the grid.
 
 What did not come over is what belongs to elsl: `--sim` (the eLSL
 simulator), `-O` and `--std` (its compiler's flags), and the
