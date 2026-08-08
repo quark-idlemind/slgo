@@ -256,3 +256,34 @@ func TestAScriptQuestionOffTheWireReachesWhoeverIsListening(t *testing.T) {
 		t.Errorf("Asked = %d", len(w.Asked()))
 	}
 }
+
+// TestPermissionSubscriptionsCloseWhenTheSessionEnds: the same promise
+// chat makes, and for the same reason.
+//
+// The late half is what needed fixing.  closeChat always closed the
+// permission subscriptions that existed, but Permissions had no guard
+// against being asked after the session ended -- so one taken out then
+// went into a map nobody would read again, and its caller waited on a
+// channel nothing could ever reach.
+func TestPermissionSubscriptionsCloseWhenTheSessionEnds(t *testing.T) {
+	w, f := newFakeSession(t)
+	asked := w.Permissions(4)
+	f.Close()
+
+	for _, c := range []struct {
+		what string
+		ch   <-chan *Permission
+	}{
+		{"one taken out before the end", asked},
+		{"one taken out after it", w.Permissions(4)},
+	} {
+		select {
+		case _, open := <-c.ch:
+			if open {
+				t.Errorf("%s delivered a request, want closed", c.what)
+			}
+		case <-time.After(2 * time.Second):
+			t.Errorf("%s was never closed", c.what)
+		}
+	}
+}

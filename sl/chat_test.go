@@ -18,6 +18,7 @@ func newTestSession(t *testing.T) (*Session, func()) {
 	w := &Session{
 		chatSubs: map[<-chan Line]*chatSub{},
 		permSubs: map[<-chan *Permission]*permSub{},
+		imSubs:   map[<-chan *IM]*imSub{},
 		chatCtl:  make(chan chatCmd),
 		readDone: make(chan struct{}),
 	}

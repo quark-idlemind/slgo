@@ -912,15 +912,13 @@ func TestTheFriendListSaysWhenItCannotBeHad(t *testing.T) {
 // ranging rather than waiting for ever, and a subscription taken out
 // after the end comes back already closed rather than silent.
 //
-// Chat and permission subscriptions behave that way -- see
-// TestChatClosesWhenReaderStops -- and IM subscriptions do not.
-// closeChat closes chatSubs and permSubs and not imSubs, and IMs has
-// none of the "the reader has already stopped" guard that Chat has,
-// so an IM subscription outlives the session it belongs to and blocks
-// its reader for ever.
+// Chat and permission subscriptions always did -- see
+// TestChatClosesWhenReaderStops -- and IM ones did not: closeChat
+// closed chatSubs and permSubs and walked past imSubs, and IMs had
+// none of the "the reader has already stopped" guard Chat had.  So an
+// IM subscription outlived the session it belonged to and blocked
+// whoever was ranging over it, for ever.
 func TestIMSubscriptionsCloseWhenTheSessionEnds(t *testing.T) {
-	t.Skip("demonstrates IM subscriptions outliving the session; see coverage-notes/sl-im.md")
-
 	w, f := newFakeSession(t)
 	ims := w.IMs(4)
 	f.Close()

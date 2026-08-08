@@ -363,20 +363,33 @@ func (w *Session) Chat(filter ChatFilter, depth int) <-chan Line {
 		depth = DefaultChatDepth
 	}
 	sub := &chatSub{ch: make(chan Line, depth), filter: filter}
-	// A reader that has already stopped will never deliver anything,
-	// so the channel is closed rather than left empty for ever.
-	stopped := true
-	select {
-	case <-w.readDone:
-	default:
-		stopped = false
-	}
-	if stopped {
+	if !w.addSub(func() { w.chatSubs[sub.ch] = sub }) {
 		close(sub.ch)
-		return sub.ch
 	}
-	w.onReader(func() { w.chatSubs[sub.ch] = sub })
 	return sub.ch
+}
+
+// addSub registers a subscription, and says whether it took.
+//
+// It answers false when the session has already ended, and the caller
+// closes the channel it was about to hand out: nothing will ever be
+// delivered to it, and a caller ranging over one is owed an end to
+// range to rather than a wait with no end.
+//
+// The decision is made inside onReader, which holds mu -- the same lock
+// closeChat takes.  Testing readDone from out here instead leaves a
+// window: the reader can stop, closeChat can run, and the registration
+// can arrive after it and sit in a map nobody will read again.
+func (w *Session) addSub(fn func()) bool {
+	added := false
+	w.onReader(func() {
+		if w.subsClosed {
+			return
+		}
+		fn()
+		added = true
+	})
+	return added
 }
 
 // StopChat closes a subscription.
@@ -462,14 +475,24 @@ func (w *Session) onReader(fn func()) {
 
 // closeChat shuts every subscription down, which is what tells a
 // caller ranging over one that there will be no more.
+//
+// Every kind, chat and permissions and instant messages alike.  Missing
+// one of them is not a smaller version of the same bug: a caller
+// ranging over the one that was missed waits for ever, which is the
+// worst way for a session to end.
 func (w *Session) closeChat() {
 	w.mu.Lock()
+	w.subsClosed = true
 	for ch, s := range w.chatSubs {
 		delete(w.chatSubs, ch)
 		close(s.ch)
 	}
 	for ch, s := range w.permSubs {
 		delete(w.permSubs, ch)
+		close(s.ch)
+	}
+	for ch, s := range w.imSubs {
+		delete(w.imSubs, ch)
 		close(s.ch)
 	}
 	w.mu.Unlock()

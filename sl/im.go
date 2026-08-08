@@ -101,7 +101,9 @@ func (w *Session) IMs(depth int) <-chan *IM {
 		depth = DefaultIMDepth
 	}
 	sub := &imSub{ch: make(chan *IM, depth)}
-	w.onReader(func() { w.imSubs[sub.ch] = sub })
+	if !w.addSub(func() { w.imSubs[sub.ch] = sub }) {
+		close(sub.ch)
+	}
 	return sub.ch
 }
 

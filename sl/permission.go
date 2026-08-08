@@ -228,7 +228,9 @@ func (w *Session) Permissions(depth int) <-chan *Permission {
 		depth = DefaultPermissionDepth
 	}
 	sub := &permSub{ch: make(chan *Permission, depth)}
-	w.onReader(func() { w.permSubs[sub.ch] = sub })
+	if !w.addSub(func() { w.permSubs[sub.ch] = sub }) {
+		close(sub.ch)
+	}
 	return sub.ch
 }
 

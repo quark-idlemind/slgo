@@ -84,6 +84,13 @@ type Session struct {
 	chatCtl  chan chatCmd
 	readDone chan struct{}
 
+	// subsClosed says closeChat has been, so that a subscription asked
+	// for after the session ended is handed back closed rather than
+	// added to a map nobody will ever read again.  It is under mu, the
+	// lock closeChat takes and every subscription is registered under,
+	// which is what stops one slipping in behind it.
+	subsClosed bool
+
 	// Chat collectors, and everything heard, in arrival order.
 	collectors []*collector
 	alerts     []string

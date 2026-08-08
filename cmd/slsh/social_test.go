@@ -347,20 +347,16 @@ func TestTheChatPrinterStopsWhenTheSessionDoes(t *testing.T) {
 	}
 }
 
-// TestTheIMSubscriptionOutlivesTheSession.
+// TestTheIMSubscriptionEndsWithTheSession: whatever the shell is
+// waiting on has to end when the session does.
 //
-// Chat and permission subscriptions are closed when the connection
-// ends, which is how anything ranging over one learns there will be no
-// more.  Instant messages are not: sl.Session.closeChat closes the
-// other two maps and leaves imSubs alone, so a subscriber waits for
-// ever on a session that has gone.  The shell survives it because it
-// waits on all three at once and the other two do close; anything
-// waiting on IMs alone would hang.
-//
-// The fix belongs in sl, next to the two loops that already do it.
-func TestTheIMSubscriptionOutlivesTheSession(t *testing.T) {
-	t.Skip("demonstrates the IM subscription that is never closed; see coverage-notes/slsh-commands.md")
-
+// This one did not.  sl.Session.closeChat closed the chat and
+// permission maps and left imSubs alone, so a subscriber waited for
+// ever on a session that had gone.  The shell survived it only because
+// it waits on all three at once and the other two closed -- anything
+// waiting on IMs alone hung, and the arm of the printer's select that
+// handles the closure was unreachable.
+func TestTheIMSubscriptionEndsWithTheSession(t *testing.T) {
 	x := newTestShell(t)
 	ims := x.s.IMs(0)
 	x.grid.Close()
