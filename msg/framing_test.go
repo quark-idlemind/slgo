@@ -3,6 +3,7 @@ package msg
 import (
 	"bytes"
 	"math/rand"
+	"strings"
 	"testing"
 )
 
@@ -348,4 +349,85 @@ func absf(f float32) float32 {
 		return -f
 	}
 	return f
+}
+
+// TestMustParseUUIDPanics: it is for constants and tests, where a bad
+// UUID is a typo in the source and should not survive to run time.
+func TestMustParseUUIDPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("MustParseUUID accepted something that is not a UUID")
+		}
+	}()
+	MustParseUUID("not a uuid")
+}
+
+// TestFreqNamesItself, including a value MakeID cannot produce: ID
+// carries the class in its top byte, and an ID built by hand or read
+// out of a capture can hold anything.  A number there is more use in a
+// log line than an empty string.
+func TestFreqNamesItself(t *testing.T) {
+	for f, want := range map[Freq]string{
+		FreqHigh:   "High",
+		FreqMedium: "Medium",
+		FreqLow:    "Low",
+		FreqFixed:  "Fixed",
+	} {
+		if got := f.String(); got != want {
+			t.Errorf("Freq(%d) = %q, want %q", uint8(f), got, want)
+		}
+	}
+	if got := Freq(9).String(); !strings.Contains(got, "9") {
+		t.Errorf("an unknown Freq printed as %q, which does not say which", got)
+	}
+}
+
+// TestRegisterRefusesADuplicate: the generated file registers every
+// message once, and a template change that gave two of them the same
+// number would otherwise leave one silently unreachable.
+func TestRegisterRefusesADuplicate(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("registering a second message under an existing number was allowed")
+		}
+	}()
+	// PacketAck's number, under another name.  register panics before
+	// it writes anything, so the registry is left as it was.
+	register(&Info{Name: "NotPacketAck", ID: LookupName("PacketAck").ID}, func() Message {
+		return &PacketAck{}
+	})
+}
+
+// TestNamesCoversTheTemplate.  Names is what msggen's own checks and
+// the shell's completion read, so it has to be the whole registry.
+func TestNamesCoversTheTemplate(t *testing.T) {
+	names := Names()
+	if len(names) != len(infoByID) {
+		t.Errorf("Names returned %d of %d messages", len(names), len(infoByID))
+	}
+	seen := map[string]bool{}
+	for _, n := range names {
+		if seen[n] {
+			t.Errorf("%s appears twice", n)
+		}
+		seen[n] = true
+	}
+	if !seen["ChatFromViewer"] || !seen["PacketAck"] {
+		t.Error("Names is missing messages that are certainly in the template")
+	}
+}
+
+// TestDecodeBodyRefusesWhatItCannotRead: an empty datagram body has no
+// message number in it, and a message number followed by too few bytes
+// is a truncated packet rather than a message with zeroes in it.
+func TestDecodeBodyRefusesWhatItCannotRead(t *testing.T) {
+	if m, err := DecodeBody(nil); err == nil {
+		t.Errorf("an empty body decoded to %T", m)
+	}
+	// UseCircuitCode is Low 3 and wants 36 bytes; it gets two.
+	short := AppendID(nil, LookupName("UseCircuitCode").ID)
+	short = append(short, 0x01, 0x02)
+	if m, err := DecodeBody(short); err == nil {
+		t.Errorf("a truncated UseCircuitCode decoded to %+v", m)
+	}
 }

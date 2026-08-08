@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/creack/pty"
 )
 
 // tempProfiles points the profile directory at a fresh one and writes
@@ -192,5 +194,94 @@ func TestCredentialsRefusesAMissingProfile(t *testing.T) {
 
 	if _, err := Resolve(pipeStdin(t, ""), &out, "nosuch", "", "", "last"); err == nil {
 		t.Fatal("expected a refusal for a profile that does not exist")
+	}
+}
+
+// TestCredentialsStopsWhenThereIsNoOneToAsk: a program run from cron or
+// a pipe that has nothing left on its input cannot be asked for a name,
+// and waiting or guessing would both be worse than saying so.
+func TestCredentialsStopsWhenThereIsNoOneToAsk(t *testing.T) {
+	cases := map[string]string{
+		"nothing at all":      "",
+		"a name and no more":  "Nobody\n",
+		"names but no secret": "Nobody\nResident\n",
+	}
+	for what, input := range cases {
+		tempProfiles(t, nil)
+		var out bytes.Buffer
+		if l, err := Resolve(pipeStdin(t, input), &out, "", "", "", "last"); err == nil {
+			t.Errorf("%s: got %+v, expected a refusal", what, l)
+		}
+	}
+}
+
+// TestCredentialsRefusesAnEmptyAnswer: pressing return at every prompt
+// is not a login, and a blank password would be sent to the login server
+// as though it were one.
+func TestCredentialsRefusesAnEmptyAnswer(t *testing.T) {
+	tempProfiles(t, nil)
+	var out bytes.Buffer
+
+	if l, err := Resolve(pipeStdin(t, "\n\n\n"), &out, "", "", "", "last"); err == nil {
+		t.Errorf("got %+v, expected a refusal", l)
+	}
+}
+
+// TestCredentialsSurvivesAnUnreadableProfileDirectory: the search by
+// avatar name is a convenience, and a configuration directory that
+// cannot be listed at all should cost the password prompt, not the run.
+func TestCredentialsSurvivesAnUnreadableProfileDirectory(t *testing.T) {
+	// A plain file where the directory should be: listing it fails
+	// with something other than "it is not there".
+	notADir := filepath.Join(t.TempDir(), "slgo")
+	if err := os.WriteFile(notADir, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SLGO_CONFIG_DIR", notADir)
+	var out bytes.Buffer
+
+	l, err := Resolve(pipeStdin(t, "hunter2\n"), &out, "", "Nobody", "Resident", "last")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Password != "hunter2" {
+		t.Errorf("password = %q", l.Password)
+	}
+}
+
+// TestPasswordIsNotEchoedToATerminal is the point of askSecret: down a
+// pipe the line is simply read, but at a terminal the password must not
+// end up in the scrollback of whoever walks past.  A pseudo-terminal is
+// the only way to be a terminal for the purposes of the test.
+func TestPasswordIsNotEchoedToATerminal(t *testing.T) {
+	tempProfiles(t, nil)
+
+	master, slave, err := pty.Open()
+	if err != nil {
+		t.Skipf("no pseudo-terminal available: %v", err)
+	}
+	t.Cleanup(func() { master.Close(); slave.Close() })
+
+	// The line is typed before the prompt goes out, which the terminal
+	// buffers exactly as it would a fast typist.
+	if _, err := master.WriteString("hunter2\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	l, err := Resolve(slave, &out, "", "Nobody", "Resident", "last")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Password != "hunter2" {
+		t.Errorf("password = %q", l.Password)
+	}
+	// The prompt goes to the given writer rather than to the terminal,
+	// so a caller can send it wherever the rest of its output goes.
+	if !strings.Contains(out.String(), "Password for Nobody Resident") {
+		t.Errorf("prompt = %q", out.String())
+	}
+	if strings.Contains(out.String(), "hunter2") {
+		t.Errorf("the password was written back out: %q", out.String())
 	}
 }

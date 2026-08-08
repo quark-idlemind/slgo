@@ -30,8 +30,11 @@ func (w *blobWriter) vec(v Vector3) { w.f32(v.X); w.f32(v.Y); w.f32(v.Z) }
 func (w *blobWriter) cstr(s string) { w.b = append(w.b, s...); w.b = append(w.b, 0) }
 func (w *blobWriter) raw(b []byte)  { w.b = append(w.b, b...) }
 
-// build makes a compressed blob with whatever the flags ask for.
-func build(flags uint32, fill func(w *blobWriter), te []byte) []byte {
+// compressedHead writes the fixed part every blob begins with, up to
+// and including the flags word that says what follows it.  It is
+// separate from build because a test that wants a blob to STOP
+// somewhere cannot have the shape and texture entry appended to it.
+func compressedHead(flags uint32) *blobWriter {
 	w := &blobWriter{}
 	w.uuid(UUID{1, 2, 3})      // FullID
 	w.u32(4242)                // LocalID
@@ -47,6 +50,12 @@ func build(flags uint32, fill func(w *blobWriter), te []byte) []byte {
 	w.f32(0)
 	w.u32(flags)
 	w.uuid(UUID{9, 9, 9}) // Owner
+	return w
+}
+
+// build makes a compressed blob with whatever the flags ask for.
+func build(flags uint32, fill func(w *blobWriter), te []byte) []byte {
+	w := compressedHead(flags)
 
 	if fill != nil {
 		fill(w)
@@ -209,5 +218,90 @@ func TestDecodeCompressedTruncated(t *testing.T) {
 			t.Fatalf("%d bytes of a %d byte object decoded without complaint", n, len(full))
 		}
 		_ = c
+	}
+}
+
+// TestUnterminatedTextIsAnError: the hover text is a C string, and a
+// blob whose text runs to the end of the buffer with no terminator has
+// to stop the read rather than take everything after it as text.
+func TestUnterminatedTextIsAnError(t *testing.T) {
+	// Nothing follows the text, so there is no zero byte anywhere for
+	// the scan to stop on -- which is the case a blob cut short in
+	// transit presents.
+	w := compressedHead(compText | compMediaURL)
+	w.raw([]byte("text with no terminator"))
+
+	c, err := DecodeCompressed(w.b)
+	if err == nil {
+		t.Fatalf("an unterminated string decoded to %+v", c)
+	}
+	// Everything after the failure reads as absent rather than as
+	// whatever happened to be in the buffer.
+	if c.MediaURL != "" || len(c.ExtraParams) != 0 {
+		t.Errorf("reads after the failure produced values: %q %+v", c.MediaURL, c.ExtraParams)
+	}
+}
+
+// TestScratchpadLengthIsChecked: the scratchpad is skipped rather than
+// read, and a length longer than the blob would otherwise move the
+// cursor past the end and misread everything after it.
+func TestScratchpadLengthIsChecked(t *testing.T) {
+	b := build(compScratchpad, func(w *blobWriter) {
+		w.u32(1 << 20) // a megabyte that is not there
+		w.u8(0)
+	}, marker)
+
+	if c, err := DecodeCompressed(b); err == nil {
+		t.Fatalf("a scratchpad longer than the blob decoded to %+v", c)
+	}
+}
+
+// TestExtraParamsLengthIsChecked, for the same reason: the block says
+// how long it is, and that length is the reader's only way past a type
+// it does not understand.
+func TestExtraParamsLengthIsChecked(t *testing.T) {
+	b := build(0, func(w *blobWriter) {
+		w.u8(1)        // one block
+		w.u16(0xabcd)  // of a type nobody knows
+		w.u32(1 << 20) // and a length that is not there
+	}, marker)
+
+	if c, err := DecodeCompressed(b); err == nil {
+		t.Fatalf("decoded to %+v", c)
+	}
+}
+
+// TestIsAttachment is what tells a worn object from one lying on the
+// ground: both have a parent, and only a worn one has a State saying
+// which attachment point it is on.
+func TestIsAttachment(t *testing.T) {
+	parent := uint32(4242)
+	cases := []struct {
+		what string
+		c    Compressed
+		want bool
+	}{
+		{"worn on the right hand", Compressed{State: 6, ParentID: &parent}, true},
+		{"sitting on a prim", Compressed{State: 0, ParentID: &parent}, false},
+		{"loose in the world", Compressed{State: 6}, false},
+	}
+	for _, c := range cases {
+		if got := c.c.IsAttachment(); got != c.want {
+			t.Errorf("%s: IsAttachment = %v, want %v", c.what, got, c.want)
+		}
+	}
+}
+
+// TestF32AtStopsAtTheEnd.  Nothing in the light block can reach this --
+// LightOf checks the length first -- but f32at is the only float reader
+// in this file that does not go through the cursor, and a caller added
+// later would find out the hard way.
+func TestF32AtStopsAtTheEnd(t *testing.T) {
+	b := []byte{0, 0, 0x80, 0x3f, 1, 2, 3}
+	if got := f32at(b, 0); got != 1 {
+		t.Errorf("f32at(0) = %v, want 1", got)
+	}
+	if got := f32at(b, 4); got != 0 {
+		t.Errorf("f32at past the end = %v, want 0", got)
 	}
 }

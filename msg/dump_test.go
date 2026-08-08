@@ -264,3 +264,94 @@ func TestDumpEscapedBytesParse(t *testing.T) {
 		t.Fatalf("YAML parse failed: %v\n%s", err, out)
 	}
 }
+
+// probeEmptyBlock is a message with a block that has no fields.  The
+// template has none today, but it describes blocks whose only purpose
+// is to be counted, and a dump that wrote nothing after the block's
+// name would be YAML that no longer parses -- which is exactly what
+// TestDumpParsesAsYAML would then stop being able to say.
+type probeEmptyBlock struct {
+	Nothing struct{} `ll:"Single"`
+}
+
+var probeEmptyBlockInfo = Info{Name: "ProbeEmptyBlock", ID: MakeID(FreqHigh, 254)}
+
+func (m *probeEmptyBlock) MsgInfo() *Info          { return &probeEmptyBlockInfo }
+func (m *probeEmptyBlock) Encode() ([]byte, error) { return Marshal(m) }
+func (m *probeEmptyBlock) Decode(b []byte) error   { return Unmarshal(b, m) }
+
+func TestDumpEmptyBlock(t *testing.T) {
+	got := DumpMessage(&probeEmptyBlock{})
+	if !strings.Contains(got, "Nothing:\n    {}\n") {
+		t.Errorf("a block with no fields should still be a mapping:\n%s", got)
+	}
+}
+
+// TestDumpSaysWhatItCannotRender rather than printing half a message.
+// A dump is what someone reads when nothing else worked, so it has to
+// survive a message it cannot make a plan for and a nil one.
+func TestDumpSaysWhatItCannotRender(t *testing.T) {
+	got := DumpMessage(&probeBadPlan{})
+	if !strings.Contains(got, "message: ProbeBadPlan") {
+		t.Errorf("the name is the one thing it always has:\n%s", got)
+	}
+	if !strings.Contains(got, "error:") {
+		t.Errorf("a message with no usable plan should say so:\n%s", got)
+	}
+
+	var nilPing *CompletePingCheck
+	got = DumpMessage(nilPing)
+	if !strings.Contains(got, "blocks: {}") {
+		t.Errorf("a nil message should dump as no blocks:\n%s", got)
+	}
+}
+
+// TestDumpUnhandledFieldKind: a field type added to the parser and not
+// to the dumper prints as null rather than as nothing, which keeps the
+// document parseable while making the gap visible.
+func TestDumpUnhandledFieldKind(t *testing.T) {
+	f := fieldPlan{name: "Impossible", kind: kind(200)}
+	v := reflect.New(reflect.TypeOf(uint8(0))).Elem()
+
+	if got := string(appendFieldYAML(nil, v, &f)); got != "null" {
+		t.Errorf("an unknown field kind dumped as %q, want null", got)
+	}
+}
+
+// TestDumpPacketExtraHeader: the extra header bytes are the part of the
+// packet nothing here understands, so a dump has to hand them over as
+// they arrived.
+func TestDumpPacketExtraHeader(t *testing.T) {
+	p := &Packet{
+		Header: Header{Sequence: 3, Extra: []byte{0xca, 0xfe}},
+	}
+	if got := DumpPacket(p); !strings.Contains(got, `extra: "0xcafe"`) {
+		t.Errorf("missing the extra header bytes:\n%s", got)
+	}
+}
+
+// TestDumpBytesThatAreNotText: most Variable fields really are strings,
+// so they are rendered as text when they look like it.  Bytes that are
+// not valid UTF-8 at all are not text under any reading, and printing
+// them as though they were would produce a document that is not even
+// valid YAML.
+func TestDumpBytesThatAreNotText(t *testing.T) {
+	m := &ChatFromViewer{}
+	m.ChatData.Message = []byte{0xff, 0xfe, 0x41}
+
+	if got := DumpMessage(m); !strings.Contains(got, `Message: "0xfffe41"`) {
+		t.Errorf("invalid UTF-8 should render as hex:\n%s", got)
+	}
+}
+
+// TestDumpEmptyCString: the C client writes strings with a NUL on the
+// end, so a field holding one zero byte is an empty string rather than
+// a byte of binary, and rendering it as 0x00 would read as a value.
+func TestDumpEmptyCString(t *testing.T) {
+	m := &ChatFromViewer{}
+	m.ChatData.Message = []byte{0}
+
+	if got := DumpMessage(m); !strings.Contains(got, `Message: ""`) {
+		t.Errorf("a lone terminator should render as an empty string:\n%s", got)
+	}
+}

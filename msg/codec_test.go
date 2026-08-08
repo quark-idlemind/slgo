@@ -494,3 +494,282 @@ func BenchmarkDecodeChatFromViewer(b *testing.B) {
 		_ = out.Decode(wire)
 	}
 }
+
+// The probes below are message shapes the generator would never emit.
+// They exist because the tag compiler's refusals are the difference
+// between a template change being caught at the first Marshal and a
+// message quietly going out with its fields in the wrong places, and
+// there is no message in the template that is wrong in any of these
+// ways.
+
+type probeBlock struct {
+	A uint8 `ll:"U8"`
+}
+
+// probeBadPlan has a quantifier no template ever used, so every plan
+// built from it fails.
+type probeBadPlan struct {
+	Block probeBlock `ll:"Wibble"`
+}
+
+var probeBadPlanInfo = Info{Name: "ProbeBadPlan"}
+
+func (m *probeBadPlan) MsgInfo() *Info          { return &probeBadPlanInfo }
+func (m *probeBadPlan) Encode() ([]byte, error) { return Marshal(m) }
+func (m *probeBadPlan) Decode(b []byte) error   { return Unmarshal(b, m) }
+
+// probeFixedBlock's tag says eight bytes and its field holds four.
+// That compiles -- the size is only checked against the Go type when a
+// packet is built -- and then fails on every message.
+type probeFixedBlock struct {
+	Name [4]byte `ll:"Fixed,8"`
+}
+
+type probeBadFixedSingle struct {
+	Block probeFixedBlock `ll:"Single"`
+}
+
+var probeBadFixedSingleInfo = Info{Name: "ProbeBadFixedSingle"}
+
+func (m *probeBadFixedSingle) MsgInfo() *Info          { return &probeBadFixedSingleInfo }
+func (m *probeBadFixedSingle) Encode() ([]byte, error) { return Marshal(m) }
+func (m *probeBadFixedSingle) Decode(b []byte) error   { return Unmarshal(b, m) }
+
+type probeBadFixedMultiple struct {
+	Blocks [2]probeFixedBlock `ll:"Multiple,2"`
+}
+
+var probeBadFixedMultipleInfo = Info{Name: "ProbeBadFixedMultiple"}
+
+func (m *probeBadFixedMultiple) MsgInfo() *Info          { return &probeBadFixedMultipleInfo }
+func (m *probeBadFixedMultiple) Encode() ([]byte, error) { return Marshal(m) }
+func (m *probeBadFixedMultiple) Decode(b []byte) error   { return Unmarshal(b, m) }
+
+// TestPlanCompilerRefusesShapesTheGeneratorCouldNotHaveMeant.  Each of
+// these is a way msggen could go wrong against a changed template, and
+// every one of them would otherwise produce a plan that encodes fields
+// at the wrong offsets rather than an error.
+func TestPlanCompilerRefusesShapesTheGeneratorCouldNotHaveMeant(t *testing.T) {
+	cases := []struct {
+		what string
+		v    any
+		want string
+	}{
+		{"a message that is not a struct", int(0), "must be a struct"},
+		{"a Multiple block with no count", struct {
+			B probeBlock `ll:"Multiple"`
+		}{}, "bad Multiple count"},
+		{"a quantifier out of nowhere", struct {
+			B probeBlock `ll:"Wibble"`
+		}{}, "unknown block quantifier"},
+		{"a Multiple block that is not an array", struct {
+			B probeBlock `ll:"Multiple,2"`
+		}{}, "must be an array"},
+		{"an array of the wrong length", struct {
+			B [3]probeBlock `ll:"Multiple,2"`
+		}{}, "array is [3]"},
+		{"a Variable block that is not a slice", struct {
+			B probeBlock `ll:"Variable"`
+		}{}, "must be a slice"},
+		{"a block that is not a struct", struct {
+			B int `ll:"Single"`
+		}{}, "block must be a struct"},
+		{"a field type out of nowhere", struct {
+			B struct {
+				A uint8 `ll:"WIBBLE"`
+			} `ll:"Single"`
+		}{}, "unknown field type"},
+		{"a Variable field with no width", struct {
+			B struct {
+				A []byte `ll:"Variable"`
+			} `ll:"Single"`
+		}{}, "needs a size"},
+		{"a length prefix of three bytes", struct {
+			B struct {
+				A []byte `ll:"Variable,3"`
+			} `ll:"Single"`
+		}{}, "must be 1, 2 or 4"},
+	}
+	for _, c := range cases {
+		_, err := compile(reflect.TypeOf(c.v), "Probe")
+		if err == nil {
+			t.Errorf("%s was accepted", c.what)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: error is %q, want it to mention %q", c.what, err, c.want)
+		}
+	}
+}
+
+// TestPlanCompilerIgnoresUntaggedFields: the tag is what makes
+// something part of the wire form, so a struct may carry anything else
+// alongside it without that ending up in a packet.
+func TestPlanCompilerIgnoresUntaggedFields(t *testing.T) {
+	type block struct {
+		Note string
+		A    uint8 `ll:"U8"`
+	}
+	type message struct {
+		Note  string
+		Block block `ll:"Single"`
+	}
+
+	p, err := compile(reflect.TypeOf(message{}), "Probe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.blocks) != 1 {
+		t.Fatalf("compiled %d blocks, want 1", len(p.blocks))
+	}
+	if len(p.blocks[0].fields) != 1 || p.blocks[0].fields[0].name != "A" {
+		t.Errorf("fields = %+v", p.blocks[0].fields)
+	}
+}
+
+// TestMarshalRefusesWhatItCannotPlan: a bad plan has to come back as an
+// error from Marshal and from Unmarshal alike, because the caller of
+// either is about to treat silence as a packet.
+func TestMarshalRefusesWhatItCannotPlan(t *testing.T) {
+	if b, err := Marshal(&probeBadPlan{}); err == nil {
+		t.Errorf("Marshal built %x from a message with no usable plan", b)
+	}
+	if err := (&probeBadPlan{}).Decode(nil); err == nil {
+		t.Error("Unmarshal accepted a message with no usable plan")
+	}
+	if _, err := planFor(reflect.TypeOf(probeBadPlan{}), "ProbeBadPlan"); err == nil {
+		t.Error("planFor accepted it")
+	}
+}
+
+// TestMarshalNeedsAPointer.  Marshal writes nothing into the message,
+// but Unmarshal does, and a value passed to either is a mistake worth
+// naming rather than a message full of zeroes.
+func TestMarshalNeedsAPointer(t *testing.T) {
+	var nilPing *CompletePingCheck
+	if _, err := Marshal(nilPing); err == nil {
+		t.Error("Marshal accepted a nil message")
+	}
+	if err := Unmarshal(nil, nilPing); err == nil {
+		t.Error("Unmarshal accepted a nil message")
+	}
+}
+
+// TestFixedFieldMustMatchItsTemplate: the array width and the template
+// width are two statements of the same fact, and a packet built from
+// them disagreeing has every field after it in the wrong place.
+func TestFixedFieldMustMatchItsTemplate(t *testing.T) {
+	if b, err := (&probeBadFixedSingle{}).Encode(); err == nil {
+		t.Errorf("encoded %x from a [4]byte field the template calls eight", b)
+	} else if !strings.Contains(err.Error(), "Fixed field") {
+		t.Errorf("error = %v", err)
+	}
+	if b, err := (&probeBadFixedMultiple{}).Encode(); err == nil {
+		t.Errorf("a Multiple block let it through: %x", b)
+	}
+
+	if err := (&probeBadFixedSingle{}).Decode(make([]byte, 16)); err == nil {
+		t.Error("decoded into a [4]byte field the template calls eight")
+	}
+	if err := (&probeBadFixedMultiple{}).Decode(make([]byte, 16)); err == nil {
+		t.Error("a Multiple block let it through on the way in")
+	}
+}
+
+// TestVariableBlockInstancesAreChecked: the count byte says how many
+// blocks follow, and a count larger than the bytes left is a truncated
+// packet, not a packet with empty blocks on the end.
+func TestVariableBlockInstancesAreChecked(t *testing.T) {
+	// PacketAck: a count of five, then one sequence number.
+	body := []byte{0x05, 0x01, 0x00, 0x00, 0x00}
+	var m PacketAck
+	if err := m.Decode(body); err == nil {
+		t.Errorf("five blocks were read out of four bytes: %+v", m.Packets)
+	}
+}
+
+// TestUnhandledKind guards the two switch defaults.  Nothing in the
+// template reaches them, but a kind added to the parser and not to the
+// codec would, and silently writing nothing is the worst of the
+// available outcomes.
+func TestUnhandledKind(t *testing.T) {
+	f := fieldPlan{name: "Impossible", kind: kind(200)}
+	v := reflect.New(reflect.TypeOf(uint8(0))).Elem()
+
+	if err := encodeField(&buf{}, v, &f); err == nil {
+		t.Error("encodeField wrote a field type it does not know")
+	}
+	if err := decodeField(&cur{b: []byte{1, 2, 3, 4}}, v, &f); err == nil {
+		t.Error("decodeField read a field type it does not know")
+	}
+}
+
+// TestEveryFieldTypeRefusesABodyThatEndsEarly is the decoding mirror of
+// TestWireSizes: every width is checked before it is read, at every
+// length short of the one it needs.  A missed check here is a panic in
+// the receive loop, and these bytes come off the network.
+func TestEveryFieldTypeRefusesABodyThatEndsEarly(t *testing.T) {
+	cases := []struct {
+		tmpl string
+		zero any
+		size int
+		val  any // non-zero payload, for the Variable widths
+	}{
+		{"U8", uint8(0), 0, nil},
+		{"U16", uint16(0), 0, nil},
+		{"U32", uint32(0), 0, nil},
+		{"U64", uint64(0), 0, nil},
+		{"S8", int8(0), 0, nil},
+		{"S16", int16(0), 0, nil},
+		{"S32", int32(0), 0, nil},
+		{"S64", int64(0), 0, nil},
+		{"F32", float32(0), 0, nil},
+		{"F64", float64(0), 0, nil},
+		{"BOOL", false, 0, nil},
+		{"LLUUID", UUID{}, 0, nil},
+		{"LLVector3", Vector3{}, 0, nil},
+		{"LLVector3d", Vector3d{}, 0, nil},
+		{"LLVector4", Vector4{}, 0, nil},
+		{"LLQuaternion", Quaternion{}, 0, nil},
+		{"IPADDR", IPAddr{}, 0, nil},
+		{"IPPORT", IPPort(0), 0, nil},
+		{"Fixed", [32]byte{}, 32, nil},
+		// The payload matters for Variable: without one the only
+		// thing that can come up short is the length prefix.
+		{"Variable", []byte(nil), 1, []byte("hello")},
+		{"Variable", []byte(nil), 2, []byte("hello")},
+		{"Variable", []byte(nil), 4, []byte("hello")},
+	}
+	for _, c := range cases {
+		f := fieldPlan{name: c.tmpl, kind: kindByName[c.tmpl], size: c.size}
+		v := reflect.New(reflect.TypeOf(c.zero)).Elem()
+		if c.val != nil {
+			v.Set(reflect.ValueOf(c.val))
+		}
+
+		w := &buf{}
+		if err := encodeField(w, v, &f); err != nil {
+			t.Errorf("%s/%d: %v", c.tmpl, c.size, err)
+			continue
+		}
+		for n := 0; n < len(w.b); n++ {
+			if err := decodeField(&cur{b: w.b[:n]}, v, &f); err == nil {
+				t.Errorf("%s/%d read %d bytes out of %d", c.tmpl, c.size, len(w.b), n)
+			}
+		}
+		if err := decodeField(&cur{b: w.b}, v, &f); err != nil {
+			t.Errorf("%s/%d: the full width did not decode: %v", c.tmpl, c.size, err)
+		}
+	}
+}
+
+// TestFixedFieldWidthIsCheckedOnTheWayIn as well as out: the same
+// disagreement, read rather than written.
+func TestFixedFieldWidthIsCheckedOnTheWayIn(t *testing.T) {
+	f := fieldPlan{name: "Name", kind: kFixed, size: 8}
+	v := reflect.New(reflect.TypeOf([4]byte{})).Elem()
+
+	if err := decodeField(&cur{b: make([]byte, 8)}, v, &f); err == nil {
+		t.Error("read eight bytes into a [4]byte field")
+	}
+}

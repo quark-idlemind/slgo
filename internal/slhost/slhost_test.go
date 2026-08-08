@@ -154,3 +154,34 @@ func TestSayingNothingIsReported(t *testing.T) {
 		t.Fatalf("an empty answer should be an error; got %q", got)
 	}
 }
+
+// TestOnlyTheFirstWordIsTheHost: a misconfigured sl-host that prints a
+// whole line of explanation, or a second address after the first, still
+// has an address at the front of it, and joining a port to the rest
+// would produce something that cannot be dialled at all.
+func TestOnlyTheFirstWordIsTheHost(t *testing.T) {
+	fakeSLHost(t, `printf 'lab.local extra words\nsecond.host\n'`)
+
+	got, err := Addr()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "lab.local:" + Port; got != want {
+		t.Errorf("Addr() = %q, want %q", got, want)
+	}
+}
+
+// TestMustAddrPassesAnAddressThrough covers what a small tool actually
+// does with it.  The other half -- a failure -- ends in os.Exit and
+// would take the test binary with it, so it is not driven from here;
+// see coverage-notes/codecs.md.
+func TestMustAddrPassesAnAddressThrough(t *testing.T) {
+	emptyPath(t)
+
+	if got := MustAddr("example.com:9999"); got != "example.com:9999" {
+		t.Errorf("MustAddr = %q", got)
+	}
+	if got, want := MustAddr(""), "localhost:"+Port; got != want {
+		t.Errorf("MustAddr(\"\") = %q, want %q", got, want)
+	}
+}

@@ -423,3 +423,136 @@ func TestDispatchPacketAckStillReachesAHandler(t *testing.T) {
 		t.Error("a registered PacketAck handler never ran")
 	}
 }
+
+// TestWithConcurrencyKeepsAtLeastOne: a zero would make the semaphore
+// unbuffered and every asynchronous handler would deadlock against the
+// dispatch loop, which is a worse answer than ignoring the argument.
+func TestWithConcurrencyKeepsAtLeastOne(t *testing.T) {
+	for _, n := range []int{0, -1} {
+		d := NewDispatcher(WithConcurrency(n))
+		if cap(d.sem) != 1 {
+			t.Errorf("WithConcurrency(%d) gave a semaphore of %d", n, cap(d.sem))
+		}
+	}
+	if d := NewDispatcher(WithConcurrency(3)); cap(d.sem) != 3 {
+		t.Errorf("WithConcurrency(3) gave a semaphore of %d", cap(d.sem))
+	}
+}
+
+// TestTapSeesEverything is what the tap is for: capture, and noticing
+// that anything at all has arrived.  It runs before routing and before
+// duplicate suppression, so a retransmission and a packet nobody
+// handles both reach it.
+func TestTapSeesEverything(t *testing.T) {
+	var tapped []uint32
+	d := NewDispatcher(WithTap(func(p *Packet) {
+		tapped = append(tapped, p.Header.Sequence)
+	}))
+
+	m := &CompletePingCheck{}
+	feed(t, d,
+		pkt(1, m), // nothing is registered for it
+		pkt(2, m), //
+		pkt(2, m), // a duplicate
+		&Packet{Header: Header{Sequence: 3}, Err: ErrShort}, // and one that did not decode
+	)
+
+	want := []uint32{1, 2, 2, 3}
+	if len(tapped) != len(want) {
+		t.Fatalf("the tap saw %v, want %v", tapped, want)
+	}
+	for i := range want {
+		if tapped[i] != want[i] {
+			t.Fatalf("the tap saw %v, want %v", tapped, want)
+		}
+	}
+}
+
+// TestMustHandlePanics: registrations are made at startup, where a name
+// that is not in the template is a typo in the source rather than
+// anything a running program can do about it.
+func TestMustHandlePanics(t *testing.T) {
+	d := NewDispatcher()
+	defer func() {
+		if recover() == nil {
+			t.Error("MustHandle accepted a message name that is not in the template")
+		}
+	}()
+	d.MustHandle("NoSuchMessage", func(*Packet) {})
+}
+
+// TestDispatchWithoutAContext: Run is called from enough places that
+// one of them passing nil is a matter of time, and panicking on it
+// would take the session down.
+func TestDispatchWithoutAContext(t *testing.T) {
+	d := NewDispatcher()
+	var seen atomic.Int64
+	if err := d.Handle("CompletePingCheck", func(*Packet) { seen.Add(1) }); err != nil {
+		t.Fatal(err)
+	}
+
+	in := make(chan *Packet, 1)
+	in <- pkt(1, &CompletePingCheck{})
+	close(in)
+
+	//lint:ignore SA1012 the nil is the point of the test
+	if err := d.Run(nil, in); err != nil {
+		t.Fatal(err)
+	}
+	if seen.Load() != 1 {
+		t.Errorf("the handler ran %d times", seen.Load())
+	}
+}
+
+// TestDispatchGivesUpWaitingForASlot: with every handler slot taken and
+// the context cancelled, the loop must stop rather than block on a
+// semaphore nothing is going to release.
+func TestDispatchGivesUpWaitingForASlot(t *testing.T) {
+	t.Parallel()
+
+	d := NewDispatcher(WithConcurrency(1))
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	if err := d.Handle("CompletePingCheck", func(*Packet) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	in := make(chan *Packet, 2)
+	in <- pkt(1, &CompletePingCheck{})
+	in <- pkt(2, &CompletePingCheck{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx, in) }()
+
+	<-started // the one slot is taken
+	cancel()
+
+	// Run cannot return until the handler does, because it drains the
+	// semaphore on the way out.
+	select {
+	case <-done:
+		t.Fatal("Run returned while a handler was still going")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not stop")
+	}
+	// The second packet was dispatched but never got a slot.
+	if st := d.Stats(); st.Async != 1 {
+		t.Errorf("stats = %+v, want one handler ever started", st)
+	}
+}

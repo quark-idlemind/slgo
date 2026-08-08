@@ -429,3 +429,218 @@ func TestReceiveOverUDP(t *testing.T) {
 		t.Errorf("Run returned %v", err)
 	}
 }
+
+// stepConn answers each read from a script, which is how the cases that
+// turn on WHEN something happens -- a cancellation between the read and
+// the parse, a datagram of no length at all -- are arranged.  Once the
+// script runs out it blocks like fakeConn until the deadline is set.
+type stepConn struct {
+	mu       sync.Mutex
+	steps    []func(p []byte) (int, net.Addr, error)
+	i        int
+	deadline chan struct{}
+	once     sync.Once
+}
+
+func newStepConn(steps ...func(p []byte) (int, net.Addr, error)) *stepConn {
+	return &stepConn{steps: steps, deadline: make(chan struct{})}
+}
+
+func (c *stepConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	c.mu.Lock()
+	if c.i < len(c.steps) {
+		step := c.steps[c.i]
+		c.i++
+		c.mu.Unlock()
+		return step(p)
+	}
+	c.mu.Unlock()
+	<-c.deadline
+	return 0, nil, &net.OpError{Op: "read", Err: errTimeout{}}
+}
+
+func (c *stepConn) SetReadDeadline(t time.Time) error {
+	c.once.Do(func() { close(c.deadline) })
+	return nil
+}
+
+// TestReceiveIgnoresAnEmptyDatagram.  A zero length UDP datagram is a
+// legal thing to send and carries no header, so it is neither a packet
+// nor a runt: there is nothing to count and nothing to say.
+func TestReceiveIgnoresAnEmptyDatagram(t *testing.T) {
+	m := &CompletePingCheck{}
+	m.PingID.PingID = 4
+	good := packet(t, 0, 1, m)
+
+	conn := newStepConn(
+		func(p []byte) (int, net.Addr, error) { return 0, nil, nil },
+		func(p []byte) (int, net.Addr, error) { return copy(p, good), nil, nil },
+	)
+	r := NewReceiver(conn)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- r.Run(ctx) }()
+
+	select {
+	case p := <-r.C():
+		if p.Message == nil {
+			t.Fatalf("the empty datagram stopped the loop: %v", p.Err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing arrived after the empty datagram")
+	}
+	cancel()
+	<-done
+	if st := r.Stats(); st.Packets != 1 || st.Runts != 0 {
+		t.Errorf("an empty datagram was counted: %+v", st)
+	}
+}
+
+// TestReceiveDropsWhatArrivedAfterTheStop: a datagram that was already
+// in the socket when the caller asked to stop must not be delivered on
+// a channel that is about to be closed.
+func TestReceiveDropsWhatArrivedAfterTheStop(t *testing.T) {
+	m := &CompletePingCheck{}
+	good := packet(t, 0, 1, m)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	conn := newStepConn(func(p []byte) (int, net.Addr, error) {
+		// The read succeeded, and the caller gave up while it was in
+		// flight.
+		cancel()
+		return copy(p, good), nil, nil
+	})
+	r := NewReceiver(conn)
+
+	if err := r.Run(ctx); err != nil {
+		t.Errorf("Run returned %v, want nil for a cancellation", err)
+	}
+	if p, ok := <-r.C(); ok {
+		t.Errorf("delivered %+v after the stop", p)
+	}
+}
+
+// TestReceiveStopsWhileWaitingToDeliver: with nothing draining the
+// channel the loop blocks, which is the deliberate default, and a
+// cancellation has to get it out of there.
+func TestReceiveStopsWhileWaitingToDeliver(t *testing.T) {
+	t.Parallel()
+
+	m := &CompletePingCheck{}
+	conn := newFakeConn(packet(t, 0, 1, m), packet(t, 0, 2, m))
+	r := NewReceiver(conn, WithBuffer(0))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- r.Run(ctx) }()
+
+	// Nothing reads r.C(), so the first delivery is stuck.
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not stop while blocked on delivery")
+	}
+}
+
+// TestWithBufferRefusesANegativeSize rather than panicking in
+// make: the number usually comes from a configuration file.
+func TestWithBufferRefusesANegativeSize(t *testing.T) {
+	if r := NewReceiver(nil, WithBuffer(-1)); cap(r.ch) != 0 {
+		t.Errorf("WithBuffer(-1) gave a channel of %d", cap(r.ch))
+	}
+}
+
+// TestReceiveWithoutAContext: nil is what a caller with nothing to
+// cancel by passes, and panicking on it would take the session down.
+func TestReceiveWithoutAContext(t *testing.T) {
+	conn := newFakeConn()
+	conn.err = errors.New("connection closed")
+	r := NewReceiver(conn)
+
+	//lint:ignore SA1012 the nil is the point of the test
+	if err := r.Run(nil); err == nil {
+		t.Error("Run should still report the read error")
+	}
+}
+
+// TestReceiveKeepsTheBodyWhenAsked is what a relay needs: the original
+// bytes of a message it does understand, so it can pass them on without
+// re-encoding and changing them.
+func TestReceiveKeepsTheBodyWhenAsked(t *testing.T) {
+	m := &CompletePingCheck{}
+	m.PingID.PingID = 33
+
+	got, _ := collect(t, newFakeConn(packet(t, 0, 1, m)), KeepBody())
+	p := got[0]
+	if p.Message == nil {
+		t.Fatalf("Err = %v", p.Err)
+	}
+	if len(p.Body) != 1 || p.Body[0] != 33 {
+		t.Errorf("Body = %x, want the one byte of a CompletePingCheck", p.Body)
+	}
+
+	// Without it, a packet that decoded carries no body at all.
+	got, _ = collect(t, newFakeConn(packet(t, 0, 1, m)))
+	if got[0].Body != nil {
+		t.Errorf("Body = %x, want nothing", got[0].Body)
+	}
+}
+
+// TestReceiveCopiesTheExtraHeader: nothing here understands the extra
+// header bytes, so they are handed over as they arrived -- and out of
+// the read buffer, which the next datagram overwrites.
+func TestReceiveCopiesTheExtraHeader(t *testing.T) {
+	m := &CompletePingCheck{}
+	m.PingID.PingID = 1
+
+	withExtra := AppendHeader(nil, &Header{Sequence: 1, Extra: []byte{0xca, 0xfe}})
+	withExtra = AppendID(withExtra, m.MsgInfo().ID)
+	body, err := m.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	withExtra = append(withExtra, body...)
+
+	got, _ := collect(t, newFakeConn(withExtra, packet(t, 0, 2, m)))
+	if len(got) != 2 {
+		t.Fatalf("got %d packets", len(got))
+	}
+	if string(got[0].Header.Extra) != "\xca\xfe" {
+		t.Errorf("extra = %x", got[0].Header.Extra)
+	}
+	if got[0].Message == nil {
+		t.Errorf("the message after the extra header was lost: %v", got[0].Err)
+	}
+}
+
+// TestReceiveMalformedPackets: each of these is a way a datagram can be
+// wrong after its header has been read, and each has to come back as a
+// packet carrying the error rather than as silence -- the acks on a bad
+// packet still have to be released, and the counters are how a session
+// notices it is talking to something it does not understand.
+func TestReceiveMalformedPackets(t *testing.T) {
+	acksThatDoNotFit := AppendHeader(nil, &Header{Flags: FlagAck, Sequence: 1})
+	acksThatDoNotFit = append(acksThatDoNotFit, 0x09) // nine acks, no room
+
+	runOffTheEnd := AppendHeader(nil, &Header{Flags: FlagZerocoded, Sequence: 2})
+	runOffTheEnd = append(runOffTheEnd, 0x01, 0x00) // a zero run with no count
+
+	noMessageNumber := AppendHeader(nil, &Header{Sequence: 3})
+	noMessageNumber = append(noMessageNumber, 0xff) // the start of a framed number
+
+	got, st := collect(t, newFakeConn(acksThatDoNotFit, runOffTheEnd, noMessageNumber))
+	for i, p := range got {
+		if p.Err == nil {
+			t.Errorf("packet %d decoded to %+v", i, p.Message)
+		}
+	}
+	if st.Failed != 3 {
+		t.Errorf("stats = %+v, want three failures", st)
+	}
+}
