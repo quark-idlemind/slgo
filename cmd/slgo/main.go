@@ -49,7 +49,15 @@ func main() {
 			log.Fatal(err)
 		}
 		for _, a := range agents {
-			fmt.Printf("%-12s %-24s %-20s %s\n", a.Name, a.AvatarName, a.Region, a.AgentId)
+			// Say when one is down.  A session that ended still
+			// answers questions out of what it last heard, so a
+			// listing that showed only the name and region would
+			// show a dead session as a healthy one.
+			where := a.Region
+			if !a.Connected {
+				where = "NOT CONNECTED"
+			}
+			fmt.Printf("%-12s %-24s %-20s %s\n", a.Name, a.AvatarName, where, a.AgentId)
 		}
 
 	case "status":

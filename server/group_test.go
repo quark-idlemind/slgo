@@ -3,13 +3,16 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -218,5 +221,126 @@ func TestDefaultIsTheOldestSession(t *testing.T) {
 	_, _ = srv.Remove("helper")
 	if _, ok := srv.Default(); ok {
 		t.Error("a server holding nothing still has a default")
+	}
+}
+
+// TestKickedSessionStaysDown is the rule that keeps the daemon out of a
+// fight with its own operator.
+//
+// Log an avatar slgod is holding into a viewer and the grid ends
+// slgod's session.  A supervisor that treats every ending as something
+// to recover from waits a few seconds and takes the session back --
+// throwing the operator out of the viewer they just opened, and doing
+// it again every time they try.  The daemon would win, repeatedly.
+//
+// So a session the grid ended DELIBERATELY is not re-established.  The
+// viewer always wins.
+func TestKickedSessionStaysDown(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+
+	var logins atomic.Int64
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logins.Add(1)
+		fmt.Fprintf(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
+		  <member><name>login</name><value><string>true</string></value></member>
+		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</string></value></member>
+		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-f4f4-19d29d124acf</string></value></member>
+		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-d169-d9847afe641e</string></value></member>
+		  <member><name>circuit_code</name><value><int>%d</int></value></member>
+		  <member><name>sim_ip</name><value><string>%s</string></value></member>
+		  <member><name>sim_port</name><value><int>%d</int></value></member>
+		  <member><name>first_name</name><value><string>"Example"</string></value></member>
+		  <member><name>last_name</name><value><string>Resident</string></value></member>
+		</struct></value></param></params></methodResponse>`,
+			4000+logins.Load(), sim.addr().IP, sim.addr().Port)
+	}))
+	defer hs.Close()
+
+	// Retry fast, so that a supervisor which is going to reconnect has
+	// every chance to do so before this test concludes it did not.
+	saved := ReconnectDelays
+	ReconnectDelays = []time.Duration{20 * time.Millisecond}
+	defer func() { ReconnectDelays = saved }()
+
+	srv := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h, err := srv.Host(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := h.Agent()
+	atLogin := logins.Load()
+
+	// The grid ejects the avatar, the way it does when the same
+	// account logs in from somewhere else.
+	kick := &msg.KickUser{}
+	kick.UserInfo.Reason = []byte("You have been logged out because you logged in from another location.\x00")
+	sim.send(kick, msg.FlagReliable)
+
+	waitFor(t, 5*time.Second, "the session to end", func() bool {
+		select {
+		case <-first.Done():
+			return true
+		default:
+			return false
+		}
+	})
+
+	// The reason survives, because it is the only explanation there is
+	// and a person reading a log needs it.
+	if reason, ok := first.Kicked(); !ok || !strings.Contains(reason, "another location") {
+		t.Errorf("Kicked() = %q, %v; want the grid's reason", reason, ok)
+	}
+	if agent.Retryable(first.Err()) {
+		t.Errorf("a kick reported itself as retryable: %v", first.Err())
+	}
+
+	// And now the whole point: it must NOT come back.  Long enough for
+	// many attempts at the 20ms retry above.
+	time.Sleep(time.Second)
+
+	if n := logins.Load(); n != atLogin {
+		t.Errorf("%d further login(s) after being kicked; the daemon took the session back", n-atLogin)
+	}
+	if a := h.Agent(); a != first {
+		t.Error("the session was re-established after a kick")
+	}
+	if !h.stopped.Load() {
+		t.Error("a kicked session was not marked stopped, so something may bring it back")
+	}
+
+	// Staying down is not enough on its own: a session that ended still
+	// answers out of what it last heard and sends into nothing, so a
+	// client must not be handed one.
+	if why := h.Down(); why == "" || !strings.Contains(why, "another location") {
+		t.Errorf("Down() = %q; want the grid's reason", why)
+	}
+	if d, ok := srv.Default(); ok {
+		t.Errorf("a stopped session is still the default: %s", d.Name)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serving := make(chan struct{})
+	go func() { defer close(serving); srv.Serve(ctx, ln) }()
+	defer func() { cancel(); <-serving }()
+
+	c, err := client.Dial(context.Background(), ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	if _, err := c.Attach(context.Background(), "example"); err == nil {
+		t.Error("attaching to a session the grid ended was allowed")
+	} else if !strings.Contains(err.Error(), "not connected") {
+		t.Errorf("attach refused, but not helpfully: %v", err)
 	}
 }

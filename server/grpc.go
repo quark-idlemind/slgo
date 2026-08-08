@@ -263,6 +263,14 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	if err != nil {
 		return err
 	}
+	// Refuse a session that is down, rather than let a client talk to
+	// something that answers out of what it last heard and sends into
+	// nothing.  Being told why beats a session that looks fine and is
+	// not.
+	if why := h.Down(); why != "" {
+		return status.Errorf(codes.FailedPrecondition,
+			"%s is not connected (%s); it will not come back on its own", h.Name, why)
+	}
 
 	c := &Client{
 		host:  h,

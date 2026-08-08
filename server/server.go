@@ -220,7 +220,12 @@ func (s *Server) Default() (*Hosted, bool) {
 func (s *Server) defaultLocked() (*Hosted, bool) {
 	var best *Hosted
 	for _, h := range s.agents {
-		if h == nil {
+		// A session that has been stopped is never the silent choice.
+		// It is still listed, so that a person can ask why it is down,
+		// but handing it to a client that named nothing would give
+		// them a session that answers from what it remembers and
+		// sends into nothing.
+		if h == nil || h.Stopped() {
 			continue
 		}
 		if best == nil || h.rank < best.rank {
@@ -228,6 +233,27 @@ func (s *Server) defaultLocked() (*Hosted, bool) {
 		}
 	}
 	return best, best != nil
+}
+
+// Stopped reports whether this session was ended deliberately -- logged
+// out, or thrown off by the grid -- and so will not come back on its
+// own.
+func (h *Hosted) Stopped() bool { return h.stopped.Load() }
+
+// Down says why a session cannot be used, or "" when it can.
+func (h *Hosted) Down() string {
+	if !h.Stopped() {
+		return ""
+	}
+	if a := h.Agent(); a != nil {
+		if reason, ok := a.Kicked(); ok {
+			return "ended by the grid: " + reason
+		}
+		if err := a.Err(); err != nil {
+			return err.Error()
+		}
+	}
+	return "logged out"
 }
 
 // ReconnectDelays are the waits before each attempt to re-establish a
@@ -256,6 +282,24 @@ func (h *Hosted) supervise(ctx context.Context) {
 		case <-a.Done():
 		}
 		if ctx.Err() != nil || h.stopped.Load() {
+			return
+		}
+
+		// Thrown off, rather than fallen off.  Somebody logged this
+		// avatar in somewhere else, or an estate banned it, or an
+		// administrator ejected it -- a decision was made, and logging
+		// straight back in would overrule it.  Worse, it would keep
+		// overruling it: the operator opening a viewer would be kicked
+		// out of their own session every few seconds by their own
+		// daemon, which would win.
+		//
+		// So the session stays down and waits to be asked for.  The
+		// viewer always wins, which is the right rule.
+		if err := a.Err(); !agent.Retryable(err) {
+			h.stopped.Store(true)
+			h.logf("%v -- staying logged out rather than taking the session back", err)
+			h.notify(pb.AgentEvent_DISCONNECTED, errText(err)+
+				" (not reconnecting; this session was ended deliberately)")
 			return
 		}
 

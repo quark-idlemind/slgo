@@ -464,10 +464,11 @@ func (a *Agent) register() {
 
 	a.Disp.MustHandle("KickUser", func(p *msg.Packet) {
 		m := p.Message.(*msg.KickUser)
+		reason := trimNul(m.UserInfo.Reason)
 		a.mu.Lock()
-		a.kicked = trimNul(m.UserInfo.Reason)
+		a.kicked = reason
 		a.mu.Unlock()
-		a.fail(fmt.Errorf("agent: kicked: %s", trimNul(m.UserInfo.Reason)))
+		a.fail(&Kicked{Reason: reason})
 	}, msg.Inline())
 }
 

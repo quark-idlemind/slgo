@@ -6,9 +6,8 @@ Written 2026-08-07, at commit `4be5a9d`.
 holds example, qi and helper with example as the default, twelve auto objects
 apiece, and nine concurrent benchmarks have been run across the three.
 Stage 4 is complete including `SLGO_AGENT` and the sweep of hardcoded
-`-agent` defaults.  Stages 3, 5, 6 and 7 are still a plan -- and stage
-7, not fighting the viewer, is the one that matters most of what is
-left.
+`-agent` defaults.  Stage 7 is done and confirmed against the live
+grid.  Stages 3, 5 and 6 are still a plan.
 
 slgod has been able to hold several sessions since it was written --
 `slgod -listen :7807 example qi` works today, every RPC carries the agent
@@ -307,20 +306,33 @@ So: **a session that ended because the avatar logged in elsewhere is not
 retryable.**  Set `stopped`, record it as `STOPPED` with that reason, log
 it plainly, and wait to be asked.
 
-`KickUser` is generated in `msg` (`msg/messages_gen.go:5811`) but nothing
-handles it, and `Agent.Err()` (`agent/agent.go:529`) does not
-distinguish why a session ended.  The work is to register a handler,
-carry the reason out through `Agent.Err`, and have `supervise` sort
-retryable from final.
+`KickUser` was already handled -- it records the grid's reason and ends
+the session -- so the work was smaller than this plan first claimed:
+make the reason readable (`agent.Kicked`), give it a type so callers can
+tell it from a lost circuit (`agent.Kicked`, `agent.Retryable`), and
+have `supervise` ask.
 
 The rule this establishes -- **the viewer always wins** -- is the right
 one, and it turns stage 6 into a convenience rather than something that
 must be remembered before opening Firestorm.
 
-Worth checking against the live grid rather than assuming: whether a
-second login produces `KickUser`, a `LogoutReply`, or simply a dead
-circuit may differ between a viewer login and another slgod.  All three
-need to be recognised, and only testing says which arrives.
+**Settled against the live grid, 2026-08-07.**  A second login produces
+`KickUser`, carrying the grid's own words:
+
+	The system has logged you out because you are attempting to log
+	in from another location.
+
+Tested by running a second slgod for an avatar the first was holding.
+The first reported the kick and stayed down; the other two sessions it
+held were untouched.
+
+One thing that fell out of the test and is not obvious: staying down is
+not enough on its own.  A session that has ended still answers questions
+out of what it last heard, and its sends go nowhere, so `status` on it
+looked perfectly healthy.  A stopped session is therefore never the
+default, attaching to it by name is refused with the reason, and a
+listing says NOT CONNECTED rather than showing a region it is no longer
+in.
 
 
 ## Stage 8 -- a pool of auto objects, instead of one set
