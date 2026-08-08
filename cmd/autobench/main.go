@@ -901,6 +901,12 @@ func main() {
 	}
 
 	padding, cnt := copyMode(b, &r)
+	if cnt == 0 {
+		// Nothing was measured, and copyMode has said why.  There is
+		// no size to report, and 511/cnt below is the second way this
+		// used to end in a crash rather than an explanation.
+		return
+	}
 	if r.Title != "" {
 		fmt.Printf("Title: %s\n", r.Title)
 	}
@@ -1035,11 +1041,19 @@ func copyMode(b *runner, r *Results) (padding, cnt int) {
 		cnt = blockSize
 	default:
 		maxMem := 62*1024 - r.Base
-		cnt = maxMem / (int(r.Size) + blockSize/(2*D))
-		cnt = int(1 << (bits.Len(uint(cnt)) - 1))
-		if cnt == 0 {
+		per := int(r.Size) + blockSize/(2*D)
+		// Whether one copy fits has to be settled BEFORE the shift.
+		// bits.Len(0)-1 is -1, and shifting by a negative amount
+		// panics -- one line above the check that exists to report
+		// this, so the message was unreachable and the user got
+		// "negative shift amount" instead.  A base larger than the
+		// memory a script has makes maxMem negative, which the same
+		// shift turns into an enormous count rather than a refusal.
+		if maxMem <= 0 || per <= 0 || maxMem < per {
 			fmt.Print("Unable to benchmark\n")
+			return pad, 0
 		}
+		cnt = int(1 << (bits.Len(uint(maxMem/per)) - 1))
 	}
 	if cnt > flags.Max {
 		cnt = flags.Max

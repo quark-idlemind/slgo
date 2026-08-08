@@ -722,18 +722,15 @@ func TestABaseThatMovedMakesEveryComparisonSuspect(t *testing.T) {
 
 // ------------------------------------------------ what copy mode cannot do
 
-// TestCopyModeSaysSoWhenItCannotBenchmark demonstrates a crash: a
-// construct too large for any copy count to fit alongside leaves cnt at
-// nought, and the line that is meant to report that is never reached --
-// bits.Len(0)-1 is -1, and shifting by a negative amount panics before
-// the check.  main recovers the panic and reports "negative shift
-// amount", which says nothing about the benchmark.
+// TestCopyModeSaysSoWhenItCannotBenchmark: a construct too large for
+// even one copy to fit is a thing to be told about, not a crash.
 //
-// The correct behaviour is the message the code already contains:
-// "Unable to benchmark".  See coverage-notes/commands.md.
+// It was a crash.  The count came out at nought and the line that
+// reports that was never reached: bits.Len(0)-1 is -1, and shifting by
+// a negative amount panics one line above the check.  What the user
+// saw was "negative shift amount", which says nothing about the
+// benchmark.
 func TestCopyModeSaysSoWhenItCannotBenchmark(t *testing.T) {
-	t.Skip("demonstrates the negative shift in copyMode; see coverage-notes/commands.md")
-
 	// A copy larger than the memory a script has, with the model's
 	// compiler limit lifted so that the size is what stops it rather than
 	// a refusal.
@@ -741,9 +738,15 @@ func TestCopyModeSaysSoWhenItCannotBenchmark(t *testing.T) {
 	useTestInfo.limit = 1 << 30
 
 	var r Results
-	said := stdoutOf(t, func() { copyMode(nil, &r) })
+	var cnt int
+	said := stdoutOf(t, func() { _, cnt = copyMode(nil, &r) })
 	if !strings.Contains(said, "Unable to benchmark") {
 		t.Errorf("copy mode measured something it cannot measure:\n%s", said)
+	}
+	// And it comes back saying so, because the caller divides by this:
+	// 511/cnt was the second way the same case ended in a crash.
+	if cnt != 0 {
+		t.Errorf("copy mode reported %d copies it cannot use", cnt)
 	}
 }
 
