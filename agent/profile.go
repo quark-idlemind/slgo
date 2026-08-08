@@ -264,6 +264,20 @@ func ListProfiles() ([]string, error) {
 		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
+		// Not everything in this directory is a profile.  Programs
+		// keep their own things here -- autobench remembers paddings
+		// in one -- and listing those as accounts is worse than
+		// untidy: with one real profile and one cache file, "the only
+		// profile" stops being the only one and a program that would
+		// have chosen for you starts asking, or offers a login as a
+		// file that has no credentials in it.
+		//
+		// The test is whether it loads.  That reads the file, which is
+		// no more than using it would, and it is exact rather than a
+		// guess at names.
+		if _, err := LoadProfile(e.Name()); err != nil {
+			continue
+		}
 		out = append(out, e.Name())
 	}
 	return out, nil
