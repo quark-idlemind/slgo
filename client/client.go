@@ -92,6 +92,12 @@ type Conn struct {
 	events   chan *Event
 	notices  chan *pb.AgentEvent
 
+	// relaying says recvLoop is running, and closed says Close has
+	// been. Both are under mu, and the pair is what decides who closes
+	// the three channels above; see closeRelay.
+	relaying bool
+	closed   bool
+
 	// locks is what this connection has asked slgod for exclusive use
 	// of.  See lock.go.
 	locks locking
@@ -99,6 +105,11 @@ type Conn struct {
 	closeOnce sync.Once
 	done      chan struct{}
 	err       atomic.Value
+
+	// relayOnce guards the close of the three relay channels, and
+	// relayDone is closed with them so that Close can wait.
+	relayOnce sync.Once
+	relayDone chan struct{}
 }
 
 // Message is a grid message relayed by the server.
@@ -184,17 +195,17 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 		}
 	}
 	return &Conn{
-		cc:       cc,
-		grid:     pb.NewGridClient(cc),
-		caps:     map[string]bool{},
-		messages: make(chan *Message, 1024),
-		events:   make(chan *Event, 256),
-		notices:  make(chan *pb.AgentEvent, 32),
-		done:     make(chan struct{}),
+		cc:        cc,
+		grid:      pb.NewGridClient(cc),
+		caps:      map[string]bool{},
+		messages:  make(chan *Message, 1024),
+		events:    make(chan *Event, 256),
+		notices:   make(chan *pb.AgentEvent, 32),
+		done:      make(chan struct{}),
+		relayDone: make(chan struct{}),
 	}, nil
 }
 
-// Close ends the connection.
 // login runs the two-call handshake on this connection.
 func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, error)) error {
 	secret, err := auth.LoadSecret("")
@@ -234,9 +245,34 @@ func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, err
 	return nil
 }
 
+// Close ends the connection, and returns once the relay channels are
+// closed.
+//
+// It does not close them itself when there is a recvLoop, because
+// recvLoop is the only thing that sends on them and closing a channel
+// under its sender is a race at best and a panic at worst -- which is
+// what this used to be, on the one path every client takes to hang up.
+// So Close shuts the transport down instead, which makes recvLoop's
+// Recv fail, and waits for it to close them on the way out.
+//
+// With no recvLoop there is no sender and nothing to wait for, and
+// Close does it here: a connection that never attached must still
+// leave anybody ranging over Messages with an end to range to.
 func (c *Conn) Close() error {
 	c.finish(nil)
-	return c.cc.Close()
+	err := c.cc.Close()
+
+	c.mu.Lock()
+	c.closed = true
+	relaying := c.relaying
+	c.mu.Unlock()
+
+	if relaying {
+		<-c.relayDone
+	} else {
+		c.closeRelay()
+	}
+	return err
 }
 
 func (c *Conn) finish(err error) {
@@ -245,9 +281,18 @@ func (c *Conn) finish(err error) {
 			c.err.Store(err)
 		}
 		close(c.done)
+	})
+}
+
+// closeRelay closes the three channels the server's packets arrive on.
+//
+// Only recvLoop may call this while one is running.  See Close.
+func (c *Conn) closeRelay() {
+	c.relayOnce.Do(func() {
 		close(c.messages)
 		close(c.events)
 		close(c.notices)
+		close(c.relayDone)
 	})
 }
 
@@ -299,7 +344,21 @@ func (c *Conn) Attach(ctx context.Context, agentName string, subscribe ...string
 		return nil, fmt.Errorf("client: server answered attach with %T", first.Body)
 	}
 
+	// Under the lock with the rest, so that Close either sees the
+	// recvLoop about to start and waits for it, or gets here first and
+	// is refused -- and never decides there is no sender just as one
+	// begins.
+	//
+	// No test reaches the refusal, and none can through this package's
+	// own doors: Close shuts the transport down, so an attach that got
+	// this far -- stream opened, first packet read -- ran entirely
+	// before it.  What is left is the window between that read and this
+	// lock, which is exactly what the guard is for.
 	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, fmt.Errorf("client: this connection is closed")
+	}
 	c.agent = agentName
 	c.stream = stream
 	c.info = att.Agent
@@ -307,6 +366,7 @@ func (c *Conn) Attach(ctx context.Context, agentName string, subscribe ...string
 	for _, n := range att.Agent.GetCaps() {
 		c.caps[n] = true
 	}
+	c.relaying = true
 	c.mu.Unlock()
 
 	go c.recvLoop(stream)
@@ -314,6 +374,9 @@ func (c *Conn) Attach(ctx context.Context, agentName string, subscribe ...string
 }
 
 func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
+	// The sender closes, so that nothing is ever sending on a channel
+	// somebody else has closed.
+	defer c.closeRelay()
 	for {
 		p, err := stream.Recv()
 		if err != nil {

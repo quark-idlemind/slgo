@@ -459,10 +459,8 @@ func TestTheDaemonHostsWhatItWasNamedAndServesIt(t *testing.T) {
 		t.Errorf("agents = %v; the hosted sessions should still be listed", agents)
 	}
 
-	// Hung up on before the daemon is told to stop, deliberately: a
-	// client being relayed to while it closes races inside the client,
-	// which closes the channels its own receiving goroutine sends on.
-	// See coverage-notes/daemon.md.
+	// Hung up on before the daemon is told to stop, so that what the
+	// stop does is the only thing left to explain what follows.
 	c.Close()
 
 	// And the signal it is stopped with logs the avatars out rather

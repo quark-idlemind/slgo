@@ -1054,13 +1054,9 @@ func TestAFailedReconnectIsSaidAndTriedAgain(t *testing.T) {
 		t.Errorf("stats = %+v; attempts should exceed the successes", st)
 	}
 
-	// Hung up on in this order on purpose.  Nothing more is sent to
-	// this client once the session is back, so closing now cannot
-	// overlap a relay -- and closing one that IS being relayed to
-	// races inside the client, which closes the channels its own
-	// receiving goroutine sends on.  See coverage-notes/daemon.md.
-	// The daemon goes second because a graceful stop waits for the
-	// streams its clients still hold.
+	// Hung up on in this order on purpose: the daemon goes second
+	// because a graceful stop waits for the streams its clients still
+	// hold.
 	c.Close()
 	cancel()
 	<-serving
@@ -1200,18 +1196,15 @@ func TestASessionThatEndedSaysWhyItCannotBeUsed(t *testing.T) {
 	}
 }
 
-// TestServeReportsAListenerThatFails demonstrates a fault rather than
-// pinning behaviour: Serve waits for the goroutine that stops the gRPC
-// server before it looks at the error, and that goroutine waits for the
-// context, so a listener that fails leaves Serve blocked for ever and
-// its error is never returned.  cmd/slgod calls it in a goroutine that
-// means to log the failure and never gets the chance.
+// TestServeReportsAListenerThatFails: a listener that cannot be
+// accepted on must come back as an error, promptly.
 //
-// The right behaviour is to return the error as soon as it happens.
-// See coverage-notes/daemon.md.
+// It used not to.  Serve waited for the goroutine that stops the gRPC
+// server before looking at the error, and that goroutine waited for the
+// context -- so Serve blocked for ever on a listener that had already
+// given up, and cmd/slgod, which calls it in a goroutine meaning to log
+// the failure, never got the chance.
 func TestServeReportsAListenerThatFails(t *testing.T) {
-	t.Skip("demonstrates Serve hanging when its listener fails; see coverage-notes/daemon.md")
-
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

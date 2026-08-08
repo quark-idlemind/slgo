@@ -347,10 +347,9 @@ func (d *fakeDaemon) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Login
 // Stream answers the attach and then relays, which is the only way an
 // ObjectUpdate can reach a client and so the only way Wear can finish.
 //
-// It replies on the goroutine that read the request, so nothing is ever
-// in flight when the client hangs up: the client closes the channels its
-// own receiving goroutine sends on, and a relay racing that close is a
-// panic on send to a closed channel.  See coverage-notes/last-commands.md.
+// It replies on the goroutine that read the request rather than from
+// one of its own, so a reply is only ever an answer to something and
+// this end has nothing to say once the program stops asking.
 func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.ServerPacket]) error {
 	first, err := s.Recv()
 	if err != nil {

@@ -1103,3 +1103,60 @@ func TestEveryDaemonCallAnswersOrSaysWhyNot(t *testing.T) {
 		t.Error("Logout reported on a daemon that refused")
 	}
 }
+
+// TestHangingUpDoesNotCloseTheRelayUnderItsSender: Close must never
+// close a channel recvLoop is still sending on.
+//
+// It used to.  Close closed messages, events and notices itself while
+// recvLoop sat in the select that sends to them, which is a data race
+// and, when the timing fell the other way, a panic on send to a closed
+// channel -- on the one path every client takes to hang up.  recvLoop
+// closes them on its way out now, and Close waits for it.
+//
+// The flood is what makes it reproducible rather than occasional: the
+// thing being raced is a sender parked in that select, so there has to
+// be one.  The loop is for the same reason -- a single hang-up finds it
+// perhaps one time in ten under -race, and twenty do not all miss.
+func TestHangingUpDoesNotCloseTheRelayUnderItsSender(t *testing.T) {
+	say := &msg.ChatFromSimulator{}
+	body, err := say.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 20; i++ {
+		d, conn := attachFake(t)
+
+		stop, flooded := make(chan struct{}), make(chan struct{})
+		go func() {
+			defer close(flooded)
+			for {
+				select {
+				case d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Message{
+					Message: &pb.InboundMessage{
+						Id: uint32(msg.IDOf(say)), Name: "ChatFromSimulator", Body: body,
+					},
+				}}:
+				case <-stop:
+					return
+				}
+			}
+		}()
+
+		// Hang up while it is actually arriving, not before it starts.
+		select {
+		case <-conn.Messages():
+		case <-time.After(5 * time.Second):
+			t.Fatal("the daemon relayed nothing to hang up in the middle of")
+		}
+		conn.Close()
+
+		close(stop)
+		<-flooded
+
+		// And the promise Close keeps: whoever is ranging over the relay
+		// is given an end to range to, before Close returns.
+		for range conn.Messages() {
+		}
+	}
+}

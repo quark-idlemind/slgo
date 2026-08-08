@@ -609,15 +609,30 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	g := grpc.NewServer(opts...)
 	pb.RegisterGridServer(g, s)
 
-	done := make(chan struct{})
+	// The stopper waits for whichever comes first.  Waiting only on the
+	// context was a deadlock: a listener that cannot be served on makes
+	// Serve return at once, and this end then waited for a cancellation
+	// that might never come -- so a daemon told to listen somewhere
+	// impossible hung instead of saying so, and the error below could
+	// not be reached at all.
+	served := make(chan struct{})
+	stopped := make(chan struct{})
 	go func() {
-		defer close(done)
-		<-ctx.Done()
-		g.GracefulStop()
+		defer close(stopped)
+		select {
+		case <-ctx.Done():
+			g.GracefulStop()
+		case <-served:
+			// Serve gave up on its own.  Stop is idempotent and there
+			// is nothing left to be graceful towards, but the server
+			// still holds what it was given.
+			g.Stop()
+		}
 	}()
 
 	err := g.Serve(ln)
-	<-done
+	close(served)
+	<-stopped
 	if ctx.Err() != nil {
 		return nil
 	}
