@@ -22,7 +22,7 @@ import (
 //
 //	first    = Example
 //	last     = Resident
-//	password = $1$00157e577e57c0de028f000000000000
+//	password = $1$<the md5 of the password>
 //	start    = last
 //	group    = Builders
 //

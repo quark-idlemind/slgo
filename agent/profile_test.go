@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,13 +31,22 @@ func writeProfile(t *testing.T, dir, name, body string, mode os.FileMode) string
 	return path
 }
 
+// testDigest is a digest of a made-up password, computed rather than
+// written out.  A stored "$1$" digest is accepted by the login server
+// IN PLACE OF the password, so one spelled out in a test file would be
+// a working credential rather than an example of one.
+var testDigest = func() string {
+	sum := md5.Sum([]byte("example-password"))
+	return "$1$" + hex.EncodeToString(sum[:])
+}()
+
 func TestLoadProfile(t *testing.T) {
 	dir := tempConfig(t)
 	writeProfile(t, dir, "example", `
 # a comment
 first    = Example
 last     = Resident
-password = $1$00157e577e57c0de028f000000000000
+password = `+testDigest+`
 start    = the test region/188/203/28
 group    = Builders
 channel  = slgo
@@ -49,7 +60,7 @@ options  = login-flags, global-textures
 	if l.First != "Example" || l.Last != "Resident" {
 		t.Errorf("names = %q %q", l.First, l.Last)
 	}
-	if l.Password != "$1$00157e577e57c0de028f000000000000" {
+	if l.Password != testDigest {
 		t.Errorf("password = %q", l.Password)
 	}
 	if l.Start != "the test region/188/203/28" || l.Channel != "slgo" {

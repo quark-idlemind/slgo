@@ -2,6 +2,8 @@ package creds
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,9 +27,18 @@ func tempProfiles(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-const qiProfile = `first    = Quark
+// testDigest is a digest of a made-up password, computed rather than
+// written out.  A stored "$1$" digest is accepted by the login server
+// IN PLACE OF the password, so one spelled out here would be a working
+// credential rather than an example of one.
+var testDigest = func() string {
+	sum := md5.Sum([]byte("example-password"))
+	return "$1$" + hex.EncodeToString(sum[:])
+}()
+
+var qiProfile = `first    = Quark
 last     = Idlemind
-password = $1$00157e577e57c0de028f000000000000
+password = ` + testDigest + `
 start    = last
 `
 
@@ -60,7 +71,7 @@ func TestCredentialsFromNamedProfile(t *testing.T) {
 	if l.First != "Quark" || l.Last != "Idlemind" {
 		t.Errorf("names = %q %q", l.First, l.Last)
 	}
-	if l.Password != "$1$00157e577e57c0de028f000000000000" {
+	if l.Password != testDigest {
 		t.Errorf("password = %q", l.Password)
 	}
 	if out.Len() != 0 {
@@ -73,8 +84,8 @@ func TestCredentialsFromNamedProfile(t *testing.T) {
 // command line has to be looked for by the names inside them.
 func TestCredentialsFindsProfileByName(t *testing.T) {
 	tempProfiles(t, map[string]string{
-		"qi":  qiProfile,
-		"example": "first = Example\nlast = Resident\npassword = $1$00157e577e57c0de028f000000000000\n",
+		"qi":      qiProfile,
+		"example": "first = Example\nlast = Resident\npassword = " + testDigest + "\n",
 	})
 	var out bytes.Buffer
 

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -172,7 +173,14 @@ func TestDecodeUntypedValueIsString(t *testing.T) {
 
 func TestHashPassword(t *testing.T) {
 	// "$1$" + md5, and an existing digest passes through untouched.
-	const digest = "$1$00157e577e57c0de028f000000000000"
+	//
+	// The expected value is COMPUTED rather than written out.  A stored
+	// digest is not a hint about a password, it IS one: the login
+	// server accepts it in place of the password, so a digest written
+	// into a file here would be a working credential sitting in a
+	// public repository.  Nothing in this tree spells one out.
+	sum := md5.Sum([]byte("example-password"))
+	digest := "$1$" + hex.EncodeToString(sum[:])
 	if got := hashPassword("example-password"); got != digest {
 		t.Errorf("hashPassword = %q, want %q", got, digest)
 	}

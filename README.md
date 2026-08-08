@@ -386,7 +386,7 @@ Credentials live one file per account under a private directory:
     # slgo profile "example"
     first    = Example
     last     = Resident
-    password = $1$00157e577e57c0de028f000000000000
+    password = $1$<the md5 of the password>
     start    = last
 
 and a session is three calls:

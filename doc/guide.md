@@ -324,10 +324,10 @@ one object given to it and can make the rest itself.
 `agents` lists the running sessions first, then the profiles that exist
 but are not running:
 
-    * example         Example Resident   Testville
-      qi          Quark Idlemind            Testville
-      helper    Helper Resident        stopped: logged out
-      builder                               configured
+    * example     Example Resident      Testville
+      qi          Quark Idlemind        Testville
+      helper      Helper Resident       stopped: logged out
+      builder                           configured
 
 The state matters because each one means a different thing to do about
 it.  `configured` can be started; `stopped` was put down deliberately
