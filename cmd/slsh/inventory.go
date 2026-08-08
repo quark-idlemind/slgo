@@ -27,6 +27,10 @@ var inventoryCommands = map[string]*command{
 		usage: "pwd",
 		brief: "where in inventory we are",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+			var flags helpOnly
+			if _, done, err := subOptions("pwd", "", &flags, out, args); err != nil || done {
+				return err
+			}
 			fmt.Fprintln(out, sh.Pwd())
 			return nil
 		},
@@ -224,6 +228,11 @@ func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, error) {
 }
 
 func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("cd", "[PATH]", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	path := ""
 	if len(args) > 0 {
 		path = args[0]
@@ -438,6 +447,11 @@ func catReadable(e sl.Entry) error {
 }
 
 func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("cat", "PATH", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	if len(args) != 1 {
 		return fmt.Errorf("usage: cat PATH")
 	}
@@ -485,6 +499,11 @@ func notecardText(b []byte) (string, bool) {
 }
 
 func cmdMkdir(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("mkdir", "PATH", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	if len(args) != 1 {
 		return fmt.Errorf("usage: mkdir PATH")
 	}
@@ -511,6 +530,11 @@ func cmdMkdir(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 }
 
 func cmdMv(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("mv", "PATH DEST", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	if len(args) != 2 {
 		return fmt.Errorf("usage: mv PATH DEST")
 	}
@@ -691,6 +715,11 @@ func cmdEmptyTrash(ctx context.Context, sh *Shell, out io.Writer, args []string)
 }
 
 func cmdFind(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("find", "TEXT [PATH]", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	if len(args) < 1 || len(args) > 2 {
 		return fmt.Errorf("usage: find TEXT [PATH]")
 	}

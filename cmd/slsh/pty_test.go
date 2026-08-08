@@ -313,7 +313,7 @@ func TestPTYOutputLandsAboveThePrompt(t *testing.T) {
 
 	// Ctrl-C clears it, then a command with output.
 	s.send("\x03")
-	s.send("help quit\r")
+	s.send("help shell\r")
 	s.waitText("leave slsh")
 	s.waitPrompt("/$")
 }
@@ -326,13 +326,13 @@ func TestPTYCommandsStayOnTheScreen(t *testing.T) {
 
 	s.send("pwd\r")
 	s.waitText("/$ pwd")
-	s.send("help quit\r")
+	s.send("help shell\r")
 	s.waitText("leave slsh")
 	s.waitPrompt("/$")
 
 	// In that order: the command, and then what it printed.
 	txt := s.text()
-	cmd, out := strings.Index(txt, "/$ help quit"), strings.Index(txt, "leave slsh")
+	cmd, out := strings.Index(txt, "/$ help shell"), strings.Index(txt, "leave slsh")
 	switch {
 	case cmd < 0:
 		t.Errorf("the command did not stay on the screen:\n%s", txt)

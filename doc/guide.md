@@ -187,9 +187,28 @@ what makes them worth diffing and worth editing into commands.
 `quit` leaves, and so does Ctrl-D on an empty line; through slgod that
 leaves the avatar logged in, and with `--direct` it does not.
 
-`help` lists every command, and `help CMD` describes one. The commands
-that take options -- `ls`, `say`, `friends` -- also answer `--help`
-with their own option list:
+`help` lists the groups the commands are in, since there are enough of
+them now that one list is a wall rather than an answer:
+
+    /$ help
+    Commands are grouped.  For a group:  help GROUP
+    For everything:        help all
+    For one command:       COMMAND --help
+
+      inventory   folders and items: what you have, and moving it about  (10)
+      people      finding people, talking to them, friendship            (11)
+      region      where this avatar is and what is around it             (6)
+      giving      handing items to somebody, and taking what is offered  (5)
+      avatars     which avatar you are driving, and slgod's sessions     (4)
+      simulator   what this grid supports                                (3)
+      shell       slsh itself                                            (4)
+
+`help GROUP` lists that group, and `help all` is every command at once.
+A command can be in more than one group where it belongs in both: `cp`
+is an inventory operation and also how an avatar that may not rez gets
+more objects, so it is under `inventory` and `giving` alike.
+
+What one command takes comes from the command, not from `help`:
 
     /$ ls --help
     Usage: ls [-hlrTt] [PATH]
@@ -198,6 +217,10 @@ with their own option list:
      -r          descend into the folders below
      -T          the time of day as well as the date
      -t          newest first, rather than by name
+
+Every command answers `--help`, with one deliberate exception: `echo`
+prints its arguments, so `echo --help` prints `--help`. It exists to put
+a line into a file and has to be able to put that one there too.
 
 ### The world around you
 

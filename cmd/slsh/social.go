@@ -243,6 +243,11 @@ func (sh *Shell) send(ctx context.Context, text string) {
 // ---------------------------------------------------------------- commands
 
 func cmdChat(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("chat", "[WHO]", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	if len(args) > 0 {
 		id, name, err := sh.who(ctx, strings.Join(args, " "))
 		if err != nil {
@@ -284,6 +289,11 @@ func cmdSay(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 }
 
 func cmdIM(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var flags helpOnly
+	args, done, err := subOptions("im", "WHO [TEXT]", &flags, out, args)
+	if err != nil || done {
+		return err
+	}
 	if len(args) == 0 {
 		return fmt.Errorf("usage: im WHO [TEXT]")
 	}
@@ -344,6 +354,11 @@ func cmdFriends(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 }
 
 func cmdLookup(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("lookup", "TEXT", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	if len(args) == 0 {
 		return fmt.Errorf("usage: lookup TEXT")
 	}
@@ -369,6 +384,11 @@ func cmdLookup(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 }
 
 func cmdOffer(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("offer", "WHO [TEXT]", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	if len(args) == 0 {
 		return fmt.Errorf("usage: offer WHO [TEXT]")
 	}
@@ -390,6 +410,11 @@ func cmdOffer(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 // and because an offer nobody answers stays pending for ever while the
 // other side is told nothing.
 func cmdOffers(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("offers", "", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	friends := sh.s.Offers()
 	items := sh.s.InventoryOffers()
 	if len(friends) == 0 && len(items) == 0 {
@@ -409,6 +434,11 @@ func cmdOffers(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 }
 
 func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var flags helpOnly
+	args, done, err := subOptions("accept", "[WHO|NAME]", &flags, out, args)
+	if err != nil || done {
+		return err
+	}
 	// An inventory offer is looked for first, and only by an argument
 	// that names one, so "accept" with a friendship offer waiting still
 	// means what it always did.
@@ -439,6 +469,11 @@ func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 }
 
 func cmdDecline(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var flags helpOnly
+	args, done, err := subOptions("decline", "[WHO|NAME]", &flags, out, args)
+	if err != nil || done {
+		return err
+	}
 	if o, ok := sh.inventoryOffer(args); ok {
 		if err := o.Decline(ctx); err != nil {
 			return err
@@ -482,6 +517,11 @@ func (sh *Shell) inventoryOffer(args []string) (*sl.InventoryOffer, bool) {
 }
 
 func cmdTalk(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("talk", "", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	list, cur := sh.talk.All()
 	for i, c := range list {
 		mark := " "

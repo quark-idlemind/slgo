@@ -567,37 +567,18 @@ func init() {
 	}
 
 	commands["help"] = &command{
-		usage: "help [command]",
-		brief: "what the commands are",
-		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-			if len(args) > 0 {
-				c, ok := commands[args[0]]
-				if !ok {
-					return fmt.Errorf("no command %q", args[0])
-				}
-				fmt.Fprintf(out, "%-28s %s\n", c.usage, c.brief)
-				return nil
-			}
-			// Aliases share a command, and listing one twice
-			// under two names says nothing extra.
-			seen := map[*command]bool{}
-			for _, n := range commandNames() {
-				c := commands[n]
-				if seen[c] {
-					continue
-				}
-				seen[c] = true
-				fmt.Fprintf(out, "%-28s %s\n", c.usage, c.brief)
-			}
-			fmt.Fprintf(out, "\nA path may be quoted, and \\/ is a slash inside a name.\n")
-			fmt.Fprintf(out, "Output redirects with > and >>, and \". file\" runs a file of commands.\n")
-			return nil
-		},
+		usage: "help [GROUP|all]",
+		brief: "the command groups; \"help GROUP\" for one, \"help all\" for everything",
+		run:   cmdHelp,
 	}
 	commands["quit"] = &command{
 		usage: "quit",
 		brief: "leave slsh",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+			var flags helpOnly
+			if _, done, err := subOptions("quit", "", &flags, out, args); err != nil || done {
+				return err
+			}
 			sh.Quit()
 			return nil
 		},
@@ -607,6 +588,11 @@ func init() {
 		usage: ". FILE",
 		brief: "run the commands in a file",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+			var flags helpOnly
+			args, done, err := subOptions(".", "FILE", &flags, out, args)
+			if err != nil || done {
+				return err
+			}
 			if len(args) != 1 {
 				return fmt.Errorf("usage: . FILE")
 			}
@@ -617,6 +603,11 @@ func init() {
 	commands["echo"] = &command{
 		usage: "echo [text ...]",
 		brief: "print the arguments, which is how to write a note into a file",
+		// No --help, deliberately.  echo exists to put a line into a
+		// file, so it has to be able to print the word "--help" like
+		// any other; a usage message there would be a command refusing
+		// to do the one thing it is for.  Unix echo makes the same
+		// choice for the same reason.
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			fmt.Fprintln(out, strings.Join(args, " "))
 			return nil

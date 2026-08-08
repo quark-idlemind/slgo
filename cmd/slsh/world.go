@@ -59,6 +59,11 @@ var worldCommands = map[string]*command{
 }
 
 func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("where", "", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	p, err := sh.s.Where(ctx)
 	if err != nil {
 		return err
@@ -71,6 +76,11 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 }
 
 func cmdWho(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("who", "", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	ps, err := sh.s.Nearby(ctx)
 	if err != nil {
 		return err
@@ -89,6 +99,11 @@ func cmdWho(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 }
 
 func cmdLook(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("look", "", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	r, err := sh.s.Region(ctx)
 	if err != nil {
 		return err
@@ -106,6 +121,11 @@ func cmdLook(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 }
 
 func cmdCaps(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("caps", "[TEXT]", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	want := ""
 	if len(args) > 0 {
 		want = strings.ToLower(args[0])
@@ -121,6 +141,11 @@ func cmdCaps(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 }
 
 func cmdFeatures(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("features", "[TEXT]", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	f, err := sh.s.Features(ctx)
 	if err != nil {
 		return err
@@ -254,6 +279,11 @@ func (sh *Shell) itemNames(ctx context.Context) map[msg.UUID]string {
 }
 
 func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("objects", "[TEXT]", &o, out, args)
+	if err != nil || done {
+		return err
+	}
 	all, err := sh.s.AllObjects(ctx, 30*time.Second)
 	if err != nil {
 		return err
