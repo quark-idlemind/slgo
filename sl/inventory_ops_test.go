@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -428,7 +429,13 @@ func TestSetItemChangesOnlyWhatItWasGiven(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 
+	// The grid applies all three, because the read-back waits for all
+	// three: a fake that changed only the name would be asking to be
+	// told the change had landed when two thirds of it had not.
+	next := uint32(PermAll)
 	renamed := anItem(theChild, "workbench renamed")
+	renamed.Desc = "a bench"
+	renamed.NextOwnerMask = next
 	a := serveAIS(t, f, func(id msg.UUID) ([]*Folder, []*Item) {
 		if id != testInvRoot {
 			return nil, nil
@@ -436,13 +443,12 @@ func TestSetItemChangesOnlyWhatItWasGiven(t *testing.T) {
 		return nil, []*Item{renamed}
 	})
 
-	next := uint32(PermAll)
 	got, err := w.SetItem(context.Background(), theChild, "workbench renamed", "a bench", &next)
 	if err != nil {
 		t.Fatalf("SetItem: %v", err)
 	}
-	if got.Name != "workbench renamed" {
-		t.Errorf("the item read back as %q", got.Name)
+	if got.Name != "workbench renamed" || got.Desc != "a bench" {
+		t.Errorf("the item read back as %q / %q", got.Name, got.Desc)
 	}
 
 	call := a.only(t)
@@ -522,35 +528,47 @@ func TestSetItemSaysWhichStepFailed(t *testing.T) {
 	})
 }
 
-// TestSetItemConfirmsADescriptionItNeverLooksAt demonstrates a bug: the
-// read-back loop tests the NAME and nothing else, so a call that changes
-// only the description returns the first item it manages to read --
-// which is the item as it was, with the old description on it.
+// TestSetItemWaitsForADescriptionAsItWaitsForAName: a change is
+// confirmed by reading back what was asked for, and a description is as
+// much a thing that was asked for as a name is.
 //
-// The correct behaviour is the one this file's own header describes:
-// read back what was asked for.  A description-only change should wait
-// for the description to be the one that was asked for, exactly as a
-// rename waits for the name, and time out if it never is.  The
-// permissions are a separate matter and deliberately not checked, since
-// the grid narrows what it will not grant.
-func TestSetItemConfirmsADescriptionItNeverLooksAt(t *testing.T) {
-	t.Skip("demonstrates the description read-back bug; see coverage-notes/sl-inventory.md")
+// The read-back used to test the name and nothing else.  A
+// description-only change names nothing, so the condition was
+// vacuously true and the first item that could be read was handed back
+// -- the item as it was.  The grid takes a moment to show a change and
+// can refuse one outright, and both came back here as a success
+// carrying the old description.
+//
+// So the grid here shows the old one first, which is what a grid that
+// has not caught up looks like, and is exactly the read the old code
+// returned.
+func TestSetItemWaitsForADescriptionAsItWaitsForAName(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 
-	// The grid never applies the change: the description stays as it
-	// was, which is what a refusal looks like from here.
 	it := anItem(theChild, "workbench")
 	it.Desc = "the old description"
+
+	// Read 1 is SetItem looking the item up; read 2 is the first read
+	// back, and still shows the old description; read 3 is where the
+	// change has landed.  The old code returned read 2.
+	var reads atomic.Int32
 	serveAIS(t, f, func(id msg.UUID) ([]*Folder, []*Item) {
 		if id != testInvRoot {
 			return nil, nil
 		}
-		return nil, []*Item{it}
+		shown := *it
+		if reads.Add(1) >= 3 {
+			shown.Desc = "the new description"
+		}
+		return nil, []*Item{&shown}
 	})
 
 	got, err := w.SetItem(context.Background(), theChild, "", "the new description", nil)
-	if err == nil && got.Desc != "the new description" {
+	if err != nil {
+		t.Fatalf("SetItem: %v", err)
+	}
+	if got.Desc != "the new description" {
 		t.Errorf("SetItem confirmed a description of %q", got.Desc)
 	}
 }

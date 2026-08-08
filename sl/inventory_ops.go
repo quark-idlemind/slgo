@@ -290,12 +290,26 @@ func (w *Session) SetItem(ctx context.Context, item msg.UUID, name, desc string,
 		return nil, err
 	}
 
-	// Read it back rather than echoing the request.
+	// Read it back rather than echoing the request, and read back
+	// everything that was asked for.
+	//
+	// Testing the name alone was worse than testing nothing: a
+	// description-only change names nothing, so the condition was
+	// vacuously true and the first item that could be read was
+	// returned -- the item as it was.  A grid that had refused outright
+	// came back as a success carrying a stale item, which is the exact
+	// failure this file exists to prevent.
+	arrived := func(got *Item) bool {
+		return (name == "" || got.Name == want.Name) &&
+			(desc == "" || got.Desc == want.Desc) &&
+			(next == nil || got.NextOwnerMask == want.NextOwnerMask)
+	}
+
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		time.Sleep(time.Second)
 		if inv, err := w.Inventory(ctx); err == nil {
-			if got, ok := inv.Item(item); ok && (name == "" || got.Name == name) {
+			if got, ok := inv.Item(item); ok && arrived(got) {
 				return got, nil
 			}
 		}
