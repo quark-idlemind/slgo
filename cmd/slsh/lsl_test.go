@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -144,5 +146,177 @@ func TestVoidReturn(t *testing.T) {
 	}
 	if got := orVoid("vector"); got != "vector" {
 		t.Errorf("orVoid(\"vector\") = %q", got)
+	}
+}
+
+// ------------------------------------------------- the command itself
+
+// serveSyntax puts a small language behind the LSLSyntax capability,
+// which is where the real one comes from: the simulator publishes what
+// it implements, so it rather than documentation is the authority.
+func serveSyntax(t *testing.T, x *testShell) {
+	t.Helper()
+	x.grid.ServeCap(t, "LSLSyntax", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		io.WriteString(w, `<?xml version="1.0" ?><llsd><map>
+		  <key>llsd-lsl-syntax-version</key><integer>2</integer>
+		  <key>functions</key><map>
+		    <key>llSay</key><map>
+		      <key>energy</key><real>10</real><key>sleep</key><real>0.1</real>
+		      <key>arguments</key><array>
+		        <map><key>channel</key><map><key>type</key><string>integer</string></map></map>
+		        <map><key>text</key><map><key>type</key><string>string</string></map></map>
+		      </array>
+		    </map>
+		    <key>llGetPos</key><map>
+		      <key>return</key><string>vector</string><key>energy</key><real>10</real>
+		    </map>
+		    <key>llCloud</key><map>
+		      <key>return</key><string>float</string><key>deprecated</key><boolean>1</boolean>
+		    </map>
+		    <key>llGodLikeRezObject</key><map><key>god-mode</key><boolean>1</boolean></map>
+		  </map>
+		  <key>constants</key><map>
+		    <key>ACTIVE</key><map>
+		      <key>type</key><string>integer</string><key>value</key><string>0x2</string>
+		    </map>
+		  </map>
+		  <key>events</key><map>
+		    <key>state_entry</key><map/>
+		    <key>touch_start</key><map><key>arguments</key><array>
+		      <map><key>total_number</key><map><key>type</key><string>integer</string></map></map>
+		    </array></map>
+		  </map>
+		  <key>types</key><map><key>integer</key><map/><key>key</key><map/></map>
+		</map></llsd>`)
+	})
+}
+
+// TestWantedIsWhatTheFlagsChose, and whether any of them did -- which
+// is what decides between the summary and a search of everything.
+func TestWantedIsWhatTheFlagsChose(t *testing.T) {
+	for _, c := range []struct {
+		o                        lslOptions
+		fns, consts, evts, types bool
+		chosen                   bool
+	}{
+		{o: lslOptions{}},
+		{o: lslOptions{All: true}, fns: true, consts: true, evts: true, types: true, chosen: true},
+		{o: lslOptions{Functions: true}, fns: true, chosen: true},
+		{o: lslOptions{Constants: true}, consts: true, chosen: true},
+		{o: lslOptions{Events: true}, evts: true, chosen: true},
+		{o: lslOptions{Types: true}, types: true, chosen: true},
+		{o: lslOptions{Functions: true, Types: true}, fns: true, types: true, chosen: true},
+	} {
+		fns, consts, evts, types, chosen := c.o.wanted()
+		if fns != c.fns || consts != c.consts || evts != c.evts || types != c.types || chosen != c.chosen {
+			t.Errorf("%+v: got %v %v %v %v %v", c.o, fns, consts, evts, types, chosen)
+		}
+	}
+}
+
+// TestBareLSLIsTheSummary, and a word with no flags searches
+// everything, which is what it did before the flags existed.
+func TestBareLSLIsTheSummary(t *testing.T) {
+	x := newTestShell(t)
+	serveSyntax(t, x)
+
+	got := x.do(t, "lsl")
+	if want := "version 2: 4 functions, 1 constants, 2 events, 2 types\n"; got != want {
+		t.Errorf("lsl printed %q, want %q", got, want)
+	}
+
+	// A word alone searches every kind, and matches the NAME rather
+	// than anything else about the entry.
+	got = x.do(t, "lsl e")
+	for _, want := range []string{
+		"vector llGetPos()", "integer ACTIVE = 0x2", "state_entry()", "type integer",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lsl e should find %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "touch_start") {
+		t.Errorf("lsl e should not find a name with no e in it:\n%s", got)
+	}
+}
+
+// TestLSLReadableSaysWhatCostsAndWhatIsGone.
+//
+// Energy and sleep are what a script pays, and deprecated and god mode
+// are what a script cannot rely on -- all three are the reason to ask
+// the simulator rather than read a manual.
+func TestLSLReadableSaysWhatCostsAndWhatIsGone(t *testing.T) {
+	x := newTestShell(t)
+	serveSyntax(t, x)
+
+	got := x.do(t, "lsl -f")
+	for _, want := range []string{
+		" llSay(integer channel, string text)   energy 10, sleep 0.1",
+		"vector llGetPos()   energy 10, sleep 0",
+		"float llCloud()   [deprecated]",
+		" llGodLikeRezObject()   [god mode]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lsl -f should print %q:\n%s", want, got)
+		}
+	}
+
+	if got := x.do(t, "lsl -c"); got != "integer ACTIVE = 0x2\n" {
+		t.Errorf("lsl -c printed %q", got)
+	}
+	if got, want := x.do(t, "lsl -e"), "state_entry()\ntouch_start(integer total_number)\n"; got != want {
+		t.Errorf("lsl -e printed %q, want %q", got, want)
+	}
+	if got, want := x.do(t, "lsl -t"), "type integer\ntype key\n"; got != want {
+		t.Errorf("lsl -t printed %q, want %q", got, want)
+	}
+
+	// A word narrows whichever kinds were asked for.
+	if got, want := x.do(t, "lsl -f llsay"), " llSay(integer channel, string text)   energy 10, sleep 0.1\n"; got != want {
+		t.Errorf("lsl -f llsay printed %q, want %q", got, want)
+	}
+	if got := x.do(t, "lsl -a"); !strings.Contains(got, "llSay") || !strings.Contains(got, "type key") {
+		t.Errorf("lsl -a should print everything:\n%s", got)
+	}
+	// -a with a word is everything that matches, which for a function
+	// name is the function and nothing else.
+	if got, want := x.do(t, "lsl -a llsay"), " llSay(integer channel, string text)   energy 10, sleep 0.1\n"; got != want {
+		t.Errorf("lsl -a llsay printed %q, want %q", got, want)
+	}
+}
+
+// TestLSLMachineFormIsWhatACompilerReads: the same selection, in the
+// dull form, and -m with no other flag means everything -- otherwise a
+// program asking for the lot would get the summary meant for a person.
+func TestLSLMachineFormIsWhatACompilerReads(t *testing.T) {
+	x := newTestShell(t)
+	serveSyntax(t, x)
+
+	got := x.do(t, "lsl -m")
+	for _, want := range []string{"function\tllSay\t", "constant\tACTIVE\t", "event\t", "type\tinteger"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lsl -m should print %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "version 2:") {
+		t.Errorf("lsl -m should not print the summary meant for a person:\n%s", got)
+	}
+
+	if got := x.do(t, "lsl -m -f llgetpos"); got != "function\tllGetPos\tvector\t10\t0\t\t\n" {
+		t.Errorf("lsl -m -f printed %q", got)
+	}
+}
+
+// TestLSLSaysWhenTheSimulatorWillNotTellIt: a session whose simulator
+// never offered the capability cannot answer, and an empty list would
+// read as a grid with no functions in it.
+func TestLSLSaysWhenTheSimulatorWillNotTellIt(t *testing.T) {
+	x := newTestShell(t)
+	if got := x.do(t, "lsl"); !strings.Contains(got, "LSLSyntax") {
+		t.Errorf("lsl should name the capability it is missing, got %q", got)
+	}
+	if got := x.do(t, "lsl --help"); !strings.Contains(got, "-m") {
+		t.Errorf("lsl --help printed %q", got)
 	}
 }

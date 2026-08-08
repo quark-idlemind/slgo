@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 )
@@ -138,5 +139,91 @@ func TestEchoDoesNotEatHelp(t *testing.T) {
 	}
 	if strings.TrimSpace(b.String()) != "--help" {
 		t.Errorf("echo --help printed %q, want %q", strings.TrimSpace(b.String()), "--help")
+	}
+}
+
+// TestHelpForOneGroupListsItsCommandsAndWhatTheyTake.
+//
+// The front page names the groups and nothing else, so this is the
+// listing somebody actually reads -- and the usage line is where the
+// flags are.
+func TestHelpForOneGroupListsItsCommandsAndWhatTheyTake(t *testing.T) {
+	var b bytes.Buffer
+	if err := cmdHelp(context.Background(), nil, &b, []string{"shell"}); err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	if !strings.Contains(got, "slsh itself") {
+		t.Errorf("the group's own description is missing:\n%s", got)
+	}
+	for _, want := range []string{"quit", ". FILE", "echo [text ...]"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("help shell should list %q:\n%s", want, got)
+		}
+	}
+	if !strings.Contains(got, helpTail) {
+		t.Errorf("every listing should say how to ask about one command:\n%s", got)
+	}
+}
+
+// TestHelpForNeitherAGroupNorACommandSuggestsTheGroups, since a name
+// that means nothing is usually a group name half remembered.
+func TestHelpForNeitherAGroupNorACommandSuggestsTheGroups(t *testing.T) {
+	err := cmdHelp(context.Background(), nil, io.Discard, []string{"nothing-of-the-sort"})
+	if err == nil {
+		t.Fatal("help for a name that means nothing should be an error")
+	}
+	for _, want := range append(groupNames(), "nothing-of-the-sort") {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal should mention %q, got %v", want, err)
+		}
+	}
+}
+
+// TestAGroupThatNamesAMissingCommandPrintsWhatItHas.
+//
+// TestGroupsNameRealCommands keeps that from happening, but the listing
+// skips what it cannot find rather than printing a blank line, because
+// half a listing is more use than a heading and a gap.
+func TestAGroupThatNamesAMissingCommandPrintsWhatItHas(t *testing.T) {
+	var b bytes.Buffer
+	err := helpGroup(&b, group{
+		name: "invented", brief: "for the test",
+		members: []string{"quit", "no-such-command"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	if !strings.Contains(got, "leave slsh") {
+		t.Errorf("the command that is there should be listed:\n%s", got)
+	}
+	if strings.Contains(got, "no-such-command") {
+		t.Errorf("the one that is not should be skipped:\n%s", got)
+	}
+}
+
+// TestUngroupedFindsACommandNobodyFiled, which is the whole point of
+// TestEveryCommandIsInAGroup: without this working, that test passes by
+// finding nothing rather than by everything being filed.
+func TestUngroupedFindsACommandNobodyFiled(t *testing.T) {
+	const name = "zz-not-in-any-group"
+	c := &command{usage: name, brief: "invented by a test"}
+	commands[name] = c
+	defer delete(commands, name)
+
+	got := ungrouped()
+	if len(got) != 1 || got[0] != name {
+		t.Errorf("ungrouped() = %v, want just %q", got, name)
+	}
+
+	// Two ungrouped names for one command are one thing to file, not
+	// two: reporting both would have somebody adding an alias to a
+	// group to quieten a test.
+	commands["zz-also-not-in-any-group"] = c
+	defer delete(commands, "zz-also-not-in-any-group")
+
+	if got := ungrouped(); len(got) != 1 {
+		t.Errorf("ungrouped() = %v, want the one command under one of its names", got)
 	}
 }

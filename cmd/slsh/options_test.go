@@ -124,3 +124,15 @@ func TestLongHelpToo(t *testing.T) {
 		t.Errorf("--help: done=%v err=%v output=%q", done, err, out.String())
 	}
 }
+
+// TestSomethingThatIsNotAnOptionSetIsReportedRatherThanPanicking.
+//
+// The option structs are read by reflection, so what a command passes
+// is only checked when it runs.  It comes back as an error, which a
+// shell can print, rather than as a panic, which would take the session
+// with it.
+func TestSomethingThatIsNotAnOptionSetIsReportedRatherThanPanicking(t *testing.T) {
+	if _, _, err := subOptions("odd", "", new(int), io.Discard, nil); err == nil {
+		t.Error("an int is not a set of options and should be refused")
+	}
+}
