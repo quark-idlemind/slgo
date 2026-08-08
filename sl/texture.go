@@ -154,18 +154,29 @@ func DecodeTextureEntry(b []byte, faces int) ([]Face, error) {
 }
 
 // textureEntryFaces guesses the face count from the sets mentioned.
+//
+// Only the exception sets count.  The default at the head of a section
+// stands for every face there could be, so a guess that let the default
+// speak answered thirty-two every time -- which it did, and which gave
+// every caller passing a count of zero twenty-six faces the object does
+// not have.
 func textureEntryFaces(b []byte) (int, error) {
 	r := &teReader{b: b}
 	high := 0
-	err := r.section(16, 32, func(i int, v []byte) {
-		if i+1 > high {
-			high = i + 1
+	err := r.exceptions(16, func(bits uint64, _ []byte) {
+		for i := range 32 {
+			if bits&(1<<uint(i)) != 0 && i+1 > high {
+				high = i + 1
+			}
 		}
 	})
 	if err != nil {
 		return 0, err
 	}
 	if high == 0 {
+		// Every face is the default, so nothing in the blob says how
+		// many there are.  One is the smallest answer that is not
+		// nonsense, and it is the right appearance for any of them.
 		high = 1
 	}
 	return high, nil
@@ -181,11 +192,34 @@ func (r *teReader) section(width, faces int, set func(i int, v []byte)) error {
 	if r.i+width > len(r.b) {
 		return fmt.Errorf("want %d bytes for the default, %d left", width, len(r.b)-r.i)
 	}
+	// Taken before exceptions walks past it.  It stays valid: the slice
+	// is a view of b and nothing here writes to it.
 	def := r.b[r.i : r.i+width]
-	r.i += width
 	for i := range faces {
 		set(i, def)
 	}
+
+	return r.exceptions(width, func(bits uint64, v []byte) {
+		for i := range faces {
+			if bits&(1<<uint(i)) != 0 {
+				set(i, v)
+			}
+		}
+	})
+}
+
+// exceptions walks one property's face sets, from the default it skips
+// past to the zero that ends them, and hands each set to each.
+//
+// It is separate from section because counting the faces an object has
+// must not let the default speak: the default covers every face there
+// could be, and a count taken from it is a count of the maximum rather
+// than of the object.
+func (r *teReader) exceptions(width int, each func(bits uint64, v []byte)) error {
+	if r.i+width > len(r.b) {
+		return fmt.Errorf("want %d bytes for the default, %d left", width, len(r.b)-r.i)
+	}
+	r.i += width
 
 	for {
 		bits, n, ok := r.varint()
@@ -201,11 +235,7 @@ func (r *teReader) section(width, faces int, set func(i int, v []byte)) error {
 		}
 		v := r.b[r.i : r.i+width]
 		r.i += width
-		for i := range faces {
-			if bits&(1<<uint(i)) != 0 {
-				set(i, v)
-			}
-		}
+		each(bits, v)
 	}
 }
 

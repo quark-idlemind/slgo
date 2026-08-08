@@ -219,23 +219,19 @@ func TestTheConventionalReadingsOfAFace(t *testing.T) {
 // says how many faces the object has, so a caller that does not know
 // either is documented to get the highest face any exception names.
 //
-// It does not.  textureEntryFaces asks section to fill thirty-two faces
-// with the default before any exception is read, and the fill calls set
-// for every one of them -- so the highest face "mentioned" is always the
-// thirty-second, whatever the blob says.  The right answer for the box
-// captured above is five: its exception set names faces 0 to 4 and
-// leaves face 5 on the default, which is exactly the case the doc
-// comment warns is unreliable.  Instead every prim guesses 32, and every
-// caller that passes a count of zero gets twenty-six faces that do not
-// exist.
+// It used not to.  textureEntryFaces asked section to fill thirty-two
+// faces with the default before any exception was read, and the fill
+// called set for every one of them -- so the highest face "mentioned"
+// was always the thirty-second, whatever the blob said, and every
+// caller passing a count of zero got twenty-six faces the object does
+// not have.
 //
-// The fix is for the guess to ignore the default fill and look only at
-// the exception sets, which is what "the sets mentioned" in
-// textureEntryFaces means.
+// Five is the right answer for the box captured above: its exception
+// set names faces 0 to 4 and leaves face 5 on the default, which is
+// exactly the case the doc comment warns is unreliable.  A guess is
+// still a guess -- the blob does not carry the count -- but it is now a
+// guess from the evidence rather than from the ceiling.
 func TestAFaceCountOfZeroIsGuessedFromWhatIsMentioned(t *testing.T) {
-	t.Skip("demonstrates the face count guess counting the default fill; " +
-		"see coverage-notes/sl-rest.md")
-
 	faces, err := DecodeTextureEntry(teBytes(t, defaultBoxTE), 0)
 	if err != nil {
 		t.Fatal(err)
