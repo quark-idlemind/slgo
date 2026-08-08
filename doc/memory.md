@@ -110,23 +110,46 @@ carried, so 4 bytes is the resolution to expect.
 
 ## What a function costs
 
-    empty function                              48
-    a function that calls anything             ~300 more
-    each further call site in that function     ~30
+Measured over 64 declarations at once, so that anything paid once per
+script is amortised away:
 
-`foo_CNT(){}` costs 48. `foo_CNT(){llDie();}` costs 368. A second
-`llDie()` in the same function adds 28, and a third adds 32.
+    a declaration        32 + one byte per character of its name
+    + calling a library function     ~304 more
+    + calling a user function        ~320 more
 
-The ~300 is paid by **every** function that calls anything, not once per
-script. The control that settles this: the benchmark harness itself
-calls `llOwnerSay` four times, so a construct using `llOwnerSay` is not
-a first use of it -- and it still costs 312. Inference, not measurement:
-the likeliest reading is that this is what it costs for a function to
-stop being a leaf, and it buys a frame and its metadata.
+The declaration figure is a fit to three points and it is a good one:
 
-Only a small part is shared. The same construct measured against a base
-script that already calls `llDie` costs 344 rather than 368, so **24
-bytes** is what a distinct library function costs once and then shares.
+| 64 empty declarations | total | each |
+|---|---|---|
+| 3-character names | 2248 | 35.1 |
+| 16-character names | 3080 | 48.1 |
+| 32-character names | 4104 | 64.1 |
+
+`32.1 + name_length` reproduces all three to a tenth of a byte.
+
+Calling anything costs about ten times the declaration. A function that
+calls one library function costs 336; one that calls one user function
+costs 352. Inference, not measurement: the ~300 is what it costs for a
+function to stop being a leaf, and it buys a frame and its metadata. It
+is paid by **every** such function, not once per script -- the harness
+itself calls `llOwnerSay` four times, so a construct using `llOwnerSay`
+is not a first use of it, and it still costs 312.
+
+### Measuring one is not measuring many
+
+The same figures taken from a single copy come out higher:
+
+| | one copy | 64 copies, each |
+|---|---|---|
+| empty declaration, 7-character name | 48 | ~39 by the fit |
+| function calling one library function | ~368 | 336 |
+
+Ten to thirty bytes, consistently high. That is the once-per-script
+component -- the name, and whatever a library function costs the first
+time it is referenced -- being charged in full to the single copy and
+spread across sixty-four in the other. It is not noise, and it is the
+same thing `-1` mode and copy mode disagree about: one measures a copy
+outright and the other measures an additional one.
 
 ---
 
@@ -134,9 +157,9 @@ bytes** is what a distinct library function costs once and then shares.
 
 All three of these matter, and all three are separable.
 
-### The name, at about a byte a character
+### The name, at a byte a character -- once
 
-Void return, no parameters:
+Void return, no parameters, one call site each:
 
 | call | name length | cost above an empty function |
 |---|---|---|
@@ -147,7 +170,17 @@ Void return, no parameters:
 | `llReleaseControls` | 17 | 332 |
 
 Twelve more characters, twelve more bytes, landing in 4-byte quanta.
-The name is stored.
+
+That is the whole cost, however many times the function is called. With
+**64** call sites instead of one:
+
+| | total | difference |
+|---|---|---|
+| 64 × `llDie()` | 21504 | |
+| 64 × `llReleaseControls()` | 21516 | **12** |
+
+Twelve again, not 64 × 12. The name is stored once per script and the
+call sites are free.
 
 ### The return type
 
@@ -177,42 +210,56 @@ worth about six characters of name.
 
 ---
 
-## User-defined calls are not library calls
+## User-defined calls compared with library calls
 
-The compiler treats the two differently, and the difference is the name.
+Names behave the same way for both, and the difference is elsewhere.
 
-### A user function's name costs nothing
+### A name costs a byte a character, once, either way
 
-Two user functions in the base script, called from the construct under
-test, differing only in the length of their names:
+Sixty-four user declarations differing only in the length of their
+names -- the amplification matters, because eleven characters at a
+single declaration disappears into the 4-byte quantum and this does
+not:
 
-| callee | name length | cost |
-|---|---|---|
-| `u1234()` | 5 | 328 |
-| `u1234567890abcde()` | 16 | **328** |
-
-Eleven more characters, no more memory. Against the library side, where
-eleven more characters cost eleven more bytes.
-
-So an `ll*` call **stores the name** and a user call does not.
-Inference, not measurement: library functions are bound by name at run
-time and user functions are resolved to a direct call when compiled.
-
-### Otherwise they cost about the same, except on the return path
-
-Matched for name length and signature, measured against the same base
-script:
-
-| shape | user | library | difference |
+| 64 declarations | total | vs the 3-character case | a byte per character predicts |
 |---|---|---|---|
-| void, no params, 5-char name | 328 | 324 | −4 |
-| one vector parameter, 8-char name | 360 | 364 | +4 |
-| returns a vector, 8-char name | 356 | **384** | **+28** |
+| 3-character names | 2248 | | |
+| 16-character names | 3080 | +832 | 64 × 13 = **832** |
+| 32-character names | 4104 | +1856 | 64 × 29 = **1856** |
 
-The first two differ by one quantum, in opposite directions, which is
-to say not at all. The third is seven quanta and is real: a library
-call carries something extra for returning a value that a user call
-does not.
+Exact, twice. A user function's declaration carries its name at a byte
+a character, exactly as a library reference does.
+
+### Call sites are free for both
+
+Sixty-four call sites of one user function, only the callee's name
+length varying:
+
+| | total |
+|---|---|
+| callee named 3 characters | 22552 |
+| callee named 32 characters | 22580 |
+
+Twenty-eight bytes for twenty-nine extra characters -- which is the
+callee's single declaration, not the sixty-four calls. The library side
+gives the same answer, 12 bytes for 12 characters across 64 call sites.
+
+So a name is stored **once**. For a user function that is its
+declaration; a library function has no declaration, so it is charged on
+first use.
+
+### A user call site costs about 16 bytes more
+
+| 64 functions, each calling one thing | each |
+|---|---|
+| a library function | 336.0 |
+| a user function | 352.4 |
+
+Matched at a single call site the two are within a quantum -- 328
+against 324 for void with no parameters, 360 against 364 for one vector
+parameter -- so this only shows up at scale. The one place a single
+pair did show a difference was returning a value: 356 for a user
+function against 384 for a library one, seven quanta.
 
 ---
 
