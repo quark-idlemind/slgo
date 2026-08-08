@@ -318,6 +318,8 @@ one object given to it and can make the rest itself.
     agents                  what slgod holds, and what it could hold
     host NAME               bring an avatar up
     logout NAME             put one down, and keep it down
+    status                  how this session and its circuit are doing
+    watch [-for D] [NAME]   print grid messages as they arrive
     auto                    how many benchmark objects are worn
     auto -n 12              set that many up
 
@@ -328,6 +330,17 @@ but are not running:
       qi          Quark Idlemind        Testville
       helper      Helper Resident       stopped: logged out
       builder                           configured
+
+`status` is the one to reach for when a session looks idle and you want
+to know whether it is idle or broken -- packet counters, retransmissions,
+and the messages arriving that this build has no handler for, which is
+how a protocol change announces itself.
+
+`watch` prints what is actually crossing the wire, by message name or
+`*` for everything.  It opens a connection of its own, so watching
+everything for an hour does not disturb the shell you are typing in:
+
+    watch --for 1h ChatFromSimulator > chat.log
 
 The state matters because each one means a different thing to do about
 it.  `configured` can be started; `stopped` was put down deliberately

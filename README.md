@@ -567,11 +567,11 @@ not tell", and that is exactly the wrong way for this to fail.
 
 ## Building, from the client
 
-`slgo chat` records public chat, and `sl.Build` puts up a multi-prim
-object in one call.  Both are client side -- the server relays bytes and
-knows nothing about prims or chat.
+`sl.Build` puts up a multi-prim object in one call, and `slsh watch`
+prints what crosses the wire.  Both are client side -- the server relays
+bytes and knows nothing about prims or chat.
 
-    slgo -for 1h -log chat.log chat
+    slsh -c "watch --for 1h ChatFromSimulator" > chat.log
 
 Building is exercised against a live simulator by the tests in `sl`,
 which are skipped unless `SLGO_TEST_ADDR` names a running slgod:

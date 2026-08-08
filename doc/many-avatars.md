@@ -245,7 +245,7 @@ A client naming an agent slgod does not hold should be able to have it
 brought up, provided a profile exists for it.
 
 I would make this **explicit rather than implicit**: a flag on `Attach`,
-or better a separate `Host` RPC that a person invokes as `slgo host qi`.
+or better a separate `Host` RPC that a person invokes as `slsh host qi`.
 The reason is that bringing an avatar into the world is a visible act --
 an arrival, a presence, a group chat notice -- and it should be
 something a client asked for rather than something that happened to it
@@ -275,7 +275,7 @@ Four things fall out of it, and none is optional:
 
 ## Stage 6 -- logout, and making it stick
 
-`slgo logout quark`: log the avatar out and do not bring it back until a
+`slsh logout quark`: log the avatar out and do not bring it back until a
 client asks for quark **by name**.
 
 Mechanically small, because `stopped` already exists and the supervisor

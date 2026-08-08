@@ -82,8 +82,8 @@ var groups = []group{
 	},
 	{
 		name:    "avatars",
-		brief:   "which avatar you are driving, and slgod's sessions",
-		members: []string{"agents", "host", "logout", "auto"},
+		brief:   "the avatars slgod holds, and how their sessions are doing",
+		members: []string{"agents", "host", "logout", "auto", "status", "watch"},
 	},
 	{
 		name:    "simulator",

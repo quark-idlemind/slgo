@@ -5,6 +5,53 @@
 // whole point.  A client may be stopped, rebuilt and restarted as often
 // as you like without the grid noticing, which is what makes it the
 // place to put the code you are actually working on.
+//
+// # Writing a program against this directly
+//
+// Most programs should use sl instead, which turns these messages into
+// objects, inventory and chat, and waits for the confirmations this
+// protocol mostly does not send.  Reach for this package when what you
+// want IS the messages -- watching the wire, or handling something sl
+// does not model.
+//
+// The whole of it is: dial, attach, and read.  Attaching names the
+// session to use -- empty takes the daemon's default -- and the
+// messages to relay, by template name; "*" is everything, and naming
+// nothing relays nothing until Subscribe says otherwise, because a busy
+// region will otherwise flood the link.
+//
+//	conn, err := client.Dial(ctx, "localhost:7807")
+//	if err != nil {
+//		return err
+//	}
+//	defer conn.Close()
+//
+//	if _, err := conn.Attach(ctx, "", "ChatFromSimulator"); err != nil {
+//		return err
+//	}
+//
+//	for m := range conn.Messages() {
+//		v, err := m.Decode()
+//		if err != nil || v == nil {
+//			continue // not in this build's template, and that is fine
+//		}
+//		chat := v.(*msg.ChatFromSimulator)
+//		fmt.Println(string(chat.ChatData.Message))
+//	}
+//
+// A message this build has never heard of still arrives, with its
+// number and its undecoded bytes: Decode returns nil for it rather than
+// an error, and the body is there to look at.  That is deliberate --
+// the server relays what it does not understand, so a client can handle
+// a message added to the protocol after the server was built.
+//
+// Sending goes the other way, and fills its own identity blocks: the
+// server relays bytes and does not fill anything in.
+//
+//	m := &msg.ChatFromViewer{}
+//	m.AgentData.AgentID, m.AgentData.SessionID = agentID, sessionID
+//	m.ChatData.Message = append([]byte("hello"), 0)
+//	err = conn.Send(ctx, m, true)
 package client
 
 import (
