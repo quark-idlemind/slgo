@@ -281,24 +281,50 @@ func (f *fakeBackend) AnswerNames(t *testing.T, names map[msg.UUID]string) {
 // so.
 func (f *fakeBackend) ServeInventory(t *testing.T, contents func(folder msg.UUID) []*Item) {
 	t.Helper()
-	f.ServeCap(t, agent.InventoryCap, func(w http.ResponseWriter, r *http.Request) {
-		// The path is /category/<folder>/children.
-		var id msg.UUID
-		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-		for i, p := range parts {
-			if p == "category" && i+1 < len(parts) {
-				id, _ = msg.ParseUUID(parts[i+1])
-			}
-		}
-		w.Header().Set("Content-Type", "application/llsd+xml")
-		io.WriteString(w, folderLLSD(id, contents(id)))
+	f.ServeInventoryTree(t, func(id msg.UUID) ([]*Folder, []*Item) {
+		return nil, contents(id)
 	})
+}
+
+// ServeInventoryTree is ServeInventory for a test that needs folders in
+// the answer as well as items.
+//
+// Finding a folder by name is a read of the root's categories -- Folder,
+// ObjectsFolder and TrashFolder are all that and nothing else -- so a
+// reply whose categories are always empty makes every one of them say
+// there is no such folder.
+func (f *fakeBackend) ServeInventoryTree(t *testing.T, contents func(folder msg.UUID) ([]*Folder, []*Item)) {
+	t.Helper()
+	f.ServeCap(t, agent.InventoryCap, func(w http.ResponseWriter, r *http.Request) {
+		id := capFolderID(r.URL.Path)
+		folders, items := contents(id)
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		io.WriteString(w, folderLLSDTree(id, folders, items))
+	})
+}
+
+// capFolderID is the folder an inventory request is about, out of a
+// path of the form /category/<folder>/children.
+func capFolderID(path string) msg.UUID {
+	var id msg.UUID
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	for i, p := range parts {
+		if p == "category" && i+1 < len(parts) {
+			id, _ = msg.ParseUUID(parts[i+1])
+		}
+	}
+	return id
 }
 
 // folderLLSD is what AIS says about one folder: the folder itself, and
 // its items under _embedded.  Only the fields anything here reads are
 // filled in.
 func folderLLSD(folder msg.UUID, items []*Item) string {
+	return folderLLSDTree(folder, nil, items)
+}
+
+// folderLLSDTree is folderLLSD with child categories as well.
+func folderLLSDTree(folder msg.UUID, folders []*Folder, items []*Item) string {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" ?><llsd><map>`)
 	fmt.Fprintf(&b, `<key>category_id</key><string>%s</string>`, folder)
@@ -306,7 +332,16 @@ func folderLLSD(folder msg.UUID, items []*Item) string {
 	b.WriteString(`<key>name</key><string>a folder</string>`)
 	b.WriteString(`<key>type_default</key><integer>-1</integer>`)
 	b.WriteString(`<key>version</key><integer>1</integer>`)
-	b.WriteString(`<key>_embedded</key><map><key>categories</key><map/><key>items</key><map>`)
+	b.WriteString(`<key>_embedded</key><map><key>categories</key><map>`)
+	for _, sub := range folders {
+		fmt.Fprintf(&b, `<key>%s</key><map>`, sub.ID)
+		fmt.Fprintf(&b, `<key>category_id</key><string>%s</string>`, sub.ID)
+		fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string>`, folder)
+		fmt.Fprintf(&b, `<key>name</key><string>%s</string>`, xmlText(sub.Name))
+		fmt.Fprintf(&b, `<key>type_default</key><integer>%d</integer>`, sub.Type)
+		b.WriteString(`<key>version</key><integer>1</integer></map>`)
+	}
+	b.WriteString(`</map><key>items</key><map>`)
 	for _, it := range items {
 		fmt.Fprintf(&b, `<key>%s</key><map>`, it.ID)
 		fmt.Fprintf(&b, `<key>item_id</key><string>%s</string>`, it.ID)
