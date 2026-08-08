@@ -382,11 +382,24 @@ func cmdAuto(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	}
 
 	if o.N > 0 {
+		start := time.Now()
 		objs, err := session.SetupAuto(ctx, sh.s, o.N)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "%d of %d ready\n", len(objs), o.N)
+		fmt.Fprintf(out, "%d of %d ready in %v\n",
+			len(objs), o.N, time.Since(start).Round(time.Second))
+		// Which slot went where.  Past the eighth two objects share a
+		// point, so the listing is the only way to see that the pool
+		// is arranged the way it was meant to be.
+		for i, obj := range objs {
+			fmt.Fprintf(out, "  %2d  %-10s %s  on %s\n",
+				i, session.AutoName(i), obj.ID, sl.AttachPointName(session.AutoPoints[i]))
+		}
+		if len(objs) < o.N {
+			fmt.Fprintf(out, "\nonly %d of %d: fewer objects means less can run at once, "+
+				"not that anything is broken\n", len(objs), o.N)
+		}
 		return nil
 	}
 

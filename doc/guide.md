@@ -532,7 +532,7 @@ would let two runs each hold some and wait for the rest, which is a
 deadlock; taking a whole group cannot deadlock, because nothing ever
 holds one group while waiting for another.
 
-Set an avatar up with `slgo-auto -n 12`, once per account. An avatar
+Set an avatar up with `auto -n 12`, once per account. An avatar
 that is not allowed to build can still be set up, provided somebody who
 can gives it one object: everything after the first is a copy, and
 copying something already owned asks the land nothing.

@@ -567,13 +567,16 @@ not tell", and that is exactly the wrong way for this to fail.
 
 ## Building, from the client
 
-`slgo chat` records public chat; `slgo-build2` builds a multi-prim
-object in one call and checks the result against what was asked for.
-Both are client side -- the server relays bytes and knows nothing about
-prims or chat.
+`slgo chat` records public chat, and `sl.Build` puts up a multi-prim
+object in one call.  Both are client side -- the server relays bytes and
+knows nothing about prims or chat.
 
     slgo -for 1h -log chat.log chat
-    slgo-build2 -at 193,206,27
+
+Building is exercised against a live simulator by the tests in `sl`,
+which are skipped unless `SLGO_TEST_ADDR` names a running slgod:
+
+    SLGO_TEST_ADDR=localhost:7807 go test ./sl -run Build -v
 
 Three things that cost time and are not written down anywhere obvious:
 
@@ -597,10 +600,16 @@ message is the whole of listening to channel 0.
 
 ## Assets and object inventory
 
-`slgo-inv` runs the whole chain against a live simulator: make a folder,
-create a notecard and a script, upload their contents, put them inside a
-prim, read the prim's inventory back, and take it all away again --
-cleaning up after itself either way.
+`TestInventoryChain` in `sl` runs the whole chain against a live
+simulator: make a folder, create a notecard and a script, upload their
+contents, put them inside a prim, read the prim's inventory back, and
+take it all away again -- cleaning up after itself either way.
+
+    SLGO_TEST_ADDR=localhost:7807 go test ./sl -run InventoryChain -v
+
+It is a test rather than a command because almost nothing in this
+protocol confirms itself, so every step reads back what it did; a fake
+simulator would simply agree with whatever the code believed.
 
 Uploading an asset is two steps.  The first posts the item id to a
 capability and the simulator answers with a one-shot uploader URL; the
