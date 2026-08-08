@@ -12,9 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
+
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 var objectCommands = map[string]*command{
@@ -37,6 +40,16 @@ var objectCommands = map[string]*command{
 		usage: "agents",
 		brief: "the sessions this daemon holds, oldest first; * is the default",
 		run:   cmdAgents,
+	},
+	"host": {
+		usage: "host [-f] NAME",
+		brief: "bring an avatar up that is not running",
+		run:   cmdHost,
+	},
+	"logout": {
+		usage: "logout [-f] NAME",
+		brief: "log an avatar out and keep it out until asked for by name",
+		run:   cmdLogout,
 	},
 	"auto": {
 		usage: "auto [-n N]",
@@ -178,31 +191,116 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		return err
 	}
 
-	type sessioner interface {
-		Sessions(context.Context) ([]string, error)
-	}
-	b, ok := sh.s.Backend().(sessioner)
+	conn, ok := sh.conn()
 	if !ok {
 		fmt.Fprintf(out, "%s (logged in directly, not through a daemon)\n", sh.s.Info().AvatarName)
 		return nil
 	}
-	names, err := b.Sessions(ctx)
+	agents, err := conn.ListAgents(ctx)
 	if err != nil {
 		return err
 	}
+
 	here := sh.s.Info().Name
-	for i, n := range names {
+	first := true
+	for _, a := range agents {
+		// The mark is the daemon's first choice, which is only
+		// meaningful among the ones it is actually holding.
 		mark := " "
-		if i == 0 {
-			mark = "*"
+		if a.GetState() == pb.AgentInfo_HOSTED && first {
+			mark, first = "*", false
 		}
 		note := ""
-		if n == here {
+		if a.GetName() == here {
 			note = "   <- this shell"
 		}
-		fmt.Fprintf(out, "%s %s%s\n", mark, n, note)
+
+		where := a.GetRegion()
+		if a.GetState() != pb.AgentInfo_HOSTED {
+			where = strings.ToLower(a.GetState().String())
+			if d := a.GetDetail(); d != "" {
+				where += ": " + d
+			}
+		}
+		fmt.Fprintf(out, "%s %-10s  %-24s  %s%s\n",
+			mark, a.GetName(), a.GetAvatarName(), where, note)
 	}
 	return nil
+}
+
+// cmdHost brings an avatar up.
+//
+// It has to be named.  Starting an avatar puts it in the world -- an
+// arrival, a presence, a notice to whoever watches for it -- so it
+// follows from somebody asking rather than from a default.
+func cmdHost(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o forceOptions
+	rest, done, err := subOptions("host", "[-f] NAME", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(rest) != 1 {
+		return fmt.Errorf("host [-f] NAME -- which avatar to start; flags come before the name")
+	}
+	conn, ok := sh.conn()
+	if !ok {
+		return fmt.Errorf("this session was logged in directly; there is no daemon to ask")
+	}
+
+	r, err := conn.Host(ctx, rest[0], o.Force)
+	if err != nil {
+		return err
+	}
+	if r.GetAlready() {
+		fmt.Fprintf(out, "%s was already up: %s in %s\n",
+			rest[0], r.Agent.GetAvatarName(), r.Agent.GetRegion())
+		return nil
+	}
+	fmt.Fprintf(out, "%s: %s in %s\n", rest[0], r.Agent.GetAvatarName(), r.Agent.GetRegion())
+	return nil
+}
+
+// cmdLogout puts one down and keeps it down.
+func cmdLogout(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o forceOptions
+	rest, done, err := subOptions("logout", "[-f] NAME", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(rest) != 1 {
+		return fmt.Errorf("logout [-f] NAME -- which avatar to log out; flags come before the name")
+	}
+	conn, ok := sh.conn()
+	if !ok {
+		return fmt.Errorf("this session was logged in directly; quitting logs it out")
+	}
+
+	r, err := conn.Logout(ctx, rest[0], o.Force)
+	if err != nil {
+		if cs := r.GetClients(); len(cs) > 0 {
+			return fmt.Errorf("%w\n        attached: %s", err, strings.Join(cs, ", "))
+		}
+		return err
+	}
+	fmt.Fprintf(out, "%s logged out; it will not come back until asked for by name\n", rest[0])
+	return nil
+}
+
+// forceOptions is for the two commands that overrule something
+// deliberate.
+type forceOptions struct {
+	Force bool `getopt:"--force -f  overrule: start one that was stopped, or log out one in use"`
+	Help  bool `getopt:"--help -h   show what this command takes"`
+}
+
+// conn is the daemon connection behind this session, when there is one.
+func (sh *Shell) conn() (*client.Conn, bool) {
+	type conner interface{ Conn() *client.Conn }
+	b, ok := sh.s.Backend().(conner)
+	if !ok {
+		return nil, false
+	}
+	return b.Conn(), true
 }
 
 // autoOptions is what auto was asked for.

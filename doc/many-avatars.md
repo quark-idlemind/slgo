@@ -6,8 +6,11 @@ Written 2026-08-07, at commit `4be5a9d`.
 holds example, qi and helper with example as the default, twelve auto objects
 apiece, and nine concurrent benchmarks have been run across the three.
 Stage 4 is complete including `SLGO_AGENT` and the sweep of hardcoded
-`-agent` defaults.  Stage 7 is done and confirmed against the live
-grid.  Stages 3, 5 and 6 are still a plan.
+`-agent` defaults.  Stages 3, 5, 6 and 7 are done and confirmed against
+the live grid.
+
+**Every stage in this document is now built.**  What is left is written
+at the end, under "What this still does not do".
 
 slgod has been able to hold several sessions since it was written --
 `slgod -listen :7807 example qi` works today, every RPC carries the agent
@@ -428,6 +431,28 @@ than to shrink the pool.
 The first use of a new slot pays the expensive path: rez, name, take,
 wear.  Only once, but it is tens of seconds, and it will land on whoever
 first asks for a larger N rather than on whoever grew the pool.
+
+
+## What this still does not do
+
+- **Teleport between regions.**  `tp` moves within one.  Another region
+  is another simulator: the session has to be established there, a new
+  circuit opened, new capabilities fetched and the old circuit closed.
+  Arriving elsewhere is still a matter of logging in there.
+
+- **Keep an offer for a client that was not attached.**  Inventory and
+  friendship offers reach clients attached when they arrive; slgod
+  relays them and does not hold them.  A shell started afterwards never
+  sees the offer, and the transaction id it would need to answer with is
+  not recoverable.
+
+- **Tell one client from another by name.**  `logout` names what is
+  attached, but every client authenticates as "slgo", so it can say how
+  many and not which program.
+
+- **Start an agent for a profile added since slgod started** -- it will,
+  since the profile list is read each time, but nothing re-reads a
+  profile that CHANGED while a session from it is running.
 
 
 ## Order, and the one thing to be careful about

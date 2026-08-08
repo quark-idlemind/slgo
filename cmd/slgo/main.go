@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
@@ -26,12 +27,13 @@ func main() {
 	var (
 		addr    = flag.String("server", "127.0.0.1:7778", "slgod address")
 		name    = flag.String("agent", "", "which hosted agent ($SLGO_AGENT, or the daemon's default)")
+		force   = flag.Bool("force", false, "for host and logout: overrule a deliberate stop, or clients in use")
 		limit   = flag.Duration("for", 30*time.Second, "how long to watch")
 		logfile = flag.String("log", "", "append chat to this file instead of stdout")
 	)
 	flag.Parse()
 	if flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "usage: slgo [-server addr] [-agent name] {agents|status|chat|watch [message...]|inventory}")
+		fmt.Fprintln(os.Stderr, "usage: slgo [-server addr] [-agent name] {agents|status|host NAME|logout NAME|chat|watch [message...]|inventory}")
 		os.Exit(2)
 	}
 
@@ -59,6 +61,36 @@ func main() {
 			}
 			fmt.Printf("%-12s %-24s %-20s %s\n", a.Name, a.AvatarName, where, a.AgentId)
 		}
+
+	case "host":
+		if flag.NArg() < 2 {
+			log.Fatal("host NAME -- which agent to start; there is no default for starting one")
+		}
+		who := flag.Arg(1)
+		r, err := c.Host(ctx, who, *force)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if r.GetAlready() {
+			fmt.Printf("%s was already up: %s in %s\n",
+				who, r.Agent.GetAvatarName(), r.Agent.GetRegion())
+			return
+		}
+		fmt.Printf("%s: %s in %s\n", who, r.Agent.GetAvatarName(), r.Agent.GetRegion())
+
+	case "logout":
+		if flag.NArg() < 2 {
+			log.Fatal("logout NAME -- which agent to log out")
+		}
+		who := flag.Arg(1)
+		r, err := c.Logout(ctx, who, *force)
+		if err != nil {
+			if cs := r.GetClients(); len(cs) > 0 {
+				log.Fatalf("%v\n        attached: %s", err, strings.Join(cs, ", "))
+			}
+			log.Fatal(err)
+		}
+		fmt.Printf("%s logged out; it will not come back until asked for by name\n", who)
 
 	case "status":
 		mustAttach(ctx, c, *name)

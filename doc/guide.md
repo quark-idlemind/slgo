@@ -292,9 +292,46 @@ one object given to it and can make the rest itself.
 
 ### The daemon and its avatars
 
-    agents                  the sessions slgod holds, oldest first
+    agents                  what slgod holds, and what it could hold
+    host NAME               bring an avatar up
+    logout NAME             put one down, and keep it down
     auto                    how many benchmark objects are worn
     auto -n 12              set that many up
+
+`agents` lists the running sessions first, then the profiles that exist
+but are not running:
+
+    * example         Example Resident   Testville
+      qi          Quark Idlemind            Testville
+      helper    Helper Resident        stopped: logged out
+      builder                               configured
+
+The state matters because each one means a different thing to do about
+it.  `configured` can be started; `stopped` was put down deliberately
+and is left alone unless asked for by name; `failed` will waste a login
+attempt if asked again too soon, and says how long it is waiting.
+
+#### Using an avatar in a viewer
+
+    logout quark            slgod lets go of it
+    ... use it in Firestorm ...
+    host quark              take it back
+
+`logout` is remembered.  slgod will not bring that avatar back on its
+own, so nothing is fighting you for it while you use it elsewhere, and
+`host` afterwards has to name it.
+
+You do not strictly have to say `logout` first.  Logging in from a
+viewer makes the grid end slgod's session, and slgod treats being thrown
+off as a decision rather than a fault: it says so and stays down.
+`logout` is the tidier way round, and the only one that lets slgod log
+out cleanly.
+
+Both refuse to be casual about it.  `logout` will not take a session
+that clients are attached to -- it names them instead -- because a
+benchmark mid-run has a script installed and a reading half taken.
+`host` will not restart something that was stopped deliberately.  `-f`
+overrules either, once you know what you are overruling.
 
 `agents` lists in the daemon's own order, not alphabetically: the first
 is what a command that names no avatar gets, and it is also the order a
