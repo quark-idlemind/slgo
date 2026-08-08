@@ -233,12 +233,15 @@ func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	if err != nil || done {
 		return err
 	}
-	path := ""
-	if len(args) > 0 {
-		path = args[0]
-	}
 	if len(args) > 1 {
 		return fmt.Errorf("usage: cd [PATH]")
+	}
+	// No path is the root, the way cd with no argument is home in a
+	// shell, and it has to be said outright: the empty path resolves
+	// to wherever you already are, so bare cd did nothing at all.
+	path := "/"
+	if len(args) > 0 {
+		path = args[0]
 	}
 	names, id, err := sh.resolveDir(ctx, path)
 	if err != nil {

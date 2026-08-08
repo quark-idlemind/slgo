@@ -125,20 +125,25 @@ func TestCdWalksDownAndBackUp(t *testing.T) {
 // path goes to the root" is the whole of its brief, and it is the
 // gesture a person makes to get out of wherever they walked to.
 //
-// It stays where it is instead.  cd with no argument resolves the empty
-// path, and resolving an empty path relative to the working folder is
-// the working folder -- so cd on its own is the one command in the
-// shell that does nothing at all.  The fix belongs in cmdCd: an
-// argument list of none is the root, and is not the same thing as the
-// empty path.
+// It used to stay where it was.  cd with no argument resolved the
+// empty path, and an empty path resolved against the working folder is
+// the working folder -- so cd on its own was the one command in the
+// shell that did nothing at all.  No arguments is the root; it is not
+// the same thing as the empty path, which is what ls with no argument
+// wants and still gets.
 func TestCdWithNoPathGoesToTheRoot(t *testing.T) {
-	t.Skip("demonstrates cd with no path staying put; see coverage-notes/slsh-commands.md")
-
 	x := newTestShell(t)
 	x.do(t, "cd /Objects")
 	x.do(t, "cd")
 	if got := x.Pwd(); got != "/" {
 		t.Errorf("cd with no path left the shell in %q", got)
+	}
+
+	// And the empty path still means here, which is what ls with no
+	// argument depends on.
+	x.do(t, "cd /Objects")
+	if got := x.do(t, "ls"); !strings.Contains(got, "/Objects/") {
+		t.Errorf("ls with no path listed something other than here:\n%s", got)
 	}
 }
 
