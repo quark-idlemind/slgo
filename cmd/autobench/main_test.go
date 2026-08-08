@@ -391,13 +391,19 @@ func TestTheProgramPrintsWhatTheModeMeasured(t *testing.T) {
 
 	// Copy mode prints the padding it paid for as well, because that is
 	// the number to feed back with --ipad on the next benchmark of the
-	// same shape, and it prints the quantisation with the size.
+	// same shape.
 	out, _ = autobench(t, "--test=474,368", "--code", "foo_CNT(){llDie();}")
 	if !strings.Contains(out, "Padding: 473\n") {
 		t.Errorf("copy mode did not report the padding:\n%s", out)
 	}
-	if !strings.Contains(out, "Size: 368 "+plusminus) {
-		t.Errorf("copy mode did not print a size with its error margin:\n%s", out)
+	// No error margin any more: the size is exact.  And the first copy
+	// is reported beside it, which for a construct that pays nothing
+	// once is the same number.
+	if !strings.Contains(out, "Size: 368\n") {
+		t.Errorf("copy mode did not print an exact size:\n%s", out)
+	}
+	if !strings.Contains(out, "First copy: 368\n") {
+		t.Errorf("copy mode did not print what one copy costs:\n%s", out)
 	}
 }
 

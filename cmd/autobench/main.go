@@ -93,7 +93,19 @@ var flags = struct {
 // testInfo describes what a test would return
 type testInfo struct {
 	pad      int // Number of pad bytes needed by the 0 count case
-	codeSize int // Number of bytes added per count
+	codeSize int // What the FIRST copy costs outright
+
+	// marginal is what each copy AFTER the first costs, and is codeSize
+	// when it is left at zero -- which is the old model exactly, and is
+	// what every case that does not care about the difference gets.
+	//
+	// The two differ whenever a copy pays a cost once that the rest
+	// share.  Measured live: a 250-character string literal is 1044
+	// bytes for one copy and 542 for each after it, because identical
+	// literals are shared and an extra copy pays only for what it
+	// cannot share.  A model that cannot express that asserts the two
+	// are equal, and every test written against it silently assumes so.
+	marginal int
 	// limit is where the model stops accepting a script, standing in for
 	// Second Life's compiler refusing one that is too large.  It is a model of
 	// a limit and not a measurement of one: the live refusal is the compiler's
@@ -647,23 +659,30 @@ func main() {
 	// failed still spent everything it spent.
 	defer reportCost()
 	if flags.Test != "" {
+		const usage = "Usage: --test=PAD,SIZE[,MARGINAL[,LIMIT]]\n"
 		f := strings.Split(flags.Test, ",")
-		if len(f) < 2 || len(f) > 3 {
-			errf("Usage: --test=PAD,SIZE[,LIMIT]\n")
+		if len(f) < 2 || len(f) > 4 {
+			errf(usage)
 		}
 		n := make([]int, len(f))
 		for i, s := range f {
 			v, err := strconv.Atoi(s)
 			if err != nil {
-				errf("Usage: --test=PAD,SIZE[,LIMIT]\n")
+				errf(usage)
 			}
 			n[i] = v
 		}
-		limit := defaultTestLimit
-		if len(n) == 3 {
-			limit = n[2]
+		// SIZE is what the first copy costs and MARGINAL what each one
+		// after it costs; leaving MARGINAL out makes them equal, which
+		// is a construct that pays nothing once and shares nothing.
+		marginal, limit := 0, defaultTestLimit
+		if len(n) >= 3 {
+			marginal = n[2]
 		}
-		useTestInfo = &testInfo{pad: n[0], codeSize: n[1], limit: limit}
+		if len(n) == 4 {
+			limit = n[3]
+		}
+		useTestInfo = &testInfo{pad: n[0], codeSize: n[1], marginal: marginal, limit: limit}
 	}
 	// b stays nil under --test.  The public autobench pointed its transport at
 	// /dev/null because its bench needed a chat log and a slot file to exist;
@@ -815,7 +834,7 @@ func main() {
 		return
 	}
 
-	padding, cnt := copyMode(b, &r)
+	padding, cnt, first := copyMode(b, &r)
 	if cnt == 0 {
 		// Nothing was measured, and copyMode has said why.  There is
 		// no size to report, and 511/cnt below is the second way this
@@ -831,7 +850,18 @@ func main() {
 		// mode paid for it as surely as padding mode did.
 		fmt.Printf("Padding: %d\n", padding)
 	}
-	fmt.Printf("Size: %d %s%d\n", int(r.Size), plusminus, 511/cnt)
+	if first == 0 {
+		// --fast, which has no boundary to measure against and so still
+		// reports the blend, to the quantisation it earned.
+		fmt.Printf("Size: %d %s%d\n", int(r.Size), plusminus, 511/cnt)
+		return
+	}
+	// Size is what each copy after the first costs, which is what copy
+	// mode has always been for and is now exact.  First copy is what one
+	// costs outright, and the two differ by whatever the construct pays
+	// once and shares -- nothing, for most things.
+	fmt.Printf("Size: %d\n", int(r.Size))
+	fmt.Printf("First copy: %d\n", first)
 }
 
 // copyMode is the whole of copy mode: many copies of CODE at one pad, measured
@@ -844,7 +874,7 @@ func main() {
 // inside main until 2026-08-03, and that is not incidental: -1 mode had offline
 // tests and copy mode had none, which is how copy mode carried a systematic
 // +blockSize/count on half of all shapes without anyone being able to see it.
-func copyMode(b *runner, r *Results) (padding, cnt int) {
+func copyMode(b *runner, r *Results) (padding, cnt, first int) {
 	// We should really always pad the base.  The base padding is the same
 	// quantity here as in -1 mode -- the same base script, the same boundary --
 	// so a Padding: value read off either mode may be given to --ipad in either
@@ -852,18 +882,15 @@ func copyMode(b *runner, r *Results) (padding, cnt int) {
 	pad := 0
 	runpad := 0
 	if !flags.Fast {
-		// Same one-apart rule as -1 mode: pad is the padding, the number
-		// Padding: reports and --ipad takes; runpad is where the runs happen.
-		// The headroom is load bearing here in a way it is not in -1 mode.  The
-		// base script and the test script are not the same script beyond the
-		// copies of CODE -- the copy count is compiled into each as a literal,
-		// and the two need not cost the same -- so at the padding itself, one
-		// byte from the boundary, an incidental byte of harness difference is
-		// enough to tip the test script into another block and put 512/count on
-		// every reported Size.  One byte further on there are 512 bytes to
-		// absorb it.
+		// AT the padding, as -1 mode does, because that is where the base
+		// script sits exactly on a block boundary -- and everything below
+		// depends on it.  This used to run a byte past, on the argument
+		// that an incidental byte of harness difference between the base
+		// script and the test script would otherwise tip a whole block.
+		// Modelled, it does not: a difference of d shifts the answer by
+		// d/count and never by a block, either side of the boundary.
 		pad = basePadding(b, r)
-		runpad = pad + 1
+		runpad = pad
 	}
 	// Get the base result.  This is also what leaves the base memory in linkset
 	// data for the copy runs to divide against, so it has to be the last cnt=0
@@ -966,16 +993,102 @@ func copyMode(b *runner, r *Results) (padding, cnt int) {
 		// shift turns into an enormous count rather than a refusal.
 		if maxMem <= 0 || per <= 0 || maxMem < per {
 			fmt.Print("Unable to benchmark\n")
-			return pad, 0
+			return pad, 0, 0
 		}
 		cnt = int(1 << (bits.Len(uint(maxMem/per)) - 1))
 	}
 	if cnt > flags.Max {
 		cnt = flags.Max
 	}
+
+	// --fast skipped the padding, so there is no boundary underneath any
+	// of this and the exact scheme below cannot be run: it needs the base
+	// script to sit ON one.  The old measurement is still available and
+	// still says what it always said, to the quantisation it prints.
+	//
+	// The searches would not work here anyway.  They read every pad from
+	// the run pad upwards, and the filler cannot emit 1 or 3 bytes -- at
+	// a run pad of nought two of the first four readings would be of a
+	// script other than the one asked for.
+	if flags.Fast {
+		return pad, runShrink(b, cnt, runpad, r), 0
+	}
+
 	// The 62KB estimate can still overshoot; runShrink halves the count on a
 	// Stack-Heap Collision until it fits, returning the count actually used.
-	return pad, runShrink(b, cnt, runpad, r)
+	//
+	// Shrunk against the TOP of the range the searches will read rather
+	// than against the run pad itself.  They walk a whole block above it,
+	// so a count that only just fits at the padding would be refused part
+	// way up -- and a refusal inside a search is a panic, not a retry.
+	cnt = runShrink(b, cnt, runpad+blockSize-1, r)
+
+	// What the copies actually cost, exactly, at two counts.
+	//
+	// One reading is not enough and never was.  A copy count of C answers
+	// with what C copies cost together, and that is not C times what one
+	// costs: a construct pays some of its cost once and shares it, so the
+	// total is an initial cost plus C marginal ones.  Dividing by C gives
+	// the marginal cost plus the initial one spread over C, which is the
+	// blend copy mode has always reported.
+	//
+	// Measured at C and at C/2 the two separate exactly.  See below.
+	mustRun(b, 0, runpad, r)
+	baseMem := r.Base
+
+	full, _ := copiesCost(b, cnt, runpad, baseMem, r)
+	half, ok := copiesCost(b, cnt/2, runpad, baseMem, r)
+	if !ok {
+		// One copy fitted and no more, so there is no second count to
+		// take a difference against and no marginal cost to be had:
+		// what a copy costs on its own and what another one costs after
+		// it are two questions and this can only answer the first.
+		noticef("only one copy of the code under test fits, so what an ADDITIONAL " +
+			"copy would cost cannot be measured; Size below is what one costs " +
+			"outright, which is what -1 mode reports\n")
+		r.Size = float64(full)
+		return pad, cnt, full
+	}
+
+	// full = F + C*m and half = F + C/2*m, so
+	//
+	//	2*half - full = F               the initial cost
+	//	(full - F)/C  = m               each copy after the first
+	//	F + m                           the first copy, outright
+	//
+	// F is what a construct pays once and shares.  It is zero for most
+	// things and large for anything with a literal in it: a 250-character
+	// string is 1044 bytes for one copy and 542 for each after.
+	initial := 2*half - full
+	if (full-initial)%cnt != 0 {
+		// C*m has to divide by C.  That it does not means the copies are
+		// not an initial cost plus a constant marginal one -- so the two
+		// numbers below are a fit to a shape the construct does not have,
+		// and saying so is worth more than a rounded answer.
+		noticef("%d copies cost %d bytes and %d cost %d, which does not resolve "+
+			"into an initial cost and a constant one per copy; Size is rounded\n",
+			cnt, full, cnt/2, half)
+	}
+	size := (full - initial) / cnt
+	r.Size = float64(size)
+	return pad, cnt, initial + size
+}
+
+// copiesCost is what cnt copies add to the base script, exactly.
+//
+// The base script at runpad sits on a block boundary, so the reading
+// with the copies in it, less the boundary, is their cost rounded UP to
+// a whole block -- and the headroom above them is how much of that last
+// block they did not use.  The difference is the cost, to the byte.
+//
+// It answers false for a count below one, which is the caller having
+// nothing to halve.
+func copiesCost(b *runner, cnt, runpad, baseMem int, r *Results) (int, bool) {
+	if cnt < 1 {
+		return 0, false
+	}
+	headroom, mem := findPadding(b, cnt, runpad, r)
+	return (mem - baseMem) - headroom, true
 }
 
 // spentCompiles counts the scripts sent to SL's compiler and never started.
@@ -1192,8 +1305,25 @@ const testAnchor = 5412
 // compile check asks the same question of the same model, and two copies of a
 // staircase drift.
 func testMem(cnt, pad int) int {
-	used := cnt*useTestInfo.codeSize + pad - useTestInfo.pad
-	return testAnchor + ((used + blockSize) &^ (blockSize - 1))
+	return testAnchor + ((testUsed(cnt) + pad - useTestInfo.pad + blockSize) &^ (blockSize - 1))
+}
+
+// testUsed is what cnt copies cost the model before quantising: the
+// first copy outright, and the marginal cost for each one after it.
+//
+// With marginal unset this is cnt*codeSize, which is what it always
+// was.  The point of the general form is that copy mode's arithmetic
+// has to separate the two, and a model that could not tell them apart
+// could not fail the test.
+func testUsed(cnt int) int {
+	if cnt == 0 {
+		return 0
+	}
+	marginal := useTestInfo.marginal
+	if marginal == 0 {
+		marginal = useTestInfo.codeSize
+	}
+	return useTestInfo.codeSize + (cnt-1)*marginal
 }
 
 // testRun answers a run from useTestInfo's model instead of from Second Life.

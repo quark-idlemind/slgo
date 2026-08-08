@@ -592,13 +592,18 @@ in 512-byte blocks -- so you cannot simply ask what one variable costs.
 `autobench` has two ways around that.
 
 **Copy mode** (the default) puts many copies of the code in one script
-and divides the difference by the number of copies. It is quick, and
-the answer carries the uncertainty it earned:
+and measures them at two counts, which separates what the code pays
+once from what each copy costs:
 
     $ autobench --title "global integer" --code "integer gCNT;"
     Title: global integer
     Padding: 377
-    Size: 22 ±0
+    Size: 22
+    First copy: 24
+
+`Size` is what an **additional** copy costs; `First copy` is what one
+costs outright. They differ by whatever the construct pays once and then
+shares -- two bytes here, and nothing at all for most things.
 
 **Padding mode** (`-1`) uses a single copy and adds filler a byte at a
 time until memory steps to the next block, which locates the boundary
@@ -755,22 +760,27 @@ than measurements.
 
 ### Reading the numbers honestly
 
-`Size: 22 ±0` and `Size: 24` are not two answers to the same question.
-Copy mode measures what an **additional** copy costs; `-1` mode measures
-one copy outright. Compare two constructs in the same mode.
+`Size: 22` and `First copy: 24` are not two answers to the same
+question. One is what an **additional** copy costs, the other what one
+copy costs outright. `-1` mode measures the second directly, which is
+why it says 24 for the same construct.
 
 The gap can be large, and when it is, it is telling you something.
-Measured: `string sCNT = "<250 identical characters>";` is 1044 bytes in
-`-1` mode and 542 in copy mode. Give each copy a *different* literal --
-put `CNT` inside the string -- and copy mode says 1030, agreeing with
-`-1`. Identical literals are shared, so an extra copy pays only for what
-it cannot share. That is a real property of the construct rather than a
-disagreement between the modes, and it is only visible because the two
-measure different things.
+Measured: `string sCNT = "<250 identical characters>";` costs 1044 bytes
+for one copy and 542 for each after it. Give each copy a *different*
+literal -- put `CNT` inside the string -- and the two converge on 1030.
+Identical literals are shared, so an extra copy pays only for what it
+cannot share. That is a real property of the construct, and copy mode
+reports both halves of it from one benchmark.
 
-`-1` mode handles constructs of any size, including those larger than a
-512-byte block: it counts the whole blocks a copy occupies as well as
-the distance to the next boundary.
+Copy mode used to divide a single reading by the copy count, which gave
+the marginal cost with the once-paid cost spread over however many
+copies it happened to use -- so the answer moved with a number nobody
+chose for its arithmetic. Measuring at two counts removes both the
+uncertainty and the blend, which is why there is no longer a `±`.
+
+Both modes handle constructs of any size, including those larger than a
+512-byte block.
 
 Second Life's own numbers move about a little from run to run. If an
 answer matters, take it twice.

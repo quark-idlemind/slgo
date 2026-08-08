@@ -269,7 +269,7 @@ func TestCopyModeReportsTheCodeSize(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			setTestInfo(t, tc.crossing, tc.codeSize)
 			var r Results
-			padding, cnt := copyMode(nil, &r)
+			padding, cnt, _ := copyMode(nil, &r)
 			if want := lowestCrossing(tc.crossing) - 1; padding != want {
 				t.Errorf("Padding: %d, want %d", padding, want)
 			}
@@ -304,13 +304,13 @@ func TestCopyModeAnchorsOnTheRunPad(t *testing.T) {
 	for crossing := minpad + 1; crossing < minpad+1+blockSize; crossing++ {
 		setTestInfo(t, crossing, codeSize)
 		var searched Results
-		padding, cnt := copyMode(nil, &searched)
+		padding, cnt, _ := copyMode(nil, &searched)
 
 		// Same shape, same padding, but handed over instead of searched for.
 		setTestInfo(t, crossing, codeSize)
 		flags.IPad = padding
 		var told Results
-		toldPadding, toldCnt := copyMode(nil, &told)
+		toldPadding, toldCnt, _ := copyMode(nil, &told)
 
 		if toldPadding != padding || toldCnt != cnt || told.Size != searched.Size {
 			t.Errorf("crossing %d: searched Padding: %d Size: %v over %d copies, "+
@@ -625,7 +625,7 @@ func TestCopyModeMeasuresMoreThanABlock(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			setTestInfo(t, tc.crossing, tc.codeSize)
 			var r Results
-			padding, cnt := copyMode(nil, &r)
+			padding, cnt, _ := copyMode(nil, &r)
 			if want := lowestCrossing(tc.crossing) - 1; padding != want {
 				t.Errorf("Padding: %d, want %d", padding, want)
 			}
@@ -747,7 +747,7 @@ func TestCopyModeSaysSoWhenItCannotBenchmark(t *testing.T) {
 
 	var r Results
 	var cnt int
-	said := stdoutOf(t, func() { _, cnt = copyMode(nil, &r) })
+	said := stdoutOf(t, func() { _, cnt, _ = copyMode(nil, &r) })
 	if !strings.Contains(said, "Unable to benchmark") {
 		t.Errorf("copy mode measured something it cannot measure:\n%s", said)
 	}
@@ -769,7 +769,7 @@ func TestACopyThatRegistersNothingIsMeasuredOverAWholeBlock(t *testing.T) {
 	t.Cleanup(func() { flags.Max = blockSize })
 
 	var r Results
-	_, cnt := copyMode(nil, &r)
+	_, cnt, _ := copyMode(nil, &r)
 	if cnt != flags.Max {
 		t.Errorf("copy mode measured over %d copies, want the cap of %d", cnt, flags.Max)
 	}
@@ -782,19 +782,27 @@ func TestACopyThatRegistersNothingIsMeasuredOverAWholeBlock(t *testing.T) {
 // found by doubling until the memory difference registers, and a count
 // that had to be halved to run at all is the ceiling -- doubling past it
 // would spend a run per attempt on scripts already known not to fit.
+//
+// The count that comes back has to fit at every pad the headroom
+// searches will read, which is a whole block above the padding, not just
+// at the padding itself.  A refusal part way up a search is a panic
+// rather than a retry, so the shrinking is done against the top of the
+// range -- and here that is what takes four copies down to two.
 func TestTheProbeStopsDoublingWhenTheScriptStopsFitting(t *testing.T) {
 	setTestInfo(t, 474, 368)
-	// Four copies fit and eight do not, so the first probe -- which
-	// starts at eight -- comes back having run four.
+	// Four copies fit at the padding and eight do not, so the first
+	// probe -- which starts at eight -- comes back having run four.
 	setLimit(t, testMem(4, 474)+1)
 
 	var r Results
-	_, cnt := copyMode(nil, &r)
-	if cnt != 4 {
-		t.Errorf("copy mode measured over %d copies, want the 4 that fit", cnt)
+	_, cnt, _ := copyMode(nil, &r)
+	if testMem(cnt, 473+blockSize-1) > useTestInfo.limit {
+		t.Errorf("copy mode settled on %d copies, which the model refuses at the "+
+			"top of the range its searches read", cnt)
 	}
-	if testMem(cnt, 474) > useTestInfo.limit {
-		t.Errorf("copy mode settled on %d copies, which the model refuses", cnt)
+	if cnt != 2 {
+		t.Errorf("copy mode measured over %d copies, want the 2 that fit with a "+
+			"block of headroom above them", cnt)
 	}
 }
 
@@ -869,5 +877,113 @@ func TestOneModeIsExactEverywhere(t *testing.T) {
 				bad++
 			}
 		}
+	}
+}
+
+// ------------------------------------------ what a copy pays only once
+
+// affineCases are constructs whose first copy costs more than the ones
+// after it, which is the whole reason copy mode measures two counts.
+//
+// The 1044/542 pair is the guide's live measurement: a 250-character
+// string literal is 1044 bytes for one copy and 542 for each after it,
+// because identical literals are shared and an extra copy pays only for
+// what it cannot share.  The rest bracket it.
+var affineCases = []struct {
+	name     string
+	crossing int
+	abs      int // what the first copy costs outright
+	marg     int // what each copy after it costs
+}{
+	{"nothing paid once", 474, 368, 368},
+	{"the shared 250-character literal, measured live", 474, 1044, 542},
+	{"almost all of it paid once", 474, 280, 22},
+	{"paid once and nothing after", 300, 500, 1},
+	{"a byte apart", 406, 45, 44},
+	{"over a block, shared", 986, 1066, 600},
+	{"an extra copy dearer than the first", 300, 22, 44},
+}
+
+// TestCopyModeSeparatesWhatIsPaidOnce is the point of measuring at two
+// counts.  One count answers with the two costs blended -- the marginal
+// cost plus the initial one spread over however many copies were used --
+// and which blend you get depends on a copy count nobody chose for its
+// arithmetic.  Two counts separate them exactly.
+func TestCopyModeSeparatesWhatIsPaidOnce(t *testing.T) {
+	for _, tc := range affineCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setTestInfo(t, tc.crossing, tc.abs)
+			useTestInfo.marginal = tc.marg
+
+			var r Results
+			padding, cnt, first := copyMode(nil, &r)
+			if want := lowestCrossing(tc.crossing) - 1; padding != want {
+				t.Errorf("Padding: %d, want %d", padding, want)
+			}
+			if got := int(r.Size); got != tc.marg {
+				t.Errorf("Size: %d over %d copies, want the marginal cost %d",
+					got, cnt, tc.marg)
+			}
+			if first != tc.abs {
+				t.Errorf("First copy: %d, want %d", first, tc.abs)
+			}
+		})
+	}
+}
+
+// TestOneModeMeasuresTheFirstCopy is the other half of the same fact: -1
+// mode uses one copy, so what it reports is what one costs outright --
+// the absolute cost, not the marginal one.  The two modes answer
+// different questions and a construct that pays something once is where
+// that stops being a technicality.
+func TestOneModeMeasuresTheFirstCopy(t *testing.T) {
+	for _, tc := range affineCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setTestInfo(t, tc.crossing, tc.abs)
+			useTestInfo.marginal = tc.marg
+
+			var r Results
+			size, _, _ := oneMode(nil, &r)
+			if size != tc.abs {
+				t.Errorf("Size: %d, want the first copy's %d", size, tc.abs)
+			}
+		})
+	}
+}
+
+// TestCopyModeIsExactAtEveryCount: the separation must not depend on how
+// many copies the probe happened to land on.
+//
+// That is exactly what the blend could not promise.  Dividing one
+// reading by the count gives the marginal cost plus the initial one
+// spread over that count, so the answer moved with a number nobody chose
+// for its arithmetic -- for the 280/22 case it was 54 at eight copies and
+// 22 at five hundred and twelve.  --max is what varies the count here.
+func TestCopyModeIsExactAtEveryCount(t *testing.T) {
+	for _, tc := range affineCases {
+		t.Run(tc.name, func(t *testing.T) {
+			counts := map[int]bool{}
+			for _, max := range []int{2, 4, 8, 16, 64, 128} {
+				setTestInfo(t, tc.crossing, tc.abs)
+				useTestInfo.marginal = tc.marg
+				flags.Max = max
+				// Room for the count asked for, so the memory limit is
+				// not what decides which counts this covers.
+				setLimit(t, 1<<30)
+
+				var r Results
+				_, cnt, first := copyMode(nil, &r)
+				counts[cnt] = true
+				if int(r.Size) != tc.marg || first != tc.abs {
+					t.Errorf("at %d copies: Size %d First copy %d, want %d and %d",
+						cnt, int(r.Size), first, tc.marg, tc.abs)
+				}
+			}
+			// If every --max produced the same count the loop above has
+			// asserted one case six times.
+			if len(counts) < 4 {
+				t.Errorf("only %d distinct copy counts were reached: %v", len(counts), counts)
+			}
+		})
 	}
 }
