@@ -402,3 +402,271 @@ func TestFetchInventoryLinks(t *testing.T) {
 		t.Errorf("linked asset = %v, want %v", it.AssetID, uid(9))
 	}
 }
+
+// TestFetchOneFolderWithoutDescending: a client that wants the contents
+// of one folder should not have to walk the whole tree to get them, and
+// asking for a depth is one round trip however deep it goes -- which is
+// the difference between reading a folder and taking the better part of
+// a minute over an inventory.
+func TestFetchOneFolderWithoutDescending(t *testing.T) {
+	a := newAIS()
+	root, kid, grandkid := uid(0), uid(1), uid(2)
+	a.folder(root, "My Inventory", "", []string{kid}, nil)
+	a.folder(kid, "Objects", root, []string{grandkid}, []string{uid(10)})
+	a.folder(grandkid, "Deeper", kid, nil, []string{uid(11)})
+
+	hs := httptest.NewServer(a.handler())
+	defer hs.Close()
+
+	// One folder, no descent: its child is named but not fetched, so
+	// nothing inside the child is known.
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	if err := s.FetchFolder(context.Background(), msg.MustParseUUID(kid)); err != nil {
+		t.Fatal(err)
+	}
+	if a.requests != 1 {
+		t.Errorf("%d requests for one folder", a.requests)
+	}
+	if _, ok := s.Inventory.Item(msg.MustParseUUID(uid(11))); ok {
+		t.Error("something inside the child folder was fetched")
+	}
+
+	// With a depth, the reply nests each child's own contents inside it,
+	// and reading only the outer one would throw away everything the
+	// extra round trip was avoided for.
+	deep := newInventory(msg.MustParseUUID(root))
+	before := a.requests
+	if err := FetchFolderDepth(context.Background(), s, deep, msg.MustParseUUID(kid), 2); err != nil {
+		t.Fatal(err)
+	}
+	if n := a.requests - before; n != 1 {
+		t.Errorf("a depth request cost %d round trips", n)
+	}
+
+	// A depth below zero is no depth at all rather than an error.
+	if err := FetchFolderDepth(context.Background(), s, deep, msg.MustParseUUID(kid), -1); err != nil {
+		t.Fatal(err)
+	}
+
+	// And none of it is possible without the capability.
+	none := &Agent{Account: &Account{}, Caps: Caps{}, Inventory: newInventory(msg.UUID{})}
+	if err := FetchFolder(context.Background(), none, none.Inventory, msg.UUID{}); err == nil {
+		t.Error("expected an error with no InventoryAPIv3")
+	}
+	if err := none.FetchFolder(context.Background(), msg.UUID{}); err == nil {
+		t.Error("expected an error with no InventoryAPIv3")
+	}
+}
+
+// TestWalkingTheTree: the same descent an "ls -R" would do, and the only
+// thing that visits a folder and everything under it in order.
+func TestWalkingTheTree(t *testing.T) {
+	a := newAIS()
+	root, objects, clothes, deeper := uid(0), uid(1), uid(2), uid(3)
+	a.folder(root, "My Inventory", "", []string{objects, clothes}, nil)
+	a.folder(objects, "Objects", root, []string{deeper}, nil)
+	a.folder(deeper, "Boxes", objects, nil, nil)
+	a.folder(clothes, "Clothing", root, nil, nil)
+
+	hs := httptest.NewServer(a.handler())
+	defer hs.Close()
+
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	if err := s.FetchInventory(context.Background(), FetchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	var seen []string
+	s.Inventory.Walk(func(f *Folder, depth int) bool {
+		seen = append(seen, fmt.Sprintf("%d:%s", depth, f.Name))
+		return true
+	})
+	want := []string{"0:My Inventory", "1:Clothing", "1:Objects", "2:Boxes"}
+	if len(seen) != len(want) {
+		t.Fatalf("walked %v, want %v", seen, want)
+	}
+	for i := range want {
+		if seen[i] != want[i] {
+			t.Errorf("walked %v, want %v", seen, want)
+			break
+		}
+	}
+
+	// Returning false stops the descent into that folder and nothing
+	// else, which is what makes the walk usable for a partial listing.
+	seen = nil
+	s.Inventory.Walk(func(f *Folder, depth int) bool {
+		seen = append(seen, f.Name)
+		return f.Name != "Objects"
+	})
+	for _, name := range seen {
+		if name == "Boxes" {
+			t.Errorf("the walk descended into a folder it was told not to: %v", seen)
+		}
+	}
+
+	// A tree whose root has never been fetched still walks whatever is
+	// under it rather than refusing.
+	empty := NewInventory(msg.MustParseUUID(root))
+	empty.Walk(func(*Folder, int) bool {
+		t.Error("an empty tree walked something")
+		return true
+	})
+
+	// And a walk stopped at the root goes no further.
+	s.Inventory.Walk(func(f *Folder, depth int) bool { return false })
+}
+
+// TestFetchingTheSameFolderTwiceUpdatesRatherThanDuplicates: a fetch may
+// be asked for again after something changed, and the second answer has
+// to replace the first rather than list every item twice.
+func TestFetchingTheSameFolderTwiceUpdatesRatherThanDuplicates(t *testing.T) {
+	a := newAIS()
+	root := uid(0)
+	a.folder(root, "My Inventory", "", nil, []string{uid(10), uid(11)})
+
+	hs := httptest.NewServer(a.handler())
+	defer hs.Close()
+
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	for range 2 {
+		if err := s.FetchFolder(context.Background(), msg.MustParseUUID(root)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, items := s.Inventory.Counts(); items != 2 {
+		t.Errorf("%d items after fetching the same folder twice", items)
+	}
+	if got := s.Inventory.Contents(msg.MustParseUUID(root)); len(got) != 2 {
+		t.Errorf("the folder lists %d items", len(got))
+	}
+}
+
+// TestAnInventoryReplyThatIsNotOne: this is HTTPS against a capability,
+// so anything at all can come back -- a proxy's error page, a truncated
+// body, a simulator answering a different question.
+func TestAnInventoryReplyThatIsNotOne(t *testing.T) {
+	long := strings.Repeat("this explanation goes on and on. ", 40)
+
+	for _, c := range []struct {
+		name   string
+		status int
+		body   string
+		says   string
+	}{
+		{"a refusal with a great deal to say", http.StatusForbidden, long, "status 403"},
+		{"a body that is not LLSD", http.StatusOK, "<not-llsd", "inventory"},
+		{"LLSD that is not a map", http.StatusOK, `<llsd><string>hello</string></llsd>`, "wanted a map"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(c.status)
+				fmt.Fprint(w, c.body)
+			}))
+			defer hs.Close()
+
+			s := invSession(hs.URL, msg.MustParseUUID(uid(0)))
+			err := s.FetchFolder(context.Background(), msg.MustParseUUID(uid(0)))
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if !strings.Contains(err.Error(), c.says) {
+				t.Errorf("err = %v, should mention %q", err, c.says)
+			}
+			// The explanation is kept, but not all of it.
+			if len(err.Error()) > 512 {
+				t.Errorf("the error is %d characters long", len(err.Error()))
+			}
+		})
+	}
+}
+
+// TestAnEntryThatOnlyItsKeyNames: AIS keys the embedded maps by id, so
+// an entry that leaves the id out of its own body is still an entry --
+// the key is the id.  An entry that has it neither way is nothing at
+// all, and taking one in would put something with the zero id in the
+// tree, where it would be the parent of everything else with no parent.
+func TestAnEntryThatOnlyItsKeyNames(t *testing.T) {
+	root, named, itemKeyed := uid(0), uid(1), uid(20)
+
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `<llsd><map>
+			<key>category_id</key><string>%s</string>
+			<key>name</key><string>My Inventory</string>
+			<key>_embedded</key><map>
+				<key>categories</key><map>
+					<key>%s</key><map>
+						<key>category_id</key><string>%s</string>
+						<key>name</key><string>Named In Its Body</string>
+					</map>
+					<key>not-a-uuid</key><map><key>name</key><string>Named By Nothing</string></map>
+					<key>%s</key><string>not a map</string>
+				</map>
+				<key>items</key><map>
+					<key>%s</key><map><key>name</key><string>Keyed Item</string></map>
+					<key>not-a-uuid</key><map><key>name</key><string>Unidentifiable</string></map>
+					<key>%s</key><string>not a map</string>
+				</map>
+			</map>
+		</map></llsd>`, root, named, named, uid(9), itemKeyed, uid(19))
+	}))
+	defer hs.Close()
+
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	if err := s.FetchFolder(context.Background(), msg.MustParseUUID(root)); err != nil {
+		t.Fatal(err)
+	}
+
+	if f, ok := s.Inventory.Folder(msg.MustParseUUID(named)); !ok || f.Name != "Named In Its Body" {
+		t.Errorf("folder = %+v", f)
+	}
+	if it, ok := s.Inventory.Item(msg.MustParseUUID(itemKeyed)); !ok || it.Name != "Keyed Item" {
+		t.Errorf("the item named only by its key was lost: %+v", it)
+	}
+
+	// Nothing that could not be identified came in, and in particular
+	// nothing came in under the zero id.
+	folders, items := s.Inventory.Counts()
+	if folders != 2 || items != 1 {
+		t.Errorf("%d folders and %d items; something unidentifiable was taken in", folders, items)
+	}
+	if _, ok := s.Inventory.Folder(msg.UUID{}); ok {
+		t.Error("a folder with the zero id was taken in")
+	}
+	if _, ok := s.Inventory.Item(msg.UUID{}); ok {
+		t.Error("an item with the zero id was taken in")
+	}
+}
+
+// TestAFolderNamedOnlyByItsKeyIsLost: absorb has a fallback for exactly
+// this -- a category whose body omits category_id takes its id from the
+// key it is filed under -- and the fallback can never run, because
+// folderFrom has already returned nil for the same reason.  An item in
+// that position is kept, because itemFrom does not do the same thing,
+// so the two halves of the reply are treated differently by accident.
+//
+// The correct behaviour is the one absorb was written for: the key names
+// the folder when the body does not.
+func TestAFolderNamedOnlyByItsKeyIsLost(t *testing.T) {
+	t.Skip("demonstrates the dead fallback in absorb; see coverage-notes/agent.md")
+
+	root, keyed := uid(0), uid(2)
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `<llsd><map>
+			<key>category_id</key><string>%s</string>
+			<key>name</key><string>My Inventory</string>
+			<key>_embedded</key><map><key>categories</key><map>
+				<key>%s</key><map><key>name</key><string>Named By Its Key</string></map>
+			</map></map>
+		</map></llsd>`, root, keyed)
+	}))
+	defer hs.Close()
+
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	if err := s.FetchFolder(context.Background(), msg.MustParseUUID(root)); err != nil {
+		t.Fatal(err)
+	}
+	if f, ok := s.Inventory.Folder(msg.MustParseUUID(keyed)); !ok || f.Name != "Named By Its Key" {
+		t.Errorf("the folder named only by its key was lost: %+v", f)
+	}
+}

@@ -495,3 +495,171 @@ func TestLoginNeedsAName(t *testing.T) {
 		t.Error("expected an error without a name")
 	}
 }
+
+// respondingWith answers every request with this body, without a socket
+// or a name to resolve, so a login can be pointed at the real default
+// URL without going anywhere near it.
+type respondingWith string
+
+func (b respondingWith) RoundTrip(r *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(string(b))),
+		Header:     http.Header{},
+		Request:    r,
+	}, nil
+}
+
+// TestALoginWithNoURLGoesToTheMainGrid: the default is the whole reason
+// a caller can write Login{First, Last, Password} and nothing else.
+func TestALoginWithNoURLGoesToTheMainGrid(t *testing.T) {
+	var asked string
+	stamp := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		asked = r.URL.String()
+		return respondingWith(string(fixture(t))).RoundTrip(r)
+	})
+
+	acct, err := Login{
+		First: "Example", Last: "Resident", Password: "secret",
+		HTTP: &http.Client{Transport: stamp},
+	}.Do(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked != DefaultLoginURL {
+		t.Errorf("posted to %q, want %q", asked, DefaultLoginURL)
+	}
+	if acct.Name() != "Example Resident" {
+		t.Errorf("Name = %q", acct.Name())
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// TestALoginToAnAddressThatIsNotOne: the URL comes from a profile file,
+// so a typo in one has to be an error rather than a panic.
+func TestALoginToAnAddressThatIsNotOne(t *testing.T) {
+	_, err := Login{First: "A", Last: "B", Password: "x", URL: "://nonsense"}.Do(context.Background())
+	if err == nil {
+		t.Error("expected an error for a URL that will not parse")
+	}
+}
+
+// TestALoginServerThatIsNotThere: a grid that is down is the ordinary
+// case for anything that logs in on a timer.
+func TestALoginServerThatIsNotThere(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := srv.URL
+	srv.Close()
+
+	_, err := Login{First: "A", Last: "B", Password: "x", URL: url}.Do(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "login request") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// TestALoginResponseThatIsNotOne: everything below is a well formed
+// XML-RPC reply saying something a login response never says, which is
+// how a captive portal or a misdirected URL announces itself.
+func TestALoginResponseThatIsNotOne(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		body string
+		says string
+	}{
+		{
+			name: "not XML-RPC at all",
+			body: `<html>you are not logged in</html>`,
+			says: "login response",
+		},
+		{
+			name: "a response that is not a struct",
+			body: wrapLogin(`<string>hello</string>`),
+			says: "wanted a struct",
+		},
+		{
+			name: "success with no agent id",
+			body: loginStruct(``),
+			says: "agent_id",
+		},
+		{
+			name: "success with no session id",
+			body: loginStruct(member("agent_id", uid(1))),
+			says: "session_id",
+		},
+		{
+			name: "success with no secure session id",
+			body: loginStruct(member("agent_id", uid(1)) + member("session_id", uid(2))),
+			says: "secure_session_id",
+		},
+		{
+			name: "success with no circuit code",
+			body: loginStruct(member("agent_id", uid(1)) + member("session_id", uid(2)) +
+				member("secure_session_id", uid(3))),
+			says: "circuit_code",
+		},
+		{
+			name: "success with a simulator address that is not one",
+			body: loginStruct(member("agent_id", uid(1)) + member("session_id", uid(2)) +
+				member("secure_session_id", uid(3)) + member("circuit_code", "690139535") +
+				member("sim_ip", "somewhere")),
+			says: "not an address",
+		},
+		{
+			name: "success with a port that is not one",
+			body: loginStruct(member("agent_id", uid(1)) + member("session_id", uid(2)) +
+				member("secure_session_id", uid(3)) + member("circuit_code", "690139535") +
+				member("sim_ip", "127.0.0.1") + member("sim_port", "99999")),
+			says: "not a port",
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				io.WriteString(w, c.body)
+			}))
+			defer srv.Close()
+
+			_, err := Login{First: "A", Last: "B", Password: "x", URL: srv.URL}.Do(context.Background())
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if !strings.Contains(err.Error(), c.says) {
+				t.Errorf("err = %v, should mention %q", err, c.says)
+			}
+		})
+	}
+}
+
+// wrapLogin puts a value in the methodResponse a login server sends.
+func wrapLogin(value string) string {
+	return `<?xml version="1.0"?><methodResponse><params><param><value>` +
+		value + `</value></param></params></methodResponse>`
+}
+
+// loginStruct is a successful login response holding these members and
+// no others, so a test can leave out exactly one field.
+func loginStruct(members string) string {
+	return wrapLogin(`<struct>` + member("login", "true") + members + `</struct>`)
+}
+
+func member(name, value string) string {
+	return `<member><name>` + name + `</name><value><string>` +
+		value + `</string></value></member>`
+}
+
+// TestARefusalWithNothingButASentence: the login server does not name
+// every refusal, so a message with no identifier still has to read as
+// something.
+func TestARefusalWithNothingButASentence(t *testing.T) {
+	e := &LoginError{Message: "Something went wrong."}
+	if got := e.Error(); got != "login refused: Something went wrong." {
+		t.Errorf("Error = %q", got)
+	}
+	// And an identifier with no coarse reason behind it stands on its own.
+	e = &LoginError{MessageID: "LoginFailedUnknown", Message: "No idea."}
+	if !strings.Contains(e.Error(), "(LoginFailedUnknown)") {
+		t.Errorf("Error = %q", e.Error())
+	}
+}
