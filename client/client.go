@@ -463,6 +463,25 @@ func (c *Conn) NoteFriend(ctx context.Context, id msg.UUID, online bool) error {
 }
 
 // Region asks what the simulator said about itself.
+// Host asks the daemon to bring a session up.
+//
+// Safe to repeat: one already hosted comes back with Already set rather
+// than being logged in a second time, which would kick the session it
+// has.  Force starts one that was stopped deliberately -- check nobody
+// is using that avatar first, because that is usually why it stopped.
+func (c *Conn) Host(ctx context.Context, name string, force bool) (*pb.HostResponse, error) {
+	return c.grid.Host(ctx, &pb.HostRequest{Agent: name, Force: force})
+}
+
+// Logout puts a session down and keeps it down.
+//
+// It is refused while clients are attached unless force is set, and the
+// refusal names them: a benchmark mid-run has a script installed and a
+// reading half taken, and losing that should be a decision.
+func (c *Conn) Logout(ctx context.Context, name string, force bool) (*pb.LogoutResponse, error) {
+	return c.grid.Logout(ctx, &pb.LogoutRequest{Agent: name, Force: force})
+}
+
 func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
 	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agent})
 }

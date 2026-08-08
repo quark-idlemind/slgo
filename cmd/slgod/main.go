@@ -69,11 +69,14 @@ func main() {
 	// profile each hosted session was made from.
 	hosted := map[string]agent.Login{}
 
-	for _, name := range flag.Args() {
+	// loginFor is how a profile becomes a login, in one place, so that
+	// a session started later on request is set up exactly like one
+	// named on the command line.  The server calls it too; see
+	// SetProfiles.
+	loginFor := func(name string) (agent.Login, agent.Options, error) {
 		login, err := agent.LoadProfile(name)
 		if err != nil {
-			log.Printf("%s: NOT hosted: %v", name, err)
-			continue
+			return login, agent.Options{}, err
 		}
 		if *start != "" {
 			login.Start = *start
@@ -101,6 +104,15 @@ func main() {
 			OnError: func(p *msg.Packet) {
 				log.Printf("%s: undecodable packet: %v", name, p.Err)
 			},
+		}
+		return login, opts, nil
+	}
+
+	for _, name := range flag.Args() {
+		login, opts, err := loginFor(name)
+		if err != nil {
+			log.Printf("%s: NOT hosted: %v", name, err)
+			continue
 		}
 
 		log.Printf("%s: logging in...", name)
@@ -169,23 +181,30 @@ func main() {
 		log.Fatal("no session came up; nothing to serve")
 	}
 
-	for _, name := range srv.Names() {
-		h, ok := srv.Agent(name)
-		if !ok {
-			continue
+	// settle is everything a session needs after it is up.  Used both
+	// for the ones named on the command line and for any started later
+	// on request, so that a session cannot be half set up depending on
+	// how it came to exist.
+	settle := func(h *server.Hosted) {
+		name := h.Name
+		want := ""
+		if l, ok := hosted[name]; ok {
+			want = l.Group
+		} else if l, _, err := loginFor(name); err == nil {
+			want = l.Group
 		}
-		a := h.Agent()
-		g, why, err := chooseGroup(ctx, a, group.For(name, hosted[name].Group))
+
+		g, why, err := chooseGroup(ctx, h.Agent(), group.For(name, want))
 		if err != nil {
-			// Not fatal either: an ambiguous group name is a reason
-			// this avatar cannot build, not a reason to take the
-			// other avatars down with it.
+			// Not fatal: an ambiguous group name is a reason this
+			// avatar cannot build, not a reason to take the others
+			// down with it.
 			log.Printf("%s: no active group: %v", name, err)
-			continue
+			return
 		}
 		if g.IsZero() {
 			log.Printf("%s: no active group (%s); parcels that only let a group build will refuse", name, why)
-			continue
+			return
 		}
 		// Through the server, which remembers it and puts it back
 		// after a reconnect -- a fresh login has no active group, and
@@ -196,6 +215,30 @@ func main() {
 			log.Printf("%s: acting as group %s (%s)", name, why, g)
 		}
 	}
+
+	for _, name := range srv.Names() {
+		if h, ok := srv.Agent(name); ok {
+			settle(h)
+		}
+	}
+
+	// What may be started later, and how.  Without these the server can
+	// only serve what it was given on the command line.
+	srv.SetProfiles(func() []string {
+		names, err := agent.ListProfiles()
+		if err != nil {
+			return nil
+		}
+		return names
+	}, loginFor)
+
+	// A session started on request belongs to the daemon, not to the
+	// call that asked for it, and gets the same settling as the rest.
+	srv.SetBase(ctx, log.Printf, func(h *server.Hosted) {
+		log.Printf("%s: started on request, %s in %s",
+			h.Name, h.Agent().Account.Name(), orUnknown(h.Agent().RegionName()))
+		settle(h)
+	})
 
 	// slgod holds a live Second Life session, so an unauthenticated one
 	// reachable off this machine lets anyone drive the avatar. On by
