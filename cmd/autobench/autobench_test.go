@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -626,5 +627,185 @@ func TestCopyModeMeasuresMoreThanABlock(t *testing.T) {
 					got, tol, cnt, tc.codeSize)
 			}
 		})
+	}
+}
+
+// --------------------------------------------- confirming one crossing
+
+// confirmAt sets a search up at the point confirmCrossing is asked its
+// question: cnt copies at pad, a step believed to be at pad+low, and the
+// reading the search took there sitting in r.
+func confirmAt(t *testing.T, pad, low, first int) (crossing, int, string) {
+	t.Helper()
+	r := Results{Test: first}
+	getBase := func() int { return r.Test }
+	var verdict crossing
+	var base int
+	said := stderrOf(t, func() {
+		verdict, base = confirmCrossing(nil, 1, pad, low, testMem(1, pad), &r, getBase)
+	})
+	return verdict, base, said
+}
+
+// TestAConfirmedCrossingIsAPairOfReadingsAndTheBaseTheyAreAgainst: this
+// is the whole of A12.  A padding search is a chain of comparisons
+// against readings of llGetUsedMemory, and on 2026-08-03 one of those
+// came back exactly one block high -- which from inside the search looks
+// precisely like the memory having grown, the event it exists to find.
+// So the step is re-read before it is turned on, and so is the base.
+func TestAConfirmedCrossingIsAPairOfReadingsAndTheBaseTheyAreAgainst(t *testing.T) {
+	// The live reference: the one-copy script crosses at 618, which is 16
+	// bytes above the pad the runs are taken at.
+	const pad, low = 602, 16
+
+	setTestInfo(t, 474, 368)
+	verdict, _, said := confirmAt(t, pad, low, testMem(1, pad+low))
+	if verdict != crossingHolds {
+		t.Errorf("a real crossing was not confirmed: %v", verdict)
+	}
+	if said != "" {
+		t.Errorf("a clean confirmation complained:\n%s", said)
+	}
+
+	// The pad that looked like it crossed reads inside the block on a
+	// second ask: the first reading was noise, and the walk continues past
+	// it rather than turning on it.
+	setTestInfo(t, 474, 368)
+	verdict, _, said = confirmAt(t, pad, 8, testMem(1, pad+low))
+	if verdict != crossingLater {
+		t.Errorf("a reading that did not reproduce was taken for a crossing: %v", verdict)
+	}
+	if !strings.Contains(said, "was noise") {
+		t.Errorf("nothing was said about the reading that did not reproduce:\n%s", said)
+	}
+
+	// Both asks say memory grew and they do not agree with each other.
+	// The crossing is here, and the disagreement is worth saying out loud
+	// because nothing else in the output would show it.
+	setTestInfo(t, 474, 368)
+	verdict, _, said = confirmAt(t, pad, low, testMem(1, pad+low)+blockSize)
+	if verdict != crossingHolds {
+		t.Errorf("a crossing both readings agree about was not taken: %v", verdict)
+	}
+	if !strings.Contains(said, "do not agree") {
+		t.Errorf("two disagreeing readings passed without comment:\n%s", said)
+	}
+}
+
+// TestABaseThatMovedMakesEveryComparisonSuspect: the base is what every
+// decision in a search was made against, so one that reads differently
+// afterwards does not invalidate the step -- it invalidates the search.
+// The answer is to run it again from the corrected reading, which is
+// cheap, since every reading it took is in the cache.
+func TestABaseThatMovedMakesEveryComparisonSuspect(t *testing.T) {
+	const pad, low = 602, 16
+	setTestInfo(t, 474, 368)
+
+	// The re-read of the base is the second thing confirmCrossing asks
+	// for, and this is the one that answers it differently.
+	fired := noiseOnce(t, 1, pad, blockSize)
+
+	verdict, base, said := confirmAt(t, pad, low, testMem(1, pad+low))
+	if *fired != 1 {
+		t.Fatalf("the base was never re-read (%d times), so this asserts nothing", *fired)
+	}
+	if verdict != crossingSuspect {
+		t.Errorf("a base that moved left the search standing: %v", verdict)
+	}
+	if want := testMem(1, pad) + blockSize; base != want {
+		t.Errorf("the corrected base is %d, want %d", base, want)
+	}
+	if !strings.Contains(said, "being run again") {
+		t.Errorf("nothing was said about the search being redone:\n%s", said)
+	}
+}
+
+// ------------------------------------------------ what copy mode cannot do
+
+// TestCopyModeSaysSoWhenItCannotBenchmark demonstrates a crash: a
+// construct too large for any copy count to fit alongside leaves cnt at
+// nought, and the line that is meant to report that is never reached --
+// bits.Len(0)-1 is -1, and shifting by a negative amount panics before
+// the check.  main recovers the panic and reports "negative shift
+// amount", which says nothing about the benchmark.
+//
+// The correct behaviour is the message the code already contains:
+// "Unable to benchmark".  See coverage-notes/commands.md.
+func TestCopyModeSaysSoWhenItCannotBenchmark(t *testing.T) {
+	t.Skip("demonstrates the negative shift in copyMode; see coverage-notes/commands.md")
+
+	// A copy larger than the memory a script has, with the model's
+	// compiler limit lifted so that the size is what stops it rather than
+	// a refusal.
+	setTestInfo(t, 474, 200*1024)
+	useTestInfo.limit = 1 << 30
+
+	var r Results
+	said := stdoutOf(t, func() { copyMode(nil, &r) })
+	if !strings.Contains(said, "Unable to benchmark") {
+		t.Errorf("copy mode measured something it cannot measure:\n%s", said)
+	}
+}
+
+// TestACopyThatRegistersNothingIsMeasuredOverAWholeBlock: a construct the
+// model says costs nothing never moves the memory, so the probe loop
+// doubles to the cap and the count falls back to a whole block of copies
+// -- which is the most a benchmark is allowed to ask for.
+func TestACopyThatRegistersNothingIsMeasuredOverAWholeBlock(t *testing.T) {
+	setTestInfo(t, 474, 0)
+	useTestInfo.limit = 1 << 30
+	flags.Max = 64
+	t.Cleanup(func() { flags.Max = blockSize })
+
+	var r Results
+	_, cnt := copyMode(nil, &r)
+	if cnt != flags.Max {
+		t.Errorf("copy mode measured over %d copies, want the cap of %d", cnt, flags.Max)
+	}
+	if r.Size != 0 {
+		t.Errorf("a costless construct measured %v", r.Size)
+	}
+}
+
+// TestTheProbeStopsDoublingWhenTheScriptStopsFitting: the copy count is
+// found by doubling until the memory difference registers, and a count
+// that had to be halved to run at all is the ceiling -- doubling past it
+// would spend a run per attempt on scripts already known not to fit.
+func TestTheProbeStopsDoublingWhenTheScriptStopsFitting(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	// Four copies fit and eight do not, so the first probe -- which
+	// starts at eight -- comes back having run four.
+	setLimit(t, testMem(4, 474)+1)
+
+	var r Results
+	_, cnt := copyMode(nil, &r)
+	if cnt != 4 {
+		t.Errorf("copy mode measured over %d copies, want the 4 that fit", cnt)
+	}
+	if testMem(cnt, 474) > useTestInfo.limit {
+		t.Errorf("copy mode settled on %d copies, which the model refuses", cnt)
+	}
+}
+
+// TestOneCopyIsWhatTellsTheTwoRefusalsApart: a script too large to
+// compile and a script that is not valid LSL come back as the same event.
+// One copy is the smallest script a benchmark can be, so a refusal of
+// THAT is not a size limit -- and saying so is worth more than another
+// nine uploads finding out.
+func TestOneCopyIsWhatTellsTheTwoRefusalsApart(t *testing.T) {
+	setTestInfo(t, 474, 368)
+	// A limit below what one copy costs, which is a shape too big to
+	// benchmark at all rather than one to try smaller.
+	setLimit(t, testAnchor)
+
+	v := oneCopyCompiles(nil, 474)
+	if v.OK {
+		t.Fatal("one copy was accepted over a limit it does not fit in")
+	}
+	if !strings.Contains(v.Error(), "over the") {
+		t.Errorf("the refusal does not say what it was measured against: %v", v.Error())
+	}
+	if spentCompiles != 1 {
+		t.Errorf("spent %d compiles asking one question", spentCompiles)
 	}
 }

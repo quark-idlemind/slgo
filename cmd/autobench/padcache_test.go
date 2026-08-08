@@ -134,3 +134,78 @@ func TestPadCacheSurvivesRubbish(t *testing.T) {
 		t.Errorf("the good line did not survive: %+v", m["good"])
 	}
 }
+
+// TestNothingHereIsWorthFailingABenchmarkOver: this is a cache of a
+// computation, not a record of anything in the world, so every way it can
+// go wrong is a search that costs a dozen runs rather than an error.  A
+// machine with nowhere to keep it is the extreme case: there is no file,
+// there is no complaint, and the benchmark runs.
+func TestNothingHereIsWorthFailingABenchmarkOver(t *testing.T) {
+	// No configuration directory to be found at all.  HOME is what
+	// os.UserConfigDir reads, and this is the test's own HOME, so the
+	// developer's real cache is nowhere near it.
+	t.Setenv("SLGO_CONFIG_DIR", "")
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	if _, err := padCachePath(); err == nil {
+		t.Skip("this machine has a configuration directory without a home to put it in")
+	}
+	if got := loadPadCache(); len(got) != 0 {
+		t.Errorf("a cache came back from nowhere: %v", got)
+	}
+	// And writing is the same: it does not happen, and it does not
+	// complain.
+	rememberPadding("abc", 377, 5924)
+	forgetPadding("abc")
+}
+
+// TestACacheThatCannotBeWrittenIsNotAFailure: the same rule where the
+// directory is there and cannot be written -- a read-only configuration
+// directory is somebody's deliberate arrangement, and a benchmark is not
+// the thing to argue with it.
+func TestACacheThatCannotBeWrittenIsNotAFailure(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "read-only")
+	if err := os.Mkdir(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SLGO_CONFIG_DIR", dir)
+
+	rememberPadding("abc", 377, 5924)
+	if _, ok := loadPadCache()["abc"]; ok {
+		t.Skip("this user can write to a directory without the write bit")
+	}
+
+	// A directory that cannot even be made is the same again.
+	t.Setenv("SLGO_CONFIG_DIR", filepath.Join(dir, "under", "a", "read-only", "one"))
+	rememberPadding("def", 349, 5960)
+}
+
+// TestForgettingSomethingNeverRememberedWritesNothing: forgetting is what
+// happens when a remembered padding turns out not to hold, and the file
+// is shared with every other shape this account has measured -- so a
+// rewrite for an entry that was not there risks the others for nothing.
+func TestForgettingSomethingNeverRememberedWritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SLGO_CONFIG_DIR", dir)
+	rememberPadding("abc", 377, 5924)
+
+	path := filepath.Join(dir, "autobench-padding")
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	forgetPadding("never seen")
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) || after.Size() != before.Size() {
+		t.Error("forgetting an entry that was not there rewrote the file")
+	}
+	if _, ok := loadPadCache()["abc"]; !ok {
+		t.Error("the entry that was there did not survive")
+	}
+}
