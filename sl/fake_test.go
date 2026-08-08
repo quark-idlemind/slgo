@@ -25,6 +25,7 @@ package sl
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -270,6 +271,68 @@ func (f *fakeBackend) AnswerNames(t *testing.T, names map[msg.UUID]string) {
 	}
 }
 
+// ServeInventory answers the inventory reads a folder listing makes.
+//
+// FolderItems does not go over the wire at all -- inventory is AIS, an
+// ordinary GET returning LLSD -- so everything built on it, which is
+// Take and Worn and EnsureAttached, needs a folder to read rather than
+// a message to relay.  contents is asked afresh for every request, so a
+// folder that is empty until something has been taken into it can say
+// so.
+func (f *fakeBackend) ServeInventory(t *testing.T, contents func(folder msg.UUID) []*Item) {
+	t.Helper()
+	f.ServeCap(t, agent.InventoryCap, func(w http.ResponseWriter, r *http.Request) {
+		// The path is /category/<folder>/children.
+		var id msg.UUID
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		for i, p := range parts {
+			if p == "category" && i+1 < len(parts) {
+				id, _ = msg.ParseUUID(parts[i+1])
+			}
+		}
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		io.WriteString(w, folderLLSD(id, contents(id)))
+	})
+}
+
+// folderLLSD is what AIS says about one folder: the folder itself, and
+// its items under _embedded.  Only the fields anything here reads are
+// filled in.
+func folderLLSD(folder msg.UUID, items []*Item) string {
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" ?><llsd><map>`)
+	fmt.Fprintf(&b, `<key>category_id</key><string>%s</string>`, folder)
+	fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string>`, testInvRoot)
+	b.WriteString(`<key>name</key><string>a folder</string>`)
+	b.WriteString(`<key>type_default</key><integer>-1</integer>`)
+	b.WriteString(`<key>version</key><integer>1</integer>`)
+	b.WriteString(`<key>_embedded</key><map><key>categories</key><map/><key>items</key><map>`)
+	for _, it := range items {
+		fmt.Fprintf(&b, `<key>%s</key><map>`, it.ID)
+		fmt.Fprintf(&b, `<key>item_id</key><string>%s</string>`, it.ID)
+		fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string>`, folder)
+		fmt.Fprintf(&b, `<key>asset_id</key><string>%s</string>`, it.AssetID)
+		fmt.Fprintf(&b, `<key>name</key><string>%s</string>`, xmlText(it.Name))
+		fmt.Fprintf(&b, `<key>desc</key><string>%s</string>`, xmlText(it.Desc))
+		fmt.Fprintf(&b, `<key>type</key><integer>%d</integer>`, it.Type)
+		fmt.Fprintf(&b, `<key>inv_type</key><integer>%d</integer>`, it.InvType)
+		fmt.Fprintf(&b, `<key>flags</key><integer>%d</integer>`, it.Flags)
+		b.WriteString(`<key>permissions</key><map>`)
+		fmt.Fprintf(&b, `<key>group_mask</key><integer>%d</integer>`, it.GroupMask)
+		fmt.Fprintf(&b, `<key>everyone_mask</key><integer>%d</integer>`, it.EveryoneMask)
+		fmt.Fprintf(&b, `<key>next_owner_mask</key><integer>%d</integer>`, it.NextOwnerMask)
+		b.WriteString(`</map></map>`)
+	}
+	b.WriteString(`</map><key>links</key><map/></map></map></llsd>`)
+	return b.String()
+}
+
+func xmlText(s string) string {
+	var b bytes.Buffer
+	xml.EscapeText(&b, []byte(s))
+	return b.String()
+}
+
 // ServeCap points a capability at an http server that lives as long as
 // the test.
 //
@@ -330,6 +393,89 @@ func (f *fakeBackend) describe() string {
 		return "nothing"
 	}
 	return strings.Join(names, ", ")
+}
+
+// aside runs a call that cannot return until the session has been told
+// something, and hands back a wait for its answer.
+//
+// The test goroutine is the only one that may Relay -- Relay fails the
+// test when nothing reads it, and a failure from anywhere else is a
+// panic rather than a failure -- so a call that waits for the simulator
+// has to be the one that moves aside.  Everything here that waits does:
+// Rez waits for the region to describe the prim, Wear for it to say the
+// attachment went on.
+func aside[T any](t *testing.T, fn func() (T, error)) (wait func() (T, error)) {
+	t.Helper()
+	type answer struct {
+		v   T
+		err error
+	}
+	done := make(chan answer, 1)
+	go func() {
+		v, err := fn()
+		done <- answer{v, err}
+	}()
+	return func() (T, error) {
+		t.Helper()
+		select {
+		case a := <-done:
+			return a.v, a.err
+		case <-time.After(60 * time.Second):
+			var zero T
+			t.Fatalf("the call set aside never returned: it is still waiting " +
+				"to be told something the test did not relay")
+			return zero, nil
+		}
+	}
+}
+
+// asideErr is aside for the calls that answer with an error alone,
+// which is most of the ones that change something.
+func asideErr(t *testing.T, fn func() error) (wait func() error) {
+	t.Helper()
+	w := aside(t, func() (struct{}, error) { return struct{}{}, fn() })
+	return func() error {
+		t.Helper()
+		_, err := w()
+		return err
+	}
+}
+
+// waitFor polls until something holds, and fails the test if it never
+// does.  It is for watching a call that is running aside: what it has
+// done so far is only visible from outside.
+func waitFor(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatalf("gave up waiting for %s", what)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
+// waitSent waits until a message of one kind has gone out, and answers
+// with the first of them.  A test driving a call that is running aside
+// has to know it has got as far as asking before it answers.
+func waitSent[T msg.Message](t *testing.T, f *fakeBackend) T {
+	t.Helper()
+	return waitSentN[T](t, f, 1)
+}
+
+// waitSentN is waitSent for the nth of them.  A call that asks the same
+// question twice has to be told apart from one that has only asked once
+// -- SetName asks what an object is called after every attempt, and
+// answering its first question as though it were its second confirms a
+// rename that has not happened yet.
+func waitSentN[T msg.Message](t *testing.T, f *fakeBackend, n int) T {
+	t.Helper()
+	var got []T
+	waitFor(t, fmt.Sprintf("message %d of a kind the call has not sent yet", n), func() bool {
+		got = sentOf[T](f)
+		return len(got) >= n
+	})
+	return got[n-1]
 }
 
 // sentOf returns the messages of one kind, which is what an assertion
