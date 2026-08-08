@@ -46,6 +46,7 @@ import (
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/auth"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 
@@ -195,22 +196,160 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 }
 
 // serveInventory puts the tree behind the AIS capability.
+//
+// Reading is a GET, and the two ways of changing something are a DELETE
+// and a PATCH: rm, emptytrash and renaming all go over AIS rather than
+// UDP, because the UDP messages for them are accepted and ignored.  So a
+// fake that only answered GET would leave every command that changes
+// inventory failing for want of a route, and each of them would pass its
+// test for the wrong reason.
 func (f *fakeGrid) serveInventory(t *testing.T) {
 	t.Helper()
 	f.ServeCap(t, agent.InventoryCap, func(w http.ResponseWriter, r *http.Request) {
-		id := capFolderID(r.URL.Path)
-		depth, _ := strconv.Atoi(r.URL.Query().Get("depth"))
-
-		f.mu.Lock()
-		dir := findDir(f.inv, id)
-		f.mu.Unlock()
-		if dir == nil {
-			http.Error(w, "no such folder", http.StatusNotFound)
+		body, status := f.inventoryRequest(r)
+		if status != http.StatusOK {
+			http.Error(w, body, status)
 			return
 		}
 		w.Header().Set("Content-Type", "application/llsd+xml")
-		io.WriteString(w, `<?xml version="1.0" ?><llsd>`+dirLLSD(dir, testRoot, depth)+`</llsd>`)
+		io.WriteString(w, body)
 	})
+}
+
+// inventoryRequest answers one AIS request against the tree, and is
+// where the tree is changed.
+func (f *fakeGrid) inventoryRequest(r *http.Request) (string, int) {
+	const empty = `<?xml version="1.0" ?><llsd><map/></llsd>`
+	kind, id, children := invPath(r.URL.Path)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	switch r.Method {
+	case "DELETE":
+		switch {
+		case kind == "item":
+			if !removeItem(f.inv, id) {
+				return "no such item", http.StatusNotFound
+			}
+		case children:
+			dir := findDir(f.inv, id)
+			if dir == nil {
+				return "no such folder", http.StatusNotFound
+			}
+			dir.Dirs, dir.Items = nil, nil
+		default:
+			if !removeDir(f.inv, id) {
+				return "no such folder", http.StatusNotFound
+			}
+		}
+		return empty, http.StatusOK
+
+	case "PATCH":
+		// Only the name is read back out again, so only the name is
+		// applied; the rest of what AIS takes here is permissions,
+		// which nothing in this package sets.
+		var name string
+		if v, err := llsd.Decode(bytes.NewReader(readAll(r))); err == nil {
+			name, _ = llsd.Map(v)["name"].(string)
+		}
+		if name == "" {
+			return "nothing to change", http.StatusBadRequest
+		}
+		if kind == "item" {
+			it := findItem(f.inv, id)
+			if it == nil {
+				return "no such item", http.StatusNotFound
+			}
+			it.Name = name
+			return empty, http.StatusOK
+		}
+		dir := findDir(f.inv, id)
+		if dir == nil {
+			return "no such folder", http.StatusNotFound
+		}
+		dir.Name = name
+		return empty, http.StatusOK
+	}
+
+	dir := findDir(f.inv, capFolderID(r.URL.Path))
+	if dir == nil {
+		return "no such folder", http.StatusNotFound
+	}
+	depth, _ := strconv.Atoi(r.URL.Query().Get("depth"))
+	return `<?xml version="1.0" ?><llsd>` + dirLLSD(dir, testRoot, depth) + `</llsd>`, http.StatusOK
+}
+
+func readAll(r *http.Request) []byte {
+	b, _ := io.ReadAll(r.Body)
+	return b
+}
+
+// invPath is what an AIS request names: the kind, the id, and whether it
+// is about the contents rather than the thing itself.  The forms are
+// /item/<id>, /category/<id> and /category/<id>/children.
+func invPath(path string) (kind string, id msg.UUID, children bool) {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) < 2 {
+		return "", msg.UUID{}, false
+	}
+	id, _ = msg.ParseUUID(parts[1])
+	return parts[0], id, len(parts) > 2 && parts[2] == "children"
+}
+
+func findItem(d *invDir, id msg.UUID) *invItem {
+	if d == nil {
+		return nil
+	}
+	for _, it := range d.Items {
+		if it.ID == id {
+			return it
+		}
+	}
+	for _, sub := range d.Dirs {
+		if got := findItem(sub, id); got != nil {
+			return got
+		}
+	}
+	return nil
+}
+
+// removeItem takes an item out of wherever in the tree it is, and says
+// whether there was one.
+func removeItem(d *invDir, id msg.UUID) bool {
+	if d == nil {
+		return false
+	}
+	for i, it := range d.Items {
+		if it.ID == id {
+			d.Items = append(d.Items[:i], d.Items[i+1:]...)
+			return true
+		}
+	}
+	for _, sub := range d.Dirs {
+		if removeItem(sub, id) {
+			return true
+		}
+	}
+	return false
+}
+
+// removeDir is removeItem for a folder, which takes what is inside it
+// with it.
+func removeDir(d *invDir, id msg.UUID) bool {
+	if d == nil {
+		return false
+	}
+	for i, sub := range d.Dirs {
+		if sub.ID == id {
+			d.Dirs = append(d.Dirs[:i], d.Dirs[i+1:]...)
+			return true
+		}
+		if removeDir(sub, id) {
+			return true
+		}
+	}
+	return false
 }
 
 // ServeCap points a capability at an http server that lives as long as
