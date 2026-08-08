@@ -44,7 +44,14 @@ type Agent struct {
 	done     chan struct{}
 	doneOnce sync.Once
 	errOnce  sync.Once
-	err      error
+
+	// err is why the session ended, and is atomic because done can be
+	// closed without it.  Close closes done itself, and a goroutine
+	// still on its way down can call fail afterwards -- so a reader
+	// woken by done has no ordering edge to the write, and a plain
+	// field is read and written at once.  errOnce makes it one store
+	// ever, which is what atomic.Value needs.
+	err atomic.Value
 
 	// Signals for the handshake, each closed once.
 	anyPacket signal
@@ -314,7 +321,9 @@ func (a *Agent) spawn(fn func() error) {
 }
 
 func (a *Agent) fail(err error) {
-	a.errOnce.Do(func() { a.err = err })
+	if err != nil {
+		a.errOnce.Do(func() { a.err.Store(err) })
+	}
 	a.doneOnce.Do(func() { close(a.done) })
 	if a.cancel != nil {
 		a.cancel()
@@ -506,8 +515,8 @@ func (a *Agent) await(ctx context.Context, ch <-chan struct{}, timeout time.Dura
 	case <-ch:
 		return nil
 	case <-a.done:
-		if a.err != nil {
-			return a.err
+		if err := a.Err(); err != nil {
+			return err
 		}
 		return fmt.Errorf("agent: session ended waiting for %s", what)
 	case <-ctx.Done():
@@ -527,7 +536,16 @@ func (a *Agent) Handle(name string, fn msg.Handler, opts ...msg.HandlerOption) e
 func (a *Agent) Done() <-chan struct{} { return a.done }
 
 // Err reports why the session ended, or nil for a clean shutdown.
-func (a *Agent) Err() error { return a.err }
+//
+// Safe to read at any time, including the moment Done fires: a session
+// closed from outside rather than failed can still be setting this as
+// the caller reads it.
+func (a *Agent) Err() error {
+	if v := a.err.Load(); v != nil {
+		return v.(error)
+	}
+	return nil
+}
 
 // RegionName is the simulator'a name, once RegionHandshake has arrived.
 // Group is one of the avatar's memberships.

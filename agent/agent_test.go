@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"sync"
@@ -559,6 +560,39 @@ func TestPresenceCanBeDisabled(t *testing.T) {
 	for _, name := range sim.got() {
 		if name == "AgentUpdate" {
 			t.Fatal("AgentUpdate was sent with presence disabled")
+		}
+	}
+}
+
+// TestErrIsSafeToReadAsTheSessionGoesDown: Err is read the moment Done
+// fires -- server.Hosted.supervise does exactly that -- and a session
+// that was closed from outside rather than having failed can still be
+// setting it at that moment.
+//
+// Close closes done itself, without an error, and a goroutine still on
+// its way down calls fail afterwards.  So the reader woken by done has
+// no ordering edge to that write, and while err was a plain field the
+// two happened at once.  Whether the race is reported depends on the
+// interleaving, so this asks for it repeatedly.
+func TestErrIsSafeToReadAsTheSessionGoesDown(t *testing.T) {
+	for range 200 {
+		a := &Agent{done: make(chan struct{})}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		// What Close does with done, without the rest of Close, which
+		// wants a circuit underneath it.
+		go func() { defer wg.Done(); a.doneOnce.Do(func() { close(a.done) }) }()
+		go func() { defer wg.Done(); a.fail(errors.New("the circuit went away")) }()
+
+		<-a.Done()
+		_ = a.Err()
+		wg.Wait()
+
+		// Whichever way round they went, the reason survives: fail is
+		// the only thing that has one.
+		if a.Err() == nil {
+			t.Fatal("the session ended with no reason at all")
 		}
 	}
 }
