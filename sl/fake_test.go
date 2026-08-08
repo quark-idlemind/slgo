@@ -1,0 +1,555 @@
+package sl
+
+// A grid that is not there.
+//
+// Everything in this package reaches the world through Backend, so a
+// fake one is the difference between testing the package and testing
+// almost none of it.  Without a backend a test can only build a bare
+// Session by hand and call the private handlers; Send, the reader
+// goroutine, and every call that asks the grid a question are out of
+// reach.  That is why so much of this package was only ever exercised
+// with SLGO_TEST_ADDR set -- not because the code needs a grid, but
+// because the tests had no way to pretend to be one.
+//
+// fakeBackend answers from fields instead of from a simulator, and
+// records what was sent.  newFakeSession wraps one in a real Session
+// through New, so the reader goroutine is running and a relayed
+// message travels the path it would from the grid: decoded, handled,
+// delivered to subscriptions.
+//
+// It complements newTestSession in chat_test.go rather than replacing
+// it.  That one builds the subscription machinery and nothing else,
+// which is all a test of the subscription machinery should depend on;
+// this one is for anything that has to reach the far end.
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/msg"
+)
+
+var _ Backend = (*fakeBackend)(nil)
+
+// Who the fake says we are.  New refuses a backend with no agent or
+// session id, so these are load bearing rather than decoration.
+var (
+	testAgentID   = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
+	testSessionID = msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")
+	testRegionID  = msg.MustParseUUID("a4fd7e57-7e57-c0de-80da-1b63ae00812a")
+	testInvRoot   = msg.MustParseUUID("23077e57-7e57-c0de-622e-77274d813d21")
+)
+
+// sentMessage is one message the session put on the wire, with the
+// flag it asked for: reliable and unreliable are different promises,
+// and a call that gets it wrong is worth catching.
+type sentMessage struct {
+	Msg      msg.Message
+	Reliable bool
+}
+
+// fakeBackend is a Backend with nothing behind it.
+//
+// Build one with newFake, or newFakeSession for one already wrapped in
+// a Session.  Every field is read under the lock, so a test may change
+// an answer while the session is running -- a friend list that grows, a
+// Send that starts failing -- without racing the reader.
+type fakeBackend struct {
+	mu sync.Mutex
+
+	info *Info
+
+	// msgs is the relay, and is unbuffered on purpose; see Relay.
+	msgs     chan *Message
+	done     chan struct{}
+	doneOnce sync.Once
+	err      error
+
+	// sent is everything the session put on the wire, in order, and
+	// noted is every friendship it recorded through NoteFriend.
+	sent  []sentMessage
+	noted []Friend
+
+	// sendErr, when set, is what Send answers with, and nothing is
+	// recorded.  This is how the other half of every call that sends
+	// something -- the half where the message never went -- is
+	// reached.
+	sendErr error
+
+	// onSend, when set, is called with each message after it is
+	// recorded and without the lock held.  A test that wants the far
+	// end to answer relays the answer from here, which is what a
+	// simulator does; see AnswerNames.
+	//
+	// It must not be used to answer something the reader goroutine
+	// itself sends: relaying from inside such a call would have the
+	// reader waiting for itself.
+	onSend func(msg.Message)
+
+	presence    *Presence
+	presenceErr error
+
+	region      *Region
+	regionKnown bool
+	regionErr   error
+
+	objects    []*Seen
+	objectsErr error
+
+	friends    []Friend
+	friendsErr error
+	noteErr    error
+	flushErr   error
+
+	// locks is what has been taken, and lockedBy is who TryLock
+	// should say holds one rather than handing it over.
+	locks    map[string]bool
+	lockedBy string
+	lockErr  error
+
+	// caps maps a capability name to the base URL serving it; see
+	// ServeCap.
+	caps   map[string]string
+	capErr error
+}
+
+// newFake builds a backend that answers plausibly and reaches nothing.
+//
+// The answers are the ones a session standing in a region would get,
+// because most calls ask for a few of them on the way past -- an
+// instant message carries the position it was sent from -- and a test
+// about something else should not have to say so.
+func newFake(t *testing.T) *fakeBackend {
+	t.Helper()
+	f := &fakeBackend{
+		info: &Info{
+			Name:          "fake",
+			AgentID:       testAgentID,
+			SessionID:     testSessionID,
+			AvatarName:    "Quark Idlemind",
+			Region:        "Test Region",
+			InventoryRoot: testInvRoot,
+			Channel:       "slgo test 1.0",
+		},
+		msgs:  make(chan *Message),
+		done:  make(chan struct{}),
+		locks: map[string]bool{},
+		caps:  map[string]string{},
+		presence: &Presence{
+			Position: msg.Vector3{X: 128, Y: 128, Z: 25},
+			LookAt:   msg.Vector3{X: 1},
+			Camera:   msg.Vector3{X: 128, Y: 128, Z: 26},
+			Region:   "Test Region",
+		},
+		region:      &Region{ID: testRegionID, Name: "Test Region", Handle: 1099511628032},
+		regionKnown: true,
+	}
+	t.Cleanup(func() { f.Close() })
+	return f
+}
+
+// newFakeSession is a real Session over a fake backend, with the
+// reader goroutine running.
+//
+// Going through New rather than filling a Session in by hand is the
+// point: the maps New builds and the ones it leaves nil are part of
+// what the session does, and a test that built its own would be
+// testing a session that does not exist.
+func newFakeSession(t *testing.T) (*Session, *fakeBackend) {
+	t.Helper()
+	f := newFake(t)
+	w, err := New(f)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// Waiting for the reader makes a goroutine left running a failure
+	// here, rather than a puzzle three tests later.
+	t.Cleanup(func() {
+		f.Close()
+		select {
+		case <-w.readDone:
+		case <-time.After(5 * time.Second):
+			t.Error("the reader goroutine did not stop when the session ended")
+		}
+	})
+	return w, f
+}
+
+// barrierID is a message number the template does not have.  See
+// Relay.
+var barrierID = msg.MakeID(msg.FreqLow, 65530)
+
+// TestTheRelayBarrierIsNotAMessage: Relay works only because the
+// reader throws the barrier away.  If the template ever grows this
+// number, every Relay in the package would quietly be feeding the
+// session a second message nobody asked for.
+func TestTheRelayBarrierIsNotAMessage(t *testing.T) {
+	if info := msg.Lookup(barrierID); info != nil {
+		t.Fatalf("the relay barrier is %s, which the session would act on", info.Name)
+	}
+}
+
+// Relay hands a message to the session as though the grid had sent it,
+// and returns once the reader has finished with it.
+//
+// The waiting is the point.  A test that relays something and then
+// asserts on what the session did with it is otherwise racing the
+// reader, and it is a race the test usually wins -- which is worse
+// than losing it, because it fails once a month on somebody else's
+// machine instead.  So the message is followed by a number the
+// template does not have, which the reader takes and discards: the
+// reader handles one message at a time, so its taking the second means
+// it has finished the first.
+func (f *fakeBackend) Relay(t *testing.T, m msg.Message) {
+	t.Helper()
+	body, err := m.Encode()
+	if err != nil {
+		t.Fatalf("encoding %s: %v", m.MsgInfo().Name, err)
+	}
+	f.RelayRaw(t, &Message{
+		ID: msg.IDOf(m), Name: m.MsgInfo().Name, Body: body, At: time.Now(),
+	})
+}
+
+// RelayRaw is Relay for a message whose bytes the test built itself,
+// which is what a test of the decoding wants.
+func (f *fakeBackend) RelayRaw(t *testing.T, raw *Message) {
+	t.Helper()
+	f.put(t, raw)
+	f.put(t, &Message{ID: barrierID, Name: "slgo relay barrier", At: time.Now()})
+}
+
+func (f *fakeBackend) put(t *testing.T, raw *Message) {
+	t.Helper()
+	select {
+	case f.msgs <- raw:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("nothing read the relay: is a session attached to this backend?")
+	}
+}
+
+// AnswerNames makes the fake reply to UUIDNameRequest the way a
+// simulator does, from a table of who is who.
+//
+// Several calls ask for names and then wait for them -- FriendList and
+// Nearby both do -- so a backend that never answers turns each of them
+// into a three second pause and a list of "(3ac37e57)".
+func (f *fakeBackend) AnswerNames(t *testing.T, names map[msg.UUID]string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		q, ok := m.(*msg.UUIDNameRequest)
+		if !ok {
+			return
+		}
+		r := &msg.UUIDNameReply{}
+		for _, b := range q.UUIDNameBlock {
+			n, ok := names[b.ID]
+			if !ok {
+				continue
+			}
+			first, last, _ := strings.Cut(n, " ")
+			r.UUIDNameBlock = append(r.UUIDNameBlock, msg.UUIDNameReply_UUIDNameBlock{
+				ID:        b.ID,
+				FirstName: append([]byte(first), 0),
+				LastName:  append([]byte(last), 0),
+			})
+		}
+		if len(r.UUIDNameBlock) > 0 {
+			f.Relay(t, r)
+		}
+	}
+}
+
+// ServeCap points a capability at an http server that lives as long as
+// the test.
+//
+// Everything here that reaches a capability goes through DoCap, so
+// this is how those calls are exercised: httptest listens on loopback,
+// which is not the network and does not need one.
+func (f *fakeBackend) ServeCap(t *testing.T, name string, h http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	s := httptest.NewServer(h)
+	t.Cleanup(s.Close)
+	f.mu.Lock()
+	f.caps[name] = s.URL
+	f.mu.Unlock()
+	return s
+}
+
+// ---------------------------------------------------------- assertions
+
+// Sent is everything the session has put on the wire, in order.
+func (f *fakeBackend) Sent() []sentMessage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]sentMessage(nil), f.sent...)
+}
+
+// Forget drops the record of what was sent, so a test making several
+// calls can assert on each without counting from the beginning.
+func (f *fakeBackend) Forget() {
+	f.mu.Lock()
+	f.sent = nil
+	f.mu.Unlock()
+}
+
+// FailSends makes every Send from now on answer with err and record
+// nothing.  This is how the other half of every call that sends
+// something -- the half where the message never went -- is reached.
+func (f *fakeBackend) FailSends(err error) {
+	f.mu.Lock()
+	f.sendErr = err
+	f.mu.Unlock()
+}
+
+// Noted is every friendship the session recorded through NoteFriend.
+func (f *fakeBackend) Noted() []Friend {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Friend(nil), f.noted...)
+}
+
+// describe names everything sent, for a failure that has to say what
+// went out instead of what was wanted.
+func (f *fakeBackend) describe() string {
+	var names []string
+	for _, s := range f.Sent() {
+		names = append(names, s.Msg.MsgInfo().Name)
+	}
+	if len(names) == 0 {
+		return "nothing"
+	}
+	return strings.Join(names, ", ")
+}
+
+// sentOf returns the messages of one kind, which is what an assertion
+// usually wants: not what went out, but what ImprovedInstantMessages
+// went out.
+func sentOf[T msg.Message](f *fakeBackend) []T {
+	var out []T
+	for _, s := range f.Sent() {
+		if m, ok := s.Msg.(T); ok {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// onlySent is sentOf insisting on exactly one.  Most calls send one
+// message, and a test that saw two was watching something else happen.
+func onlySent[T msg.Message](t *testing.T, f *fakeBackend) T {
+	t.Helper()
+	got := sentOf[T](f)
+	if len(got) != 1 {
+		var zero T
+		t.Fatalf("%d messages of type %T went out, want 1; all of them: %s",
+			len(got), zero, f.describe())
+	}
+	return got[0]
+}
+
+// ------------------------------------------------------------- backend
+
+func (f *fakeBackend) Info() *Info { return f.info }
+
+func (f *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) error {
+	f.mu.Lock()
+	err, onSend := f.sendErr, f.onSend
+	if err == nil {
+		f.sent = append(f.sent, sentMessage{Msg: m, Reliable: reliable})
+	}
+	f.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if onSend != nil {
+		onSend(m)
+	}
+	return nil
+}
+
+func (f *fakeBackend) Messages() <-chan *Message { return f.msgs }
+func (f *fakeBackend) Done() <-chan struct{}     { return f.done }
+
+func (f *fakeBackend) Err() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.err
+}
+
+func (f *fakeBackend) Presence(ctx context.Context, drawDistance float32) (*Presence, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.presenceErr != nil {
+		return nil, f.presenceErr
+	}
+	if f.presence == nil {
+		return &Presence{}, nil
+	}
+	// A draw distance above zero sets it, as the real ones do, so a
+	// caller reading the answer back sees what it asked for.
+	if drawDistance > 0 {
+		f.presence.DrawDistance = drawDistance
+	}
+	p := *f.presence
+	return &p, nil
+}
+
+// Objects filters the way the real backends do, so that a caller
+// asking for one object does not have to sift the region itself.
+func (f *fakeBackend) Objects(ctx context.Context, named, id string) ([]*Seen, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.objectsErr != nil {
+		return nil, f.objectsErr
+	}
+	out := make([]*Seen, 0, len(f.objects))
+	for _, o := range f.objects {
+		if id != "" && !strings.EqualFold(o.ID.String(), id) {
+			continue
+		}
+		if named != "" && o.Name != named {
+			continue
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func (f *fakeBackend) Region(ctx context.Context) (*Region, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.regionErr != nil {
+		return nil, false, f.regionErr
+	}
+	return f.region, f.regionKnown, nil
+}
+
+func (f *fakeBackend) Lock(ctx context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.lockErr != nil {
+		return f.lockErr
+	}
+	f.locks[name] = true
+	return nil
+}
+
+func (f *fakeBackend) Unlock(name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.locks, name)
+	return nil
+}
+
+func (f *fakeBackend) TryLock(ctx context.Context, name string) (bool, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.lockErr != nil {
+		return false, "", f.lockErr
+	}
+	if f.lockedBy != "" {
+		return false, f.lockedBy, nil
+	}
+	f.locks[name] = true
+	return true, "", nil
+}
+
+// Flush empties what the backend was holding and says how much that
+// was, which is what makes a second call answer zero.
+func (f *fakeBackend) Flush(ctx context.Context) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.flushErr != nil {
+		return 0, f.flushErr
+	}
+	n := len(f.objects)
+	f.objects = nil
+	return n, nil
+}
+
+func (f *fakeBackend) Friends(ctx context.Context) ([]Friend, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.friendsErr != nil {
+		return nil, f.friendsErr
+	}
+	return append([]Friend(nil), f.friends...), nil
+}
+
+func (f *fakeBackend) NoteFriend(ctx context.Context, id msg.UUID, online bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.noteErr != nil {
+		return f.noteErr
+	}
+	f.noted = append(f.noted, Friend{ID: id, Online: online})
+	f.friends = append(f.friends, Friend{ID: id, Online: online})
+	return nil
+}
+
+func (f *fakeBackend) HasCap(name string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.caps[name]
+	return ok
+}
+
+func (f *fakeBackend) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
+	f.mu.Lock()
+	err, base := f.capErr, f.caps[r.Cap]
+	f.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+
+	url := r.URL
+	if url == "" {
+		if base == "" {
+			return nil, fmt.Errorf("fake: no %s capability", r.Cap)
+		}
+		url = base + r.Path
+	}
+	method := r.Method
+	if method == "" {
+		method = "GET"
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(r.Body))
+	if err != nil {
+		return nil, err
+	}
+	if r.Type != "" {
+		req.Header.Set("Content-Type", r.Type)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return &agent.CapResponse{Status: resp.StatusCode, Body: body}, nil
+}
+
+// Close ends the session, which is what stops the reader and closes
+// every subscription.  Closing twice is not an error, since the test
+// cleanup and the test itself may both do it.
+func (f *fakeBackend) Close() error {
+	f.doneOnce.Do(func() {
+		close(f.msgs)
+		close(f.done)
+	})
+	return nil
+}

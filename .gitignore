@@ -24,3 +24,7 @@
 *.a
 *.test
 *.out
+
+# Notes written while raising coverage: what is still uncovered and why.
+# They are working notes about the tests, not documentation of the code.
+/coverage-notes/
