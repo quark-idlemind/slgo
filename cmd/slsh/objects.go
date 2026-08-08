@@ -36,6 +36,11 @@ var objectCommands = map[string]*command{
 		brief: "move to a position in this region",
 		run:   cmdTP,
 	},
+	"place": {
+		usage: "place NAME X Y Z",
+		brief: "move a rezzed object to a position",
+		run:   cmdPlace,
+	},
 	"agents": {
 		usage: "agents",
 		brief: "the sessions this daemon holds, oldest first; * is the default",
@@ -151,20 +156,9 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			"slgod's to do and is not built; log in there instead (slgod -start).")
 	}
 
-	var v msg.Vector3
-	for i, s := range rest {
-		f, err := strconv.ParseFloat(s, 32)
-		if err != nil {
-			return fmt.Errorf("%q is not a number", s)
-		}
-		switch i {
-		case 0:
-			v.X = float32(f)
-		case 1:
-			v.Y = float32(f)
-		case 2:
-			v.Z = float32(f)
-		}
+	v, err := position(rest)
+	if err != nil {
+		return err
 	}
 
 	if err := sh.s.TeleportLocal(ctx, v, 30*time.Second); err != nil {
@@ -176,6 +170,76 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	}
 	fmt.Fprintf(out, "%s at %.0f, %.0f, %.0f\n", p.Region, p.Position.X, p.Position.Y, p.Position.Z)
 	return nil
+}
+
+// cmdPlace moves a rezzed object.
+//
+// It exists because taking an object and rezzing it again does not put
+// it back: a rez happens where you ask, and "where it was" is not
+// something Second Life remembers for you.  Anything that takes an
+// object as part of a round trip has to note where it stood and put it
+// back itself.
+func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var flags helpOnly
+	rest, done, err := subOptions("place", "NAME X Y Z", &flags, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(rest) != 4 {
+		return fmt.Errorf("place NAME X Y Z -- an object in this region, and where to put it")
+	}
+
+	at, err := position(rest[1:])
+	if err != nil {
+		return err
+	}
+
+	found, err := sh.s.ObjectsNamed(ctx, rest[0], 60*time.Second)
+	if err != nil {
+		return err
+	}
+	if len(found) == 0 {
+		return fmt.Errorf("no object named %q in this region", rest[0])
+	}
+	if len(found) > 1 {
+		return fmt.Errorf("%d objects are called %q; rename one, or move it by hand", len(found), rest[0])
+	}
+	o := found[0]
+
+	// Its own rotation and scale.  Place sets all three at once, so
+	// inventing the other two would quietly reshape whatever it was
+	// pointed at.
+	if err := sh.s.Place(ctx, &o.Object, at, o.Rotation, o.Scale); err != nil {
+		return err
+	}
+
+	// Wait for it to have moved, rather than read it back once.
+	//
+	// Place is fire and forget -- the simulator answers with an
+	// ObjectUpdate whenever it gets round to it -- so an immediate
+	// re-read returns the position the object had BEFORE the move and
+	// reports it with total confidence.  Observed: "place-probe is at
+	// 33.0, 73.0, 1000.2" for an object that was by then at 36, 78,
+	// 1002.  A stale answer is worse than none, because nothing about
+	// it looks wrong.
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		again, err := sh.s.ObjectByID(ctx, o.ID, 20*time.Second)
+		if err != nil {
+			return err
+		}
+		if near(again.Position, at) {
+			fmt.Fprintf(out, "%s is at %.1f, %.1f, %.1f\n",
+				again.Name, again.Position.X, again.Position.Y, again.Position.Z)
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s did not move; it is still at %.1f, %.1f, %.1f\n"+
+				"        (a parcel that will not have objects moved refuses silently)",
+				again.Name, again.Position.X, again.Position.Y, again.Position.Z)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 // cmdAgents lists what the daemon is holding.
@@ -344,6 +408,38 @@ func cmdAuto(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		fmt.Fprintf(out, "auto -n %d sets up the rest\n", len(session.AutoPoints))
 	}
 	return nil
+}
+
+// near is whether an object has arrived where it was sent.  Loose
+// enough for the rounding a position makes on its way through a
+// float32 and back, tight enough that a metre's difference is not
+// "arrived".
+func near(a, b msg.Vector3) bool {
+	const tol = 0.25
+	d := func(x, y float32) float32 {
+		if x > y {
+			return x - y
+		}
+		return y - x
+	}
+	return d(a.X, b.X) < tol && d(a.Y, b.Y) < tol && d(a.Z, b.Z) < tol
+}
+
+// position reads three numbers as a place in the region.
+func position(args []string) (msg.Vector3, error) {
+	var v msg.Vector3
+	if len(args) != 3 {
+		return v, fmt.Errorf("a position is three numbers: X Y Z")
+	}
+	into := []*float32{&v.X, &v.Y, &v.Z}
+	for i, s := range args {
+		f, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(s), ","), 32)
+		if err != nil {
+			return msg.Vector3{}, fmt.Errorf("%q is not a number", s)
+		}
+		*into[i] = float32(f)
+	}
+	return v, nil
 }
 
 // helpOnly is for a command whose only flag is --help.

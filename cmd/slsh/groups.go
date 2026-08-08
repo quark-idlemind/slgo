@@ -69,7 +69,7 @@ var groups = []group{
 	{
 		name:    "region",
 		brief:   "where this avatar is and what is around it",
-		members: []string{"where", "tp", "who", "look", "objects", "worn"},
+		members: []string{"where", "tp", "who", "look", "objects", "worn", "place"},
 	},
 	{
 		name:  "giving",

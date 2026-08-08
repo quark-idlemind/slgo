@@ -567,12 +567,13 @@ not tell", and that is exactly the wrong way for this to fail.
 
 ## Building, from the client
 
-`slgo chat` records public chat; `slgo-build` rezzes two prims, links
-them and reads back what the simulator says.  Both are client side --
-the server relays bytes and knows nothing about prims or chat.
+`slgo chat` records public chat; `slgo-build2` builds a multi-prim
+object in one call and checks the result against what was asked for.
+Both are client side -- the server relays bytes and knows nothing about
+prims or chat.
 
     slgo -for 1h -log chat.log chat
-    slgo-build -at 193,206,27 -chatlog chat.log
+    slgo-build2 -at 193,206,27
 
 Three things that cost time and are not written down anywhere obvious:
 
@@ -596,10 +597,10 @@ message is the whole of listening to channel 0.
 
 ## Assets and object inventory
 
-`slgo-asset` runs the whole chain against a live simulator: rez a prim,
-create a notecard and a script in inventory, upload their contents, put
-both inside the prim, read the prim's inventory back, edit the notecard
-where it sits, and pull a copy out again.
+`slgo-inv` runs the whole chain against a live simulator: make a folder,
+create a notecard and a script, upload their contents, put them inside a
+prim, read the prim's inventory back, and take it all away again --
+cleaning up after itself either way.
 
 Uploading an asset is two steps.  The first posts the item id to a
 capability and the simulator answers with a one-shot uploader URL; the

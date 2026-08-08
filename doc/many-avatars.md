@@ -475,7 +475,7 @@ The one thing that will surprise a user rather than a developer: the
 moment a second avatar is hosted, every command run without `--agent`
 changes behaviour.  Before stage 4 it starts *failing* with "name one";
 after stage 4 it silently picks.  Anything with a hardcoded flag default
--- and several `cmd/slgo-*` programs default to `"example"` or `"example"` --
+-- and several `cmd/slgo-*` programs hardcoded one --
 keeps working but may now be naming an avatar that exists and is not the
 one meant.  Worth a sweep of those defaults at the same time as stage 4,
 and worth a line in `doc/guide.md` when the whole is done.
