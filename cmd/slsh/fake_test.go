@@ -41,7 +41,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/auth"
@@ -821,11 +823,18 @@ func (d *fakeDaemon) Host(context.Context, *pb.HostRequest) (*pb.HostResponse, e
 	return d.host, nil
 }
 
-// Logout answers the way slgod does, response and error together, which
-// is the shape TestLogoutRefusalCannotNameWhoIsUsingIt is about.
+// Logout answers the way slgod does: a refusal is a status, and who is
+// holding the session travels in its details, since a unary call gives
+// back a message or a status and never both.
 func (d *fakeDaemon) Logout(context.Context, *pb.LogoutRequest) (*pb.LogoutResponse, error) {
 	if d.fail != nil {
-		return d.logout, d.fail
+		st := status.New(codes.FailedPrecondition, d.fail.Error())
+		if len(d.logout.GetClients()) > 0 {
+			if with, err := st.WithDetails(d.logout); err == nil {
+				st = with
+			}
+		}
+		return nil, st.Err()
 	}
 	return d.logout, nil
 }

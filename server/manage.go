@@ -182,9 +182,18 @@ func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 	// and a reading half taken, and throwing that away should be a
 	// decision rather than a side effect.
 	if who := h.clientNames(); len(who) > 0 && !req.GetForce() {
-		return &pb.LogoutResponse{Clients: who}, status.Errorf(codes.FailedPrecondition,
+		st := status.Newf(codes.FailedPrecondition,
 			"%s is in use by %s; use force to log out anyway",
 			name, strings.Join(who, ", "))
+		// The names travel in the status details as well as the
+		// sentence.  A unary call carries a response or an error and
+		// never both, so returning them on a LogoutResponse alongside
+		// this put them somewhere the client could not read: it gets a
+		// nil response with the error, every time.
+		if with, err := st.WithDetails(&pb.LogoutResponse{Clients: who}); err == nil {
+			st = with
+		}
+		return nil, st.Err()
 	}
 
 	// Stopped BEFORE logging out, so the supervisor reads a deliberate

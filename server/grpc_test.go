@@ -466,6 +466,48 @@ func TestSubscriptionsAreNamesInTwoMaps(t *testing.T) {
 	}
 }
 
+// TestAClearedSubscriptionStopsTheRelay: a client that asks for nothing
+// gets nothing, which is the whole use of asking.
+//
+// Replace is what carries it.  An empty Set does not survive proto3 --
+// an empty repeated field is written as no field at all -- so this
+// arrived indistinguishable from a frame that named no Set, and the
+// wipe below never happened.  A client on a flooded link asking to be
+// left alone was quietly ignored.
+func TestAClearedSubscriptionStopsTheRelay(t *testing.T) {
+	t.Parallel()
+	c := &Client{subs: map[msg.ID]bool{}, names: map[string]bool{}}
+
+	c.setSubs(&pb.Subscribe{Set: []string{"*"}, Replace: true})
+	if !c.wants(msg.LookupName("ChatFromSimulator").ID) {
+		t.Fatal("a subscription to everything does not want chat")
+	}
+
+	if got := c.setSubs(&pb.Subscribe{Replace: true}); len(got) != 0 {
+		t.Errorf("clearing left %v subscribed", got)
+	}
+	if c.wants(msg.LookupName("ChatFromSimulator").ID) || c.wantsEvent("anything at all") {
+		t.Error("the relay carried on after the subscription was cleared")
+	}
+}
+
+// TestASetWithNamesStillWipesWithoutTheFlag: a client older than
+// Replace cannot say what it meant by an empty Set, but a Set with
+// something in it has always meant replace and still must.
+func TestASetWithNamesStillWipesWithoutTheFlag(t *testing.T) {
+	t.Parallel()
+	c := &Client{subs: map[msg.ID]bool{}, names: map[string]bool{}}
+
+	c.setSubs(&pb.Subscribe{Set: []string{"*"}})
+	c.setSubs(&pb.Subscribe{Set: []string{"ChatFromSimulator"}})
+	if c.wantsEvent("anything at all") {
+		t.Error(`"*" survived a Set that replaced it`)
+	}
+	if !c.wants(msg.LookupName("ChatFromSimulator").ID) {
+		t.Error("the name that replaced it did not take")
+	}
+}
+
 // TestTheStreamRefusesFramesThatAreOutOfOrder: an attach names the
 // session, so it has to come first and cannot come twice -- a second
 // one would be a client changing session under its own subscriptions.

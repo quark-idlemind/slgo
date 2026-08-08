@@ -598,10 +598,20 @@ func (x *Locked) GetHolder() string {
 // Subscribe adjusts what this stream relays.  Exactly one field is
 // used: set replaces the subscription, add and remove adjust it.
 type Subscribe struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Set           []string               `protobuf:"bytes,1,rep,name=set,proto3" json:"set,omitempty"`
-	Add           []string               `protobuf:"bytes,2,rep,name=add,proto3" json:"add,omitempty"`
-	Remove        []string               `protobuf:"bytes,3,rep,name=remove,proto3" json:"remove,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Set    []string               `protobuf:"bytes,1,rep,name=set,proto3" json:"set,omitempty"`
+	Add    []string               `protobuf:"bytes,2,rep,name=add,proto3" json:"add,omitempty"`
+	Remove []string               `protobuf:"bytes,3,rep,name=remove,proto3" json:"remove,omitempty"`
+	// Replace says set is meant, even when it is empty.
+	//
+	// It exists because proto3 writes an empty repeated field as no
+	// field at all, so "subscribe to nothing" and "leave the
+	// subscription alone" arrive identically -- which made clearing a
+	// subscription a silent no-op, on exactly the connection that most
+	// needs it.  A server still honours a set that has names in it
+	// without this, so a client older than the field works as it always
+	// did.
+	Replace       bool `protobuf:"varint,4,opt,name=replace,proto3" json:"replace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -655,6 +665,13 @@ func (x *Subscribe) GetRemove() []string {
 		return x.Remove
 	}
 	return nil
+}
+
+func (x *Subscribe) GetReplace() bool {
+	if x != nil {
+		return x.Replace
+	}
+	return false
 }
 
 // Attach must be the first frame on a stream.
@@ -3091,11 +3108,12 @@ const file_slgo_proto_rawDesc = "" +
 	"\x06Locked\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04held\x18\x02 \x01(\bR\x04held\x12\x16\n" +
-	"\x06holder\x18\x03 \x01(\tR\x06holder\"G\n" +
+	"\x06holder\x18\x03 \x01(\tR\x06holder\"a\n" +
 	"\tSubscribe\x12\x10\n" +
 	"\x03set\x18\x01 \x03(\tR\x03set\x12\x10\n" +
 	"\x03add\x18\x02 \x03(\tR\x03add\x12\x16\n" +
-	"\x06remove\x18\x03 \x03(\tR\x06remove\"<\n" +
+	"\x06remove\x18\x03 \x03(\tR\x06remove\x12\x18\n" +
+	"\areplace\x18\x04 \x01(\bR\areplace\"<\n" +
 	"\x06Attach\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x1c\n" +
 	"\tsubscribe\x18\x02 \x03(\tR\tsubscribe\"e\n" +

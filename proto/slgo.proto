@@ -212,6 +212,17 @@ message Subscribe {
   repeated string set = 1;
   repeated string add = 2;
   repeated string remove = 3;
+
+  // Replace says set is meant, even when it is empty.
+  //
+  // It exists because proto3 writes an empty repeated field as no
+  // field at all, so "subscribe to nothing" and "leave the
+  // subscription alone" arrive identically -- which made clearing a
+  // subscription a silent no-op, on exactly the connection that most
+  // needs it.  A server still honours a set that has names in it
+  // without this, so a client older than the field works as it always
+  // did.
+  bool replace = 4;
 }
 
 // Attach must be the first frame on a stream.

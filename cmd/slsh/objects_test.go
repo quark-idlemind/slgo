@@ -515,24 +515,15 @@ func TestLogoutSaysItWillStayOut(t *testing.T) {
 	}
 }
 
-// TestLogoutRefusalCannotNameWhoIsUsingIt.
+// TestLogoutRefusalNamesWhoIsUsingIt: the person deciding whether to
+// force it has to be told what they would be interrupting.
 //
-// slgod refuses a logout while clients are attached and returns the
-// names alongside the error, and cmdLogout prints them: "attached:
-// autobench, slsh".  It never happens.  A gRPC unary call carries
-// either a message or a status, so a handler that returns both has its
-// message dropped by the transport, and the client receives (nil, err)
-// -- which is what the fake here does too, since it answers exactly the
-// way the server does.  The names are therefore unreachable, and the
-// person who has to decide whether to force it is told only that
-// something is using it.
-//
-// The fix belongs in the server: the names have to travel in the status
-// details, or the refusal has to be an ordinary response with a reason
-// in it rather than an error.
-func TestLogoutRefusalCannotNameWhoIsUsingIt(t *testing.T) {
-	t.Skip("demonstrates the dropped client list; see coverage-notes/slsh-shell.md")
-
+// It used not to be told.  slgod returned the names on a LogoutResponse
+// beside the error, and a gRPC unary call carries a message or a status
+// and never both -- so the transport dropped the message and the client
+// got (nil, err) every time.  The names go in the status details now,
+// which is the one place they survive next to a refusal.
+func TestLogoutRefusalNamesWhoIsUsingIt(t *testing.T) {
 	x, d := newDaemonShell(t)
 	d.logout = &pb.LogoutResponse{Clients: []string{"autobench", "slsh"}}
 	d.fail = errors.New("first is in use by autobench, slsh; use force to log out anyway")

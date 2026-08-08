@@ -105,7 +105,11 @@ func (c *Client) setSubs(s *pb.Subscribe) []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if s.Set != nil {
+	// Replace or a set with something in it.  The second half is for a
+	// client older than the flag, which cannot say what it meant by an
+	// empty one -- proto3 does not carry the difference -- and so gets
+	// what it always got.
+	if s.Replace || s.Set != nil {
 		c.subs = map[msg.ID]bool{}
 		c.names = map[string]bool{}
 		c.all = false

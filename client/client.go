@@ -69,6 +69,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/llsd"
@@ -431,8 +432,13 @@ func (c *Conn) Info() *pb.AgentInfo {
 }
 
 // Subscribe replaces the set of messages relayed to this stream.
+//
+// With no names it clears it, and nothing is relayed until something
+// is added back.  Replace is what says so: an empty repeated field
+// does not survive proto3, so the flag is the only thing that tells
+// the far end this was meant.
 func (c *Conn) Subscribe(names ...string) error {
-	return c.sub(&pb.Subscribe{Set: nonNil(names)})
+	return c.sub(&pb.Subscribe{Set: names, Replace: true})
 }
 
 // Watch adds to it.
@@ -453,15 +459,6 @@ func (c *Conn) sub(s *pb.Subscribe) error {
 		return errors.New("client: not attached")
 	}
 	return stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_Subscribe{Subscribe: s}})
-}
-
-// nonNil keeps a Set of nothing distinguishable from no Set at all, so
-// Subscribe() with no names really does clear the subscription.
-func nonNil(in []string) []string {
-	if in == nil {
-		return []string{}
-	}
-	return in
 }
 
 // Send puts a message on the circuit.  The server assigns the sequence
@@ -589,7 +586,20 @@ func (c *Conn) Host(ctx context.Context, name string, force bool) (*pb.HostRespo
 // refusal names them: a benchmark mid-run has a script installed and a
 // reading half taken, and losing that should be a decision.
 func (c *Conn) Logout(ctx context.Context, name string, force bool) (*pb.LogoutResponse, error) {
-	return c.grid.Logout(ctx, &pb.LogoutRequest{Agent: name, Force: force})
+	r, err := c.grid.Logout(ctx, &pb.LogoutRequest{Agent: name, Force: force})
+	if err == nil {
+		return r, nil
+	}
+	// A refusal says who is holding the session, and says it in the
+	// status details, because a unary call hands back a response or an
+	// error and never both.  Handing it on beside the error is what
+	// lets a caller name them without reading the sentence.
+	for _, d := range status.Convert(err).Details() {
+		if lr, ok := d.(*pb.LogoutResponse); ok {
+			return lr, err
+		}
+	}
+	return r, err
 }
 
 func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {

@@ -107,15 +107,20 @@ func TestAnAuthenticatedClientIsKnownByName(t *testing.T) {
 	}
 
 	// And that name is what a refusal to log the session out names, so
-	// that a person knows what they are about to interrupt.
+	// that a person knows what they are about to interrupt.  It comes
+	// back twice over: in the sentence, and as a field somebody can act
+	// on without reading English.
 	//
-	// The names are read off the error text rather than the response:
-	// Logout returns both a LogoutResponse and a status, and gRPC
-	// carries one or the other, so the Clients field never arrives.
-	// See the note in coverage-notes/daemon.md.
-	_, err = c.Logout(ctx, "example", false)
+	// The field is the part that took work.  Returning it on a
+	// LogoutResponse beside the status did not reach here at all -- a
+	// unary call carries a message or a status -- so it travels in the
+	// status details, which is where the two can go together.
+	got, err := c.Logout(ctx, "example", false)
 	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(errText(err), "slgo") {
 		t.Errorf("logout refusal = %v; want a FailedPrecondition naming slgo", err)
+	}
+	if who := got.GetClients(); len(who) != 1 || who[0] != "slgo" {
+		t.Errorf("the refusal came back naming %v, want the attached client", who)
 	}
 }
 

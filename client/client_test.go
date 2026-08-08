@@ -868,29 +868,26 @@ func TestSubscribingReplacesAddsAndRemovesSeparately(t *testing.T) {
 	}
 }
 
-// TestClearingASubscriptionSurvivesTheWire: nonNil exists so that a Set
-// of nothing stays distinguishable from no Set at all, and the daemon
-// tells them apart the same way -- server.setSubs wipes the subscription
-// only when Set is non-nil.  It does not survive: proto3 writes an empty
-// repeated field as no field, so what arrives is nil either way and
-// Subscribe() with no names quietly changes nothing on a link already
-// being flooded.
+// TestClearingASubscriptionSurvivesTheWire: a client that names nothing
+// must stop receiving what it was receiving.
 //
-// The correct behaviour is that a client that names nothing stops
-// receiving everything it was receiving.  Distinguishing the two needs
-// something on the wire that an empty list cannot erase -- a bool beside
-// the field, or the whole message wrapped in an optional -- which is a
-// change to slgo.proto and to both ends.
+// This used to be sent as an empty Set and nothing else, on the theory
+// that a Set of nothing stays distinguishable from no Set at all.  It
+// does not: proto3 writes an empty repeated field as no field, so what
+// arrived was nil either way, and the daemon -- which wipes the
+// subscription only when Set is non-nil -- quietly changed nothing, on
+// a link already being flooded.  Replace is the bit an empty list
+// cannot erase.
 func TestClearingASubscriptionSurvivesTheWire(t *testing.T) {
-	t.Skip("demonstrates the empty Subscribe.Set that proto3 erases; see coverage-notes/client-session.md")
 	t.Parallel()
 	d, conn := attachFake(t)
 
 	if err := conn.Subscribe(); err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	if s := waitForSubscribe(t, d); s.Set == nil {
-		t.Error("clearing the subscription reached the daemon as no Set at all, which it ignores")
+	if s := waitForSubscribe(t, d); !s.GetReplace() {
+		t.Errorf("clearing the subscription reached the daemon as %+v, "+
+			"which it cannot tell from being left alone", s)
 	}
 }
 
