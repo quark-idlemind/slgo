@@ -57,6 +57,13 @@ type fakeGrid struct {
 	obj  sl.Object
 	held string // what the object already holds, by name
 
+	// seen is what the region says is in range, which for the object a
+	// script runs in is the whole of what a caller has to go on.  It
+	// starts as the one object and is added to by a test that needs an
+	// ATTACHMENT rather than a prim -- the shared auto object is worn,
+	// and is found by the inventory item it was worn from.
+	seen []*sl.Seen
+
 	caps map[string]string
 
 	// says is what the script says when it runs, in order, and sentinel
@@ -84,13 +91,11 @@ type fakeGrid struct {
 	sources []string
 }
 
-// newFakeSession is a real sl.Session over a grid that is not there,
-// holding one object with one script already inside it.
-//
-// Already inside it because creating one costs six seconds of waiting for
-// the object to admit it is there, and none of what automate does is
-// about that.
-func newFakeSession(t *testing.T, held string) (*sl.Session, *sl.Object, *fakeGrid) {
+// newFakeGrid is the grid on its own, for the runs that reach it through
+// a daemon rather than as a backend of their own.  See daemon_test.go:
+// everything a hosted session asks for is answered from here, and the
+// daemon is a proxy in front of it.
+func newFakeGrid(t *testing.T, held string) *fakeGrid {
 	t.Helper()
 	f := &fakeGrid{
 		info: &sl.Info{
@@ -104,8 +109,21 @@ func newFakeSession(t *testing.T, held string) (*sl.Session, *sl.Object, *fakeGr
 		caps:     map[string]string{},
 		sentinel: "DONE",
 	}
+	f.seen = []*sl.Seen{{Object: f.obj}}
 	t.Cleanup(func() { f.Close() })
 	f.serveUpload(t)
+	return f
+}
+
+// newFakeSession is a real sl.Session over a grid that is not there,
+// holding one object with one script already inside it.
+//
+// Already inside it because creating one costs six seconds of waiting for
+// the object to admit it is there, and none of what automate does is
+// about that.
+func newFakeSession(t *testing.T, held string) (*sl.Session, *sl.Object, *fakeGrid) {
+	t.Helper()
+	f := newFakeGrid(t, held)
 
 	s, err := sl.New(f)
 	if err != nil {
@@ -305,13 +323,17 @@ func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Pres
 func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if named != "" && named != f.obj.Name {
-		return nil, nil
+	out := make([]*sl.Seen, 0, len(f.seen))
+	for _, s := range f.seen {
+		if named != "" && named != s.Object.Name {
+			continue
+		}
+		if id != "" && !strings.EqualFold(id, s.Object.ID.String()) {
+			continue
+		}
+		out = append(out, s)
 	}
-	if id != "" && !strings.EqualFold(id, f.obj.ID.String()) {
-		return nil, nil
-	}
-	return []*sl.Seen{{Object: f.obj}}, nil
+	return out, nil
 }
 
 func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
