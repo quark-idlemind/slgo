@@ -1,7 +1,57 @@
 // Command msggen turns Linden Lab's message_template.msg into Go
 // structures with Encode and Decode methods.
 //
-//	msggen -template message_template.msg -out msg/messages_gen.go
+//	msggen -out msg/messages_gen.go            # from the shipping viewer
+//	msggen -template ../viewer/scripts/messages/message_template.msg
+//	msggen -template https://.../some/other/message_template.msg
+//
+// The template is Linden Lab's, not ours, and is not kept in this
+// repository -- it is fetched, and -template also takes a path for
+// building offline or against a checkout.  Whichever was used is
+// recorded in the generated file's header, so the output says where it
+// came from.
+//
+// # Where to get it
+//
+// There are three, and they do not agree.  The default is the first:
+//
+//	The shipping viewer -- what the grid demonstrably speaks.
+//	https://raw.githubusercontent.com/secondlife/viewer/main/scripts/messages/message_template.msg
+//
+//	The master template -- what Linden Lab's servers accept, which is
+//	a superset and moves ahead of the client.
+//	https://raw.githubusercontent.com/secondlife/master-message-template/master/message_template.msg
+//
+//	Firestorm's -- the viewer's, plus additions for OpenSim.
+//	https://raw.githubusercontent.com/FirestormViewer/phoenix-firestorm/master/scripts/messages/message_template.msg
+//
+// # Why the viewer's is the default
+//
+// It is the only one of the three that describes what the grid actually
+// sends.  The other two each carry a block that Second Life never puts
+// on the wire.
+//
+// Measured rather than assumed, because a message can be wrong in a way
+// that never fails: a trailing Variable block that the sender omitted
+// decodes as empty and reports no error, so believing the template is
+// free until the day it matters.
+//
+//   - Firestorm adds Size to MapBlockReply, for OpenSim's variable-sized
+//     regions.  Asking Second Life for a region list and counting the
+//     bytes, three replies of 4, 28 and 26 regions accounted for every
+//     byte with none left over: the grid sends no Size block at all.
+//
+//   - The master template adds NewScriptInfo to RezScript, so that a new
+//     script can start from an inventory item rather than the stock one.
+//     Nothing in the viewer sends it or mentions the name, and it was
+//     added in February 2026 and changed again in March -- a field was
+//     dropped -- so it is server-side work the client has not taken up.
+//
+// Take the master template when you want to reach something newer than
+// the client, Firestorm's when you want to talk to OpenSim, and expect
+// to test what you get either way.
+//
+// # What this program is not
 //
 // The wire behaviour lives in package msg, not here: the generated
 // structs carry the template's own type names in `ll` struct tags and
@@ -12,14 +62,18 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"go/format"
+	"io"
+	"net/http"
 	"os"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ---------------------------------------------------------------- model
@@ -515,16 +569,72 @@ func formatNumber(m Message) string {
 
 // ----------------------------------------------------------------- main
 
+// The three places the template is published.  See the package comment
+// for how they differ and why ViewerURL is the default.
+const (
+	// ViewerURL is the shipping client's copy: what the grid speaks.
+	ViewerURL = "https://raw.githubusercontent.com/secondlife/viewer/main/scripts/messages/message_template.msg"
+
+	// MasterURL is what Linden Lab's servers accept.  Their README
+	// calls it the official public description of the protocol, and
+	// the viewer's build verifies its own copy against it -- see
+	// TEMPLATE_VERIFIER_MASTER_URL in indra/cmake/Variables.cmake.
+	MasterURL = "https://raw.githubusercontent.com/secondlife/master-message-template/master/message_template.msg"
+
+	// FirestormURL is the viewer's plus OpenSim's additions.
+	FirestormURL = "https://raw.githubusercontent.com/FirestormViewer/phoenix-firestorm/master/scripts/messages/message_template.msg"
+)
+
+// read fetches the template from a URL, or reads it from a file.
+//
+// Which it is comes from the string itself rather than a second flag: a
+// path and a URL are never confusable, and one flag means one thing to
+// remember.
+func read(src string) ([]byte, error) {
+	if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
+		return os.ReadFile(src)
+	}
+
+	// Bounded, because a build that hangs on a network read with no
+	// explanation is worse than one that fails saying so.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, src, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching %s: %w\n"+
+			"        -template also takes a path, for building offline", src, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetching %s: %s", src, resp.Status)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", src, err)
+	}
+	// A proxy or a login page answering 200 with HTML would otherwise
+	// reach the parser and be reported as a syntax error on line 1.
+	if !bytes.HasPrefix(data, []byte("//")) && !bytes.Contains(data[:min(len(data), 200)], []byte("version")) {
+		return nil, fmt.Errorf("%s did not answer with a message template", src)
+	}
+	return data, nil
+}
+
 func main() {
 	var (
-		src  = flag.String("template", "message_template.msg", "path to message_template.msg")
+		src  = flag.String("template", ViewerURL, "URL or path of message_template.msg")
 		out  = flag.String("out", "msg/messages_gen.go", "file to write, or - for stdout")
 		pkg  = flag.String("package", "msg", "package name for the generated file")
 		stat = flag.Bool("stats", false, "print a summary of what was parsed")
 	)
 	flag.Parse()
 
-	data, err := os.ReadFile(*src)
+	data, err := read(*src)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "msggen: %v\n", err)
 		os.Exit(1)

@@ -1,15 +1,19 @@
 # slgo — Second Life message layer in Go
 
 The first piece of a Go rewrite of the C client one directory up: the
-483 UDP messages in `message_template.msg`, as Go structs that encode
-and decode themselves.
+UDP messages of Linden Lab's `message_template.msg`, as Go structs that
+encode and decode themselves.
 
-    go generate ./msg      # regenerate msg/messages_gen.go
+    go generate ./msg      # fetch the template and regenerate
     go test ./...
+
+The template is Linden Lab's and is not kept here; `go generate` fetches
+it from the shipping viewer.  `cmd/msggen`'s documentation says where
+else it is published, and why that one is the default.
 
 ## Layout
 
-    cmd/msggen/         reads message_template.msg, writes Go
+    cmd/msggen/         fetches message_template.msg, writes Go
     cmd/slgod/          holds grid connections, serves clients
     cmd/slsh/           the shell: inventory, the world, and chat
     cmd/automate/       runs LSL scripts, prints what they said
@@ -971,3 +975,14 @@ not prove.
 `Receiver` allocates a message per packet through `New`. At the packet
 rates in the C client's stats — 600k in a long session — that is worth
 a pool eventually, but not before there is something to measure.
+
+## Licence
+
+Apache License 2.0.  The full text is in `LICENSE`.
+
+Second Life is Linden Lab's; this is an independent client and is not
+endorsed by or affiliated with them.
+
+`message_template.msg` is theirs and is deliberately not distributed
+here: `cmd/msggen` fetches it from where they publish it.  The generated
+`msg/messages_gen.go` is derived from it, and describes their protocol.

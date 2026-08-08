@@ -6,7 +6,7 @@
 // network order: the packet sequence number, IPADDR and IPPORT.
 package msg
 
-//go:generate go run ../cmd/msggen -template ../message_template.msg -out messages_gen.go
+//go:generate go run ../cmd/msggen -out messages_gen.go
 
 import (
 	"encoding/hex"

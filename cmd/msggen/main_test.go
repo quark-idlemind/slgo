@@ -1,9 +1,12 @@
 package main
 
 import (
-	"os"
+	"context"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 const sample = `
@@ -154,31 +157,87 @@ func TestParseErrors(t *testing.T) {
 	}
 }
 
-// TestParseRealTemplate is the one that matters: the actual file.
+// TestParseRealTemplate is the one that matters: the actual file, from
+// where Linden Lab publishes it.
+//
+// Fetched rather than kept here, for the same reason the generator
+// fetches it -- the template is theirs, and a copy in this repository
+// would be a stale second opinion, which is exactly what the last one
+// turned out to be.  Skipped when there is no network, so an offline
+// build still passes.
+//
+// What it checks is deliberately not an exact count.  The template is
+// somebody else's file and it moves; a test asserting "483 messages"
+// fails the day Linden Lab adds one, which says nothing about this
+// parser.  So: it parses, it is the right order of magnitude, and the
+// messages this client actually depends on are present and shaped as
+// expected.
 func TestParseRealTemplate(t *testing.T) {
-	src, err := os.ReadFile("../../message_template.msg")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ViewerURL, nil)
 	if err != nil {
-		t.Skipf("template not available: %v", err)
+		t.Fatal(err)
 	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Skipf("cannot reach %s: %v", ViewerURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Skipf("%s answered %s", ViewerURL, resp.Status)
+	}
+	src, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Skipf("reading %s: %v", ViewerURL, err)
+	}
+
 	msgs, err := Parse(src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(msgs) != 483 {
-		t.Errorf("parsed %d messages, want 483", len(msgs))
+	if len(msgs) < 400 {
+		t.Fatalf("parsed %d messages, which is too few to be the real template", len(msgs))
 	}
-	if _, err := Generate("msg", "message_template.msg", msgs); err != nil {
+	if _, err := Generate("msg", ViewerURL, msgs); err != nil {
 		t.Fatal(err)
 	}
 
-	blocks, fields := 0, 0
-	for _, m := range msgs {
-		for _, b := range m.Block {
-			blocks++
-			fields += len(b.Field)
+	// A message this client depends on, checked in full: the parser
+	// getting the shape right matters more than the count.
+	byName := map[string]*Message{}
+	for i := range msgs {
+		byName[msgs[i].Name] = &msgs[i]
+	}
+	chat, ok := byName["ChatFromSimulator"]
+	if !ok {
+		t.Fatal("the template has no ChatFromSimulator")
+	}
+	if chat.Freq != "Low" {
+		t.Errorf("ChatFromSimulator is %s frequency, want Low", chat.Freq)
+	}
+	if len(chat.Block) != 1 || chat.Block[0].Name != "ChatData" {
+		t.Fatalf("ChatFromSimulator has blocks %v, want one called ChatData", chat.Block)
+	}
+	for _, want := range []string{"FromName", "SourceID", "ChatType", "Message"} {
+		found := false
+		for _, f := range chat.Block[0].Field {
+			if f.Name == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("ChatFromSimulator.ChatData has no %s field", want)
 		}
 	}
-	if blocks != 905 || fields != 2985 {
-		t.Errorf("%d blocks and %d fields, want 905 and 2985", blocks, fields)
+
+	// And the ones every session depends on existing at all.
+	for _, want := range []string{
+		"UseCircuitCode", "CompleteAgentMovement", "AgentUpdate",
+		"PacketAck", "StartPingCheck", "RegionHandshake", "LogoutRequest",
+	} {
+		if _, ok := byName[want]; !ok {
+			t.Errorf("the template has no %s", want)
+		}
 	}
 }

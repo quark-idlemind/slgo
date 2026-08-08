@@ -15,6 +15,10 @@
 /automate
 /autobench
 
+# Linden Lab's message template.  msggen fetches it; a copy pulled down
+# for offline work is theirs and does not belong in this repository.
+/message_template.msg
+
 # Anything else built here.
 *.o
 *.a
