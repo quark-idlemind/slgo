@@ -914,11 +914,11 @@ A client asks for a channel of them and answers on the request itself:
 
     asks := w.Permissions(0)
     for q := range asks {
-        if q.Wants.Any(world.PermissionDebit | world.PermissionTeleport) {
+        if q.Wants.Any(sl.PermissionDebit | sl.PermissionTeleport) {
             q.Deny(ctx)
             continue
         }
-        q.Grant(ctx, world.PermissionTriggerAnimation)
+        q.Grant(ctx, sl.PermissionTriggerAnimation)
     }
 
 Grant sends only the bits named, and drops any that were not asked for.
