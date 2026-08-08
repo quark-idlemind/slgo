@@ -177,6 +177,45 @@ worth about six characters of name.
 
 ---
 
+## User-defined calls are not library calls
+
+The compiler treats the two differently, and the difference is the name.
+
+### A user function's name costs nothing
+
+Two user functions in the base script, called from the construct under
+test, differing only in the length of their names:
+
+| callee | name length | cost |
+|---|---|---|
+| `u1234()` | 5 | 328 |
+| `u1234567890abcde()` | 16 | **328** |
+
+Eleven more characters, no more memory. Against the library side, where
+eleven more characters cost eleven more bytes.
+
+So an `ll*` call **stores the name** and a user call does not.
+Inference, not measurement: library functions are bound by name at run
+time and user functions are resolved to a direct call when compiled.
+
+### Otherwise they cost about the same, except on the return path
+
+Matched for name length and signature, measured against the same base
+script:
+
+| shape | user | library | difference |
+|---|---|---|---|
+| void, no params, 5-char name | 328 | 324 | −4 |
+| one vector parameter, 8-char name | 360 | 364 | +4 |
+| returns a vector, 8-char name | 356 | **384** | **+28** |
+
+The first two differ by one quantum, in opposite directions, which is
+to say not at all. The third is seven quanta and is real: a library
+call carries something extra for returning a value that a user call
+does not.
+
+---
+
 ## What this means for a benchmark
 
 **The two modes answer different questions, and both are right.** `-1`
@@ -190,10 +229,18 @@ shared, so a construct measured at 1054 bytes for one copy costs 540 for
 each one after it. Give each copy a different literal and the two
 converge.
 
-**A construct's cost depends on its surroundings.** The same code
-measured in a script that already calls the same library function costs
-24 bytes less. There is no context-free answer, and a figure is only
-comparable against another taken the same way.
+**A construct's cost depends on its surroundings, and the effect is not
+small.** `foo_CNT(){llGetPos();}` measured 484 against one base script
+and 424 against another -- sixty bytes apart, for the same code. The
+second base script already contained a function returning a vector, so
+that machinery was paid for before the construct was measured. The same
+effect at a smaller scale: a construct costs 24 bytes less measured
+against a script that already calls the same library function, and the
+empty-function baseline itself moved between 40 and 48.
+
+There is no context-free answer. A figure is only comparable against
+another taken against the same base script, which is why every number
+in this document says what it was measured against.
 
 ---
 
@@ -217,6 +264,8 @@ Not covered, and worth knowing:
   refused with "Internal server compile error", as was a padding of
   2009. The practical limit is lower than the 62KB `autobench` assumes
   when estimating a copy count.
+- **Why a returned value costs a library call 28 bytes more than a user
+  call.** One matched pair, measured once.
 - **Whether any of this is stable.** These are measurements of one grid
   on one day. The 512-byte block and the 1:1 filler rate are structural
   enough to rely on; the constants are not.
