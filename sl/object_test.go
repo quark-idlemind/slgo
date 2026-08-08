@@ -233,17 +233,13 @@ func TestSetNameNeedsBothMessagesToGoOut(t *testing.T) {
 // the longest wait in this file -- so it is the one call where being
 // held past a cancellation is most obvious.
 //
-// It does not stop.  The context is passed to await, which honours it,
-// but the error await comes back with is discarded: the loop sees only
-// that the name has not arrived, and goes round again.  With a
-// cancelled context await returns at once, so the loop spins for the
-// full twenty seconds sending a question every time round, and then
-// reports a timeout rather than the cancellation.  The correct
-// behaviour is to return the context's error the first time await
-// reports it.
+// It used not to stop.  The context reached await, which honours it,
+// but the error await came back with was discarded: the loop saw only
+// that the name had not arrived and went round again.  With a
+// cancelled context await returns at once, so the loop spun flat out
+// for the full twenty seconds, asking the simulator every time round,
+// and then reported a timeout rather than the cancellation.
 func TestSetNameStopsWhenTheCallerGivesUp(t *testing.T) {
-	t.Skip("demonstrates SetName ignoring a cancelled context; see coverage-notes/sl-caches.md")
-
 	w, _ := newFakeSession(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

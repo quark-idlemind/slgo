@@ -25,6 +25,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -480,5 +481,29 @@ func TestFindingOursWillNotClaimSomebodyElsesPrim(t *testing.T) {
 	}
 	if o.ID != thePrim {
 		t.Errorf("rezAt took %s, which belongs to somebody else", o)
+	}
+}
+
+// TestSetDescriptionStopsWhenTheCallerGivesUp: the same promise SetName
+// makes, in the other twenty second loop in this package.
+//
+// This one had no pause of its own -- the only wait was inside
+// Properties -- so an error that came back at once sent it round again
+// at once.  A cancelled context did exactly that, and the loop span
+// flat out for the full twenty seconds before reporting a timeout that
+// was not the reason.
+func TestSetDescriptionStopsWhenTheCallerGivesUp(t *testing.T) {
+	t.Parallel()
+	w, _ := newFakeSession(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	err := w.SetDescription(ctx, &Object{ID: thePrim, Local: 77}, "a thing")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("SetDescription = %v, want the context's reason", err)
+	}
+	if waited := time.Since(start); waited > time.Second {
+		t.Errorf("SetDescription took %s to notice the caller had gone", waited)
 	}
 }

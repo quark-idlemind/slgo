@@ -184,6 +184,14 @@ func (w *Session) SetDescription(ctx context.Context, o *Object, desc string) er
 	for time.Now().Before(deadline) {
 		p, err := w.Properties(ctx, o, 5*time.Second)
 		if err != nil {
+			// A timeout means ask again, and has already cost five
+			// seconds of the twenty.  Anything else -- the caller
+			// gone, the circuit gone -- will not get better for being
+			// asked faster, and this loop has no pause of its own, so
+			// ignoring it span here flat out until the deadline.
+			if !errors.Is(err, ErrTimeout) {
+				return err
+			}
 			continue
 		}
 		if p.Description == desc {

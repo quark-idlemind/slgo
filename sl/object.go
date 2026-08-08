@@ -3,6 +3,7 @@ package sl
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"time"
 
@@ -80,10 +81,19 @@ func (w *Session) SetName(ctx context.Context, o *Object, name string) error {
 			return err
 		}
 		var got string
-		_ = w.await(ctx, 3*time.Second, "the new name", func() bool {
+		// A timeout here is the ordinary case and means ask again --
+		// the simulator answers a family request when it feels like
+		// it.  Anything else is the caller giving up, and has to come
+		// back as that.  Discarding it altogether made a cancelled
+		// context spin this loop flat out for the full twenty seconds
+		// and then report a timeout, which is neither true nor quick.
+		err := w.await(ctx, 3*time.Second, "the new name", func() bool {
 			got = w.objectNames[o.ID]
 			return got != ""
 		})
+		if err != nil && !errors.Is(err, ErrTimeout) {
+			return err
+		}
 		if got == name {
 			o.Name = name
 			return nil
