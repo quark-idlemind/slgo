@@ -543,6 +543,48 @@ message ObjectInfo {
   // was connected when it was described -- which is this server.
   uint32 attach_point = 11;
   string attach_item = 12;
+
+  // Rotation, and the prim's form.
+  //
+  // Both arrive with every update and neither can be asked for
+  // afterwards, so a client that wants to describe an object as it
+  // stands has to be told them by whoever was listening.
+  Quaternion rotation = 13;
+  PrimShape shape = 14;
+}
+
+// Quaternion is a rotation, unpacked: the wire form is three floats
+// with the fourth recovered by normalising, and this is after that.
+message Quaternion {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+  float w = 4;
+}
+
+// PrimShape is what gives a prim its form, in the protocol's own packed
+// units rather than anything a person would recognise.  Unpacking them
+// is sl.UnpackShape's business, and doing it here would put the same
+// arithmetic in two places.
+message PrimShape {
+  uint32 path_curve = 1;
+  uint32 profile_curve = 2;
+  uint32 path_begin = 3;
+  uint32 path_end = 4;
+  uint32 path_scale_x = 5;
+  uint32 path_scale_y = 6;
+  uint32 path_shear_x = 7;
+  uint32 path_shear_y = 8;
+  int32 path_twist = 9;
+  int32 path_twist_begin = 10;
+  int32 path_radius_offset = 11;
+  int32 path_taper_x = 12;
+  int32 path_taper_y = 13;
+  uint32 path_revolutions = 14;
+  int32 path_skew = 15;
+  uint32 profile_begin = 16;
+  uint32 profile_end = 17;
+  uint32 profile_hollow = 18;
 }
 
 message ObjectsResponse {

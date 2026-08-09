@@ -178,6 +178,8 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Owner:        parseUUIDOrZero(o.Owner),
 			Position:     fromPB(o.Position),
 			Scale:        fromPB(o.Scale),
+			Rotation:     quatFromPB(o.Rotation),
+			Shape:        shapeFromPB(o.Shape),
 			Parent:       o.Parent,
 			PCode:        uint8(o.Pcode),
 			TextureEntry: o.TextureEntry,
@@ -250,5 +252,33 @@ func infoFromPB(i *pb.AgentInfo) *Info {
 		InventoryRoot: parseUUIDOrZero(i.InventoryRoot),
 		Channel:       i.ChannelVersion,
 		Caps:          i.Caps,
+	}
+}
+
+// quatFromPB reads a rotation, treating a missing one as none.
+func quatFromPB(q *pb.Quaternion) msg.Quaternion {
+	if q == nil {
+		return msg.Quaternion{}
+	}
+	return msg.Quaternion{X: q.X, Y: q.Y, Z: q.Z}
+}
+
+// shapeFromPB reads the packed prim form.  The server leaves it out
+// for an object nothing has described, and the zero value says so.
+func shapeFromPB(p *pb.PrimShape) msg.PrimShape {
+	if p == nil {
+		return msg.PrimShape{}
+	}
+	return msg.PrimShape{
+		PathCurve: uint8(p.PathCurve), ProfileCurve: uint8(p.ProfileCurve),
+		PathBegin: uint16(p.PathBegin), PathEnd: uint16(p.PathEnd),
+		PathScaleX: uint8(p.PathScaleX), PathScaleY: uint8(p.PathScaleY),
+		PathShearX: uint8(p.PathShearX), PathShearY: uint8(p.PathShearY),
+		PathTwist: int8(p.PathTwist), PathTwistBegin: int8(p.PathTwistBegin),
+		PathRadiusOffset: int8(p.PathRadiusOffset),
+		PathTaperX:       int8(p.PathTaperX), PathTaperY: int8(p.PathTaperY),
+		PathRevolutions: uint8(p.PathRevolutions), PathSkew: int8(p.PathSkew),
+		ProfileBegin: uint16(p.ProfileBegin), ProfileEnd: uint16(p.ProfileEnd),
+		ProfileHollow: uint16(p.ProfileHollow),
 	}
 }

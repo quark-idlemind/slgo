@@ -486,6 +486,33 @@ func vec(v msg.Vector3) *pb.Vector3 {
 	return &pb.Vector3{X: v.X, Y: v.Y, Z: v.Z}
 }
 
+func quat(q msg.Quaternion) *pb.Quaternion {
+	return &pb.Quaternion{X: q.X, Y: q.Y, Z: q.Z, W: q.W()}
+}
+
+// shape crosses the eighteen packed numbers that give a prim its form.
+//
+// A prim that nothing has described yet packs to all zeros, and sending
+// that would be indistinguishable from a real shape at the far end, so
+// it is left out instead.
+func shape(p msg.PrimShape) *pb.PrimShape {
+	if p.IsZero() {
+		return nil
+	}
+	return &pb.PrimShape{
+		PathCurve: uint32(p.PathCurve), ProfileCurve: uint32(p.ProfileCurve),
+		PathBegin: uint32(p.PathBegin), PathEnd: uint32(p.PathEnd),
+		PathScaleX: uint32(p.PathScaleX), PathScaleY: uint32(p.PathScaleY),
+		PathShearX: uint32(p.PathShearX), PathShearY: uint32(p.PathShearY),
+		PathTwist: int32(p.PathTwist), PathTwistBegin: int32(p.PathTwistBegin),
+		PathRadiusOffset: int32(p.PathRadiusOffset),
+		PathTaperX:       int32(p.PathTaperX), PathTaperY: int32(p.PathTaperY),
+		PathRevolutions: uint32(p.PathRevolutions), PathSkew: int32(p.PathSkew),
+		ProfileBegin: uint32(p.ProfileBegin), ProfileEnd: uint32(p.ProfileEnd),
+		ProfileHollow: uint32(p.ProfileHollow),
+	}
+}
+
 // Objects returns what the region has told this session about itself.
 func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.ObjectsResponse, error) {
 	h, err := s.lookup(req.Agent)
@@ -515,6 +542,8 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			Text:         o.Text,
 			AttachPoint:  uint32(o.AttachPoint),
 			AttachItem:   attachItemString(o.AttachItem),
+			Rotation:     quat(o.Rotation),
+			Shape:        shape(o.Shape),
 		})
 	}
 	return out, nil

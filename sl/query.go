@@ -102,6 +102,10 @@ type Seen struct {
 	// been seen.  DecodeTextureEntry unpacks it.
 	TextureEntry []byte
 
+	// Shape is the prim's profile and path, still packed.  Form
+	// unpacks it into something with names.
+	Shape msg.PrimShape
+
 	// Text is the floating text above the object.
 	Text string
 
@@ -358,4 +362,18 @@ func (w *Session) ActiveGroup(ctx context.Context) (msg.UUID, error) {
 		return msg.UUID{}, err
 	}
 	return p.ActiveGroup, nil
+}
+
+// Form is what this prim is shaped like: a box, a sphere, a torus with
+// a hole in it.
+//
+// The second result says whether anything has described the prim at
+// all.  An object listed by name alone -- because something asked for
+// its name and nothing else -- has no shape yet, and a default box is
+// a plausible wrong answer rather than an obvious gap.
+func (s *Seen) Form() (Shape, bool) {
+	if s.Shape.IsZero() {
+		return Shape{}, false
+	}
+	return UnpackShape(s.Shape), true
 }

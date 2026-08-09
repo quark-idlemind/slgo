@@ -175,6 +175,7 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Parent:       o.Parent,
 			PCode:        o.PCode,
 			TextureEntry: o.TextureEntry,
+			Shape:        o.Shape,
 			Text:         o.Text,
 			AttachPoint:  o.AttachPoint,
 			AttachItem:   o.AttachItem,

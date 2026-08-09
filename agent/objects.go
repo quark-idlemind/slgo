@@ -36,6 +36,10 @@ type Object struct {
 	Position msg.Vector3
 	Rotation msg.Quaternion
 
+	// Shape is the prim's profile and path, still packed.  Both kinds
+	// of update carry it, so it is known as soon as anything is.
+	Shape msg.PrimShape
+
 	// Name is only known if something asked; an ObjectUpdate carries
 	// none.  Owner comes either from asking or from a compressed
 	// update, which does carry it.
@@ -256,6 +260,7 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 
 	v := o.seen(d.FullID)
 	v.Local, v.Parent, v.PCode, v.Scale = d.ID, d.ParentID, d.PCode, d.Scale
+	v.Shape = msg.ShapeOfUpdate(d)
 	if havePos {
 		v.Position, v.Rotation = pos, rot
 	}
@@ -333,6 +338,9 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	v := o.seen(c.FullID)
 	v.Local, v.Parent, v.PCode = c.LocalID, parent, c.PCode
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
+	if !c.Shape.IsZero() {
+		v.Shape = c.Shape
+	}
 	if !c.Owner.IsZero() {
 		v.Owner = c.Owner
 	}
