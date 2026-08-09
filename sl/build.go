@@ -34,6 +34,11 @@ type Prim struct {
 	// the wire as three floats with the fourth recovered by
 	// normalising, and all three zero recovers a W of one.
 	Rotation msg.Quaternion
+
+	// Shape is what the prim is: a box, a sphere, a torus with a hole
+	// in it.  The zero value is a box, since a prim asked for with
+	// nothing said about it has always been one.
+	Shape Shape
 }
 
 // Built is an object that was built.
@@ -118,7 +123,7 @@ func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 		size = msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}
 	}
 
-	o, err := w.rezAt(ctx, p.Position, size, p.Rotation)
+	o, err := w.rezAt(ctx, p.Position, size, p.Rotation, p.Shape)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +234,7 @@ func distance(a, b msg.Vector3) float32 {
 
 // rezAt is Rez with the scale and rotation given, and is what Build
 // uses.
-func (w *Session) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quaternion) (*Object, error) {
+func (w *Session) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quaternion, shape ...Shape) (*Object, error) {
 	w.mu.Lock()
 	before := make(map[uint32]bool, len(w.locals))
 	for _, l := range w.locals {
@@ -241,13 +246,23 @@ func (w *Session) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quat
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	d := &m.ObjectData
 	d.PCode, d.Material, d.AddFlags = 9, 3, 2
-	d.PathCurve, d.ProfileCurve = 16, 1
-	d.PathScaleX, d.PathScaleY = 100, 100
+
+	// The form to rez.  A box by default, since that is what asking
+	// for a prim and saying nothing else has always meant here.
+	form := DefaultShape()
+	if len(shape) > 0 && shape[0].Type != "" {
+		form = shape[0]
+	}
+	packed, err := form.Pack()
+	if err != nil {
+		return nil, err
+	}
+	packed.FillAdd(d)
 	d.BypassRaycast = 1
 	d.RayStart, d.RayEnd = at, at
 	d.Scale = scale
 	d.Rotation = rot
-	if err := w.Send(ctx, m); err != nil {
+	if err = w.Send(ctx, m); err != nil {
 		return nil, err
 	}
 	return w.findOurs(ctx, before, 15*time.Second)
