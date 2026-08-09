@@ -23,6 +23,8 @@ else it is published, and why that one is the default.
     internal/slhost/    where slgod is, asking sl-host when it is there
     sl/                 the client library: everything an avatar can do
     sl/backend.go       one interface, two ways to be connected
+    sl/image.go         textures as pictures: jpeg 2000 in, png out
+    sl/resize.go        getting a picture to a size the grid takes
     client/profile.go   credentials under ~/.config/slgo
     client/xmlrpc.go    XML-RPC decoding
     client/llsd.go      LLSD decoding and encoding
@@ -847,6 +849,260 @@ asset. Nothing guesses between the two, because a call that is
 sometimes an http fetch and sometimes a UDP transfer, with no way to
 tell which happened, is worse than being told.
 
+## Textures as pictures
+
+    img, err := s.TextureImage(ctx, id)                    // fetch and decode
+    b,   err := sl.EncodeTexture(img, sl.TextureOptions{}) // a codestream
+    it,  _, err := s.UploadImage(ctx, up, img, opts)       // both, and upload
+
+A texture is a JPEG 2000 codestream, which nothing on a desktop opens,
+so `slsh` deals in PNGs at both ends:
+
+    get 89a47e57-7e57-c0de-80c1-7f0bfad0ac8e     # by asset id
+    get -o wall.png /Textures/brick              # by inventory path
+    get --raw /Textures/brick                    # the codestream, undecoded
+
+    put -N photo.png                             # what it would do, and cost
+    put --round up --filter catmullrom photo.png
+    put -n "brick wall" -f /Textures/walls brick.png
+    put already.j2c                              # uploaded byte for byte
+    put -o tried.png --filter nearest photo.png  # to disk, to look at first
+
+`put` reads png, jpeg, gif, bmp and tiff, applies the EXIF orientation a
+camera leaves behind, resizes if it must, encodes, and uploads. It names
+the item after the file unless `-n` says otherwise. `--round`,
+`--round-x` and `--round-y` take nearest, up or down.
+
+`--filter` takes any of imaging's fifteen by name, and `put --filters`
+says which to pick -- keyed by **what you are uploading** rather than by
+what each filter is, since the person at the prompt has a picture in
+front of them and not a signal-processing question:
+
+    a photograph                           lanczos     the default
+    pixel art, or an icon with hard edges  nearest     invents no colours
+    a mask, or anything read as data       nearest     a blended value is a wrong value
+    a diagram, text, or a screenshot       catmullrom  sharp, quicker than lanczos
+    a picture lanczos leaves haloed        mitchell    much less ringing at edges
+    a big reduction, a quarter or less     box         plain averaging
+    ...
+
+The rest are listed after, grouped by family -- the cubics with the
+cubics and the windowed sincs with the sincs -- because "try another one
+of these" only helps if the alternatives are actually alike. A test
+asserts every filter the command accepts appears in the guide, so the
+two cannot drift.
+
+Three things about it are because an upload costs money and cannot be
+undone.
+
+`-N` does everything except the upload and reports what would have
+happened, fee included:
+
+    $ put -N --round up odd.png
+    odd.png: 500x333 -> 512x512, 10992 bytes, L$10
+    not uploaded: --dry-run
+
+`-o` goes further and writes the result to disk instead of uploading, so
+that what the filter and the rounding actually did can be looked at
+first. **The extension picks the format** -- png, jpg, gif, bmp, tiff,
+or one of the codestream extensions to get exactly the bytes the grid
+would store. It is the only thing a person typing a filename has
+already said about the format they want, and a flag saying it again is
+a flag that can disagree with the name:
+
+    $ put -o nearest.png --round up --filter nearest odd.png
+    odd.png: 500x333 -> 512x512, 8781 bytes, L$10
+    nearest.png: 512x512, not uploaded
+
+    $ put -o lanczos.png --round up --filter lanczos odd.png
+    odd.png: 500x333 -> 512x512, 10992 bytes, L$10
+
+-- where the 8781 against 10992 is the filter showing up in the
+compressed size as well as in the picture. A `.j2c` given to `-o` as a
+picture is decoded on the way out, since somebody asking for a PNG of
+one wants to see it rather than copy it.
+
+And a file that is already a codestream -- `.j2c`, `.j2k`, `.jpc`,
+`.jp2` -- goes up untouched rather than being decoded and re-encoded,
+which would cost quality for nothing.
+
+**An asset id is enough.** The content delivery network serves by id
+alone, so a texture on somebody else's object -- named nowhere in this
+avatar's inventory, belonging to an avatar this one has never met -- is
+fetchable the moment its id is known. Tried on the beta grid against
+textures owned by two other avatars, including Governor Linden: fetched
+and decoded, no permission involved. An id that is no asset comes back
+as a **503 from the edge cache**, not a 404.
+
+The codec is [`github.com/mububoki/jpeg2000`](https://github.com/mububoki/jpeg2000),
+pure Go with no dependencies of its own. It was chosen by testing rather
+than by reading: of the three pure-Go candidates on pkg.go.dev, one
+returned a flat grey square for a real Second Life texture -- no error,
+right dimensions, nothing in it -- while this one and
+`ajroetker/go-jpeg2000` agreed to within a rounding error and each
+decoded the other's output exactly. That interoperability is most of
+why this is believable, and the rest is that the grid itself accepts
+what it writes.
+
+Encoding is lossless below `LosslessArea` (128×128, the viewer's own
+cutoff) and lossy above it, aiming at `DefaultRatio` -- 8:1, which is
+about what Second Life's own textures are: the stock plywood is 98282
+bytes for 512×512. Five decomposition levels, as the viewer asks
+OpenJPEG for, so the grid can serve a lower resolution from a prefix of
+the stream. A gradient is the case where lossy is *bigger* than
+lossless, since the layers cost more than the rate control saves.
+
+`EncodeTexture` does not resize -- an image whose sides are not powers
+of two is refused, naming the size it would have to be. Resizing is a
+separate call, because it is two decisions and neither is this
+package's to make.
+
+## Resizing to a size the grid takes
+
+    img = sl.Resize(img, sl.ResizeOptions{
+        Filter:     &imaging.CatmullRom,
+        Horizontal: sl.RoundUp,
+        Vertical:   sl.RoundDown,
+    })
+
+    b, resized, err := sl.EncodeResized(img, ropts, topts)   // both at once
+
+Almost nothing anybody wants to upload is already a power of two by a
+power of two, so something has to resample. The two decisions are the
+caller's:
+
+- **Which way to round**, per axis. `RoundUp` loses nothing and can
+  quadruple the texture; `RoundDown` is cheaper and lossier -- 1023
+  becomes 512; `RoundNearest` is the viewer's own biased rule and the
+  default. The axes are separate because a wide banner may reasonably
+  want one thing of its width and another of its height.
+- **Which filter.** `sl.Filter` is
+  [imaging](https://github.com/disintegration/imaging)'s
+  `ResampleFilter`, so every filter that package offers works and none
+  needs re-listing here: NearestNeighbor, Box, Linear, Hermite,
+  MitchellNetravali, CatmullRom, BSpline, Gaussian, Bartlett, Lanczos
+  and the windowed sincs. The default is Lanczos, which is imaging's
+  recommendation for photographs -- a texture is resized once and
+  looked at for as long as it exists, so the slow good one is right.
+  NearestNeighbor is the one to reach for deliberately, for pixel art
+  that any smoothing ruins; there is a test that says the two really do
+  differ.
+
+The ceiling is not a choice: over 2048 a dimension comes down to 2048
+whatever the rounding says, `RoundUp` included, because the alternative
+is an image the grid refuses. An image already at an acceptable size is
+returned untouched rather than resampled to its own dimensions, which
+is neither free nor lossless.
+
+One thing to know about the dependency: imaging's last release is
+v1.6.2, from November 2019, and there has been none since -- the
+repository is not archived and has 31 issues open, so read that as
+stalled rather than as finished. What makes it tolerable is how little
+of it is load bearing here: `imaging.Resize` and the filter constants,
+nothing else. Its own dependency is `golang.org/x/image`, which this
+module pins to a current version rather than the 2019 one imaging asks
+for, since the old one carries decoders with known problems that
+nothing here calls but a scanner would still find.
+
+## Uploading a file, and what the grid does to it
+
+    it, res, err := s.UploadTexture(ctx, "a name", "why", folder, j2c)
+
+This is the one asset path that costs money -- L$10 a go, whatever the
+file -- and the only one where the grid makes the inventory item rather
+than the client. `SaveScript` and `SaveNotecard` write to an item that
+already exists, and `CreateItem` makes an item with nothing behind it;
+neither shape works for a texture, because there is no capability that
+fills in a texture somebody else created.
+
+Things are checked before anything is sent, since the capability takes
+any bytes at all and **charges before it looks** -- a refusal after that
+has still cost the fee:
+
+  - **The bytes are a JPEG 2000 codestream.** Second Life stores
+    textures as J2C and converts nothing -- a viewer converts the PNG
+    somebody chose before it uploads it. Sending the PNG is accepted,
+    charged for, and stored as a texture no viewer can decode.
+  - **The dimensions are ones the grid will take.** Read out of the SIZ
+    marker, which is where a codestream keeps them; see below.
+  - **The folder is named.** The grid would file it itself, but then
+    nothing knows where to read it back from, so the system folder for
+    the type is looked up and sent.
+
+### What size a texture may be
+
+Measured against the beta grid on 2026-08-09, one upload per row:
+
+| size | verdict |
+|---|---|
+| 512×512 | uploads |
+| 1024×64 | uploads -- **16:1 is fine** |
+| 2048×256 | uploads |
+| 1×1 | uploads |
+| 300×200 | *"Invalid width: Value not a power of 2."* |
+| 4096×256 | *"Invalid width: Value too large."* |
+| 256×4096 | *"Invalid height: Value too large."* |
+
+So the rule is **each dimension independently a power of two, at most
+2048**. Any power of two by any other, not just square or 2:1 -- and
+there is no minimum at the grid, whatever the viewer does.
+
+`sl.TextureDim` is the size to resize a dimension to, ported from the
+viewer's `LLImageRaw::biasedDimToPowerOfTwo`: the nearest power of two,
+biased **downwards**, going up only past 1.75× the power below, since
+the bandwidth saved is worth more than the detail lost. 100 becomes 64
+and 115 becomes 128. The viewer floors it at 4; the grid does not.
+
+### What it costs
+
+L$10, except above a megapixel:
+
+| area | fee |
+|---|---|
+| ≤ 1024×1024 | L$10 |
+| > 1024×1024 | L$50 on the beta grid |
+
+`Upload.Cost` is chosen from the size for that reason. It is checked,
+not believed -- a 2048×2048 offered at L$10, L$20, L$30 or L$40 is
+refused with *"The server expects a different upload fee"*, and the
+refusal is free, which is how the L$50 above was found. The viewer
+reads its own figure from the account's benefits package
+(`LLAgentBenefits::get2KTextureUploadCost`), so an account whose
+benefits differ needs `Upload.Cost` set.
+
+The item is then read back out of that folder before the call returns,
+because the capability answers with an id and an id is not evidence
+that anything looking for the item would find it.
+
+`folder_id` has to be an LLSD `<uuid>` and not a `<string>`: the
+service refuses the same characters sent the other way -- *"Parameter
+'folder_id' is `<type 'str'>`, expected lluuid.UUID"* -- while
+`UpdateScriptAgent` takes its `item_id` either way. That is what
+`llsd.UUID` is for. The strictness is per service and cannot be
+guessed.
+
+### What comes back is not quite what went up
+
+Measured on the beta grid on 2026-08-09, by downloading the default
+plywood texture and uploading those same bytes back -- a real
+codestream, so no encoder is needed to test the path:
+
+  - The stream returns **byte for byte identical except for its comment
+    marker**, which Second Life rewrites from whatever the encoder left
+    (`Kakadu-3.0.3`) to a record of its own:
+    `a=<uploader>&h=512&z=20260809184539&w=512`. The image is untouched;
+    provenance is added. 55 bytes, in this case.
+  - **Identical bytes get one asset.** The same file uploaded twice
+    produced two inventory items and *the same* asset id, with the `z=`
+    stamp of the first upload. Change one character of the comment and
+    the id moves. So the asset server deduplicates by content, and the
+    timestamp in the comment is when those bytes were first seen -- not
+    when this item was made.
+
+`sl/upload_live_test.go` is that round trip, gated on
+`SLGO_TEST_PROFILE` because it spends L$10. Run it against a profile
+that names the beta grid's login URI.
+
 ## Two ways to be connected
 
 A session runs against a Backend, and there are two of them:
@@ -965,8 +1221,11 @@ back down.
 
 ## Not done
 
-No region crossing, no teleport, no appearance, and inventory is read
-only -- nothing creates, moves or deletes.
+No region crossing, no teleport beyond the current region, and no
+appearance. Inventory is no longer read only -- see the sections above.
+
+Textures encode, decode and resize. Sounds, animations and meshes go
+up through the same `UploadAsset` and none has been tried.
 
 The sender writes to an `io.Writer`, which suits the connected socket a
 single simulator needs. Neighbouring simulators at once will want a
