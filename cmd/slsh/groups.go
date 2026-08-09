@@ -53,7 +53,7 @@ var groups = []group{
 		name:  "inventory",
 		brief: "folders and items: what you have, and moving it about",
 		members: []string{
-			"pwd", "cd", "ls", "find", "cat",
+			"pwd", "cd", "ls", "find", "cat", "get", "put",
 			"mkdir", "mv", "cp", "rm", "emptytrash",
 		},
 	},
