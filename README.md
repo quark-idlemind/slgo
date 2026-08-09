@@ -25,6 +25,8 @@ else it is published, and why that one is the default.
     sl/backend.go       one interface, two ways to be connected
     sl/image.go         textures as pictures: jpeg 2000 in, png out
     sl/resize.go        getting a picture to a size the grid takes
+    sl/shape.go         what a prim is shaped like, packed and unpacked
+    sl/objectjson.go    objects in the eLSL simulator's JSON
     client/profile.go   credentials under ~/.config/slgo
     client/xmlrpc.go    XML-RPC decoding
     client/llsd.go      LLSD decoding and encoding
@@ -1102,6 +1104,64 @@ codestream, so no encoder is needed to test the path:
 `sl/upload_live_test.go` is that round trip, gated on
 `SLGO_TEST_PROFILE` because it spends L$10. Run it against a profile
 that names the beta grid's login URI.
+
+## Objects as JSON
+
+    dump "slgo tower"                  # what is there, as the simulator's JSON
+    dump -o tower.json "slgo tower"
+    rez --at 254,186,22 tower.json     # build what a file describes
+    reform "slgo tower" edit.json      # change one to match a file
+
+The format is the eLSL simulator's, from `simulator/primjson.go`, so one
+file describes an object to both: elslsim runs it with no grid at all
+and `rez` builds the same thing in Second Life. A probe written for one
+is a probe for the other, and the difference between what the simulator
+does and what the grid does becomes a diff of two files.
+
+A four-prim object, built and read back on the beta grid:
+
+```json
+{"name": "slgo tower", "prims": [
+  {"type": "box",      "size": [1,1,0.4], "hollow": 0.4, "twist": [0,0.5,0]},
+  {"type": "sphere",   "size": [0.7,0.7,0.7], "dimple": [0.25,0.75,0]},
+  {"type": "torus",    "size": [0.9,0.9,0.3], "revolutions": 2.0, "taper": [0.3,0.3,0]},
+  {"type": "cylinder", "size": [0.2,0.2,1.2], "topsize": [0.1,0.1,0]}
+]}
+```
+
+`reform` applies a *partial* description: what a file omits is left as
+it is, which is what makes a two-line file an edit rather than a
+demolition. Reforming the root above with `{"hollow": 0.75}` raised the
+hollow and **kept the twist**. A description with more prims than the
+object is refused rather than half-applied -- adding prims is what `rez`
+is for.
+
+### What had to be learned to do this
+
+**A prim has no type on the wire.** It has a profile curve and a path
+curve, and a sphere is a half-circle swept round a circle. `sl.Shape`
+is the translation, and the packing is the viewer's own, from
+`indra/llprimitive/llvolumemessage.cpp` rather than guessed:
+
+    begin        round(f / 0.00002)
+    end          50000 - round(f / 0.00002)
+    scale x, y   200 - round(f / 0.01)
+    revolutions  round((f - 1) / 0.015)
+
+Two of those are stored as the distance from the far end, so a zero
+byte means *all of it*. Getting either backwards makes a prim that is
+inside out rather than one that fails.
+
+**The cut swaps with the path.** A prim swept along a line is cut by its
+profile; one swept round a circle is cut by its path, and its profile is
+cut by what LSL calls the advanced cut. That is why a sphere's cut is
+called a dimple, and the format spells it that way too.
+
+**Rotation and shape were not on the wire between slgod and its
+clients.** `ObjectInfo` carried position and scale and neither of those,
+so `Seen.Rotation` was a field nothing ever filled. Both are there now,
+and the shape crosses in the protocol's own packed units -- unpacking it
+at both ends would be the same arithmetic in two places.
 
 ## Two ways to be connected
 

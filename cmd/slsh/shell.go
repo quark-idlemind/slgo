@@ -560,7 +560,7 @@ func commandNames() []string {
 
 func init() {
 	commands = map[string]*command{}
-	for _, set := range []map[string]*command{inventoryCommands, textureCommands, worldCommands, socialCommands, objectCommands, sessionCommands} {
+	for _, set := range []map[string]*command{inventoryCommands, textureCommands, objectFileCommands, worldCommands, socialCommands, objectCommands, sessionCommands} {
 		for n, c := range set {
 			commands[n] = c
 		}
