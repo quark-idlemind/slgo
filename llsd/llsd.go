@@ -27,6 +27,22 @@ import (
 // As with the XML-RPC decoder, the last line is the point.  This is
 // what the capability and inventory servers speak, and they gain types
 // and fields over time.
+//
+// Decoding is lossy about which of the string-shaped types a value
+// arrived as, and encoding cannot be: a service that wants a uuid
+// refuses the same characters sent as a string.  Encode a UUID for
+// those.
+
+// UUID is an id that encodes as <uuid> rather than <string>.
+//
+// It exists because the two are not interchangeable in the direction
+// that matters.  NewFileAgentInventory refuses a folder_id sent as a
+// string -- "Parameter 'folder_id' is <type 'str'>, expected
+// lluuid.UUID" -- while UpdateScriptAgent takes its item_id either way,
+// so the strictness is per service and cannot be guessed.  Decoding
+// still yields a plain string, since nothing reading a reply has to
+// tell them apart.
+type UUID string
 
 // Decode reads one LLSD document.
 func Decode(r io.Reader) (any, error) {
@@ -222,6 +238,12 @@ func encodeValue(b *bytes.Buffer, v any) error {
 			return err
 		}
 		b.WriteString("</string>")
+	case UUID:
+		b.WriteString("<uuid>")
+		if err := xml.EscapeText(b, []byte(t)); err != nil {
+			return err
+		}
+		b.WriteString("</uuid>")
 	case bool:
 		if t {
 			b.WriteString("<boolean>1</boolean>")

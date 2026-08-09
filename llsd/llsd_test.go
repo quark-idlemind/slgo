@@ -315,6 +315,11 @@ func TestEncodeGolden(t *testing.T) {
 		// One key, because a map's iteration order is not fixed.
 		{"a map", map[string]any{"k&": int64(1)},
 			`<llsd><map><key>k&amp;</key><integer>1</integer></map></llsd>`},
+		// A uuid is a string with a different tag, and services that
+		// check reject the string: see NewFileAgentInventory, which
+		// refuses a folder_id sent as one.
+		{"a uuid", UUID("17037e57-7e57-c0de-b12a-24470e312844"),
+			`<llsd><uuid>17037e57-7e57-c0de-b12a-24470e312844</uuid></llsd>`},
 	}
 	for _, c := range cases {
 		b, err := Encode(c.in)
