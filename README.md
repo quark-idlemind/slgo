@@ -27,6 +27,7 @@ else it is published, and why that one is the default.
     sl/resize.go        getting a picture to a size the grid takes
     sl/shape.go         what a prim is shaped like, packed and unpacked
     sl/objectjson.go    objects in the eLSL simulator's JSON
+    sl/touch.go         touching a named point on a named face
     client/profile.go   credentials under ~/.config/slgo
     client/xmlrpc.go    XML-RPC decoding
     client/llsd.go      LLSD decoding and encoding
@@ -1172,6 +1173,43 @@ clients.** `ObjectInfo` carried position and scale and neither of those,
 so `Seen.Rotation` was a field nothing ever filled. Both are there now,
 and the shape crosses in the protocol's own packed units -- unpacking it
 at both ends would be the same arithmetic in two places.
+
+## Touching things
+
+    touch "a button"                       # a click, middle of face 0
+    touch -f 2 --uv 0.9,0.25 "a button"    # a named point on a named face
+    touch -H 1.5 "a button"                # held, so touch fires repeatedly
+
+    w.Touch(ctx, o, sl.Touch{Face: 2, UV: msg.Vector3{X: 0.9, Y: 0.25}})
+    w.TouchHold(ctx, o, t, 1500*time.Millisecond)
+
+**The raycast is not on the wire.** A viewer works out what was clicked
+by casting a ray from the camera through the mouse and then sends the
+*answer*: an object, a face index, the intersection point, the normal,
+the texture coordinates. The simulator does no geometry of its own --
+`send_ObjectGrab_message` packs `pick.mIntersection` straight into the
+message, and the sim hands those numbers to the script as
+`llDetectedTouchPos` and the rest.
+
+Which makes this **more** precise than a viewer, not less. A test that
+must touch the third face nine tenths of the way along an edge does not
+have to place a camera and aim; it says so. Verified against a script
+in world:
+
+    touch -f 2 --uv 0.9,0.25 --st 0.1,0.2 ...
+
+    start face=2 uv=<0.90000, 0.25000, 0.00000> st=<0.10000, 0.20000, 0.00000>
+    start pos=<254.30000, 187.00000, 21.00000> normal=<1.00000, 0.00000, 0.00000>
+
+Three messages, three events: `ObjectGrab` is `touch_start`,
+`ObjectGrabUpdate` is `touch`, `ObjectDeGrab` is `touch_end`. A click
+sends the first and last; `TouchHold` sends updates in between, and
+always lets go, cancellation included -- a grab left open makes the next
+touch of that object look like a continuation of this one.
+
+Worth knowing before counting: **`touch` fires at the simulator's frame
+rate, not at the rate updates are sent.** A touch held for 1.5 seconds
+with an update every 100ms produced 33 `touch` events, not 15.
 
 ## Two ways to be connected
 

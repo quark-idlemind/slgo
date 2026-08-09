@@ -39,6 +39,11 @@ var objectFileCommands = map[string]*command{
 		brief: "build the object a JSON file describes",
 		run:   cmdRez,
 	},
+	"touch": {
+		usage: "touch [-f FACE] [--uv U,V] [--at X,Y,Z] [-H SECONDS] NAME|UUID",
+		brief: "click an object, on a named face at a named point",
+		run:   cmdTouch,
+	},
 	"reform": {
 		usage: "reform NAME|UUID FILE",
 		brief: "change an object to match a JSON file; what it omits is left alone",
@@ -263,4 +268,107 @@ func parseVector(s string) (msg.Vector3, error) {
 		return v, fmt.Errorf("--at wants X,Y,Z, not %q", s)
 	}
 	return v, nil
+}
+
+// ------------------------------------------------------------- touching
+
+type touchFlags struct {
+	Face int    `getopt:"--face -f=N        which face, counting as LSL does; -1 for none"`
+	UV   string `getopt:"--uv=U,V           where on the face, each 0 to 1 [0.5,0.5]"`
+	ST   string `getopt:"--st=S,T           the same point in the texture's coordinates"`
+	At   string `getopt:"--at=X,Y,Z         the point touched, in region coordinates"`
+	Norm string `getopt:"--normal=X,Y,Z     the surface direction there [0,0,1]"`
+	Hold string `getopt:"--hold -H=SECONDS  keep touching for this long, sending touch events"`
+	Help bool   `getopt:"--help -h          show what this command takes"`
+}
+
+func cmdTouch(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o touchFlags
+	args, done, err := subOptions("touch", "NAME|UUID", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) != 1 {
+		return fmt.Errorf("usage: touch [-f FACE] [--uv U,V] [-H SECONDS] NAME|UUID")
+	}
+
+	seen, err := sh.seenNamed(ctx, args[0], 30)
+	if err != nil {
+		return err
+	}
+	t := sl.Touch{Face: o.Face, Position: seen.Position}
+	for _, c := range []struct {
+		text string
+		to   *msg.Vector3
+	}{{o.UV, &t.UV}, {o.ST, &t.ST}, {o.At, &t.Position}, {o.Norm, &t.Normal}} {
+		if c.text == "" {
+			continue
+		}
+		v, err := parsePoint(c.text)
+		if err != nil {
+			return err
+		}
+		*c.to = v
+	}
+
+	target := &seen.Object
+	if o.Hold == "" {
+		if err := sh.s.Touch(ctx, target, t); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "touched %s, face %d\n", target.Name, t.Face)
+		return nil
+	}
+
+	var secs float64
+	if _, err := fmt.Sscanf(o.Hold, "%g", &secs); err != nil || secs <= 0 {
+		return fmt.Errorf("--hold wants a number of seconds, not %q", o.Hold)
+	}
+	held := time.Duration(secs * float64(time.Second))
+	ctx, cancel := context.WithTimeout(ctx, held+30*time.Second)
+	defer cancel()
+	if err := sh.s.TouchHold(ctx, target, t, held); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "touched %s for %s, face %d\n", target.Name, held, t.Face)
+	return nil
+}
+
+// seenNamed is objectNamed, keeping what the region said about the
+// object -- a touch needs its position, and looking it up twice is a
+// second sweep of everything in range.
+func (sh *Shell) seenNamed(ctx context.Context, what string, wait int) (*sl.Seen, error) {
+	if id, err := msg.ParseUUID(what); err == nil {
+		return sh.s.ObjectByID(ctx, id, waitFor(wait))
+	}
+	found, err := sh.s.ObjectsNamed(ctx, what, waitFor(wait))
+	if err != nil {
+		return nil, err
+	}
+	switch len(found) {
+	case 0:
+		return nil, fmt.Errorf("nothing called %q is in range", what)
+	case 1:
+		return found[0], nil
+	}
+	var b []byte
+	for _, f := range found {
+		b = append(b, "\n  "...)
+		b = append(b, f.ID.String()...)
+	}
+	return nil, fmt.Errorf("%d objects are called %q; name one by uuid:%s", len(found), what, b)
+}
+
+// parsePoint reads "X,Y" or "X,Y,Z", since a uv coordinate has two and
+// a position has three and both are written the same way.
+func parsePoint(s string) (msg.Vector3, error) {
+	var v msg.Vector3
+	if n, err := fmt.Sscanf(s, "%f,%f,%f", &v.X, &v.Y, &v.Z); err == nil && n == 3 {
+		return v, nil
+	}
+	v = msg.Vector3{}
+	if n, err := fmt.Sscanf(s, "%f,%f", &v.X, &v.Y); err == nil && n == 2 {
+		return v, nil
+	}
+	return v, fmt.Errorf("wanted X,Y or X,Y,Z, not %q", s)
 }
