@@ -1129,6 +1129,16 @@ A four-prim object, built and read back on the beta grid:
 ]}
 ```
 
+**Every position in the file is a region coordinate**, root and
+children alike. That is not what the grid says: a child prim's update
+describes it in its ROOT's frame -- an offset from the root, and a
+rotation relative to the root's -- so `dump` composes the root's frame
+back out and `reform` puts it back in. Without that, a three-prim
+object two metres across dumps its children as `[2,0,0]` and rebuilds
+them at the region's edge. Verified by round trip: a spread-out linkset
+described at 254,186,22 / 256,186,22 / 254,186,24 came back at exactly
+those three points.
+
 `reform` applies a *partial* description: what a file omits is left as
 it is, which is what makes a two-line file an edit rather than a
 demolition. Reforming the root above with `{"hollow": 0.75}` raised the

@@ -198,3 +198,54 @@ type Message interface {
 
 // ErrShort is reported when a message ends before its fields do.
 var ErrShort = errors.New("msg: truncated message")
+
+// Rotate turns a vector by this rotation.
+//
+// It is here because a child prim is described in its root's frame:
+// the position and rotation on a child's update are relative to the
+// root, and putting one on the map needs the root's rotation applied
+// to it.  Standard quaternion sandwich, v' = q v q*, written out
+// rather than through a matrix because it is used a few times and a
+// matrix type would be a package.
+func (q Quaternion) Rotate(v Vector3) Vector3 {
+	x, y, z, w := q.X, q.Y, q.Z, q.W()
+
+	// t = 2 * (q.xyz cross v)
+	tx := 2 * (y*v.Z - z*v.Y)
+	ty := 2 * (z*v.X - x*v.Z)
+	tz := 2 * (x*v.Y - y*v.X)
+
+	return Vector3{
+		X: v.X + w*tx + (y*tz - z*ty),
+		Y: v.Y + w*ty + (z*tx - x*tz),
+		Z: v.Z + w*tz + (x*ty - y*tx),
+	}
+}
+
+// Conjugate is the rotation that undoes this one.
+func (q Quaternion) Conjugate() Quaternion {
+	// The wire form keeps W non-negative by negating the vector part
+	// when it would not be, so the conjugate of a rotation whose W is
+	// recovered rather than stored is the negated vector -- which is
+	// what this type already holds.  Negating it again gives the
+	// original, so the conjugate has to carry its own sign.
+	return Quaternion{X: -q.X, Y: -q.Y, Z: -q.Z}
+}
+
+// Mul composes two rotations: q.Mul(r) is r applied first, then q.
+func (q Quaternion) Mul(r Quaternion) Quaternion {
+	qx, qy, qz, qw := q.X, q.Y, q.Z, q.W()
+	rx, ry, rz, rw := r.X, r.Y, r.Z, r.W()
+	out := Quaternion{
+		X: qw*rx + qx*rw + qy*rz - qz*ry,
+		Y: qw*ry - qx*rz + qy*rw + qz*rx,
+		Z: qw*rz + qx*ry - qy*rx + qz*rw,
+	}
+	// W is recovered by normalising and is never negative, so a
+	// product whose W came out negative is the same rotation with
+	// every component negated.
+	if w := qw*rw - qx*rx - qy*ry - qz*rz; w < 0 {
+		out = Quaternion{X: -out.X, Y: -out.Y, Z: -out.Z}
+	}
+	return out
+}

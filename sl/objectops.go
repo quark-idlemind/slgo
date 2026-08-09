@@ -14,6 +14,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // taskTypeNames turn the words an object's contents file uses into the
@@ -47,6 +49,13 @@ func (w *Session) Describe(ctx context.Context, o *Object, timeout time.Duration
 		return nil, err
 	}
 
+	// A child prim's update describes it in the ROOT's frame: its
+	// position is an offset from the root and its rotation is relative
+	// to the root's.  The file says where things are in the region,
+	// because that is what Build takes and what somebody reading the
+	// file expects, so the root's frame is composed back out here.
+	rootPos, rootRot := parts[0].Position, parts[0].Rotation
+
 	out := &ObjectJSON{}
 	for i, s := range parts {
 		obj := &Object{ID: s.ID, Local: s.Local, Name: s.Name}
@@ -56,7 +65,13 @@ func (w *Session) Describe(ctx context.Context, o *Object, timeout time.Duration
 			// with what arrived on its update.
 			props = nil
 		}
+		at, rot := s.Position, s.Rotation
+		if i > 0 {
+			at = add3(rootPos, rootRot.Rotate(at))
+			rot = rootRot.Mul(rot)
+		}
 		p := describePrim(s, props)
+		p.Pos, p.Rot = floats(at), floats4(rot)
 		if items, err := w.TaskInventory(ctx, obj); err == nil {
 			for _, it := range items {
 				p.Inventory = append(p.Inventory, InventoryItemJSON{
@@ -224,9 +239,18 @@ func (w *Session) Apply(ctx context.Context, o *Object, oj ObjectJSON, timeout t
 			at, rot, size := parts[i].Position, parts[i].Rotation, parts[i].Scale
 			if len(pj.Pos) >= 3 {
 				at = vec3(pj.Pos)
+				if i > 0 {
+					// The file is in region coordinates and a child
+					// is moved in its root's frame, so undo the root.
+					rootRot := parts[0].Rotation
+					at = rootRot.Conjugate().Rotate(sub3(at, parts[0].Position))
+				}
 			}
 			if len(pj.Rot) >= 4 {
 				rot = quat(pj.Rot)
+				if i > 0 {
+					rot = parts[0].Rotation.Conjugate().Mul(rot)
+				}
 			}
 			if len(pj.Size) >= 3 {
 				size = vec3(pj.Size)
@@ -355,4 +379,12 @@ func linkset(all []*Seen, o *Object) ([]*Seen, error) {
 		}
 	}
 	return parts, nil
+}
+
+func add3(a, b msg.Vector3) msg.Vector3 {
+	return msg.Vector3{X: a.X + b.X, Y: a.Y + b.Y, Z: a.Z + b.Z}
+}
+
+func sub3(a, b msg.Vector3) msg.Vector3 {
+	return msg.Vector3{X: a.X - b.X, Y: a.Y - b.Y, Z: a.Z - b.Z}
 }
