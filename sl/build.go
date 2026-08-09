@@ -284,6 +284,15 @@ func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, timeout 
 			if local == 0 || before[local] {
 				continue
 			}
+			// Nor is the avatar itself, which is an object in range
+			// owned by us like any other -- and one whose update can
+			// arrive after the snapshot when a build follows a login
+			// closely.  Rezzing a prim and being handed the avatar is
+			// a confusing way to find that out, and renaming it is
+			// worse.
+			if id == w.me {
+				continue
+			}
 			if w.owners[id] == w.me {
 				found = &Object{ID: id, Local: local}
 				return true
