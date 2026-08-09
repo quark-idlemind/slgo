@@ -146,6 +146,15 @@ type UploadResult struct {
 	Compiled bool
 	Errors   []string
 	Body     []byte
+
+	// NewItem is the inventory item a file upload made, and is zero
+	// for the capabilities that write to an item that already exists.
+	NewItem msg.UUID
+
+	// Message is what the capability said when it was unhappy, which
+	// it says instead of failing: an upload with no money behind it
+	// answers 200 with a state of "error" and the reason here.
+	Message string
 }
 
 // upload runs the two step asset upload: describe what is being
@@ -161,8 +170,16 @@ func (w *Session) upload(ctx context.Context, capName string, fields map[string]
 	if err != nil {
 		return nil, err
 	}
-	uploader := llsd.String(llsd.Map(decodeLLSD(first)), "uploader")
+	described := llsd.Map(decodeLLSD(first))
+	uploader := llsd.String(described, "uploader")
 	if uploader == "" {
+		// A refusal arrives here rather than as an HTTP error: the
+		// capability answers 200 with state "error" and says why, and
+		// "too poor" and "the fee is not what you said" are both worth
+		// reading rather than reporting as a missing field.
+		if why := llsd.String(described, "message"); why != "" {
+			return nil, fmt.Errorf("sl: %s refused the upload: %s", capName, why)
+		}
 		return nil, fmt.Errorf("sl: %s gave no uploader: %s", capName, snippet(first))
 	}
 
@@ -178,6 +195,8 @@ func (w *Session) upload(ctx context.Context, capName string, fields map[string]
 	if m != nil {
 		res.State = llsd.String(m, "state")
 		res.NewAsset, _ = msg.ParseUUID(llsd.String(m, "new_asset"))
+		res.NewItem, _ = msg.ParseUUID(llsd.String(m, "new_inventory_item"))
+		res.Message = llsd.String(m, "message")
 		res.Compiled = llsd.Bool(m, "compiled")
 		if errs, ok := m["errors"].([]any); ok {
 			for _, e := range errs {
