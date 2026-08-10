@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -44,6 +45,11 @@ var objectFileCommands = map[string]*command{
 		usage: "touch [-f FACE] [--uv U,V] [--at X,Y,Z] [-H SECONDS] NAME|UUID",
 		brief: "click an object, on a named face at a named point",
 		run:   cmdTouch,
+	},
+	"texture": {
+		usage: "texture [-f FACE] [--id UUID] [--repeats S,T] [--color R,G,B] NAME|UUID",
+		brief: "set what a face looks like: texture, tiling, tint, alpha, glow",
+		run:   cmdTexture,
 	},
 	"reform": {
 		usage: "reform NAME|UUID FILE",
@@ -441,4 +447,131 @@ func parsePoint(s string) (msg.Vector3, error) {
 		return v, nil
 	}
 	return v, fmt.Errorf("wanted X,Y or X,Y,Z, not %q", s)
+}
+
+// ------------------------------------------------------------ texturing
+
+type textureFlags struct {
+	Face    int    `getopt:"--face -f=N        which face; every face by default"`
+	ID      string `getopt:"--id=UUID          the texture to put on it"`
+	Repeats string `getopt:"--repeats=S,T      how many times it tiles"`
+	Offset  string `getopt:"--offset=S,T       how far it slides, each -1 to 1"`
+	Rot     string `getopt:"--rot=DEGREES      how far it turns"`
+	Colour  string `getopt:"--color=R,G,B      the tint, each 0 to 255"`
+	Alpha   int    `getopt:"--alpha=N          how opaque, 0 clear to 255 solid"`
+	Bright  bool   `getopt:"--fullbright       ignore lighting"`
+	Dark    bool   `getopt:"--no-fullbright    stop ignoring it"`
+	Shiny   int    `getopt:"--shiny=N          shininess, 0 none to 3 high"`
+	Glow    int    `getopt:"--glow=N           glow, 0 to 255"`
+	Help    bool   `getopt:"--help -h          show what this command takes"`
+}
+
+func cmdTexture(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	o := textureFlags{Face: sl.AllFaces, Alpha: -1, Shiny: -1, Glow: -1}
+	args, done, err := subOptions("texture", "NAME|UUID", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) != 1 {
+		return fmt.Errorf("usage: texture [-f FACE] [--repeats S,T] ... NAME|UUID")
+	}
+	if o.Bright && o.Dark {
+		return fmt.Errorf("--fullbright and --no-fullbright are opposites")
+	}
+
+	// Everything is parsed before anything is sent, so a typo in the
+	// last flag does not leave the object half changed.
+	var id msg.UUID
+	if o.ID != "" {
+		if id, err = msg.ParseUUID(o.ID); err != nil {
+			return fmt.Errorf("--id wants a uuid, not %q", o.ID)
+		}
+	}
+	repeats, err := optionalPair("--repeats", o.Repeats)
+	if err != nil {
+		return err
+	}
+	offset, err := optionalPair("--offset", o.Offset)
+	if err != nil {
+		return err
+	}
+	colour, err := optionalPair("--color", o.Colour)
+	if err != nil {
+		return err
+	}
+	var rot *float64
+	if o.Rot != "" {
+		var deg float64
+		if _, err := fmt.Sscanf(o.Rot, "%g", &deg); err != nil {
+			return fmt.Errorf("--rot wants degrees, not %q", o.Rot)
+		}
+		rot = &deg
+	}
+	var blue float64
+	if colour != nil {
+		if _, err := fmt.Sscanf(o.Colour, "%g,%g,%g", &colour[0], &colour[1], &blue); err != nil {
+			return fmt.Errorf("--color wants R,G,B, not %q", o.Colour)
+		}
+	}
+
+	target, err := sh.objectNamed(ctx, args[0], 30)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
+	err = sh.s.SetFace(ctx, target, o.Face, func(f *sl.Face) {
+		if o.ID != "" {
+			f.Texture = id
+		}
+		if repeats != nil {
+			f.SetRepeats(float32(repeats[0]), float32(repeats[1]))
+		}
+		if offset != nil {
+			f.SetOffsets(float32(offset[0]), float32(offset[1]))
+		}
+		if rot != nil {
+			f.SetRotationRad(float32(*rot * math.Pi / 180))
+		}
+		if colour != nil {
+			f.SetColour(uint8(colour[0]), uint8(colour[1]), uint8(blue))
+		}
+		if o.Alpha >= 0 {
+			f.SetAlpha(uint8(o.Alpha))
+		}
+		if o.Bright {
+			f.SetFullbright(true)
+		}
+		if o.Dark {
+			f.SetFullbright(false)
+		}
+		if o.Shiny >= 0 {
+			f.SetShiny(uint8(o.Shiny))
+		}
+		if o.Glow >= 0 {
+			f.Glow = uint8(o.Glow)
+		}
+	})
+	if err != nil {
+		return err
+	}
+	which := fmt.Sprintf("face %d", o.Face)
+	if o.Face == sl.AllFaces {
+		which = "every face"
+	}
+	fmt.Fprintf(out, "%s: %s\n", target.Name, which)
+	return nil
+}
+
+// optionalPair reads "A,B", or nil when the flag was not given.
+func optionalPair(flag, s string) ([]float64, error) {
+	if s == "" {
+		return nil, nil
+	}
+	out := make([]float64, 2)
+	if _, err := fmt.Sscanf(s, "%g,%g", &out[0], &out[1]); err != nil {
+		return nil, fmt.Errorf("%s wants two numbers separated by a comma, not %q", flag, s)
+	}
+	return out, nil
 }

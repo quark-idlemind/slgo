@@ -1174,6 +1174,42 @@ so `Seen.Rotation` was a field nothing ever filled. Both are there now,
 and the shape crosses in the protocol's own packed units -- unpacking it
 at both ends would be the same arithmetic in two places.
 
+## Setting what a face looks like
+
+    texture --id 89556747-… --repeats 4,2 --color 255,80,80 \
+            --alpha 200 --fullbright --glow 100 "a sign"
+    texture -f 2 --offset 0.25,-0.5 --shiny 3 "a sign"
+
+    w.SetFace(ctx, o, 2, func(f *sl.Face) {
+        f.SetRepeats(4, 2); f.SetColour(255, 80, 80); f.SetFullbright(true)
+    })
+
+`texture.go` decoded a TextureEntry; `textureset.go` writes one and
+sends it as `ObjectImage`. The blob is packed by exception -- a default
+value per property, then face sets for the faces that differ -- so the
+encoder picks the value most faces share as the default, which keeps a
+prim with one odd face down to one exception instead of five. Verified
+by round trip through the decoder that already existed, and in world by
+asking a script with `llGetPrimitiveParams`.
+
+Two things the format does that surprise:
+
+  - **The colour is stored inverted.** Opaque white is four zero bytes,
+    which is why an untouched prim costs nothing to describe -- and why
+    forgetting the inversion would make every prim black and invisible.
+  - **Bumpiness, shininess and fullbright share one byte.** The setters
+    mask rather than assign, so turning fullbright off does not flatten
+    the shine.
+
+**One message carries every face**, so a face cannot be changed alone:
+`SetFaces` sends the lot. `SetFace` reads the object first and changes
+one -- but what it reads is the last appearance the *region* described,
+and the region does not describe one the instant it changes. Two
+`SetFace` calls in quick succession both start from the appearance
+before either, and the second undoes the first. Measured: texturing
+every face and then face 2 alone left faces 0 and 1 plain. Build the
+faces once and send them with `SetFaces` when making several changes.
+
 ## Touching things
 
     touch "a button"                       # a click, middle of face 0
