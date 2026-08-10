@@ -611,6 +611,40 @@ carries one), and gives the selection straight back -- a simulator
 believes a selected object is being edited, and one avatar's selection
 is another's object that will not move.
 
+### What the cache may not do
+
+A cache of a place you are standing in has two ways to lie, and both
+were being told:
+
+**It may not invent.** `named` used to create the object it was naming.
+A name arrives only because something asked, and an answer can outlive
+its object -- so a reply about something already trimmed conjured an
+entry with a name and nothing else: no position, no shape, no parent,
+listed as a root prim standing at the origin, and never removed because
+nothing would ever describe it again. Eight of sixty-six objects in a
+live region were exactly that. Naming now annotates what is there and
+drops the rest.
+
+**It may not churn.** The grace period for a prim whose root is unknown
+was measured from when it was FIRST heard. But a region goes on
+describing prims whose roots it never describes to us, and an update
+about something unrooted cannot be judged for distance, so it is taken
+in -- which meant: drop it after a minute, take it straight back,
+forever. Caught by watching one prim across five minutes; the count
+oscillated between 55 and 59 and the prim reappeared with its name
+gone, which is the signature of a delete and a re-create. Each cycle
+cost a fresh name lookup to recover the name. The clock is now the last
+mention: a thing the simulator keeps talking about is a thing that is
+there.
+
+Related, and found on the way: the trim decided where a child was by
+looking for a parent that had no parent of its own. An attachment's
+root hangs off an **avatar**, so no prim of a linked attachment could be
+placed at all -- every one was an orphan, dropped a minute later and
+taken back on the next update. It now walks up to whatever has no
+parent, which for an attachment is the avatar wearing it, and that is
+where the whole thing is judged to be.
+
 ### What is worn is not what the store holds
 
 Sharing forced a fix to something that was already wrong. Every agent in

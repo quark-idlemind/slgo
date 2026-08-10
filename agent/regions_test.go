@@ -9,6 +9,7 @@ package agent
 
 import (
 	"testing"
+	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -156,5 +157,120 @@ func TestJoiningAStoreKeepsWhatWasHeardFirst(t *testing.T) {
 	}
 	if v, _ := older.Get(msg.UUID{15: 7}); v.Scale.X != 9 {
 		t.Error("a newcomer's copy overwrote what was already known")
+	}
+}
+
+// TestANameDoesNotConjureAnObject.
+//
+// A name arrives because something asked, and an answer can outlive its
+// object: a reply about something already trimmed would otherwise make
+// an entry with a name and nothing else -- no position, no shape, no
+// parent -- which lists as a root prim at the origin and never goes
+// away, since nothing will describe it again.  Measured on a live
+// region before this: eight of sixty-six objects were exactly that.
+func TestANameDoesNotConjureAnObject(t *testing.T) {
+	o := newObjects()
+	gone := msg.UUID{15: 3}
+
+	o.named(gone, "LH Med Fire Grate", msg.UUID{15: 9})
+	if _, ok := o.Get(gone); ok {
+		t.Error("a name for something nobody has described made an object out of nothing")
+	}
+
+	// And a name for something that IS here still lands.
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 3, FullID: gone, PCode: 9,
+		ObjectData: placement(msg.Vector3{X: 5}, msg.Quaternion{}),
+	}, msg.Vector3{}, 0)
+	o.named(gone, "LH Med Fire Grate", msg.UUID{15: 9})
+	if v, ok := o.Get(gone); !ok || v.Name != "LH Med Fire Grate" {
+		t.Errorf("naming something that is here gave %+v", v)
+	}
+}
+
+// TestAWornPrimIsJudgedByItsWearer.
+//
+// An attachment's position is an offset from the avatar, and a prim of
+// a linked attachment is an offset from that attachment's root -- whose
+// own parent is the avatar rather than nothing.  Looking only for a
+// parent that has no parent found neither, so every prim of a linked
+// hud was an orphan and went a minute later.
+func TestAWornPrimIsJudgedByItsWearer(t *testing.T) {
+	o := newObjects()
+	here := msg.Vector3{X: 128, Y: 128, Z: 30}
+
+	// The avatar, standing here.
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 1, FullID: msg.UUID{15: 1}, PCode: 47,
+		ObjectData: placement(here, msg.Quaternion{}),
+	}, here, 128)
+	// Its attachment, and a prim of that attachment.  Both carry
+	// offsets, which are nowhere near the camera as coordinates.
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 2, FullID: msg.UUID{15: 2}, PCode: 9, ParentID: 1,
+		ObjectData: placement(msg.Vector3{X: 0.2}, msg.Quaternion{}),
+	}, here, 128)
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 3, FullID: msg.UUID{15: 3}, PCode: 9, ParentID: 2,
+		ObjectData: placement(msg.Vector3{X: 0.1}, msg.Quaternion{}),
+	}, here, 128)
+
+	if n := o.Trim(here, 128); n != 0 {
+		t.Errorf("trimmed %d of an avatar standing in front of the camera", n)
+	}
+	if o.Count() != 3 {
+		t.Fatalf("%d objects kept, want the avatar and both prims", o.Count())
+	}
+
+	// And when the avatar is far away, the whole of it goes: the prims
+	// are where their wearer is, not at their offsets.
+	far := msg.Vector3{X: 900, Y: 900}
+	if n := o.Trim(far, 128); n != 3 {
+		t.Errorf("trimmed %d when the wearer walked off, want all three", n)
+	}
+}
+
+// TestAnOrphanTheRegionKeepsMentioningIsKept.
+//
+// The grace period is measured from the last word about a prim, not the
+// first.  A region goes on describing prims whose roots it never
+// describes to us; those updates cannot be judged for distance, so they
+// are taken in -- and dropping them on a timer only means taking them
+// straight back.  Measured on a live region: one prim was deleted and
+// re-created every minute for hours, losing its name each time and
+// costing a name lookup to get it back.
+func TestAnOrphanTheRegionKeepsMentioningIsKept(t *testing.T) {
+	o := newObjects()
+	here := msg.Vector3{X: 128, Y: 128, Z: 30}
+	orphan := msg.UUID{15: 5}
+
+	describe := func() {
+		o.update(&msg.ObjectUpdate_ObjectData{
+			ID: 5, FullID: orphan, PCode: 9, ParentID: 4242,
+			ObjectData: placement(msg.Vector3{X: 1}, msg.Quaternion{}),
+		}, here, 128)
+	}
+	describe()
+	o.named(orphan, "HearthEmbers", msg.UUID{15: 9})
+
+	// Long past the grace period by the clock that used to be used.
+	o.mu.Lock()
+	o.byID[orphan].First = time.Now().Add(-10 * orphanGrace)
+	o.mu.Unlock()
+
+	describe() // and the region mentions it again
+	if n := o.Trim(here, 128); n != 0 {
+		t.Errorf("trimmed %d that the region is still describing", n)
+	}
+	if v, ok := o.Get(orphan); !ok || v.Name != "HearthEmbers" {
+		t.Error("a prim the region keeps describing was dropped, name and all")
+	}
+
+	// Once it stops being mentioned, it goes.
+	o.mu.Lock()
+	o.byID[orphan].Last = time.Now().Add(-2 * orphanGrace)
+	o.mu.Unlock()
+	if n := o.Trim(here, 128); n != 1 {
+		t.Errorf("trimmed %d after the region went quiet about it, want 1", n)
 	}
 }

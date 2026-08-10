@@ -254,9 +254,14 @@ func (o *Objects) Flush() int {
 // again.  The margin costs a few entries and stops the flapping.
 const TrimMargin = 32
 
-// orphanGrace is how long a child is kept whose root has not been
-// described.  Object updates arrive in no particular order, so a child
-// can genuinely precede its root by a moment.
+// orphanGrace is how long a child is kept after the last word about it,
+// when nothing here says where its root is.
+//
+// It has to be measured from the last mention rather than the first.
+// Updates arrive in no particular order, so a child can precede its
+// root -- but a region also goes on describing prims whose roots it
+// never describes to us at all, and dropping those on a timer only
+// means taking them straight back.
 const orphanGrace = time.Minute
 
 // Trim forgets objects further from the camera than the draw distance,
@@ -286,32 +291,50 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	roots := make(map[uint32]msg.Vector3, len(o.byID))
+	// Where everything is, resolved once.  A child's position is an
+	// offset, so what decides its fate is where its root is standing --
+	// and an attachment's root hangs off an avatar rather than off
+	// nothing, which is why this walks up rather than looking for a
+	// parent with no parent of its own.
+	byLocal := make(map[uint32]*Object, len(o.byID))
 	for _, v := range o.byID {
-		if v.Parent == 0 {
-			roots[v.Local] = v.Position
+		byLocal[v.Local] = v
+	}
+	anchor := func(v *Object) (msg.Vector3, bool) {
+		for up := 0; up < 8; up++ {
+			if v.Parent == 0 {
+				return v.Position, true
+			}
+			p := byLocal[v.Parent]
+			if p == nil {
+				return msg.Vector3{}, false
+			}
+			v = p
 		}
+		return msg.Vector3{}, false
 	}
 
 	n := 0
 	for id, v := range o.byID {
-		at := v.Position
-		if v.Parent != 0 {
-			p, ok := roots[v.Parent]
-			if !ok {
-				// An orphan: its root has not been described.  Give
-				// it a grace period, since updates arrive in no
-				// particular order, and then let it go -- a root that
-				// has not turned up by now is one that was refused
-				// for being out of range, and its children are out of
-				// range too.
-				if time.Since(v.First) > orphanGrace {
-					delete(o.byID, id)
-					n++
-				}
-				continue
+		at, known := anchor(v)
+		if !known {
+			// An orphan: nothing here says where it is.  It goes once
+			// the region has stopped mentioning it, which is the only
+			// evidence available that it is no longer worth keeping.
+			//
+			// Since it was FIRST heard was the wrong clock.  A region
+			// goes on describing a prim whose root it never describes
+			// to us, and this is an unjudgeable update, so it is taken
+			// back in as soon as it is dropped: measured on a live
+			// region, one such prim was deleted and re-created every
+			// minute for hours, losing its name each time and costing
+			// a fresh name lookup to get it back.  A thing the
+			// simulator keeps talking about is a thing that is there.
+			if time.Since(v.Last) > orphanGrace {
+				delete(o.byID, id)
+				n++
 			}
-			at = p
+			continue
 		}
 		if !o.keepLocked(at, camera, drawDistance) {
 			delete(o.byID, id)
@@ -348,7 +371,7 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	if havePos {
 		at, judge := pos, true
 		if d.ParentID != 0 {
-			at, judge = o.rootPosLocked(d.ParentID)
+			at, judge = o.anchorLocked(d.ParentID)
 		}
 		if judge && !o.keepLocked(at, camera, drawDistance) {
 			delete(o.byID, d.FullID)
@@ -430,7 +453,7 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 
 	at, judge := c.Position, true
 	if parent != 0 {
-		at, judge = o.rootPosLocked(parent)
+		at, judge = o.anchorLocked(parent)
 	}
 	if judge && !o.keepLocked(at, camera, drawDistance) {
 		delete(o.byID, c.FullID)
@@ -472,21 +495,62 @@ func (o *Objects) moved(t *msg.Terse) {
 	}
 }
 
-// rootPosLocked finds where a root is by its local id.
-func (o *Objects) rootPosLocked(local uint32) (msg.Vector3, bool) {
-	for _, v := range o.byID {
-		if v.Local == local && v.Parent == 0 {
+// anchorLocked is where the thing with this local id really is.
+//
+// A root's position is a place; a child's is an offset from its root,
+// and an attachment's is an offset from the avatar wearing it.  So the
+// answer is found by walking up until something with no parent is
+// reached -- an avatar has none, which is what makes an attachment
+// judged by where its wearer is standing.
+//
+// Not found means the chain leaves the store before the top, and the
+// caller cannot say where this is at all.  It is a different answer
+// from a position, and treating it as the origin would put everything
+// unrooted in the corner of the region.
+func (o *Objects) anchorLocked(local uint32) (msg.Vector3, bool) {
+	for up := 0; up < 8; up++ {
+		v := o.byLocalLocked(local)
+		if v == nil {
+			return msg.Vector3{}, false
+		}
+		if v.Parent == 0 {
 			return v.Position, true
 		}
+		local = v.Parent
 	}
 	return msg.Vector3{}, false
 }
 
+func (o *Objects) byLocalLocked(local uint32) *Object {
+	for _, v := range o.byID {
+		if v.Local == local {
+			return v
+		}
+	}
+	return nil
+}
+
+// named records what something is called, for an object that is here.
+//
+// It does not make one.  A name arrives because something asked, and an
+// answer can outlive its object: the reply to a question about
+// something that has since been trimmed would otherwise conjure an
+// entry with a name and nothing else -- no position, no shape, no
+// parent -- which lists as a root prim standing at the origin and never
+// goes away, since nothing will ever describe it again.  Measured on a
+// live region: eight of sixty-six objects were that and nothing else.
+//
+// The cost is a name that arrives before the object it belongs to,
+// which is dropped.  Nothing is lost by it: what asks for names asks
+// again for whatever is still unnamed.
 func (o *Objects) named(id msg.UUID, name string, owner msg.UUID) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	v := o.seen(id)
-	v.Name, v.Owner = name, owner
+	v := o.byID[id]
+	if v == nil {
+		return
+	}
+	v.Name, v.Owner, v.Last = name, owner, time.Now()
 }
 
 // kill forgets an object by local id.

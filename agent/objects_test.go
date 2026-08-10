@@ -640,6 +640,16 @@ func TestNamesAndOwnersComeOnlyFromAsking(t *testing.T) {
 
 	a, _ := offlineSession(t)
 
+	// Both have to have been described: a name is given to an object
+	// that is here, and an answer about one that has gone does not
+	// bring it back.  See named.
+	feed(t, a, &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{
+		{ID: 7, FullID: aPrim, PCode: 9,
+			ObjectData: placement(msg.Vector3{X: 1}, msg.Quaternion{})},
+		{ID: 8, FullID: aChild, PCode: 9,
+			ObjectData: placement(msg.Vector3{X: 2}, msg.Quaternion{})},
+	}})
+
 	family := &msg.ObjectPropertiesFamily{}
 	family.ObjectData.ObjectID = aPrim
 	family.ObjectData.OwnerID = anOwner
@@ -702,10 +712,13 @@ func TestTrimForgetsWhatIsOutOfSight(t *testing.T) {
 		t.Fatalf("trimming with no draw distance removed %d", n)
 	}
 
-	// An orphan is given a grace period, because updates arrive in no
-	// particular order; one older than that is a root that was refused
-	// for being out of range, and its children are out of range too.
-	o.byID[oldOrphan].First = time.Now().Add(-2 * orphanGrace)
+	// An orphan is kept while the region goes on mentioning it, and
+	// goes once it has stopped.  The clock is the LAST word about it
+	// rather than the first: a region describes prims whose roots it
+	// never describes to us, and dropping those on a timer only means
+	// taking them straight back in -- measured live, one such prim was
+	// deleted and re-created every minute for hours.
+	o.byID[oldOrphan].Last = time.Now().Add(-2 * orphanGrace)
 
 	if n := o.Trim(camera, 64); n != 3 {
 		t.Errorf("Trim removed %d, want 3", n)
@@ -752,6 +765,12 @@ func TestTheCacheHandsOutCopies(t *testing.T) {
 	t.Parallel()
 
 	o := newObjects()
+	// Described first: a name is something an object is given, not
+	// something that makes one.  See named.
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 7, FullID: aPrim, PCode: 9,
+		ObjectData: placement(msg.Vector3{X: 1}, msg.Quaternion{}),
+	}, msg.Vector3{}, 0)
 	o.named(aPrim, "as described", anOwner)
 
 	if _, ok := o.Get(someone); ok {
