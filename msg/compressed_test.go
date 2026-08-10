@@ -20,6 +20,7 @@ import (
 type blobWriter struct{ b []byte }
 
 func (w *blobWriter) u8(v uint8)   { w.b = append(w.b, v) }
+func (w *blobWriter) i8(v int8)    { w.b = append(w.b, byte(v)) }
 func (w *blobWriter) u16(v uint16) { w.b = binary.LittleEndian.AppendUint16(w.b, v) }
 func (w *blobWriter) u32(v uint32) { w.b = binary.LittleEndian.AppendUint32(w.b, v) }
 func (w *blobWriter) f32(v float32) {
@@ -62,25 +63,33 @@ func build(flags uint32, fill func(w *blobWriter), te []byte) []byte {
 	}
 
 	// Shape: eighteen fields, whose sizes are as easy to get wrong as
-	// anything optional.
-	w.u8(16)  // PathCurve
-	w.u8(1)   // ProfileCurve
-	w.u16(0)  // PathBegin
-	w.u16(0)  // PathEnd
-	w.u8(100) // PathScaleX
-	w.u8(100) // PathScaleY
-	w.u8(0)   // PathShearX
-	w.u8(0)   // PathShearY
-	w.u8(0)   // PathTwist
-	w.u8(0)   // PathTwistBegin
-	w.u8(0)   // PathRadiusOffset
-	w.u8(0)   // PathTaperX
-	w.u8(0)   // PathTaperY
-	w.u8(0)   // PathRevolutions
-	w.u8(0)   // PathSkew
-	w.u16(0)  // ProfileBegin
-	w.u16(0)  // ProfileEnd
-	w.u16(0)  // ProfileHollow
+	// anything optional -- and whose ORDER is this message's own.  The
+	// profile curve comes last of the curves here, after every path
+	// field, where the other three messages put it second.
+	//
+	// Every field gets a value of its own so that reading them in the
+	// wrong order fails here rather than in a region.  Zeros hid the
+	// real thing: a stream of them reads the same however it is
+	// misaligned, and a plain box came back from Second Life as a
+	// cylinder before this fixture could say so.
+	w.u8(16)      // PathCurve
+	w.u16(0x0102) // PathBegin
+	w.u16(0x0304) // PathEnd
+	w.u8(100)     // PathScaleX
+	w.u8(99)      // PathScaleY
+	w.u8(98)      // PathShearX
+	w.u8(97)      // PathShearY
+	w.i8(-5)      // PathTwist
+	w.i8(-6)      // PathTwistBegin
+	w.i8(-7)      // PathRadiusOffset
+	w.i8(-8)      // PathTaperX
+	w.i8(-9)      // PathTaperY
+	w.u8(96)      // PathRevolutions
+	w.i8(-10)     // PathSkew
+	w.u8(1)       // ProfileCurve
+	w.u16(0x0506) // ProfileBegin
+	w.u16(0x0708) // ProfileEnd
+	w.u16(0x090a) // ProfileHollow
 
 	w.u32(uint32(len(te)))
 	w.raw(te)
@@ -90,6 +99,19 @@ func build(flags uint32, fill func(w *blobWriter), te []byte) []byte {
 // marker is a recognisable texture entry: if the reader has lost its
 // place, what comes back will not be this.
 var marker = []byte("TEXTURE-ENTRY-MARKER")
+
+// wantShape is what build wrote, field by field.
+var wantShape = PrimShape{
+	PathCurve: 16,
+	PathBegin: 0x0102, PathEnd: 0x0304,
+	PathScaleX: 100, PathScaleY: 99,
+	PathShearX: 98, PathShearY: 97,
+	PathTwist: -5, PathTwistBegin: -6, PathRadiusOffset: -7,
+	PathTaperX: -8, PathTaperY: -9,
+	PathRevolutions: 96, PathSkew: -10,
+	ProfileCurve: 1,
+	ProfileBegin: 0x0506, ProfileEnd: 0x0708, ProfileHollow: 0x090a,
+}
 
 func checkTail(t *testing.T, c *Compressed, err error) {
 	t.Helper()
@@ -102,8 +124,8 @@ func checkTail(t *testing.T, c *Compressed, err error) {
 	if c.Position != (Vector3{10, 20, 30}) {
 		t.Errorf("Position = %v, want {10 20 30}", c.Position)
 	}
-	if c.Shape.PathCurve != 16 || c.Shape.ProfileCurve != 1 || c.Shape.PathScaleX != 100 {
-		t.Errorf("shape misread: %+v", c.Shape)
+	if c.Shape != wantShape {
+		t.Errorf("shape misread:\n\t%+v\nwant\n\t%+v", c.Shape, wantShape)
 	}
 	if !bytes.Equal(c.TextureEntry, marker) {
 		t.Errorf("TextureEntry = %q, want %q -- the reader lost its place",

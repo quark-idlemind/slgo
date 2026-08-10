@@ -180,16 +180,27 @@ func DecodeCompressed(b []byte) (*Compressed, error) {
 		c.NameValues = r.cstring()
 	}
 
-	c.Shape = PrimShape{
-		PathCurve: r.u8(), ProfileCurve: r.u8(),
-		PathBegin: r.u16(), PathEnd: r.u16(),
-		PathScaleX: r.u8(), PathScaleY: r.u8(),
-		PathShearX: r.u8(), PathShearY: r.u8(),
-		PathTwist: r.i8(), PathTwistBegin: r.i8(), PathRadiusOffset: r.i8(),
-		PathTaperX: r.i8(), PathTaperY: r.i8(),
-		PathRevolutions: r.u8(), PathSkew: r.i8(),
-		ProfileBegin: r.u16(), ProfileEnd: r.u16(), ProfileHollow: r.u16(),
-	}
+	// The shape, in this message's own order, which is not the order
+	// the other three use: here the profile curve comes after all the
+	// path fields rather than beside the path curve.
+	//
+	// Reading it in the familiar order costs a byte's alignment on
+	// everything from PathBegin on, and the result still looks like a
+	// prim: a plain box came back as a cylinder with a skew, which is
+	// how this was found.  So the fields are listed one to a line and
+	// in the order the bytes arrive, rather than in the order the
+	// struct happens to declare them.
+	c.Shape.PathCurve = r.u8()
+	c.Shape.PathBegin, c.Shape.PathEnd = r.u16(), r.u16()
+	c.Shape.PathScaleX, c.Shape.PathScaleY = r.u8(), r.u8()
+	c.Shape.PathShearX, c.Shape.PathShearY = r.u8(), r.u8()
+	c.Shape.PathTwist, c.Shape.PathTwistBegin = r.i8(), r.i8()
+	c.Shape.PathRadiusOffset = r.i8()
+	c.Shape.PathTaperX, c.Shape.PathTaperY = r.i8(), r.i8()
+	c.Shape.PathRevolutions, c.Shape.PathSkew = r.u8(), r.i8()
+	c.Shape.ProfileCurve = r.u8()
+	c.Shape.ProfileBegin, c.Shape.ProfileEnd = r.u16(), r.u16()
+	c.Shape.ProfileHollow = r.u16()
 
 	// The texture entry is length prefixed here, where in ObjectUpdate
 	// it is a field of the message and the framing does it.

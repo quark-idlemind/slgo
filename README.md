@@ -1210,6 +1210,41 @@ before either, and the second undoes the first. Measured: texturing
 every face and then face 2 alone left faces 0 and 1 plain. Build the
 faces once and send them with `SetFaces` when making several changes.
 
+### Asking what a face looks like
+
+    texture "a sign"          # every face
+    texture -f 2 "a sign"     # one of them
+
+    faces, err := w.Faces(ctx, o)
+
+    a sign, 6 faces
+      faces 0-1,3-5  texture none  colour 255,255,255  alpha 255  repeats 1,1
+      face 2         texture 89556747-…  colour 255,80,80  alpha 200  repeats 4,2
+                     offset 0.25,-0.5  fullbright  shiny high  glow 100
+
+Given nothing to change, `texture` says what is there instead. Faces
+that look alike are printed once under all their numbers, because that
+is how a prim usually is -- five sides of a box alike and one different
+-- and only what is not plain is mentioned, so what has been done to a
+prim stands out from what has not.
+
+Two bugs turned up in the reading, both of which had made everything
+look untextured:
+
+  - **A full update carries the appearance too**, and only the
+    compressed one was being read. Most prims never get a compressed
+    update, so most prims read back as plain white whatever they
+    actually looked like.
+  - **The compressed update orders the shape fields its own way**: the
+    profile curve comes after every path field, where the other three
+    messages put it second. Reading it in the familiar order shifted
+    everything from `PathBegin` on by a byte -- and the result still
+    looked like a prim, so nothing complained: a plain box came back as
+    a cylinder with a skew, and a cylinder has three faces, so half the
+    box's faces were not reported at all. The fixture that should have
+    caught it was all zeros, which read the same however misaligned; it
+    now gives every field a distinct value.
+
 ## Touching things
 
     touch "a button"                       # a click, middle of face 0

@@ -46,10 +46,10 @@ type Object struct {
 	Name  string
 	Owner msg.UUID
 
-	// TextureEntry is the per face appearance, still packed.  Most of
-	// the time it arrives only in a compressed update, since a full
-	// ObjectUpdate is sent when an object first appears and appearance
-	// changes after that come the compressed way.
+	// TextureEntry is the per face appearance, still packed.  Both
+	// kinds of update carry it, and taking it from only the compressed
+	// one left most prims looking untextured: a region sends a full
+	// update for plenty of objects that never get a compressed one.
 	TextureEntry []byte
 
 	// Text is the floating text above the object, when it has any.
@@ -261,6 +261,13 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	v := o.seen(d.FullID)
 	v.Local, v.Parent, v.PCode, v.Scale = d.ID, d.ParentID, d.PCode, d.Scale
 	v.Shape = msg.ShapeOfUpdate(d)
+	// A full update carries the appearance as well, and it is the only
+	// update most prims ever get: a region sends a compressed one for
+	// what it thinks is worth compressing, so waiting for one leaves
+	// everything else looking like a prim nothing has textured.
+	if len(d.TextureEntry) > 0 {
+		v.TextureEntry = d.TextureEntry
+	}
 	if havePos {
 		v.Position, v.Rotation = pos, rot
 	}
@@ -312,8 +319,8 @@ func (o *Objects) Attachments() []*Object {
 
 // compressed records what a compressed update said.
 //
-// It carries more than a full update does -- the owner, the floating
-// text, the appearance -- so this fills in things nothing else would.
+// It carries things a full update does not -- the owner, the floating
+// text -- so this fills in what nothing else would.
 func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance float32) {
 	parent := uint32(0)
 	if c.ParentID != nil {

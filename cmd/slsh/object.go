@@ -23,6 +23,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,7 +38,7 @@ var objectFileCommands = map[string]*command{
 		run:   cmdDump,
 	},
 	"rez": {
-		usage: "rez [-at X,Y,Z] FILE",
+		usage: "rez [--at X,Y,Z] FILE",
 		brief: "build the object a JSON file describes",
 		run:   cmdRez,
 	},
@@ -48,7 +49,7 @@ var objectFileCommands = map[string]*command{
 	},
 	"texture": {
 		usage: "texture [-f FACE] [--id UUID] [--repeats S,T] [--color R,G,B] NAME|UUID",
-		brief: "set what a face looks like: texture, tiling, tint, alpha, glow",
+		brief: "set what a face looks like, or with no flags say what it looks like",
 		run:   cmdTexture,
 	},
 	"reform": {
@@ -112,7 +113,7 @@ func cmdRez(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("usage: rez [-at X,Y,Z] FILE")
+		return fmt.Errorf("usage: rez [--at X,Y,Z] FILE")
 	}
 
 	objs, err := readObjects(args[0])
@@ -470,6 +471,10 @@ func cmdTexture(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	o := textureFlags{Face: sl.AllFaces, Alpha: -1, Shiny: -1, Glow: -1}
 	args, done, err := subOptions("texture", "NAME|UUID", &o, out, args)
 	if err != nil || done {
+		if done {
+			fmt.Fprint(out, "\nGiven none of these, it says what the faces look like now instead\n"+
+				"of changing them; -f on its own reports that one face.\n")
+		}
 		return err
 	}
 	if len(args) != 1 {
@@ -477,6 +482,13 @@ func cmdTexture(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	}
 	if o.Bright && o.Dark {
 		return fmt.Errorf("--fullbright and --no-fullbright are opposites")
+	}
+
+	// Asked to change nothing, say what is there instead.  A command
+	// that took no flags and reported success without having done
+	// anything would be worse than useless.
+	if o.changesNothing() {
+		return sh.showFaces(ctx, out, args[0], o.Face)
 	}
 
 	// Everything is parsed before anything is sent, so a typo in the
@@ -562,6 +574,138 @@ func cmdTexture(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	}
 	fmt.Fprintf(out, "%s: %s\n", target.Name, which)
 	return nil
+}
+
+// changesNothing reports whether the command was given no change to
+// make, which is how it is asked to report instead.
+func (o textureFlags) changesNothing() bool {
+	return o.ID == "" && o.Repeats == "" && o.Offset == "" && o.Rot == "" &&
+		o.Colour == "" && o.Alpha < 0 && o.Shiny < 0 && o.Glow < 0 &&
+		!o.Bright && !o.Dark
+}
+
+// showFaces prints what an object's faces look like.
+//
+// Faces that look the same are printed once, under all of their
+// numbers, because that is how a prim usually is -- five sides of a box
+// alike and one different -- and six identical lines say less than one.
+func (sh *Shell) showFaces(ctx context.Context, out io.Writer, name string, only int) error {
+	target, err := sh.objectNamed(ctx, name, 30)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	faces, err := sh.s.Faces(ctx, target)
+	if err != nil {
+		return err
+	}
+	first := 0
+	if only != sl.AllFaces {
+		if only < 0 || only >= len(faces) {
+			return fmt.Errorf("%s has %d faces, so there is no face %d", target.Name, len(faces), only)
+		}
+		faces, first = faces[only:only+1], only
+	}
+
+	fmt.Fprintf(out, "%s, %d %s\n", target.Name, len(faces), pluralFaces(len(faces)))
+	var (
+		labels  []string
+		details []string
+	)
+	printed := make([]bool, len(faces))
+	for i, f := range faces {
+		if printed[i] {
+			continue
+		}
+		// Gather the faces that look alike.  They need not be next to
+		// each other, so every later match is collected here.
+		d := describeFace(f)
+		nums := []int{i + first}
+		for j := i + 1; j < len(faces); j++ {
+			if !printed[j] && describeFace(faces[j]) == d {
+				nums = append(nums, j+first)
+				printed[j] = true
+			}
+		}
+		labels = append(labels, faceLabel(nums))
+		details = append(details, d)
+	}
+	width := 0
+	for _, l := range labels {
+		if len(l) > width {
+			width = len(l)
+		}
+	}
+	for i, l := range labels {
+		fmt.Fprintf(out, "  %-*s  %s\n", width, l, details[i])
+	}
+	return nil
+}
+
+// pluralFaces is the word to follow the count with.
+func pluralFaces(n int) string {
+	if n == 1 {
+		return "face"
+	}
+	return "faces"
+}
+
+// faceLabel names a run of faces: "face 2", or "faces 0-1,3-5".
+func faceLabel(nums []int) string {
+	var runs []string
+	for i := 0; i < len(nums); {
+		j := i
+		for j+1 < len(nums) && nums[j+1] == nums[j]+1 {
+			j++
+		}
+		switch {
+		case j == i:
+			runs = append(runs, strconv.Itoa(nums[i]))
+		default:
+			runs = append(runs, fmt.Sprintf("%d-%d", nums[i], nums[j]))
+		}
+		i = j + 1
+	}
+	if len(nums) == 1 {
+		return "face " + runs[0]
+	}
+	return "faces " + strings.Join(runs, ",")
+}
+
+// describeFace is one face in one line.  Everything a face always has
+// is always printed; the rest only when it is not the plain value, so
+// that what has been done to a prim stands out from what has not.
+func describeFace(f sl.Face) string {
+	texture := "none"
+	if f.Texture != (msg.UUID{}) {
+		texture = f.Texture.String()
+	}
+	parts := []string{
+		"texture " + texture,
+		fmt.Sprintf("colour %d,%d,%d", f.Colour[0], f.Colour[1], f.Colour[2]),
+		fmt.Sprintf("alpha %d", f.Colour[3]),
+		fmt.Sprintf("repeats %g,%g", f.ScaleS, f.ScaleT),
+	}
+	if s, t := f.OffsetsF(); s != 0 || t != 0 {
+		parts = append(parts, fmt.Sprintf("offset %.4g,%.4g", s, t))
+	}
+	if f.Rotation != 0 {
+		parts = append(parts, fmt.Sprintf("rot %.4g", float64(f.RotationRad())*180/math.Pi))
+	}
+	if f.Fullbright() {
+		parts = append(parts, "fullbright")
+	}
+	if s := f.Shiny(); s != 0 {
+		parts = append(parts, "shiny "+[...]string{"none", "low", "medium", "high"}[s])
+	}
+	if b := f.Bumpiness(); b != 0 {
+		parts = append(parts, fmt.Sprintf("bump %d", b))
+	}
+	if f.Glow != 0 {
+		parts = append(parts, fmt.Sprintf("glow %d", f.Glow))
+	}
+	return strings.Join(parts, "  ")
 }
 
 // optionalPair reads "A,B", or nil when the flag was not given.

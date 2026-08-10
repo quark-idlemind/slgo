@@ -233,6 +233,40 @@ func (w *Session) SetFaces(ctx context.Context, o *Object, faces []Face) error {
 	return w.Send(ctx, m)
 }
 
+// Faces is what each face of an object looks like now: its texture,
+// tint, tiling, and the rest.
+//
+// The number of faces is what the object update said the prim has,
+// since the blob does not say -- a face that never differed from the
+// default leaves no trace in it.
+//
+// A prim nothing has described yet reads as plain white rather than as
+// an error: an object can be known to be there before anything has said
+// what it looks like, and a prim with no appearance recorded against it
+// is a plain white prim, so PlainFaces is the truth about it rather
+// than a guess.
+//
+// What comes back is the last appearance the REGION described, which
+// lags a change made a moment ago; see SetFace.
+func (w *Session) Faces(ctx context.Context, o *Object) ([]Face, error) {
+	if o == nil {
+		return nil, fmt.Errorf("sl: nothing to look at")
+	}
+	seen, err := w.ObjectByID(ctx, o.ID, 30*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	n := facesOf(seen)
+	faces, err := seen.Faces(n)
+	if err != nil {
+		if len(seen.TextureEntry) > 0 {
+			return nil, fmt.Errorf("sl: reading what %s looks like: %w", o, err)
+		}
+		return PlainFaces(n), nil
+	}
+	return faces, nil
+}
+
 // SetFace changes one face and leaves the others as they are.
 //
 // It reads the object's current appearance first, since the message
@@ -258,22 +292,9 @@ func (w *Session) SetFaces(ctx context.Context, o *Object, faces []Face) error {
 // send them with SetFaces, which is the whole appearance in one
 // message and has nothing to read back.
 func (w *Session) SetFace(ctx context.Context, o *Object, face int, change func(*Face)) error {
-	seen, err := w.ObjectByID(ctx, o.ID, 30*time.Second)
+	faces, err := w.Faces(ctx, o)
 	if err != nil {
 		return err
-	}
-	n := facesOf(seen)
-	faces, err := seen.Faces(n)
-	if err != nil {
-		// Nothing has described this prim's faces, which is the
-		// ordinary state of one just rezzed: the appearance arrives in
-		// a compressed update and a fresh prim has not had one.  It is
-		// a plain white prim, and saying so is better than refusing to
-		// texture anything until something else has looked at it.
-		if len(seen.TextureEntry) > 0 {
-			return fmt.Errorf("sl: reading what %s looks like: %w", o, err)
-		}
-		faces = PlainFaces(n)
 	}
 	switch {
 	case face == AllFaces:
