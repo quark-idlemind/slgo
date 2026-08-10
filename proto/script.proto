@@ -1,0 +1,365 @@
+syntax = "proto3";
+
+// Package script.v1 is how a program that wants LSL run asks something
+// else to run it.
+//
+// The programs are automate and autobench: they write a script, put it
+// somewhere it can run, watch what it says, and want to know whether it
+// compiled, whether it faulted and whether it got to the end.  None of
+// that is particular to Second Life.  The same script can be run by the
+// eLSL simulator with no grid at all, or by a viewer driven from
+// outside, or by a client holding a real grid session -- and the caller
+// should not have to be written three times to say so.
+//
+// So this is the seam.  A backend is anything that can be handed a
+// script and made to answer these questions, and it lives wherever it
+// likes: in this repository, beside the simulator, or beside a viewer.
+//
+// # What a backend owns and what a caller owns
+//
+// The backend owns everything that would break if the caller restarted:
+// the grid session or the viewer, the objects a script runs in, which
+// of them are busy, and the queue for them when they all are.  The
+// caller owns the script and what its output means.
+//
+// That division is why a lease is a stream rather than a pair of calls.
+// A caller that dies mid-benchmark must not leave objects held forever,
+// and no timeout is a good answer to that: too short and a long run
+// loses its objects, too long and a crash blocks the pool.  A stream
+// answers exactly: the objects are held while the caller is there.
+//
+// # What is deliberately not here
+//
+// Rezzing, linking, texturing, inventory.  A script runs inside an
+// object and the backend supplies one; how it came to exist is the
+// backend's business.  The simulator has no prims, the viewer has slot
+// files, a grid client rezzes and wears things, and a caller that had
+// to know which would be back to being written three times.
+//
+// Nor is there anything for reading state back out of an object.  A
+// benchmark that wants a number from the last run has the script say
+// it, which works everywhere; anything else would be an interface to
+// linkset data, which two of the three backends do not have.
+
+package script.v1;
+
+option go_package = "github.com/quark-idlemind/slgo/proto/scriptv1";
+
+// Runner runs LSL and says what happened.
+service Runner {
+  // Health is what this backend is and what it can do.  It is also the
+  // liveness check: a backend that answers is up.
+  rpc Health(HealthRequest) returns (HealthResponse);
+
+  // Pool is what there is to run in, and what is busy.  It is for a
+  // person asking why their benchmark is queued, and for a caller
+  // deciding how many runs to start at once.
+  rpc Pool(PoolRequest) returns (PoolResponse);
+
+  // Lease takes somewhere to run and holds it until the stream ends.
+  //
+  // The objects are the caller's alone until then, which is what a
+  // measurement needs: a benchmark leaves its base reading inside the
+  // object between runs, and a second caller in the same object would
+  // read somebody else's numbers.
+  //
+  // Ending the stream gives them back.  So does dying, which is the
+  // point -- there is no Release to forget to call, and no lease timer
+  // to tune between "a long run loses its objects" and "a crash blocks
+  // the pool".
+  //
+  // The first event is Granted or Queued; Queued may be followed by
+  // Granted when a turn comes up.
+  rpc Lease(LeaseRequest) returns (stream LeaseEvent);
+
+  // Run runs one script and streams back what it said.
+  //
+  // Streaming rather than returning a transcript because a run can last
+  // minutes and a person watching wants the lines as they arrive.  A
+  // caller that only wants the whole thing collects the stream.
+  //
+  // Cancelling the call stops the run.
+  rpc Run(RunRequest) returns (stream RunEvent);
+}
+
+// ---------------------------------------------------------------- health
+
+message HealthRequest {}
+
+message HealthResponse {
+  // Backend names the implementation -- "simulator", "viewer", "slgo"
+  // -- and Version is its build.  Both are for logs and bug reports; no
+  // caller should change what it does based on the name.  What a
+  // backend can do is in Capabilities, where it can be asked about
+  // rather than guessed from a word.
+  string backend = 1;
+  string version = 2;
+
+  Capabilities capabilities = 3;
+
+  // Ready is false when the backend is up but cannot run anything yet
+  // -- a viewer not started, a grid session still logging in -- and Why
+  // says which.  It is not an error: a caller may reasonably wait.
+  bool ready = 4;
+  string why = 5;
+}
+
+// Capabilities is what a caller may count on.
+//
+// Asked for rather than assumed, because the backends differ in ways a
+// test needs to know about: a simulator has no notion of a run-time
+// fault reported by a region, and a viewer cannot tell one avatar's
+// objects from another's.
+message Capabilities {
+  // MaxConcurrentRuns is how many scripts this backend will run at
+  // once.  One is a real answer: a viewer driven through its editor can
+  // only do one thing at a time.
+  int32 max_concurrent_runs = 1;
+
+  // CompileOnly says RunRequest.compile_only is honoured.  Where it is
+  // not, asking for it is an error rather than a run.
+  bool compile_only = 2;
+
+  // Faults says a run-time fault is reported as a Fault rather than
+  // appearing as ordinary output, or not at all.
+  bool faults = 3;
+
+  // OutOfMemory says a fault can be told to be an out-of-memory one,
+  // which is what a benchmark searching for a size limit turns on.
+  bool out_of_memory = 4;
+
+  // PersistentTargets says an object keeps what a script left in it
+  // between runs of the same lease.  A benchmark that carries its base
+  // reading from one run to the next needs this; without it, every run
+  // starts from nothing.
+  bool persistent_targets = 5;
+
+  // Agents says targets belong to named avatars, so LeaseRequest.agent
+  // means something.  A simulator has no avatars and ignores it.
+  bool agents = 6;
+
+  // Grid says this is a real Second Life session, and so that a run
+  // costs money, takes region time, and can be seen by other people.
+  // It is the flag a destructive test checks before doing something it
+  // would not do in public.
+  bool grid = 7;
+}
+
+// ------------------------------------------------------------------ pool
+
+message PoolRequest {}
+
+message PoolResponse {
+  repeated PoolAgent agents = 1;
+
+  // Waiting is how many callers are queued for a lease across all of
+  // them.
+  int32 waiting = 2;
+}
+
+// PoolAgent is one avatar, or the single anonymous holder of everything
+// on a backend with no avatars.
+message PoolAgent {
+  string agent = 1;
+
+  // Groups are the sets of objects a lease is granted from.  A group is
+  // taken whole: handing out objects one at a time lets two callers
+  // each hold some and wait for the rest, which is a deadlock where a
+  // queue is merely slow.
+  repeated PoolGroup groups = 2;
+}
+
+message PoolGroup {
+  int32 group = 1;
+  int32 size = 2;
+
+  // HeldBy names whoever has it, for a person wondering what else is
+  // running.  Empty means free.
+  string held_by = 3;
+}
+
+// ----------------------------------------------------------------- lease
+
+message LeaseRequest {
+  // Targets is how many objects are wanted, and they are granted
+  // together or not at all.
+  //
+  // Zero means one.  More than a group holds is an error rather than a
+  // wait that will never end.
+  int32 targets = 1;
+
+  // Agent asks for a particular avatar's objects.  Empty takes the
+  // first free group anywhere, which is what a caller that does not
+  // mind should say -- naming one is honoured exactly, including the
+  // waiting, since being given another avatar would be worse than being
+  // slow.
+  string agent = 2;
+
+  // Who is the caller, for the pool listing and the logs.  A person
+  // wondering what is holding the objects is better served by
+  // "autobench string-concat" than by a client address.
+  string who = 3;
+
+  // Wait bounds how long to queue when everything is busy.  Zero waits
+  // as long as the stream lives; a caller that would rather fail fast
+  // sets it.
+  int64 wait_seconds = 4;
+}
+
+message LeaseEvent {
+  oneof event {
+    Granted granted = 1;
+    Queued queued = 2;
+  }
+}
+
+message Granted {
+  // Targets are what to run in, in the order they were asked for.  They
+  // are valid until this stream ends and are meaningless to anybody
+  // else.
+  repeated Target targets = 1;
+
+  // Agent is whose objects these turned out to be, which a caller that
+  // did not name one should say out loud: a reading is only comparable
+  // with another from the same avatar.
+  string agent = 2;
+
+  // Group is which group of the pool this is, for the same reason the
+  // pool listing exists.
+  int32 group = 3;
+}
+
+message Queued {
+  // Ahead is how many callers are in front.  It is a hint for a log
+  // line, not a promise about order.
+  int32 ahead = 1;
+}
+
+// Target is somewhere a script can run.
+//
+// The id is opaque and belongs to the backend: a grid object's uuid, a
+// viewer's slot file, a name the simulator made up.  A caller passes it
+// back and does not read it.  Name is what a person would call it.
+message Target {
+  string id = 1;
+  string name = 2;
+}
+
+// ------------------------------------------------------------------- run
+
+message RunRequest {
+  // Target is where to run, from a Granted on a lease held by this same
+  // caller.
+  //
+  // Empty means anywhere: the backend takes somewhere, runs, and gives
+  // it back.  That is the whole of what a one-off script needs, and it
+  // saves a caller holding a lease stream to run a single script.
+  string target = 1;
+
+  // Name is what the script is called inside the object.  Reusing a
+  // name replaces that script rather than adding another.  Empty lets
+  // the backend choose, which is what a caller with one script and no
+  // opinion wants.
+  string name = 2;
+
+  // Source is the LSL.
+  string source = 3;
+
+  // Done is the text that means the script has finished; the run ends
+  // as soon as a line contains it.
+  //
+  // Without one there is no way to tell a script that has finished from
+  // one about to speak again, and the run can only wait out the
+  // timeout.  Have the script say something distinctive at the end and
+  // name it here.
+  string done = 4;
+
+  // TimeoutSeconds is how long to wait for Done.  Reaching it is not an
+  // error: the lines heard so far are still sent, and Finished says the
+  // sentinel was never seen.  A script that says nothing is a result
+  // worth seeing rather than a failure to report.
+  int64 timeout_seconds = 5;
+
+  // CompileOnly installs the script without starting it, which is how
+  // to get a compiler verdict without disturbing anything the object
+  // holds.  Nothing runs, so no linkset data is written and no
+  // measurement in progress is spoiled.
+  bool compile_only = 6;
+
+  // IgnoreFault keeps the run going after a fault the backend blames on
+  // this script.  By default a fault ends it, because the script has
+  // stopped and the sentinel is never coming.  Set this when something
+  // else in the object is expected to carry on talking.
+  bool ignore_fault = 7;
+}
+
+message RunEvent {
+  oneof event {
+    // Compiled comes first and exactly once.  A script that would not
+    // compile is followed by Finished and nothing else.
+    Compiled compiled = 1;
+
+    // Line is one thing the object said, as it is heard.
+    Line line = 2;
+
+    // Fault is a run-time error the backend blames on this script.
+    Fault fault = 3;
+
+    // Finished comes last and exactly once, whatever happened.
+    Finished finished = 4;
+  }
+}
+
+message Compiled {
+  bool ok = 1;
+
+  // Errors is what the compiler complained about.  There is usually at
+  // most one: a compiler reports the first error and stops.
+  repeated string errors = 2;
+
+  // Item is the script's id inside the object where a backend has such
+  // a thing, which is not the id of whatever it was copied from.
+  string item = 3;
+}
+
+message Line {
+  string text = 1;
+
+  // AtUnixNanos is when it was heard.
+  int64 at_unix_nanos = 2;
+
+  // Debug marks the channel a region comments on scripts on, as against
+  // the script speaking.  A caller printing a transcript for a person
+  // leaves these out; one diagnosing a failure wants them.
+  bool debug = 3;
+
+  // From is the name of whatever spoke and Source is its opaque id.
+  // Both are worth having when several objects are talking at once.
+  string from = 4;
+  string source = 5;
+}
+
+message Fault {
+  // Script is which script was blamed, which need not be the one just
+  // sent -- an object may hold others.
+  string script = 1;
+
+  // Reason is what the backend said, in its own words.
+  string reason = 2;
+
+  // OutOfMemory is the one kind worth telling apart, since a benchmark
+  // searching for a size limit treats it as the answer rather than as a
+  // failure.  Backends that cannot tell leave it false and say so in
+  // Capabilities.
+  bool out_of_memory = 3;
+}
+
+message Finished {
+  // Sentinel says Done was seen.  False after a timeout, a fault that
+  // ended the run, or a script that would not compile.
+  bool sentinel = 1;
+
+  // ElapsedMillis is how long the run took, measured by the backend --
+  // the only side that can leave out its own queueing.
+  int64 elapsed_millis = 2;
+}
