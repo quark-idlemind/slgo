@@ -578,6 +578,28 @@ it hangs off, which is why the listing walks up the linkset -- a linked
 hud is parented to its own root, so every prim of it but the root would
 otherwise be listed as standing in the region.
 
+An object is a linkset, and what a person means by one is its root, so
+the roots are the listing and `-c` opens them up:
+
+    objects            # a line per object
+    objects -c         # its prims too, indented under it
+
+    ec6c7e57-…  TrioBox                  30, 76, 1000
+      f3a97e57-…  TrioChild2               offset 3, 0, 0
+      95647e57-…  TrioChild1               offset 1.5, 0, 0
+
+Listing every prim by default turned a hundred things into a thousand
+lines, most called "Object" and placed at an offset from something the
+listing did not name. What is left out is counted rather than dropped
+(`20 more prims, not shown: -c lists them`), and a prim whose root was
+never described says so, since it has nothing to sit under.
+
+Browsing and searching differ: `objects` shows the objects, `objects
+HearthEmbers` shows the prim that was asked for, wherever it is. The
+name a person remembers is often on a prim inside, and answering
+"nothing matched" about something standing in front of them would be a
+lie by omission.
+
 Names cost a second round. An `ObjectUpdate` carries none, so
 `AllObjects` asks -- and `RequestObjectPropertiesFamily` is answered for
 a root prim and **not** for a child of a linkset. That was the whole

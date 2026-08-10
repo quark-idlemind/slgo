@@ -368,3 +368,94 @@ func TestWorldCommandsAllAnswerForHelp(t *testing.T) {
 		}
 	}
 }
+
+// TestObjectsListsTheObjectsAndThenTheirPrims.
+//
+// An object is a linkset, and what a person means by one is its root.
+// Listing every prim turns a hundred things into a thousand lines, most
+// of them called "Object" and placed at an offset from something the
+// listing does not name -- so the roots are the listing, and -c opens
+// them up.
+func TestObjectsListsTheObjectsAndThenTheirPrims(t *testing.T) {
+	x := newTestShell(t)
+	child := msg.MustParseUUID("f3a97e57-7e57-c0de-02ff-92b46275fd1b")
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: testLamp, Local: 1, Name: "TrioBox"}, PCode: 9,
+			Position: msg.Vector3{X: 30, Y: 76, Z: 1000}},
+		{Object: sl.Object{ID: child, Local: 2, Name: "TrioChild"}, PCode: 9,
+			Parent: 1, Position: msg.Vector3{X: 3}},
+	}
+
+	got := x.do(t, "objects")
+	if !strings.Contains(got, "TrioBox") {
+		t.Errorf("the object itself should be listed:\n%s", got)
+	}
+	if strings.Contains(got, "TrioChild") {
+		t.Errorf("a prim inside an object should not be a line of its own:\n%s", got)
+	}
+	// What was left out is said, rather than a listing that quietly
+	// claims the region holds less than it does.
+	if !strings.Contains(got, "1 more prim, not shown") {
+		t.Errorf("the prims left out should be counted:\n%s", got)
+	}
+
+	got = x.do(t, "objects -c")
+	if !strings.Contains(got, "  "+child.String()) {
+		t.Errorf("-c should list the prims, indented under the object:\n%s", got)
+	}
+	if !strings.Contains(got, "offset 3, 0, 0") {
+		t.Errorf("a prim's position is an offset from its root:\n%s", got)
+	}
+	if strings.Contains(got, "not shown") {
+		t.Errorf("nothing was left out, so nothing should be counted:\n%s", got)
+	}
+}
+
+// TestObjectsSearchesTheNamesInsideToo: browsing shows the objects,
+// searching shows what was searched for.  The name a person remembers
+// is often on a prim inside, and being told nothing is here -- when it
+// is standing in front of them -- would be a lie by omission.
+func TestObjectsSearchesTheNamesInsideToo(t *testing.T) {
+	x := newTestShell(t)
+	child := msg.MustParseUUID("f3a97e57-7e57-c0de-02ff-92b46275fd1b")
+	other := msg.MustParseUUID("95647e57-7e57-c0de-4d18-16ea29724ad6")
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: testLamp, Local: 1, Name: "TrioBox"}, PCode: 9},
+		{Object: sl.Object{ID: child, Local: 2, Name: "HearthEmbers"}, PCode: 9, Parent: 1},
+		{Object: sl.Object{ID: other, Local: 3, Name: "Flames"}, PCode: 9, Parent: 1},
+	}
+
+	got := x.do(t, "objects HearthEmbers")
+	if !strings.Contains(got, "TrioBox") {
+		t.Errorf("the object holding the match should be named:\n%s", got)
+	}
+	if !strings.Contains(got, "HearthEmbers") {
+		t.Errorf("the prim that was searched for should be shown without -c:\n%s", got)
+	}
+	if strings.Contains(got, "Flames") {
+		t.Errorf("a prim nobody asked about should stay inside:\n%s", got)
+	}
+}
+
+// TestObjectsShowsAPrimWhoseRootIsNotThere: a child whose root has not
+// been described has nothing to sit under, and the region really does
+// hold it.
+func TestObjectsShowsAPrimWhoseRootIsNotThere(t *testing.T) {
+	x := newTestShell(t)
+	orphan := msg.MustParseUUID("d7987e57-7e57-c0de-3e1f-bedbf023d953")
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: orphan, Local: 9, Name: "HearthEmbers"}, PCode: 9,
+			Parent: 4242, Position: msg.Vector3{X: -29.2}},
+	}
+
+	if got := x.do(t, "objects"); !strings.Contains(got, "1 more prim, not shown") {
+		t.Errorf("an orphan prim should be counted, not dropped:\n%s", got)
+	}
+	got := x.do(t, "objects -c")
+	if !strings.Contains(got, "HearthEmbers") {
+		t.Errorf("-c should list it:\n%s", got)
+	}
+	if !strings.Contains(got, "from a root nothing has described") {
+		t.Errorf("and should say why it is not under anything:\n%s", got)
+	}
+}

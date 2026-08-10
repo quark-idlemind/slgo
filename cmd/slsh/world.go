@@ -54,8 +54,8 @@ var worldCommands = map[string]*command{
 		run:   cmdWorn,
 	},
 	"objects": {
-		usage: "objects [TEXT]",
-		brief: "the objects the region has described, by name",
+		usage: "objects [-c] [TEXT]",
+		brief: "the objects the region has described; -c for the prims inside each",
 		run:   cmdObjects,
 	},
 }
@@ -280,8 +280,21 @@ func (sh *Shell) itemNames(ctx context.Context) map[msg.UUID]string {
 	return out
 }
 
+// objectsOptions is what objects was asked for.
+type objectsOptions struct {
+	Children bool `getopt:"--children -c  the prims of each object as well, indented under it"`
+	Help     bool `getopt:"--help -h      show what this command takes"`
+}
+
+// cmdObjects lists what the region has described, an object to a line.
+//
+// An object is a linkset, and what a person means by one is its root:
+// listing every prim turns a hundred things into a thousand lines, most
+// of them called "Object" and placed at an offset from something the
+// listing does not say. So the roots are the listing and -c opens them
+// up.
 func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	var o helpOnly
+	var o objectsOptions
 	args, done, err := subOptions("objects", "[TEXT]", &o, out, args)
 	if err != nil || done {
 		return err
@@ -301,34 +314,159 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 		sh.s.Names(ctx, namesWanted(wearers), 5*time.Second)
 	}
 
-	n := 0
+	roots, kids, orphans := linksets(all)
+
+	shown, hidden := 0, 0
+	for _, r := range roots {
+		mine := kids[r.Local]
+		if !namesAnywhere(want, r, mine) {
+			continue
+		}
+		fmt.Fprintf(out, "%-36s %-28s %s\n", r.ID, r.Name, sh.whereIs(r, wearers))
+		shown++
+		for _, c := range mine {
+			// Browsing shows the objects; searching shows what was
+			// searched for.  Without -c the prims inside are the
+			// object's business, but a prim whose own name was asked
+			// for is the answer to the question and is shown either
+			// way.
+			if !o.Children && !hit(want, c) {
+				hidden++
+				continue
+			}
+			// Indented, and without repeating whose attachment it is:
+			// the line above says that, and a child is worn wherever
+			// its root is.
+			fmt.Fprintf(out, "  %-34s %-28s offset %s\n", c.ID, c.Name, offsetOf(c.Position))
+			shown++
+		}
+	}
+
+	// A child whose root has not been described has nothing to sit
+	// under.  Leaving it out silently would be a listing that says a
+	// region holds less than it does.
+	for _, c := range orphans {
+		if !namesAnywhere(want, c, nil) {
+			continue
+		}
+		if !o.Children && !hit(want, c) {
+			hidden++
+			continue
+		}
+		fmt.Fprintf(out, "  %-34s %-28s offset %s, from a root nothing has described\n",
+			c.ID, c.Name, offsetOf(c.Position))
+		shown++
+	}
+
+	switch {
+	case shown == 0 && hidden == 0:
+		fmt.Fprintln(out, "nothing matched")
+	case hidden > 0:
+		fmt.Fprintf(out, "%d more %s, not shown: -c lists them\n",
+			hidden, pluralPrims(hidden))
+	}
+	return nil
+}
+
+func pluralPrims(n int) string {
+	if n == 1 {
+		return "prim"
+	}
+	return "prims"
+}
+
+// whereIs is the last column: a place for something standing in the
+// region, and who is wearing it for an attachment.
+func (sh *Shell) whereIs(o *sl.Seen, wearers map[uint32]wearer) string {
+	if who, worn := wearers[o.Local]; worn {
+		whose := sh.s.NameOr(who.avatar)
+		if who.point != 0 {
+			return "worn on " + sl.AttachPointName(who.point) + ", " + whose
+		}
+		return "worn by " + whose
+	}
+	return fmt.Sprintf("%.0f, %.0f, %.0f", o.Position.X, o.Position.Y, o.Position.Z)
+}
+
+// hit is whether this object's own name is what was searched for.  An
+// empty search is browsing rather than searching, and hits nothing.
+func hit(want string, o *sl.Seen) bool {
+	return want != "" && strings.Contains(strings.ToLower(o.Name), want)
+}
+
+// namesAnywhere is whether a listing filtered by text should show this
+// object.
+//
+// A root matches on its children's names as well as its own, because
+// the name a person remembers is often on a prim inside: searching for
+// "HearthEmbers" and being told nothing is here, when it is a prim of
+// the chimney standing in front of them, would be a lie by omission.
+func namesAnywhere(want string, root *sl.Seen, kids []*sl.Seen) bool {
+	if want == "" {
+		return true
+	}
+	if strings.Contains(strings.ToLower(root.Name), want) {
+		return true
+	}
+	for _, c := range kids {
+		if strings.Contains(strings.ToLower(c.Name), want) {
+			return true
+		}
+	}
+	return false
+}
+
+// linksets sorts objects into roots, the prims under each root, and the
+// children whose root is not here.
+//
+// A root is a prim with no prim above it: one standing in the region,
+// or the root of an attachment, which hangs off an avatar rather than
+// off another prim.  Avatars themselves are not objects for this
+// purpose -- an avatar is a person, and listing one among the furniture
+// helps nobody.
+func linksets(all []*sl.Seen) (roots []*sl.Seen, kids map[uint32][]*sl.Seen, orphans []*sl.Seen) {
+	byLocal := make(map[uint32]*sl.Seen, len(all))
+	for _, o := range all {
+		byLocal[o.Local] = o
+	}
+	kids = map[uint32][]*sl.Seen{}
 	for _, o := range all {
 		if o.IsAvatar() {
 			continue
 		}
-		if want != "" && !strings.Contains(strings.ToLower(o.Name), want) {
-			continue
-		}
-		// Only a root prim standing in the region has a position that
-		// is a place.  A child's is an offset from its root, and an
-		// attachment's is an offset from the avatar -- printing either
-		// as coordinates is three numbers that mean nothing.
-		where := fmt.Sprintf("%.0f, %.0f, %.0f", o.Position.X, o.Position.Y, o.Position.Z)
-		switch who, worn := wearers[o.Local]; {
-		case worn:
-			whose := sh.s.NameOr(who.avatar)
-			where = "worn by " + whose
-			if who.point != 0 {
-				where = "worn on " + sl.AttachPointName(who.point) + ", " + whose
+		up := byLocal[o.Parent]
+		switch {
+		case o.Parent == 0, up != nil && up.IsAvatar():
+			roots = append(roots, o)
+		case up == nil:
+			orphans = append(orphans, o)
+		default:
+			root := rootOf(o, byLocal)
+			if root == nil {
+				orphans = append(orphans, o)
+				continue
 			}
-		case o.Parent != 0:
-			where = "linked, offset " + offsetOf(o.Position)
+			kids[root.Local] = append(kids[root.Local], o)
 		}
-		fmt.Fprintf(out, "%-36s %-28s %s\n", o.ID, o.Name, where)
-		n++
 	}
-	if n == 0 {
-		fmt.Fprintln(out, "nothing matched")
+	return roots, kids, orphans
+}
+
+// rootOf walks up to the prim nothing is above, or nil if the chain
+// leaves the store before it gets there.
+func rootOf(o *sl.Seen, byLocal map[uint32]*sl.Seen) *sl.Seen {
+	for up := 0; up < 16; up++ {
+		if o.Parent == 0 {
+			return o // standing in the region
+		}
+		parent := byLocal[o.Parent]
+		if parent == nil {
+			return nil // the chain leaves the store before the top
+		}
+		if parent.IsAvatar() {
+			return o // the root of an attachment
+		}
+		o = parent
 	}
 	return nil
 }
