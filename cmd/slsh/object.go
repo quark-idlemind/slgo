@@ -608,7 +608,14 @@ func (sh *Shell) showFaces(ctx context.Context, out io.Writer, name string, only
 		faces, first = faces[only:only+1], only
 	}
 
-	fmt.Fprintf(out, "%s, %d %s\n", target.Name, len(faces), pluralFaces(len(faces)))
+	// A name is only known if something asked for it, and a cache
+	// filled a minute ago has not.  The id is a poor label but it is
+	// the object's; a blank one names nothing at all.
+	label := target.Name
+	if label == "" {
+		label = target.ID.String()
+	}
+	fmt.Fprintf(out, "%s, %d %s\n", label, len(faces), pluralFaces(len(faces)))
 	var (
 		labels  []string
 		details []string
