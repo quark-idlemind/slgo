@@ -459,3 +459,71 @@ func TestObjectsShowsAPrimWhoseRootIsNotThere(t *testing.T) {
 		t.Errorf("and should say why it is not under anything:\n%s", got)
 	}
 }
+
+// TestObjectsNamesTheOwner: "whose is that" is the question a listing
+// of a region full of other people's things is usually being asked.
+func TestObjectsNamesTheOwner(t *testing.T) {
+	x := newTestShell(t)
+	owner := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000a")
+	stranger := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000b")
+	child := msg.MustParseUUID("f3a97e57-7e57-c0de-02ff-92b46275fd1b")
+	unowned := msg.MustParseUUID("95647e57-7e57-c0de-4d18-16ea29724ad6")
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: testSomebody, Local: 1, Name: "Wearer"}, PCode: pcodeAvatar, Owner: owner},
+		{Object: sl.Object{ID: testLamp, Local: 2, Name: "a lamp"}, PCode: 9, Owner: owner},
+		{Object: sl.Object{ID: child, Local: 3, Name: "the shade"}, PCode: 9, Parent: 2, Owner: owner},
+		// Nobody has said who owns this one, which is not the same as
+		// saying nobody owns it.
+		{Object: sl.Object{ID: unowned, Local: 4, Name: "a mystery"}, PCode: 9},
+	}
+	x.grid.AnswerNames(t, map[msg.UUID]string{
+		owner: "Kerra Yule", stranger: "Somebody Else", testSomebody: "Wearer Resident",
+	})
+
+	got := x.do(t, "objects -c")
+	if !strings.Contains(got, "a lamp                       Kerra Yule") {
+		t.Errorf("the owner should be named beside the object:\n%s", got)
+	}
+	// A prim inside says so too, so a line copied out on its own still
+	// says whose it is.
+	if !strings.Contains(got, "the shade                    Kerra Yule") {
+		t.Errorf("a prim inside should name its owner too:\n%s", got)
+	}
+	// An owner nobody has answered for is left blank rather than shown
+	// as an id nobody can read.
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "a mystery") && strings.Contains(line, "00000000") {
+			t.Errorf("an unknown owner should be blank, not an id: %q", line)
+		}
+	}
+}
+
+// TestObjectsSaysWhoIsWearingSomethingOnlyWhenItIsNotTheirs: an avatar
+// wears its own things, so naming the wearer beside the owner is the
+// same word twice.  The case worth a word is the other one.
+func TestObjectsSaysWhoIsWearingSomethingOnlyWhenItIsNotTheirs(t *testing.T) {
+	x := newTestShell(t)
+	wearer := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000c")
+	other := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000d")
+	borrowed := msg.MustParseUUID("95647e57-7e57-c0de-4d18-16ea29724ad6")
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: wearer, Local: 1}, PCode: pcodeAvatar},
+		{Object: sl.Object{ID: testLamp, Local: 2, Name: "own hat"}, PCode: 9,
+			Parent: 1, AttachPoint: 4, Owner: wearer},
+		{Object: sl.Object{ID: borrowed, Local: 3, Name: "borrowed hat"}, PCode: 9,
+			Parent: 1, AttachPoint: 5, Owner: other},
+	}
+	x.grid.AnswerNames(t, map[msg.UUID]string{
+		wearer: "Wearer Resident", other: "Somebody Else",
+	})
+
+	got := x.do(t, "objects")
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "own hat") && strings.Contains(line, ", by ") {
+			t.Errorf("an avatar wearing its own thing needs no second name: %q", line)
+		}
+		if strings.Contains(line, "borrowed hat") && !strings.Contains(line, "by Wearer Resident") {
+			t.Errorf("somebody wearing another's thing is worth saying: %q", line)
+		}
+	}
+}

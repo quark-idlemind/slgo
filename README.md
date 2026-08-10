@@ -569,9 +569,18 @@ root prim's position is a place in the region, a child's is an offset
 from its root, and an attachment's is an offset from the avatar wearing
 it. All three used to print as three numbers.
 
-    6bdc7e57-…  Tanagera Design - Art Perrick Tree     228, 66, 30
-    d7987e57-…  HearthEmbers                           linked, offset -29.2, 6.5, 8.1
-    ec247e57-…  HUD control                            worn on HUD centre 2, Perrick Hobb
+    6bdc7e57-…  Tanagera Design      Kerra Yule            228, 66, 30
+    d7987e57-…  HearthEmbers         Kerra Yule            offset -29.2, 6.5, 8.1
+    ec247e57-…  HUD control          Perrick Hobb  worn on HUD centre 2
+
+Every line names its owner, prims inside included, so a line copied out
+on its own still says whose it is. An owner nobody has answered for is
+left blank rather than shown as an id, and a group owned object shows
+the group's id, since nothing here resolves a group name -- that it is
+not a person's name is the useful half of that answer. The wearer is
+named only when it is not the owner: an avatar wears its own things, so
+saying it twice is noise, and somebody wearing another's is the case
+worth a word.
 
 Being worn is not a property of the object: what says so is the avatar
 it hangs off, which is why the listing walks up the linkset -- a linked

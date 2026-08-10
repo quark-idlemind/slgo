@@ -308,11 +308,10 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 		want = strings.ToLower(args[0])
 	}
 	wearers := whoWears(all)
-	if len(wearers) > 0 {
-		// One request for all of them: an attachment says which avatar
-		// it hangs off, and an id is a poor way to say whose it is.
-		sh.s.Names(ctx, namesWanted(wearers), 5*time.Second)
-	}
+	// One request for the lot: an attachment says which avatar it hangs
+	// off and every object says who owns it, and an id is a poor way to
+	// say whose anything is.
+	sh.s.Names(ctx, namesWanted(wearers, all), 10*time.Second)
 
 	roots, kids, orphans := linksets(all)
 
@@ -322,7 +321,8 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 		if !namesAnywhere(want, r, mine) {
 			continue
 		}
-		fmt.Fprintf(out, "%-36s %-28s %s\n", r.ID, r.Name, sh.whereIs(r, wearers))
+		fmt.Fprintf(out, "%-36s %-28s %-24s %s\n",
+			r.ID, r.Name, sh.owner(r), sh.whereIs(r, wearers))
 		shown++
 		for _, c := range mine {
 			// Browsing shows the objects; searching shows what was
@@ -337,7 +337,8 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 			// Indented, and without repeating whose attachment it is:
 			// the line above says that, and a child is worn wherever
 			// its root is.
-			fmt.Fprintf(out, "  %-34s %-28s offset %s\n", c.ID, c.Name, offsetOf(c.Position))
+			fmt.Fprintf(out, "  %-34s %-28s %-24s offset %s\n",
+				c.ID, c.Name, sh.owner(c), offsetOf(c.Position))
 			shown++
 		}
 	}
@@ -353,8 +354,8 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 			hidden++
 			continue
 		}
-		fmt.Fprintf(out, "  %-34s %-28s offset %s, from a root nothing has described\n",
-			c.ID, c.Name, offsetOf(c.Position))
+		fmt.Fprintf(out, "  %-34s %-28s %-24s offset %s, from a root nothing has described\n",
+			c.ID, c.Name, sh.owner(c), offsetOf(c.Position))
 		shown++
 	}
 
@@ -378,14 +379,21 @@ func pluralPrims(n int) string {
 // whereIs is the last column: a place for something standing in the
 // region, and who is wearing it for an attachment.
 func (sh *Shell) whereIs(o *sl.Seen, wearers map[uint32]wearer) string {
-	if who, worn := wearers[o.Local]; worn {
-		whose := sh.s.NameOr(who.avatar)
-		if who.point != 0 {
-			return "worn on " + sl.AttachPointName(who.point) + ", " + whose
-		}
-		return "worn by " + whose
+	who, worn := wearers[o.Local]
+	if !worn {
+		return fmt.Sprintf("%.0f, %.0f, %.0f", o.Position.X, o.Position.Y, o.Position.Z)
 	}
-	return fmt.Sprintf("%.0f, %.0f, %.0f", o.Position.X, o.Position.Y, o.Position.Z)
+	where := "worn"
+	if who.point != 0 {
+		where = "worn on " + sl.AttachPointName(who.point)
+	}
+	// Whose it is has its own column, and an avatar wears its own
+	// things, so saying the name again is noise.  It is worth saying
+	// only when the two differ, which is the case worth noticing.
+	if who.avatar != o.Owner {
+		where += ", by " + sh.s.NameOr(who.avatar)
+	}
+	return where
 }
 
 // hit is whether this object's own name is what was searched for.  An
@@ -534,14 +542,41 @@ func whoWears(all []*sl.Seen) map[uint32]wearer {
 	return out
 }
 
-func namesWanted(wearers map[uint32]wearer) []msg.UUID {
+// namesWanted is every avatar the listing will have to name: the ones
+// wearing something, and the ones who own anything.
+func namesWanted(wearers map[uint32]wearer, all []*sl.Seen) []msg.UUID {
 	seen := map[msg.UUID]bool{}
 	var ids []msg.UUID
-	for _, w := range wearers {
-		if !seen[w.avatar] {
-			seen[w.avatar] = true
-			ids = append(ids, w.avatar)
+	add := func(id msg.UUID) {
+		if id.IsZero() || seen[id] {
+			return
 		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	for _, w := range wearers {
+		add(w.avatar)
+	}
+	for _, s := range all {
+		add(s.Owner)
 	}
 	return ids
+}
+
+// owner is who an object belongs to, as a name where one is known.
+//
+// Blank when nobody has said.  An owner arrives with a compressed
+// update or with the properties the naming asks for, and neither is
+// guaranteed -- a column of shortened ids for objects nothing has
+// answered about would be worse than a column that is simply empty
+// where the answer is not in.
+//
+// A group owned object names the group, which no lookup here resolves,
+// so it shows as a shortened id.  That it is not an avatar's name is
+// the useful half of the answer.
+func (sh *Shell) owner(o *sl.Seen) string {
+	if o.Owner.IsZero() {
+		return ""
+	}
+	return sh.s.NameOr(o.Owner)
 }
