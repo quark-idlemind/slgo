@@ -538,3 +538,61 @@ func TestObjectsSaysWhoIsWearingSomethingOnlyWhenItIsNotTheirs(t *testing.T) {
 		}
 	}
 }
+
+// TestObjectsFiltersByOwner: a region is mostly other people's things,
+// so "only mine" and "only theirs" are the questions being asked.
+func TestObjectsFiltersByOwner(t *testing.T) {
+	x := newTestShell(t)
+	Kerra := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000a")
+	somebody := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000b")
+	theirs := msg.MustParseUUID("95647e57-7e57-c0de-4d18-16ea29724ad6")
+	nameless := msg.MustParseUUID("f3a97e57-7e57-c0de-02ff-92b46275fd1b")
+	unknown := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000e")
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: testLamp, Local: 1, Name: "a lamp"}, PCode: 9, Owner: Kerra},
+		{Object: sl.Object{ID: theirs, Local: 2, Name: "a bench"}, PCode: 9, Owner: somebody},
+		{Object: sl.Object{ID: nameless, Local: 3, Name: "a mystery"}, PCode: 9, Owner: unknown},
+	}
+	x.grid.AnswerNames(t, map[msg.UUID]string{
+		Kerra: "Kerra Yule", somebody: "Somebody Else",
+	})
+
+	// A pattern, matched without regard to case: nobody types a
+	// resident's capitals the way they were registered.
+	got := x.do(t, "objects --owner Kerra")
+	if !strings.Contains(got, "a lamp") || strings.Contains(got, "a bench") {
+		t.Errorf("--owner Kerra should be one person's things:\n%s", got)
+	}
+	if got2 := x.do(t, "objects --owner Kerra"); got2 != got {
+		t.Errorf("the match should ignore case:\n%s", got2)
+	}
+	// It is a regular expression, not a word.
+	if got := x.do(t, "objects --owner '^Somebody'"); !strings.Contains(got, "a bench") {
+		t.Errorf("--owner should take a pattern:\n%s", got)
+	}
+
+	// A uuid names somebody exactly, which is the only way to tell two
+	// residents of the same name apart -- or to ask about one the
+	// region has not answered about at all.
+	if got := x.do(t, "objects --owner "+somebody.String()); !strings.Contains(got, "a bench") ||
+		strings.Contains(got, "a lamp") {
+		t.Errorf("--owner UUID should be that owner exactly:\n%s", got)
+	}
+	if got := x.do(t, "objects --owner "+unknown.String()); !strings.Contains(got, "a mystery") {
+		t.Errorf("a uuid should find an owner nobody has named:\n%s", got)
+	}
+
+	// A pattern cannot match a name nobody has answered with, and how
+	// many were passed over that way is worth saying: it is the
+	// difference between "nobody here owns one" and "nobody has said".
+	got = x.do(t, "objects --owner Kerra")
+	if !strings.Contains(got, "1 prim whose owner nobody has named") {
+		t.Errorf("the unnamed owners passed over should be counted:\n%s", got)
+	}
+
+	// And a pattern that is not one says so rather than matching
+	// nothing quietly.
+	if got := x.do(t, "objects --owner '['"); !strings.Contains(got, "--owner wants a uuid or a pattern") {
+		t.Errorf("a broken pattern should be reported: %q", got)
+	}
+}

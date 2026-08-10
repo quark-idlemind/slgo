@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,7 +55,7 @@ var worldCommands = map[string]*command{
 		run:   cmdWorn,
 	},
 	"objects": {
-		usage: "objects [-c] [TEXT]",
+		usage: "objects [-c] [--owner WHO] [TEXT]",
 		brief: "the objects the region has described; -c for the prims inside each",
 		run:   cmdObjects,
 	},
@@ -282,8 +283,9 @@ func (sh *Shell) itemNames(ctx context.Context) map[msg.UUID]string {
 
 // objectsOptions is what objects was asked for.
 type objectsOptions struct {
-	Children bool `getopt:"--children -c  the prims of each object as well, indented under it"`
-	Help     bool `getopt:"--help -h      show what this command takes"`
+	Children bool   `getopt:"--children -c  the prims of each object as well, indented under it"`
+	Owner    string `getopt:"--owner=WHO    only one owner's things: a uuid, or a pattern for the name"`
+	Help     bool   `getopt:"--help -h      show what this command takes"`
 }
 
 // cmdObjects lists what the region has described, an object to a line.
@@ -307,6 +309,10 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	if len(args) > 0 {
 		want = strings.ToLower(args[0])
 	}
+	whose, err := ownerFilter(o.Owner)
+	if err != nil {
+		return err
+	}
 	wearers := whoWears(all)
 	// One request for the lot: an attachment says which avatar it hangs
 	// off and every object says who owns it, and an id is a poor way to
@@ -316,7 +322,18 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	roots, kids, orphans := linksets(all)
 
 	shown, hidden := 0, 0
+	unnamed := 0
 	for _, g := range sh.byOwner(roots, orphans) {
+		if !whose(g) {
+			// Somebody nobody has named is not a match for a pattern
+			// about names, and how many were passed over that way is
+			// worth a word: it is the difference between "nobody here
+			// owns one" and "nobody has said".
+			if g.named == "" {
+				unnamed += len(g.roots) + len(g.orphans)
+			}
+			continue
+		}
 		// The owner heads the group rather than repeating down a
 		// column, since a region is mostly one person's things at a
 		// time and the name is the longest thing on the line.
@@ -376,6 +393,10 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	case hidden > 0:
 		fmt.Fprintf(out, "%d more %s, not shown: -c lists them\n",
 			hidden, pluralPrims(hidden))
+	}
+	if unnamed > 0 {
+		fmt.Fprintf(out, "%d %s whose owner nobody has named were not matched\n",
+			unnamed, pluralPrims(unnamed))
 	}
 	return nil
 }
@@ -576,11 +597,46 @@ func namesWanted(wearers map[uint32]wearer, all []*sl.Seen) []msg.UUID {
 
 // owned is one person's things: what they own that is standing here or
 // worn, and the prims of theirs whose root is not here.
+//
+// id and named are what --owner is matched against.  The heading is not:
+// it reads "(owner not known)" for things nobody has answered about, and
+// a pattern for a person's name should not start matching those.
 type owned struct {
+	id      msg.UUID
+	named   string
 	name    string
 	roots   []*sl.Seen
 	orphans []*sl.Seen
 	printed bool
+}
+
+// ownerFilter reads what --owner was given: a uuid, or a pattern for
+// the name.
+//
+// A uuid is taken as one because nothing else looks like one, and it is
+// the only way to name somebody the region has not answered about yet
+// -- or to tell two people with the same name apart.  Anything else is
+// a regular expression, matched without regard to case, since nobody
+// types a resident's capitals the way they were registered.
+//
+// An empty filter matches everybody, which is what asking for nothing
+// in particular means.
+func ownerFilter(want string) (func(*owned) bool, error) {
+	if want == "" {
+		return func(*owned) bool { return true }, nil
+	}
+	if id, err := msg.ParseUUID(want); err == nil {
+		return func(g *owned) bool { return g.id == id }, nil
+	}
+	re, err := regexp.Compile("(?i)" + want)
+	if err != nil {
+		return nil, fmt.Errorf("--owner wants a uuid or a pattern: %w", err)
+	}
+	// Somebody nobody has named cannot be matched by a pattern for a
+	// name.  Saying so is better than quietly listing them, and better
+	// than quietly leaving them out of a listing that claims to be
+	// everything.
+	return func(g *owned) bool { return g.named != "" && re.MatchString(g.named) }, nil
 }
 
 // byOwner gathers objects under whoever owns them, sorted by name.
@@ -593,9 +649,17 @@ func (sh *Shell) byOwner(roots, orphans []*sl.Seen) []*owned {
 	group := func(s *sl.Seen) *owned {
 		g := groups[s.Owner]
 		if g == nil {
-			g = &owned{name: sh.owner(s)}
-			if g.name == "" {
+			g = &owned{id: s.Owner, named: sh.ownerName(s)}
+			switch {
+			case g.named != "":
+				g.name = g.named
+			case s.Owner.IsZero():
 				g.name = "(owner not known)"
+			default:
+				// Known to be somebody, but nobody has said who.  The
+				// shortened id at least tells one such owner from
+				// another, which a shared heading would not.
+				g.name = sh.s.NameOr(s.Owner)
 			}
 			groups[s.Owner] = g
 		}
@@ -614,30 +678,32 @@ func (sh *Shell) byOwner(roots, orphans []*sl.Seen) []*owned {
 	for _, g := range groups {
 		out = append(out, g)
 	}
+	// Whoever has a name first, in name order; the rest after, since a
+	// heap of things under an id is the least useful thing to read and
+	// should not be the first thing anybody reads.
 	sort.Slice(out, func(i, j int) bool {
-		ui, uj := out[i].name == "(owner not known)", out[j].name == "(owner not known)"
-		if ui != uj {
-			return uj
+		if (out[i].named == "") != (out[j].named == "") {
+			return out[j].named == ""
 		}
 		return strings.ToLower(out[i].name) < strings.ToLower(out[j].name)
 	})
 	return out
 }
 
-// owner is who an object belongs to, as a name where one is known.
+// ownerName is what whoever owns this is called, and "" when nobody has
+// said -- either because no owner is known at all, or because the name
+// behind the id has not been answered for.
 //
-// Blank when nobody has said.  An owner arrives with a compressed
-// update or with the properties the naming asks for, and neither is
-// guaranteed -- a column of shortened ids for objects nothing has
-// answered about would be worse than a column that is simply empty
-// where the answer is not in.
+// The two are worth telling apart from a name that IS known: a pattern
+// for a person's name cannot match what nobody has named, and quietly
+// leaving those out of a filtered listing would be the difference
+// between "nobody here owns one" and "nobody has said" going unsaid.
 //
-// A group owned object names the group, which no lookup here resolves,
-// so it shows as a shortened id.  That it is not an avatar's name is
-// the useful half of the answer.
-func (sh *Shell) owner(o *sl.Seen) string {
+// A group owned object is the other case with no name: nothing here
+// resolves a group name, so it stays an id.
+func (sh *Shell) ownerName(o *sl.Seen) string {
 	if o.Owner.IsZero() {
 		return ""
 	}
-	return sh.s.NameOr(o.Owner)
+	return sh.s.Name(o.Owner)
 }

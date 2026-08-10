@@ -591,6 +591,20 @@ The wearer is named only when it is not the owner. An avatar wears its
 own things, so under their own heading it would be the same name twice;
 somebody wearing another's is the case worth the words.
 
+`--owner` narrows it to one person:
+
+    objects --owner Kerra                    # a pattern, ignoring case
+    objects --owner '^Perrick.*Engineer$'     # it is a regular expression
+    objects --owner 372d7e57-…                # or exactly whom you mean
+    objects --owner perrick Box               # with the name filter as well
+
+A uuid is taken as one because nothing else looks like one, and it is
+the only way to tell two residents of the same name apart -- or to ask
+about an owner the region has not named. A pattern cannot match a name
+nobody has answered with, so those are counted and said rather than
+dropped: `3 prims whose owner nobody has named were not matched` is the
+difference between "nobody here owns one" and "nobody has said".
+
 Being worn is not a property of the object: what says so is the avatar
 it hangs off, which is why the listing walks up the linkset -- a linked
 hud is parented to its own root, so every prim of it but the root would
