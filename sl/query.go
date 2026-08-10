@@ -281,8 +281,12 @@ func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Dur
 			return nil
 		}
 		if have == last {
+			// Answers have stopped, which does not mean everything
+			// that is going to be named has been: what is left may be
+			// the kind this request is never answered for.  Stop
+			// waiting, but go on to ask the other way.
 			if quiet++; quiet >= quietRounds {
-				return nil
+				break
 			}
 		} else {
 			quiet = 0
@@ -290,6 +294,70 @@ func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Dur
 		last = have
 		if err := w.Settle(ctx, time.Second); err != nil {
 			return err
+		}
+	}
+	return w.selectForNames(ctx, want, deadline)
+}
+
+// selectByBatch is how many objects one ObjectSelect names at a time.
+// The message takes a block per object, so this is one packet rather
+// than sixty-four.
+const selectByBatch = 64
+
+// selectForNames asks again, by selecting, for the ones the family
+// request never answered.
+//
+// A RequestObjectPropertiesFamily is answered for a root prim and NOT
+// for a child of a linkset -- measured: a child prim stayed nameless
+// through the whole resolve, and one ObjectSelect named it
+// "HearthEmbers" immediately.  That is the difference between what
+// "objects" could see and what "dump" could: dump selects.
+//
+// Selecting is cheaper here than asking, since one message carries
+// many objects where the family request carries one.  What it is not
+// is free of meaning: the simulator now believes these are being
+// edited, and an object another avatar has selected is one they cannot
+// always move.  So the selection is given back immediately.
+func (w *Session) selectForNames(ctx context.Context, want []msg.UUID, deadline time.Time) error {
+	if !time.Now().Before(deadline) {
+		return nil
+	}
+	seen, err := w.fetch(ctx, "", "")
+	if err != nil {
+		return err
+	}
+	var locals []uint32
+	for _, s := range seen {
+		// Avatars are named by a name lookup, not by asking the object
+		// what it is called, and selecting one is a strange thing to
+		// do to somebody.
+		if s.Name != "" || s.IsAvatar() {
+			continue
+		}
+		for _, id := range want {
+			if s.ID == id {
+				locals = append(locals, s.Local)
+				break
+			}
+		}
+	}
+	if len(locals) == 0 {
+		return nil
+	}
+
+	for i := 0; i < len(locals); i += selectByBatch {
+		batch := locals[i:min(i+selectByBatch, len(locals))]
+		if err := w.Send(ctx, w.selectMsg(batch...)); err != nil {
+			return err
+		}
+		if err := w.Settle(ctx, 500*time.Millisecond); err != nil {
+			return err
+		}
+		if err := w.Send(ctx, w.deselectMsg(batch...)); err != nil {
+			return err
+		}
+		if !time.Now().Before(deadline) {
+			return nil
 		}
 	}
 	return nil

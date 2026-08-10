@@ -101,3 +101,51 @@ func TestChangesNothingIsEveryFlag(t *testing.T) {
 		}
 	}
 }
+
+// TestWhoWearsFollowsTheLinkUpToTheAvatar.
+//
+// Being worn is not a property of the object alone: what says so is the
+// avatar it hangs off.  A linked attachment is parented to its own root
+// rather than to the avatar, so every prim of a linked hud but the root
+// would otherwise be listed as if it stood in the region.
+func TestWhoWearsFollowsTheLinkUpToTheAvatar(t *testing.T) {
+	me := msg.MustParseUUID("345e7e57-7e57-c0de-facd-866ae36a55db")
+	stranger := msg.MustParseUUID("36d97e57-7e57-c0de-7134-ab99a0aedcbd")
+	root := msg.MustParseUUID("c0837e57-7e57-c0de-7d2a-0e9925a20a3f")
+	child := msg.MustParseUUID("ec247e57-7e57-c0de-c550-cbea2d96d52f")
+	loose := msg.MustParseUUID("c9cb7e57-7e57-c0de-23e9-75ff2f62eb69")
+
+	worn := whoWears([]*sl.Seen{
+		{Object: sl.Object{ID: me, Local: 10}, PCode: 47},
+		{Object: sl.Object{ID: stranger, Local: 20}, PCode: 47},
+		// A hud of two prims: the root hangs off the avatar, the
+		// child off the root.
+		{Object: sl.Object{ID: root, Local: 11}, Parent: 10, AttachPoint: sl.HUDCenter1},
+		{Object: sl.Object{ID: child, Local: 12}, Parent: 11},
+		// Somebody else's.
+		{Object: sl.Object{ID: msg.UUID{15: 9}, Local: 21}, Parent: 20, AttachPoint: 2},
+		// And a prim standing in the region.
+		{Object: sl.Object{ID: loose, Local: 30}},
+	})
+
+	if w, ok := worn[11]; !ok || w.avatar != me || w.point != sl.HUDCenter1 {
+		t.Errorf("the root of a worn hud came back as %+v (found=%v)", w, ok)
+	}
+	if w, ok := worn[12]; !ok || w.avatar != me {
+		t.Errorf("a child of a worn hud came back as %+v (found=%v)", w, ok)
+	}
+	// The child has no attach point of its own; the root's is the
+	// answer, since that is where the thing is worn.
+	if worn[12].point != sl.HUDCenter1 {
+		t.Errorf("a child of a worn hud reported point %d", worn[12].point)
+	}
+	if w, ok := worn[21]; !ok || w.avatar != stranger {
+		t.Errorf("a stranger's attachment came back as %+v (found=%v)", w, ok)
+	}
+	if _, ok := worn[30]; ok {
+		t.Error("a prim standing in the region was called an attachment")
+	}
+	if _, ok := worn[10]; ok {
+		t.Error("an avatar was called an attachment")
+	}
+}

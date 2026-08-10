@@ -172,6 +172,15 @@ func (w *Session) selectMsg(locals ...uint32) *msg.ObjectSelect {
 	return m
 }
 
+func (w *Session) deselectMsg(locals ...uint32) *msg.ObjectDeselect {
+	m := &msg.ObjectDeselect{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	for _, l := range locals {
+		m.ObjectData = append(m.ObjectData, msg.ObjectDeselect_ObjectData{ObjectLocalID: l})
+	}
+	return m
+}
+
 // Select tells the simulator we are editing these objects, which some
 // operations require.
 func (w *Session) Select(ctx context.Context, objs ...*Object) error {

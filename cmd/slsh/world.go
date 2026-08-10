@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -292,6 +294,13 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	if len(args) > 0 {
 		want = strings.ToLower(args[0])
 	}
+	wearers := whoWears(all)
+	if len(wearers) > 0 {
+		// One request for all of them: an attachment says which avatar
+		// it hangs off, and an id is a poor way to say whose it is.
+		sh.s.Names(ctx, namesWanted(wearers), 5*time.Second)
+	}
+
 	n := 0
 	for _, o := range all {
 		if o.IsAvatar() {
@@ -300,12 +309,101 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 		if want != "" && !strings.Contains(strings.ToLower(o.Name), want) {
 			continue
 		}
-		fmt.Fprintf(out, "%-36s %-28s %.0f, %.0f, %.0f\n",
-			o.ID, o.Name, o.Position.X, o.Position.Y, o.Position.Z)
+		// Only a root prim standing in the region has a position that
+		// is a place.  A child's is an offset from its root, and an
+		// attachment's is an offset from the avatar -- printing either
+		// as coordinates is three numbers that mean nothing.
+		where := fmt.Sprintf("%.0f, %.0f, %.0f", o.Position.X, o.Position.Y, o.Position.Z)
+		switch who, worn := wearers[o.Local]; {
+		case worn:
+			whose := sh.s.NameOr(who.avatar)
+			where = "worn by " + whose
+			if who.point != 0 {
+				where = "worn on " + sl.AttachPointName(who.point) + ", " + whose
+			}
+		case o.Parent != 0:
+			where = "linked, offset " + offsetOf(o.Position)
+		}
+		fmt.Fprintf(out, "%-36s %-28s %s\n", o.ID, o.Name, where)
 		n++
 	}
 	if n == 0 {
 		fmt.Fprintln(out, "nothing matched")
 	}
 	return nil
+}
+
+// offsetOf writes an offset to a tenth of a metre.
+//
+// A region coordinate is worth a whole metre and no more, but an offset
+// of a tenth is a real difference between one prim and the next, and
+// rounding those to metres printed a linkset as a column of zeros.
+func offsetOf(v msg.Vector3) string {
+	return tenth(v.X) + ", " + tenth(v.Y) + ", " + tenth(v.Z)
+}
+
+func tenth(f float32) string {
+	r := math.Round(float64(f)*10) / 10
+	if r == 0 {
+		// Negative zero prints as "-0", which is a distinction
+		// without a difference.
+		r = 0
+	}
+	return strconv.FormatFloat(r, 'g', -1, 64)
+}
+
+// wearer is the avatar an attachment hangs off, and where on them.
+type wearer struct {
+	avatar msg.UUID
+	point  int
+}
+
+// whoWears works out which of these objects are attachments, by local
+// id.
+//
+// Being worn is not a property of the object alone: what says so is the
+// avatar it is parented to.  A linked attachment is parented to its own
+// root rather than to the avatar, so this walks up until it finds one
+// -- otherwise every prim of a linked hud but the root would be listed
+// as if it were standing in the region.
+//
+// The store holds everyone's attachments, not only ours, since that is
+// how a viewer draws other people; so the answer is whose, not whether.
+func whoWears(all []*sl.Seen) map[uint32]wearer {
+	byLocal := make(map[uint32]*sl.Seen, len(all))
+	for _, o := range all {
+		byLocal[o.Local] = o
+	}
+	out := map[uint32]wearer{}
+	for _, o := range all {
+		if o.IsAvatar() || o.Parent == 0 {
+			continue
+		}
+		point := o.AttachPoint
+		for up, at := 0, byLocal[o.Parent]; at != nil && up < 8; up, at = up+1, byLocal[at.Parent] {
+			if at.IsAvatar() {
+				out[o.Local] = wearer{avatar: at.ID, point: point}
+				break
+			}
+			if point == 0 {
+				point = at.AttachPoint
+			}
+			if at.Parent == 0 {
+				break
+			}
+		}
+	}
+	return out
+}
+
+func namesWanted(wearers map[uint32]wearer) []msg.UUID {
+	seen := map[msg.UUID]bool{}
+	var ids []msg.UUID
+	for _, w := range wearers {
+		if !seen[w.avatar] {
+			seen[w.avatar] = true
+			ids = append(ids, w.avatar)
+		}
+	}
+	return ids
 }

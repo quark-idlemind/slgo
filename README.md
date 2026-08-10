@@ -562,6 +562,33 @@ Measured on the beta grid with two avatars in Dovet: both listed the
 same 1501 objects, and flushing through one emptied what the other saw
 -- 1504 objects each before, 0 each after. One store.
 
+### Telling an attachment from a thing standing there
+
+`objects` says which is which, because the coordinates alone cannot: a
+root prim's position is a place in the region, a child's is an offset
+from its root, and an attachment's is an offset from the avatar wearing
+it. All three used to print as three numbers.
+
+    6bdc7e57-…  Tanagera Design - Art Perrick Tree     228, 66, 30
+    d7987e57-…  HearthEmbers                           linked, offset -29.2, 6.5, 8.1
+    ec247e57-…  HUD control                            worn on HUD centre 2, Perrick Hobb
+
+Being worn is not a property of the object: what says so is the avatar
+it hangs off, which is why the listing walks up the linkset -- a linked
+hud is parented to its own root, so every prim of it but the root would
+otherwise be listed as standing in the region.
+
+Names cost a second round. An `ObjectUpdate` carries none, so
+`AllObjects` asks -- and `RequestObjectPropertiesFamily` is answered for
+a root prim and **not** for a child of a linkset. That was the whole
+difference between what `objects` could show and what `dump` could:
+dump selects. So the resolve now falls back to an `ObjectSelect` for
+whatever the family request never answered, which is cheaper than
+asking (one message carries sixty-four objects where the family request
+carries one), and gives the selection straight back -- a simulator
+believes a selected object is being edited, and one avatar's selection
+is another's object that will not move.
+
 ### What is worn is not what the store holds
 
 Sharing forced a fix to something that was already wrong. Every agent in
