@@ -205,7 +205,7 @@ func TestAFullUpdateIsRememberedFromItsBytes(t *testing.T) {
 		ObjectData: placement(pos, rot),
 	}))
 
-	got, ok := a.Objects.Get(aPrim)
+	got, ok := a.Objects().Get(aPrim)
 	if !ok {
 		t.Fatal("the object was not remembered")
 	}
@@ -224,8 +224,8 @@ func TestAFullUpdateIsRememberedFromItsBytes(t *testing.T) {
 	if got.First.IsZero() || got.Last.IsZero() {
 		t.Errorf("first %v last %v, both should be set", got.First, got.Last)
 	}
-	if a.Objects.Count() != 1 || len(a.Objects.All()) != 1 {
-		t.Errorf("count = %d, all = %d", a.Objects.Count(), len(a.Objects.All()))
+	if a.Objects().Count() != 1 || len(a.Objects().All()) != 1 {
+		t.Errorf("count = %d, all = %d", a.Objects().Count(), len(a.Objects().All()))
 	}
 }
 
@@ -314,7 +314,7 @@ func TestAWornObjectRemembersTheItemItCameFrom(t *testing.T) {
 		NameValue:  []byte("AttachItemID STRING RW DS " + anItem.String() + "\n\x00"),
 	}))
 
-	got, ok := a.Objects.Get(aPrim)
+	got, ok := a.Objects().Get(aPrim)
 	if !ok {
 		t.Fatal("not remembered")
 	}
@@ -325,7 +325,7 @@ func TestAWornObjectRemembersTheItemItCameFrom(t *testing.T) {
 		t.Errorf("attach point = %d, want 35", got.AttachPoint)
 	}
 
-	worn := a.Objects.Attachments()
+	worn := a.Objects().Attachments()
 	if len(worn) != 1 || worn[0].ID != aPrim {
 		t.Errorf("Attachments = %v", worn)
 	}
@@ -444,7 +444,7 @@ func TestACompressedUpdateCarriesWhatAFullOneDoesNot(t *testing.T) {
 	}}
 	feed(t, a, m)
 
-	got, ok := a.Objects.Get(aChild)
+	got, ok := a.Objects().Get(aChild)
 	if !ok {
 		t.Fatal("the compressed update was not recorded")
 	}
@@ -556,10 +556,10 @@ func TestATruncatedCompressedBlobIsDropped(t *testing.T) {
 	// The first is unusable and goes.  The second decoded far enough to
 	// say what the object is and where it is, which is what the cache is
 	// for, so the error on its tail is worth nothing here.
-	if a.Objects.Count() != 1 {
-		t.Fatalf("count = %d, want 1", a.Objects.Count())
+	if a.Objects().Count() != 1 {
+		t.Fatalf("count = %d, want 1", a.Objects().Count())
 	}
-	got, ok := a.Objects.Get(aPrim)
+	got, ok := a.Objects().Get(aPrim)
 	if !ok || got.PCode != 9 {
 		t.Errorf("a partly decoded object was lost: %+v", got)
 	}
@@ -591,10 +591,10 @@ func TestATerseUpdateMovesSomethingAlreadyKnown(t *testing.T) {
 	}
 	feed(t, a, m)
 
-	if a.Objects.Count() != 1 {
-		t.Fatalf("count = %d, want 1", a.Objects.Count())
+	if a.Objects().Count() != 1 {
+		t.Fatalf("count = %d, want 1", a.Objects().Count())
 	}
-	got, _ := a.Objects.Get(aPrim)
+	got, _ := a.Objects().Get(aPrim)
 	if want := (msg.Vector3{X: 40, Y: 50, Z: 60}); got.Position != want {
 		t.Errorf("position = %+v, want %+v", got.Position, want)
 	}
@@ -624,10 +624,10 @@ func TestKillObjectForgetsIt(t *testing.T) {
 	k.ObjectData = []msg.KillObject_ObjectData{{ID: 1}, {ID: 12345}}
 	feed(t, a, k)
 
-	if _, ok := a.Objects.Get(aPrim); ok {
+	if _, ok := a.Objects().Get(aPrim); ok {
 		t.Error("the killed object is still held")
 	}
-	if _, ok := a.Objects.Get(aChild); !ok {
+	if _, ok := a.Objects().Get(aChild); !ok {
 		t.Error("a kill for an unknown local id took something else with it")
 	}
 }
@@ -653,11 +653,11 @@ func TestNamesAndOwnersComeOnlyFromAsking(t *testing.T) {
 	}}
 	feed(t, a, family, props)
 
-	got, ok := a.Objects.Get(aPrim)
+	got, ok := a.Objects().Get(aPrim)
 	if !ok || got.Name != "a nameless prim" || got.Owner != anOwner {
 		t.Errorf("ObjectPropertiesFamily gave %+v", got)
 	}
-	got, ok = a.Objects.Get(aChild)
+	got, ok = a.Objects().Get(aChild)
 	if !ok || got.Name != "the other one" || got.Owner != someone {
 		t.Errorf("ObjectProperties gave %+v", got)
 	}

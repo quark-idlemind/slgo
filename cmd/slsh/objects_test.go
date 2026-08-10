@@ -352,9 +352,11 @@ func TestAutoCountsWhatIsWornAndSaysWhatThatBuys(t *testing.T) {
 	for i := range session.AutoPoints {
 		id := msg.UUID{15: byte(i + 1)}
 		objs.Items = append(objs.Items, &invItem{ID: id, Name: session.AutoName(i)})
+		// Worn by us: an attachment hangs off the avatar wearing it,
+		// and what is worn by somebody else does not count.
 		x.grid.objects = append(x.grid.objects, &sl.Seen{
 			Object: sl.Object{ID: msg.UUID{14: byte(i + 1)}, Local: uint32(i + 1)},
-			PCode:  9, AttachItem: id, AttachPoint: session.AutoPoints[i],
+			PCode:  9, Owner: testMe, AttachItem: id, AttachPoint: session.AutoPoints[i],
 		})
 	}
 	x.grid.mu.Unlock()

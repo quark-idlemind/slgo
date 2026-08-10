@@ -173,19 +173,62 @@ func (w *Session) Wear(ctx context.Context, it *Item, point int, timeout time.Du
 // and waiting fifteen seconds gets nothing -- so the name a person
 // knows it by is the name of the inventory item it was worn from,
 // which is what AttachItem is for.
+// Only this avatar's are returned.  Everyone's attachments are objects
+// in the region and all of them are described the same way, so "worn"
+// is not enough to mean "worn by me": the object store is the region's
+// and may be shared with the other avatars in it.  What settles it is
+// the parent -- an attachment hangs off the avatar wearing it.
 func (w *Session) WornObjects(ctx context.Context) ([]*Attached, error) {
 	seen, err := w.b.Objects(ctx, "", "")
 	if err != nil {
 		return nil, err
 	}
+	avatars := map[uint32]msg.UUID{}
+	mine, knowMe := uint32(0), false
+	for _, s := range seen {
+		if !s.IsAvatar() {
+			continue
+		}
+		avatars[s.Local] = s.ID
+		if s.ID == w.me {
+			mine, knowMe = s.Local, true
+		}
+	}
+
 	var out []*Attached
 	for _, s := range seen {
 		if s.AttachItem.IsZero() {
 			continue
 		}
+		if !worn(s, w.me, mine, knowMe, avatars) {
+			continue
+		}
 		out = append(out, &Attached{Object: s.Object, Item: s.AttachItem, Point: s.AttachPoint})
 	}
 	return out, nil
+}
+
+// worn reports whether an attachment is this avatar's.
+//
+// Everyone's attachments look alike -- they all carry an AttachItemID,
+// including strangers' -- and the store is the region's, so what
+// settles it is the avatar the object hangs off.
+//
+// Once this avatar has been described, that is the whole answer: worn
+// by us means parented to us.  Before then there is nothing to compare
+// against, and the fallback is to leave out only what is known to be
+// somebody else's rather than to claim nothing is worn at all.  Both
+// halves were measured: with the fallback alone, two avatars sharing a
+// region each reported a passing stranger's hat as their own, because
+// the stranger had not been described when the hat was.
+func worn(s *Seen, me msg.UUID, mine uint32, knowMe bool, avatars map[uint32]msg.UUID) bool {
+	if knowMe {
+		return s.Parent == mine
+	}
+	if who, ok := avatars[s.Parent]; ok && who != me {
+		return false
+	}
+	return s.Owner.IsZero() || s.Owner == me
 }
 
 // WornFromItem finds the worn object that an inventory item is being
@@ -209,6 +252,9 @@ func (w *Session) WornFromItem(ctx context.Context, item msg.UUID) (*Attached, b
 		return nil, false
 	}
 	for _, s := range seen {
+		// An item id is unique to the wearer's inventory, so unlike
+		// WornObjects this needs no filter: nobody else's attachment
+		// can have been worn from this avatar's item.
 		if s.AttachItem == item {
 			return &Attached{Object: s.Object, Item: item, Point: s.AttachPoint}, true
 		}

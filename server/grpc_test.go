@@ -96,7 +96,7 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	upd := &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{ID: 4242, FullID: prim, PCode: 9}}}
 	r.sim.send(upd, 0)
 	waitFor(t, 5*time.Second, "the object update to be recorded", func() bool {
-		return h.Agent().Objects.Count() > 0
+		return h.Agent().Objects().Count() > 0
 	})
 
 	all, err := r.srv.Objects(ctx, &pb.ObjectsRequest{})

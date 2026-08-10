@@ -65,6 +65,12 @@ type Server struct {
 	// not work, and what is already being tried.
 	starts agentState
 
+	// regions is one object store per region, shared by every avatar
+	// hosted here.  What a region says about its objects is true for
+	// all of them, so keeping a copy each would be three answers to
+	// the same question -- see agent.Cache.
+	regions *agent.Cache
+
 	// ctx is the daemon's own lifetime.  A session started on request
 	// outlives the request: cancelling the call that asked for it must
 	// not take the avatar back out of the world.
@@ -154,7 +160,11 @@ func (h *Hosted) setAgent(a *agent.Agent) {
 
 // New makes an empty server.
 func New() *Server {
-	return &Server{agents: map[string]*Hosted{}, ctx: context.Background()}
+	return &Server{
+		agents:  map[string]*Hosted{},
+		regions: agent.NewCache(),
+		ctx:     context.Background(),
+	}
 }
 
 // SetBase gives the server the lifetime its sessions should have, and
@@ -214,6 +224,8 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	// message it does not understand.
 	opts.Recv = append(opts.Recv, msg.KeepBody())
 	opts.Tap = func(p *msg.Packet) { h.relay(p) }
+	// Every avatar here shares one store per region.
+	opts.Regions = s.regions
 	opts.OnEvent = func(name string, body []byte) { h.relayEvent(name, body) }
 	h.opts = opts
 

@@ -203,8 +203,26 @@ func TestFeaturesReportsACapabilityThatIsNotThere(t *testing.T) {
 
 // wearThings puts objects on the fake avatar, since an attachment is
 // only an object that says which item it was worn from.
+//
+// It hangs them off the avatar, and describes the avatar if nothing has
+// yet, because that is what says whose attachments these are: the store
+// is the region's and may hold everyone's.
 func wearThings(x *testShell, worn ...*sl.Seen) {
+	const avatar = uint32(1)
 	x.grid.mu.Lock()
+	described := false
+	for _, o := range x.grid.objects {
+		described = described || o.ID == testMe
+	}
+	if !described {
+		x.grid.objects = append(x.grid.objects,
+			&sl.Seen{Object: sl.Object{ID: testMe, Local: avatar}, PCode: 47})
+	}
+	for _, o := range worn {
+		if o.Parent == 0 {
+			o.Parent = avatar
+		}
+	}
 	x.grid.objects = append(x.grid.objects, worn...)
 	x.grid.mu.Unlock()
 }

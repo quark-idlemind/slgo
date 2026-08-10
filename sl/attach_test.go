@@ -280,11 +280,21 @@ func TestTakeOffForgetsWhatWasWorn(t *testing.T) {
 func TestWornObjectsAsksWhoeverWasConnected(t *testing.T) {
 	w, f := newFakeSession(t)
 	item := msg.MustParseUUID("75f27e57-7e57-c0de-b61a-dcef76421b96")
+	elsewhere := msg.MustParseUUID("87e97e57-7e57-c0de-f56c-a8837e56f4d8")
 	f.objects = []*Seen{
-		{Object: Object{ID: thePrim, Local: 5}, AttachItem: item, AttachPoint: HUDCenter1},
+		// This avatar, which is what says whose the attachment is: it
+		// hangs off the wearer.
+		{Object: Object{ID: testAgentID, Local: 4}, PCode: pcodeAvatar},
+		{Object: Object{ID: thePrim, Local: 5}, Parent: 4, AttachItem: item, AttachPoint: HUDCenter1},
 		// A prim standing in the region is not worn, whatever else is
 		// known about it.
 		{Object: Object{ID: theOther, Local: 6}, PCode: pcodePrim},
+		// Somebody else's attachment.  The store is the region's and
+		// may be shared with the avatars in it, so being worn is not
+		// enough to be worn by us.
+		{Object: Object{ID: elsewhere, Local: 8}, PCode: pcodeAvatar},
+		{Object: Object{ID: msg.MustParseUUID("93907e57-7e57-c0de-f462-557f179447a9"), Local: 9},
+			Parent: 8, AttachItem: msg.MustParseUUID("94c37e57-7e57-c0de-392b-0489550b815e")},
 	}
 
 	worn, err := w.WornObjects(context.Background())

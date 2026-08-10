@@ -36,7 +36,7 @@ import (
 func aDirectSession(t *testing.T) *Direct {
 	t.Helper()
 	return &Direct{
-		a:        &agent.Agent{Objects: &agent.Objects{}, Caps: agent.Caps{}},
+		a:        &agent.Agent{Caps: agent.Caps{}},
 		messages: make(chan *Message, relayDepth),
 		info: &Info{
 			Name: "direct", AgentID: testAgentID, SessionID: testSessionID,

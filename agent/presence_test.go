@@ -51,10 +51,10 @@ func TestTheCacheIsSweptOnATimer(t *testing.T) {
 
 	// One object in view and one a region away, put in with the range
 	// check turned off so the sweep is the only thing that can remove it.
-	a.Objects.update(&msg.ObjectUpdate_ObjectData{ID: 1, FullID: aPrim,
+	a.Objects().update(&msg.ObjectUpdate_ObjectData{ID: 1, FullID: aPrim,
 		ObjectData: placement(msg.Vector3{X: 130, Y: 128, Z: 25}, msg.Quaternion{})},
 		msg.Vector3{}, 0)
-	a.Objects.update(&msg.ObjectUpdate_ObjectData{ID: 2, FullID: aChild,
+	a.Objects().update(&msg.ObjectUpdate_ObjectData{ID: 2, FullID: aChild,
 		ObjectData: placement(msg.Vector3{X: 900, Y: 128, Z: 25}, msg.Quaternion{})},
 		msg.Vector3{}, 0)
 
@@ -63,13 +63,13 @@ func TestTheCacheIsSweptOnATimer(t *testing.T) {
 	go a.trimObjects(ctx, 5*time.Millisecond)
 
 	deadline := time.Now().Add(2 * time.Second)
-	for a.Objects.Count() > 1 {
+	for a.Objects().Count() > 1 {
 		if time.Now().After(deadline) {
-			t.Fatalf("the sweep left %d objects", a.Objects.Count())
+			t.Fatalf("the sweep left %d objects", a.Objects().Count())
 		}
 		time.Sleep(time.Millisecond)
 	}
-	if _, ok := a.Objects.Get(aPrim); !ok {
+	if _, ok := a.Objects().Get(aPrim); !ok {
 		t.Error("the sweep took something that was in view")
 	}
 }

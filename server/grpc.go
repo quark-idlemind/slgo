@@ -519,7 +519,7 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 	if err != nil {
 		return nil, err
 	}
-	all := h.Agent().Objects.All()
+	all := h.Agent().Objects().All()
 
 	out := &pb.ObjectsResponse{Known: int32(len(all))}
 	for _, o := range all {
@@ -617,7 +617,7 @@ func (s *Server) Flush(ctx context.Context, req *pb.FlushRequest) (*pb.FlushResp
 	if err != nil {
 		return nil, err
 	}
-	return &pb.FlushResponse{Forgotten: int32(h.Agent().Objects.Flush())}, nil
+	return &pb.FlushResponse{Forgotten: int32(h.Agent().Objects().Flush())}, nil
 }
 
 func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, error) {

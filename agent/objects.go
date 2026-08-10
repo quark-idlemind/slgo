@@ -85,13 +85,83 @@ type Object struct {
 // distance does not retroactively forget what was already described:
 // raising it from 128 to 256 metres took the count from 195 to 217,
 // and dropping it to 32 left it at 193.
+//
+// A store can be shared by several agents in the same region -- see
+// Cache -- which is what viewers is for: what to keep is decided by
+// everyone looking, not by whoever happened to hear the update.
 type Objects struct {
-	mu   sync.RWMutex
-	byID map[msg.UUID]*Object
+	mu      sync.RWMutex
+	byID    map[msg.UUID]*Object
+	viewers map[string]viewpoint
+}
+
+// A viewpoint is one avatar's camera and how far it is being told
+// about.  Far of zero means that avatar has no limit, so nothing is
+// dropped on its account.
+type viewpoint struct {
+	camera msg.Vector3
+	far    float32
 }
 
 func newObjects() *Objects {
-	return &Objects{byID: map[msg.UUID]*Object{}}
+	return &Objects{byID: map[msg.UUID]*Object{}, viewers: map[string]viewpoint{}}
+}
+
+// Watch registers where an agent is looking from.
+//
+// It is what stops one avatar's walking away from throwing out what
+// another is standing in front of: every viewpoint gets a say in what
+// the store keeps.  The key is the agent's, and registering again moves
+// that viewpoint rather than adding one.
+func (o *Objects) Watch(key string, camera msg.Vector3, far float32) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.viewers[key] = viewpoint{camera: camera, far: far}
+}
+
+// Unwatch takes an agent's viewpoint away, which is what leaving the
+// region or logging out amounts to.  A viewpoint left behind would go
+// on keeping objects alive for an avatar that is not there.
+func (o *Objects) Unwatch(key string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.viewers, key)
+}
+
+// Watchers is how many agents are looking at this store.
+func (o *Objects) Watchers() int {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return len(o.viewers)
+}
+
+// keepLocked reports whether something at a point is close enough to
+// anybody to be worth keeping.
+//
+// The caller's own viewpoint is passed rather than looked up, because
+// the update being judged came with the position the camera had when it
+// arrived, and because an agent whose first update lands before its
+// first Watch would otherwise be judged by nobody.
+func (o *Objects) keepLocked(at, camera msg.Vector3, far float32) bool {
+	if within(at, camera, far) {
+		return true
+	}
+	for _, v := range o.viewers {
+		if within(at, v.camera, v.far) {
+			return true
+		}
+	}
+	return false
+}
+
+// within is one viewpoint's answer.  No draw distance means no limit,
+// so everything is within it.
+func within(at, camera msg.Vector3, far float32) bool {
+	if far <= 0 {
+		return true
+	}
+	limit := far + TrimMargin
+	return dist2(at, camera) <= limit*limit
 }
 
 // All returns a copy of everything known.
@@ -136,6 +206,33 @@ func (o *Objects) seen(id msg.UUID) *Object {
 	return v
 }
 
+// absorb takes in what another store holds, keeping what this one
+// already has.
+//
+// It is for the moment an agent joins a shared store: what it heard
+// before the region named itself is this region's, and dropping it
+// would lose objects that nothing will describe again.  What is already
+// here came from an agent that has been in the region longer, so it is
+// not worth overwriting with a newcomer's copy.
+func (o *Objects) absorb(from *Objects) int {
+	if from == nil || from == o {
+		return 0
+	}
+	taken := from.All()
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	n := 0
+	for _, v := range taken {
+		if _, have := o.byID[v.ID]; have {
+			continue
+		}
+		o.byID[v.ID] = v
+		n++
+	}
+	return n
+}
+
 // Flush forgets everything.
 //
 // A region's objects are described once on arrival, so the cache is
@@ -177,12 +274,14 @@ const orphanGrace = time.Minute
 // by where their root is and go with it.  An orphan whose root never
 // turned up goes once it is old enough to be sure the root is not
 // coming.
+// Everyone watching the store gets a say: an object is kept if it is
+// within ANY viewpoint's draw distance.  A store shared by three
+// avatars in three corners of a region holds what all three can see,
+// and none of them walking away throws out another's view.
 func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 	if drawDistance <= 0 {
 		return 0
 	}
-	limit := drawDistance + TrimMargin
-	limit2 := limit * limit
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -214,7 +313,7 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 			}
 			at = p
 		}
-		if dist2(at, camera) > limit2 {
+		if !o.keepLocked(at, camera, drawDistance) {
 			delete(o.byID, id)
 			n++
 		}
@@ -246,13 +345,12 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	if drawDistance > 0 && havePos {
-		limit := drawDistance + TrimMargin
+	if havePos {
 		at, judge := pos, true
 		if d.ParentID != 0 {
 			at, judge = o.rootPosLocked(d.ParentID)
 		}
-		if judge && dist2(at, camera) > limit*limit {
+		if judge && !o.keepLocked(at, camera, drawDistance) {
 			delete(o.byID, d.FullID)
 			return
 		}
@@ -330,16 +428,13 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	if drawDistance > 0 {
-		limit := drawDistance + TrimMargin
-		at, judge := c.Position, true
-		if parent != 0 {
-			at, judge = o.rootPosLocked(parent)
-		}
-		if judge && dist2(at, camera) > limit*limit {
-			delete(o.byID, c.FullID)
-			return
-		}
+	at, judge := c.Position, true
+	if parent != 0 {
+		at, judge = o.rootPosLocked(parent)
+	}
+	if judge && !o.keepLocked(at, camera, drawDistance) {
+		delete(o.byID, c.FullID)
+		return
 	}
 
 	v := o.seen(c.FullID)
@@ -418,7 +513,7 @@ func (a *Agent) trackObjects() {
 		m := p.Message.(*msg.ObjectUpdate)
 		l := a.Look()
 		for i := range m.ObjectData {
-			a.Objects.update(&m.ObjectData[i], l.Center, l.Far)
+			a.Objects().update(&m.ObjectData[i], l.Center, l.Far)
 		}
 	}, msg.Inline())
 
@@ -437,7 +532,7 @@ func (a *Agent) trackObjects() {
 			// it is, which is what the cache is for.  The error is
 			// worth nothing here beyond not trusting the tail.
 			_ = err
-			a.Objects.compressed(c, l.Center, l.Far)
+			a.Objects().compressed(c, l.Center, l.Far)
 		}
 	}, msg.Inline())
 
@@ -452,14 +547,14 @@ func (a *Agent) trackObjects() {
 			if err != nil {
 				continue
 			}
-			a.Objects.moved(t)
+			a.Objects().moved(t)
 		}
 	}, msg.Inline())
 
 	a.Disp.MustHandle("KillObject", func(p *msg.Packet) {
 		m := p.Message.(*msg.KillObject)
 		for _, d := range m.ObjectData {
-			a.Objects.kill(d.ID)
+			a.Objects().kill(d.ID)
 		}
 	}, msg.Inline())
 
@@ -496,7 +591,7 @@ func (a *Agent) trackObjects() {
 	// client does not have to ask again.
 	a.Disp.MustHandle("ObjectPropertiesFamily", func(p *msg.Packet) {
 		m := p.Message.(*msg.ObjectPropertiesFamily)
-		a.Objects.named(m.ObjectData.ObjectID,
+		a.Objects().named(m.ObjectData.ObjectID,
 			trimNul(m.ObjectData.Name), m.ObjectData.OwnerID)
 	}, msg.Inline())
 
@@ -504,7 +599,7 @@ func (a *Agent) trackObjects() {
 		m := p.Message.(*msg.ObjectProperties)
 		for i := range m.ObjectData {
 			d := &m.ObjectData[i]
-			a.Objects.named(d.ObjectID, trimNul(d.Name), d.OwnerID)
+			a.Objects().named(d.ObjectID, trimNul(d.Name), d.OwnerID)
 		}
 	}, msg.Inline())
 }

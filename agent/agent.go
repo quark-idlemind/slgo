@@ -69,6 +69,20 @@ type Agent struct {
 	// it.
 	lastPacket atomic.Int64
 
+	// objects is what the region has said about itself.  It lives here
+	// because a region describes itself once, when the avatar arrives,
+	// and a client that attaches later is never told.
+	//
+	// It is a pointer that changes: crossing into another region swaps
+	// in that region's store, which may be one other agents are already
+	// keeping.  Read it through Objects, never directly, or a read
+	// racing a crossing gets the wrong region's objects.
+	objects atomic.Pointer[Objects]
+
+	// regions hands out those stores.  A nil cache means this agent
+	// keeps its own, which is what a single direct login wants.
+	regions *Cache
+
 	mu          sync.RWMutex
 	friends     map[msg.UUID]*Friend
 	look        Look
@@ -76,10 +90,9 @@ type Agent struct {
 	activeGroup msg.UUID
 	groups      []Group
 	regionFlags uint32
-	// Objects is what the region has said about itself.  It lives here
-	// because a region describes itself once, when the avatar arrives,
-	// and a client that attaches later is never told.
-	Objects *Objects
+
+	// attached is the region whose store is held now, under mu.
+	attached msg.UUID
 
 	region regionState
 
@@ -112,6 +125,13 @@ type Options struct {
 	// Tap, if set, sees every packet.  msg.DumpPacket makes a
 	// reasonable capture.
 	Tap msg.Handler
+
+	// Regions, if set, is where this agent gets its object store: one
+	// per region, shared with the other agents there.  Nil gives the
+	// agent a store of its own, which is what one login on its own
+	// wants.  A server hosting several avatars should pass the same
+	// cache to all of them.
+	Regions *Cache
 
 	// OnUnhandled sees decoded messages nothing is registered for.
 	// Worth setting: this is how a protocol change announces
@@ -183,6 +203,7 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 		HTTP:      opts.HTTP,
 		Inventory: newInventory(acct.InventoryRoot),
 		Caps:      Caps{},
+		regions:   opts.Regions,
 		done:      make(chan struct{}),
 		anyPacket: newSignal(),
 		inRegion:  newSignal(),
@@ -324,7 +345,7 @@ func (a *Agent) fail(err error) {
 	if err != nil {
 		a.errOnce.Do(func() { a.err.Store(err) })
 	}
-	a.doneOnce.Do(func() { close(a.done) })
+	a.doneOnce.Do(func() { close(a.done); a.leaveRegion() })
 	if a.cancel != nil {
 		a.cancel()
 	}
@@ -334,7 +355,10 @@ func (a *Agent) fail(err error) {
 // are Inline: they are trivial, and running them in order keeps the
 // handshake deterministic.
 func (a *Agent) register() {
-	a.Objects = newObjects()
+	// A store of its own until the handshake says which region this
+	// is.  Objects can be described before that arrives, and they are
+	// this region's whatever it turns out to be called.
+	a.objects.Store(newObjects())
 	a.trackObjects()
 
 	// AgentDataUpdate carries the active group, which decides whether a
@@ -385,12 +409,11 @@ func (a *Agent) register() {
 		a.mu.Unlock()
 
 		r := regionFromHandshake(m)
-		if a.setRegion(r) {
-			// A different region: everything cached describes
-			// somewhere else now.  Nothing says so, and nothing
-			// will, so this handshake is the notice.
-			a.Objects.Flush()
-		}
+		a.setRegion(r)
+		// Whichever region this is, its objects are kept apart from
+		// the last one's.  Nothing says a region has changed and
+		// nothing will, so this handshake is the notice.
+		a.enterRegion(r.ID)
 
 		reply := &msg.RegionHandshakeReply{}
 		reply.AgentData.AgentID = a.Account.AgentID
@@ -654,7 +677,7 @@ func (a *Agent) Logout(ctx context.Context, timeout time.Duration) error {
 // Close stops the session'a goroutines and the socket without telling
 // the simulator anything.
 func (a *Agent) Close() {
-	a.doneOnce.Do(func() { close(a.done) })
+	a.doneOnce.Do(func() { close(a.done); a.leaveRegion() })
 	if a.cancel != nil {
 		a.cancel()
 	}

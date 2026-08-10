@@ -142,7 +142,12 @@ func (a *Agent) trimObjects(ctx context.Context, every time.Duration) {
 			return
 		case <-t.C:
 			l := a.Look()
-			a.Objects.Trim(l.Center, l.Far)
+			store := a.Objects()
+			// Say where this avatar is looking from before trimming,
+			// so that a store shared with other agents keeps what they
+			// can see and they keep what this one can.
+			store.Watch(a.viewKey(), l.Center, l.Far)
+			store.Trim(l.Center, l.Far)
 		}
 	}
 }

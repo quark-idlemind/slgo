@@ -528,6 +528,66 @@ checks neither leaks into the other. They exist so that a package level
 cache added later fails a test instead of being discovered in
 production.
 
+### One object cache per region, not per avatar
+
+Objects are the exception, and deliberately: `agent.Cache` hands out one
+store per region and every avatar standing there shares it. What a
+region says about its objects -- ids, shapes, appearances, names, and
+the local ids most messages use -- is true for everybody there, so a
+copy each is three answers to the same question, three sets of the same
+few thousand objects, and a separate `ObjectProperties` request for
+every name. It is keyed on the region's **UUID** rather than its handle:
+a handle is grid coordinates, and Agni and Aditi both have regions at
+the same ones.
+
+Sharing also widens what is known. A region describes what is near each
+avatar's camera, so avatars in different corners are told about
+different things and the union is more than any one heard.
+
+Two things that had to change with it:
+
+  - **The trim answers to every viewpoint.** It used to discard whatever
+    was beyond one camera's draw distance. Pointed at a shared store,
+    one avatar walking away would throw out what another was standing in
+    front of, so each agent registers a viewpoint with `Watch` and an
+    object survives if *any* of them can see it. The same applies on the
+    way in: the agent that HEARD an update need not be the one near it.
+  - **The last one out drops the store.** A region goes on changing with
+    nobody in it, and the only notice of an object being destroyed is a
+    `KillObject` to the agents present -- so a store kept past the last
+    agent fills with things that no longer exist and looks exactly like
+    one that is right.
+
+Measured on the beta grid with two avatars in Dovet: both listed the
+same 1501 objects, and flushing through one emptied what the other saw
+-- 1504 objects each before, 0 each after. One store.
+
+### What is worn is not what the store holds
+
+Sharing forced a fix to something that was already wrong. Every agent in
+a region is told about *everyone's* attachments -- that is how a viewer
+draws other people's clothes -- so "carries an AttachItemID" never meant
+"worn by me", and the receiving stream does not settle it either. Logged
+in alone with a private cache, Perrick Hobb's own stream
+carried 16 attachments, all of them a passing stranger's and none its
+own.
+
+What settles it is the parent: an attachment hangs off the avatar
+wearing it. `WornObjects` filters on that once this avatar has been
+described, and before then falls back to leaving out only what is known
+to be somebody else's -- claiming nothing is worn would be worse than
+claiming too much. Both halves were measured: with the fallback alone,
+two avatars sharing a region each reported that stranger's hat as their
+own; with the parent known, one avatar wearing a HUD saw it and the
+other saw nothing.
+
+HUDs are the case that makes this the client's job rather than the
+grid's. Ordinary attachments are sent to everybody; a HUD is sent only
+to the avatar wearing it, which is why none of that stranger's sixteen
+were at points 31 to 38. Sharing a store puts a HUD where another
+avatar can read it, so the filter is now what keeps the separation the
+protocol used to provide for free.
+
 ## Presence
 
 `AgentUpdate` is not optional, in a way that is not obvious. A session

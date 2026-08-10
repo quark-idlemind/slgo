@@ -197,13 +197,13 @@ func TestCrossingToAnotherRegionForgetsTheOldOne(t *testing.T) {
 
 	// The same region again, under a new name: nothing is forgotten.
 	feed(t, a, handshakeFor(aRegion, "renamed since"))
-	if a.Objects.Count() != 1 {
+	if a.Objects().Count() != 1 {
 		t.Error("a rename emptied the object cache")
 	}
 
 	feed(t, a, handshakeFor(otherRegion, "somewhere else"))
-	if a.Objects.Count() != 0 {
-		t.Errorf("%d objects from the old region survived the crossing", a.Objects.Count())
+	if a.Objects().Count() != 0 {
+		t.Errorf("%d objects from the old region survived the crossing", a.Objects().Count())
 	}
 }
 

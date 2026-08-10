@@ -159,7 +159,7 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 
 func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error) {
 	var out []*Seen
-	for _, o := range d.a.Objects.All() {
+	for _, o := range d.a.Objects().All() {
 		if named != "" && o.Name != named {
 			continue
 		}
@@ -217,7 +217,7 @@ func (d *Direct) TryLock(ctx context.Context, name string) (bool, string, error)
 func (d *Direct) Unlock(name string) error { return nil }
 
 func (d *Direct) Flush(ctx context.Context) (int, error) {
-	return d.a.Objects.Flush(), nil
+	return d.a.Objects().Flush(), nil
 }
 
 func (d *Direct) Friends(ctx context.Context) ([]Friend, error) {
