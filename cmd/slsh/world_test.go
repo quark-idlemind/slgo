@@ -481,20 +481,31 @@ func TestObjectsNamesTheOwner(t *testing.T) {
 	})
 
 	got := x.do(t, "objects -c")
-	if !strings.Contains(got, "a lamp                       Kerra Yule") {
-		t.Errorf("the owner should be named beside the object:\n%s", got)
+
+	// The owner heads their things and is said once, not down a column.
+	if !strings.Contains(got, "\nKerra Yule\n") && !strings.HasPrefix(got, "Kerra Yule\n") {
+		t.Errorf("the owner should head their objects:\n%s", got)
 	}
-	// A prim inside says so too, so a line copied out on its own still
-	// says whose it is.
-	if !strings.Contains(got, "the shade                    Kerra Yule") {
-		t.Errorf("a prim inside should name its owner too:\n%s", got)
+	if n := strings.Count(got, "Kerra Yule"); n != 1 {
+		t.Errorf("the owner was named %d times, want once:\n%s", n, got)
 	}
-	// An owner nobody has answered for is left blank rather than shown
-	// as an id nobody can read.
-	for _, line := range strings.Split(got, "\n") {
-		if strings.Contains(line, "a mystery") && strings.Contains(line, "00000000") {
-			t.Errorf("an unknown owner should be blank, not an id: %q", line)
-		}
+	// Their object is under it, and the prim inside is under that.
+	if !strings.Contains(got, "\n  "+testLamp.String()) {
+		t.Errorf("an object should be indented under its owner:\n%s", got)
+	}
+	if !strings.Contains(got, "\n    "+child.String()) {
+		t.Errorf("a prim should be indented under its object:\n%s", got)
+	}
+	// Whoever nobody has answered for is a group of their own, last,
+	// and named as the open question it is rather than as an id.
+	if !strings.Contains(got, "(owner not known)") {
+		t.Errorf("an object whose owner is unknown should say so:\n%s", got)
+	}
+	if strings.Index(got, "(owner not known)") < strings.Index(got, "Kerra Yule") {
+		t.Errorf("the nameless group should come last:\n%s", got)
+	}
+	if strings.Contains(got, "00000000-0000") {
+		t.Errorf("an unknown owner should not print as an id:\n%s", got)
 	}
 }
 

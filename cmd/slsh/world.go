@@ -316,47 +316,58 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	roots, kids, orphans := linksets(all)
 
 	shown, hidden := 0, 0
-	for _, r := range roots {
-		mine := kids[r.Local]
-		if !namesAnywhere(want, r, mine) {
-			continue
+	for _, g := range sh.byOwner(roots, orphans) {
+		// The owner heads the group rather than repeating down a
+		// column, since a region is mostly one person's things at a
+		// time and the name is the longest thing on the line.
+		head := func() {
+			if g.printed {
+				return
+			}
+			g.printed = true
+			fmt.Fprintf(out, "%s\n", g.name)
 		}
-		fmt.Fprintf(out, "%-36s %-28s %-24s %s\n",
-			r.ID, r.Name, sh.owner(r), sh.whereIs(r, wearers))
-		shown++
-		for _, c := range mine {
-			// Browsing shows the objects; searching shows what was
-			// searched for.  Without -c the prims inside are the
-			// object's business, but a prim whose own name was asked
-			// for is the answer to the question and is shown either
-			// way.
+
+		for _, r := range g.roots {
+			mine := kids[r.Local]
+			if !namesAnywhere(want, r, mine) {
+				continue
+			}
+			head()
+			fmt.Fprintf(out, "  %-36s %-28s %s\n", r.ID, r.Name, sh.whereIs(r, wearers))
+			shown++
+			for _, c := range mine {
+				// Browsing shows the objects; searching shows what was
+				// searched for.  Without -c the prims inside are the
+				// object's business, but a prim whose own name was
+				// asked for is the answer to the question and is shown
+				// either way.
+				if !o.Children && !hit(want, c) {
+					hidden++
+					continue
+				}
+				fmt.Fprintf(out, "    %-34s %-28s offset %s\n",
+					c.ID, c.Name, offsetOf(c.Position))
+				shown++
+			}
+		}
+
+		// A child whose root has not been described has nothing to sit
+		// under.  Leaving it out silently would be a listing that says
+		// a region holds less than it does.
+		for _, c := range g.orphans {
+			if !namesAnywhere(want, c, nil) {
+				continue
+			}
 			if !o.Children && !hit(want, c) {
 				hidden++
 				continue
 			}
-			// Indented, and without repeating whose attachment it is:
-			// the line above says that, and a child is worn wherever
-			// its root is.
-			fmt.Fprintf(out, "  %-34s %-28s %-24s offset %s\n",
-				c.ID, c.Name, sh.owner(c), offsetOf(c.Position))
+			head()
+			fmt.Fprintf(out, "    %-34s %-28s offset %s, from a root nothing has described\n",
+				c.ID, c.Name, offsetOf(c.Position))
 			shown++
 		}
-	}
-
-	// A child whose root has not been described has nothing to sit
-	// under.  Leaving it out silently would be a listing that says a
-	// region holds less than it does.
-	for _, c := range orphans {
-		if !namesAnywhere(want, c, nil) {
-			continue
-		}
-		if !o.Children && !hit(want, c) {
-			hidden++
-			continue
-		}
-		fmt.Fprintf(out, "  %-34s %-28s %-24s offset %s, from a root nothing has described\n",
-			c.ID, c.Name, sh.owner(c), offsetOf(c.Position))
-		shown++
 	}
 
 	switch {
@@ -561,6 +572,56 @@ func namesWanted(wearers map[uint32]wearer, all []*sl.Seen) []msg.UUID {
 		add(s.Owner)
 	}
 	return ids
+}
+
+// owned is one person's things: what they own that is standing here or
+// worn, and the prims of theirs whose root is not here.
+type owned struct {
+	name    string
+	roots   []*sl.Seen
+	orphans []*sl.Seen
+	printed bool
+}
+
+// byOwner gathers objects under whoever owns them, sorted by name.
+//
+// Whoever nobody has answered for goes last: a group of things with no
+// name on it is the least useful group, and putting it first would be
+// the first thing anybody read.
+func (sh *Shell) byOwner(roots, orphans []*sl.Seen) []*owned {
+	groups := map[msg.UUID]*owned{}
+	group := func(s *sl.Seen) *owned {
+		g := groups[s.Owner]
+		if g == nil {
+			g = &owned{name: sh.owner(s)}
+			if g.name == "" {
+				g.name = "(owner not known)"
+			}
+			groups[s.Owner] = g
+		}
+		return g
+	}
+	for _, r := range roots {
+		g := group(r)
+		g.roots = append(g.roots, r)
+	}
+	for _, c := range orphans {
+		g := group(c)
+		g.orphans = append(g.orphans, c)
+	}
+
+	out := make([]*owned, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, g)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		ui, uj := out[i].name == "(owner not known)", out[j].name == "(owner not known)"
+		if ui != uj {
+			return uj
+		}
+		return strings.ToLower(out[i].name) < strings.ToLower(out[j].name)
+	})
+	return out
 }
 
 // owner is who an object belongs to, as a name where one is known.
