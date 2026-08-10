@@ -172,56 +172,187 @@ func (w *Session) Touch(ctx context.Context, o *Object, t Touch) error {
 	return w.TouchEnd(ctx, o, t)
 }
 
-// TouchInterval is how often a held touch sends an update.
+// TouchRate is how many updates a second a moving touch sends, which
+// is what a viewer sends: one a frame.
 //
-// A viewer sends one per frame while the mouse is down, which is more
-// often than anything needs; ten a second is enough for a script
-// counting touch events to see a steady stream and cheap enough not to
-// matter.
-const TouchInterval = 100 * time.Millisecond
+// It is NOT how many touch events the script sees.  That is the
+// simulator's business and nothing a client does changes it; see
+// Drag.Rate for the measurement.
+const TouchRate = 45
 
-// TouchHold touches an object and keeps touching it.
+// TouchEventRate is how often a script's touch event actually fires
+// while a touch is held: 22.5 times a second, half the simulator's
+// 45 fps.
 //
-// The script sees touch_start, then a touch every TouchInterval for as
-// long as asked, then touch_end -- which is what holding the mouse down
-// on something does.  A test for a "press and hold" script needs this
-// rather than Touch, since a click produces one touch and proves
-// nothing about the counting.
+// Measured on Agni's beta grid, holding a touch on a counting script
+// while varying how fast updates were sent:
 //
-// It always ends the touch, including when the context is cancelled:
-// leaving a grab open makes the next thing to touch that object look
-// like it is continuing this one.
-func (w *Session) TouchHold(ctx context.Context, o *Object, t Touch, d time.Duration) error {
-	if err := w.TouchStart(ctx, o, t); err != nil {
+//	updates/s    1     2     5    15    30    45    90
+//	2s hold     --    --    45    45    45    45    45
+//	4s hold     90    90    --    --    --    --    90
+//
+// The count depends on the duration and on nothing else.  One update a
+// second and ninety produce the same number of events, so a caller
+// cannot make a script see more touches by sending more, and does not
+// lose any by sending fewer.
+const TouchEventRate = 22.5
+
+// Drag is a touch that moves.
+//
+// It is the general case and Touch is the degenerate one: a single
+// point with no durations is a click.  What it describes is what a
+// hand does -- press somewhere, hold still a moment, move through some
+// points, rest at the end, let go -- because that is what a script
+// being tested has to survive.
+type Drag struct {
+	// Points are where the touch is, in order.  The first is where it
+	// starts and the last is where it is released.  One point is a
+	// touch that does not move.
+	Points []Touch
+
+	// Press is how long to hold still at the first point before
+	// moving, Move is how long the whole path takes, and Dwell is how
+	// long to rest at the last point before letting go.
+	//
+	// They are separate because a script can tell them apart: a menu
+	// that opens on a long press and a slider that follows a drag are
+	// looking at different halves of the same gesture.
+	Press time.Duration
+	Move  time.Duration
+	Dwell time.Duration
+
+	// Rate is how many updates a second to send.  Zero means TouchRate.
+	//
+	// It controls how finely a MOVING touch is sampled -- how often the
+	// script is told the point has changed -- and nothing else.  It
+	// does not control how many touch events fire: the simulator fires
+	// those at TouchEventRate whatever a client does, which is measured
+	// there.  So a still hold needs almost no updates, and a drag that
+	// must be followed closely needs many.
+	Rate int
+}
+
+// Drag touches an object, moves the touch through the points, and lets
+// go.
+//
+// Time is divided equally between the segments rather than by distance.
+// A caller that wants an even speed spaces its points evenly, which is
+// something it can do and this cannot: the points may be texture
+// coordinates on different faces, where distance means nothing.
+//
+// It always lets go, cancellation included.
+func (w *Session) Drag(ctx context.Context, o *Object, d Drag) error {
+	if len(d.Points) == 0 {
+		return fmt.Errorf("sl: a drag needs somewhere to start")
+	}
+	rate := d.Rate
+	if rate <= 0 {
+		rate = TouchRate
+	}
+	every := time.Second / time.Duration(rate)
+
+	if err := w.TouchStart(ctx, o, d.Points[0]); err != nil {
 		return err
 	}
 	defer func() {
-		// A cancelled context cannot send the degrab, so the end goes
-		// out on one that is still alive.
 		end, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
-		_ = w.TouchEnd(end, o, t)
+		_ = w.TouchEnd(end, o, d.Points[len(d.Points)-1])
 	}()
 
-	deadline := time.Now().Add(d)
 	last := time.Now()
-	for {
-		wait := TouchInterval
+	tick := func(at Touch) error {
+		now := time.Now()
+		err := w.TouchMove(ctx, o, at, now.Sub(last))
+		last = now
+		return err
+	}
+
+	// Held still at the start.
+	if err := w.hold(ctx, d.Points[0], d.Press, every, tick); err != nil {
+		return err
+	}
+
+	// Along the path.  Each segment gets an equal share of the time and
+	// however many updates fit in it, and the point itself is always
+	// sent, so a path is never skipped over by a rate too slow for it.
+	if n := len(d.Points) - 1; n > 0 && d.Move > 0 {
+		per := d.Move / time.Duration(n)
+		for i := 0; i < n; i++ {
+			from, to := d.Points[i], d.Points[i+1]
+			steps := int(per / every)
+			for s := 1; s <= steps; s++ {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(every):
+				}
+				if err := tick(between(from, to, float32(s)/float32(steps))); err != nil {
+					return err
+				}
+			}
+			if err := tick(to); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Resting at the end.
+	return w.hold(ctx, d.Points[len(d.Points)-1], d.Dwell, every, tick)
+}
+
+// hold sends updates at one point for a while.
+func (w *Session) hold(ctx context.Context, at Touch, d, every time.Duration, tick func(Touch) error) error {
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		wait := every
 		if left := time.Until(deadline); left < wait {
 			wait = left
-		}
-		if wait <= 0 {
-			return nil
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(wait):
 		}
-		now := time.Now()
-		if err := w.TouchMove(ctx, o, t, now.Sub(last)); err != nil {
+		if err := tick(at); err != nil {
 			return err
 		}
-		last = now
 	}
+	return nil
+}
+
+// between is one point part of the way to another.
+//
+// Everything continuous is interpolated; the face is not, since there
+// is nothing between face 2 and face 3.  It takes the face it is
+// travelling FROM until it arrives, which is what a finger sliding off
+// one face onto another does.
+func between(a, b Touch, t float32) Touch {
+	return Touch{
+		Face:     a.Face,
+		UV:       lerp3(a.UV, b.UV, t),
+		ST:       lerp3(a.ST, b.ST, t),
+		Position: lerp3(a.Position, b.Position, t),
+		Normal:   lerp3(a.Normal, b.Normal, t),
+		Binormal: lerp3(a.Binormal, b.Binormal, t),
+		Offset:   lerp3(a.Offset, b.Offset, t),
+	}
+}
+
+func lerp3(a, b msg.Vector3, t float32) msg.Vector3 {
+	return msg.Vector3{
+		X: a.X + (b.X-a.X)*t,
+		Y: a.Y + (b.Y-a.Y)*t,
+		Z: a.Z + (b.Z-a.Z)*t,
+	}
+}
+
+// TouchHold touches an object and keeps touching it, without moving.
+//
+// The script sees touch_start, a stream of touch, then touch_end, which
+// is what holding the mouse down on something does.  A test for a
+// "press and hold" script needs this rather than Touch, since a click
+// produces one touch and proves nothing about the counting.
+func (w *Session) TouchHold(ctx context.Context, o *Object, t Touch, d time.Duration) error {
+	return w.Drag(ctx, o, Drag{Points: []Touch{t}, Dwell: d})
 }

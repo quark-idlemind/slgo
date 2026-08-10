@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
@@ -273,13 +274,57 @@ func parseVector(s string) (msg.Vector3, error) {
 // ------------------------------------------------------------- touching
 
 type touchFlags struct {
-	Face int    `getopt:"--face -f=N        which face, counting as LSL does; -1 for none"`
-	UV   string `getopt:"--uv=U,V           where on the face, each 0 to 1 [0.5,0.5]"`
-	ST   string `getopt:"--st=S,T           the same point in the texture's coordinates"`
-	At   string `getopt:"--at=X,Y,Z         the point touched, in region coordinates"`
-	Norm string `getopt:"--normal=X,Y,Z     the surface direction there [0,0,1]"`
-	Hold string `getopt:"--hold -H=SECONDS  keep touching for this long, sending touch events"`
-	Help bool   `getopt:"--help -h          show what this command takes"`
+	Face  int    `getopt:"--face -f=N        which face, counting as LSL does; -1 for none"`
+	UV    string `getopt:"--uv=U,V           where on the face, each 0 to 1 [0.5,0.5]"`
+	ST    string `getopt:"--st=S,T           the same point in the texture's coordinates"`
+	At    string `getopt:"--at=X,Y,Z         the point touched, in region coordinates"`
+	Norm  string `getopt:"--normal=X,Y,Z     the surface direction there [0,0,1]"`
+	Press string `getopt:"--press=SECONDS    hold still at the first point before moving"`
+	Move  string `getopt:"--move=SECONDS     spend this long travelling through the points"`
+	Dwell string `getopt:"--dwell -H=SECONDS rest at the last point before letting go"`
+	Rate  int    `getopt:"--rate=N          updates a second while moving [45]"`
+	Help  bool   `getopt:"--help -h          show what this command takes"`
+}
+
+// parseSeconds reads a duration written as a number of seconds, which
+// is how a person types one at a prompt.
+func parseSeconds(flag, s string) (time.Duration, error) {
+	if s == "" {
+		return 0, nil
+	}
+	var secs float64
+	if _, err := fmt.Sscanf(s, "%g", &secs); err != nil || secs < 0 {
+		return 0, fmt.Errorf("%s wants a number of seconds, not %q", flag, s)
+	}
+	return time.Duration(secs * float64(time.Second)), nil
+}
+
+// parseTouchPoint reads one point of a drag, on top of whatever the
+// flags already said.
+//
+// Two numbers are a place on a face and three are a place in the
+// region, since that is what tells them apart without a second flag.
+// A leading "N:" names the face, so a drag can cross from one to
+// another.
+func parseTouchPoint(s string, base sl.Touch) (sl.Touch, error) {
+	t := base
+	if i := strings.Index(s, ":"); i >= 0 {
+		var face int
+		if _, err := fmt.Sscanf(s[:i], "%d", &face); err != nil {
+			return t, fmt.Errorf("%q does not start with a face number", s)
+		}
+		t.Face, s = face, s[i+1:]
+	}
+	var x, y, z float32
+	if n, err := fmt.Sscanf(s, "%f,%f,%f", &x, &y, &z); err == nil && n == 3 {
+		t.Position = msg.Vector3{X: x, Y: y, Z: z}
+		return t, nil
+	}
+	if n, err := fmt.Sscanf(s, "%f,%f", &x, &y); err == nil && n == 2 {
+		t.UV = msg.Vector3{X: x, Y: y}
+		return t, nil
+	}
+	return t, fmt.Errorf("a point is U,V or X,Y,Z, optionally after a face and a colon, not %q", s)
 }
 
 func cmdTouch(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
@@ -288,8 +333,8 @@ func cmdTouch(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	if err != nil || done {
 		return err
 	}
-	if len(args) != 1 {
-		return fmt.Errorf("usage: touch [-f FACE] [--uv U,V] [-H SECONDS] NAME|UUID")
+	if len(args) < 1 {
+		return fmt.Errorf("usage: touch [-f FACE] [--uv U,V] NAME|UUID [POINT ...]")
 	}
 
 	seen, err := sh.seenNamed(ctx, args[0], 30)
@@ -311,8 +356,37 @@ func cmdTouch(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		*c.to = v
 	}
 
+	// Where it goes after the first point.  Each one is read on top of
+	// the last, so a drag across one face names the face once.
+	points := []sl.Touch{t}
+	for _, a := range args[1:] {
+		p, err := parseTouchPoint(a, points[len(points)-1])
+		if err != nil {
+			return err
+		}
+		points = append(points, p)
+	}
+
+	d := sl.Drag{Points: points, Rate: o.Rate}
+	for _, c := range []struct {
+		flag, text string
+		to         *time.Duration
+	}{{"--press", o.Press, &d.Press}, {"--move", o.Move, &d.Move}, {"--dwell", o.Dwell, &d.Dwell}} {
+		v, err := parseSeconds(c.flag, c.text)
+		if err != nil {
+			return err
+		}
+		*c.to = v
+	}
+	// A path with no time to cross it is a jump, which is not what
+	// anybody means by a drag.
+	if len(points) > 1 && d.Move == 0 {
+		return fmt.Errorf("%d points but no --move: say how long the drag takes", len(points))
+	}
+
 	target := &seen.Object
-	if o.Hold == "" {
+	total := d.Press + d.Move + d.Dwell
+	if total == 0 && len(points) == 1 {
 		if err := sh.s.Touch(ctx, target, t); err != nil {
 			return err
 		}
@@ -320,17 +394,13 @@ func cmdTouch(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		return nil
 	}
 
-	var secs float64
-	if _, err := fmt.Sscanf(o.Hold, "%g", &secs); err != nil || secs <= 0 {
-		return fmt.Errorf("--hold wants a number of seconds, not %q", o.Hold)
-	}
-	held := time.Duration(secs * float64(time.Second))
-	ctx, cancel := context.WithTimeout(ctx, held+30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, total+time.Minute)
 	defer cancel()
-	if err := sh.s.TouchHold(ctx, target, t, held); err != nil {
+	if err := sh.s.Drag(ctx, target, d); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "touched %s for %s, face %d\n", target.Name, held, t.Face)
+	fmt.Fprintf(out, "touched %s for %s over %d point(s); the script saw about %.0f touch events\n",
+		target.Name, total, len(points), total.Seconds()*sl.TouchEventRate)
 	return nil
 }
 

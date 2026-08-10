@@ -1203,13 +1203,47 @@ in world:
 
 Three messages, three events: `ObjectGrab` is `touch_start`,
 `ObjectGrabUpdate` is `touch`, `ObjectDeGrab` is `touch_end`. A click
-sends the first and last; `TouchHold` sends updates in between, and
-always lets go, cancellation included -- a grab left open makes the next
-touch of that object look like a continuation of this one.
+sends the first and last, and always lets go, cancellation included --
+a grab left open makes the next touch of that object look like a
+continuation of this one.
 
-Worth knowing before counting: **`touch` fires at the simulator's frame
-rate, not at the rate updates are sent.** A touch held for 1.5 seconds
-with an update every 100ms produced 33 `touch` events, not 15.
+### A drag is points and three durations
+
+    touch --press 0.5 --move 2 --dwell 0.5 "a slider" 0.1,0.5 0.9,0.5
+    touch -f 2 --move 1 "a knob" 3:0.5,0.5      # across from face 2 to face 3
+
+    w.Drag(ctx, o, sl.Drag{Points: []sl.Touch{a, b, c},
+        Press: 500*time.Millisecond, Move: 2*time.Second, Dwell: 500*time.Millisecond})
+
+Press at the first point, hold still, travel through the rest, rest at
+the last, let go. The three durations are separate because a script can
+tell them apart -- a menu that opens on a long press and a slider that
+follows a drag are watching different halves of one gesture. Two
+numbers is a place on a face and three is a place in the region; a
+leading `N:` changes face, so a drag can cross from one to another.
+Time is split equally between segments, and every named point is always
+visited even when the update rate is slower than the path.
+
+### How many touch events a hold actually produces
+
+Not what I assumed, and worth measuring before you count. Holding a
+touch on a counting script while varying how fast updates were sent:
+
+| updates/s | 1 | 2 | 5 | 15 | 30 | 45 | 90 |
+|---|---|---|---|---|---|---|---|
+| 2s hold | | | 45 | 45 | 45 | 45 | 45 |
+| 4s hold | 90 | 90 | | | | | 90 |
+
+**The count depends on the duration and on nothing else.** One update a
+second and ninety produce the same number of events. So `touch` fires
+at 22.5 a second -- half the simulator's 45 fps -- and a client cannot
+make a script see more of them by sending more, nor lose any by sending
+fewer.
+
+What the update rate *does* control is how finely a **moving** touch is
+sampled: how often the script is told the point has changed. A still
+hold needs almost none; a drag that has to be followed closely wants
+many. The default is 45, which is what a viewer sends.
 
 ## Two ways to be connected
 

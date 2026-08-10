@@ -142,3 +142,131 @@ func TestTouchingNothing(t *testing.T) {
 		t.Error("moved a touch on an object with no id")
 	}
 }
+
+// TestADragVisitsEveryPointItIsGiven, whatever the rate.  A path is a
+// description of where the touch went, and skipping a corner because
+// the clock did not land on it would be a drag that took a shortcut.
+func TestADragVisitsEveryPointItIsGiven(t *testing.T) {
+	w, f := newFakeSession(t)
+	at := func(x float32) Touch { return Touch{Position: msg.Vector3{X: x}} }
+
+	err := w.Drag(context.Background(), aThing(), Drag{
+		Points: []Touch{at(1), at(2), at(3)},
+		Move:   120 * time.Millisecond,
+		Rate:   2, // one update every 500ms: slower than the whole drag
+	})
+	if err != nil {
+		t.Fatalf("Drag: %v", err)
+	}
+
+	var xs []float32
+	for _, u := range sentOf[*msg.ObjectGrabUpdate](f) {
+		xs = append(xs, u.SurfaceInfo[0].Position.X)
+	}
+	if len(xs) < 2 {
+		t.Fatalf("a three point drag sent %d updates", len(xs))
+	}
+	if xs[len(xs)-1] != 3 {
+		t.Errorf("the drag ended at %v, want the last point", xs[len(xs)-1])
+	}
+	var sawMiddle bool
+	for _, x := range xs {
+		if x == 2 {
+			sawMiddle = true
+		}
+	}
+	if !sawMiddle {
+		t.Errorf("the middle point was skipped: %v", xs)
+	}
+}
+
+// TestADragInterpolatesBetweenPoints, so that a script following one
+// sees it move rather than jump.
+func TestADragInterpolatesBetweenPoints(t *testing.T) {
+	w, f := newFakeSession(t)
+	err := w.Drag(context.Background(), aThing(), Drag{
+		Points: []Touch{{UV: msg.Vector3{X: 0}}, {UV: msg.Vector3{X: 1}}},
+		Move:   200 * time.Millisecond,
+		Rate:   50,
+	})
+	if err != nil {
+		t.Fatalf("Drag: %v", err)
+	}
+	var between int
+	for _, u := range sentOf[*msg.ObjectGrabUpdate](f) {
+		if x := u.SurfaceInfo[0].UVCoord.X; x > 0 && x < 1 {
+			between++
+		}
+	}
+	if between < 3 {
+		t.Errorf("only %d updates fell between the two points", between)
+	}
+}
+
+// TestTheFaceDoesNotInterpolate: there is nothing between face 2 and
+// face 3, so a drag from one to the other is on the first until it
+// arrives.
+func TestTheFaceDoesNotInterpolate(t *testing.T) {
+	w, f := newFakeSession(t)
+	err := w.Drag(context.Background(), aThing(), Drag{
+		Points: []Touch{{Face: 2}, {Face: 3}},
+		Move:   150 * time.Millisecond,
+		Rate:   50,
+	})
+	if err != nil {
+		t.Fatalf("Drag: %v", err)
+	}
+	ups := sentOf[*msg.ObjectGrabUpdate](f)
+	for i, u := range ups {
+		got := u.SurfaceInfo[0].FaceIndex
+		if got != 2 && got != 3 {
+			t.Fatalf("update %d is on face %d", i, got)
+		}
+		if i < len(ups)-1 && got == 3 {
+			t.Errorf("update %d arrived at face 3 early", i)
+		}
+	}
+	if ups[len(ups)-1].SurfaceInfo[0].FaceIndex != 3 {
+		t.Error("the drag never reached face 3")
+	}
+}
+
+// TestThePressAndTheDwellAreSeparate: a script can tell a long press
+// from a long rest at the end, so the two are not one duration.
+func TestThePressAndTheDwellAreSeparate(t *testing.T) {
+	w, f := newFakeSession(t)
+	err := w.Drag(context.Background(), aThing(), Drag{
+		Points: []Touch{{UV: msg.Vector3{X: 0.1}}, {UV: msg.Vector3{X: 0.9}}},
+		Press:  150 * time.Millisecond,
+		Move:   100 * time.Millisecond,
+		Dwell:  150 * time.Millisecond,
+		Rate:   40,
+	})
+	if err != nil {
+		t.Fatalf("Drag: %v", err)
+	}
+	ups := sentOf[*msg.ObjectGrabUpdate](f)
+	var atStart, atEnd int
+	for _, u := range ups {
+		switch u.SurfaceInfo[0].UVCoord.X {
+		case 0.1:
+			atStart++
+		case 0.9:
+			atEnd++
+		}
+	}
+	if atStart < 3 {
+		t.Errorf("%d updates at the first point, want the press to hold there", atStart)
+	}
+	if atEnd < 3 {
+		t.Errorf("%d updates at the last point, want the dwell to rest there", atEnd)
+	}
+}
+
+// TestADragNeedsSomewhereToStart.
+func TestADragNeedsSomewhereToStart(t *testing.T) {
+	w, _ := newFakeSession(t)
+	if err := w.Drag(context.Background(), aThing(), Drag{}); err == nil {
+		t.Error("a drag with no points was accepted")
+	}
+}
