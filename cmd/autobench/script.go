@@ -140,10 +140,11 @@ func openBackend(addr string, targets int) (backend, error) {
 // belong to.  Worth saying when a real backend chose for us -- a reading
 // is only comparable with another from the same avatar -- and noise when
 // the backend is the offline model, which has exactly one and made it up.
+//
 // c is a client and not a connection, because whether there is a
 // connection is not this function's business: --backend dials one, and
 // the offline model behind --test is reached in process, where a run
-// costs 4 microseconds instead of 100.  Both answer the same interface
+// costs 5 microseconds instead of 100.  Both answer the same interface
 // and everything below here is written against that.
 func openScript(ctx context.Context, c scriptv1.RunnerClient, targets int, agent, who string, announce bool) (*scriptRunner, error) {
 	h, err := c.Health(ctx, &scriptv1.HealthRequest{})

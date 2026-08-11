@@ -12,10 +12,15 @@ import (
 
 // These tests drive the measurement machinery against the offline model, so
 // no Second Life and no viewer are involved.  The model is a real script.v1
-// backend served over a pipe in this process, which is what --test is: every
-// call here goes through buildScript, the transport, the compile verdict and
+// backend running in this process, which is what --test is: every call here
+// goes through buildScript, openScript, runIn, the compile verdict, sift and
 // absorbResults, exactly as a live run does.  What is not real is the
 // readings, and nothing else.
+//
+// What is also not here is a connection.  The backend is reached through
+// scripttest's in-process client, because these tests are about the
+// measurement and there are 440,000 runs of it; what a connection does to a
+// run is scripttest's own business and is tested there, over its pipe.
 //
 // What the model says.  For cnt copies at pad it reports
 //
@@ -96,7 +101,7 @@ func offlineWith(t *testing.T, o scripttest.Options) *modelled {
 	// In process rather than over scripttest.Pipe.  The sweeps below run
 	// about 440,000 scripts, which over a connection is 100 microseconds
 	// each and about a minute of this package's test time spent almost
-	// entirely on goroutine hand-off; in process it is 4.  What the
+	// entirely on goroutine hand-off; in process it is 5.  What the
 	// connection would be testing is the transport, and the transport is
 	// tested in scripttest, over Pipe, once.
 	b, err := openScript(context.Background(), s.Direct(), o.GroupSize, "", "test", false)

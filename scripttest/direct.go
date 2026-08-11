@@ -7,7 +7,7 @@ package scripttest
 // answers the contract without a transport in the middle.  What that
 // buys is the per-run cost, and the per-run cost is the whole reason
 // this file exists: measured by BenchmarkARunReachedEachWay, one run of
-// the offline model costs about 100us over Pipe and about 4us here.
+// the offline model costs about 100us over Pipe and about 5us here.
 // Almost all of the difference is goroutine hand-off -- a run streams
 // seven messages and each one is a wake-up on the other side -- and a
 // profile of autobench's tests before this change spent 73% of the run

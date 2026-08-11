@@ -42,7 +42,7 @@
 // addition rather than a replacement.  It is for the caller that runs
 // scripts by the hundred thousand and is measuring something else -- the
 // offline model behind autobench --test, and the sweeps in its tests,
-// which cost 100 microseconds a run over the pipe and about 4 through
+// which cost 100 microseconds a run over the pipe and about 5 through
 // Direct, nearly all of the difference being goroutine hand-off for the
 // seven messages a run streams.  What it cannot do is what Pipe is for:
 // a caller cannot DIE, having no connection to lose, and a run arrives

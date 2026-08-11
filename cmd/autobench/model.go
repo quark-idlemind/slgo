@@ -27,7 +27,7 @@ package main
 // connection was buying on top of that was the transport's own
 // behaviour, which is worth testing exactly once and is tested in
 // scripttest against Pipe, and what it cost was 100 microseconds a run
-// against 4 here.  A live run costs 1 to 30 seconds and would not care;
+// against 5 here.  A live run costs 1 to 30 seconds and would not care;
 // a --test sweep of a hundred thousand of them cares a great deal, and
 // paying it here bought nothing this program is responsible for.
 
