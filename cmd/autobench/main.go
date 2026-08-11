@@ -80,8 +80,8 @@ var flags = struct {
 	NoCache   bool          `getopt:"--no-cache do not remember or reuse the padding for this base script"`
 	Objects   int           `getopt:"--objects=N how many objects to take readings in at once"`
 	Timeout   time.Duration `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
-	Test      string        `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model, see the source code"`
-	Backend   string        `getopt:"--backend=ADDR run scripts through a script.v1 backend at this address"`
+	Test      string        `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model in this process, see the source code"`
+	Backend   string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life; --test is the same contract answered by a model here"`
 }{
 	Start:   "last",
 	Timeout: time.Minute,
@@ -670,9 +670,20 @@ func main() {
 	// live one does.
 	var b backend
 	switch {
+	case flags.Test != "" && flags.Backend != "":
+		// Both name where scripts run, and they are not the same
+		// somewhere.  Picking one would mean quietly measuring against
+		// something other than what was asked for.
+		errf("Only one of --test or --backend may be specified\n")
 	case flags.Test != "":
 		var err error
 		if b, err = openModel(testModel(flags.Test), flags.Objects); err != nil {
+			errf("%v\n", err)
+		}
+		defer b.Close()
+	case flags.Backend != "":
+		var err error
+		if b, err = openBackend(flags.Backend, flags.Objects); err != nil {
 			errf("%v\n", err)
 		}
 		defer b.Close()

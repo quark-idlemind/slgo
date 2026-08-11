@@ -10,6 +10,7 @@ import (
 	"github.com/pborman/getopt/v2"
 
 	"github.com/quark-idlemind/slgo/internal/session"
+	"github.com/quark-idlemind/slgo/scripttest"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -402,6 +403,52 @@ func TestTheProgramPrintsWhatTheModeMeasured(t *testing.T) {
 	}
 	if !strings.Contains(out, "First copy: 368\n") {
 		t.Errorf("copy mode did not print what one copy costs:\n%s", out)
+	}
+}
+
+// TestABackendAtAnAddressMeasuresTheSameThing: --backend points this
+// program at something else that runs LSL -- the simulator, a viewer
+// daemon -- and the whole of the benchmark above the transport is
+// unchanged by that.  So the answer has to be the answer, whether the
+// contract was reached over a pipe in this process or over a socket.
+//
+// It goes through main rather than through openBackend, because what is
+// being checked is the flag: the dial, the lease and the timeout are what
+// a person typing an address gets, and none of them are exercised by a
+// backend handed over ready-made.
+func TestABackendAtAnAddressMeasuresTheSameThing(t *testing.T) {
+	s := scripttest.New(scripttest.Options{
+		Memory:    scripttest.Memory{Pad: 474, CodeSize: 368},
+		GroupSize: 4,
+	})
+	// Loopback with a port of the system's choosing.  Nothing is asked of
+	// the network this machine is on, and nothing outside this process can
+	// be reached by it.
+	addr, err := s.Listen("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("serving a backend: %v", err)
+	}
+	t.Cleanup(s.Stop)
+
+	out, said := autobench(t, "--backend", addr.String(), "-1",
+		"--code", "foo_CNT(){llDie();}")
+	for _, want := range []string{"Size: 368\n", "Padding: 473\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("a benchmark through --backend did not print %q:\n%s\n%s",
+				want, out, said)
+		}
+	}
+	// Which avatar's objects these turned out to be, said out loud: a real
+	// backend chose, and a reading is only comparable with another from
+	// the same avatar.
+	if !strings.Contains(said, "running as test") {
+		t.Errorf("nothing was said about whose objects the backend granted:\n%s", said)
+	}
+	// And nothing was written to the padding cache, because these readings
+	// are not Second Life's.  The file every later benchmark reads must
+	// hold measurements and not somebody else's arithmetic.
+	if _, ok := loadPadCache()[baseKey()]; ok {
+		t.Error("a padding measured through a backend that is not the grid was remembered")
 	}
 }
 

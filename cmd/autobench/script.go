@@ -86,6 +86,41 @@ func dialScript(addr string) (*grpc.ClientConn, error) {
 	return grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 }
 
+// openBackend is --backend: a script.v1 daemon somewhere else, reached
+// over the network and asked for somewhere to run.
+//
+// What is at the far end is none of this program's business, which is the
+// point of there being a contract at all -- the eLSL simulator with no
+// grid under it, a viewer driven from outside, a daemon holding a real
+// session.  Two things follow, and both are answered by the backend
+// rather than assumed here: whether a padding found through it is worth
+// remembering in the file every later benchmark reads (Capabilities.grid,
+// see basePadding), and whether it can be asked to compile a script
+// without running it (see Compile).  A backend that says neither is still
+// usable; it is measured against and not written down.
+func openBackend(addr string, targets int) (backend, error) {
+	conn, err := dialScript(addr)
+	if err != nil {
+		return nil, fmt.Errorf("dialling the backend at %s: %w", addr, err)
+	}
+	who := "autobench"
+	if flags.Title != "" {
+		who += " " + flags.Title
+	}
+	// Announced, unlike the offline model: a real backend may hold
+	// several avatars' objects and chose one for us, and a reading is
+	// only comparable with another from the same avatar.
+	r, err := openScript(context.Background(), conn, targets, flags.Agent, who, true)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	r.Timeout = flags.Timeout
+	r.Info = flags.Show
+	r.alsoClose(func() { conn.Close() })
+	return r, nil
+}
+
 // openScript takes a lease on a script.v1 backend and answers with
 // something a benchmark can run in.
 //
