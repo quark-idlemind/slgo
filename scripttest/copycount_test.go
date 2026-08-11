@@ -79,7 +79,7 @@ type bench struct {
 
 func newBench(t *testing.T, o scripttest.Options) (*bench, func()) {
 	t.Helper()
-	_, c := serve(t, o)
+	_, c := serve(t, overAPipe, o)
 	// One lease for the whole benchmark, because the base reading
 	// travels from the cnt=0 script to the cnt>0 ones inside the object.
 	// A second caller in there would be read as our own base.

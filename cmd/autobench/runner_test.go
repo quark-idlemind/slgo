@@ -143,7 +143,7 @@ func TestARunTimeErrorBeatsTheSilenceItCaused(t *testing.T) {
 	if !errors.As(err, &re) {
 		t.Fatalf("Send = %v (%T), want a *runtimeError", err, err)
 	}
-	if !re.StackHeap() {
+	if !re.OutOfMemory() {
 		t.Errorf("%v was not recognised as running out of memory", re)
 	}
 	if re.Script != scriptName {
@@ -155,8 +155,19 @@ func TestARunTimeErrorBeatsTheSilenceItCaused(t *testing.T) {
 
 	// Another kind of fault is not a size limit, and treating it as one
 	// would halve the copy count for ever without ever succeeding.
-	other := &runtimeError{Object: "a prim", Script: scriptName, Detail: "Math Error"}
-	if other.StackHeap() {
+	//
+	// Sent through the same path rather than built by hand: what used to
+	// be asserted here was that a runtimeError classified its own reason,
+	// and it no longer does -- sl reads the simulator's words and the
+	// verdict is carried down.  A struct with the field left false would
+	// prove nothing about whether anything sets it.
+	f.fault[b.obj.ID] = "Math Error"
+	_, _, err = b.Send(buildScript(256, 474))
+	var other *runtimeError
+	if !errors.As(err, &other) {
+		t.Fatalf("Send = %v (%T), want a *runtimeError", err, err)
+	}
+	if other.OutOfMemory() {
 		t.Errorf("%v was taken for running out of memory", other)
 	}
 	// A fault with no reason still has to produce a sentence.

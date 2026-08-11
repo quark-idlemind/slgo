@@ -46,6 +46,7 @@ import (
 	"github.com/pborman/options"
 
 	"github.com/quark-idlemind/slgo/internal/session"
+	"github.com/quark-idlemind/slgo/scripttest"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -79,7 +80,8 @@ var flags = struct {
 	NoCache   bool          `getopt:"--no-cache do not remember or reuse the padding for this base script"`
 	Objects   int           `getopt:"--objects=N how many objects to take readings in at once"`
 	Timeout   time.Duration `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
-	Test      string        `getopt:"--test=PAD,SIZE[,LIMIT] for testing, see the source code"`
+	Test      string        `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model in this process, see the source code"`
+	Backend   string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life; --test is the same contract answered by a model here"`
 }{
 	Start:   "last",
 	Timeout: time.Minute,
@@ -90,57 +92,46 @@ var flags = struct {
 	Objects: 4,
 }
 
-// testInfo describes what a test would return
-type testInfo struct {
-	pad      int // Number of pad bytes needed by the 0 count case
-	codeSize int // What the FIRST copy costs outright
-
-	// marginal is what each copy AFTER the first costs, and is codeSize
-	// when it is left at zero -- which is the old model exactly, and is
-	// what every case that does not care about the difference gets.
-	//
-	// The two differ whenever a copy pays a cost once that the rest
-	// share.  Measured live: a 250-character string literal is 1044
-	// bytes for one copy and 542 for each after it, because identical
-	// literals are shared and an extra copy pays only for what it
-	// cannot share.  A model that cannot express that asserts the two
-	// are equal, and every test written against it silently assumes so.
-	marginal int
-
-	// drift adds one byte every drift copies, for a construct whose
-	// per-copy cost is not perfectly constant.  Zero is off.
-	//
-	// Live, copies are not quite constant: 32 of one construct cost 11008
-	// bytes and 16 cost 5516, which works out at 343.25 each.  Copy mode
-	// has a guard for exactly that -- the per-copy total not dividing by
-	// the count -- and with an affine model the guard cannot fire, which
-	// is the same gap that let the older fault hide.
-	drift int
-	// limit is where the model stops accepting a script, standing in for
-	// Second Life's compiler refusing one that is too large.  It is a model of
-	// a limit and not a measurement of one: the live refusal is the compiler's
-	// and is about the compiled script, while this is about the memory the
-	// model says the script would use.  What it buys is that copyCount's
-	// control flow can be exercised offline; what it does not buy is any claim
-	// about where SL's own limit falls.  See defaultTestLimit.
-	limit int
-}
-
-// defaultTestLimit is the model's limit when --test does not name one.  64KB is
-// the script memory limit a Mono script has, so it puts the model's refusal
-// roughly where the live one is and leaves every offline case that existed
-// before this flag grew a third field measuring the same copy count it did.
-const defaultTestLimit = 64 * 1024
-
-// useTestInfo, if not nil, circumvents the actual running of the script
-// so tests can be run.
+// testModel reads --test=PAD,SIZE[,MARGINAL[,LIMIT]] into the model the
+// offline backend answers from.
 //
-// It sits ABOVE the transport, not inside it: runScript answers from the model
-// and never reaches the runner, so --test needs no grid, no slgod and no
-// network.  That is the whole point of it -- the measurement machinery is about
-// LSL and can be exercised without the grid, and this is the only way to do
-// that.
-var useTestInfo *testInfo
+// The fields are scripttest's, and the reasoning for each of them lives
+// there beside the arithmetic that uses them.  What is worth saying here
+// is what the flag is FOR: the measurement machinery -- the padding
+// search, the block arithmetic, the copy count, the backing off -- is
+// about LSL and about readings, and none of it needs Second Life to be
+// exercised.  This is how it is exercised without one.
+//
+// It describes a model and not a place, which is why it takes no address:
+// --backend is for pointing this program at something that runs scripts
+// somewhere else.
+func testModel(spec string) scripttest.Memory {
+	const usage = "Usage: --test=PAD,SIZE[,MARGINAL[,LIMIT]]\n"
+	f := strings.Split(spec, ",")
+	if len(f) < 2 || len(f) > 4 {
+		errf(usage)
+	}
+	n := make([]int, len(f))
+	for i, s := range f {
+		v, err := strconv.Atoi(s)
+		if err != nil {
+			errf(usage)
+		}
+		n[i] = v
+	}
+	// SIZE is what the first copy costs and MARGINAL what each one after
+	// it costs; leaving MARGINAL out makes them equal, which is a
+	// construct that pays nothing once and shares nothing.  LIMIT left out
+	// is scripttest's default, which is the 64KB a Mono script has.
+	m := scripttest.Memory{Pad: n[0], CodeSize: n[1]}
+	if len(n) >= 3 {
+		m.Marginal = n[2]
+	}
+	if len(n) == 4 {
+		m.Limit = n[3]
+	}
+	return m
+}
 
 func errf(format string, v ...any) {
 	fmt.Fprintf(os.Stderr, format, v...)
@@ -176,7 +167,7 @@ const minpad = 5
 //
 // Every run writes r, so on return r holds the reading from the crossing run --
 // one block above the reading at pad, which is the step -1 mode measures.
-func findPadding(b *runner, cnt, pad int, r *Results) (offset, base int) {
+func findPadding(b backend, cnt, pad int, r *Results) (offset, base int) {
 	debugf("FindPadding\n")
 	defer debugf("FindPadding Done\n")
 
@@ -226,14 +217,8 @@ func findPadding(b *runner, cnt, pad int, r *Results) (offset, base int) {
 //
 // Never in the measured object: see probe.go for why that is safe for a
 // script with copies in it as well as for the base.
-func quarterSearch(b *runner, cnt, pad, base, low, high int) (int, int) {
-	// Under --test there is nothing to parallelise -- the model answers
-	// instantly and there is no object to run in -- but the SEARCH is
-	// still the search, and the search is what is worth testing without
-	// a grid.  probeAt falls back to asking the model one pad at a
-	// time, so the same quartering happens and the same answer has to
-	// come out of it.  b is nil there and is never reached.
-	if useTestInfo == nil && (b == nil || len(b.spare) < 3) {
+func quarterSearch(b backend, cnt, pad, base, low, high int) (int, int) {
+	if b == nil || b.Spares() < 3 {
 		return low, high
 	}
 
@@ -263,7 +248,7 @@ func quarterSearch(b *runner, cnt, pad, base, low, high int) (int, int) {
 // to have been misread, in which case base is the corrected reading and the
 // whole search has to be redone against it -- every comparison it made was
 // against the wrong number.
-func searchPadding(b *runner, cnt, pad int, r *Results, getBase func() int) (offset, base int, ok bool) {
+func searchPadding(b backend, cnt, pad int, r *Results, getBase func() int) (offset, base int, ok bool) {
 	mustRun(b, cnt, pad, r)
 	base = getBase()
 	debugf("Base[%d] %d : %d\n", cnt, pad, base)
@@ -373,7 +358,7 @@ const (
 // agree with each other -- and it is not meant to.  It turns a silent wrong
 // answer into either a right one or a loud complaint, which is the difference
 // that matters for a number nobody can check afterwards.
-func confirmCrossing(b *runner, cnt, pad, low, base int, r *Results, getBase func() int) (crossing, int) {
+func confirmCrossing(b backend, cnt, pad, low, base int, r *Results, getBase func() int) (crossing, int) {
 	first := getBase()
 	// The reading that looked like the crossing.
 	if again := reread(b, cnt, low+pad, r, getBase); again == base {
@@ -415,7 +400,7 @@ func confirmCrossing(b *runner, cnt, pad, low, base int, r *Results, getBase fun
 //
 // The reading it gets replaces the cached one, so a run that has been corrected
 // stays corrected for the rest of the benchmark.
-func reread(b *runner, cnt, pad int, r *Results, getBase func() int) int {
+func reread(b backend, cnt, pad int, r *Results, getBase func() int) int {
 	delete(cache, Cache{Count: cnt, Padding: pad})
 	spentRereads++
 	mustRun(b, cnt, pad, r)
@@ -449,7 +434,7 @@ func noticef(format string, v ...any) {
 //
 // This is the padding autobench *names*.  The pad it *runs* at is one byte
 // more; both callers add that themselves.
-func basePadding(b *runner, r *Results) int {
+func basePadding(b backend, r *Results) int {
 	// --ipad is an assertion, not a hint: the caller has run this shape before
 	// and is telling us what it measured.  Take it.  Verification costs two
 	// live runs and is available on request (--check-ipad), but it is the
@@ -465,12 +450,16 @@ func basePadding(b *runner, r *Results) int {
 	// confirm and saves about a dozen.  It is confirmed rather than trusted:
 	// what SL's compiler does can change, and a padding that is wrong by k
 	// reports every Size wrong by k with nothing in the output to show it.
-	// Never under --test.  The model has no compiler and no memory
-	// limit; its paddings are arithmetic, not measurements, and writing
-	// them to the same file a live run reads would poison every later
-	// benchmark with numbers that never came from Second Life.
+	//
+	// Only for readings that are Second Life's.  The file is read by every
+	// later benchmark on this account, and a model's paddings are
+	// arithmetic while a simulator's are its own -- either would poison it
+	// with numbers that never came from the grid.  The backend is asked
+	// rather than the flags: the question is about where the readings came
+	// from, which is the transport's to answer and not this program's to
+	// infer from how it was invoked.
 	key := baseKey()
-	if !flags.NoCache && useTestInfo == nil {
+	if !flags.NoCache && b.Grid() {
 		if e, ok := loadPadCache()[key]; ok {
 			if held, at, above := paddingHolds(b, e.Padding); held {
 				debugf("padding %d remembered and confirmed (%d -> %d)\n",
@@ -488,7 +477,7 @@ func basePadding(b *runner, r *Results) int {
 	// already stepped back off the crossing.
 	off, _ := findPadding(b, 0, minpad, r)
 	pad := off + minpad
-	if !flags.NoCache && useTestInfo == nil {
+	if !flags.NoCache && b.Grid() {
 		rememberPadding(key, pad, r.Base)
 	}
 	return pad
@@ -500,7 +489,7 @@ func basePadding(b *runner, r *Results) int {
 //
 // The two runs are independent, so they are taken at the same time in
 // two objects when there are two to take them in.
-func paddingHolds(b *runner, pad int) (held bool, at, above int) {
+func paddingHolds(b backend, pad int) (held bool, at, above int) {
 	if !expressiblePadding(pad) {
 		return false, 0, 0
 	}
@@ -522,7 +511,7 @@ func paddingHolds(b *runner, pad int) (held bool, at, above int) {
 // This is exactly the pair of runs the search itself ends on, so the value it
 // confirms is the value Padding: prints: hand a reported padding straight back
 // to --ipad --check-ipad and it passes.
-func checkIPad(b *runner, pad int) {
+func checkIPad(b backend, pad int) {
 	held, atMem, aboveMem := paddingHolds(b, pad)
 	debugf("IPad[%d] %d : %d, %d : %d\n", pad, pad, atMem, pad+1, aboveMem)
 	if held {
@@ -604,9 +593,8 @@ func expressiblePadding(pad int) bool { return pad >= minpad-1 }
 // this one is shorter and says why it works.
 //
 // It is a function rather than a block inside main so that a test can drive it
-// with useTestInfo set and no Second Life at hand; b is untouched in that case.
-// See autobench_test.go.
-func oneMode(b *runner, r *Results) (size, padding, headroom int) {
+// against the offline model and no Second Life at hand.  See autobench_test.go.
+func oneMode(b backend, r *Results) (size, padding, headroom int) {
 	// BASEPAD: the most filler the base script carries without spilling.
 	// This is the number Padding: reports and --ipad takes, and the runs
 	// happen at it rather than a byte past it -- there is one pad in this
@@ -668,40 +656,38 @@ func main() {
 	// it is reported even when the benchmark ends in a panic -- a run that
 	// failed still spent everything it spent.
 	defer reportCost()
-	if flags.Test != "" {
-		const usage = "Usage: --test=PAD,SIZE[,MARGINAL[,LIMIT]]\n"
-		f := strings.Split(flags.Test, ",")
-		if len(f) < 2 || len(f) > 4 {
-			errf(usage)
+
+	// Where the scripts run.  The choice is made once, here, and nothing
+	// above backend.go knows which was made: a benchmark is arithmetic on
+	// readings, and where the readings come from is a transport.
+	//
+	// --test used to be answered ABOVE the transport -- runScript had a
+	// branch that returned the model's number without ever sending
+	// anything -- so the compile-error path, the fault path,
+	// absorbResults and the whole of the transport were reachable only
+	// with a grid at the far end.  It is a backend now, served in this
+	// process over a pipe, and the offline path runs the same code the
+	// live one does.
+	var b backend
+	switch {
+	case flags.Test != "" && flags.Backend != "":
+		// Both name where scripts run, and they are not the same
+		// somewhere.  Picking one would mean quietly measuring against
+		// something other than what was asked for.
+		errf("Only one of --test or --backend may be specified\n")
+	case flags.Test != "":
+		var err error
+		if b, err = openModel(testModel(flags.Test), flags.Objects); err != nil {
+			errf("%v\n", err)
 		}
-		n := make([]int, len(f))
-		for i, s := range f {
-			v, err := strconv.Atoi(s)
-			if err != nil {
-				errf(usage)
-			}
-			n[i] = v
+		defer b.Close()
+	case flags.Backend != "":
+		var err error
+		if b, err = openBackend(flags.Backend, flags.Objects); err != nil {
+			errf("%v\n", err)
 		}
-		// SIZE is what the first copy costs and MARGINAL what each one
-		// after it costs; leaving MARGINAL out makes them equal, which
-		// is a construct that pays nothing once and shares nothing.
-		marginal, limit := 0, defaultTestLimit
-		if len(n) >= 3 {
-			marginal = n[2]
-		}
-		if len(n) == 4 {
-			limit = n[3]
-		}
-		useTestInfo = &testInfo{pad: n[0], codeSize: n[1], marginal: marginal, limit: limit}
-	}
-	// b stays nil under --test.  The public autobench pointed its transport at
-	// /dev/null because its bench needed a chat log and a slot file to exist;
-	// here there is nothing to point at and no session to open -- which is the
-	// clearer statement of what --test means anyway.  runScript answers from
-	// the model above the transport, so nothing dereferences it, and a run
-	// under --test never logs in.
-	var b *runner
-	if useTestInfo == nil {
+		defer b.Close()
+	default:
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
@@ -745,7 +731,15 @@ func main() {
 			if got, _ := resultPayload(results[0]); got != "Hello" {
 				errf("Got %q, want %q\n", got, "Hello")
 			}
-			fmt.Printf("SL Live\n")
+			// What answered, rather than what usually answers: --probe
+			// reaches whatever backend was chosen, and saying "SL Live"
+			// about the offline model would be a lie in the one place a
+			// person is checking whether they are talking to Second Life.
+			if b.Grid() {
+				fmt.Printf("SL Live\n")
+			} else {
+				fmt.Printf("Backend live\n")
+			}
 			return
 		case <-time.After(time.Minute):
 			errf("timed out waiting for Second Life\n")
@@ -885,11 +879,11 @@ func main() {
 // per-copy size in r.Size, where the benchmark script itself computed it.
 //
 // Like oneMode it is a function rather than a block inside main so that a test
-// can drive it with useTestInfo set and no Second Life at hand.  It was a block
-// inside main until 2026-08-03, and that is not incidental: -1 mode had offline
-// tests and copy mode had none, which is how copy mode carried a systematic
-// +blockSize/count on half of all shapes without anyone being able to see it.
-func copyMode(b *runner, r *Results) (padding, cnt, first int) {
+// can drive it against the offline model.  It was a block inside main until
+// 2026-08-03, and that is not incidental: -1 mode had offline tests and copy
+// mode had none, which is how copy mode carried a systematic +blockSize/count
+// on half of all shapes without anyone being able to see it.
+func copyMode(b backend, r *Results) (padding, cnt, first int) {
 	// We should really always pad the base.  The base padding is the same
 	// quantity here as in -1 mode -- the same base script, the same boundary --
 	// so a Padding: value read off either mode may be given to --ipad in either
@@ -1108,7 +1102,7 @@ func copyMode(b *runner, r *Results) (padding, cnt, first int) {
 //
 // It answers false for a count below one, which is the caller having
 // nothing to halve.
-func copiesCost(b *runner, cnt, runpad, baseMem int, r *Results) (int, bool) {
+func copiesCost(b backend, cnt, runpad, baseMem int, r *Results) (int, bool) {
 	if cnt < 1 {
 		return 0, false
 	}
@@ -1143,30 +1137,20 @@ var oneCopyVerdict *compilation
 // Not being able to ask is fatal.  The caller is already handling a failed run,
 // and a diagnosis that cannot be obtained is not one to guess at.
 //
-// Under --test it answers from the model.  The model has no compiler, so what
-// stands in for one is the thing the compiler is being asked about: a script is
-// refused once the memory the model says it uses passes testInfo.limit.  That
-// is a stand-in and is documented as one; it is here so the back-off in
-// runShrink can be driven without a grid.
-func oneCopyCompiles(b *runner, pad int) *compilation {
+// Whatever is at the far end answers it.  The offline model has no compiler, so
+// what stands in for one there is the thing the compiler is being asked about --
+// the memory the model says the script would use, against the model's limit --
+// and it answers that through the same call, having installed nothing.
+func oneCopyCompiles(b backend, pad int) *compilation {
 	if oneCopyVerdict != nil {
 		return oneCopyVerdict
 	}
 	spentCompiles++
-	switch {
-	case useTestInfo == nil:
-		c, err := b.Compile(buildScript(1, pad))
-		if err != nil {
-			panic(err)
-		}
-		oneCopyVerdict = c
-	case testMem(1, pad) <= useTestInfo.limit:
-		oneCopyVerdict = &compilation{OK: true}
-	default:
-		oneCopyVerdict = &compilation{Errors: []string{fmt.Sprintf(
-			"model: one copy at pad %d would use %d bytes, over the %d-byte limit",
-			pad, testMem(1, pad), useTestInfo.limit)}}
+	c, err := b.Compile(buildScript(1, pad))
+	if err != nil {
+		panic(err)
 	}
+	oneCopyVerdict = c
 	debugf("Compile[1] accepted=%v\n", oneCopyVerdict.OK)
 	return oneCopyVerdict
 }
@@ -1224,9 +1208,10 @@ var lsdPad = -1
 // a wait for the script to speak, and everything else this program does is free
 // beside it.
 //
-// It counts model runs under --test too.  The model is a stand-in for a run and
-// is reached at exactly the points a run would be, so the count is the same
-// count; that is what lets a change be costed offline before it is spent live.
+// It counts runs against the offline model too.  The model is a stand-in for a
+// run and is sent one at exactly the points a run would be, so the count is the
+// same count; that is what lets a change be costed offline before it is spent
+// live.
 var spentRuns int
 
 // spentRereads counts the runs spent asking a question a second time --
@@ -1245,7 +1230,7 @@ func reportCost() {
 
 // mustRun runs the script and treats any error as fatal.  Used where an error
 // is not expected and not recoverable (padding search, zero-copy base run).
-func mustRun(b *runner, cnt, pad int, r *Results) {
+func mustRun(b backend, cnt, pad int, r *Results) {
 	err := runScript(b, cnt, pad, r)
 	if err != nil {
 		panic(err)
@@ -1270,14 +1255,14 @@ func mustRun(b *runner, cnt, pad int, r *Results) {
 // be -- so it is the code under test that SL will not take, and saying so is
 // worth more than another nine uploads finding out.  oneCopyCompiles is what
 // tells the two apart, and it is asked at most once per benchmark.
-func runShrink(b *runner, cnt, pad int, r *Results) int {
+func runShrink(b backend, cnt, pad int, r *Results) int {
 	for {
 		err := runScript(b, cnt, pad, r)
 		if err == nil {
 			return cnt
 		}
 		var re *runtimeError
-		if cnt > 1 && errors.As(err, &re) && re.StackHeap() {
+		if cnt > 1 && errors.As(err, &re) && re.OutOfMemory() {
 			debugf("Stack-Heap Collision at %d copies; retrying at %d\n", cnt, cnt/2)
 			cnt /= 2
 			continue
@@ -1309,97 +1294,6 @@ copies of CODE, then the harness, then the padding.
 	}
 }
 
-// testBaseMem stands in for the linkset data the real benchmark uses to carry
-// the base reading from the cnt=0 script to the cnt>0 ones.  Live, SIZE is
-// computed inside the script as (mem - old)/count, where old is what the last
-// cnt=0 script that ACTUALLY RAN wrote; testRun is likewise reached only on a
-// cache miss, so writing it here mirrors that exactly.  Zero before any cnt=0
-// run is right too: llLinksetDataRead of a missing key casts to 0.
-var testBaseMem int
-
-// testAnchor is where the model's staircase starts.  5412 is a value that has
-// been seen live; nothing depends on it beyond its being larger than any pad
-// the model is asked about.
-const testAnchor = 5412
-
-// testMem is the model: what llGetUsedMemory would report for cnt copies at
-// pad.  A staircase in pad, one blockSize step every blockSize bytes, with the
-// step for cnt=0 falling AT pad == useTestInfo.pad.
-//
-// It is a function on its own rather than four lines inside testRun because the
-// compile check asks the same question of the same model, and two copies of a
-// staircase drift.
-func testMem(cnt, pad int) int {
-	return testAnchor + ((testUsed(cnt) + pad - useTestInfo.pad + blockSize) &^ (blockSize - 1))
-}
-
-// testUsed is what cnt copies cost the model before quantising: the
-// first copy outright, and the marginal cost for each one after it.
-//
-// With marginal unset this is cnt*codeSize, which is what it always
-// was.  The point of the general form is that copy mode's arithmetic
-// has to separate the two, and a model that could not tell them apart
-// could not fail the test.
-func testUsed(cnt int) int {
-	if cnt == 0 {
-		return 0
-	}
-	marginal := useTestInfo.marginal
-	if marginal == 0 {
-		marginal = useTestInfo.codeSize
-	}
-	used := useTestInfo.codeSize + (cnt-1)*marginal
-	if useTestInfo.drift > 0 {
-		used += cnt / useTestInfo.drift
-	}
-	return used
-}
-
-// testRun answers a run from useTestInfo's model instead of from Second Life.
-// It writes the same fields of r that a real run would write for that cnt, so
-// that everything downstream -- including the cache -- behaves as it does live.
-//
-// Which fields those are is not symmetric, and the asymmetry is the model's
-// whole job: a cnt=0 script reports BASE_MEM as a RESULT, while a cnt>0 script
-// reports TEST_MEM and SIZE as RESULTs and BASE_MEM only as INFO.  runScript
-// parses RESULTs, so a cnt>0 run never writes r.Base.  Neither does this.
-// testNoise, if not nil, is asked what the model's reading should be, and may
-// answer something other than the truth.  It stands in for the one thing the
-// model cannot otherwise express and the thing A12 is about: llGetUsedMemory
-// occasionally answering something a second ask does not agree with.
-//
-// It is called once per RUN, not once per reading, so a hook that lies the first
-// time it sees a pad and tells the truth afterwards produces exactly the event
-// that was seen live -- a single bad reading, cached and served back.  That is
-// what the crossing confirmation has to survive, and without a hook there is no
-// way to write that test at all: the live fault has been seen once in the whole
-// history of this program.
-var testNoise func(cnt, pad, mem int) int
-
-func testRun(cnt, pad int, r *Results) {
-	mem := testMem(cnt, pad)
-	if testNoise != nil {
-		mem = testNoise(cnt, pad, mem)
-	}
-	defer func() {
-		debugf("mustRun(cnt = %d, pad = %d) Base: %d, Test: %d\n", cnt, pad, r.Base, r.Test)
-	}()
-	if cnt == 0 {
-		r.Base = mem
-		testBaseMem = r.Base
-		return
-	}
-	r.Test = mem
-	// (Test - base)/cnt, and the base is the cnt=0 reading, NOT the model's
-	// `reported` anchor.  Those differ by however many blocks the base script
-	// itself occupies above the anchor -- at the live reference, exactly one --
-	// so anchoring here put +blockSize/cnt on every Size copy mode reported and
-	// on nothing else.  It is also what decides whether the probe loop sees a
-	// step at all, so getting it wrong moved the copy count as well as the
-	// answer.
-	r.Size = float64(r.Test-testBaseMem) / float64(cnt)
-}
-
 // buildScript renders the benchmark: cnt copies of CODE between the preamble
 // and the postamble, then the harness, then pad bytes of filler.
 //
@@ -1429,12 +1323,22 @@ func buildScript(cnt, pad int) string {
 	// The pad the harness REPORTS is the one it was asked for; the filler
 	// below consumes its copy.  Keep them apart.
 	reported := pad
-	padding := flags.Pad
+	// A builder rather than a string appended to in the loop below.  The
+	// +i chain adds two bytes at a time, and appending to a string copies
+	// the whole of it each time, so rendering a pad of n cost n^2/4 bytes
+	// of copying -- 53 kilobytes of garbage for a middling script.  It
+	// went unnoticed while --test answered above the transport and built
+	// no script at all; the offline sweeps build 440,000 and it was the
+	// largest single thing they spent.  The bytes emitted are the same
+	// bytes, which is the only thing about this function that may not
+	// change.
+	var pb strings.Builder
+	pb.WriteString(flags.Pad)
 	// `integer i;` backs the +i filler chain below.  Emit it unconditionally
 	// so its cost is a fixed constant across every pad value; the old
 	// `if pad > 0` made the pad 0 -> 1 transition a variable-declaration-sized
 	// jump instead of one byte.
-	padding += "integer i;\n"
+	pb.WriteString("integer i;\n")
 	// The +i chain moves in 2-byte steps, so on its own it can only express
 	// even byte counts.  A jump/label pair is the one odd-sized (5-byte)
 	// filler, so spend it whenever pad is odd; pad-5 is then even.  Callers
@@ -1442,24 +1346,24 @@ func buildScript(cnt, pad int) string {
 	// holds --ipad to it -- so this never drives pad negative and every count
 	// from minpad up is representable to the byte, with no upper limit.
 	if pad%2 != 0 {
-		padding += "jump Z; @Z;\n"
+		pb.WriteString("jump Z; @Z;\n")
 		pad -= 5
 	}
 	if pad >= 2 {
-		padding += "i"
+		pb.WriteString("i")
 		pad -= 2
 		for pad >= 2 {
-			padding += "+i"
+			pb.WriteString("+i")
 			pad -= 2
 		}
-		padding += ";\n"
+		pb.WriteString(";\n")
 	}
 
-	fmt.Fprintf(&buf, code, title, cnt, reported, padding)
+	fmt.Fprintf(&buf, code, title, cnt, reported, pb.String())
 	return buf.String()
 }
 
-func runScript(b *runner, cnt, pad int, r *Results) error {
+func runScript(b backend, cnt, pad int, r *Results) error {
 	key := Cache{Count: cnt, Padding: pad}
 	if or, ok := cache[key]; ok {
 		debugf("Using cache for %v\n", key)
@@ -1467,29 +1371,6 @@ func runScript(b *runner, cnt, pad int, r *Results) error {
 		return nil
 	}
 	spentRuns++
-	// Below the cache on purpose: a test that never takes a cache hit cannot
-	// see a bug that only a cache hit causes, and there has been one -- the hit
-	// assigns the whole Results back, so a field the caller set after the first
-	// run is reverted by the second.
-	if useTestInfo != nil {
-		// The model's stand-in for SL's compiler refusing a script that is too
-		// large.  It is on the RUN and not on a separate ask because that is
-		// where the live one arrives too: the source goes up through
-		// UpdateScriptTask, SL refuses it, and the run comes back as a
-		// compileError having executed nothing.  Nothing is cached -- a
-		// refusal is not a reading.
-		if testMem(cnt, pad) > useTestInfo.limit {
-			return &compileError{Errors: []string{fmt.Sprintf(
-				"model: %d copies at pad %d would use %d bytes, over the %d-byte limit",
-				cnt, pad, testMem(cnt, pad), useTestInfo.limit)}}
-		}
-		testRun(cnt, pad, r)
-		if cnt == 0 {
-			lsdPad = pad
-		}
-		cache[key] = *r
-		return nil
-	}
 	script := buildScript(cnt, pad)
 	if flags.Show {
 		fmt.Println(script)

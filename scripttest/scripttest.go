@@ -36,6 +36,21 @@
 // is cancelled and it has to notice.  That last one is the whole reason
 // the lease is a stream, and an in-process fake cannot fail it.
 //
+// # And why there is an in-process client anyway
+//
+// Direct is that shorter thing, and the argument above is why it is an
+// addition rather than a replacement.  It is for the caller that runs
+// scripts by the hundred thousand and is measuring something else -- the
+// offline model behind autobench --test, and the sweeps in its tests,
+// which cost 100 microseconds a run over the pipe and about 5 through
+// Direct, nearly all of the difference being goroutine hand-off for the
+// seven messages a run streams.  What it cannot do is what Pipe is for:
+// a caller cannot DIE, having no connection to lose, and a run arrives
+// when it has finished rather than as it goes, so a caller cannot cancel
+// one in reaction to what it has heard.  Those tests stay on Pipe.
+// Everything else is checked against both clients, so a divergence
+// between them fails the build rather than waiting to be noticed.
+//
 // # Who it is for
 //
 // Our own tests, and anybody writing a backend: the tests in this
@@ -204,6 +219,13 @@ type Server struct {
 
 	grpc  *grpc.Server
 	conns []*grpc.ClientConn
+
+	// direct is what Stop has to cut off on the in-process client.  A
+	// Direct lease handler runs on a goroutine of its own, waiting to be
+	// told the caller has gone, and there is no connection whose closing
+	// would ever tell it.  Keyed by seq, which already mints ids nothing
+	// else uses.
+	direct map[int]context.CancelFunc
 }
 
 // New builds a backend.  Nothing is served until Pipe or Listen.
@@ -334,11 +356,23 @@ func (s *Server) Listen(addr string) (net.Addr, error) {
 // Stop shuts the server down and closes what Pipe handed out.  Streams
 // in flight are cut off rather than waited for, which is what a caller
 // that leaked a lease should see.
+//
+// A Direct lease is cut off the only way it can be, by cancelling the
+// context its handler is waiting on.  A Direct RUN is not: it happens on
+// the caller's own goroutine and has returned before there is anything
+// to stop.
 func (s *Server) Stop() {
 	s.mu.Lock()
 	conns := s.conns
 	s.conns = nil
+	direct := s.direct
+	s.direct = nil
 	s.mu.Unlock()
+	// Outside the lock: cancelling wakes a lease handler, and the first
+	// thing it does is give its group back, which takes the lock.
+	for _, cancel := range direct {
+		cancel()
+	}
 	for _, c := range conns {
 		c.Close()
 	}

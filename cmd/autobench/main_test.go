@@ -10,6 +10,7 @@ import (
 	"github.com/pborman/getopt/v2"
 
 	"github.com/quark-idlemind/slgo/internal/session"
+	"github.com/quark-idlemind/slgo/scripttest"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -223,9 +224,9 @@ func TestTheScriptIsTheHarnessAroundTheCodeUnderTest(t *testing.T) {
 // remembered or supplied padding is confirmed with, and the rule it
 // applies is the definition -- memory has to grow between pad and pad+1.
 func TestAPaddingIsTheLastPadInsideItsBlock(t *testing.T) {
-	setTestInfo(t, 474, 368)
+	b := offline(t, 474, 368)
 
-	held, at, above := paddingHolds(nil, 473)
+	held, at, above := paddingHolds(b, 473)
 	if !held {
 		t.Errorf("473 was not confirmed as a padding: %d then %d", at, above)
 	}
@@ -235,14 +236,14 @@ func TestAPaddingIsTheLastPadInsideItsBlock(t *testing.T) {
 
 	// Anything else in the block is not the padding: it is inside, and so
 	// is the byte after it.
-	if held, _, _ := paddingHolds(nil, 400); held {
+	if held, _, _ := paddingHolds(b, 400); held {
 		t.Error("a pad in the middle of a block was confirmed as a padding")
 	}
 
 	// A pad the filler cannot emit is refused without spending a run,
 	// because measuring at a pad other than the one named and reporting it
 	// as the one named is the one wrong answer here that cannot be seen.
-	if held, at, above := paddingHolds(nil, 3); held || at != 0 || above != 0 {
+	if held, at, above := paddingHolds(b, 3); held || at != 0 || above != 0 {
 		t.Error("an inexpressible pad was measured rather than refused")
 	}
 }
@@ -252,8 +253,8 @@ func TestAPaddingIsTheLastPadInsideItsBlock(t *testing.T) {
 // is free beside it -- but the count is for whoever asked for --debug,
 // not for a caller parsing stdout.
 func TestTheCostIsReportedUnderDebugAndNowhereElse(t *testing.T) {
-	setTestInfo(t, 474, 368)
 	spentRuns, spentRereads, spentCompiles = 11, 6, 1
+	t.Cleanup(func() { spentRuns, spentRereads, spentCompiles = 0, 0, 0 })
 
 	flags.Debug = false
 	t.Cleanup(func() { flags.Debug = false })
@@ -331,8 +332,7 @@ func autobench(t *testing.T, args ...string) (stdout, stderr string) {
 	getopt.CommandLine = getopt.New()
 	clear(cache)
 	clear(probeTest)
-	testBaseMem, lsdPad = 0, -1
-	useTestInfo, oneCopyVerdict, testNoise = nil, nil, nil
+	lsdPad, oneCopyVerdict = -1, nil
 	spentRuns, spentRereads, spentCompiles = 0, 0, 0
 
 	t.Cleanup(func() {
@@ -340,8 +340,7 @@ func autobench(t *testing.T, args ...string) (stdout, stderr string) {
 		flags = flagDefaults
 		clear(cache)
 		clear(probeTest)
-		testBaseMem, lsdPad = 0, -1
-		useTestInfo, oneCopyVerdict, testNoise = nil, nil, nil
+		lsdPad, oneCopyVerdict = -1, nil
 	})
 
 	main()
@@ -404,6 +403,52 @@ func TestTheProgramPrintsWhatTheModeMeasured(t *testing.T) {
 	}
 	if !strings.Contains(out, "First copy: 368\n") {
 		t.Errorf("copy mode did not print what one copy costs:\n%s", out)
+	}
+}
+
+// TestABackendAtAnAddressMeasuresTheSameThing: --backend points this
+// program at something else that runs LSL -- the simulator, a viewer
+// daemon -- and the whole of the benchmark above the transport is
+// unchanged by that.  So the answer has to be the answer, whether the
+// contract was reached over a pipe in this process or over a socket.
+//
+// It goes through main rather than through openBackend, because what is
+// being checked is the flag: the dial, the lease and the timeout are what
+// a person typing an address gets, and none of them are exercised by a
+// backend handed over ready-made.
+func TestABackendAtAnAddressMeasuresTheSameThing(t *testing.T) {
+	s := scripttest.New(scripttest.Options{
+		Memory:    scripttest.Memory{Pad: 474, CodeSize: 368},
+		GroupSize: 4,
+	})
+	// Loopback with a port of the system's choosing.  Nothing is asked of
+	// the network this machine is on, and nothing outside this process can
+	// be reached by it.
+	addr, err := s.Listen("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("serving a backend: %v", err)
+	}
+	t.Cleanup(s.Stop)
+
+	out, said := autobench(t, "--backend", addr.String(), "-1",
+		"--code", "foo_CNT(){llDie();}")
+	for _, want := range []string{"Size: 368\n", "Padding: 473\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("a benchmark through --backend did not print %q:\n%s\n%s",
+				want, out, said)
+		}
+	}
+	// Which avatar's objects these turned out to be, said out loud: a real
+	// backend chose, and a reading is only comparable with another from
+	// the same avatar.
+	if !strings.Contains(said, "running as test") {
+		t.Errorf("nothing was said about whose objects the backend granted:\n%s", said)
+	}
+	// And nothing was written to the padding cache, because these readings
+	// are not Second Life's.  The file every later benchmark reads must
+	// hold measurements and not somebody else's arithmetic.
+	if _, ok := loadPadCache()[baseKey()]; ok {
+		t.Error("a padding measured through a backend that is not the grid was remembered")
 	}
 }
 
