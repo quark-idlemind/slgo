@@ -1323,12 +1323,22 @@ func buildScript(cnt, pad int) string {
 	// The pad the harness REPORTS is the one it was asked for; the filler
 	// below consumes its copy.  Keep them apart.
 	reported := pad
-	padding := flags.Pad
+	// A builder rather than a string appended to in the loop below.  The
+	// +i chain adds two bytes at a time, and appending to a string copies
+	// the whole of it each time, so rendering a pad of n cost n^2/4 bytes
+	// of copying -- 53 kilobytes of garbage for a middling script.  It
+	// went unnoticed while --test answered above the transport and built
+	// no script at all; the offline sweeps build 440,000 and it was the
+	// largest single thing they spent.  The bytes emitted are the same
+	// bytes, which is the only thing about this function that may not
+	// change.
+	var pb strings.Builder
+	pb.WriteString(flags.Pad)
 	// `integer i;` backs the +i filler chain below.  Emit it unconditionally
 	// so its cost is a fixed constant across every pad value; the old
 	// `if pad > 0` made the pad 0 -> 1 transition a variable-declaration-sized
 	// jump instead of one byte.
-	padding += "integer i;\n"
+	pb.WriteString("integer i;\n")
 	// The +i chain moves in 2-byte steps, so on its own it can only express
 	// even byte counts.  A jump/label pair is the one odd-sized (5-byte)
 	// filler, so spend it whenever pad is odd; pad-5 is then even.  Callers
@@ -1336,20 +1346,20 @@ func buildScript(cnt, pad int) string {
 	// holds --ipad to it -- so this never drives pad negative and every count
 	// from minpad up is representable to the byte, with no upper limit.
 	if pad%2 != 0 {
-		padding += "jump Z; @Z;\n"
+		pb.WriteString("jump Z; @Z;\n")
 		pad -= 5
 	}
 	if pad >= 2 {
-		padding += "i"
+		pb.WriteString("i")
 		pad -= 2
 		for pad >= 2 {
-			padding += "+i"
+			pb.WriteString("+i")
 			pad -= 2
 		}
-		padding += ";\n"
+		pb.WriteString(";\n")
 	}
 
-	fmt.Fprintf(&buf, code, title, cnt, reported, padding)
+	fmt.Fprintf(&buf, code, title, cnt, reported, pb.String())
 	return buf.String()
 }
 
