@@ -14,18 +14,25 @@ package main
 // said, absorbResults -- was therefore skipped under --test and reachable
 // only with a grid at the far end, which is to say reachable only by
 // hand.  Now the model is a script.v1 backend like any other, started in
-// this process and reached over a pipe, and an offline benchmark runs the
-// same code a live one does.
+// this process, and an offline benchmark runs the same code a live one
+// does.
 //
-// The pipe is not ceremony.  Over it the messages are marshalled and the
-// lease is a real stream, so the model exercises script.go rather than
-// standing in for it; scripttest's own documentation makes the same
-// argument at more length.  It costs about 90 microseconds a run
-// measured here, against the 1 to 30 seconds a live one costs.
+// # Reached in process, and why that is not a step back
+//
+// This was a real connection at first -- scripttest.Pipe, marshalling
+// and all -- on the argument that the model should exercise script.go
+// rather than stand in for it.  It still does: what openScript, runIn,
+// sift and absorbResults do is unchanged, because what they are written
+// against is scriptv1.RunnerClient and that is an interface.  What the
+// connection was buying on top of that was the transport's own
+// behaviour, which is worth testing exactly once and is tested in
+// scripttest against Pipe, and what it cost was 100 microseconds a run
+// against 4 here.  A live run costs 1 to 30 seconds and would not care;
+// a --test sweep of a hundred thousand of them cares a great deal, and
+// paying it here bought nothing this program is responsible for.
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/quark-idlemind/slgo/scripttest"
 )
@@ -49,14 +56,9 @@ func openModel(m scripttest.Memory, targets int) (backend, error) {
 		// model: this backend serves one caller, which is us.
 		GroupSize: targets,
 	})
-	conn, err := s.Pipe()
-	if err != nil {
-		s.Stop()
-		return nil, fmt.Errorf("serving the offline model: %w", err)
-	}
 	// No agent: the model has one and made the name up, so asking for a
 	// particular avatar would be asking a question it cannot answer.
-	r, err := openScript(context.Background(), conn, targets, "", "autobench --test", false)
+	r, err := openScript(context.Background(), s.Direct(), targets, "", "autobench --test", false)
 	if err != nil {
 		s.Stop()
 		return nil, err

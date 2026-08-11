@@ -93,11 +93,13 @@ func offlineWith(t *testing.T, o scripttest.Options) *modelled {
 		o.GroupSize = 1
 	}
 	s := scripttest.New(o)
-	conn, err := s.Pipe()
-	if err != nil {
-		t.Fatalf("serving the model: %v", err)
-	}
-	b, err := openScript(context.Background(), conn, o.GroupSize, "", "test", false)
+	// In process rather than over scripttest.Pipe.  The sweeps below run
+	// about 440,000 scripts, which over a connection is 100 microseconds
+	// each and about a minute of this package's test time spent almost
+	// entirely on goroutine hand-off; in process it is 4.  What the
+	// connection would be testing is the transport, and the transport is
+	// tested in scripttest, over Pipe, once.
+	b, err := openScript(context.Background(), s.Direct(), o.GroupSize, "", "test", false)
 	if err != nil {
 		s.Stop()
 		t.Fatalf("leasing from the model: %v", err)

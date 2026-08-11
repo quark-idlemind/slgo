@@ -110,7 +110,7 @@ func openBackend(addr string, targets int) (backend, error) {
 	// Announced, unlike the offline model: a real backend may hold
 	// several avatars' objects and chose one for us, and a reading is
 	// only comparable with another from the same avatar.
-	r, err := openScript(context.Background(), conn, targets, flags.Agent, who, true)
+	r, err := openScript(context.Background(), scriptv1.NewRunnerClient(conn), targets, flags.Agent, who, true)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -140,9 +140,12 @@ func openBackend(addr string, targets int) (backend, error) {
 // belong to.  Worth saying when a real backend chose for us -- a reading
 // is only comparable with another from the same avatar -- and noise when
 // the backend is the offline model, which has exactly one and made it up.
-func openScript(ctx context.Context, conn *grpc.ClientConn, targets int, agent, who string, announce bool) (*scriptRunner, error) {
-	c := scriptv1.NewRunnerClient(conn)
-
+// c is a client and not a connection, because whether there is a
+// connection is not this function's business: --backend dials one, and
+// the offline model behind --test is reached in process, where a run
+// costs 4 microseconds instead of 100.  Both answer the same interface
+// and everything below here is written against that.
+func openScript(ctx context.Context, c scriptv1.RunnerClient, targets int, agent, who string, announce bool) (*scriptRunner, error) {
 	h, err := c.Health(ctx, &scriptv1.HealthRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("asking the backend what it is: %w", err)
