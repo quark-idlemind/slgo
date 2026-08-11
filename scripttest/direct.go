@@ -174,9 +174,9 @@ func (s *Server) forgetDirect(id int) {
 // The same two steps grpc-go's own server takes: a handler that returned
 // a status error is believed, and anything else becomes one -- which is
 // how a bare context.Canceled from a handler reaches the caller as
-// codes.Canceled rather than as itself.  Without this the two clients
-// would disagree about every error code, and the tests below compare
-// them.
+// codes.Canceled rather than as itself.  Without it the two clients
+// would disagree about every error code, and the tests that run against
+// both compare exactly that.
 func asStatus(err error) error {
 	if err == nil {
 		return nil
