@@ -66,12 +66,12 @@ var probeTest = map[Cache]int{}
 // anything a probe could not do -- under --test, with no spare objects,
 // or when a probe failed, which puts the error in front of the code
 // that already knows what to do about it.
-func probeBase(b *runner, pads []int) []int { return probeAt(b, 0, pads) }
+func probeBase(b backend, pads []int) []int { return probeAt(b, 0, pads) }
 
 // probeAt measures a script of a given copy count at several pads at
 // once, and returns the reading the search compares: BASE_MEM for the
 // base script, TEST_MEM for one with copies in it.
-func probeAt(b *runner, cnt int, pads []int) []int {
+func probeAt(b backend, cnt int, pads []int) []int {
 	out := make([]int, len(pads))
 
 	var todo []probeJob
@@ -86,12 +86,12 @@ func probeAt(b *runner, cnt int, pads []int) []int {
 		return out
 	}
 
-	if useTestInfo == nil && len(b.spare) > 0 {
+	if b.Spares() > 0 {
 		todo = probeConcurrently(b, cnt, todo, out)
 	}
 
-	// Whatever is left goes the ordinary way: the model, a run that
-	// failed, or a benchmark with nowhere to run in parallel.
+	// Whatever is left goes the ordinary way: a run that failed, or a
+	// benchmark with nowhere to run in parallel.
 	for _, j := range todo {
 		var r Results
 		mustRun(b, cnt, j.pad, &r)
@@ -125,11 +125,11 @@ func probed(cnt, pad int) (int, bool) {
 
 // probeConcurrently runs what it can in the spare objects and returns
 // the jobs it did not manage.
-func probeConcurrently(b *runner, cnt int, todo []probeJob, out []int) []probeJob {
+func probeConcurrently(b backend, cnt int, todo []probeJob, out []int) []probeJob {
 	var left []probeJob
 
-	for start := 0; start < len(todo); start += len(b.spare) {
-		end := start + len(b.spare)
+	for start := 0; start < len(todo); start += b.Spares() {
+		end := start + b.Spares()
 		if end > len(todo) {
 			end = len(todo)
 		}
@@ -137,12 +137,12 @@ func probeConcurrently(b *runner, cnt int, todo []probeJob, out []int) []probeJo
 		var wg sync.WaitGroup
 		failed := make([]bool, end-start)
 		for k := start; k < end; k++ {
-			j, obj := todo[k], b.spare[k-start]
+			j, spare := todo[k], k-start
 			wg.Add(1)
 			go func(slot int) {
 				defer wg.Done()
 				src := buildScript(cnt, j.pad)
-				results, _, err := b.sendIn(obj, src)
+				results, _, err := b.SendSpare(spare, src)
 				if err != nil {
 					// Not reported here.  Running it again the ordinary
 					// way puts it in front of the code that knows which

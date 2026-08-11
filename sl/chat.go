@@ -131,6 +131,24 @@ func (f *Fault) String() string {
 	return f.Script + ": " + f.Reason
 }
 
+// OutOfMemory reports whether the script ran out of room rather than
+// doing something wrong.
+//
+// It is the one kind of fault worth telling apart, because it is the
+// only one a caller can do something about: a benchmark searching for a
+// size limit has just found it, and halves its script rather than
+// giving up.  Mistaking a division by zero for it halves for ever, and
+// mistaking it for a division by zero ends a run that had its answer.
+//
+// The rule lives here because the words are Second Life's -- "Stack-Heap
+// Collision" is its phrase, not ours -- and this package is where the
+// grid's vocabulary is already read.  It was a string match inside
+// autobench before, which meant a program about measuring LSL had to
+// know how a simulator words a crash.
+func (f *Fault) OutOfMemory() bool {
+	return strings.Contains(f.Reason, "Stack-Heap")
+}
+
 // faultScript recognises the header of a script fault and returns the
 // script it names:
 //

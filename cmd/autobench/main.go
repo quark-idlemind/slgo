@@ -79,7 +79,8 @@ var flags = struct {
 	NoCache   bool          `getopt:"--no-cache do not remember or reuse the padding for this base script"`
 	Objects   int           `getopt:"--objects=N how many objects to take readings in at once"`
 	Timeout   time.Duration `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
-	Test      string        `getopt:"--test=PAD,SIZE[,LIMIT] for testing, see the source code"`
+	Test      string        `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model, see the source code"`
+	Backend   string        `getopt:"--backend=ADDR run scripts through a script.v1 backend at this address"`
 }{
 	Start:   "last",
 	Timeout: time.Minute,
@@ -176,7 +177,7 @@ const minpad = 5
 //
 // Every run writes r, so on return r holds the reading from the crossing run --
 // one block above the reading at pad, which is the step -1 mode measures.
-func findPadding(b *runner, cnt, pad int, r *Results) (offset, base int) {
+func findPadding(b backend, cnt, pad int, r *Results) (offset, base int) {
 	debugf("FindPadding\n")
 	defer debugf("FindPadding Done\n")
 
@@ -226,14 +227,8 @@ func findPadding(b *runner, cnt, pad int, r *Results) (offset, base int) {
 //
 // Never in the measured object: see probe.go for why that is safe for a
 // script with copies in it as well as for the base.
-func quarterSearch(b *runner, cnt, pad, base, low, high int) (int, int) {
-	// Under --test there is nothing to parallelise -- the model answers
-	// instantly and there is no object to run in -- but the SEARCH is
-	// still the search, and the search is what is worth testing without
-	// a grid.  probeAt falls back to asking the model one pad at a
-	// time, so the same quartering happens and the same answer has to
-	// come out of it.  b is nil there and is never reached.
-	if useTestInfo == nil && (b == nil || len(b.spare) < 3) {
+func quarterSearch(b backend, cnt, pad, base, low, high int) (int, int) {
+	if b == nil || b.Spares() < 3 {
 		return low, high
 	}
 
@@ -263,7 +258,7 @@ func quarterSearch(b *runner, cnt, pad, base, low, high int) (int, int) {
 // to have been misread, in which case base is the corrected reading and the
 // whole search has to be redone against it -- every comparison it made was
 // against the wrong number.
-func searchPadding(b *runner, cnt, pad int, r *Results, getBase func() int) (offset, base int, ok bool) {
+func searchPadding(b backend, cnt, pad int, r *Results, getBase func() int) (offset, base int, ok bool) {
 	mustRun(b, cnt, pad, r)
 	base = getBase()
 	debugf("Base[%d] %d : %d\n", cnt, pad, base)
@@ -373,7 +368,7 @@ const (
 // agree with each other -- and it is not meant to.  It turns a silent wrong
 // answer into either a right one or a loud complaint, which is the difference
 // that matters for a number nobody can check afterwards.
-func confirmCrossing(b *runner, cnt, pad, low, base int, r *Results, getBase func() int) (crossing, int) {
+func confirmCrossing(b backend, cnt, pad, low, base int, r *Results, getBase func() int) (crossing, int) {
 	first := getBase()
 	// The reading that looked like the crossing.
 	if again := reread(b, cnt, low+pad, r, getBase); again == base {
@@ -415,7 +410,7 @@ func confirmCrossing(b *runner, cnt, pad, low, base int, r *Results, getBase fun
 //
 // The reading it gets replaces the cached one, so a run that has been corrected
 // stays corrected for the rest of the benchmark.
-func reread(b *runner, cnt, pad int, r *Results, getBase func() int) int {
+func reread(b backend, cnt, pad int, r *Results, getBase func() int) int {
 	delete(cache, Cache{Count: cnt, Padding: pad})
 	spentRereads++
 	mustRun(b, cnt, pad, r)
@@ -449,7 +444,7 @@ func noticef(format string, v ...any) {
 //
 // This is the padding autobench *names*.  The pad it *runs* at is one byte
 // more; both callers add that themselves.
-func basePadding(b *runner, r *Results) int {
+func basePadding(b backend, r *Results) int {
 	// --ipad is an assertion, not a hint: the caller has run this shape before
 	// and is telling us what it measured.  Take it.  Verification costs two
 	// live runs and is available on request (--check-ipad), but it is the
@@ -500,7 +495,7 @@ func basePadding(b *runner, r *Results) int {
 //
 // The two runs are independent, so they are taken at the same time in
 // two objects when there are two to take them in.
-func paddingHolds(b *runner, pad int) (held bool, at, above int) {
+func paddingHolds(b backend, pad int) (held bool, at, above int) {
 	if !expressiblePadding(pad) {
 		return false, 0, 0
 	}
@@ -522,7 +517,7 @@ func paddingHolds(b *runner, pad int) (held bool, at, above int) {
 // This is exactly the pair of runs the search itself ends on, so the value it
 // confirms is the value Padding: prints: hand a reported padding straight back
 // to --ipad --check-ipad and it passes.
-func checkIPad(b *runner, pad int) {
+func checkIPad(b backend, pad int) {
 	held, atMem, aboveMem := paddingHolds(b, pad)
 	debugf("IPad[%d] %d : %d, %d : %d\n", pad, pad, atMem, pad+1, aboveMem)
 	if held {
@@ -606,7 +601,7 @@ func expressiblePadding(pad int) bool { return pad >= minpad-1 }
 // It is a function rather than a block inside main so that a test can drive it
 // with useTestInfo set and no Second Life at hand; b is untouched in that case.
 // See autobench_test.go.
-func oneMode(b *runner, r *Results) (size, padding, headroom int) {
+func oneMode(b backend, r *Results) (size, padding, headroom int) {
 	// BASEPAD: the most filler the base script carries without spilling.
 	// This is the number Padding: reports and --ipad takes, and the runs
 	// happen at it rather than a byte past it -- there is one pad in this
@@ -700,7 +695,7 @@ func main() {
 	// clearer statement of what --test means anyway.  runScript answers from
 	// the model above the transport, so nothing dereferences it, and a run
 	// under --test never logs in.
-	var b *runner
+	var b backend
 	if useTestInfo == nil {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -889,7 +884,7 @@ func main() {
 // inside main until 2026-08-03, and that is not incidental: -1 mode had offline
 // tests and copy mode had none, which is how copy mode carried a systematic
 // +blockSize/count on half of all shapes without anyone being able to see it.
-func copyMode(b *runner, r *Results) (padding, cnt, first int) {
+func copyMode(b backend, r *Results) (padding, cnt, first int) {
 	// We should really always pad the base.  The base padding is the same
 	// quantity here as in -1 mode -- the same base script, the same boundary --
 	// so a Padding: value read off either mode may be given to --ipad in either
@@ -1108,7 +1103,7 @@ func copyMode(b *runner, r *Results) (padding, cnt, first int) {
 //
 // It answers false for a count below one, which is the caller having
 // nothing to halve.
-func copiesCost(b *runner, cnt, runpad, baseMem int, r *Results) (int, bool) {
+func copiesCost(b backend, cnt, runpad, baseMem int, r *Results) (int, bool) {
 	if cnt < 1 {
 		return 0, false
 	}
@@ -1148,7 +1143,7 @@ var oneCopyVerdict *compilation
 // refused once the memory the model says it uses passes testInfo.limit.  That
 // is a stand-in and is documented as one; it is here so the back-off in
 // runShrink can be driven without a grid.
-func oneCopyCompiles(b *runner, pad int) *compilation {
+func oneCopyCompiles(b backend, pad int) *compilation {
 	if oneCopyVerdict != nil {
 		return oneCopyVerdict
 	}
@@ -1245,7 +1240,7 @@ func reportCost() {
 
 // mustRun runs the script and treats any error as fatal.  Used where an error
 // is not expected and not recoverable (padding search, zero-copy base run).
-func mustRun(b *runner, cnt, pad int, r *Results) {
+func mustRun(b backend, cnt, pad int, r *Results) {
 	err := runScript(b, cnt, pad, r)
 	if err != nil {
 		panic(err)
@@ -1270,14 +1265,14 @@ func mustRun(b *runner, cnt, pad int, r *Results) {
 // be -- so it is the code under test that SL will not take, and saying so is
 // worth more than another nine uploads finding out.  oneCopyCompiles is what
 // tells the two apart, and it is asked at most once per benchmark.
-func runShrink(b *runner, cnt, pad int, r *Results) int {
+func runShrink(b backend, cnt, pad int, r *Results) int {
 	for {
 		err := runScript(b, cnt, pad, r)
 		if err == nil {
 			return cnt
 		}
 		var re *runtimeError
-		if cnt > 1 && errors.As(err, &re) && re.StackHeap() {
+		if cnt > 1 && errors.As(err, &re) && re.OutOfMemory() {
 			debugf("Stack-Heap Collision at %d copies; retrying at %d\n", cnt, cnt/2)
 			cnt /= 2
 			continue
@@ -1459,7 +1454,7 @@ func buildScript(cnt, pad int) string {
 	return buf.String()
 }
 
-func runScript(b *runner, cnt, pad int, r *Results) error {
+func runScript(b backend, cnt, pad int, r *Results) error {
 	key := Cache{Count: cnt, Padding: pad}
 	if or, ok := cache[key]; ok {
 		debugf("Using cache for %v\n", key)
