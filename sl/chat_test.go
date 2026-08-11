@@ -357,6 +357,22 @@ func TestAFaultPrintsWhatItKnows(t *testing.T) {
 	}
 }
 
+// TestRunningOutOfMemoryIsToldApartFromEveryOtherFault: a benchmark
+// searching for a size limit halves its script on this one and gives up
+// on the rest, so a division by zero mistaken for it would halve for
+// ever and a collision mistaken for a division by zero would end a
+// benchmark that had just found its answer.
+func TestRunningOutOfMemoryIsToldApartFromEveryOtherFault(t *testing.T) {
+	if f := (&Fault{Script: "a script", Reason: "Stack-Heap Collision"}); !f.OutOfMemory() {
+		t.Errorf("%v was not recognised as running out of memory", f)
+	}
+	for _, reason := range []string{"Math Error", "", "Heap Stack Collision"} {
+		if f := (&Fault{Script: "a script", Reason: reason}); f.OutOfMemory() {
+			t.Errorf("%q was taken for running out of memory", reason)
+		}
+	}
+}
+
 // TestACollectorHearsOnlyTheObjectItWasPointedAt: a region has other
 // things talking in it, and a run whose transcript held them would
 // report lines the script never said.
