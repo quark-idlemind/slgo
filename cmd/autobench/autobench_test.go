@@ -440,12 +440,13 @@ func TestCopyModeAnchorsOnTheRunPad(t *testing.T) {
 	}
 }
 
-// TestTestRunDividesByTheBaseRun pins the model itself, which had the same
-// shape of fault as the code it is used to test: SIZE is computed in the
-// benchmark script as (mem - old)/count, and old is the cnt=0 reading, not the
-// model's internal anchor.  Anchoring on the constant put +blockSize/count on
-// every copy-mode Size and hid the linkset-data bug underneath it.
-func TestTestRunDividesByTheBaseRun(t *testing.T) {
+// TestACopyRunDividesByTheBaseRunBeforeIt pins where SIZE comes from, which
+// had the same shape of fault as the code it is used to find it in: the
+// benchmark script computes (mem - old)/count, and old is the cnt=0 reading
+// the object is holding, not any anchor the model has inside it.  Anchoring on
+// the constant put +blockSize/count on every copy-mode Size and hid the
+// linkset-data bug underneath it.
+func TestACopyRunDividesByTheBaseRunBeforeIt(t *testing.T) {
 	const crossing, codeSize, cnt = 474, 368, 128
 	b := offline(t, crossing, codeSize)
 
@@ -565,9 +566,9 @@ func TestCompileRefusalIsNotAStackHeapCollision(t *testing.T) {
 	}
 }
 
-// TestRefusedRunIsNotCached is the reason the model's refusal returns before
-// testRun: a refusal is not a reading, and caching one would serve it back as a
-// memory figure to whatever asked next.
+// TestRefusedRunIsNotCached is why runScript caches a run only after it has
+// come back: a refusal is not a reading, and caching one would serve it back
+// as a memory figure to whatever asked next.
 func TestRefusedRunIsNotCached(t *testing.T) {
 	b := refusesOver(t, 474, 368, 30*1024)
 
