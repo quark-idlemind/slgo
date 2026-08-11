@@ -182,13 +182,19 @@ func (f *fakeGrid) object(local uint32) *sl.Object {
 	return &o
 }
 
+// fakeAnchor is where this fake's staircase starts.  5412 is a value that
+// has been seen live; nothing depends on it beyond its being larger than
+// any pad the fake is asked about.
+const fakeAnchor = 5412
+
 // mem is the model: what llGetUsedMemory would report for cnt copies at
-// pad.  The same staircase as testMem, written out again rather than
-// shared, because this one has to hold when useTestInfo is nil -- which
-// is the whole point of running a benchmark through the transport.
+// pad.  The same staircase the offline model uses, written out again
+// rather than shared: this is the fake for the GRID transport, and a
+// benchmark run through it has to come out with the same numbers as one
+// run through the contract without the two agreeing by construction.
 func (f *fakeGrid) mem(cnt, pad int) int {
 	used := cnt*f.codeSize + pad - f.crossing
-	return testAnchor + ((used + blockSize) &^ (blockSize - 1))
+	return fakeAnchor + ((used + blockSize) &^ (blockSize - 1))
 }
 
 // harnessCall reads the copy count and the pad back out of a rendered

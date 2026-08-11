@@ -63,9 +63,9 @@ var probeTest = map[Cache]int{}
 //
 // It answers from the run cache where it can, so asking for a pad twice
 // costs one run, and falls back to the ordinary sequential path for
-// anything a probe could not do -- under --test, with no spare objects,
-// or when a probe failed, which puts the error in front of the code
-// that already knows what to do about it.
+// anything a probe could not do -- a benchmark with no spare objects, or
+// a probe that failed, which puts the error in front of the code that
+// already knows what to do about it.
 func probeBase(b backend, pads []int) []int { return probeAt(b, 0, pads) }
 
 // probeAt measures a script of a given copy count at several pads at

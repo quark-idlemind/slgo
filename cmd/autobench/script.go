@@ -95,11 +95,17 @@ func dialScript(addr string) (*grpc.ClientConn, error) {
 // reading inside the measured object between runs, and a second caller
 // in the same object would read somebody else's numbers.
 //
+// agent asks for a particular avatar's objects; empty takes the first
+// free group anywhere.  It is a parameter rather than read from the flags
+// because the offline model has one made-up avatar and no opinion about
+// which, and a --agent meant for the grid must not turn into a lease
+// request for an avatar the model has never heard of.
+//
 // announce says whether to report which avatar the objects turned out to
 // belong to.  Worth saying when a real backend chose for us -- a reading
 // is only comparable with another from the same avatar -- and noise when
 // the backend is the offline model, which has exactly one and made it up.
-func openScript(ctx context.Context, conn *grpc.ClientConn, targets int, who string, announce bool) (*scriptRunner, error) {
+func openScript(ctx context.Context, conn *grpc.ClientConn, targets int, agent, who string, announce bool) (*scriptRunner, error) {
 	c := scriptv1.NewRunnerClient(conn)
 
 	h, err := c.Health(ctx, &scriptv1.HealthRequest{})
@@ -134,7 +140,7 @@ func openScript(ctx context.Context, conn *grpc.ClientConn, targets int, who str
 	// the point of its being a stream at all.
 	lctx, cancel := context.WithCancel(context.Background())
 	stream, err := c.Lease(lctx, &scriptv1.LeaseRequest{
-		Targets: int32(targets), Agent: flags.Agent, Who: who,
+		Targets: int32(targets), Agent: agent, Who: who,
 	})
 	if err != nil {
 		cancel()

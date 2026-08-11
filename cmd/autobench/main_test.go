@@ -223,9 +223,9 @@ func TestTheScriptIsTheHarnessAroundTheCodeUnderTest(t *testing.T) {
 // remembered or supplied padding is confirmed with, and the rule it
 // applies is the definition -- memory has to grow between pad and pad+1.
 func TestAPaddingIsTheLastPadInsideItsBlock(t *testing.T) {
-	setTestInfo(t, 474, 368)
+	b := offline(t, 474, 368)
 
-	held, at, above := paddingHolds(nil, 473)
+	held, at, above := paddingHolds(b, 473)
 	if !held {
 		t.Errorf("473 was not confirmed as a padding: %d then %d", at, above)
 	}
@@ -235,14 +235,14 @@ func TestAPaddingIsTheLastPadInsideItsBlock(t *testing.T) {
 
 	// Anything else in the block is not the padding: it is inside, and so
 	// is the byte after it.
-	if held, _, _ := paddingHolds(nil, 400); held {
+	if held, _, _ := paddingHolds(b, 400); held {
 		t.Error("a pad in the middle of a block was confirmed as a padding")
 	}
 
 	// A pad the filler cannot emit is refused without spending a run,
 	// because measuring at a pad other than the one named and reporting it
 	// as the one named is the one wrong answer here that cannot be seen.
-	if held, at, above := paddingHolds(nil, 3); held || at != 0 || above != 0 {
+	if held, at, above := paddingHolds(b, 3); held || at != 0 || above != 0 {
 		t.Error("an inexpressible pad was measured rather than refused")
 	}
 }
@@ -252,8 +252,8 @@ func TestAPaddingIsTheLastPadInsideItsBlock(t *testing.T) {
 // is free beside it -- but the count is for whoever asked for --debug,
 // not for a caller parsing stdout.
 func TestTheCostIsReportedUnderDebugAndNowhereElse(t *testing.T) {
-	setTestInfo(t, 474, 368)
 	spentRuns, spentRereads, spentCompiles = 11, 6, 1
+	t.Cleanup(func() { spentRuns, spentRereads, spentCompiles = 0, 0, 0 })
 
 	flags.Debug = false
 	t.Cleanup(func() { flags.Debug = false })
@@ -331,8 +331,7 @@ func autobench(t *testing.T, args ...string) (stdout, stderr string) {
 	getopt.CommandLine = getopt.New()
 	clear(cache)
 	clear(probeTest)
-	testBaseMem, lsdPad = 0, -1
-	useTestInfo, oneCopyVerdict, testNoise = nil, nil, nil
+	lsdPad, oneCopyVerdict = -1, nil
 	spentRuns, spentRereads, spentCompiles = 0, 0, 0
 
 	t.Cleanup(func() {
@@ -340,8 +339,7 @@ func autobench(t *testing.T, args ...string) (stdout, stderr string) {
 		flags = flagDefaults
 		clear(cache)
 		clear(probeTest)
-		testBaseMem, lsdPad = 0, -1
-		useTestInfo, oneCopyVerdict, testNoise = nil, nil, nil
+		lsdPad, oneCopyVerdict = -1, nil
 	})
 
 	main()

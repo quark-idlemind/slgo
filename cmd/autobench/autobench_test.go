@@ -1,29 +1,35 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/quark-idlemind/slgo/scripttest"
 )
 
-// These tests drive the measurement machinery with useTestInfo set, so no
-// Second Life and no viewer are involved.  runScript short-circuits before it
-// touches the Bench, so every call here passes a nil *runner.
+// These tests drive the measurement machinery against the offline model, so
+// no Second Life and no viewer are involved.  The model is a real script.v1
+// backend served over a pipe in this process, which is what --test is: every
+// call here goes through buildScript, the transport, the compile verdict and
+// absorbResults, exactly as a live run does.  What is not real is the
+// readings, and nothing else.
 //
-// What the model says.  With useTestInfo set, runScript reports
+// What the model says.  For cnt copies at pad it reports
 //
 //	mem(cnt, pad) = 5412 + blockSize*(floor(x/blockSize) + 1),
-//	           x  = pad - useTestInfo.pad + cnt*useTestInfo.codeSize
+//	           x  = pad - Memory.Pad + cnt*Memory.CodeSize
 //
 // which is a staircase in pad with one blockSize step every blockSize bytes,
-// exactly what live SL does.  The step for cnt=0 falls AT pad ==
-// useTestInfo.pad: that pad is one byte into a fresh block and pad-1 is the
-// last pad still inside the old one.
+// exactly what live SL does.  The step for cnt=0 falls AT pad == Memory.Pad:
+// that pad is one byte into a fresh block and pad-1 is the last pad still
+// inside the old one.
 //
-// So useTestInfo.pad is the CROSSING pad, and the padding autobench names --
-// what Padding: prints, what --ipad takes and what --check-ipad confirms -- is
-// one less.  The tests below spell that out as `crossing` rather than `pad` to
+// So Memory.Pad is the CROSSING pad, and the padding autobench names -- what
+// Padding: prints, what --ipad takes and what --check-ipad confirms -- is one
+// less.  The tests below spell that out as `crossing` rather than `pad` to
 // keep the two apart, because getting them confused is precisely the bug A11
 // fixed against live SL.
 //
@@ -32,32 +38,134 @@ import (
 // reads 5412 bytes at pad 473 and 5924 at pad 474.  That is {crossing: 474,
 // codeSize: 368} here.
 
-// setTestInfo installs the model for one case and removes it afterwards.
+// modelled is a benchmark's backend together with the staircase it answers
+// from, so that a test can say what a reading should have been without
+// working the staircase out a second time -- two copies of it drift.
+type modelled struct {
+	backend
+	mem scripttest.Memory
+	srv *scripttest.Server
+}
+
+// noLimit is a model that refuses nothing, for a case about something other
+// than the compiler.  Larger than the memory any script has, rather than
+// scripttest's negative "no limit at all", so that a case which does go over
+// it is a wrong answer rather than an infinite one.
+const noLimit = 1 << 30
+
+// stop hands the model back without waiting for the test to finish.
+//
+// t.Cleanup does not run until the test does, and the sweeps here build
+// thousands of these -- so a sweep that only registered a cleanup would have
+// thousands of servers standing at once.  Calling it twice is harmless,
+// which is what lets the cleanup stay registered as well.
+func (m *modelled) stop() {
+	m.Close()
+	m.srv.Stop()
+}
+
+// offline serves one case's model as a backend, and puts back everything a
+// benchmark carries between runs.
+//
 // crossing is the pad at which the copy-free base script first tips into the
 // next block; codeSize is the cost of one copy of CODE.
-func setTestInfo(t *testing.T, crossing, codeSize int) {
+func offline(t *testing.T, crossing, codeSize int) *modelled {
 	t.Helper()
-	useTestInfo = &testInfo{pad: crossing, codeSize: codeSize, limit: defaultTestLimit}
-	flags.IPad = 0
-	flags.ICheck = false
-	// The copy search starts AT --max, so a case that left it where the
-	// previous case put it would measure a different copy count.  blockSize is
-	// the default the flag block sets.
-	flags.Max = blockSize
-	// The run cache is keyed on {count, pad} only, so a reading taken under one
-	// model would be served to the next.  Each case starts with an empty one,
-	// which is also what a fresh process gives the real thing.  testBaseMem is
-	// the model's linkset data and goes with it: leaving one case's base reading
-	// standing would let the next case's first copy run be divided against it.
-	clear(cache)
-	testBaseMem = 0
-	t.Cleanup(func() {
-		useTestInfo = nil
+	return offlineWith(t, scripttest.Options{
+		Memory: scripttest.Memory{Pad: crossing, CodeSize: codeSize},
+	})
+}
+
+// offlineWith is offline for a case that has more to say about the model
+// than its crossing and its size -- a limit, a marginal cost, a reading that
+// comes back wrong once.
+//
+// One object unless a case asks for more, and that is deliberate: with spare
+// objects the search quarters its range instead of bisecting it, and the
+// pads it reads move.  The A12 cases below name the pad their bad reading
+// arrives at, so they would be asserting nothing at all against a search
+// that no longer goes there.  What a search does with spares is measured
+// against the grid transport in probe_test.go and against this one in
+// TestASearchThroughTheModelUsesTheSpareObjects.
+func offlineWith(t *testing.T, o scripttest.Options) *modelled {
+	t.Helper()
+	if o.GroupSize == 0 {
+		o.GroupSize = 1
+	}
+	s := scripttest.New(o)
+	conn, err := s.Pipe()
+	if err != nil {
+		t.Fatalf("serving the model: %v", err)
+	}
+	b, err := openScript(context.Background(), conn, o.GroupSize, "", "test", false)
+	if err != nil {
+		s.Stop()
+		t.Fatalf("leasing from the model: %v", err)
+	}
+	m := &modelled{backend: b, mem: o.Memory, srv: s}
+	t.Cleanup(m.stop)
+
+	// Everything a benchmark accumulates as it goes, put back to what a
+	// fresh process would have.  The run cache is keyed on {count, pad}
+	// only, so a reading taken under one model would be served to the
+	// next; lsdPad names the pad the measured object is anchored at and
+	// this object has just been leased, holding nothing; and the verdict
+	// on one copy is about the code under test, which the next case
+	// changes.
+	reset := func() {
 		flags.IPad = 0
 		flags.ICheck = false
+		// The copy search starts AT --max, so a case that left it where
+		// the previous case put it would measure a different copy count.
+		// blockSize is the default the flag block sets.
 		flags.Max = blockSize
 		clear(cache)
-		testBaseMem = 0
+		clear(probeTest)
+		lsdPad = -1
+		oneCopyVerdict = nil
+		spentRuns, spentRereads, spentCompiles = 0, 0, 0
+	}
+	reset()
+	t.Cleanup(reset)
+
+	return m
+}
+
+// affine is offline for a construct whose first copy costs more than the
+// ones after it, which is the whole reason copy mode measures two counts.
+func affine(t *testing.T, crossing, abs, marginal, limit int) *modelled {
+	t.Helper()
+	return offlineWith(t, scripttest.Options{Memory: scripttest.Memory{
+		Pad: crossing, CodeSize: abs, Marginal: marginal, Limit: limit,
+	}})
+}
+
+// noiseOnce makes the model answer wrong the first time it is asked about
+// (cnt, pad) and truthfully every time after, which is the live event
+// exactly: one bad reading, cached, and served back to the rest of the
+// search.
+//
+// It returns the hook and a pointer to the fire count, so a test can insist
+// the fault it arranged actually happened -- a hook that never fires makes
+// every assertion after it vacuous, and a silent no-op is how a mutation test
+// passes for the wrong reason.
+func noiseOnce(cnt, pad, delta int) (func(int, int, int) int, *int) {
+	fired := 0
+	return func(c, p, reading int) int {
+		if c == cnt && p == pad && fired == 0 {
+			fired++
+			return reading + delta
+		}
+		return reading
+	}, &fired
+}
+
+// noisy is offline for a case whose instrument misreports itself once.
+func noisy(t *testing.T, crossing, codeSize int, noise func(cnt, pad, reading int) int) *modelled {
+	t.Helper()
+	return offlineWith(t, scripttest.Options{
+		Memory: scripttest.Memory{Pad: crossing, CodeSize: codeSize},
+		Noise:  noise,
 	})
 }
 
@@ -113,11 +221,11 @@ var bigModelCases = []struct {
 // block at it, and stay flat for the rest of that block.
 func TestModelIsAStaircase(t *testing.T) {
 	const crossing = 474
-	setTestInfo(t, crossing, 368)
+	b := offline(t, crossing, 368)
 
 	var r Results
 	read := func(pad int) int {
-		mustRun(nil, 0, pad, &r)
+		mustRun(b, 0, pad, &r)
 		return r.Base
 	}
 
@@ -159,10 +267,10 @@ func lowestCrossing(crossing int) int {
 func TestFindPaddingFindsTheLastPadInside(t *testing.T) {
 	for _, tc := range modelCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setTestInfo(t, tc.crossing, tc.codeSize)
+			b := offline(t, tc.crossing, tc.codeSize)
 			var r Results
 			want := lowestCrossing(tc.crossing) - minpad - 1
-			got, base := findPadding(nil, 0, minpad, &r)
+			got, base := findPadding(b, 0, minpad, &r)
 			if got != want {
 				t.Errorf("findPadding(0, %d) = %d, want %d (crossing %d)",
 					minpad, got, want, lowestCrossing(tc.crossing))
@@ -170,7 +278,7 @@ func TestFindPaddingFindsTheLastPadInside(t *testing.T) {
 			// The base comes back so that a caller measuring a step against it
 			// gets the reading the search actually used, not one taken before
 			// the search that a re-read may since have corrected.
-			if want := testMem(0, minpad); base != want {
+			if want := b.mem.Reading(0, minpad); base != want {
 				t.Errorf("findPadding returned base %d, want the reading at pad %d, %d",
 					base, minpad, want)
 			}
@@ -184,10 +292,10 @@ func TestFindPaddingFindsTheLastPadInside(t *testing.T) {
 func TestBasePaddingNamesTheLastPadInside(t *testing.T) {
 	for _, tc := range modelCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setTestInfo(t, tc.crossing, tc.codeSize)
+			b := offline(t, tc.crossing, tc.codeSize)
 			var r Results
 			want := lowestCrossing(tc.crossing) - 1
-			if got := basePadding(nil, &r); got != want {
+			if got := basePadding(b, &r); got != want {
 				t.Errorf("basePadding() = %d, want %d", got, want)
 			}
 		})
@@ -198,10 +306,10 @@ func TestBasePaddingNamesTheLastPadInside(t *testing.T) {
 // assertion the caller already measured, used exactly as given, with no search
 // and no audit unless --check-ipad asks for one.
 func TestBasePaddingTakesIPadOnTrust(t *testing.T) {
-	setTestInfo(t, 474, 368)
+	b := offline(t, 474, 368)
 	flags.IPad = 985
 	var r Results
-	if got := basePadding(nil, &r); got != 985 {
+	if got := basePadding(b, &r); got != 985 {
 		t.Errorf("basePadding() with --ipad 985 = %d, want 985", got)
 	}
 }
@@ -216,9 +324,9 @@ func TestOneModeReportsTheCodeSize(t *testing.T) {
 		codeSize int
 	}{}, modelCases...), bigModelCases...) {
 		t.Run(tc.name, func(t *testing.T) {
-			setTestInfo(t, tc.crossing, tc.codeSize)
+			b := offline(t, tc.crossing, tc.codeSize)
 			var r Results
-			size, padding, _ := oneMode(nil, &r)
+			size, padding, _ := oneMode(b, &r)
 			if size != tc.codeSize {
 				t.Errorf("Size: %d, want %d", size, tc.codeSize)
 			}
@@ -240,10 +348,10 @@ func TestOneModeIsPaddingIndependent(t *testing.T) {
 	const codeSize = 368
 	for _, ipad := range []int{0, 473, 473 + blockSize, 473 + 2*blockSize} {
 		t.Run(fmt.Sprintf("ipad=%d", ipad), func(t *testing.T) {
-			setTestInfo(t, 474, codeSize)
+			b := offline(t, 474, codeSize)
 			flags.IPad = ipad
 			var r Results
-			size, padding, _ := oneMode(nil, &r)
+			size, padding, _ := oneMode(b, &r)
 			if size != codeSize {
 				t.Errorf("Size: %d, want %d", size, codeSize)
 			}
@@ -267,9 +375,9 @@ func TestOneModeIsPaddingIndependent(t *testing.T) {
 func TestCopyModeReportsTheCodeSize(t *testing.T) {
 	for _, tc := range modelCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setTestInfo(t, tc.crossing, tc.codeSize)
+			b := offline(t, tc.crossing, tc.codeSize)
 			var r Results
-			padding, cnt, _ := copyMode(nil, &r)
+			padding, cnt, _ := copyMode(b, &r)
 			if want := lowestCrossing(tc.crossing) - 1; padding != want {
 				t.Errorf("Padding: %d, want %d", padding, want)
 			}
@@ -302,15 +410,19 @@ func TestCopyModeReportsTheCodeSize(t *testing.T) {
 func TestCopyModeAnchorsOnTheRunPad(t *testing.T) {
 	const codeSize = 368
 	for crossing := minpad + 1; crossing < minpad+1+blockSize; crossing++ {
-		setTestInfo(t, crossing, codeSize)
+		b := offline(t, crossing, codeSize)
 		var searched Results
-		padding, cnt, _ := copyMode(nil, &searched)
+		padding, cnt, _ := copyMode(b, &searched)
+		b.stop()
 
-		// Same shape, same padding, but handed over instead of searched for.
-		setTestInfo(t, crossing, codeSize)
+		// Same shape, same padding, but handed over instead of searched
+		// for -- and in a fresh object, since the one above is holding
+		// the base reading its own runs left in it.
+		b = offline(t, crossing, codeSize)
 		flags.IPad = padding
 		var told Results
-		toldPadding, toldCnt, _ := copyMode(nil, &told)
+		toldPadding, toldCnt, _ := copyMode(b, &told)
+		b.stop()
 
 		if toldPadding != padding || toldCnt != cnt || told.Size != searched.Size {
 			t.Errorf("crossing %d: searched Padding: %d Size: %v over %d copies, "+
@@ -335,12 +447,12 @@ func TestCopyModeAnchorsOnTheRunPad(t *testing.T) {
 // every copy-mode Size and hid the linkset-data bug underneath it.
 func TestTestRunDividesByTheBaseRun(t *testing.T) {
 	const crossing, codeSize, cnt = 474, 368, 128
-	setTestInfo(t, crossing, codeSize)
+	b := offline(t, crossing, codeSize)
 
 	var r Results
-	mustRun(nil, 0, crossing, &r) // the base run, at runPad
+	mustRun(b, 0, crossing, &r) // the base run, at runPad
 	base := r.Base
-	mustRun(nil, cnt, crossing, &r)
+	mustRun(b, cnt, crossing, &r)
 	if want := float64(r.Test-base) / cnt; r.Size != want {
 		t.Errorf("Size = %v, want %v ((%d - %d)/%d)", r.Size, want, r.Test, base, cnt)
 	}
@@ -378,14 +490,17 @@ func TestExpressiblePadding(t *testing.T) {
 
 // --- a script Second Life will not compile -------------------------------
 
-// setLimit gives the model a size SL would refuse above, standing in for the
-// compiler.  See runScript's --test branch.
-func setLimit(t *testing.T, limit int) {
+// refusesOver is the model for a case about a script Second Life would not
+// compile: the same staircase, with a reading it refuses above.
+//
+// The model has no compiler, so what stands in for one is the thing the
+// compiler is asked about -- the memory the script would use.  The refusal
+// arrives where the live one does, on the run, having executed nothing.
+func refusesOver(t *testing.T, crossing, codeSize, limit int) *modelled {
 	t.Helper()
-	useTestInfo.limit = limit
-	oneCopyVerdict = nil
-	spentRuns, spentCompiles = 0, 0
-	t.Cleanup(func() { oneCopyVerdict = nil })
+	return offlineWith(t, scripttest.Options{
+		Memory: scripttest.Memory{Pad: crossing, CodeSize: codeSize, Limit: limit},
+	})
 }
 
 // TestRunShrinkBacksOffOnACompileRefusal is the case that used to end a
@@ -395,17 +510,16 @@ func setLimit(t *testing.T, limit int) {
 // shape compiled and then collided, and 512 were refused.  Either way a smaller
 // count is the thing to try.
 func TestRunShrinkBacksOffOnACompileRefusal(t *testing.T) {
-	setTestInfo(t, 474, 368)
 	// One copy is well under this and 128 copies are well over it, so the
 	// refusal is unambiguously about size.
-	setLimit(t, 30*1024)
+	b := refusesOver(t, 474, 368, 30*1024)
 
 	var r Results
-	got := runShrink(nil, 128, 474, &r)
+	got := runShrink(b, 128, 474, &r)
 	if got != 64 {
 		t.Errorf("runShrink(128) = %d, want 64 (128 refused, 64 taken)", got)
 	}
-	if testMem(got, 474) > useTestInfo.limit {
+	if b.mem.Reading(got, 474) > b.mem.Limit {
 		t.Errorf("runShrink returned %d, which the model refuses", got)
 	}
 	// Exactly one compile: the diagnosis is about the code, which does not
@@ -419,12 +533,11 @@ func TestRunShrinkBacksOffOnACompileRefusal(t *testing.T) {
 // which is where a benchmark actually makes them: the probe loop calls
 // runShrink and then the measuring run calls it again.
 func TestRunShrinkAsksOnceAboutOneCopy(t *testing.T) {
-	setTestInfo(t, 474, 368)
-	setLimit(t, 30*1024)
+	b := refusesOver(t, 474, 368, 30*1024)
 
 	var r Results
-	runShrink(nil, 128, 474, &r)
-	runShrink(nil, 128, 480, &r)
+	runShrink(b, 128, 474, &r)
+	runShrink(b, 128, 480, &r)
 	if spentCompiles != 1 {
 		t.Errorf("spent %d compiles over two calls, want 1", spentCompiles)
 	}
@@ -436,10 +549,9 @@ func TestRunShrinkAsksOnceAboutOneCopy(t *testing.T) {
 // limit that stopped the script from ever starting look like one it hit while
 // running.
 func TestCompileRefusalIsNotAStackHeapCollision(t *testing.T) {
-	setTestInfo(t, 474, 368)
-	setLimit(t, 30*1024)
+	b := refusesOver(t, 474, 368, 30*1024)
 
-	err := runScript(nil, 128, 474, &Results{})
+	err := runScript(b, 128, 474, &Results{})
 	if err == nil {
 		t.Fatal("128 copies over the model's limit must be refused")
 	}
@@ -457,10 +569,9 @@ func TestCompileRefusalIsNotAStackHeapCollision(t *testing.T) {
 // testRun: a refusal is not a reading, and caching one would serve it back as a
 // memory figure to whatever asked next.
 func TestRefusedRunIsNotCached(t *testing.T) {
-	setTestInfo(t, 474, 368)
-	setLimit(t, 30*1024)
+	b := refusesOver(t, 474, 368, 30*1024)
 
-	if err := runScript(nil, 128, 474, &Results{}); err == nil {
+	if err := runScript(b, 128, 474, &Results{}); err == nil {
 		t.Fatal("want a refusal")
 	}
 	if _, ok := cache[Cache{Count: 128, Padding: 474}]; ok {
@@ -476,28 +587,6 @@ func TestRefusedRunIsNotCached(t *testing.T) {
 // pad all agreed with each other (TestLiveReadingIsStable, 10 runs at each of
 // four pads, plus five earlier). So it cannot be provoked live to order, and a
 // hook is the only way to write these at all.
-
-// noiseOnce makes the model answer wrong the first time it is asked about
-// (cnt, pad) and truthfully every time after, which is the live event exactly:
-// one bad reading, cached, and served back to the rest of the search.
-//
-// It returns a pointer to the fire count, so a test can insist the fault it
-// arranged actually happened -- a hook that never fires makes every assertion
-// after it vacuous, and a silent no-op is how a mutation test passes for the
-// wrong reason.
-func noiseOnce(t *testing.T, cnt, pad, delta int) *int {
-	t.Helper()
-	fired := 0
-	testNoise = func(c, p, mem int) int {
-		if c == cnt && p == pad && fired == 0 {
-			fired++
-			return mem + delta
-		}
-		return mem
-	}
-	t.Cleanup(func() { testNoise = nil })
-	return &fired
-}
 
 // TestOneModeSurvivesAReadingOneBlockHigh replays the incident.
 //
@@ -520,11 +609,11 @@ func noiseOnce(t *testing.T, cnt, pad, delta int) *int {
 // So this fails without the confirmation, and it fails with the exact wrong
 // answer that was published, not merely with some wrong answer.
 func TestOneModeSurvivesAReadingOneBlockHigh(t *testing.T) {
-	setTestInfo(t, 474, 368)
-	fired := noiseOnce(t, 1, 601, blockSize)
+	noise, fired := noiseOnce(1, 601, blockSize)
+	b := noisy(t, 474, 368, noise)
 
 	var r Results
-	size, padding, pad := oneMode(nil, &r)
+	size, padding, pad := oneMode(b, &r)
 	if *fired != 1 {
 		t.Fatalf("the bad reading was never taken (%d times); pad 601 is not on the "+
 			"search's path any more and this test is asserting nothing", *fired)
@@ -545,12 +634,12 @@ func TestOneModeSurvivesAReadingOneBlockHigh(t *testing.T) {
 // catch that -- it really does read high -- which is why confirmCrossing also
 // re-reads the pad BELOW, the one the search accepted as inside.
 func TestOneModeSurvivesAReadingOneBlockLow(t *testing.T) {
-	setTestInfo(t, 474, 368)
 	// 729 is the bisection's first probe above the crossing at 618.
-	fired := noiseOnce(t, 1, 729, -blockSize)
+	noise, fired := noiseOnce(1, 729, -blockSize)
+	b := noisy(t, 474, 368, noise)
 
 	var r Results
-	size, padding, pad := oneMode(nil, &r)
+	size, padding, pad := oneMode(b, &r)
 	if *fired != 1 {
 		t.Fatalf("the bad reading was never taken (%d times)", *fired)
 	}
@@ -571,12 +660,11 @@ func TestOneModeSurvivesAReadingOneBlockLow(t *testing.T) {
 // search has to be run again against the corrected base instead of reporting
 // the answer it had.
 func TestOneModeSurvivesAMisreadBase(t *testing.T) {
-	setTestInfo(t, 474, 368)
-	fired := noiseOnce(t, 1, 473, blockSize)
+	noise, fired := noiseOnce(1, 473, blockSize)
+	b := noisy(t, 474, 368, noise)
 
-	spentRuns, spentRereads = 0, 0
 	var r Results
-	size, padding, pad := oneMode(nil, &r)
+	size, padding, pad := oneMode(b, &r)
 	if *fired != 1 {
 		t.Fatalf("the bad reading was never taken (%d times)", *fired)
 	}
@@ -599,11 +687,11 @@ func TestOneModeSurvivesAMisreadBase(t *testing.T) {
 // pad that crossed, the base, and the pad below.  Six runs, on a benchmark that
 // spends about two dozen.
 func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
-	setTestInfo(t, 474, 368)
+	b := offline(t, 474, 368)
 	spentRuns, spentRereads = 0, 0
 
 	var r Results
-	if size, _, _ := oneMode(nil, &r); size != 368 {
+	if size, _, _ := oneMode(b, &r); size != 368 {
 		t.Fatalf("Size: %d, want 368", size)
 	}
 	if spentRereads != 6 {
@@ -623,9 +711,9 @@ func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
 func TestCopyModeMeasuresMoreThanABlock(t *testing.T) {
 	for _, tc := range bigModelCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setTestInfo(t, tc.crossing, tc.codeSize)
+			b := offline(t, tc.crossing, tc.codeSize)
 			var r Results
-			padding, cnt, _ := copyMode(nil, &r)
+			padding, cnt, _ := copyMode(b, &r)
 			if want := lowestCrossing(tc.crossing) - 1; padding != want {
 				t.Errorf("Padding: %d, want %d", padding, want)
 			}
@@ -638,19 +726,53 @@ func TestCopyModeMeasuresMoreThanABlock(t *testing.T) {
 	}
 }
 
+// TestASearchThroughTheModelUsesTheSpareObjects: with somewhere to put
+// them the search asks three pads at once, and over this transport that is
+// three Run calls in three leased objects rather than one in the measured
+// one.  The answer must not depend on which of those happened.
+//
+// The trap it guards is probe.go's reason for existing.  A cnt>0 script
+// divides against the base reading its own object holds, and a spare holds
+// none, so everything but the memory reading it reports is arithmetic on a
+// zero -- and the model's objects behave that way too, which is what makes
+// this reachable without a grid.  A reading allowed out of a spare into the
+// run cache would report a size out by a whole block.
+func TestASearchThroughTheModelUsesTheSpareObjects(t *testing.T) {
+	b := offlineWith(t, scripttest.Options{
+		Memory:    scripttest.Memory{Pad: 474, CodeSize: 368},
+		GroupSize: 4,
+	})
+	if b.Spares() != 3 {
+		t.Fatalf("the lease granted %d spare objects, want 3", b.Spares())
+	}
+
+	var r Results
+	size, padding, pad := oneMode(b, &r)
+	if size != 368 || padding != 473 || pad != 144 {
+		t.Errorf("Size: %d Padding: %d Result pad: %d, want 368/473/144",
+			size, padding, pad)
+	}
+	// probeTest is written by nothing but a reading taken in a spare, so an
+	// empty one means the whole search went the sequential way and this has
+	// asserted the one-object case twice.
+	if len(probeTest) == 0 {
+		t.Error("no reading was taken in a spare object")
+	}
+}
+
 // --------------------------------------------- confirming one crossing
 
 // confirmAt sets a search up at the point confirmCrossing is asked its
 // question: cnt copies at pad, a step believed to be at pad+low, and the
 // reading the search took there sitting in r.
-func confirmAt(t *testing.T, pad, low, first int) (crossing, int, string) {
+func confirmAt(t *testing.T, b *modelled, pad, low, first int) (crossing, int, string) {
 	t.Helper()
 	r := Results{Test: first}
 	getBase := func() int { return r.Test }
 	var verdict crossing
 	var base int
 	said := stderrOf(t, func() {
-		verdict, base = confirmCrossing(nil, 1, pad, low, testMem(1, pad), &r, getBase)
+		verdict, base = confirmCrossing(b, 1, pad, low, b.mem.Reading(1, pad), &r, getBase)
 	})
 	return verdict, base, said
 }
@@ -666,8 +788,8 @@ func TestAConfirmedCrossingIsAPairOfReadingsAndTheBaseTheyAreAgainst(t *testing.
 	// bytes above the pad the runs are taken at.
 	const pad, low = 602, 16
 
-	setTestInfo(t, 474, 368)
-	verdict, _, said := confirmAt(t, pad, low, testMem(1, pad+low))
+	b := offline(t, 474, 368)
+	verdict, _, said := confirmAt(t, b, pad, low, b.mem.Reading(1, pad+low))
 	if verdict != crossingHolds {
 		t.Errorf("a real crossing was not confirmed: %v", verdict)
 	}
@@ -678,8 +800,8 @@ func TestAConfirmedCrossingIsAPairOfReadingsAndTheBaseTheyAreAgainst(t *testing.
 	// The pad that looked like it crossed reads inside the block on a
 	// second ask: the first reading was noise, and the walk continues past
 	// it rather than turning on it.
-	setTestInfo(t, 474, 368)
-	verdict, _, said = confirmAt(t, pad, 8, testMem(1, pad+low))
+	b = offline(t, 474, 368)
+	verdict, _, said = confirmAt(t, b, pad, 8, b.mem.Reading(1, pad+low))
 	if verdict != crossingLater {
 		t.Errorf("a reading that did not reproduce was taken for a crossing: %v", verdict)
 	}
@@ -690,8 +812,8 @@ func TestAConfirmedCrossingIsAPairOfReadingsAndTheBaseTheyAreAgainst(t *testing.
 	// Both asks say memory grew and they do not agree with each other.
 	// The crossing is here, and the disagreement is worth saying out loud
 	// because nothing else in the output would show it.
-	setTestInfo(t, 474, 368)
-	verdict, _, said = confirmAt(t, pad, low, testMem(1, pad+low)+blockSize)
+	b = offline(t, 474, 368)
+	verdict, _, said = confirmAt(t, b, pad, low, b.mem.Reading(1, pad+low)+blockSize)
 	if verdict != crossingHolds {
 		t.Errorf("a crossing both readings agree about was not taken: %v", verdict)
 	}
@@ -707,20 +829,20 @@ func TestAConfirmedCrossingIsAPairOfReadingsAndTheBaseTheyAreAgainst(t *testing.
 // cheap, since every reading it took is in the cache.
 func TestABaseThatMovedMakesEveryComparisonSuspect(t *testing.T) {
 	const pad, low = 602, 16
-	setTestInfo(t, 474, 368)
 
 	// The re-read of the base is the second thing confirmCrossing asks
 	// for, and this is the one that answers it differently.
-	fired := noiseOnce(t, 1, pad, blockSize)
+	noise, fired := noiseOnce(1, pad, blockSize)
+	b := noisy(t, 474, 368, noise)
 
-	verdict, base, said := confirmAt(t, pad, low, testMem(1, pad+low))
+	verdict, base, said := confirmAt(t, b, pad, low, b.mem.Reading(1, pad+low))
 	if *fired != 1 {
 		t.Fatalf("the base was never re-read (%d times), so this asserts nothing", *fired)
 	}
 	if verdict != crossingSuspect {
 		t.Errorf("a base that moved left the search standing: %v", verdict)
 	}
-	if want := testMem(1, pad) + blockSize; base != want {
+	if want := b.mem.Reading(1, pad) + blockSize; base != want {
 		t.Errorf("the corrected base is %d, want %d", base, want)
 	}
 	if !strings.Contains(said, "being run again") {
@@ -742,12 +864,11 @@ func TestCopyModeSaysSoWhenItCannotBenchmark(t *testing.T) {
 	// A copy larger than the memory a script has, with the model's
 	// compiler limit lifted so that the size is what stops it rather than
 	// a refusal.
-	setTestInfo(t, 474, 200*1024)
-	useTestInfo.limit = 1 << 30
+	b := refusesOver(t, 474, 200*1024, noLimit)
 
 	var r Results
 	var cnt int
-	said := stdoutOf(t, func() { _, cnt, _ = copyMode(nil, &r) })
+	said := stdoutOf(t, func() { _, cnt, _ = copyMode(b, &r) })
 	if !strings.Contains(said, "Unable to benchmark") {
 		t.Errorf("copy mode measured something it cannot measure:\n%s", said)
 	}
@@ -763,13 +884,12 @@ func TestCopyModeSaysSoWhenItCannotBenchmark(t *testing.T) {
 // doubles to the cap and the count falls back to a whole block of copies
 // -- which is the most a benchmark is allowed to ask for.
 func TestACopyThatRegistersNothingIsMeasuredOverAWholeBlock(t *testing.T) {
-	setTestInfo(t, 474, 0)
-	useTestInfo.limit = 1 << 30
+	b := refusesOver(t, 474, 0, noLimit)
 	flags.Max = 64
 	t.Cleanup(func() { flags.Max = blockSize })
 
 	var r Results
-	_, cnt, _ := copyMode(nil, &r)
+	_, cnt, _ := copyMode(b, &r)
 	if cnt != flags.Max {
 		t.Errorf("copy mode measured over %d copies, want the cap of %d", cnt, flags.Max)
 	}
@@ -789,14 +909,14 @@ func TestACopyThatRegistersNothingIsMeasuredOverAWholeBlock(t *testing.T) {
 // rather than a retry, so the shrinking is done against the top of the
 // range -- and here that is what takes four copies down to two.
 func TestTheProbeStopsDoublingWhenTheScriptStopsFitting(t *testing.T) {
-	setTestInfo(t, 474, 368)
 	// Four copies fit at the padding and eight do not, so the first
 	// probe -- which starts at eight -- comes back having run four.
-	setLimit(t, testMem(4, 474)+1)
+	staircase := scripttest.Memory{Pad: 474, CodeSize: 368}
+	b := refusesOver(t, 474, 368, staircase.Reading(4, 474)+1)
 
 	var r Results
-	_, cnt, _ := copyMode(nil, &r)
-	if testMem(cnt, 473+blockSize-1) > useTestInfo.limit {
+	_, cnt, _ := copyMode(b, &r)
+	if b.mem.Reading(cnt, 473+blockSize-1) > b.mem.Limit {
 		t.Errorf("copy mode settled on %d copies, which the model refuses at the "+
 			"top of the range its searches read", cnt)
 	}
@@ -812,12 +932,11 @@ func TestTheProbeStopsDoublingWhenTheScriptStopsFitting(t *testing.T) {
 // THAT is not a size limit -- and saying so is worth more than another
 // nine uploads finding out.
 func TestOneCopyIsWhatTellsTheTwoRefusalsApart(t *testing.T) {
-	setTestInfo(t, 474, 368)
 	// A limit below what one copy costs, which is a shape too big to
 	// benchmark at all rather than one to try smaller.
-	setLimit(t, testAnchor)
+	b := refusesOver(t, 474, 368, scripttest.DefaultAnchor)
 
-	v := oneCopyCompiles(nil, 474)
+	v := oneCopyCompiles(b, 474)
 	if v.OK {
 		t.Fatal("one copy was accepted over a limit it does not fit in")
 	}
@@ -843,18 +962,10 @@ func TestOneCopyIsWhatTellsTheTwoRefusalsApart(t *testing.T) {
 // base script happened to sit in its block.
 func TestOneModeIsExactEverywhere(t *testing.T) {
 	run := func(crossing, size int) int {
-		useTestInfo = &testInfo{pad: crossing, codeSize: size, limit: 1 << 30}
-		flags.IPad, flags.ICheck, flags.Max = 0, false, blockSize
-		clear(cache)
-		testBaseMem = 0
-		got, _, _ := oneMode(nil, &Results{})
+		b := refusesOver(t, crossing, size, noLimit)
+		got, _, _ := oneMode(b, &Results{})
 		return got
 	}
-	t.Cleanup(func() {
-		useTestInfo = nil
-		clear(cache)
-		testBaseMem = 0
-	})
 
 	// Every size from nothing to two blocks, at crossings low, middling
 	// and high in their own block.
@@ -912,11 +1023,10 @@ var affineCases = []struct {
 func TestCopyModeSeparatesWhatIsPaidOnce(t *testing.T) {
 	for _, tc := range affineCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setTestInfo(t, tc.crossing, tc.abs)
-			useTestInfo.marginal = tc.marg
+			b := affine(t, tc.crossing, tc.abs, tc.marg, 0)
 
 			var r Results
-			padding, cnt, first := copyMode(nil, &r)
+			padding, cnt, first := copyMode(b, &r)
 			if want := lowestCrossing(tc.crossing) - 1; padding != want {
 				t.Errorf("Padding: %d, want %d", padding, want)
 			}
@@ -939,11 +1049,10 @@ func TestCopyModeSeparatesWhatIsPaidOnce(t *testing.T) {
 func TestOneModeMeasuresTheFirstCopy(t *testing.T) {
 	for _, tc := range affineCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setTestInfo(t, tc.crossing, tc.abs)
-			useTestInfo.marginal = tc.marg
+			b := affine(t, tc.crossing, tc.abs, tc.marg, 0)
 
 			var r Results
-			size, _, _ := oneMode(nil, &r)
+			size, _, _ := oneMode(b, &r)
 			if size != tc.abs {
 				t.Errorf("Size: %d, want the first copy's %d", size, tc.abs)
 			}
@@ -964,15 +1073,13 @@ func TestCopyModeIsExactAtEveryCount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			counts := map[int]bool{}
 			for _, max := range []int{2, 4, 8, 16, 64, 128} {
-				setTestInfo(t, tc.crossing, tc.abs)
-				useTestInfo.marginal = tc.marg
-				flags.Max = max
 				// Room for the count asked for, so the memory limit is
 				// not what decides which counts this covers.
-				setLimit(t, 1<<30)
+				b := affine(t, tc.crossing, tc.abs, tc.marg, noLimit)
+				flags.Max = max
 
 				var r Results
-				_, cnt, first := copyMode(nil, &r)
+				_, cnt, first := copyMode(b, &r)
 				counts[cnt] = true
 				if int(r.Size) != tc.marg || first != tc.abs {
 					t.Errorf("at %d copies: Size %d First copy %d, want %d and %d",
@@ -1000,14 +1107,14 @@ func TestCopyModeIsExactAtEveryCount(t *testing.T) {
 func TestCopyModeWithholdsAFirstCopyItCannotResolve(t *testing.T) {
 	// A construct whose per-copy cost is not perfectly constant, which
 	// is what live readings look like.
-	setTestInfo(t, 474, 100)
-	useTestInfo.marginal = 33
-	useTestInfo.drift = 4
+	b := offlineWith(t, scripttest.Options{Memory: scripttest.Memory{
+		Pad: 474, CodeSize: 100, Marginal: 33, Drift: 4,
+	}})
 	flags.Max = 8
 
 	var r Results
 	said := stderrOf(t, func() {
-		_, _, first := copyMode(nil, &r)
+		_, _, first := copyMode(b, &r)
 		if first != 0 {
 			t.Errorf("First copy reported as %d for a shape that does not fit", first)
 		}
@@ -1021,11 +1128,10 @@ func TestCopyModeWithholdsAFirstCopyItCannotResolve(t *testing.T) {
 // construct really is an initial cost plus a constant one per copy, both
 // numbers are reported.
 func TestCopyModeReportsAFirstCopyItCanResolve(t *testing.T) {
-	setTestInfo(t, 474, 1044)
-	useTestInfo.marginal = 542
+	b := affine(t, 474, 1044, 542, 0)
 
 	var r Results
-	_, _, first := copyMode(nil, &r)
+	_, _, first := copyMode(b, &r)
 	if int(r.Size) != 542 || first != 1044 {
 		t.Errorf("Size %d First copy %d, want 542 and 1044", int(r.Size), first)
 	}
