@@ -9,6 +9,13 @@
 // one: --object names an object already in the region, and without it a
 // prim is rezzed beside the avatar for the run and deleted afterwards.
 //
+// Second Life is not the only thing that runs LSL, and none of what
+// automate does is particular to it -- put a script somewhere, watch what
+// it says, find out whether it compiled and whether it got to the end.
+// --backend says that to something else through the script.v1 contract:
+// the eLSL simulator with no grid under it, or a viewer driven from
+// outside.  See script.go.
+//
 // The contract with the script is one line: it says DONE when it has
 // finished.  Without that there is nothing to wait for but the clock,
 // and every run costs the whole timeout.  Set --done to change the word
@@ -52,6 +59,7 @@ var flags = struct {
 	Last    string        `getopt:"--last=NAME       the avatar's last name, for --direct"`
 	Start   string        `getopt:"--start=WHERE     where to arrive: last, home, or a region, for --direct"`
 	Object  string        `getopt:"--object=NAME     run in an object of this name, instead of the shared one"`
+	Backend string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life"`
 	Rez     bool          `getopt:"--rez             rez a throwaway prim instead of using the shared auto object"`
 	Script  string        `getopt:"--script=NAME     what to call the script inside the object"`
 	Done    string        `getopt:"--done=TEXT       the text that means the script has finished"`
@@ -104,27 +112,19 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	opts := session.Options{
-		Addr: flags.Addr, Agent: flags.Agent, Direct: flags.Direct,
-		First: flags.First, Last: flags.Last, Start: flags.Start,
-		Channel: "automate",
-	}
-
-	s, obj, cleanup, err := runIn(ctx, opts)
+	// Where the scripts run.  Both transports come down to the same
+	// thing -- a function that runs one script, prints what it said as it
+	// says it, and reports whether it got to the end -- which is what
+	// lets everything else here be written once.
+	run1, done, err := somewhereToRun(ctx, len(srcs))
 	if err != nil {
 		return err
 	}
-	defer s.Close()
-	if cleanup != nil {
-		defer cleanup()
-	}
-	if flags.Keep {
-		fmt.Printf("running in %s\n", obj)
-	}
+	defer done()
 
 	failed := false
 	for _, src := range srcs {
-		if !once(ctx, s, obj, src.path, src.text) {
+		if !run1(src.path, src.text) {
 			failed = true
 		}
 	}
@@ -137,6 +137,56 @@ func run() error {
 		return errScript
 	}
 	return nil
+}
+
+// somewhereToRun gets a place for the scripts and answers with the one
+// thing the rest of this program needs of it.
+//
+// n is how many scripts there are, which the contract path turns into
+// whether to hold an object: several scripts run in the order they were
+// named and one that leaves something behind for the next has to find it
+// there.  The grid path holds one object either way, because that is what
+// it has -- a session with an object in it.
+func somewhereToRun(ctx context.Context, n int) (run func(path, src string) bool, done func(), err error) {
+	if flags.Backend != "" {
+		switch {
+		case flags.Object != "":
+			// A backend supplies the object and names it itself; there is
+			// nothing in the contract that asks for one by name.  Refused
+			// rather than ignored: a person who named an object meant it.
+			return nil, nil, fmt.Errorf("--object names an object in a region, " +
+				"which a script.v1 backend does not have: it supplies the object " +
+				"and how it came to exist is its business")
+		case flags.Keep:
+			return nil, nil, fmt.Errorf("--keep leaves a rezzed prim behind, and a " +
+				"script.v1 backend rezzes nothing: the object it ran in is its own")
+		}
+		r, err := openBackend(flags.Backend, n > 1 || flags.Rez)
+		if err != nil {
+			return nil, nil, err
+		}
+		return func(path, src string) bool { return r.once(ctx, path, src) }, r.Close, nil
+	}
+
+	opts := session.Options{
+		Addr: flags.Addr, Agent: flags.Agent, Direct: flags.Direct,
+		First: flags.First, Last: flags.Last, Start: flags.Start,
+		Channel: "automate",
+	}
+	s, obj, cleanup, err := runIn(ctx, opts)
+	if err != nil {
+		return nil, nil, err
+	}
+	if flags.Keep {
+		fmt.Printf("running in %s\n", obj)
+	}
+	return func(path, src string) bool { return once(ctx, s, obj, path, src) },
+		func() {
+			if cleanup != nil {
+				cleanup()
+			}
+			s.Close()
+		}, nil
 }
 
 // once runs one script and prints what it said, reporting whether it
@@ -165,22 +215,36 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 		fmt.Printf("%s: %v\n", path, err)
 		return false
 	}
+	var fault string
+	if res.Fault != nil {
+		fault = res.Fault.String()
+	}
+	return verdict(path, res.Compiled, res.Errors, fault, res.Finished)
+}
 
+// verdict prints what a run came to and says whether the script got to
+// the end.
+//
+// It is apart from the transports because it is the whole of what
+// automate decides, and the two must not drift: a run reported as having
+// succeeded when it did not is a probe that quietly measured nothing, and
+// that must not depend on which side of the seam the script ran on.
+func verdict(path string, compiled bool, errs []string, fault string, finished bool) bool {
 	switch {
-	case !res.Compiled:
-		for _, e := range res.Errors {
+	case !compiled:
+		for _, e := range errs {
 			fmt.Printf("%s: %s\n", path, e)
 		}
-		if len(res.Errors) == 0 {
+		if len(errs) == 0 {
 			fmt.Printf("%s: it would not compile, and the compiler did not say why\n", path)
 		}
 		return false
 
-	case res.Fault != nil:
-		fmt.Printf("%s: %s\n", path, res.Fault)
+	case fault != "":
+		fmt.Printf("%s: %s\n", path, fault)
 		return false
 
-	case !res.Finished && flags.Done != "":
+	case !finished && flags.Done != "":
 		fmt.Printf("%s: it did not say %s within %v\n", path, flags.Done, flags.Timeout)
 		return false
 	}
