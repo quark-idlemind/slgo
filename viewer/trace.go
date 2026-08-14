@@ -103,6 +103,12 @@ const (
 	// Unclassified means nothing said what to do with it.  Every one
 	// of these is a gap in the table.
 	Unclassified
+
+	// Dropped means there was somewhere to send it and no room to
+	// queue it -- a viewer not keeping up with the simulator.  It is
+	// counted rather than waited on, because waiting would be the
+	// grid session waiting.
+	Dropped
 )
 
 func (d Disposition) String() string {
@@ -117,12 +123,14 @@ func (d Disposition) String() string {
 		return "no viewer attached"
 	case Unclassified:
 		return "unclassified"
+	case Dropped:
+		return "dropped, viewer behind"
 	}
 	return fmt.Sprintf("disposition(%d)", uint8(d))
 }
 
 // dispositions is every Disposition, in report order.
-var dispositions = []Disposition{Forwarded, Absorbed, WrongWay, NoViewer, Unclassified}
+var dispositions = []Disposition{Forwarded, Absorbed, WrongWay, NoViewer, Unclassified, Dropped}
 
 // Count is what the census knows about one message in one direction.
 type Count struct {

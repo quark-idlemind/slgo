@@ -116,6 +116,24 @@ func main() {
 	var hostMu sync.Mutex
 	hosted := map[string]agent.Login{}
 
+	// The viewer endpoint, prepared before any session comes up.  The
+	// relay has to be wired into a session as it logs in -- a session
+	// that came up without it could never pass anything to a viewer
+	// afterwards -- and that is long before there is an endpoint to
+	// serve.
+	var viewers *viewerHost
+	if *viewerAt != "" {
+		host, _, err := viewer.HostPort(*viewerAt)
+		if err != nil {
+			log.Fatalf("viewer: %v", err)
+		}
+		viewers = newViewerHost(ctx, host, srv, func(profile string) string {
+			hostMu.Lock()
+			defer hostMu.Unlock()
+			return hosted[profile].ViewerPassword
+		}, census, tracer, log.Printf)
+	}
+
 	// waiting is a profile whose login failed in a way that may clear,
 	// kept until the server is set up enough to receive it.
 	type waiting struct {
@@ -171,6 +189,13 @@ func main() {
 			OnError: func(p *msg.Packet) {
 				log.Printf("%s: undecodable packet: %v", name, p.Err)
 			},
+		}
+		if viewers != nil {
+			// What the region says, passed on to a viewer if one
+			// is attached.  The relay rather than the tap,
+			// because a tap sees retransmissions and the far end
+			// cannot tell one of those from a second message.
+			opts.Relay = viewers.relayFor(name)
 		}
 		if *trace != "" {
 			// The tap, so this is the wire as it really was --
@@ -412,16 +437,9 @@ func main() {
 		log.Print("WARNING: serving without authentication")
 	}
 
-	// The viewer endpoint, if it was asked for.  After the sessions are
-	// up, because it hands out what they hold and has nothing to say
-	// before there is anything to hand over.
-	if *viewerAt != "" {
-		stopViewers, err := serveViewers(ctx, *viewerAt, srv,
-			func(profile string) string {
-				hostMu.Lock()
-				defer hostMu.Unlock()
-				return hosted[profile].ViewerPassword
-			}, census, tracer, log.Printf)
+	// Now that the sessions are up there is something to hand over.
+	if viewers != nil {
+		stopViewers, err := viewers.serve(*viewerAt)
 		if err != nil {
 			log.Fatalf("viewer: %v", err)
 		}

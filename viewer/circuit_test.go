@@ -88,6 +88,9 @@ func (s *simStub) run() {
 		case "UseCircuitCode":
 			rh := &msg.RegionHandshake{}
 			rh.RegionInfo.SimName = []byte("Dovet\x00")
+			// A field regionFromHandshake throws away, so a test
+			// can tell a replayed handshake from a rebuilt one.
+			rh.RegionInfo.TerrainDetail0 = testTerrainTexture
 			s.send(rh, msg.FlagReliable)
 		case "CompleteAgentMovement":
 			amc := &msg.AgentMovementComplete{}
@@ -145,6 +148,17 @@ func (s *simStub) never(t *testing.T, name string) {
 }
 
 const testCircuitCode = 690139535
+
+var testTerrainTexture = msg.MustParseUUID("c4a67e57-7e57-c0de-f622-7fbb9d50e934")
+
+// sendLand puts one land patch on the wire, as a region does in the
+// first seconds after an avatar arrives.
+func (s *simStub) sendLand(body string) {
+	m := &msg.LayerData{}
+	m.LayerID.Type = 'L'
+	m.LayerData.Data = []byte(body)
+	s.send(m, msg.FlagReliable)
+}
 
 // handedOver stands up a session against simStub and a viewer circuit
 // in front of it, which is the arrangement slgod has when a viewer
@@ -307,5 +321,142 @@ func TestViewerTakesTheCamera(t *testing.T) {
 			t.Fatalf("the session never took the viewer's camera: %+v", a.Look())
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestTheRegionIsDescribedToAJoiningViewer: a region introduces itself
+// once, in the first seconds of a session that may have been up for
+// hours.  A viewer that is not told sits on "Loading world" for ever
+// with no indication of what it is waiting for.
+func TestTheRegionIsDescribedToAJoiningViewer(t *testing.T) {
+	sim, a, _, v, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	// The land arrives while the session is starting, long before any
+	// viewer, which is why it is recorded rather than asked for.
+	sim.sendLand("the ground")
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if n, _, _ := a.Terrain().Stats(); n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the session did not record the land")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "RegionHandshake", 5*time.Second)
+	v.waitSeen(t, "LayerData", 5*time.Second)
+
+	// The handshake is the simulator's own message, not one rebuilt
+	// from the dozen fields this tree keeps: a reconstruction loses
+	// every terrain texture id and renders ground with nothing on it.
+	h := v.last(t, "RegionHandshake").(*msg.RegionHandshake)
+	if got := trimNul(string(h.RegionInfo.SimName)); got != "Dovet" {
+		t.Errorf("region name = %q", got)
+	}
+	if h.RegionInfo.TerrainDetail0 != testTerrainTexture {
+		t.Errorf("terrain texture = %v, want the one the simulator sent", h.RegionInfo.TerrainDetail0)
+	}
+
+	land := v.last(t, "LayerData").(*msg.LayerData)
+	if string(land.LayerData.Data) != "the ground" {
+		t.Errorf("land = %q", land.LayerData.Data)
+	}
+	if !census.Seen("RegionHandshake", ToViewer) || !census.Seen("LayerData", ToViewer) {
+		t.Errorf("the replay was not recorded:\n%s", census.Report())
+	}
+}
+
+func trimNul(s string) string {
+	if i := len(s) - 1; i >= 0 && s[i] == 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// TestWhatTheRegionSaysReachesTheViewer is the direction that was
+// missing: without it a viewer is told only what slgod invents, so every
+// answer to every question it asked stops at the daemon.
+func TestWhatTheRegionSaysReachesTheViewer(t *testing.T) {
+	sim, a, c, v, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	// The session's own relay hook, as slgod wires it.
+	a.Disp.MustHandle("ChatFromSimulator", func(*msg.Packet) {}, msg.Inline())
+
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	chat := &msg.ChatFromSimulator{}
+	chat.ChatData.FromName = []byte("Somebody\x00")
+	chat.ChatData.Message = []byte("hello from the region\x00")
+	c.FromSim(&msg.Packet{
+		Header:  msg.Header{Sequence: 4001, Flags: msg.FlagReliable},
+		ID:      msg.IDOf(chat),
+		Message: chat,
+		At:      time.Now(),
+	})
+
+	v.waitSeen(t, "ChatFromSimulator", 5*time.Second)
+	got := v.last(t, "ChatFromSimulator").(*msg.ChatFromSimulator)
+	if string(got.ChatData.Message) != "hello from the region\x00" {
+		t.Errorf("message = %q", got.ChatData.Message)
+	}
+	if !census.Seen("ChatFromSimulator", FromSim) {
+		t.Errorf("not recorded:\n%s", census.Report())
+	}
+}
+
+// TestPingsAreNotPassedOn: they are per circuit, and a viewer answering
+// a ping meant for the session would be answering the wrong end.
+func TestPingsAreNotPassedOn(t *testing.T) {
+	sim, _, c, v, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	ping := &msg.StartPingCheck{}
+	ping.PingID.PingID = 9
+	c.FromSim(&msg.Packet{ID: msg.IDOf(ping), Message: ping, At: time.Now()})
+
+	time.Sleep(150 * time.Millisecond)
+	for _, n := range v.got() {
+		if n == "StartPingCheck" {
+			t.Error("the simulator's ping was passed to the viewer")
+		}
+	}
+}
+
+// TestABehindViewerDropsRatherThanStallingTheSession: the hand-off runs
+// on the grid session's dispatch goroutine, so a viewer that stops
+// draining must cost updates rather than costing the avatar.
+func TestABehindViewerDropsRatherThanStallingTheSession(t *testing.T) {
+	sim, _, c, v, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	// Far more than the backlog, offered as fast as the loop goes.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < Backlog*3; i++ {
+			m := &msg.ChatFromSimulator{}
+			m.ChatData.Message = []byte("flood\x00")
+			c.FromSim(&msg.Packet{ID: msg.IDOf(m), Message: m, At: time.Now()})
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("offering messages to a viewer blocked the caller")
+	}
+	if c.Dropped() == 0 {
+		t.Log("nothing was dropped; the viewer kept up, which is fine")
 	}
 }

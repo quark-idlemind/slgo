@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -21,6 +23,18 @@ import (
 // of no object updates after a crash is a shrug; a session that never
 // speaks again is a dead avatar.
 const PresenceLease = 3 * time.Second
+
+// Backlog is how many simulator messages may be waiting to go to the
+// viewer before the rest are dropped.
+//
+// There has to be a limit and it has to drop rather than block.  The
+// hand-off happens on the grid session's dispatch goroutine, so a viewer
+// that cannot keep up -- or a socket that has stopped draining -- would
+// otherwise stall the session itself: no more object updates, no more
+// chat, automate wedged, and all of it caused by a window somebody left
+// open.  A viewer missing a few updates is a viewer that redraws
+// something late.  A stalled session is the avatar gone.
+const Backlog = 2048
 
 // Circuit is the viewer's half of a handed-over session: a UDP socket on
 // which slgod answers as though it were the simulator.
@@ -42,6 +56,11 @@ type Circuit struct {
 	census *Census
 	trace  *Trace
 	logf   func(string, ...any)
+
+	// out carries what the simulator said, from the session's dispatch
+	// goroutine to this circuit's own.  See Backlog.
+	out     chan *msg.Packet
+	dropped atomic.Uint64
 
 	mu     sync.Mutex
 	peer   *net.UDPAddr
@@ -75,7 +94,10 @@ func Listen(host string, a *agent.Agent, census *Census, trace *Trace, logf func
 		return nil, fmt.Errorf("viewer: listening for a viewer: %w", err)
 	}
 
-	c := &Circuit{conn: conn, agent: a, census: census, trace: trace, logf: logf}
+	c := &Circuit{
+		conn: conn, agent: a, census: census, trace: trace, logf: logf,
+		out: make(chan *msg.Packet, Backlog),
+	}
 	c.send = msg.NewSender(c, msg.WithSendTap(func(p *msg.Packet) {
 		c.record(ToViewer, p, Forwarded)
 	}))
@@ -113,10 +135,11 @@ func (c *Circuit) Write(p []byte) (int, error) {
 // Run serves the circuit until the context is cancelled.
 func (c *Circuit) Run(ctx context.Context) {
 	ctx, c.cancel = context.WithCancel(ctx)
-	c.wg.Add(3)
+	c.wg.Add(4)
 	go func() { defer c.wg.Done(); c.recv.Run(ctx) }()
 	go func() { defer c.wg.Done(); c.send.Run(ctx) }()
 	go func() { defer c.wg.Done(); c.disp.Run(ctx, c.recv.C()) }()
+	go func() { defer c.wg.Done(); c.pump(ctx) }()
 	c.logf("viewer: listening on %s for %s", c.Addr(), c.agent.Account.Name())
 }
 
@@ -178,8 +201,10 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 
 	case "CompleteAgentMovement":
 		// The request to be put in the region.  The avatar is
-		// already there; what the viewer needs is the answer.
+		// already there; what the viewer needs is the answer -- and
+		// then everything the region said once, before it existed.
 		c.record(FromViewer, p, Absorbed)
+		c.describeRegion()
 		c.sendMovementComplete()
 
 	case "RegionHandshakeReply":
@@ -281,6 +306,40 @@ func (c *Circuit) sendMovementComplete() {
 		c.agent.RegionName(), m.Data.Position)
 }
 
+// describeRegion tells a joining viewer what the region said when this
+// session arrived.
+//
+// A region introduces itself exactly once.  The handshake and the land
+// arrived in the first seconds of a session that may have been up for
+// hours, nothing will send them again, and a viewer will not begin
+// rendering without them -- it sits on "Loading world" with no
+// indication of what it is waiting for.
+//
+// Both are replayed rather than rebuilt.  The handshake is the message
+// the simulator sent, kept whole: what this package decodes from it is
+// twelve fields of thirty odd, and the ones it drops include every
+// terrain texture id, so a viewer given a reconstruction would render
+// ground with nothing on it.
+func (c *Circuit) describeRegion() {
+	if h := c.agent.Handshake(); h != nil {
+		c.toViewer(h, msg.FlagReliable)
+	} else {
+		c.logf("viewer: no region handshake to replay; the viewer will not finish loading")
+	}
+
+	for _, patch := range c.agent.Terrain().Patches() {
+		m := &msg.LayerData{}
+		m.LayerID.Type = patch.Type
+		m.LayerData.Data = patch.Data
+		c.toViewer(m, msg.FlagReliable)
+	}
+	n, bytes, dropped := c.agent.Terrain().Stats()
+	c.logf("viewer: replayed the region handshake and %d land patches (%d bytes)", n, bytes)
+	if dropped > 0 {
+		c.logf("viewer: %d land patches were dropped for the size limit before this viewer attached", dropped)
+	}
+}
+
 // sendLogoutReply lets the viewer quit cleanly.  Without it a viewer
 // waits out its own timeout before closing, which reads as a hang.
 func (c *Circuit) sendLogoutReply() {
@@ -335,5 +394,71 @@ func (c *Circuit) toViewer(m msg.Message, flags uint8) {
 	}
 	if err != nil {
 		c.logf("viewer: sending %s: %v", m.MsgInfo().Name, err)
+	}
+}
+
+// FromSim offers a message the simulator sent, to be passed on to the
+// viewer.
+//
+// It runs on the session's dispatch goroutine and must not block there,
+// so it hands over and returns.  A full queue drops, and says so: see
+// Backlog for why that is the right way round.
+func (c *Circuit) FromSim(p *msg.Packet) {
+	if p.Message == nil {
+		return
+	}
+	switch MessageName(p) {
+	case "StartPingCheck", "CompletePingCheck":
+		// Per circuit.  This session answers the simulator's and
+		// sends its own to the viewer; passing these on would have
+		// the viewer answering pings meant for somebody else.
+		c.record(FromSim, p, Absorbed)
+		return
+	case "KickUser":
+		// The session's business, not the viewer's.  Whether a
+		// viewer should be told its session is ending is a
+		// question for when detaching cleanly exists.
+		c.record(FromSim, p, Absorbed)
+		return
+	}
+
+	select {
+	case c.out <- p:
+	default:
+		c.dropped.Add(1)
+		c.record(FromSim, p, Dropped)
+	}
+}
+
+// Dropped is how many simulator messages were lost because the viewer
+// was not keeping up.
+func (c *Circuit) Dropped() uint64 { return c.dropped.Load() }
+
+// pump moves what the simulator said onto the viewer's circuit, where it
+// is given that circuit's own sequence number.
+func (c *Circuit) pump(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case p := <-c.out:
+			if !c.Joined() {
+				// Before the handshake there is nowhere for
+				// this to go: a viewer still asking to be let
+				// in cannot make sense of the region yet.
+				c.record(FromSim, p, NoViewer)
+				continue
+			}
+			c.record(FromSim, p, Forwarded)
+			var err error
+			if p.Header.Reliable() {
+				err = c.send.SendReliable(ctx, p.Message)
+			} else {
+				err = c.send.Send(ctx, p.Message)
+			}
+			if err != nil && ctx.Err() == nil {
+				c.logf("viewer: passing on %s: %v", MessageName(p), err)
+			}
+		}
 	}
 }

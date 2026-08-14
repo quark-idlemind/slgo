@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/server"
 	"github.com/quark-idlemind/slgo/viewer"
 )
@@ -33,25 +34,47 @@ type viewerHost struct {
 	// was not set up to be handed over.
 	digest func(profile string) string
 
-	mu       sync.Mutex
-	circuits map[string]*viewer.Circuit // by profile name
-	ctx      context.Context
+	// circuits is looked up for every message the grid sends, so it is
+	// a sync.Map rather than something with a mutex on that path: the
+	// alternative is taking a lock several thousand times a second on
+	// the goroutine the whole session reads through.
+	circuits sync.Map // profile name -> *viewer.Circuit
+
+	mu  sync.Mutex // held only while opening one
+	ctx context.Context
 }
 
-// serveViewers starts the endpoint and returns a function that stops it.
-func serveViewers(ctx context.Context, addr string, srv *server.Server,
+// newViewerHost prepares the endpoint without starting it.
+//
+// Separate from serving because the relay has to be wired into each
+// session as it logs in, which happens before there is any endpoint to
+// serve -- and a session that came up without it could never pass
+// anything to a viewer afterwards.
+func newViewerHost(ctx context.Context, host string, srv *server.Server,
 	digest func(string) string, census *viewer.Census, trace *viewer.Trace,
-	logf func(string, ...any)) (func(), error) {
-
-	host, _, err := viewer.HostPort(addr)
-	if err != nil {
-		return nil, err
-	}
-	vh := &viewerHost{
+	logf func(string, ...any)) *viewerHost {
+	return &viewerHost{
 		srv: srv, host: host, census: census, trace: trace, logf: logf,
-		digest: digest, circuits: map[string]*viewer.Circuit{}, ctx: ctx,
+		digest: digest, ctx: ctx,
 	}
+}
 
+// relayFor is the hook a session hands its messages to.
+//
+// Nil until a viewer attaches, which is the ordinary case and has to be
+// cheap: this runs on the session's dispatch goroutine for every
+// message the region sends.
+func (v *viewerHost) relayFor(profile string) func(*msg.Packet) {
+	return func(p *msg.Packet) {
+		if c, ok := v.circuits.Load(profile); ok {
+			c.(*viewer.Circuit).FromSim(p)
+		}
+	}
+}
+
+// serve starts the login endpoint and returns a function that stops it.
+func (vh *viewerHost) serve(addr string) (func(), error) {
+	logf := vh.logf
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("viewer login: %w", err)
@@ -156,23 +179,28 @@ func (v *viewerHost) circuitFor(profile string, a *agent.Agent) (*viewer.Circuit
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	if c, ok := v.circuits[profile]; ok {
-		return c, nil
+	if c, ok := v.circuits.Load(profile); ok {
+		return c.(*viewer.Circuit), nil
 	}
 	c, err := viewer.Listen(v.host, a, v.census, v.trace, v.logf)
 	if err != nil {
 		return nil, err
 	}
 	c.Run(v.ctx)
-	v.circuits[profile] = c
+	v.circuits.Store(profile, c)
 	return c, nil
 }
 
 func (v *viewerHost) closeAll() {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	for name, c := range v.circuits {
+	v.circuits.Range(func(k, val any) bool {
+		c := val.(*viewer.Circuit)
+		if n := c.Dropped(); n > 0 {
+			v.logf("viewer: %d messages were dropped for %v because the viewer fell behind", n, k)
+		}
 		c.Close()
-		delete(v.circuits, name)
-	}
+		v.circuits.Delete(k)
+		return true
+	})
 }
