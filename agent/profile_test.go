@@ -197,7 +197,7 @@ func TestSaveProfileRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Password != hashPassword("example-password") {
+	if out.Password != HashPassword("example-password") {
 		t.Errorf("password = %q", out.Password)
 	}
 	if out.First != in.First || out.Last != in.Last || out.Start != in.Start {
@@ -207,7 +207,7 @@ func TestSaveProfileRoundTrip(t *testing.T) {
 		t.Errorf("group round trip = %q, want %q", out.Group, in.Group)
 	}
 	// A saved digest logs in identically.
-	if hashPassword(out.Password) != hashPassword(in.Password) {
+	if HashPassword(out.Password) != HashPassword(in.Password) {
 		t.Error("the stored digest does not hash to the same thing")
 	}
 }
@@ -373,7 +373,7 @@ func TestAProfileSurvivesBeingSavedAndReadBack(t *testing.T) {
 
 	// The password is stored as its digest, which is the only form that
 	// ever goes over the wire.
-	want.Password = hashPassword(want.Password)
+	want.Password = HashPassword(want.Password)
 	if got.First != want.First || got.Password != want.Password ||
 		got.URL != want.URL || got.ID0 != want.ID0 ||
 		got.PlatformString != want.PlatformString {

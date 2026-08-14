@@ -213,7 +213,7 @@ func (e *LoginError) Error() string {
 // digit digest, so the field named "mac" has never held one.  See
 // llhasheduniqueid.cpp, and doc/login-parameters.md.
 //
-// A digest passes through, the way hashPassword passes through a "$1$"
+// A digest passes through, the way HashPassword passes through a "$1$"
 // that is already a digest, so a value copied out of a viewer's log
 // works.  Anything that is neither is hashed as it stands, so that
 // whatever is configured, what goes over the wire has the shape a
@@ -232,9 +232,9 @@ func hashMAC(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// hashPassword returns the "$1$" + md5 form the login server wants,
+// HashPassword returns the "$1$" + md5 form the login server wants,
 // passing through a digest that is already in that form.
-func hashPassword(p string) string {
+func HashPassword(p string) string {
 	if len(p) == 35 && strings.HasPrefix(p, "$1$") {
 		if _, err := hex.DecodeString(p[3:]); err == nil {
 			return p
@@ -332,7 +332,7 @@ func (l Login) body() ([]byte, error) {
 	fields := [][2]string{
 		{"first", l.First},
 		{"last", l.Last},
-		{"passwd", hashPassword(l.Password)},
+		{"passwd", HashPassword(l.Password)},
 		{"start", startLocation(l.Start)},
 		{"version", version},
 		{"channel", channel},

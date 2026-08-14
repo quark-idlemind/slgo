@@ -37,7 +37,7 @@ func TestDecodeARealFirestormLogin(t *testing.T) {
 	if got := String(params, "last"); got != "Prober" {
 		t.Errorf("last = %q", got)
 	}
-	// The password is the same $1$ digest slgo's own hashPassword
+	// The password is the same $1$ digest slgo's own HashPassword
 	// produces, which is what lets slgod authenticate a viewer against
 	// a stored profile by comparing strings.
 	if got := String(params, "passwd"); !strings.HasPrefix(got, "$1$") {

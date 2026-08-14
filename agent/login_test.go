@@ -181,14 +181,14 @@ func TestHashPassword(t *testing.T) {
 	// public repository.  Nothing in this tree spells one out.
 	sum := md5.Sum([]byte("example-password"))
 	digest := "$1$" + hex.EncodeToString(sum[:])
-	if got := hashPassword("example-password"); got != digest {
-		t.Errorf("hashPassword = %q, want %q", got, digest)
+	if got := HashPassword("example-password"); got != digest {
+		t.Errorf("HashPassword = %q, want %q", got, digest)
 	}
-	if got := hashPassword(digest); got != digest {
+	if got := HashPassword(digest); got != digest {
 		t.Errorf("an existing digest was hashed again: %q", got)
 	}
 	// Something that merely looks like one is hashed.
-	if got := hashPassword("$1$notactuallyhexadecimal0000000000"); strings.HasSuffix(got, "0000") {
+	if got := HashPassword("$1$notactuallyhexadecimal0000000000"); strings.HasSuffix(got, "0000") {
 		t.Errorf("a non-digest was passed through: %q", got)
 	}
 }
@@ -230,7 +230,7 @@ func TestLoginBodyIsWellFormedXML(t *testing.T) {
 	if v["first"] != "Example" || v["last"] != "Resident" {
 		t.Errorf("names = %v", v)
 	}
-	if v["passwd"] != hashPassword("secret") {
+	if v["passwd"] != HashPassword("secret") {
 		t.Errorf("passwd = %v", v["passwd"])
 	}
 	if v["start"] != "uri:Bits & Pieces&10&20&30" {

@@ -208,7 +208,7 @@ func SaveProfile(name string, l Login) error {
 	write("first", l.First)
 	write("last", l.Last)
 	if l.Password != "" {
-		write("password", hashPassword(l.Password))
+		write("password", HashPassword(l.Password))
 	}
 	write("start", l.Start)
 	write("group", l.Group)
