@@ -53,6 +53,10 @@ type Agent struct {
 	// ever, which is what atomic.Value needs.
 	err atomic.Value
 
+	// presenceHeldUntil is when this session may speak for the camera
+	// again.  See DeferPresence.
+	presenceHeldUntil time.Time
+
 	// Signals for the handshake, each closed once.
 	anyPacket signal
 	inRegion  signal

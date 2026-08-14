@@ -73,3 +73,57 @@ func TestTheCacheIsSweptOnATimer(t *testing.T) {
 		t.Error("the sweep took something that was in view")
 	}
 }
+
+// TestPresenceIsHandedOverAndComesBack: while a viewer holds the camera
+// this session must not also send AgentUpdate, and when the viewer stops
+// talking the session must start again on its own.
+//
+// The coming back is the part worth testing.  A viewer that crashes says
+// nothing, and a session left permanently silent falls out of the
+// simulator's interest list and receives nothing further -- a failure
+// that looks exactly like the relay having broken.
+func TestPresenceIsHandedOverAndComesBack(t *testing.T) {
+	a := &Agent{}
+
+	if a.presenceDeferred() {
+		t.Error("a session with no viewer is already deferring")
+	}
+
+	// A short lease, because what is under test is it running out
+	// rather than it being cancelled: the deadline only ever moves
+	// forward, so a past time cannot cut a live lease short.
+	a.DeferPresence(time.Now().Add(30 * time.Millisecond))
+	if !a.presenceDeferred() {
+		t.Error("the camera was not handed over")
+	}
+
+	// Nobody asks for it back; it simply lapses.
+	time.Sleep(60 * time.Millisecond)
+	if a.presenceDeferred() {
+		t.Error("a lapsed lease still holds the camera")
+	}
+}
+
+// TestALapsedLeaseIsNotExtendedByAnOlderOne: the deadline only ever
+// moves forward, so a late update carrying an earlier time cannot cut a
+// live lease short.
+func TestALapsedLeaseIsNotExtendedByAnOlderOne(t *testing.T) {
+	a := &Agent{}
+	far := time.Now().Add(time.Minute)
+	a.DeferPresence(far)
+	a.DeferPresence(time.Now().Add(time.Millisecond))
+	if !a.presenceDeferred() {
+		t.Error("an older deadline shortened a live lease")
+	}
+}
+
+// TestResumeIsImmediate: a viewer that detaches in an orderly way should
+// not leave the session mute for the rest of the lease.
+func TestResumeIsImmediate(t *testing.T) {
+	a := &Agent{}
+	a.DeferPresence(time.Now().Add(time.Minute))
+	a.ResumePresence()
+	if a.presenceDeferred() {
+		t.Error("resuming did not take the camera back")
+	}
+}

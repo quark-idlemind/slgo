@@ -25,6 +25,7 @@ type fakeViewer struct {
 
 	mu   sync.Mutex
 	seen []string
+	msgs []msg.Message
 	seq  uint32
 }
 
@@ -81,6 +82,7 @@ func (v *fakeViewer) run() {
 		}
 		v.mu.Lock()
 		v.seen = append(v.seen, m.MsgInfo().Name)
+		v.msgs = append(v.msgs, m)
 		v.mu.Unlock()
 	}
 }
@@ -379,4 +381,19 @@ func (s *syncBuffer) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return string(s.b)
+}
+
+// last returns the most recent message of a given name, so a test can
+// look inside what the viewer was told rather than only counting it.
+func (v *fakeViewer) last(t *testing.T, name string) msg.Message {
+	t.Helper()
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for i := len(v.msgs) - 1; i >= 0; i-- {
+		if v.msgs[i].MsgInfo().Name == name {
+			return v.msgs[i]
+		}
+	}
+	t.Fatalf("the viewer was never sent %s; it heard %v", name, v.seen)
+	return nil
 }

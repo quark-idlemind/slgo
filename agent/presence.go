@@ -87,6 +87,11 @@ func (a *Agent) sendPresence(ctx context.Context, every time.Duration) {
 	defer t.Stop()
 
 	send := func() {
+		// A viewer attached to this session sends these itself, and
+		// the two would disagree about where the camera is.
+		if a.presenceDeferred() {
+			return
+		}
 		l := a.Look()
 		m := &msg.AgentUpdate{}
 		d := &m.AgentData
@@ -150,4 +155,46 @@ func (a *Agent) trimObjects(ctx context.Context, every time.Duration) {
 			store.Trim(l.Center, l.Far)
 		}
 	}
+}
+
+// DeferPresence stops this session sending its own AgentUpdate until the
+// given moment, because something else is sending them.
+//
+// A viewer attached to the session is authoritative for the camera while
+// it is there.  Two things sending AgentUpdate would fight over where
+// the camera is, and the camera is not decoration: the simulator works
+// out what to stream from it, so losing that argument means objects
+// stop arriving.
+//
+// It is a deadline rather than a switch, and that is the whole of the
+// safety here.  A viewer that quits cleanly can say so; a viewer that
+// crashes, or whose window is force quit, or whose circuit simply stops,
+// says nothing at all -- and a session left permanently silent falls out
+// of the simulator's interest list and receives nothing further, which
+// looks exactly like the relay having broken.  Letting the deadline
+// lapse means the worst case is a few seconds of no updates rather than
+// a session that never recovers.
+//
+// The caller pushes the deadline forward as the viewer keeps talking.
+func (a *Agent) DeferPresence(until time.Time) {
+	a.mu.Lock()
+	if until.After(a.presenceHeldUntil) {
+		a.presenceHeldUntil = until
+	}
+	a.mu.Unlock()
+}
+
+// ResumePresence hands the camera back at once, for a viewer that
+// detached in an orderly way.
+func (a *Agent) ResumePresence() {
+	a.mu.Lock()
+	a.presenceHeldUntil = time.Time{}
+	a.mu.Unlock()
+}
+
+// presenceDeferred reports whether something else is speaking for us.
+func (a *Agent) presenceDeferred() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return time.Now().Before(a.presenceHeldUntil)
 }
