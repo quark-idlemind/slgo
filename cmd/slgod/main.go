@@ -146,6 +146,17 @@ func main() {
 		if login.ID0 == "" {
 			login.ID0 = mach.ID0
 		}
+		// Asked for always, not when a viewer turns up.  A viewer is
+		// handed a session that is already running, and the login
+		// server answered that session's one question hours earlier;
+		// a block not requested then cannot be requested now, and
+		// the viewer would come up missing it with no way to say so.
+		//
+		// It is close to free.  Measured on Aditi: 2.84s against
+		// 2.93s for a plain login, which is noise, for eleven more
+		// top-level blocks -- most of the bulk being the Library
+		// skeleton, which is the same for every avatar.
+		login.Options = append(login.Options, agent.ViewerOptions...)
 
 		opts := agent.Options{
 			// A message nobody has registered for is how a

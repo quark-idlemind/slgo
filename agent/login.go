@@ -87,6 +87,11 @@ type Login struct {
 
 	// Options are the extra blocks to ask for.  inventory-root and
 	// buddy-list are requested by default.
+	//
+	// A session that may later hand itself to a viewer wants
+	// ViewerOptions here, and wants it at login: the login server
+	// answers once, and what was not asked for cannot be asked for
+	// afterwards.
 	Options []string
 
 	HTTP *http.Client
@@ -372,7 +377,10 @@ func (l Login) body() ([]byte, error) {
 	// is ever offered: who your friends are is not on the circuit and
 	// cannot be asked for later, so a login that does not take it here
 	// can never know. It costs a few dozen uuids.
-	opts := append([]string{"inventory-root", "buddy-list"}, l.Options...)
+	// Deduplicated, because ViewerOptions names both of the defaults
+	// and a login server asked twice for the same block is being asked
+	// a question about this client rather than about the account.
+	opts := dedupe(append([]string{"inventory-root", "buddy-list"}, l.Options...))
 	b.WriteString("<member><name>options</name><value><array><data>\n")
 	for _, o := range opts {
 		b.WriteString("<value><string>")
@@ -512,4 +520,68 @@ func uuidField(m map[string]any, key string) (msg.UUID, error) {
 		return msg.UUID{}, fmt.Errorf("agent: %s: %w", key, err)
 	}
 	return u, nil
+}
+
+// ViewerOptions are the option blocks a viewer asks the login server
+// for, in the order Firestorm 7.2.4 sends them.
+//
+// They are here because of how a handover works.  slgod answers a
+// viewer's login by replaying the response the real login server gave
+// it, and a response holds only what was asked for -- so a block this
+// session did not request is a block the viewer will never see, and
+// there is no second chance: the login server answers once, at login,
+// and the session then lives for hours.
+//
+// A viewer that does not get them does not fail cleanly.  Missing
+// inventory-lib-root in particular trips an assertion inside the viewer
+// with no useful message, which is the sort of fault that gets blamed on
+// everything except the login response.
+//
+// The list is taken from a capture rather than from the documentation,
+// which says twenty-three; agent/testdata/firestorm-login.xml is the
+// capture, and a test here holds the two together so that a newer viewer
+// asking for more is a test failure rather than a mystery.
+var ViewerOptions = []string{
+	"inventory-root",
+	"inventory-skeleton",
+	"inventory-lib-root",
+	"inventory-lib-owner",
+	"inventory-skel-lib",
+	"initial-outfit",
+	"gestures",
+	"display_names",
+	"event_categories",
+	"event_notifications",
+	"classified_categories",
+	"adult_compliant",
+	"buddy-list",
+	"newuser-config",
+	"ui-config",
+	"advanced-mode",
+	"max-agent-groups",
+	"map-server-url",
+	"voice-config",
+	"tutorial_setting",
+	"login-flags",
+	"global-textures",
+	"currency",
+	"max_groups",
+	"search",
+	"destination_guide_url",
+	"avatar_picker_url",
+}
+
+// dedupe keeps the first of each, so the order asked for is the order
+// given.
+func dedupe(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := in[:0:0]
+	for _, s := range in {
+		if seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	return out
 }
