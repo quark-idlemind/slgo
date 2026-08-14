@@ -420,7 +420,7 @@ func main() {
 			func(profile string) string {
 				hostMu.Lock()
 				defer hostMu.Unlock()
-				return hosted[profile].Password
+				return hosted[profile].ViewerPassword
 			}, census, tracer, log.Printf)
 		if err != nil {
 			log.Fatalf("viewer: %v", err)

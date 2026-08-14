@@ -27,6 +27,23 @@ type Login struct {
 	Last     string
 	Password string // plain text, or an existing "$1$" + md5 hex digest
 
+	// ViewerPassword is what a viewer must type to be handed this
+	// session, and it is deliberately not Password.
+	//
+	// Nothing on the grid has ever seen it.  It authenticates one
+	// local thing to another -- a viewer on this machine, asking
+	// slgod for a session slgod is already holding -- so making it
+	// the account password would mean typing the account password
+	// into a viewer's login box, where viewers remember it, for a
+	// login that never leaves the loopback interface.
+	//
+	// Empty means this session cannot be handed to a viewer, which is
+	// the right default: a daemon that was not set up for it should
+	// not be one password guess away from giving a session out.
+	//
+	// Stored as its "$1$" digest, like Password.
+	ViewerPassword string
+
 	// Start is "last", "home", or a location such as
 	// "the test region/128/128/25".
 	Start string

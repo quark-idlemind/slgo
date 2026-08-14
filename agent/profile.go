@@ -147,6 +147,8 @@ func parseProfile(r *os.File) (Login, error) {
 			l.Password = value
 		case "start":
 			l.Start = value
+		case "viewer_password", "viewer-password":
+			l.ViewerPassword = value
 		case "group":
 			l.Group = value
 		case "url", "login_url":
@@ -209,6 +211,9 @@ func SaveProfile(name string, l Login) error {
 	write("last", l.Last)
 	if l.Password != "" {
 		write("password", HashPassword(l.Password))
+	}
+	if l.ViewerPassword != "" {
+		write("viewer_password", HashPassword(l.ViewerPassword))
 	}
 	write("start", l.Start)
 	write("group", l.Group)

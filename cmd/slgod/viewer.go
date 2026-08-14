@@ -28,8 +28,9 @@ type viewerHost struct {
 	trace  *viewer.Trace
 	logf   func(string, ...any)
 
-	// digest gives a profile's stored password, which is what a
-	// viewer's login is compared against.
+	// digest gives a profile's stored viewer password, which is what a
+	// viewer's login is compared against.  Empty means this profile
+	// was not set up to be handed over.
 	digest func(profile string) string
 
 	mu       sync.Mutex
@@ -83,6 +84,16 @@ func (v *viewerHost) find(first, last string) *viewer.Handover {
 	}
 	a := h.Agent()
 	if a == nil || a.Account == nil {
+		return nil
+	}
+
+	// No viewer password, no handover.  Falling back to the account
+	// password would mean the grid credential were typed into a
+	// viewer's login box -- where viewers remember it -- for a login
+	// that never leaves this machine.
+	want := v.digest(profile)
+	if want == "" {
+		v.logf("viewer: %s has no viewer_password in its profile, so it cannot be handed over", profile)
 		return nil
 	}
 

@@ -499,3 +499,55 @@ func TestLoginAsIsTheWholeOfWhatAProgramNeeds(t *testing.T) {
 		t.Error("expected an error for a profile that is not there")
 	}
 }
+
+// TestViewerPasswordIsSeparateAndHashed: the viewer credential is not
+// the grid one, and is stored the same way -- it is still a secret, just
+// a local one.
+func TestViewerPasswordIsSeparateAndHashed(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	in := Login{
+		First: "Taren", Last: "Holt",
+		Password:       "the-grid-one",
+		ViewerPassword: "the-local-one",
+	}
+	if err := SaveProfile("example", in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := LoadProfile("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if out.ViewerPassword != HashPassword("the-local-one") {
+		t.Errorf("viewer password = %q, want the digest of the local one", out.ViewerPassword)
+	}
+	if out.ViewerPassword == out.Password {
+		t.Error("the viewer password and the grid password came back the same")
+	}
+	if out.Password != HashPassword("the-grid-one") {
+		t.Errorf("the grid password was disturbed: %q", out.Password)
+	}
+}
+
+// TestNoViewerPasswordIsTheDefault: a profile that never mentions one
+// has none, which is what stops a daemon nobody set up for it from
+// being one guess away from handing out a session.
+func TestNoViewerPasswordIsTheDefault(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	if err := SaveProfile("example", Login{
+		First: "A", Last: "B", Password: "x",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := LoadProfile("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.ViewerPassword != "" {
+		t.Errorf("viewer password = %q, want none", out.ViewerPassword)
+	}
+}
