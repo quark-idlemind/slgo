@@ -238,7 +238,17 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	}
 	// Every avatar here shares one store per region.
 	opts.Regions = s.regions
-	opts.OnEvent = func(name string, body []byte) { h.relayEvent(name, body) }
+	// Chained for the same reason the tap is: a caller that wanted
+	// the events too -- slgod, feeding a viewer's own queue -- would
+	// otherwise have them taken away without a word.
+	if caller := opts.OnEvent; caller != nil {
+		opts.OnEvent = func(name string, body []byte) {
+			caller(name, body)
+			h.relayEvent(name, body)
+		}
+	} else {
+		opts.OnEvent = func(name string, body []byte) { h.relayEvent(name, body) }
+	}
 	h.opts = opts
 
 	a, err := agent.Connect(ctx, acct, opts)

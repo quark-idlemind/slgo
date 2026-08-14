@@ -191,6 +191,11 @@ func main() {
 			},
 		}
 		if viewers != nil {
+			// The session stays the only reader of the simulator's
+			// event queue; this is a copy for a viewer, not a
+			// second poller.  Two pollers would split the events
+			// between them at random.
+			opts.OnEvent = viewers.eventsFor(name)
 			// What the region says, passed on to a viewer if one
 			// is attached.  The relay rather than the tap,
 			// because a tap sees retransmissions and the far end

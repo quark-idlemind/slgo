@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,11 +35,16 @@ type viewerHost struct {
 	// was not set up to be handed over.
 	digest func(profile string) string
 
+	// base is the address a viewer reaches this daemon at, as a URL
+	// prefix, so the capabilities handed out can name it.
+	base string
+
 	// circuits is looked up for every message the grid sends, so it is
 	// a sync.Map rather than something with a mutex on that path: the
 	// alternative is taking a lock several thousand times a second on
 	// the goroutine the whole session reads through.
 	circuits sync.Map // profile name -> *viewer.Circuit
+	queues   sync.Map // profile name -> *viewer.EventQueue
 
 	mu  sync.Mutex // held only while opening one
 	ctx context.Context
@@ -57,6 +63,29 @@ func newViewerHost(ctx context.Context, host string, srv *server.Server,
 		srv: srv, host: host, census: census, trace: trace, logf: logf,
 		digest: digest, ctx: ctx,
 	}
+}
+
+// queueFor is the viewer's copy of the event queue for one profile.
+//
+// Made on demand and kept, because the session starts handing events to
+// it the moment it logs in -- long before any viewer asks for one.
+func (v *viewerHost) queueFor(profile string) *viewer.EventQueue {
+	if q, ok := v.queues.Load(profile); ok {
+		return q.(*viewer.EventQueue)
+	}
+	q, _ := v.queues.LoadOrStore(profile, viewer.NewEventQueue())
+	return q.(*viewer.EventQueue)
+}
+
+// eventsFor is the hook a session hands its events to.
+//
+// The session stays the only thing polling the simulator's queue.  Two
+// pollers would not each get a copy: events are delivered once and
+// acknowledged, so they would be split between them at random, and
+// neither would know it was missing any.
+func (v *viewerHost) eventsFor(profile string) func(string, []byte) {
+	q := v.queueFor(profile)
+	return func(name string, body []byte) { q.Add(name, body) }
 }
 
 // relayFor is the hook a session hands its messages to.
@@ -79,13 +108,17 @@ func (vh *viewerHost) serve(addr string) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("viewer login: %w", err)
 	}
-	hs := &http.Server{Handler: viewer.LoginHandler(vh.find, logf)}
+	mux := http.NewServeMux()
+	mux.Handle("/", viewer.LoginHandler(vh.find, logf))
+	mux.HandleFunc("/cap/", vh.serveCap)
+	hs := &http.Server{Handler: mux}
 	go func() {
 		if err := hs.Serve(ln); err != nil && err != http.ErrServerClosed {
 			logf("viewer login: %v", err)
 		}
 	}()
 
+	vh.base = strings.TrimSuffix(viewer.LoginURI(ln.Addr().String()), "/")
 	logf("viewer logins at %s -- add a grid with that login URI and log in as the avatar",
 		viewer.LoginURI(ln.Addr().String()))
 
@@ -134,15 +167,12 @@ func (v *viewerHost) find(first, last string) *viewer.Handover {
 		Raw:     a.Account.Raw,
 		SimIP:   addr.IP.String(),
 		SimPort: addr.Port,
-		// The simulator's own seed, for now: every capability the
-		// viewer asks for it will get straight from the grid.  That
-		// is right for textures and meshes, which is most of the
-		// traffic, and wrong for exactly one -- EventQueueGet is
-		// delivered once and acknowledged, so two readers split the
-		// events between them at random.  Serving our own seed is
-		// the next stage; until then a viewer and slgod share that
-		// queue and both miss things.
-		Seed: a.Account.SeedCapability,
+		// slgod's own seed, which is a proxy of the simulator's with
+		// one entry changed.  Everything a viewer fetches -- the
+		// textures, the meshes, the inventory -- still comes
+		// straight from the grid; only the event queue comes past
+		// here, because it has to have a single reader.
+		Seed: v.base + "/cap/" + profile + "/seed",
 	}
 }
 
@@ -203,4 +233,45 @@ func (v *viewerHost) closeAll() {
 		v.circuits.Delete(k)
 		return true
 	})
+}
+
+// serveCap routes the capabilities slgod serves itself.
+//
+// There are two, and only two: the seed, so that the answer can be
+// rewritten, and the event queue, which is what has to be rewritten.
+// Everything else a viewer asks for it asks the simulator directly.
+//
+// The path carries the profile because one daemon hosts several avatars
+// and their queues must not be confused; it is not a secret and does not
+// need to be, since the login endpoint decided who may attach.
+func (v *viewerHost) serveCap(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(r.URL.Path, "/cap/")
+	profile, what, ok := strings.Cut(rest, "/")
+	if !ok || profile == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	switch what {
+	case "event":
+		v.queueFor(profile).ServeHTTP(w, r)
+	case "seed":
+		h, ok := v.srv.Agent(profile)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		a := h.Agent()
+		if a == nil || a.Account == nil {
+			http.Error(w, "that session is not up", http.StatusServiceUnavailable)
+			return
+		}
+		(&viewer.Seed{
+			Real:       a.Account.SeedCapability,
+			EventQueue: v.base + "/cap/" + profile + "/event",
+			Logf:       v.logf,
+		}).ServeHTTP(w, r)
+	default:
+		http.NotFound(w, r)
+	}
 }
