@@ -53,6 +53,9 @@ type Agent struct {
 	// ever, which is what atomic.Value needs.
 	err atomic.Value
 
+	// terrain is the land, kept because it cannot be asked for twice.
+	terrain Terrain
+
 	// presenceHeldUntil is when this session may speak for the camera
 	// again.  See DeferPresence.
 	presenceHeldUntil time.Time
@@ -135,6 +138,17 @@ type Options struct {
 	// together are a whole trace; Tap alone records only what
 	// arrived, which cannot answer whether something was ever sent.
 	SendTap msg.Handler
+
+	// Relay, if set, sees every decoded message once, after
+	// duplicate suppression and before any handler.
+	//
+	// This is what something passing messages on wants, and Tap is
+	// not: a tap runs ahead of the duplicate check, so a
+	// retransmission reaches it twice and would be passed on as two
+	// messages the far end cannot tell apart.  Keep it quick and do
+	// not block in it -- it runs on the dispatch goroutine, so a
+	// slow one stops this session reading anything at all.
+	Relay msg.Handler
 
 	// Regions, if set, is where this agent gets its object store: one
 	// per region, shared with the other agents there.  Nil gives the
@@ -240,6 +254,9 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 				opts.Tap(p)
 			}
 		}),
+	}
+	if opts.Relay != nil {
+		dopts = append(dopts, msg.WithRelay(opts.Relay))
 	}
 	if opts.OnUnhandled != nil {
 		dopts = append(dopts, msg.OnUnhandled(opts.OnUnhandled))
@@ -415,6 +432,18 @@ func (a *Agent) register() {
 		_ = a.Send.Send(context.Background(), reply)
 	}, msg.Inline())
 
+	// Land, kept from the first packet.  This is registered whether or
+	// not anything will ever want it, because by the time something
+	// does it is far too late: a region sends its heightmap in the
+	// first seconds after the avatar arrives and will not send it
+	// again for the asking.  The cost of always keeping it is about
+	// forty kilobytes.
+	a.Disp.MustHandle("LayerData", func(p *msg.Packet) {
+		if m, ok := p.Message.(*msg.LayerData); ok {
+			a.terrain.note(m)
+		}
+	}, msg.Inline())
+
 	a.Disp.MustHandle("RegionHandshake", func(p *msg.Packet) {
 		m := p.Message.(*msg.RegionHandshake)
 		a.mu.Lock()
@@ -423,6 +452,7 @@ func (a *Agent) register() {
 		a.mu.Unlock()
 
 		r := regionFromHandshake(m)
+		a.setHandshake(m)
 		a.setRegion(r)
 		// Whichever region this is, its objects are kept apart from
 		// the last one's.  Nothing says a region has changed and

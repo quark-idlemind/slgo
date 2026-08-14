@@ -144,6 +144,13 @@ func (a *Agent) enterRegion(region msg.UUID) {
 	// be described before the message that says where we are.
 	first := was.IsZero()
 
+	// The land of the region just left describes somewhere else.  It
+	// is dropped on a crossing and not on the first handshake, where
+	// patches may already have arrived ahead of it.
+	if !first {
+		a.terrain.forget()
+	}
+
 	if a.regions == nil {
 		if !first {
 			a.objects.Load().Flush()

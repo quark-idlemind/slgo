@@ -59,6 +59,18 @@ type regionState struct {
 	mu      sync.RWMutex
 	current Region
 	known   bool
+
+	// handshake is the message as it arrived, kept whole.
+	//
+	// Region above is what this package needs and is not what a
+	// viewer needs: regionFromHandshake keeps twelve fields of a
+	// message that has thirty odd, and among the ones it drops are
+	// the eight terrain texture ids and the eight height and range
+	// floats -- precisely what decides whether the ground has
+	// anything on it.  A region says this once, when the avatar
+	// arrives, so a viewer handed the session later can only be told
+	// what was kept.
+	handshake *msg.RegionHandshake
 }
 
 // Region returns what the simulator said about itself, and whether the
@@ -82,6 +94,22 @@ func (a *Agent) Region() (Region, bool) {
 // The comparison is on the region id rather than the name: two regions
 // can share a name, and a region can be renamed without becoming a
 // different place.
+// Handshake is the RegionHandshake this region sent, or nil before it
+// has arrived.  It is the message itself so that it can be passed on
+// entire, rather than rebuilt from the part of it this package models.
+func (a *Agent) Handshake() *msg.RegionHandshake {
+	a.region.mu.RLock()
+	defer a.region.mu.RUnlock()
+	return a.region.handshake
+}
+
+// setHandshake keeps the message alongside what was decoded from it.
+func (a *Agent) setHandshake(m *msg.RegionHandshake) {
+	a.region.mu.Lock()
+	a.region.handshake = m
+	a.region.mu.Unlock()
+}
+
 func (a *Agent) setRegion(r Region) (changed bool) {
 	a.region.mu.Lock()
 	defer a.region.mu.Unlock()
