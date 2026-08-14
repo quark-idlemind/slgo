@@ -475,3 +475,54 @@ func TestAFriendListThatWasNeverSeededStillTakesNotifications(t *testing.T) {
 		t.Errorf("Friends = %+v", fs)
 	}
 }
+
+// TestAnAvatarAboveTheCoarseCeilingKeepsTheHeightItHad.
+//
+// The height in a coarse location is one byte of four metre steps, so it
+// stops at 1020 and 255 means "higher than this can say".  Read as a
+// height it puts the camera a kilometre under an avatar on a skybox --
+// and then everything the region describes is judged against a place the
+// avatar is not: the objects around it, and the other avatars standing
+// beside it, arrive already out of range and are dropped.  A region
+// describes an object once, so nothing brings them back.
+//
+// Measured against Second Life before this: three avatars at about 2001m
+// were each reported at exactly 1020, and none could see any of the
+// others, nor its own avatar.
+func TestAnAvatarAboveTheCoarseCeilingKeepsTheHeightItHad(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+
+	// Something that carries the height in full puts it up there.
+	up := &msg.AgentMovementComplete{}
+	up.Data.Position = msg.Vector3{X: 30, Y: 70, Z: 2001}
+	feed(t, a, up)
+	if got := a.Position().Z; got != 2001 {
+		t.Fatalf("the avatar starts at %v, want 2001", got)
+	}
+
+	// Now a coarse update with the height at its ceiling.  Sideways
+	// movement is still worth having -- it is whole metres and correct
+	// -- but the height it reports is not a height.
+	m := &msg.CoarseLocationUpdate{}
+	m.Location = []msg.CoarseLocationUpdate_Location{{X: 33, Y: 75, Z: 255}}
+	m.Index.You = 0
+	feed(t, a, m)
+
+	if want := (msg.Vector3{X: 33, Y: 75, Z: 2001}); a.Position() != want {
+		t.Errorf("position = %+v, want %+v -- 255 is not 1020", a.Position(), want)
+	}
+	if a.Look().Center.Z != 2001 {
+		t.Errorf("the camera dropped to %v, a kilometre below the avatar", a.Look().Center.Z)
+	}
+
+	// Below the ceiling it is used, since there it is an answer.
+	m = &msg.CoarseLocationUpdate{}
+	m.Location = []msg.CoarseLocationUpdate_Location{{X: 33, Y: 75, Z: 8}}
+	m.Index.You = 0
+	feed(t, a, m)
+	if got := a.Position().Z; got != 32 {
+		t.Errorf("a height under the ceiling gave %v, want 32", got)
+	}
+}

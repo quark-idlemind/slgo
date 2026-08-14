@@ -450,6 +450,11 @@ func (a *Agent) register() {
 		a.setCenter(m.Info.Position)
 	}, msg.Inline())
 
+	// coarseTooHigh is the height byte at its ceiling.  A coarse
+	// location counts four metres to the step, so 255 is 1020 and is
+	// also everything above it.
+	const coarseTooHigh = 255
+
 	// CoarseLocationUpdate is the only thing that keeps arriving as an
 	// avatar walks, so it is what stops the camera drifting away from
 	// one that moved without teleporting.  It is coarse -- whole
@@ -462,8 +467,30 @@ func (a *Agent) register() {
 			return
 		}
 		l := m.Location[i]
-		at := msg.Vector3{X: float32(l.X), Y: float32(l.Y), Z: float32(l.Z) * 4}
+
+		// The height is one byte of four metre steps, so it stops at
+		// 1020 and says nothing at all about an avatar above that: 255
+		// means "higher than this can say", not "at 1020".  Taking it
+		// literally puts the camera a kilometre below an avatar on a
+		// skybox, and everything the region then describes is judged
+		// against a place the avatar is not -- the objects around it,
+		// and the other avatars standing beside it, arrive already out
+		// of range and are dropped.  Nothing describes them twice, so
+		// the session never recovers.
+		//
+		// Measured: three avatars at about 2001m were all reported at
+		// exactly 1020, and none of them could see any of the others,
+		// nor its own avatar.
+		//
+		// So a saturated height is no height.  The last one from a
+		// message that carries it in full -- AgentMovementComplete, or
+		// a teleport -- is kept instead, which is where the avatar was
+		// when something last said properly.
 		a.mu.Lock()
+		at := msg.Vector3{X: float32(l.X), Y: float32(l.Y), Z: float32(l.Z) * 4}
+		if l.Z == coarseTooHigh {
+			at.Z = a.position.Z
+		}
 		a.position = at
 		a.mu.Unlock()
 		a.setCenter(at)
