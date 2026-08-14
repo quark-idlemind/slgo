@@ -188,7 +188,7 @@ func handedOver(t *testing.T) (*simStub, *agent.Agent, *Circuit, *fakeViewer, *C
 	t.Cleanup(func() { a.Close(); cancel() })
 
 	census := NewCensus()
-	c, err := Listen("127.0.0.1", a, census, nil, func(string, ...any) {})
+	c, err := Listen("127.0.0.1", func() *agent.Agent { return a }, census, nil, func(string, ...any) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -459,4 +459,95 @@ func TestABehindViewerDropsRatherThanStallingTheSession(t *testing.T) {
 	if c.Dropped() == 0 {
 		t.Log("nothing was dropped; the viewer kept up, which is fine")
 	}
+}
+
+// TestTheCircuitFollowsAReconnect: a grid session is replaced when it
+// has to be re-established, and a viewer circuit outlives that.
+//
+// Holding the old pointer meant every forward failed with "sender is
+// not running" and the region handshake was composed from a session
+// that had ended -- which presents as a viewer stuck on "Waiting for
+// region handshake", with nothing to say the session underneath had
+// been swapped.
+func TestTheCircuitFollowsAReconnect(t *testing.T) {
+	sim := newSimStub(t)
+
+	acct := &agent.Account{
+		AgentID:     msg.MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995"),
+		SessionID:   msg.MustParseUUID("8d1b7e57-7e57-c0de-f4f4-19d29d124acf"),
+		CircuitCode: testCircuitCode,
+		SimIP:       sim.addr().IP,
+		SimPort:     sim.addr().Port,
+		FirstName:   "Quark", LastName: "Idlemind",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mu sync.Mutex
+	current, err := agent.Connect(ctx, acct, agent.Options{
+		Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	get := func() *agent.Agent {
+		mu.Lock()
+		defer mu.Unlock()
+		return current
+	}
+
+	census := NewCensus()
+	c, err := Listen("127.0.0.1", get, census, nil, func(string, ...any) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Run(ctx)
+	defer c.Close()
+
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	// The session ends and is re-established, as the supervisor does.
+	current.Close()
+	replacement, err := agent.Connect(ctx, acct, agent.Options{
+		Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	current = replacement
+	mu.Unlock()
+	defer replacement.Close()
+
+	v := newFakeViewer(t, c.Addr())
+	defer v.close()
+	go v.run()
+
+	v.connect(testCircuitCode)
+	// Answered at all means the circuit found the live session: the
+	// dead one's sender would have refused.
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	chat := &msg.ChatFromViewer{}
+	chat.ChatData.Message = []byte("through the new session\x00")
+	v.send(chat, msg.FlagReliable)
+	sim.waitSeen(t, "ChatFromViewer", 5*time.Second)
+}
+
+// TestAViewerThatComesBackOnANewPortIsAnswered: a restarted viewer has
+// a new socket, and a circuit that pinned the first address would go on
+// talking to one that had quit.
+func TestAViewerThatComesBackOnANewPortIsAnswered(t *testing.T) {
+	sim, _, c, first, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	first.connect(testCircuitCode)
+	first.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+	first.close()
+
+	// A second viewer, on a socket of its own.
+	second := newFakeViewer(t, c.Addr())
+	defer second.close()
+	go second.run()
+
+	second.connect(testCircuitCode)
+	second.waitSeen(t, "AgentMovementComplete", 5*time.Second)
 }

@@ -153,7 +153,7 @@ func (v *viewerHost) find(first, last string) *viewer.Handover {
 		return nil
 	}
 
-	c, err := v.circuitFor(profile, a)
+	c, err := v.circuitFor(profile, h.Agent)
 	if err != nil {
 		v.logf("viewer: no circuit for %s: %v", name, err)
 		return nil
@@ -205,14 +205,14 @@ func (v *viewerHost) hostedNamed(name string) (string, *server.Hosted) {
 // login response and nothing else needs it: a session nobody watches
 // never opens one.  Kept afterwards, because a viewer that is restarted
 // logs in again and there is no reason to move the port under it.
-func (v *viewerHost) circuitFor(profile string, a *agent.Agent) (*viewer.Circuit, error) {
+func (v *viewerHost) circuitFor(profile string, session func() *agent.Agent) (*viewer.Circuit, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
 	if c, ok := v.circuits.Load(profile); ok {
 		return c.(*viewer.Circuit), nil
 	}
-	c, err := viewer.Listen(v.host, a, v.census, v.trace, v.logf)
+	c, err := viewer.Listen(v.host, session, v.census, v.trace, v.logf)
 	if err != nil {
 		return nil, err
 	}

@@ -46,8 +46,16 @@ const Backlog = 2048
 // arrives here is therefore sorted rather than forwarded, and the
 // sorting is the work.
 type Circuit struct {
-	conn  *net.UDPConn
-	agent *agent.Agent
+	conn *net.UDPConn
+
+	// session is looked up rather than held, because a grid session
+	// is replaced when it has to be re-established and a viewer
+	// circuit outlives that.  Holding the pointer meant that after a
+	// reconnect the circuit went on talking to a dead session: every
+	// forward failed with "sender is not running" and the viewer sat
+	// waiting for a region handshake that was being composed from a
+	// session that had ended.
+	session func() *agent.Agent
 
 	send *msg.Sender
 	recv *msg.Receiver
@@ -75,8 +83,8 @@ type Circuit struct {
 // The socket is opened before the login response is composed, because
 // the port it lands on has to be named in that response -- a viewer is
 // told where to send UDP once and never asks again.
-func Listen(host string, a *agent.Agent, census *Census, trace *Trace, logf func(string, ...any)) (*Circuit, error) {
-	if a == nil {
+func Listen(host string, session func() *agent.Agent, census *Census, trace *Trace, logf func(string, ...any)) (*Circuit, error) {
+	if session == nil || session() == nil {
 		return nil, fmt.Errorf("viewer: a circuit needs a session to hand over")
 	}
 	if logf == nil {
@@ -95,7 +103,7 @@ func Listen(host string, a *agent.Agent, census *Census, trace *Trace, logf func
 	}
 
 	c := &Circuit{
-		conn: conn, agent: a, census: census, trace: trace, logf: logf,
+		conn: conn, session: session, census: census, trace: trace, logf: logf,
 		out: make(chan *msg.Packet, Backlog),
 	}
 	c.send = msg.NewSender(c, msg.WithSendTap(func(p *msg.Packet) {
@@ -140,7 +148,9 @@ func (c *Circuit) Run(ctx context.Context) {
 	go func() { defer c.wg.Done(); c.send.Run(ctx) }()
 	go func() { defer c.wg.Done(); c.disp.Run(ctx, c.recv.C()) }()
 	go func() { defer c.wg.Done(); c.pump(ctx) }()
-	c.logf("viewer: listening on %s for %s", c.Addr(), c.agent.Account.Name())
+	if a := c.session(); a != nil {
+		c.logf("viewer: listening on %s for %s", c.Addr(), a.Account.Name())
+	}
 }
 
 // Close ends the circuit and gives the camera back.
@@ -152,7 +162,9 @@ func (c *Circuit) Close() {
 	c.wg.Wait()
 	// Whatever the viewer left the camera pointing at is not where
 	// this session should go on looking.
-	c.agent.ResumePresence()
+	if a := c.session(); a != nil {
+		a.ResumePresence()
+	}
 }
 
 // Joined reports whether a viewer has completed the handshake.
@@ -162,17 +174,33 @@ func (c *Circuit) Joined() bool {
 	return c.joined
 }
 
+// notePeer answers whoever is talking, which is what a simulator does.
+//
+// It follows the address rather than pinning the first one, because a
+// viewer that is restarted comes back on a new port.  Pinning meant the
+// circuit went on sending to the socket of a viewer that had quit, and
+// the new one waited for a handshake that was being delivered to
+// nobody.  The login endpoint decides who may attach; by here the
+// question has been answered.
 func (c *Circuit) notePeer(addr net.Addr) {
 	ua, ok := addr.(*net.UDPAddr)
 	if !ok {
 		return
 	}
 	c.mu.Lock()
-	if c.peer == nil {
+	changed := c.peer == nil || c.peer.String() != ua.String()
+	if changed {
+		if c.peer != nil {
+			// A different viewer, so the last one's handshake
+			// means nothing to it.
+			c.joined = false
+		}
 		c.peer = ua
-		c.logf("viewer: a viewer appeared at %s", ua)
 	}
 	c.mu.Unlock()
+	if changed {
+		c.logf("viewer: a viewer appeared at %s", ua)
+	}
 }
 
 func (c *Circuit) record(dir Direction, p *msg.Packet, what Disposition) {
@@ -252,13 +280,18 @@ func (c *Circuit) forward(p *msg.Packet) {
 	if p.Message == nil {
 		return
 	}
+	a := c.session()
+	if a == nil {
+		c.record(FromViewer, p, NoViewer)
+		return
+	}
 	c.record(FromViewer, p, Forwarded)
 
 	var err error
 	if p.Header.Reliable() {
-		err = c.agent.Send.SendReliable(context.Background(), p.Message)
+		err = a.Send.SendReliable(context.Background(), p.Message)
 	} else {
-		err = c.agent.Send.Send(context.Background(), p.Message)
+		err = a.Send.Send(context.Background(), p.Message)
 	}
 	if err != nil {
 		c.logf("viewer: forwarding %s: %v", MessageName(p), err)
@@ -273,7 +306,11 @@ func (c *Circuit) checkCircuit(p *msg.Packet) {
 	if !ok {
 		return
 	}
-	acct := c.agent.Account
+	a := c.session()
+	if a == nil {
+		return
+	}
+	acct := a.Account
 	if m.CircuitCode.Code != acct.CircuitCode || m.CircuitCode.SessionID != acct.SessionID {
 		c.logf("viewer: a viewer claimed circuit %d session %s, but this session is %d/%s",
 			m.CircuitCode.Code, m.CircuitCode.SessionID, acct.CircuitCode, acct.SessionID)
@@ -287,15 +324,19 @@ func (c *Circuit) checkCircuit(p *msg.Packet) {
 // the viewer existed, and a viewer will not finish loading without it.
 // Every field is one this session already holds.
 func (c *Circuit) sendMovementComplete() {
-	acct := c.agent.Account
+	a := c.session()
+	if a == nil {
+		return
+	}
+	acct := a.Account
 	m := &msg.AgentMovementComplete{}
 	m.AgentData.AgentID = acct.AgentID
 	m.AgentData.SessionID = acct.SessionID
-	m.Data.Position = c.agent.Position()
-	m.Data.LookAt = c.agent.Look().At
-	m.Data.RegionHandle = c.agent.RegionHandle()
+	m.Data.Position = a.Position()
+	m.Data.LookAt = a.Look().At
+	m.Data.RegionHandle = a.RegionHandle()
 	m.Data.Timestamp = uint32(time.Now().Unix())
-	m.SimData.ChannelVersion = []byte(c.agent.ChannelVersion() + "\x00")
+	m.SimData.ChannelVersion = []byte(a.ChannelVersion() + "\x00")
 
 	c.toViewer(m, msg.FlagReliable)
 
@@ -303,7 +344,7 @@ func (c *Circuit) sendMovementComplete() {
 	c.joined = true
 	c.mu.Unlock()
 	c.logf("viewer: told the viewer it is in %s at %v",
-		c.agent.RegionName(), m.Data.Position)
+		a.RegionName(), m.Data.Position)
 }
 
 // describeRegion tells a joining viewer what the region said when this
@@ -321,19 +362,23 @@ func (c *Circuit) sendMovementComplete() {
 // terrain texture id, so a viewer given a reconstruction would render
 // ground with nothing on it.
 func (c *Circuit) describeRegion() {
-	if h := c.agent.Handshake(); h != nil {
+	a := c.session()
+	if a == nil {
+		return
+	}
+	if h := a.Handshake(); h != nil {
 		c.toViewer(h, msg.FlagReliable)
 	} else {
 		c.logf("viewer: no region handshake to replay; the viewer will not finish loading")
 	}
 
-	for _, patch := range c.agent.Terrain().Patches() {
+	for _, patch := range a.Terrain().Patches() {
 		m := &msg.LayerData{}
 		m.LayerID.Type = patch.Type
 		m.LayerData.Data = patch.Data
 		c.toViewer(m, msg.FlagReliable)
 	}
-	n, bytes, dropped := c.agent.Terrain().Stats()
+	n, bytes, dropped := a.Terrain().Stats()
 	c.logf("viewer: replayed the region handshake and %d land patches (%d bytes)", n, bytes)
 	if dropped > 0 {
 		c.logf("viewer: %d land patches were dropped for the size limit before this viewer attached", dropped)
@@ -343,7 +388,11 @@ func (c *Circuit) describeRegion() {
 // sendLogoutReply lets the viewer quit cleanly.  Without it a viewer
 // waits out its own timeout before closing, which reads as a hang.
 func (c *Circuit) sendLogoutReply() {
-	acct := c.agent.Account
+	a := c.session()
+	if a == nil {
+		return
+	}
+	acct := a.Account
 	m := &msg.LogoutReply{}
 	m.AgentData.AgentID = acct.AgentID
 	m.AgentData.SessionID = acct.SessionID
@@ -371,8 +420,12 @@ func (c *Circuit) takeCamera(p *msg.Packet) {
 	if !ok {
 		return
 	}
+	a := c.session()
+	if a == nil {
+		return
+	}
 	d := &m.AgentData
-	c.agent.SetLook(agent.Look{
+	a.SetLook(agent.Look{
 		Center:       d.CameraCenter,
 		At:           d.CameraAtAxis,
 		Left:         d.CameraLeftAxis,
@@ -381,7 +434,7 @@ func (c *Circuit) takeCamera(p *msg.Packet) {
 		ControlFlags: d.ControlFlags,
 		State:        d.State,
 	})
-	c.agent.DeferPresence(time.Now().Add(PresenceLease))
+	a.DeferPresence(time.Now().Add(PresenceLease))
 }
 
 // toViewer sends a message slgod composed, as the simulator would.
