@@ -696,3 +696,35 @@ func (a *Agent) requestCachedObjects(ids []uint32) {
 		ids = ids[n:]
 	}
 }
+
+// Redescribe asks the simulator to describe every object this session
+// knows about, again, and returns how many were asked for.
+//
+// It exists for a viewer joining a session that has been running.  A
+// region describes each object once, on arrival, and this session
+// consumed those descriptions hours ago; nothing will repeat them, so a
+// viewer attached later sees only what happens to change while it
+// watches -- which on a quiet parcel is almost nothing, and looks
+// exactly like a relay that is dropping object updates.
+//
+// The simulator does not mind being asked.  Measured on Aditi: a store
+// of 1449 objects, flushed and asked for again, came back complete in
+// six seconds.  What comes back are ordinary updates, so they reach a
+// viewer the same way everything else does and carry every field the
+// simulator sends rather than the dozen this package keeps.
+func (a *Agent) Redescribe() int {
+	objs := a.Objects().All()
+	ids := make([]uint32, 0, len(objs))
+	for _, o := range objs {
+		if o.Local != 0 {
+			ids = append(ids, o.Local)
+		}
+	}
+	if len(ids) == 0 {
+		return 0
+	}
+	// Off the caller's goroutine: this is dozens of datagrams and the
+	// caller is usually a dispatch loop that must not stall.
+	go a.requestCachedObjects(ids)
+	return len(ids)
+}

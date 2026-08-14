@@ -383,6 +383,20 @@ func (c *Circuit) describeRegion() {
 	if dropped > 0 {
 		c.logf("viewer: %d land patches were dropped for the size limit before this viewer attached", dropped)
 	}
+
+	// And the objects.  The region described each of them once, before
+	// this viewer existed, so asking again is the only way it can be
+	// told -- and asking is enough: the simulator answers with ordinary
+	// updates, which reach the viewer the way everything else does and
+	// carry every field the simulator sends rather than the dozen this
+	// tree keeps.
+	//
+	// Without this a viewer sees only what changes while it watches,
+	// which on a quiet parcel is almost nothing and reads as a relay
+	// that has stopped working.
+	if asked := a.Redescribe(); asked > 0 {
+		c.logf("viewer: asked the simulator to describe %d objects again", asked)
+	}
 }
 
 // sendLogoutReply lets the viewer quit cleanly.  Without it a viewer

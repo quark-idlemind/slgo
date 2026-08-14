@@ -2,6 +2,8 @@ package viewer
 
 import (
 	"context"
+	"encoding/binary"
+	"math"
 	"net"
 	"sync"
 	"testing"
@@ -150,6 +152,28 @@ func (s *simStub) never(t *testing.T, name string) {
 const testCircuitCode = 690139535
 
 var testTerrainTexture = msg.MustParseUUID("c4a67e57-7e57-c0de-f622-7fbb9d50e934")
+
+// describeObjects sends full object updates, as a region does once when
+// an avatar arrives and never again.
+func (s *simStub) describeObjects(n int) {
+	m := &msg.ObjectUpdate{}
+	m.RegionData.RegionHandle = 0x0003_f000_0003_e800
+	for i := 0; i < n; i++ {
+		d := msg.ObjectUpdate_ObjectData{}
+		d.ID = uint32(1000 + i)
+		d.FullID = msg.MustParseUUID("00000000-0000-0000-0000-00000000000" + string(rune('1'+i)))
+		d.PCode = 9
+		// Placement lives at the front of ObjectData, and the store
+		// drops anything outside the draw distance -- so these have
+		// to be where the avatar is, not at the origin.
+		d.ObjectData = make([]byte, 60)
+		binary.LittleEndian.PutUint32(d.ObjectData[0:], math.Float32bits(128))
+		binary.LittleEndian.PutUint32(d.ObjectData[4:], math.Float32bits(129))
+		binary.LittleEndian.PutUint32(d.ObjectData[8:], math.Float32bits(2001))
+		m.ObjectData = append(m.ObjectData, d)
+	}
+	s.send(m, msg.FlagReliable)
+}
 
 // sendLand puts one land patch on the wire, as a region does in the
 // first seconds after an avatar arrives.
@@ -550,4 +574,34 @@ func TestAViewerThatComesBackOnANewPortIsAnswered(t *testing.T) {
 
 	second.connect(testCircuitCode)
 	second.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+}
+
+// TestAJoiningViewerIsSentTheObjects is the other half of describing a
+// region: the handshake says where you are, and this says what is
+// there.
+//
+// A region describes each object once, on arrival, and the session
+// consumed those descriptions before the viewer existed.  Without
+// asking again the viewer sees only what changes while it watches --
+// almost nothing on a quiet parcel, and indistinguishable from a relay
+// that has stopped working.
+func TestAJoiningViewerIsSentTheObjects(t *testing.T) {
+	sim, a, _, v, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	// Objects the region described before any viewer turned up.
+	sim.describeObjects(3)
+	deadline := time.Now().Add(5 * time.Second)
+	for a.Objects().Count() < 3 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the session recorded %d objects, want 3", a.Objects().Count())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	// Asking is what the viewer's arrival has to produce.
+	sim.waitSeen(t, "RequestMultipleObjects", 5*time.Second)
 }
