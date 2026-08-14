@@ -439,6 +439,99 @@ func TestWithConcurrencyKeepsAtLeastOne(t *testing.T) {
 	}
 }
 
+// TestRelaySkipsWhatATapWouldRepeat is the whole reason the relay hook
+// exists rather than reusing the tap.  Fed exactly the input of
+// TestTapSeesEverything, which the tap sees as 1, 2, 2, 3, the relay
+// sees 1 and 2: the retransmission is gone, because forwarding it would
+// reach the far end as a second message it could not tell from the
+// first, and the packet that would not decode is gone, because there is
+// nothing there to pass on.
+func TestRelaySkipsWhatATapWouldRepeat(t *testing.T) {
+	var relayed []uint32
+	d := NewDispatcher(WithRelay(func(p *Packet) {
+		relayed = append(relayed, p.Header.Sequence)
+	}))
+
+	m := &CompletePingCheck{}
+	feed(t, d,
+		pkt(1, m),
+		pkt(2, m),
+		pkt(2, m), // a duplicate
+		&Packet{Header: Header{Sequence: 3}, Err: ErrShort},     // would not decode
+		&Packet{Header: Header{Sequence: 4}, Acks: []uint32{5}}, // nothing but acks
+	)
+
+	want := []uint32{1, 2}
+	if len(relayed) != len(want) {
+		t.Fatalf("the relay saw %v, want %v", relayed, want)
+	}
+	for i := range want {
+		if relayed[i] != want[i] {
+			t.Fatalf("the relay saw %v, want %v", relayed, want)
+		}
+	}
+	if st := d.Stats(); st.Relayed != 2 {
+		t.Errorf("stats = %+v, want 2 relayed", st)
+	}
+}
+
+// TestRelaySeesMessagesNothingHandles: the messages a relay most needs
+// to pass on are the ones this build has no handler for, so having no
+// handler must not keep one from the relay.
+func TestRelaySeesMessagesNothingHandles(t *testing.T) {
+	var relayed, handled int
+	d := NewDispatcher(WithRelay(func(*Packet) { relayed++ }))
+	if err := d.Handle("CompletePingCheck", func(*Packet) { handled++ }); err != nil {
+		t.Fatal(err)
+	}
+
+	feed(t, d,
+		pkt(1, &CompletePingCheck{}), // handled here
+		pkt(2, &StartPingCheck{}),    // not
+	)
+
+	if relayed != 2 {
+		t.Errorf("the relay saw %d messages, want both", relayed)
+	}
+	if handled != 1 {
+		t.Errorf("the handler ran %d times, want once", handled)
+	}
+	if st := d.Stats(); st.Unhandled != 1 {
+		t.Errorf("stats = %+v, want one unhandled", st)
+	}
+}
+
+// TestRelaySkipsConsumedPacketAck: acknowledgements are terminated at
+// each end of a relay rather than forwarded, since the two sides number
+// their packets independently.  A PacketAck the bookkeeping has already
+// acted on is circuit machinery, not a message, and must not be offered.
+func TestRelaySkipsConsumedPacketAck(t *testing.T) {
+	c := newCapture()
+	s, stop := runSender(t, c)
+	defer stop()
+
+	var relayed []string
+	d := NewDispatcher(WithSender(s), WithRelay(func(p *Packet) {
+		relayed = append(relayed, p.ID.String())
+	}))
+
+	feed(t, d,
+		&Packet{
+			Header:  Header{Sequence: 1},
+			ID:      IDOf(&PacketAck{}),
+			Message: &PacketAck{Packets: []PacketAck_Packets{{ID: 7}}},
+		},
+		pkt(2, &CompletePingCheck{}),
+	)
+
+	if len(relayed) != 1 {
+		t.Fatalf("the relay saw %v, want only the ping", relayed)
+	}
+	if st := d.Stats(); st.Relayed != 1 {
+		t.Errorf("stats = %+v, want 1 relayed", st)
+	}
+}
+
 // TestTapSeesEverything is what the tap is for: capture, and noticing
 // that anything at all has arrived.  It runs before routing and before
 // duplicate suppression, so a retransmission and a packet nobody

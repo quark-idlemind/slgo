@@ -42,6 +42,7 @@ type Dispatcher struct {
 	onUnhandled Handler
 	onError     Handler
 	tap         Handler
+	relay       Handler
 
 	dispatched atomic.Uint64
 	inline     atomic.Uint64
@@ -51,6 +52,7 @@ type Dispatcher struct {
 	errors     atomic.Uint64
 	ackOnly    atomic.Uint64
 	acksSeen   atomic.Uint64
+	relayed    atomic.Uint64
 
 	unmu          sync.Mutex
 	unhandledByID map[ID]uint64
@@ -71,6 +73,7 @@ type DispatchStats struct {
 	Errors     uint64 // packets the receiver could not decode
 	AckOnly    uint64
 	AcksSeen   uint64 // acknowledgements of ours the peer sent back
+	Relayed    uint64 // offered to the relay hook, duplicates already removed
 }
 
 // DispatcherOption configures a Dispatcher.
@@ -124,6 +127,33 @@ func OnError(fn Handler) DispatcherOption {
 // quick, because it runs in the path of every packet.
 func WithTap(fn Handler) DispatcherOption {
 	return func(d *Dispatcher) { d.tap = fn }
+}
+
+// WithRelay calls fn for every decoded message that is about to be
+// routed, on the dispatch goroutine, AFTER duplicate suppression and
+// before any handler runs.
+//
+// It exists because a relay wants something a tap cannot give it.  A tap
+// sees retransmissions, since it runs ahead of the duplicate check --
+// which is right for a capture, where seeing the wire as it really was
+// is the whole point, and wrong for a relay, where forwarding the same
+// message twice under two sequence numbers gives the far end no way to
+// tell it was one message.  A chat line said once and shown twice is the
+// visible form of that.
+//
+// It is offered decoded messages only.  A packet that would not decode
+// is not something to pass on, and one carrying nothing but
+// acknowledgements has nothing to pass on: reliability is terminated at
+// each end of a relay rather than forwarded, so both sides number their
+// own packets and neither ever sees the other's sequence numbers.  For
+// the same reason a PacketAck the bookkeeping has already consumed is
+// not offered either.
+//
+// Registering a handler is not required for the relay to see a message,
+// and is not a reason to skip it: the messages a relay most needs to
+// pass on are exactly the ones nothing here understands.
+func WithRelay(fn Handler) DispatcherOption {
+	return func(d *Dispatcher) { d.relay = fn }
 }
 
 // NewDispatcher prepares a Dispatcher.
@@ -190,6 +220,7 @@ func (d *Dispatcher) Stats() DispatchStats {
 		Errors:     d.errors.Load(),
 		AckOnly:    d.ackOnly.Load(),
 		AcksSeen:   d.acksSeen.Load(),
+		Relayed:    d.relayed.Load(),
 	}
 }
 
@@ -281,6 +312,15 @@ func (d *Dispatcher) one(ctx context.Context, p *Packet) {
 	if d.duplicate(p.Header.Sequence) {
 		d.duplicates.Add(1)
 		return
+	}
+
+	// Past the duplicate check, so this message has not been seen
+	// before -- which is the guarantee a relay needs and a tap cannot
+	// offer.  Ahead of the handler lookup, so a message nothing here
+	// registers for is still passed on.
+	if d.relay != nil && !consumed {
+		d.relayed.Add(1)
+		d.relay(p)
 	}
 
 	d.mu.RLock()
