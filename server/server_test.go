@@ -953,6 +953,47 @@ func TestStartAgentWiresTheRelayIntoTheSession(t *testing.T) {
 	h.opts.Tap(&msg.Packet{})
 }
 
+// TestStartAgentKeepsTheCallersTap: the relay needs the tap and so does
+// anything the caller wanted it for -- slgod's packet trace, in
+// particular.  Overwriting it instead of chaining would drop the
+// caller's hook in silence, which presents as "the trace is empty" and
+// sends the search to entirely the wrong place.
+func TestStartAgentKeepsTheCallersTap(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+	var logins atomic.Int64
+	hs := loginServer(t, sim, &logins, nil)
+
+	var mine atomic.Int64
+	srv := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h, err := srv.StartAgent(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{
+			Timeout: 10 * time.Second, SkipCaps: true, Idle: -1,
+			Tap: func(*msg.Packet) { mine.Add(1) },
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.opts.Tap == nil {
+		t.Fatal("no tap at all")
+	}
+	// The session is live and has already pushed its handshake through
+	// the tap, so the count is whatever it is; what matters is that
+	// one more packet reaches the caller's hook and not only the
+	// relay's.
+	before := mine.Load()
+	h.opts.Tap(&msg.Packet{})
+	if got := mine.Load() - before; got != 1 {
+		t.Errorf("the caller's tap saw %d of the packet, want 1", got)
+	}
+	if before == 0 {
+		t.Error("the caller's tap saw none of the session's own traffic")
+	}
+}
+
 // TestSupervisingASessionThatIsNotThere: nothing to watch is not a
 // fault, it is a Hosted whose login never produced one.
 func TestSupervisingASessionThatIsNotThere(t *testing.T) {

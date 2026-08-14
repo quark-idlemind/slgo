@@ -223,7 +223,19 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	// Keeping the undecoded body is what lets the relay pass on a
 	// message it does not understand.
 	opts.Recv = append(opts.Recv, msg.KeepBody())
-	opts.Tap = func(p *msg.Packet) { h.relay(p) }
+	// The relay needs the tap, and so does anything the caller wanted
+	// it for -- tracing, most of it.  Assigning here rather than
+	// chaining would drop the caller's hook without saying so, which
+	// is the sort of silence that gets diagnosed as "the trace does
+	// not work".
+	if caller := opts.Tap; caller != nil {
+		opts.Tap = func(p *msg.Packet) {
+			caller(p)
+			h.relay(p)
+		}
+	} else {
+		opts.Tap = func(p *msg.Packet) { h.relay(p) }
+	}
 	// Every avatar here shares one store per region.
 	opts.Regions = s.regions
 	opts.OnEvent = func(name string, body []byte) { h.relayEvent(name, body) }
