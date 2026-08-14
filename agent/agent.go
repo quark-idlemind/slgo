@@ -126,6 +126,12 @@ type Options struct {
 	// reasonable capture.
 	Tap msg.Handler
 
+	// SendTap, if set, sees every message this session puts on the
+	// wire, with the header it went out under.  Tap and SendTap
+	// together are a whole trace; Tap alone records only what
+	// arrived, which cannot answer whether something was ever sent.
+	SendTap msg.Handler
+
 	// Regions, if set, is where this agent gets its object store: one
 	// per region, shared with the other agents there.  Nil gives the
 	// agent a store of its own, which is what one login on its own
@@ -213,7 +219,11 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 
 	a.seedFriends(acct.Buddies)
 
-	a.Send = msg.NewSender(conn)
+	var sendOpts []msg.SenderOption
+	if opts.SendTap != nil {
+		sendOpts = append(sendOpts, msg.WithSendTap(opts.SendTap))
+	}
+	a.Send = msg.NewSender(conn, sendOpts...)
 	a.Recv = msg.NewReceiver(conn, opts.Recv...)
 
 	dopts := []msg.DispatcherOption{

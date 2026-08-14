@@ -50,6 +50,7 @@ type SendStats struct {
 // cheap and prompt, and messages want to be ordered.
 type Sender struct {
 	conn PacketWriter
+	tap  Handler
 
 	out      chan *outbound
 	acks     chan uint32
@@ -107,6 +108,24 @@ func WithRetransmit(rto time.Duration, tries int) SenderOption {
 }
 
 // WithSendBuffer sets the outbound channel capacity.  Default 128.
+// WithSendTap calls fn for every message this sender puts on the wire
+// for the first time, with the header it went out under, so a caller can
+// record the sequence number it was given.
+//
+// It is the outbound half of a trace.  Without it a record shows only
+// what arrived, which for a relay is half the story and the wrong half:
+// the question that gets asked is whether slgod ever sent the thing, and
+// a record of inbound traffic cannot answer it.
+//
+// Retransmissions do not call it.  They carry the sequence number and
+// bytes of the original, so reporting them as fresh sends would show one
+// message as several and invite exactly the double-counting the relay
+// hook exists to avoid.  Bare acknowledgements do not call it either;
+// they are circuit machinery and carry no message.
+func WithSendTap(fn Handler) SenderOption {
+	return func(s *Sender) { s.tap = fn }
+}
+
 func WithSendBuffer(n int) SenderOption {
 	return func(s *Sender) { s.out = make(chan *outbound, n) }
 }
@@ -344,6 +363,18 @@ func (s *Sender) transmit(ob *outbound) error {
 			tries: 1,
 			next:  time.Now().Add(s.rto),
 		}
+	}
+
+	// After the write, so what is reported went out rather than merely
+	// having been attempted.  Built only when someone is watching: an
+	// outbound Packet exists for no other reason.
+	if s.tap != nil {
+		s.tap(&Packet{
+			At:      time.Now(),
+			Header:  h,
+			ID:      ob.m.MsgInfo().ID,
+			Message: ob.m,
+		})
 	}
 	return nil
 }

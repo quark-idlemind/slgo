@@ -766,3 +766,63 @@ func TestSenderRunWithoutAContext(t *testing.T) {
 		t.Fatal("Run did not return")
 	}
 }
+
+// TestSendTapReportsWhatWentOut is the outbound half of a trace.  The
+// question a relay gets asked is whether it ever sent the thing, and a
+// record of what arrived cannot answer that.
+func TestSendTapReportsWhatWentOut(t *testing.T) {
+	c := newCapture()
+	var mu sync.Mutex
+	var seen []uint32
+	s, stop := runSender(t, c, WithSendTap(func(p *Packet) {
+		mu.Lock()
+		defer mu.Unlock()
+		if p.Message == nil {
+			t.Error("the send tap was given a packet with no message")
+		}
+		seen = append(seen, p.Header.Sequence)
+	}))
+	defer stop()
+
+	for i := 0; i < 3; i++ {
+		if err := s.Send(context.Background(), &CompletePingCheck{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitFor(t, "three sends", func() bool { return c.count() == 3 })
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 3 {
+		t.Fatalf("the tap saw %v, want three sends", seen)
+	}
+	// The sequence numbers are the ones the wire carried, which is the
+	// point: a trace has to be matchable against a capture.
+	for i := 1; i < len(seen); i++ {
+		if seen[i] <= seen[i-1] {
+			t.Errorf("sequence numbers not increasing: %v", seen)
+		}
+	}
+}
+
+// TestSendTapIgnoresRetransmissions: a resend carries the original's
+// sequence number and bytes, so reporting it as a fresh send would show
+// one message as several.
+func TestSendTapIgnoresRetransmissions(t *testing.T) {
+	c := newCapture()
+	var tapped atomic.Int64
+	s, stop := runSender(t, c,
+		WithRetransmit(30*time.Millisecond, 5),
+		WithSendTap(func(*Packet) { tapped.Add(1) }))
+	defer stop()
+
+	// Reliable and never acknowledged, so it retransmits.
+	if err := s.SendReliable(context.Background(), &CompletePingCheck{}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the retransmissions", func() bool { return c.count() >= 3 })
+
+	if got := tapped.Load(); got != 1 {
+		t.Errorf("the tap saw %d sends of one retransmitted message, want 1", got)
+	}
+}
