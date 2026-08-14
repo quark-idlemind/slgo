@@ -29,15 +29,21 @@ import (
 	"github.com/quark-idlemind/slgo/auth"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/server"
+	"github.com/quark-idlemind/slgo/viewer"
 )
 
 func main() {
 	var (
-		listen  = flag.String("listen", ":7807", "address to serve clients on")
-		noAuth  = flag.Bool("no-auth", false, "serve without authentication; loopback only, and it is not checked")
-		verbose = flag.Bool("v", false, "log every message the grid sends")
-		start   = flag.String("start", "", "override the profile's start location")
-		group   groupFlag
+		listen    = flag.String("listen", ":7807", "address to serve clients on")
+		noAuth    = flag.Bool("no-auth", false, "serve without authentication; loopback only, and it is not checked")
+		verbose   = flag.Bool("v", false, "log every message the grid sends")
+		start     = flag.String("start", "", "override the profile's start location")
+		trace     = flag.String("trace", "", "write a packet trace to this file")
+		traceMsgs = flag.String("trace-messages", "",
+			"comma separated message names to trace; empty traces every one")
+		traceBodies = flag.Bool("trace-bodies", false,
+			"write each traced message out in full, rather than one line naming it")
+		group groupFlag
 	)
 	flag.Var(&group, "group",
 		"group to act as, by name or uuid, or PROFILE=GROUP; overrides the profile's own")
@@ -54,6 +60,40 @@ func main() {
 	log.SetFlags(log.Ltime)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// The record of what crossed the wire.  It is here rather than in
+	// the viewer work proper because it is worth having before there
+	// is a viewer: a baseline of what an ordinary session receives is
+	// what a handover's trace has to be compared against, and it
+	// cannot be collected afterwards.
+	//
+	// Both are shared by every session, so one file holds the whole
+	// daemon in arrival order.  Which avatar a packet belonged to is
+	// not recorded yet; when a viewer circuit exists there will be two
+	// directions to tell apart and that is the point to add it.
+	census := viewer.NewCensus()
+	var tracer *viewer.Trace
+	if *trace != "" {
+		f, err := os.Create(*trace)
+		if err != nil {
+			log.Fatalf("trace: %v", err)
+		}
+		defer f.Close()
+		var only []string
+		if *traceMsgs != "" {
+			only = strings.Split(*traceMsgs, ",")
+			for i := range only {
+				only[i] = strings.TrimSpace(only[i])
+			}
+		}
+		tracer = viewer.NewTrace(f, only, *traceBodies)
+		log.Printf("tracing to %s", *trace)
+		defer func() {
+			written, skipped := tracer.Stats()
+			log.Printf("trace: %d entries written, %d skipped by the filter", written, skipped)
+			log.Printf("census:\n%s", census.Report())
+		}()
+	}
 
 	srv := server.New()
 
@@ -118,6 +158,28 @@ func main() {
 			OnError: func(p *msg.Packet) {
 				log.Printf("%s: undecodable packet: %v", name, p.Err)
 			},
+		}
+		if *trace != "" {
+			// The tap, so this is the wire as it really was --
+			// retransmissions included, since it runs ahead of
+			// duplicate suppression.  That is right for a
+			// transcript and worth stating, because the viewer
+			// side records from the relay instead and will not
+			// show them.
+			//
+			// Nothing is forwarded anywhere yet, so every packet
+			// is recorded as having had no viewer to go to.
+			opts.Tap = func(p *msg.Packet) {
+				census.Record(viewer.MessageName(p), viewer.FromSim, p.At, viewer.NoViewer)
+				tracer.Write(viewer.FromSim, p, viewer.NoViewer)
+			}
+			// The other half.  Without it the record answers
+			// "what arrived" and not "was it ever sent", and the
+			// second is the question a relay gets asked.
+			opts.SendTap = func(p *msg.Packet) {
+				census.Record(viewer.MessageName(p), viewer.ToSim, p.At, viewer.Forwarded)
+				tracer.Write(viewer.ToSim, p, viewer.Forwarded)
+			}
 		}
 		return login, opts, nil
 	}
