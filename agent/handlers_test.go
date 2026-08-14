@@ -526,3 +526,47 @@ func TestAnAvatarAboveTheCoarseCeilingKeepsTheHeightItHad(t *testing.T) {
 		t.Errorf("a height under the ceiling gave %v, want 32", got)
 	}
 }
+
+// TestARegionGoingDownIsNotADecisionAboutTheAvatar.
+//
+// Every kick used to be treated as somebody's decision, and staying out
+// is right for all the ones that are: a duplicate login, an estate ban,
+// an administrator ejecting. A region restart is not one of them --
+// nobody took the session and nobody is holding it, and a viewer in the
+// same position comes back when the region does. Measured before this:
+// one routine restart left three avatars logged out for two hours, and
+// the first anybody knew was a command failing.
+//
+// The reason text is all there is to tell them apart, so the match is
+// narrow and anything unrecognised still stays out. Getting that
+// backwards is the expensive direction: a daemon that reconnects when
+// told not to fights whoever is holding the avatar, and wins.
+func TestARegionGoingDownIsNotADecisionAboutTheAvatar(t *testing.T) {
+	t.Parallel()
+
+	for _, c := range []struct {
+		reason string
+		retry  bool
+	}{
+		{"The region where you are standing is going down.", true},
+		{"The region you are in is restarting.", true},
+		{"The system has logged you out because you are attempting to " +
+			"log in from another location.", false},
+		{"You have been ejected from this estate.", false},
+		{"", false},
+		// Not a region: a word from one sentence and a word from the
+		// other must not add up to a reason to come back.
+		{"Your account is going down for maintenance.", false},
+	} {
+		err := error(&Kicked{Reason: c.reason})
+		if got := Retryable(err); got != c.retry {
+			t.Errorf("Retryable(%q) = %v, want %v", c.reason, got, c.retry)
+		}
+	}
+
+	// And a circuit that merely failed is still retryable, which is
+	// the case this must not have broken.
+	if !Retryable(errors.New("simulator silent for 1m14s")) {
+		t.Error("a lost circuit was taken for a decision")
+	}
+}

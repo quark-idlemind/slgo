@@ -22,12 +22,27 @@ package agent
 // fighting its own operator, and it would win.
 //
 // So a kick is reported as this rather than as a plain error, and a
-// caller tells the two apart with errors.As.  Every kick is treated the
-// same way: whatever the grid's reason, being ejected and immediately
-// returning is the wrong answer to all of them, and the reason is
-// carried along so that a person can see which it was.
+// caller tells the two apart with errors.As.
+//
+// # The kick that is not a decision
+//
+// One kind of kick is not about the avatar at all: the region is going
+// down for a restart, and everyone standing in it is put out.  Nobody
+// took the session and nobody is holding it, and a viewer in the same
+// position simply comes back when the region does -- so staying out is
+// the wrong answer, and an expensive one.  Measured: a routine restart
+// left three avatars logged out for two hours, and the first anybody
+// knew of it was a command failing.
+//
+// The reason text is the only thing that tells them apart, which is not
+// much to hang a decision on, so the recognition is narrow and the
+// default is unchanged: a kick nobody recognises is still a decision to
+// respect.
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 // Kicked is a session the grid ended deliberately.  It is not
 // retryable: see Retryable.
@@ -54,6 +69,20 @@ func (a *Agent) Kicked() (string, bool) {
 	return a.kicked, true
 }
 
+// RegionWentDown reports whether this kick was the region going away
+// rather than a decision about the avatar.
+//
+// The grid's words are all there is to go on -- there is no code, and
+// the sentence is written for a person -- so this matches the one thing
+// it is sure of and nothing more.  A reason it does not recognise is
+// treated as a decision, which is the answer that costs a wait rather
+// than a fight with whoever is holding the session.
+func (k *Kicked) RegionWentDown() bool {
+	r := strings.ToLower(k.Reason)
+	return strings.Contains(r, "region") &&
+		(strings.Contains(r, "going down") || strings.Contains(r, "restarting"))
+}
+
 // Retryable says whether a session that ended this way should be
 // re-established.
 //
@@ -61,7 +90,13 @@ func (a *Agent) Kicked() (string, bool) {
 // default: a fault nobody understands is more likely to be a lost
 // circuit than a decision, and failing to reconnect is visible and
 // recoverable while reconnecting when told not to is neither.
+//
+// A region going down is not an ejection, whatever it arrives as.  See
+// RegionWentDown.
 func Retryable(err error) bool {
 	var k *Kicked
-	return !errors.As(err, &k)
+	if !errors.As(err, &k) {
+		return true
+	}
+	return k.RegionWentDown()
 }
