@@ -74,6 +74,12 @@ type Circuit struct {
 	peer   *net.UDPAddr
 	joined bool
 
+	// pending holds the appearances kept from before this viewer
+	// attached, until the viewer has been told the avatars they
+	// describe exist.  See dressAvatars.
+	pendingMu sync.Mutex
+	pending   map[msg.UUID]*msg.AvatarAppearance
+
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -397,6 +403,74 @@ func (c *Circuit) describeRegion() {
 	if asked := a.Redescribe(); asked > 0 {
 		c.logf("viewer: asked the simulator to describe %d objects again", asked)
 	}
+
+	// And how the avatars look, which the objects coming back will not
+	// say.  These are held rather than sent: see dressAvatars for why
+	// they cannot go out until their avatars have arrived.
+	if held := a.Appearances().All(); len(held) > 0 {
+		c.pendingMu.Lock()
+		c.pending = held
+		c.pendingMu.Unlock()
+		c.logf("viewer: holding %d avatar appearances until the viewer knows the avatars", len(held))
+	}
+	if _, dropped := a.Appearances().Stats(); dropped > 0 {
+		c.logf("viewer: %d avatar appearances were forgotten for the limit before this viewer attached", dropped)
+	}
+}
+
+// pcodeAvatar is what the simulator calls an avatar in an object update.
+const pcodeAvatar = 47
+
+// dressAvatars sends a stored appearance once the viewer has been told
+// that the avatar it describes exists.
+//
+// The order is the whole difficulty.  A viewer that receives an
+// appearance for an avatar it has not heard of has nowhere to put it: it
+// looks the avatar up by id, finds nothing, drops the message and says
+// so in its log, and nothing ever asks again.  Meanwhile the avatars
+// themselves only come back because Redescribe asked for them, seconds
+// after this viewer joined and in whatever order the simulator answers.
+//
+// So rather than guess at a delay, each appearance waits for its own
+// avatar and follows immediately behind it.
+func (c *Circuit) dressAvatars(m msg.Message) {
+	c.pendingMu.Lock()
+	waiting := len(c.pending)
+	c.pendingMu.Unlock()
+	if waiting == 0 {
+		return
+	}
+
+	switch u := m.(type) {
+	case *msg.ObjectUpdate:
+		for i := range u.ObjectData {
+			if d := &u.ObjectData[i]; d.PCode == pcodeAvatar {
+				c.dress(d.FullID)
+			}
+		}
+	case *msg.ObjectUpdateCompressed:
+		for i := range u.ObjectData {
+			// A partly decoded object still says what it is and
+			// which avatar it is, which is all this needs.
+			d, _ := msg.DecodeCompressed(u.ObjectData[i].Data)
+			if d != nil && d.PCode == pcodeAvatar {
+				c.dress(d.FullID)
+			}
+		}
+	}
+}
+
+// dress hands over one avatar's kept appearance, once.
+func (c *Circuit) dress(id msg.UUID) {
+	c.pendingMu.Lock()
+	m := c.pending[id]
+	delete(c.pending, id)
+	c.pendingMu.Unlock()
+	if m == nil {
+		return
+	}
+	c.toViewer(m, msg.FlagReliable)
+	c.logf("viewer: replayed how %s looks", id)
 }
 
 // sendLogoutReply lets the viewer quit cleanly.  Without it a viewer
@@ -525,7 +599,12 @@ func (c *Circuit) pump(ctx context.Context) {
 			}
 			if err != nil && ctx.Err() == nil {
 				c.logf("viewer: passing on %s: %v", MessageName(p), err)
+				continue
 			}
+			// The viewer now knows about whatever that described,
+			// which for an avatar is the moment its appearance can
+			// be delivered.
+			c.dressAvatars(p.Message)
 		}
 	}
 }

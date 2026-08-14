@@ -56,6 +56,10 @@ type Agent struct {
 	// terrain is the land, kept because it cannot be asked for twice.
 	terrain Terrain
 
+	// appearance is how the avatars nearby look, kept for the same
+	// reason.
+	appearance Appearances
+
 	// presenceHeldUntil is when this session may speak for the camera
 	// again.  See DeferPresence.
 	presenceHeldUntil time.Time
@@ -441,6 +445,15 @@ func (a *Agent) register() {
 	a.Disp.MustHandle("LayerData", func(p *msg.Packet) {
 		if m, ok := p.Message.(*msg.LayerData); ok {
 			a.terrain.note(m)
+		}
+	}, msg.Inline())
+
+	// And how everybody looks, kept for the same reason and at about
+	// the same cost: a few hundred bytes an avatar, for as long as the
+	// session can see them.
+	a.Disp.MustHandle("AvatarAppearance", func(p *msg.Packet) {
+		if m, ok := p.Message.(*msg.AvatarAppearance); ok {
+			a.appearance.note(m)
 		}
 	}, msg.Inline())
 

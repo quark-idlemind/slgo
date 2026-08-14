@@ -149,6 +149,7 @@ func (a *Agent) enterRegion(region msg.UUID) {
 	// patches may already have arrived ahead of it.
 	if !first {
 		a.terrain.forget()
+		a.appearance.forget()
 	}
 
 	if a.regions == nil {

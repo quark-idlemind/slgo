@@ -605,3 +605,72 @@ func TestAJoiningViewerIsSentTheObjects(t *testing.T) {
 	// Asking is what the viewer's arrival has to produce.
 	sim.waitSeen(t, "RequestMultipleObjects", 5*time.Second)
 }
+
+// describeAppearance says how one avatar looks, as a region does when it
+// comes into view and never again.
+func (s *simStub) describeAppearance(who msg.UUID, texture string) {
+	m := &msg.AvatarAppearance{}
+	m.Sender.ID = who
+	m.ObjectData.TextureEntry = []byte(texture)
+	s.send(m, msg.FlagReliable)
+}
+
+// TestAJoiningViewerIsToldHowAvatarsLook: an avatar's appearance is sent
+// once, when it comes into view, and cannot be asked for again -- so a
+// viewer attaching to a session that has been up for hours draws
+// everybody as the default body, untextured and wearing nothing.
+//
+// It also has to arrive in the right order.  An appearance for an avatar
+// the viewer has not heard of is dropped on the floor, so this checks
+// that it is held back until the avatar itself has gone across.
+func TestAJoiningViewerIsToldHowAvatarsLook(t *testing.T) {
+	sim, a, c, v, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	who := msg.MustParseUUID("6c457e57-7e57-c0de-8676-7ee670495387")
+	sim.describeAppearance(who, "how she looks")
+	deadline := time.Now().Add(5 * time.Second)
+	for a.Appearances().Get(who) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the session never recorded the avatar's appearance")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	// describeRegion has run by now, and must not have sent this yet:
+	// the viewer does not know the avatar exists.
+	for _, name := range v.got() {
+		if name == "AvatarAppearance" {
+			t.Fatal("the appearance went out before the avatar the viewer could attach it to")
+		}
+	}
+
+	// The avatar comes back, as it does when the simulator answers
+	// Redescribe.
+	upd := &msg.ObjectUpdate{}
+	upd.RegionData.RegionHandle = 0x0003_f000_0003_e800
+	upd.ObjectData = []msg.ObjectUpdate_ObjectData{{
+		ID:         2001,
+		FullID:     who,
+		PCode:      47,
+		ObjectData: make([]byte, 60),
+	}}
+	c.FromSim(&msg.Packet{
+		Header:  msg.Header{Sequence: 4101, Flags: msg.FlagReliable},
+		ID:      msg.IDOf(upd),
+		Message: upd,
+		At:      time.Now(),
+	})
+
+	v.waitSeen(t, "AvatarAppearance", 5*time.Second)
+	got := v.last(t, "AvatarAppearance").(*msg.AvatarAppearance)
+	if got.Sender.ID != who {
+		t.Errorf("appearance was for %s, want %s", got.Sender.ID, who)
+	}
+	if string(got.ObjectData.TextureEntry) != "how she looks" {
+		t.Errorf("texture entry = %q", got.ObjectData.TextureEntry)
+	}
+}
