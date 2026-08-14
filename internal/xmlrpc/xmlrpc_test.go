@@ -1,4 +1,4 @@
-package agent
+package xmlrpc
 
 // The login response is XML-RPC, and the whole point of this decoder is
 // that it is hard to upset.
@@ -66,7 +66,7 @@ func TestEveryTypeBecomesAPlainGoValue(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := decodeResponse(strings.NewReader(respond(c.value)))
+			got, err := DecodeResponse(strings.NewReader(respond(c.value)))
 			if err != nil {
 				t.Fatalf("%s: %v", c.value, err)
 			}
@@ -83,7 +83,7 @@ func TestEveryTypeBecomesAPlainGoValue(t *testing.T) {
 func TestArraysAndStructsNest(t *testing.T) {
 	t.Parallel()
 
-	got, err := decodeResponse(strings.NewReader(respond(
+	got, err := DecodeResponse(strings.NewReader(respond(
 		`<struct>
 			<member><name>numbers</name><value><array><data>
 				<value><int>1</int></value>
@@ -122,7 +122,7 @@ func TestArraysAndStructsNest(t *testing.T) {
 func TestElementsNobodyModelsAreSteppedOver(t *testing.T) {
 	t.Parallel()
 
-	got, err := decodeResponse(strings.NewReader(
+	got, err := DecodeResponse(strings.NewReader(
 		`<methodResponse>
 			<somethingNew><with>contents</with></somethingNew>
 			<params>
@@ -210,7 +210,7 @@ func TestADocumentThatStopsInTheMiddleIsAnError(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			v, err := decodeResponse(strings.NewReader(c.xml))
+			v, err := DecodeResponse(strings.NewReader(c.xml))
 			if err == nil {
 				t.Fatalf("decoded %q as %#v; a truncated document is not a response", c.xml, v)
 			}
@@ -263,7 +263,7 @@ func TestAFaultCarriesItsCodeAndSentence(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := decodeResponse(strings.NewReader(c.xml))
+			_, err := DecodeResponse(strings.NewReader(c.xml))
 			var f *Fault
 			if !errors.As(err, &f) {
 				t.Fatalf("err = %v (%T), wanted a *Fault", err, err)
@@ -309,8 +309,8 @@ func TestFieldsAreReadInWhateverFormTheyArrived(t *testing.T) {
 		{"array", ""},
 		{"missing", ""},
 	} {
-		if got := getString(m, c.key); got != c.want {
-			t.Errorf("getString(%q) = %q, want %q", c.key, got, c.want)
+		if got := String(m, c.key); got != c.want {
+			t.Errorf("String(%q) = %q, want %q", c.key, got, c.want)
 		}
 	}
 
@@ -327,9 +327,9 @@ func TestFieldsAreReadInWhateverFormTheyArrived(t *testing.T) {
 		{"yes", 0, false},
 		{"missing", 0, false},
 	} {
-		got, ok := getInt(m, c.key)
+		got, ok := Int(m, c.key)
 		if got != c.want || ok != c.ok {
-			t.Errorf("getInt(%q) = %d, %v; want %d, %v", c.key, got, ok, c.want, c.ok)
+			t.Errorf("Int(%q) = %d, %v; want %d, %v", c.key, got, ok, c.want, c.ok)
 		}
 	}
 }
