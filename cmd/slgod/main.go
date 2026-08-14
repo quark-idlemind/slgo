@@ -43,6 +43,8 @@ func main() {
 			"comma separated message names to trace; empty traces every one")
 		traceBodies = flag.Bool("trace-bodies", false,
 			"write each traced message out in full, rather than one line naming it")
+		viewerAt = flag.String("viewer", "",
+			"serve viewer logins on this address, so a real viewer can be handed a session")
 		group groupFlag
 	)
 	flag.Var(&group, "group",
@@ -408,6 +410,22 @@ func main() {
 			"authentication is mutual and bound to the TLS session")
 	} else {
 		log.Print("WARNING: serving without authentication")
+	}
+
+	// The viewer endpoint, if it was asked for.  After the sessions are
+	// up, because it hands out what they hold and has nothing to say
+	// before there is anything to hand over.
+	if *viewerAt != "" {
+		stopViewers, err := serveViewers(ctx, *viewerAt, srv,
+			func(profile string) string {
+				hostMu.Lock()
+				defer hostMu.Unlock()
+				return hosted[profile].Password
+			}, census, tracer, log.Printf)
+		if err != nil {
+			log.Fatalf("viewer: %v", err)
+		}
+		defer stopViewers()
 	}
 
 	ln, err := net.Listen("tcp", *listen)
