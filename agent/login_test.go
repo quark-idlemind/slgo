@@ -663,3 +663,35 @@ func TestARefusalWithNothingButASentence(t *testing.T) {
 		t.Errorf("Error = %q", e.Error())
 	}
 }
+
+// TestALoginWorthTryingAgainIsMostOfThem.
+//
+// A daemon that gives up on the first refusal is a daemon somebody has
+// to go and restart: a grid hands back a dead seed capability, or the
+// last session has not finished ending, often enough that it happens on
+// an ordinary morning. Measured: one avatar of three failed a restart
+// with a 404 on its seed capability and came up first try a moment
+// later.
+//
+// The refusals not worth repeating are the ones a person has to clear.
+// Asking every couple of minutes for ever is how an account gets
+// throttled, and it would never succeed anyway.
+func TestALoginWorthTryingAgainIsMostOfThem(t *testing.T) {
+	for _, c := range []struct {
+		what  string
+		err   error
+		retry bool
+	}{
+		{"a dead seed capability", errors.New("seed capability returned 404 Not Found"), true},
+		{"a timeout", errors.New("dial tcp: i/o timeout"), true},
+		{"the last session still ending", &LoginError{Reason: "presence"}, true},
+		{"a refusal with no reason given", &LoginError{Message: "Login failed."}, true},
+		{"a wrong password", &LoginError{Reason: "key"}, false},
+		{"terms of service to accept", &LoginError{Reason: "tos"}, false},
+		{"a client too old", &LoginError{Reason: "update"}, false},
+	} {
+		if got := RetryableLogin(c.err); got != c.retry {
+			t.Errorf("%s: RetryableLogin = %v, want %v", c.what, got, c.retry)
+		}
+	}
+}

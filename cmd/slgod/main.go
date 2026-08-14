@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -67,7 +68,20 @@ func main() {
 
 	// The logins that came up, so that the group loop below knows which
 	// profile each hosted session was made from.
+	//
+	// Guarded because a session may now come up minutes after the
+	// others, from the retry below, while settle is reading this.
+	var hostMu sync.Mutex
 	hosted := map[string]agent.Login{}
+
+	// waiting is a profile whose login failed in a way that may clear,
+	// kept until the server is set up enough to receive it.
+	type waiting struct {
+		name  string
+		login agent.Login
+		opts  agent.Options
+	}
+	var pending []waiting
 
 	// loginFor is how a profile becomes a login, in one place, so that
 	// a session started later on request is set up exactly like one
@@ -108,24 +122,14 @@ func main() {
 		return login, opts, nil
 	}
 
-	for _, name := range flag.Args() {
-		login, opts, err := loginFor(name)
-		if err != nil {
-			log.Printf("%s: NOT hosted: %v", name, err)
-			continue
-		}
-
-		log.Printf("%s: logging in...", name)
-		h, err := srv.StartAgent(ctx, name, login, opts)
-		if err != nil {
-			// Not fatal.  One expired password should not take down
-			// the sessions that did come up, which are somebody's
-			// benchmark in progress.
-			log.Printf("%s: NOT hosted: %v", name, err)
-			continue
-		}
+	// up is everything that follows a session coming up, wherever it
+	// came up from -- the command line, or a retry minutes later.  One
+	// place, so that a session started the slow way is not half set up.
+	up := func(name string, login agent.Login, h *server.Hosted) {
 		h.Log = log.Printf
+		hostMu.Lock()
 		hosted[name] = login
+		hostMu.Unlock()
 		a := h.Agent()
 		log.Printf("%s: %s in %s, %d capabilities",
 			name, a.Account.Name(), orUnknown(a.RegionName()), len(a.Caps))
@@ -162,6 +166,36 @@ func main() {
 		}(name, h)
 	}
 
+	for _, name := range flag.Args() {
+		login, opts, err := loginFor(name)
+		if err != nil {
+			log.Printf("%s: NOT hosted: %v", name, err)
+			continue
+		}
+
+		log.Printf("%s: logging in...", name)
+		h, err := srv.StartAgent(ctx, name, login, opts)
+		if err == nil {
+			up(name, login, h)
+			continue
+		}
+		// A refusal a wait cannot clear is the end of it for this
+		// profile.  It is not fatal: one expired password should not
+		// take down the sessions that did come up, which are somebody's
+		// benchmark in progress.
+		if !agent.RetryableLogin(err) {
+			log.Printf("%s: NOT hosted: %v", name, err)
+			continue
+		}
+		// Everything else is worth asking again for.  A grid hands
+		// back a dead seed capability often enough that a daemon which
+		// gives up on the first one is a daemon somebody has to go and
+		// restart -- seen here: hobb failed with a 404 on the seed
+		// capability and came up first try a moment later.
+		log.Printf("%s: not up yet (%v); trying again", name, err)
+		pending = append(pending, waiting{name: name, login: login, opts: opts})
+	}
+
 	// The active group, which decides whether a parcel lets this avatar
 	// build at all.
 	//
@@ -177,7 +211,7 @@ func main() {
 	// restarted slgod is a fresh login, so it must be settled again --
 	// and so is a RECONNECT, which is why the answer is handed to the
 	// server to remember rather than sent from here.  See server/group.go.
-	if len(hosted) == 0 {
+	if len(hosted) == 0 && len(pending) == 0 {
 		log.Fatal("no session came up; nothing to serve")
 	}
 
@@ -188,7 +222,10 @@ func main() {
 	settle := func(h *server.Hosted) {
 		name := h.Name
 		want := ""
-		if l, ok := hosted[name]; ok {
+		hostMu.Lock()
+		l, known := hosted[name]
+		hostMu.Unlock()
+		if known {
 			want = l.Group
 		} else if l, _, err := loginFor(name); err == nil {
 			want = l.Group
@@ -220,6 +257,44 @@ func main() {
 		if h, ok := srv.Agent(name); ok {
 			settle(h)
 		}
+	}
+
+	// The ones that were not up yet.  Started here rather than where
+	// they failed, because a session that arrives this way has to be
+	// settled like any other and settle is only defined by now -- an
+	// avatar that came up on the second attempt and could not build
+	// would be a worse bug than the one this fixes.
+	//
+	// The waits are the server's own, which are generous on purpose: a
+	// login server throttles a client that hammers it, and what is
+	// being waited for usually takes a while to clear.  They repeat,
+	// so this keeps trying until the profile comes up, the refusal
+	// turns into one no wait can clear, or the daemon stops.
+	for _, w := range pending {
+		go func(w waiting) {
+			for attempt := 0; ; attempt++ {
+				delay := server.ReconnectDelays[len(server.ReconnectDelays)-1]
+				if attempt < len(server.ReconnectDelays) {
+					delay = server.ReconnectDelays[attempt]
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(delay):
+				}
+
+				h, err := srv.StartAgent(ctx, w.name, w.login, w.opts)
+				if err == nil {
+					up(w.name, w.login, h)
+					settle(h)
+					return
+				}
+				if !agent.RetryableLogin(err) {
+					log.Printf("%s: NOT hosted: %v", w.name, err)
+					return
+				}
+			}
+		}(w)
 	}
 
 	// What may be started later, and how.  Without these the server can

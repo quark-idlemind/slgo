@@ -6,6 +6,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -151,6 +152,38 @@ type LoginError struct {
 	Message     string
 	MessageID   string
 	MessageArgs map[string]any
+}
+
+// RetryableLogin says whether a login that failed this way is worth
+// trying again.
+//
+// Most failures are worth it.  A seed capability answering 404, a
+// timeout, a refused connection, a region mid-restart -- none of those
+// are about this account, and all of them clear on their own.  So does
+// "presence", which is the login server saying the last session has not
+// finished ending yet, and which is the single most common reason a
+// login made moments after a logout is refused.
+//
+// What is not worth retrying is a refusal a human has to clear: a wrong
+// password, terms of service to accept, a client too old.  Those will
+// answer the same way for ever, and asking every couple of minutes for
+// ever is how an account gets throttled.
+//
+// The default here is the opposite of Retryable's, and deliberately.  A
+// kick is a statement about a session that WAS alive, so the safe
+// reading of one nobody recognises is that somebody meant it.  A login
+// failure is usually a failure to reach, so the safe reading of an
+// unfamiliar one is that it may clear.
+func RetryableLogin(err error) bool {
+	var e *LoginError
+	if !errors.As(err, &e) {
+		return true
+	}
+	switch e.Reason {
+	case "key", "tos", "update", "critical":
+		return false
+	}
+	return true
 }
 
 func (e *LoginError) Error() string {
