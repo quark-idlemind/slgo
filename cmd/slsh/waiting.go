@@ -13,10 +13,11 @@ package main
 // holds still while the thing is waiting, and the prompt says how many
 // there are.  Nothing is answered by being looked at.
 //
-//	waiting          what is waiting, numbered
-//	answer N [WHAT]  yes, or a button, or the text a box wants
-//	no N             decline, and tell whoever asked
-//	ignore N         leave it waiting and stop counting it
+//	waiting             what is waiting, numbered
+//	answer N [WHAT]     yes, or a button, or the text a box wants
+//	answer --file P N   a text box answer of more than one line
+//	no N                decline, and tell whoever asked
+//	ignore N            leave it waiting and stop counting it
 //
 // The four kinds do not have four sets of commands, because from where
 // a person sits they are the same question -- something wants an
@@ -26,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,7 +43,7 @@ var waitingCommands = map[string]*command{
 		run:   cmdWaiting,
 	},
 	"answer": {
-		usage: "answer N [BUTTON|TEXT]",
+		usage: "answer [--file PATH] N [BUTTON|TEXT]",
 		brief: "answer one of them: yes, a button by name or number, or what a text box wants",
 		run:   cmdAnswer,
 	},
@@ -310,8 +312,18 @@ func cmdWaiting(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	return nil
 }
 
+type answerFlags struct {
+	// File is how a text box gets more than one line.  A shell reads a
+	// line at a time and a text box in the viewer is a text editor, so
+	// the shape of the answer and the shape of the prompt do not match;
+	// naming a file is the way through that does not involve inventing
+	// an escape for the newline and then having to escape the escape.
+	File string `getopt:"--file=PATH   take the answer from a file, newlines and all"`
+	Help bool   `getopt:"--help -h    show what this command takes"`
+}
+
 func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	var o helpOnly
+	var o answerFlags
 	args, done, err := subOptions("answer", "N [BUTTON|TEXT]", &o, out, args)
 	if err != nil || done {
 		return err
@@ -324,6 +336,18 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		return err
 	}
 	rest := strings.TrimSpace(strings.Join(args[1:], " "))
+	if o.File != "" {
+		if w.dialog == nil || !w.dialog.IsTextBox() {
+			return fmt.Errorf("--file answers a text box; %d is a %s", w.n, w.kind)
+		}
+		b, err := os.ReadFile(o.File)
+		if err != nil {
+			return err
+		}
+		// Kept as it is, including a trailing newline if the file has
+		// one: what a person put in the file is the answer.
+		rest = string(b)
+	}
 
 	switch {
 	case w.dialog != nil && w.dialog.IsTextBox():

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -89,6 +91,67 @@ func TestATextBoxIsNotAButton(t *testing.T) {
 	}
 	if got := x.do(t, "answer 1 Quark"); !strings.Contains(got, "told") {
 		t.Errorf("answering with text: %s", got)
+	}
+}
+
+// TestATextBoxTakesMoreThanOneLine.
+//
+// The viewer's text box is a text editor rather than a field, so an
+// answer there can have newlines in it, and a shell that reads one line
+// at a time cannot type one.  Naming a file is the way in.
+//
+// Measured on Agni: three lines went out and the script received them
+// with the newlines intact -- 33 characters, three lines when parsed on
+// "\n" -- and 254 bytes with five newlines arrived whole.
+func TestATextBoxTakesMoreThanOneLine(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	path := filepath.Join(t.TempDir(), "answer.txt")
+	if err := os.WriteFile(path, []byte("first line\nsecond line\nthird"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	x.grid.Relay(t, dialogFrom("a sign", "your name?", -106, "!!llTextBox!!"))
+	waits(t, x, "a sign asks")
+
+	if got := x.do(t, "answer --file "+path+" 1"); !strings.Contains(got, "told") {
+		t.Fatalf("answering from a file: %s", got)
+	}
+	var sent string
+	for _, m := range x.grid.Sent() {
+		if r, ok := m.(*msg.ScriptDialogReply); ok {
+			sent = strings.TrimRight(string(r.Data.ButtonLabel), "\x00")
+		}
+	}
+	if want := "first line\nsecond line\nthird"; sent != want {
+		t.Errorf("the reply carried %q, want %q", sent, want)
+	}
+}
+
+// TestATextBoxHasALimit: the label the answer travels in is one byte of
+// length and 254 of text, and a person is better told before it goes
+// than left wondering which half arrived.
+func TestATextBoxHasALimit(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	path := filepath.Join(t.TempDir(), "long.txt")
+	if err := os.WriteFile(path, []byte(strings.Repeat("y", 255)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	x.grid.Relay(t, dialogFrom("a sign", "your name?", -107, "!!llTextBox!!"))
+	waits(t, x, "a sign asks")
+
+	got := x.do(t, "answer --file "+path+" 1")
+	if !strings.Contains(got, "too long") || !strings.Contains(got, "254") {
+		t.Errorf("an over-long answer should say so and give the limit: %s", got)
+	}
+	for _, m := range x.grid.Sent() {
+		if _, ok := m.(*msg.ScriptDialogReply); ok {
+			t.Error("it was sent anyway")
+		}
 	}
 }
 
