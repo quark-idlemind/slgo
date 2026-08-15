@@ -364,7 +364,7 @@ func dist2(a, b msg.Vector3) float32 {
 // same platform, in conversation, and the session will not know it is
 // there.
 //
-// Measured on Aditi.  Quark logged in at ground level while two others
+// Measured on Agni.  Quark logged in at ground level while two others
 // stood on a skybox 1977m up; each session threw the others away as
 // out of range at that moment, and after Quark teleported up to join
 // them, all three were within six metres and none could see any of the

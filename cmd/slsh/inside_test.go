@@ -8,7 +8,7 @@ import (
 // The operations themselves -- listing, renaming and deleting inside an
 // object -- are not exercised here: they go through RequestTaskInventory
 // and the xfer protocol, which this package's fake grid does not speak.
-// They were run against Aditi instead.  What is checked here is the
+// They were run against Agni instead.  What is checked here is the
 // wiring: that --in takes the path it is given to the right place, and
 // that a command asked for something impossible says so rather than
 // doing something else.
