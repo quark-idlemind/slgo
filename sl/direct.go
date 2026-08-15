@@ -25,6 +25,7 @@ type Direct struct {
 	a        *agent.Agent
 	info     *Info
 	messages chan *Message
+	events   chan *QueueEvent
 }
 
 var _ Backend = (*Direct)(nil)
@@ -46,12 +47,20 @@ func Login(ctx context.Context, l agent.Login) (*Direct, error) {
 		return nil, err
 	}
 
-	d := &Direct{messages: make(chan *Message, relayDepth)}
+	d := &Direct{
+		messages: make(chan *Message, relayDepth),
+		events:   make(chan *QueueEvent, relayDepth),
+	}
 	opts := agent.Options{
 		// Keeping the undecoded body is what lets one tap feed the
 		// relay without the agent knowing what any of it means.
 		Recv: []msg.ReceiverOption{msg.KeepBody()},
 		Tap:  d.tap,
+		// Setting this is what starts the long poll at all: the agent
+		// leaves the queue alone when nothing is listening, which was
+		// the right default for a one-shot client and meant a direct
+		// session never heard a UDPDeprecated message in its life.
+		OnEvent: d.event,
 	}
 	if d.a, err = agent.Connect(ctx, acct, opts); err != nil {
 		return nil, err
@@ -112,11 +121,30 @@ func (d *Direct) tap(p *msg.Packet) {
 	}
 }
 
-func (d *Direct) Info() *Info               { return d.info }
-func (d *Direct) Messages() <-chan *Message { return d.messages }
-func (d *Direct) Done() <-chan struct{}     { return d.a.Done() }
-func (d *Direct) Err() error                { return d.a.Err() }
-func (d *Direct) HasCap(name string) bool   { return d.a.HasCap(name) }
+// event turns one entry from the queue into the same thing slgod would
+// have relayed.
+//
+// It runs on the goroutine polling the queue, so it hands over and
+// returns for the reason tap does: a reader that has stopped must not be
+// able to stop the poll, since the poll is also what acknowledges the
+// sequence and a queue nobody acknowledges stops delivering.
+//
+// Nothing is filtered.  A hosted session is filtered at the daemon,
+// which knows the names each client asked for; here there is one reader
+// and the whole queue is its business.
+func (d *Direct) event(name string, body []byte) {
+	select {
+	case d.events <- &QueueEvent{Name: name, Body: body, At: time.Now()}:
+	default: // the reader is behind; dropping beats stalling the poll
+	}
+}
+
+func (d *Direct) Info() *Info                { return d.info }
+func (d *Direct) Messages() <-chan *Message  { return d.messages }
+func (d *Direct) Events() <-chan *QueueEvent { return d.events }
+func (d *Direct) Done() <-chan struct{}      { return d.a.Done() }
+func (d *Direct) Err() error                 { return d.a.Err() }
+func (d *Direct) HasCap(name string) bool    { return d.a.HasCap(name) }
 
 // Close ends the session.  Unlike a hosted one there is nobody else
 // holding it, so this logs out rather than merely hanging up.

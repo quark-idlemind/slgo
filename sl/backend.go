@@ -29,6 +29,20 @@ import (
 // be copying every packet to rename it.
 type Message = client.Message
 
+// QueueEvent is one entry from the grid's event queue, still LLSD
+// encoded.
+//
+// The queue carries what the circuit no longer does.  A message the
+// template marks UDPDeprecated is not gone: the simulator sends it here
+// instead, under its own name and with its blocks as LLSD, and it may
+// carry fields the template never had.  ScriptRunningReply is the one
+// this package reads; see Session.event.
+//
+// Not "Event", which this package already uses for one of the handlers
+// an LSL state declares (see Syntax).  The two have nothing to do with
+// each other and the shorter name was there first.
+type QueueEvent = client.Event
+
 // Info is what the session knows about itself before anything is
 // asked.
 type Info struct {
@@ -90,6 +104,20 @@ type Backend interface {
 	// Messages is the relay: every message this session subscribed
 	// to, undecoded.  Closed when the session ends.
 	Messages() <-chan *Message
+
+	// Events is the other relay: what arrived on the grid's event
+	// queue rather than on the circuit.
+	//
+	// Both are needed, and neither replaces the other.  A message
+	// marked UDPDeprecated in the template stops arriving on the
+	// circuit and starts arriving here, so a session reading only
+	// Messages waits for ever on confirmations the simulator has
+	// already sent -- which is exactly what ScriptRunning did before
+	// this existed.
+	//
+	// A nil channel is a valid answer from a backend that has no
+	// queue to offer, and blocks rather than ending the session.
+	Events() <-chan *QueueEvent
 
 	// Done closes when the session ends, and Err says why.
 	Done() <-chan struct{}

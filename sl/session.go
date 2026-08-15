@@ -11,6 +11,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -96,6 +97,12 @@ type Session struct {
 	alerts     []string
 	propsFns   []func(*Properties)
 
+	// scriptFns are who is waiting for a ScriptRunningReply.  See
+	// ScriptRunning: the state is not remembered, because a script
+	// starts and stops on its own and a remembered answer would be a
+	// claim about the past dressed as one about now.
+	scriptFns []func(object, item msg.UUID, running bool)
+
 	// Permission requests seen, answered or not, in arrival order.
 	asked []*Permission
 
@@ -111,8 +118,8 @@ type Session struct {
 
 	// lures are the teleport offers waiting for an answer, by whoever
 	// offered.  See lure.go.
-	lures map[msg.UUID]*Lure
-	pickers   map[msg.UUID]chan []Found
+	lures   map[msg.UUID]*Lure
+	pickers map[msg.UUID]chan []Found
 
 	// Dialogs a script has put up, in arrival order.  Kept rather
 	// than only delivered, because a dialog that appears the instant
@@ -298,14 +305,20 @@ func (w *Session) Alerts() []string {
 	return append([]string(nil), w.alerts...)
 }
 
-// read is the one goroutine that consumes the relay.
+// read is the one goroutine that consumes both relays.
 //
 // It also owns the chat subscriptions, which is why it selects rather
 // than ranging: adding and removing one has to happen here, in between
 // deliveries, so that nothing can be closed while a delivery is in
 // flight.
+//
+// The circuit is what says the session is over.  The event queue ending
+// is not the same thing -- a simulator answers 404 to a queue it has
+// finished with while the circuit carries on -- so a closed event
+// channel only stops this listening to it.
 func (w *Session) read(ctx context.Context) {
 	msgs := w.b.Messages()
+	events := w.b.Events()
 	defer func() {
 		close(w.readDone)
 		w.closeChat()
@@ -334,8 +347,101 @@ func (w *Session) read(ctx context.Context) {
 				continue
 			}
 			w.handle(m, v)
+
+		case e, ok := <-events:
+			if !ok {
+				// A nil channel blocks for ever, which is what stops
+				// this arm spinning on a queue that has finished.
+				events = nil
+				continue
+			}
+			w.event(e)
 		}
 	}
+}
+
+// eventHandlers are the event queue messages this session acts on.
+//
+// A map keyed by name, because that is all an event has: it arrives
+// under its message name with its blocks as LLSD and no number to look
+// up, which is how the viewer treats one too -- lleventpoll.cpp:110
+// hands the name and the body to the same dispatch the circuit's
+// messages go through.
+//
+// The map is so that wanting one more is a line here rather than
+// another arm of a switch nobody can find.  Nothing is registered
+// speculatively: an event with no reader is an event whose shape nobody
+// has checked, and this package has been wrong about the shape of one
+// already -- see scriptRunningEvent.
+var eventHandlers = map[string]func(*Session, map[string]any){
+	"ScriptRunningReply": (*Session).scriptRunningEvent,
+}
+
+// event dispatches one entry from the event queue.
+//
+// Anything unknown is dropped without complaint.  A hosted session is
+// handed whatever the daemon was asked to relay, which is a longer list
+// than this reads, and a direct one is handed the whole queue.
+func (w *Session) event(e *QueueEvent) {
+	fn := eventHandlers[e.Name]
+	if fn == nil {
+		return
+	}
+	m, err := e.Decode()
+	if err != nil || m == nil {
+		return
+	}
+	fn(w, m)
+}
+
+// scriptRunningEvent reads a ScriptRunningReply that came over the event
+// queue, which on Second Life is the only place it comes from.
+//
+// See ScriptRunning for the measurement and for what the body looks
+// like.  Two things about it are load bearing here.  The Script block
+// arrives as an ARRAY of maps where the template declares a single
+// block, so it is read as one and a lone map is accepted too, since
+// which of them a grid sends is not this package's to insist on.  And
+// the maps carry fields the template has never had -- Mono, and Luau and
+// LuauLanguage, which Agni had added by August 2026 -- so only the three
+// fields wanted are read and everything else goes past unlooked at.
+//
+// A block whose ids will not parse is passed on as zeroes rather than
+// guarded against, because zero cannot match: a question is asked about
+// an item that came out of an object's contents, and the answer is
+// matched on both ids.  A guard here would be a branch nothing could
+// ever reach through.
+func (w *Session) scriptRunningEvent(m map[string]any) {
+	for _, b := range llsdBlocks(m, "Script") {
+		w.scriptRunning(
+			parseUUIDOrZero(llsd.String(b, "ObjectID")),
+			parseUUIDOrZero(llsd.String(b, "ItemID")),
+			llsd.Bool(b, "Running"))
+	}
+}
+
+// llsdBlocks is one named block of an event body, as the list of maps a
+// message block always is.
+//
+// Liberal on purpose.  A block declared Single in the template still
+// arrives inside an array here, and a block declared Multiple obviously
+// does, so the array is the shape to expect -- but a grid that sent the
+// bare map would otherwise be silently read as nothing at all, which is
+// the failure that looks exactly like a message never arriving.
+func llsdBlocks(m map[string]any, name string) []map[string]any {
+	switch v := m[name].(type) {
+	case []any:
+		out := make([]map[string]any, 0, len(v))
+		for _, e := range v {
+			if b := llsd.Map(e); b != nil {
+				out = append(out, b)
+			}
+		}
+		return out
+	case map[string]any:
+		return []map[string]any{v}
+	}
+	return nil
 }
 
 func (w *Session) handle(raw *client.Message, v msg.Message) {
@@ -404,6 +510,12 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			}
 		}
 
+	case *msg.ScriptRunningReply:
+		// Kept for a grid that still answers on the circuit.  Second
+		// Life does not -- see ScriptRunning -- and the arm that does
+		// the work there is scriptRunningEvent.
+		w.scriptRunning(t.Script.ObjectID, t.Script.ItemID, t.Script.Running)
+
 	case *msg.UpdateCreateInventoryItem:
 		w.mu.Lock()
 		for i := range t.InventoryData {
@@ -444,6 +556,25 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.mu.Unlock()
 		if fn != nil {
 			fn(s)
+		}
+	}
+}
+
+// scriptRunning hands an answer about a script to whoever asked for it,
+// whichever relay it came in on.
+//
+// Delivered rather than stored.  Whether a script is running is a fact
+// with a moment attached -- a script stops itself, and another client
+// may start one -- so the answer belongs to the question it answers and
+// to nothing else.
+func (w *Session) scriptRunning(object, item msg.UUID, running bool) {
+	w.mu.Lock()
+	fns := make([]func(msg.UUID, msg.UUID, bool), len(w.scriptFns))
+	copy(fns, w.scriptFns)
+	w.mu.Unlock()
+	for _, fn := range fns {
+		if fn != nil {
+			fn(object, item, running)
 		}
 	}
 }

@@ -26,6 +26,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -83,6 +84,7 @@ type fakeGrid struct {
 	info *sl.Info
 
 	msgs     chan *sl.Message
+	events   chan *sl.QueueEvent
 	done     chan struct{}
 	doneOnce sync.Once
 
@@ -158,9 +160,10 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 			Channel:       "slsh test 1.0",
 			Caps:          []string{"SimulatorFeatures", "ViewerAsset", "LSLSyntax"},
 		},
-		msgs: make(chan *sl.Message),
-		done: make(chan struct{}),
-		caps: map[string]string{},
+		msgs:   make(chan *sl.Message),
+		events: make(chan *sl.QueueEvent),
+		done:   make(chan struct{}),
+		caps:   map[string]string{},
 		presence: &sl.Presence{
 			Position:     msg.Vector3{X: 128, Y: 128, Z: 25},
 			LookAt:       msg.Vector3{X: 1},
@@ -474,6 +477,22 @@ func (f *fakeGrid) Relay(t *testing.T, m msg.Message) {
 	}
 }
 
+// RelayEvent hands one entry to the session as though it had come off
+// the grid's event queue.
+//
+// The body is LLSD text rather than a struct, because an event has no
+// template and no generated type: what a test asserts against has to be
+// the shape a live grid sent.  See sl.ScriptRunning for the one captured
+// on Agni.
+func (f *fakeGrid) RelayEvent(t *testing.T, name, body string) {
+	t.Helper()
+	select {
+	case f.events <- &sl.QueueEvent{Name: name, Body: []byte(body), At: time.Now()}:
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing read the event relay: is a session attached to this backend?")
+	}
+}
+
 // AnswerNames makes the fake reply to UUIDNameRequest the way a
 // simulator does.  Several calls ask for names and then wait for them,
 // so a backend that never answers turns each into a three second pause.
@@ -625,6 +644,157 @@ func (f *fakeGrid) AnswerLinking(t *testing.T) {
 	}
 }
 
+// heldItem is one thing inside a fake object and, when it is a script,
+// what it will do about being started or stopped.
+type heldItem struct {
+	Name string
+	ID   msg.UUID
+
+	// Kind is the word the contents file uses for it, and "" is
+	// "lsltext", a script.  Anything else is there to be filtered out.
+	Kind string
+
+	Running bool
+
+	// Deaf answers no question at all, which is the region that has
+	// taken the request and said nothing about it since.  Stuck answers
+	// every question and never changes state, which is a script the
+	// simulator will not start.
+	Deaf, Stuck bool
+}
+
+// AnswerInside makes the fake serve what an object holds, and answer for
+// the scripts inside it.
+//
+// Three protocols in one helper, because start and stop need all three
+// and a fake that spoke any two of them would leave the commands waiting
+// on the third: an object's contents arrive as a filename and then a
+// file over xfer, SetScriptRunning is answered by nothing whatever, and
+// the only way to learn whether it took is to ask with GetScriptRunning.
+//
+// The running state is kept here and changed by the request rather than
+// echoed back at the asker, because that difference is what the commands
+// are about: a script that was already running has to answer the
+// question asked before anything is sent, and a stuck one has to go on
+// answering with the state it began in however often it is told
+// otherwise.
+func (f *fakeGrid) AnswerInside(t *testing.T, task msg.UUID, held ...*heldItem) {
+	var mu sync.Mutex
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		switch r := m.(type) {
+		case *msg.RequestTaskInventory:
+			f.Relay(t, replyTaskInventory(task, "inventory_37c9.tmp"))
+
+		case *msg.RequestXfer:
+			mu.Lock()
+			file := taskInventoryFile(task, held)
+			mu.Unlock()
+			f.Relay(t, xferPacket(r.XferID.ID, 0, true, file))
+
+		case *msg.SetScriptRunning:
+			mu.Lock()
+			for _, h := range held {
+				if h.ID == r.Script.ItemID && !h.Stuck {
+					h.Running = r.Script.Running
+				}
+			}
+			mu.Unlock()
+
+		case *msg.GetScriptRunning:
+			mu.Lock()
+			say := ""
+			for _, h := range held {
+				if h.ID != r.Script.ItemID || h.Deaf {
+					continue
+				}
+				say = scriptRunningBody(r.Script.ObjectID, h.ID, h.Running)
+			}
+			mu.Unlock()
+			if say != "" {
+				// The event queue and not the circuit, which is what
+				// Agni does: measured there, nothing came back on the
+				// circuit at all.  See sl.ScriptRunning.
+				f.RelayEvent(t, "ScriptRunningReply", say)
+			}
+		}
+	}
+}
+
+// scriptRunningBody is what Agni answers GetScriptRunning with, on the
+// event queue.
+//
+// Copied from a capture rather than composed, because its shape is the
+// whole reason the answer goes over the queue at all: the Script block
+// arrives as an ARRAY where the template declares a single block, and
+// the map carries Mono and -- since some time before August 2026 -- Luau
+// and LuauLanguage, none of which the template has.  The unknown ones
+// are here to be ignored; a decoder that choked on them would fail on
+// the next field Linden Lab adds.
+func scriptRunningBody(object, item msg.UUID, running bool) string {
+	n := 0
+	if running {
+		n = 1
+	}
+	return fmt.Sprintf(`<llsd><map><key>Script</key><array><map>`+
+		`<key>Running</key><boolean>%d</boolean>`+
+		`<key>ItemID</key><string>%s</string>`+
+		`<key>Luau</key><boolean>0</boolean><key>LuauLanguage</key><boolean>0</boolean>`+
+		`<key>Mono</key><boolean>1</boolean>`+
+		`<key>ObjectID</key><string>%s</string>`+
+		`</map></array></map></llsd>`, n, item, object)
+}
+
+// replyTaskInventory is the simulator naming the file it has written an
+// object's contents to.
+func replyTaskInventory(task msg.UUID, filename string) *msg.ReplyTaskInventory {
+	m := &msg.ReplyTaskInventory{}
+	m.InventoryData.TaskID = task
+	m.InventoryData.Serial = 1
+	m.InventoryData.Filename = append([]byte(filename), 0)
+	return m
+}
+
+// xferPacket is one packet of a file arriving over the xfer protocol.
+// The first carries a four byte length prefix that is not part of the
+// file, and the last is marked in the top bit of its number.
+func xferPacket(id uint64, seq uint32, last bool, data []byte) *msg.SendXferPacket {
+	m := &msg.SendXferPacket{}
+	m.XferID.ID = id
+	m.XferID.Packet = seq
+	if last {
+		m.XferID.Packet |= 0x80000000
+	}
+	if seq == 0 {
+		m.DataPacket.Data = binary.LittleEndian.AppendUint32(nil, uint32(len(data)))
+	}
+	m.DataPacket.Data = append(m.DataPacket.Data, data...)
+	return m
+}
+
+// taskInventoryFile is the contents file for an object: the nested
+// braces sl.TaskInventory parses, with only the fields anything here
+// reads filled in.  A name ends with a bar, which is how the format
+// marks the end of a value that may have spaces in it.
+func taskInventoryFile(task msg.UUID, held []*heldItem) []byte {
+	var b strings.Builder
+	for _, h := range held {
+		kind := h.Kind
+		if kind == "" {
+			kind = "lsltext"
+		}
+		fmt.Fprintf(&b, "\tinv_item\t0\n\t{\n")
+		fmt.Fprintf(&b, "\t\titem_id\t%s\n", h.ID)
+		fmt.Fprintf(&b, "\t\tparent_id\t%s\n", task)
+		fmt.Fprintf(&b, "\t\ttype\t%s\n", kind)
+		fmt.Fprintf(&b, "\t\tinv_type\t%s\n", kind)
+		fmt.Fprintf(&b, "\t\tname\t%s|\n", h.Name)
+		fmt.Fprintf(&b, "\t}\n")
+	}
+	return []byte(b.String())
+}
+
 // ------------------------------------------------------------- backend
 
 func (f *fakeGrid) Info() *sl.Info { return f.info }
@@ -645,9 +815,10 @@ func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error
 	return nil
 }
 
-func (f *fakeGrid) Messages() <-chan *sl.Message { return f.msgs }
-func (f *fakeGrid) Done() <-chan struct{}        { return f.done }
-func (f *fakeGrid) Err() error                   { return nil }
+func (f *fakeGrid) Messages() <-chan *sl.Message  { return f.msgs }
+func (f *fakeGrid) Events() <-chan *sl.QueueEvent { return f.events }
+func (f *fakeGrid) Done() <-chan struct{}         { return f.done }
+func (f *fakeGrid) Err() error                    { return nil }
 
 func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Presence, error) {
 	f.mu.Lock()
@@ -765,6 +936,7 @@ func (f *fakeGrid) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapRes
 func (f *fakeGrid) Close() error {
 	f.doneOnce.Do(func() {
 		close(f.msgs)
+		close(f.events)
 		close(f.done)
 	})
 	return nil

@@ -1,17 +1,44 @@
 package main
 
+// What is inside a rezzed object, over a grid that is not there.
+//
+// Listing, renaming and deleting inside an object are still not
+// exercised here.  What is, since AnswerInside taught the fake to speak
+// an object's contents, is start and stop -- which need the contents and
+// two more messages besides, and which make a claim about the world that
+// nothing replies to.  That claim is the point of most of what follows:
+// SetScriptRunning is answered by silence, so every "started" printed
+// here has to have been established by asking, and a command that
+// printed it for having asked would pass no test in this file.
+
 import (
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/quark-idlemind/slgo/msg"
 )
 
-// The operations themselves -- listing, renaming and deleting inside an
-// object -- are not exercised here: they go through RequestTaskInventory
-// and the xfer protocol, which this package's fake grid does not speak.
-// They were run against Agni instead.  What is checked here is the
-// wiring: that --in takes the path it is given to the right place, and
-// that a command asked for something impossible says so rather than
-// doing something else.
+// The prims and the scripts these tests work with.
+var (
+	aBox      = msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
+	aGreeter  = msg.MustParseUUID("72a47e57-7e57-c0de-61cf-35aab6d46a79")
+	aListener = msg.MustParseUUID("46357e57-7e57-c0de-aacc-8812f9835614")
+	aWatcher  = msg.MustParseUUID("285f7e57-7e57-c0de-16a0-5a60c5ef8785")
+	aReadme   = msg.MustParseUUID("f5b27e57-7e57-c0de-d46a-2fe30bdca05e")
+)
+
+// aBoxHolding puts one object in the region and fills it, which is the
+// setup every test below wants.
+func aBoxHolding(t *testing.T, held ...*heldItem) *testShell {
+	t.Helper()
+	x := newTestShell(t)
+	standing(x, aPrim(aBox, 21, "Box1", 0))
+	x.grid.AnswerInside(t, aBox, held...)
+	return x
+}
 
 // TestLsInTakesNoPath: an object holds no folders, so a path alongside
 // --in is a person expecting something this cannot do.
@@ -44,4 +71,276 @@ func TestNewRefusesAKindItCannotMake(t *testing.T) {
 	if !strings.Contains(got, "notecard or script") {
 		t.Errorf("new --kind texture printed %q", got)
 	}
+}
+
+// TestStartingEveryScriptSaysWhatBecameOfEachOne.
+//
+// "start Box1" is one request per script and they need not agree with
+// each other: one may be stopped, one may be running already, and which
+// was which is the whole of what somebody needs to know next.  So a line
+// each, and "already" is a line rather than an error -- a script running
+// when somebody asked for it to run is in the state they wanted, and
+// "started" would be a claim about something that did not happen.
+//
+// The notecard is here to be left alone.  Starting one is not a thing,
+// so an object's contents are filtered down to its scripts before any of
+// this begins.
+func TestStartingEveryScriptSaysWhatBecameOfEachOne(t *testing.T) {
+	x := aBoxHolding(t,
+		&heldItem{Name: "greeter", ID: aGreeter},
+		&heldItem{Name: "listener", ID: aListener, Running: true},
+		&heldItem{Name: "readme", ID: aReadme, Kind: "notecard"},
+	)
+
+	got := x.do(t, "start Box1")
+	if !strings.Contains(got, "started    greeter") {
+		t.Errorf("the script that was stopped printed %q", got)
+	}
+	if !strings.Contains(got, "already    listener") {
+		t.Errorf("the script that was already running printed %q", got)
+	}
+	if strings.Contains(got, "readme") {
+		t.Errorf("start touched the notecard: %q", got)
+	}
+
+	// Nothing was sent for the script that was already running.  The
+	// request would have been harmless and the report would not: it is
+	// the answer to the question asked first that makes "already"
+	// something this knows rather than something it guessed.
+	sent := sentOfShell[*msg.SetScriptRunning](x)
+	if len(sent) != 1 {
+		t.Fatalf("%d scripts were told to start, want the one that was not running", len(sent))
+	}
+	if sent[0].Script.ItemID != aGreeter || !sent[0].Script.Running {
+		t.Errorf("the request was %+v", sent[0].Script)
+	}
+	if sent[0].Script.ObjectID != aBox {
+		t.Errorf("the request named object %s", sent[0].Script.ObjectID)
+	}
+}
+
+// TestStopAsksForTheOtherStateAndSaysSo: stop is start with the state
+// reversed, and a stop that sent Running true would leave every script
+// in the object running and report that it had stopped them.
+func TestStopAsksForTheOtherStateAndSaysSo(t *testing.T) {
+	x := aBoxHolding(t,
+		&heldItem{Name: "greeter", ID: aGreeter, Running: true},
+		&heldItem{Name: "listener", ID: aListener},
+	)
+
+	got := x.do(t, "stop Box1")
+	if !strings.Contains(got, "stopped    greeter") {
+		t.Errorf("the script that was running printed %q", got)
+	}
+	if !strings.Contains(got, "already    listener") {
+		t.Errorf("the script that was already stopped printed %q", got)
+	}
+
+	sent := sentOfShell[*msg.SetScriptRunning](x)
+	if len(sent) != 1 || sent[0].Script.ItemID != aGreeter || sent[0].Script.Running {
+		t.Errorf("stop sent %+v", sent)
+	}
+}
+
+// TestOneScriptThatWillNotMoveDoesNotStopTheOthers.
+//
+// A script the simulator will not start is reported as exactly that --
+// the request went out and the object has not agreed -- and the scripts
+// after it are still asked.  Stopping at the first failure would leave
+// somebody with one line of output about one script and no idea whether
+// the other two moved, which is the state this is written to prevent.
+func TestOneScriptThatWillNotMoveDoesNotStopTheOthers(t *testing.T) {
+	x := aBoxHolding(t,
+		&heldItem{Name: "greeter", ID: aGreeter, Stuck: true},
+		&heldItem{Name: "listener", ID: aListener},
+		&heldItem{Name: "watcher", ID: aWatcher},
+	)
+
+	got := x.do(t, "start -w 1 Box1")
+	if !strings.Contains(got, "no answer  greeter") {
+		t.Errorf("the script that would not start printed %q", got)
+	}
+	for _, want := range []string{"started    listener", "started    watcher"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the scripts after it printed %q, want %q among them", got, want)
+		}
+	}
+	if !strings.Contains(got, "1 of 3 scripts") {
+		t.Errorf("start should fail saying how many did not agree, printed %q", got)
+	}
+
+	// The request did go out for it, which is why the report says the
+	// object has not agreed rather than that the start was refused.
+	var told bool
+	for _, m := range sentOfShell[*msg.SetScriptRunning](x) {
+		told = told || m.Script.ItemID == aGreeter
+	}
+	if !told {
+		t.Error("nothing was ever sent for the script reported as unanswered")
+	}
+}
+
+// TestAScriptWhoseAnswerNeverArrivesIsNotReportedAsStopped.
+//
+// A region can take the request and say nothing about it, on either
+// relay, and that has to read as not knowing.  Reporting it as a start
+// that happened would be the claim the confirmation exists to prevent,
+// and reporting it as a refusal would blame the region for something it
+// may well have done: measured on Agni, a stop whose confirmation never
+// reached this client had in fact stopped the script.
+func TestAScriptWhoseAnswerNeverArrivesIsNotReportedAsStopped(t *testing.T) {
+	x := aBoxHolding(t, &heldItem{Name: "greeter", ID: aGreeter, Deaf: true})
+
+	got := x.do(t, "start -w 1 Box1")
+	if !strings.Contains(got, "no answer  greeter") {
+		t.Errorf("a script nothing answered about printed %q", got)
+	}
+	if strings.Contains(got, "started") || strings.Contains(got, "already") {
+		t.Errorf("a script nothing answered about was reported as changed: %q", got)
+	}
+	if !strings.Contains(got, "the request went out") {
+		t.Errorf("the failure should say the request went out, printed %q", got)
+	}
+}
+
+// TestStartingOneNamedScriptLeavesTheRestAlone: naming a script is the
+// whole reason the argument is there, and a command that started them
+// all anyway would be worse than one that refused the name.
+func TestStartingOneNamedScriptLeavesTheRestAlone(t *testing.T) {
+	x := aBoxHolding(t,
+		&heldItem{Name: "greeter", ID: aGreeter},
+		&heldItem{Name: "listener", ID: aListener},
+	)
+
+	got := x.do(t, "start Box1 listener")
+	if !strings.Contains(got, "started    listener") {
+		t.Errorf("start of one script printed %q", got)
+	}
+	if strings.Contains(got, "greeter") {
+		t.Errorf("start of one script touched the other: %q", got)
+	}
+	sent := sentOfShell[*msg.SetScriptRunning](x)
+	if len(sent) != 1 || sent[0].Script.ItemID != aListener {
+		t.Errorf("start of one script sent %+v", sent)
+	}
+}
+
+// TestStartRefusesWhatIsNotThere.
+//
+// A name that is not in the object is a typo or a script somebody
+// deleted, and either way the answer is what the object does hold.  An
+// object with no scripts at all gets its own sentence: "no script called
+// x" would read as a denial that the box has any, which is the thing
+// most worth saying when it is true.
+func TestStartRefusesWhatIsNotThere(t *testing.T) {
+	x := aBoxHolding(t,
+		&heldItem{Name: "greeter", ID: aGreeter},
+	)
+	got := x.do(t, "start Box1 footstool")
+	if !strings.Contains(got, `no script called "footstool"`) {
+		t.Errorf("start of a script that is not there printed %q", got)
+	}
+	if !strings.Contains(got, "ls --in") {
+		t.Errorf("the refusal should say how to see what is there, printed %q", got)
+	}
+	if got := sentOfShell[*msg.SetScriptRunning](x); len(got) != 0 {
+		t.Errorf("a refused start still sent %d requests", len(got))
+	}
+
+	x = aBoxHolding(t, &heldItem{Name: "readme", ID: aReadme, Kind: "notecard"})
+	if got := x.do(t, "start Box1"); !strings.Contains(got, "holds no scripts") {
+		t.Errorf("start of an object with nothing to start printed %q", got)
+	}
+
+	// The object itself is the region's answer rather than this
+	// command's, and comes back as it stands.
+	x = newTestShell(t)
+	if got := x.do(t, "stop footstool"); !strings.Contains(got, `nothing called "footstool"`) {
+		t.Errorf("stop of an object that is not there printed %q", got)
+	}
+	for _, line := range []string{"start", "stop"} {
+		if got := x.do(t, line); !strings.Contains(got, "usage: "+line) {
+			t.Errorf("%q with no object printed %q", line, got)
+		}
+		if got := x.do(t, line+" --help"); !strings.Contains(got, "Usage:") {
+			t.Errorf("%s --help printed %q", line, got)
+		}
+	}
+}
+
+// TestNewInsideAnObjectCompilesItAndSaysItIsRunning.
+//
+// Copying a script into an object leaves it there and does not start it;
+// InstallScript uploads the source through UpdateScriptTask, which
+// compiles it inside the object and starts it.  That is a different
+// outcome from "new" on its own, so the output says so -- somebody who
+// read "hello.lsl 97c27e57" and walked away would have no idea whether
+// anything was running.
+func TestNewInsideAnObjectCompilesItAndSaysItIsRunning(t *testing.T) {
+	x := aBoxHolding(t, &heldItem{Name: "greeter", ID: aGreeter})
+	serveScriptUpload(t, x, `<llsd><map><key>state</key><string>complete</string>`+
+		`<key>compiled</key><boolean>1</boolean></map></llsd>`)
+
+	got := x.do(t, "new --in Box1 greeter")
+	if !strings.Contains(got, "greeter is in Box1 and running") {
+		t.Errorf("new --in printed %q", got)
+	}
+
+	// A script that will not compile is in there and is not running,
+	// and the compiler's complaint is the whole answer to why.
+	x = aBoxHolding(t, &heldItem{Name: "greeter", ID: aGreeter})
+	serveScriptUpload(t, x, `<llsd><map><key>state</key><string>complete</string>`+
+		`<key>compiled</key><boolean>0</boolean>`+
+		`<key>errors</key><array><string>(1,1) : ERROR : Syntax error</string></array>`+
+		`</map></llsd>`)
+	got = x.do(t, "new --in Box1 greeter")
+	if !strings.Contains(got, "did not compile") || !strings.Contains(got, "Syntax error") {
+		t.Errorf("new --in of something that will not compile printed %q", got)
+	}
+	if strings.Contains(got, "running") {
+		t.Errorf("a script that did not compile was reported as running: %q", got)
+	}
+}
+
+// TestNewInsideAnObjectRefusesANotecardByName.
+//
+// Nothing in the sl package writes a notecard into a prim, so this is a
+// call that does not exist rather than a kind that is not a kind -- and
+// "--kind is notecard or script" would be a lie, since notecard is
+// exactly what was asked for and is what "new" makes everywhere else.
+// The refusal says which two commands do it in two steps instead.
+func TestNewInsideAnObjectRefusesANotecardByName(t *testing.T) {
+	x := aBoxHolding(t)
+	got := x.do(t, "new --in Box1 --kind notecard readme")
+	if !strings.Contains(got, "nothing here can write a notecard inside an object") {
+		t.Errorf("new --in --kind notecard printed %q", got)
+	}
+	if !strings.Contains(got, "drop") {
+		t.Errorf("the refusal should say what to do instead, printed %q", got)
+	}
+
+	// An object holds no folders, so a path names nothing it could go
+	// into; ls --in refuses one for the same reason.
+	if got := x.do(t, "new --in Box1 Scripts/greeter"); !strings.Contains(got, "holds no folders") {
+		t.Errorf("new --in with a path printed %q", got)
+	}
+	if got := x.do(t, "new --in Box1 --kind texture greeter"); !strings.Contains(got, "notecard or script") {
+		t.Errorf("new --in with a kind that is neither printed %q", got)
+	}
+}
+
+// serveScriptUpload answers UpdateScriptTask, which is the two step
+// upload every capability uses: the first request names somewhere to put
+// the bytes, and what comes back from THERE is the compiler's verdict.
+func serveScriptUpload(t *testing.T, x *testShell, verdict string) {
+	t.Helper()
+	dest := x.grid.ServeCap(t, "slgo test script upload", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		io.WriteString(w, verdict)
+	})
+	x.grid.ServeCap(t, "UpdateScriptTask", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		fmt.Fprintf(w, `<llsd><map><key>state</key><string>upload</string>`+
+			`<key>uploader</key><string>%s/upload</string></map></llsd>`, dest.URL)
+	})
 }

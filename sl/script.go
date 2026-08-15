@@ -295,6 +295,141 @@ func (w *Session) SetScriptRunning(ctx context.Context, o *Object, item msg.UUID
 	return w.Send(ctx, m)
 }
 
+// ScriptRunning asks whether a script inside an object is running, and
+// waits for the object to say.
+//
+// This is the other half of SetScriptRunning, which is answered by
+// nothing at all: the request goes out and the simulator says neither
+// yes nor no, so a caller that reported a start had happened would be
+// reporting that it had asked.  Asking afterwards is the only way to
+// know, and it is the viewer's way too -- its script editor sends this
+// the moment it opens a script in a prim, to decide whether the
+// "Running" box is ticked.
+//
+// The timeout is how long to wait for the reply.  Reaching it is not a
+// refusal and must not be reported as one: the question went unanswered,
+// which leaves the script's state exactly as unknown as it was before.
+//
+// # The request is not deprecated, and the reply is
+//
+// GetScriptRunning is an ordinary template message, sent over the
+// circuit, and the viewer still sends it that way rather than through
+// any capability: it packs one and sends it reliably to the region's
+// host at llpreviewscript.cpp:2875-2881, and it has no entry of its own
+// in message.xml, so it takes the server default flavour -- "template",
+// at message.xml:4-10 -- which is what chooses the template builder over
+// the LLSD one (message.cpp:3427-3452).
+//
+// The REPLY has moved off the circuit.  ScriptRunningReply is marked
+// UDPDeprecated in the template (message_template.msg:5510) and
+// message.xml gives it the llsd flavour, under a heading that says
+// "UDPDeprecated Messages" (message.xml:590-597).  The tell is a field:
+// the template's Mono is commented out with "Added to LLSD message"
+// (message_template.msg:5516), and the viewer reads Mono by name when a
+// reply arrives (llpreviewscript.cpp:3328).  It could not do that off
+// the circuit, since the template reader kills the viewer outright when
+// asked for a variable its template does not have
+// (lltemplatemessagereader.cpp:98-103).  So the reply the viewer
+// actually handles is the LLSD one off the event queue, dispatched by
+// name into the same handler either transport reaches
+// (lleventpoll.cpp:110, llstartup.cpp:3857).
+//
+// So the question goes out on the circuit -- there is no capability for
+// it in the viewer's list or in this grid's -- and the answer is watched
+// for on both relays.  Which of them it arrives on is the simulator's
+// choice and not this call's, and a grid that still answers on the
+// circuit is handled by the type switch in Session.handle.
+//
+// # What Agni actually does, measured
+//
+// Second Life answers only on the event queue.  Measured on Agni as hobb,
+// in Pelmar Reach, with a second client attached to the same slgod watching
+// both relays: a script was installed and started in a rezzed box, "stop"
+// was asked for, and NOTHING arrived on the circuit.  Every reply came
+// over the queue, in this shape:
+//
+//	<llsd><map><key>Script</key><array><map>
+//	  <key>Running</key><boolean>1</boolean>
+//	  <key>ItemID</key><string>d1a87e57-...</string>
+//	  <key>Luau</key><boolean>0</boolean>
+//	  <key>LuauLanguage</key><boolean>0</boolean>
+//	  <key>Mono</key><boolean>1</boolean>
+//	  <key>ObjectID</key><string>785f7e57-...</string>
+//	</map></array></map></llsd>
+//
+// Two things in that are worth writing down.  The Script block arrives
+// as an ARRAY of maps although the template declares it Single, so it is
+// read as a list; and the map carries fields the template has never had
+// -- Mono, which the template at least mentions, and Luau and
+// LuauLanguage, which it does not and which Agni had grown by August
+// 2026.  Only ObjectID, ItemID and Running are read, so the next field
+// Linden Lab adds goes past unlooked at.  See Session.scriptRunningEvent.
+//
+// The first reply said Running 1 and every later one said 0: the stop
+// had worked all along and only the confirmation was deaf.  That is the
+// reason this waits for a real answer rather than reporting the request
+// as the outcome -- and the reason the timeout below still exists.  A
+// question can go unanswered, and when it does the caller must be told
+// the object has not agreed, never that it has.
+func (w *Session) ScriptRunning(ctx context.Context, o *Object, item msg.UUID, timeout time.Duration) (bool, error) {
+	if o == nil {
+		return false, fmt.Errorf("sl: ScriptRunning needs an object")
+	}
+	if timeout == 0 {
+		timeout = 15 * time.Second
+	}
+
+	// Listening before asking, for the same reason Run does: the reply
+	// is a message like any other and a listener opened after the
+	// request has already missed it.
+	got := make(chan bool, 1)
+	stop := w.onScriptRunning(func(object, it msg.UUID, running bool) {
+		// Both ids, because one object may hold several scripts and one
+		// script's name may be in several objects.
+		if object != o.ID || it != item {
+			return
+		}
+		select {
+		case got <- running:
+		default:
+		}
+	})
+	defer stop()
+
+	m := &msg.GetScriptRunning{}
+	m.Script.ObjectID = o.ID
+	m.Script.ItemID = item
+	if err := w.Send(ctx, m); err != nil {
+		return false, err
+	}
+
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case running := <-got:
+		return running, nil
+	case <-t.C:
+		return false, fmt.Errorf("%w: whether %s in %s is running", ErrTimeout, item, o)
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+}
+
+// onScriptRunning is the internal subscription ScriptRunning waits on.
+func (w *Session) onScriptRunning(fn func(object, item msg.UUID, running bool)) (stop func()) {
+	w.mu.Lock()
+	w.scriptFns = append(w.scriptFns, fn)
+	i := len(w.scriptFns) - 1
+	w.mu.Unlock()
+	return func() {
+		w.mu.Lock()
+		if i < len(w.scriptFns) {
+			w.scriptFns[i] = nil
+		}
+		w.mu.Unlock()
+	}
+}
+
 // InstallScript puts a script into an object and starts it, returning
 // what the compiler said.
 //

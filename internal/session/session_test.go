@@ -344,8 +344,14 @@ func (f *fakeGrid) Sent() []msg.Message {
 }
 
 func (f *fakeGrid) Messages() <-chan *sl.Message { return f.msgs }
-func (f *fakeGrid) Done() <-chan struct{}        { return f.done }
-func (f *fakeGrid) Err() error                   { return nil }
+
+// Events is nothing.  A nil channel blocks for ever, which is what a
+// backend with no event queue behind it honestly offers: the session
+// reads it alongside the circuit and must not take silence there for
+// the session ending.
+func (f *fakeGrid) Events() <-chan *sl.QueueEvent { return nil }
+func (f *fakeGrid) Done() <-chan struct{}         { return f.done }
+func (f *fakeGrid) Err() error                    { return nil }
 
 func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Presence, error) {
 	f.mu.Lock()

@@ -79,7 +79,7 @@ var groups = []group{
 		brief: "where this avatar is and what is around it",
 		members: []string{"where", "tp", "who", "look", "objects", "worn", "wear",
 			"detach", "place", "dump", "rez", "reform", "touch", "texture",
-			"take", "bring", "perms", "drop", "link", "unlink"},
+			"take", "bring", "perms", "drop", "start", "stop", "link", "unlink"},
 	},
 	{
 		name:  "giving",

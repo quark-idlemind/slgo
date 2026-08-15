@@ -20,14 +20,59 @@ package main
 // in, and that has its own command: "give" offers an item to a person
 // and waits for them to accept, while dropping one into your own object
 // happens at once and asks nobody.
+//
+// # Why start and stop are verbs rather than two more --in flags
+//
+// The flag works above because each of those three is an operation the
+// shell already has somewhere else, and --in only says which container
+// to perform it in.  Starting a script has no counterpart: a script in
+// inventory does not run and cannot be made to, because an object is the
+// only place a script runs at all.  So there is nothing for a flag to
+// choose between.  "run --in Box1 hello.lsl" would be a flag with one
+// legal value, which is a verb spelled at length -- and it would put the
+// object, the one argument that is never optional, behind a flag.
+//
+// So the object is an argument, in the place drop puts it:
+//
+//	start Box1 hello.lsl   start one script
+//	start Box1             start every script in the object
+//	stop Box1 hello.lsl
+//
+// and, as in drop, the first word is the object and everything after it
+// is one name.  An object whose name has a space in it is quoted; a
+// script whose name has one need not be.
+//
+// The names are the plainest words for it.  The viewer has no verb to
+// borrow -- its script editor shows a "Running" tick box, and "running"
+// and "unrunning" are not a pair of commands -- and "run" is worse than
+// it looks, because sl.Run means putting a script in, compiling it and
+// waiting for what it says, which is a different and much longer act
+// than flipping a switch on one that is already there.
+//
+// # Why "new --in" is a flag after all
+//
+// It goes the other way round because making a script IS an operation
+// that exists in both places, and --in says which.  What differs is what
+// happens afterwards: a script made in inventory sits there, and a
+// script put into an object is compiled and started by the same call
+// that puts it there (see sl.InstallScript), so the two report different
+// things and the command says which of them it did.
+//
+// A notecard cannot be made inside an object at all -- nothing here can
+// write one into a prim -- so --in without --kind means a script, since
+// a script is the only thing it could mean, and --kind notecard with
+// --in is refused rather than quietly made in inventory instead.
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -38,17 +83,30 @@ var insideCommands = map[string]*command{
 		run:   cmdDrop,
 	},
 	"new": {
-		usage: "new [--kind notecard|script] [--from FILE] PATH",
-		brief: "make a notecard or a script in inventory, empty or from a file",
+		usage: "new [--in OBJECT] [--kind KIND] [--from FILE] PATH",
+		brief: "make a notecard or a script; --in puts a script in an object and starts it",
 		run:   cmdNew,
+	},
+	"start": {
+		usage: "start OBJECT [SCRIPT]",
+		brief: "start a script inside a rezzed object, or every script in it",
+		run:   cmdStart,
+	},
+	"stop": {
+		usage: "stop OBJECT [SCRIPT]",
+		brief: "stop a script inside a rezzed object, or every script in it",
+		run:   cmdStop,
 	},
 }
 
 // insideObject resolves what --in named, and says so in the error when
 // it is not there: a mistyped object name and an empty object are very
 // different answers to "why did nothing happen".
-func (sh *Shell) insideObject(ctx context.Context, what string) (*sl.Object, error) {
-	o, err := sh.objectNamed(ctx, strings.TrimSpace(what), 30)
+//
+// wait is seconds to let the region describe itself, and zero is the
+// thirty waitFor gives everything else that looks something up.
+func (sh *Shell) insideObject(ctx context.Context, what string, wait int) (*sl.Object, error) {
+	o, err := sh.objectNamed(ctx, strings.TrimSpace(what), wait)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +116,7 @@ func (sh *Shell) insideObject(ctx context.Context, what string) (*sl.Object, err
 // listInside prints an object's contents, in the columns ls uses: name
 // last, so that a name with spaces in it cannot run into anything.
 func (sh *Shell) listInside(ctx context.Context, out io.Writer, what string, long bool) error {
-	o, err := sh.insideObject(ctx, what)
+	o, err := sh.insideObject(ctx, what, 0)
 	if err != nil {
 		return err
 	}
@@ -88,7 +146,7 @@ func (sh *Shell) listInside(ctx context.Context, out io.Writer, what string, lon
 // Anything wanted back has to come from the original in inventory,
 // which is why this says what it deleted rather than reporting a count.
 func (sh *Shell) removeInside(ctx context.Context, out io.Writer, what string, names []string) error {
-	o, err := sh.insideObject(ctx, what)
+	o, err := sh.insideObject(ctx, what, 0)
 	if err != nil {
 		return err
 	}
@@ -107,7 +165,7 @@ func (sh *Shell) removeInside(ctx context.Context, out io.Writer, what string, n
 
 // renameInside renames one item inside an object.
 func (sh *Shell) renameInside(ctx context.Context, out io.Writer, what string, from, to string) error {
-	o, err := sh.insideObject(ctx, what)
+	o, err := sh.insideObject(ctx, what, 0)
 	if err != nil {
 		return err
 	}
@@ -132,7 +190,7 @@ func cmdDrop(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return fmt.Errorf("usage: drop OBJECT PATH")
 	}
 
-	obj, err := sh.insideObject(ctx, args[0])
+	obj, err := sh.insideObject(ctx, args[0], 0)
 	if err != nil {
 		return err
 	}
@@ -158,8 +216,10 @@ func cmdDrop(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 }
 
 type newFlags struct {
-	Kind string `getopt:"--kind=KIND   notecard or script [notecard]"`
+	In   string `getopt:"--in=OBJECT   make it inside a rezzed object, where a script is compiled and started"`
+	Kind string `getopt:"--kind=KIND   notecard or script [notecard, or script with --in]"`
 	From string `getopt:"--from=FILE   its contents; without this it is empty"`
+	Wait int    `getopt:"--wait -w=SECONDS  how long to let the region describe itself [30]"`
 	Help bool   `getopt:"--help -h     show what this command takes"`
 }
 
@@ -176,7 +236,7 @@ func cmdNew(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: new [--kind notecard|script] [--from FILE] PATH")
+		return fmt.Errorf("usage: new [--in OBJECT] [--kind notecard|script] [--from FILE] PATH")
 	}
 
 	body := ""
@@ -193,6 +253,10 @@ func cmdNew(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if len(names) == 0 {
 		return fmt.Errorf("new: no name given")
 	}
+	if o.In != "" {
+		return sh.newInside(ctx, out, o, names, body)
+	}
+
 	name := names[len(names)-1]
 	parent, err := sh.folderAt(ctx, names[:len(names)-1])
 	if err != nil {
@@ -219,7 +283,7 @@ func cmdNew(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		// because a script with no source is a compile error waiting
 		// to happen the moment anything runs it.
 		if body == "" {
-			body = "default\n{\n    state_entry()\n    {\n    }\n}\n"
+			body = emptyScript
 		}
 		it, res, err := sh.s.NewScript(ctx, name, body)
 		if err != nil {
@@ -236,4 +300,274 @@ func cmdNew(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return fmt.Errorf("--kind is notecard or script, not %q", o.Kind)
 	}
 	return nil
+}
+
+// emptyScript is what a script with no source is given, because a script
+// with none at all is a compile error waiting to happen.
+const emptyScript = "default\n{\n    state_entry()\n    {\n    }\n}\n"
+
+// newInside makes a script inside a rezzed object.
+//
+// InstallScript is what does it, and it does more than the inventory
+// half: copying a script into an object leaves it there without
+// compiling it, so the source is uploaded through UpdateScriptTask,
+// which compiles it inside the object and starts it.  That is why this
+// says the script is running and "new" on its own does not -- the
+// difference is real and belongs in the output rather than in the
+// manual.
+//
+// Reusing a name replaces that script rather than adding another, which
+// is InstallScript's doing and worth knowing before it happens: an
+// object renames every copy it is given, so a command that added would
+// leave "hello.lsl" and "hello.lsl 1" both running.
+func (sh *Shell) newInside(ctx context.Context, out io.Writer, o newFlags, names []string, body string) error {
+	switch strings.ToLower(o.Kind) {
+	case "", "script":
+	case "notecard":
+		// Not a generic complaint about the kind: the kind is a real one
+		// and what is missing is a call.  A notecard inside a prim is
+		// written through the object's own inventory rather than the
+		// agent's, and nothing in the sl package does that -- so saying
+		// "notecard or script" here would be a lie about what --kind
+		// takes.
+		return fmt.Errorf("nothing here can write a notecard inside an object, only a script; " +
+			"make the notecard in inventory with \"new\" and put it in with \"drop\"")
+	default:
+		return fmt.Errorf("--kind is notecard or script, not %q", o.Kind)
+	}
+
+	// An object holds no folders, so a path names nothing it could go
+	// into; ls --in refuses one for the same reason.
+	if len(names) > 1 {
+		return fmt.Errorf("an object holds no folders, so new --in takes a name and not a path")
+	}
+	name := names[0]
+	if body == "" {
+		body = emptyScript
+	}
+
+	obj, err := sh.insideObject(ctx, o.In, o.Wait)
+	if err != nil {
+		return err
+	}
+	res, err := sh.s.InstallScript(ctx, obj, name, body, true)
+	if err != nil {
+		return err
+	}
+	if res != nil && !res.Compiled {
+		// The script is in there and is not running: nothing compiled,
+		// so there is nothing to start.  The compiler reports the first
+		// error and stops, so this is one line and worth printing whole.
+		fmt.Fprintf(out, "%s is in %s and did not compile\n", name, obj.Name)
+		for _, e := range res.Errors {
+			fmt.Fprintf(out, "  %s\n", e)
+		}
+		return nil
+	}
+	fmt.Fprintf(out, "%s is in %s and running\n", name, obj.Name)
+	return nil
+}
+
+type runningFlags struct {
+	Wait int  `getopt:"--wait -w=SECONDS  how long to give the object to agree it changed [15]"`
+	Help bool `getopt:"--help -h          show what this command takes"`
+}
+
+func cmdStart(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	return sh.setRunning(ctx, out, args, true)
+}
+
+func cmdStop(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	return sh.setRunning(ctx, out, args, false)
+}
+
+// setRunning is start and stop, which differ only in the state they ask
+// for and in the word they print.
+//
+// # What it prints, and why every script gets a line
+//
+// One line per script, in the columns a listing uses, with the name
+// last:
+//
+//	started    hello.lsl
+//	already    listener
+//	no answer  watcher
+//
+// A single count would not do.  "start Box1" on an object of six is one
+// request per script and they do not have to agree with each other: a
+// script may already be running, and a script may not answer at all, and
+// which of the six that was is the whole of what somebody needs to know
+// next.  So nothing stops at the first script that will not change --
+// every one of them is asked, and every one of them gets its line --
+// and the count of those that did not agree is what the command finally
+// fails with, once the listing that explains it is already on the
+// screen.
+//
+// "already" is a line and not an error.  A script that is running when
+// somebody asks for it to run is in the state they wanted; saying
+// "started" would be a claim about something that did not happen, and
+// failing would be a complaint about getting what was asked for.
+func (sh *Shell) setRunning(ctx context.Context, out io.Writer, args []string, running bool) error {
+	verb, changed := "stop", "stopped"
+	if running {
+		verb, changed = "start", "started"
+	}
+
+	var o runningFlags
+	args, done, err := subOptions(verb, "OBJECT [SCRIPT]", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) < 1 {
+		return fmt.Errorf("usage: %s OBJECT [SCRIPT]", verb)
+	}
+
+	obj, err := sh.insideObject(ctx, args[0], 0)
+	if err != nil {
+		return err
+	}
+	scripts, err := sh.scriptsIn(ctx, obj, strings.Join(args[1:], " "))
+	if err != nil {
+		return err
+	}
+
+	stuck := 0
+	for _, it := range scripts {
+		word, agreed, err := sh.changeScript(ctx, obj, it, running, o.Wait, changed)
+		if err != nil {
+			// The circuit rather than the script: nothing after this
+			// would go out either, so stopping says so once instead of
+			// once per script.  What has already been decided is
+			// printed above and stands.
+			return err
+		}
+		if !agreed {
+			stuck++
+		}
+		fmt.Fprintf(out, "%-10s %s\n", word, it.Name)
+	}
+
+	if stuck > 0 {
+		// One script is named and several are counted, because "1 of 1
+		// scripts has not agreed" is a sentence about arithmetic and the
+		// name is what somebody would go and look at.
+		what := fmt.Sprintf("%d of %d scripts %s", stuck, len(scripts), plural(stuck, "has", "have"))
+		if len(scripts) == 1 {
+			what = fmt.Sprintf("%q has", scripts[0].Name)
+		}
+		return fmt.Errorf("%s not agreed to %s; the request went out for each of them, "+
+			"so it may yet have happened -- %q again says what the object thinks now",
+			what, verb, verb+" "+args[0])
+	}
+	return nil
+}
+
+// scriptsIn is the scripts inside an object: the one named, or all of
+// them when nothing is named.
+//
+// "lsltext" is what the contents file calls a script, and is what tells
+// one from the notecards and textures beside it; sl.RemoveScripts
+// filters on the same word.  Starting a notecard is not a thing, so a
+// command given no name asks about scripts rather than about everything
+// the object holds.
+func (sh *Shell) scriptsIn(ctx context.Context, o *sl.Object, name string) ([]sl.TaskItem, error) {
+	items, err := sh.s.TaskInventory(ctx, o)
+	if err != nil {
+		return nil, err
+	}
+	var scripts []sl.TaskItem
+	for _, it := range items {
+		if it.Type != "lsltext" {
+			continue
+		}
+		if name != "" && it.Name != name {
+			continue
+		}
+		scripts = append(scripts, it)
+	}
+	switch {
+	case len(scripts) > 0:
+		return scripts, nil
+	case name == "":
+		return nil, fmt.Errorf("%s holds no scripts; \"ls --in\" lists what it does hold", o.Name)
+	}
+	return nil, fmt.Errorf("%s holds no script called %q; \"ls --in\" lists what it does hold", o.Name, name)
+}
+
+// scriptAsk is how long one GetScriptRunning is given to be answered.
+//
+// Short, and short on purpose: what is waited for is the script reaching
+// a state rather than any one reply, so a question nobody answered is
+// followed by another question instead of by a longer wait.  It is also
+// the smallest --wait that means anything, since a question already in
+// flight is not abandoned when the deadline passes.
+const scriptAsk = 3 * time.Second
+
+// changeScript starts or stops one script and says what happened to it.
+//
+// The state is read BEFORE anything is sent, so that a script already in
+// the state asked for is reported as that rather than as a change that
+// did not happen.  A question that goes unanswered does not stop the
+// request: the answer arrives on the event queue, which is a long poll
+// and may be between rounds -- see sl.ScriptRunning -- so treating one
+// slow answer as a verdict would turn a working start into a refusal.
+//
+// The error is for the circuit going away, which is not this script's
+// business and ends the command.  A script that will not change state is
+// not an error here: it is a word in the listing, so that the scripts
+// after it are still asked.
+func (sh *Shell) changeScript(ctx context.Context, o *sl.Object, it sl.TaskItem,
+	running bool, wait int, changed string) (word string, agreed bool, err error) {
+
+	if was, err := sh.s.ScriptRunning(ctx, o, it.ID, scriptAsk); err == nil && was == running {
+		return "already", true, nil
+	}
+	if err := sh.s.SetScriptRunning(ctx, o, it.ID, running); err != nil {
+		return "", false, err
+	}
+	ok, err := sh.confirmRunning(ctx, o, it.ID, running, wait)
+	if err != nil {
+		return "", false, err
+	}
+	if !ok {
+		return "no answer", false, nil
+	}
+	return changed, true, nil
+}
+
+// confirmRunning waits until the object agrees a script is running, or
+// is not, and says whether it ever did.
+//
+// Nothing replies to SetScriptRunning, so this is the whole of what
+// stands between the command and a sentence it has not established --
+// the mistake TeleportLocal's doc comment was written about.  Not
+// agreeing is not the same as failing: the request went out and may yet
+// take effect, which is what the caller prints, so this reports it as
+// false rather than as an error.
+//
+// The error is the context's alone.  A question that fails or goes
+// unanswered is only this one question, and the answer to that is to ask
+// again until the deadline.
+func (sh *Shell) confirmRunning(ctx context.Context, o *sl.Object, item msg.UUID, want bool, seconds int) (bool, error) {
+	if seconds <= 0 {
+		seconds = 15
+	}
+	deadline := time.Now().Add(time.Duration(seconds) * time.Second)
+	for {
+		running, err := sh.s.ScriptRunning(ctx, o, item, scriptAsk)
+		if err == nil && running == want {
+			return true, nil
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return false, err
+		}
+		if time.Now().After(deadline) {
+			return false, nil
+		}
+		select {
+		case <-time.After(300 * time.Millisecond):
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+	}
 }

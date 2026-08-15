@@ -70,7 +70,11 @@ type fakeBackend struct {
 	info *Info
 
 	// msgs is the relay, and is unbuffered on purpose; see Relay.
+	// events is the other relay, and is unbuffered for the same
+	// reason: what arrives on the grid's event queue rather than on
+	// the circuit.  See RelayEvent.
 	msgs     chan *Message
+	events   chan *QueueEvent
 	done     chan struct{}
 	doneOnce sync.Once
 	err      error
@@ -141,10 +145,11 @@ func newFake(t *testing.T) *fakeBackend {
 			InventoryRoot: testInvRoot,
 			Channel:       "slgo test 1.0",
 		},
-		msgs:  make(chan *Message),
-		done:  make(chan struct{}),
-		locks: map[string]bool{},
-		caps:  map[string]string{},
+		msgs:   make(chan *Message),
+		events: make(chan *QueueEvent),
+		done:   make(chan struct{}),
+		locks:  map[string]bool{},
+		caps:   map[string]string{},
 		presence: &Presence{
 			Position: msg.Vector3{X: 128, Y: 128, Z: 25},
 			LookAt:   msg.Vector3{X: 1},
@@ -226,6 +231,29 @@ func (f *fakeBackend) Relay(t *testing.T, m msg.Message) {
 func (f *fakeBackend) RelayRaw(t *testing.T, raw *Message) {
 	t.Helper()
 	f.put(t, raw)
+	f.put(t, &Message{ID: barrierID, Name: "slgo relay barrier", At: time.Now()})
+}
+
+// RelayEvent hands one entry to the session as though it had come off
+// the grid's event queue, and returns once the reader has finished with
+// it.
+//
+// The body is written as LLSD text rather than built from a struct,
+// because that is the only thing an event ever is: there is no template
+// for it and no generated type, so what a test asserts against has to be
+// the shape a live grid actually sent.  See sl.ScriptRunning for the one
+// that was captured on Agni.
+//
+// The barrier is Relay's, for Relay's reason: the reader takes one thing
+// at a time, whichever relay it came from, so its taking the message
+// after means it has finished with the event.
+func (f *fakeBackend) RelayEvent(t *testing.T, name, body string) {
+	t.Helper()
+	select {
+	case f.events <- &QueueEvent{Name: name, Body: []byte(body), At: time.Now()}:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("nothing read the event relay: is a session attached to this backend?")
+	}
 	f.put(t, &Message{ID: barrierID, Name: "slgo relay barrier", At: time.Now()})
 }
 
@@ -559,8 +587,9 @@ func (f *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) er
 	return nil
 }
 
-func (f *fakeBackend) Messages() <-chan *Message { return f.msgs }
-func (f *fakeBackend) Done() <-chan struct{}     { return f.done }
+func (f *fakeBackend) Messages() <-chan *Message  { return f.msgs }
+func (f *fakeBackend) Events() <-chan *QueueEvent { return f.events }
+func (f *fakeBackend) Done() <-chan struct{}      { return f.done }
 
 func (f *fakeBackend) Err() error {
 	f.mu.Lock()
@@ -724,9 +753,18 @@ func (f *fakeBackend) DoCap(ctx context.Context, r agent.CapRequest) (*agent.Cap
 	return &agent.CapResponse{Status: resp.StatusCode, Body: body}, nil
 }
 
+// EndEvents closes the event relay and nothing else, which is a
+// simulator that has finished with a queue while the circuit carries on
+// -- it answers 404 to the next poll and the session is not over.
+func (f *fakeBackend) EndEvents() { close(f.events) }
+
 // Close ends the session, which is what stops the reader and closes
 // every subscription.  Closing twice is not an error, since the test
 // cleanup and the test itself may both do it.
+//
+// The event relay is left open on purpose.  The circuit ending is what
+// ends a session, so closing events here would say nothing extra and
+// would race EndEvents, which a test may have called already.
 func (f *fakeBackend) Close() error {
 	f.doneOnce.Do(func() {
 		close(f.msgs)

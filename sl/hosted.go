@@ -116,9 +116,20 @@ func (h *Hosted) Sessions(ctx context.Context) ([]string, error) {
 func (h *Hosted) Info() *Info               { return h.info }
 func (h *Hosted) Messages() <-chan *Message { return h.conn.Messages() }
 func (h *Hosted) Done() <-chan struct{}     { return h.conn.Done() }
-func (h *Hosted) Err() error                { return h.conn.Err() }
-func (h *Hosted) Close() error              { return h.conn.Close() }
-func (h *Hosted) HasCap(name string) bool   { return h.conn.HasCap(name) }
+
+// Events is the grid's event queue as slgod fans it out.
+//
+// The daemon is the only thing polling the queue -- the sequence has to
+// be acknowledged in order and a second poller would take events the
+// first never sees -- and it hands each one to every attached client
+// that asked for it by name.  So reading this does not starve a viewer
+// attached to the same avatar; it is a copy of what the daemon already
+// received.
+func (h *Hosted) Events() <-chan *QueueEvent { return h.conn.Events() }
+
+func (h *Hosted) Err() error              { return h.conn.Err() }
+func (h *Hosted) Close() error            { return h.conn.Close() }
+func (h *Hosted) HasCap(name string) bool { return h.conn.HasCap(name) }
 
 // Lock takes a lock through slgod, which holds it for as long as this
 // client's stream lasts.

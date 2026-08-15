@@ -94,10 +94,14 @@ func (b *fakeBackend) Info() *sl.Info {
 
 func (b *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) error { return nil }
 func (b *fakeBackend) Messages() <-chan *sl.Message                                 { return b.messages }
-func (b *fakeBackend) Done() <-chan struct{}                                        { return b.done }
-func (b *fakeBackend) Err() error                                                   { return nil }
-func (b *fakeBackend) Close() error                                                 { return nil }
-func (b *fakeBackend) HasCap(name string) bool                                      { return name == "InventoryAPIv3" }
+
+// Events is nothing: this fake exists so a real terminal can be driven
+// over a real pty, and nothing it drives reads the event queue.
+func (b *fakeBackend) Events() <-chan *sl.QueueEvent { return nil }
+func (b *fakeBackend) Done() <-chan struct{}         { return b.done }
+func (b *fakeBackend) Err() error                    { return nil }
+func (b *fakeBackend) Close() error                  { return nil }
+func (b *fakeBackend) HasCap(name string) bool       { return name == "InventoryAPIv3" }
 
 func (b *fakeBackend) Presence(ctx context.Context, d float32) (*sl.Presence, error) {
 	return &sl.Presence{Region: "Nowhere"}, nil

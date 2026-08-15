@@ -232,8 +232,12 @@ func (f *fakeGrid) Info() *sl.Info {
 func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error { return nil }
 
 func (f *fakeGrid) Messages() <-chan *sl.Message { return f.msgs }
-func (f *fakeGrid) Done() <-chan struct{}        { return f.done }
-func (f *fakeGrid) Err() error                   { return nil }
+
+// Events is nothing: nothing here reads the event queue, and a nil
+// channel blocks rather than reading as a queue that has ended.
+func (f *fakeGrid) Events() <-chan *sl.QueueEvent { return nil }
+func (f *fakeGrid) Done() <-chan struct{}         { return f.done }
+func (f *fakeGrid) Err() error                    { return nil }
 
 func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Presence, error) {
 	return &sl.Presence{Region: "Test Region"}, nil

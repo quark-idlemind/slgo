@@ -963,3 +963,382 @@ func TestRemoveScriptsSettlesBeforeSayingItIsDone(t *testing.T) {
 		t.Errorf("RemoveScripts counted %d removed", n)
 	}
 }
+
+// scriptRunningReply is the simulator answering GetScriptRunning.
+func scriptRunningReply(object, item msg.UUID, running bool) *msg.ScriptRunningReply {
+	m := &msg.ScriptRunningReply{}
+	m.Script.ObjectID = object
+	m.Script.ItemID = item
+	m.Script.Running = running
+	return m
+}
+
+// running is what ScriptRunning answered, for a call driven from
+// another goroutine: the whole point of these tests is what the call
+// does before it returns, which a wait for its answer cannot see.
+type running struct {
+	is  bool
+	err error
+}
+
+func askRunning(w *Session, ctx context.Context, o *Object, item msg.UUID, timeout time.Duration) chan running {
+	got := make(chan running, 1)
+	go func() {
+		is, err := w.ScriptRunning(ctx, o, item, timeout)
+		got <- running{is, err}
+	}()
+	return got
+}
+
+// TestScriptRunningAnswersOnlyForTheScriptItWasAskedAbout.
+//
+// Nothing replies to SetScriptRunning, so a caller that printed "it is
+// running" would be printing that it had asked.  This is the question
+// that turns that into an answer, and both ids are in it: one object
+// holds several scripts, and one script's name is in several objects, so
+// a reply matched on either id alone would answer about something else
+// entirely -- and answering early is worse than not answering, because
+// the wrong answer looks like a confirmation.
+func TestScriptRunningAnswersOnlyForTheScriptItWasAskedAbout(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
+	q := waitSent[*msg.GetScriptRunning](t, f)
+	if q.Script.ObjectID != thePrim || q.Script.ItemID != theChild {
+		t.Errorf("the question named %+v", q.Script)
+	}
+
+	// The same script in another object, then another script in this
+	// one.  Neither is what was asked.
+	f.Relay(t, scriptRunningReply(theOther, theChild, true))
+	f.Relay(t, scriptRunningReply(thePrim, theOther, true))
+	select {
+	case a := <-got:
+		t.Fatalf("ScriptRunning answered %v (%v) from a reply about another script", a.is, a.err)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	f.Relay(t, scriptRunningReply(thePrim, theChild, true))
+	select {
+	case a := <-got:
+		if a.err != nil {
+			t.Fatalf("ScriptRunning: %v", a.err)
+		}
+		if !a.is {
+			t.Error("ScriptRunning said the script was stopped, and the object said it was running")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("ScriptRunning never answered, though the object had said it was running")
+	}
+}
+
+// TestScriptRunningBelievesAStoppedScriptToo.
+//
+// "Not running" is an answer and not the absence of one, which is the
+// whole difference between a script that will not start and a reply this
+// client never heard.  A query that treated false as nothing would leave
+// stop with no way ever to confirm itself.
+func TestScriptRunningBelievesAStoppedScriptToo(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
+	waitSent[*msg.GetScriptRunning](t, f)
+	f.Relay(t, scriptRunningReply(thePrim, theChild, false))
+
+	select {
+	case a := <-got:
+		if a.err != nil {
+			t.Fatalf("ScriptRunning: %v", a.err)
+		}
+		if a.is {
+			t.Error("ScriptRunning said the script was running, and the object said it was stopped")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("ScriptRunning treated a stopped script as no answer at all")
+	}
+}
+
+// TestScriptRunningReportsNotKnowingRatherThanGuessing.
+//
+// Every way this can fail has to be distinguishable from "the script is
+// stopped", because the caller prints one of them and acts on the other.
+// The reply is marked UDPDeprecated in the message template, so a region
+// that has moved it to the event queue would leave this unanswered for
+// ever -- and reporting that as a stopped script would have somebody
+// told their script is not running when nothing here can say either way.
+func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
+	o := &Object{ID: thePrim, Local: 77}
+
+	t.Run("nothing answered", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		is, err := w.ScriptRunning(context.Background(), o, theChild, 200*time.Millisecond)
+		if !errors.Is(err, ErrTimeout) {
+			t.Errorf("ScriptRunning = %v, %v; want a timeout", is, err)
+		}
+		if is {
+			t.Error("a question nobody answered came back as a running script")
+		}
+		// The question still went out, which is what says the silence
+		// is the region's and not this call's.
+		if got := sentOf[*msg.GetScriptRunning](f); len(got) != 1 {
+			t.Errorf("%d questions went out", len(got))
+		}
+	})
+
+	t.Run("the question never went", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		f.FailSends(errors.New("the circuit is gone"))
+		if is, err := w.ScriptRunning(context.Background(), o, theChild, 30*time.Second); err == nil {
+			t.Errorf("ScriptRunning = %v with the circuit gone", is)
+		}
+		if got := f.Sent(); len(got) != 0 {
+			t.Errorf("a question that failed to send was recorded as %s", f.describe())
+		}
+	})
+
+	t.Run("the caller gave up waiting", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		got := askRunning(w, ctx, o, theChild, 30*time.Second)
+		waitSent[*msg.GetScriptRunning](t, f)
+		cancel()
+		select {
+		case a := <-got:
+			if !errors.Is(a.err, context.Canceled) {
+				t.Errorf("ScriptRunning = %v, %v; want the context's reason", a.is, a.err)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("ScriptRunning waited out its own timeout after the context was cancelled")
+		}
+	})
+
+	t.Run("no object to ask about", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		if _, err := w.ScriptRunning(context.Background(), nil, theChild, time.Second); err == nil {
+			t.Error("ScriptRunning asked about no object at all")
+		}
+		if got := f.Sent(); len(got) != 0 {
+			t.Errorf("a question about nothing still sent %s", f.describe())
+		}
+	})
+}
+
+// TestScriptRunningListensBeforeItAsks.
+//
+// The reply is a message like any other and can be handled before Send
+// has returned, since the region is not obliged to wait for anything.  A
+// call that subscribed after asking would miss exactly the fast answer
+// and report a timeout for a script the object had already described.
+func TestScriptRunningListensBeforeItAsks(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	f.mu.Lock()
+	f.onSend = func(m msg.Message) {
+		if q, ok := m.(*msg.GetScriptRunning); ok {
+			f.Relay(t, scriptRunningReply(q.Script.ObjectID, q.Script.ItemID, true))
+		}
+	}
+	f.mu.Unlock()
+
+	select {
+	case a := <-askRunning(w, context.Background(), o, theChild, 5*time.Second):
+		if a.err != nil || !a.is {
+			t.Errorf("ScriptRunning = %v, %v; the object answered while the question was still being sent", a.is, a.err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("ScriptRunning never answered")
+	}
+}
+
+// agniScriptRunning is the answer Second Life sends, as it was captured
+// on Agni: the Script block as an ARRAY where the template declares a
+// single block, and fields the template has never had.
+//
+// Written out as text rather than built from the generated type, because
+// the generated type cannot express any of what makes this worth
+// testing.  Running is "1" or "0".
+func agniScriptRunning(object, item msg.UUID, running string) string {
+	return `<llsd><map><key>Script</key><array><map>` +
+		`<key>Running</key><boolean>` + running + `</boolean>` +
+		`<key>ItemID</key><string>` + item.String() + `</string>` +
+		`<key>Luau</key><boolean>0</boolean><key>LuauLanguage</key><boolean>0</boolean>` +
+		`<key>Mono</key><boolean>1</boolean>` +
+		`<key>ObjectID</key><string>` + object.String() + `</string>` +
+		`</map></array></map></llsd>`
+}
+
+// TestTheAnswerAboutAScriptComesOffTheEventQueue.
+//
+// This is the shape a live grid sends and the only place it sends it.
+// Measured on Agni: a stop was asked for with a second client watching
+// both relays, nothing at all came back on the circuit, and every reply
+// arrived on the queue in the body this builds.
+//
+// Three things about that body are load bearing.  The Script block is an
+// ARRAY although the template declares it Single, so a decoder reading
+// the value as one map finds nothing.  The map carries Mono, Luau and
+// LuauLanguage, which the template does not have, so a decoder that
+// insisted on the template's fields would reject the whole thing -- and
+// a decoder that reached for the wrong key would answer with Luau's
+// false for a script that is running.  And the ids are strings rather
+// than the uuid element, which is what llsd renders either as.
+func TestTheAnswerAboutAScriptComesOffTheEventQueue(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
+	waitSent[*msg.GetScriptRunning](t, f)
+	f.RelayEvent(t, "ScriptRunningReply", agniScriptRunning(thePrim, theChild, "1"))
+
+	select {
+	case a := <-got:
+		if a.err != nil {
+			t.Fatalf("ScriptRunning: %v", a.err)
+		}
+		if !a.is {
+			t.Error("the queue said the script was running and ScriptRunning did not")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("ScriptRunning never heard the answer the event queue carried")
+	}
+
+	// And the other way, since a stop is confirmed by exactly this
+	// answer with one character changed.
+	w, f = newFakeSession(t)
+	got = askRunning(w, context.Background(), o, theChild, 30*time.Second)
+	waitSent[*msg.GetScriptRunning](t, f)
+	f.RelayEvent(t, "ScriptRunningReply", agniScriptRunning(thePrim, theChild, "0"))
+	select {
+	case a := <-got:
+		if a.err != nil || a.is {
+			t.Errorf("ScriptRunning = %v, %v; the queue said the script was stopped", a.is, a.err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("ScriptRunning never heard the answer the event queue carried")
+	}
+}
+
+// TestAnEventQueueAnswerIsSiftedTheWayAMessageIs.
+//
+// The queue carries everything the grid has to say and hands it over by
+// name, so what would be a message number on the circuit is a string
+// here and nothing else stands between this session and somebody else's
+// business.  An answer about another script, an event of another name,
+// and a body that is not the shape at all all have to go past without
+// answering the question that was asked -- and without bringing the
+// reader down, since the reader is the whole session.
+func TestAnEventQueueAnswerIsSiftedTheWayAMessageIs(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
+	waitSent[*msg.GetScriptRunning](t, f)
+
+	for _, wrong := range []struct {
+		what string
+		name string
+		body string
+	}{
+		{"another script in this object", "ScriptRunningReply", agniScriptRunning(thePrim, theOther, "1")},
+		{"this script in another object", "ScriptRunningReply", agniScriptRunning(theOther, theChild, "1")},
+		{"an event nothing here reads", "TeleportFinish", agniScriptRunning(thePrim, theChild, "1")},
+		{"a body with no block in it", "ScriptRunningReply", `<llsd><map/></llsd>`},
+		{"a block with no ids in it", "ScriptRunningReply",
+			`<llsd><map><key>Script</key><array><map><key>Running</key><boolean>1</boolean></map></array></map></llsd>`},
+		{"a body that is not LLSD at all", "ScriptRunningReply", `not llsd`},
+	} {
+		f.RelayEvent(t, wrong.name, wrong.body)
+		select {
+		case a := <-got:
+			t.Fatalf("%s answered the question: %v, %v", wrong.what, a.is, a.err)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	// The reader survived all of it and still answers the real thing,
+	// which is what says the sifting drops rather than derails.
+	f.RelayEvent(t, "ScriptRunningReply", agniScriptRunning(thePrim, theChild, "1"))
+	select {
+	case a := <-got:
+		if a.err != nil || !a.is {
+			t.Errorf("ScriptRunning = %v, %v after the bodies it had to ignore", a.is, a.err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the reader stopped reading the queue after a body it could not use")
+	}
+}
+
+// TestABlockThatIsNotAnArrayIsStillABlock.
+//
+// Agni sends the array and the template says Single, so the two disagree
+// and this package cannot insist on either.  A grid that sent the bare
+// map -- an older simulator, another grid entirely -- would otherwise be
+// read as an answer with no blocks in it, which is the failure that
+// looks exactly like the message never arriving.
+func TestABlockThatIsNotAnArrayIsStillABlock(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
+	waitSent[*msg.GetScriptRunning](t, f)
+	f.RelayEvent(t, "ScriptRunningReply", `<llsd><map><key>Script</key><map>`+
+		`<key>ObjectID</key><string>`+thePrim.String()+`</string>`+
+		`<key>ItemID</key><string>`+theChild.String()+`</string>`+
+		`<key>Running</key><boolean>1</boolean></map></map></llsd>`)
+
+	select {
+	case a := <-got:
+		if a.err != nil || !a.is {
+			t.Errorf("ScriptRunning = %v, %v for a block sent as one map", a.is, a.err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("a block sent as one map rather than an array of one was read as no block at all")
+	}
+}
+
+// TestTheEventQueueEndingIsNotTheSessionEnding.
+//
+// A simulator answers 404 to a queue it has finished with, and the
+// circuit carries on regardless -- so a reader that treated the queue
+// closing as the session closing would take down chat, every waiter and
+// every subscription because a long poll had been retired.
+func TestTheEventQueueEndingIsNotTheSessionEnding(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+
+	f.EndEvents()
+
+	// The circuit still works, which is the whole claim.  A grid that
+	// answers there is answered from Session.handle rather than from
+	// the queue, so this exercises the other arm as well.
+	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
+	waitSent[*msg.GetScriptRunning](t, f)
+	f.Relay(t, scriptRunningReply(thePrim, theChild, true))
+	select {
+	case a := <-got:
+		if a.err != nil || !a.is {
+			t.Errorf("ScriptRunning = %v, %v with the event queue closed", a.is, a.err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the reader stopped when the event queue closed, and the circuit was still up")
+	}
+	select {
+	case <-w.readDone:
+		t.Error("the session ended because its event queue did")
+	default:
+	}
+}
