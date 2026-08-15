@@ -31,6 +31,7 @@ var Subscriptions = []string{
 	"SendXferPacket", "AbortXfer", "TransferInfo", "TransferPacket",
 	"ChatFromSimulator", "AlertMessage",
 	"ImprovedInstantMessage", "UUIDNameReply", "AvatarPickerReply",
+	"AvatarPropertiesReply", "AvatarInterestsReply", "AvatarGroupsReply",
 	"OnlineNotification", "OfflineNotification",
 	"ScriptRunningReply", "ScriptQuestion", "ScriptDialog",
 	"TeleportLocal", "TeleportFailed", "TeleportFinish",
@@ -96,6 +97,12 @@ type Session struct {
 	collectors []*collector
 	alerts     []string
 	propsFns   []func(*Properties)
+
+	// profileFns are who is waiting for the three replies an
+	// AvatarPropertiesRequest is answered with.  See profile.go: they
+	// are called with mu held, which is what makes a profile assembled
+	// from three messages safe for the caller to read.
+	profileFns []func(*avatarReply)
 
 	// scriptFns are who is waiting for a ScriptRunningReply.  See
 	// ScriptRunning: the state is not remembered, because a script
@@ -553,6 +560,19 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 
 	case *msg.AvatarPickerReply:
 		w.pickerReply(t)
+
+	// The three answers to one AvatarPropertiesRequest.  Which avatar
+	// each is about is in its own AgentData block rather than in
+	// anything the request left behind, so that is what a waiter sifts
+	// them by; see profile.go.
+	case *msg.AvatarPropertiesReply:
+		w.avatarReplyTo(&avatarReply{Avatar: t.AgentData.AvatarID, Props: t})
+
+	case *msg.AvatarInterestsReply:
+		w.avatarReplyTo(&avatarReply{Avatar: t.AgentData.AvatarID, Interests: t})
+
+	case *msg.AvatarGroupsReply:
+		w.avatarReplyTo(&avatarReply{Avatar: t.AgentData.AvatarID, Groups: t})
 
 	case *msg.AlertMessage:
 		s := trimNul(t.AlertData.Message)

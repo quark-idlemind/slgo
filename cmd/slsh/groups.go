@@ -69,7 +69,7 @@ var groups = []group{
 		name:  "people",
 		brief: "finding people, talking to them, friendship",
 		members: []string{
-			"who", "lookup", "friends",
+			"who", "lookup", "profile", "friends",
 			"offer", "offers", "accept", "decline",
 			"chat", "say", "im", "talk",
 		},

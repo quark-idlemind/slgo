@@ -47,6 +47,11 @@ var socialCommands = map[string]*command{
 		brief: "search the grid for people by part of a name",
 		run:   cmdLookup,
 	},
+	"profile": {
+		usage: "profile WHO",
+		brief: "what somebody's profile says: born, payment, partner, about, groups",
+		run:   cmdProfile,
+	},
 	"offer": {
 		usage: "offer WHO [TEXT]",
 		brief: "offer friendship",
@@ -382,6 +387,27 @@ func cmdLookup(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		fmt.Fprintln(out, "nobody found")
 		return nil
 	}
+	sh.printFound(out, found)
+	return nil
+}
+
+// printFound prints what a name search turned up and makes it the last
+// listing, so that a number typed afterwards means one of these lines.
+//
+// This is lookup's listing, shared rather than copied: whoOrSearch shows
+// the same rows for the same reason -- somebody has to pick one of them
+// -- and two spellings of the same list would be two lists as far as
+// anybody reading the screen is concerned.  The display name is shown
+// only where it differs from the name, since a second column repeating
+// the first is a column of noise.
+//
+// A full page says so.  The search answers with at most sl.LookupLimit
+// rows and nothing in the reply says how many it left behind, so one
+// letter typed into it comes back looking exactly like the whole of the
+// grid -- and a person scrolling a hundred names for one that is not
+// there deserves to know the search stopped counting rather than that
+// their friend has left.
+func (sh *Shell) printFound(out io.Writer, found []sl.Found) {
 	listed := make([]person, 0, len(found))
 	for i, f := range found {
 		line := fmt.Sprintf("%2d  %-32s", i+1, f.Name)
@@ -392,7 +418,246 @@ func cmdLookup(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		listed = append(listed, person{ID: f.ID, Name: f.Name})
 	}
 	sh.setListed(listed)
+	if len(found) >= sl.LookupLimit {
+		fmt.Fprintf(out, "that is as many as one search answers with, "+
+			"so there are probably more; try more of the name\n")
+	}
+}
+
+// profileOptions is what profile was asked for.
+type profileOptions struct {
+	Wait int  `getopt:"--wait -w=SECONDS  how long to give the grid to answer [15]"`
+	Help bool `getopt:"--help -h          show what this command takes"`
+}
+
+// cmdProfile prints what a profile says about somebody.
+//
+// # What it prints, and what it says instead of nothing
+//
+// A block of labelled fields with the group listing under it:
+//
+//	Hobb Resident
+//	  key       d22b7e57-7e57-c0de-0e4e-000000000001
+//	  born      5/21/2010
+//	  payment   on file, and used
+//	  partner   a0c27e57-7e57-c0de-9773-c8eaa2e796f4  Somebody Resident
+//	  about     I build things.
+//	  groups    1 listed, which is not every group they are in
+//	  5adb7e57-7e57-c0de-f28b-a359208f6cdd  Officer   Lorn Rangers
+//
+// Every field says what it does not know rather than printing an empty
+// column, because a blank beside "born" reads as a shell that lost the
+// answer where "not said" reads as a profile that does not have one.
+// The two of them a person is most likely to misread are worth the
+// words: "none on file" and "not revealed" are different facts about
+// payment -- a captioned account has its payment information withheld
+// rather than absent -- and the groups are only the ones their owner
+// chose to list, which is why the count says so.
+//
+// The keys stay in the lines.  A key is what everything else in this
+// shell takes, including this command's own argument, so a partner or a
+// group worth reading about is one more line to type and not a search.
+//
+// # A key nobody knows is a sentence
+//
+// The grid has no way of saying it has never heard of somebody: it
+// answers the question with an empty group list and simply never sends
+// the profile (see sl.Profile).  So the answer for a made-up key is the
+// deadline passing, and it is printed as the plain sentence it is rather
+// than as a failure -- nothing went wrong, and the question was
+// answered.  It is also the one case worth a --wait: the whole of the
+// wait is spent on it, where a profile that exists arrives in
+// milliseconds.
+func cmdProfile(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o profileOptions
+	args, done, err := subOptions("profile", "WHO", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) == 0 {
+		return fmt.Errorf("usage: profile WHO")
+	}
+	id, name, err := sh.whoOrSearch(ctx, out, strings.Join(args, " "))
+	if err != nil {
+		return err
+	}
+
+	p, err := sh.s.Profile(ctx, id, time.Duration(o.Wait)*time.Second)
+	if err != nil {
+		return err
+	}
+	if !p.Known {
+		fmt.Fprintf(out, "the grid says nothing at all about %s: it answered with an "+
+			"empty group list and no profile, which is how it says it has never "+
+			"heard of a key\n", id)
+		return nil
+	}
+
+	fmt.Fprintln(out, name)
+	field := func(label, value string) {
+		fmt.Fprintf(out, profileField, label, value)
+	}
+	field("key", id.String())
+	field("born", orUnknown(p.BornOn, "not said"))
+	field("payment", p.Payment().String())
+	if p.Caption != "" {
+		// Beside payment, since a caption is why payment can be
+		// withheld: read on its own the line would look like a title
+		// somebody chose.
+		field("account", p.Caption)
+	}
+	if p.Partner.IsZero() {
+		field("partner", "nobody")
+	} else {
+		names := sh.s.Names(ctx, []msg.UUID{p.Partner}, 3*time.Second)
+		field("partner", strings.TrimRight(
+			fmt.Sprintf("%-36s %s", p.Partner, names[p.Partner]), " "))
+	}
+	if p.URL != "" {
+		field("web", p.URL)
+	}
+	field("about", indented(orUnknown(p.About, "nothing said")))
+
+	// The interests are shown only when there are any.  The current
+	// viewer throws the whole reply away unread -- its handler is empty,
+	// under a comment wondering whether the interests panel is still
+	// part of the design (llavatarpropertiesprocessor.cpp:467-477) -- so
+	// almost nobody has been able to set one for years, and three lines
+	// saying so on every profile would be noise.  Somebody who did fill
+	// them in has text no viewer will show them, and it costs a line.
+	for _, in := range []struct{ label, text string }{
+		{"wants", p.WantTo}, {"skills", p.Skills}, {"speaks", p.Languages},
+	} {
+		if in.text != "" {
+			field(in.label, indented(in.text))
+		}
+	}
+
+	if len(p.Groups) == 0 {
+		field("groups", "none listed")
+		return nil
+	}
+	field("groups", fmt.Sprintf("%d listed, which is not every group they are in",
+		len(p.Groups)))
+	for _, g := range p.Groups {
+		fmt.Fprintln(out, strings.TrimRight(
+			fmt.Sprintf("  %-36s %-20s %s", g.ID, g.Title, g.Name), " "))
+	}
 	return nil
+}
+
+// whoOrSearch is who a command means, falling back to the grid's own
+// search when nothing here has heard the name.
+//
+// # Why the fallback exists
+//
+// sh.who reaches whoever has been mentioned and whoever is standing in
+// the region, which is everybody a shell usually talks about and not
+// everybody there is.  Somebody on the other side of the grid has been
+// mentioned to nobody and is standing nowhere near, so
+//
+//	slsh -a qi -c "profile Perrick Hobb"
+//
+// would refuse a name that "lookup" finds at once.  A profile is exactly
+// the question one asks about somebody who is not here, so the command
+// that answers it should not be the one command that cannot find them.
+//
+// # Why it is not in sh.who
+//
+// Because of what the other callers do with the answer.  Reading a
+// profile is a public question about somebody, answered by the grid to
+// anybody who asks: nothing reaches the person, nothing is spent, and
+// guessing wrong costs a wasted listing on the screen.  im, offer and
+// give reach OUT -- a message arrives, a friendship is offered, an item
+// changes hands -- and a name guessed at there delivers it to a
+// stranger, which is a different kind of mistake and not one to make on
+// somebody's behalf because a search was convenient.  The region is a
+// different matter and is in sh.who for everybody: see there.
+//
+// # What it does with what it finds
+//
+// One hit is the answer.  A name that matches one row exactly is that
+// row even when the search returned others, which is what chooseGroup
+// does with a group name and for the same reason: a name typed in full
+// is not an ambiguous name.
+//
+// Several are printed, as lookup's own numbered listing and through
+// lookup's own code, and the refusal after them says only that a number
+// picks one.  Naming them in the sentence instead is what this did
+// first, and one letter typed on Agni made it ninety-five names joined
+// by commas into a single line -- ending with a promise about numbers
+// that were nowhere on the screen.  A list that somebody is meant to
+// choose from has to look like a list.
+//
+// A key or a number is never searched for.  A key needs no search, and
+// a number that was not in the last listing means the listing, not
+// somebody called "3".
+func (sh *Shell) whoOrSearch(ctx context.Context, out io.Writer, want string) (msg.UUID, string, error) {
+	id, name, err := sh.who(ctx, want)
+	if err == nil {
+		return id, name, nil
+	}
+	want = strings.TrimSpace(want)
+	if _, e := msg.ParseUUID(want); e == nil {
+		return msg.UUID{}, "", err
+	}
+	if _, e := strconv.Atoi(want); e == nil {
+		return msg.UUID{}, "", err
+	}
+
+	found, ferr := sh.s.Lookup(ctx, want)
+	if ferr != nil {
+		return msg.UUID{}, "", ferr
+	}
+
+	var exact []sl.Found
+	for _, f := range found {
+		if strings.EqualFold(f.Name, want) || strings.EqualFold(f.Username, want) {
+			exact = append(exact, f)
+		}
+	}
+	switch {
+	case len(exact) == 1:
+		return exact[0].ID, exact[0].Name, nil
+	case len(found) == 1:
+		return found[0].ID, found[0].Name, nil
+	case len(found) == 0:
+		// Not "try lookup": this has just done that.  What is left is
+		// less of the name, since the search matches part of one, or the
+		// key for somebody the search will not turn up.
+		return msg.UUID{}, "", fmt.Errorf("nobody here or on the grid is called %q; "+
+			"try less of the name, or give the key", want)
+	}
+
+	sh.printFound(out, found)
+	return msg.UUID{}, "", fmt.Errorf("%d people answer to %q; a number picks one",
+		len(found), want)
+}
+
+// How a profile's lines are laid out: two spaces, a label wide enough
+// for the widest of them, and the value.  The margin is where the value
+// starts, and the two have to agree -- see indented.
+const (
+	profileField  = "  %-9s %s\n"
+	profileMargin = "            "
+)
+
+// orUnknown is what to print when a field is empty, which is a sentence
+// rather than a blank: a column with nothing in it reads as an answer
+// that went missing on the way.
+func orUnknown(s, missing string) string {
+	if s == "" {
+		return missing
+	}
+	return s
+}
+
+// indented lines up the second and later lines of a value with the
+// first.  An about text is whatever somebody typed into a box, newlines
+// and all, and a second line starting at the margin would read as a
+// field of its own with a very long name.
+func indented(s string) string {
+	return strings.ReplaceAll(strings.TrimRight(s, "\n"), "\n", "\n"+profileMargin)
 }
 
 func cmdOffer(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
@@ -576,7 +841,36 @@ func (sh *Shell) offer(args []string) (*sl.Offer, error) {
 }
 
 // who turns what was typed into somebody: a uuid, the number from the
-// last listing, or a name the session has heard.
+// last listing, a name the session has heard, or somebody standing in
+// the region.
+//
+// # Why the region is looked at, and why the grid is not
+//
+// The session's name cache holds whoever has been mentioned to it: a
+// listing printed, somebody who has spoken, a conversation opened.
+// Nothing evicts from it -- the daemon keeps avatars whatever the
+// distance (agent/objects.go:319) and the cache is kept for the life of
+// the session (sl/names.go) -- but a shell that has just started has had
+// nothing mentioned to it, so "slsh -c" would refuse a name that "who"
+// would have listed a moment later.  The daemon has known that avatar
+// all along; only this process had not asked.
+//
+// So asking is the second step.  It is safe for every command that
+// resolves a person because it is not a guess: the answer is somebody
+// standing in the region, matched by the same rules the cache is matched
+// by, and a shell that lists a person under a name has to accept that
+// name back from the next command typed.
+//
+// Searching the GRID is a third step and is not here.  It reaches people
+// who are nowhere near, whom nothing has mentioned, and whose names may
+// merely resemble what was typed -- which is fine for reading a public
+// profile and is not fine for im, offer or give, where a name guessed at
+// wrong delivers something to a stranger.  See whoOrSearch, which is the
+// commands that only look.
+//
+// The cost is the reason the region is asked second and not first: it is
+// a round trip to the daemon and a name resolution, so the case that
+// already works must not pay for it.
 func (sh *Shell) who(ctx context.Context, want string) (msg.UUID, string, error) {
 	want = strings.TrimSpace(want)
 	if id, err := msg.ParseUUID(want); err == nil {
@@ -594,6 +888,20 @@ func (sh *Shell) who(ctx context.Context, want string) (msg.UUID, string, error)
 	}
 
 	hits := sh.s.Find(want)
+	if len(hits) == 0 {
+		// Asking who is in the region puts their names in the cache, so
+		// the second look is the same look: one set of matching rules,
+		// and two people whose names differ only in case are still two
+		// people rather than a pick.
+		//
+		// A region that will not answer is left as a region with nobody
+		// in it.  The refusal below is what this would have said a
+		// moment ago anyway, and turning a mistyped name into a report
+		// about the daemon would explain the wrong thing.
+		if _, err := sh.s.Nearby(ctx); err == nil {
+			hits = sh.s.Find(want)
+		}
+	}
 	switch len(hits) {
 	case 1:
 		return hits[0], sh.s.NameOr(hits[0]), nil

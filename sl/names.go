@@ -268,6 +268,18 @@ func (w *Session) Lookup(ctx context.Context, want string) ([]Found, error) {
 	return out, nil
 }
 
+// LookupLimit is the page Lookup asks the search for, and so the most
+// rows it can hand back.
+//
+// It is exported because a result of exactly this many is a page rather
+// than an answer: one letter matches thousands of people and the reply
+// says nothing about how many were left behind, so a caller showing the
+// rows to somebody has to be able to tell a full page from a complete
+// one.  Nothing here asks for the next page -- a person who typed too
+// little of a name wants to type more of it, not to read a hundred more
+// names -- which is why the number stays modest.
+const LookupLimit = 100
+
 func (w *Session) lookupByCap(ctx context.Context, want string) ([]Found, error) {
 	// The viewer turns dots into spaces before asking, so that a
 	// username typed as "first.last" searches as a name.
@@ -275,7 +287,8 @@ func (w *Session) lookupByCap(ctx context.Context, want string) ([]Found, error)
 	body, err := w.capDo(ctx, agent.CapRequest{
 		Cap:    PickerCap,
 		Method: "GET",
-		Path:   "/?page_size=100&names=" + url.QueryEscape(query),
+		Path: fmt.Sprintf("/?page_size=%d&names=%s",
+			LookupLimit, url.QueryEscape(query)),
 	})
 	if err != nil {
 		return nil, err

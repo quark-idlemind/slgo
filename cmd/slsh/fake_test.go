@@ -120,6 +120,12 @@ type fakeGrid struct {
 	// refusing them all, because the first refusal ends the command.
 	presenceCalls  int
 	presenceFailAt int
+
+	// objectsCalls counts how many times the region has been asked what
+	// is in it, which is how a test tells a step that was taken from one
+	// that was not needed: resolving a name the session already knows
+	// must not cost a round trip.
+	objectsCalls int
 }
 
 // invDir is a folder in the fake inventory, and invItem a thing in one.
@@ -451,6 +457,14 @@ func xmlText(s string) string {
 
 // ---------------------------------------------------------- assertions
 
+// AskedTheRegion is how many times the region has been asked what is in
+// it.  See objectsCalls.
+func (f *fakeGrid) AskedTheRegion() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.objectsCalls
+}
+
 // Sent is everything the session has put on the wire, in order.
 func (f *fakeGrid) Sent() []msg.Message {
 	f.mu.Lock()
@@ -521,6 +535,78 @@ func (f *fakeGrid) AnswerNames(t *testing.T, names map[msg.UUID]string) {
 			f.Relay(t, r)
 		}
 	}
+}
+
+// AnswerProfile makes the fake answer an AvatarPropertiesRequest with
+// the replies it is given, in the order it is given them.
+//
+// A simulator sends three and sends the groups FIRST, twenty
+// milliseconds ahead of the properties, so a test that wants to catch
+// the mistake that ordering predicts has to hand them over the same way
+// round.  Handing over the groups alone is the other measured case: an
+// avatar the grid has never heard of gets the empty group row and
+// nothing else, ever.
+//
+// Whatever the fake was already answering is answered as well, because a
+// profile with a partner in it needs the names answered too and there is
+// one hook between them.
+func (f *fakeGrid) AnswerProfile(t *testing.T, replies ...msg.Message) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before := f.onSend
+	f.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		if _, ok := m.(*msg.AvatarPropertiesRequest); !ok {
+			return
+		}
+		for _, r := range replies {
+			f.Relay(t, r)
+		}
+	}
+}
+
+// avatarProperties is the reply that carries the profile itself.
+func avatarProperties(who msg.UUID, born, about string, partner msg.UUID, flags uint32) *msg.AvatarPropertiesReply {
+	m := &msg.AvatarPropertiesReply{}
+	m.AgentData.AgentID, m.AgentData.AvatarID = testMe, who
+	m.PropertiesData.BornOn = append([]byte(born), 0)
+	m.PropertiesData.AboutText = append([]byte(about), 0)
+	m.PropertiesData.PartnerID = partner
+	m.PropertiesData.CharterMember = []byte{0}
+	m.PropertiesData.Flags = flags
+	return m
+}
+
+// avatarGroups is the reply that carries the groups an avatar lists.
+// With no rows it is what an avatar who lists none really sends: one row
+// of all zeros, which is not a group.
+func avatarGroups(who msg.UUID, rows ...msg.AvatarGroupsReply_GroupData) *msg.AvatarGroupsReply {
+	m := &msg.AvatarGroupsReply{}
+	m.AgentData.AgentID, m.AgentData.AvatarID = testMe, who
+	if len(rows) == 0 {
+		rows = []msg.AvatarGroupsReply_GroupData{{GroupName: []byte{0}, GroupTitle: []byte{0}}}
+	}
+	m.GroupData = rows
+	return m
+}
+
+func aGroup(id msg.UUID, name, title string) msg.AvatarGroupsReply_GroupData {
+	return msg.AvatarGroupsReply_GroupData{
+		GroupID:   id,
+		GroupName: append([]byte(name), 0), GroupTitle: append([]byte(title), 0),
+	}
+}
+
+func avatarInterests(who msg.UUID, wantTo, skills, languages string) *msg.AvatarInterestsReply {
+	m := &msg.AvatarInterestsReply{}
+	m.AgentData.AgentID, m.AgentData.AvatarID = testMe, who
+	m.PropertiesData.WantToText = append([]byte(wantTo), 0)
+	m.PropertiesData.SkillsText = append([]byte(skills), 0)
+	m.PropertiesData.LanguagesText = append([]byte(languages), 0)
+	return m
 }
 
 // AnswerAttach makes the fake put something on when it is asked to.
@@ -860,6 +946,7 @@ func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Pres
 func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.objectsCalls++
 	if f.objectsErr != nil {
 		return nil, f.objectsErr
 	}

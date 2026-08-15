@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -678,6 +679,322 @@ func TestLookupSaysSoWhenNobodyMatched(t *testing.T) {
 	}
 }
 
+// testGroupID is a group somebody lists in their profile, which is not
+// one this avatar has joined: a profile's groups are somebody else's.
+var testGroupID = msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
+
+// TestProfileShowsWhatAProfileSays.
+//
+// Everything printed comes from a different one of the three replies, so
+// a listing missing a line is a reply that went astray rather than a
+// formatting slip: born and payment and the partner from the properties,
+// the languages from the interests, and the group from the reply that
+// arrives before either of them.
+func TestProfileShowsWhatAProfileSays(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerNames(t, map[msg.UUID]string{
+		testSomebody: "Some Body", testFriend: "A Friend",
+	})
+	x.grid.AnswerProfile(t,
+		avatarGroups(testSomebody, aGroup(testGroupID, "Lorn Rangers", "Officer")),
+		avatarProperties(testSomebody, "5/21/2010", "I build things.\nMostly boats.",
+			testFriend, 0x1d),
+		avatarInterests(testSomebody, "", "", "English"))
+
+	got := x.do(t, "profile "+testSomebody.String())
+	for _, want := range []string{
+		"Some Body\n",
+		"  born      5/21/2010\n",
+		// Both flags set, which is the 0x1d measured on Agni: on file
+		// says one thing and used says another.
+		"  payment   on file, and used\n",
+		"  about     I build things.\n            Mostly boats.\n",
+		"  speaks    English\n",
+		"1 listed, which is not every group they are in",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("profile printed no %q:\n%s", want, got)
+		}
+	}
+	if !strings.Contains(got, testFriend.String()) || !strings.Contains(got, "A Friend") {
+		t.Errorf("the partner is named by neither key nor name:\n%s", got)
+	}
+
+	// The group row is a key, a title and the name last, since the name
+	// is the only one of the three with no length worth relying on.
+	var row string
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, testGroupID.String()) {
+			row = line
+		}
+	}
+	if row == "" {
+		t.Fatalf("the groups reply arrives first and nothing printed it:\n%s", got)
+	}
+	if i, j := strings.Index(row, "Officer"), strings.Index(row, "Lorn Rangers"); i < 0 || j < i {
+		t.Errorf("the group row is %q, want the key, the title, and the name last", row)
+	}
+}
+
+// TestProfileSaysWhatItDoesNotKnow.
+//
+// A blank beside "born" reads as a shell that lost the answer where "not
+// said" reads as a profile that has none, and the two are worth telling
+// apart on the screen because they are worth telling apart at all.  The
+// interests are the exception and say nothing when there is nothing:
+// hardly anybody has been able to set one for years, so a line about
+// them on every profile would be noise.
+func TestProfileSaysWhatItDoesNotKnow(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerNames(t, map[msg.UUID]string{testSomebody: "Some Body"})
+	x.grid.AnswerProfile(t,
+		avatarGroups(testSomebody),
+		avatarProperties(testSomebody, "", "", msg.UUID{}, 0),
+		avatarInterests(testSomebody, "", "", ""))
+
+	got := x.do(t, "profile "+testSomebody.String())
+	for _, want := range []string{
+		"  born      not said\n",
+		"  payment   none on file\n",
+		"  partner   nobody\n",
+		"  about     nothing said\n",
+		"  groups    none listed\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("profile printed no %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{"wants", "skills", "speaks", "web", "account"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("profile printed an empty %q:\n%s", unwanted, got)
+		}
+	}
+	// The empty row an avatar with no groups sends is not a group, and
+	// printing it would put a line of zeros under the count that says
+	// none.
+	if strings.Contains(got, "00000000-0000-0000-0000-000000000000") {
+		t.Errorf("the empty group row was printed as a group:\n%s", got)
+	}
+}
+
+// TestAKeyTheGridHasNeverHeardOfIsASentenceAndNotAFailure.
+//
+// The grid answers a made-up key with the empty group row and never
+// sends the profile, so the wait running out IS the answer.  Reported as
+// an error it would read as slsh having broken, and the thing that
+// actually happened -- there is nobody with that key -- would be the one
+// fact missing from the screen.
+func TestAKeyTheGridHasNeverHeardOfIsASentenceAndNotAFailure(t *testing.T) {
+	x := newTestShell(t)
+	nobody := msg.MustParseUUID("71ed7e57-7e57-c0de-537b-0faae2121a1c")
+	x.grid.AnswerNames(t, map[msg.UUID]string{})
+	x.grid.AnswerProfile(t, avatarGroups(nobody))
+
+	got := x.do(t, "profile -w 1 "+nobody.String())
+	if !strings.Contains(got, "never heard of") || !strings.Contains(got, nobody.String()) {
+		t.Errorf("a key nobody knows printed %q", got)
+	}
+	if strings.Contains(got, "slsh:") {
+		t.Errorf("a key nobody knows was reported as a failure: %q", got)
+	}
+}
+
+// searching makes the grid's name search answer with these people.
+//
+// It is the only way a shell that has just started can turn a name into
+// a key: the session's own cache holds whoever has been mentioned, and
+// in "slsh -c" nothing has been mentioned yet.
+func searching(t *testing.T, x *testShell, people ...sl.Found) {
+	t.Helper()
+	x.grid.ServeCap(t, sl.PickerCap, func(w http.ResponseWriter, r *http.Request) {
+		var b strings.Builder
+		b.WriteString(`<?xml version="1.0" ?><llsd><map><key>agents</key><array>`)
+		for _, p := range people {
+			first, last, _ := strings.Cut(p.Name, " ")
+			fmt.Fprintf(&b, `<map><key>id</key><uuid>%s</uuid>`+
+				`<key>legacy_first_name</key><string>%s</string>`+
+				`<key>legacy_last_name</key><string>%s</string></map>`, p.ID, first, last)
+		}
+		b.WriteString(`</array></map></llsd>`)
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		io.WriteString(w, b.String())
+	})
+}
+
+// TestProfileFindsANameOnlyTheGridKnows.
+//
+// The session's name cache holds whoever has been mentioned, so a shell
+// that has just started knows nobody -- and "slsh -c profile SOMEBODY",
+// which is how most of this shell's examples are written, would refuse a
+// name that "who" lists thirty metres away.  The search is one call and
+// answers it, so the command makes it rather than telling somebody to
+// type lookup and try again.
+func TestProfileFindsANameOnlyTheGridKnows(t *testing.T) {
+	x := newTestShell(t)
+	searching(t, x, sl.Found{ID: testSomebody, Name: "Perrick Hobb"})
+	x.grid.AnswerProfile(t,
+		avatarGroups(testSomebody),
+		avatarProperties(testSomebody, "4/17/2011", "", msg.UUID{}, 0),
+		avatarInterests(testSomebody, "", "", ""))
+
+	got := x.do(t, "profile -w 2 Perrick Hobb")
+	if !strings.Contains(got, "Perrick Hobb\n") || !strings.Contains(got, "4/17/2011") {
+		t.Errorf("a name only the grid knows printed %q", got)
+	}
+	if strings.Contains(got, "is known") {
+		t.Errorf("the name was refused rather than looked up: %q", got)
+	}
+}
+
+// crowd is a search result of n people, all answering to "Some".
+//
+// Enough of them that the shape of the answer matters: two people fit in
+// a sentence and ninety-five do not, and it was ninety-five that a
+// single letter typed on Agni turned up.  The first is the one the rest
+// of the test profiles.
+func crowd(n int) []sl.Found {
+	out := make([]sl.Found, 0, n)
+	for i := range n {
+		id := testSomebody
+		if i > 0 {
+			id = msg.MustParseUUID(fmt.Sprintf("d22b7e57-7e57-c0de-0e4e-%012d", 100+i))
+		}
+		out = append(out, sl.Found{ID: id, Name: fmt.Sprintf("Some Body%02d", i)})
+	}
+	return out
+}
+
+// TestProfileListsThePeopleANameCouldBe.
+//
+// Picking one of several would read a stranger's profile and say it was
+// the person asked for, which is the one mistake a search can make that
+// looks like success.  So they are listed instead -- as lookup's own
+// numbered listing, one per line, because the sentence that follows
+// promises that a number picks one and a promise about numbers is worth
+// nothing beside a line of names joined by commas.
+func TestProfileListsThePeopleANameCouldBe(t *testing.T) {
+	x := newTestShell(t)
+	searching(t, x, crowd(12)...)
+	x.grid.AnswerProfile(t,
+		avatarGroups(testSomebody),
+		avatarProperties(testSomebody, "4/17/2011", "", msg.UUID{}, 0),
+		avatarInterests(testSomebody, "", "", ""))
+
+	got := x.do(t, "profile Some")
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 13 {
+		t.Fatalf("twelve people and one sentence printed %d lines:\n%s", len(lines), got)
+	}
+	// The same shape lookup prints, numbered from one and lined up.
+	if !strings.HasPrefix(lines[0], " 1  Some Body00") {
+		t.Errorf("the first line is %q, want lookup's numbered listing", lines[0])
+	}
+	if !strings.HasPrefix(lines[9], "10  Some Body09") {
+		t.Errorf("the tenth line is %q, want the number in the same column", lines[9])
+	}
+	// And the sentence is short, now that the names are above it.
+	if last := lines[12]; !strings.Contains(last, "12 people answer to") ||
+		!strings.Contains(last, "a number picks one") || len(last) > 80 {
+		t.Errorf("the sentence under the listing is %q", last)
+	}
+
+	// The number it invites is a number that works.
+	if got := x.do(t, "profile -w 2 1"); !strings.Contains(got, "4/17/2011") {
+		t.Errorf("the first of the people listed did not profile: %q", got)
+	}
+
+	// A number is never searched for: one that is not in the listing
+	// means the listing and not somebody called "99".
+	if got := x.do(t, "profile 99"); !strings.Contains(got, "no 99 in the last listing") {
+		t.Errorf("a number nobody listed printed %q", got)
+	}
+}
+
+// TestAFullPageOfSearchResultsSaysItIsOne.
+//
+// The search answers with at most sl.LookupLimit rows and says nothing
+// about what it left out, so one letter comes back looking exactly like
+// the whole of the grid.  Somebody scrolling a hundred names for one
+// that is not among them would conclude their friend had gone, where
+// what actually happened is that the search stopped counting.
+func TestAFullPageOfSearchResultsSaysItIsOne(t *testing.T) {
+	x := newTestShell(t)
+	searching(t, x, crowd(sl.LookupLimit)...)
+
+	const note = "as many as one search answers with"
+	got := x.do(t, "profile Some")
+	if !strings.Contains(got, note) {
+		t.Errorf("a full page of results did not say it was a page:\n%s",
+			strings.Join(strings.Split(got, "\n")[:3], "\n"))
+	}
+	// lookup shows the same rows and needs the same warning: it is the
+	// same list, printed by the same code, read by the same person.
+	if got := x.do(t, "lookup Some"); !strings.Contains(got, note) {
+		t.Error("lookup printed a full page without saying so")
+	}
+
+	// One short of the page is the whole answer, and saying otherwise
+	// would put a warning under every listing.
+	x2 := newTestShell(t)
+	searching(t, x2, crowd(sl.LookupLimit-1)...)
+	if got := x2.do(t, "lookup Some"); strings.Contains(got, note) {
+		t.Error("a listing that was not a full page was called one")
+	}
+}
+
+// TestAFullyTypedNameIsNotAnAmbiguousOne.
+//
+// A search matches part of a name, so the whole of somebody's name can
+// come back with the people whose names contain it.  Listing them would
+// refuse the one argument that could not have been meant any other way,
+// which is what chooseGroup decided about a group name for the same
+// reason.
+func TestAFullyTypedNameIsNotAnAmbiguousOne(t *testing.T) {
+	x := newTestShell(t)
+	searching(t, x,
+		sl.Found{ID: testSomebody, Name: "Some Body"},
+		sl.Found{ID: testFriend, Name: "Some Body Junior"})
+	x.grid.AnswerProfile(t,
+		avatarGroups(testSomebody),
+		avatarProperties(testSomebody, "4/17/2011", "", msg.UUID{}, 0),
+		avatarInterests(testSomebody, "", "", ""))
+
+	got := x.do(t, "profile -w 2 Some Body")
+	if !strings.Contains(got, "4/17/2011") {
+		t.Errorf("a name typed in full printed %q", got)
+	}
+	if strings.Contains(got, "could be any of") {
+		t.Errorf("a name typed in full was called ambiguous: %q", got)
+	}
+}
+
+// TestProfileNeedsSomebodyToAskAbout, and answers for itself like every
+// other command.
+//
+// A name the grid's own search cannot find either is still a refusal,
+// and one that no longer says "try lookup": that is what has just been
+// done.  What is left to try is less of the name, since the search
+// matches part of one, or the key.
+func TestProfileNeedsSomebodyToAskAbout(t *testing.T) {
+	x := newTestShell(t)
+	searching(t, x)
+
+	if got := x.do(t, "profile"); !strings.Contains(got, "usage: profile WHO") {
+		t.Errorf("profile with nobody printed %q", got)
+	}
+	if got := x.do(t, "profile --help"); !strings.Contains(got, "WHO") ||
+		!strings.Contains(got, "--wait") {
+		t.Errorf("profile --help printed %q", got)
+	}
+	got := x.do(t, "profile nobody at all")
+	if !strings.Contains(got, `nobody here or on the grid is called "nobody at all"`) {
+		t.Errorf("profile of a name nobody knows printed %q", got)
+	}
+	if strings.Contains(got, "try who, friends or lookup") {
+		t.Errorf("the refusal still points at the search it just made: %q", got)
+	}
+}
+
 // TestOfferSaysWhoItOffered, since the offer itself produces nothing
 // visible until the other side answers it.
 func TestOfferSaysWhoItOffered(t *testing.T) {
@@ -977,6 +1294,93 @@ func TestWhoTurnsWhatWasTypedIntoSomebody(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Some Body") || !strings.Contains(err.Error(), "Some Other") {
 		t.Errorf("the refusal should name both, got %v", err)
+	}
+}
+
+// TestWhoFindsSomebodyStandingInTheRegion.
+//
+// The second of the three steps, and the one a fresh shell needs: the
+// daemon has known this avatar since before slsh started, and the
+// session's cache has had nobody mentioned to it, so a name that "who"
+// would list is a name every command should take.  Nothing here is a
+// guess -- the person is thirty metres away and answers to that name.
+func TestWhoFindsSomebodyStandingInTheRegion(t *testing.T) {
+	x := newTestShell(t)
+	ctx := context.Background()
+	near := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000004")
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: near, Local: 3}, PCode: pcodeAvatar,
+			Position: msg.Vector3{X: 130, Y: 128, Z: 25}},
+	}
+	x.grid.AnswerNames(t, map[msg.UUID]string{near: "Perrick Hobb"})
+
+	// Nothing has been listed, nobody has spoken, and no command has been
+	// typed: the cache is empty and the name resolves anyway.
+	id, name, err := x.who(ctx, "Perrick Hobb")
+	if err != nil || id != near || name != "Perrick Hobb" {
+		t.Fatalf("who(a name only the region knows) = %v %q %v", id, name, err)
+	}
+
+	// And having been asked once, it is in the cache: a name the session
+	// already knows must not cost another round trip to the region.
+	asked := x.grid.AskedTheRegion()
+	if asked == 0 {
+		t.Fatal("the name resolved without the region being asked at all")
+	}
+	if id, _, err := x.who(ctx, "perrick"); err != nil || id != near {
+		t.Errorf("who(part of a name already learnt) = %v %v", id, err)
+	}
+	if again := x.grid.AskedTheRegion(); again != asked {
+		t.Errorf("the region was asked again for a name the session already knew: "+
+			"%d asks became %d", asked, again)
+	}
+}
+
+// TestTheRegionIsNotGuessedBetweenEither.
+//
+// Two people standing here whose names begin alike are two people, and
+// the step that reaches them must refuse in the same words the cache
+// does rather than picking the nearest -- which would send an instant
+// message to whoever happened to be standing closer.
+func TestTheRegionIsNotGuessedBetweenEither(t *testing.T) {
+	x := newTestShell(t)
+	ctx := context.Background()
+	other := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000005")
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: testSomebody, Local: 2}, PCode: pcodeAvatar,
+			Position: msg.Vector3{X: 138, Y: 128, Z: 25}},
+		{Object: sl.Object{ID: other, Local: 3}, PCode: pcodeAvatar,
+			Position: msg.Vector3{X: 130, Y: 128, Z: 25}},
+	}
+	x.grid.AnswerNames(t, map[msg.UUID]string{
+		testSomebody: "Some Body", other: "Some Other",
+	})
+
+	_, _, err := x.who(ctx, "some")
+	if err == nil || !strings.Contains(err.Error(), "could be any of") {
+		t.Fatalf("two people in the region answering to a name gave %v", err)
+	}
+	if !strings.Contains(err.Error(), "Some Body") || !strings.Contains(err.Error(), "Some Other") {
+		t.Errorf("the refusal should name both, got %v", err)
+	}
+}
+
+// TestARegionThatWillNotAnswerIsARegionWithNobodyInIt.
+//
+// The region is one more place to look and not the point of the call, so
+// a daemon that cannot say who is here leaves the refusal exactly as it
+// was: telling somebody who mistyped a name about an object query would
+// explain the wrong thing.
+func TestARegionThatWillNotAnswerIsARegionWithNobodyInIt(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.objectsErr = errors.New("the circuit is down")
+
+	_, _, err := x.who(context.Background(), "nobody of that name")
+	if err == nil || !strings.Contains(err.Error(), "is known") {
+		t.Errorf("who with the region unreachable = %v, want the ordinary refusal", err)
+	}
+	if strings.Contains(err.Error(), "circuit is down") {
+		t.Errorf("a mistyped name was reported as a daemon failure: %v", err)
 	}
 }
 
