@@ -15,8 +15,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -804,5 +808,259 @@ func TestARelativePathIsFromTheWorkingFolder(t *testing.T) {
 	defer cancel()
 	if err := x.Do(ctx, "ls"); err == nil {
 		t.Error("a working folder that is not there should fail rather than list the root")
+	}
+}
+
+// ---------------------------------------------------------------- save
+
+// itemWrite is what one of the two capabilities that write to an
+// existing item was asked for.
+//
+// Both halves are kept, because a save is two requests and each says
+// something different: the first names the item being written and is
+// the only place the choice between notecard and script shows, and the
+// second carries the bytes, which is the only place the file shows.
+type itemWrite struct {
+	mu           sync.Mutex
+	asked, wrote []byte
+}
+
+// seen is the description and then the asset, as text.
+func (u *itemWrite) seen() (asked, wrote string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return string(u.asked), string(u.wrote)
+}
+
+// serveItemWrite answers UpdateNotecardAgentInventory or
+// UpdateScriptAgent, which are the same two step upload every
+// capability uses: the first request describes what is being written
+// and answers with somewhere to put the bytes, and what comes back
+// from THERE is the verdict.
+func serveItemWrite(t *testing.T, x *testShell, capName, verdict string) *itemWrite {
+	t.Helper()
+	u := &itemWrite{}
+	dest := x.grid.ServeCap(t, "slgo test bytes for "+capName, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		u.mu.Lock()
+		u.wrote = b
+		u.mu.Unlock()
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		io.WriteString(w, verdict)
+	})
+	x.grid.ServeCap(t, capName, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		u.mu.Lock()
+		u.asked = b
+		u.mu.Unlock()
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		fmt.Fprintf(w, `<llsd><map><key>state</key><string>upload</string>`+
+			`<key>uploader</key><string>%s/upload</string></map></llsd>`, dest.URL)
+	})
+	return u
+}
+
+// compileOK is what the capability says about a script it liked, and
+// savedOK what it says about a notecard, which is not compiled at all.
+const (
+	compileOK = `<llsd><map><key>state</key><string>complete</string>` +
+		`<key>compiled</key><boolean>1</boolean></map></llsd>`
+	savedOK = `<llsd><map><key>state</key><string>complete</string></map></llsd>`
+)
+
+// aFile puts something on disk for save to read.
+func aFile(t *testing.T, name, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestSaveWritesTheFileIntoTheItemThatIsAlreadyThere.
+//
+// The direction is the whole point: the file is read and the item is
+// written, which is the opposite of cat and get, and a command that had
+// them the other way round would quietly overwrite the file somebody
+// meant to upload.
+//
+// Which capability is used follows from the item's type and from
+// nothing else, so both are served here and each save has to reach
+// exactly one of them.  A notecard goes up wrapped in the container
+// format and a script goes up as it stands, which is the other thing
+// the two calls do differently.
+func TestSaveWritesTheFileIntoTheItemThatIsAlreadyThere(t *testing.T) {
+	x := newTestShell(t)
+	note := serveItemWrite(t, x, "UpdateNotecardAgentInventory", savedOK)
+	script := serveItemWrite(t, x, "UpdateScriptAgent", compileOK)
+
+	got := x.do(t, "save "+aFile(t, "notes.txt", "one\ntwo\n")+" readme")
+	if want := "readme: 8 bytes written\n"; got != want {
+		t.Errorf("save of a notecard printed %q, want %q", got, want)
+	}
+	asked, wrote := note.seen()
+	if !strings.Contains(asked, testNote.String()) {
+		t.Errorf("the notecard written was %q, want the item readme names", asked)
+	}
+	if !strings.Contains(wrote, "one\ntwo\n") || !strings.Contains(wrote, "Text length 8") {
+		t.Errorf("the notecard asset was %q, want the file inside the container", wrote)
+	}
+	if _, wrote := script.seen(); wrote != "" {
+		t.Errorf("saving a notecard wrote %q through the script capability", wrote)
+	}
+
+	// A script takes the other call, and says what the compiler thought
+	// -- saving to inventory compiles even though no object is involved.
+	const source = "default { state_entry() { } }\n"
+	got = x.do(t, "save "+aFile(t, "hello.lsl", source)+" /Scripts/probe")
+	if want := "probe: 30 bytes written, and it compiled\n"; got != want {
+		t.Errorf("save of a script printed %q, want %q", got, want)
+	}
+	asked, wrote = script.seen()
+	if !strings.Contains(asked, testProbe.String()) {
+		t.Errorf("the script written was %q, want the item probe names", asked)
+	}
+	if wrote != source {
+		t.Errorf("the script asset was %q, want the file unchanged", wrote)
+	}
+
+	// A script in inventory is not running anywhere, so nothing here
+	// may say it is: an object is the only place a script runs.
+	if strings.Contains(got, "running") {
+		t.Errorf("save said something about running: %q", got)
+	}
+}
+
+// TestSaveOfAScriptThatWillNotCompileSaysItIsWrittenAnyway.
+//
+// That is what happens: the save succeeds and the compile fails, in
+// that order, so the item now holds source that will not run.  Saying
+// only "did not compile" would leave somebody thinking their old script
+// was still in there, and failing outright would report the opposite of
+// what the grid did.  The compiler's complaint is the whole answer to
+// why, so it is printed rather than counted.
+func TestSaveOfAScriptThatWillNotCompileSaysItIsWrittenAnyway(t *testing.T) {
+	x := newTestShell(t)
+	u := serveItemWrite(t, x, "UpdateScriptAgent",
+		`<llsd><map><key>state</key><string>complete</string>`+
+			`<key>compiled</key><boolean>0</boolean>`+
+			`<key>errors</key><array><string>(1,9) : ERROR : Syntax error</string></array>`+
+			`</map></llsd>`)
+
+	const source = "default { oops }\n"
+	line := "save " + aFile(t, "broken.lsl", source) + " /Scripts/probe"
+	got := x.do(t, line)
+	if !strings.Contains(got, "17 bytes written") || !strings.Contains(got, "did not compile") {
+		t.Errorf("save of a script that will not compile printed %q", got)
+	}
+	if !strings.Contains(got, "(1,9) : ERROR : Syntax error") {
+		t.Errorf("the compiler's complaint was not printed: %q", got)
+	}
+	if _, wrote := u.seen(); wrote != source {
+		t.Errorf("the item was not written: %q", wrote)
+	}
+	if err := x.Do(context.Background(), line); err != nil {
+		t.Errorf("a save whose compile failed reported %v, and the item was written all the same", err)
+	}
+
+	// The capability says this when it is unhappy without failing, and
+	// it is the only explanation there will be.
+	y := newTestShell(t)
+	serveItemWrite(t, y, "UpdateNotecardAgentInventory",
+		`<llsd><map><key>state</key><string>error</string>`+
+			`<key>message</key><string>Not enough space in inventory</string></map></llsd>`)
+	got = y.do(t, "save "+aFile(t, "notes.txt", "hello\n")+" readme")
+	if !strings.Contains(got, "Not enough space in inventory") {
+		t.Errorf("save printed %q, and said nothing of what the capability complained of", got)
+	}
+}
+
+// TestSaveTargetPinsWhatCanBeWrittenTo.
+//
+// It stands here rather than with the other pure helpers because it is
+// the whole of what decides which capability a save uses, and getting
+// it wrong is not a refusal but a notecard written through the script
+// compiler.  A kind that cannot be written has to say what does work,
+// and name the command where there is one: an image is "put", which is
+// a different command because it costs L$.
+func TestSaveTargetPinsWhatCanBeWrittenTo(t *testing.T) {
+	for _, c := range []struct {
+		what string
+		e    sl.Entry
+		kind sl.AssetType
+		want string // a fragment of the refusal, or "" to be writable
+	}{
+		{"a notecard", sl.Entry{Name: "readme", Type: int(sl.AssetNotecard)}, sl.AssetNotecard, ""},
+		{"a script", sl.Entry{Name: "probe", Type: int(sl.AssetLSLText)}, sl.AssetLSLText, ""},
+		{"a script whose asset id the grid withheld",
+			sl.Entry{Name: "probe", Type: int(sl.AssetLSLText)}, sl.AssetLSLText, ""},
+		{"a script of the long dead kind, which is a script still",
+			sl.Entry{Name: "old", Type: int(sl.AssetScriptLegacy)}, sl.AssetLSLText, ""},
+		{"a texture, which has a command of its own",
+			sl.Entry{Name: "a picture", Type: int(sl.AssetTexture)}, 0, `"put"`},
+		{"an object, which nothing here uploads",
+			sl.Entry{Name: "a lamp", Type: int(sl.AssetObject)}, 0, "nothing here uploads an object"},
+		{"a landmark, likewise",
+			sl.Entry{Name: "home", Type: int(sl.AssetLandmark)}, 0, "nothing here uploads a landmark"},
+		{"a folder, whose type is what it likes to hold",
+			sl.Entry{Name: "Scripts", Folder: true, Type: int(sl.AssetLSLText)}, 0, "is a folder"},
+		{"a link, which is not the item it names",
+			sl.Entry{Name: "readme", Type: int(sl.AssetNotecard), IsLink: true}, 0, "is a link"},
+	} {
+		kind, err := saveTarget(c.e)
+		switch {
+		case c.want == "" && err != nil:
+			t.Errorf("%s: should be writable, got %v", c.what, err)
+		case c.want == "" && kind != c.kind:
+			t.Errorf("%s: goes to %v, want %v", c.what, kind, c.kind)
+		case c.want != "" && err == nil:
+			t.Errorf("%s: should be refused, was not", c.what)
+		case c.want != "" && !strings.Contains(err.Error(), c.want):
+			t.Errorf("%s: refusal should mention %q, got %v", c.what, c.want, err)
+		}
+		if c.want != "" && err != nil && !strings.Contains(err.Error(), "notecard") {
+			t.Errorf("%s: refusal should say what save does write, got %v", c.what, err)
+		}
+	}
+}
+
+// TestSaveRefusesBeforeItWritesAnything.
+//
+// Everything that can be checked without the grid is checked before a
+// byte goes anywhere, because a save cannot be undone: the item's
+// previous asset is gone.  A filename that is not there is the likeliest
+// mistake of the lot -- it is the argument that is not an inventory path
+// -- and it must not reach the capability.
+func TestSaveRefusesBeforeItWritesAnything(t *testing.T) {
+	x := newTestShell(t)
+	note := serveItemWrite(t, x, "UpdateNotecardAgentInventory", savedOK)
+	file := aFile(t, "notes.txt", "one\n")
+
+	for _, c := range []struct{ line, want string }{
+		{"save", "usage: save FILE PATH"},
+		{"save " + file, "usage: save FILE PATH"},
+		{"save " + filepath.Join(filepath.Dir(file), "not-here.txt") + " readme", "not-here.txt"},
+		{"save " + file + " nowhere", `nothing called "nowhere"`},
+		{"save " + file + " /Objects/a lamp", "nothing here uploads an object"},
+		{"save " + file + " /Scripts", "is a folder"},
+	} {
+		if got := x.do(t, c.line); !strings.Contains(got, c.want) {
+			t.Errorf("%q printed %q, want %q in it", c.line, got, c.want)
+		}
+	}
+	if _, wrote := note.seen(); wrote != "" {
+		t.Errorf("a refused save wrote %q", wrote)
+	}
+
+	// And the same file into something it can write, so that none of
+	// the refusals above is a save failing for some other reason.  The
+	// lamp was found at all because the path takes the rest of the line
+	// as drop's does, spaces and all.
+	if got := x.do(t, "save "+file+" readme"); !strings.Contains(got, "readme: 4 bytes written") {
+		t.Errorf("save printed %q", got)
+	}
+	if got := x.do(t, "save --help"); !strings.Contains(got, "FILE PATH") {
+		t.Errorf("save --help printed %q", got)
 	}
 }

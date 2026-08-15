@@ -7,12 +7,66 @@ package main
 // be written to a file, edited into a list of moves, and run.  That is
 // why ls prints one bare path per line by default and keeps the columns
 // for ls -l.
+//
+// # save, and why it is two plain arguments
+//
+// Reading an item out has had commands for a long time -- cat prints a
+// notecard or a script, get writes a texture to disk -- and so has
+// making a new one, which is "new --from FILE PATH".  Writing a file
+// into an item that is ALREADY there had none, although the session
+// layer has done it all along: sl.SaveNotecard and sl.SaveScript were
+// reachable from "new" and from nothing at all respectively.
+//
+//	save notes.txt readme            a notecard
+//	save hello.lsl /Scripts/greeter  a script, which is compiled
+//
+// The word is the viewer's.  These are the two capabilities behind its
+// own Save button -- LLPreviewLSL::saveIfNeeded asks the region for
+// UpdateScriptAgent (llpreviewscript.cpp:2569) and
+// LLPreviewNotecard::saveIfNeeded for UpdateNotecardAgentInventory
+// (llpreviewnotecard.cpp:674) -- so "save" is what somebody who has used
+// the viewer already calls this.  "put" was not free to take: it means
+// uploading an image, which costs L$ where a notecard and a script cost
+// nothing, and one word for both would hide that.
+//
+// Two positional arguments, and not "save --from FILE PATH" -- which
+// would have matched "new --from FILE PATH" word for word, and was the
+// other real candidate.  What differs is that new can make an empty
+// notecard and save cannot write one: the file is the whole of what
+// this command does, and an option that must always be given is a
+// positional argument spelled at length.  That is the objection that
+// kept the object out of a flag in start and stop.  It is also a trap:
+// a --from that may be left off makes "save readme" a legal line that
+// empties a notecard, and nothing would have been asked for.
+//
+// So the source is first and the destination second, in cp's order, and
+// which side is which is the shell's own vocabulary rather than a
+// convention invented here.  FILE is on this machine wherever it
+// appears -- put FILE, . FILE, --from FILE -- and PATH is in inventory
+// wherever it appears -- cat PATH, rm PATH, drop OBJECT PATH.  "get -o
+// FILE PATH" reads the other way round because its subject is the thing
+// on the grid and the file is only where the copy lands; here the file
+// is the subject and the item is where it lands.
+//
+// # What save does not do
+//
+// It does not start anything, and does not touch the world.  A script
+// in inventory is not running and cannot be made to run: an object is
+// the only place a script runs at all, and putting one there is "new
+// --in OBJECT", which compiles it inside the object and starts it (see
+// sl.InstallScript).  Saving compiles too -- the capability answers
+// with the verdict -- but what it has changed is the item, and the
+// copies already inside objects are untouched.  So the output says
+// whether it compiled and says nothing whatever about running, and
+// there is no --in here: a second way into an object would be a second
+// thing to keep right.
 
 import (
 	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -49,6 +103,11 @@ var inventoryCommands = map[string]*command{
 		usage: "cat PATH",
 		brief: "print a notecard or a script",
 		run:   cmdCat,
+	},
+	"save": {
+		usage: "save FILE PATH",
+		brief: "write a local file into a notecard or script that is already there",
+		run:   cmdSave,
 	},
 	"mkdir": {
 		usage: "mkdir PATH",
@@ -436,6 +495,15 @@ func kindOf(e sl.Entry) string {
 	return fmt.Sprintf("type%d", e.Type)
 }
 
+// aKind is a kind with its article, since "a object" in a refusal reads
+// as a bug in the refusal rather than as an answer.
+func aKind(kind string) string {
+	if kind != "" && strings.ContainsRune("aeiou", rune(kind[0])) {
+		return "an " + kind
+	}
+	return "a " + kind
+}
+
 // catReadable says whether cat can read an entry, and why not when it
 // cannot.
 //
@@ -509,6 +577,134 @@ func notecardText(b []byte) (string, bool) {
 		text = text[:k]
 	}
 	return strings.TrimRight(text, "\n"), true
+}
+
+// saveTarget says which of the two calls writes to an entry, and why
+// neither does when neither does.
+//
+// The item's own type decides, because the item is already there and
+// its type is settled: a notecard takes UpdateNotecardAgentInventory
+// and a script takes UpdateScriptAgent.  A flag saying which would be
+// asking somebody to repeat what inventory already knows, and to be
+// wrong about it half as often as they are right.
+//
+// What it does NOT look at is the asset id, for the reason catReadable
+// gives: the grid leaves a script's asset id out of a listing, so an
+// entry with no asset is a script all the same.
+//
+// A script of the long dead pre-LSL2 kind is written as a script,
+// which is what cat does with one too.  Nobody has one to try it on;
+// refusing would mean telling somebody that their script is not a
+// script, and the capability has the last word either way.
+func saveTarget(e sl.Entry) (sl.AssetType, error) {
+	// A folder's Type is its preferred contents, so without this a
+	// folder reports itself as whatever it likes to hold -- get has the
+	// same check for the same reason.
+	if e.Folder {
+		return 0, fmt.Errorf("%s is a folder, and save writes one notecard or script", e.Name)
+	}
+	// A link carries the type of what it points at, so it would
+	// otherwise look exactly like the notecard it names -- and the
+	// write would go to the link's own item id, which is not where the
+	// text lives.
+	if e.IsLink {
+		return 0, fmt.Errorf("%s is a link and not the item itself; save writes the notecard "+
+			"or script the link points at, so give it that path", e.Name)
+	}
+	switch t := sl.AssetType(e.Type); t {
+	case sl.AssetNotecard:
+		return t, nil
+	case sl.AssetLSLText, sl.AssetScriptLegacy:
+		return sl.AssetLSLText, nil
+	case sl.AssetTexture:
+		return 0, fmt.Errorf("%s is a texture; save writes a notecard or a script, "+
+			"and an image goes up with \"put\"", e.Name)
+	}
+	return 0, fmt.Errorf("%s is %s; save writes a notecard or a script, and nothing here uploads %s",
+		e.Name, aKind(kindOf(e)), aKind(kindOf(e)))
+}
+
+// cmdSave writes a file into a notecard or a script that already
+// exists.  The direction is the one thing to be sure of: the file is
+// read and the item is written, which is the opposite of cat and get.
+func cmdSave(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("save", "FILE PATH", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) < 2 {
+		return fmt.Errorf("usage: save FILE PATH")
+	}
+
+	// The file first, and the path takes the rest of the line as drop's
+	// does: a name with spaces in it is ordinary in inventory and rare
+	// on disk, so the quoting falls where it is least often needed.
+	//
+	// Read before anything is looked up, so that a filename that is not
+	// there costs nothing and changes nothing -- and read as it stands.
+	// new puts a skeleton in a script with no source, because it is
+	// making one and a script with none faults the moment anything runs
+	// it; this is writing what somebody pointed at, and inventing source
+	// they did not ask for would be worse than the compile error they
+	// are about to be shown.
+	body, err := os.ReadFile(args[0])
+	if err != nil {
+		return err
+	}
+	e, err := sh.entryAt(ctx, strings.Join(args[1:], " "))
+	if err != nil {
+		return err
+	}
+	kind, err := saveTarget(e)
+	if err != nil {
+		return err
+	}
+
+	var res *sl.UploadResult
+	switch kind {
+	case sl.AssetNotecard:
+		res, err = sh.s.SaveNotecard(ctx, e.ID, string(body))
+	default:
+		res, err = sh.s.SaveScript(ctx, e.ID, string(body))
+	}
+	if err != nil {
+		return err
+	}
+
+	// The file's own size, not the asset's: a notecard goes up wrapped
+	// in a container nobody asked about, and the number worth printing
+	// is the one that matches the file on disk.
+	//
+	// The verdict is a clause on the same line and never a failure,
+	// because the item WAS written either way -- the save succeeds and
+	// the compile fails, in that order -- and a command that returned an
+	// error would say the opposite.  cmdNew and newInside report a
+	// compile the same way for the same reason.
+	line := fmt.Sprintf("%s: %d bytes written", e.Name, len(body))
+	if kind != sl.AssetNotecard && res != nil {
+		verdict := ", and it compiled"
+		if !res.Compiled {
+			verdict = ", and it did not compile"
+		}
+		line += verdict
+	}
+	fmt.Fprintln(out, line)
+	if res == nil {
+		return nil
+	}
+	// The compiler reports the first error and stops, so this is one
+	// line and worth printing whole.
+	for _, complaint := range res.Errors {
+		fmt.Fprintf(out, "  %s\n", complaint)
+	}
+	// What the capability says when it is unhappy without failing.  It
+	// is the only explanation there will be, so it is printed rather
+	// than left in the reply nobody sees.
+	if res.Message != "" {
+		fmt.Fprintf(out, "  %s\n", res.Message)
+	}
+	return nil
 }
 
 func cmdMkdir(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

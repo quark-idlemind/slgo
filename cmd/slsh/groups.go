@@ -54,7 +54,7 @@ var groups = []group{
 		brief: "folders and items: what you have, and moving it about",
 		members: []string{
 			"pwd", "cd", "ls", "find", "cat", "get", "put",
-			"mkdir", "mv", "cp", "rm", "new", "emptytrash",
+			"mkdir", "mv", "cp", "rm", "new", "save", "emptytrash",
 		},
 	},
 	{
