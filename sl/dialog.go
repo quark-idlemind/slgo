@@ -48,6 +48,27 @@ type Dialog struct {
 	Channel int32
 }
 
+// TextBoxToken is the button label a text box arrives as.
+//
+// llTextBox is not a message of its own: the simulator sends an
+// ordinary ScriptDialog whose single button carries this sentinel, and
+// a viewer that recognises it draws a field to type in instead of a
+// button to press (lllslconstants.h:213).  The answer goes back as the
+// same ScriptDialogReply with the typed text where the button label
+// would be (llviewermessage.cpp:8278).
+const TextBoxToken = "!!llTextBox!!"
+
+// IsTextBox says whether this is a text box rather than a set of
+// buttons.
+func (d Dialog) IsTextBox() bool {
+	for _, b := range d.Buttons {
+		if strings.TrimSpace(b) == TextBoxToken {
+			return true
+		}
+	}
+	return false
+}
+
 // Button reports whether the dialog offers a button with this label,
 // ignoring the case and the spaces around it, and where it sits.
 func (d Dialog) Button(label string) (int, bool) {
@@ -123,6 +144,35 @@ func (w *Session) WaitDialog(ctx context.Context, timeout time.Duration, match f
 	return found, nil
 }
 
+// AnswerText types into a text box.
+//
+// The reply is the same message a button press sends, with the typed
+// text in place of the label -- which is why a text box cannot be told
+// from a button by anything downstream, and why the script hears it on
+// the same channel either way.
+func (w *Session) AnswerText(ctx context.Context, d Dialog, text string) error {
+	if !d.IsTextBox() {
+		return fmt.Errorf("sl: %s is a dialog with buttons, not a text box", d.ObjectName)
+	}
+	if len(text) > maxDialogReply {
+		return fmt.Errorf("sl: %d bytes is too long for a text box; the limit is %d", len(text), maxDialogReply)
+	}
+	return w.answer(ctx, d, 0, text)
+}
+
+// Forget drops a dialog from the list without answering it, which is
+// what ignoring one on screen amounts to.
+func (w *Session) ForgetDialog(d Dialog) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for i, x := range w.dialogs {
+		if x.At.Equal(d.At) && x.Object == d.Object && x.Channel == d.Channel {
+			w.dialogs = append(w.dialogs[:i], w.dialogs[i+1:]...)
+			return
+		}
+	}
+}
+
 // Answer presses the button with this label.
 //
 // The label has to be one the dialog offered: the simulator passes both
@@ -145,6 +195,10 @@ func (w *Session) AnswerIndex(ctx context.Context, d Dialog, i int) error {
 }
 
 func (w *Session) answer(ctx context.Context, d Dialog, index int, label string) error {
+	// Answered is done: a dialog that stayed on the list would be
+	// offered again to whoever asks what is waiting.
+	defer w.ForgetDialog(d)
+
 	m := &msg.ScriptDialogReply{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.Data.ObjectID = d.Object

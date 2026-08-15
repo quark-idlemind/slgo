@@ -58,6 +58,14 @@ var groups = []group{
 		},
 	},
 	{
+		name:  "waiting",
+		brief: "things that want an answer, and how to give one",
+		// offers, accept and decline are here too: they are the older
+		// way to the same two kinds, and a person looking for "how do
+		// I say yes to this" should find both in one place.
+		members: []string{"waiting", "answer", "no", "ignore", "offers", "accept", "decline"},
+	},
+	{
 		name:  "people",
 		brief: "finding people, talking to them, friendship",
 		members: []string{

@@ -159,8 +159,15 @@ func (sh *Shell) watch(ctx context.Context) {
 	ims := sh.s.IMs(0)
 	perms := sh.s.Permissions(0)
 	sh.s.OnDialog = func(d sl.Dialog) {
-		sh.noticef("%s asks: %q %v -- answer with: say -c %d BUTTON",
-			d.ObjectName, d.Message, d.Buttons, d.Channel)
+		// A text box carries a sentinel where its buttons would be, and
+		// printing that at somebody is showing them the plumbing.
+		if d.IsTextBox() {
+			sh.noticef("%s asks: %q -- waiting lists it, answer N TEXT replies",
+				d.ObjectName, d.Message)
+			return
+		}
+		sh.noticef("%s asks: %q %v -- waiting lists it, answer N picks one",
+			d.ObjectName, d.Message, d.Buttons)
 	}
 
 	for {
@@ -184,7 +191,7 @@ func (sh *Shell) watch(ctx context.Context) {
 			if !ok {
 				return
 			}
-			sh.noticef("%s wants %s -- grant with: accept-perms, or ignore it",
+			sh.noticef("%s wants %s -- waiting lists it, answer N grants it",
 				q.ObjectName, q.Wants)
 		}
 	}

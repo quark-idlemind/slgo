@@ -494,6 +494,12 @@ func (w *Session) instantMessage(m *msg.ImprovedInstantMessage) {
 		w.mu.Unlock()
 	}
 
+	// A teleport offer, kept for the same reason again: the lure id
+	// answers it and nothing else does.  See lure.go.
+	if b.Dialog == DialogTeleportLure {
+		w.noteLure(im)
+	}
+
 	// An inventory offer is kept for the same reason: the transaction
 	// id is the only thing that can answer it, and it is not derivable.
 	if o, ok := InventoryOfferFrom(im); ok {

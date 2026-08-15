@@ -108,6 +108,10 @@ type Session struct {
 	// two people may offer at once, and the transaction is what tells
 	// the answers apart.
 	invOffers map[msg.UUID]*InventoryOffer
+
+	// lures are the teleport offers waiting for an answer, by whoever
+	// offered.  See lure.go.
+	lures map[msg.UUID]*Lure
 	pickers   map[msg.UUID]chan []Found
 
 	// Dialogs a script has put up, in arrival order.  Kept rather

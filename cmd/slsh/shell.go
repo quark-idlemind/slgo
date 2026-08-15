@@ -53,6 +53,19 @@ type Shell struct {
 	// what it just showed.
 	listed []person
 
+	// ignoring is what has been set aside: things still waiting for an
+	// answer that the prompt has stopped counting.  Keyed by what
+	// waiter.key builds, and the shell's own -- another client attached
+	// to this avatar has its own idea of what it has dealt with.
+	ignoring map[string]bool
+
+	// numbers is what each waiting thing is called, so that the number
+	// on the screen still means the same thing after something else
+	// has been answered.  nextNum is the next to hand out, and both
+	// reset when nothing is left waiting.
+	numbers map[string]int
+	nextNum int
+
 	// history is what has been typed, oldest first, and histAt is
 	// where the arrows have got to.
 	history []string
@@ -259,11 +272,18 @@ func (sh *Shell) setMode(mode int) {
 // prompt says where the next line will go, which is the only thing
 // standing between a command and a remark said out loud.
 func (sh *Shell) prompt() {
+	// What is waiting goes in front of everything, in both modes: a
+	// teleport offered while somebody is mid-conversation is exactly
+	// when it is easiest to miss, and a dialog nobody answers expires.
+	mark := ""
+	if n := sh.waitingCount(); n > 0 {
+		mark = fmt.Sprintf("(%d) ", n)
+	}
 	if sh.chatting() {
-		sh.term.SetPrompt(sh.talk.Current().Label() + "> ")
+		sh.term.SetPrompt(mark + sh.talk.Current().Label() + "> ")
 		return
 	}
-	sh.term.SetPrompt(sh.Pwd() + "$ ")
+	sh.term.SetPrompt(mark + sh.Pwd() + "$ ")
 }
 
 // Pwd is the working directory as a path.
@@ -560,7 +580,7 @@ func commandNames() []string {
 
 func init() {
 	commands = map[string]*command{}
-	for _, set := range []map[string]*command{inventoryCommands, textureCommands, objectFileCommands, carryCommands, insideCommands, worldCommands, socialCommands, objectCommands, sessionCommands} {
+	for _, set := range []map[string]*command{inventoryCommands, textureCommands, objectFileCommands, carryCommands, insideCommands, waitingCommands, worldCommands, socialCommands, objectCommands, sessionCommands} {
 		for n, c := range set {
 			commands[n] = c
 		}

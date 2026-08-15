@@ -299,8 +299,8 @@ func TestAScriptAskingForSomethingSaysHowToAnswerIt(t *testing.T) {
 	x.grid.Relay(t, d)
 
 	got := waits(t, x, "a lamp asks")
-	if !strings.Contains(got, "say -c -1379 BUTTON") {
-		t.Errorf("the notice should say how to answer:\n%s", got)
+	if !strings.Contains(got, "waiting") || !strings.Contains(got, "answer") {
+		t.Errorf("the notice should name the commands that answer it:\n%s", got)
 	}
 	if !strings.Contains(got, "[on off]") {
 		t.Errorf("the notice should list the buttons:\n%s", got)
@@ -314,8 +314,17 @@ func TestAScriptAskingForSomethingSaysHowToAnswerIt(t *testing.T) {
 	q.Data.Questions = 2 // take controls
 	x.grid.Relay(t, q)
 
-	if got := waits(t, x, "a lamp wants"); !strings.Contains(got, "accept-perms") {
+	// This asserted "accept-perms" for as long as the notice said it,
+	// and no such command has ever existed.  A test that checks the
+	// advice is spelled the same way it was written down does not check
+	// that the advice works.
+	if got := waits(t, x, "a lamp wants"); !strings.Contains(got, "answer") {
 		t.Errorf("a permission request should say how to grant it:\n%s", got)
+	}
+	for _, name := range []string{"waiting", "answer", "no", "ignore"} {
+		if _, ok := commands[name]; !ok {
+			t.Errorf("the notices name %q, which is not a command", name)
+		}
 	}
 }
 
