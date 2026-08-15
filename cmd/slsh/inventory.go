@@ -260,11 +260,12 @@ func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 // alone: it registers every field it can set, and a field with no tag
 // would become a flag named after itself.
 type lsOptions struct {
-	Long   bool `getopt:"-l          the columns: kind, date, id and path"`
-	Deep   bool `getopt:"-r          descend into the folders below"`
-	ByTime bool `getopt:"-t          newest first, rather than by name"`
-	Exact  bool `getopt:"-T          the time of day as well as the date"`
-	Help   bool `getopt:"--help -h   show what this command takes"`
+	Long   bool   `getopt:"-l          the columns: kind, date, id and path"`
+	Deep   bool   `getopt:"-r          descend into the folders below"`
+	ByTime bool   `getopt:"-t          newest first, rather than by name"`
+	Exact  bool   `getopt:"-T          the time of day as well as the date"`
+	In     string `getopt:"--in=OBJECT what a rezzed object holds, rather than inventory"`
+	Help   bool   `getopt:"--help -h   show what this command takes"`
 
 	path string
 	done bool
@@ -320,6 +321,15 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		return err
 	}
 	long, deep, exact, path := o.Long, o.Deep, o.Exact, o.path
+
+	// An object's contents are somewhere else entirely, with ids of
+	// their own; see inside.go.
+	if o.In != "" {
+		if path != "" {
+			return fmt.Errorf("ls --in lists one object, and takes no path")
+		}
+		return sh.listInside(ctx, out, o.In, long)
+	}
 
 	names, id, err := sh.resolveDir(ctx, path)
 	if err != nil {
@@ -532,14 +542,24 @@ func cmdMkdir(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	return nil
 }
 
+type mvOptions struct {
+	In   string `getopt:"--in=OBJECT  rename inside a rezzed object, not in inventory"`
+	Help bool   `getopt:"--help -h    show what this command takes"`
+}
+
 func cmdMv(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	var o helpOnly
+	var o mvOptions
 	args, done, err := subOptions("mv", "PATH DEST", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) != 2 {
 		return fmt.Errorf("usage: mv PATH DEST")
+	}
+	// Inside an object there is nowhere to move to -- an object holds
+	// no folders -- so this is a rename and nothing else.
+	if o.In != "" {
+		return sh.renameInside(ctx, out, o.In, args[0], args[1])
 	}
 	e, err := sh.entryAt(ctx, args[0])
 	if err != nil {
@@ -581,8 +601,9 @@ const allItems = "*"
 
 // rmOptions is what rm was asked for.
 type rmOptions struct {
-	AllCopies bool `getopt:"--remove-all-copies  delete everything of that name, not just the first"`
-	Help      bool `getopt:"--help -h            show what this command takes"`
+	AllCopies bool   `getopt:"--remove-all-copies  delete everything of that name, not just the first"`
+	In        string `getopt:"--in=OBJECT          delete from inside a rezzed object, not from inventory"`
+	Help      bool   `getopt:"--help -h            show what this command takes"`
 }
 
 func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
@@ -593,6 +614,9 @@ func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	}
 	if len(args) == 0 {
 		return fmt.Errorf("usage: rm [--remove-all-copies] PATH...")
+	}
+	if o.In != "" {
+		return sh.removeInside(ctx, out, o.In, args)
 	}
 	for _, path := range args {
 		// One name, and a folder may hold a dozen things wearing it.

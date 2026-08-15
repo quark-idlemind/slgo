@@ -54,7 +54,7 @@ var groups = []group{
 		brief: "folders and items: what you have, and moving it about",
 		members: []string{
 			"pwd", "cd", "ls", "find", "cat", "get", "put",
-			"mkdir", "mv", "cp", "rm", "emptytrash",
+			"mkdir", "mv", "cp", "rm", "new", "emptytrash",
 		},
 	},
 	{
@@ -70,7 +70,8 @@ var groups = []group{
 		name:  "region",
 		brief: "where this avatar is and what is around it",
 		members: []string{"where", "tp", "who", "look", "objects", "worn", "place",
-			"dump", "rez", "reform", "touch", "texture", "take", "bring", "perms"},
+			"dump", "rez", "reform", "touch", "texture", "take", "bring", "perms",
+			"drop"},
 	},
 	{
 		name:  "giving",
