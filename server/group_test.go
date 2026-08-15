@@ -14,6 +14,7 @@ import (
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // counted is how many times the sim saw a message of that name.
@@ -36,6 +37,65 @@ func waitFor(t *testing.T, within time.Duration, what string, f func() bool) {
 			t.Fatalf("timed out waiting for %s", what)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestTheGroupListCrossesToAClient: which groups an avatar has joined
+// is known here and nowhere else.  Nothing asks for it -- the simulator
+// volunteers it shortly after the handshake and again whenever it
+// changes -- so a client that attached later has no way to fetch it,
+// exactly as with the active group.
+//
+// Without it a client holds no group key at all, and the only thing it
+// could do with ActivateGroup is send a key it has no way of knowing.
+func TestTheGroupListCrossesToAClient(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+	h, _ := r.srv.Agent("example")
+
+	// Before the simulator says anything, which is not the same as
+	// belonging to none.  The response carries an empty list either
+	// way and leaves the difference to whoever reads it.
+	p, err := r.srv.Presence(ctx, &pb.PresenceRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.GetGroups()) != 0 {
+		t.Errorf("groups = %v before the simulator said anything", p.GetGroups())
+	}
+
+	builders := msg.MustParseUUID("431c7e57-7e57-c0de-3436-9a8a7819a5e2")
+	explorers := msg.MustParseUUID("5adb7e57-7e57-c0de-d129-851548d0e1c3")
+	m := &msg.AgentGroupDataUpdate{}
+	m.AgentData.AgentID = h.Agent().Account.AgentID
+	m.GroupData = []msg.AgentGroupDataUpdate_GroupData{
+		{GroupID: builders, GroupName: []byte("Pelmar Reach Builders\x00"), GroupPowers: 0x101},
+		{GroupID: explorers, GroupName: []byte("Explorers\x00")},
+	}
+	r.sim.send(m, 0)
+	waitFor(t, 5*time.Second, "the membership list to arrive", func() bool {
+		return len(h.Agent().Groups()) == 2
+	})
+
+	p, err = r.srv.Presence(ctx, &pb.PresenceRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gs := p.GetGroups()
+	if len(gs) != 2 {
+		t.Fatalf("groups = %v, want the two the simulator sent", gs)
+	}
+	// The name as a person would type it: the wire carries it
+	// nul-terminated, and a nul that crossed would make every name
+	// this is matched against fail to match.
+	if gs[0].GetId() != builders.String() || gs[0].GetName() != "Pelmar Reach Builders" {
+		t.Errorf("first group = %v", gs[0])
+	}
+	if gs[0].GetPowers() != 0x101 {
+		t.Errorf("powers = %#x, want the bitfield the simulator sent", gs[0].GetPowers())
+	}
+	if gs[1].GetId() != explorers.String() || gs[1].GetName() != "Explorers" {
+		t.Errorf("second group = %v", gs[1])
 	}
 }
 

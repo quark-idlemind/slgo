@@ -585,6 +585,29 @@ func (f *fakeGrid) AnswerDetach(after time.Duration) {
 	}
 }
 
+// AnswerActivateGroup makes the fake act as whatever group it is asked
+// to.
+//
+// Nothing replies to ActivateGroup.  What says it took effect is the
+// active group in a later AgentDataUpdate, which is why sl.ActivateGroup
+// reads the presence back rather than trusting the send -- so a fake
+// that recorded the message and left the presence alone would leave
+// every activation waiting out its timeout for a change nobody was
+// going to make.
+func (f *fakeGrid) AnswerActivateGroup() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		a, ok := m.(*msg.ActivateGroup)
+		if !ok {
+			return
+		}
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.presence.ActiveGroup = a.AgentData.GroupID
+	}
+}
+
 // AnswerLinking makes the fake join and take apart what it is asked to.
 //
 // Neither message is replied to.  What says a link happened is the
@@ -1030,6 +1053,12 @@ type fakeDaemon struct {
 	agents []*pb.AgentInfo
 	status *pb.StatusResponse
 
+	// presence is what to answer the where-am-I call with, for the
+	// commands whose answer is state slgod holds and a client can only
+	// be handed.  Unset means the least a session can say: a region
+	// name and nothing else.
+	presence *pb.PresenceResponse
+
 	host   *pb.HostResponse
 	logout *pb.LogoutResponse
 
@@ -1133,6 +1162,9 @@ func (d *fakeDaemon) Logout(context.Context, *pb.LogoutRequest) (*pb.LogoutRespo
 }
 
 func (d *fakeDaemon) Presence(context.Context, *pb.PresenceRequest) (*pb.PresenceResponse, error) {
+	if d.presence != nil {
+		return d.presence, nil
+	}
 	return &pb.PresenceResponse{Region: "Test Region"}, nil
 }
 

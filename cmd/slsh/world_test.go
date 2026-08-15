@@ -39,11 +39,21 @@ func TestWhereIsTheRegionAndThePosition(t *testing.T) {
 	}
 
 	// A group is worth saying, because building fails without one and
-	// the land blames itself rather than the avatar.
+	// the land blames itself rather than the avatar.  Until the
+	// membership list arrives there is nothing to call it but its key.
 	group := msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
 	x.grid.presence.ActiveGroup = group
 	if got := x.do(t, "where"); !strings.Contains(got, "acting as group "+group.String()) {
 		t.Errorf("where should name the active group, got %q", got)
+	}
+
+	// With the list in, the name goes in front of the key: the key is
+	// what everything else takes, and the name is what says whether
+	// this is the group the land wants.
+	x.grid.presence.Groups = []sl.Group{{ID: group, Name: "Pelmar Reach Builders"}}
+	if got := x.do(t, "where"); !strings.Contains(got,
+		"acting as group Pelmar Reach Builders ("+group.String()+")") {
+		t.Errorf("where should name the group it can name, got %q", got)
 	}
 }
 

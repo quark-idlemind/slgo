@@ -198,6 +198,13 @@ func TestADirectPresenceComesFromTheAgentsOwnState(t *testing.T) {
 	if p.Region != "" || p.RegionHandle != 0 {
 		t.Errorf("an agent that has not arrived anywhere reports %+v", p)
 	}
+	// The membership list comes from the agent as well, and an agent
+	// nothing has told about any groups has none to hand over -- which
+	// a reader has to take as "not told yet" as much as "belongs to
+	// none".
+	if len(p.Groups) != 0 {
+		t.Errorf("an agent told about no groups reports %+v", p.Groups)
+	}
 
 	// Setting it goes through the agent, because the view is what the
 	// agent keeps telling the simulator about -- a draw distance held

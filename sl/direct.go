@@ -182,7 +182,25 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 		RegionHandle: d.a.RegionHandle(),
 		Region:       d.a.RegionName(),
 		ActiveGroup:  d.a.ActiveGroup(),
+		Groups:       groupsFromAgent(d.a.Groups()),
 	}, nil
+}
+
+// groupsFromAgent crosses the membership list out of the agent package.
+//
+// The two types are the same three fields and are deliberately not
+// shared: agent.Group is what the session was told and sl.Group is what
+// a client is handed, and a hosted session builds the second from
+// protobuf without an agent anywhere in reach.
+func groupsFromAgent(gs []agent.Group) []Group {
+	if len(gs) == 0 {
+		return nil
+	}
+	out := make([]Group, 0, len(gs))
+	for _, g := range gs {
+		out = append(out, Group{ID: g.ID, Name: g.Name, Powers: g.Powers})
+	}
+	return out
 }
 
 func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error) {

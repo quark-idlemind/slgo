@@ -491,6 +491,27 @@ message PresenceResponse {
   // It arrives at login and whenever it changes, so a client that
   // attached later would never have heard it.
   string active_group = 7;
+
+  // Every group the avatar has joined, which is what active_group can
+  // be chosen from.  It travels for the same reason: the simulator
+  // volunteers it shortly after the handshake and again whenever it
+  // changes, so a client that attached later has no way to ask for it.
+  //
+  // Empty means "not told yet" as much as "belongs to none", and
+  // nothing here can tell those apart.
+  repeated GroupMembership groups = 8;
+}
+
+// GroupMembership is one of the avatar's groups, as
+// AgentGroupDataUpdate describes it.
+message GroupMembership {
+  string id = 1;
+  string name = 2;
+
+  // What this membership is allowed to do, as the bitfield the
+  // simulator sends.  Nothing here interprets it; it crosses so that a
+  // client which wants to can.
+  uint64 powers = 3;
 }
 
 // ------------------------------------------------------------- objects

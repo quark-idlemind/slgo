@@ -170,7 +170,29 @@ func (h *Hosted) Presence(ctx context.Context, drawDistance float32) (*Presence,
 		RegionHandle: r.RegionHandle,
 		Region:       r.Region,
 		ActiveGroup:  parseUUIDOrZero(r.ActiveGroup),
+		Groups:       groupsFromPB(r.Groups),
 	}, nil
+}
+
+// groupsFromPB reads the membership list off the wire.
+//
+// A row whose id will not parse is dropped rather than kept as the zero
+// uuid: zero is what "no group" is spelled as everywhere else here, and
+// a nameless zero in the list would read as a group the avatar could
+// act as.
+func groupsFromPB(gs []*pb.GroupMembership) []Group {
+	if len(gs) == 0 {
+		return nil
+	}
+	out := make([]Group, 0, len(gs))
+	for _, g := range gs {
+		id, err := msg.ParseUUID(g.GetId())
+		if err != nil || id.IsZero() {
+			continue
+		}
+		out = append(out, Group{ID: id, Name: g.GetName(), Powers: g.GetPowers()})
+	}
+	return out
 }
 
 func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error) {

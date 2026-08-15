@@ -77,7 +77,13 @@ var groups = []group{
 	{
 		name:  "region",
 		brief: "where this avatar is and what is around it",
-		members: []string{"where", "tp", "who", "look", "objects", "worn", "wear",
+		// group is here rather than under people.  It is a social thing
+		// in Second Life and a land permission in practice: what it
+		// decides is whether this parcel will let the avatar rez, so
+		// the question it answers -- "why has building stopped working
+		// here" -- is asked next to where and rez and nowhere near
+		// friends.
+		members: []string{"where", "group", "tp", "who", "look", "objects", "worn", "wear",
 			"detach", "place", "dump", "rez", "reform", "touch", "texture",
 			"take", "bring", "perms", "drop", "start", "stop", "link", "unlink"},
 	},

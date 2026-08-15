@@ -73,7 +73,12 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	}
 	fmt.Fprintf(out, "%s at %.0f, %.0f, %.0f\n", p.Region, p.Position.X, p.Position.Y, p.Position.Z)
 	if !p.ActiveGroup.IsZero() {
-		fmt.Fprintf(out, "acting as group %s\n", p.ActiveGroup)
+		// Named where a name is to be had.  The key is what everything
+		// else takes and stays in the line for that reason, but it is
+		// the name that says whether this is the group the land wants,
+		// which is the question anybody reading this line has.
+		fmt.Fprintf(out, "acting as group %s\n",
+			describeGroup(nameOfGroup(p.Groups, p.ActiveGroup), p.ActiveGroup))
 	}
 	return nil
 }

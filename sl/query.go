@@ -32,6 +32,29 @@ type Presence struct {
 	// none, which is what a headless login starts with -- and what
 	// makes a parcel refuse to let it build.
 	ActiveGroup msg.UUID
+
+	// Groups is every group the avatar has joined, which is what
+	// ActiveGroup can be set to.
+	//
+	// Empty means "not told yet" as much as "belongs to none".  The
+	// list is not asked for: the simulator volunteers it shortly after
+	// the handshake and again whenever it changes -- see the doc
+	// comments on agent.Groups and agent.WaitGroups -- so a read taken
+	// in the seconds after login can find nothing and be wrong.  There
+	// is no way here to tell the two apart, and anything that says
+	// "this avatar is in no groups" is claiming more than it knows.
+	Groups []Group
+}
+
+// Group is one of the avatar's memberships, as AgentGroupDataUpdate
+// describes it.
+type Group struct {
+	ID   msg.UUID
+	Name string
+
+	// Powers is what the membership is allowed to do, as the bitfield
+	// the simulator sends.  Nothing in this package interprets it.
+	Powers uint64
 }
 
 // Where reports the avatar's position and view.

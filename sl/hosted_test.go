@@ -408,6 +408,52 @@ func TestThePresenceIsTranslatedVectorByVector(t *testing.T) {
 	}
 }
 
+// TestTheMembershipListCrossesWithoutItsUnusableRows: the list of
+// groups an avatar has joined is knowledge the daemon has and a client
+// cannot ask for, so this translation is the only way it reaches
+// anything that could act on it.
+//
+// A row whose key will not parse is dropped rather than kept as the
+// zero uuid.  Zero is how "acting as no group" is spelled everywhere
+// else here, so a zero in the list would read as a group that could be
+// activated -- and activating it is a request to leave whatever group
+// the avatar is in.
+func TestTheMembershipListCrossesWithoutItsUnusableRows(t *testing.T) {
+	t.Parallel()
+	h, d := newFakeDaemon(t)
+	d.presence = &pb.PresenceResponse{
+		Region: "Test Region",
+		Groups: []*pb.GroupMembership{
+			{Id: theOther.String(), Name: "Pelmar Reach Builders", Powers: 0x101},
+			{Id: "not a uuid", Name: "Nowhere"},
+			{Id: msg.UUID{}.String(), Name: "No Group At All"},
+		},
+	}
+
+	p, err := h.Presence(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("Presence: %v", err)
+	}
+	if len(p.Groups) != 1 {
+		t.Fatalf("Groups = %+v, want only the row with a usable key", p.Groups)
+	}
+	if p.Groups[0].ID != theOther || p.Groups[0].Name != "Pelmar Reach Builders" ||
+		p.Groups[0].Powers != 0x101 {
+		t.Errorf("Groups[0] = %+v", p.Groups[0])
+	}
+
+	// No groups at all is an empty list rather than a list of nothing:
+	// it means "not told yet" as much as "belongs to none", and a
+	// caller reads the length to find out.
+	d.presence = &pb.PresenceResponse{Region: "Test Region"}
+	if p, err = h.Presence(context.Background(), 0); err != nil {
+		t.Fatalf("Presence: %v", err)
+	}
+	if len(p.Groups) != 0 {
+		t.Errorf("Groups = %+v for a daemon that sent none", p.Groups)
+	}
+}
+
 // TestObjectsWithoutAReadableIdAreDropped: every id crosses the wire as
 // a string, and an object whose own id will not parse is not an object
 // -- keeping it would put something in the region list that no call

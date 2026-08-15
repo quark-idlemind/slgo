@@ -2167,7 +2167,15 @@ type PresenceResponse struct {
 	// script rights are usually granted to rather than to individuals.
 	// It arrives at login and whenever it changes, so a client that
 	// attached later would never have heard it.
-	ActiveGroup   string `protobuf:"bytes,7,opt,name=active_group,json=activeGroup,proto3" json:"active_group,omitempty"`
+	ActiveGroup string `protobuf:"bytes,7,opt,name=active_group,json=activeGroup,proto3" json:"active_group,omitempty"`
+	// Every group the avatar has joined, which is what active_group can
+	// be chosen from.  It travels for the same reason: the simulator
+	// volunteers it shortly after the handshake and again whenever it
+	// changes, so a client that attached later has no way to ask for it.
+	//
+	// Empty means "not told yet" as much as "belongs to none", and
+	// nothing here can tell those apart.
+	Groups        []*GroupMembership `protobuf:"bytes,8,rep,name=groups,proto3" json:"groups,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2251,6 +2259,78 @@ func (x *PresenceResponse) GetActiveGroup() string {
 	return ""
 }
 
+func (x *PresenceResponse) GetGroups() []*GroupMembership {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+// GroupMembership is one of the avatar's groups, as
+// AgentGroupDataUpdate describes it.
+type GroupMembership struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// What this membership is allowed to do, as the bitfield the
+	// simulator sends.  Nothing here interprets it; it crosses so that a
+	// client which wants to can.
+	Powers        uint64 `protobuf:"varint,3,opt,name=powers,proto3" json:"powers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroupMembership) Reset() {
+	*x = GroupMembership{}
+	mi := &file_slgo_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupMembership) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupMembership) ProtoMessage() {}
+
+func (x *GroupMembership) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupMembership.ProtoReflect.Descriptor instead.
+func (*GroupMembership) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GroupMembership) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *GroupMembership) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GroupMembership) GetPowers() uint64 {
+	if x != nil {
+		return x.Powers
+	}
+	return 0
+}
+
 type ObjectsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Agent string                 `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
@@ -2266,7 +2346,7 @@ type ObjectsRequest struct {
 
 func (x *ObjectsRequest) Reset() {
 	*x = ObjectsRequest{}
-	mi := &file_slgo_proto_msgTypes[30]
+	mi := &file_slgo_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2278,7 +2358,7 @@ func (x *ObjectsRequest) String() string {
 func (*ObjectsRequest) ProtoMessage() {}
 
 func (x *ObjectsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[30]
+	mi := &file_slgo_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2291,7 +2371,7 @@ func (x *ObjectsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectsRequest.ProtoReflect.Descriptor instead.
 func (*ObjectsRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{30}
+	return file_slgo_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ObjectsRequest) GetAgent() string {
@@ -2358,7 +2438,7 @@ type ObjectInfo struct {
 
 func (x *ObjectInfo) Reset() {
 	*x = ObjectInfo{}
-	mi := &file_slgo_proto_msgTypes[31]
+	mi := &file_slgo_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2370,7 +2450,7 @@ func (x *ObjectInfo) String() string {
 func (*ObjectInfo) ProtoMessage() {}
 
 func (x *ObjectInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[31]
+	mi := &file_slgo_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2383,7 +2463,7 @@ func (x *ObjectInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectInfo.ProtoReflect.Descriptor instead.
 func (*ObjectInfo) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{31}
+	return file_slgo_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ObjectInfo) GetId() string {
@@ -2498,7 +2578,7 @@ type Quaternion struct {
 
 func (x *Quaternion) Reset() {
 	*x = Quaternion{}
-	mi := &file_slgo_proto_msgTypes[32]
+	mi := &file_slgo_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2510,7 +2590,7 @@ func (x *Quaternion) String() string {
 func (*Quaternion) ProtoMessage() {}
 
 func (x *Quaternion) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[32]
+	mi := &file_slgo_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2523,7 +2603,7 @@ func (x *Quaternion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Quaternion.ProtoReflect.Descriptor instead.
 func (*Quaternion) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{32}
+	return file_slgo_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *Quaternion) GetX() float32 {
@@ -2584,7 +2664,7 @@ type PrimShape struct {
 
 func (x *PrimShape) Reset() {
 	*x = PrimShape{}
-	mi := &file_slgo_proto_msgTypes[33]
+	mi := &file_slgo_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2596,7 +2676,7 @@ func (x *PrimShape) String() string {
 func (*PrimShape) ProtoMessage() {}
 
 func (x *PrimShape) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[33]
+	mi := &file_slgo_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2609,7 +2689,7 @@ func (x *PrimShape) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrimShape.ProtoReflect.Descriptor instead.
 func (*PrimShape) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{33}
+	return file_slgo_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *PrimShape) GetPathCurve() uint32 {
@@ -2750,7 +2830,7 @@ type ObjectsResponse struct {
 
 func (x *ObjectsResponse) Reset() {
 	*x = ObjectsResponse{}
-	mi := &file_slgo_proto_msgTypes[34]
+	mi := &file_slgo_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2762,7 +2842,7 @@ func (x *ObjectsResponse) String() string {
 func (*ObjectsResponse) ProtoMessage() {}
 
 func (x *ObjectsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[34]
+	mi := &file_slgo_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2775,7 +2855,7 @@ func (x *ObjectsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectsResponse.ProtoReflect.Descriptor instead.
 func (*ObjectsResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{34}
+	return file_slgo_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ObjectsResponse) GetObjects() []*ObjectInfo {
@@ -2801,7 +2881,7 @@ type RegionRequest struct {
 
 func (x *RegionRequest) Reset() {
 	*x = RegionRequest{}
-	mi := &file_slgo_proto_msgTypes[35]
+	mi := &file_slgo_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2813,7 +2893,7 @@ func (x *RegionRequest) String() string {
 func (*RegionRequest) ProtoMessage() {}
 
 func (x *RegionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[35]
+	mi := &file_slgo_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2826,7 +2906,7 @@ func (x *RegionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegionRequest.ProtoReflect.Descriptor instead.
 func (*RegionRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{35}
+	return file_slgo_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RegionRequest) GetAgent() string {
@@ -2862,7 +2942,7 @@ type RegionInfo struct {
 
 func (x *RegionInfo) Reset() {
 	*x = RegionInfo{}
-	mi := &file_slgo_proto_msgTypes[36]
+	mi := &file_slgo_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2874,7 +2954,7 @@ func (x *RegionInfo) String() string {
 func (*RegionInfo) ProtoMessage() {}
 
 func (x *RegionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[36]
+	mi := &file_slgo_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2887,7 +2967,7 @@ func (x *RegionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegionInfo.ProtoReflect.Descriptor instead.
 func (*RegionInfo) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{36}
+	return file_slgo_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *RegionInfo) GetId() string {
@@ -3011,7 +3091,7 @@ type FriendsRequest struct {
 
 func (x *FriendsRequest) Reset() {
 	*x = FriendsRequest{}
-	mi := &file_slgo_proto_msgTypes[37]
+	mi := &file_slgo_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3023,7 +3103,7 @@ func (x *FriendsRequest) String() string {
 func (*FriendsRequest) ProtoMessage() {}
 
 func (x *FriendsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[37]
+	mi := &file_slgo_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3036,7 +3116,7 @@ func (x *FriendsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FriendsRequest.ProtoReflect.Descriptor instead.
 func (*FriendsRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{37}
+	return file_slgo_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *FriendsRequest) GetAgent() string {
@@ -3067,7 +3147,7 @@ type Friend struct {
 
 func (x *Friend) Reset() {
 	*x = Friend{}
-	mi := &file_slgo_proto_msgTypes[38]
+	mi := &file_slgo_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3079,7 +3159,7 @@ func (x *Friend) String() string {
 func (*Friend) ProtoMessage() {}
 
 func (x *Friend) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[38]
+	mi := &file_slgo_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3092,7 +3172,7 @@ func (x *Friend) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Friend.ProtoReflect.Descriptor instead.
 func (*Friend) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{38}
+	return file_slgo_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *Friend) GetId() string {
@@ -3132,7 +3212,7 @@ type FriendsResponse struct {
 
 func (x *FriendsResponse) Reset() {
 	*x = FriendsResponse{}
-	mi := &file_slgo_proto_msgTypes[39]
+	mi := &file_slgo_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3144,7 +3224,7 @@ func (x *FriendsResponse) String() string {
 func (*FriendsResponse) ProtoMessage() {}
 
 func (x *FriendsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[39]
+	mi := &file_slgo_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3157,7 +3237,7 @@ func (x *FriendsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FriendsResponse.ProtoReflect.Descriptor instead.
 func (*FriendsResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{39}
+	return file_slgo_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *FriendsResponse) GetFriends() []*Friend {
@@ -3181,7 +3261,7 @@ type NoteFriendRequest struct {
 
 func (x *NoteFriendRequest) Reset() {
 	*x = NoteFriendRequest{}
-	mi := &file_slgo_proto_msgTypes[40]
+	mi := &file_slgo_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3193,7 +3273,7 @@ func (x *NoteFriendRequest) String() string {
 func (*NoteFriendRequest) ProtoMessage() {}
 
 func (x *NoteFriendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[40]
+	mi := &file_slgo_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3206,7 +3286,7 @@ func (x *NoteFriendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NoteFriendRequest.ProtoReflect.Descriptor instead.
 func (*NoteFriendRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{40}
+	return file_slgo_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *NoteFriendRequest) GetAgent() string {
@@ -3238,7 +3318,7 @@ type NoteFriendResponse struct {
 
 func (x *NoteFriendResponse) Reset() {
 	*x = NoteFriendResponse{}
-	mi := &file_slgo_proto_msgTypes[41]
+	mi := &file_slgo_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3250,7 +3330,7 @@ func (x *NoteFriendResponse) String() string {
 func (*NoteFriendResponse) ProtoMessage() {}
 
 func (x *NoteFriendResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[41]
+	mi := &file_slgo_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3263,7 +3343,7 @@ func (x *NoteFriendResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NoteFriendResponse.ProtoReflect.Descriptor instead.
 func (*NoteFriendResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{41}
+	return file_slgo_proto_rawDescGZIP(), []int{42}
 }
 
 type FlushRequest struct {
@@ -3275,7 +3355,7 @@ type FlushRequest struct {
 
 func (x *FlushRequest) Reset() {
 	*x = FlushRequest{}
-	mi := &file_slgo_proto_msgTypes[42]
+	mi := &file_slgo_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3287,7 +3367,7 @@ func (x *FlushRequest) String() string {
 func (*FlushRequest) ProtoMessage() {}
 
 func (x *FlushRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[42]
+	mi := &file_slgo_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3300,7 +3380,7 @@ func (x *FlushRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlushRequest.ProtoReflect.Descriptor instead.
 func (*FlushRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{42}
+	return file_slgo_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *FlushRequest) GetAgent() string {
@@ -3320,7 +3400,7 @@ type FlushResponse struct {
 
 func (x *FlushResponse) Reset() {
 	*x = FlushResponse{}
-	mi := &file_slgo_proto_msgTypes[43]
+	mi := &file_slgo_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3332,7 +3412,7 @@ func (x *FlushResponse) String() string {
 func (*FlushResponse) ProtoMessage() {}
 
 func (x *FlushResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[43]
+	mi := &file_slgo_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3345,7 +3425,7 @@ func (x *FlushResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlushResponse.ProtoReflect.Descriptor instead.
 func (*FlushResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{43}
+	return file_slgo_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *FlushResponse) GetForgotten() int32 {
@@ -3514,7 +3594,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x01z\x18\x03 \x01(\x02R\x01z\"L\n" +
 	"\x0fPresenceRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12#\n" +
-	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\x9a\x02\n" +
+	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\xcc\x02\n" +
 	"\x10PresenceResponse\x12,\n" +
 	"\bposition\x18\x01 \x01(\v2\x10.slgo.v1.Vector3R\bposition\x12)\n" +
 	"\alook_at\x18\x02 \x01(\v2\x10.slgo.v1.Vector3R\x06lookAt\x12(\n" +
@@ -3522,7 +3602,12 @@ const file_slgo_proto_rawDesc = "" +
 	"\rdraw_distance\x18\x04 \x01(\x02R\fdrawDistance\x12#\n" +
 	"\rregion_handle\x18\x05 \x01(\x04R\fregionHandle\x12\x16\n" +
 	"\x06region\x18\x06 \x01(\tR\x06region\x12!\n" +
-	"\factive_group\x18\a \x01(\tR\vactiveGroup\"L\n" +
+	"\factive_group\x18\a \x01(\tR\vactiveGroup\x120\n" +
+	"\x06groups\x18\b \x03(\v2\x18.slgo.v1.GroupMembershipR\x06groups\"M\n" +
+	"\x0fGroupMembership\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
+	"\x06powers\x18\x03 \x01(\x04R\x06powers\"L\n" +
 	"\x0eObjectsRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
@@ -3656,7 +3741,7 @@ func file_slgo_proto_rawDescGZIP() []byte {
 }
 
 var file_slgo_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_slgo_proto_goTypes = []any{
 	(AgentEvent_Kind)(0),       // 0: slgo.v1.AgentEvent.Kind
 	(AgentInfo_State)(0),       // 1: slgo.v1.AgentInfo.State
@@ -3690,21 +3775,22 @@ var file_slgo_proto_goTypes = []any{
 	(*Vector3)(nil),            // 29: slgo.v1.Vector3
 	(*PresenceRequest)(nil),    // 30: slgo.v1.PresenceRequest
 	(*PresenceResponse)(nil),   // 31: slgo.v1.PresenceResponse
-	(*ObjectsRequest)(nil),     // 32: slgo.v1.ObjectsRequest
-	(*ObjectInfo)(nil),         // 33: slgo.v1.ObjectInfo
-	(*Quaternion)(nil),         // 34: slgo.v1.Quaternion
-	(*PrimShape)(nil),          // 35: slgo.v1.PrimShape
-	(*ObjectsResponse)(nil),    // 36: slgo.v1.ObjectsResponse
-	(*RegionRequest)(nil),      // 37: slgo.v1.RegionRequest
-	(*RegionInfo)(nil),         // 38: slgo.v1.RegionInfo
-	(*FriendsRequest)(nil),     // 39: slgo.v1.FriendsRequest
-	(*Friend)(nil),             // 40: slgo.v1.Friend
-	(*FriendsResponse)(nil),    // 41: slgo.v1.FriendsResponse
-	(*NoteFriendRequest)(nil),  // 42: slgo.v1.NoteFriendRequest
-	(*NoteFriendResponse)(nil), // 43: slgo.v1.NoteFriendResponse
-	(*FlushRequest)(nil),       // 44: slgo.v1.FlushRequest
-	(*FlushResponse)(nil),      // 45: slgo.v1.FlushResponse
-	nil,                        // 46: slgo.v1.StatusResponse.UnhandledEntry
+	(*GroupMembership)(nil),    // 32: slgo.v1.GroupMembership
+	(*ObjectsRequest)(nil),     // 33: slgo.v1.ObjectsRequest
+	(*ObjectInfo)(nil),         // 34: slgo.v1.ObjectInfo
+	(*Quaternion)(nil),         // 35: slgo.v1.Quaternion
+	(*PrimShape)(nil),          // 36: slgo.v1.PrimShape
+	(*ObjectsResponse)(nil),    // 37: slgo.v1.ObjectsResponse
+	(*RegionRequest)(nil),      // 38: slgo.v1.RegionRequest
+	(*RegionInfo)(nil),         // 39: slgo.v1.RegionInfo
+	(*FriendsRequest)(nil),     // 40: slgo.v1.FriendsRequest
+	(*Friend)(nil),             // 41: slgo.v1.Friend
+	(*FriendsResponse)(nil),    // 42: slgo.v1.FriendsResponse
+	(*NoteFriendRequest)(nil),  // 43: slgo.v1.NoteFriendRequest
+	(*NoteFriendResponse)(nil), // 44: slgo.v1.NoteFriendResponse
+	(*FlushRequest)(nil),       // 45: slgo.v1.FlushRequest
+	(*FlushResponse)(nil),      // 46: slgo.v1.FlushResponse
+	nil,                        // 47: slgo.v1.StatusResponse.UnhandledEntry
 }
 var file_slgo_proto_depIdxs = []int32{
 	9,  // 0: slgo.v1.ClientPacket.attach:type_name -> slgo.v1.Attach
@@ -3723,50 +3809,51 @@ var file_slgo_proto_depIdxs = []int32{
 	16, // 13: slgo.v1.HostResponse.agent:type_name -> slgo.v1.AgentInfo
 	16, // 14: slgo.v1.ListAgentsResponse.agents:type_name -> slgo.v1.AgentInfo
 	16, // 15: slgo.v1.StatusResponse.agent:type_name -> slgo.v1.AgentInfo
-	46, // 16: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
+	47, // 16: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
 	10, // 17: slgo.v1.SendRequest.message:type_name -> slgo.v1.OutboundMessage
 	29, // 18: slgo.v1.PresenceResponse.position:type_name -> slgo.v1.Vector3
 	29, // 19: slgo.v1.PresenceResponse.look_at:type_name -> slgo.v1.Vector3
 	29, // 20: slgo.v1.PresenceResponse.camera:type_name -> slgo.v1.Vector3
-	29, // 21: slgo.v1.ObjectInfo.scale:type_name -> slgo.v1.Vector3
-	29, // 22: slgo.v1.ObjectInfo.position:type_name -> slgo.v1.Vector3
-	34, // 23: slgo.v1.ObjectInfo.rotation:type_name -> slgo.v1.Quaternion
-	35, // 24: slgo.v1.ObjectInfo.shape:type_name -> slgo.v1.PrimShape
-	33, // 25: slgo.v1.ObjectsResponse.objects:type_name -> slgo.v1.ObjectInfo
-	40, // 26: slgo.v1.FriendsResponse.friends:type_name -> slgo.v1.Friend
-	2,  // 27: slgo.v1.Grid.Login:input_type -> slgo.v1.LoginRequest
-	4,  // 28: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
-	21, // 29: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
-	23, // 30: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
-	17, // 31: slgo.v1.Grid.Host:input_type -> slgo.v1.HostRequest
-	19, // 32: slgo.v1.Grid.Logout:input_type -> slgo.v1.LogoutRequest
-	30, // 33: slgo.v1.Grid.Presence:input_type -> slgo.v1.PresenceRequest
-	32, // 34: slgo.v1.Grid.Objects:input_type -> slgo.v1.ObjectsRequest
-	37, // 35: slgo.v1.Grid.Region:input_type -> slgo.v1.RegionRequest
-	44, // 36: slgo.v1.Grid.Flush:input_type -> slgo.v1.FlushRequest
-	25, // 37: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
-	27, // 38: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
-	39, // 39: slgo.v1.Grid.Friends:input_type -> slgo.v1.FriendsRequest
-	42, // 40: slgo.v1.Grid.NoteFriend:input_type -> slgo.v1.NoteFriendRequest
-	3,  // 41: slgo.v1.Grid.Login:output_type -> slgo.v1.LoginResponse
-	11, // 42: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
-	22, // 43: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
-	24, // 44: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
-	18, // 45: slgo.v1.Grid.Host:output_type -> slgo.v1.HostResponse
-	20, // 46: slgo.v1.Grid.Logout:output_type -> slgo.v1.LogoutResponse
-	31, // 47: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
-	36, // 48: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
-	38, // 49: slgo.v1.Grid.Region:output_type -> slgo.v1.RegionInfo
-	45, // 50: slgo.v1.Grid.Flush:output_type -> slgo.v1.FlushResponse
-	26, // 51: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
-	28, // 52: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
-	41, // 53: slgo.v1.Grid.Friends:output_type -> slgo.v1.FriendsResponse
-	43, // 54: slgo.v1.Grid.NoteFriend:output_type -> slgo.v1.NoteFriendResponse
-	41, // [41:55] is the sub-list for method output_type
-	27, // [27:41] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	32, // 21: slgo.v1.PresenceResponse.groups:type_name -> slgo.v1.GroupMembership
+	29, // 22: slgo.v1.ObjectInfo.scale:type_name -> slgo.v1.Vector3
+	29, // 23: slgo.v1.ObjectInfo.position:type_name -> slgo.v1.Vector3
+	35, // 24: slgo.v1.ObjectInfo.rotation:type_name -> slgo.v1.Quaternion
+	36, // 25: slgo.v1.ObjectInfo.shape:type_name -> slgo.v1.PrimShape
+	34, // 26: slgo.v1.ObjectsResponse.objects:type_name -> slgo.v1.ObjectInfo
+	41, // 27: slgo.v1.FriendsResponse.friends:type_name -> slgo.v1.Friend
+	2,  // 28: slgo.v1.Grid.Login:input_type -> slgo.v1.LoginRequest
+	4,  // 29: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
+	21, // 30: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
+	23, // 31: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
+	17, // 32: slgo.v1.Grid.Host:input_type -> slgo.v1.HostRequest
+	19, // 33: slgo.v1.Grid.Logout:input_type -> slgo.v1.LogoutRequest
+	30, // 34: slgo.v1.Grid.Presence:input_type -> slgo.v1.PresenceRequest
+	33, // 35: slgo.v1.Grid.Objects:input_type -> slgo.v1.ObjectsRequest
+	38, // 36: slgo.v1.Grid.Region:input_type -> slgo.v1.RegionRequest
+	45, // 37: slgo.v1.Grid.Flush:input_type -> slgo.v1.FlushRequest
+	25, // 38: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
+	27, // 39: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
+	40, // 40: slgo.v1.Grid.Friends:input_type -> slgo.v1.FriendsRequest
+	43, // 41: slgo.v1.Grid.NoteFriend:input_type -> slgo.v1.NoteFriendRequest
+	3,  // 42: slgo.v1.Grid.Login:output_type -> slgo.v1.LoginResponse
+	11, // 43: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
+	22, // 44: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
+	24, // 45: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
+	18, // 46: slgo.v1.Grid.Host:output_type -> slgo.v1.HostResponse
+	20, // 47: slgo.v1.Grid.Logout:output_type -> slgo.v1.LogoutResponse
+	31, // 48: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
+	37, // 49: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
+	39, // 50: slgo.v1.Grid.Region:output_type -> slgo.v1.RegionInfo
+	46, // 51: slgo.v1.Grid.Flush:output_type -> slgo.v1.FlushResponse
+	26, // 52: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
+	28, // 53: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
+	42, // 54: slgo.v1.Grid.Friends:output_type -> slgo.v1.FriendsResponse
+	44, // 55: slgo.v1.Grid.NoteFriend:output_type -> slgo.v1.NoteFriendResponse
+	42, // [42:56] is the sub-list for method output_type
+	28, // [28:42] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_slgo_proto_init() }
@@ -3794,7 +3881,7 @@ func file_slgo_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_slgo_proto_rawDesc), len(file_slgo_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   45,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

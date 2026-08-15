@@ -479,7 +479,31 @@ func (s *Server) Presence(ctx context.Context, req *pb.PresenceRequest) (*pb.Pre
 		RegionHandle: a.RegionHandle(),
 		Region:       a.RegionName(),
 		ActiveGroup:  a.ActiveGroup().String(),
+		Groups:       memberships(a.Groups()),
 	}, nil
+}
+
+// memberships crosses the group list a client has no other way to hear.
+//
+// Nothing waits for it here.  The daemon is told the list of its own
+// accord shortly after the handshake, so by the time a client attaches
+// it is long since in; and a Presence call that blocked for it would
+// stall every caller for the one case where the answer is genuinely
+// nothing.  An empty list is handed over as empty and the client is the
+// one that says what that means.
+func memberships(gs []agent.Group) []*pb.GroupMembership {
+	if len(gs) == 0 {
+		return nil
+	}
+	out := make([]*pb.GroupMembership, 0, len(gs))
+	for _, g := range gs {
+		out = append(out, &pb.GroupMembership{
+			Id:     g.ID.String(),
+			Name:   g.Name,
+			Powers: g.Powers,
+		})
+	}
+	return out
 }
 
 func vec(v msg.Vector3) *pb.Vector3 {
