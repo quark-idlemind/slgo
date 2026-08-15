@@ -566,6 +566,65 @@ func (f *fakeGrid) AnswerDetach(after time.Duration) {
 	}
 }
 
+// AnswerLinking makes the fake join and take apart what it is asked to.
+//
+// Neither message is replied to.  What says a link happened is the
+// children naming the root as their parent in an ordinary object update,
+// and what says a delink happened is the same update naming nobody -- so
+// a fake that took the request and said nothing would leave every link
+// and every unlink waiting twenty seconds for a confirmation nothing was
+// going to send.
+//
+// What the region has described is changed as well as relayed, because
+// both commands read the linkset back to say what it is now: a fake that
+// went on reporting the old shape would have the report contradict the
+// update that arrived a moment before it.
+func (f *fakeGrid) AnswerLinking(t *testing.T) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		var parent uint32
+		var locals []uint32
+		switch r := m.(type) {
+		case *msg.ObjectLink:
+			// The first block is the root and the rest go under it,
+			// which is the order sl.Link packs them in.
+			if len(r.ObjectData) < 2 {
+				return
+			}
+			parent = r.ObjectData[0].ObjectLocalID
+			for _, d := range r.ObjectData[1:] {
+				locals = append(locals, d.ObjectLocalID)
+			}
+		case *msg.ObjectDelink:
+			for _, d := range r.ObjectData {
+				locals = append(locals, d.ObjectLocalID)
+			}
+		default:
+			return
+		}
+
+		f.mu.Lock()
+		var said []msg.ObjectUpdate_ObjectData
+		for _, l := range locals {
+			for _, o := range f.objects {
+				if o.Local != l {
+					continue
+				}
+				o.Parent = parent
+				said = append(said, msg.ObjectUpdate_ObjectData{
+					FullID: o.ID, ID: o.Local, ParentID: parent,
+				})
+			}
+		}
+		f.mu.Unlock()
+
+		for _, u := range said {
+			f.Relay(t, &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{u}})
+		}
+	}
+}
+
 // ------------------------------------------------------------- backend
 
 func (f *fakeGrid) Info() *sl.Info { return f.info }

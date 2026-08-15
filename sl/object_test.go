@@ -471,6 +471,108 @@ func TestLinkRefusesWhatItCannotDo(t *testing.T) {
 	})
 }
 
+// TestUnlinkSendsThePrimsBeingFreedAndWaitsForThemToSaySo.
+//
+// A delink names the prims that are LEAVING rather than the root they
+// are leaving, which is the opposite of a link and is what lets one
+// prim out of a set.  Nothing replies to it, so the confirmation is the
+// freed prims saying they have no parent -- and "no parent" has to mean
+// something the region said, not the absence of anything said at all: a
+// map of parents answers zero for a prim it has never heard of, which
+// would pass for success before the request had gone anywhere.
+func TestUnlinkSendsThePrimsBeingFreedAndWaitsForThemToSaySo(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	child := &Object{ID: theChild, Local: 2}
+	other := &Object{ID: theOther, Local: 3}
+
+	// Not asideErr: what this has to watch is the call NOT returning,
+	// and a wait for the answer cannot say that.
+	done := make(chan error, 1)
+	go func() { done <- w.Unlink(context.Background(), child, other) }()
+
+	sel := waitSent[*msg.ObjectSelect](t, f)
+	if len(sel.ObjectData) != 2 {
+		t.Errorf("unlinking selected %+v, want both prims", sel.ObjectData)
+	}
+	del := waitSent[*msg.ObjectDelink](t, f)
+	if len(del.ObjectData) != 2 ||
+		del.ObjectData[0].ObjectLocalID != 2 || del.ObjectData[1].ObjectLocalID != 3 {
+		t.Errorf("delinked %+v, want the prims being freed", del.ObjectData)
+	}
+	if del.AgentData.AgentID != testAgentID || del.AgentData.SessionID != testSessionID {
+		t.Errorf("the delink came from %+v", del.AgentData)
+	}
+
+	select {
+	case err := <-done:
+		t.Fatalf("Unlink finished before the region said anything at all: %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	// One of the two is not both of them.
+	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: theChild, ID: 2, ParentID: 0}))
+	select {
+	case err := <-done:
+		t.Fatalf("Unlink finished with the second prim still linked: %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: theOther, ID: 3, ParentID: 0}))
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Unlink: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("Unlink never finished, though both prims had said they were loose")
+	}
+	if p, ok := w.Parent(child); !ok || p != 0 {
+		t.Errorf("Parent = %d, %v", p, ok)
+	}
+}
+
+// TestUnlinkRefusesWhatItCannotDo: an unlink that reported success
+// without the simulator having agreed would have somebody take a
+// linkset apart, be told it came apart, and find it whole.
+func TestUnlinkRefusesWhatItCannotDo(t *testing.T) {
+	child := &Object{ID: theChild, Local: 2}
+
+	t.Run("nothing to take apart", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		if err := w.Unlink(context.Background()); err == nil {
+			t.Error("Unlink took nothing apart and reported it")
+		}
+		if got := f.Sent(); len(got) != 0 {
+			t.Errorf("a delink with nothing to free sent %s", f.describe())
+		}
+	})
+
+	t.Run("the selection never went", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.FailSends(errors.New("the circuit is gone"))
+		if err := w.Unlink(context.Background(), child); err == nil {
+			t.Error("Unlink went ahead without a selection")
+		}
+		if got := sentOf[*msg.ObjectDelink](f); len(got) != 0 {
+			t.Error("the delink went out after the selection failed")
+		}
+	})
+
+	t.Run("the caller gave up waiting", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		wait := asideErr(t, func() error { return w.Unlink(ctx, child) })
+		waitSent[*msg.ObjectDelink](t, f)
+		cancel()
+		if err := wait(); !errors.Is(err, context.Canceled) {
+			t.Errorf("Unlink = %v, want the context's reason", err)
+		}
+	})
+}
+
 // aFolder is where things are taken to.
 var aFolder = msg.MustParseUUID("41857e57-7e57-c0de-7351-f953176288ed")
 

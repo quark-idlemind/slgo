@@ -227,6 +227,97 @@ func (w *Session) Link(ctx context.Context, root *Object, children ...*Object) e
 	})
 }
 
+// Unlink frees prims from the linkset they are in, and waits until the
+// simulator agrees they are loose.
+//
+// The prims named are the ones being FREED, which is the other way
+// round from Link.  A delink goes out as individuals and a link as
+// roots, and the viewer says why where it does it: "Delink needs to
+// send individuals so you can unlink a single object from a linked set"
+// (llselectmgr.cpp:5477), against SEND_ONLY_ROOTS in sendLink just above
+// (llselectmgr.cpp:5434).  So a whole linkset comes apart by naming
+// every child of it, and one prim leaves by naming that prim; which of
+// those was meant is the caller's to decide.
+//
+// The root of a linkset is not among them.  It has no parent to lose,
+// so naming it frees nothing, and it is not something that can be
+// waited for either: the confirmation here is a prim saying it has no
+// parent, and a prim that never had one has no reason to be described
+// again.  The viewer does send it, since clicking an object selects the
+// whole linkset and every prim of a selection goes into the message, so
+// the selection this takes -- exactly the prims being freed -- is one
+// the viewer would not make, and the viewer's source cannot say whether
+// the simulator minds: it is only ever the sending half.
+//
+// It does not mind.  Measured on Agni, in Pelmar Reach: three prims linked
+// into one object, then a delink naming only the last child, with the
+// root left out of both the selection and the message.  The child came
+// out and stood where it had been, and what was left answered to the
+// root's name as two prims.
+//
+// # The physics shape the viewer changes on the way past
+//
+// Before sending, the viewer walks the selection and, for every
+// modifiable prim whose physics shape type is PHYSICS_SHAPE_NONE, sets
+// it to PHYSICS_SHAPE_CONVEX_HULL and calls updateFlags()
+// (llselectmgr.cpp:5458-5472).  This does not, for two reasons.
+//
+// The first is that the step never puts the shape on the wire.
+// updateFlags() takes a physics_changed parameter which defaults to
+// false (llviewerobject.h:650) and the delink passes nothing, and it is
+// that parameter which decides whether the ExtraPhysics block carrying
+// PhysicsShapeType is added at all (llviewerobject.cpp:7297-7305).  What
+// reaches the simulator is an ObjectFlagUpdate of UsePhysics,
+// IsTemporary and IsPhantom -- none of which the delink touched.  The
+// new shape type stays in the viewer's own copy of the object, which is
+// where its build floater reads one from.
+//
+// The second is that this client does not know what a prim's physics
+// shape is.  It arrives in ObjectPhysicsProperties, which nothing here
+// asks for or decodes, so copying the step would mean fetching the
+// properties of every prim and sending a message this package does not
+// have, in order to reproduce bookkeeping the viewer does for its own
+// display.  What a freed prim's physics shape ends up as is the
+// simulator's business and was not verifiable from the viewer's source;
+// if one ever comes out of a delink shaped wrongly, that is worth
+// measuring on a live region before writing code against it.
+func (w *Session) Unlink(ctx context.Context, prims ...*Object) error {
+	if len(prims) == 0 {
+		return fmt.Errorf("sl: unlinking needs something to take apart")
+	}
+	if err := w.Select(ctx, prims...); err != nil {
+		return err
+	}
+	// A delink operates on the current selection, the same way a link
+	// does, and the simulator has to have taken it in first.
+	if err := w.Settle(ctx, 2*time.Second); err != nil {
+		return err
+	}
+
+	m := &msg.ObjectDelink{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	for _, o := range prims {
+		m.ObjectData = append(m.ObjectData, msg.ObjectDelink_ObjectData{ObjectLocalID: o.Local})
+	}
+	if err := w.Send(ctx, m); err != nil {
+		return err
+	}
+
+	// A delink shows up as the freed prims naming nobody as their
+	// parent.  The entry has to be present as well as zero: parents is a
+	// map, and a prim this session has never heard an update about reads
+	// as zero already, which would pass for a confirmation before the
+	// request had reached the region.
+	return w.await(ctx, 20*time.Second, "the prims to say they have no parent", func() bool {
+		for _, o := range prims {
+			if p, ok := w.parents[o.Local]; !ok || p != 0 {
+				return false
+			}
+		}
+		return true
+	})
+}
+
 // Parent reports the local id an object says is its parent, and
 // whether the simulator has mentioned it at all.
 func (w *Session) Parent(o *Object) (uint32, bool) {
