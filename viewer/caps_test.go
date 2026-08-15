@@ -2,6 +2,7 @@ package viewer
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -163,8 +164,39 @@ func TestAddNeverBlocks(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("adding events blocked the session")
 	}
-	if _, dropped := q.Stats(); dropped == 0 {
+	if _, dropped, _ := q.Stats(); dropped == 0 {
 		t.Error("nothing was dropped, so the bound did nothing")
+	}
+}
+
+// TestNeighbourRegionsAreNotOfferedToTheViewer: the event carries a
+// neighbouring simulator's UDP address and seed capability, and a
+// viewer given it opens a direct connection there using this session's
+// credentials -- to a simulator that has never heard of slgod.
+func TestNeighbourRegionsAreNotOfferedToTheViewer(t *testing.T) {
+	q := NewEventQueue()
+	q.Add("EstablishAgentCommunication", []byte("<llsd><map/></llsd>"))
+	q.Add("ParcelProperties", []byte("<llsd><map/></llsd>"))
+
+	delivered, _, withheld := q.Stats()
+	if withheld != 1 {
+		t.Errorf("withheld %d events, want the one", withheld)
+	}
+	_ = delivered
+
+	s := httptest.NewServer(q)
+	defer s.Close()
+	resp, err := http.Post(s.URL, "application/llsd+xml", strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), "EstablishAgentCommunication") {
+		t.Errorf("the neighbour was offered to the viewer anyway:\n%s", body)
+	}
+	if !strings.Contains(string(body), "ParcelProperties") {
+		t.Errorf("ordinary events stopped going across:\n%s", body)
 	}
 }
 

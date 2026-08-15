@@ -49,6 +49,27 @@ type EventQueue struct {
 
 	delivered uint64
 	dropped   uint64
+	withheld  uint64
+}
+
+// withheldEvents are the events a viewer must not be given.
+//
+// EstablishAgentCommunication is the simulator introducing a neighbour
+// region: its UDP address and its seed capability, so that a viewer can
+// open a child connection and draw what is over the border.  Handed to
+// a viewer here, that is exactly what it does -- and the connection it
+// opens is direct, using this session's own agent and session ids, to a
+// simulator that has never heard of slgod.  The handover stops being a
+// handover: part of the session is then in the daemon and part of it is
+// in the viewer, and nothing can see both.
+//
+// So it is withheld, and the cost is plain rather than hidden: the
+// viewer draws this region and nothing beyond it.  Neighbouring
+// regions are void.  Making them work means slgod holding the child
+// connections itself and handing on what they say, which is the same
+// piece of work as region crossing and is not built.
+var withheldEvents = map[string]bool{
+	"EstablishAgentCommunication": true,
 }
 
 type event struct {
@@ -76,6 +97,13 @@ func NewEventQueue() *EventQueue {
 // viewer that has stopped collecting must not be able to stop the
 // session's queue from draining.
 func (q *EventQueue) Add(name string, body []byte) {
+	if withheldEvents[name] {
+		q.mu.Lock()
+		q.withheld++
+		q.mu.Unlock()
+		return
+	}
+
 	q.mu.Lock()
 	if len(q.waiting) >= QueueLimit {
 		// Oldest first.  A viewer this far behind has stopped
@@ -93,12 +121,13 @@ func (q *EventQueue) Add(name string, body []byte) {
 	}
 }
 
-// Stats is how many events were handed on and how many were dropped for
-// a viewer that stopped collecting.
-func (q *EventQueue) Stats() (delivered, dropped uint64) {
+// Stats is how many events were handed on, how many were dropped for a
+// viewer that stopped collecting, and how many were withheld because a
+// viewer must not act on them.
+func (q *EventQueue) Stats() (delivered, dropped, withheld uint64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return q.delivered, q.dropped
+	return q.delivered, q.dropped, q.withheld
 }
 
 // take returns what is waiting, if anything.

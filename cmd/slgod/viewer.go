@@ -85,7 +85,18 @@ func (v *viewerHost) queueFor(profile string) *viewer.EventQueue {
 // neither would know it was missing any.
 func (v *viewerHost) eventsFor(profile string) func(string, []byte) {
 	q := v.queueFor(profile)
-	return func(name string, body []byte) { q.Add(name, body) }
+	// Said once per session rather than per event: a region with four
+	// neighbours introduces them repeatedly, and this is a standing
+	// limitation rather than news.
+	var said sync.Once
+	return func(name string, body []byte) {
+		q.Add(name, body)
+		if _, _, withheld := q.Stats(); withheld > 0 {
+			said.Do(func() {
+				v.logf("viewer: %s: neighbouring regions are not offered to the viewer, so it will draw this region and nothing beyond it", profile)
+			})
+		}
+	}
 }
 
 // relayFor is the hook a session hands its messages to.
