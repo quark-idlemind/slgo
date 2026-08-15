@@ -57,6 +57,39 @@ func AttachPointName(point int) string {
 	return fmt.Sprintf("point %d", point)
 }
 
+// attachPointsByName is attachPointNames the other way round, built from
+// it so that there is one table and not two: a name added to the map
+// above is understood here without anybody remembering to add it twice.
+//
+// The keys are folded to lower case, and "center" is accepted for
+// "centre" as well, because the viewer spells the HUD points the
+// American way and a person reading them off its menu should not be told
+// there is no such point.
+var attachPointsByName = func() map[string]int {
+	m := make(map[string]int, 2*len(attachPointNames))
+	for point, name := range attachPointNames {
+		n := strings.ToLower(name)
+		m[n] = point
+		if alt := strings.ReplaceAll(n, "centre", "center"); alt != n {
+			m[alt] = point
+		}
+	}
+	return m
+}()
+
+// AttachPointNamed is the point a name means, and is what
+// AttachPointName undoes.  The name is matched without regard to case or
+// to surrounding space, since it is typed by a person rather than
+// carried on the wire.
+//
+// A name nothing is called is not guessed at: an attachment on the wrong
+// point has to be found and taken off again, which is a worse answer
+// than being told the name was not understood.
+func AttachPointNamed(name string) (int, bool) {
+	point, ok := attachPointsByName[strings.ToLower(strings.TrimSpace(name))]
+	return point, ok
+}
+
 // AttachAdd asks for an attachment to be added rather than to replace
 // whatever is on the point.
 const AttachAdd = 0x80

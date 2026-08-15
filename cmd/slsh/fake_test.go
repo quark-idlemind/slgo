@@ -504,6 +504,68 @@ func (f *fakeGrid) AnswerNames(t *testing.T, names map[msg.UUID]string) {
 	}
 }
 
+// AnswerAttach makes the fake put something on when it is asked to.
+//
+// A wear is not finished when the request goes out: the session waits
+// for the region to describe a brand new object carrying the item it
+// came from, since that is the only thing tying the two together.  So a
+// fake that only accepted the request would leave every wear timing out
+// after forty seconds.
+//
+// The point is the fake's to choose rather than an echo of the request,
+// because the two differ in the case that matters: a wear with no point
+// named asks for 0, meaning "wherever the object itself says", and what
+// it lands on is known only from the answer.
+func (f *fakeGrid) AnswerAttach(t *testing.T, id msg.UUID, local uint32, point int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		r, ok := m.(*msg.RezSingleAttachmentFromInv)
+		if !ok {
+			return
+		}
+		f.Relay(t, &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{
+			FullID: id,
+			ID:     local,
+			// The point rides in the State byte with its nibbles
+			// swapped, which is how the session reads it back.
+			State:     uint8((point&0x0f)<<4 | (point>>4)&0x0f),
+			NameValue: []byte("AttachItemID STRING RW DS " + r.ObjectData.ItemID.String() + "\n"),
+		}}})
+	}
+}
+
+// AnswerDetach makes the fake take something off when it is asked to,
+// but not at once.
+//
+// The delay is the whole point of the helper.  Nothing replies to a
+// detach: what says the thing came off is the object no longer being
+// among what is worn, and on a real region that is true some time after
+// the request rather than during it.  A fake that dropped the object
+// inside the send would let a command which never waited at all pass.
+func (f *fakeGrid) AnswerDetach(after time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		d, ok := m.(*msg.DetachAttachmentIntoInv)
+		if !ok {
+			return
+		}
+		item := d.ObjectData.ItemID
+		time.AfterFunc(after, func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			var keep []*sl.Seen
+			for _, o := range f.objects {
+				if o.AttachItem != item {
+					keep = append(keep, o)
+				}
+			}
+			f.objects = keep
+		})
+	}
+}
+
 // ------------------------------------------------------------- backend
 
 func (f *fakeGrid) Info() *sl.Info { return f.info }

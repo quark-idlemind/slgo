@@ -73,6 +73,41 @@ func TestAttachPointsAreNamed(t *testing.T) {
 	}
 }
 
+// TestAPointCanBeFoundByTheNameItIsPrintedUnder: a person choosing
+// where to put something has the name and not the number, and the two
+// tables are one table -- a name that AttachPointName prints has to be
+// one AttachPointNamed accepts, or the shell can print a point it will
+// not then take back.
+func TestAPointCanBeFoundByTheNameItIsPrintedUnder(t *testing.T) {
+	for point, name := range attachPointNames {
+		got, ok := AttachPointNamed(name)
+		if !ok || got != point {
+			t.Errorf("AttachPointNamed(%q) = %d, %v, want %d", name, got, ok, point)
+		}
+	}
+
+	// Typed by a person, so case and space are not the question being
+	// asked; and the viewer spells the HUD points the American way.
+	for _, name := range []string{"LEFT HAND", "  left hand  ", "Left Hand"} {
+		if got, ok := AttachPointNamed(name); !ok || got != 5 {
+			t.Errorf("AttachPointNamed(%q) = %d, %v", name, got, ok)
+		}
+	}
+	if got, ok := AttachPointNamed("HUD center 1"); !ok || got != HUDCenter1 {
+		t.Errorf("the American spelling of a HUD point = %d, %v", got, ok)
+	}
+
+	// A name nothing is called is not guessed at.  An attachment put on
+	// the wrong point has to be hunted down and taken off again, which
+	// is a worse answer than being told the name was not understood.
+	if got, ok := AttachPointNamed("elbow"); ok {
+		t.Errorf("AttachPointNamed(\"elbow\") = %d, want nothing", got)
+	}
+	if _, ok := AttachPointNamed(""); ok {
+		t.Error("the empty name found a point")
+	}
+}
+
 // TestTheAttachPointArrivesWithItsNibblesSwapped: the State byte holds
 // the point in swapped halves, and reading it straight gives a point
 // number that names something else entirely.
