@@ -70,7 +70,7 @@ var groups = []group{
 		name:  "region",
 		brief: "where this avatar is and what is around it",
 		members: []string{"where", "tp", "who", "look", "objects", "worn", "place",
-			"dump", "rez", "reform", "touch", "texture"},
+			"dump", "rez", "reform", "touch", "texture", "take", "bring", "perms"},
 	},
 	{
 		name:  "giving",
@@ -79,7 +79,7 @@ var groups = []group{
 		// place anyway: "how do I give somebody an object" is a real
 		// question whose answer is otherwise spread between inventory
 		// and people.
-		members: []string{"give", "cp", "offers", "accept", "decline"},
+		members: []string{"give", "cp", "offers", "accept", "decline", "perms"},
 	},
 	{
 		name:    "avatars",
