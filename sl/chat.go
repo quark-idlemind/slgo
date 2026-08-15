@@ -561,10 +561,13 @@ func (w *Session) SayAs(ctx context.Context, text string, channel int32, chatTyp
 	return w.Send(ctx, m)
 }
 
-// maxDialogReply is how much text a script dialog reply can carry.  The
+// MaxDialogReply is how much text a script dialog reply can carry.  The
 // template gives ButtonLabel a one byte length prefix, so 255 bytes
 // including the terminator.
-const maxDialogReply = 254
+//
+// It bounds a text box answer and a say on a negative channel alike,
+// since both travel in that one field.
+const MaxDialogReply = 254
 
 // sayNegative speaks on a negative channel, which ChatFromViewer from
 // this client does not manage.
@@ -587,9 +590,9 @@ const maxDialogReply = 254
 // rather than the only route, since it costs a length limit the real
 // one does not have.
 func (w *Session) sayNegative(ctx context.Context, text string, channel int32) error {
-	if len(text) > maxDialogReply {
+	if len(text) > MaxDialogReply {
 		return fmt.Errorf("sl: %d bytes is too long for channel %d; "+
-			"a negative channel carries at most %d", len(text), channel, maxDialogReply)
+			"a negative channel carries at most %d", len(text), channel, MaxDialogReply)
 	}
 	m := &msg.ScriptDialogReply{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()

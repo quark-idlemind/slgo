@@ -259,7 +259,7 @@ func TestSayNegativeLimits(t *testing.T) {
 	}
 
 	// The label has a one byte length prefix, so there is a ceiling.
-	long := strings.Repeat("x", maxDialogReply+1)
+	long := strings.Repeat("x", MaxDialogReply+1)
 	err := w.SayAs(nil, long, -1, ChatSay)
 	if err == nil {
 		t.Fatal("a message past the limit should be refused")
@@ -267,7 +267,7 @@ func TestSayNegativeLimits(t *testing.T) {
 	if !strings.Contains(err.Error(), "254") {
 		t.Errorf("the error should say the limit: %v", err)
 	}
-	if err := w.SayAs(nil, strings.Repeat("x", maxDialogReply), -1, ChatSay); err != nil {
+	if err := w.SayAs(nil, strings.Repeat("x", MaxDialogReply), -1, ChatSay); err != nil {
 		t.Errorf("a message at the limit should be sent: %v", err)
 	}
 }

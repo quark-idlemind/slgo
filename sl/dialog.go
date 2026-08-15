@@ -154,8 +154,8 @@ func (w *Session) AnswerText(ctx context.Context, d Dialog, text string) error {
 	if !d.IsTextBox() {
 		return fmt.Errorf("sl: %s is a dialog with buttons, not a text box", d.ObjectName)
 	}
-	if len(text) > maxDialogReply {
-		return fmt.Errorf("sl: %d bytes is too long for a text box; the limit is %d", len(text), maxDialogReply)
+	if len(text) > MaxDialogReply {
+		return fmt.Errorf("sl: %d bytes is too long for a text box; the limit is %d", len(text), MaxDialogReply)
 	}
 	return w.answer(ctx, d, 0, text)
 }

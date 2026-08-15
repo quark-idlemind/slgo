@@ -31,6 +31,10 @@ import (
 const (
 	modeCommand = iota
 	modeChat
+
+	// modeText collects a multi-line answer for a text box.  See
+	// entry.go.
+	modeText
 )
 
 // Shell is one running slsh.
@@ -65,6 +69,9 @@ type Shell struct {
 	// reset when nothing is left waiting.
 	numbers map[string]int
 	nextNum int
+
+	// entry is the multi-line answer being typed, if one is.
+	entry *entry
 
 	// history is what has been typed, oldest first, and histAt is
 	// where the arrows have got to.
@@ -149,6 +156,10 @@ func (sh *Shell) key(ctx context.Context, r rune) {
 			sh.term.Take()
 			return
 		}
+		if sh.typing() {
+			sh.abandon()
+			return
+		}
 		if chat {
 			sh.setMode(modeCommand)
 			return
@@ -174,6 +185,14 @@ func (sh *Shell) key(ctx context.Context, r rune) {
 }
 
 func (sh *Shell) enter(ctx context.Context) {
+	if sh.typing() {
+		// Echoed like a command rather than swallowed like chat: what
+		// was typed is the answer, and a person needs to see it to
+		// know whether to type a full stop yet.
+		sh.term.Echo()
+		sh.typed(ctx, sh.term.Take())
+		return
+	}
 	if sh.chatting() {
 		// Chat does not echo the line here: send prints it in its own
 		// marked form, so that what was said and what was heard can be
@@ -278,6 +297,16 @@ func (sh *Shell) prompt() {
 	mark := ""
 	if n := sh.waitingCount(); n > 0 {
 		mark = fmt.Sprintf("(%d) ", n)
+	}
+	if sh.typing() {
+		sh.mu.Lock()
+		n := 0
+		if sh.entry != nil {
+			n = len(sh.entry.lines)
+		}
+		sh.mu.Unlock()
+		sh.term.SetPrompt(fmt.Sprintf("%d text> ", n+1))
+		return
 	}
 	if sh.chatting() {
 		sh.term.SetPrompt(mark + sh.talk.Current().Label() + "> ")
