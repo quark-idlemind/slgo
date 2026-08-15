@@ -212,6 +212,11 @@ func (sh *Shell) heard(m *sl.IM) {
 	case m.Dialog == sl.DialogFriendshipOffered:
 		sh.noticef("%s offers friendship -- accept %s, or decline %s",
 			name, firstWord(name), firstWord(name))
+	case m.Dialog == sl.DialogGroupInvitation:
+		// Deliberately not "answer N joins": whether a bare answer
+		// joins depends on the fee, which the listing has and a line
+		// of notice has no room for.
+		sh.noticef("%s invites you into a group -- waiting lists it, and what joining costs", name)
 	case m.Dialog == sl.DialogTypingStart, m.Dialog == sl.DialogTypingStop:
 		// A line per keystroke is not worth showing.
 	default:

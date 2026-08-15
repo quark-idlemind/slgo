@@ -16,12 +16,19 @@ package main
 //	waiting             what is waiting, numbered
 //	answer N [WHAT]     yes, or a button, or the text a box wants
 //	answer --file P N   a text box answer of more than one line
+//	answer N L$50       yes to something that costs money
 //	no N                decline, and tell whoever asked
 //	ignore N            leave it waiting and stop counting it
 //
-// The four kinds do not have four sets of commands, because from where
-// a person sits they are the same question -- something wants an
-// answer, and the answer is yes, no, one of these, or not now.
+// The kinds do not have a set of commands each, because from where a
+// person sits they are the same question -- something wants an answer,
+// and the answer is yes, no, one of these, or not now.
+//
+// The L$ line is the exception, and it exists because one kind can
+// spend money: a group invitation may carry a joining fee, and a bare
+// "answer 3" that quietly paid it would be the shell deciding to spend
+// somebody's money for them.  So the fee is in the listing and has to
+// be typed back before it will go.  See agreedFee.
 
 import (
 	"context"
@@ -39,12 +46,12 @@ import (
 var waitingCommands = map[string]*command{
 	"waiting": {
 		usage: "waiting [-a]",
-		brief: "what is waiting for an answer: teleports, dialogs, offers, permissions; -a includes ignored",
+		brief: "what is waiting for an answer: teleports, dialogs, offers, permissions, invitations; -a includes ignored",
 		run:   cmdWaiting,
 	},
 	"answer": {
-		usage: "answer [--file PATH] N [BUTTON|TEXT]",
-		brief: "answer one of them: yes, a button by name or number, or what a text box wants",
+		usage: "answer [--file PATH] N [BUTTON|TEXT|L$FEE]",
+		brief: "answer one of them: yes, a button by name or number, what a text box wants, or the fee a group asks",
 		run:   cmdAnswer,
 	},
 	"no": {
@@ -75,6 +82,7 @@ type waiter struct {
 	item   *sl.InventoryOffer
 	friend *sl.Offer
 	perm   *sl.Permission
+	invite *sl.Invitation
 }
 
 // key identifies one across a refresh, so that a number a person is
@@ -91,6 +99,8 @@ func (w waiter) key() string {
 		return "friend|" + w.friend.Transaction.String()
 	case w.perm != nil:
 		return fmt.Sprintf("perm|%s|%s", w.perm.Object, w.perm.Item)
+	case w.invite != nil:
+		return "invite|" + w.invite.Transaction.String()
 	}
 	return ""
 }
@@ -108,6 +118,14 @@ func (w waiter) who() string {
 		return w.friend.Name
 	case w.perm != nil:
 		return w.perm.ObjectName
+	case w.invite != nil:
+		// Whoever invited, or the group itself: the invitation names a
+		// person and never the group, so an unnamed one leaves the id
+		// as the only handle there is.
+		if w.invite.By != "" {
+			return w.invite.By
+		}
+		return w.invite.Group.String()
 	}
 	return ""
 }
@@ -130,8 +148,30 @@ func (w waiter) asks() string {
 		return "offers friendship"
 	case w.perm != nil:
 		return "wants " + w.perm.Wants.String()
+	case w.invite != nil:
+		// The group's name is not a field of an invitation, so the
+		// text the simulator wrote is where it appears if it appears
+		// at all, and it is quoted rather than trusted to be one line.
+		s := "invites you into a group"
+		if w.invite.Text != "" {
+			s = fmt.Sprintf("%s: %q", s, w.invite.Text)
+		}
+		return s + " " + feeNote(w.invite)
 	}
 	return ""
+}
+
+// feeNote is what an invitation costs, which is in the listing rather
+// than only in the refusal because a person deciding whether to look
+// closer should not have to type at it to find out.
+func feeNote(i *sl.Invitation) string {
+	switch {
+	case !i.Stated:
+		return "(it did not say what joining costs)"
+	case i.Fee > 0:
+		return fmt.Sprintf("(L$%d to join)", i.Fee)
+	}
+	return "(no fee)"
 }
 
 // choices is what may be typed at it, which is the part a person needs
@@ -148,6 +188,10 @@ func (w waiter) choices() string {
 		return strings.Join(b, ", ")
 	case w.lure != nil:
 		return "answer (ends this session unless it is the same region), no, ignore"
+	case w.invite != nil && !w.invite.Stated:
+		return "answer N L$AMOUNT (it did not say what joining costs), no, ignore"
+	case w.invite != nil && w.invite.Fee > 0:
+		return fmt.Sprintf("answer N L$%d (the fee has to be typed), no, ignore", w.invite.Fee)
 	default:
 		return "answer, no, ignore"
 	}
@@ -186,6 +230,9 @@ func (sh *Shell) waiters() []waiter {
 	}
 	for _, q := range sh.s.Asked() {
 		all = append(all, waiter{at: q.At, kind: "permission", perm: q})
+	}
+	for _, i := range sh.s.Invitations() {
+		all = append(all, waiter{at: i.At, kind: "group", invite: i})
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].at.Before(all[j].at) })
 
@@ -324,12 +371,12 @@ type answerFlags struct {
 
 func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o answerFlags
-	args, done, err := subOptions("answer", "N [BUTTON|TEXT]", &o, out, args)
+	args, done, err := subOptions("answer", "N [BUTTON|TEXT|L$FEE]", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: answer N [BUTTON|TEXT]")
+		return fmt.Errorf("usage: answer N [BUTTON|TEXT|L$FEE]")
 	}
 	w, err := sh.pick(args[0])
 	if err != nil {
@@ -406,10 +453,99 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 			return err
 		}
 		fmt.Fprintf(out, "granted %s to %s\n", w.perm.Wants, w.who())
+
+	case w.invite != nil:
+		if err := agreedFee(*w.invite, w.n, rest); err != nil {
+			return err
+		}
+		// Said before the message goes, because afterwards the money
+		// has already moved.
+		if !w.invite.Stated {
+			fmt.Fprintf(out, "the invitation did not say what joining costs, "+
+				"so the group will charge its fee whatever you typed\n")
+		}
+		if err := sh.s.AcceptInvitation(ctx, w.invite); err != nil {
+			return err
+		}
+		cost := ""
+		if w.invite.Fee > 0 {
+			cost = fmt.Sprintf(", at L$%d", w.invite.Fee)
+		}
+		fmt.Fprintf(out, "accepted the group invitation from %s%s; "+
+			"nothing answers a join, so groups says whether it worked\n", w.who(), cost)
 	}
 
 	sh.setIgnored(w.key(), false)
 	return nil
+}
+
+// agreedFee decides whether a person has said enough for money to
+// move, and is the whole of this shell's answer to a group that charges
+// to join.
+//
+// Nothing else here spends L$ except put, which prints what an upload
+// will cost and takes -N to stop before paying it.  An invitation is
+// the harder case: the amount is the group's rather than ours, and the
+// answer carries no figure at all -- the simulator charges the fee
+// whatever we send -- so there is nothing to check the charge against
+// except what the invitation said it would be.
+//
+// Hence the rule.  A fee of zero is the ordinary case and "answer N"
+// takes it.  Anything else, including an invitation whose fee could not
+// be read, has to have the amount typed back before it will go.  That
+// is not a payment instruction and does not cap anything: it is the
+// person saying the number out loud, which is the only part of this a
+// shell can honestly ask of them.
+func agreedFee(i sl.Invitation, n int, said string) error {
+	pay := fmt.Sprintf("answer %d L$%d", n, i.Fee)
+	if said == "" {
+		switch {
+		case !i.Stated:
+			return fmt.Errorf("the invitation did not say what joining costs; "+
+				"type \"answer %d L$0\" if you mean it is free, or the amount you will pay; "+
+				"\"no %d\" declines it", n, n)
+		case i.Fee > 0:
+			return fmt.Errorf("joining costs L$%d; type %q to pay it, or %q to decline",
+				i.Fee, pay, fmt.Sprintf("no %d", n))
+		}
+		return nil
+	}
+	amount, ok := feeSaid(said)
+	if !ok {
+		return fmt.Errorf("%q is not an amount; a group invitation takes the fee, as in %q", said, pay)
+	}
+	// Nothing said, nothing to check it against: the person's figure is
+	// all there is, and they have been asked for it, which is as far as
+	// this can go.
+	if !i.Stated {
+		return nil
+	}
+	if amount != i.Fee {
+		if i.Fee == 0 {
+			return fmt.Errorf("joining costs nothing; type \"answer %d\" on its own to take it", n)
+		}
+		return fmt.Errorf("joining costs L$%d, not L$%d; type %q to pay it", i.Fee, amount, pay)
+	}
+	return nil
+}
+
+// feeSaid reads an amount the way a person would write one: L$50, or 50
+// from somebody who has already typed the L$ once today.
+//
+// It is deliberately narrow -- no separators, no decimal point, nothing
+// negative -- because its only use is confirming a figure that is
+// already on the screen, and anything it fails to understand is
+// refused rather than rounded into a payment.
+func feeSaid(s string) (int32, bool) {
+	s = strings.TrimSpace(s)
+	if len(s) > 2 && (s[0] == 'L' || s[0] == 'l') && s[1] == '$' {
+		s = s[2:]
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 || n > 1<<31-1 {
+		return 0, false
+	}
+	return int32(n), true
 }
 
 // buttonOf reads what a person typed at a dialog: a number as the
@@ -473,6 +609,11 @@ func cmdNo(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			return err
 		}
 		fmt.Fprintf(out, "refused %s to %s\n", w.perm.Wants, w.who())
+	case w.invite != nil:
+		if err := sh.s.DeclineInvitation(ctx, w.invite); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "declined the group invitation from %s\n", w.who())
 	}
 
 	sh.setIgnored(w.key(), false)

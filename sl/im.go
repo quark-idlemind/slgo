@@ -474,7 +474,14 @@ func (w *Session) instantMessage(m *msg.ImprovedInstantMessage) {
 		Group:    b.FromGroup,
 		Bucket:   b.BinaryBucket,
 	}
-	w.learn(im.From, im.FromName)
+	// A group invitation is the one kind whose sender is not a person:
+	// the id is the group and the agent-name field is whoever invited
+	// (see invite.go), so learning the two together would file a
+	// person's name under a group's id and every name printed for that
+	// group afterwards would be wrong.
+	if b.Dialog != DialogGroupInvitation {
+		w.learn(im.From, im.FromName)
+	}
 
 	// A friendship offer is worth keeping rather than only
 	// delivering: whoever is listening may not be ready to answer,
@@ -498,6 +505,13 @@ func (w *Session) instantMessage(m *msg.ImprovedInstantMessage) {
 	// answers it and nothing else does.  See lure.go.
 	if b.Dialog == DialogTeleportLure {
 		w.noteLure(im)
+	}
+
+	// A group invitation, kept for the same reason again: the transaction
+	// answers it and nothing else does, and a group with enrolment
+	// closed cannot be joined any other way.  See invite.go.
+	if b.Dialog == DialogGroupInvitation {
+		w.noteInvitation(im)
 	}
 
 	// An inventory offer is kept for the same reason: the transaction

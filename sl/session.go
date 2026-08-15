@@ -118,7 +118,13 @@ type Session struct {
 
 	// lures are the teleport offers waiting for an answer, by whoever
 	// offered.  See lure.go.
-	lures   map[msg.UUID]*Lure
+	lures map[msg.UUID]*Lure
+
+	// invites are the group invitations waiting for an answer, by the
+	// group they are into -- which is also who they came from.  See
+	// invite.go.
+	invites map[msg.UUID]*Invitation
+
 	pickers map[msg.UUID]chan []Found
 
 	// Dialogs a script has put up, in arrival order.  Kept rather
