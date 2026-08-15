@@ -416,6 +416,22 @@ func (c *Circuit) describeRegion() {
 	if _, dropped := a.Appearances().Stats(); dropped > 0 {
 		c.logf("viewer: %d avatar appearances were forgotten for the limit before this viewer attached", dropped)
 	}
+
+	// And whatever was said to the person while there was nothing to
+	// show it on.  These are the messages a viewer exists to answer,
+	// and until now they went into the daemon and stopped there: an
+	// offered teleport arrived four minutes before the viewer did and
+	// was never seen.
+	//
+	// Sent last, and after the region, because a viewer showing an
+	// invitation before it has drawn anything is a dialogue over a grey
+	// screen.
+	if waiting := a.Offers().Take(); len(waiting) > 0 {
+		for _, m := range waiting {
+			c.toViewer(m, msg.FlagReliable)
+		}
+		c.logf("viewer: showed the viewer %d message(s) that arrived while nothing was attached", len(waiting))
+	}
 }
 
 // pcodeAvatar is what the simulator calls an avatar in an object update.

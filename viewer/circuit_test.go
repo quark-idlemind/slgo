@@ -606,6 +606,45 @@ func TestAJoiningViewerIsSentTheObjects(t *testing.T) {
 	sim.waitSeen(t, "RequestMultipleObjects", 5*time.Second)
 }
 
+// TestWhatWasSaidBeforeTheViewerArrivedIsShown: an instant message --
+// and with it every teleport offer, inventory offer and group
+// invitation -- is said once and addressed to the person.  Arriving
+// while no viewer was attached it went into the daemon and stopped
+// there, which is how a teleport offer was lost.
+func TestWhatWasSaidBeforeTheViewerArrivedIsShown(t *testing.T) {
+	sim, a, _, v, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	offer := &msg.ImprovedInstantMessage{}
+	offer.MessageBlock.FromAgentName = []byte("Kerra Yule\x00")
+	offer.MessageBlock.Message = []byte("come and see the house\x00")
+	sim.send(offer, msg.FlagReliable)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if held, _ := a.Offers().Stats(); held > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the session never kept the instant message")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "ImprovedInstantMessage", 5*time.Second)
+	got := v.last(t, "ImprovedInstantMessage").(*msg.ImprovedInstantMessage)
+	if s := string(got.MessageBlock.Message); s != "come and see the house\x00" {
+		t.Errorf("message = %q", s)
+	}
+
+	// And taken, so a viewer attaching after this one is not handed an
+	// invitation that has already been answered.
+	if held, _ := a.Offers().Stats(); held != 0 {
+		t.Errorf("%d offers were still held after the viewer was shown them", held)
+	}
+}
+
 // describeAppearance says how one avatar looks, as a region does when it
 // comes into view and never again.
 func (s *simStub) describeAppearance(who msg.UUID, texture string) {

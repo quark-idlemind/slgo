@@ -60,6 +60,10 @@ type Agent struct {
 	// reason.
 	appearance Appearances
 
+	// offers is what was said to the person while no viewer was there
+	// to show it.
+	offers Offers
+
 	// presenceHeldUntil is when this session may speak for the camera
 	// again.  See DeferPresence.
 	presenceHeldUntil time.Time
@@ -395,6 +399,7 @@ func (a *Agent) register() {
 	// this region's whatever it turns out to be called.
 	a.objects.Store(newObjects())
 	a.trackObjects()
+	a.keepOffers()
 
 	// AgentDataUpdate carries the active group, which decides whether a
 	// parcel lets this avatar build. It is sent at login and when the
