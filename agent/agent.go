@@ -64,6 +64,12 @@ type Agent struct {
 	// to show it.
 	offers Offers
 
+	// asked remembers which local ids were recently asked about, so
+	// that something moving on the edge of the draw distance is not
+	// asked for several times a second.  See askAgain.
+	askedMu sync.Mutex
+	asked   map[uint32]time.Time
+
 	// presenceHeldUntil is when this session may speak for the camera
 	// again.  See DeferPresence.
 	presenceHeldUntil time.Time

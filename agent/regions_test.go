@@ -222,11 +222,18 @@ func TestAWornPrimIsJudgedByItsWearer(t *testing.T) {
 		t.Fatalf("%d objects kept, want the avatar and both prims", o.Count())
 	}
 
-	// And when the avatar is far away, the whole of it goes: the prims
-	// are where their wearer is, not at their offsets.
+	// And when the avatar is far away its prims go, because they are
+	// where their wearer is standing rather than at their offsets.
+	//
+	// The person stays.  A region names each avatar once and a standing
+	// one says nothing afterwards, so an avatar dropped for distance is
+	// dropped for good -- see pcodeAvatar.
 	far := msg.Vector3{X: 900, Y: 900}
-	if n := o.Trim(far, 128); n != 3 {
-		t.Errorf("trimmed %d when the wearer walked off, want all three", n)
+	if n := o.Trim(far, 128); n != 2 {
+		t.Errorf("trimmed %d when the wearer walked off, want the two prims", n)
+	}
+	if o.Count() != 1 {
+		t.Errorf("%d kept, want the avatar", o.Count())
 	}
 }
 

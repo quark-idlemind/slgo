@@ -316,6 +316,10 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 
 	n := 0
 	for id, v := range o.byID {
+		if v.PCode == pcodeAvatar {
+			// See update: people are kept whatever the distance.
+			continue
+		}
 		at, known := anchor(v)
 		if !known {
 			// An orphan: nothing here says where it is.  It goes once
@@ -349,6 +353,29 @@ func dist2(a, b msg.Vector3) float32 {
 	return dx*dx + dy*dy + dz*dz
 }
 
+// pcodeAvatar is what the simulator calls a person.
+//
+// People are never dropped for distance, and that exception is worth
+// its weight.  A region describes each avatar once, when the session
+// arrives, and never again -- and a standing avatar sends nothing at
+// all afterwards, not even the terse position updates that would give
+// a re-request something to fire on.  So an avatar refused for
+// distance is refused permanently: it can be three metres away, on the
+// same platform, in conversation, and the session will not know it is
+// there.
+//
+// Measured on Aditi.  Quark logged in at ground level while two others
+// stood on a skybox 1977m up; each session threw the others away as
+// out of range at that moment, and after Quark teleported up to join
+// them, all three were within six metres and none could see any of the
+// others.  Logging in already beside them worked perfectly, which is
+// what made it look like a viewer problem.
+//
+// The cost of the exception is a few hundred bytes per person in the
+// region, which is nothing against the cost of not knowing who is
+// standing next to you.
+const pcodeAvatar = 47
+
 // update records what an ObjectUpdate said, unless it is about
 // something beyond the draw distance.
 //
@@ -368,7 +395,7 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	if havePos {
+	if havePos && d.PCode != pcodeAvatar {
 		at, judge := pos, true
 		if d.ParentID != 0 {
 			at, judge = o.anchorLocked(d.ParentID)
@@ -451,13 +478,15 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	at, judge := c.Position, true
-	if parent != 0 {
-		at, judge = o.anchorLocked(parent)
-	}
-	if judge && !o.keepLocked(at, camera, drawDistance) {
-		delete(o.byID, c.FullID)
-		return
+	if c.PCode != pcodeAvatar {
+		at, judge := c.Position, true
+		if parent != 0 {
+			at, judge = o.anchorLocked(parent)
+		}
+		if judge && !o.keepLocked(at, camera, drawDistance) {
+			delete(o.byID, c.FullID)
+			return
+		}
 	}
 
 	v := o.seen(c.FullID)
@@ -483,16 +512,25 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 // object by local id alone, so one for something never described is
 // not enough to make an entry with -- there would be nothing to say
 // what it is.
-func (o *Objects) moved(t *msg.Terse) {
+func (o *Objects) moved(t *msg.Terse) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for _, v := range o.byID {
 		if v.Local == t.LocalID {
 			v.Position, v.Rotation = t.Position, t.Rotation
 			v.Last = time.Now()
-			return
+			return true
 		}
 	}
+	return false
+}
+
+// worthDescribing says whether something at this position is close
+// enough that not knowing what it is matters.
+func (o *Objects) worthDescribing(at msg.Vector3, camera msg.Vector3, far float32) bool {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.keepLocked(at, camera, far)
 }
 
 // anchorLocked is where the thing with this local id really is.
@@ -606,12 +644,37 @@ func (a *Agent) trackObjects() {
 	// known rather than introducing anything.
 	a.Disp.MustHandle("ImprovedTerseObjectUpdate", func(p *msg.Packet) {
 		m := p.Message.(*msg.ImprovedTerseObjectUpdate)
+		l := a.Look()
+		store := a.Objects()
+		var strangers []uint32
 		for i := range m.ObjectData {
 			t, err := msg.DecodeTerse(m.ObjectData[i].Data)
 			if err != nil {
 				continue
 			}
-			a.Objects().moved(t)
+			if store.moved(t) {
+				continue
+			}
+			// Something the simulator believes we already hold and
+			// will not describe again.  Usually that is right and this
+			// is out of range anyway; but a thing that was dropped for
+			// distance and has since come close -- an avatar who
+			// teleported up to the same platform, most of all --
+			// arrives here and nowhere else, because a terse update
+			// carries a local id and a position and nothing that says
+			// what it is.  Landing on nothing, it leaves the two of
+			// them invisible to each other for as long as they both
+			// stand there.
+			if !store.worthDescribing(t.Position, l.Center, l.Far) {
+				continue
+			}
+			if a.askAgain(t.LocalID) {
+				strangers = append(strangers, t.LocalID)
+			}
+		}
+		if len(strangers) > 0 {
+			// Off the dispatch goroutine, as with any asking.
+			go a.requestCachedObjects(strangers)
 		}
 	}, msg.Inline())
 
@@ -666,6 +729,43 @@ func (a *Agent) trackObjects() {
 			a.Objects().named(d.ObjectID, trimNul(d.Name), d.OwnerID)
 		}
 	}, msg.Inline())
+}
+
+// AskAgainAfter is how long to leave a local id alone once it has been
+// asked about.
+//
+// Something moving just inside the draw distance is described, kept,
+// and trimmed again as it drifts back out, and without this each pass
+// would ask afresh several times a second.  Long enough that the churn
+// costs one request rather than a stream, short enough that a thing
+// which really did arrive and was really missed is not invisible for
+// long.
+const AskAgainAfter = 15 * time.Second
+
+// askAgain says whether this local id may be asked about now, and
+// remembers that it was.
+func (a *Agent) askAgain(local uint32) bool {
+	now := time.Now()
+
+	a.askedMu.Lock()
+	defer a.askedMu.Unlock()
+	if a.asked == nil {
+		a.asked = map[uint32]time.Time{}
+	}
+	if when, seen := a.asked[local]; seen && now.Sub(when) < AskAgainAfter {
+		return false
+	}
+	// Swept here rather than on a timer: this runs only when something
+	// unknown turns up, which is exactly when the map grows.
+	if len(a.asked) > 4096 {
+		for id, when := range a.asked {
+			if now.Sub(when) >= AskAgainAfter {
+				delete(a.asked, id)
+			}
+		}
+	}
+	a.asked[local] = now
+	return true
 }
 
 // requestCachedObjects asks the simulator to describe objects it

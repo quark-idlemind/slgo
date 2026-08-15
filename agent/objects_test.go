@@ -605,6 +605,91 @@ func TestATerseUpdateMovesSomethingAlreadyKnown(t *testing.T) {
 	}
 }
 
+// TestSomethingThatMovesIntoRangeIsAskedAbout: the simulator describes
+// an object once and then only moves it, so anything dropped for
+// distance and later brought close arrives as a terse update naming a
+// local id this session no longer knows.  Two avatars who arrived at
+// opposite ends of a region and then met on the same platform were
+// invisible to each other for exactly this reason.
+func TestSomethingThatMovesIntoRangeIsAskedAbout(t *testing.T) {
+	t.Parallel()
+
+	a, sent := offlineSession(t)
+	a.SetLook(Look{Center: msg.Vector3{X: 100, Y: 100, Z: 2000}, Far: 128})
+
+	m := &msg.ImprovedTerseObjectUpdate{}
+	m.ObjectData = []msg.ImprovedTerseObjectUpdate_ObjectData{
+		// Close enough to matter, and never described.
+		{Data: terseBlob(4242, msg.Vector3{X: 101, Y: 101, Z: 2001})},
+		// Unknown, but a long way off: the simulator is right that we
+		// do not need it.
+		{Data: terseBlob(7777, msg.Vector3{X: 100, Y: 100, Z: 20})},
+	}
+	feed(t, a, m)
+	// The asking happens off the dispatch goroutine.
+	sent.waitFor(t, 1)
+
+	var asked []uint32
+	for _, sm := range sent.messages(t) {
+		if r, ok := sm.(*msg.RequestMultipleObjects); ok {
+			for _, d := range r.ObjectData {
+				asked = append(asked, d.ID)
+			}
+		}
+	}
+	if len(asked) != 1 || asked[0] != 4242 {
+		t.Fatalf("asked about %v, want just the one that came into range", asked)
+	}
+
+	// And not again while it goes on moving, or a thing hovering at the
+	// edge of the draw distance would be asked for several times a
+	// second.
+	feed(t, a, m)
+	asked = asked[:0]
+	for _, sm := range sent.messages(t) {
+		if r, ok := sm.(*msg.RequestMultipleObjects); ok {
+			for _, d := range r.ObjectData {
+				asked = append(asked, d.ID)
+			}
+		}
+	}
+	if len(asked) != 1 {
+		t.Errorf("asked %d times, want the one: %v", len(asked), asked)
+	}
+}
+
+// TestAPersonIsNeverDroppedForDistance: a region names each avatar once
+// and a standing one says nothing afterwards, so an avatar refused for
+// range is refused permanently -- three metres away and invisible.
+func TestAPersonIsNeverDroppedForDistance(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	a.SetLook(Look{Center: msg.Vector3{X: 30, Y: 70, Z: 24}, Far: 128})
+
+	// Somebody on a skybox two kilometres up, described while this
+	// session stands on the ground.
+	feed(t, a, arriving(t,
+		msg.ObjectUpdate_ObjectData{ID: 1, FullID: aPrim, PCode: pcodeAvatar,
+			ObjectData: placement(msg.Vector3{X: 28, Y: 72, Z: 2001}, msg.Quaternion{})},
+		msg.ObjectUpdate_ObjectData{ID: 2, FullID: aChild, PCode: 9,
+			ObjectData: placement(msg.Vector3{X: 28, Y: 72, Z: 2001}, msg.Quaternion{})},
+	))
+
+	if _, ok := a.Objects().Get(aPrim); !ok {
+		t.Fatal("the person was refused for distance and can never be described again")
+	}
+	if _, ok := a.Objects().Get(aChild); ok {
+		t.Error("a prim that far away was kept; only people are exempt")
+	}
+
+	// And a later trim leaves them alone too.
+	a.Objects().Trim(msg.Vector3{X: 30, Y: 70, Z: 24}, 128)
+	if _, ok := a.Objects().Get(aPrim); !ok {
+		t.Error("the person was trimmed away")
+	}
+}
+
 // TestKillObjectForgetsIt: KillObject names the local id and not the
 // object id, so forgetting one is a scan.
 func TestKillObjectForgetsIt(t *testing.T) {
