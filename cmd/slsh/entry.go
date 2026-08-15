@@ -7,12 +7,30 @@ package main
 // at a time, so the two shapes do not meet -- and inventing an escape
 // for the newline means inventing an escape for the escape.
 //
-// So the answer is collected the way ed collects one: lines until a
-// line that is a single full stop.  A line of nothing but full stops
-// loses one and is kept, so a paragraph can end with a full stop of its
-// own -- ".." is how you say ".", and "...." is how you say "...".
-// That rule is what makes the terminator escapable without a second
-// syntax, and it costs nothing on any line that is not all dots.
+// So the answer is collected the way ed collects one, and ended the way
+// mail does: Ctrl-D, which cannot appear in text and so needs no escape.
+//
+// It was a full stop on a line of its own first, with ed's rule for
+// escaping one -- a line of nothing but full stops losing one, so ".."
+// said "." -- and that went as soon as Ctrl-D was bound, because the
+// reason to keep it did not survive being looked at.  The argument was
+// that a file of commands cannot send Ctrl-D; but a file of commands
+// cannot type an answer either, since slsh -f hands every line to the
+// command parser and the line after "answer 1" would be run as a
+// command.  Scripted answers have --file.  So the escape rule was
+// paying for a case that does not exist, and every line now means
+// itself.
+//
+// A line being typed is an ordinary line: backspace, delete, Ctrl-U,
+// Ctrl-W, Ctrl-K, Ctrl-A and the arrows all work, because this is the
+// same line editor the prompt uses.  What they cannot reach is a line
+// already entered, so Escape starts the whole answer again.
+//
+// Ctrl-D ends it too, and needs no escaping because it cannot appear in
+// text.  The full stop stays because Ctrl-D cannot be written into a
+// file of commands: slsh -f is driven a line at a time, and a rule that
+// only a keyboard can reach would leave that route with no terminator
+// at all.
 //
 // Leaving without sending is Ctrl-C, which is what it does everywhere
 // else here.
@@ -53,27 +71,6 @@ func (sh *Shell) collect(d sl.Dialog, what string, n int) {
 	sh.setMode(modeText)
 }
 
-// endLine is the line that finishes the answer.
-const endLine = "."
-
-// entryLine takes one typed line, and says whether that was the end.
-//
-// The dots are counted rather than trimmed so that a line of spaces and
-// dots is left alone: only a line that is nothing but full stops means
-// anything special, which is the rule ed has and the reason a person
-// can type a paragraph without thinking about it.
-func entryLine(line string) (text string, done bool) {
-	if line == endLine {
-		return "", true
-	}
-	if line != "" && strings.Trim(line, ".") == "" {
-		// All dots and more than one: it stands for itself, one
-		// shorter.
-		return line[1:], false
-	}
-	return line, false
-}
-
 // typed takes a line while a text box answer is being collected.
 func (sh *Shell) typed(ctx context.Context, line string) {
 	sh.mu.Lock()
@@ -84,10 +81,52 @@ func (sh *Shell) typed(ctx context.Context, line string) {
 		return
 	}
 
-	text, done := entryLine(line)
-	if !done {
-		e.lines = append(e.lines, text)
-		sh.prompt()
+	// Every line means itself, including one that is a full stop.
+	e.lines = append(e.lines, line)
+	sh.prompt()
+}
+
+// finish ends the answer where it stands, which is what Ctrl-D means.
+//
+// Whatever is half typed on the current line counts as a last line, the
+// way it does to mail(1): a person who has typed something and pressed
+// Ctrl-D meant to send it.
+func (sh *Shell) finish(ctx context.Context) {
+	line := sh.term.Take()
+	sh.term.Echo()
+	sh.mu.Lock()
+	e := sh.entry
+	sh.mu.Unlock()
+	if e != nil && line != "" {
+		e.lines = append(e.lines, line)
+	}
+	sh.submit(ctx)
+}
+
+// startOver throws away what has been typed and stays in the answer,
+// because the line editor cannot reach a line already entered and the
+// alternative is to abandon the whole thing and find it again.
+func (sh *Shell) startOver() {
+	sh.mu.Lock()
+	e := sh.entry
+	if e != nil {
+		e.lines = nil
+	}
+	sh.mu.Unlock()
+	sh.term.Take()
+	if e != nil {
+		fmt.Fprintf(sh.stdout(), "cleared; type the answer again\n")
+	}
+	sh.prompt()
+}
+
+// submit sends what has been collected.
+func (sh *Shell) submit(ctx context.Context) {
+	sh.mu.Lock()
+	e := sh.entry
+	sh.mu.Unlock()
+	if e == nil {
+		sh.setMode(modeCommand)
 		return
 	}
 
@@ -98,6 +137,11 @@ func (sh *Shell) typed(ctx context.Context, line string) {
 	sh.setMode(modeCommand)
 
 	out := sh.stdout()
+	if len(e.lines) == 0 {
+		// An empty answer is a real answer -- a text box can be
+		// submitted blank -- but it is worth saying which happened.
+		fmt.Fprintf(out, "sending an empty answer to %s\n", e.what)
+	}
 	if len(answer) > sl.MaxDialogReply {
 		// Said rather than truncated: half an answer arriving is worse
 		// than none, and the lines are still on the screen to be

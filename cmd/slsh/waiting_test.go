@@ -86,7 +86,7 @@ func TestATextBoxIsNotAButton(t *testing.T) {
 	if !strings.Contains(got, "text box") || !strings.Contains(got, "type an answer") {
 		t.Errorf("a text box should say what it wants:\n%s", got)
 	}
-	if got := x.do(t, "answer 1"); !strings.Contains(got, "a line with one . ends it") {
+	if got := x.do(t, "answer 1"); !strings.Contains(got, "^D ends it") {
 		t.Errorf("answering a text box with no text should start collecting: %s", got)
 	}
 	x.abandon()

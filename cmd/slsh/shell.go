@@ -173,14 +173,31 @@ func (sh *Shell) key(ctx context.Context, r rune) {
 		return
 	}
 
-	// The escape key leaves chat, and does nothing outside it.
-	if chat && r == sh.cfg.Prefix {
-		sh.setMode(modeCommand)
-		return
+	// The escape key leaves chat, and starts a typed answer again:
+	// the line editor reaches the line being typed and no further, so
+	// this is the only way back from a line already entered.
+	if r == sh.cfg.Prefix {
+		if sh.typing() {
+			sh.startOver()
+			return
+		}
+		if chat {
+			sh.setMode(modeCommand)
+			return
+		}
 	}
 
-	if !sh.term.Key(r) && r == 4 && sh.term.Line() == "" {
-		sh.Quit()
+	// Ctrl-D deletes forward while there is anything to delete, and
+	// otherwise means end of input: of the answer being typed, or of
+	// the shell.
+	if !sh.term.Key(r) && r == 4 {
+		if sh.typing() {
+			sh.finish(ctx)
+			return
+		}
+		if sh.term.Line() == "" {
+			sh.Quit()
+		}
 	}
 }
 

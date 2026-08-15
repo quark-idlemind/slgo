@@ -139,7 +139,7 @@ func (w waiter) asks() string {
 func (w waiter) choices() string {
 	switch {
 	case w.dialog != nil && w.dialog.IsTextBox():
-		return "answer N (type lines, . ends), answer N TEXT for one line, no N discards"
+		return "answer N (type lines, ^D ends), answer N TEXT for one line, no N discards"
 	case w.dialog != nil:
 		var b []string
 		for i, label := range w.dialog.Buttons {
@@ -356,7 +356,8 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 			// until a full stop, which is the only way to send more
 			// than one from a prompt that reads one at a time.
 			fmt.Fprintf(out, "%s asks: %s\n", w.who(), w.dialog.Message)
-			fmt.Fprintf(out, "type the answer; a line with one . ends it, ^C sends nothing\n")
+			fmt.Fprintf(out, "type the answer; ^D ends it, ESC starts again, "+
+				"^C sends nothing\n")
 			sh.collect(*w.dialog, w.who(), w.n)
 			return nil
 		}
