@@ -31,8 +31,8 @@ import (
 
 var carryCommands = map[string]*command{
 	"take": {
-		usage: "take [--into FOLDER] NAME|UUID",
-		brief: "take a rezzed object into inventory",
+		usage: "take [--copy] [--into FOLDER] NAME|UUID",
+		brief: "take a rezzed object into inventory; --copy tries to leave the original",
 		run:   cmdTake,
 	},
 	"bring": {
@@ -48,10 +48,7 @@ var carryCommands = map[string]*command{
 }
 
 type takeFlags struct {
-	// slinv had --copy, and this does not: a take copy is a different
-	// DeRez destination, the sl package has only the one, and guessing
-	// at the enum is how an object ends up somewhere it cannot be got
-	// back from.  See Take.
+	Copy bool   `getopt:"--copy       take a copy and try to leave the original standing"`
 	Into string `getopt:"--into=FOLDER  the folder it lands in [Objects]"`
 	Wait int    `getopt:"--wait -w=SECONDS  how long to let the region describe itself [30]"`
 	Help bool   `getopt:"--help -h    show what this command takes"`
@@ -64,7 +61,7 @@ func cmdTake(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: take [--into FOLDER] NAME|UUID")
+		return fmt.Errorf("usage: take [--copy] [--into FOLDER] NAME|UUID")
 	}
 
 	obj, err := sh.objectNamed(ctx, args[0], o.Wait)
@@ -75,6 +72,15 @@ func cmdTake(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	folder, err := sh.takeFolder(ctx, o.Into)
 	if err != nil {
 		return err
+	}
+
+	if o.Copy {
+		it, err := sh.s.TakeCopy(ctx, obj, folder, 0)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "%s is in inventory as %s, and still where it was\n", obj, it.Name)
+		return nil
 	}
 
 	it, err := sh.s.Take(ctx, obj, folder, 0)

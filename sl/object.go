@@ -236,8 +236,17 @@ func (w *Session) Parent(o *Object) (uint32, bool) {
 	return p, ok
 }
 
-// Destinations for DeRezObject, from the viewer's EDeRezDestination.
+// Destinations for DeRezObject, from the viewer's EDeRezDestination
+// (llselectmgr.h:83).  The two that matter here sit either side of
+// values that do quite different things -- 5 is the god inventory and 6
+// is the trash -- so they are named rather than written where they are
+// used.
 const (
+	// derezAcquireCopy takes a copy and tries to leave the original
+	// standing.  "Take Copy" in the viewer sends this
+	// (llviewermenu.cpp:6420).
+	derezAcquireCopy = 1
+
 	derezTakeIntoInventory = 4
 	derezTrash             = 6
 )
@@ -248,6 +257,37 @@ const (
 // over AIS some seconds later, so this polls the folder for something
 // that was not there before rather than waiting for a message.
 func (w *Session) Take(ctx context.Context, o *Object, folder msg.UUID, timeout time.Duration) (*Item, error) {
+	return w.derezToInventory(ctx, o, folder, derezTakeIntoInventory, timeout)
+}
+
+// TakeCopy takes a copy and leaves the original standing.
+//
+// The viewer calls this Take Copy and sends the same destination
+// (llviewermenu.cpp:6420); the enum comments it as "try to leave copy in
+// world", which reads as though the simulator might take the original
+// instead when it cannot be copied.  Measured on Agni, it does not: an
+// object with the owner's copy right removed produced no item and no
+// change in world at all, and the request was ignored in silence.  Put
+// the right back and the same call worked.
+//
+// So a timeout here is not a slow grid, it is a refusal, and saying so
+// is the difference between a person checking their inventory and a
+// person checking their permissions.
+func (w *Session) TakeCopy(ctx context.Context, o *Object, folder msg.UUID, timeout time.Duration) (*Item, error) {
+	it, err := w.derezToInventory(ctx, o, folder, derezAcquireCopy, timeout)
+	if err == nil {
+		return it, nil
+	}
+	if !errors.Is(err, ErrTimeout) {
+		return nil, err
+	}
+	if _, still := w.ObjectByID(ctx, o.ID, 5*time.Second); still == nil {
+		return nil, fmt.Errorf("sl: %s was not copied and is still where it was; an object that may not be copied is refused rather than taken", o)
+	}
+	return nil, err
+}
+
+func (w *Session) derezToInventory(ctx context.Context, o *Object, folder msg.UUID, destination uint8, timeout time.Duration) (*Item, error) {
 	if timeout == 0 {
 		timeout = 40 * time.Second
 	}
@@ -269,7 +309,7 @@ func (w *Session) Take(ctx context.Context, o *Object, folder msg.UUID, timeout 
 
 	m := &msg.DeRezObject{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
-	m.AgentBlock.Destination = derezTakeIntoInventory
+	m.AgentBlock.Destination = destination
 	m.AgentBlock.DestinationID = folder
 	m.AgentBlock.TransactionID = randomUUID()
 	m.AgentBlock.PacketCount, m.AgentBlock.PacketNumber = 1, 0
