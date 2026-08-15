@@ -85,7 +85,7 @@ func TestAppearancesAreBounded(t *testing.T) {
 	if dropped == 0 {
 		t.Error("nothing was dropped, so the limit did nothing")
 	}
-	if s.Get(avatarID(AppearanceLimit * 2)) == nil {
+	if s.Get(avatarID(AppearanceLimit*2)) == nil {
 		t.Error("the most recent avatar was dropped; eviction took the wrong end")
 	}
 }
