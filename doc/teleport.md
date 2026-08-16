@@ -336,6 +336,75 @@ A run is cheap and repeatable, so the stage 2 test should be a loop:
 twenty round trips, checking the region name and position each time and
 that the object count in each region settles rather than growing.
 
+## Open questions
+
+Decisions the stages above depend on and that nobody has made yet, or
+findings from building stage 1 and 2 that belong to a later one.
+
+**Which region the test loop uses.** Vortera, which was asked for, is
+not on Agni. Vortaro (43584, 43712, moderate) exists and is next door;
+Sandbox Goguen (995, 997, general) is the one stage 0 actually
+teleported to and returned from. Vortaro has never been tried as a
+destination, and a moderate region next to a Linden Homes estate may
+refuse an arrival for reasons the map has no field for. Try it once in
+stage 3; keep Goguen as the fallback that is known to work.
+
+**A viewer attached across a move gets the wrong seed (stage 6).**
+`a.Account.SeedCapability` still holds the region this session LOGGED IN
+to, and `cmd/slgod/viewer.go:449` serves exactly that to a viewer being
+handed the session. After a move it addresses a simulator the avatar has
+left. That is an argument for stage 6 refusing a viewer's teleport
+rather than following it, and for refusing to hand a session over at all
+while it is mid-move.
+
+**`sl.Direct` goes stale (stage 4).** `Info.Region` and `Info.Caps` are
+built once in `Login` (`sl/direct.go:73`) and never revised, so a direct
+session that moves reports the region it started in. Whatever stage 4
+does about telling a client the region changed has to reach this too.
+
+**Two regions with no id look like one region.** `enterRegion` keys the
+object store on the region's uuid, so two regions that both report a
+zero `RegionID` would share a store. It has never been reachable --
+this is the first stage that enters a second region at all -- and it is
+not obviously worth guarding, but it is worth knowing before a strange
+report about objects from somewhere else.
+
+**A map lookup can be truncated by another one.** `MapBlockReply`
+carries nothing that says which question it answers and the daemon
+relays by message number, so two clients looking regions up at once can
+end each other's lists early. Documented at the head of `sl/worldmap.go`
+along with the half that is fixed. It costs a listing shorter than the
+grid's answer, never a wrong one, and it wants a second look if
+`regions` ever becomes something a script depends on.
+
+**The lure fault is still reachable.** `AcceptLure` sends the request
+and returns, and stage 0 measured what that costs: two minutes of
+answers about the wrong region, then a reconnect. Stage 3 fixes it by
+following the teleport, but until then `slsh waiting` will accept an
+offer and appear to do nothing. It may be worth saying so in `waiting`'s
+man page before stage 3 lands rather than after.
+
+**The next release is a minor.** Stage 2 removed `Agent.Conn` and turned
+`Agent.Caps` from a field into a method. Both are exported, and v0.2.0
+set the precedent: a caller reading only a patch number would not look.
+
+### Not about teleport
+
+Two things found while working on this that belong nowhere else yet.
+
+`agents` pads the profile name to ten characters (`cmd/slsh/objects.go:317`),
+so a longer name pushes every column after it out of line -- seen with a
+24-character profile on this machine. `ls -l` has the same shape and
+gets away with it because a path is last on the line; here the name is
+first.
+
+`rez` does not name the active group. `rezAt` (`sl/build.go:237`) fills
+in `ObjectAdd` without a `GroupID`, where `RezFromInventory`
+(`sl/inventory_ops.go:383`) takes one and sends it. A parcel that grants
+building to a group rather than to individuals should therefore refuse
+`rez` and allow `place`, which would present as the land being wrong.
+Unverified: it is a reading of the source, not a measurement.
+
 ## What this does not do
 
 - **Neighbouring regions.** A viewer keeps circuits to the simulators
