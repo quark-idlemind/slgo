@@ -19,11 +19,11 @@ That is the viewer's Add rather than its Wear, and the difference
 between the two is one bit in the request, so which one a bare command
 means was ours to choose.
 
-It was chosen the hard way.  With "auto 11" already on HUD bottom
-right, "wear Objects/auto 3" with no --at at all put auto 3 there and
-took auto 11 off -- and nothing said so: not this command, which
-printed its one line about auto 3, and not the region.  A wrong add is
-visible and costs a detach.  A wrong replace is invisible and costs
+It was chosen the hard way.  With a badge already on a HUD point,
+wearing a second thing with no --at at all put that thing on the point
+and took the badge off -- and nothing said so: not this command,
+which printed its one line about what went on, and not the region.  A
+wrong add is visible and costs a detach.  A wrong replace is invisible and costs
 whatever was there.  Between two defaults, the one to have is the one
 whose mistake can be seen.
 
@@ -59,11 +59,11 @@ alongside it.
 
 Put a HUD on wherever it asks to go:
 
-	wear Objects/auto 3
+	wear Objects/badge
 
 Put one on a named point, over whatever is there:
 
-	wear --replace --at "HUD bottom right" Objects/auto 4
+	wear --replace --at "HUD bottom right" Objects/meter
 
 See also: detach, worn for what is on and where, and place for putting
 an inventory object into the world instead of onto the avatar.

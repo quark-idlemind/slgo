@@ -38,7 +38,7 @@ rather than as failing.  --wait sets how long, in seconds.
 # Examples
 
 	detach hat
-	detach "auto 3"
+	detach badge
 	detach --wait 30 Objects/hat
 
 See also: wear, worn.

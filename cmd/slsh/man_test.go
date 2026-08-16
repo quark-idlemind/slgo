@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -308,6 +309,39 @@ func TestEveryPageInTheDirectoryIsNamedBySomeCommand(t *testing.T) {
 		}
 		if !named[manDir+"/"+f] {
 			t.Errorf("cmd/slsh/%s/%s is a page no command names, so nobody can reach it", manDir, f)
+		}
+	}
+}
+
+// TestNoManPageQuotesAWholeKey.
+//
+// A page is written for whoever reads it and not about whoever wrote
+// it, so it carries invented names -- Example Resident, Testville, a
+// lantern -- and never the avatars, groups or objects of the account it
+// was written on.  That rule cannot be tested in general, since a test
+// cannot know a real name from an invented one, but one form of it can:
+// a whole key, all thirty-six characters of it, is almost never typed
+// by hand.  It arrives by being pasted out of live output, and whatever
+// else came with it was real too.
+//
+// So the truncated form the shell itself prints -- d8467e57-... -- is
+// what a page uses when it has to show a key at all.
+func TestNoManPageQuotesAWholeKey(t *testing.T) {
+	whole := regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+	files, err := manPages.ReadDir(manDir)
+	if err != nil {
+		t.Fatalf("reading %s: %v", manDir, err)
+	}
+	for _, f := range files {
+		body, err := manPages.ReadFile(manDir + "/" + f.Name())
+		if err != nil {
+			t.Errorf("%s: %v", f.Name(), err)
+			continue
+		}
+		if found := whole.FindString(string(body)); found != "" {
+			t.Errorf("cmd/slsh/%s/%s quotes the whole key %s; a page shows a key as %q, "+
+				"and a whole one usually means live output was pasted in",
+				manDir, f.Name(), found, "d8467e57-...")
 		}
 	}
 }
