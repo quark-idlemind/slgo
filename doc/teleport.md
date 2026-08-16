@@ -279,7 +279,7 @@ Sandbox Goguen, forty moves, none of them failed.** What that measured:
   `simulator silent`, no `DisableSimulator` -- we leave each region well
   inside the fifty seconds of grace stage 0 measured.
 
-### Stage 4 -- what the clients are told
+### Stage 4 -- what the clients are told (done)
 
 A teleport invalidates most of what a client is holding: local ids are
 the region's numbering, the object cache describes somewhere else, and
@@ -291,6 +291,32 @@ a region change; the clients do not know it happened.
 - `sl.Session` clears its per-region caches when it sees one.
 - `PresenceResponse` already carries the region and handle, so a client
   that polls needs nothing new.
+
+Built as a **notice** rather than as anything on the message
+subscription stream: `AgentEvent_REGION_CHANGED` already existed for the
+reconnect, and a teleport is the same news for a different reason. The
+kind gained `region` and `region_handle`, and the reconnect fills them
+in too.
+
+Two things were learned building it:
+
+- **The handle decides where the notice is fired from.**
+  `RegionHandshake` is where the name, the store and the terrain change
+  and is the obvious place; it does not carry the handle, which arrives
+  afterwards in `AgentMovementComplete`. A notice from the handshake
+  pairs the new name with the old handle -- half right, and therefore
+  worse than none.
+- **`asking` was a bug, not a cache.** It marks the ids a
+  `UUIDNameRequest` is out for and clears on the reply. After a teleport
+  the reply never comes, so the mark reads "already asked" for the rest
+  of the session and the name is never learned. It is dropped with the
+  rest of the region's state.
+
+Run 2026-08-16 against Agni: three round trips, six moves, **six region
+changes, each with the right name and handle and none spurious**. The
+notice reached a subscriber about **400ms before `Teleport` returned**
+to the caller that asked for it. `Info.Region` read "Pelmar Reach"
+throughout, which is that field's contract working rather than failing.
 
 ### Stage 5 -- slsh
 
@@ -413,8 +439,29 @@ grid's answer, never a wrong one, and it wants a second look if
 `regions` ever becomes something a script depends on.
 
 **The next release is a minor.** Stage 2 removed `Agent.Conn` and turned
-`Agent.Caps` from a field into a method. Both are exported, and v0.2.0
-set the precedent: a caller reading only a patch number would not look.
+`Agent.Caps` from a field into a method, and stage 4 added a method to
+`sl.Backend`, which anything implementing that interface outside this
+tree has to grow. All three are exported, and v0.2.0 set the precedent:
+a caller reading only a patch number would not look.
+
+**A client can be told before the capabilities have moved.** The notice
+fires from `AgentMovementComplete`, on the dispatch goroutine, while
+`moveTo` is still between the arrival and the capability swap -- so a
+client that reacts to a region change with a capability-backed request
+inside that window addresses the region it has left. Measured at about
+400ms of daylight. Nothing has hit it, because the notice is news to act
+on rather than a starting gun, and the alternative -- firing after the
+whole move -- would put the notice behind the object updates the new
+region is already sending. Worth knowing before something reacts to a
+region change by fetching.
+
+**A dropped region change is worse than a dropped anything else.** Every
+hop from the daemon to a subscriber drops rather than blocks, because
+blocking any of them stops a stream or the dispatch goroutine; a session
+that missed one goes on believing it is where it is not. The buffers are
+sized for one per teleport rather than one per packet, which is the
+whole of the defence. It wants a second look only if a client can stop
+reading for minutes at a time.
 
 **A teleport's failed dial should probably end the session.** `moveTo`
 deliberately leaves the session where it was when the dial fails,
