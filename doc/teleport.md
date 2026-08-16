@@ -318,7 +318,7 @@ notice reached a subscriber about **400ms before `Teleport` returned**
 to the caller that asked for it. `Info.Region` read "Pelmar Reach"
 throughout, which is that field's contract working rather than failing.
 
-### Stage 5 -- slsh
+### Stage 5 -- slsh (done)
 
 - `tp REGION [X Y Z]` -- the refusal in `man/tp.txt` becomes a
   paragraph about what it costs. Default arrival position is the middle
@@ -326,6 +326,32 @@ throughout, which is that field's contract working rather than failing.
 - `waiting`'s `accept` on a lure follows the teleport instead of firing
   and forgetting.
 - `where` gains nothing; it already prints the region.
+
+The shell chose **thirty seconds** where `sl.DefaultTeleportTimeout` is
+ninety, which settles that open question for `slsh` and leaves it open
+for everyone else. `--wait` overrides it, and it covers the arrival
+rather than the map lookup in front of it. `waiting`'s accept takes the
+same thirty through a context, which is all `AcceptLure` needed.
+
+`(*Shell).watch` gained a region-change arm, so an arrival nobody typed
+at the prompt is said out loud. A `tp` therefore prints twice -- the
+session's news and the command's answer -- which is deliberate.
+
+**What the simulator does with the height was measured, and it is not
+what everything before this assumed.** It does not stand the avatar on
+the ground: the avatar arrives at whichever is higher of the height
+asked for and the ground under the point, plus about a metre. Measured
+on Agni: 30 came back as 31, 60 as 61, 2001 as 2002, and **0 as the
+ground**. So a zero height is how to ask for ground level without
+knowing where the ground is, which is what the default wants -- and what
+it does not promise is dry land, since a region's middle can be under
+its water, as Sandbox Goguen's is.
+
+Four man pages carried sentences that `a2fd50b` made false and now do
+not: `tp.txt` rewritten, `answer.txt` no longer says accepting a
+teleport ends the session, `regions.txt` no longer says nothing
+teleports between regions, `waiting.txt` says an offer is followed. The
+same falsehood was in `waiting.go`'s `choices()`.
 
 ### Stage 6 -- a viewer attached while it happens
 
@@ -489,9 +515,14 @@ another's. Documented at the head of `sl/teleport.go`.
 anything had been timed. Forty moves now say a teleport costs 355ms to
 5 seconds, so the constant is two orders of magnitude above what it
 covers, and the only argument for keeping it there is that nobody has
-seen a slow grid day. `slsh waiting`'s accept inherits it, so an offer
-to a region that never answers holds the shell for a minute and a half;
-stage 5 should decide whether the shell wants its own.
+seen a slow grid day. Stage 5 answered this for `slsh`, which uses
+thirty seconds of its own and no longer inherits the ninety; every other
+caller still does, and the constant itself is untouched.
+
+**`README.md` still says there is no teleport.** Its "Not done" section
+reads "No region crossing, no teleport beyond the current region". The
+second half has been false since `a2fd50b` and the first is stage 7, so
+the sentence wants splitting rather than deleting.
 
 ### Not about teleport
 
