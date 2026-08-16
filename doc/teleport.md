@@ -1,6 +1,8 @@
 # Cross-region teleport
 
 Written 2026-08-16, against `09b3366` (v0.3.0). Nothing here is built.
+Stage 0 has been run, and what it measured is folded in below: where
+this says what happens, it was watched happening.
 
 `sl/teleport.go`, `cmd/slsh/man/tp.txt` and `doc/viewer-frontend.md`
 each stop at the same sentence -- another region is a different
@@ -30,13 +32,28 @@ comes over the event queue and not the circuit. slgod is the only
 poller and fans out (`agent/eventqueue.go`), and `sl.Subscriptions`
 already names `TeleportFinish`, `TeleportFailed` and `TeleportLocal`.
 
-**And there is a fault sitting in it.** `Session.AcceptLure` sends
-`TeleportLureRequest` and returns. Nothing stops a person accepting an
-offer to another region from `slsh waiting`; the request is granted, the
-avatar leaves, and this daemon is left holding a circuit to a simulator
-the avatar is no longer in. Stage 0 measures what that actually looks
-like. Whatever it turns out to be, it is currently reachable from a
-prompt with no warning.
+**And there is a fault sitting in it, worse than it reads.**
+`Session.AcceptLure` sends `TeleportLureRequest` and returns. Nothing
+stops a person accepting an offer to another region from `slsh waiting`;
+the request is granted and the avatar leaves. Measured, what follows is:
+
+- for **50 seconds** the origin behaves as though nothing happened --
+  object updates, coarse locations, land, and a `StartPingCheck` every
+  five seconds which slgod dutifully answers;
+- then one `DisableSimulator`, which nothing in the tree handles, and
+  silence for good;
+- **116 seconds** after the teleport the idle watchdog gives up, logging
+  `connection ended: agent: simulator silent for 1m6s`;
+- eight seconds later slgod reconnects and the avatar is **back where it
+  started**, because no root agent was ever established at the
+  destination.
+
+Through all of that `where`, `status` and `Presence` answer with the old
+region and the old position, and the client stream reports `DISCONNECTED`
+and then `REGION_CHANGED: session re-established` -- the same pair any
+lost circuit produces. Nothing anywhere names the teleport. To a person
+it looks like nothing happened, except that the session blinked two
+minutes later.
 
 ## What a teleport is, on the wire
 
@@ -49,6 +66,7 @@ prompt with no warning.
 	  |<--------------------------|                    |
 	  |  TeleportFinish (event queue: address + seed)  |
 	  |<--------------------------|                    |
+	  |     ... or TeleportFailed, also on the queue   |
 	  |            UseCircuitCode                      |
 	  |----------------------------------------------->|
 	  |            CompleteAgentMovement               |
@@ -66,10 +84,31 @@ why this is a teleport and not a relog. Everything after `UseCircuitCode`
 is the handshake `agent.Connect` already performs (`agent/agent.go:602`)
 -- against a different address.
 
-The three failure shapes, all of which have to be told apart:
-`TeleportFailed` instead of `TeleportFinish`; `TeleportFinish` and then
-nothing from the new address; and a request that is simply ignored,
-which is what a teleport too soon after the last one looks like.
+`TeleportStart` and `TeleportProgress` arrive on UDP; `TeleportFinish`
+and `TeleportFailed` both arrive on the **event queue**, measured, even
+though the template marks only the first of them `UDPBlackListed`.
+Decoding the event is not "read integers out of a map": `LocationID`,
+`RegionHandle`, `SimIP` and `TeleportFlags` come as LLSD *binary*, while
+`SimPort` and `SimAccess` are integers and `SeedCapability` a string.
+
+The whole exchange takes about 300ms:
+
+	+0.000  --> TeleportLocationRequest  handle=1094014069892352
+	+0.101  <-- TeleportStart            flags=0x10
+	+0.101  <-- TeleportProgress         "resolving"
+	+0.209  <-- TeleportProgress         "Sending to destination."
+	+0.298  <== TeleportFinish           (event queue)
+
+The three failure shapes, all of which have to be told apart.
+`TeleportFailed` instead of `TeleportFinish` -- it carries both a
+machine key and human text, in different places depending on the
+failure: a handle that is no region gives `AlertInfo[0].Message` and
+`Info[0].Reason` both `"no_host"`, while a region that refuses gives
+`"MustHaveVIPStatus"` in the first and a sentence in the second.
+`TeleportFinish` and then nothing from the new address. And a request
+that is simply ignored, which is what a second teleport looks like: once
+the agent has been handed off the origin answers no more teleport
+requests at all -- not a rate limit, and not a wait that clears.
 
 ## The hard part: the circuit moves under everything
 
@@ -120,37 +159,55 @@ as though they were per session:
 
 Each stage ends somewhere it can be left standing.
 
-### Stage 0 -- watch one happen
+### Stage 0 -- watch one happen (done)
 
-No code. `slgod -trace` on both a lure accepted to another region and a
-`TeleportLocationRequest` aimed at another region's handle, with the
-questions written down first:
+Run 2026-08-16 against Agni, with a throwaway probe and `slgod -trace`.
+What it answered is above and in the stages below; what it changed is
+worth stating plainly, since each was written the other way round first:
 
-- Does `TeleportFinish` arrive on the event queue, with what fields?
-- What does the old simulator do afterwards -- a `CloseCircuit`, a
-  silence, or does it keep answering pings?
-- How long does the idle watchdog take to end the session, and does it
-  report anything a client could tell from an ordinary disconnect?
-- What does `TeleportFailed` carry when the destination refuses?
-- What is the minimum interval between teleports before requests start
-  being ignored?
-
-Everything after this stage is written against the answers rather than
-against what the protocol is supposed to do.
+- `TeleportFailed` is an event-queue message too, not a UDP one.
+- `TeleportFinish`'s numeric fields are LLSD binary, not integers.
+- The origin gives a **50 second grace period**, then `DisableSimulator`.
+  `moveTo` has a generous window, and `DisableSimulator` is a real
+  signal that the old region has let go rather than a message to count.
+- The default reconnect already lands the avatar back at the origin, so
+  the fallback for a botched teleport is better than assumed: do
+  nothing, wait two minutes.
+- `MapNameRequest` is a prefix search with a sentinel, which stage 1 has
+  to cope with rather than treat as an exception.
 
 ### Stage 1 -- a region name becomes a handle
 
-`TeleportLocationRequest` takes a `RegionHandle`, and a person types
-"Vortera". `MapNameRequest` is answered by `MapBlockReply`, whose blocks
+`TeleportLocationRequest` takes a `RegionHandle`, and a person types a
+name. `MapNameRequest` is answered by `MapBlockReply`, whose blocks
 carry `X` and `Y` as grid coordinates (`msg/messages_gen.go:13575`);
-the handle is those multiplied by 256 and packed, `x<<32 | y`. There is
-no handle arithmetic in the tree yet, so it arrives with this stage, and
-its first test is that it reproduces `Agent.RegionHandle()` for the
-region the session is already standing in.
+the handle is those multiplied by 256 and packed,
+`uint64(x*256)<<32 | uint64(y*256)`. There is no handle arithmetic in
+the tree yet, so it arrives with this stage. Stage 0 confirmed it:
+Pelmar Reach is (43648, 43648) and the session reports handle
+47991483540340736, which is what that expression gives. The reply takes
+about 110ms.
 
-A name that matches nothing, and a name that matches several -- the
-reply is a list -- both have to be answerable rather than guessed at.
-`lookup`'s numbered listing is the shape to follow.
+`MapBlockReply` is not the tidy list the field names suggest, and stage 0
+measured all four of these:
+
+- **It is a case-insensitive PREFIX search.** `"Pelm"` returns eleven
+  regions; an exact name is just one row among them. A name that matches
+  several is the normal case, not the exception -- `lookup`'s numbered
+  listing is the shape to follow.
+- **Every reply ends with a sentinel block** whose `Name` is the query
+  lowercased with its last character removed, `X=Y=0` and `Access=255`.
+  It is not a region and must be dropped.
+- **A name that matches nothing returns the sentinel and nothing else.**
+  That, and not an empty reply, is how "no such region" arrives.
+- **The reply can be split across several packets** -- `"Sandbox"` came
+  back as 26 blocks and then 8 -- so a caller accumulates until the
+  sentinel arrives rather than until the first reply.
+
+`Agents`, `RegionFlags` and `WaterHeight` came back zero for every
+region on every run, so `slsh region NAME` cannot say whether a region
+is up or how busy it is. `Access` -- 13 general, 21 moderate, 42 adult
+-- is the only usable datum besides the position.
 
 Standing on its own this is worth having: `slsh region NAME` printing
 where a region is and whether it is up.
@@ -239,30 +296,41 @@ Nothing in the tree handles it today, so an avatar that walks over a
 border is in the same position as one that accepts a lure. Once stage 2
 exists this is a handler and a test.
 
-## Testing: Pelmar Reach to Vortera and back
+## Testing: Pelmar Reach and back
 
-The session on `:7898` is standing in **Pelmar Reach at 28, 72, 2001** --
-a Linden Homes region, and a skybox two kilometres up. Vortera is a
-public sandbox on the same grid. Between them they exercise the awkward
-cases:
+The session on `:7898` stands in **Pelmar Reach at 28, 72, 2001** -- a
+Linden Homes region, this avatar's home, and a skybox two kilometres up.
 
-- **Out and back**, which is the whole thing. `tp Vortera`, confirm the
-  region name, the position and that objects are described there;
-  `tp "Pelmar Reach" 28 72 2001` and confirm the height survives. A
-  height of 2001m is not incidental: coarse location reports it as 1020
-  (v0.2.0), so a teleport that lands by coarse location lands wrong.
+**Vortera is not a region on Agni.** `MapNameRequest` for "Vorter"
+returns Vorterhaven Sands, Vorterra Cove and Vortero Flats and nothing
+else. **Vortaro** does exist, at (43584, 43712), handle
+`47921114796179456`, moderate -- it is next door to Pelmar Reach's (1054,
+992) and is probably the name meant. The destination stage 0 actually
+teleported to and returned from is **Sandbox Goguen**, (995, 997),
+handle `1094014069892352`, general, which is proven to accept this
+avatar. Use Vortaro if it accepts us; keep Goguen as the one known to.
+
+Between them they exercise the awkward cases:
+
+- **Out and back**, which is the whole thing. Confirm the region name,
+  the position and that objects are described there; then back to
+  `Pelmar Reach 28 72 2001` and confirm the height survives. A height of
+  2001m is not incidental: coarse location reports it as 1020 (v0.2.0),
+  so a teleport that lands by coarse location lands a kilometre wrong.
+  Expect the simulator to stand the avatar a metre higher than asked.
 - **A sandbox is busy**, so arrival is a real object burst rather than
   the forty-one objects Pelmar Reach has described. The store swap and the
   `Cache` reference counting get exercised by something with weight.
 - **Two avatars, one daemon**, in different regions at once -- `qi` in
-  Vortera and another profile left in Pelmar Reach -- which is what the
+  the sandbox and another profile left in Pelmar Reach -- which is what the
   per-region `Cache` was built for and has never been asked to do.
-- **The failure paths**: a region name that does not exist, a teleport
-  refused by a parcel, and two teleports in quick succession.
-- **Getting home if it goes wrong.** Pelmar Reach is home for this avatar,
-  so a session that ends up somewhere unexpected comes back with a
-  relog and `start = home`. That is the fallback the current man page
-  describes, and it stays true throughout.
+- **The failure paths**, all reachable cheaply and none of which ended
+  the session in stage 0: a handle that is no region (`no_host`), a
+  region that refuses (Sandbox Bricker, adult, `MustHaveVIPStatus`), and
+  a second teleport after a successful one, which is answered with
+  nothing at all.
+- **Getting home if it goes wrong** costs nothing but two minutes: the
+  reconnect lands the avatar back at the origin by itself.
 
 A run is cheap and repeatable, so the stage 2 test should be a loop:
 twenty round trips, checking the region name and position each time and
