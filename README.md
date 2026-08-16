@@ -892,7 +892,8 @@ move is UDP, because AIS refuses to change a parent. A folder renamed
 to `odd / name \ here` comes back with exactly that name.
 
 For how to use the commands rather than how they work, see
-[doc/guide.md](doc/guide.md).
+[doc/slsh-guide.html](doc/slsh-guide.html); the daemon and the two
+benchmark programs are in [doc/guide.md](doc/guide.md).
 
 ## Where slgod is
 
