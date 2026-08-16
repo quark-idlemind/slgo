@@ -4,7 +4,7 @@ package main
 //
 // These commands are the ones that change something, so their careful
 // halves are the point: give reports an offer rather than a transfer,
-// place waits for the object to have moved instead of reading back the
+// move waits for the object to have moved instead of reading back the
 // position it had before, and cp refuses a folder outright.  All of
 // that is reachable over a fake grid; what is not is noted in
 // coverage-notes/slsh-shell.md.
@@ -254,56 +254,56 @@ func TestTPReportsWhereItEndedUp(t *testing.T) {
 	}
 }
 
-// TestPlaceNeedsExactlyOneObjectOfThatName.
+// TestMoveNeedsExactlyOneObjectOfThatName.
 //
-// Two of a name is not an ambiguity to guess at: place sets a position,
+// Two of a name is not an ambiguity to guess at: move sets a position,
 // a rotation and a scale at once, so picking the wrong one reshapes it.
-func TestPlaceNeedsExactlyOneObjectOfThatName(t *testing.T) {
+func TestMoveNeedsExactlyOneObjectOfThatName(t *testing.T) {
 	x := newTestShell(t)
 
-	if got := x.do(t, "place probe 1 2"); !strings.Contains(got, "NAME X Y Z") {
-		t.Errorf("place with too few arguments printed %q", got)
+	if got := x.do(t, "move probe 1 2"); !strings.Contains(got, "NAME X Y Z") {
+		t.Errorf("move with too few arguments printed %q", got)
 	}
-	if got := x.do(t, "place probe 1 2 over-there"); !strings.Contains(got, "is not a number") {
-		t.Errorf("place with a bad position printed %q", got)
+	if got := x.do(t, "move probe 1 2 over-there"); !strings.Contains(got, "is not a number") {
+		t.Errorf("move with a bad position printed %q", got)
 	}
-	if got := x.do(t, "place --help"); !strings.Contains(got, "NAME X Y Z") {
-		t.Errorf("place --help printed %q", got)
+	if got := x.do(t, "move --help"); !strings.Contains(got, "NAME X Y Z") {
+		t.Errorf("move --help printed %q", got)
 	}
-	if got := x.do(t, "place probe 10 20 30"); !strings.Contains(got, `no object named "probe"`) {
-		t.Errorf("place of nothing printed %q", got)
+	if got := x.do(t, "move probe 10 20 30"); !strings.Contains(got, `no object named "probe"`) {
+		t.Errorf("move of nothing printed %q", got)
 	}
 
 	x.grid.objects = []*sl.Seen{
 		{Object: sl.Object{ID: testLamp, Local: 1, Name: "probe"}, PCode: 9},
 		{Object: sl.Object{ID: testNote, Local: 2, Name: "probe"}, PCode: 9},
 	}
-	if got := x.do(t, "place probe 10 20 30"); !strings.Contains(got, "2 objects are called") {
-		t.Errorf("place of two of a name printed %q", got)
+	if got := x.do(t, "move probe 10 20 30"); !strings.Contains(got, "2 objects are called") {
+		t.Errorf("move of two of a name printed %q", got)
 	}
 
 	x.grid.objectsErr = errors.New("nobody is holding this session")
-	if got := x.do(t, "place probe 10 20 30"); !strings.Contains(got, "nobody is holding") {
-		t.Errorf("place should report the failure, got %q", got)
+	if got := x.do(t, "move probe 10 20 30"); !strings.Contains(got, "nobody is holding") {
+		t.Errorf("move should report the failure, got %q", got)
 	}
 }
 
-// TestPlaceWaitsForTheObjectToHaveMoved.
+// TestMoveWaitsForTheObjectToHaveMoved.
 //
-// Place is fire and forget: the simulator answers with an ObjectUpdate
-// whenever it gets round to it, so an immediate re-read returns the
-// position the object had BEFORE the move and reports it with total
-// confidence.  A stale answer is worse than none, because nothing about
-// it looks wrong.
-func TestPlaceWaitsForTheObjectToHaveMoved(t *testing.T) {
+// sl.Place is fire and forget: the simulator answers with an
+// ObjectUpdate whenever it gets round to it, so an immediate re-read
+// returns the position the object had BEFORE the move and reports it
+// with total confidence.  A stale answer is worse than none, because
+// nothing about it looks wrong.
+func TestMoveWaitsForTheObjectToHaveMoved(t *testing.T) {
 	x := newTestShell(t)
 	at := msg.Vector3{X: 10, Y: 20, Z: 30}
 	x.grid.objects = []*sl.Seen{
 		{Object: sl.Object{ID: testLamp, Local: 1, Name: "probe"}, PCode: 9, Position: at},
 	}
 
-	if got, want := x.do(t, "place probe 10 20 30"), "probe is at 10.0, 20.0, 30.0\n"; got != want {
-		t.Errorf("place printed %q, want %q", got, want)
+	if got, want := x.do(t, "move probe 10 20 30"), "probe is at 10.0, 20.0, 30.0\n"; got != want {
+		t.Errorf("move printed %q, want %q", got, want)
 	}
 
 	// An object that goes away while it is being moved is a failure
@@ -316,8 +316,8 @@ func TestPlaceWaitsForTheObjectToHaveMoved(t *testing.T) {
 		defer x.grid.mu.Unlock()
 		x.grid.objects = nil
 	}
-	if got := x.do(t, "place probe 10 20 30"); !strings.Contains(got, "is not in the region") {
-		t.Errorf("place of something that vanished printed %q", got)
+	if got := x.do(t, "move probe 10 20 30"); !strings.Contains(got, "is not in the region") {
+		t.Errorf("move of something that vanished printed %q", got)
 	}
 
 	// A move the circuit would not take is reported rather than waited
@@ -327,8 +327,8 @@ func TestPlaceWaitsForTheObjectToHaveMoved(t *testing.T) {
 		{Object: sl.Object{ID: testLamp, Local: 1, Name: "probe"}, PCode: 9, Position: at},
 	}
 	x.grid.sendErr = errors.New("the circuit is down")
-	if got := x.do(t, "place probe 10 20 30"); !strings.Contains(got, "the circuit is down") {
-		t.Errorf("place should report a refused send, got %q", got)
+	if got := x.do(t, "move probe 10 20 30"); !strings.Contains(got, "the circuit is down") {
+		t.Errorf("move should report a refused send, got %q", got)
 	}
 }
 

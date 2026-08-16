@@ -384,7 +384,7 @@
 <pre><span class="p">/$</span> <span class="c">cd Objects</span>
 <span class="p">/Objects$</span> <span class="c">ls -l lantern</span>
 <span class="o">object     2026-08-02  3ae17e57-…  /Objects/brass lantern</span>
-<span class="p">/Objects$</span> <span class="c">bring "brass lantern"</span>
+<span class="p">/Objects$</span> <span class="c">place "brass lantern"</span>
 <span class="o">"brass lantern" 785f7e57-… is at 35, 73, 2001</span>
 <span class="p">/Objects$</span> <span class="c">start "brass lantern"</span>
 <span class="o">started    flicker</span></pre>
@@ -646,17 +646,18 @@
 
         <p>
           <code>take</code> brings a rezzed object into inventory and
-          <code>bring</code> puts one back into the world — the pair is named
-          that way round because <code>rez</code> already means "build what this
-          JSON file describes", which is a different act from "put back what I
-          took".
+          <code>place</code> puts one back into the world. Neither of them is
+          <code>rez</code>, which already means "build what this JSON file
+          describes" — a different act from "put back what I took".
+          <code>move</code> is for something already standing there: it changes
+          where it is and nothing else.
         </p>
 
         <div class="tablewrap">
           <table>
             <tbody>
-              <tr><td class="cmd">take · bring</td><td class="what">between the world and inventory; <code>take --copy</code> tries to leave the original standing</td></tr>
-              <tr><td class="cmd">place · touch</td><td class="what">move a rezzed object; click one, on a named face at a named point</td></tr>
+              <tr><td class="cmd">take · place</td><td class="what">between the world and inventory; <code>take --copy</code> tries to leave the original standing</td></tr>
+              <tr><td class="cmd">move · touch</td><td class="what">move a rezzed object; click one, on a named face at a named point</td></tr>
               <tr><td class="cmd">link · unlink</td><td class="what">join objects into one; take one apart, or free a single prim from it</td></tr>
               <tr><td class="cmd">perms</td><td class="what">what the next owner, the group or everyone may do: <code>c</code>opy, <code>m</code>odify, <code>t</code>ransfer, mo<code>v</code>e</td></tr>
               <tr><td class="cmd">texture</td><td class="what">what a face looks like, or with no flags, what it looks like now</td></tr>
@@ -1021,7 +1022,7 @@ viewer_launch = open -a {app} --args --grid {grid} --login {first} {last} {passw
               <tr><td class="cmd">where · look · tp · group</td><td class="what">where you are, what it is, moving, and who you act as</td></tr>
               <tr><td class="cmd">objects · dump · rez · reform</td><td class="what">what is here, described, built and changed</td></tr>
               <tr><td class="cmd">worn · wear · detach</td><td class="what">attachments</td></tr>
-              <tr><td class="cmd">take · bring · place · drop</td><td class="what">between the world and inventory, and about the region</td></tr>
+              <tr><td class="cmd">take · place · move · drop</td><td class="what">between the world and inventory, and about the region</td></tr>
               <tr><td class="cmd">link · unlink · perms · texture · touch</td><td class="what">building, permissions, faces, clicking</td></tr>
               <tr><td class="cmd">start · stop</td><td class="what">scripts inside an object</td></tr>
 

@@ -15,7 +15,7 @@ package main
 //
 // wear names something in inventory and detach names something worn,
 // and those are different places even when they hold the same word.  So
-// wear takes a path, the way bring does, and looks the item up; detach
+// wear takes a path, the way place does, and looks the item up; detach
 // takes a name and matches it against what is actually on, because the
 // thing it has to send is the id of the item an attachment was worn
 // from and that is what the region's answer carries.

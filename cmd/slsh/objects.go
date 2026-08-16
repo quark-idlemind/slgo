@@ -36,10 +36,10 @@ var objectCommands = map[string]*command{
 		brief: "move to a position in this region",
 		run:   cmdTP,
 	},
-	"place": {
-		usage: "place NAME X Y Z",
+	"move": {
+		usage: "move NAME X Y Z",
 		brief: "move a rezzed object to a position",
-		run:   cmdPlace,
+		run:   cmdMove,
 	},
 	"agents": {
 		usage: "agents",
@@ -172,21 +172,26 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	return nil
 }
 
-// cmdPlace moves a rezzed object.
+// cmdMove moves a rezzed object.
 //
 // It exists because taking an object and rezzing it again does not put
 // it back: a rez happens where you ask, and "where it was" is not
 // something Second Life remembers for you.  Anything that takes an
 // object as part of a round trip has to note where it stood and put it
 // back itself.
-func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+//
+// This was "place" until the word was wanted for putting an inventory
+// object into the world, which is what "place" sounds like it means.
+// "move" says what this one does without any of that argument, since
+// the thing is already in the world and all that changes is where.
+func cmdMove(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var flags helpOnly
-	rest, done, err := subOptions("place", "NAME X Y Z", &flags, out, args)
+	rest, done, err := subOptions("move", "NAME X Y Z", &flags, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(rest) != 4 {
-		return fmt.Errorf("place NAME X Y Z -- an object in this region, and where to put it")
+		return fmt.Errorf("move NAME X Y Z -- an object in this region, and where to put it")
 	}
 
 	at, err := position(rest[1:])
@@ -206,7 +211,7 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	}
 	o := found[0]
 
-	// Its own rotation and scale.  Place sets all three at once, so
+	// Its own rotation and scale.  sl.Place sets all three at once, so
 	// inventing the other two would quietly reshape whatever it was
 	// pointed at.
 	if err := sh.s.Place(ctx, &o.Object, at, o.Rotation, o.Scale); err != nil {
@@ -215,7 +220,7 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 
 	// Wait for it to have moved, rather than read it back once.
 	//
-	// Place is fire and forget -- the simulator answers with an
+	// sl.Place is fire and forget -- the simulator answers with an
 	// ObjectUpdate whenever it gets round to it -- so an immediate
 	// re-read returns the position the object had BEFORE the move and
 	// reports it with total confidence.  Observed: "place-probe is at

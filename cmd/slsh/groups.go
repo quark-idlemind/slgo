@@ -83,9 +83,14 @@ var groups = []group{
 		// the question it answers -- "why has building stopped working
 		// here" -- is asked next to where and rez and nowhere near
 		// friends.
+		//
+		// take and place are listed together because they are one
+		// question asked in two directions, and move sits with the
+		// other things done to an object that is already standing
+		// there rather than beside them.
 		members: []string{"where", "group", "tp", "who", "look", "objects", "worn", "wear",
-			"detach", "place", "dump", "rez", "reform", "touch", "texture",
-			"take", "bring", "perms", "drop", "start", "stop", "link", "unlink"},
+			"detach", "move", "dump", "rez", "reform", "touch", "texture",
+			"take", "place", "perms", "drop", "start", "stop", "link", "unlink"},
 	},
 	{
 		name:  "giving",

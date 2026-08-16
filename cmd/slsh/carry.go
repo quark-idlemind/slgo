@@ -4,20 +4,41 @@ package main
 // with them once they are there.
 //
 //	take   the world into inventory
-//	bring  inventory into the world
+//	place  inventory into the world
 //	perms  what the next owner, the group or everyone may do
 //
 // These were slinv's, in the days when a separate daemon owned the
 // session; the operations themselves have been in the sl package all
 // along and only wanted a way to be asked for.
 //
-// "rez" would have been the name for bring, since that is what everyone
-// calls it, and it is already the command that builds an object from a
-// JSON file.  One word cannot mean both "make what this file describes"
-// and "put back what I took": the first invents an object and the
-// second restores one, and a person who mixed them up would be told
-// their file was not valid JSON.  So the pair is take and bring, which
-// at least say which direction they go in.
+// # Why the pair is take and place
+//
+// "rez" is what everyone calls this, and it is already the command that
+// builds an object from a JSON file.  One word cannot mean both "make
+// what this file describes" and "put back what I took": the first
+// invents an object and the second restores one, and a person who mixed
+// them up would be told their file was not valid JSON.  That has not
+// changed and is not going to.
+//
+// What did change is that "place" became free.  It used to be the
+// command that repositioned something already rezzed, and that is now
+// "move", which is the plainer word for shifting a thing that is
+// already there and leaves "place" to mean what it sounds like: putting
+// a thing into the world.  So the pair is take and place, and each of
+// them says which direction it goes in.
+//
+// # The names these two used to have
+//
+// This command was called "bring", and nothing answers to that now.  A
+// script that says it stops with an unknown command, which is loud,
+// immediate and costs a re-run, so there is no alias for it: an alias
+// would keep the word in circulation, and the word being a poor
+// description of the act is the whole reason for the rename.
+//
+// "place" is the half worth being careful about, because it did not
+// disappear -- it changed meaning, and both meanings are spelt the same
+// way.  See the argument count in cmdPlace for what that costs and what
+// is done about it.
 
 import (
 	"context"
@@ -35,10 +56,10 @@ var carryCommands = map[string]*command{
 		brief: "take a rezzed object into inventory; --copy tries to leave the original",
 		run:   cmdTake,
 	},
-	"bring": {
-		usage: "bring [--at X,Y,Z] PATH|UUID",
+	"place": {
+		usage: "place [--at X,Y,Z] PATH|UUID",
 		brief: "put an inventory object into the world, which is what take undoes",
-		run:   cmdBring,
+		run:   cmdPlace,
 	},
 	"perms": {
 		usage: "perms [--next LETTERS] [--group LETTERS] [--everyone LETTERS] NAME|UUID",
@@ -111,19 +132,29 @@ func (sh *Shell) takeFolder(ctx context.Context, into string) (msg.UUID, error) 
 	return e.ID, nil
 }
 
-type bringFlags struct {
+type placeFlags struct {
 	At   string `getopt:"--at=X,Y,Z   where to put it [beside the avatar]"`
 	Help bool   `getopt:"--help -h    show what this command takes"`
 }
 
-func cmdBring(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	var o bringFlags
-	args, done, err := subOptions("bring", "PATH|UUID", &o, out, args)
+func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o placeFlags
+	args, done, err := subOptions("place", "PATH|UUID", &o, out, args)
 	if err != nil || done {
 		return err
 	}
-	if len(args) < 1 {
-		return fmt.Errorf("usage: bring [--at X,Y,Z] PATH|UUID")
+	// Exactly one, counted rather than taken from the front, because of
+	// what this name used to mean.  "place NAME X Y Z" repositioned a
+	// rezzed object, and the first word of such a line is very often the
+	// name of an inventory item as well: an object taken into inventory
+	// keeps its name, and one rezzed from an item was named by it.
+	// Reading args[0] and ignoring the rest would answer that line
+	// by rezzing a second copy beside the avatar and reporting success,
+	// leaving the object the script meant to move exactly where it was.
+	// A usage error costs a re-run; a stray object costs finding it.
+	if len(args) != 1 {
+		return fmt.Errorf("usage: place [--at X,Y,Z] PATH|UUID -- one object, quoted if its name has spaces\n" +
+			"        (to move something already rezzed, that is \"move NAME X Y Z\")")
 	}
 
 	e, err := sh.entryAt(ctx, args[0])
@@ -131,7 +162,7 @@ func cmdBring(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		return err
 	}
 	if e.Folder {
-		return fmt.Errorf("%s is a folder; bring takes one object", args[0])
+		return fmt.Errorf("%s is a folder; place takes one object", args[0])
 	}
 	// An Entry says where a thing sits; RezFromInventory wants the item
 	// itself, with its asset and permissions on it.
