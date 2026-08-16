@@ -399,6 +399,36 @@ func (d *Dispatcher) duplicate(seq uint32) bool {
 	return false
 }
 
+// Forget discards every remembered sequence number, so that the next
+// packet under any number counts as one that has not been seen.
+//
+// It exists for a circuit whose peer has been replaced.  A sequence
+// number belongs to a conversation and not to a socket: a viewer numbers
+// its own packets from 1, so the second one to attach to a session opens
+// with the numbers the first one used, and duplicate suppression -- which
+// has no way to tell the two apart -- throws its handshake away.  Nothing
+// else asks to forget, because for a peer that has not changed a repeated
+// sequence number really is a retransmission.
+//
+// Safe from the dispatch goroutine and nowhere else, which means from a
+// tap, an inline handler or the relay hook.  d.seen and the ring are
+// written by duplicate alone and carry no lock, and that is deliberate:
+// they are touched for every packet that arrives, so a mutex there would
+// be paid by every session to buy something one caller needs once in its
+// life.  Called from a tap this runs between two dispatches, on the very
+// goroutine that owns those fields, so the single-writer property is kept
+// rather than defended.
+func (d *Dispatcher) Forget() {
+	if d.seen == nil {
+		return
+	}
+	// The ring itself is left as it is.  A length of zero is what says
+	// which of its slots hold anything, so refilling from the start
+	// overwrites the stale numbers as it goes.
+	clear(d.seen)
+	d.ringPos, d.ringLen = 0, 0
+}
+
 func (d *Dispatcher) countUnhandled(id ID) {
 	d.unmu.Lock()
 	d.unhandledByID[id]++

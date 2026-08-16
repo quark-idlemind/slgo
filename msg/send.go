@@ -81,6 +81,10 @@ type Sender struct {
 type outbound struct {
 	m        Message
 	reliable bool
+
+	// forget asks Run to drop what is in flight rather than to send
+	// anything.  See Forget for why it travels on this channel.
+	forget bool
 }
 
 type inflight struct {
@@ -176,6 +180,33 @@ func (s *Sender) SendReliable(ctx context.Context, m Message) error {
 	return s.queue(ctx, &outbound{m: m, reliable: true})
 }
 
+// Forget drops every reliable message still waiting to be acknowledged,
+// so that nothing composed for a peer that has gone is retransmitted to
+// the one that replaced it.
+//
+// What is in flight when a viewer quits is the tail of a conversation
+// that has ended, and some of it is actively wrong for its successor: a
+// LogoutReply sent to a viewer that closed before acknowledging it would
+// otherwise arrive at the next viewer and log that one straight out
+// again.  The rest is merely stale -- a region handshake and a movement
+// complete that the new peer is about to be sent properly, delivered
+// twice and out of order.
+//
+// It rides the message channel rather than a channel of its own so that
+// it is ordered against the sends around it.  Run selects between its
+// channels at random, so a forget asked for before the replacement's
+// handshake was composed could be served after it, and would then drop
+// from the retransmission list the one message the new peer cannot
+// start without.
+//
+// Sequence numbers are deliberately not wound back.  The peer changed,
+// not the sender: numbering that goes backwards is how two different
+// packets come to share a number, and the new peer has a duplicate
+// filter of its own that has never seen any of ours.
+func (s *Sender) Forget(ctx context.Context) error {
+	return s.queue(ctx, &outbound{forget: true})
+}
+
 // queue hands a message to Run.  Returning nil means queued, not sent:
 // anything still in the channel when Run stops is discarded.
 func (s *Sender) queue(ctx context.Context, ob *outbound) error {
@@ -249,6 +280,15 @@ func (s *Sender) Run(ctx context.Context) error {
 			return nil
 
 		case ob := <-s.out:
+			if ob.forget {
+				// Acknowledgements still waiting are left
+				// alone.  They name packet numbers the new
+				// peer never sent, which it discards without
+				// consequence, and draining them here would
+				// race with the ones it has just earned.
+				clear(s.unacked)
+				continue
+			}
 			if err := s.transmit(ob); err != nil {
 				return err
 			}

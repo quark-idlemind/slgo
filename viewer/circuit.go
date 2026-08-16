@@ -195,8 +195,11 @@ func (c *Circuit) notePeer(addr net.Addr) {
 	}
 	c.mu.Lock()
 	changed := c.peer == nil || c.peer.String() != ua.String()
+	// A first viewer arriving is not a replacement.  There is no
+	// previous conversation behind it and so nothing to forget.
+	replaced := changed && c.peer != nil
 	if changed {
-		if c.peer != nil {
+		if replaced {
 			// A different viewer, so the last one's handshake
 			// means nothing to it.
 			c.joined = false
@@ -204,9 +207,61 @@ func (c *Circuit) notePeer(addr net.Addr) {
 		c.peer = ua
 	}
 	c.mu.Unlock()
+	if replaced {
+		c.forgetTheLastViewer()
+	}
 	if changed {
 		c.logf("viewer: a viewer appeared at %s", ua)
 	}
+}
+
+// forgetTheLastViewer drops what belonged to the viewer that has gone,
+// and nothing else.
+//
+// The sequence numbers are the whole reason this exists.  A viewer
+// numbers its own packets from 1, so a second one opens with
+// UseCircuitCode at 1 and CompleteAgentMovement at 2 -- numbers the
+// first viewer used, and still in the dispatcher's ring of the last
+// 4096.  Both were dropped as retransmissions before ever reaching
+// fromViewer, which is the only thing that replays the region and
+// answers the movement request, while the peer was noticed anyway
+// because the tap that notices it runs ahead of the duplicate check.
+// The daemon logged a viewer appearing and then said nothing, and the
+// viewer sat at STATE_AGENT_WAIT with a grey world until slgod was
+// restarted.
+//
+// Measured on Agni, from two daemon traces, which is why it looked
+// intermittent rather than certain.  Where re-attaching failed the first
+// viewer had sent 326 traced packets, so 1 and 2 were still in the ring.
+// Where it succeeded the first viewer had sent 3777 traced packets and
+// about fifty minutes of acknowledgements and pings the trace does not
+// record, which is enough for the ring to have wrapped past them.
+//
+// Both halves run here because both are the departed viewer's.  Anything
+// still awaiting acknowledgement was addressed to a socket that has
+// closed, and the LogoutReply case is the one that bites: a viewer that
+// quits sends LogoutRequest, and the reply it never acknowledged would
+// be retransmitted to its replacement and log that one out on arrival.
+//
+// What is not touched is as deliberate.  This is the same circuit and
+// the same grid session: the session's own circuit to the simulator, its
+// sequence numbers, and everything it has learned about the region
+// belong to the daemon rather than to whoever is looking at it, and the
+// simulator messages already queued for the viewer are the region's
+// current state, which the new viewer wants as much as the old one did.
+// The appearances in c.pending are the same: describeRegion refills them
+// from the session, and anything left over describes an avatar standing
+// in this region either way.  The receiver has nothing of its own to
+// forget -- it carries no state at all from one datagram to the next.
+//
+// Called from notePeer, which runs on the dispatch goroutine as the
+// circuit's tap.  That is what makes Dispatcher.Forget safe: it writes
+// fields no lock protects, on the one goroutine that owns them.
+func (c *Circuit) forgetTheLastViewer() {
+	c.disp.Forget()
+	// A sender that has stopped has nothing left in flight, so there is
+	// nothing to report about being told too late.
+	_ = c.send.Forget(context.Background())
 }
 
 func (c *Circuit) record(dir Direction, p *msg.Packet, what Disposition) {

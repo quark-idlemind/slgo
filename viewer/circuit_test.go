@@ -576,6 +576,161 @@ func TestAViewerThatComesBackOnANewPortIsAnswered(t *testing.T) {
 	second.waitSeen(t, "AgentMovementComplete", 5*time.Second)
 }
 
+// sentToViewer is how many times the circuit composed and sent a
+// message of its own.
+//
+// It counts answers rather than arrivals, which is what these tests
+// need: the send tap the census is wired to is not called for a
+// retransmission (see WithSendTap), so a message that went out once and
+// was resent to whoever happens to be listening now counts once.
+func sentToViewer(c *Census, name string) uint64 {
+	for _, row := range c.Counts() {
+		if row.Name == name && row.Dir == ToViewer {
+			return row.Packets
+		}
+	}
+	return 0
+}
+
+// heardFromViewer is how many times the circuit acted on a message the
+// viewer sent.
+func heardFromViewer(c *Census, name string) uint64 {
+	for _, row := range c.Counts() {
+		if row.Name == name && row.Dir == FromViewer {
+			return row.Packets
+		}
+	}
+	return 0
+}
+
+// TestASecondViewerIsAnsweredRatherThanTakenForARetransmission is the
+// bug that made a handover work exactly once per daemon.
+//
+// A viewer numbers its own packets from 1, so the second one to attach
+// opens with UseCircuitCode at sequence 1 and CompleteAgentMovement at
+// sequence 2 -- the numbers the first one used hours earlier, and still
+// in the dispatcher's ring of recent sequence numbers.  Both were
+// therefore thrown away as retransmissions before reaching the relay,
+// which is the only thing that replays the region and answers the
+// movement request.  The peer was still noticed, because the tap that
+// notices it runs ahead of the duplicate check, so the daemon logged a
+// viewer appearing and then said nothing more while the viewer sat at
+// STATE_AGENT_WAIT looking at a grey world.
+//
+// TestAViewerThatComesBackOnANewPortIsAnswered was supposed to cover
+// this and did not, for a reason worth writing down: it passed in 4.50
+// seconds on every run of three, which is the retransmission timer and
+// not an answer.  The first viewer's unacknowledged AgentMovementComplete
+// was being resent to whoever the peer now was, and the second viewer
+// heard it and the test was satisfied.  With this fix it passes in 0.01
+// seconds, having actually been answered.  So the assertions here count
+// what the circuit composed rather than what the socket heard: the
+// census is fed by the send tap, which a retransmission never reaches.
+func TestASecondViewerIsAnsweredRatherThanTakenForARetransmission(t *testing.T) {
+	sim, _, c, first, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	first.connect(testCircuitCode)
+	first.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+	first.close()
+
+	// A viewer quit and launched again: a socket of its own, and a
+	// conversation that starts over at sequence 1.
+	second := newFakeViewer(t, c.Addr())
+	defer second.close()
+	go second.run()
+	second.connect(testCircuitCode)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if sentToViewer(census, "RegionHandshake") >= 2 && sentToViewer(census, "AgentMovementComplete") >= 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the second viewer got %d region handshakes and %d movement completes, want 2 of each; "+
+				"the dispatcher suppressed %d duplicates\n%s",
+				sentToViewer(census, "RegionHandshake"), sentToViewer(census, "AgentMovementComplete"),
+				c.disp.Stats().Duplicates, census.Report())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !c.Joined() {
+		t.Error("the circuit does not consider the second viewer joined")
+	}
+}
+
+// TestTheLastViewersLogoutReplyIsNotDeliveredToTheNextOne is the other
+// half of forgetting a viewer that has gone.
+//
+// A viewer quits by sending LogoutRequest and closing, so the reply it
+// is owed is often never acknowledged and sits in the circuit's
+// retransmission list.  Left there, it goes out again once the circuit
+// has a new peer -- and a LogoutReply is not a stale nicety, it is the
+// message that tells a viewer the session is over, arriving seconds
+// after the new one finished loading.
+func TestTheLastViewersLogoutReplyIsNotDeliveredToTheNextOne(t *testing.T) {
+	sim, _, c, first, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	first.connect(testCircuitCode)
+	first.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	first.send(&msg.LogoutRequest{}, msg.FlagReliable)
+	first.waitSeen(t, "LogoutReply", 5*time.Second)
+	// Closing without acknowledging it, which is what quitting is.
+	first.close()
+
+	second := newFakeViewer(t, c.Addr())
+	defer second.close()
+	go second.run()
+	second.connect(testCircuitCode)
+	second.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	// Past the moment the retransmission would have carried it: the
+	// sender waits one timeout of three seconds and then tries again
+	// every second and a half.
+	time.Sleep(5 * time.Second)
+	for _, n := range second.got() {
+		if n == "LogoutReply" {
+			t.Fatalf("the new viewer was sent the last one's LogoutReply, which closes it; it heard %v", second.got())
+		}
+	}
+}
+
+// TestARetransmissionFromTheSameViewerIsStillSuppressed guards the other
+// side of the same fix: forgetting a departed viewer's sequence numbers
+// must not amount to turning duplicate suppression off.
+//
+// A viewer resends anything reliable whose acknowledgement went missing,
+// which is ordinary and frequent.  Acted on twice, one
+// CompleteAgentMovement becomes two region replays and two
+// AgentMovementCompletes -- and, for everything that is forwarded rather
+// than absorbed, one chat line said once and heard twice at the far end.
+func TestARetransmissionFromTheSameViewerIsStillSuppressed(t *testing.T) {
+	sim, _, _, v, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	// The same packet, from the same socket, under the number it went
+	// out with.
+	cam := &msg.CompleteAgentMovement{}
+	cam.AgentData.CircuitCode = testCircuitCode
+	v.sendSeq(cam, msg.FlagReliable, 2)
+
+	// Long enough for a second answer to have been composed had the
+	// duplicate been acted on.
+	time.Sleep(250 * time.Millisecond)
+
+	if n := heardFromViewer(census, "CompleteAgentMovement"); n != 1 {
+		t.Errorf("CompleteAgentMovement was acted on %d times, want 1:\n%s", n, census.Report())
+	}
+	if n := sentToViewer(census, "AgentMovementComplete"); n != 1 {
+		t.Errorf("the viewer was answered %d times, want 1:\n%s", n, census.Report())
+	}
+}
+
 // TestAJoiningViewerIsSentTheObjects is the other half of describing a
 // region: the handshake says where you are, and this says what is
 // there.

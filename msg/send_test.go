@@ -826,3 +826,56 @@ func TestSendTapIgnoresRetransmissions(t *testing.T) {
 		t.Errorf("the tap saw %d sends of one retransmitted message, want 1", got)
 	}
 }
+
+// TestForgetDropsWhatWasMeantForAPeerThatHasGone: a circuit whose peer
+// has been replaced is still holding the tail of the last conversation,
+// and retransmitting it delivers that tail into the start of the next
+// one.  The LogoutReply a viewer quit without acknowledging is the case
+// that bites: arriving at its replacement, it logs that one straight out
+// again.
+func TestForgetDropsWhatWasMeantForAPeerThatHasGone(t *testing.T) {
+	c := newCapture()
+	s, stop := runSender(t, c, WithRetransmit(100*time.Millisecond, 20))
+	defer stop()
+
+	if err := s.SendReliable(context.Background(), &CompletePingCheck{}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the first send", func() bool { return c.count() == 1 })
+
+	if err := s.Forget(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// Several retransmission rounds' worth of doing nothing.
+	time.Sleep(500 * time.Millisecond)
+	if st := s.Stats(); st.Resent != 0 {
+		t.Errorf("resent %d times to a peer that has gone", st.Resent)
+	}
+	if c.count() != 1 {
+		t.Errorf("%d packets went out, want the one from before the peer changed", c.count())
+	}
+}
+
+// TestForgetIsOrderedAgainstTheSendsAroundIt is why forgetting travels
+// on the message channel rather than one of its own.
+//
+// Run selects between its channels at random, so a forget asked for
+// before the replacement's handshake was composed could be served after
+// it -- and would then drop from the retransmission list the one message
+// the new peer cannot start without.
+func TestForgetIsOrderedAgainstTheSendsAroundIt(t *testing.T) {
+	c := newCapture()
+	s, stop := runSender(t, c, WithRetransmit(30*time.Millisecond, 20))
+	defer stop()
+
+	if err := s.Forget(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SendReliable(context.Background(), &CompletePingCheck{}); err != nil {
+		t.Fatal(err)
+	}
+
+	waitFor(t, "the new peer's message to be retransmitted", func() bool {
+		return s.Stats().Resent >= 1
+	})
+}

@@ -179,6 +179,82 @@ func TestDispatchDedupeEvicts(t *testing.T) {
 	}
 }
 
+// TestForgetLetsAReplacementPeerStartOverAtOne is what a circuit whose
+// peer has been swapped needs from duplicate suppression.
+//
+// A sequence number belongs to a conversation and not to a socket.  A
+// second viewer opens with 1 and 2, the numbers the first one used, and
+// without forgetting them its handshake is thrown away as a
+// retransmission and never reaches anything that would answer it.  The
+// tap is where the change of peer is noticed and where the forgetting
+// therefore has to be safe: it runs on the dispatch goroutine, which is
+// the one that owns the fields Forget writes.
+func TestForgetLetsAReplacementPeerStartOverAtOne(t *testing.T) {
+	var n atomic.Int64
+	var forget atomic.Bool
+	var d *Dispatcher
+	d = NewDispatcher(WithTap(func(p *Packet) {
+		if forget.CompareAndSwap(true, false) {
+			d.Forget()
+		}
+	}))
+	d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
+
+	in := make(chan *Packet, 4)
+	in <- pkt(1, &CompletePingCheck{})
+	in <- pkt(2, &CompletePingCheck{})
+	close(in)
+	if err := d.Run(context.Background(), in); err != nil {
+		t.Fatal(err)
+	}
+
+	// The peer changes, and the same two numbers arrive again.
+	forget.Store(true)
+	feed(t, d, pkt(1, &CompletePingCheck{}), pkt(2, &CompletePingCheck{}))
+
+	if n.Load() != 4 {
+		t.Errorf("the handler ran %d times, want 4: the replacement's packets were taken for the first peer's", n.Load())
+	}
+	if st := d.Stats(); st.Duplicates != 0 {
+		t.Errorf("stats = %+v, want nothing suppressed", st)
+	}
+}
+
+// TestForgetDoesNotTurnDuplicateSuppressionOff: a peer that has not
+// changed and repeats a sequence number really is retransmitting, and
+// acting on it twice is what the ring exists to prevent.
+func TestForgetDoesNotTurnDuplicateSuppressionOff(t *testing.T) {
+	d := NewDispatcher()
+	var n atomic.Int64
+	d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
+
+	feed(t, d, pkt(1, &CompletePingCheck{}))
+	d.Forget()
+	feed(t, d,
+		pkt(1, &CompletePingCheck{}),
+		pkt(1, &CompletePingCheck{}),
+		pkt(1, &CompletePingCheck{}),
+	)
+	if n.Load() != 2 {
+		t.Errorf("the handler ran %d times, want 2: one before forgetting and one after", n.Load())
+	}
+	if st := d.Stats(); st.Duplicates != 2 {
+		t.Errorf("stats = %+v, want the two repeats after forgetting suppressed", st)
+	}
+}
+
+// TestForgetWithDedupeOff is the case with nothing to forget.
+func TestForgetWithDedupeOff(t *testing.T) {
+	d := NewDispatcher(WithDedupe(0))
+	var n atomic.Int64
+	d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
+	d.Forget()
+	feed(t, d, pkt(1, &CompletePingCheck{}), pkt(1, &CompletePingCheck{}))
+	if n.Load() != 2 {
+		t.Errorf("handler ran %d times, want 2 with dedupe off", n.Load())
+	}
+}
+
 func TestDispatchDedupeDisabled(t *testing.T) {
 	d := NewDispatcher(WithDedupe(0))
 	var n atomic.Int64
