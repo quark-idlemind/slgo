@@ -60,9 +60,9 @@ func TestLiveLogin(t *testing.T) {
 	}
 	t.Logf("in region %q at %+v", s.RegionName(), s.Position())
 	t.Logf("simulator build %q", s.ChannelVersion())
-	t.Logf("capabilities: %d offered", len(s.Caps))
-	if _, ok := s.Caps.Get("InventoryAPIv3"); !ok {
-		t.Errorf("no InventoryAPIv3 among %v", s.Caps.Names())
+	t.Logf("capabilities: %d offered", len(s.Caps()))
+	if _, ok := s.Caps().Get("InventoryAPIv3"); !ok {
+		t.Errorf("no InventoryAPIv3 among %v", s.Caps().Names())
 	}
 
 	// Fetch the whole inventory tree over AIS.

@@ -237,7 +237,7 @@ func main() {
 		hostMu.Unlock()
 		a := h.Agent()
 		log.Printf("%s: %s in %s, %d capabilities",
-			name, a.Account.Name(), orUnknown(a.RegionName()), len(a.Caps))
+			name, a.Account.Name(), orUnknown(a.RegionName()), len(a.Caps()))
 
 		// The server re-establishes a session that ends; this
 		// just says so.

@@ -163,11 +163,12 @@ func (a *aisServer) handler() http.Handler {
 // invSession makes a Agent with only the HTTP parts wired up, which
 // is all the inventory needs.
 func invSession(base string, root msg.UUID) *Agent {
-	return &Agent{
+	a := &Agent{
 		Account:   &Account{InventoryRoot: root},
-		Caps:      Caps{"InventoryAPIv3": base},
 		Inventory: newInventory(root),
 	}
+	a.SetCaps(Caps{"InventoryAPIv3": base})
+	return a
 }
 
 func TestFetchInventoryTree(t *testing.T) {
@@ -356,7 +357,7 @@ func TestFetchInventoryGivesUp(t *testing.T) {
 }
 
 func TestFetchInventoryNeedsTheCapability(t *testing.T) {
-	s := &Agent{Account: &Account{}, Caps: Caps{}, Inventory: newInventory(msg.UUID{})}
+	s := &Agent{Account: &Account{}, Inventory: newInventory(msg.UUID{})}
 	err := s.FetchInventory(context.Background(), FetchOptions{})
 	if err == nil || !strings.Contains(err.Error(), "InventoryAPIv3") {
 		t.Errorf("err = %v", err)
@@ -449,7 +450,7 @@ func TestFetchOneFolderWithoutDescending(t *testing.T) {
 	}
 
 	// And none of it is possible without the capability.
-	none := &Agent{Account: &Account{}, Caps: Caps{}, Inventory: newInventory(msg.UUID{})}
+	none := &Agent{Account: &Account{}, Inventory: newInventory(msg.UUID{})}
 	if err := FetchFolder(context.Background(), none, none.Inventory, msg.UUID{}); err == nil {
 		t.Error("expected an error with no InventoryAPIv3")
 	}

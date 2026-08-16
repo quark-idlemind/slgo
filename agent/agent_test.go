@@ -22,6 +22,7 @@ type fakeSim struct {
 	peer     *net.UDPAddr
 	seq      uint32
 	regionNm string
+	regionID msg.UUID
 
 	// Set to skip a step, to test the timeouts.
 	silent      bool
@@ -140,6 +141,7 @@ func (f *fakeSim) react(name string) {
 		rh := &msg.RegionHandshake{}
 		rh.RegionInfo.SimName = []byte(f.regionNm + "\x00")
 		rh.RegionInfo.RegionFlags = 0x1234
+		rh.RegionInfo2.RegionID = f.regionID
 		f.send(rh, msg.FlagReliable)
 
 	case "CompleteAgentMovement":

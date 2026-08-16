@@ -748,7 +748,7 @@ func (h *Hosted) info() *pb.AgentInfo {
 		Region:         a.RegionName(),
 		ChannelVersion: a.ChannelVersion(),
 		InventoryRoot:  a.Account.InventoryRoot.String(),
-		Caps:           a.Caps.Names(),
+		Caps:           a.Caps().Names(),
 		// Connected and State answer different questions and are both
 		// kept: Connected is whether a circuit is up this instant,
 		// State is what may be done about it.  A client too old to know

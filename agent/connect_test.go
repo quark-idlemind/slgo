@@ -179,7 +179,7 @@ func TestConnectFetchesTheCapabilities(t *testing.T) {
 	defer a.Close()
 
 	if !a.HasCap("InventoryAPIv3") {
-		t.Errorf("capabilities = %v", a.Caps.Names())
+		t.Errorf("capabilities = %v", a.Caps().Names())
 	}
 	select {
 	case <-polled:

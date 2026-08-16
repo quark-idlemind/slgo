@@ -204,7 +204,7 @@ func newSessionWith(t *testing.T, caps agent.Caps, idle time.Duration) *rig {
 		t.Fatalf("connect: %v", err)
 	}
 	if caps != nil {
-		a.Caps = caps
+		a.SetCaps(caps)
 	}
 	h.setAgent(a)
 	srv.mu.Lock()

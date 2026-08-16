@@ -73,7 +73,7 @@ func Login(ctx context.Context, l agent.Login) (*Direct, error) {
 		Region:        d.a.RegionName(),
 		InventoryRoot: acct.InventoryRoot,
 		Channel:       d.a.ChannelVersion(),
-		Caps:          d.a.Caps.Names(),
+		Caps:          d.a.Caps().Names(),
 	}
 	return d, nil
 }

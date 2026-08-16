@@ -11,6 +11,14 @@ import (
 	"testing"
 )
 
+// capAgent is an Agent with nothing wired up but its capabilities,
+// which is all a capability request needs.
+func capAgent(c Caps) *Agent {
+	a := &Agent{Account: &Account{}}
+	a.SetCaps(c)
+	return a
+}
+
 // A capability reply can hand back a URL to post to next -- asset
 // upload works that way.  The server will follow one, but only to a
 // host the simulator already serves a capability on, so this cannot be
@@ -29,7 +37,7 @@ func TestDoCapAbsoluteURL(t *testing.T) {
 	}))
 	defer hs.Close()
 
-	a := &Agent{Account: &Account{}, Caps: Caps{"UpdateScriptAgent": hs.URL + "/cap/upload"}}
+	a := capAgent(Caps{"UpdateScriptAgent": hs.URL + "/cap/upload"})
 
 	// Step one: an ordinary capability request.
 	resp, err := a.DoCap(context.Background(), CapRequest{
@@ -56,7 +64,7 @@ func TestDoCapAbsoluteURL(t *testing.T) {
 }
 
 func TestDoCapRefusesForeignURL(t *testing.T) {
-	a := &Agent{Account: &Account{}, Caps: Caps{"X": "https://sim.example.com/cap/1"}}
+	a := capAgent(Caps{"X": "https://sim.example.com/cap/1"})
 	_, err := a.DoCap(context.Background(), CapRequest{URL: "https://evil.example.net/steal"})
 	if err == nil {
 		t.Fatal("a URL on a host the simulator never mentioned should be refused")
@@ -67,7 +75,7 @@ func TestDoCapRefusesForeignURL(t *testing.T) {
 }
 
 func TestDoCapUnknownCapability(t *testing.T) {
-	a := &Agent{Account: &Account{}, Caps: Caps{}}
+	a := capAgent(Caps{})
 	if _, err := a.DoCap(context.Background(), CapRequest{Cap: "Nope"}); err == nil {
 		t.Error("expected an error")
 	}
@@ -86,11 +94,8 @@ func TestACapRequestUsesTheClientItWasGiven(t *testing.T) {
 	}))
 	defer hs.Close()
 
-	a := &Agent{
-		Account: &Account{},
-		Caps:    Caps{"X": hs.URL},
-		HTTP:    &http.Client{Transport: headerStamp{http.DefaultTransport}},
-	}
+	a := capAgent(Caps{"X": hs.URL})
+	a.HTTP = &http.Client{Transport: headerStamp{http.DefaultTransport}}
 	if _, err := a.DoCap(context.Background(), CapRequest{Cap: "X"}); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +116,7 @@ func (h headerStamp) RoundTrip(r *http.Request) (*http.Response, error) {
 // simulator, so a malformed one is the simulator's doing and not a
 // reason to panic on the way out.
 func TestACapRequestThatCannotBeMade(t *testing.T) {
-	a := &Agent{Account: &Account{}, Caps: Caps{"X": "://not a url"}}
+	a := capAgent(Caps{"X": "://not a url"})
 	if _, err := a.DoCap(context.Background(), CapRequest{Cap: "X"}); err == nil {
 		t.Error("expected an error building the request")
 	}
@@ -137,7 +142,7 @@ func TestACapReplyThatStopsHalfway(t *testing.T) {
 		c.Close()
 	}()
 
-	a := &Agent{Account: &Account{}, Caps: Caps{"X": "http://" + ln.Addr().String()}}
+	a := capAgent(Caps{"X": "http://" + ln.Addr().String()})
 	if _, err := a.DoCap(context.Background(), CapRequest{Cap: "X"}); err == nil {
 		t.Error("a truncated body was accepted as an answer")
 	}
@@ -149,7 +154,7 @@ func TestACapReplyThatStopsHalfway(t *testing.T) {
 // this cannot be turned into a way to make the session fetch anything at
 // all.
 func TestOnlyURLsTheSimulatorOfferedAreRemembered(t *testing.T) {
-	a := &Agent{Account: &Account{}, Caps: Caps{"X": "https://sim.example.com/cap/1"}}
+	a := capAgent(Caps{"X": "https://sim.example.com/cap/1"})
 
 	a.RememberURL("https://sim.example.com/upload/1")
 	a.RememberURL("https://evil.example.net/steal")
@@ -181,7 +186,7 @@ func TestOnlyURLsTheSimulatorOfferedAreRemembered(t *testing.T) {
 // TestACapWithNoHostIsNobodysHost: a capability that will not parse must
 // not match everything.
 func TestACapWithNoHostIsNobodysHost(t *testing.T) {
-	a := &Agent{Account: &Account{}, Caps: Caps{"broken": "://nonsense"}}
+	a := capAgent(Caps{"broken": "://nonsense"})
 	if a.sameHostAsACap("https://sim.example.com/x") {
 		t.Error("a capability that is not a URL matched one that is")
 	}

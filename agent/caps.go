@@ -67,6 +67,31 @@ func (c Caps) Names() []string {
 	return out
 }
 
+// Caps are the capability URLs the region this session is in offered.
+//
+// It is a method rather than the field it used to be because the set
+// belongs to the region and not to the session: a teleport replaces
+// every URL in it at once, while requests are being made through it, and
+// a plain field read as that happened was a data race.  The map is the
+// live one and is not to be written to; a URL taken out of it is worth
+// no more than the moment it was read, since the avatar may have left.
+func (a *Agent) Caps() Caps {
+	if c := a.caps.Load(); c != nil {
+		return *c
+	}
+	return Caps{}
+}
+
+// SetCaps replaces the set, for a caller that got them from somewhere
+// this package did not: a session handed capabilities by whatever
+// arranged the login, or a test.
+func (a *Agent) SetCaps(c Caps) {
+	if c == nil {
+		c = Caps{}
+	}
+	a.caps.Store(&c)
+}
+
 // RequestCaps asks a seed capability for the URLs of the named
 // capabilities.
 //

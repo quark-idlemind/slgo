@@ -96,11 +96,9 @@ func (e *eqServer) seenAcks() []any {
 // eqAgent makes an Agent with only the capability plumbing wired up,
 // which is all the event queue needs.
 func eqAgent(url string) *Agent {
-	return &Agent{
-		Account: &Account{},
-		Caps:    Caps{EventQueueCap: url},
-		done:    make(chan struct{}),
-	}
+	a := &Agent{Account: &Account{}, done: make(chan struct{})}
+	a.SetCaps(Caps{EventQueueCap: url})
+	return a
 }
 
 func TestEventQueueDelivers(t *testing.T) {
@@ -253,7 +251,7 @@ func TestEventQueueSaysDoneOnShutdown(t *testing.T) {
 }
 
 func TestEventQueueNeedsTheCapability(t *testing.T) {
-	a := &Agent{Account: &Account{}, Caps: Caps{}, done: make(chan struct{})}
+	a := &Agent{Account: &Account{}, done: make(chan struct{})}
 	done := make(chan struct{})
 	go func() { defer close(done); a.runEventQueue(context.Background(), nil) }()
 	select {
