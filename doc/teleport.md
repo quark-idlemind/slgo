@@ -377,16 +377,46 @@ along with the half that is fixed. It costs a listing shorter than the
 grid's answer, never a wrong one, and it wants a second look if
 `regions` ever becomes something a script depends on.
 
-**The lure fault is still reachable.** `AcceptLure` sends the request
-and returns, and stage 0 measured what that costs: two minutes of
-answers about the wrong region, then a reconnect. Stage 3 fixes it by
-following the teleport, but until then `slsh waiting` will accept an
-offer and appear to do nothing. It may be worth saying so in `waiting`'s
-man page before stage 3 lands rather than after.
-
 **The next release is a minor.** Stage 2 removed `Agent.Conn` and turned
 `Agent.Caps` from a field into a method. Both are exported, and v0.2.0
 set the precedent: a caller reading only a patch number would not look.
+
+**Stage 3 has not been run against the grid.** Everything in it was
+verified offline, including under `-race`, but the out-and-back loop
+this document asks for has not happened: the daemon holding the live
+session is built from stage 0, and following a teleport is precisely
+what that binary cannot do. Restarting it onto the new one logs the
+avatar out and back in, which is why it is not done casually. Until then
+the whole of stage 3 is unmeasured.
+
+**A teleport's failed dial should probably end the session.** `moveTo`
+deliberately leaves the session where it was when the dial fails,
+because that is the one failure that changes nothing -- but a dial after
+`TeleportFinish` is different: the avatar has already been handed away,
+so there is nothing to stay for, and the watchdog takes about a minute
+to notice. Stage 3 did not override the policy. It may be that the
+caller rather than `moveTo` should decide.
+
+**A move with an unusable seed has no way back.** The circuit moves and
+the capability set is dropped, which is right -- URLs into the region
+left behind are worse than none -- but nothing ever fetches a set again,
+so the session runs on with no capabilities and no event queue. Not
+reachable on Agni, where the seed is always a URL, and there is no
+recovery if it ever is.
+
+**Two clients teleporting one avatar read each other's answers.** The
+same relay-by-name trouble as the map lookup, and nearly harmless for
+the same reason it is not harmless there: a finish another client
+provoked is still this session going somewhere, and is still followed by
+waiting to arrive. What it can do is report one client's refusal as
+another's. Documented at the head of `sl/teleport.go`.
+
+**Ninety seconds is a guess.** `DefaultTeleportTimeout` covers 300ms of
+grid and an unbounded daemon-side handshake and capability fetch, and
+nobody has measured the tail. `slsh waiting`'s accept inherits it, so an
+offer accepted to a region that never answers holds the shell for a
+minute and a half; stage 5 should decide whether the shell wants its
+own.
 
 ### Not about teleport
 
