@@ -9,14 +9,41 @@ everything inside it.
 # One name can mean a dozen items
 
 Inventory names are not unique, so a path may name several things.  A
-plain rm takes the first of them, which is the careful thing to do by
-default: deleting is permanent, and a path that turns out to mean
-twelve items is not something to discover afterwards.
+plain rm refuses that and deletes nothing: deleting is permanent, and
+which of twelve identically named items went is not a thing to work
+out afterwards.
 
---remove-all-copies takes every one of the name instead.  It is
-spelled out at that length on purpose, no abbreviation of it is
-accepted, and the count printed at the end is the only evidence it did
-what was wanted.
+	/Scripts$ rm greeter
+	slsh: rm: "greeter" is 3 things here: say --newest or --oldest
+	to delete one of them, --remove-all-copies for all 3, or name
+	one by its id, which ls -l prints beside the date
+
+Three flags answer that, and they are one choice rather than three
+options -- any two of them together is a line that means two things,
+and is refused.
+
+--newest and --oldest take one end of the pile, by the date ls -l
+prints.  What went is named on the way out, with its date and its id,
+because the copies share a name and those are the only two things that
+tell them apart.
+
+--remove-all-copies takes every one of the name.  It is spelled out at
+that length on purpose, no abbreviation of it is accepted, and the
+count printed at the end is the only evidence it did what was wanted.
+
+# When a date does not settle it
+
+--newest and --oldest refuse rather than guess in two cases.
+
+Inventory dates are whole seconds, so a folder copied in one go can
+hold several items stamped alike; there is no sense in which one of
+those is the newer, and being told which end was asked for does not
+help.  The other case is something with no date at all -- a folder has
+none -- and undated is not the same as old.
+
+Both refusals point at the id, which names exactly one thing.  The
+other end of the pile may still be unambiguous: two tied at the newest
+date does not stop --oldest from having an answer.
 
 # The star, which is not a glob
 
@@ -47,13 +74,18 @@ catches the result and not a flickering counter.
 --in deletes from inside a rezzed object rather than from inventory.
 It is a delete and not a take: the copy is gone, and anything wanted
 back has to come from the original in inventory, which is why that
-form names what it deleted rather than counting.
+form names what it deleted rather than counting.  --newest and --oldest
+do not apply with it: what an object holds carries a name, a kind and
+an id, and the date stayed with the item it was copied from.
 
 # Examples
 
 	rm Notecards/README
+	rm --newest greeter
+	rm --oldest greeter
 	rm --remove-all-copies greeter
 	rm --remove-all-copies *
+	rm d8467e57-...
 	rm --in lantern hello.lsl
 
 See also: emptytrash, mv, ls, and drop for putting something into an

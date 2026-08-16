@@ -383,7 +383,7 @@
       <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">cd Objects</span>
 <span class="p">/Objects$</span> <span class="c">ls -l lantern</span>
-<span class="o">object     2026-08-02  40f17e57-…  /Objects/lantern</span>
+<span class="o">object     2026-08-02T15:09:30  40f17e57-…  /Objects/lantern</span>
 <span class="p">/Objects$</span> <span class="c">place lantern</span>
 <span class="o">"lantern" a8de7e57-… is at 129, 128, 25</span>
 <span class="p">/Objects$</span> <span class="c">start lantern</span>
@@ -631,10 +631,10 @@ For one command:       COMMAND --help
 <span class="o">/Objects/lantern
 /Objects/sign
 /Objects/spares</span>
-<span class="p">/Objects$</span> <span class="c">ls -l</span>                    <span class="n">kind, date, id, path</span>
-<span class="o">object     2026-08-02  40f17e57-…  /Objects/lantern
-object     2026-07-29  91357e57-…  /Objects/sign
-folder     -           1ae57e57-…  /Objects/spares</span>
+<span class="p">/Objects$</span> <span class="c">ls -l</span>                    <span class="n">kind, when, id, path</span>
+<span class="o">object     2026-08-02T15:09:30  40f17e57-…  /Objects/lantern
+object     2026-07-29T09:41:12  91357e57-…  /Objects/sign
+folder     -                    1ae57e57-…  /Objects/spares</span>
 <span class="p">/Objects$</span> <span class="c">ls -lt</span>                   <span class="n">newest first</span>
 <span class="p">/Objects$</span> <span class="c">ls -r spares</span>             <span class="n">and everything below it</span>
 <span class="p">/Objects$</span> <span class="c">find lantern</span>             <span class="n">names containing it, from here down</span></pre>
@@ -647,6 +647,13 @@ folder     -           1ae57e57-…  /Objects/spares</span>
           an item's id, which is what <code>ls -l</code> prints them for. When
           a name is ambiguous, list, then work by id.
         </p>
+        <p>
+          The date column is the whole date, down to the second, because that
+          is the other thing that tells two copies of one name apart — and it
+          is what <code>rm --newest</code> and <code>rm --oldest</code> choose
+          by. Reading commands take the first of several and think nothing of
+          it; <code>rm</code> does not, for the reason below.
+        </p>
 
         <p>
           Paths escape rather than forbid: <code>/</code> separates,
@@ -657,12 +664,40 @@ folder     -           1ae57e57-…  /Objects/spares</span>
 
         <h3>Deleting, which has no undo</h3>
         <p>
-          <code>rm</code> takes the <em>first</em> thing of the name it is
-          given, which is the careful default when a name may mean a dozen
-          items. <code>--remove-all-copies</code> takes all of them and says
-          how many; <code>*</code> means every item in the folder and is
-          refused without that flag, so the sweeping form has to be asked for
-          on purpose.
+          <code>rm</code> refuses a name that means more than one thing, and
+          deletes nothing. Deleting here is permanent, and which of a dozen
+          identically named items went is not a thing to work out afterwards.
+          Three flags answer the question of which — and they are one choice,
+          not three options, so any two of them together is refused as well.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/Scripts$</span> <span class="c">rm greeter</span>
+<span class="o">slsh: rm: "greeter" is 3 things here: say --newest or --oldest to delete one of
+them, --remove-all-copies for all 3, or name one by its id, which ls -l prints
+beside the date</span>
+<span class="p">/Scripts$</span> <span class="c">rm --oldest greeter</span>
+<span class="o">greeter: removed the oldest of 3, acquired 2026-07-29T09:41:12 (91357e57-…)</span>
+<span class="p">/Scripts$</span> <span class="c">rm --remove-all-copies greeter</span>
+<span class="o">greeter: removed 2 copies</span></pre>
+        </div>
+
+        <p>
+          <code>--newest</code> and <code>--oldest</code> name what they took —
+          the date they chose by and the id — since a count would not say which
+          one went. They refuse rather than guess when the dates do not settle
+          it: inventory dates are whole seconds, so a folder copied in one go
+          holds items stamped alike, and a folder has no date at all. Either
+          refusal points at the id, and the other end of the pile may still
+          have an answer.
+        </p>
+
+        <p>
+          <code>*</code> means every item in the folder — never its subfolders,
+          and it is not a glob — and is refused without
+          <code>--remove-all-copies</code>, so the sweeping form has to be
+          asked for on purpose.
         </p>
 
         <div class="term">

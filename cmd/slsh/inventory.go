@@ -100,7 +100,7 @@ var inventoryCommands = map[string]*command{
 	"ls": {
 		params: "[PATH]",
 		flags:  func() any { return new(lsOptions) },
-		brief:  "list a folder; -l for detail, -T the time as well, -t newest first, -r to descend",
+		brief:  "list a folder; -l for detail, -t newest first, -r to descend",
 		man:    "ls",
 		run:    cmdLs,
 	},
@@ -135,7 +135,7 @@ var inventoryCommands = map[string]*command{
 	"rm": {
 		params: "PATH ...",
 		flags:  func() any { return new(rmOptions) },
-		brief:  "delete items, permanently; --remove-all-copies for every one of a name",
+		brief:  "delete items, permanently; a name that means several is refused",
 		man:    "rm",
 		run:    cmdRm,
 	},
@@ -211,6 +211,12 @@ func (sh *Shell) folderAt(ctx context.Context, names []string) (msg.UUID, error)
 // them.  ls -l prints the id beside the path for exactly this, so that
 // a listing of duplicates can still be edited into commands that mean
 // one each.
+//
+// Taking the first is right for reading -- cat, get and the rest print
+// or copy, and doing it to the wrong one of two identical items costs
+// nothing but a second look.  rm does not use this: deleting is
+// permanent, so it asks entriesAt what the name really means and refuses
+// a name that means several.
 func (sh *Shell) entryAt(ctx context.Context, path string) (sl.Entry, error) {
 	es, err := sh.entriesAt(ctx, path)
 	if err != nil {
@@ -222,8 +228,9 @@ func (sh *Shell) entryAt(ctx context.Context, path string) (sl.Entry, error) {
 // entriesAt is entryAt for everything the path names, in listing order.
 //
 // A path can name more than one thing, since a folder may hold a dozen
-// items called the same thing -- which is what rm --remove-all-copies
-// is for.  An id names exactly one, so that form returns the one.
+// items called the same thing -- which is what rm --newest, --oldest and
+// --remove-all-copies are for, and what rm refuses without one of them.
+// An id names exactly one, so that form returns the one.
 func (sh *Shell) entriesAt(ctx context.Context, path string) ([]sl.Entry, error) {
 	if id, err := msg.ParseUUID(strings.TrimSpace(path)); err == nil {
 		e, err := sh.entryByID(ctx, id)
@@ -259,8 +266,7 @@ func (sh *Shell) entriesAt(ctx context.Context, path string) ([]sl.Entry, error)
 }
 
 // matchName picks out everything of a name, keeping the listing order
-// so that the first is the one a path without --remove-all-copies
-// means.
+// so that the first is the one a path means where one is taken.
 //
 // The comparison ignores case, as the rest of the shell does: the grid
 // keeps the case a name was given but does not make two names that
@@ -337,10 +343,9 @@ func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 // alone: it registers every field it can set, and a field with no tag
 // would become a flag named after itself.
 type lsOptions struct {
-	Long   bool   `getopt:"-l          the columns: kind, date, id and path"`
+	Long   bool   `getopt:"-l          the columns: kind, when it was acquired, id and path"`
 	Deep   bool   `getopt:"-r          descend into the folders below"`
 	ByTime bool   `getopt:"-t          newest first, rather than by name"`
-	Exact  bool   `getopt:"-T          the time of day as well as the date"`
 	In     string `getopt:"--in=OBJECT what a rezzed object holds, rather than inventory"`
 	Help   bool   `getopt:"--help -h   show what this command takes"`
 
@@ -363,33 +368,26 @@ func readLsOptions(out io.Writer, args []string) (lsOptions, error) {
 	if len(rest) == 1 {
 		o.path = rest[0]
 	}
-	// The time is detail, and detail is what -l is, so asking for it
-	// asks for the long form too.
-	if o.Exact {
-		o.Long = true
-	}
 	return o, nil
 }
 
 // lsWhen formats the date column.
 //
-// -T widens this column rather than adding one, and joins the time to
-// the date with a T rather than a space, so that a listing has four
-// columns whether or not the time was asked for: a script that reads
-// the id out of the third field goes on working either way, which is
-// the whole reason the listing is laid out in columns at all.
+// It is the whole date: the day something was acquired and the time of
+// day as well, joined by a T rather than a space so that the column
+// stays one field and a script reading the id out of the third one goes
+// on working.  The seconds are there because they settle things -- two
+// items of one name, made a minute apart, are told apart by this column
+// and by nothing else on the line except the id, and rm --newest picks
+// between them by exactly this number.
 //
 // A folder has no date, and an empty column would move every column
 // after it, so it gets a dash.
-func lsWhen(created int64, exact bool) string {
-	layout := "2006-01-02"
-	if exact {
-		layout = "2006-01-02T15:04:05"
-	}
+func lsWhen(created int64) string {
 	if created <= 0 {
 		return "-"
 	}
-	return time.Unix(created, 0).Format(layout)
+	return time.Unix(created, 0).Format("2006-01-02T15:04:05")
 }
 
 func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
@@ -397,7 +395,7 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	if err != nil || o.done {
 		return err
 	}
-	long, deep, exact, path := o.Long, o.Deep, o.Exact, o.path
+	long, deep, path := o.Long, o.Deep, o.path
 
 	// An object's contents are somewhere else entirely, with ids of
 	// their own; see inside.go.
@@ -437,12 +435,8 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			fmt.Fprintln(out, full)
 			continue
 		}
-		width := 10
-		if exact {
-			width = 19
-		}
-		fmt.Fprintf(out, "%-10s %-*s %-36s %s\n",
-			kindOf(e), width, lsWhen(e.Created, exact), e.ID, full)
+		fmt.Fprintf(out, "%-10s %-19s %-36s %s\n",
+			kindOf(e), lsWhen(e.Created), e.ID, full)
 	}
 	return nil
 }
@@ -814,10 +808,81 @@ func cmdMv(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 const allItems = "*"
 
 // rmOptions is what rm was asked for.
+//
+// The three that choose among duplicates are one choice and not three
+// flags: --newest, --oldest and --remove-all-copies each answer the same
+// question -- a path names several things, which of them is meant --
+// with a different answer, so any two of them together is a line that
+// means two things at once and is refused.
 type rmOptions struct {
-	AllCopies bool   `getopt:"--remove-all-copies  delete everything of that name, not just the first"`
+	Newest    bool   `getopt:"--newest             of several of a name, delete the one acquired last"`
+	Oldest    bool   `getopt:"--oldest             of several of a name, delete the one acquired first"`
+	AllCopies bool   `getopt:"--remove-all-copies  delete everything of that name, not just one"`
 	In        string `getopt:"--in=OBJECT          delete from inside a rezzed object, not from inventory"`
 	Help      bool   `getopt:"--help -h            show what this command takes"`
+}
+
+// whichOne says how rm was told to choose among several of a name, for
+// the refusal when it was told twice.
+func (o rmOptions) whichOne() []string {
+	var said []string
+	if o.Newest {
+		said = append(said, "--newest")
+	}
+	if o.Oldest {
+		said = append(said, "--oldest")
+	}
+	if o.AllCopies {
+		said = append(said, "--remove-all-copies")
+	}
+	return said
+}
+
+// ageWord names the end of the pile that was asked for.
+func ageWord(newest bool) string {
+	if newest {
+		return "newest"
+	}
+	return "oldest"
+}
+
+// pickByAge takes the newest or the oldest of several things of one
+// name.
+//
+// It refuses rather than guesses in the two cases where the dates do not
+// settle it.  A tie at the end being chosen is one: inventory dates are
+// whole seconds, so a folder copied in one go can hold several items
+// stamped alike, and there is no sense in which one of those is the
+// newer.  Something with no date at all is the other: a folder has none,
+// and undated is not the same as old.
+//
+// Either way the id names exactly one thing, and ls -l prints it beside
+// the date this chooses by -- so the refusal has somewhere to point.
+func pickByAge(targets []sl.Entry, newest bool) (sl.Entry, error) {
+	word := ageWord(newest)
+	for _, e := range targets {
+		if e.Created <= 0 {
+			return sl.Entry{}, fmt.Errorf(
+				"%q has no date on it, so there is no %s: name the one you mean by its id",
+				e.Name, word)
+		}
+	}
+	best := targets[0]
+	ties := 1
+	for _, e := range targets[1:] {
+		switch {
+		case e.Created == best.Created:
+			ties++
+		case newest == (e.Created > best.Created):
+			best, ties = e, 1
+		}
+	}
+	if ties > 1 {
+		return sl.Entry{}, fmt.Errorf(
+			"%d of those were acquired at %s, which is the %s: name the one you mean by its id",
+			ties, lsWhen(best.Created), word)
+	}
+	return best, nil
 }
 
 func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
@@ -829,16 +894,26 @@ func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	if len(args) == 0 {
 		return usageError("rm")
 	}
+	if said := o.whichOne(); len(said) > 1 {
+		return fmt.Errorf("%s and %s are two answers to one question; say one of them",
+			strings.Join(said[:len(said)-1], ", "), said[len(said)-1])
+	}
 	if o.In != "" {
+		// Choosing among duplicates is choosing by date, and what an
+		// object holds is not dated: sl.TaskItem carries a name, a kind
+		// and an id, and the item it was copied from kept the date.
+		if said := o.whichOne(); len(said) > 0 && !o.AllCopies {
+			return fmt.Errorf("%s does not apply inside an object: what one holds has no dates on it", said[0])
+		}
 		return sh.removeInside(ctx, out, o.In, args)
 	}
 	for _, path := range args {
 		// One name, and a folder may hold a dozen things wearing it.
-		// Without the flag rm takes the first, which is the careful
-		// thing to do by default: deleting is permanent here, and a
-		// path that turns out to mean twelve items is not something to
-		// discover afterwards.
+		// A plain rm refuses that rather than taking one of them:
+		// deleting is permanent here, and which of twelve identically
+		// named items went is not a thing to work out afterwards.
 		var targets []sl.Entry
+		var chose string
 		switch {
 		case path == allItems:
 			// Refused rather than guessed at.  Taking it to mean one
@@ -853,9 +928,31 @@ func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		case o.AllCopies:
 			targets, err = sh.entriesAt(ctx, path)
 		default:
-			var e sl.Entry
-			if e, err = sh.entryAt(ctx, path); err == nil {
+			var found []sl.Entry
+			if found, err = sh.entriesAt(ctx, path); err != nil {
+				break
+			}
+			switch {
+			case len(found) == 1:
+				targets = found
+			case !o.Newest && !o.Oldest:
+				return fmt.Errorf("%q is %d things here: say --newest or --oldest to "+
+					"delete one of them, --remove-all-copies for all %d, or name one by "+
+					"its id, which ls -l prints beside the date",
+					path, len(found), len(found))
+			default:
+				var e sl.Entry
+				if e, err = pickByAge(found, o.Newest); err != nil {
+					break
+				}
 				targets = []sl.Entry{e}
+				// Which of the several went.  A count would not do it:
+				// they share a name, so the date and the id are the only
+				// two things on the line that tell them apart, and both
+				// are wanted afterwards -- the date to see that the right
+				// end of the pile was taken, the id to say so exactly.
+				chose = fmt.Sprintf("%s: removed the %s of %d, acquired %s (%s)\n",
+					path, ageWord(o.Newest), len(found), lsWhen(e.Created), e.ID)
 			}
 		}
 		if err != nil {
@@ -888,6 +985,9 @@ func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			if many {
 				sh.term.Status(fmt.Sprintf("removed %d of %d %s", i+1, len(targets), noun))
 			}
+		}
+		if chose != "" {
+			fmt.Fprint(out, chose)
 		}
 		// Say so when one path meant many things: the count is the
 		// only evidence that the flag did what was wanted.

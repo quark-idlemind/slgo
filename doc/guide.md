@@ -104,8 +104,7 @@ you expect.
 
     /$ cd Objects
     /Objects$ ls
-    /Objects$ ls -l                 kind, date and id as well
-    /Objects$ ls -lT                the time of day too
+    /Objects$ ls -l                 kind, when it was acquired, and id as well
     /Objects$ ls -lt                newest first
     /Objects$ ls -r Textures        descend into subfolders
     /Objects$ find lantern          names containing "lantern", from here down
@@ -114,6 +113,7 @@ you expect.
     /Objects$ mv "old lamp" sorted  move into a folder
     /Objects$ mv "old lamp" "lamp"  a plain name renames instead
     /Objects$ rm "old lamp"         permanent; there is no undo
+    /Objects$ rm --newest "old lamp"        of several of the name
     /Objects$ rm --remove-all-copies "old lamp"
     /Objects$ rm --remove-all-copies *      every item here
     /Objects$ emptytrash
@@ -134,9 +134,27 @@ name newest first, with every folder followed by what is inside it.
 and by name for things made in the same second. A folder has no date
 and sorts last under `-t`.
 
-`rm` takes the first thing of the name it is given, which is the
-careful default when a name may mean a dozen items. `--remove-all-copies`
-takes all of them and says how many it took:
+`rm` refuses a name that means more than one thing, and deletes
+nothing: deleting is permanent, and which of a dozen identically named
+items went is not a thing to work out afterwards.
+
+    /Scripts$ rm greeter
+    slsh: rm: "greeter" is 3 things here: say --newest or --oldest to
+    delete one of them, --remove-all-copies for all 3, or name one by
+    its id, which ls -l prints beside the date
+
+`--newest` and `--oldest` take one end of the pile by that date, and
+name what they took, since the copies share a name and the date and the
+id are the only things that tell them apart:
+
+    /Scripts$ rm --oldest greeter
+    greeter: removed the oldest of 3, acquired 2026-08-02T15:09:30 (3ae17e57-...)
+
+They refuse rather than guess when the dates do not settle it: whole
+seconds, so a folder copied in one go holds items stamped alike, and a
+folder has no date at all. The id is the way through either.
+
+`--remove-all-copies` takes all of them and says how many it took:
 
     /Scripts$ rm --remove-all-copies /Scripts/slrun-bench
     removed 431 of 645 copies          <- counting up, in place
@@ -173,13 +191,17 @@ how much it threw:
 The trash is found by what it is rather than what it is called, so it
 works on an account whose viewer named it something else.
 
-`ls -l` is four columns: kind, date, id, path. `-T` gives the time as
-well, joined to the date rather than put in a column of its own:
+`ls -l` is four columns: kind, when it was acquired, id, path. The
+date is the whole date, down to the second, joined by a `T` rather than
+put in a column of its own:
 
-    notecard   2026-08-02T15:09:30 3ae17e57-...-cbd3405daadf /Notecards/README
+    notecard   2026-08-02T15:09:30 3ae17e57-... /Notecards/README
 
-so it is still four columns and anything reading the id out of the
-third field works either way. A folder has no date and shows a dash.
+so it is four columns and anything reading the id out of the third
+field goes on working. A folder has no date and shows a dash. The
+seconds are there because they settle things: two items of one name are
+told apart by this column and by the id, and that column is what
+`rm --newest` and `rm --oldest` choose by.
 
 Two listings of a folder that has not changed are identical, which is
 what makes them worth diffing and worth editing into commands.
@@ -211,12 +233,14 @@ more objects, so it is under `inventory` and `giving` alike.
 What one command takes comes from the command, not from `help`:
 
     /$ ls --help
-    Usage: ls [-hlrTt] [PATH]
-     -h, --help  show what this command takes
-     -l          the columns: kind, date, id and path
-     -r          descend into the folders below
-     -T          the time of day as well as the date
-     -t          newest first, rather than by name
+    Usage: ls [-lrt] [--in OBJECT] [PATH]
+     -h, --help       show what this command takes
+         --in=OBJECT  what a rezzed object holds, rather than inventory
+     -l               the columns: kind, when it was acquired, id and path
+     -r               descend into the folders below
+     -t               newest first, rather than by name
+
+    "man ls" describes it at length.
 
 Every command answers `--help`, with one deliberate exception: `echo`
 prints its arguments, so `echo --help` prints `--help`. It exists to put

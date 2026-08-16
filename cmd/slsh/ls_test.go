@@ -13,10 +13,10 @@ import (
 // TestReadLsOptions pins the flag letters and how they cluster.
 func TestReadLsOptions(t *testing.T) {
 	for _, c := range []struct {
-		args             []string
-		long, deep, xact bool
-		path             string
-		byTime           bool
+		args       []string
+		long, deep bool
+		path       string
+		byTime     bool
 	}{
 		{args: []string{}},
 		{args: []string{"-l"}, long: true},
@@ -24,14 +24,10 @@ func TestReadLsOptions(t *testing.T) {
 		{args: []string{"-lr"}, long: true, deep: true},
 		{args: []string{"-rl"}, long: true, deep: true},
 		{args: []string{"-l", "-r"}, long: true, deep: true},
-		// -T is detail, and -l is what detail is, so it implies it.
-		{args: []string{"-T"}, long: true, xact: true},
-		{args: []string{"-lT"}, long: true, xact: true},
-		{args: []string{"-lrT"}, long: true, deep: true, xact: true},
 		{args: []string{"-lt"}, long: true, byTime: true},
 		{args: []string{"-l", "-t"}, long: true, byTime: true},
-		{args: []string{"-ltT"}, long: true, byTime: true, xact: true},
-		{args: []string{"-lT", "/Objects"}, long: true, xact: true, path: "/Objects"},
+		{args: []string{"-lrt"}, long: true, deep: true, byTime: true},
+		{args: []string{"-l", "/Objects"}, long: true, path: "/Objects"},
 		{args: []string{"/Objects"}, path: "/Objects"},
 		{args: []string{"-"}, path: "-"},
 	} {
@@ -40,12 +36,19 @@ func TestReadLsOptions(t *testing.T) {
 			t.Errorf("%v: %v", c.args, err)
 			continue
 		}
-		if o.Long != c.long || o.Deep != c.deep || o.Exact != c.xact ||
+		if o.Long != c.long || o.Deep != c.deep ||
 			o.ByTime != c.byTime || o.path != c.path {
-			t.Errorf("%v: got long=%v deep=%v exact=%v byTime=%v path=%q, want %v %v %v %v %q",
-				c.args, o.Long, o.Deep, o.Exact, o.ByTime, o.path,
-				c.long, c.deep, c.xact, c.byTime, c.path)
+			t.Errorf("%v: got long=%v deep=%v byTime=%v path=%q, want %v %v %v %q",
+				c.args, o.Long, o.Deep, o.ByTime, o.path,
+				c.long, c.deep, c.byTime, c.path)
 		}
+	}
+
+	// -T used to add the time of day, which -l now always prints.  It
+	// is gone rather than kept as a flag that does nothing, so that a
+	// line that asks for it is answered rather than quietly obeyed.
+	if _, err := readLsOptions(io.Discard, []string{"-lT"}); err == nil {
+		t.Error("-T should be refused now that -l prints the time")
 	}
 
 	if _, err := readLsOptions(io.Discard, []string{"-lq"}); err == nil {
@@ -55,26 +58,21 @@ func TestReadLsOptions(t *testing.T) {
 	}
 }
 
-// TestLsWhen: the date column stays ONE field with -T as without it, so
-// that a listing has four columns either way and anything reading the
-// id out of the third field goes on working.
+// TestLsWhen: the whole date, down to the second, in ONE field -- the
+// listing has four columns, so anything reading the id out of the third
+// goes on working, and the seconds are what rm --newest chooses by.
 func TestLsWhen(t *testing.T) {
 	when := time.Date(2026, 8, 3, 21, 26, 43, 0, time.Local).Unix()
 
-	if got, want := lsWhen(when, false), "2026-08-03"; got != want {
-		t.Errorf("without -T: got %q, want %q", got, want)
+	if got, want := lsWhen(when), "2026-08-03T21:26:43"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
-	if got, want := lsWhen(when, true), "2026-08-03T21:26:43"; got != want {
-		t.Errorf("with -T: got %q, want %q", got, want)
+	if got := lsWhen(when); strings.ContainsAny(got, " \t") {
+		t.Errorf("%q has whitespace in it, so it is two columns", got)
 	}
-	for _, exact := range []bool{false, true} {
-		if got := lsWhen(when, exact); strings.ContainsAny(got, " \t") {
-			t.Errorf("exact=%v: %q has whitespace in it, so it is two columns", exact, got)
-		}
-		// A folder has no date and must not collapse the column.
-		if got := lsWhen(0, exact); got != "-" {
-			t.Errorf("exact=%v: a folder should be %q, got %q", exact, "-", got)
-		}
+	// A folder has no date and must not collapse the column.
+	if got := lsWhen(0); got != "-" {
+		t.Errorf("a folder should be %q, got %q", "-", got)
 	}
 }
 

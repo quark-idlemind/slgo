@@ -165,30 +165,32 @@ func TestLsPrintsOnePathPerLineSoAListingIsAScript(t *testing.T) {
 		t.Errorf("ls printed %q, want %q", got, want)
 	}
 
-	// -l is kind, date, id and path, and a folder has no date to print.
+	// -l is kind, when it was acquired, id and path, and a folder has no
+	// date to print.
 	got = x.do(t, "ls -l")
 	for _, want := range []string{
-		"folder     -          " + testObjects.String() + " /Objects",
+		fmt.Sprintf("%-10s %-19s %s /Objects", "folder", "-", testObjects),
 		"notecard   ", testNote.String() + " /readme",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("ls -l should have a line with %q in it:\n%s", want, got)
 		}
 	}
+	// Four fields, and the second of them is the day AND the time of
+	// day: two items of one name, acquired a minute apart, are told
+	// apart by that column and by nothing else on the line except the
+	// id.
 	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
-		if n := len(strings.Fields(line)); n != 4 {
-			t.Errorf("a long listing line has %d fields, want 4: %q", n, line)
+		f := strings.Fields(line)
+		if len(f) != 4 {
+			t.Errorf("a long listing line has %d fields, want 4: %q", len(f), line)
+			continue
 		}
-	}
-
-	// -T widens the date column and does not add one.
-	got = x.do(t, "ls -T")
-	if !strings.Contains(got, "T") || !strings.Contains(got, testNote.String()) {
-		t.Errorf("ls -T printed:\n%s", got)
-	}
-	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
-		if n := len(strings.Fields(line)); n != 4 {
-			t.Errorf("ls -T should still be 4 fields, got %d: %q", n, line)
+		if f[1] == "-" {
+			continue // a folder, which has no date
+		}
+		if _, err := time.ParseInLocation("2006-01-02T15:04:05", f[1], time.Local); err != nil {
+			t.Errorf("the date column should be a whole timestamp, got %q", f[1])
 		}
 	}
 
@@ -526,24 +528,28 @@ func stock(t *testing.T, x *testShell, name string, n int) {
 	}
 }
 
-// TestRmTakesTheFirstOfANameUnlessAskedForAllOfThem.
+// TestRmRefusesANameThatMeansSeveralThings.
 //
 // Deleting is permanent here, so a path that turns out to mean twelve
-// items is not something to discover afterwards: the careful reading is
-// the default and the other one has to be spelled out.
-func TestRmTakesTheFirstOfANameUnlessAskedForAllOfThem(t *testing.T) {
+// items is not something to discover afterwards.  It used to take the
+// first of them, which was careful about how many went and not about
+// which; now nothing goes until the line says which one is meant.
+func TestRmRefusesANameThatMeansSeveralThings(t *testing.T) {
 	x := newTestShell(t)
 	stock(t, x, "dup", 3)
 
-	if got := x.do(t, "rm dup"); got != "" {
-		t.Errorf("rm of one thing printed %q, and should print nothing", got)
+	got := x.do(t, "rm dup")
+	for _, want := range []string{"3 things here", "--newest", "--oldest", "--remove-all-copies", "id"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the refusal should mention %q, got %q", want, got)
+		}
 	}
-	if n := strings.Count(x.do(t, "ls"), "/dup\n"); n != 2 {
-		t.Errorf("rm took %d of the three copies", 3-n)
+	if n := strings.Count(x.do(t, "ls"), "/dup\n"); n != 3 {
+		t.Errorf("a refused rm should have deleted nothing, and %d went", 3-n)
 	}
 
 	// The count is the only evidence the flag did what was wanted.
-	if got := x.do(t, "rm --remove-all-copies dup"); got != "dup: removed 2 copies\n" {
+	if got := x.do(t, "rm --remove-all-copies dup"); got != "dup: removed 3 copies\n" {
 		t.Errorf("rm --remove-all-copies printed %q", got)
 	}
 	if got := x.do(t, "ls"); strings.Contains(got, "/dup") {
@@ -556,6 +562,92 @@ func TestRmTakesTheFirstOfANameUnlessAskedForAllOfThem(t *testing.T) {
 	}
 	if got := x.do(t, "ls -r"); strings.Contains(got, "/Objects") {
 		t.Errorf("the folder should be gone:\n%s", got)
+	}
+}
+
+// TestRmNewestAndOldestTakeOneEndOfThePile.
+//
+// The two flags are the answer to the refusal above, and what they say
+// they did has to be checkable: the line names the date it chose by,
+// which is the column ls -l prints, and the id, which is the only other
+// thing on that line that tells one copy from another.
+func TestRmNewestAndOldestTakeOneEndOfThePile(t *testing.T) {
+	x := newTestShell(t)
+	stock(t, x, "dup", 3) // 1754000300, 301, 302
+
+	newest, oldest := lsWhen(1754000302), lsWhen(1754000300)
+
+	got := x.do(t, "rm --newest dup")
+	if !strings.Contains(got, "removed the newest of 3") || !strings.Contains(got, newest) {
+		t.Errorf("rm --newest printed %q, and should name what it took", got)
+	}
+	if listed := x.do(t, "ls -l"); strings.Contains(listed, newest) {
+		t.Errorf("the newest should be the one that went:\n%s", listed)
+	}
+
+	got = x.do(t, "rm --oldest dup")
+	if !strings.Contains(got, "removed the oldest of 2") || !strings.Contains(got, oldest) {
+		t.Errorf("rm --oldest printed %q", got)
+	}
+	if listed := x.do(t, "ls -l"); strings.Contains(listed, oldest) {
+		t.Errorf("the oldest should be the one that went:\n%s", listed)
+	}
+
+	// One left, so neither flag has anything to choose between; it goes
+	// without a word, as a plain rm of one thing does.
+	if got := x.do(t, "rm --newest dup"); got != "" {
+		t.Errorf("with one of the name left there is nothing to report, got %q", got)
+	}
+	if listed := x.do(t, "ls"); strings.Contains(listed, "/dup") {
+		t.Errorf("all three should be gone:\n%s", listed)
+	}
+}
+
+// TestRmWillNotChooseBetweenTwoOfOneDate.
+//
+// Inventory dates are whole seconds, so a folder copied in one go holds
+// items stamped alike, and there is no sense in which one of those is
+// the newer.  It refuses and points at the id, which is the only thing
+// left that tells them apart.
+func TestRmWillNotChooseBetweenTwoOfOneDate(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.mu.Lock()
+	for i := 0; i < 2; i++ {
+		x.grid.inv.Items = append(x.grid.inv.Items, &invItem{
+			ID:      msg.UUID{0: byte(i + 1), 15: 0xee},
+			Name:    "twin",
+			Type:    int(sl.AssetNotecard),
+			Created: 1754000500,
+		})
+	}
+	x.grid.mu.Unlock()
+
+	for _, flag := range []string{"--newest", "--oldest"} {
+		got := x.do(t, "rm "+flag+" twin")
+		if !strings.Contains(got, "2 of those were acquired at") || !strings.Contains(got, "id") {
+			t.Errorf("rm %s printed %q", flag, got)
+		}
+	}
+	if n := strings.Count(x.do(t, "ls"), "/twin\n"); n != 2 {
+		t.Errorf("a refused rm should have deleted nothing, and %d went", 2-n)
+	}
+}
+
+// TestRmTakesOneAnswerToTheQuestionOfWhich: the three flags are one
+// choice, so two of them together is a line that means two things.
+func TestRmTakesOneAnswerToTheQuestionOfWhich(t *testing.T) {
+	x := newTestShell(t)
+	stock(t, x, "dup", 2)
+
+	got := x.do(t, "rm --newest --oldest dup")
+	if !strings.Contains(got, "two answers to one question") {
+		t.Errorf("rm --newest --oldest printed %q", got)
+	}
+	if got := x.do(t, "rm --newest --remove-all-copies dup"); !strings.Contains(got, "two answers") {
+		t.Errorf("rm --newest --remove-all-copies printed %q", got)
+	}
+	if n := strings.Count(x.do(t, "ls"), "/dup\n"); n != 2 {
+		t.Errorf("nothing should have gone, and %d did", 2-n)
 	}
 }
 

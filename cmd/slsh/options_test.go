@@ -109,7 +109,7 @@ func TestHelpPrintsTheCommandsOwnOptions(t *testing.T) {
 	}
 
 	got := out.String()
-	for _, want := range []string{"ls", "[PATH]", "-l", "-r", "-t", "-T", "--help"} {
+	for _, want := range []string{"ls", "[PATH]", "-l", "-r", "-t", "--help"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the usage should mention %q:\n%s", want, got)
 		}

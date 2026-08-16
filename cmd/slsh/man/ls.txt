@@ -10,12 +10,22 @@ get in the way of that.
 
 # The columns, and why the third is always the id
 
-With -l a line is kind, date, id, path, in that order and padded to
-fixed widths.  -T asks for the time of day as well and widens the date
-column rather than adding one, so a listing has four fields whether or
-not the time was asked for and anything reading the id out of the
-third field goes on working either way.  A folder has no date and gets
-a dash, since an empty column would move every column after it.
+With -l a line is kind, when it was acquired, id, path, in that order
+and padded to fixed widths.
+
+	notecard   2026-08-03T21:26:43  d8467e57-...  /Notecards/readme
+
+The date is the whole date, down to the second, and it is one field:
+the day and the time of day are joined by a T rather than a space, so
+a listing is four fields and anything reading the id out of the third
+one goes on working.  The seconds are there because they settle
+things.  Two items of one name, acquired a minute apart, are told
+apart by this column and by nothing else on the line except the id,
+and rm --newest and --oldest pick between them by exactly this number
+-- so a listing is how to see what one of those is about to take.
+
+A folder has no date and gets a dash, since an empty column would move
+every column after it.
 
 # Why an id is worth printing at all
 
@@ -23,7 +33,9 @@ Inventory names are not unique.  A folder can hold a dozen items
 called the same thing, and a path names the first of them -- so a
 listing of duplicates would otherwise be a set of lines that all mean
 one item.  The id names exactly one, and cat, get, rm, mv, drop and
-the rest take an id anywhere they take a path.
+the rest take an id anywhere they take a path.  It is the answer rm
+points at when a name means several things and the dates do not settle
+which.
 
 # How far down, and in what order
 

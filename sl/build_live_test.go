@@ -79,9 +79,9 @@ func TestBuildLinksToTheFirstPrim(t *testing.T) {
 			Size:        msg.Vector3{X: 1.0, Y: 1.0, Z: 0.25},
 		},
 		{
-			Name:        "slgo test middle",
-			Position:    msg.Vector3{X: at.X, Y: at.Y, Z: at.Z + 0.5},
-			Size:        msg.Vector3{X: 0.6, Y: 0.6, Z: 0.6},
+			Name:     "slgo test middle",
+			Position: msg.Vector3{X: at.X, Y: at.Y, Z: at.Z + 0.5},
+			Size:     msg.Vector3{X: 0.6, Y: 0.6, Z: 0.6},
 		},
 		{
 			// Turned, so that a rotation surviving the round trip is
