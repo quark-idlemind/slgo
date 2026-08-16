@@ -24,6 +24,12 @@ type fakeSim struct {
 	regionNm string
 	regionID msg.UUID
 
+	// What AgentMovementComplete says on arrival.  Two regions in one
+	// test have to disagree about both, or nothing that reads them can
+	// tell which region answered.
+	position msg.Vector3
+	handle   uint64
+
 	// Set to skip a step, to test the timeouts.
 	silent      bool
 	noMovement  bool
@@ -60,10 +66,31 @@ func newFakeSim(t *testing.T) *fakeSim {
 	if err != nil {
 		t.Skipf("no loopback UDP: %v", err)
 	}
-	return &fakeSim{conn: conn, regionNm: "the test region"}
+	return &fakeSim{
+		conn:     conn,
+		regionNm: "the test region",
+		position: msg.Vector3{X: 188.4, Y: 202.8, Z: 26.3},
+		handle:   0x0003_f000_0003_e800,
+	}
 }
 
 func (f *fakeSim) addr() *net.UDPAddr { return f.conn.LocalAddr().(*net.UDPAddr) }
+
+// arrivalAt sets what this simulator says when the avatar gets here, and
+// arrival reads it back.  Both take the lock: the goroutine answering
+// for this simulator is running from the moment it is built, so a test
+// that assigned the fields would be writing them under a reader.
+func (f *fakeSim) arrivalAt(at msg.Vector3, handle uint64) {
+	f.mu.Lock()
+	f.position, f.handle = at, handle
+	f.mu.Unlock()
+}
+
+func (f *fakeSim) arrival() (msg.Vector3, uint64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.position, f.handle
+}
 
 func (f *fakeSim) close() { f.conn.Close() }
 
@@ -154,10 +181,14 @@ func (f *fakeSim) react(name string) {
 			f.send(k, msg.FlagReliable)
 			return
 		}
+		f.mu.Lock()
+		at, handle := f.position, f.handle
+		f.mu.Unlock()
+
 		amc := &msg.AgentMovementComplete{}
-		amc.Data.Position = msg.Vector3{X: 188.4, Y: 202.8, Z: 26.3}
+		amc.Data.Position = at
 		amc.Data.LookAt = msg.Vector3{X: 1}
-		amc.Data.RegionHandle = 0x0003_f000_0003_e800
+		amc.Data.RegionHandle = handle
 		amc.SimData.ChannelVersion = []byte("Second Life Server 2026-07-10\x00")
 		f.send(amc, msg.FlagReliable)
 

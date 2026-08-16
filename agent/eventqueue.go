@@ -314,14 +314,26 @@ func (a *Agent) closeEventQueue(url string, ack any) {
 	_, _, _ = a.postEventQueue(ctx, url, body)
 }
 
-// noteEvent records session state carried by an event.
+// noteEvent acts on what an event says about this session.
 //
 // Only what belongs to the session goes here. Everything else is the
 // clients' business and is passed through untouched.
+//
+// Both arms run inline, on the goroutine that polls the queue and hands
+// events on, so a client is never told something about this session
+// before the session itself has acted on it.  For the teleport that is
+// not a nicety: see noteTeleportFinish.
 func (a *Agent) noteEvent(name string, body any) {
-	if name != "AgentGroupDataUpdate" {
-		return
+	switch name {
+	case "AgentGroupDataUpdate":
+		a.noteGroups(body)
+	case "TeleportFinish":
+		a.noteTeleportFinish(body)
 	}
+}
+
+// noteGroups records the memberships an AgentGroupDataUpdate carries.
+func (a *Agent) noteGroups(body any) {
 	m := llsd.Map(body)
 	if m == nil {
 		return

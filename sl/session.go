@@ -111,6 +111,12 @@ type Session struct {
 	// for the caller to read.
 	mapFns []func([]msg.MapBlockReply_Data)
 
+	// teleportFns are who is waiting to hear what became of a teleport
+	// they asked for.  See teleport.go: they are called with mu held,
+	// like the two above, and for the same reason -- the answer is put
+	// together on the reader goroutine and read on another.
+	teleportFns []func(*teleportAnswer)
+
 	// scriptFns are who is waiting for a ScriptRunningReply.  See
 	// ScriptRunning: the state is not remembered, because a script
 	// starts and stops on its own and a remembered answer would be a
@@ -395,6 +401,12 @@ func (w *Session) read(ctx context.Context) {
 // already -- see scriptRunningEvent.
 var eventHandlers = map[string]func(*Session, map[string]any){
 	"ScriptRunningReply": (*Session).scriptRunningEvent,
+
+	// Both halves of a teleport's answer arrive here rather than on the
+	// circuit.  The template says so of the first and not of the second,
+	// and stage 0 watched both come off the queue.
+	"TeleportFinish": (*Session).teleportFinishEvent,
+	"TeleportFailed": (*Session).teleportFailedEvent,
 }
 
 // event dispatches one entry from the event queue.
@@ -535,6 +547,26 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		// Life does not -- see ScriptRunning -- and the arm that does
 		// the work there is scriptRunningEvent.
 		w.scriptRunning(t.Script.ObjectID, t.Script.ItemID, t.Script.Running)
+
+	// A teleport inside this region, which the simulator does itself and
+	// announces on the circuit.  It is the whole answer to a lure to
+	// somewhere nearby: there is no finish for one of those and waiting
+	// for one waits for the timeout.
+	case *msg.TeleportLocal:
+		w.teleportAnswered(&teleportAnswer{local: true})
+
+	// These two are the queue's on Second Life -- see eventHandlers --
+	// and these arms are for a grid that still sends them on the
+	// circuit, as the ScriptRunningReply arm above is.
+	case *msg.TeleportFinish:
+		w.teleportAnswered(&teleportAnswer{handle: t.Info.RegionHandle})
+
+	case *msg.TeleportFailed:
+		a := &teleportAnswer{failed: true, reason: trimNul(t.Info.Reason)}
+		if len(t.AlertInfo) > 0 {
+			a.key = trimNul(t.AlertInfo[0].Message)
+		}
+		w.teleportAnswered(a)
 
 	case *msg.UpdateCreateInventoryItem:
 		w.mu.Lock()

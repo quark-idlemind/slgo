@@ -91,6 +91,13 @@ func twoRegions(t *testing.T, opts Options) (*Agent, *fakeRegion, *fakeRegion) {
 	from := newRegion(t, "the region left", msg.MustParseUUID("12b57e57-7e57-c0de-efe3-b327af5dfe62"))
 	to := newRegion(t, "the region arrived at", msg.MustParseUUID("1c117e57-7e57-c0de-da64-e42aeda52a0a"))
 
+	// Two neighbouring grid squares, and an avatar standing at a
+	// different spot in each.  Every one of those is something a move
+	// has to carry across, and two regions that agreed about them would
+	// hide a move that carried none of them.
+	from.sim.arrivalAt(msg.Vector3{X: 188.4, Y: 202.8, Z: 26.3}, msg.RegionHandle(43648, 43648))
+	to.sim.arrivalAt(msg.Vector3{X: 12.5, Y: 240.25, Z: 2001}, msg.RegionHandle(43649, 43648))
+
 	acct := testAccount(from.sim)
 	acct.SeedCapability = from.seed()
 	if opts.Timeout == 0 {
@@ -439,5 +446,41 @@ func waitFor(t *testing.T, what string, ok func() bool) {
 			t.Fatalf("timed out waiting for %s", what)
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestTheLookIsRefreshedAfterAMove: the camera is what the simulator
+// works its interest list out from, so a session that arrived somewhere
+// else with its camera left behind is described nothing that is near it
+// -- including its own attachments -- while reporting that the teleport
+// worked.
+//
+// Nothing in moveTo does this and nothing needs to.  The
+// AgentMovementComplete handler calls setCenter with the position the
+// new simulator gave, and setCenter keeps the draw distance the session
+// is using rather than resetting it to the one it was asked for at
+// login.  That is worth a test rather than a reading, because it is two
+// files away from the move and would be silently lost by a change to
+// either.
+func TestTheLookIsRefreshedAfterAMove(t *testing.T) {
+	a, _, to := twoRegions(t, Options{SkipCaps: true})
+
+	l := a.Look()
+	l.Far = 96
+	a.SetLook(l)
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	got := a.Look()
+	if at, _ := to.sim.arrival(); got.Center != at {
+		t.Errorf("the camera is at %v, want the arrival position %v", got.Center, at)
+	}
+	if got.Far != 96 {
+		t.Errorf("draw distance = %v, want the 96 this session was using", got.Far)
+	}
+	if got.At == (msg.Vector3{}) || got.Up == (msg.Vector3{}) || got.Left == (msg.Vector3{}) {
+		t.Errorf("the view after the move is not a direction: %+v", got)
 	}
 }
