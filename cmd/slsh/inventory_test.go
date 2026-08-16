@@ -210,13 +210,80 @@ func TestLsPrintsOnePathPerLineSoAListingIsAScript(t *testing.T) {
 	}
 }
 
+// TestLsOfAnItemListsEveryOneOfThatName.
+//
+// Names are not unique, so a path can mean four things, and the columns
+// are what tell them apart -- but they could only be reached by listing
+// the whole folder and picking them out by eye.  ls of a path that is
+// not a folder lists what it names, which is also how ls of a file
+// reads in any shell, and it is where rm's refusal sends a person.
+func TestLsOfAnItemListsEveryOneOfThatName(t *testing.T) {
+	x := newTestShell(t)
+	stock(t, x, "dup", 3) // in the root, a second apart
+
+	got := x.do(t, "ls -l dup")
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("ls -l of three things of a name printed %d lines:\n%s", len(lines), got)
+	}
+	ids := map[string]bool{}
+	for _, line := range lines {
+		f := strings.Fields(line)
+		if len(f) != 4 || f[3] != "/dup" {
+			t.Errorf("want four fields ending /dup, got %q", line)
+			continue
+		}
+		ids[f[2]] = true
+	}
+	if len(ids) != 3 {
+		t.Errorf("the ids are what tell them apart, and there are %d:\n%s", len(ids), got)
+	}
+
+	// -t sorts them, which is the whole reason to want this listing.
+	if got := x.do(t, "ls -lt dup"); !strings.Contains(strings.SplitN(got, "\n", 2)[0], lsWhen(1754000302)) {
+		t.Errorf("ls -lt should put the newest of them first:\n%s", got)
+	}
+
+	// The plain form is still one path per line, and they are the same
+	// path: what tells the copies apart is behind -l.
+	if got := x.do(t, "ls dup"); got != "/dup\n/dup\n/dup\n" {
+		t.Errorf("ls of three things of a name printed %q", got)
+	}
+
+	// One item, from another folder, and its own folder in front of it.
+	x.do(t, "cd /Objects")
+	if got := x.do(t, "ls -l /readme"); !strings.HasSuffix(got, " /readme\n") {
+		t.Errorf("ls of an item elsewhere printed %q", got)
+	}
+	if got := x.do(t, `ls -l "a lamp"`); !strings.HasSuffix(got, " /Objects/a lamp\n") {
+		t.Errorf("ls of an item here printed %q", got)
+	}
+
+	// And by id, which is the form that names exactly one of several.
+	for _, where := range []string{"/", "/Objects"} {
+		x.do(t, "cd "+where)
+		got := x.do(t, "ls -l "+testLamp.String())
+		if !strings.HasSuffix(got, " /Objects/a lamp\n") || !strings.Contains(got, testLamp.String()) {
+			t.Errorf("from %s, ls of an id printed %q", where, got)
+		}
+	}
+}
+
 // TestLsSaysWhyItCannotList rather than printing an empty folder, which
 // is what a folder that could not be read looks like otherwise.
 func TestLsSaysWhyItCannotList(t *testing.T) {
 	x := newTestShell(t)
 
-	if got := x.do(t, "ls nowhere"); !strings.Contains(got, `no folder "nowhere"`) {
-		t.Errorf("ls of a folder that is not there printed %q", got)
+	// A name that is neither a folder nor an item is reported as the
+	// name it is, and not as the folder it was tried as first: "no
+	// folder" is not what went wrong when it was never meant to be one.
+	if got := x.do(t, "ls nowhere"); !strings.Contains(got, `nothing called "nowhere" here`) {
+		t.Errorf("ls of a name that is not there printed %q", got)
+	}
+	// A folder missing further up is still named, since that is as far
+	// as either reading of the path gets.
+	if got := x.do(t, "ls nowhere/deeper"); !strings.Contains(got, `no folder "nowhere"`) {
+		t.Errorf("ls below a folder that is not there printed %q", got)
 	}
 	if got := x.do(t, "ls one two"); !strings.Contains(got, "only one folder at a time") {
 		t.Errorf("ls of two folders printed %q", got)

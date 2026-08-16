@@ -18,6 +18,10 @@ out afterwards.
 	to delete one of them, --remove-all-copies for all 3, or name
 	one by its id, which ls -l prints beside the date
 
+"ls -l greeter" is what to look at then: a path that names items lists
+those items, one line each, with the dates and the ids that tell them
+apart.
+
 Three flags answer that, and they are one choice rather than three
 options -- any two of them together is a line that means two things,
 and is refused.

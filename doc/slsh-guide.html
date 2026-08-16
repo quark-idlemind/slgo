@@ -637,6 +637,7 @@ object     2026-07-29T09:41:12  91357e57-…  /Objects/sign
 folder     -                    1ae57e57-…  /Objects/spares</span>
 <span class="p">/Objects$</span> <span class="c">ls -lt</span>                   <span class="n">newest first</span>
 <span class="p">/Objects$</span> <span class="c">ls -r spares</span>             <span class="n">and everything below it</span>
+<span class="p">/Objects$</span> <span class="c">ls -l lantern</span>            <span class="n">not a folder: lists what it names</span>
 <span class="p">/Objects$</span> <span class="c">find lantern</span>             <span class="n">names containing it, from here down</span></pre>
         </div>
 
@@ -654,6 +655,26 @@ folder     -                    1ae57e57-…  /Objects/spares</span>
           by. Reading commands take the first of several and think nothing of
           it; <code>rm</code> does not, for the reason below.
         </p>
+
+        <p>
+          A path that is not a folder lists what it <em>names</em>, the way
+          <code>ls</code> of a file reads in any shell — which here is the way
+          to see several of one name by themselves rather than picking them
+          out of a whole folder by eye. A uuid works as the path too, and a
+          folder wins where a folder and an item share a name.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">ls -l /Scripts/greeter</span>
+<span class="o">script     2026-08-07T12:06:57  cb567e57-…  /Scripts/greeter
+script     2026-08-07T11:26:01  e9d97e57-…  /Scripts/greeter
+script     2026-08-07T11:25:53  7e277e57-…  /Scripts/greeter</span>
+<span class="p">/$</span> <span class="c">ls /Scripts/greeter</span>          <span class="n">without -l, three identical lines</span>
+<span class="o">/Scripts/greeter
+/Scripts/greeter
+/Scripts/greeter</span></pre>
+        </div>
 
         <p>
           Paths escape rather than forbid: <code>/</code> separates,
@@ -678,7 +699,7 @@ folder     -                    1ae57e57-…  /Objects/spares</span>
 them, --remove-all-copies for all 3, or name one by its id, which ls -l prints
 beside the date</span>
 <span class="p">/Scripts$</span> <span class="c">rm --oldest greeter</span>
-<span class="o">greeter: removed the oldest of 3, acquired 2026-07-29T09:41:12 (91357e57-…)</span>
+<span class="o">greeter: removed the oldest of 3, acquired 2026-08-07T11:25:53 (7e277e57-…)</span>
 <span class="p">/Scripts$</span> <span class="c">rm --remove-all-copies greeter</span>
 <span class="o">greeter: removed 2 copies</span></pre>
         </div>

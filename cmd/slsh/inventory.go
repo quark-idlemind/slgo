@@ -100,7 +100,7 @@ var inventoryCommands = map[string]*command{
 	"ls": {
 		params: "[PATH]",
 		flags:  func() any { return new(lsOptions) },
-		brief:  "list a folder; -l for detail, -t newest first, -r to descend",
+		brief:  "list a folder, or what a path names; -l for detail, -t newest first",
 		man:    "ls",
 		run:    cmdLs,
 	},
@@ -232,16 +232,35 @@ func (sh *Shell) entryAt(ctx context.Context, path string) (sl.Entry, error) {
 // --remove-all-copies are for, and what rm refuses without one of them.
 // An id names exactly one, so that form returns the one.
 func (sh *Shell) entriesAt(ctx context.Context, path string) ([]sl.Entry, error) {
+	_, es, err := sh.entriesIn(ctx, path)
+	return es, err
+}
+
+// entriesIn is entriesAt, and says as well which folder the things it
+// found are in, as the names that lead to it.
+//
+// That is for ls, which prints a whole path for each line and so needs
+// to know what to put in front of the names: a listing of four items
+// called "autobench" is four paths that differ only in the id and the
+// date beside them, and a path that is short by its folder would not be
+// one that could be typed back in.
+//
+// Each entry's Path is its own name and nothing more, so that the
+// caller can put the folder in front of it and get the same shape it
+// gets from listing a folder.  The id form is normalised to that too,
+// since what it finds carries a path from wherever it was found.
+func (sh *Shell) entriesIn(ctx context.Context, path string) ([]string, []sl.Entry, error) {
 	if id, err := msg.ParseUUID(strings.TrimSpace(path)); err == nil {
-		e, err := sh.entryByID(ctx, id)
+		e, in, err := sh.entryByID(ctx, id)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return []sl.Entry{e}, nil
+		e.Path = sl.EscapeName(e.Name)
+		return in, []sl.Entry{e}, nil
 	}
 	names := sl.SplitPath(path)
 	if len(names) == 0 {
-		return nil, fmt.Errorf("no path given")
+		return nil, nil, fmt.Errorf("no path given")
 	}
 	dir := strings.Join([]string{}, "")
 	if strings.HasPrefix(path, "/") {
@@ -249,20 +268,20 @@ func (sh *Shell) entriesAt(ctx context.Context, path string) ([]sl.Entry, error)
 	}
 	dir += sl.JoinPath(names[:len(names)-1]...)
 
-	_, id, err := sh.resolveDir(ctx, dir)
+	in, id, err := sh.resolveDir(ctx, dir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	es, err := sh.s.ListFolder(ctx, id, 0)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	want := names[len(names)-1]
 	found := matchName(es, want)
 	if len(found) == 0 {
-		return nil, fmt.Errorf("nothing called %q here", want)
+		return nil, nil, fmt.Errorf("nothing called %q here", want)
 	}
-	return found, nil
+	return in, found, nil
 }
 
 // matchName picks out everything of a name, keeping the listing order
@@ -282,32 +301,37 @@ func matchName(es []sl.Entry, want string) []sl.Entry {
 	return found
 }
 
-// entryByID looks for an id here, then anywhere below the root.
+// entryByID looks for an id here, then anywhere below the root, and
+// says which folder it was found in as the names that lead to it.
 //
 // Here first because that is nearly always where it is, and the whole
-// tree is a hundred requests.
-func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, error) {
+// tree is a hundred requests.  The two searches know where they looked
+// in different ways: this folder is the one the shell is in, and the
+// whole-tree listing carries a path from the root, whose last name is
+// the entry's own.
+func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, []string, error) {
 	sh.mu.Lock()
-	cwd := sh.cwdID
+	cwd, here := sh.cwdID, append([]string(nil), sh.cwd...)
 	sh.mu.Unlock()
 
 	if es, err := sh.s.ListFolder(ctx, cwd, 0); err == nil {
 		for _, e := range es {
 			if e.ID == id {
-				return e, nil
+				return e, here, nil
 			}
 		}
 	}
 	es, err := sh.s.ListInventory(ctx, "", 4)
 	if err != nil {
-		return sl.Entry{}, err
+		return sl.Entry{}, nil, err
 	}
 	for _, e := range es {
 		if e.ID == id {
-			return e, nil
+			at := sl.SplitPath(e.Path)
+			return e, at[:len(at)-1], nil
 		}
 	}
-	return sl.Entry{}, fmt.Errorf("nothing here has the id %s", id)
+	return sl.Entry{}, nil, fmt.Errorf("nothing here has the id %s", id)
 }
 
 func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
@@ -406,15 +430,7 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		return sh.listInside(ctx, out, o.In, long)
 	}
 
-	names, id, err := sh.resolveDir(ctx, path)
-	if err != nil {
-		return err
-	}
-	var depth uint
-	if deep {
-		depth = 4
-	}
-	es, err := sh.s.ListFolder(ctx, id, depth)
+	names, es, err := sh.toList(ctx, path, deep)
 	if err != nil {
 		return err
 	}
@@ -439,6 +455,38 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			kindOf(e), lsWhen(e.Created), e.ID, full)
 	}
 	return nil
+}
+
+// toList is what a path given to ls means: a folder's contents where it
+// names a folder, and the things it names where it does not.
+//
+// A path that names items is the answer to a question the columns
+// otherwise refuse to answer.  Names are not unique, so /Scripts holding
+// four things called "autobench" lists as four lines that differ only in
+// the id and the date -- and there was no way to ask about just those
+// four without reading a whole folder and picking them out by eye.  It
+// is also how ls of a file reads in any shell, and it is what rm's
+// refusal sends a person to look at.
+//
+// A folder wins where a folder and an item share a name, since that is
+// the older meaning of the two and the one cd agrees with; the item can
+// still be named by its id.  The refusal from the folder attempt is
+// dropped rather than reported, because "no folder" is not what went
+// wrong when the name was never meant to be one.
+func (sh *Shell) toList(ctx context.Context, path string, deep bool) ([]string, []sl.Entry, error) {
+	names, id, err := sh.resolveDir(ctx, path)
+	if err != nil {
+		return sh.entriesIn(ctx, path)
+	}
+	var depth uint
+	if deep {
+		depth = 4
+	}
+	es, err := sh.s.ListFolder(ctx, id, depth)
+	if err != nil {
+		return nil, nil, err
+	}
+	return names, es, nil
 }
 
 // sortByTime puts a listing newest first, and things made in the same

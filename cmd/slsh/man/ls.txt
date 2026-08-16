@@ -2,6 +2,10 @@ ls lists a folder.  With no path it lists the folder the shell is in,
 which is the one cd sets and pwd prints; with one it lists that folder
 instead, relative to here unless it starts from the root.
 
+A path that is not a folder lists what it names, the way ls of a file
+does in any shell -- and here that is worth more than it sounds, since
+a name can mean several things.
+
 By default it prints one bare path per line and nothing else.  That is
 the useful shape rather than the plain one: a listing written to a
 file is a list of paths, which can be edited into a file of commands
@@ -26,6 +30,30 @@ and rm --newest and --oldest pick between them by exactly this number
 
 A folder has no date and gets a dash, since an empty column would move
 every column after it.
+
+# Listing an item, and why
+
+	/$ ls -l /Scripts/greeter
+	script     2026-08-07T12:06:57  cb567e57-...  /Scripts/greeter
+	script     2026-08-07T11:26:01  e9d97e57-...  /Scripts/greeter
+	script     2026-08-07T11:25:53  7e277e57-...  /Scripts/greeter
+	script     2026-08-07T11:25:53  ade67e57-...  /Scripts/greeter
+
+Four things of one name, and until this worked the only way to see
+them was to list the whole folder and pick them out by eye.  This is
+where rm sends a person when it refuses a name that means several: the
+dates here are what --newest and --oldest choose by, and the ids are
+what names one of them exactly.  A uuid works as the path too, and
+prints the one line it names.
+
+Without -l the same listing is the same path four times over, which is
+honest -- there are four of them -- but says nothing about which is
+which.  The columns are behind -l for that.
+
+A folder wins where a folder and an item share a name, since that is
+what cd means by the name as well; the id names the item.  A path that
+is neither is reported as the name it is rather than as the folder it
+was tried as first.
 
 # Why an id is worth printing at all
 
@@ -61,6 +89,8 @@ which is what rm and mv want when they are given the same flag.
 # Examples
 
 	ls -l Objects
+	ls -l /Scripts/greeter
+	ls -lt d8467e57-...
 	ls -rt
 	ls --in lantern
 

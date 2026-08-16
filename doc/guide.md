@@ -106,6 +106,7 @@ you expect.
     /Objects$ ls
     /Objects$ ls -l                 kind, when it was acquired, and id as well
     /Objects$ ls -lt                newest first
+    /Objects$ ls -l "old lamp"      a path that is not a folder lists what it names
     /Objects$ ls -r Textures        descend into subfolders
     /Objects$ find lantern          names containing "lantern", from here down
     /Objects$ cat "my notecard"     print a notecard or a script
@@ -128,6 +129,17 @@ Names are **not** unique -- one folder can hold a dozen things with the
 same name -- so `mv`, `rm` and `cat` accept an item's id anywhere they
 accept a path. That is what makes a listing of duplicates usable.
 
+`ls` of a path that is not a folder lists what that path names, which is
+how to see the duplicates by themselves:
+
+    /$ ls -l /Scripts/greeter
+    script     2026-08-07T12:06:57 cb567e57-... /Scripts/greeter
+    script     2026-08-07T11:26:01 e9d97e57-... /Scripts/greeter
+    script     2026-08-07T11:25:53 7e277e57-... /Scripts/greeter
+
+A uuid works as the path too. A folder wins where a folder and an item
+share a name.
+
 A listing is in tree order: siblings by name, and things of the same
 name newest first, with every folder followed by what is inside it.
 `-t` sorts by time instead -- newest first across the whole listing,
@@ -148,7 +160,7 @@ name what they took, since the copies share a name and the date and the
 id are the only things that tell them apart:
 
     /Scripts$ rm --oldest greeter
-    greeter: removed the oldest of 3, acquired 2026-08-02T15:09:30 (3ae17e57-...)
+    greeter: removed the oldest of 3, acquired 2026-08-07T11:25:53 (7e277e57-...)
 
 They refuse rather than guess when the dates do not settle it: whole
 seconds, so a folder copied in one go holds items stamped alike, and a
