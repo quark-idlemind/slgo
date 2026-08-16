@@ -36,6 +36,7 @@ var Subscriptions = []string{
 	"ScriptRunningReply", "ScriptQuestion", "ScriptDialog",
 	"TeleportLocal", "TeleportFailed", "TeleportFinish",
 	"AgentMovementComplete", "ParcelProperties",
+	"MapBlockReply",
 }
 
 // Session is a connection to a hosted agent, with the bookkeeping needed
@@ -103,6 +104,12 @@ type Session struct {
 	// are called with mu held, which is what makes a profile assembled
 	// from three messages safe for the caller to read.
 	profileFns []func(*avatarReply)
+
+	// mapFns are who is waiting for the blocks a MapNameRequest is
+	// answered with.  See worldmap.go: they are called with mu held,
+	// which is what makes an answer assembled from several packets safe
+	// for the caller to read.
+	mapFns []func([]msg.MapBlockReply_Data)
 
 	// scriptFns are who is waiting for a ScriptRunningReply.  See
 	// ScriptRunning: the state is not remembered, because a script
@@ -573,6 +580,12 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 
 	case *msg.AvatarGroupsReply:
 		w.avatarReplyTo(&avatarReply{Avatar: t.AgentData.AvatarID, Groups: t})
+
+	// One name asked about is answered with as many of these as it
+	// takes, so the blocks go to whoever asked and the list is put back
+	// together there; see worldmap.go.
+	case *msg.MapBlockReply:
+		w.mapBlocks(t.Data)
 
 	case *msg.AlertMessage:
 		s := trimNul(t.AlertData.Message)

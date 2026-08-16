@@ -568,6 +568,43 @@ func (f *fakeGrid) AnswerProfile(t *testing.T, replies ...msg.Message) {
 	}
 }
 
+// AnswerMap makes the fake answer a MapNameRequest with these blocks and
+// the end of the list after them.
+//
+// The end marker is added here rather than left to the caller because
+// every reply has one and nothing returns without it: a fake that
+// answered with regions alone would leave every lookup waiting out its
+// deadline.  Its shape is the measured one -- no coordinates, an access
+// code of 255, and the query lowercased with its last character taken
+// off -- so that a command reading it as a region would be caught.
+func (f *fakeGrid) AnswerMap(t *testing.T, blocks ...msg.MapBlockReply_Data) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		q, ok := m.(*msg.MapNameRequest)
+		if !ok {
+			return
+		}
+		asked := strings.ToLower(strings.TrimRight(string(q.NameData.Name), "\x00"))
+		if asked != "" {
+			asked = asked[:len(asked)-1]
+		}
+		r := &msg.MapBlockReply{Data: append(append([]msg.MapBlockReply_Data(nil), blocks...),
+			msg.MapBlockReply_Data{Name: append([]byte(asked), 0), Access: 255})}
+		r.AgentData.AgentID = testMe
+		f.Relay(t, r)
+	}
+}
+
+// mapBlock is one region as the map describes it, with the fields Second
+// Life sends as zero left as zero.
+func mapBlock(name string, x, y uint16, access uint8) msg.MapBlockReply_Data {
+	return msg.MapBlockReply_Data{
+		X: x, Y: y, Name: append([]byte(name), 0), Access: access,
+	}
+}
+
 // avatarProperties is the reply that carries the profile itself.
 func avatarProperties(who msg.UUID, born, about string, partner msg.UUID, flags uint32) *msg.AvatarPropertiesReply {
 	m := &msg.AvatarPropertiesReply{}

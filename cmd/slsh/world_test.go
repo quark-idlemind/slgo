@@ -126,7 +126,7 @@ func TestLookIsWhatTheSimulatorSaidAboutItself(t *testing.T) {
 
 	got := x.do(t, "look")
 	for _, want := range []string{
-		"Test Region", "  access   13", "  water    20.0m",
+		"Test Region", "  access   general", "  water    20.0m",
 		"Estate / Full Region", "1 described so far",
 	} {
 		if !strings.Contains(got, want) {
@@ -137,6 +137,86 @@ func TestLookIsWhatTheSimulatorSaidAboutItself(t *testing.T) {
 	x.grid.regionErr = errors.New("the handshake never arrived")
 	if got := x.do(t, "look"); !strings.Contains(got, "the handshake never arrived") {
 		t.Errorf("look should report the failure, got %q", got)
+	}
+}
+
+// TestRegionsSaysWhereANameIsAndWhatToAddressATeleportTo.
+//
+// The handle is the point of the line as much as the position is: it is
+// the number a teleport takes, it cannot be worked out by eye from the
+// coordinates, and nothing else in this shell prints one.
+func TestRegionsSaysWhereANameIsAndWhatToAddressATeleportTo(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t, mapBlock("Pelmar Reach", 43648, 43648, 21))
+
+	got := x.do(t, "regions Pelmar Reach")
+	for _, want := range []string{"Pelmar Reach", "43648, 43648", "moderate", "47991483540340736"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("regions should print %q:\n%s", want, got)
+		}
+	}
+	// The name asked about travels as it was typed, spaces and all,
+	// rather than as the first word of it.
+	var asked string
+	for _, m := range x.grid.Sent() {
+		if q, ok := m.(*msg.MapNameRequest); ok {
+			asked = strings.TrimRight(string(q.NameData.Name), "\x00")
+		}
+	}
+	if asked != "Pelmar Reach" {
+		t.Errorf("the map was asked about %q", asked)
+	}
+}
+
+// TestRegionsListsEveryRegionThePrefixMatched, because the search is by
+// prefix and the shell has no way to ask for an exact name: picking the
+// closest line would be choosing between somebody's several
+// possibilities without showing them.
+func TestRegionsListsEveryRegionThePrefixMatched(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t,
+		mapBlock("Sandbox Two", 43552, 43552, 13),
+		mapBlock("Sandbox One", 995, 997, 13),
+		mapBlock("Sandbox Adult", 43553, 43552, 42))
+
+	got := x.do(t, "regions Sandbox")
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("regions printed %d lines, want the three that matched:\n%s", len(lines), got)
+	}
+	// In name order, so that asking twice gives the same listing.
+	if !strings.HasPrefix(lines[0], "Sandbox Adult") || !strings.HasPrefix(lines[2], "Sandbox Two") {
+		t.Errorf("the listing is not in name order:\n%s", got)
+	}
+	if !strings.Contains(lines[0], "adult") {
+		t.Errorf("the maturity rating should be in words: %q", lines[0])
+	}
+}
+
+// TestRegionsSaysWhichNameTheMapKnewNothingAbout.
+//
+// The end of the list arrives with nothing before it, which is the only
+// way the grid says there is no such region -- so a command that printed
+// nothing would look exactly like one that lost the reply.
+func TestRegionsSaysWhichNameTheMapKnewNothingAbout(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t)
+
+	got := x.do(t, "regions Nowhere At All")
+	if !strings.Contains(got, "Nowhere At All") {
+		t.Errorf("regions should say which name found nothing:\n%s", got)
+	}
+}
+
+// TestRegionsWithNoNameSaysHowItIsTyped rather than asking the map about
+// the empty string.
+func TestRegionsWithNoNameSaysHowItIsTyped(t *testing.T) {
+	x := newTestShell(t)
+	if got := x.do(t, "regions"); !strings.Contains(got, "usage: regions") {
+		t.Errorf("regions with nothing to look up printed %q", got)
+	}
+	if got := x.grid.Sent(); len(got) != 0 {
+		t.Errorf("a request for no name went out anyway: %v", got)
 	}
 }
 

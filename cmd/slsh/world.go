@@ -37,6 +37,13 @@ var worldCommands = map[string]*command{
 		man:   "look",
 		run:   cmdLook,
 	},
+	"regions": {
+		params: "NAME",
+		flags:  func() any { return new(regionsOptions) },
+		brief:  "find regions on the grid's map by the start of a name",
+		man:    "regions",
+		run:    cmdRegions,
+	},
 	"caps": {
 		params: "[TEXT]",
 		flags:  func() any { return new(helpOnly) },
@@ -132,11 +139,60 @@ func cmdLook(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	fmt.Fprintf(out, "%s\n", r.Name)
 	fmt.Fprintf(out, "  id       %s\n", r.ID)
 	fmt.Fprintf(out, "  owner    %s\n", r.Owner)
-	fmt.Fprintf(out, "  access   %d\n", r.Access)
+	// In the same words "regions" uses.  It is one datum, and the two
+	// commands are run one after the other: a "21" here beside a
+	// "moderate" there reads as two different facts.
+	fmt.Fprintf(out, "  access   %s\n", sl.AccessName(r.Access))
 	fmt.Fprintf(out, "  water    %.1fm\n", r.WaterHeight)
 	fmt.Fprintf(out, "  product  %s\n", r.ProductName)
 	if n, err := sh.s.Known(ctx); err == nil {
 		fmt.Fprintf(out, "  objects  %d described so far\n", n)
+	}
+	return nil
+}
+
+// regionsOptions is what regions was asked for.
+type regionsOptions struct {
+	Wait int  `getopt:"--wait -w=SECONDS  how long to give the map to answer [15]"`
+	Help bool `getopt:"--help -h          show what this command takes"`
+}
+
+// cmdRegions says where a region is, for a region the avatar is not in.
+//
+// It is "look" asked about somewhere else, and it can say much less:
+// what the map answers with is a position, a maturity rating and a
+// handle, because the rest of the block -- how many people are there,
+// what the region allows, where the water is -- came back zero for every
+// region on every run (see sl.FindRegions).
+//
+// Plural, because the search is by prefix and a listing is what comes
+// back: "Sandbox" finds thirty-three regions and none of them is called
+// Sandbox, and an exact name is one row among however many begin with
+// it.  Picking the closest match would be this command deciding which of
+// thirty-three places somebody meant, and doing it silently.
+//
+// The handle is in the line because it is the number a teleport is
+// addressed to, and nothing else in the shell will tell anybody what it
+// is.
+func cmdRegions(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o regionsOptions
+	args, done, err := subOptions("regions", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) == 0 {
+		return usageError("regions")
+	}
+	// Joined with spaces: a region name has them in it, and quoting one
+	// at a prompt is a thing to have to remember.
+	found, err := sh.s.FindRegions(ctx, strings.Join(args, " "),
+		time.Duration(o.Wait)*time.Second)
+	if err != nil {
+		return err
+	}
+	for _, r := range found {
+		fmt.Fprintf(out, "%-32s %5d, %-5d %-9s %d\n",
+			r.Name, r.X, r.Y, sl.AccessName(r.Access), r.Handle)
 	}
 	return nil
 }
