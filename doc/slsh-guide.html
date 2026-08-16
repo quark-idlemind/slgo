@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>slsh — a user's guide</title>
+</head>
+<body>
+<style>
+  :root {
+    --ground: #f1f2f5;
+    --surface: #ffffff;
+    --surface-2: #e7eaf0;
+    --ink: #131a26;
+    --ink-soft: #3f4a5d;
+    --muted: #6b7688;
+    --rule: #d6dbe3;
+    --rule-soft: #e4e8ee;
+    --accent: #a85f09;
+    --accent-ink: #7d4606;
+    --accent-soft: #f5e7d2;
+
+    /* The terminal is a terminal in either theme. */
+    --term-bg: #161d29;
+    --term-ink: #dfe4ec;
+    --term-muted: #8d99ad;
+    --term-accent: #e9a64a;
+    --term-rule: #2a3446;
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+
+    --measure: 66ch;
+    --gap: clamp(1.1rem, 2.4vw, 1.6rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e131c;
+      --surface: #141b26;
+      --surface-2: #1a2230;
+      --ink: #e4e8ef;
+      --ink-soft: #c2cad7;
+      --muted: #8b95a7;
+      --rule: #26303f;
+      --rule-soft: #1e2734;
+      --accent: #e9a64a;
+      --accent-ink: #f2bc6b;
+      --accent-soft: #33270f;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0e131c;
+    --surface: #141b26;
+    --surface-2: #1a2230;
+    --ink: #e4e8ef;
+    --ink-soft: #c2cad7;
+    --muted: #8b95a7;
+    --rule: #26303f;
+    --rule-soft: #1e2734;
+    --accent: #e9a64a;
+    --accent-ink: #f2bc6b;
+    --accent-soft: #33270f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 78rem;
+    margin: 0 auto;
+    padding: 0 clamp(1rem, 4vw, 3rem) 6rem;
+  }
+
+  /* ---------------------------------------------------------- masthead */
+
+  .masthead {
+    padding: clamp(3rem, 8vw, 5.5rem) 0 clamp(2rem, 5vw, 3rem);
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    grid-template-columns: minmax(0, 1fr);
+    align-items: end;
+  }
+
+  @media (min-width: 60rem) {
+    .masthead { grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem); }
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1.1rem;
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(2.6rem, 8vw, 4.2rem);
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  h1 .caret {
+    color: var(--accent);
+    font-weight: 400;
+  }
+
+  .said {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin: 0.9rem 0 0;
+  }
+
+  .standfirst {
+    max-width: 46ch;
+    margin: 1.4rem 0 0;
+    font-size: 1.17rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    text-wrap: pretty;
+  }
+
+  /* ---------------------------------------------------------- terminal */
+
+  .term {
+    background: var(--term-bg);
+    color: var(--term-ink);
+    border-radius: 4px;
+    border: 1px solid var(--term-rule);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .term pre {
+    margin: 0;
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 0.815rem;
+    line-height: 1.72;
+    tab-size: 4;
+  }
+
+  .term .p { color: var(--term-accent); }          /* the prompt */
+  .term .c { color: var(--term-ink); font-weight: 600; }  /* what you type */
+  .term .o { color: var(--term-muted); }           /* what comes back */
+  .term .n { color: var(--term-muted); font-style: italic; }
+
+  .copy {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.45rem;
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--term-muted);
+    background: transparent;
+    border: 1px solid var(--term-rule);
+    border-radius: 3px;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+
+  .term:hover .copy, .copy:focus-visible { opacity: 1; }
+  .copy:hover { color: var(--term-accent); border-color: var(--term-accent); }
+
+  /* ---------------------------------------------------------- layout */
+
+  .body-grid {
+    display: grid;
+    gap: clamp(2rem, 5vw, 4rem);
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: clamp(2rem, 5vw, 3.5rem);
+  }
+
+  @media (min-width: 60rem) {
+    .body-grid { grid-template-columns: 13.5rem minmax(0, 1fr); align-items: start; }
+  }
+
+  nav.rail {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
+  @media (min-width: 60rem) {
+    nav.rail { position: sticky; top: 1.5rem; max-height: calc(100vh - 3rem); overflow-y: auto; }
+  }
+
+  nav.rail ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  nav.rail a {
+    color: var(--muted);
+    text-decoration: none;
+    display: block;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--rule);
+  }
+
+  nav.rail a:hover { color: var(--ink); }
+  nav.rail a.here { color: var(--accent-ink); border-left-color: var(--accent); }
+
+  main { min-width: 0; display: flex; flex-direction: column; gap: clamp(2.6rem, 6vw, 4rem); }
+
+  section { display: flex; flex-direction: column; gap: var(--gap); scroll-margin-top: 1.5rem; }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: clamp(1.25rem, 2.6vw, 1.6rem);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    text-wrap: balance;
+  }
+
+  h2 .num {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 0.72em;
+    margin-right: 0.7em;
+  }
+
+  h3 {
+    font-family: var(--mono);
+    font-size: 0.96rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    margin: 0.6rem 0 0;
+    color: var(--ink);
+  }
+
+  p, ul, ol.prose { margin: 0; max-width: var(--measure); }
+  p { text-wrap: pretty; }
+
+  ul { padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.45rem; }
+  li::marker { color: var(--muted); }
+
+  a { color: var(--accent-ink); text-underline-offset: 0.18em; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 0.1em 0.34em;
+  }
+
+  strong { font-weight: 600; }
+
+  .note {
+    max-width: var(--measure);
+    border-left: 2px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 0.85rem 1.1rem;
+    border-radius: 0 3px 3px 0;
+    font-size: 0.97rem;
+  }
+
+  .note p { margin: 0; }
+  .note p + p { margin-top: 0.6rem; }
+
+  /* ---------------------------------------------------------- tables */
+
+  .tablewrap { overflow-x: auto; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+
+  th, td {
+    text-align: left;
+    vertical-align: baseline;
+    padding: 0.5rem 1.1rem 0.5rem 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+
+  th {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    border-bottom-color: var(--rule);
+  }
+
+  td.cmd {
+    font-family: var(--mono);
+    font-size: 0.83rem;
+    white-space: nowrap;
+    color: var(--ink);
+    padding-right: 1.6rem;
+  }
+
+  td.keys {
+    font-family: var(--mono);
+    font-size: 0.83rem;
+    white-space: nowrap;
+    color: var(--accent-ink);
+    padding-right: 1.6rem;
+  }
+
+  td.what { color: var(--ink-soft); }
+
+  /* ------------------------------------------------------ reference */
+
+  .group-title {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    padding-top: 1.4rem;
+  }
+
+  footer {
+    margin-top: clamp(3rem, 7vw, 5rem);
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.6rem;
+  }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; scroll-behavior: auto !important; }
+  }
+
+  html { scroll-behavior: smooth; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">A user's guide</p>
+      <h1><span class="caret">/$ </span>slsh</h1>
+      <p class="said">said "slush"</p>
+      <p class="standfirst">
+        A shell for Second Life. Your inventory is a filesystem, the region
+        around you is a set of commands, and the things that want an answer
+        queue up at the prompt. It has no view — which is exactly why it can
+        be scripted, piped and left running.
+      </p>
+    </div>
+    <div class="term">
+      <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">cd Objects</span>
+<span class="p">/Objects$</span> <span class="c">ls -l lantern</span>
+<span class="o">object     2026-08-02  3ae17e57-…  /Objects/brass lantern</span>
+<span class="p">/Objects$</span> <span class="c">bring "brass lantern"</span>
+<span class="o">"brass lantern" 785f7e57-… is at 35, 73, 2001</span>
+<span class="p">/Objects$</span> <span class="c">start "brass lantern"</span>
+<span class="o">started    flicker</span></pre>
+    </div>
+  </header>
+
+  <div class="body-grid">
+
+    <nav class="rail" aria-label="Sections">
+      <ol>
+        <li><a href="#connect">Getting connected</a></li>
+        <li><a href="#prompt">The prompt</a></li>
+        <li><a href="#inventory">Inventory</a></li>
+        <li><a href="#world">The world around you</a></li>
+        <li><a href="#objects">Objects and scripts</a></li>
+        <li><a href="#people">People</a></li>
+        <li><a href="#waiting">Things waiting</a></li>
+        <li><a href="#daemon">The daemon</a></li>
+        <li><a href="#viewer">A viewer, for eyes</a></li>
+        <li><a href="#files">Files and redirection</a></li>
+        <li><a href="#keys">Keys</a></li>
+        <li><a href="#reference">Every command</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- ------------------------------------------------ connecting -->
+      <section id="connect">
+        <h2><span class="num">1</span>Getting connected</h2>
+
+        <p>
+          There are two ways to be connected and <code>slsh</code> does both.
+          Normally it attaches to <strong>slgod</strong>, a daemon that holds the
+          session to the grid: the shell starts instantly, several programs can
+          share one avatar, and quitting leaves that avatar logged in. With
+          <code>--direct</code> the shell logs in itself and holds the session
+          for as long as it runs, which needs no daemon but pays for a fresh
+          login every time and logs the avatar out when you leave.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">$</span> <span class="c">slsh</span>                          <span class="n">attach, and start at a prompt</span>
+<span class="p">$</span> <span class="c">slsh --direct</span>                 <span class="n">log in first</span>
+<span class="p">$</span> <span class="c">slsh -c "ls -l Objects"</span>       <span class="n">run one command and exit</span>
+<span class="p">$</span> <span class="c">slsh -f commands.slsh</span>         <span class="n">run a file of commands and exit</span></pre>
+        </div>
+
+        <h3>Which daemon</h3>
+        <p>
+          <code>--addr HOST:PORT</code> says where slgod is. Without it the
+          address comes from <code>addr =</code> in the configuration file, then
+          from whatever an <code>sl-host</code> command prints if you have one,
+          then from this machine — which is the ordinary case when you run your
+          own slgod, so usually you pass nothing at all.
+        </p>
+
+        <h3>Which avatar</h3>
+        <p>
+          A daemon can hold several. In descending order of strength:
+          <code>--agent NAME</code> (<code>-a</code>) for one command,
+          <code>SLGO_AGENT</code> for one shell, <code>agent =</code> in the
+          configuration file for this machine, and otherwise the daemon's own
+          default — the session it has held longest. Whenever a command does not
+          name one it tells you which it used, which is worth reading, since
+          that default depends on the daemon's history and nothing on disk
+          records it.
+        </p>
+
+        <div class="note">
+          <p>
+            For <code>--direct</code>, accounts live one file per account in
+            <code>~/.config/slgo</code>. The directory must be mode 700 and each
+            file 600 — these programs refuse to read credentials anyone else
+            can. Storing a password as its <code>$1$…</code> digest works and is
+            preferred: that is the only form that ever leaves your machine.
+          </p>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------- prompt -->
+      <section id="prompt">
+        <h2><span class="num">2</span>The prompt, and the modes behind it</h2>
+
+        <p>
+          The prompt is where you are in inventory. Command mode is the outer
+          one, because that is what a keyboard is mostly for; <code>chat</code>
+          goes inward and Escape comes back out. Each mode remembers the line
+          you had half-typed in it, so switching never loses what you were
+          saying.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/Objects$</span> <span class="c">chat</span>
+<span class="p">Local&gt;</span> <span class="c">hello everyone</span>
+<span class="n">(Escape)</span>
+<span class="p">/Objects$</span></pre>
+        </div>
+
+        <p>
+          Anything said to you is printed as it arrives, above whatever you are
+          typing, in <em>either</em> mode. You never have to leave what you are
+          doing to see chat, and chat never eats your half-typed command. Start
+          in chat mode with <code>--chat</code>; change the key that leaves it
+          with <code>--escape KEY</code>.
+        </p>
+
+        <p>
+          A number in front of the prompt is the count of things waiting for an
+          answer — <code>(2) /Objects$</code>. There is a third mode too, for
+          typing an answer several lines long; see
+          <a href="#waiting">Things waiting</a>.
+        </p>
+
+        <p>
+          While a command runs there is no prompt. A prompt means the shell is
+          ready for the next line; what you type during a long command waits its
+          turn and arrives when the command is done.
+        </p>
+      </section>
+
+      <!-- ------------------------------------------------- inventory -->
+      <section id="inventory">
+        <h2><span class="num">3</span>Inventory is a filesystem</h2>
+
+        <p>
+          <code>cd</code>, <code>ls</code>, <code>pwd</code>, <code>cat</code>,
+          <code>mkdir</code>, <code>mv</code>, <code>cp</code>, <code>rm</code>
+          and <code>find</code> all work the way you expect them to.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">cd Objects</span>
+<span class="p">/Objects$</span> <span class="c">ls -l</span>                    <span class="n">kind, date and id as well</span>
+<span class="p">/Objects$</span> <span class="c">ls -lt</span>                   <span class="n">newest first</span>
+<span class="p">/Objects$</span> <span class="c">ls -r Textures</span>           <span class="n">descend into subfolders</span>
+<span class="p">/Objects$</span> <span class="c">find lantern</span>             <span class="n">names containing it, from here down</span>
+<span class="p">/Objects$</span> <span class="c">cat "my notecard"</span>
+<span class="p">/Objects$</span> <span class="c">mv "old lamp" sorted</span>     <span class="n">into a folder</span>
+<span class="p">/Objects$</span> <span class="c">mv "old lamp" lamp</span>       <span class="n">a plain name renames instead</span>
+<span class="p">/Objects$</span> <span class="c">rm "old lamp"</span>            <span class="n">permanent; there is no undo</span></pre>
+        </div>
+
+        <p>
+          <code>cd</code> with no path goes to the root and <code>..</code> goes
+          up. Names may contain almost any printable character, so paths escape:
+          <code>/</code> separates, <code>\/</code> is a slash inside a name, and
+          quotes work too.
+        </p>
+
+        <p>
+          Names are <strong>not</strong> unique — one folder can hold a dozen
+          things with the same name — so <code>mv</code>, <code>rm</code> and
+          <code>cat</code> take an item's id anywhere they take a path. That is
+          what makes a listing of duplicates usable, and what <code>ls -l</code>
+          prints ids for. <code>rm</code> takes the first thing of the name it is
+          given; <code>--remove-all-copies</code> takes all of them and says how
+          many. Two listings of a folder that has not changed are identical,
+          which is what makes them worth diffing and worth editing into
+          commands.
+        </p>
+
+        <h3>Getting text and pictures in and out</h3>
+        <p>
+          <code>cat</code> prints a notecard or a script;
+          <code>get -o FILE</code> saves a texture as a PNG;
+          <code>put FILE</code> uploads an image as a texture, which costs L$, so
+          <code>-N</code> says what it would do without doing it.
+          <code>new</code> makes an empty notecard or a script, or one from a
+          file, and <code>save FILE PATH</code> writes a local file into a
+          notecard or script that already exists.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">new --kind script --from hello.lsl greeter</span>
+<span class="o">greeter 7a887e57-7e57-c0de-afe2-f49e9af56164</span>
+<span class="p">/$</span> <span class="c">save hello.lsl greeter</span>
+<span class="o">greeter: 81 bytes written, and it compiled</span></pre>
+        </div>
+
+        <p>
+          A script that does not compile is still saved — the save succeeded and
+          the compile failed, in that order — and the compiler's complaint is
+          printed underneath.
+        </p>
+      </section>
+
+      <!-- ----------------------------------------------------- world -->
+      <section id="world">
+        <h2><span class="num">4</span>The world around you</h2>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="cmd">where</td><td class="what">the region and position you are at, and the group you are acting as</td></tr>
+              <tr><td class="cmd">who</td><td class="what">who else is in the region, nearest first</td></tr>
+              <tr><td class="cmd">look</td><td class="what">what the simulator said about the region</td></tr>
+              <tr><td class="cmd">objects</td><td class="what">the objects the region has described; <code>-c</code> for the prims inside each</td></tr>
+              <tr><td class="cmd">tp X Y Z</td><td class="what">move to a position in this region</td></tr>
+              <tr><td class="cmd">caps · features · lsl</td><td class="what">what this simulator grants, supports and implements</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          <code>objects</code>, <code>caps</code>, <code>features</code> and
+          <code>lsl</code> all take text to filter by, so <code>lsl llSensor</code>
+          answers what this grid's LSL actually has rather than what the wiki
+          remembers.
+        </p>
+
+        <div class="note">
+          <p>
+            <code>tp</code> moves <strong>within</strong> the region only.
+            Another region is a different simulator needing a new circuit and a
+            new set of capabilities, which slgod does not do yet — so arriving
+            somewhere else is still a matter of logging in there.
+          </p>
+        </div>
+
+        <h3>What you are wearing</h3>
+        <p>
+          <code>worn</code> lists the attachments, <code>wear</code> puts one on
+          and <code>detach</code> takes it off. A point holds one attachment, so
+          wearing something on an occupied point knocks off what was there —
+          the viewer's Wear, not its Add. With no <code>--at</code> the object
+          goes wherever it says it belongs.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">wear Objects/tape measure</span>
+<span class="o">tape measure is worn on left hand</span>
+<span class="p">/$</span> <span class="c">wear --at "HUD top right" Objects/panel</span>
+<span class="p">/$</span> <span class="c">detach "tape measure"</span>
+<span class="o">tape measure is no longer worn on left hand</span></pre>
+        </div>
+
+        <h3>The group you act as</h3>
+        <p>
+          Land usually grants building to a <em>group</em> rather than to people,
+          and a headless login starts with none — so an avatar that cannot rez
+          on land it is entitled to is usually an avatar acting as nobody.
+          <code>group</code> lists what it could act as and marks what it does;
+          <code>group NAME</code> changes it, and <code>group none</code> clears
+          it.
+        </p>
+      </section>
+
+      <!-- --------------------------------------------------- objects -->
+      <section id="objects">
+        <h2><span class="num">5</span>Objects, and the scripts inside them</h2>
+
+        <p>
+          <code>take</code> brings a rezzed object into inventory and
+          <code>bring</code> puts one back into the world — the pair is named
+          that way round because <code>rez</code> already means "build what this
+          JSON file describes", which is a different act from "put back what I
+          took".
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="cmd">take · bring</td><td class="what">between the world and inventory; <code>take --copy</code> tries to leave the original standing</td></tr>
+              <tr><td class="cmd">place · touch</td><td class="what">move a rezzed object; click one, on a named face at a named point</td></tr>
+              <tr><td class="cmd">link · unlink</td><td class="what">join objects into one; take one apart, or free a single prim from it</td></tr>
+              <tr><td class="cmd">perms</td><td class="what">what the next owner, the group or everyone may do: <code>c</code>opy, <code>m</code>odify, <code>t</code>ransfer, mo<code>v</code>e</td></tr>
+              <tr><td class="cmd">texture</td><td class="what">what a face looks like, or with no flags, what it looks like now</td></tr>
+              <tr><td class="cmd">dump · reform · rez</td><td class="what">describe an object as JSON, change it to match a file, or build one from it</td></tr>
+              <tr><td class="cmd">drop</td><td class="what">put an inventory item inside a rezzed object</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          <code>link</code> names the root first and everything that goes under
+          it. <code>unlink</code> given a root takes the whole thing apart and
+          given one prim frees just that prim — and it lists what it freed with
+          their keys, because a linkset answers to its root's name while the
+          pieces keep their own, which for anything built by hand is often
+          "Object" for all of them.
+        </p>
+
+        <h3>Inside an object</h3>
+        <p>
+          An object holds inventory of its own, with its own ids. The same three
+          verbs reach it with <code>--in</code>, and scripts have two more.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">ls --in "brass lantern"</span>
+<span class="o">lsltext    flicker</span>
+<span class="p">/$</span> <span class="c">new --in "brass lantern" --from flicker.lsl flicker</span>
+<span class="o">flicker is in brass lantern and running</span>
+<span class="p">/$</span> <span class="c">stop "brass lantern"</span>
+<span class="o">stopped    flicker</span>
+<span class="p">/$</span> <span class="c">start "brass lantern" flicker</span>
+<span class="o">started    flicker</span></pre>
+        </div>
+
+        <p>
+          <code>start</code> and <code>stop</code> with no script name mean every
+          script in the object, one line each, and they wait for the object to
+          agree rather than reporting what they merely asked for. A script
+          already in the state you asked for says <code>already</code> and
+          nothing is sent. <code>new --in</code> compiles the script inside the
+          object and starts it, which is what dropping one in does not do.
+        </p>
+      </section>
+
+      <!-- ---------------------------------------------------- people -->
+      <section id="people">
+        <h2><span class="num">6</span>People</h2>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="cmd">say TEXT</td><td class="what">one line to local chat without leaving command mode</td></tr>
+              <tr><td class="cmd">chat [WHO]</td><td class="what">enter chat mode, on local chat or in a conversation</td></tr>
+              <tr><td class="cmd">im WHO TEXT</td><td class="what">send one message without entering chat mode</td></tr>
+              <tr><td class="cmd">talk</td><td class="what">the conversations chat mode cycles between with Tab</td></tr>
+              <tr><td class="cmd">lookup TEXT</td><td class="what">search the grid for people by part of a name</td></tr>
+              <tr><td class="cmd">profile WHO</td><td class="what">born, payment, partner, about text, and the groups they list</td></tr>
+              <tr><td class="cmd">friends [-a]</td><td class="what">friends online, or all of them</td></tr>
+              <tr><td class="cmd">offer · give</td><td class="what">offer friendship; offer an inventory item</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          A name is resolved three ways, in order: what this shell already knows,
+          then the avatars in the region, then — for <code>profile</code> alone —
+          a search of the whole grid. The last step is <code>profile</code>'s only
+          because reading a profile is public and harmless, while <code>im</code>
+          and <code>give</code> reach out to whoever is found, and a wrong guess
+          there sends something to a stranger.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">profile Torley Linden</span>
+<span class="o">Torley Linden
+  key       8c717e57-7e57-c0de-6f29-62af189183f7
+  born      9/15/2004
+  payment   not revealed
+  groups    2 listed, which is not every group they are in
+  2d837e57-… Weather Nut          Windlight Region Testers</span></pre>
+        </div>
+
+        <p>
+          The groups in a profile are the ones somebody chose to publish, so it
+          is what they say about themselves rather than a complete list.
+        </p>
+
+        <div class="note">
+          <p>
+            An offer is not a transfer: nothing moves until it is accepted.
+            <code>accept</code> puts what arrives in the folder you are in, so
+            <code>cd</code> there first if that is where it belongs.
+          </p>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------- waiting -->
+      <section id="waiting">
+        <h2><span class="num">7</span>Things waiting for an answer</h2>
+
+        <p>
+          A script puts up a dialog, somebody offers a teleport, an object asks
+          for permission to animate you. They queue, the prompt counts them, and
+          four commands deal with them: <code>waiting</code> lists,
+          <code>answer</code> says yes, <code>no</code> declines and tells
+          whoever asked, and <code>ignore</code> leaves one waiting but stops
+          counting it.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">(2) /$</span> <span class="c">waiting</span>
+<span class="o">1  dialog      a lamp asks: on or off?
+                answer 1 on, answer 1 off, no, ignore
+2  teleport    Some Resident offers a teleport: "Join me in Pelmar Reach!"
+                answer, no, ignore</span>
+<span class="p">(2) /$</span> <span class="c">answer 1 on</span>
+<span class="o">pressed "on"</span></pre>
+        </div>
+
+        <p>
+          A number keeps meaning the same thing: answering one does not renumber
+          the rest, so the <code>answer 2</code> you had already half typed still
+          means what you meant. Numbers start again at 1 once the list is empty.
+        </p>
+
+        <h3>A text box wants several lines</h3>
+        <p>
+          <code>llTextBox</code> is an editor rather than a field, so
+          <code>answer N</code> with no text starts taking lines. Every line
+          means itself. <strong>Ctrl-D</strong> ends the answer and sends it,
+          taking a half-typed line with it as <code>mail</code> does;
+          <strong>Escape</strong> throws away what you have typed and keeps the
+          question; <strong>Ctrl-C</strong> sends nothing and says which number is
+          still waiting. Ordinary line editing — backspace, Ctrl-U, the arrows —
+          works on the line you are typing.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">(1) /$</span> <span class="c">answer 1</span>
+<span class="o">a sign asks: your name?  — type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
+<span class="p">1 text&gt;</span> <span class="c">Quark Idlemind</span>
+<span class="p">1 text&gt;</span> <span class="c">of no fixed abode</span>
+<span class="n">(Ctrl-D)</span>
+<span class="o">told a sign 2 lines</span></pre>
+        </div>
+
+        <p>
+          For a scripted answer, <code>answer --file PATH N</code> sends a file's
+          contents instead. A text box carries 254 bytes; more than that is
+          refused before it is sent rather than truncated on the way.
+        </p>
+
+        <h3>When money is involved</h3>
+        <p>
+          A group invitation carrying a signup fee is never accepted by a bare
+          <code>answer N</code>. The fee has to be typed back — <code>answer 3
+          L$50</code> — and a wrong figure is refused by naming the right one. An
+          invitation whose fee the message did not state is treated as costing
+          something unknown rather than as free.
+        </p>
+
+        <div class="note">
+          <p>
+            What is waiting belongs to the shell that saw it arrive. slgod relays
+            these and does not keep them, so a shell started afterwards sees
+            nothing, and <code>slsh -c "waiting"</code> — a shell that attaches,
+            runs and exits — will always say there is nothing.
+          </p>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------- daemon -->
+      <section id="daemon">
+        <h2><span class="num">8</span>The daemon and its avatars</h2>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="cmd">agents</td><td class="what">the sessions slgod holds, then the profiles it could hold</td></tr>
+              <tr><td class="cmd">host NAME</td><td class="what">bring an avatar up</td></tr>
+              <tr><td class="cmd">logout NAME</td><td class="what">put one down, and keep it down until asked for by name</td></tr>
+              <tr><td class="cmd">status</td><td class="what">how this session and its circuit are doing</td></tr>
+              <tr><td class="cmd">watch</td><td class="what">print grid messages as they arrive, by name or all of them</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          <code>status</code> is the one to reach for when a session looks idle
+          and you want to know whether it is idle or broken: packet counters,
+          retransmissions, and the messages arriving that this build has no
+          handler for — which is how a protocol change announces itself.
+          <code>watch</code> opens a connection of its own, so watching
+          everything for an hour does not disturb the shell you are typing in.
+        </p>
+
+        <p>
+          Both <code>host</code> and <code>logout</code> refuse to be casual.
+          <code>logout</code> will not take a session that clients are attached
+          to and names them instead; <code>host</code> will not restart something
+          that was stopped deliberately. <code>-f</code> overrules either, once
+          you know what you are overruling.
+        </p>
+      </section>
+
+      <!-- ---------------------------------------------------- viewer -->
+      <section id="viewer">
+        <h2><span class="num">9</span>A viewer, when you want eyes</h2>
+
+        <p>
+          slgod can hand its live session to a real viewer: the avatar never logs
+          in twice, so the session a script is driving and the session you are
+          looking at are the same one. <code>viewer</code> says where that is
+          offered and whether anybody has taken it;
+          <code>viewer --launch</code> starts one and logs it in.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">viewer</span>
+<span class="o">viewer logins at http://127.0.0.1:9000/
+  add a grid with that login URI and log in as Quark Idlemind
+  no viewer has taken this session</span>
+<span class="p">/$</span> <span class="c">viewer --launch</span>
+<span class="o">starting a viewer at http://127.0.0.1:9000/, logged in as Quark Idlemind
+  the password it was given works once and expires in 5 minutes</span></pre>
+        </div>
+
+        <p>
+          The password is minted by the daemon for that one login and expires.
+          Nothing is stored: the profiles keep only a digest, which is why the
+          launcher cannot simply read one.
+        </p>
+
+        <div class="note">
+          <p>
+            Two things have to be true for the launch to land. The daemon must
+            have been started with <code>-viewer ADDR</code> — otherwise
+            <code>viewer</code> says so and names the flag. And the viewer must
+            be one that can be pointed at a private grid: a Second Life–only
+            Firestorm silently ignores the login URI and comes up on the main
+            grid, so the OpenSim build is the one to install, with the login URI
+            added once as a grid in its preferences.
+          </p>
+        </div>
+      </section>
+
+      <!-- ----------------------------------------------------- files -->
+      <section id="files">
+        <h2><span class="num">10</span>Files, redirection and settings</h2>
+
+        <p>
+          Any command's output can be redirected, and a file of commands can be
+          run with <code>.</code> — which together are the point of having a
+          shell at all.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">ls -l /Objects &gt; listing</span>
+<span class="p">/$</span> <span class="c">echo done &gt;&gt; listing</span>
+
+<span class="p">$</span> <span class="c">awk '{print "mv " $3 " /Objects/sorted"}' listing &gt; moves</span>
+<span class="p">$</span> <span class="c">slsh -f moves</span>
+<span class="o">slsh: cd: no folder "sorted"
+slsh: moves:1: cd sorted
+slsh: stopped; 43 lines were not run</span></pre>
+        </div>
+
+        <p>
+          A file stops at the first command that fails, naming the line it gave
+          up on and how much it did not run — which matters because such a file
+          usually begins by changing folder, and carrying on after that failed
+          would run every line that follows somewhere else. A one-shot run exits
+          non-zero when anything failed, so a script wrapping slsh can tell
+          without reading the output.
+        </p>
+
+        <h3>The configuration file</h3>
+        <p>
+          <code>~/.config/slsh/config</code>, as <code>key = value</code> lines
+          with <code>#</code> for comments. A flag always beats the file, and a
+          misspelled key is an error rather than a setting that silently does
+          nothing.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="o">addr    = HOST:PORT
+agent   = NAME
+escape  = ESC
+
+viewer_app    = Firestorm-OpenSim
+viewer_grid   = slgod
+viewer_launch = open -a {app} --args --grid {grid} --login {first} {last} {password}</span></pre>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------ keys -->
+      <section id="keys">
+        <h2><span class="num">11</span>Keys</h2>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Key</th><th>Command mode</th><th>Chat mode</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="keys">Tab</td><td class="what">complete a command or a path</td><td class="what">next conversation</td></tr>
+              <tr><td class="keys">↑ ↓</td><td class="what">walk through what you have typed</td><td class="what">the same</td></tr>
+              <tr><td class="keys">Escape</td><td class="what">—</td><td class="what">back to command mode</td></tr>
+              <tr><td class="keys">Ctrl-C</td><td class="what">clear the line</td><td class="what">clear the line</td></tr>
+              <tr><td class="keys">Ctrl-D</td><td class="what">leave slsh, on an empty line</td><td class="what">—</td></tr>
+              <tr><td class="keys">Ctrl-U · Ctrl-W · Ctrl-K</td><td class="what">kill the line, the word, to the end</td><td class="what">the same</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          While an answer is being typed the same editing keys apply to the line
+          in hand, and the three that end it are described under
+          <a href="#waiting">Things waiting</a>. Through slgod, leaving the shell
+          leaves the avatar logged in; with <code>--direct</code> it does not.
+        </p>
+      </section>
+
+      <!-- ------------------------------------------------- reference -->
+      <section id="reference">
+        <h2><span class="num">12</span>Every command</h2>
+
+        <p>
+          As <code>help</code> groups them. A command answers
+          <code>--help</code> for what it takes; <code>help GROUP</code> lists one
+          group and <code>help all</code> lists the lot.
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="group-title" colspan="2">Inventory</td></tr>
+              <tr><td class="cmd">pwd · cd · ls · find</td><td class="what">where you are, moving about, and looking</td></tr>
+              <tr><td class="cmd">cat · get · put</td><td class="what">read a notecard or script; save a texture; upload one</td></tr>
+              <tr><td class="cmd">mkdir · mv · cp · rm</td><td class="what">make, move, copy, delete</td></tr>
+              <tr><td class="cmd">new · save</td><td class="what">make a notecard or script; write a file into one</td></tr>
+              <tr><td class="cmd">emptytrash</td><td class="what">throw away everything in the trash</td></tr>
+
+              <tr><td class="group-title" colspan="2">Waiting</td></tr>
+              <tr><td class="cmd">waiting · answer · no · ignore</td><td class="what">what wants an answer, and how to give one</td></tr>
+              <tr><td class="cmd">offers · accept · decline</td><td class="what">the older way to the same two kinds</td></tr>
+
+              <tr><td class="group-title" colspan="2">People</td></tr>
+              <tr><td class="cmd">who · lookup · profile · friends</td><td class="what">who is about, who they are</td></tr>
+              <tr><td class="cmd">say · chat · im · talk</td><td class="what">talking, and the conversations you have open</td></tr>
+              <tr><td class="cmd">offer · give</td><td class="what">friendship; an inventory item</td></tr>
+
+              <tr><td class="group-title" colspan="2">Region</td></tr>
+              <tr><td class="cmd">where · look · tp · group</td><td class="what">where you are, what it is, moving, and who you act as</td></tr>
+              <tr><td class="cmd">objects · dump · rez · reform</td><td class="what">what is here, described, built and changed</td></tr>
+              <tr><td class="cmd">worn · wear · detach</td><td class="what">attachments</td></tr>
+              <tr><td class="cmd">take · bring · place · drop</td><td class="what">between the world and inventory, and about the region</td></tr>
+              <tr><td class="cmd">link · unlink · perms · texture · touch</td><td class="what">building, permissions, faces, clicking</td></tr>
+              <tr><td class="cmd">start · stop</td><td class="what">scripts inside an object</td></tr>
+
+              <tr><td class="group-title" colspan="2">Avatars and the daemon</td></tr>
+              <tr><td class="cmd">agents · host · logout · status · watch</td><td class="what">the sessions slgod holds</td></tr>
+              <tr><td class="cmd">viewer</td><td class="what">where a real viewer can take over, and starting one</td></tr>
+              <tr><td class="cmd">auto</td><td class="what">the objects benchmarks run in</td></tr>
+
+              <tr><td class="group-title" colspan="2">Simulator</td></tr>
+              <tr><td class="cmd">caps · features · lsl</td><td class="what">what this grid grants, supports and implements</td></tr>
+
+              <tr><td class="group-title" colspan="2">The shell itself</td></tr>
+              <tr><td class="cmd">help · echo · . FILE · quit</td><td class="what">help, a note into a file, a file of commands, and leaving</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    <span>slsh — part of slgo</span>
+    <span>Second Life is a trademark of Linden Research, Inc.</span>
+  </footer>
+</div>
+
+<script>
+  // Copy a transcript. The prompt and the commentary go with it: what is
+  // wanted is usually the command, and a person pasting into a shell can
+  // see at a glance what they took.
+  document.querySelectorAll(".copy").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var pre = button.parentElement.querySelector("pre");
+      navigator.clipboard.writeText(pre.innerText).then(function () {
+        var was = button.textContent;
+        button.textContent = "copied";
+        setTimeout(function () { button.textContent = was; }, 1200);
+      });
+    });
+  });
+
+  // Mark the section being read in the rail.
+  var links = {};
+  document.querySelectorAll("nav.rail a").forEach(function (a) {
+    links[a.getAttribute("href").slice(1)] = a;
+  });
+  var watcher = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      Object.keys(links).forEach(function (id) { links[id].classList.remove("here"); });
+      var here = links[entry.target.id];
+      if (here) here.classList.add("here");
+    });
+  }, { rootMargin: "-10% 0px -75% 0px" });
+  document.querySelectorAll("main section").forEach(function (s) { watcher.observe(s); });
+</script>
+</body>
+</html>
