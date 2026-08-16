@@ -36,25 +36,115 @@ package main
 // in the answer already, so neither costs anything -- but the item is
 // what goes on the wire.
 //
-// # Wearing takes off whatever was there
+// # Wearing adds, and --replace is the other one
 //
-// A point holds one attachment, and putting something on an occupied
-// point knocks off what was on it.  Measured on Agni, in Pelmar Reach:
-// holt was wearing "auto 11" on HUD bottom right, and
+// A point can hold more than one attachment, and which of the two
+// happens is the request's to say: the point travels in one byte with
+// 0x80, ATTACHMENT_ADD (indra_constants.h:193), laid over it, and the
+// viewer lays it there exactly that way -- "if (attachment.mAdd)
+// attachment_pt |= ATTACHMENT_ADD" (llattachmentsmgr.cpp:247-249).  So
+// the difference between the viewer's Add and its Wear is one bit, and
+// the choice of which is the default is entirely ours.
+//
+// This command replaced, and now it adds.  What settled it was measured
+// on Agni, in Pelmar Reach: holt was wearing "auto 11" on HUD bottom
+// right, and
 //
 //	wear Objects/auto 3
 //
 // with no --at at all put auto 3 on HUD bottom right and took auto 11
-// off.  Nothing was said about auto 11 by anybody -- it simply stopped
-// being worn.  That is the viewer's Wear and it is the right behaviour,
-// but the person most likely to type this is already wearing something,
-// so the command's brief says it rather than leaving it to be found out.
+// off.  Nothing was said about auto 11 by anybody -- not by the command,
+// which printed its one line about auto 3, and not by the region.  It
+// simply stopped being worn.
 //
-// The protocol can add instead of replacing -- sl.AttachAdd, the 0x80
-// bit laid over the point, which is what the viewer's "Add" menu item
-// sends -- and it is deliberately not offered here.  Adding is the
-// unusual half of the pair, nothing has wanted it yet, and a flag that
-// changes what comes off is worth naming carefully when somebody does.
+// That silence is the argument.  The person most likely to type wear is
+// already dressed; the point an object asks for is one they did not
+// choose and usually do not know until the answer names it; and so the
+// replacing default put the loss of something they were wearing behind a
+// command that reads as purely additive.  A wrong add is visible and
+// costs a detach.  A wrong replace is invisible and costs whatever was
+// there.  Between two defaults, the one to have is the one whose mistake
+// can be seen.
+//
+// --replace is the old behaviour, kept because putting a thing where
+// another thing is really is sometimes what is meant -- and it now names
+// what it displaced instead of leaving that to be found out.
+//
+// The point laid under the bit may be 0, which is a value here rather
+// than a missing one (see attachWhereItSays).  "Add, wherever the object
+// itself says" is therefore the single byte 0x80, and that is what a
+// bare wear sends.
+//
+// # Where the add bit is laid on
+//
+// On the way past, in this command, rather than by anything in sl.
+// sl.Wear takes the AttachmentPt byte and sends it, and that byte is
+// the point with the bit over it: the protocol has one field for both,
+// so a caller able to pass 0x85 can already say everything the message
+// can express.  A second way of saying it in sl -- a flag, an options
+// struct -- would be an argument nobody but this command ever varies,
+// and it would sit two files from the --replace that decides it.
+//
+// The other half of that is what it leaves alone.  sl.Wear's other
+// callers, EnsureAttached and Worn, pass a bare point and are untouched
+// by any of this; they take a HUD off and put it straight back on for
+// autobench, and a default that had quietly started adding would leave
+// a second copy behind on every run.
+//
+// # The same item twice
+//
+// Adding makes it possible to wear one inventory item twice, and wear
+// refuses to.  An attachment is known here by the item it came from --
+// the session keys its map that way (w.attach in sl/attach.go) and the
+// object's own id is freshly minted at every attach and every login --
+// so two attachments from one item are two rows agreeing in every field
+// a person could name one by.  detach would find both, refuse as
+// ambiguous, and advise telling them apart by the item id that "worn -l"
+// prints, which is precisely the thing they share.  That is a state this
+// shell can create and cannot then unpick, so it is not created: the
+// refusal names the point it is already on, and names --replace and
+// detach as the two ways on from there.
+//
+// The viewer declines the same thing more quietly, by dropping the
+// request where a person cannot see it -- "ATT duplicate attachment
+// request, ignoring" (llinventorybridge.cpp:8144-8149).
+//
+// # Naming what came off, and confirming it
+//
+// wear asks what is worn before it sends, which is the same question the
+// refusal above needs answered, so that read is paid for either way.
+// The last line then says what a --replace displaced: "X is worn on
+// chest; Y came off".
+//
+// That clause was first written as a prediction -- whatever was on the
+// point beforehand -- on the reasoning that the region had been asked to
+// replace and had answered by putting the new attachment on that point.
+// It is wrong, and it is wrong in exactly the case this change created,
+// because before today a point never held two.  Measured on Agni, as
+// holt, with auto 11 and auto 3 both on HUD bottom right:
+//
+//	wear --replace --at "HUD bottom right" Objects/auto 4
+//	auto 4 is worn on HUD bottom right; auto 11 and auto 3 came off
+//
+// and afterwards the point held auto 3 and auto 4.  A replace displaces
+// ONE attachment, not the point's worth of them, so the prediction named
+// something that was still on.
+//
+// So it is confirmed instead: what was on that point before, is not worn
+// now, and is not the thing just put on.  That is one more read and not
+// the polling loop detach needs -- detach polls because nothing else
+// will ever tell it, whereas here sl.Wear has already waited for the
+// region to describe the new attachment, so the answer is sitting there
+// for the asking.
+//
+// Both ways of coming up empty say nothing rather than inventing a
+// reassurance.  If the difference is empty -- nothing was displaced, or
+// the region has not caught up with the fact yet -- the line is the bare
+// one; the failure that leaves is a person not being told about
+// something that did come off, which is where they were before this
+// clause existed, rather than being told a thing that is untrue.  And a
+// read that fails prints the line without the clause: the wear worked,
+// and it is the report that could not be finished.
 //
 // # Why detach waits and TakeOff does not
 //
@@ -95,8 +185,8 @@ import (
 
 var wearCommands = map[string]*command{
 	"wear": {
-		usage: "wear [--at POINT] PATH|UUID",
-		brief: "put an inventory object on; whatever is on that point comes off",
+		usage: "wear [--replace] [--at POINT] PATH|UUID",
+		brief: "put an inventory object on, alongside whatever is already on that point",
 		run:   cmdWear,
 	},
 	"detach": {
@@ -126,7 +216,7 @@ var wearCommands = map[string]*command{
 // simulator use the point stored on the object, which is how a thing
 // goes back where its maker put it without anybody having to know where
 // that is.  The one number it must not collide with is 0x80, the ADD bit
-// (indra_constants.h:192), and that is why the points stop at 127.
+// (indra_constants.h:193), and that is why the points stop at 127.
 //
 // One thing the viewer does differently: it has not sent
 // RezSingleAttachmentFromInv for years and packs
@@ -138,8 +228,9 @@ var wearCommands = map[string]*command{
 const attachWhereItSays = 0
 
 type wearFlags struct {
-	At   string `getopt:"--at=POINT   the point to wear it on, by name or number [wherever the object itself says]"`
-	Help bool   `getopt:"--help -h    show what this command takes"`
+	At      string `getopt:"--at=POINT   the point to wear it on, by name or number [wherever the object itself says]"`
+	Replace bool   `getopt:"--replace    take off whatever is on that point, instead of wearing alongside it"`
+	Help    bool   `getopt:"--help -h    show what this command takes"`
 }
 
 // cmdWear puts an inventory object on.
@@ -147,7 +238,8 @@ type wearFlags struct {
 // The point it reports is the one the region gave back rather than the
 // one asked for, and that is the whole reason the report is worth
 // printing: with no --at nobody here knows where the thing went until
-// the simulator says so.
+// the simulator says so.  It is also what makes the displaced
+// attachment nameable, since until then there is no point to look up.
 func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o wearFlags
 	args, done, err := subOptions("wear", "PATH|UUID", &o, out, args)
@@ -155,7 +247,7 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: wear [--at POINT] PATH|UUID")
+		return fmt.Errorf("usage: wear [--replace] [--at POINT] PATH|UUID")
 	}
 	point, err := attachPointArg(o.At)
 	if err != nil {
@@ -178,12 +270,114 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return err
 	}
 
-	a, err := sh.s.Wear(ctx, it, point, 0)
+	// What is on now, asked before anything changes it.  An add has to
+	// know whether this item is already worn, since a second copy of one
+	// item is a thing detach cannot pick apart; a replace needs it as the
+	// first half of a comparison, because what it displaced is what is in
+	// this answer and not in the one taken afterwards.  One question
+	// serves both.
+	//
+	// A failure here is returned rather than stepped over.  It is the
+	// call detach makes and treats as fatal, and going on without the
+	// answer means either wearing blind into the state that gets
+	// refused, or reporting a replace with the same silence about what
+	// came off that the flag exists to end.  The read AFTER the wear is
+	// the one that may fail quietly -- by then the wear has happened.
+	before, err := sh.s.WornObjects(ctx)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "%s is worn on %s\n", it.Name, sl.AttachPointName(a.Point))
+	if !o.Replace {
+		if a, ok := wornFrom(before, it.ID); ok {
+			return fmt.Errorf("%s is already worn on %s; wearing it again would put on a second copy "+
+				"that nothing here could tell from the first, since an attachment is known by the item "+
+				"it came from and both would answer to this one -- \"wear --replace\" puts it on in "+
+				"place of what is there, and \"detach %s\" takes it off",
+				it.Name, sl.AttachPointName(a.Point), it.Name)
+		}
+	}
+
+	// The byte the message carries, which is the point with the add bit
+	// over it -- see the head of this file for why it is composed here
+	// and not inside sl.Wear.
+	send := point
+	if !o.Replace {
+		send |= sl.AttachAdd
+	}
+	a, err := sh.s.Wear(ctx, it, send, 0)
+	if err != nil {
+		return err
+	}
+	// One line, built and then written: the terminal takes a write with
+	// no newline in it as a line of its own (termWriter), so a sentence
+	// printed in two halves would arrive as two.
+	line := fmt.Sprintf("%s is worn on %s", it.Name, sl.AttachPointName(a.Point))
+	if o.Replace {
+		if off := cameOff(ctx, sh, before, a.Point, it.ID); off != "" {
+			line += fmt.Sprintf("; %s came off", off)
+		}
+	}
+	fmt.Fprintln(out, line)
 	return nil
+}
+
+// cameOff names what a wear displaced: what was on the point before,
+// asked for again afterwards, and gone.
+//
+// Three conditions, and each of them is load bearing.  On that point,
+// because a replace reaches no further and something that vanished
+// elsewhere in the meantime is not this command's doing -- the point is
+// the one from the region's answer rather than the one requested, since
+// with no --at nothing here knows it until then.  Gone, because a
+// replace takes off one attachment and leaves any others where they are;
+// that was measured, and the measurement is at the head of this file.
+// And not the item just worn: a replace of something already on that
+// point takes the old copy off and puts a new one on, so which of the
+// two the region has got round to describing when this asks decides
+// whether the item looks worn -- an ordering nothing here controls, and
+// "X is worn on chest; X came off" is a sentence arguing with itself
+// whichever way it falls out.
+//
+// Only a replacing wear displaces anything, which is why the caller asks
+// only for one.  An add landing on an occupied point leaves what is
+// there, and this would then cost a read to confirm that nothing
+// happened.
+//
+// A read that fails is empty rather than an error: the wear has already
+// happened and been reported, and the caller's line is better without
+// its clause than the whole command is as a failure.
+//
+// Names are looked up only when there is something to name, since that
+// costs a walk of inventory.  A name that is not there falls back to the
+// item's id, the way detach's does: an id is poor but it is true, and it
+// is what "worn -l" prints.
+func cameOff(ctx context.Context, sh *Shell, before []*sl.Attached, point int, item msg.UUID) string {
+	now, err := sh.s.WornObjects(ctx)
+	if err != nil {
+		return ""
+	}
+	var ids []msg.UUID
+	for _, a := range before {
+		if a.Point != point || a.Item == item {
+			continue
+		}
+		if _, on := wornFrom(now, a.Item); !on {
+			ids = append(ids, a.Item)
+		}
+	}
+	if len(ids) == 0 {
+		return ""
+	}
+	byID := sh.itemNames(ctx)
+	names := make([]string, 0, len(ids))
+	for _, id := range ids {
+		name := byID[id]
+		if name == "" {
+			name = id.String()
+		}
+		names = append(names, name)
+	}
+	return strings.Join(names, " and ")
 }
 
 // attachPointArg is the point --at named.
@@ -201,7 +395,10 @@ func attachPointArg(text string) (int, error) {
 		// The point travels in one byte with 0x80 meaning "add rather
 		// than replace", so a bigger number is not a point that this
 		// grid has not heard of -- it is a number that would arrive as
-		// something else entirely.
+		// something else entirely.  Somebody typing a number means a
+		// point by it and nothing more; the add bit is laid over what
+		// comes back from here, by the caller that knows whether it is
+		// adding.
 		if n < 0 || n >= sl.AttachAdd {
 			return 0, fmt.Errorf("--at: %d is not an attachment point; they run from 1 to %d", n, sl.AttachAdd-1)
 		}
@@ -281,10 +478,11 @@ func (sh *Shell) waitOff(ctx context.Context, item msg.UUID, name string, second
 	var last error
 	for {
 		worn, err := sh.s.WornObjects(ctx)
+		_, on := wornFrom(worn, item)
 		switch {
 		case err != nil:
 			last = err
-		case !stillWorn(worn, item):
+		case !on:
 			return nil
 		default:
 			last = nil
@@ -304,15 +502,17 @@ func (sh *Shell) waitOff(ctx context.Context, item msg.UUID, name string, second
 	}
 }
 
-// stillWorn reports whether an item is among what is worn.  The item and
-// not the object: the object is what goes away.
-func stillWorn(worn []*sl.Attached, item msg.UUID) bool {
+// wornFrom is the attachment an item is on as, if it is on at all.  The
+// item and not the object: the object is what goes away, and the item is
+// what both callers hold -- one waiting for it to stop being listed, the
+// other refusing to put a second copy of it on.
+func wornFrom(worn []*sl.Attached, item msg.UUID) (*sl.Attached, bool) {
 	for _, a := range worn {
 		if a.Item == item {
-			return true
+			return a, true
 		}
 	}
-	return false
+	return nil, false
 }
 
 // findWorn is which attachment a word means, and what to call it.

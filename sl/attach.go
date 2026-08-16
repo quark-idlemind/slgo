@@ -160,6 +160,14 @@ func (w *Session) WornFrom(item msg.UUID) (*Attached, bool) {
 // It is matched on the AttachItemID rather than on being a new object,
 // which is exact: attaching produces a brand new object id, and other
 // objects arrive continuously.
+//
+// The point is the AttachmentPt byte as it goes on the wire, not just a
+// point: AttachAdd is laid over it by a caller that wants the thing
+// added rather than put in place of what is on that point, which is how
+// the viewer composes the same field (llattachmentsmgr.cpp:247-249).  A
+// bare point replaces, which is what the callers here want -- Worn and
+// EnsureAttached take a thing off and put it straight back on, and would
+// otherwise leave a copy behind every time.
 func (w *Session) Wear(ctx context.Context, it *Item, point int, timeout time.Duration) (*Attached, error) {
 	if timeout == 0 {
 		timeout = 40 * time.Second

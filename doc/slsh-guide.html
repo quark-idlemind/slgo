@@ -612,17 +612,19 @@
         <h3>What you are wearing</h3>
         <p>
           <code>worn</code> lists the attachments, <code>wear</code> puts one on
-          and <code>detach</code> takes it off. A point holds one attachment, so
-          wearing something on an occupied point knocks off what was there —
-          the viewer's Wear, not its Add. With no <code>--at</code> the object
-          goes wherever it says it belongs.
+          and <code>detach</code> takes it off. A point can hold more than one
+          attachment, and <code>wear</code> adds alongside whatever is already
+          there — the viewer's Add. <code>wear --replace</code> is the other
+          one: what was on that point comes off, and the line says which. With
+          no <code>--at</code> the object goes wherever it says it belongs.
         </p>
 
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">wear Objects/tape measure</span>
 <span class="o">tape measure is worn on left hand</span>
-<span class="p">/$</span> <span class="c">wear --at "HUD top right" Objects/panel</span>
+<span class="p">/$</span> <span class="c">wear --replace --at "HUD top right" Objects/panel</span>
+<span class="o">panel is worn on HUD top right; clock came off</span>
 <span class="p">/$</span> <span class="c">detach "tape measure"</span>
 <span class="o">tape measure is no longer worn on left hand</span></pre>
         </div>
@@ -839,8 +841,8 @@
           <table>
             <tbody>
               <tr><td class="cmd">agents</td><td class="what">the sessions slgod holds, then the profiles it could hold</td></tr>
-              <tr><td class="cmd">host NAME</td><td class="what">bring an avatar up</td></tr>
-              <tr><td class="cmd">logout NAME</td><td class="what">put one down, and keep it down until asked for by name</td></tr>
+              <tr><td class="cmd">host NAME</td><td class="what">log an avatar in and hold the session</td></tr>
+              <tr><td class="cmd">logout NAME</td><td class="what">log one out, and leave it out until it is asked for by name</td></tr>
               <tr><td class="cmd">status</td><td class="what">how this session and its circuit are doing</td></tr>
               <tr><td class="cmd">watch</td><td class="what">print grid messages as they arrive, by name or all of them</td></tr>
             </tbody>

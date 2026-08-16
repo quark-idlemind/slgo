@@ -621,7 +621,14 @@ func avatarInterests(who msg.UUID, wantTo, skills, languages string) *msg.Avatar
 // because the two differ in the case that matters: a wear with no point
 // named asks for 0, meaning "wherever the object itself says", and what
 // it lands on is known only from the answer.
-func (f *fakeGrid) AnswerAttach(t *testing.T, id msg.UUID, local uint32, point int) {
+//
+// What comes off is the caller's to say for the same reason, and it is
+// said as items rather than worked out from the point.  A replacing wear
+// displaces ONE attachment however many are on the point -- measured on
+// Agni, and recorded at the head of cmd/slsh/wear.go -- so a fake that
+// cleared the point would agree with a command that named everything
+// that had been there, which is the bug this argument exists to catch.
+func (f *fakeGrid) AnswerAttach(t *testing.T, id msg.UUID, local uint32, point int, off ...msg.UUID) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.onSend = func(m msg.Message) {
@@ -629,6 +636,7 @@ func (f *fakeGrid) AnswerAttach(t *testing.T, id msg.UUID, local uint32, point i
 		if !ok {
 			return
 		}
+		f.takeOff(off...)
 		f.Relay(t, &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{
 			FullID: id,
 			ID:     local,
@@ -657,18 +665,30 @@ func (f *fakeGrid) AnswerDetach(after time.Duration) {
 			return
 		}
 		item := d.ObjectData.ItemID
-		time.AfterFunc(after, func() {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			var keep []*sl.Seen
-			for _, o := range f.objects {
-				if o.AttachItem != item {
-					keep = append(keep, o)
-				}
-			}
-			f.objects = keep
-		})
+		time.AfterFunc(after, func() { f.takeOff(item) })
 	}
+}
+
+// takeOff stops the fake listing the attachments worn from some items,
+// which is all that coming off looks like from outside: the object goes
+// away and the inventory item it was worn from does not.
+func (f *fakeGrid) takeOff(items ...msg.UUID) {
+	if len(items) == 0 {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var keep []*sl.Seen
+	for _, o := range f.objects {
+		gone := false
+		for _, item := range items {
+			gone = gone || o.AttachItem == item
+		}
+		if !gone {
+			keep = append(keep, o)
+		}
+	}
+	f.objects = keep
 }
 
 // AnswerActivateGroup makes the fake act as whatever group it is asked

@@ -12,11 +12,14 @@ import (
 
 // TestWearingSomethingReportsWhereItLanded.
 //
-// With no --at the request carries point 0, which means "wherever the
+// With no --at the request names no point, which means "wherever the
 // object itself says", and nothing here knows where that is until the
 // region answers.  So the line printed has to quote the point that came
 // back rather than the one that was asked for: a wear that reported the
 // request would say "point 0" for every attachment on the avatar.
+//
+// Nothing was worn here, so the line is the bare one -- what a wear says
+// when it displaced nothing is the sentence and no more.
 func TestWearingSomethingReportsWhereItLanded(t *testing.T) {
 	x := newTestShell(t)
 	x.grid.AnswerAttach(t, testSomebody, 10, 5)
@@ -32,17 +35,52 @@ func TestWearingSomethingReportsWhereItLanded(t *testing.T) {
 	if m.ObjectData.ItemID != testLamp {
 		t.Errorf("wore item %s, want %s", m.ObjectData.ItemID, testLamp)
 	}
-	// The value under test: 0 is what the viewer sends for "wherever the
-	// object says", and anything else here would put the thing somewhere
-	// its maker did not choose.
-	if m.ObjectData.AttachmentPt != 0 {
-		t.Errorf("wear with no --at asked for point %d, want 0", m.ObjectData.AttachmentPt)
+}
+
+// TestWearingAddsUnlessReplaceIsAskedFor.
+//
+// This is the byte the whole change is about.  A point and the add bit
+// share one field, so what "add, wherever the object itself says" looks
+// like on the wire is 0x80 alone and nothing else -- and the old default,
+// which sent 0, is what took auto 11 off an occupied HUD point on Agni
+// without anybody saying so.  --replace is that behaviour, kept and
+// named, and it must still send the point bare or it would not replace.
+//
+// Asserted here rather than in the test above because the two forms are
+// only worth reading side by side: the difference between them is one
+// bit and the whole of what a person gets.
+func TestWearingAddsUnlessReplaceIsAskedFor(t *testing.T) {
+	for _, c := range []struct {
+		line string
+		want uint8
+	}{
+		{"wear Objects/a lamp", sl.AttachAdd},
+		{"wear --at chest Objects/a lamp", 1 | sl.AttachAdd},
+		{"wear --replace Objects/a lamp", 0},
+		{"wear --replace --at chest Objects/a lamp", 1},
+	} {
+		x := newTestShell(t)
+		x.grid.AnswerAttach(t, testSomebody, 10, 1)
+		if got := x.do(t, c.line); !strings.Contains(got, "is worn on") {
+			t.Errorf("%s printed %q", c.line, got)
+		}
+		m, ok := lastAttach(x)
+		if !ok {
+			t.Fatalf("%s sent no attach request", c.line)
+		}
+		if m.ObjectData.AttachmentPt != c.want {
+			t.Errorf("%s sent 0x%02x, want 0x%02x", c.line, m.ObjectData.AttachmentPt, c.want)
+		}
 	}
 }
 
 // TestWearingOnANamedPointSendsThatPoint: a person reading a point off
 // the viewer's menu has a name and not a number, and the name is the
 // whole of what they can type.
+//
+// The point arrives with the add bit over it, since these all wear the
+// default way; what is under test here is the number, which is why the
+// bit is taken back off rather than written into every want.
 func TestWearingOnANamedPointSendsThatPoint(t *testing.T) {
 	for _, c := range []struct {
 		at   string
@@ -67,9 +105,188 @@ func TestWearingOnANamedPointSendsThatPoint(t *testing.T) {
 		if !ok {
 			t.Fatalf("wear %s sent no attach request", c.at)
 		}
-		if m.ObjectData.AttachmentPt != c.want {
-			t.Errorf("wear %s asked for point %d, want %d", c.at, m.ObjectData.AttachmentPt, c.want)
+		if got := m.ObjectData.AttachmentPt &^ sl.AttachAdd; got != c.want {
+			t.Errorf("wear %s asked for point %d, want %d", c.at, got, c.want)
 		}
+	}
+}
+
+// TestReplacingSaysWhatCameOff.
+//
+// The silent loss is what started this: on Agni, a wear onto an occupied
+// HUD point took the attachment that was there off, and nothing -- not
+// the command, not the region -- mentioned it.  --replace still does
+// that, so the line has to say it.
+func TestReplacingSaysWhatCameOff(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a2")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000002")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	wearThings(x, &sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
+		AttachItem: testLamp, AttachPoint: 1})
+	x.grid.AnswerAttach(t, hatWorn, 11, 1, testLamp)
+
+	if got, want := x.do(t, "wear --replace Objects/a hat"), "a hat is worn on chest; a lamp came off\n"; got != want {
+		t.Errorf("a replacing wear printed %q, want %q", got, want)
+	}
+	if m, ok := lastAttach(x); !ok || m.ObjectData.ItemID != hat {
+		t.Errorf("the wrong item was worn: %v", m)
+	}
+
+	// An add says nothing about what came off, and the point of saying so
+	// here is that the lamp DOES come off while it happens -- a script,
+	// or somebody at a viewer.  An add displaces nothing, so whatever
+	// else was going on at the time is not this command's to report.
+	// Claiming it would be the original complaint told backwards.
+	x = newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	wearThings(x, &sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
+		AttachItem: testLamp, AttachPoint: 1})
+	x.grid.AnswerAttach(t, hatWorn, 11, 1, testLamp)
+
+	if got, want := x.do(t, "wear Objects/a hat"), "a hat is worn on chest\n"; got != want {
+		t.Errorf("an adding wear printed %q, want %q", got, want)
+	}
+}
+
+// TestAReplaceNamesOnlyTheAttachmentThatWentOffThePoint.
+//
+// The command used to name everything that had been on the point, which
+// agreed with the region for as long as a point held one thing -- and
+// adding is what made a point hold two.  Measured on Agni, as holt,
+// with auto 11 and auto 3 both on HUD bottom right: a --replace of auto
+// 4 onto that point printed "auto 11 and auto 3 came off", and the point
+// afterwards held auto 3 and auto 4.  A replace displaces one.
+//
+// So the clause is confirmed against what is worn afterwards, and this
+// is the shape that tells the two apart: two attachments on the point,
+// the region taking one of them off, and one name in the line.
+func TestAReplaceNamesOnlyTheAttachmentThatWentOffThePoint(t *testing.T) {
+	clock := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a3")
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a2")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000002")
+
+	x := newTestShell(t)
+	addObjectItem(x, clock, "a clock")
+	addObjectItem(x, hat, "a hat")
+	wearThings(x,
+		&sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
+			AttachItem: testLamp, AttachPoint: sl.HUDBottomRight},
+		&sl.Seen{Object: sl.Object{ID: testNote, Local: 11}, PCode: 9,
+			AttachItem: clock, AttachPoint: sl.HUDBottomRight},
+	)
+	// The region takes the lamp off and leaves the clock, which is what
+	// it was seen to do.
+	x.grid.AnswerAttach(t, hatWorn, 12, sl.HUDBottomRight, testLamp)
+
+	got := x.do(t, "wear --replace --at \"HUD bottom right\" Objects/a hat")
+	want := "a hat is worn on HUD bottom right; a lamp came off\n"
+	if got != want {
+		t.Errorf("a replace over two attachments printed %q, want %q", got, want)
+	}
+	if strings.Contains(got, "a clock") {
+		t.Errorf("the clock is still worn and was named as having come off: %q", got)
+	}
+
+	// The other half of "off the point": a replace reaches no further
+	// than the point it lands on, so an attachment that stops being worn
+	// somewhere else while this is going on is somebody else's doing --
+	// a script, or a detach from a moment ago still settling -- and
+	// naming it here would blame the wear for it.
+	badge := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a4")
+	x = newTestShell(t)
+	addObjectItem(x, badge, "a badge")
+	addObjectItem(x, hat, "a hat")
+	wearThings(x,
+		&sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
+			AttachItem: testLamp, AttachPoint: sl.HUDBottomRight},
+		&sl.Seen{Object: sl.Object{ID: testNote, Local: 11}, PCode: 9,
+			AttachItem: badge, AttachPoint: 1},
+	)
+	x.grid.AnswerAttach(t, hatWorn, 12, sl.HUDBottomRight, testLamp, badge)
+
+	got = x.do(t, "wear --replace --at \"HUD bottom right\" Objects/a hat")
+	if got != want {
+		t.Errorf("a replace printed %q, want %q -- the badge came off a different point", got, want)
+	}
+}
+
+// TestAWearThatCannotBeCheckedAfterwardsStillReportsTheWear.
+//
+// The clause costs a read that happens after the attachment is on, so a
+// grid that stops answering between the two has cost the report and not
+// the wear.  Failing the command there would say the wear failed, which
+// is the one thing that is known not to have happened.
+func TestAWearThatCannotBeCheckedAfterwardsStillReportsTheWear(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a2")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000002")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	wearThings(x, &sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
+		AttachItem: testLamp, AttachPoint: 1})
+	x.grid.AnswerAttach(t, hatWorn, 11, 1, testLamp)
+
+	// The failure begins as the request goes out, so the read before it
+	// answers and the read after it does not.
+	x.grid.mu.Lock()
+	answer := x.grid.onSend
+	x.grid.onSend = func(m msg.Message) {
+		answer(m)
+		if _, ok := m.(*msg.RezSingleAttachmentFromInv); !ok {
+			return
+		}
+		x.grid.mu.Lock()
+		defer x.grid.mu.Unlock()
+		x.grid.objectsErr = errors.New("nobody is holding this session")
+	}
+	x.grid.mu.Unlock()
+
+	if got, want := x.do(t, "wear --replace Objects/a hat"), "a hat is worn on chest\n"; got != want {
+		t.Errorf("a wear that could not be checked printed %q, want %q", got, want)
+	}
+}
+
+// TestWearingTheSameItemTwiceIsRefused.
+//
+// Adding makes it possible, and nothing downstream could undo it: an
+// attachment is known by the item it came from, so two worn from one
+// item are indistinguishable to detach, which finds both, refuses as
+// ambiguous, and offers the item id as the tie-breaker -- the one field
+// they share.  The refusal has to name a way on, or it is just a wall.
+func TestWearingTheSameItemTwiceIsRefused(t *testing.T) {
+	x := newTestShell(t)
+	wearThings(x, &sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
+		AttachItem: testLamp, AttachPoint: 1})
+	// The region takes the old copy off, which is what a replace of
+	// something already worn does, and it is described as gone before the
+	// one that took its place is described as on.
+	x.grid.AnswerAttach(t, msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000002"), 11, 1, testLamp)
+
+	got := x.do(t, "wear Objects/a lamp")
+	if !strings.Contains(got, "already worn on chest") {
+		t.Errorf("wearing a worn item again printed %q, want a refusal saying where it is", got)
+	}
+	if !strings.Contains(got, "--replace") || !strings.Contains(got, "detach a lamp") {
+		t.Errorf("the refusal should say what to do instead, got %q", got)
+	}
+	if _, ok := lastAttach(x); ok {
+		t.Error("a refused wear still sent an attach request")
+	}
+
+	// --replace is one of the two ways out it names, so it has to work:
+	// the item ends up worn once, which is a state detach can unpick.
+	// The line is the bare one and is matched whole, because the thing
+	// that stopped being worn here is the item that was just put on --
+	// "a lamp is worn on chest; a lamp came off" is a sentence arguing
+	// with itself, and no ordering of the region's descriptions should
+	// be able to produce it.
+	if got, want := x.do(t, "wear --replace Objects/a lamp"), "a lamp is worn on chest\n"; got != want {
+		t.Errorf("wear --replace of a worn item printed %q, want %q", got, want)
+	}
+	if _, ok := lastAttach(x); !ok {
+		t.Error("wear --replace of a worn item sent nothing")
 	}
 }
 
@@ -81,7 +298,9 @@ func TestWearingOnANamedPointSendsThatPoint(t *testing.T) {
 // hunting through "worn" to take it off.  A number too big for the
 // field is the same mistake with a different cause -- 0x80 is the bit
 // that means "add rather than replace", so a point above it arrives as
-// something else entirely.
+// something else entirely.  That refusal survives the bit becoming the
+// default: somebody typing a number means a point by it, and the bit is
+// laid over what this returns rather than being something to type.
 func TestAnAttachmentPointThatIsNotOneIsRefused(t *testing.T) {
 	x := newTestShell(t)
 	for _, at := range []string{"--at elbow", "--at 200", "--at 128", `--at "left hands"`} {
@@ -101,7 +320,10 @@ func TestAnAttachmentPointThatIsNotOneIsRefused(t *testing.T) {
 	if got := x.do(t, "wear Objects"); !strings.Contains(got, "is a folder") {
 		t.Errorf("wear of a folder printed %q", got)
 	}
-	if got := x.do(t, "wear --help"); !strings.Contains(got, "--at") {
+	// Both flags in the help, since --replace is now the only way to ask
+	// for what this command used to do without being asked.
+	got := x.do(t, "wear --help")
+	if !strings.Contains(got, "--at") || !strings.Contains(got, "--replace") {
 		t.Errorf("wear --help printed %q", got)
 	}
 }
@@ -271,10 +493,7 @@ func TestDetachingSaysWhenTheRegionNeverAgrees(t *testing.T) {
 func TestDetachingANameWornTwiceAsksWhichOne(t *testing.T) {
 	x := newTestShell(t)
 	other := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a1")
-	x.grid.mu.Lock()
-	objs := x.grid.inv.Dirs[0]
-	objs.Items = append(objs.Items, &invItem{ID: other, Name: "a lamp", Type: int(sl.AssetObject)})
-	x.grid.mu.Unlock()
+	addObjectItem(x, other, "a lamp")
 
 	wearThings(x,
 		&sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
@@ -293,6 +512,19 @@ func TestDetachingANameWornTwiceAsksWhichOne(t *testing.T) {
 	if got := x.grid.Sent(); len(got) != 0 {
 		t.Errorf("an ambiguous detach still sent %d messages", len(got))
 	}
+}
+
+// addObjectItem puts another object in the fake's Objects folder.
+//
+// The tests that need one need two things of it: that wear can find it
+// by path, and that its name can be looked up from its item id, which is
+// how both the displaced attachment and an ambiguous detach are named.
+// Both come from the same inventory, so putting it there covers both.
+func addObjectItem(x *testShell, id msg.UUID, name string) {
+	x.grid.mu.Lock()
+	defer x.grid.mu.Unlock()
+	objs := x.grid.inv.Dirs[0]
+	objs.Items = append(objs.Items, &invItem{ID: id, Name: name, Type: int(sl.AssetObject)})
 }
 
 // lastAttach and lastDetach are the request a command sent, out of
