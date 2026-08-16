@@ -91,7 +91,7 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "%s at %.0f, %.0f, %.0f\n", p.Region, p.Position.X, p.Position.Y, p.Position.Z)
+	fmt.Fprintln(out, positionLine(p))
 	if !p.ActiveGroup.IsZero() {
 		// Named where a name is to be had.  The key is what everything
 		// else takes and stays in the line for that reason, but it is
@@ -190,11 +190,21 @@ func cmdRegions(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	if err != nil {
 		return err
 	}
+	printRegions(out, found)
+	return nil
+}
+
+// printRegions writes what the map answered, a region to a line.
+//
+// Shared rather than copied, because tp prints the same listing when a
+// name matched several and it has to be the same listing: somebody
+// reading a refusal and then running regions to look again should not be
+// shown the same rows in two different shapes.
+func printRegions(out io.Writer, found []sl.MapRegion) {
 	for _, r := range found {
 		fmt.Fprintf(out, "%-32s %5d, %-5d %-9s %d\n",
 			r.Name, r.X, r.Y, sl.AccessName(r.Access), r.Handle)
 	}
-	return nil
 }
 
 func cmdCaps(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

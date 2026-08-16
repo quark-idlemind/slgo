@@ -16,6 +16,13 @@ Each line says who is asking and what for, and the line under it says
 what may be typed: the buttons a dialog offers, the fee an invitation
 wants, or the plain "answer, no, ignore".
 
+Two of them do more than send a message and are marked as such.  A group
+invitation may cost money, so its fee has to be typed back.  A teleport
+offer is followed rather than answered and forgotten: accepting one
+moves the avatar and waits for it to arrive, which takes about half a
+second, and everything this shell knew about the region left behind is
+dropped on the way.
+
 # The number belongs to the thing
 
 A number is handed out when a thing is first seen and kept until it
@@ -37,5 +44,6 @@ listed and not counted at the prompt, which is what ignore is for.
 	waiting
 	waiting -a
 
-See also: answer, no, ignore, and offers for the older way to the
-friendship and inventory offers, which appear here too.
+See also: answer, no, ignore, offers for the older way to the friendship
+and inventory offers, which appear here too, and tp for going somewhere
+without waiting to be invited.

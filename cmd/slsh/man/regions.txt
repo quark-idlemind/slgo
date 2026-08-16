@@ -37,8 +37,10 @@ corner in metres packed into a single number, which is how every message
 that names a region names it.  The two are the same fact, and the second
 is the one to quote when the question is which region something meant.
 
-Nothing teleports between regions yet, so today the handle is a fact
-about a place rather than a thing to do something with.
+tp takes a name rather than a handle, and looks it up through this same
+search -- so the listing here is what tp will be choosing between, and
+running regions first is how to find out whether the name is enough.  A
+name that matches several is refused there, where here it is the answer.
 
 # What the map will not tell you
 
@@ -62,4 +64,4 @@ less of the name typed:
 	regions Example
 
 See also: look for what the region underfoot says about itself, where
-for the position inside it, and tp for moving about within it.
+for the position inside it, and tp for going to one of these.

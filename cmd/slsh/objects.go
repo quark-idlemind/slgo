@@ -36,9 +36,9 @@ var objectCommands = map[string]*command{
 		run:    cmdCopy,
 	},
 	"tp": {
-		params: "X Y Z",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "move to a position in this region",
+		params: "REGION [X Y Z] | X Y Z",
+		flags:  func() any { return new(tpOptions) },
+		brief:  "move to another region by name, or to a position in this one",
 		man:    "tp",
 		run:    cmdTP,
 	},
@@ -160,39 +160,242 @@ func cmdCopy(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	return nil
 }
 
-// cmdTP moves within the region.
+// tpOptions is what tp was asked for.
+type tpOptions struct {
+	Wait int  `getopt:"--wait -w=SECONDS  how long to wait for the avatar to arrive [30]"`
+	Help bool `getopt:"--help -h          show what this command takes"`
+}
+
+// shellTeleportTimeout is how long this shell waits for a teleport to
+// another region before saying nothing answered.
 //
-// Only within: another region means another simulator, a new circuit
-// and a new set of capabilities, which is the daemon's work and is not
-// built.  Saying so is better than a command that silently does nothing
-// when given a region name.
+// Thirty seconds, where sl.DefaultTeleportTimeout is ninety.  That
+// constant was set before a teleport had ever been timed; forty moves
+// between Pelmar Reach and Sandbox Goguen have since been measured at
+// 355 milliseconds to 4.95 seconds, so ninety is two orders of magnitude
+// above what it covers.  Thirty is six times the slowest move measured,
+// which leaves room for a grid having a bad day, and it is what a
+// teleport inside the region has been given all along.
+//
+// The other end of the argument is what waiting costs.  A shell that
+// inherited the ninety would sit silent for a minute and a half over an
+// offer the grid was never going to answer, and the third failure --
+// a request answered with nothing whatever -- is exactly the one a
+// person meets when they accept a second lure while the first is still
+// under way.
+const shellTeleportTimeout = 30 * time.Second
+
+// tpMiddle is where a teleport with no position lands.
+//
+// The middle of the region, which is 256 metres square, because that is
+// where a viewer puts an avatar that typed a name into the world map and
+// said nothing about where in it.
+//
+// The height is left at zero rather than guessed at, and zero is not
+// arbitrary: measured on Agni, the avatar arrives at whichever is higher
+// of the height asked for and the ground under the point, plus about a
+// metre -- 30 came back as 31, 60 as 61, and 0 as the ground.  So zero
+// is how a client asks for ground level without knowing where the ground
+// is, and there is no cheap way to ask that about a region this session
+// has never been to.
+//
+// What it does not promise is dry land.  A region's middle can be under
+// water, and Sandbox Goguen's is, so this arrives there submerged.  That
+// is the region rather than the default, and the man page says so.
+var tpMiddle = msg.Vector3{X: 128, Y: 128}
+
+// cmdTP moves the avatar: to a position in this region, or to another
+// region by name.
+//
+// # Which of the two a line means
+//
+// Three numbers and nothing else is a position here, and it stays the
+// cheap thing it has always been: no map lookup, no circuit moving under
+// the session, nothing but the request and waiting for the position to
+// agree.  Anything else is a region name, joined with spaces for the
+// reason regions joins them -- a region name has spaces in it and
+// quoting one at a prompt is a thing to have to remember -- and the last
+// three words are the position when all three are numbers.
+//
+// So a region whose name ends in three numbers cannot be reached from
+// here.  That is written down in the man page rather than defended
+// against, because the defence is a quoting rule everybody would have to
+// remember for a region nobody has met.
+//
+// Nothing but numbers, and not three of them, is refused rather than
+// looked up.  "tp 128 128" is a position typed short, and asking the
+// grid's map about a region called "128 128" would answer a question
+// nobody asked and take a round trip over it.
+//
+// # Why the name is not narrowed to one region here
+//
+// The map's search is by prefix, so a name typed in full comes back
+// beside every longer name beginning with it and several matches are the
+// ordinary case.  See regionNamed: an exact name wins outright and
+// anything else that matched twice is listed and refused, because
+// choosing on somebody's behalf is how an avatar ends up in the wrong
+// place.
+//
+// # Why an arrival is printed twice
+//
+// The notice from the shell's watcher says the avatar is in another
+// region, and the line this prints says where it ended up.  Both are
+// wanted and they say different things: one is the session's news, which
+// arrives whoever asked for the move, and the other is this command's
+// answer to the person who typed it.  Suppressing the notice for a
+// change this command asked for would need state shared between the two,
+// and would silently swallow a second change that arrived at the same
+// moment.
 func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	var o helpOnly
+	var o tpOptions
 	rest, done, err := subOptions("tp", &o, out, args)
 	if err != nil || done {
 		return err
 	}
-	if len(rest) != 3 {
-		return usageError("tp",
-			"a position in this region; another region needs a new circuit and new",
-			"capabilities, which is slgod's to do and is not built -- log in there",
-			"instead (slgod -start)")
+	if len(rest) == 0 {
+		return usageError("tp", "a region to go to, or three numbers for a position in this one")
 	}
 
-	v, err := position(rest)
+	region, at, err := teleportTarget(rest)
+	if err != nil {
+		return err
+	}
+	// One deadline for both, because it is one question -- how long to
+	// believe in an arrival -- and a flag that quietly did nothing to a
+	// move inside the region would be worse than no flag.
+	wait := time.Duration(o.Wait) * time.Second
+	if wait == 0 {
+		wait = shellTeleportTimeout
+	}
+
+	if region == "" {
+		if err := sh.s.TeleportLocal(ctx, at, wait); err != nil {
+			return err
+		}
+		return sh.sayPosition(ctx, out)
+	}
+
+	found, err := sh.regionNamed(ctx, out, region)
 	if err != nil {
 		return err
 	}
 
-	if err := sh.s.TeleportLocal(ctx, v, 30*time.Second); err != nil {
+	// Said before the waiting starts.  A teleport to another region takes
+	// about four hundred milliseconds and has been measured at five
+	// seconds, and a shell that has silently stopped answering is
+	// indistinguishable from one that has hung.
+	fmt.Fprintf(out, "teleporting to %s at %.0f, %.0f, %.0f\n",
+		found.Name, at.X, at.Y, at.Z)
+	if err := sh.s.Teleport(ctx, found.Handle, at, wait); err != nil {
 		return err
 	}
+	return sh.sayPosition(ctx, out)
+}
+
+// teleportTarget reads what tp was asked for: the region to go to, or ""
+// for a move inside this one, and where to arrive.  See cmdTP for the
+// rule and for what it costs.
+func teleportTarget(args []string) (region string, at msg.Vector3, err error) {
+	if allNumbers(args) {
+		if len(args) != 3 {
+			return "", msg.Vector3{}, usageError("tp",
+				"a position is three numbers; a region is a name")
+		}
+		at, err = position(args)
+		return "", at, err
+	}
+
+	at = tpMiddle
+	if n := len(args); n > 3 && allNumbers(args[n-3:]) {
+		if at, err = position(args[n-3:]); err != nil {
+			return "", msg.Vector3{}, err
+		}
+		args = args[:n-3]
+	}
+	return strings.Join(args, " "), at, nil
+}
+
+// allNumbers is whether every word is a number, which is what tells a
+// position from the end of a region's name.
+//
+// It parses the same way position does, trailing comma and all, so that
+// a position copied off the screen is read as one here too rather than
+// being sent to the map as a name.
+func allNumbers(args []string) bool {
+	for _, s := range args {
+		if _, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(s), ","), 32); err != nil {
+			return false
+		}
+	}
+	return len(args) > 0
+}
+
+// regionNamed is the one region a name means, or a listing and a
+// refusal.
+//
+// The map's search is by prefix and ignores case, so a name typed in
+// full comes back beside every longer name that begins with it: "Pelmar
+// Reach" and "Pelmar Reach Annexe" are one answer to one question.  An exact
+// name is therefore taken outright, which is what whoOrSearch does with
+// a person's and for the same reason -- a name typed in full is not an
+// ambiguous name.  One row and no exact match is taken as well, since
+// there is nothing to choose between.
+//
+// Anything else is printed the way regions prints it and refused.  This
+// command moves an avatar, and a wrong guess here is not a listing to
+// read again: it is an avatar somewhere else, with everything the shell
+// knew about the region it left thrown away on the way.
+func (sh *Shell) regionNamed(ctx context.Context, out io.Writer, name string) (*sl.MapRegion, error) {
+	// The map's own deadline rather than --wait, which is the teleport's
+	// budget: this is regions' question, asked before the teleport is,
+	// and it answers in about a tenth of a second or not at all.
+	found, err := sh.s.FindRegions(ctx, name, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	var exact []sl.MapRegion
+	for _, r := range found {
+		if strings.EqualFold(r.Name, name) {
+			exact = append(exact, r)
+		}
+	}
+	switch {
+	case len(exact) == 1:
+		return &exact[0], nil
+	case len(exact) == 0 && len(found) == 1:
+		return &found[0], nil
+	case len(exact) > 1:
+		// Two regions may share a name.  The handles differ and nothing
+		// else does, so there is no more of the name to type and this is
+		// as far as a name can be taken.
+		printRegions(out, exact)
+		return nil, fmt.Errorf("%d regions on this grid are called %q, and nothing "+
+			"here can tell which was meant", len(exact), name)
+	}
+	printRegions(out, found)
+	return nil, fmt.Errorf("%d regions begin with %q; teleporting to one of them "+
+		"needs its name in full", len(found), name)
+}
+
+// sayPosition prints where the avatar is now, read back rather than
+// assumed: the simulator stands it on whatever is under the point asked
+// for, so the position to believe is the one it reports afterwards.
+func (sh *Shell) sayPosition(ctx context.Context, out io.Writer) error {
 	p, err := sh.s.Where(ctx)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "%s at %.0f, %.0f, %.0f\n", p.Region, p.Position.X, p.Position.Y, p.Position.Z)
+	fmt.Fprintln(out, positionLine(p))
 	return nil
+}
+
+// positionLine is where the avatar is, in the one wording where, tp and
+// an accepted lure all say it in.  A region and a position to the metre:
+// see man/where.txt for why no more than that is honest.
+func positionLine(p *sl.Presence) string {
+	return fmt.Sprintf("%s at %.0f, %.0f, %.0f",
+		p.Region, p.Position.X, p.Position.Y, p.Position.Z)
 }
 
 // cmdMove moves a rezzed object.

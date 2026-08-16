@@ -26,6 +26,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/xml"
 	"fmt"
@@ -73,6 +74,12 @@ var (
 	testSomebody  = msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000001")
 )
 
+// testRegionHandle is where the fake says the avatar is standing: grid
+// square (1, 1), packed the way every message that names a region packs
+// one.  Named because a teleport is addressed by handle, so a test about
+// one has to be able to say which region it means.
+const testRegionHandle = 1099511628032
+
 // fakeGrid is an sl.Backend with nothing behind it.
 //
 // Every field is read under the lock, so a test may change an answer
@@ -85,6 +92,7 @@ type fakeGrid struct {
 
 	msgs     chan *sl.Message
 	events   chan *sl.QueueEvent
+	regions  chan *sl.RegionChange
 	done     chan struct{}
 	doneOnce sync.Once
 
@@ -166,10 +174,11 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 			Channel:       "slsh test 1.0",
 			Caps:          []string{"SimulatorFeatures", "ViewerAsset", "LSLSyntax"},
 		},
-		msgs:   make(chan *sl.Message),
-		events: make(chan *sl.QueueEvent),
-		done:   make(chan struct{}),
-		caps:   map[string]string{},
+		msgs:    make(chan *sl.Message),
+		events:  make(chan *sl.QueueEvent),
+		regions: make(chan *sl.RegionChange),
+		done:    make(chan struct{}),
+		caps:    map[string]string{},
 		presence: &sl.Presence{
 			Position:     msg.Vector3{X: 128, Y: 128, Z: 25},
 			LookAt:       msg.Vector3{X: 1},
@@ -505,6 +514,92 @@ func (f *fakeGrid) RelayEvent(t *testing.T, name, body string) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("nothing read the event relay: is a session attached to this backend?")
 	}
+}
+
+// RelayRegion tells the session the avatar is in another region, as the
+// daemon does once it has followed a teleport somewhere.
+//
+// It is the only way the news arrives.  Polling for the position would
+// answer with the new region as well, so a shell that has to act at the
+// moment -- print a line, drop what it holds -- has to be told rather
+// than to look.
+func (f *fakeGrid) RelayRegion(t *testing.T, region string, handle uint64) {
+	t.Helper()
+	select {
+	case f.regions <- &sl.RegionChange{Region: region, Handle: handle}:
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing read the region relay: is a session attached to this backend?")
+	}
+}
+
+// AnswerTeleport makes the fake take the avatar to another region when
+// it is asked to.
+//
+// Two things have to happen or a teleport would never return.  The
+// finish arrives on the EVENT QUEUE rather than on the circuit, which is
+// where Second Life sends it and what a fake answering on the circuit
+// would let a session get away with reading.  And the presence has to
+// start answering with the new region afterwards, because the finish
+// says only that the simulator being left has let go: what says the
+// avatar arrived is this session reporting the region the finish named.
+//
+// Whatever the fake was already answering is answered as well, since a
+// teleport by name asks the map first and there is one hook between
+// them.
+func (f *fakeGrid) AnswerTeleport(t *testing.T, region string, handle uint64) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before := f.onSend
+	f.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		// Both ways of asking, since an accepted lure is answered with
+		// the same finish and differs only in what was sent.
+		switch m.(type) {
+		case *msg.TeleportLocationRequest, *msg.TeleportLureRequest:
+		default:
+			return
+		}
+		f.RelayEvent(t, "TeleportFinish", teleportFinish(handle))
+		f.mu.Lock()
+		f.presence.Region, f.presence.RegionHandle = region, handle
+		f.mu.Unlock()
+	}
+}
+
+// AnswerTeleportWith makes the fake refuse instead, with a body of the
+// shape Agni sends: a key in one block and a sentence in the other.
+func (f *fakeGrid) AnswerTeleportWith(t *testing.T, body string) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before := f.onSend
+	f.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		switch m.(type) {
+		case *msg.TeleportLocationRequest, *msg.TeleportLureRequest:
+			f.RelayEvent(t, "TeleportFailed", body)
+		}
+	}
+}
+
+// teleportFinish is the grid saying the region it has handed this avatar
+// to.  The handle is LLSD binary, eight bytes big endian; the address
+// and the seed beside it in a real one are for whoever moves the
+// circuit, which is the daemon, and nothing here reads them.
+func teleportFinish(handle uint64) string {
+	h := binary.BigEndian.AppendUint64(nil, handle)
+	return `<llsd><map><key>Info</key><array><map>` +
+		`<key>AgentID</key><uuid>` + testMe.String() + `</uuid>` +
+		`<key>RegionHandle</key><binary>` +
+		base64.StdEncoding.EncodeToString(h) + `</binary>` +
+		`<key>SimAccess</key><integer>13</integer>` +
+		`<key>SimPort</key><integer>13032</integer>` +
+		`</map></array></map></llsd>`
 }
 
 // AnswerNames makes the fake reply to UUIDNameRequest the way a
@@ -986,9 +1081,7 @@ func (f *fakeGrid) Events() <-chan *sl.QueueEvent { return f.events }
 func (f *fakeGrid) Done() <-chan struct{}         { return f.done }
 func (f *fakeGrid) Err() error                    { return nil }
 
-// RegionChanges is never told of one: nothing the shell does here
-// leaves the region.
-func (f *fakeGrid) RegionChanges() <-chan *sl.RegionChange { return nil }
+func (f *fakeGrid) RegionChanges() <-chan *sl.RegionChange { return f.regions }
 
 func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Presence, error) {
 	f.mu.Lock()
@@ -1108,6 +1201,7 @@ func (f *fakeGrid) Close() error {
 	f.doneOnce.Do(func() {
 		close(f.msgs)
 		close(f.events)
+		close(f.regions)
 		close(f.done)
 	})
 	return nil

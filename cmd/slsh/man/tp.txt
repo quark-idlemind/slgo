@@ -1,50 +1,142 @@
-tp moves the avatar to a point in the region it is already in.  It is
-"move" done to a person instead of to an object, and like move it waits
-for the arrival rather than reporting the request.
+tp moves the avatar: to a point in the region it is already in, or to
+another region by name.  It is "move" done to a person instead of to an
+object, and like move it waits for the arrival rather than reporting the
+request.  What is printed afterwards is where the avatar actually ended
+up, read back, and not the point that was asked for.
 
-The argument is three numbers -- X Y Z, in this region's metres,
-separated by spaces.  What is printed afterwards is where the avatar
-actually ended up, read back, and not the point that was asked for.
+Three numbers and nothing else -- X Y Z, in this region's metres -- is a
+move inside this region.  Anything else is a region's name, joined with
+spaces so that a name with one in it needs no quoting, and the last
+three words are the position when all three are numbers:
 
-# This region only, and why the other one is a different matter
+	tp 128 128 25
+	tp Example Landing
+	tp Example Landing 33 73 1000.5
 
-A teleport within a region is a small thing.  The simulator already has
-the avatar: it moves it, says so, and nothing about the session changes
--- same circuit, same capabilities, same session.  A client can ask for
-that and whatever holds the session underneath need not know it
-happened.
+A name with no position arrives in the middle of the region, at 128,
+128, which is where a viewer puts somebody who typed a name into the
+world map and said nothing about where in it.  The height asked for is
+nothing, which the simulator reads as ground level -- and ground level
+in the middle of a region is sometimes under water: Sandbox Goguen's
+water is at 5 metres and its middle is below that, so tp with no
+position arrives there submerged.  Name a height to land somewhere
+else.
 
-Another region is a different act entirely.  The destination is a
-different simulator at a different address, and getting there means
-establishing the session there, opening a new circuit, fetching a new
-set of capabilities and closing the old one.  That is the daemon's work
-rather than a client's, and it is not built.  So a region name is
-refused, with the alternative named in the refusal, instead of being
-accepted by something that would half work.
+# Several regions can answer to one name
 
-Until it is built, arriving somewhere else is a matter of logging in
-there: a profile's start location is honoured and the daemon's -start
-overrides it.  That is a relog rather than a teleport -- it costs a
-login, and every client attached is told the session was
-re-established -- but it does arrive.
+The map's search matches from the start of a name and ignores case, so
+"Example Landing" comes back beside Example Landing North and everything
+else beginning with those words.  A name that matches one of them
+exactly is that one, even when longer names shared its prefix -- a name
+typed in full is not an ambiguous name.  Anything else that matched more
+than once is printed, in the listing regions prints, and refused.
+
+Refused rather than guessed at, because the guess is not a listing to
+read again: it is an avatar somewhere it was not sent, with everything
+this shell knew about the region it left thrown away on the way.  Type
+the name in full, or run regions first to see what the name catches.
+
+Two regions may share a name outright.  There is no more of the name to
+type then, and the refusal says so.
+
+# What a teleport costs
+
+About four hundred milliseconds, and up to about five seconds.  Twenty
+round trips between Pelmar Reach and Sandbox Goguen -- forty moves -- were
+measured end to end at between 355 milliseconds and 4.95 seconds, with a
+median of 425 and none of them failing.  So it is quick, and the slow
+tail is seconds rather than fractions of one, which is worth knowing
+before anything treats a teleport as instant.
+
+The line saying where it is going is printed before the waiting starts,
+because a shell that has silently stopped answering is indistinguishable
+from one that has hung.
+
+The wait is thirty seconds, which is six times the slowest move ever
+measured here and leaves room for a grid having a bad day.  It can be
+set with --wait, in seconds, and it covers the arrival -- in this region
+or another one -- rather than the map lookup in front of it, which has a
+deadline of its own.
+
+# Everything about the old region is gone the moment it arrives
+
+Local ids are the region's own numbering and the next region hands the
+same numbers out again, so what the shell knew about objects is not
+merely stale after a teleport -- it would name something here as
+confidently as it named something there.  All of it is dropped: the
+objects, who owns them, what they are called, what is inside them.
+Anything a script was holding across a tp has to be asked for again.
+
+What survives is what was never a region's to say: who people are,
+inventory, friends, the offers and dialogs still waiting for an answer.
+That is a good part of why a teleport is cheaper than the relog it
+replaces.
+
+A line of notice says the avatar is now somewhere else.  It comes from
+the same place arriving chat does, so it appears whoever asked for the
+move -- another client attached to the same daemon, a session
+re-established after the circuit was lost -- and it appears for this
+command too, alongside the command's own answer.  The two say different
+things: one is the session's news, the other is the answer to what was
+typed.
+
+# When the grid says no
+
+A refusal is the grid's and not this shell's, and it arrives in two
+voices: a key a program could act on and a sentence meant for a person.
+Both are printed, because they are not always the same string.
+"no_host" is a handle that is no region, and says the same word twice;
+"MustHaveVIPStatus" comes with a sentence about being a premium
+subscriber.  An estate can refuse an arrival for reasons the map has no
+field for, so a region the map listed is not a region that will have
+this avatar.
+
+The session is left standing where it was: a refusal costs the request
+and nothing else.
+
+Silence is the third answer.  Once this avatar has been handed to
+another simulator, the one it left answers no further teleport request
+at all -- not a rate limit, and not a wait that clears -- so a teleport
+asked for while one is under way runs out its wait and says so.
 
 # Landing near, rather than exactly
 
-The simulator stands the avatar on whatever is under the point given,
-so the height it settles at is its choice.  Anything within a few
+The height is the simulator's to settle, and what it does with it was
+measured rather than guessed: the avatar arrives at whichever is higher
+of the height asked for and the ground under the point, plus about a
+metre.  A request for 30 came back as 31, one for 60 as 61, one for 2001
+as 2002, and one for 0 as the ground.  So asking for nothing is asking
+for ground level rather than for a fall, and asking for a height above
+the ground is honoured rather than corrected.  Anything within a few
 metres counts as having arrived, and the line printed afterwards is the
 position to believe.
 
-A refused teleport -- a parcel that will not have the avatar, a point
-outside the region -- produces no error and no reply of any kind.  That
-is why this waits and reads back: without it, a refusal would be
-indistinguishable from success, and every position computed afterwards
-would be wrong.
+A teleport within a region that is refused -- a parcel that will not
+have the avatar, a point outside the region -- produces no error and no
+reply of any kind.  That is why this waits and reads back: without it a
+refusal would be indistinguishable from success, and every position
+computed afterwards would be wrong.
+
+# A name that ends in three numbers cannot be typed here
+
+The last three words are the position when all three of them are
+numbers, so a region actually called something ending in three numbers
+is out of reach, and so is one whose whole name is numbers.  It is
+written down rather than defended against: the defence would be a
+quoting rule everybody has to remember, for a region nobody has met.
+
+A line that is nothing but numbers and is not three of them is a
+position typed short, and is refused as one rather than sent to the map
+as a name.
 
 # Examples
 
 	tp 128 128 25
-	tp 33 73 1000.5
+	tp Example Landing
+	tp Example Landing 128 128 2001
+	tp --wait 60 Example Shallows
 
-See also: where for the position this is given in, move for shifting an
-object rather than the avatar, and look for the region it cannot leave.
+See also: regions for finding out what a name matches and where it is,
+where for the position this is given in, look for what the region
+underfoot says about itself, move for shifting an object rather than the
+avatar, and answer for accepting a teleport somebody else offered.

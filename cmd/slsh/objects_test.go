@@ -14,6 +14,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/msg"
@@ -210,22 +211,54 @@ func TestCopyGoesIntoTheFolderTheShellIsIn(t *testing.T) {
 	}
 }
 
-// TestTPStopsAtTheRegionBoundary, and says why rather than doing
-// nothing when given a region name.
-func TestTPStopsAtTheRegionBoundary(t *testing.T) {
+// TestTPSaysHowItIsTypedRatherThanGuessing.
+//
+// Three numbers is a position and anything else is a region's name, so
+// the one line that is neither -- numbers, and not three of them -- is a
+// position typed short.  Asking the grid's map about a region called
+// "128 128" would answer a question nobody asked and take a round trip
+// over it.
+func TestTPSaysHowItIsTypedRatherThanGuessing(t *testing.T) {
 	x := newTestShell(t)
 
-	for _, line := range []string{"tp", "tp 128 128", "tp Somewhere Else"} {
+	for _, line := range []string{"tp", "tp 128 128", "tp 128 128 25 30"} {
 		got := x.do(t, line)
-		if !strings.Contains(got, "a position in this region") {
+		if !strings.Contains(got, "usage: tp") {
 			t.Errorf("%q printed %q", line, got)
 		}
 	}
-	if got := x.do(t, "tp 128 128 over-there"); !strings.Contains(got, "is not a number") {
-		t.Errorf("tp with something that is not a number printed %q", got)
+	if got := x.grid.Sent(); len(got) != 0 {
+		t.Errorf("a teleport nobody could read went out anyway: %v", got)
 	}
 	if got := x.do(t, "tp --help"); !strings.Contains(got, "X Y Z") {
 		t.Errorf("tp --help printed %q", got)
+	}
+}
+
+// TestTPWithThreeNumbersAsksTheMapNothing.
+//
+// A move inside the region is the cheap thing it has always been: the
+// simulator already has the avatar, nothing about the session changes,
+// and there is no name to look up.  A version that sent every teleport
+// through the map would work and would cost a round trip on the grid for
+// every step across a room.
+func TestTPWithThreeNumbersAsksTheMapNothing(t *testing.T) {
+	x := newTestShell(t)
+
+	if got, want := x.do(t, "tp 130 128 25"), "Test Region at 128, 128, 25\n"; got != want {
+		t.Errorf("tp printed %q, want %q", got, want)
+	}
+	for _, m := range x.grid.Sent() {
+		if _, ok := m.(*msg.MapNameRequest); ok {
+			t.Error("a position in this region was looked up on the map")
+		}
+	}
+	sent := lastTeleport(t, x)
+	if sent.Info.RegionHandle != testRegionHandle {
+		t.Errorf("a local teleport named region %d", sent.Info.RegionHandle)
+	}
+	if sent.Info.Position != (msg.Vector3{X: 130, Y: 128, Z: 25}) {
+		t.Errorf("tp asked for %v", sent.Info.Position)
 	}
 }
 
@@ -253,6 +286,186 @@ func TestTPReportsWhereItEndedUp(t *testing.T) {
 		t.Errorf("tp should report a refused send, got %q", got)
 	}
 }
+
+// TestTPByNameGoesToTheHandleTheMapGave, which is the only thing a
+// teleport can be addressed to: a name is not in the request at all.
+//
+// The line saying where it is going comes first and before any of the
+// waiting, because a cross-region teleport takes about four hundred
+// milliseconds and has been measured at five seconds, and a shell that
+// has silently stopped answering is indistinguishable from one that has
+// hung.
+func TestTPByNameGoesToTheHandleTheMapGave(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t, mapBlock("Sandbox Goguen", 995, 997, 13))
+	x.grid.AnswerTeleport(t, "Sandbox Goguen", goguenHandle)
+
+	got := x.do(t, "tp Sandbox Goguen 33 73 2001")
+	said := strings.Index(got, "teleporting to Sandbox Goguen")
+	arrived := strings.Index(got, "Sandbox Goguen at")
+	if said < 0 || arrived < 0 || said > arrived {
+		t.Fatalf("tp should say where it is going and then where it arrived:\n%s", got)
+	}
+	// The name travels to the map as it was typed, spaces and all, with
+	// the position taken off the end of it rather than made part of it.
+	var asked string
+	for _, m := range x.grid.Sent() {
+		if q, ok := m.(*msg.MapNameRequest); ok {
+			asked = strings.TrimRight(string(q.NameData.Name), "\x00")
+		}
+	}
+	if asked != "Sandbox Goguen" {
+		t.Errorf("the map was asked about %q", asked)
+	}
+	sent := lastTeleport(t, x)
+	if sent.Info.RegionHandle != goguenHandle {
+		t.Errorf("tp asked for region %d, want the handle the map gave", sent.Info.RegionHandle)
+	}
+	if sent.Info.Position != (msg.Vector3{X: 33, Y: 73, Z: 2001}) {
+		t.Errorf("tp asked to arrive at %v", sent.Info.Position)
+	}
+}
+
+// TestTPWithNoPositionArrivesInTheMiddleOfTheRegion, which is where a
+// viewer puts somebody who typed a name into the world map and said
+// nothing about where in it.
+//
+// The height is asked for as nothing rather than guessed at: the
+// simulator stands the avatar on whatever is under the point, and there
+// is no cheap way to ask how high the ground is somewhere this session
+// has never been.
+func TestTPWithNoPositionArrivesInTheMiddleOfTheRegion(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t, mapBlock("Sandbox Goguen", 995, 997, 13))
+	x.grid.AnswerTeleport(t, "Sandbox Goguen", goguenHandle)
+
+	x.do(t, "tp Sandbox Goguen")
+	if got := lastTeleport(t, x).Info.Position; got != (msg.Vector3{X: 128, Y: 128}) {
+		t.Errorf("tp with no position asked to arrive at %v, want the middle of the region", got)
+	}
+}
+
+// TestTPWillNotChooseBetweenTheRegionsANameMatched.
+//
+// The map's search is by prefix, so a name that matches several is the
+// ordinary case and not a mistake.  Choosing the closest row would be
+// this command deciding which of somebody's several possibilities they
+// meant -- and a wrong guess here is not a listing to read again, it is
+// an avatar somewhere it was not sent.
+func TestTPWillNotChooseBetweenTheRegionsANameMatched(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t,
+		mapBlock("Sandbox Goguen", 995, 997, 13),
+		mapBlock("Sandbox Goguen Margin", 43552, 43552, 13))
+
+	got := x.do(t, "tp Sandbox")
+	for _, want := range []string{"Sandbox Goguen", "Sandbox Goguen Margin", "name in full"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("tp should list what matched and refuse, want %q:\n%s", want, got)
+		}
+	}
+	for _, m := range x.grid.Sent() {
+		if _, ok := m.(*msg.TeleportLocationRequest); ok {
+			t.Fatal("an ambiguous name teleported the avatar anyway")
+		}
+	}
+}
+
+// TestTPTakesANameTypedInFullOverTheLongerOnesBesideIt.
+//
+// A name typed in full is not an ambiguous name.  Since the search is by
+// prefix, every longer name comes back with it, so a command that
+// refused whenever more than one row arrived could never reach a region
+// whose name is the beginning of another's.
+func TestTPTakesANameTypedInFullOverTheLongerOnesBesideIt(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t,
+		mapBlock("Sandbox Goguen", 995, 997, 13),
+		mapBlock("Sandbox Goguen Margin", 43552, 43552, 13))
+	x.grid.AnswerTeleport(t, "Sandbox Goguen", goguenHandle)
+
+	// And in whatever case it was typed in, because the map's search
+	// ignores case and a person typing a name does too.
+	if got := x.do(t, "tp sandbox goguen"); !strings.Contains(got, "Sandbox Goguen at") {
+		t.Fatalf("tp should take the name typed in full:\n%s", got)
+	}
+	if got := lastTeleport(t, x).Info.RegionHandle; got != goguenHandle {
+		t.Errorf("tp went to region %d, want the one named in full", got)
+	}
+}
+
+// TestTPReportsBothVoicesOfARefusal.
+//
+// The refusal is the grid's and it says two things at once: a key a
+// program could act on and a sentence meant for a person.  They are not
+// always the same string, and neither can be worked out from the other,
+// so a shell that printed one of them would leave whoever read it
+// without either the reason or the name of it.
+func TestTPReportsBothVoicesOfARefusal(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t, mapBlock("Sandbox Bricker", 43554, 43552, 42))
+	x.grid.AnswerTeleportWith(t, agniRefusedTeleport)
+
+	got := x.do(t, "tp Sandbox Bricker")
+	for _, want := range []string{"MustHaveVIPStatus", "premium or vip subscriber"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the refusal should carry %q:\n%s", want, got)
+		}
+	}
+}
+
+// TestTPGivesUpAfterTheWaitItWasGiven.
+//
+// A teleport answered with nothing at all is a real answer rather than a
+// fault to retry: once this avatar has been handed off, the simulator it
+// left answers no further teleport request, ever.  So --wait is what
+// says how long to believe in one, and this shell has a default of its
+// own rather than the ninety seconds sl gives a caller that names none.
+func TestTPGivesUpAfterTheWaitItWasGiven(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t, mapBlock("Sandbox Goguen", 995, 997, 13))
+
+	start := time.Now()
+	got := x.do(t, "tp --wait 1 Sandbox Goguen")
+	if !strings.Contains(got, "nothing at all") {
+		t.Errorf("tp should say what silence means:\n%s", got)
+	}
+	if took := time.Since(start); took > 15*time.Second {
+		t.Errorf("tp waited %s, which is not the second it was given", took.Round(time.Second))
+	}
+}
+
+// lastTeleport is the teleport the shell asked for, and a failure when
+// it asked for none.
+func lastTeleport(t *testing.T, x *testShell) *msg.TeleportLocationRequest {
+	t.Helper()
+	var last *msg.TeleportLocationRequest
+	for _, m := range x.grid.Sent() {
+		if r, ok := m.(*msg.TeleportLocationRequest); ok {
+			last = r
+		}
+	}
+	if last == nil {
+		t.Fatal("nothing asked to be teleported anywhere")
+	}
+	return last
+}
+
+// goguenHandle is the region the map blocks above stand for: grid square
+// (995, 997), which is the destination stage 0 measured a real teleport
+// to and back from.
+const goguenHandle = 1094014069892352
+
+// agniRefusedTeleport is a region that would not have this avatar, as
+// Agni sent it: a key in one block and a sentence for a person in the
+// other.
+const agniRefusedTeleport = `<llsd><map>` +
+	`<key>AlertInfo</key><array><map>` +
+	`<key>ExtraParams</key><string></string>` +
+	`<key>Message</key><string>MustHaveVIPStatus</string></map></array>` +
+	`<key>Info</key><array><map>` +
+	`<key>Reason</key><string>You must be a premium or vip subscriber ` +
+	`to enter this region.</string></map></array></map></llsd>`
 
 // TestMoveNeedsExactlyOneObjectOfThatName.
 //

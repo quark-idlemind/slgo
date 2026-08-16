@@ -418,3 +418,49 @@ func TestNoDeclinesAGroupInvitation(t *testing.T) {
 		t.Errorf("a declined invitation is still waiting:\n%s", got)
 	}
 }
+
+// TestAnsweringALureFollowsTheTeleportRatherThanFiringItOff.
+//
+// A lure is the one teleport whose destination nobody knows in advance:
+// the offer says who made it and whatever they typed with it, and the
+// region is not a field of the message at all.  So the arrival is read
+// back afterwards, and the line before it is said before the request
+// goes -- accepting waits for the avatar to be there, which is half a
+// second at best and has been measured at five.
+func TestAnsweringALureFollowsTheTeleportRatherThanFiringItOff(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+	x.grid.AnswerTeleport(t, "Sandbox Goguen", goguenHandle)
+
+	x.grid.Relay(t, imFrom(testSomebody, "Some Body", sl.DialogTeleportLure, "come and see"))
+	waits(t, x, "come and see")
+
+	// The listing says what accepting will do, since a teleport is the
+	// one offer here that moves the avatar.
+	if got := x.do(t, "waiting"); !strings.Contains(got, "waits for the arrival") {
+		t.Errorf("the listing should say what answering a lure does:\n%s", got)
+	}
+
+	got := x.do(t, "answer 1")
+	accepting := strings.Index(got, "accepting a teleport from Some Body")
+	arrived := strings.Index(got, "arrived in Sandbox Goguen at")
+	if accepting < 0 || arrived < 0 || accepting > arrived {
+		t.Fatalf("answering a lure should say what it is doing and then where it arrived:\n%s", got)
+	}
+
+	var asked *msg.TeleportLureRequest
+	for _, m := range x.grid.Sent() {
+		if r, ok := m.(*msg.TeleportLureRequest); ok {
+			asked = r
+		}
+	}
+	if asked == nil {
+		t.Fatal("nothing accepted the lure")
+	}
+	if asked.Info.LureID != testSomebody {
+		t.Errorf("the lure answered was %s", asked.Info.LureID)
+	}
+	if got := x.do(t, "waiting"); !strings.Contains(got, "nothing waiting") {
+		t.Errorf("an accepted lure is still waiting:\n%s", got)
+	}
+}

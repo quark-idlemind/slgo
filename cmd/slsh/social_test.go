@@ -279,6 +279,31 @@ func TestAnOfferOfFriendshipSaysHowToAnswerIt(t *testing.T) {
 	}
 }
 
+// TestAnArrivalNobodyAskedForIsPrinted.
+//
+// A region change reaches this shell whoever provoked it: a lure
+// accepted from another client attached to the same daemon, a session
+// re-established after the circuit was lost, and one day an avatar
+// walking over a border.  None of those is a command's answer, so
+// without this the shell would go on describing a region it had left and
+// nothing on the screen would say why the objects had all changed.
+func TestAnArrivalNobodyAskedForIsPrinted(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	x.grid.RelayRegion(t, "Sandbox Goguen", goguenHandle)
+	got := waits(t, x, "Sandbox Goguen")
+	if !strings.Contains(got, "the avatar is now in Sandbox Goguen") {
+		t.Errorf("the notice should name the region arrived in:\n%s", got)
+	}
+	// And say what it costs, since a script or a person holding an
+	// object from a moment ago is holding something the new region has
+	// never heard of.
+	if !strings.Contains(got, "gone") {
+		t.Errorf("the notice should say what the move threw away:\n%s", got)
+	}
+}
+
 // TestAScriptAskingForSomethingSaysHowToAnswerIt.
 //
 // A dialog and a permission request both wait for an answer that has
