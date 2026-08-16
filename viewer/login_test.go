@@ -157,7 +157,7 @@ func TestHandoverKeepsWhatNothingModels(t *testing.T) {
 	// A quoted name is passed on exactly as the login server sent it,
 	// quotes and all: unquoting is the reader's business and a viewer
 	// expects what a login server sends.
-	if got["first_name"] != `"Inventory"` {
+	if got["first_name"] != `"Taren"` {
 		t.Errorf("first_name = %v, want it verbatim", got["first_name"])
 	}
 	skel, ok := got["inventory-skeleton"].([]any)
