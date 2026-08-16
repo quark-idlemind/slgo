@@ -235,7 +235,7 @@ a test can stand up two fake simulators and move between them. The
 duplicate-ring bug is a test that fails without `Forget` -- write it
 that way round.
 
-### Stage 3 -- Teleport, in sl
+### Stage 3 -- Teleport, in sl (done)
 
 `Session.Teleport(ctx, handle, position, timeout)`, alongside the
 `TeleportLocal` that is already there, plus `AcceptLure` growing the
@@ -248,6 +248,36 @@ old simulator has let go, not that the new one has us. The condition is
 `AgentMovementComplete` from the new address, which is what
 `Agent.moveTo` already waits for; `sl` waits for the daemon to say the
 move is done.
+
+Run 2026-08-16 against Agni: **twenty round trips between Pelmar Reach and
+Sandbox Goguen, forty moves, none of them failed.** What that measured:
+
+- **A move costs about 400 milliseconds** end to end -- asked for to
+  usable in the new region. Median 425ms over the forty, fastest 355ms,
+  and one outlier of **4.95 seconds** that arrived correctly like the
+  rest. So the tail is seconds rather than sub-second, which is worth
+  knowing before anything treats a teleport as instant.
+- **The capabilities really are the new region's.** `SimulatorFeatures`
+  answered from `simhost-0526923bb...` in Goguen and
+  `simhost-0aaaaaaaa...` in Pelmar Reach, every time, which is the seed out
+  of `TeleportFinish` being fetched and used rather than the login one
+  being kept.
+- **The object stores do not leak.** 58 objects described in Goguen and
+  41 in Pelmar Reach, the same two numbers on all twenty visits. The store
+  swap and the `Cache` reference counting hold up under repetition,
+  which is what the loop was for.
+- **The event queue restarts.** Not separately checked, because it
+  cannot be faked: `TeleportFinish` arrives on the queue, so hop N+1
+  only happens if the queue started against the region hop N arrived in.
+  Forty hops is forty of those.
+- **The height survives.** Back at 28, 72, **2002** every time, from a
+  request for 2001 -- the simulator stands the avatar a metre higher, as
+  expected. A landing by coarse location would have been 1020.
+- **A refusal leaves the session standing.** A handle that is no region
+  came back `no_host` in 223ms and the avatar had not moved.
+- Nothing in the daemon's log for the whole run: no reconnect, no
+  `simulator silent`, no `DisableSimulator` -- we leave each region well
+  inside the fifty seconds of grace stage 0 measured.
 
 ### Stage 4 -- what the clients are told
 
@@ -349,6 +379,11 @@ destination, and a moderate region next to a Linden Homes estate may
 refuse an arrival for reasons the map has no field for. Try it once in
 stage 3; keep Goguen as the fallback that is known to work.
 
+Stage 3 used Goguen for all forty of its moves and Vortaro is still
+untried, so this stays open for whoever wants a second destination --
+and a moderate region beside a Linden Homes estate is the more
+interesting test of the two.
+
 **A viewer attached across a move gets the wrong seed (stage 6).**
 `a.Account.SeedCapability` still holds the region this session LOGGED IN
 to, and `cmd/slgod/viewer.go:449` serves exactly that to a viewer being
@@ -381,14 +416,6 @@ grid's answer, never a wrong one, and it wants a second look if
 `Agent.Caps` from a field into a method. Both are exported, and v0.2.0
 set the precedent: a caller reading only a patch number would not look.
 
-**Stage 3 has not been run against the grid.** Everything in it was
-verified offline, including under `-race`, but the out-and-back loop
-this document asks for has not happened: the daemon holding the live
-session is built from stage 0, and following a teleport is precisely
-what that binary cannot do. Restarting it onto the new one logs the
-avatar out and back in, which is why it is not done casually. Until then
-the whole of stage 3 is unmeasured.
-
 **A teleport's failed dial should probably end the session.** `moveTo`
 deliberately leaves the session where it was when the dial fails,
 because that is the one failure that changes nothing -- but a dial after
@@ -411,12 +438,13 @@ provoked is still this session going somewhere, and is still followed by
 waiting to arrive. What it can do is report one client's refusal as
 another's. Documented at the head of `sl/teleport.go`.
 
-**Ninety seconds is a guess.** `DefaultTeleportTimeout` covers 300ms of
-grid and an unbounded daemon-side handshake and capability fetch, and
-nobody has measured the tail. `slsh waiting`'s accept inherits it, so an
-offer accepted to a region that never answers holds the shell for a
-minute and a half; stage 5 should decide whether the shell wants its
-own.
+**Ninety seconds is a lot.** `DefaultTeleportTimeout` was set before
+anything had been timed. Forty moves now say a teleport costs 355ms to
+5 seconds, so the constant is two orders of magnitude above what it
+covers, and the only argument for keeping it there is that nobody has
+seen a slow grid day. `slsh waiting`'s accept inherits it, so an offer
+to a region that never answers holds the shell for a minute and a half;
+stage 5 should decide whether the shell wants its own.
 
 ### Not about teleport
 
