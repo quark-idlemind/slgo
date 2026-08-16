@@ -1,0 +1,50 @@
+tp moves the avatar to a point in the region it is already in.  It is
+"move" done to a person instead of to an object, and like move it waits
+for the arrival rather than reporting the request.
+
+The argument is three numbers -- X Y Z, in this region's metres,
+separated by spaces.  What is printed afterwards is where the avatar
+actually ended up, read back, and not the point that was asked for.
+
+# This region only, and why the other one is a different matter
+
+A teleport within a region is a small thing.  The simulator already has
+the avatar: it moves it, says so, and nothing about the session changes
+-- same circuit, same capabilities, same session.  A client can ask for
+that and whatever holds the session underneath need not know it
+happened.
+
+Another region is a different act entirely.  The destination is a
+different simulator at a different address, and getting there means
+establishing the session there, opening a new circuit, fetching a new
+set of capabilities and closing the old one.  That is the daemon's work
+rather than a client's, and it is not built.  So a region name is
+refused, with the alternative named in the refusal, instead of being
+accepted by something that would half work.
+
+Until it is built, arriving somewhere else is a matter of logging in
+there: a profile's start location is honoured and the daemon's -start
+overrides it.  That is a relog rather than a teleport -- it costs a
+login, and every client attached is told the session was
+re-established -- but it does arrive.
+
+# Landing near, rather than exactly
+
+The simulator stands the avatar on whatever is under the point given,
+so the height it settles at is its choice.  Anything within a few
+metres counts as having arrived, and the line printed afterwards is the
+position to believe.
+
+A refused teleport -- a parcel that will not have the avatar, a point
+outside the region -- produces no error and no reply of any kind.  That
+is why this waits and reads back: without it, a refusal would be
+indistinguishable from success, and every position computed afterwards
+would be wrong.
+
+# Examples
+
+	tp 128 128 25
+	tp 33 73 1000.5
+
+See also: where for the position this is given in, move for shifting an
+object rather than the avatar, and look for the region it cannot leave.

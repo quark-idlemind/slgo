@@ -1,0 +1,40 @@
+who lists the other avatars in the region, nearest first.  It is the
+people half of what "objects" does for the furniture, and "where" and
+"look" answer the two questions either side of it: where this avatar is
+standing, and what the region is.
+
+It takes no argument.  Each line is a number, the name, the distance in
+metres and the key.  The distance is a straight line through all three
+axes rather than a distance across the ground, so somebody a hundred
+metres overhead is a hundred metres away and not the nearest person in
+the room.  The avatar this shell is driving is not in its own listing.
+
+# The number down the left is meant to be typed
+
+It is not decoration.  Every command that names a person -- im, chat,
+give, offer -- takes a number in place of a name, and it means whoever
+was on that line of the last listing this shell printed.
+
+That makes it the shell's count rather than the region's, with two
+consequences.  A second run renumbers everybody, since somebody who has
+walked closer changes places; and a listing from some other command --
+friends, lookup -- replaces it, so the number to use is always the one
+from the listing still on the screen.
+
+# A name that has not arrived yet
+
+An avatar's name is only ever had by asking, and the answer is given a
+few seconds to come back before the listing is printed.  Whoever is
+still unanswered appears as the first eight characters of their key, in
+brackets.  That is a question in flight rather than a person with no
+name, and the next run usually has it.
+
+# Examples
+
+Who is here, and then a word to the second of them:
+
+	who
+	im 2 is the lantern by the gate yours?
+
+See also: where, look, objects, lookup and profile for somebody who is
+not standing here, and im for talking to one who is.

@@ -69,6 +69,7 @@ var carryCommands = map[string]*command{
 		params: "NAME|UUID",
 		flags:  func() any { return new(permsFlags) },
 		brief:  "set what others may do with a rezzed object: c copy, m modify, t transfer, v move",
+		man:    "perms",
 		run:    cmdPerms,
 	},
 }

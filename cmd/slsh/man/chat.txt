@@ -1,0 +1,55 @@
+chat turns the keyboard over to talking.  Command mode is the outer
+one, because a shell is wanted for listing and moving things far more
+often than for conversation, and this is the way in; the escape key is
+the way back out.
+
+With nobody named it enters chat mode on whichever conversation is
+current.  With somebody named -- a name, a key, or a number from the
+last listing -- it opens the conversation with that person first and
+switches to it, which is the same thing "im" does when there is nothing
+to say.
+
+The prompt is where the next line will go: "Local" for the region's
+open chat, or somebody's name for an instant message to them.  That
+prompt is the only thing standing between a command and a remark said
+out loud, which is why it says so plainly.
+
+# The two modes each keep their own half-typed line
+
+Leaving one mode puts the line being typed aside and brings back the
+line that was put aside on the way in, so an interrupted command is
+still there afterwards and so is an interrupted sentence.  Neither is
+sent or run by the switch.
+
+# What the keys do here
+
+Tab moves to the next conversation, rather than completing a word as
+it does at a command prompt, and it does nothing at all while
+something is half typed -- moving then would send the line somewhere
+nobody meant.  The arrow keys do not walk the history in chat mode:
+what was said is not a command to run again.  Ctrl-C on an empty line
+returns to command mode rather than leaving the shell.
+
+The escape key is what leaves, and slsh takes a key of its own if
+escape is awkward on a particular terminal; "slsh --help" says how.
+
+# Everything heard is printed in either mode
+
+Arriving chat has nothing to do with what the keyboard is for, so
+remarks, instant messages and notices are printed above whatever is
+being typed whichever mode is in force.  Time-stamped, and marked with
+"<" for heard and ">" for said, since the two are otherwise hard to
+tell apart in a column.
+
+# Examples
+
+Enter chat mode and talk to the room:
+
+	chat
+
+Enter it already talking to somebody:
+
+	chat Example Resident
+
+See also: talk for the conversations tab moves between, im for one
+message without leaving command mode, and say for one remark out loud.

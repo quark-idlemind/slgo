@@ -374,8 +374,8 @@
       <p class="said">said "slush"</p>
       <p class="standfirst">
         A shell for Second Life. Your inventory is a filesystem, the region
-        around you is a set of commands, and the things that want an answer
-        queue up at the prompt. It has no view — which is exactly why it can
+        around you is a set of commands, and anything that wants an answer
+        queues up at the prompt. It has no view — which is exactly why it can
         be scripted, piped and left running.
       </p>
     </div>
@@ -383,10 +383,10 @@
       <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">cd Objects</span>
 <span class="p">/Objects$</span> <span class="c">ls -l lantern</span>
-<span class="o">object     2026-08-02  40f17e57-…  /Objects/brass lantern</span>
-<span class="p">/Objects$</span> <span class="c">place "brass lantern"</span>
-<span class="o">"brass lantern" a8de7e57-… is at 35, 73, 2001</span>
-<span class="p">/Objects$</span> <span class="c">start "brass lantern"</span>
+<span class="o">object     2026-08-02  40f17e57-…  /Objects/lantern</span>
+<span class="p">/Objects$</span> <span class="c">place lantern</span>
+<span class="o">"lantern" a8de7e57-… is at 129, 128, 25</span>
+<span class="p">/Objects$</span> <span class="c">start lantern</span>
 <span class="o">started    flicker</span></pre>
     </div>
   </header>
@@ -396,15 +396,19 @@
     <nav class="rail" aria-label="Sections">
       <ol>
         <li><a href="#connect">Getting connected</a></li>
-        <li><a href="#prompt">The prompt</a></li>
+        <li><a href="#learn">Finding your way about</a></li>
+        <li><a href="#prompt">The prompt and its modes</a></li>
         <li><a href="#inventory">Inventory</a></li>
-        <li><a href="#world">The world around you</a></li>
-        <li><a href="#objects">Objects and scripts</a></li>
-        <li><a href="#people">People</a></li>
+        <li><a href="#region">Where you are</a></li>
+        <li><a href="#wearing">Wearing things</a></li>
+        <li><a href="#objects">Objects in the world</a></li>
+        <li><a href="#scripts">Notecards and scripts</a></li>
+        <li><a href="#people">Talking to people</a></li>
         <li><a href="#waiting">Things waiting</a></li>
         <li><a href="#daemon">The daemon</a></li>
         <li><a href="#viewer">A viewer, for eyes</a></li>
         <li><a href="#files">Files and redirection</a></li>
+        <li><a href="#config">The configuration file</a></li>
         <li><a href="#keys">Keys</a></li>
         <li><a href="#reference">Every command</a></li>
       </ol>
@@ -417,42 +421,81 @@
         <h2><span class="num">1</span>Getting connected</h2>
 
         <p>
-          There are two ways to be connected and <code>slsh</code> does both.
-          Normally it attaches to <strong>slgod</strong>, a daemon that holds the
-          session to the grid: the shell starts instantly, several programs can
-          share one avatar, and quitting leaves that avatar logged in. With
-          <code>--direct</code> the shell logs in itself and holds the session
-          for as long as it runs, which needs no daemon but pays for a fresh
-          login every time and logs the avatar out when you leave.
+          Type <code>slsh</code> and you are at a prompt, in a region, as an
+          avatar. The prompt shows where you are in inventory, and the first
+          thing worth typing is <code>where</code>:
         </p>
 
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">$</span> <span class="c">slsh</span>                          <span class="n">attach, and start at a prompt</span>
-<span class="p">$</span> <span class="c">slsh --direct</span>                 <span class="n">log in first</span>
-<span class="p">$</span> <span class="c">slsh -c "ls -l Objects"</span>       <span class="n">run one command and exit</span>
-<span class="p">$</span> <span class="c">slsh -f commands.slsh</span>         <span class="n">run a file of commands and exit</span></pre>
+<pre><span class="p">$</span> <span class="c">slsh</span>
+<span class="p">/$</span> <span class="c">where</span>
+<span class="o">Testville at 128, 128, 25
+acting as group Example Builders (87f07e57-…)</span>
+<span class="p">/$</span> <span class="c">who</span>
+<span class="o"> 1  Example Resident                  3.1m  d8467e57-…
+ 2  Another Resident                 12.4m  7ed37e57-…</span>
+<span class="p">/$</span> <span class="c">quit</span></pre>
         </div>
 
-        <h3>Which daemon</h3>
         <p>
-          <code>--addr HOST:PORT</code> says where slgod is. Without it the
-          address comes from <code>addr =</code> in the configuration file, then
-          from whatever an <code>sl-host</code> command prints if you have one,
-          then from this machine — which is the ordinary case when you run your
-          own slgod, so usually you pass nothing at all.
+          Leaving does not log the avatar out. That is the point of the
+          arrangement: a daemon called <strong>slgod</strong> holds the session
+          to the grid, and <code>slsh</code> attaches to it. The shell starts
+          instantly because there is no login to wait for, several programs can
+          drive one avatar at the same time, and closing the shell leaves the
+          avatar standing where it was.
         </p>
 
-        <h3>Which avatar</h3>
         <p>
-          A daemon can hold several. In descending order of strength:
-          <code>--agent NAME</code> (<code>-a</code>) for one command,
-          <code>SLGO_AGENT</code> for one shell, <code>agent =</code> in the
-          configuration file for this machine, and otherwise the daemon's own
-          default — the session it has held longest. Whenever a command does not
-          name one it tells you which it used, which is worth reading, since
-          that default depends on the daemon's history and nothing on disk
-          records it.
+          The other way is <code>--direct</code>, where the shell logs in
+          itself and holds the session for as long as it runs. It needs no
+          daemon, but every start pays for a fresh login and quitting logs the
+          avatar out. Use it when there is no daemon to attach to.
+        </p>
+
+        <h3>Running one command, or a file of them</h3>
+        <p>
+          Neither form has to be interactive. <code>-c</code> runs one command
+          line and exits; <code>-f</code> runs a file of them. Both are how
+          slsh ends up inside shell scripts and makefiles.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">$</span> <span class="c">slsh -c "ls -l Objects"</span>
+<span class="p">$</span> <span class="c">slsh -f tidy-up.slsh</span>
+<span class="p">$</span> <span class="c">slsh --direct -c where</span>            <span class="n">log in, ask, log out</span></pre>
+        </div>
+
+        <h3>Which daemon, and which avatar</h3>
+        <p>
+          <code>--addr HOST:PORT</code> says where slgod is. Without it the
+          address comes from <code>addr =</code> in the configuration file,
+          then from an <code>sl-host</code> command if you have one, then from
+          this machine — which is the usual case, so most people never pass it.
+        </p>
+
+        <p>
+          One daemon can hold several avatars, and four things decide which one
+          a command drives, in descending order of strength:
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="cmd">--agent NAME</td><td class="what">this command and nothing else (<code>-a</code> for short)</td></tr>
+              <tr><td class="cmd">SLGO_AGENT</td><td class="what">every command in this shell</td></tr>
+              <tr><td class="cmd">agent = NAME</td><td class="what">in the configuration file, for this machine</td></tr>
+              <tr><td class="cmd">nothing</td><td class="what">the daemon's default: the session it has held longest</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          When a command does not name one it says which it used. That is worth
+          reading, because the default depends on the daemon's history and
+          nothing on disk records it.
         </p>
 
         <div class="note">
@@ -460,22 +503,91 @@
             For <code>--direct</code>, accounts live one file per account in
             <code>~/.config/slgo</code>. The directory must be mode 700 and each
             file 600 — these programs refuse to read credentials anyone else
-            can. Storing a password as its <code>$1$…</code> digest works and is
+            can. A password stored as its <code>$1$…</code> digest works and is
             preferred: that is the only form that ever leaves your machine.
           </p>
         </div>
       </section>
 
-      <!-- ---------------------------------------------------- prompt -->
-      <section id="prompt">
-        <h2><span class="num">2</span>The prompt, and the modes behind it</h2>
+      <!-- -------------------------------------------------- learning -->
+      <section id="learn">
+        <h2><span class="num">2</span>Finding your way about</h2>
 
         <p>
-          The prompt is where you are in inventory. Command mode is the outer
-          one, because that is what a keyboard is mostly for; <code>chat</code>
-          goes inward and Escape comes back out. Each mode remembers the line
-          you had half-typed in it, so switching never loses what you were
-          saying.
+          There are sixty-odd commands, and three ways to ask about them. They
+          answer different questions and it is worth knowing which is which.
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="cmd">help</td><td class="what">what groups of commands exist; <code>help region</code> lists one group</td></tr>
+              <tr><td class="cmd">place --help</td><td class="what">what that command takes: its flags, one line each</td></tr>
+              <tr><td class="cmd">man place</td><td class="what">what that command is <em>for</em>, at length, with examples</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          <code>help</code> is grouped because one list of sixty is a wall
+          rather than an answer. A command can be in more than one group where
+          it belongs in both.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">help</span>
+<span class="o">Commands are grouped.  For a group:  help GROUP
+For everything:        help all
+For one command:       COMMAND --help
+
+  inventory   folders and items: what you have, and moving it about  (15)
+  waiting     things that want an answer, and how to give one         (7)
+  people      finding people, talking to them, friendship            (12)
+  region      where this avatar is and what is around it             (18)
+  …</span></pre>
+        </div>
+
+        <p>
+          <code>man</code> is where the reasoning lives — why a command
+          behaves as it does, what it cannot know, and what to type instead
+          when it refuses. Where this guide is a walk through, a man page is
+          the whole of one command.
+        </p>
+
+        <p>
+          <strong>Tab</strong> completes a command name or an inventory path,
+          and <strong>up</strong> and <strong>down</strong> walk through what
+          you have typed before. Both are worth using from the first minute.
+        </p>
+      </section>
+
+      <!-- ---------------------------------------------------- prompt -->
+      <section id="prompt">
+        <h2><span class="num">3</span>The prompt and its modes</h2>
+
+        <p>
+          The prompt is where you are in inventory, so it changes as you
+          <code>cd</code> about. Two other things can appear in it, and both
+          mean something.
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="cmd">/Objects$</td><td class="what">command mode, in the folder /Objects</td></tr>
+              <tr><td class="cmd">(2) /Objects$</td><td class="what">the same, with two things waiting for an answer</td></tr>
+              <tr><td class="cmd">Local&gt;</td><td class="what">chat mode, talking to the region</td></tr>
+              <tr><td class="cmd">1 text&gt;</td><td class="what">typing a multi-line answer to question 1</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          Command mode is the outer one, because that is what a keyboard is
+          mostly for. <code>chat</code> goes inward and Escape comes back out.
+          Each mode remembers the line you had half-typed in it, so switching
+          never loses what you were saying.
         </p>
 
         <div class="term">
@@ -490,102 +602,107 @@
           Anything said to you is printed as it arrives, above whatever you are
           typing, in <em>either</em> mode. You never have to leave what you are
           doing to see chat, and chat never eats your half-typed command. Start
-          in chat mode with <code>--chat</code>; change the key that leaves it
-          with <code>--escape KEY</code>.
-        </p>
-
-        <p>
-          A number in front of the prompt is the count of things waiting for an
-          answer — <code>(2) /Objects$</code>. There is a third mode too, for
-          typing an answer several lines long; see
-          <a href="#waiting">Things waiting</a>.
+          in chat mode with <code>--chat</code>, and change the key that leaves
+          it with <code>--escape KEY</code>.
         </p>
 
         <p>
           While a command runs there is no prompt. A prompt means the shell is
-          ready for the next line; what you type during a long command waits its
-          turn and arrives when the command is done.
+          ready for the next line; what you type during a long command waits
+          its turn and arrives when the command is done.
         </p>
       </section>
 
       <!-- ------------------------------------------------- inventory -->
       <section id="inventory">
-        <h2><span class="num">3</span>Inventory is a filesystem</h2>
+        <h2><span class="num">4</span>Inventory is a filesystem</h2>
 
         <p>
-          <code>cd</code>, <code>ls</code>, <code>pwd</code>, <code>cat</code>,
-          <code>mkdir</code>, <code>mv</code>, <code>cp</code>, <code>rm</code>
-          and <code>find</code> all work the way you expect them to.
+          <code>cd</code>, <code>ls</code>, <code>pwd</code>, <code>mkdir</code>,
+          <code>mv</code>, <code>cp</code>, <code>rm</code> and <code>find</code>
+          all mean what they mean in any shell. The tree is the one the viewer
+          shows, and <code>/</code> is the root of it.
         </p>
 
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">cd Objects</span>
-<span class="p">/Objects$</span> <span class="c">ls -l</span>                    <span class="n">kind, date and id as well</span>
+<span class="p">/Objects$</span> <span class="c">ls</span>
+<span class="o">/Objects/lantern
+/Objects/sign
+/Objects/spares</span>
+<span class="p">/Objects$</span> <span class="c">ls -l</span>                    <span class="n">kind, date, id, path</span>
+<span class="o">object     2026-08-02  40f17e57-…  /Objects/lantern
+object     2026-07-29  91357e57-…  /Objects/sign
+folder     -           1ae57e57-…  /Objects/spares</span>
 <span class="p">/Objects$</span> <span class="c">ls -lt</span>                   <span class="n">newest first</span>
-<span class="p">/Objects$</span> <span class="c">ls -r Textures</span>           <span class="n">descend into subfolders</span>
-<span class="p">/Objects$</span> <span class="c">find lantern</span>             <span class="n">names containing it, from here down</span>
-<span class="p">/Objects$</span> <span class="c">cat "my notecard"</span>
-<span class="p">/Objects$</span> <span class="c">mv "old lamp" sorted</span>     <span class="n">into a folder</span>
-<span class="p">/Objects$</span> <span class="c">mv "old lamp" lamp</span>       <span class="n">a plain name renames instead</span>
-<span class="p">/Objects$</span> <span class="c">rm "old lamp"</span>            <span class="n">permanent; there is no undo</span></pre>
+<span class="p">/Objects$</span> <span class="c">ls -r spares</span>             <span class="n">and everything below it</span>
+<span class="p">/Objects$</span> <span class="c">find lantern</span>             <span class="n">names containing it, from here down</span></pre>
         </div>
 
+        <h3>Names are not unique, so ids are accepted everywhere</h3>
         <p>
-          <code>cd</code> with no path goes to the root and <code>..</code> goes
-          up. Names may contain almost any printable character, so paths escape:
-          <code>/</code> separates, <code>\/</code> is a slash inside a name, and
-          quotes work too.
+          One folder can hold a dozen things called "lantern" — the grid allows
+          it and viewers do it. So every command that takes a path also takes
+          an item's id, which is what <code>ls -l</code> prints them for. When
+          a name is ambiguous, list, then work by id.
         </p>
 
         <p>
-          Names are <strong>not</strong> unique — one folder can hold a dozen
-          things with the same name — so <code>mv</code>, <code>rm</code> and
-          <code>cat</code> take an item's id anywhere they take a path. That is
-          what makes a listing of duplicates usable, and what <code>ls -l</code>
-          prints ids for. <code>rm</code> takes the first thing of the name it is
-          given; <code>--remove-all-copies</code> takes all of them and says how
-          many. Two listings of a folder that has not changed are identical,
-          which is what makes them worth diffing and worth editing into
-          commands.
+          Paths escape rather than forbid: <code>/</code> separates,
+          <code>\/</code> is a slash inside a name, <code>\\</code> is a
+          backslash, and quoting with <code>"</code> or <code>'</code> works as
+          well. A name with a space in it wants quoting.
         </p>
 
-        <h3>Getting text and pictures in and out</h3>
+        <h3>Deleting, which has no undo</h3>
         <p>
-          <code>cat</code> prints a notecard or a script;
-          <code>get -o FILE</code> saves a texture as a PNG;
-          <code>put FILE</code> uploads an image as a texture, which costs L$, so
-          <code>-N</code> says what it would do without doing it.
-          <code>new</code> makes an empty notecard or a script, or one from a
-          file, and <code>save FILE PATH</code> writes a local file into a
-          notecard or script that already exists.
+          <code>rm</code> takes the <em>first</em> thing of the name it is
+          given, which is the careful default when a name may mean a dozen
+          items. <code>--remove-all-copies</code> takes all of them and says
+          how many; <code>*</code> means every item in the folder and is
+          refused without that flag, so the sweeping form has to be asked for
+          on purpose.
         </p>
 
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">new --kind script --from hello.lsl greeter</span>
-<span class="o">greeter 73427e57-…</span>
-<span class="p">/$</span> <span class="c">save hello.lsl greeter</span>
-<span class="o">greeter: 81 bytes written, and it compiled</span></pre>
+<pre><span class="p">/Scripts$</span> <span class="c">rm *</span>
+<span class="o">*: means every item in this folder: say rm --remove-all-copies * if that is what you want</span>
+<span class="p">/Scripts$</span> <span class="c">rm --remove-all-copies *</span>
+<span class="o">*: removed 645 items</span></pre>
         </div>
 
         <p>
-          A script that does not compile is still saved — the save succeeded and
-          the compile failed, in that order — and the compiler's complaint is
-          printed underneath.
+          Each removal is a round trip, so six hundred of them take minutes.
+          The count climbs in place while it works, and is written to the
+          terminal rather than to a file, so a redirect catches the result and
+          not the flicker. <code>emptytrash</code> throws away everything in
+          the trash, permanently, and finds the trash by what it is rather than
+          what it is called — so it works on an account whose viewer named it
+          something else.
         </p>
+
+        <div class="note">
+          <p>
+            <code>mv</code> tries its destination as a folder first. A rename
+            to a plain word that happens to <em>be</em> a folder beside the
+            item moves it there instead, and reports success either way. When
+            renaming, it is worth knowing what else is in the folder.
+          </p>
+        </div>
       </section>
 
-      <!-- ----------------------------------------------------- world -->
-      <section id="world">
-        <h2><span class="num">4</span>The world around you</h2>
+      <!-- ---------------------------------------------------- region -->
+      <section id="region">
+        <h2><span class="num">5</span>Where you are, and who else is</h2>
 
         <div class="tablewrap">
           <table>
             <tbody>
-              <tr><td class="cmd">where</td><td class="what">the region and position you are at, and the group you are acting as</td></tr>
-              <tr><td class="cmd">who</td><td class="what">who else is in the region, nearest first</td></tr>
-              <tr><td class="cmd">look</td><td class="what">what the simulator said about the region</td></tr>
+              <tr><td class="cmd">where</td><td class="what">the region, the position, and the group being acted as</td></tr>
+              <tr><td class="cmd">who</td><td class="what">who else is here, nearest first, with their keys</td></tr>
+              <tr><td class="cmd">look</td><td class="what">what the simulator said about the region when this session arrived</td></tr>
               <tr><td class="cmd">objects</td><td class="what">the objects the region has described; <code>-c</code> for the prims inside each</td></tr>
               <tr><td class="cmd">tp X Y Z</td><td class="what">move to a position in this region</td></tr>
               <tr><td class="cmd">caps · features · lsl</td><td class="what">what this simulator grants, supports and implements</td></tr>
@@ -597,139 +714,284 @@
           <code>objects</code>, <code>caps</code>, <code>features</code> and
           <code>lsl</code> all take text to filter by, so <code>lsl llSensor</code>
           answers what this grid's LSL actually has rather than what the wiki
-          remembers.
+          remembers. <code>objects</code> groups what it found by owner.
         </p>
 
         <div class="note">
           <p>
             <code>tp</code> moves <strong>within</strong> the region only.
-            Another region is a different simulator needing a new circuit and a
-            new set of capabilities, which slgod does not do yet — so arriving
-            somewhere else is still a matter of logging in there.
+            Another region is a different simulator, needing a new circuit and
+            a new set of capabilities, which slgod does not do yet — so
+            arriving somewhere else is still a matter of logging in there.
           </p>
-        </div>
-
-        <h3>What you are wearing</h3>
-        <p>
-          <code>worn</code> lists the attachments, <code>wear</code> puts one on
-          and <code>detach</code> takes it off. A point can hold more than one
-          attachment, and <code>wear</code> adds alongside whatever is already
-          there — the viewer's Add. <code>wear --replace</code> is the other
-          one: what was on that point comes off, and the line says which. With
-          no <code>--at</code> the object goes wherever it says it belongs.
-        </p>
-
-        <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">wear Objects/tape measure</span>
-<span class="o">tape measure is worn on left hand</span>
-<span class="p">/$</span> <span class="c">wear --replace --at "HUD top right" Objects/panel</span>
-<span class="o">panel is worn on HUD top right; clock came off</span>
-<span class="p">/$</span> <span class="c">detach "tape measure"</span>
-<span class="o">tape measure is no longer worn on left hand</span></pre>
         </div>
 
         <h3>The group you act as</h3>
         <p>
-          Land usually grants building to a <em>group</em> rather than to people,
-          and a headless login starts with none — so an avatar that cannot rez
-          on land it is entitled to is usually an avatar acting as nobody.
-          <code>group</code> lists what it could act as and marks what it does;
-          <code>group NAME</code> changes it, and <code>group none</code> clears
-          it.
+          Land usually grants building to a <em>group</em> rather than to
+          people, and a headless login starts acting as nobody. So an avatar
+          that cannot rez on land it is plainly entitled to is usually an
+          avatar with no group active — and the refusal talks about the land,
+          which sends you looking in the wrong place.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">group</span>
+<span class="o">active  87f07e57-… Example Builders
+        29af7e57-… Testville Gardeners</span>
+<span class="p">/$</span> <span class="c">group testville gardeners</span>     <span class="n">case does not matter</span>
+<span class="o">acting as Testville Gardeners (29af7e57-…)</span>
+<span class="p">/$</span> <span class="c">group none</span>
+<span class="o">acting as no group, which is what land that grants building to a group refuses</span></pre>
+        </div>
+
+        <p>
+          An empty list is not proof of anything: the simulator volunteers the
+          list shortly after login and answers no question about it, so "no
+          groups are known here" means either none joined or none told yet.
+        </p>
+      </section>
+
+      <!-- --------------------------------------------------- wearing -->
+      <section id="wearing">
+        <h2><span class="num">6</span>Wearing things</h2>
+
+        <p>
+          <code>worn</code> lists the attachments, <code>wear</code> puts one
+          on, <code>detach</code> takes it off. The argument to
+          <code>wear</code> is an inventory path or an id; the argument to
+          <code>detach</code> is the name of the item something was worn from,
+          which is what <code>worn</code> prints.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">wear Objects/badge</span>
+<span class="o">badge is worn on HUD top right</span>
+<span class="p">/$</span> <span class="c">worn</span>
+<span class="o">HUD top right      badge
+left hand          lantern</span>
+<span class="p">/$</span> <span class="c">detach badge</span>
+<span class="o">badge is no longer worn on HUD top right</span></pre>
+        </div>
+
+        <p>
+          <strong>Wearing adds.</strong> A bare <code>wear</code> puts the
+          object on alongside whatever is already on that point, which is the
+          viewer's Add rather than its Wear. <code>--replace</code> is the
+          other one, and it says what it displaced. Without <code>--at</code>
+          the object goes wherever the object itself says, and the line printed
+          names the point the region gave back rather than one guessed here.
+        </p>
+
+        <p>
+          Wearing an item that is already on is refused. Two attachments from
+          one item agree in every field a person could name one by, so
+          <code>detach</code> would find both and be unable to choose.
         </p>
       </section>
 
       <!-- --------------------------------------------------- objects -->
       <section id="objects">
-        <h2><span class="num">5</span>Objects, and the scripts inside them</h2>
+        <h2><span class="num">7</span>Objects in the world</h2>
 
         <p>
-          <code>take</code> brings a rezzed object into inventory and
-          <code>place</code> puts one back into the world. Neither of them is
-          <code>rez</code>, which already means "build what this JSON file
-          describes" — a different act from "put back what I took".
-          <code>move</code> is for something already standing there: it changes
-          where it is and nothing else.
-        </p>
-
-        <div class="tablewrap">
-          <table>
-            <tbody>
-              <tr><td class="cmd">take · place</td><td class="what">between the world and inventory; <code>take --copy</code> tries to leave the original standing</td></tr>
-              <tr><td class="cmd">move · touch</td><td class="what">move a rezzed object; click one, on a named face at a named point</td></tr>
-              <tr><td class="cmd">link · unlink</td><td class="what">join objects into one; take one apart, or free a single prim from it</td></tr>
-              <tr><td class="cmd">perms</td><td class="what">what the next owner, the group or everyone may do: <code>c</code>opy, <code>m</code>odify, <code>t</code>ransfer, mo<code>v</code>e</td></tr>
-              <tr><td class="cmd">texture</td><td class="what">what a face looks like, or with no flags, what it looks like now</td></tr>
-              <tr><td class="cmd">dump · reform · rez</td><td class="what">describe an object as JSON, change it to match a file, or build one from it</td></tr>
-              <tr><td class="cmd">drop</td><td class="what">put an inventory item inside a rezzed object</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <p>
-          <code>link</code> names the root first and everything that goes under
-          it. <code>unlink</code> given a root takes the whole thing apart and
-          given one prim frees just that prim — and it lists what it freed with
-          their keys, because a linkset answers to its root's name while the
-          pieces keep their own, which for anything built by hand is often
-          "Object" for all of them.
-        </p>
-
-        <h3>Inside an object</h3>
-        <p>
-          An object holds inventory of its own, with its own ids. The same three
-          verbs reach it with <code>--in</code>, and scripts have two more.
+          <code>take</code> and <code>place</code> are a pair:
+          <code>take</code> brings a rezzed object into inventory, and
+          <code>place</code> puts one back out. <code>move</code> repositions
+          something already standing there, and <code>rez</code> builds an
+          object from a JSON description rather than from inventory.
         </p>
 
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">ls --in "brass lantern"</span>
+<pre><span class="p">/$</span> <span class="c">place Objects/lantern</span>
+<span class="o">"lantern" a8de7e57-… is at 129, 128, 25</span>
+<span class="p">/$</span> <span class="c">move lantern 128 130 25</span>
+<span class="o">lantern is at 128.0, 130.0, 25.0</span>
+<span class="p">/$</span> <span class="c">touch lantern</span>
+<span class="p">/$</span> <span class="c">take lantern</span>
+<span class="o">"lantern" a8de7e57-… (local 83565482) is in inventory as lantern</span></pre>
+        </div>
+
+        <p>
+          An object is named the way an inventory item is: by name, or by key
+          where the name is ambiguous. Only what the region has described is
+          findable — a region introduces itself once, and nothing beyond the
+          draw distance is described at all — so an object that is not listed
+          may be out of range rather than absent.
+        </p>
+
+        <h3>Joining and taking apart</h3>
+        <p>
+          <code>link</code> names the root first and everything that goes under
+          it. <code>unlink</code> given a root takes the whole thing apart;
+          given one prim of a set, it frees just that prim.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">link chair seat "left leg" "right leg"</span>
+<span class="o">"chair" 5ef67e57-… (local 83565482) is one object of 4 prims</span>
+<span class="p">/$</span> <span class="c">unlink chair</span>
+<span class="o">"chair" came apart into 4 objects:
+  5ef67e57-…                          chair
+  76167e57-…                          Object
+  8b537e57-…                          Object
+  8c617e57-…                          Object
+more than one of these is called "Object"; name one by its key</span></pre>
+        </div>
+
+        <p>
+          That is why it lists keys rather than printing a success line: a
+          linkset answers to its root's name while the pieces keep their own,
+          which for anything built by hand is often "Object" for all of them.
+        </p>
+
+        <h3>Permissions and faces</h3>
+        <p>
+          <code>perms</code> sets what the next owner, the group or everyone
+          may do with a rezzed object, in letters: <code>c</code>opy,
+          <code>m</code>odify, <code>t</code>ransfer, mo<code>v</code>e.
+          <code>texture</code> sets what a face looks like, or with no flags
+          says what it looks like now.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">perms --next cmt --everyone none lantern</span>
+<span class="o">the next owner may now copy, modify, transfer
+everyone may now nothing</span>
+<span class="p">/$</span> <span class="c">texture -f 2 --id d8467e57-… lantern</span></pre>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------- scripts -->
+      <section id="scripts">
+        <h2><span class="num">8</span>Notecards and scripts</h2>
+
+        <p>
+          <code>cat</code> prints a notecard or a script. <code>new</code>
+          makes one, empty or from a file. <code>save</code> writes a local
+          file into one that already exists — the two are different acts and
+          have different names for that reason.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">new --kind script --from flicker.lsl flicker</span>
+<span class="o">flicker 73427e57-…</span>
+<span class="p">/$</span> <span class="c">save flicker.lsl flicker</span>
+<span class="o">flicker: 81 bytes written, and it compiled</span>
+<span class="p">/$</span> <span class="c">cat flicker</span>
+<span class="o">default
+{
+    state_entry()
+    …</span></pre>
+        </div>
+
+        <p>
+          A script that does not compile is still saved — the save succeeded
+          and the compile failed, in that order — and the compiler's complaint
+          is printed underneath. An inventory script is not running anywhere;
+          it runs when it is inside an object.
+        </p>
+
+        <h3>Inside an object</h3>
+        <p>
+          An object holds inventory of its own, with its own ids. The same
+          three verbs reach it with <code>--in</code>, and scripts have three
+          commands more.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">ls --in lantern</span>
 <span class="o">lsltext    flicker</span>
-<span class="p">/$</span> <span class="c">new --in "brass lantern" --from flicker.lsl flicker</span>
-<span class="o">flicker is in brass lantern and running</span>
-<span class="p">/$</span> <span class="c">stop "brass lantern"</span>
+<span class="p">/$</span> <span class="c">new --in lantern --from flicker.lsl flicker</span>
+<span class="o">flicker is in lantern and running</span>
+<span class="p">/$</span> <span class="c">stop lantern</span>
 <span class="o">stopped    flicker</span>
-<span class="p">/$</span> <span class="c">start "brass lantern" flicker</span>
+<span class="p">/$</span> <span class="c">start lantern flicker</span>
 <span class="o">started    flicker</span></pre>
         </div>
 
         <p>
-          <code>start</code> and <code>stop</code> with no script name mean every
-          script in the object, one line each, and they wait for the object to
-          agree rather than reporting what they merely asked for. A script
-          already in the state you asked for says <code>already</code> and
-          nothing is sent. <code>new --in</code> compiles the script inside the
-          object and starts it, which is what dropping one in does not do.
+          <code>new --in</code> compiles the script inside the object and
+          starts it, which is what dropping one in does <em>not</em> do:
+          <code>drop</code> copies an item in and leaves it there, unstarted.
+          <code>start</code> and <code>stop</code> with no script named mean
+          every script in the object, one line each, and they wait for the
+          object to agree rather than reporting what they merely asked for. A
+          script already in the state you asked for says <code>already</code>
+          and nothing is sent.
         </p>
       </section>
 
       <!-- ---------------------------------------------------- people -->
       <section id="people">
-        <h2><span class="num">6</span>People</h2>
+        <h2><span class="num">9</span>Talking to people</h2>
 
-        <div class="tablewrap">
-          <table>
-            <tbody>
-              <tr><td class="cmd">say TEXT</td><td class="what">one line to local chat without leaving command mode</td></tr>
-              <tr><td class="cmd">chat [WHO]</td><td class="what">enter chat mode, on local chat or in a conversation</td></tr>
-              <tr><td class="cmd">im WHO TEXT</td><td class="what">send one message without entering chat mode</td></tr>
-              <tr><td class="cmd">talk</td><td class="what">the conversations chat mode cycles between with Tab</td></tr>
-              <tr><td class="cmd">lookup TEXT</td><td class="what">search the grid for people by part of a name</td></tr>
-              <tr><td class="cmd">profile WHO</td><td class="what">born, payment, partner, about text, and the groups they list</td></tr>
-              <tr><td class="cmd">friends [-a]</td><td class="what">friends online, or all of them</td></tr>
-              <tr><td class="cmd">offer · give</td><td class="what">offer friendship; offer an inventory item</td></tr>
-            </tbody>
-          </table>
+        <p>
+          <code>say</code> puts one line into local chat without leaving
+          command mode. <code>chat</code> enters chat mode, where everything
+          typed is said until Escape.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">say the lantern is lit</span>
+<span class="p">/$</span> <span class="c">chat</span>
+<span class="p">Local&gt;</span> <span class="c">and the door is open</span>
+<span class="n">&lt;ESC&gt;</span></pre>
+        </div>
+
+        <h3>Instant messages</h3>
+        <p>
+          <code>im WHO TEXT</code> sends one message and stays in command
+          mode. <code>im WHO</code> with nothing after it opens the
+          conversation in chat mode instead, which is what to use for a
+          conversation rather than a remark.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">im Example Resident are you about?</span>
+<span class="o">* new conversation with Example Resident
+&gt; [IM Example Resident] are you about?</span>
+<span class="p">/$</span> <span class="c">im Example Resident</span>              <span class="n">no text: go and talk</span>
+<span class="p">Example Resident&gt;</span> <span class="c">I am here</span>
+<span class="n">&lt;TAB&gt;</span>                              <span class="n">next conversation</span>
+<span class="p">Local&gt;</span>
+<span class="n">&lt;ESC&gt;</span>
+<span class="p">/$</span> <span class="c">talk</span>
+<span class="o">*  1  Local
+   2  Example Resident</span></pre>
         </div>
 
         <p>
-          A name is resolved three ways, in order: what this shell already knows,
-          then the avatars in the region, then — for <code>profile</code> alone —
-          a search of the whole grid. The last step is <code>profile</code>'s only
-          because reading a profile is public and harmless, while <code>im</code>
-          and <code>give</code> reach out to whoever is found, and a wrong guess
-          there sends something to a stranger.
+          In chat mode <strong>Tab</strong> cycles between conversations, so
+          local chat and every instant message are one interface with a star
+          against the one you are in. <code>talk</code> lists them without
+          entering.
+        </p>
+
+        <p>
+          A name with a space in it is taken whole: the shell tries the longest
+          run of words that names somebody, so <code>im Example Resident
+          hello</code> says "hello" to Example Resident rather than saying
+          "Resident hello". Quoting works too and is never wrong.
+        </p>
+
+        <h3>Finding somebody</h3>
+        <p>
+          A name is resolved from what this shell already knows, then from the
+          avatars in the region, and — for <code>profile</code> alone — from a
+          search of the whole grid. Only <code>profile</code> takes that last
+          step, because reading a profile is public and harmless, while
+          <code>im</code> and <code>give</code> reach out to whoever is found.
+          <code>lookup</code> searches the grid on purpose.
         </p>
 
         <div class="term">
@@ -745,60 +1007,76 @@
         </div>
 
         <p>
-          The groups in a profile are the ones somebody chose to publish, so it
-          is what they say about themselves rather than a complete list.
+          The groups a profile lists are the ones somebody chose to publish, so
+          it is what they say about themselves rather than a complete list.
+        </p>
+
+        <h3>Friendship, and handing things over</h3>
+        <p>
+          <code>friends</code> lists who is online, <code>-a</code> all of
+          them. <code>offer</code> offers friendship; <code>give</code> offers
+          an inventory item. Neither is a transfer: nothing moves until the
+          other side accepts, and what they do is not reported back here.
         </p>
 
         <div class="note">
           <p>
-            An offer is not a transfer: nothing moves until it is accepted.
-            <code>accept</code> puts what arrives in the folder you are in, so
-            <code>cd</code> there first if that is where it belongs.
+            An offer only reaches a client that is attached when it arrives.
+            slgod relays it and does not keep it, so a shell started afterwards
+            never sees it — and a one-shot <code>slsh -c</code> will not see one
+            at all.
           </p>
         </div>
       </section>
 
       <!-- --------------------------------------------------- waiting -->
       <section id="waiting">
-        <h2><span class="num">7</span>Things waiting for an answer</h2>
+        <h2><span class="num">10</span>Things waiting for an answer</h2>
 
         <p>
           A script puts up a dialog, somebody offers a teleport, an object asks
-          for permission to animate you. They queue, the prompt counts them, and
-          four commands deal with them: <code>waiting</code> lists,
-          <code>answer</code> says yes, <code>no</code> declines and tells
-          whoever asked, and <code>ignore</code> leaves one waiting but stops
-          counting it.
+          permission to animate you, a group invites you in. They queue, the
+          prompt counts them, and four commands deal with them.
         </p>
 
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">(2) /$</span> <span class="c">waiting</span>
-<span class="o">1  dialog      a lamp asks: on or off?
+<span class="o">1  dialog      a lantern asks: on or off?
                 answer 1 on, answer 1 off, no, ignore
 2  teleport    Another Resident offers a teleport: "Come and see this!"
                 answer, no, ignore</span>
 <span class="p">(2) /$</span> <span class="c">answer 1 on</span>
-<span class="o">pressed "on"</span></pre>
+<span class="o">pressed "on"</span>
+<span class="p">(1) /$</span> <span class="c">ignore 2</span>
+<span class="o">2 is still waiting; "waiting -a" shows it</span></pre>
         </div>
 
         <p>
-          A number keeps meaning the same thing: answering one does not renumber
-          the rest, so the <code>answer 2</code> you had already half typed still
-          means what you meant. Numbers start again at 1 once the list is empty.
+          A number keeps meaning the same thing. Answering one does not
+          renumber the rest, so an <code>answer 2</code> you had already
+          half-typed still means what you meant; numbering starts again at 1
+          once the list is empty. <code>no</code> declines and tells whoever
+          asked — silence would leave them watching a dialog that never
+          resolves.
         </p>
 
         <h3>A text box wants several lines</h3>
         <p>
           <code>llTextBox</code> is an editor rather than a field, so
           <code>answer N</code> with no text starts taking lines. Every line
-          means itself. <strong>Ctrl-D</strong> ends the answer and sends it,
-          taking a half-typed line with it as <code>mail</code> does;
-          <strong>Escape</strong> throws away what you have typed and keeps the
-          question; <strong>Ctrl-C</strong> sends nothing and says which number is
-          still waiting. Ordinary line editing — backspace, Ctrl-U, the arrows —
-          works on the line you are typing.
+          means itself.
         </p>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="keys">^D</td><td class="what">end the answer and send it, taking a half-typed line with it</td></tr>
+              <tr><td class="keys">&lt;ESC&gt;</td><td class="what">throw away what has been typed and keep the question</td></tr>
+              <tr><td class="keys">^C</td><td class="what">send nothing; the question stays, and its number is named</td></tr>
+            </tbody>
+          </table>
+        </div>
 
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
@@ -811,40 +1089,54 @@
         </div>
 
         <p>
-          For a scripted answer, <code>answer --file PATH N</code> sends a file's
-          contents instead. A text box carries 254 bytes; more than that is
-          refused before it is sent rather than truncated on the way.
+          Ordinary line editing works on the line in hand. For a scripted
+          answer, <code>answer --file PATH N</code> sends a file's contents
+          instead. A text box carries 254 bytes; more than that is refused
+          before it is sent rather than truncated on the way.
         </p>
 
         <h3>When money is involved</h3>
         <p>
           A group invitation carrying a signup fee is never accepted by a bare
-          <code>answer N</code>. The fee has to be typed back — <code>answer 3
-          L$50</code> — and a wrong figure is refused by naming the right one. An
-          invitation whose fee the message did not state is treated as costing
-          something unknown rather than as free.
+          <code>answer N</code>. The fee has to be typed back —
+          <code>answer 3 L$50</code> — and a wrong figure is refused by naming
+          the right one. An invitation whose fee the message did not state is
+          treated as costing something unknown rather than as free.
         </p>
-
-        <div class="note">
-          <p>
-            What is waiting belongs to the shell that saw it arrive. slgod relays
-            these and does not keep them, so a shell started afterwards sees
-            nothing, and <code>slsh -c "waiting"</code> — a shell that attaches,
-            runs and exits — will always say there is nothing.
-          </p>
-        </div>
       </section>
 
       <!-- ---------------------------------------------------- daemon -->
       <section id="daemon">
-        <h2><span class="num">8</span>The daemon and its avatars</h2>
+        <h2><span class="num">11</span>The daemon and its avatars</h2>
+
+        <p>
+          <code>agents</code> lists the sessions slgod holds, then the profiles
+          it could hold. The star is the default — what a command that names no
+          avatar gets — and the arrow is the one this shell is driving.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">agents</span>
+<span class="o">* example     Example Resident      Testville   &lt;- this shell
+  builder     Builder Resident      Testville
+  helper                            stopped: logged out
+  spare                             configured</span></pre>
+        </div>
+
+        <p>
+          The states differ in what to do about them. <code>configured</code>
+          can be started. <code>stopped</code> was put down deliberately and is
+          left alone until asked for by name. <code>failed</code> will waste a
+          login attempt if asked again too soon, and says how long it is
+          waiting.
+        </p>
 
         <div class="tablewrap">
           <table>
             <tbody>
-              <tr><td class="cmd">agents</td><td class="what">the sessions slgod holds, then the profiles it could hold</td></tr>
-              <tr><td class="cmd">host NAME</td><td class="what">log an avatar in and hold the session</td></tr>
-              <tr><td class="cmd">logout NAME</td><td class="what">log one out, and leave it out until it is asked for by name</td></tr>
+              <tr><td class="cmd">login NAME</td><td class="what">log an avatar in and hold the session</td></tr>
+              <tr><td class="cmd">logout NAME</td><td class="what">log one out until it is logged back in via <code>login</code></td></tr>
               <tr><td class="cmd">status</td><td class="what">how this session and its circuit are doing</td></tr>
               <tr><td class="cmd">watch</td><td class="what">print grid messages as they arrive, by name or all of them</td></tr>
             </tbody>
@@ -852,32 +1144,48 @@
         </div>
 
         <p>
-          <code>status</code> is the one to reach for when a session looks idle
-          and you want to know whether it is idle or broken: packet counters,
-          retransmissions, and the messages arriving that this build has no
-          handler for — which is how a protocol change announces itself.
-          <code>watch</code> opens a connection of its own, so watching
-          everything for an hour does not disturb the shell you are typing in.
+          A logout is remembered: slgod will not bring that avatar back on its
+          own, so nothing is fighting you while you use it elsewhere — and
+          <code>login</code> afterwards needs <code>-f</code>, because
+          undoing a deliberate stop should be deliberate too. Both refuse to be
+          casual: <code>logout</code> will not take a session that clients are
+          attached to, and names them instead.
         </p>
 
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">status</span>
+<span class="o">Example Resident (example) in Testville
+  simulator   Second Life Server 2026-08-03.30838755483
+  packets     49309 in, 14714 out (0 resent, 0 abandoned)
+  duplicates  1
+  clients     1
+  caps        21
+  no handler for:
+    AttachedSound                    21769
+    SimStats                          4917</span></pre>
+        </div>
+
         <p>
-          Both <code>host</code> and <code>logout</code> refuse to be casual.
-          <code>logout</code> will not take a session that clients are attached
-          to and names them instead; <code>host</code> will not restart something
-          that was stopped deliberately. <code>-f</code> overrules either, once
-          you know what you are overruling.
+          <code>status</code> is what to reach for when a session looks idle
+          and you want to know whether it is idle or broken. The last list is
+          messages arriving that this build has no handler for, which is how a
+          protocol change announces itself. <code>watch</code> prints what is
+          actually crossing the wire and opens a connection of its own, so
+          watching everything for an hour does not disturb the shell you are
+          typing in.
         </p>
       </section>
 
       <!-- ---------------------------------------------------- viewer -->
       <section id="viewer">
-        <h2><span class="num">9</span>A viewer, when you want eyes</h2>
+        <h2><span class="num">12</span>A viewer, when you want eyes</h2>
 
         <p>
-          slgod can hand its live session to a real viewer: the avatar never logs
-          in twice, so the session a script is driving and the session you are
-          looking at are the same one. <code>viewer</code> says where that is
-          offered and whether anybody has taken it;
+          slgod can hand its live session to a real viewer: the avatar never
+          logs in twice, so the session a script is driving and the session you
+          are looking at are the same one. <code>viewer</code> says where that
+          is offered and whether anybody has taken it;
           <code>viewer --launch</code> starts one and logs it in.
         </p>
 
@@ -894,26 +1202,30 @@
 
         <p>
           The password is minted by the daemon for that one login and expires.
-          Nothing is stored: the profiles keep only a digest, which is why the
+          Nothing is stored: a profile keeps only a digest, which is why the
           launcher cannot simply read one.
         </p>
 
         <div class="note">
           <p>
-            Two things have to be true for the launch to land. The daemon must
-            have been started with <code>-viewer ADDR</code> — otherwise
-            <code>viewer</code> says so and names the flag. And the viewer must
-            be one that can be pointed at a private grid: a Second Life–only
-            Firestorm silently ignores the login URI and comes up on the main
-            grid, so the OpenSim build is the one to install, with the login URI
-            added once as a grid in its preferences.
+            Three things have to be true. The daemon must have been started
+            with <code>-viewer ADDR</code>, or <code>viewer</code> says so and
+            names the flag. The viewer must be a build that can be pointed at a
+            private grid — one that reads its own grid list, rather than a
+            Second Life–only build, which ignores the login URI and comes up on
+            the main grid with no explanation. And the grid has to be added to
+            that viewer once, by hand, using the login URI printed above.
+          </p>
+          <p>
+            Which viewer is launched, and how, are settings — see
+            <a href="#config">the configuration file</a>.
           </p>
         </div>
       </section>
 
       <!-- ----------------------------------------------------- files -->
       <section id="files">
-        <h2><span class="num">10</span>Files, redirection and settings</h2>
+        <h2><span class="num">13</span>Files and redirection</h2>
 
         <p>
           Any command's output can be redirected, and a file of commands can be
@@ -925,46 +1237,70 @@
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">ls -l /Objects &gt; listing</span>
 <span class="p">/$</span> <span class="c">echo done &gt;&gt; listing</span>
+<span class="p">/$</span> <span class="c">. moves</span>                       <span class="n">run a file of commands</span>
 
-<span class="p">$</span> <span class="c">awk '{print "mv " $3 " /Objects/sorted"}' listing &gt; moves</span>
+<span class="p">$</span> <span class="c">awk '{print "mv " $3 " /Objects/spares"}' listing &gt; moves</span>
 <span class="p">$</span> <span class="c">slsh -f moves</span>
-<span class="o">slsh: cd: no folder "sorted"
-slsh: moves:1: cd sorted
+<span class="o">slsh: cd: no folder "spares"
+slsh: moves:1: cd spares
 slsh: stopped; 43 lines were not run</span></pre>
         </div>
 
         <p>
           A file stops at the first command that fails, naming the line it gave
-          up on and how much it did not run — which matters because such a file
+          up on and how much it did not run. That matters because such a file
           usually begins by changing folder, and carrying on after that failed
-          would run every line that follows somewhere else. A one-shot run exits
-          non-zero when anything failed, so a script wrapping slsh can tell
-          without reading the output.
+          would run every line that follows somewhere else. A one-shot run
+          exits non-zero when anything failed, so a script wrapping slsh can
+          tell without reading the output.
         </p>
 
-        <h3>The configuration file</h3>
+        <p>
+          Two listings of a folder that has not changed are identical, which is
+          what makes them worth diffing and worth editing into commands.
+          <code>echo</code> prints its arguments, which is how to write a note
+          into a file you are building.
+        </p>
+      </section>
+
+      <!-- ---------------------------------------------------- config -->
+      <section id="config">
+        <h2><span class="num">14</span>The configuration file</h2>
+
         <p>
           <code>~/.config/slsh/config</code>, as <code>key = value</code> lines
-          with <code>#</code> for comments. A flag always beats the file, and a
-          misspelled key is an error rather than a setting that silently does
-          nothing.
+          with <code>#</code> for comments. A command-line flag always beats
+          the file, and a misspelled key is an error rather than a setting that
+          silently does nothing.
         </p>
 
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="o">addr    = HOST:PORT
+<pre><span class="o"># which daemon, and which of its avatars
+addr    = HOST:PORT
 agent   = NAME
 escape  = ESC
 
-viewer_app    = Firestorm-OpenSim
-viewer_grid   = slgod
-viewer_launch = open -a {app} --args --grid {grid} --login {first} {last} {password}</span></pre>
+# which viewer "viewer --launch" starts, and how
+viewer_app     = the application to run
+viewer_grid    = the grid nickname it knows the daemon by
+viewer_launch  = open -a {app} --args --grid {grid} --login {first} {last} {password}
+viewer_running = how to tell whether one is running already</span></pre>
         </div>
+
+        <p>
+          The launch line is a template: <code>{app}</code>,
+          <code>{grid}</code>, <code>{first}</code>, <code>{last}</code>,
+          <code>{password}</code> and <code>{uri}</code> are filled in. It is a
+          setting rather than a constant because neither the viewer nor the way
+          it is told where to go is guessable — a viewer that cannot be pointed
+          at a private grid will silently use the main one instead.
+        </p>
       </section>
 
       <!-- ------------------------------------------------------ keys -->
       <section id="keys">
-        <h2><span class="num">11</span>Keys</h2>
+        <h2><span class="num">15</span>Keys</h2>
 
         <div class="tablewrap">
           <table>
@@ -974,30 +1310,34 @@ viewer_launch = open -a {app} --args --grid {grid} --login {first} {last} {passw
             <tbody>
               <tr><td class="keys">Tab</td><td class="what">complete a command or a path</td><td class="what">next conversation</td></tr>
               <tr><td class="keys">↑ ↓</td><td class="what">walk through what you have typed</td><td class="what">the same</td></tr>
-              <tr><td class="keys">Escape</td><td class="what">—</td><td class="what">back to command mode</td></tr>
-              <tr><td class="keys">Ctrl-C</td><td class="what">clear the line</td><td class="what">clear the line</td></tr>
-              <tr><td class="keys">Ctrl-D</td><td class="what">leave slsh, on an empty line</td><td class="what">—</td></tr>
-              <tr><td class="keys">Ctrl-U · Ctrl-W · Ctrl-K</td><td class="what">kill the line, the word, to the end</td><td class="what">the same</td></tr>
+              <tr><td class="keys">← →</td><td class="what">move along the line</td><td class="what">the same</td></tr>
+              <tr><td class="keys">^A · ^E</td><td class="what">to the start of the line, to the end</td><td class="what">the same</td></tr>
+              <tr><td class="keys">^U · ^W · ^K</td><td class="what">kill the line, the word before, to the end</td><td class="what">the same</td></tr>
+              <tr><td class="keys">backspace · delete</td><td class="what">the character before, the character under</td><td class="what">the same</td></tr>
+              <tr><td class="keys">&lt;ESC&gt;</td><td class="what">—</td><td class="what">back to command mode</td></tr>
+              <tr><td class="keys">^C</td><td class="what">clear the line</td><td class="what">clear the line</td></tr>
+              <tr><td class="keys">^D</td><td class="what">leave slsh, on an empty line</td><td class="what">—</td></tr>
             </tbody>
           </table>
         </div>
 
         <p>
-          While an answer is being typed the same editing keys apply to the line
-          in hand, and the three that end it are described under
-          <a href="#waiting">Things waiting</a>. Through slgod, leaving the shell
-          leaves the avatar logged in; with <code>--direct</code> it does not.
+          While a multi-line answer is being typed the same editing keys apply
+          to the line in hand, and the three that end it are described under
+          <a href="#waiting">Things waiting</a>. Through slgod, leaving the
+          shell leaves the avatar logged in; with <code>--direct</code> it does
+          not.
         </p>
       </section>
 
       <!-- ------------------------------------------------- reference -->
       <section id="reference">
-        <h2><span class="num">12</span>Every command</h2>
+        <h2><span class="num">16</span>Every command</h2>
 
         <p>
-          As <code>help</code> groups them. A command answers
-          <code>--help</code> for what it takes; <code>help GROUP</code> lists one
-          group and <code>help all</code> lists the lot.
+          As <code>help</code> groups them. Every command answers
+          <code>--help</code> for what it takes, and <code>man COMMAND</code>
+          for what it is for.
         </p>
 
         <div class="tablewrap">
@@ -1028,7 +1368,7 @@ viewer_launch = open -a {app} --args --grid {grid} --login {first} {last} {passw
               <tr><td class="cmd">start · stop</td><td class="what">scripts inside an object</td></tr>
 
               <tr><td class="group-title" colspan="2">Avatars and the daemon</td></tr>
-              <tr><td class="cmd">agents · host · logout · status · watch</td><td class="what">the sessions slgod holds</td></tr>
+              <tr><td class="cmd">agents · login · logout · status · watch</td><td class="what">the sessions slgod holds</td></tr>
               <tr><td class="cmd">viewer</td><td class="what">where a real viewer can take over, and starting one</td></tr>
               <tr><td class="cmd">auto</td><td class="what">the objects benchmarks run in</td></tr>
 
@@ -1036,7 +1376,7 @@ viewer_launch = open -a {app} --args --grid {grid} --login {first} {last} {passw
               <tr><td class="cmd">caps · features · lsl</td><td class="what">what this grid grants, supports and implements</td></tr>
 
               <tr><td class="group-title" colspan="2">The shell itself</td></tr>
-              <tr><td class="cmd">help · echo · . FILE · quit</td><td class="what">help, a note into a file, a file of commands, and leaving</td></tr>
+              <tr><td class="cmd">help · man · echo · . FILE · quit</td><td class="what">help, the long description, a note into a file, a file of commands, and leaving</td></tr>
             </tbody>
           </table>
         </div>

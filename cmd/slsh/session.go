@@ -25,12 +25,14 @@ var sessionCommands = map[string]*command{
 	"status": {
 		flags: func() any { return new(helpOnly) },
 		brief: "how this session and its circuit are doing",
+		man:   "status",
 		run:   cmdStatus,
 	},
 	"watch": {
 		params: "[NAME...]",
 		flags:  func() any { return new(watchOptions) },
 		brief:  "print grid messages as they arrive; no NAME means everything",
+		man:    "watch",
 		run:    cmdWatch,
 	},
 }

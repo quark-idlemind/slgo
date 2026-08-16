@@ -74,12 +74,14 @@ var linkCommands = map[string]*command{
 		params: "ROOT CHILD...",
 		flags:  func() any { return new(linkFlags) },
 		brief:  "join objects into one; the first is the root and its name is the object's",
+		man:    "link",
 		run:    cmdLink,
 	},
 	"unlink": {
 		params: "NAME|UUID",
 		flags:  func() any { return new(linkFlags) },
 		brief:  "take a linked object apart; naming one prim of it frees only that prim",
+		man:    "unlink",
 		run:    cmdUnlink,
 	},
 }

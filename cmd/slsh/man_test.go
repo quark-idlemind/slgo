@@ -71,22 +71,28 @@ func TestManWithNoNameListsThePagesThatExist(t *testing.T) {
 // page being unwritten, which for the next while is the commoner case
 // by six to one.  So it says so, and gives what it does have.
 func TestManForACommandWithNoPageSaysWhichItIs(t *testing.T) {
-	if commands["where"].man != "" {
-		t.Skip("where has been written up; pick another command for this test")
-	}
+	// A command of the test's own, because every real one has a page
+	// now.  Borrowing whichever was still unwritten made this test skip
+	// itself the moment somebody wrote that page, which is exactly when
+	// a test should be running rather than standing aside.
+	const name = "unwritten"
+	commands[name] = &command{brief: "a command whose page nobody has written",
+		flags: func() any { return &helpOnly{} }}
+	defer delete(commands, name)
+
 	var b bytes.Buffer
-	if err := cmdMan(context.Background(), &Shell{}, &b, []string{"where"}); err != nil {
+	if err := cmdMan(context.Background(), &Shell{}, &b, []string{name}); err != nil {
 		t.Fatal(err)
 	}
 	got := b.String()
-	if !strings.Contains(got, "no man page for where yet") {
-		t.Errorf("man where should say the page is unwritten:\n%s", got)
+	if !strings.Contains(got, "no man page for "+name+" yet") {
+		t.Errorf("man %s should say the page is unwritten:\n%s", name, got)
 	}
-	if !strings.Contains(got, "where --help") {
-		t.Errorf("man where should point at the flags it does have:\n%s", got)
+	if !strings.Contains(got, name+" --help") {
+		t.Errorf("man %s should point at the flags it does have:\n%s", name, got)
 	}
-	if !strings.Contains(got, commands["where"].brief) {
-		t.Errorf("man where should still say what where is for:\n%s", got)
+	if !strings.Contains(got, commands[name].brief) {
+		t.Errorf("man %s should still say what it is for:\n%s", name, got)
 	}
 }
 
@@ -251,16 +257,20 @@ func TestHelpPointsAtManOnlyWhereThereIsAPage(t *testing.T) {
 		t.Errorf("place --help should point at its page:\n%s", with.String())
 	}
 
-	if commands["where"].man != "" {
-		t.Skip("where has been written up; pick another command for this test")
-	}
+	// And a command with no page must not send anybody looking for one.
+	// It is the test's own command for the reason given above.
+	const name = "unwritten"
+	commands[name] = &command{brief: "a command whose page nobody has written",
+		flags: func() any { return &helpOnly{} }}
+	defer delete(commands, name)
+
 	var without bytes.Buffer
 	var h helpOnly
-	if _, _, err := subOptions("where", &h, &without, []string{"--help"}); err != nil {
+	if _, _, err := subOptions(name, &h, &without, []string{"--help"}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(without.String(), "man where") {
-		t.Errorf("where has no page and --help should not send anybody to one:\n%s", without.String())
+	if strings.Contains(without.String(), "man "+name) {
+		t.Errorf("%s has no page and --help should not send anybody to one:\n%s", name, without.String())
 	}
 }
 

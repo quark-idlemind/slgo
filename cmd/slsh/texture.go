@@ -38,12 +38,14 @@ var textureCommands = map[string]*command{
 		params: "PATH|UUID",
 		flags:  func() any { return new(getFlags) },
 		brief:  "save a texture as a PNG, by inventory path or by asset id",
+		man:    "get",
 		run:    cmdGet,
 	},
 	"put": {
 		params: "FILE",
 		flags:  func() any { return new(putFlags) },
 		brief:  "upload an image as a texture; costs L$, so -N says what it would do",
+		man:    "put",
 		run:    cmdPut,
 	},
 }

@@ -1,0 +1,60 @@
+rm deletes inventory, permanently and at once.  Nothing here moves
+anything to the trash: what emptytrash disposes of is what a viewer
+put there, and what rm names is simply gone.
+
+The arguments are paths, relative to the folder the shell is in, or
+uuids; several may be given on one line, and a folder goes with
+everything inside it.
+
+# One name can mean a dozen items
+
+Inventory names are not unique, so a path may name several things.  A
+plain rm takes the first of them, which is the careful thing to do by
+default: deleting is permanent, and a path that turns out to mean
+twelve items is not something to discover afterwards.
+
+--remove-all-copies takes every one of the name instead.  It is
+spelled out at that length on purpose, no abbreviation of it is
+accepted, and the count printed at the end is the only evidence it did
+what was wanted.
+
+# The star, which is not a glob
+
+A path of one star means every item in the folder the shell is in, and
+it is refused unless --remove-all-copies is given as well: taking it
+to mean one arbitrary item would be surprising, and taking it to mean
+all of them unasked is not a thing to find out after the fact.  There
+is no other pattern -- the shell has no matching in it, and this is
+the one pattern rm needs.  Folders are never included in it: emptying
+a folder of its items is a thing to want, and taking its subfolders
+with them is not.
+
+An item may itself be named with a star, since the grid allows nearly
+any printable character in a name.  Such an item can no longer be
+named at a prompt; its id still names it, which is what "ls -l" prints
+ids for.
+
+# Hundreds of removals take minutes
+
+Each one is a round trip to the grid, so six hundred deletions is six
+hundred round trips.  A count climbs in place while it works, so that
+a long silence is visibly progress rather than a hang, and it goes to
+the terminal rather than to the output: a line redirected to a file
+catches the result and not a flickering counter.
+
+# Options
+
+--in deletes from inside a rezzed object rather than from inventory.
+It is a delete and not a take: the copy is gone, and anything wanted
+back has to come from the original in inventory, which is why that
+form names what it deleted rather than counting.
+
+# Examples
+
+	rm Notecards/README
+	rm --remove-all-copies greeter
+	rm --remove-all-copies *
+	rm --in lantern hello.lsl
+
+See also: emptytrash, mv, ls, and drop for putting something into an
+object that rm can take out again.

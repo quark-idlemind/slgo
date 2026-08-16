@@ -81,24 +81,28 @@ var insideCommands = map[string]*command{
 		params: "OBJECT PATH",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "put an inventory item inside a rezzed object",
+		man:    "drop",
 		run:    cmdDrop,
 	},
 	"new": {
 		params: "PATH",
 		flags:  func() any { return new(newFlags) },
 		brief:  "make a notecard or a script; --in puts a script in an object and starts it",
+		man:    "new",
 		run:    cmdNew,
 	},
 	"start": {
 		params: "OBJECT [SCRIPT]",
 		flags:  func() any { return new(runningFlags) },
 		brief:  "start a script inside a rezzed object, or every script in it",
+		man:    "start",
 		run:    cmdStart,
 	},
 	"stop": {
 		params: "OBJECT [SCRIPT]",
 		flags:  func() any { return new(runningFlags) },
 		brief:  "stop a script inside a rezzed object, or every script in it",
+		man:    "stop",
 		run:    cmdStop,
 	},
 }

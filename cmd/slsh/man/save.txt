@@ -1,0 +1,60 @@
+save writes a file from this machine into a notecard or a script that
+already exists in inventory.  It is what cat reads back, and it is not
+what makes an item: "new" does that, and save writes to what is
+already there.
+
+Two plain arguments, the file first and the item second, which is cp's
+order and the shell's own vocabulary throughout -- a file is on this
+machine wherever it appears in a command, and a path is in inventory
+wherever it appears.  The item takes the rest of the line, since a
+name with spaces in it is ordinary in inventory and rare on disk, so
+the quoting falls where it is least often needed.
+
+# Why the file is not behind a flag
+
+"save --from FILE PATH" would have matched "new --from FILE PATH" word
+for word, and was the other real candidate.  What differs is that
+"new" can make an empty notecard and this cannot write one: the file
+is the whole of what this command does, and an option that must always
+be given is a positional argument spelled at length.  It is also a
+trap -- a flag that may be left off makes "save README" a legal line
+that empties a notecard, and nothing would have been asked for.
+
+# Which of the two writes is not asked
+
+The item's own type decides, because the item is there already and its
+type is settled.  A flag saying which would be asking somebody to
+repeat what inventory knows and to be wrong about it half as often as
+they are right.  A link is refused rather than followed: it carries
+the type of whatever it points at, so it looks exactly like the
+notecard it names, and the write would go to the link's own item,
+which is not where the text lives.
+
+# A script that does not compile is still saved
+
+The item is written and then compiled, in that order, so the verdict
+is a clause on the same line rather than a failure -- and the compiler
+reports the first error and stops, so what follows is one line and is
+printed whole.  Nothing is invented on the way: the file goes up as it
+stands, where "new" would put a skeleton in a script given no source.
+The file is also read before anything is looked up, so a filename that
+is not there costs nothing and changes nothing.
+
+The size reported is the file's own and not the asset's, because a
+notecard goes up wrapped in a container nobody asked about.
+
+# What it does not do
+
+It does not start anything and does not touch the world.  A script in
+inventory is not running and cannot be made to run, since an object is
+the only place a script runs at all; putting one there and starting it
+is "new --in OBJECT".  Nor does it reach the copies already inside
+objects: they were separate the moment they were put there, and a save
+leaves every one of them as it was.
+
+# Examples
+
+	save notes.txt Notecards/README
+	save hello.lsl /Scripts/greeter
+
+See also: cat, new, drop, start, and put for an image, which costs L$.

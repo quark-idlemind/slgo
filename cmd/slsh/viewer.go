@@ -116,6 +116,7 @@ var viewerCommands = map[string]*command{
 	"viewer": {
 		flags: func() any { return new(viewerOptions) },
 		brief: "where a real viewer can take this session over, and start one",
+		man:   "viewer",
 		run:   cmdViewer,
 	},
 }

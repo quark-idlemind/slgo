@@ -1,0 +1,50 @@
+friends lists the people this avatar is friends with who are logged in.
+It is the narrow list on purpose: a friend list of four hundred people,
+of whom two are online, answers a question nobody asked.  The whole of
+it is one flag away.
+
+It takes nothing else.  Each line is a number, a name and a key, and
+the listing is what the next command means by a number -- "friends"
+then "im 2" is the ordinary way round, and the same number works for
+profile, offer or give.
+
+# Where the list comes from, and what it is not
+
+Both halves of this arrive once and never again.  The list itself is
+part of the login response and is on no message the simulator ever
+sends afterwards; who is online arrives seconds after the handshake, as
+one burst naming everybody already logged in, and after that only as
+people come and go.  So it is held for the whole session rather than
+asked for, and a shell that started an hour later is reading what was
+caught at the time rather than asking now.
+
+A friendship formed while the session is up is added as it happens,
+since the grid tells the side that offered and tells the side that
+accepted nothing whatsoever, on the grounds that it was the one that
+did it.
+
+Online is what the grid volunteered, and no more than that.  Each
+friendship carries rights on both sides -- to see the other online, to
+see them on the map, to edit their objects -- so this list can only be
+as complete as what those rights allow, and it is not a promise that
+somebody is awake or willing to be written to.
+
+# Options
+
+-a lists everybody rather than the ones online.  It is the list to use
+when the question is who somebody has ever befriended, or when a name
+is wanted for a key.
+
+# Examples
+
+	friends
+	friends -a
+
+Write to the second person listed:
+
+	friends
+	im 2 are you still at the build
+
+See also: offer for making a friendship, offers for one waiting to be
+answered, who for the people in the region who are not friends, and
+lookup for everybody else.

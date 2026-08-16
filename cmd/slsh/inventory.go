@@ -80,6 +80,7 @@ var inventoryCommands = map[string]*command{
 	"pwd": {
 		flags: func() any { return new(helpOnly) },
 		brief: "where in inventory we are",
+		man:   "pwd",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
 			if _, done, err := subOptions("pwd", &flags, out, args); err != nil || done {
@@ -93,53 +94,62 @@ var inventoryCommands = map[string]*command{
 		params: "[PATH]",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "change folder; no path goes to the root, .. goes up",
+		man:    "cd",
 		run:    cmdCd,
 	},
 	"ls": {
 		params: "[PATH]",
 		flags:  func() any { return new(lsOptions) },
 		brief:  "list a folder; -l for detail, -T the time as well, -t newest first, -r to descend",
+		man:    "ls",
 		run:    cmdLs,
 	},
 	"cat": {
 		params: "PATH",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "print a notecard or a script",
+		man:    "cat",
 		run:    cmdCat,
 	},
 	"save": {
 		params: "FILE PATH",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "write a local file into a notecard or script that is already there",
+		man:    "save",
 		run:    cmdSave,
 	},
 	"mkdir": {
 		params: "PATH",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "make a folder",
+		man:    "mkdir",
 		run:    cmdMkdir,
 	},
 	"mv": {
 		params: "PATH DEST",
 		flags:  func() any { return new(mvOptions) },
 		brief:  "move into a folder, or rename if DEST is a plain name; folders too",
+		man:    "mv",
 		run:    cmdMv,
 	},
 	"rm": {
 		params: "PATH ...",
 		flags:  func() any { return new(rmOptions) },
 		brief:  "delete items, permanently; --remove-all-copies for every one of a name",
+		man:    "rm",
 		run:    cmdRm,
 	},
 	"emptytrash": {
 		flags: func() any { return new(emptyTrashOptions) },
 		brief: "throw away everything in the trash, permanently",
+		man:   "emptytrash",
 		run:   cmdEmptyTrash,
 	},
 	"find": {
 		params: "TEXT [PATH]",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "look for names containing TEXT, from here down",
+		man:    "find",
 		run:    cmdFind,
 	},
 }

@@ -1,0 +1,43 @@
+caps lists the capabilities the simulator granted this session.  A
+capability is an HTTP service the session may use alongside the message
+circuit -- fetching inventory, uploading a script, searching for
+somebody by part of their name, asking what the region supports -- and
+what is on this list decides which of those are possible at all.
+
+With a word after it, only the capabilities whose names contain that
+word are printed, matched without regard to case.  status counts the
+same list without naming it.
+
+# What is on the list and what is missing from it
+
+The list is the answer to one question asked at login: the session
+names the capabilities it wants, and the simulator replies with the
+ones it serves.  So a name that is absent is absent for one of two
+reasons that look identical here -- either nothing asked for it, or the
+region does not offer it -- and asking for one that does not exist is
+harmless, because the reply simply omits it.
+
+That makes this the first place to look when a command fails in a way
+that has nothing to do with permissions or with the object it names.
+Whole paths through the protocol are shut when their capability is not
+there, and what the simulator says at that point is usually about
+something else.
+
+What is printed is the names alone.  Each one is served by a URL, and
+the URL stays with whatever holds the session, which is what does the
+asking; nothing about it would be usable from here.
+
+# It describes this session and no other
+
+Capabilities are granted per session, by the simulator the session
+logged in to, so two avatars in the same region can have different
+lists -- and the same avatar logged in again may too.  A listing saved
+from an earlier session says what was true then.
+
+# Examples
+
+	caps
+	caps inventory
+
+See also: features for what the simulator says it supports, lsl for the
+language it implements, and status.

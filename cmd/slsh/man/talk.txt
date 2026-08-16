@@ -1,0 +1,39 @@
+talk lists the conversations, and marks the one a line typed in chat
+mode would go to.  Chat mode shows only the current one, in its prompt;
+this is the whole set tab moves between.
+
+It takes nothing.  Open chat is always the first entry, called Local,
+and each person spoken to or heard from is another, in the order they
+appeared.  A star marks where typing would land.
+
+# The numbers are positions and nothing takes them
+
+The number in each row is where that conversation sits in the cycle, so
+that a listing of six can be counted rather than squinted at.  Nothing
+accepts it as an argument: the way to another conversation is tab in
+chat mode, or naming the person to "im" or "chat".  A conversation that
+opened while this listing was on the screen has moved the numbers under
+it, which is the other reason not to type one.
+
+# A conversation opens by itself and does not close
+
+The list grows when somebody sends an instant message, as well as when
+this side starts one, and a notice says so at the moment it happens --
+that notice is worth reading, because it means tab now has one more
+stop on it.  Nothing removes an entry; the list is the session's memory
+of who has been talked to, and it ends when the shell does.  Local
+cannot be closed either, which is what makes tab a cycle: pressing it
+enough times always comes back to speaking out loud.
+
+The names can improve.  An instant message carries a key and sometimes
+no name at all, so a conversation can appear as the first few
+characters of a key in brackets -- (d8467e57) -- until the grid says
+who that is, and the row takes the better name when it arrives.
+
+# Examples
+
+	talk
+
+See also: chat for entering the mode this describes, im for opening a
+conversation with somebody, and who for the people in the region who
+are not in a conversation yet.

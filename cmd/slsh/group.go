@@ -100,6 +100,7 @@ var groupCommands = map[string]*command{
 		params: "[NAME|UUID|none]",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "what this avatar is acting as, and what it could act as; land rights hang on it",
+		man:    "group",
 		run:    cmdGroup,
 	},
 }

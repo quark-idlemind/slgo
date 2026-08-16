@@ -1,0 +1,46 @@
+lookup searches the whole grid for people by part of a name.  It is the
+wide question, where "who" asks who is standing in this region and
+"friends" asks who is on the friend list; this one reaches somebody who
+is nowhere near and has never been mentioned here.
+
+The argument is whatever part of a name is remembered, joined with
+spaces.  What comes back is a numbered listing in name order, with the
+display name in a second column where it differs from the name -- a
+display name that is only the name again is a column of noise.
+
+The listing is what the next command means by a number.  "lookup" then
+"profile 3" is the ordinary way round, and the same number works for
+anything else that takes a person.
+
+# A full page is not a complete answer
+
+The search returns at most one page of names and the reply says nothing
+about how many it left behind, so a single letter typed in comes back
+looking exactly like the whole of the grid.  A listing that is a full
+page says so underneath.  Nothing here asks for the next page: somebody
+who typed too little of a name wants to type more of it rather than
+read a hundred more names.
+
+# What the search will and will not match
+
+Where the grid grants this session its name search, part of a name
+matches, and so does a display name.  Where it does not, the older
+message is used instead and only a whole name matches -- so a search
+that finds nothing on a name typed in part is worth trying again in
+full before concluding nobody is there.
+
+A name found here is not a person who is online, in this region, or
+reachable; it is a name the grid knows, and a key to go with it.
+
+# Examples
+
+	lookup example
+
+Find somebody, then read what their profile says:
+
+	lookup Another Resident
+	profile 1
+
+See also: profile, which makes this same search for itself when nothing
+nearer knows the name, who for the people in this region, friends for
+the friend list, and im for saying something to whoever was found.

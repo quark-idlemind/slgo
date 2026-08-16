@@ -10,6 +10,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -26,63 +27,74 @@ var socialCommands = map[string]*command{
 		params: "[WHO]",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "enter chat mode; with WHO, in an instant message session",
+		man:    "chat",
 		run:    cmdChat,
 	},
 	"say": {
 		params: "TEXT ...",
 		flags:  func() any { return new(sayOptions) },
 		brief:  "say one line without leaving command mode",
+		man:    "say",
 		run:    cmdSay,
 	},
 	"im": {
 		params: "WHO [TEXT]",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "open a conversation, or send one message to it",
+		man:    "im",
 		run:    cmdIM,
 	},
 	"friends": {
 		flags: func() any { return new(friendsOptions) },
 		brief: "friends who are online, or -a for all of them",
+		man:   "friends",
 		run:   cmdFriends,
 	},
 	"lookup": {
 		params: "TEXT",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "search the grid for people by part of a name",
+		man:    "lookup",
 		run:    cmdLookup,
 	},
 	"profile": {
 		params: "WHO",
 		flags:  func() any { return new(profileOptions) },
 		brief:  "what somebody's profile says: born, payment, partner, about, groups",
+		man:    "profile",
 		run:    cmdProfile,
 	},
 	"offer": {
 		params: "WHO [TEXT]",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "offer friendship",
+		man:    "offer",
 		run:    cmdOffer,
 	},
 	"offers": {
 		flags: func() any { return new(helpOnly) },
 		brief: "friendship and inventory offers waiting for an answer",
+		man:   "offers",
 		run:   cmdOffers,
 	},
 	"accept": {
 		params: "[WHO|NAME]",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "accept an offer of friendship, or of an inventory item",
+		man:    "accept",
 		run:    cmdAccept,
 	},
 	"decline": {
 		params: "[WHO|NAME]",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "refuse one",
+		man:    "decline",
 		run:    cmdDecline,
 	},
 	"talk": {
 		flags: func() any { return new(helpOnly) },
 		brief: "the conversations chat mode cycles between",
+		man:   "talk",
 		run:   cmdTalk,
 	},
 }
@@ -322,17 +334,17 @@ func cmdIM(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	if len(args) == 0 {
 		return usageError("im")
 	}
-	id, name, err := sh.who(ctx, args[0])
+	id, name, rest, err := sh.whoAndRest(ctx, args)
 	if err != nil {
 		return err
 	}
 	c, made := sh.talk.Open(id, name)
-	if len(args) == 1 {
+	if len(rest) == 0 {
 		sh.talk.Switch(c)
 		sh.setMode(modeChat)
 		return nil
 	}
-	text := strings.Join(args[1:], " ")
+	text := strings.Join(rest, " ")
 	if err := sh.s.SendIM(ctx, id, text); err != nil {
 		return err
 	}
@@ -677,11 +689,11 @@ func cmdOffer(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	if len(args) == 0 {
 		return usageError("offer")
 	}
-	id, name, err := sh.who(ctx, args[0])
+	id, name, rest, err := sh.whoAndRest(ctx, args)
 	if err != nil {
 		return err
 	}
-	if err := sh.s.OfferFriendship(ctx, id, strings.Join(args[1:], " ")); err != nil {
+	if err := sh.s.OfferFriendship(ctx, id, strings.Join(rest, " ")); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "offered friendship to %s\n", name)
@@ -848,6 +860,109 @@ func (sh *Shell) offer(args []string) (*sl.Offer, error) {
 	}
 }
 
+// unknownName is a name nothing here has heard of.
+//
+// It is a type rather than a sentence because two callers have to tell
+// it from the other refusals.  who asks the region about this one and
+// about nothing else: a uuid and a number have been answered
+// definitively either way, and asking the region about "9" would turn
+// "there is no 9 in the last listing" into a report about somebody
+// called nine.  whoAndRest treats it as the signal to try a shorter run
+// of words -- see there.
+type unknownName struct{ want string }
+
+func (e *unknownName) Error() string {
+	return fmt.Sprintf("nobody called %q is known; try who, friends or lookup", e.want)
+}
+
+// ambiguousName is a name that answers for more than one person.
+//
+// The opposite signal to unknownName, and the reason they are two types
+// rather than one: a name nobody has is a name to keep looking for, and
+// a name several people have is the answer.
+type ambiguousName struct {
+	want  string
+	names []string
+}
+
+func (e *ambiguousName) Error() string {
+	return fmt.Sprintf("%q could be any of: %s", e.want, strings.Join(e.names, ", "))
+}
+
+// maxNameWords is how many words at the front of a command line can be
+// the name of a person.
+//
+// Two, because a Second Life name is a first name and a last name and
+// every place a name is resolved from here holds it in that form: the
+// session's cache is filled from UUIDNameReply, which is two fields,
+// and so is the region listing and so is a search result.  A run of
+// three words could therefore only ever be a name with a word of the
+// message stuck to the end of it, and trying it would be one more
+// chance to resolve something that was never a name.
+const maxNameWords = 2
+
+// whoAndRest is the person named at the front of a command line and
+// whatever is left of it.
+//
+// The commands that take somebody AND something else -- im, offer, give
+// -- cannot simply read the first word as the name, because a name has
+// two words in it and sh.who matches either half of one.  Measured
+// live, with the names changed:
+//
+//	$ slsh -c "im Example Resident hello from the guide"
+//	> [IM Example Resident] Resident hello from the guide
+//
+// "Example" resolved to Example Resident all by itself, so the last
+// name became the first word of the message.  It went to the right
+// person and said the wrong thing, and nothing on this side looked
+// amiss -- the same shape as "place probe 10 20 30", where a partial
+// match succeeding is what makes the mistake silent.
+//
+// So the longest leading run that names somebody wins: "im a b c" tries
+// "a b" and then "a".  A run that names nobody is a run to try shorter,
+// which is what leaves "im Example hello there" saying "hello there" --
+// "Example hello" is nobody.
+//
+// An ambiguous run is not.  It is returned as it stands rather than
+// retried shorter, and it has to be: Find matches on prefixes, so
+// everybody "a b" could be "a" could be too, and every shorter run is
+// ambiguous in at least as many ways.  Falling back would replace a
+// refusal naming two people with a refusal naming five.
+//
+// The region is asked once, after every run has failed against what is
+// already known, for the reason sh.who asks it at all -- and once
+// rather than per run, since one answer fills the cache for all of
+// them.
+func (sh *Shell) whoAndRest(ctx context.Context, args []string) (msg.UUID, string, []string, error) {
+	if len(args) == 0 {
+		return msg.UUID{}, "", nil, fmt.Errorf("nobody was named")
+	}
+	n := min(maxNameWords, len(args))
+
+	var last error
+	for pass := range 2 {
+		for k := n; k >= 1; k-- {
+			id, name, err := sh.whoKnown(ctx, strings.Join(args[:k], " "))
+			if err == nil {
+				return id, name, args[k:], nil
+			}
+			var unknown *unknownName
+			if !errors.As(err, &unknown) {
+				return msg.UUID{}, "", nil, err
+			}
+			// The shortest run is the one a person meant as a name, so
+			// its refusal is the one worth printing if it comes to that.
+			last = err
+		}
+		if pass == 0 {
+			if _, err := sh.s.Nearby(ctx); err != nil {
+				break
+			}
+		}
+	}
+	return msg.UUID{}, "", nil, last
+}
+
 // who turns what was typed into somebody: a uuid, the number from the
 // last listing, a name the session has heard, or somebody standing in
 // the region.
@@ -880,6 +995,32 @@ func (sh *Shell) offer(args []string) (*sl.Offer, error) {
 // a round trip to the daemon and a name resolution, so the case that
 // already works must not pay for it.
 func (sh *Shell) who(ctx context.Context, want string) (msg.UUID, string, error) {
+	id, name, err := sh.whoKnown(ctx, want)
+	var unknown *unknownName
+	if !errors.As(err, &unknown) {
+		return id, name, err
+	}
+
+	// Asking who is in the region puts their names in the cache, so the
+	// second look is the same look: one set of matching rules, and two
+	// people whose names differ only in case are still two people rather
+	// than a pick.
+	//
+	// A region that will not answer is left as a region with nobody in
+	// it.  The refusal already in hand is what this would have said a
+	// moment ago anyway, and turning a mistyped name into a report about
+	// the daemon would explain the wrong thing.
+	if _, e := sh.s.Nearby(ctx); e != nil {
+		return msg.UUID{}, "", err
+	}
+	return sh.whoKnown(ctx, want)
+}
+
+// whoKnown is who a name means among what this shell already has: a
+// uuid, a number from the last listing, or a name the session has
+// heard.  It asks the region nothing, which is what lets who ask it
+// once and whoAndRest ask it once for a whole line of words.
+func (sh *Shell) whoKnown(ctx context.Context, want string) (msg.UUID, string, error) {
 	want = strings.TrimSpace(want)
 	if id, err := msg.ParseUUID(want); err == nil {
 		names := sh.s.Names(ctx, []msg.UUID{id}, 3*time.Second)
@@ -896,31 +1037,17 @@ func (sh *Shell) who(ctx context.Context, want string) (msg.UUID, string, error)
 	}
 
 	hits := sh.s.Find(want)
-	if len(hits) == 0 {
-		// Asking who is in the region puts their names in the cache, so
-		// the second look is the same look: one set of matching rules,
-		// and two people whose names differ only in case are still two
-		// people rather than a pick.
-		//
-		// A region that will not answer is left as a region with nobody
-		// in it.  The refusal below is what this would have said a
-		// moment ago anyway, and turning a mistyped name into a report
-		// about the daemon would explain the wrong thing.
-		if _, err := sh.s.Nearby(ctx); err == nil {
-			hits = sh.s.Find(want)
-		}
-	}
 	switch len(hits) {
 	case 1:
 		return hits[0], sh.s.NameOr(hits[0]), nil
 	case 0:
-		return msg.UUID{}, "", fmt.Errorf("nobody called %q is known; try who, friends or lookup", want)
+		return msg.UUID{}, "", &unknownName{want: want}
 	default:
 		names := make([]string, 0, len(hits))
 		for _, id := range hits {
 			names = append(names, sh.s.NameOr(id))
 		}
-		return msg.UUID{}, "", fmt.Errorf("%q could be any of: %s", want, strings.Join(names, ", "))
+		return msg.UUID{}, "", &ambiguousName{want: want, names: names}
 	}
 }
 

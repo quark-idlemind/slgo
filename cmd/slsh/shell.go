@@ -660,11 +660,13 @@ func init() {
 		params: "[GROUP|all]",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "the command groups; \"help GROUP\" for one, \"help all\" for everything",
+		man:    "help",
 		run:    cmdHelp,
 	}
 	commands["quit"] = &command{
 		flags: func() any { return new(helpOnly) },
 		brief: "leave slsh",
+		man:   "quit",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
 			if _, done, err := subOptions("quit", &flags, out, args); err != nil || done {
@@ -679,6 +681,9 @@ func init() {
 		params: "FILE",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "run the commands in a file",
+		// The page is source.txt: "." is not a filename anybody wants,
+		// and the field naming the page is what allows the difference.
+		man: "source",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
 			args, done, err := subOptions(".", &flags, out, args)
@@ -695,6 +700,7 @@ func init() {
 	commands["echo"] = &command{
 		params: "[text ...]",
 		brief:  "print the arguments, which is how to write a note into a file",
+		man:    "echo",
 		// No flags at all, deliberately, which is why this is the one
 		// command with no option struct.  echo exists to put a line into
 		// a file, so it has to be able to print the word "--help" like

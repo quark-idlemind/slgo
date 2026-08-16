@@ -1384,6 +1384,140 @@ func TestARegionThatWillNotAnswerIsARegionWithNobodyInIt(t *testing.T) {
 	}
 }
 
+// said is the text of an instant message that went out, which is where
+// the difference between the right words and the wrong ones shows.
+func said(t *testing.T, m msg.Message) string {
+	t.Helper()
+	im, ok := m.(*msg.ImprovedInstantMessage)
+	if !ok {
+		t.Fatalf("the message went out as %T, want an instant message", m)
+	}
+	return strings.TrimRight(string(im.MessageBlock.Message), "\x00")
+}
+
+// TestTheNameIsTheLongestRunOfWordsThatNamesSomebody.
+//
+// A name has two words in it and sh.who matches either half of one, so
+// reading the first word as the name and the rest as the message put
+// the last name at the front of what was said.  Measured live, with the
+// names changed:
+//
+//	> [IM Example Resident] Resident hello from the guide
+//
+// It goes to the right person and says the wrong thing, and nothing on
+// this side looks amiss, which is what makes it worth a test rather
+// than a rule somebody is meant to remember.
+func TestTheNameIsTheLongestRunOfWordsThatNamesSomebody(t *testing.T) {
+	x := newTestShell(t)
+	knows(t, x, map[msg.UUID]string{testSomebody: "Example Resident"})
+
+	got := x.do(t, "im Example Resident hello from the guide")
+	if !strings.Contains(got, "> [IM Example Resident] hello from the guide") {
+		t.Errorf("im printed %q", got)
+	}
+	if got := said(t, x.grid.Sent()[0]); got != "hello from the guide" {
+		t.Errorf("what went out was %q, want the message without the last name on it", got)
+	}
+
+	// The same rule where there is nothing left to say: the whole line
+	// is the name, and the conversation opens rather than a message
+	// going out saying "Resident".
+	x.setMode(modeCommand)
+	if got := x.do(t, "im Example Resident"); got != "" {
+		t.Errorf("im with nothing to say printed %q", got)
+	}
+	if !x.chatting() {
+		t.Error("im with no text should open the conversation and enter chat mode")
+	}
+	if n := len(x.grid.Sent()); n != 1 {
+		t.Errorf("%d messages went out, want only the first one", n)
+	}
+}
+
+// TestAWordOfTheMessageIsNotPartOfTheName, which is the other half of
+// the rule: the run shortens until it names somebody, so a one-word
+// name keeps the whole of what follows it.
+func TestAWordOfTheMessageIsNotPartOfTheName(t *testing.T) {
+	x := newTestShell(t)
+	knows(t, x, map[msg.UUID]string{testSomebody: "Example Resident"})
+
+	if got := x.do(t, "im Example hello there"); !strings.Contains(got, "] hello there") {
+		t.Errorf("im printed %q", got)
+	}
+	if got := said(t, x.grid.Sent()[0]); got != "hello there" {
+		t.Errorf("what went out was %q, want the whole message", got)
+	}
+
+	// A message whose first word could start a name is still a message.
+	if got := x.do(t, "im Example Examples are hard"); !strings.Contains(got, "] Examples are hard") {
+		t.Errorf("im printed %q", got)
+	}
+	if got := said(t, x.grid.Sent()[1]); got != "Examples are hard" {
+		t.Errorf("what went out was %q, want the whole message", got)
+	}
+}
+
+// TestAnAmbiguousNameStaysAmbiguousRatherThanShortening.
+//
+// Find matches on prefixes, so everybody a long run could be a short
+// one could be too: falling back would answer a refusal that names two
+// people with one that names more of them, and it would do it while
+// looking like progress.
+func TestAnAmbiguousNameStaysAmbiguousRatherThanShortening(t *testing.T) {
+	x := newTestShell(t)
+	knows(t, x, map[msg.UUID]string{
+		testSomebody: "Example Resident", testFriend: "Example Builder",
+	})
+
+	got := x.do(t, "im Example hello there")
+	if !strings.Contains(got, "could be any of") {
+		t.Errorf("an ambiguous name printed %q", got)
+	}
+	if !strings.Contains(got, "Example Resident") || !strings.Contains(got, "Example Builder") {
+		t.Errorf("the refusal should name both, got %q", got)
+	}
+	if n := len(x.grid.Sent()); n != 0 {
+		t.Errorf("%d messages went out on a name nobody resolved", n)
+	}
+
+	// Typed in full it is one person again, and the rest is the message.
+	if got := x.do(t, "im Example Builder hello there"); !strings.Contains(got, "] hello there") {
+		t.Errorf("a name typed in full printed %q", got)
+	}
+}
+
+// TestGiveAndOfferReadTheNameTheSameWay.
+//
+// One helper for the three commands that take somebody and something
+// else, because the mistake is worst here: an item offered under a
+// mangled path is either not found at all or is a different item, and
+// the person at the other end is the right one either way.
+func TestGiveAndOfferReadTheNameTheSameWay(t *testing.T) {
+	x := newTestShell(t)
+	knows(t, x, map[msg.UUID]string{testSomebody: "Example Resident"})
+
+	if got := x.do(t, "give Example Resident readme"); !strings.Contains(got, `offered "readme" to Example Resident`) {
+		t.Errorf("give printed %q", got)
+	}
+	// The path is what was left after the name, so a one-word name
+	// leaves a path of one word as well.
+	if got := x.do(t, "give Example readme"); !strings.Contains(got, `offered "readme"`) {
+		t.Errorf("give printed %q", got)
+	}
+	// A name with nothing after it is a give with no item, and says so
+	// rather than offering something nobody named.
+	if got := x.do(t, "give Example Resident"); !strings.Contains(got, "usage: give") {
+		t.Errorf("give with no item printed %q", got)
+	}
+
+	if got := x.do(t, "offer Example Resident be my friend"); !strings.Contains(got, "offered friendship to Example Resident") {
+		t.Errorf("offer printed %q", got)
+	}
+	if got := said(t, x.grid.Sent()[len(x.grid.Sent())-1]); got != "be my friend" {
+		t.Errorf("the greeting was %q, want the message without the last name on it", got)
+	}
+}
+
 // TestSomebodyWithNoNameIsTheirId.
 //
 // A uuid that nobody will name still names one person, so it resolves;

@@ -25,18 +25,21 @@ var objectCommands = map[string]*command{
 		params: "WHO PATH",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "offer an inventory item to somebody",
+		man:    "give",
 		run:    cmdGive,
 	},
 	"cp": {
 		params: "PATH NAME",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "copy an inventory item under a new name",
+		man:    "cp",
 		run:    cmdCopy,
 	},
 	"tp": {
 		params: "X Y Z",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "move to a position in this region",
+		man:    "tp",
 		run:    cmdTP,
 	},
 	"move": {
@@ -49,23 +52,27 @@ var objectCommands = map[string]*command{
 	"agents": {
 		flags: func() any { return new(helpOnly) },
 		brief: "the sessions this daemon holds, oldest first; * is the default",
+		man:   "agents",
 		run:   cmdAgents,
 	},
 	"login": {
 		params: "NAME",
 		flags:  func() any { return new(forceOptions) },
 		brief:  "bring an avatar up that is not running",
+		man:    "login",
 		run:    cmdLogin,
 	},
 	"logout": {
 		params: "NAME",
 		flags:  func() any { return new(forceOptions) },
 		brief:  "log NAME out until it is logged back in via login",
+		man:    "logout",
 		run:    cmdLogout,
 	},
 	"auto": {
 		flags: func() any { return new(autoOptions) },
 		brief: "the objects benchmarks run in; -n sets up that many",
+		man:   "auto",
 		run:   cmdAuto,
 	},
 }
@@ -75,6 +82,11 @@ var objectCommands = map[string]*command{
 // An offer, not a transfer: nothing moves until they accept, and
 // nothing here can tell whether they did.  Saying "offered" rather than
 // "gave" is the honest report.
+//
+// The name is read by whoAndRest rather than off the first word, which
+// matters more here than anywhere: a two-word name read as one word
+// leaves the last name at the front of the path, so the item is either
+// not found at all or is the wrong one, offered to the right person.
 func cmdGive(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
 	rest, done, err := subOptions("give", &o, out, args)
@@ -85,12 +97,15 @@ func cmdGive(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return usageError("give")
 	}
 
-	who, name, err := sh.who(ctx, rest[0])
+	who, name, path, err := sh.whoAndRest(ctx, rest)
 	if err != nil {
 		return err
 	}
+	if len(path) == 0 {
+		return usageError("give", "which item to offer; a name with a space in it is one argument")
+	}
 
-	e, err := sh.entryAt(ctx, strings.Join(rest[1:], " "))
+	e, err := sh.entryAt(ctx, strings.Join(path, " "))
 	if err != nil {
 		return err
 	}

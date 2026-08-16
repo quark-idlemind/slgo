@@ -1,0 +1,58 @@
+auto is about the worn objects a benchmark runs its scripts in.  With
+no flags it reports what this avatar has: how many of the objects are
+worn, and therefore how many benchmarks can run at once.  With -n it
+sets that many up, and prints which object went to which slot.
+
+Nothing else in this shell needs it.  It is here because the answer to
+"why will only two benchmarks run at a time" is a number nothing else
+prints.
+
+# Why the objects are kept rather than made
+
+A run could make its own object and throw it away afterwards, and the
+cost of that is not mainly the rezzing.  It is the script: installing
+one into an object that has never held a script takes about eight
+seconds, while replacing a script already there takes under one.  So
+the objects are made once, worn, and left alone.
+
+They are worn on the HUD points because nothing else wants those and
+they are no part of how the avatar looks.  There are only eight of
+them, so the first eight objects have one each and the rest double up
+-- a point holds more than one object when the attaching asks to add
+rather than to replace, which was measured rather than assumed.  That
+is what the listing after -n is for: past the eighth slot the only way
+to see the pool is arranged as intended is to read which point each one
+landed on.
+
+# Groups of four, and why a run takes a whole one
+
+The pool is divided into fixed groups and a benchmark takes an entire
+group, which is what makes several runs at once safe.  Handing out
+objects one at a time would let two runs each hold some and wait for
+the rest, which is a deadlock; one lock per group cannot deadlock,
+because nothing ever holds one while waiting for another.
+
+Four to a group because that is what the search uses: three readings
+taken at once alongside the object being measured.  A larger group
+would idle and a smaller one would slow the search down.
+
+# Setting up while something is running
+
+-n takes every group before it does anything, and refuses if any of
+them is busy.  Wearing things is not something to do underneath a
+benchmark: an attach replaces what is on the point, and a run whose
+object went away reports nothing useful about why it failed.
+
+Getting fewer objects than were asked for is not a failure and does not
+read as one.  Fewer objects means fewer runs at once, and the report
+says so in those words.
+
+# Examples
+
+Ask what is there, then fill the pool up:
+
+	auto
+	auto -n 12
+
+See also: worn for the same objects as attachments, wear and detach for
+moving one by hand, and agents for which avatar this is being asked of.

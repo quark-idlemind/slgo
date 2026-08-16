@@ -1,0 +1,39 @@
+where says which region this avatar is in and whereabouts in it.  It is
+the narrowest of the three questions about the surroundings: "look"
+describes the region itself, "objects" lists what is standing in it, and
+this one answers only "here".
+
+It takes no argument.  The position is printed to the metre, in the
+region's own coordinates, which are what "tp" and "move" take and what
+place's --at takes.
+
+# The position is exact only some of the time
+
+It is exact on arriving in a region and after a teleport, because both
+of those are answered with a position.  While the avatar is walking
+about, what carries it is the message a viewer draws the dots on its
+map with, and that message has a metre's resolution -- so a walking
+avatar's position is right to the metre and no better.  Nothing here
+can do better, and nothing this shell does needs to.
+
+# The group line, and why it is not decoration
+
+A second line says which group the avatar is acting as, and is missing
+when it is acting as none -- which is what a headless login starts as.
+
+That line is the answer to the commonest failure in the region
+commands.  A parcel usually grants "create objects" to a group rather
+than to a person, so an avatar with the wrong group active, or none, is
+refused by the land even where it plainly has permission, and the
+refusal talks about the land rather than about the group.  The name and
+the key are both printed: the key is what everything else takes, and it
+is the name that says whether this is the group the land wants.
+
+# Examples
+
+	where
+	Testville at 33, 73, 1000
+	acting as group Example Builders (d8467e57-…)
+
+See also: look, who, objects, tp for moving the avatar within the
+region, and group for setting the one this reports.
