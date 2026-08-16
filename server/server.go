@@ -254,6 +254,18 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	} else {
 		opts.OnEvent = func(name string, body []byte) { h.relayEvent(name, body) }
 	}
+	// The avatar being somewhere else is news for every client, and it
+	// is the daemon that finds out: the grid announces a teleport to
+	// the session, not to whoever is attached to it.  Chained like the
+	// two above, for their reason.
+	if caller := opts.OnRegionChange; caller != nil {
+		opts.OnRegionChange = func(region string, handle uint64) {
+			caller(region, handle)
+			h.noteRegion(region, handle)
+		}
+	} else {
+		opts.OnRegionChange = func(region string, handle uint64) { h.noteRegion(region, handle) }
+	}
 	h.opts = opts
 
 	a, err := agent.Connect(ctx, acct, opts)
@@ -421,7 +433,19 @@ func (h *Hosted) supervise(ctx context.Context) {
 			// session: a different session id, circuit code
 			// and set of capability URLs.  Clients holding
 			// any of those need to ask again.
-			h.notify(pb.AgentEvent_REGION_CHANGED, "session re-established")
+			//
+			// Where the avatar came back is filled in as a
+			// teleport's is, because the fields mean where it is
+			// now and a client should not have to know which of
+			// the two kinds of region change it was reading.  A
+			// fresh login lands wherever the grid thinks the
+			// avatar is, which is not always where it was.
+			h.notice(&pb.AgentEvent{
+				Kind:         pb.AgentEvent_REGION_CHANGED,
+				Detail:       "session re-established",
+				Region:       next.RegionName(),
+				RegionHandle: next.RegionHandle(),
+			})
 			break
 		}
 	}
@@ -438,13 +462,43 @@ func (h *Hosted) reconnect(ctx context.Context) (*agent.Agent, error) {
 // notify tells every attached client something happened to the
 // connection under them.
 func (h *Hosted) notify(kind pb.AgentEvent_Kind, detail string) {
-	ev := &pb.ServerPacket{Body: &pb.ServerPacket_Notice{
-		Notice: &pb.AgentEvent{Kind: kind, Detail: detail},
-	}}
+	h.notice(&pb.AgentEvent{Kind: kind, Detail: detail})
+}
+
+// noteRegion says the avatar is in a different region, with the name
+// and handle of the one it is in now.
+//
+// This is the teleport arriving, and it is the same news the reconnect
+// path sends: everything you were holding is stale.  A client that
+// handles one handles the other, which is why it is the kind that
+// already exists rather than a new one -- and why it goes out as a
+// notice.  The message subscription stream carries what the grid said;
+// this is what happened to the connection.
+//
+// It runs on the session's dispatch goroutine, so it does what notify
+// does and no more: the sends to clients do not block.
+func (h *Hosted) noteRegion(region string, handle uint64) {
+	// A region that did not name itself in its handshake still moved
+	// the avatar, and the detail is read by a person: "the avatar is
+	// now in " with nothing after it is worse than saying less.
+	detail := "the avatar is now in another region"
+	if region != "" {
+		detail = "the avatar is now in " + region
+	}
+	h.notice(&pb.AgentEvent{
+		Kind:         pb.AgentEvent_REGION_CHANGED,
+		Detail:       detail,
+		Region:       region,
+		RegionHandle: handle,
+	})
+}
+
+func (h *Hosted) notice(ev *pb.AgentEvent) {
+	p := &pb.ServerPacket{Body: &pb.ServerPacket_Notice{Notice: ev}}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for c := range h.clients {
-		c.send(ev)
+		c.send(p)
 	}
 }
 

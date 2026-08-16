@@ -32,6 +32,27 @@ type fakeSim struct {
 	seq  uint32
 }
 
+// testvilleHandle is where this sim says it is.  Any handle would do;
+// what matters is that it is not zero, since zero is how a session says
+// it has never been told where it is.
+var testvilleHandle = msg.RegionHandle(43520, 43520)
+
+// enterRegion is what arriving in another region looks like on the
+// wire: the simulator introduces itself, and then answers the movement
+// request.  The order is the real one, and it is the whole reason the
+// name and the handle cannot be read from the same message.
+func (f *fakeSim) enterRegion(name string, handle uint64) {
+	rh := &msg.RegionHandshake{}
+	rh.RegionInfo.SimName = append([]byte(name), 0)
+	f.send(rh, msg.FlagReliable)
+
+	amc := &msg.AgentMovementComplete{}
+	amc.Data.Position = msg.Vector3{X: 128, Y: 128, Z: 30}
+	amc.Data.RegionHandle = handle
+	amc.SimData.ChannelVersion = []byte("Fake Server\x00")
+	f.send(amc, msg.FlagReliable)
+}
+
 func newSim(t *testing.T) *fakeSim {
 	t.Helper()
 	addr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
@@ -104,6 +125,10 @@ func (f *fakeSim) run() {
 		case "CompleteAgentMovement":
 			amc := &msg.AgentMovementComplete{}
 			amc.Data.Position = msg.Vector3{X: 1, Y: 2, Z: 3}
+			// A real one always says which region it is, and a
+			// session that was never told cannot tell arriving
+			// somewhere else from arriving for the first time.
+			amc.Data.RegionHandle = testvilleHandle
 			amc.SimData.ChannelVersion = []byte("Fake Server\x00")
 			f.send(amc, msg.FlagReliable)
 		case "LogoutRequest":
@@ -1275,4 +1300,78 @@ func TestServeReportsAListenerThatFails(t *testing.T) {
 // dial option is the documented way to say so.
 func plaintext() grpc.DialOption {
 	return grpc.WithTransportCredentials(insecure.NewCredentials())
+}
+
+// TestAClientIsToldWhereTheAvatarIsNow: a teleport invalidates nearly
+// everything a client holds -- local ids are the region's own numbering
+// and its object cache describes somewhere else -- and until this stage
+// nothing told it so.  The notice carries the name and the handle
+// together so that dropping what it has costs no round trip.
+//
+// Through StartAgent rather than the rig, because the wiring is half of
+// what is being tested: the daemon learns of the move from the session
+// under it and has to be the one that passes it on.
+func TestAClientIsToldWhereTheAvatarIsNow(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+	var logins atomic.Int64
+	hs := loginServer(t, sim, &logins, nil)
+
+	srv := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h, err := srv.StartAgent(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.opts.OnRegionChange == nil {
+		t.Fatal("the session was not told to say when the avatar moves")
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { defer close(done); srv.Serve(ctx, ln) }()
+	defer func() { cancel(); <-done }()
+
+	c, err := client.Dial(context.Background(), ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Attach(context.Background(), "example"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sandbox Goguen's handle on Agni, which stage 0 measured.
+	const goguen = uint64(1094014069892352)
+	sim.enterRegion("Sandbox Goguen", goguen)
+
+	select {
+	case ev := <-c.Notices():
+		if ev.Kind != pb.AgentEvent_REGION_CHANGED {
+			t.Fatalf("the client was told %v: %s", ev.Kind, ev.Detail)
+		}
+		if ev.Region != "Sandbox Goguen" || ev.RegionHandle != goguen {
+			t.Errorf("the notice says %q handle %d, want %q handle %d",
+				ev.Region, ev.RegionHandle, "Sandbox Goguen", goguen)
+		}
+		if ev.Detail == "" {
+			t.Error("the notice says nothing a person could read")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the client was not told the avatar had moved")
+	}
+
+	// And one is all.  The first arrival said nothing, or the client
+	// would have been told to drop a cache it had not filled.
+	select {
+	case ev := <-c.Notices():
+		t.Errorf("a second notice for one move: %v %s", ev.Kind, ev.Detail)
+	case <-time.After(300 * time.Millisecond):
+	}
 }

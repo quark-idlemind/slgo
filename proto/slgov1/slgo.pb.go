@@ -1144,9 +1144,24 @@ func (x *InboundMessage) GetReceivedAt() int64 {
 
 // AgentEvent is something that happened to the grid connection itself.
 type AgentEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kind          AgentEvent_Kind        `protobuf:"varint,1,opt,name=kind,proto3,enum=slgo.v1.AgentEvent_Kind" json:"kind,omitempty"`
-	Detail        string                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Kind   AgentEvent_Kind        `protobuf:"varint,1,opt,name=kind,proto3,enum=slgo.v1.AgentEvent_Kind" json:"kind,omitempty"`
+	Detail string                 `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
+	// Where the avatar is now, for REGION_CHANGED: the name the new
+	// region gave in its handshake and the handle it answers to.
+	//
+	// They travel with the notice so that a client can drop what it holds
+	// without a round trip.  A region change is the news that local ids,
+	// the object cache and everything keyed on either belong to somewhere
+	// the avatar has left, and a client that had to ask where it is
+	// before believing that would be acting on the old region for as long
+	// as the question took.
+	//
+	// Both may be empty on a notice from a server that does not fill them
+	// in, which says nothing about whether the region changed: the kind
+	// is what says that.
+	Region        string `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
+	RegionHandle  uint64 `protobuf:"varint,4,opt,name=region_handle,json=regionHandle,proto3" json:"region_handle,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1193,6 +1208,20 @@ func (x *AgentEvent) GetDetail() string {
 		return x.Detail
 	}
 	return ""
+}
+
+func (x *AgentEvent) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *AgentEvent) GetRegionHandle() uint64 {
+	if x != nil {
+		return x.RegionHandle
+	}
+	return 0
 }
 
 type AgentInfo struct {
@@ -3727,11 +3756,13 @@ const file_slgo_proto_rawDesc = "" +
 	"\bsequence\x18\x04 \x01(\rR\bsequence\x12\x14\n" +
 	"\x05flags\x18\x05 \x01(\rR\x05flags\x12\x1f\n" +
 	"\vreceived_at\x18\x06 \x01(\x03R\n" +
-	"receivedAt\"\x99\x01\n" +
+	"receivedAt\"\xd6\x01\n" +
 	"\n" +
 	"AgentEvent\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.slgo.v1.AgentEvent.KindR\x04kind\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\tR\x06detail\"E\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail\x12\x16\n" +
+	"\x06region\x18\x03 \x01(\tR\x06region\x12#\n" +
+	"\rregion_handle\x18\x04 \x01(\x04R\fregionHandle\"E\n" +
 	"\x04Kind\x12\v\n" +
 	"\aUNKNOWN\x10\x00\x12\x12\n" +
 	"\x0eREGION_CHANGED\x10\x01\x12\x10\n" +

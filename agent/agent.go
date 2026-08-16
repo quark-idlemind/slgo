@@ -247,6 +247,23 @@ type Options struct {
 	// that does not care.
 	OnEvent EventHandler
 
+	// OnRegionChange is told that the avatar is in a different
+	// region from the one it was in, with that region's name and
+	// handle.  See regionChanged for when it fires and, as
+	// importantly, when it does not.
+	//
+	// It is what lets something above this package throw away what
+	// belongs to the region left behind, which is most of what a
+	// client holds: local ids are the region's own numbering and an
+	// object cache describes somewhere else.  This package does not
+	// know what a client is and does not learn it here -- the
+	// callback is the whole of what it says.
+	//
+	// It runs on the dispatch goroutine, like Relay, so keep it
+	// quick and do not block in it: a slow one stops this session
+	// reading anything at all.
+	OnRegionChange RegionChangeHandler
+
 	// Presence is how often AgentUpdate is sent.  Default one
 	// second; a negative value stops it, which also stops the
 	// simulator streaming any object data.
@@ -553,8 +570,10 @@ func (a *Agent) register() {
 		a.setHandshake(m)
 		a.setRegion(r)
 		// Whichever region this is, its objects are kept apart from
-		// the last one's.  Nothing says a region has changed and
-		// nothing will, so this handshake is the notice.
+		// the last one's.  What tells anything ABOVE this package
+		// that the region changed is fired from
+		// AgentMovementComplete rather than here, because this
+		// message does not carry the handle; see regionChanged.
 		a.enterRegion(r.ID)
 
 		reply := &msg.RegionHandshakeReply{}
@@ -567,6 +586,12 @@ func (a *Agent) register() {
 	a.Disp.MustHandle("AgentMovementComplete", func(p *msg.Packet) {
 		m := p.Message.(*msg.AgentMovementComplete)
 		a.mu.Lock()
+		// The handle this session held until now, which is what
+		// says whether the avatar has arrived somewhere it was not,
+		// and the name the handshake just recorded, which is the
+		// new region's; both are read under the one lock so that
+		// the pair cannot be half of each region.
+		was, name := a.handle, a.regionName
 		a.position = m.Data.Position
 		a.lookAt = m.Data.LookAt
 		a.handle = m.Data.RegionHandle
@@ -579,6 +604,7 @@ func (a *Agent) register() {
 		if s := a.arrived.Load(); s != nil {
 			s.fire()
 		}
+		a.regionChanged(was, m.Data.RegionHandle, name)
 	}, msg.Inline())
 
 	// Keep the camera on the avatar.  AgentUpdate is what puts a

@@ -26,6 +26,11 @@ type Direct struct {
 	info     *Info
 	messages chan *Message
 	events   chan *QueueEvent
+
+	// regions is the third relay.  A hosted session is told the avatar
+	// moved by the daemon that moved it; here the agent in this
+	// process is the daemon, and it says so through a callback.
+	regions chan *RegionChange
 }
 
 var _ Backend = (*Direct)(nil)
@@ -50,6 +55,11 @@ func Login(ctx context.Context, l agent.Login) (*Direct, error) {
 	d := &Direct{
 		messages: make(chan *Message, relayDepth),
 		events:   make(chan *QueueEvent, relayDepth),
+		// Shallower than the other two on purpose: these arrive one to
+		// a teleport rather than one to a packet, and a buffer that
+		// held a thousand of them would be holding the whole history
+		// of somewhere the avatar has been.
+		regions: make(chan *RegionChange, 32),
 	}
 	opts := agent.Options{
 		// Keeping the undecoded body is what lets one tap feed the
@@ -61,6 +71,10 @@ func Login(ctx context.Context, l agent.Login) (*Direct, error) {
 		// the right default for a one-shot client and meant a direct
 		// session never heard a UDPDeprecated message in its life.
 		OnEvent: d.event,
+		// And this is what a hosted session gets off the daemon's
+		// notice stream.  Nothing above Backend may be able to tell
+		// the two apart, which is the whole of why it is here.
+		OnRegionChange: d.regionChanged,
 	}
 	if d.a, err = agent.Connect(ctx, acct, opts); err != nil {
 		return nil, err
@@ -139,12 +153,32 @@ func (d *Direct) event(name string, body []byte) {
 	}
 }
 
-func (d *Direct) Info() *Info                { return d.info }
-func (d *Direct) Messages() <-chan *Message  { return d.messages }
-func (d *Direct) Events() <-chan *QueueEvent { return d.events }
-func (d *Direct) Done() <-chan struct{}      { return d.a.Done() }
-func (d *Direct) Err() error                 { return d.a.Err() }
-func (d *Direct) HasCap(name string) bool    { return d.a.HasCap(name) }
+// regionChanged turns the agent's word that the avatar has been moved
+// into what the daemon would have relayed.
+//
+// It runs on the dispatch goroutine, so it hands over and returns, for
+// the reason tap does.  Dropping is the wrong thing here and there is
+// nothing better available: a reader that missed this goes on believing
+// it is in a region it has left.  What makes it tolerable is the rate
+// -- one per teleport against one per packet -- and the buffer, which
+// is sized for that rather than for the relay.
+//
+// Info is deliberately not revised.  It is what was known at attach
+// time and says so; see Info.Region.
+func (d *Direct) regionChanged(region string, handle uint64) {
+	select {
+	case d.regions <- &RegionChange{Region: region, Handle: handle}:
+	default:
+	}
+}
+
+func (d *Direct) Info() *Info                         { return d.info }
+func (d *Direct) Messages() <-chan *Message           { return d.messages }
+func (d *Direct) Events() <-chan *QueueEvent          { return d.events }
+func (d *Direct) RegionChanges() <-chan *RegionChange { return d.regions }
+func (d *Direct) Done() <-chan struct{}               { return d.a.Done() }
+func (d *Direct) Err() error                          { return d.a.Err() }
+func (d *Direct) HasCap(name string) bool             { return d.a.HasCap(name) }
 
 // Close ends the session.  Unlike a hosted one there is nobody else
 // holding it, so this logs out rather than merely hanging up.

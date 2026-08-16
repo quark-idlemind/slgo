@@ -81,11 +81,12 @@ type Session struct {
 	// thing that ever touches a subscription's channel: the only
 	// writer and the only closer.  Closing from anywhere else races
 	// with a send no matter how it is locked.
-	chatSubs map[<-chan Line]*chatSub
-	permSubs map[<-chan *Permission]*permSub
-	imSubs   map[<-chan *IM]*imSub
-	chatCtl  chan chatCmd
-	readDone chan struct{}
+	chatSubs   map[<-chan Line]*chatSub
+	permSubs   map[<-chan *Permission]*permSub
+	imSubs     map[<-chan *IM]*imSub
+	regionSubs map[<-chan *RegionChange]*regionSub
+	chatCtl    chan chatCmd
+	readDone   chan struct{}
 
 	// subsClosed says closeChat has been, so that a subscription asked
 	// for after the session ended is handed back closed rather than
@@ -245,6 +246,7 @@ func New(b Backend) (*Session, error) {
 		chatSubs:    map[<-chan Line]*chatSub{},
 		permSubs:    map[<-chan *Permission]*permSub{},
 		imSubs:      map[<-chan *IM]*imSub{},
+		regionSubs:  map[<-chan *RegionChange]*regionSub{},
 		names:       map[msg.UUID]string{},
 		asking:      map[msg.UUID]bool{},
 		offers:      map[msg.UUID]*Offer{},
@@ -341,10 +343,12 @@ func (w *Session) Alerts() []string {
 // The circuit is what says the session is over.  The event queue ending
 // is not the same thing -- a simulator answers 404 to a queue it has
 // finished with while the circuit carries on -- so a closed event
-// channel only stops this listening to it.
+// channel only stops this listening to it.  The same goes for the
+// region changes, which a backend may not have at all.
 func (w *Session) read(ctx context.Context) {
 	msgs := w.b.Messages()
 	events := w.b.Events()
+	regions := w.b.RegionChanges()
 	defer func() {
 		close(w.readDone)
 		w.closeChat()
@@ -382,6 +386,19 @@ func (w *Session) read(ctx context.Context) {
 				continue
 			}
 			w.event(e)
+
+		// The avatar is in another region, so most of what this
+		// session remembers is about somewhere else.  Handled here
+		// rather than by whoever teleported, because a teleport is
+		// not the only way it happens: an accepted lure, a border
+		// crossing, and a session re-established after the circuit
+		// was lost all arrive as this and nothing else.
+		case c, ok := <-regions:
+			if !ok {
+				regions = nil
+				continue
+			}
+			w.regionChanged(c)
 		}
 	}
 }

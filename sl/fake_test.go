@@ -72,9 +72,11 @@ type fakeBackend struct {
 	// msgs is the relay, and is unbuffered on purpose; see Relay.
 	// events is the other relay, and is unbuffered for the same
 	// reason: what arrives on the grid's event queue rather than on
-	// the circuit.  See RelayEvent.
+	// the circuit.  See RelayEvent.  regions is the third, unbuffered
+	// for the third time: see RelayRegion.
 	msgs     chan *Message
 	events   chan *QueueEvent
+	regions  chan *RegionChange
 	done     chan struct{}
 	doneOnce sync.Once
 	err      error
@@ -145,11 +147,12 @@ func newFake(t *testing.T) *fakeBackend {
 			InventoryRoot: testInvRoot,
 			Channel:       "slgo test 1.0",
 		},
-		msgs:   make(chan *Message),
-		events: make(chan *QueueEvent),
-		done:   make(chan struct{}),
-		locks:  map[string]bool{},
-		caps:   map[string]string{},
+		msgs:    make(chan *Message),
+		events:  make(chan *QueueEvent),
+		regions: make(chan *RegionChange),
+		done:    make(chan struct{}),
+		locks:   map[string]bool{},
+		caps:    map[string]string{},
 		presence: &Presence{
 			Position: msg.Vector3{X: 128, Y: 128, Z: 25},
 			LookAt:   msg.Vector3{X: 1},
@@ -253,6 +256,25 @@ func (f *fakeBackend) RelayEvent(t *testing.T, name, body string) {
 	case f.events <- &QueueEvent{Name: name, Body: []byte(body), At: time.Now()}:
 	case <-time.After(5 * time.Second):
 		t.Fatalf("nothing read the event relay: is a session attached to this backend?")
+	}
+	f.put(t, &Message{ID: barrierID, Name: "slgo relay barrier", At: time.Now()})
+}
+
+// RelayRegion tells the session the avatar is in another region, as the
+// daemon does when it has followed a teleport, and returns once the
+// reader has finished with it.
+//
+// The barrier is Relay's and is here for Relay's reason, and it earns
+// its keep twice over here: everything a region change does happens on
+// the reader goroutine -- the forgetting as much as the delivery -- so a
+// test asserting on what was dropped without it is asserting on a
+// session that may not have been told yet.
+func (f *fakeBackend) RelayRegion(t *testing.T, region string, handle uint64) {
+	t.Helper()
+	select {
+	case f.regions <- &RegionChange{Region: region, Handle: handle}:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("nothing read the region relay: is a session attached to this backend?")
 	}
 	f.put(t, &Message{ID: barrierID, Name: "slgo relay barrier", At: time.Now()})
 }
@@ -587,9 +609,10 @@ func (f *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) er
 	return nil
 }
 
-func (f *fakeBackend) Messages() <-chan *Message  { return f.msgs }
-func (f *fakeBackend) Events() <-chan *QueueEvent { return f.events }
-func (f *fakeBackend) Done() <-chan struct{}      { return f.done }
+func (f *fakeBackend) Messages() <-chan *Message           { return f.msgs }
+func (f *fakeBackend) Events() <-chan *QueueEvent          { return f.events }
+func (f *fakeBackend) RegionChanges() <-chan *RegionChange { return f.regions }
+func (f *fakeBackend) Done() <-chan struct{}               { return f.done }
 
 func (f *fakeBackend) Err() error {
 	f.mu.Lock()

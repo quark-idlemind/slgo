@@ -570,3 +570,6 @@ func (f *fakeGrid) Close() error {
 	f.once.Do(func() { close(f.done) })
 	return nil
 }
+
+// RegionChanges is never told of one: nothing here teleports.
+func (f *fakeGrid) RegionChanges() <-chan *sl.RegionChange { return nil }

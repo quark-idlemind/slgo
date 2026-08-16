@@ -43,6 +43,14 @@ type Message = client.Message
 // each other and the shorter name was there first.
 type QueueEvent = client.Event
 
+// RegionChange is the avatar being somewhere else: the name and handle
+// of the region it is in now.
+//
+// An alias for the same reason Message is one: the hosted backend is
+// handed these by the client package and would otherwise copy each one
+// to rename it.
+type RegionChange = client.RegionChange
+
 // Info is what the session knows about itself before anything is
 // asked.
 type Info struct {
@@ -53,8 +61,19 @@ type Info struct {
 	AgentID   msg.UUID
 	SessionID msg.UUID
 
-	AvatarName    string
-	Region        string
+	AvatarName string
+
+	// Region is where the avatar was when this session attached, and
+	// it is not revised afterwards.
+	//
+	// That is the contract above working as written rather than a
+	// fault to fix: this whole struct is what was known at attach time,
+	// and a field that quietly changed under a caller would be worse
+	// than one that plainly does not.  An avatar that teleports is
+	// somewhere else and this still says where it started, so ask
+	// Session.Where, or subscribe to Session.RegionChanges to be told.
+	Region string
+
 	InventoryRoot msg.UUID
 
 	// Channel is the client name and version the login server was
@@ -118,6 +137,20 @@ type Backend interface {
 	// A nil channel is a valid answer from a backend that has no
 	// queue to offer, and blocks rather than ending the session.
 	Events() <-chan *QueueEvent
+
+	// RegionChanges is the third relay: the avatar has been moved to
+	// another region, and everything keyed on the one it was in is
+	// stale.
+	//
+	// A relay rather than a question, because there is no question to
+	// ask.  Where says which region the avatar is in now and cannot
+	// tell one teleport from two, so a caller that has to act at the
+	// moment it happens -- to drop what it holds, or to say something
+	// to a person -- must be told rather than look.
+	//
+	// A nil channel is a valid answer, as for Events, and is what a
+	// backend with no way of hearing about one gives.
+	RegionChanges() <-chan *RegionChange
 
 	// Done closes when the session ends, and Err says why.
 	Done() <-chan struct{}

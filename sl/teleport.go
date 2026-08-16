@@ -160,8 +160,13 @@ const DefaultTeleportTimeout = 90 * time.Second
 // has the circuit, the capabilities and the queue there.  What it does
 // NOT mean is that anything a caller was holding is still good.  Local
 // ids are the region's own numbering and the objects are somewhere
-// else's; until this package is told a region changed, a caller that
-// teleports should treat what it knew as gone.
+// else's, so a caller that teleports should treat what it knew as gone.
+//
+// This package throws away its own share of that when it is told the
+// avatar has moved -- see region.go for what goes and what stays -- but
+// being told arrives on the relay and this call does not wait for it,
+// so a caller with state of its own should subscribe to RegionChanges
+// rather than take the return as the moment.
 //
 // A zero timeout is DefaultTeleportTimeout.
 func (w *Session) Teleport(ctx context.Context, handle uint64, to msg.Vector3, timeout time.Duration) error {

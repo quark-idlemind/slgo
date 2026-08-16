@@ -127,6 +127,16 @@ func (h *Hosted) Done() <-chan struct{}     { return h.conn.Done() }
 // received.
 func (h *Hosted) Events() <-chan *QueueEvent { return h.conn.Events() }
 
+// RegionChanges is the daemon saying the avatar is somewhere else.
+//
+// It comes off the notice stream and not the message one, because it is
+// not something the grid said: it is something that happened to the
+// connection, like the session going away and coming back.  The daemon
+// is the only one in a position to know -- a teleport is announced to
+// the session it moves, and by the time a client could read the
+// announcement the daemon has already followed it.
+func (h *Hosted) RegionChanges() <-chan *RegionChange { return h.conn.RegionChanges() }
+
 func (h *Hosted) Err() error              { return h.conn.Err() }
 func (h *Hosted) Close() error            { return h.conn.Close() }
 func (h *Hosted) HasCap(name string) bool { return h.conn.HasCap(name) }

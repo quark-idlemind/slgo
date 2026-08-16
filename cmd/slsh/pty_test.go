@@ -103,6 +103,10 @@ func (b *fakeBackend) Err() error                    { return nil }
 func (b *fakeBackend) Close() error                  { return nil }
 func (b *fakeBackend) HasCap(name string) bool       { return name == "InventoryAPIv3" }
 
+// RegionChanges is never told of one: nothing typed at this shell
+// leaves the region.
+func (b *fakeBackend) RegionChanges() <-chan *sl.RegionChange { return nil }
+
 func (b *fakeBackend) Presence(ctx context.Context, d float32) (*sl.Presence, error) {
 	return &sl.Presence{Region: "Nowhere"}, nil
 }

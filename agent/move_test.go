@@ -484,3 +484,97 @@ func TestTheLookIsRefreshedAfterAMove(t *testing.T) {
 		t.Errorf("the view after the move is not a direction: %+v", got)
 	}
 }
+
+// TestTheFirstArrivalOfASessionIsNotARegionChange: the notice means
+// "everything you were holding is stale", and a session that has just
+// connected was holding nothing.  Firing on the first arrival would have
+// every client throw away a cache it had not filled yet, and would make
+// a reconnect say it twice -- once for the fresh session's own arrival
+// and once from whatever hosts it.
+func TestTheFirstArrivalOfASessionIsNotARegionChange(t *testing.T) {
+	told := make(chan string, 4)
+	a, _, _ := twoRegions(t, Options{SkipCaps: true,
+		OnRegionChange: func(name string, _ uint64) { told <- name }})
+
+	// Connect does not return until AgentMovementComplete has been
+	// handled, so anything this was going to say has been said.
+	select {
+	case name := <-told:
+		t.Errorf("arriving in %q for the first time was reported as a region change", name)
+	default:
+	}
+	if a.RegionName() == "" {
+		t.Error("the session never got a handshake, so it proves nothing")
+	}
+}
+
+// TestAMoveSaysWhichRegionTheAvatarIsInNow is the assertion the rest of
+// stage 4 rests on, and the one that catches the trap in it.  The two
+// halves of the answer come from different messages -- the name from
+// RegionHandshake and the handle from the AgentMovementComplete that
+// follows it -- so a notice fired at the obvious moment carries the new
+// region's name beside the handle of the region the avatar has left, and
+// looks entirely reasonable while doing it.
+func TestAMoveSaysWhichRegionTheAvatarIsInNow(t *testing.T) {
+	type where struct {
+		name   string
+		handle uint64
+	}
+	told := make(chan where, 4)
+	a, from, to := twoRegions(t, Options{SkipCaps: true,
+		OnRegionChange: func(name string, handle uint64) { told <- where{name, handle} }})
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	var got where
+	select {
+	case got = <-told:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a move said nothing about the region changing")
+	}
+
+	_, arrived := to.sim.arrival()
+	if got.name != to.sim.regionNm || got.handle != arrived {
+		_, left := from.sim.arrival()
+		t.Errorf("told %q handle %d, want %q handle %d; the region left is %q handle %d",
+			got.name, got.handle, to.sim.regionNm, arrived, from.sim.regionNm, left)
+	}
+
+	// Exactly one.  A second would have a client throw away the object
+	// cache it had just been handed by the region it arrived in.
+	select {
+	case again := <-told:
+		t.Errorf("one move was reported twice; the second was %+v", again)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// TestArrivingAgainInTheRegionWeAreInIsNotAChange: an
+// AgentMovementComplete naming the handle this session already has says
+// the avatar is where it was.  There is nothing stale to drop, and the
+// notice costs a client everything it holds.
+func TestArrivingAgainInTheRegionWeAreInIsNotAChange(t *testing.T) {
+	told := make(chan string, 4)
+	a, from, _ := twoRegions(t, Options{SkipCaps: true,
+		OnRegionChange: func(name string, _ uint64) { told <- name }})
+
+	// The same region and the same handle, at a different spot, which is
+	// what makes the arrival visible from here without asking the
+	// dispatcher anything.
+	_, handle := from.sim.arrival()
+	at := msg.Vector3{X: 33, Y: 44, Z: 55}
+	amc := &msg.AgentMovementComplete{}
+	amc.Data.Position = at
+	amc.Data.LookAt = msg.Vector3{X: 1}
+	amc.Data.RegionHandle = handle
+	from.sim.send(amc, msg.FlagReliable)
+
+	waitFor(t, "the second arrival to be handled", func() bool { return a.Position() == at })
+	select {
+	case name := <-told:
+		t.Errorf("arriving again in %q was reported as a change of region", name)
+	default:
+	}
+}

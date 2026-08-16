@@ -169,6 +169,43 @@ func (a *Agent) enterRegion(region msg.UUID) {
 	a.regions.Detach(was)
 }
 
+// A RegionChangeHandler is told the name and handle of the region the
+// avatar is in now.  See Options.OnRegionChange.
+type RegionChangeHandler func(name string, handle uint64)
+
+// regionChanged says that the avatar is in a different region from the
+// one it was in.
+//
+// It is called from the AgentMovementComplete handler and not from the
+// RegionHandshake one, which is where the name, the object store and
+// the terrain change and so is the obvious place for it.  The obvious
+// place is the wrong one, because the handshake does not carry the
+// handle: it arrives afterwards, in AgentMovementComplete, and a notice
+// fired from the handshake would pair the new region's name with the
+// handle of the region the avatar has left -- an answer that is half
+// right, which is worse than none, since the two halves would be
+// checked against each other and disagree.  Both handlers are Inline
+// and the simulator sends the handshake first, so by the time this runs
+// the name is already the new region's.
+//
+// The first arrival of a session is not a change and says nothing.
+// That is what a zero handle behind us means: nothing was held that
+// could be stale.  It is also what keeps a reconnect quiet -- a
+// reconnect is a fresh Agent, so its AgentMovementComplete is a first
+// arrival, and whatever hosts the session already says so for itself.
+//
+// A second AgentMovementComplete naming the region we are already in
+// says nothing either.  There is nothing to drop, and a notice for it
+// would have a client throw away an object cache it has just filled.
+func (a *Agent) regionChanged(was, now uint64, name string) {
+	if was == 0 || was == now {
+		return
+	}
+	if fn := a.opts.OnRegionChange; fn != nil {
+		fn(name, now)
+	}
+}
+
 // leaveRegion gives the store back, which is what logging out amounts
 // to.  A viewpoint left behind would keep objects alive for an avatar
 // that is not there, and a reference left behind would keep a whole

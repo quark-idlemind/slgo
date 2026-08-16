@@ -328,6 +328,22 @@ message AgentEvent {
   }
   Kind kind = 1;
   string detail = 2;
+
+  // Where the avatar is now, for REGION_CHANGED: the name the new
+  // region gave in its handshake and the handle it answers to.
+  //
+  // They travel with the notice so that a client can drop what it holds
+  // without a round trip.  A region change is the news that local ids,
+  // the object cache and everything keyed on either belong to somewhere
+  // the avatar has left, and a client that had to ask where it is
+  // before believing that would be acting on the old region for as long
+  // as the question took.
+  //
+  // Both may be empty on a notice from a server that does not fill them
+  // in, which says nothing about whether the region changed: the kind
+  // is what says that.
+  string region = 3;
+  uint64 region_handle = 4;
 }
 
 // ------------------------------------------------------------ control
