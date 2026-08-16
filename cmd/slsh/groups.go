@@ -97,9 +97,14 @@ var groups = []group{
 		members: []string{"give", "cp", "offers", "accept", "decline", "perms"},
 	},
 	{
-		name:    "avatars",
-		brief:   "the avatars slgod holds, and how their sessions are doing",
-		members: []string{"agents", "host", "logout", "auto", "status", "watch"},
+		name:  "avatars",
+		brief: "the avatars slgod holds, and how their sessions are doing",
+		// viewer is here rather than under shell: what it reports is
+		// the daemon's, not slsh's -- where slgod serves logins and
+		// whether one of its sessions has been taken over -- and the
+		// question it answers, "how do I get eyes on this avatar", is
+		// asked next to status and watch.
+		members: []string{"agents", "host", "logout", "auto", "status", "watch", "viewer"},
 	},
 	{
 		name:    "simulator",

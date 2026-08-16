@@ -87,6 +87,11 @@ type Server struct {
 	// auth is nil when the server runs without authentication, which is
 	// only reasonable bound to loopback.
 	auth *auth.Server
+
+	// viewer is slgod's login endpoint for real viewers, which the
+	// daemon owns and this package only reports on.  Nil -- the
+	// ordinary case -- means none is served; see viewer.go.
+	viewer Viewer
 }
 
 // SetAuth turns authentication on. Every method but Login is then

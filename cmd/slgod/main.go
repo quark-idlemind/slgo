@@ -449,6 +449,12 @@ func main() {
 			log.Fatalf("viewer: %v", err)
 		}
 		defer stopViewers()
+		// After serve, because until it has bound the listener there
+		// is no address to tell anybody.  A server left without this
+		// answers "no viewer logins", which is the truth for a daemon
+		// started without -viewer and the answer every client here
+		// gets today.
+		srv.SetViewer(viewers)
 	}
 
 	ln, err := net.Listen("tcp", *listen)

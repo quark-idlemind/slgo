@@ -7,6 +7,11 @@ package main
 //	agent  = example
 //	escape = ESC
 //
+//	viewer_app     = Firestorm-OpenSim
+//	viewer_grid    = slgod
+//	viewer_launch  = open -a {app} --args --grid {grid} --login {first} {last} {password}
+//	viewer_running = pgrep -f {app}.app/Contents
+//
 // Flags win over the file, and the file over the defaults.
 
 import (
@@ -14,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -32,6 +38,16 @@ type Config struct {
 
 	// Chat starts in chat mode rather than at a command prompt.
 	Chat bool
+
+	// ViewerApp, ViewerGrid, ViewerLaunch and ViewerRunning are how
+	// "viewer --launch" starts a real viewer and hands it the session:
+	// which application, which entry in that viewer's own grid list,
+	// the command that starts it, and the command that says whether
+	// one is up already.  See viewerDefaults.
+	ViewerApp     string
+	ViewerGrid    string
+	ViewerLaunch  string
+	ViewerRunning string
 }
 
 // DefaultConfig is what an empty file leaves you with.
@@ -40,7 +56,97 @@ type Config struct {
 // in a file and nothing on the command line, where slgod runs is a
 // question for sl-host, and a default here would answer it first.
 func DefaultConfig() Config {
-	return Config{Prefix: 27}
+	c := Config{Prefix: 27}
+	c.ViewerApp, c.ViewerGrid, c.ViewerLaunch, c.ViewerRunning = viewerDefaults(runtime.GOOS)
+	return c
+}
+
+// viewerDefaults is how to start a real viewer on this kind of machine,
+// point it at slgod, and tell whether one is already up.
+//
+// # Why the OpenSim build and not the one already installed
+//
+// This is the trap, and it is worth the paragraph.  A Firestorm built
+// for Second Life CANNOT be pointed at a private grid at all.  That
+// flavour compiles LLGridManager from llviewernetwork.cpp, whose
+// grid-file block -- the one that would read the viewer's own
+// grids.user.xml -- is compiled out (llviewernetwork.cpp:149-201,
+// "#if 0 <FS:AW disabled for meeting havok sublicense requirements/>"),
+// so the only grids it has are the two it hardcodes.  Driven live, the
+// SL build at /Applications/Firestorm-Releasex64.app logged
+//
+//	WARNING #GridManager# llviewernetwork.cpp(214) initialize :
+//	Unknown grid 'slgod'
+//
+// and then llviewernetwork.cpp:244, "Default grid to
+// util.agni.lindenlab.com" -- an Agni login screen, with nothing on it
+// to suggest why.  Somebody who reaches for the viewer they already
+// have gets exactly that, which is why the default names the other one.
+//
+// The OpenSim flavour compiles fsgridhandler.cpp instead, which does
+// read grids.user.xml, and it is at ~/Applications/Firestorm-OpenSim.app
+// here.  "open -a Firestorm-OpenSim" resolves it by name; both the bare
+// name and the full path were tried live and both attached.
+//
+// # Why the grid is a NICKNAME and a setting of its own
+//
+// --grid takes a nickname out of the viewer's own grid list, not a URL.
+// Passing the login URI where the nickname goes was tried on the chance
+// that the auto-add path would take it, and did not work: "Unknown grid
+// 'http://127.0.0.1:9000/'", then Agni again.  --loginuri, which would
+// be the obvious flag, is read into CmdLineLoginURI
+// (app_settings/cmd_line.xml:201-208) and then never looked at by
+// anything but its own unit tests.
+//
+// So the grid has to exist in the viewer BEFORE any of this works:
+// Preferences -> OpenSim, add the login URI that "viewer" prints, and
+// give it the nickname this setting names.  That is a one-off piece of
+// local setup, which is exactly the sort of thing that belongs in a
+// setting rather than buried in a command template where nobody would
+// find it.
+//
+// # Why macOS goes through open(1)
+//
+// A macOS application is a bundle, not an executable: the binary here
+// is Firestorm-OpenSim.app/Contents/MacOS/Firestorm, and running it
+// directly is not the same as launching the app.  "open -a" is the
+// supported way and is what the recovery script on this machine already
+// uses (~/bin/sl-restart, which launches with open -a "$APP" --args
+// --autologin), so it is copied from there.
+//
+// It also brings the viewer to the FRONT, which is deliberate and is
+// what was asked for: open activates the application it launches unless
+// -g is given (man open), and somebody who has just typed "viewer
+// --launch" wants to be looking at it.
+//
+// open returns as soon as the launch has been handed off rather than
+// waiting for the application to exit -- that is what -W is for, and it
+// is not passed -- so the prompt comes back at once.
+//
+// # Why the running check is a process match
+//
+// It has to answer before the viewer has a window, a port or a session,
+// and a process is the only thing it has by then.  The pattern is the
+// bundle path rather than the process name because the process is
+// called plain "Firestorm" whichever build it came from -- which is
+// also why it must follow the app setting, since the two flavours are
+// told apart only by their bundles.  sl-restart reaps orphans with the
+// same shape of pattern (pkill -f "Firestorm-Releasex64.app/Contents").
+//
+// # Why an unknown platform gets nothing
+//
+// Guessing a binary name would produce a command that fails somewhere
+// inside a viewer's own startup, or worse, starts the wrong program.
+// Empty means "viewer --launch" says nobody has told it what to run,
+// which is a sentence somebody can act on.
+func viewerDefaults(goos string) (app, grid, launch, running string) {
+	switch goos {
+	case "darwin":
+		return "Firestorm-OpenSim", "slgod",
+			"open -a {app} --args --grid {grid} --login {first} {last} {password}",
+			"pgrep -f {app}.app/Contents"
+	}
+	return "", "", "", ""
 }
 
 // ConfigDir is where slchat keeps its settings.  SLSH_CONFIG_DIR
@@ -95,6 +201,17 @@ func LoadConfig() (Config, error) {
 			c.Addr = value
 		case "agent", "profile":
 			c.Agent = value
+		case "viewer_app":
+			c.ViewerApp = value
+		case "viewer_grid":
+			c.ViewerGrid = value
+		case "viewer_launch":
+			c.ViewerLaunch = value
+		case "viewer_running":
+			// Deliberately settable to nothing: a person who would
+			// rather slsh did not run pgrep can empty it, and the
+			// launch then goes ahead without the check.
+			c.ViewerRunning = value
 		case "escape", "prefix", "prefix_key":
 			r, err := ParseKey(value)
 			if err != nil {

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -48,7 +50,55 @@ type viewerHost struct {
 
 	mu  sync.Mutex // held only while opening one
 	ctx context.Context
+
+	// credMu guards creds, the passwords minted for a single login.
+	// An ordinary mutex and not a sync.Map: this is touched when
+	// somebody starts a viewer and on the one login that follows, which
+	// is a handful of times a day rather than a hot path.
+	credMu sync.Mutex
+	creds  map[string]*oneTime
 }
+
+// oneTime is a viewer password minted for a single login.
+//
+// The plaintext is not here and is nowhere else either.  It is returned
+// to whoever asked and forgotten; what stays behind is the digest a
+// login is compared against, which is the same thing a profile holds
+// and no more use to anyone who reads it than that is.
+type oneTime struct {
+	digest string
+	expiry time.Time
+}
+
+// viewerCredentialLife is how long a minted password is good for.
+//
+// It has to cover a viewer starting up and reaching its login, and that
+// takes far longer than it sounds.  Measured on this machine, warm --
+// caches full, the viewer having just been running -- "viewer --launch"
+// at 18:51:0x reached the daemon's login endpoint at 18:51:46, and a
+// second run at 18:55:5x arrived at 18:55:54.  Forty-five to fifty
+// seconds, at best; a cold first start is slower again.  The minute
+// this began as would have expired mid-startup often enough to look
+// like a broken feature rather than a tight window, so it is five.
+//
+// The extra minutes cost little.  What carries the argument for putting
+// a password on a command line is that it works ONCE and that the
+// endpoint is on loopback -- not the clock.  An onlooker who reads it
+// out of ps races a viewer that is already logging in with it, and
+// loses as soon as it does.
+const viewerCredentialLife = 5 * time.Minute
+
+// viewerPasswordChars is how long a minted password is.
+//
+// Sixteen because that is what a viewer's login box will hold --
+// panel_login.xml:144 gives the password field max_length_chars="16" --
+// so a password that has to be typed or pasted by hand still can be.
+// The command line does not care (llloginhandler.cpp:168 md5s whatever
+// it is given, whole), but a credential that works one way and is
+// silently truncated the other is a bad hour for somebody.  Sixteen hex
+// digits is 64 bits, from crypto/rand, for a secret that lives a minute
+// and works once.
+const viewerPasswordChars = 16
 
 // newViewerHost prepares the endpoint without starting it.
 //
@@ -141,6 +191,117 @@ func (vh *viewerHost) serve(addr string) (func(), error) {
 	}, nil
 }
 
+// The three answers the server gives a client about all this, which is
+// the whole of server.Viewer.  They are here because everything they
+// are made of is here: where the endpoint was bound, which profiles may
+// be handed over, and the circuits.
+var _ server.Viewer = (*viewerHost)(nil)
+
+// LoginURI is the address to add to a viewer's grid list.
+//
+// Until now this appeared once, in the daemon's log, at startup: a
+// person attached with a shell an hour later had no way to ask.
+func (v *viewerHost) LoginURI() string {
+	if v.base == "" {
+		return ""
+	}
+	return viewer.LoginURI(v.base)
+}
+
+// Attached reports whether a viewer has taken this profile's circuit.
+//
+// A circuit exists from the first login and is kept afterwards, so its
+// existence says only that a viewer once arrived; the handshake is the
+// nearest thing to a live answer, since a viewer that quits sends
+// nothing to say so.
+func (v *viewerHost) Attached(profile string) bool {
+	c, ok := v.circuits.Load(profile)
+	return ok && c.(*viewer.Circuit).Joined()
+}
+
+// Mint makes a password good for one login as this profile.
+//
+// The plaintext is returned and not kept.  It reaches a viewer's argv,
+// which every process this user owns can read, and that is what being
+// single use and short lived is for: what an onlooker gets is a
+// credential that is either already spent or about to expire, for a
+// session they would have to be on this machine to reach anyway.
+//
+// A profile with no viewer_password is refused, which is the same
+// refusal find() makes below and for the same reason: that setting is
+// what marks a profile as one that may be handed to a viewer at all,
+// and minting around it would turn a deliberate omission into nothing.
+func (v *viewerHost) Mint(profile string) (string, time.Duration, error) {
+	if v.digest(profile) == "" {
+		return "", 0, fmt.Errorf("%s has no viewer_password, so it cannot be handed to a viewer; "+
+			"add a \"viewer_password = ...\" line to that profile and restart slgod", profile)
+	}
+	pass, err := newViewerPassword()
+	if err != nil {
+		// Deliberately says nothing about what was being made.
+		return "", 0, fmt.Errorf("no viewer password could be made: %w", err)
+	}
+
+	v.credMu.Lock()
+	defer v.credMu.Unlock()
+	if v.creds == nil {
+		v.creds = map[string]*oneTime{}
+	}
+	// One outstanding per profile: minting again drops the last one,
+	// so a person who starts a viewer twice cannot leave a live
+	// credential behind them.  Only ever as many entries as there are
+	// profiles, so nothing grows.
+	v.creds[profile] = &oneTime{
+		digest: agent.HashPassword(pass),
+		expiry: time.Now().Add(viewerCredentialLife),
+	}
+	return pass, viewerCredentialLife, nil
+}
+
+// oneTimeFor is the live minted digest for this profile, and the
+// function that spends it, or nothing.
+//
+// Expiry is checked here rather than swept on a timer: a stale entry is
+// harmless -- it is a digest of a secret nobody has -- and a sweeper
+// would be a goroutine whose only job is to delete something already
+// being ignored.
+func (v *viewerHost) oneTimeFor(profile string) (string, func()) {
+	v.credMu.Lock()
+	defer v.credMu.Unlock()
+	c, ok := v.creds[profile]
+	if !ok {
+		return "", nil
+	}
+	if time.Now().After(c.expiry) {
+		delete(v.creds, profile)
+		return "", nil
+	}
+	return c.digest, func() {
+		v.credMu.Lock()
+		defer v.credMu.Unlock()
+		// Only if it is still the same one.  A credential minted
+		// again while this login was in flight belongs to whoever
+		// asked for it second, and spending theirs here would refuse
+		// them a viewer for no reason they could see.
+		if now, ok := v.creds[profile]; ok && now == c {
+			delete(v.creds, profile)
+		}
+	}
+}
+
+// newViewerPassword is a fresh secret, from crypto/rand.
+//
+// Hex rather than base64 so that nothing in it can be eaten by a shell,
+// a URL or an XML-RPC encoder on the way to the viewer -- this string
+// crosses all three.
+func newViewerPassword() (string, error) {
+	b := make([]byte, viewerPasswordChars/2)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
 // find answers the login endpoint's question: is there a session for
 // this name, and if so, on what terms.
 func (v *viewerHost) find(first, last string) *viewer.Handover {
@@ -171,10 +332,17 @@ func (v *viewerHost) find(first, last string) *viewer.Handover {
 	}
 	addr := c.Addr()
 
+	// The password minted for a viewer being started right now, if
+	// there is one.  It is offered ALONGSIDE the profile's rather than
+	// instead of it, so a handover that works today goes on working.
+	once, spend := v.oneTimeFor(profile)
+
 	return &viewer.Handover{
 		First:   a.Account.FirstName,
 		Last:    a.Account.LastName,
 		Digest:  agent.HashPassword(v.digest(profile)),
+		OneTime: once,
+		UseOnce: spend,
 		Raw:     a.Account.Raw,
 		SimIP:   addr.IP.String(),
 		SimPort: addr.Port,

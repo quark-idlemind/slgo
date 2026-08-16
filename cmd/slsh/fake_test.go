@@ -1165,6 +1165,18 @@ type fakeDaemon struct {
 	// fail, when set, is what Host, Logout, ListAgents and Status
 	// answer with, which is how the error half of each is reached.
 	fail error
+
+	// credential is what a viewer credential request is answered with,
+	// and credentialFail is the refusal instead -- a daemon serving no
+	// viewer logins, or a profile that may not be handed over.  Both
+	// are what the shell has to make readable.
+	credential     *pb.ViewerCredentialResponse
+	credentialFail error
+
+	// credentials counts how many were asked for, since minting is the
+	// one call here with an effect: asking twice for one launch would
+	// leave a live password behind.
+	credentials int
 }
 
 func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.ServerPacket]) error {
@@ -1223,6 +1235,14 @@ func (d *fakeDaemon) Status(context.Context, *pb.StatusRequest) (*pb.StatusRespo
 		return nil, d.fail
 	}
 	return d.status, nil
+}
+
+func (d *fakeDaemon) ViewerCredential(context.Context, *pb.ViewerCredentialRequest) (*pb.ViewerCredentialResponse, error) {
+	d.credentials++
+	if d.credentialFail != nil {
+		return nil, status.Error(codes.FailedPrecondition, d.credentialFail.Error())
+	}
+	return d.credential, nil
 }
 
 func (d *fakeDaemon) Host(context.Context, *pb.HostRequest) (*pb.HostResponse, error) {

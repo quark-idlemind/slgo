@@ -32,20 +32,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Grid_Login_FullMethodName      = "/slgo.v1.Grid/Login"
-	Grid_Stream_FullMethodName     = "/slgo.v1.Grid/Stream"
-	Grid_ListAgents_FullMethodName = "/slgo.v1.Grid/ListAgents"
-	Grid_Status_FullMethodName     = "/slgo.v1.Grid/Status"
-	Grid_Host_FullMethodName       = "/slgo.v1.Grid/Host"
-	Grid_Logout_FullMethodName     = "/slgo.v1.Grid/Logout"
-	Grid_Presence_FullMethodName   = "/slgo.v1.Grid/Presence"
-	Grid_Objects_FullMethodName    = "/slgo.v1.Grid/Objects"
-	Grid_Region_FullMethodName     = "/slgo.v1.Grid/Region"
-	Grid_Flush_FullMethodName      = "/slgo.v1.Grid/Flush"
-	Grid_Cap_FullMethodName        = "/slgo.v1.Grid/Cap"
-	Grid_Send_FullMethodName       = "/slgo.v1.Grid/Send"
-	Grid_Friends_FullMethodName    = "/slgo.v1.Grid/Friends"
-	Grid_NoteFriend_FullMethodName = "/slgo.v1.Grid/NoteFriend"
+	Grid_Login_FullMethodName            = "/slgo.v1.Grid/Login"
+	Grid_Stream_FullMethodName           = "/slgo.v1.Grid/Stream"
+	Grid_ListAgents_FullMethodName       = "/slgo.v1.Grid/ListAgents"
+	Grid_Status_FullMethodName           = "/slgo.v1.Grid/Status"
+	Grid_Host_FullMethodName             = "/slgo.v1.Grid/Host"
+	Grid_Logout_FullMethodName           = "/slgo.v1.Grid/Logout"
+	Grid_Presence_FullMethodName         = "/slgo.v1.Grid/Presence"
+	Grid_Objects_FullMethodName          = "/slgo.v1.Grid/Objects"
+	Grid_Region_FullMethodName           = "/slgo.v1.Grid/Region"
+	Grid_Flush_FullMethodName            = "/slgo.v1.Grid/Flush"
+	Grid_Cap_FullMethodName              = "/slgo.v1.Grid/Cap"
+	Grid_Send_FullMethodName             = "/slgo.v1.Grid/Send"
+	Grid_Friends_FullMethodName          = "/slgo.v1.Grid/Friends"
+	Grid_NoteFriend_FullMethodName       = "/slgo.v1.Grid/NoteFriend"
+	Grid_ViewerCredential_FullMethodName = "/slgo.v1.Grid/ViewerCredential"
 )
 
 // GridClient is the client API for Grid service.
@@ -139,6 +140,17 @@ type GridClient interface {
 	// server, which holds what a client restart would lose. The server
 	// still decodes nothing.
 	NoteFriend(ctx context.Context, in *NoteFriendRequest, opts ...grpc.CallOption) (*NoteFriendResponse, error)
+	// ViewerCredential mints a password a real viewer may log in with
+	// ONCE, so that a session can be handed to a person without any
+	// password being typed or stored anywhere.
+	//
+	// A call of its own rather than a field of StatusResponse because
+	// asking is not free: every call makes a fresh secret and drops the
+	// one before it, which is not something a client watching the
+	// counters should do by accident.  Where the endpoint is and whether
+	// a viewer is on it are facts and cost nothing to read, so they
+	// travel in StatusResponse.viewer instead.
+	ViewerCredential(ctx context.Context, in *ViewerCredentialRequest, opts ...grpc.CallOption) (*ViewerCredentialResponse, error)
 }
 
 type gridClient struct {
@@ -292,6 +304,16 @@ func (c *gridClient) NoteFriend(ctx context.Context, in *NoteFriendRequest, opts
 	return out, nil
 }
 
+func (c *gridClient) ViewerCredential(ctx context.Context, in *ViewerCredentialRequest, opts ...grpc.CallOption) (*ViewerCredentialResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ViewerCredentialResponse)
+	err := c.cc.Invoke(ctx, Grid_ViewerCredential_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GridServer is the server API for Grid service.
 // All implementations must embed UnimplementedGridServer
 // for forward compatibility.
@@ -383,6 +405,17 @@ type GridServer interface {
 	// server, which holds what a client restart would lose. The server
 	// still decodes nothing.
 	NoteFriend(context.Context, *NoteFriendRequest) (*NoteFriendResponse, error)
+	// ViewerCredential mints a password a real viewer may log in with
+	// ONCE, so that a session can be handed to a person without any
+	// password being typed or stored anywhere.
+	//
+	// A call of its own rather than a field of StatusResponse because
+	// asking is not free: every call makes a fresh secret and drops the
+	// one before it, which is not something a client watching the
+	// counters should do by accident.  Where the endpoint is and whether
+	// a viewer is on it are facts and cost nothing to read, so they
+	// travel in StatusResponse.viewer instead.
+	ViewerCredential(context.Context, *ViewerCredentialRequest) (*ViewerCredentialResponse, error)
 	mustEmbedUnimplementedGridServer()
 }
 
@@ -434,6 +467,9 @@ func (UnimplementedGridServer) Friends(context.Context, *FriendsRequest) (*Frien
 }
 func (UnimplementedGridServer) NoteFriend(context.Context, *NoteFriendRequest) (*NoteFriendResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method NoteFriend not implemented")
+}
+func (UnimplementedGridServer) ViewerCredential(context.Context, *ViewerCredentialRequest) (*ViewerCredentialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ViewerCredential not implemented")
 }
 func (UnimplementedGridServer) mustEmbedUnimplementedGridServer() {}
 func (UnimplementedGridServer) testEmbeddedByValue()              {}
@@ -697,6 +733,24 @@ func _Grid_NoteFriend_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_ViewerCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ViewerCredentialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).ViewerCredential(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_ViewerCredential_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).ViewerCredential(ctx, req.(*ViewerCredentialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Grid_ServiceDesc is the grpc.ServiceDesc for Grid service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -755,6 +809,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "NoteFriend",
 			Handler:    _Grid_NoteFriend_Handler,
+		},
+		{
+			MethodName: "ViewerCredential",
+			Handler:    _Grid_ViewerCredential_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

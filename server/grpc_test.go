@@ -267,6 +267,13 @@ func TestEveryCallSaysWhichAgentItCouldNotFind(t *testing.T) {
 			_, err := empty.Send(ctx, &pb.SendRequest{Agent: n})
 			return err
 		},
+		// The agent is resolved before the endpoint is looked for, so
+		// that a name nobody holds is answered the same way here as
+		// everywhere else rather than as "no viewer logins".
+		"ViewerCredential": func(n string) error {
+			_, err := empty.ViewerCredential(ctx, &pb.ViewerCredentialRequest{Agent: n})
+			return err
+		},
 	}
 
 	for name, call := range calls {

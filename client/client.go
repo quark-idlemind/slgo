@@ -505,6 +505,21 @@ func (c *Conn) Status(ctx context.Context) (*pb.StatusResponse, error) {
 	return c.grid.Status(ctx, &pb.StatusRequest{Agent: name})
 }
 
+// ViewerCredential asks the daemon for a password a real viewer may log
+// in as this agent with, once.
+//
+// Deliberately not folded into Status.  Every call makes a secret and
+// drops the one before it, so it must be something a caller does on
+// purpose; and the answer is the one thing this package handles that
+// must not be logged, kept or repeated -- it is passed straight to
+// whatever is starting the viewer and then forgotten.
+func (c *Conn) ViewerCredential(ctx context.Context) (*pb.ViewerCredentialResponse, error) {
+	c.mu.RLock()
+	name := c.agent
+	c.mu.RUnlock()
+	return c.grid.ViewerCredential(ctx, &pb.ViewerCredentialRequest{Agent: name})
+}
+
 // ---------------------------------------------------------- capabilities
 
 // A Conn is an agent.CapDoer, so anything written against capabilities

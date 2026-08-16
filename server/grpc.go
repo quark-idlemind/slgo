@@ -444,6 +444,7 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 		UnknownMessages: rs.Unknown,
 		Clients:         int32(h.ClientCount()),
 		Unhandled:       map[string]uint64{},
+		Viewer:          s.viewerFor(h.Name),
 	}
 	for id, n := range a.Disp.Unhandled() {
 		out.Unhandled[id.String()] = n

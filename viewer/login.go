@@ -35,6 +35,30 @@ type Handover struct {
 	// authenticating is a comparison and never a decryption.
 	Digest string
 
+	// OneTime is a digest the daemon minted for a single login, in the
+	// same form, and empty when there is none outstanding.
+	//
+	// A second accepted password rather than a replacement, because
+	// the two answer different questions.  The profile's is a standing
+	// arrangement: whoever can read the profile may attach whenever
+	// they like.  This one is an invitation issued just now, to hand
+	// the session to a viewer being started this second by somebody
+	// who cannot read the profile and could not hash a password into a
+	// match if they could -- what a profile stores is already a
+	// digest.  Dropping the first for the second would break every
+	// handover that works today; the login handler therefore accepts
+	// either.
+	OneTime string
+
+	// UseOnce is called when OneTime was the digest that matched, and
+	// is what makes "one time" true rather than a claim.  Nil is
+	// allowed and means nothing is consumed.
+	//
+	// It fires on a match rather than on a completed handover: by then
+	// the password has been shown to whoever asked, so letting it work
+	// twice is exactly what it must not do, whatever happens next.
+	UseOnce func()
+
 	Raw map[string]any
 
 	// SimIP and SimPort are where the viewer should send its UDP:
@@ -111,11 +135,31 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Constant time, because this is a credential comparison even
 	// though both sides are digests.
-	want := hand.Digest
-	if subtle.ConstantTimeCompare([]byte(agent.HashPassword(passwd)), []byte(want)) != 1 {
+	//
+	// Both candidates are compared, always, and the answers combined
+	// afterwards: stopping at the first match would make the time
+	// taken say which of the two was presented, and skipping the
+	// second when the first matched is the same leak wearing a hat.
+	// An absent OneTime is compared against anyway -- an empty string
+	// can never match, since HashPassword returns 35 characters for
+	// every input including none, and ConstantTimeCompare answers 0
+	// for a length that differs.
+	got := []byte(agent.HashPassword(passwd))
+	byProfile := subtle.ConstantTimeCompare(got, []byte(hand.Digest))
+	byOneTime := subtle.ConstantTimeCompare(got, []byte(hand.OneTime))
+	if byProfile|byOneTime != 1 {
 		h.logf("viewer login: wrong password for %s %s", first, last)
 		h.refuse(w, "key", "That password does not match the session.")
 		return
+	}
+	if byOneTime == 1 && hand.UseOnce != nil {
+		// Spent here, before anything else can go wrong, so that a
+		// handover which fails further down does not leave a live
+		// credential behind that somebody watched cross a command
+		// line.  The password itself is never logged, here or
+		// anywhere: it is on a viewer's argv already, which is quite
+		// enough exposure for one secret.
+		hand.UseOnce()
 	}
 	if hand.Raw == nil {
 		// A session whose login response was not kept cannot be

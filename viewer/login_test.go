@@ -369,3 +369,101 @@ func TestHostPort(t *testing.T) {
 		}
 	}
 }
+
+// ------------------------------------------------- the one-time password
+
+// oneTimeHandover is a session with both credentials live: the
+// profile's standing password and a minted one, with a counter for how
+// often the minted one was spent.
+func oneTimeHandover(minted string) (*Handover, *int) {
+	spent := 0
+	h := testHandover()
+	h.OneTime = agent.HashPassword(minted)
+	h.UseOnce = func() { spent++ }
+	return h, &spent
+}
+
+// TestAMintedPasswordLogsInOnceAndIsSpent: this is the whole point of
+// minting one.  A profile stores its viewer password as a digest, so
+// nothing outside the daemon can produce a plaintext a viewer would
+// hash into a match; the daemon makes one instead, and it has to stop
+// working the moment it has been used, because by then it has crossed
+// a command line where anything on this machine could read it.
+func TestAMintedPasswordLogsInOnceAndIsSpent(t *testing.T) {
+	h, spent := oneTimeHandover("one-time-pass")
+	s := serve(t, h)
+
+	got := login(t, s.URL, map[string]any{
+		"first": "Taren", "last": "Holt", "passwd": "one-time-pass"})
+	if got["login"] != "true" {
+		t.Fatalf("a minted password was refused: %v", got["message"])
+	}
+	if *spent != 1 {
+		t.Fatalf("the minted password was spent %d times, want once", *spent)
+	}
+
+	// The daemon drops it when it is spent, which is what the counter
+	// stands for; here the handover is emptied by hand and the same
+	// login tried again.
+	h.OneTime, h.UseOnce = "", nil
+	again := login(t, s.URL, map[string]any{
+		"first": "Taren", "last": "Holt", "passwd": "one-time-pass"})
+	if again["login"] != "false" {
+		t.Error("a spent password logged in a second time")
+	}
+}
+
+// TestTheProfilePasswordStillWorksBesideAMintedOne: the minted password
+// is an addition and not a replacement.  Every handover that worked
+// before this existed went through the profile's viewer_password, and
+// somebody typing it into a viewer by hand must not find that a
+// credential minted for somebody else has locked them out.
+func TestTheProfilePasswordStillWorksBesideAMintedOne(t *testing.T) {
+	h, spent := oneTimeHandover("one-time-pass")
+	s := serve(t, h)
+
+	got := login(t, s.URL, map[string]any{
+		"first": "Taren", "last": "Holt", "passwd": "secret"})
+	if got["login"] != "true" {
+		t.Fatalf("the profile's own password was refused: %v", got["message"])
+	}
+	// And it does not spend the other one: the invitation somebody
+	// else is holding is still theirs to use.
+	if *spent != 0 {
+		t.Errorf("logging in with the profile password spent the minted one %d times", *spent)
+	}
+}
+
+// TestAWrongPasswordIsRefusedWithBothLive: with two accepted digests
+// the refusal has to survive both comparisons, and neither may be
+// spent by an attempt that matched nothing.
+func TestAWrongPasswordIsRefusedWithBothLive(t *testing.T) {
+	h, spent := oneTimeHandover("one-time-pass")
+	s := serve(t, h)
+
+	got := login(t, s.URL, map[string]any{
+		"first": "Taren", "last": "Holt", "passwd": "not-either-of-them"})
+	if got["login"] != "false" {
+		t.Error("a password matching neither digest logged in")
+	}
+	if *spent != 0 {
+		t.Errorf("a wrong password spent the minted one %d times", *spent)
+	}
+}
+
+// TestNoMintedPasswordMeansNothingExtraIsAccepted: with no credential
+// outstanding the empty OneTime is still compared against, so the
+// comparison has to answer "no" for it rather than matching an empty
+// or absent password.
+func TestNoMintedPasswordMeansNothingExtraIsAccepted(t *testing.T) {
+	h := testHandover() // OneTime empty, UseOnce nil
+	s := serve(t, h)
+
+	for _, passwd := range []string{"", "$1$", agent.HashPassword("")} {
+		got := login(t, s.URL, map[string]any{
+			"first": "Taren", "last": "Holt", "passwd": passwd})
+		if got["login"] != "false" {
+			t.Errorf("passwd %q logged in against a handover with no minted password", passwd)
+		}
+	}
+}
