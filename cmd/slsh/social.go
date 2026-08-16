@@ -23,57 +23,65 @@ import (
 
 var socialCommands = map[string]*command{
 	"chat": {
-		usage: "chat [WHO]",
-		brief: "enter chat mode; with WHO, in an instant message session",
-		run:   cmdChat,
+		params: "[WHO]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "enter chat mode; with WHO, in an instant message session",
+		run:    cmdChat,
 	},
 	"say": {
-		usage: "say TEXT",
-		brief: "say one line without leaving command mode",
-		run:   cmdSay,
+		params: "TEXT ...",
+		flags:  func() any { return new(sayOptions) },
+		brief:  "say one line without leaving command mode",
+		run:    cmdSay,
 	},
 	"im": {
-		usage: "im WHO [TEXT]",
-		brief: "open a conversation, or send one message to it",
-		run:   cmdIM,
+		params: "WHO [TEXT]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "open a conversation, or send one message to it",
+		run:    cmdIM,
 	},
 	"friends": {
-		usage: "friends [-a]",
+		flags: func() any { return new(friendsOptions) },
 		brief: "friends who are online, or -a for all of them",
 		run:   cmdFriends,
 	},
 	"lookup": {
-		usage: "lookup TEXT",
-		brief: "search the grid for people by part of a name",
-		run:   cmdLookup,
+		params: "TEXT",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "search the grid for people by part of a name",
+		run:    cmdLookup,
 	},
 	"profile": {
-		usage: "profile WHO",
-		brief: "what somebody's profile says: born, payment, partner, about, groups",
-		run:   cmdProfile,
+		params: "WHO",
+		flags:  func() any { return new(profileOptions) },
+		brief:  "what somebody's profile says: born, payment, partner, about, groups",
+		run:    cmdProfile,
 	},
 	"offer": {
-		usage: "offer WHO [TEXT]",
-		brief: "offer friendship",
-		run:   cmdOffer,
+		params: "WHO [TEXT]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "offer friendship",
+		run:    cmdOffer,
 	},
 	"offers": {
-		usage: "offers",
+		flags: func() any { return new(helpOnly) },
 		brief: "friendship and inventory offers waiting for an answer",
 		run:   cmdOffers,
 	},
 	"accept": {
-		usage: "accept [WHO|NAME]",
-		brief: "accept an offer of friendship, or of an inventory item",
-		run:   cmdAccept,
+		params: "[WHO|NAME]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "accept an offer of friendship, or of an inventory item",
+		run:    cmdAccept,
 	},
 	"decline": {
-		usage: "decline [WHO|NAME]",
-		brief: "refuse one",
-		run:   cmdDecline,
+		params: "[WHO|NAME]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "refuse one",
+		run:    cmdDecline,
 	},
 	"talk": {
-		usage: "talk",
+		flags: func() any { return new(helpOnly) },
 		brief: "the conversations chat mode cycles between",
 		run:   cmdTalk,
 	},
@@ -261,7 +269,7 @@ func (sh *Shell) send(ctx context.Context, text string) {
 
 func cmdChat(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("chat", "[WHO]", &o, out, args)
+	args, done, err := subOptions("chat", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -285,13 +293,13 @@ type sayOptions struct {
 
 func cmdSay(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o sayOptions
-	args, done, err := subOptions("say", "TEXT ...", &o, out, args)
+	args, done, err := subOptions("say", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	channel := int32(o.Channel)
 	if len(args) == 0 {
-		return fmt.Errorf("usage: say [-c CHANNEL] TEXT")
+		return usageError("say")
 	}
 	text := strings.Join(args, " ")
 	if err := sh.s.Say(ctx, text, channel); err != nil {
@@ -307,12 +315,12 @@ func cmdSay(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 
 func cmdIM(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var flags helpOnly
-	args, done, err := subOptions("im", "WHO [TEXT]", &flags, out, args)
+	args, done, err := subOptions("im", &flags, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) == 0 {
-		return fmt.Errorf("usage: im WHO [TEXT]")
+		return usageError("im")
 	}
 	id, name, err := sh.who(ctx, args[0])
 	if err != nil {
@@ -343,7 +351,7 @@ type friendsOptions struct {
 
 func cmdFriends(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o friendsOptions
-	if _, done, err := subOptions("friends", "", &o, out, args); err != nil || done {
+	if _, done, err := subOptions("friends", &o, out, args); err != nil || done {
 		return err
 	}
 	all := o.All
@@ -372,12 +380,12 @@ func cmdFriends(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 
 func cmdLookup(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("lookup", "TEXT", &o, out, args)
+	args, done, err := subOptions("lookup", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) == 0 {
-		return fmt.Errorf("usage: lookup TEXT")
+		return usageError("lookup")
 	}
 	found, err := sh.s.Lookup(ctx, strings.Join(args, " "))
 	if err != nil {
@@ -470,12 +478,12 @@ type profileOptions struct {
 // milliseconds.
 func cmdProfile(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o profileOptions
-	args, done, err := subOptions("profile", "WHO", &o, out, args)
+	args, done, err := subOptions("profile", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) == 0 {
-		return fmt.Errorf("usage: profile WHO")
+		return usageError("profile")
 	}
 	id, name, err := sh.whoOrSearch(ctx, out, strings.Join(args, " "))
 	if err != nil {
@@ -662,12 +670,12 @@ func indented(s string) string {
 
 func cmdOffer(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("offer", "WHO [TEXT]", &o, out, args)
+	args, done, err := subOptions("offer", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) == 0 {
-		return fmt.Errorf("usage: offer WHO [TEXT]")
+		return usageError("offer")
 	}
 	id, name, err := sh.who(ctx, args[0])
 	if err != nil {
@@ -688,7 +696,7 @@ func cmdOffer(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 // other side is told nothing.
 func cmdOffers(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("offers", "", &o, out, args)
+	args, done, err := subOptions("offers", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -712,7 +720,7 @@ func cmdOffers(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 
 func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var flags helpOnly
-	args, done, err := subOptions("accept", "[WHO|NAME]", &flags, out, args)
+	args, done, err := subOptions("accept", &flags, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -747,7 +755,7 @@ func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 
 func cmdDecline(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var flags helpOnly
-	args, done, err := subOptions("decline", "[WHO|NAME]", &flags, out, args)
+	args, done, err := subOptions("decline", &flags, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -795,7 +803,7 @@ func (sh *Shell) inventoryOffer(args []string) (*sl.InventoryOffer, bool) {
 
 func cmdTalk(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("talk", "", &o, out, args)
+	args, done, err := subOptions("talk", &o, out, args)
 	if err != nil || done {
 		return err
 	}

@@ -114,7 +114,7 @@ import (
 
 var viewerCommands = map[string]*command{
 	"viewer": {
-		usage: "viewer [--launch]",
+		flags: func() any { return new(viewerOptions) },
 		brief: "where a real viewer can take this session over, and start one",
 		run:   cmdViewer,
 	},
@@ -128,7 +128,7 @@ type viewerOptions struct {
 
 func cmdViewer(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o viewerOptions
-	if _, done, err := subOptions("viewer", "", &o, out, args); err != nil || done {
+	if _, done, err := subOptions("viewer", &o, out, args); err != nil || done {
 		return err
 	}
 	conn, ok := sh.conn()

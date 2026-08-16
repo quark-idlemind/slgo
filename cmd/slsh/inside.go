@@ -78,24 +78,28 @@ import (
 
 var insideCommands = map[string]*command{
 	"drop": {
-		usage: "drop OBJECT PATH",
-		brief: "put an inventory item inside a rezzed object",
-		run:   cmdDrop,
+		params: "OBJECT PATH",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "put an inventory item inside a rezzed object",
+		run:    cmdDrop,
 	},
 	"new": {
-		usage: "new [--in OBJECT] [--kind KIND] [--from FILE] PATH",
-		brief: "make a notecard or a script; --in puts a script in an object and starts it",
-		run:   cmdNew,
+		params: "PATH",
+		flags:  func() any { return new(newFlags) },
+		brief:  "make a notecard or a script; --in puts a script in an object and starts it",
+		run:    cmdNew,
 	},
 	"start": {
-		usage: "start OBJECT [SCRIPT]",
-		brief: "start a script inside a rezzed object, or every script in it",
-		run:   cmdStart,
+		params: "OBJECT [SCRIPT]",
+		flags:  func() any { return new(runningFlags) },
+		brief:  "start a script inside a rezzed object, or every script in it",
+		run:    cmdStart,
 	},
 	"stop": {
-		usage: "stop OBJECT [SCRIPT]",
-		brief: "stop a script inside a rezzed object, or every script in it",
-		run:   cmdStop,
+		params: "OBJECT [SCRIPT]",
+		flags:  func() any { return new(runningFlags) },
+		brief:  "stop a script inside a rezzed object, or every script in it",
+		run:    cmdStop,
 	},
 }
 
@@ -182,12 +186,12 @@ func (sh *Shell) renameInside(ctx context.Context, out io.Writer, what string, f
 
 func cmdDrop(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("drop", "OBJECT PATH", &o, out, args)
+	args, done, err := subOptions("drop", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 2 {
-		return fmt.Errorf("usage: drop OBJECT PATH")
+		return usageError("drop")
 	}
 
 	obj, err := sh.insideObject(ctx, args[0], 0)
@@ -231,12 +235,12 @@ type newFlags struct {
 // charges.
 func cmdNew(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o newFlags
-	args, done, err := subOptions("new", "PATH", &o, out, args)
+	args, done, err := subOptions("new", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: new [--in OBJECT] [--kind notecard|script] [--from FILE] PATH")
+		return usageError("new")
 	}
 
 	body := ""
@@ -414,12 +418,12 @@ func (sh *Shell) setRunning(ctx context.Context, out io.Writer, args []string, r
 	}
 
 	var o runningFlags
-	args, done, err := subOptions(verb, "OBJECT [SCRIPT]", &o, out, args)
+	args, done, err := subOptions(verb, &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: %s OBJECT [SCRIPT]", verb)
+		return usageError(verb)
 	}
 
 	obj, err := sh.insideObject(ctx, args[0], 0)

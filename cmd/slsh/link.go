@@ -71,14 +71,16 @@ import (
 
 var linkCommands = map[string]*command{
 	"link": {
-		usage: "link ROOT CHILD...",
-		brief: "join objects into one; the first is the root and its name is the object's",
-		run:   cmdLink,
+		params: "ROOT CHILD...",
+		flags:  func() any { return new(linkFlags) },
+		brief:  "join objects into one; the first is the root and its name is the object's",
+		run:    cmdLink,
 	},
 	"unlink": {
-		usage: "unlink NAME|UUID",
-		brief: "take a linked object apart; naming one prim of it frees only that prim",
-		run:   cmdUnlink,
+		params: "NAME|UUID",
+		flags:  func() any { return new(linkFlags) },
+		brief:  "take a linked object apart; naming one prim of it frees only that prim",
+		run:    cmdUnlink,
 	},
 }
 
@@ -90,7 +92,7 @@ type linkFlags struct {
 // cmdLink joins objects into one.
 func cmdLink(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o linkFlags
-	args, done, err := subOptions("link", "ROOT CHILD...", &o, out, args)
+	args, done, err := subOptions("link", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -132,12 +134,12 @@ func cmdLink(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 // cmdUnlink takes a linked object apart.
 func cmdUnlink(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o linkFlags
-	args, done, err := subOptions("unlink", "NAME|UUID", &o, out, args)
+	args, done, err := subOptions("unlink", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: unlink NAME|UUID")
+		return usageError("unlink")
 	}
 
 	named, err := sh.objectNamed(ctx, strings.Join(args, " "), o.Wait)

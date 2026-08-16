@@ -489,7 +489,7 @@ func TestMvNeedsAFolderOrAPlainName(t *testing.T) {
 	x := newTestShell(t)
 
 	for _, line := range []string{"mv", "mv one", "mv one two three"} {
-		if got := x.do(t, line); !strings.Contains(got, "usage: mv PATH DEST") {
+		if got := x.do(t, line); !strings.Contains(got, "usage: mv [--in OBJECT] PATH DEST") {
 			t.Errorf("%q printed %q", line, got)
 		}
 	}

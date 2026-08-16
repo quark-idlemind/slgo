@@ -22,42 +22,49 @@ import (
 
 var objectCommands = map[string]*command{
 	"give": {
-		usage: "give WHO PATH",
-		brief: "offer an inventory item to somebody",
-		run:   cmdGive,
+		params: "WHO PATH",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "offer an inventory item to somebody",
+		run:    cmdGive,
 	},
 	"cp": {
-		usage: "cp PATH NAME",
-		brief: "copy an inventory item under a new name",
-		run:   cmdCopy,
+		params: "PATH NAME",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "copy an inventory item under a new name",
+		run:    cmdCopy,
 	},
 	"tp": {
-		usage: "tp X Y Z",
-		brief: "move to a position in this region",
-		run:   cmdTP,
+		params: "X Y Z",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "move to a position in this region",
+		run:    cmdTP,
 	},
 	"move": {
-		usage: "move NAME X Y Z",
-		brief: "move a rezzed object to a position",
-		run:   cmdMove,
+		params: "NAME X Y Z",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "move a rezzed object to a position",
+		man:    "move",
+		run:    cmdMove,
 	},
 	"agents": {
-		usage: "agents",
+		flags: func() any { return new(helpOnly) },
 		brief: "the sessions this daemon holds, oldest first; * is the default",
 		run:   cmdAgents,
 	},
-	"host": {
-		usage: "host [-f] NAME",
-		brief: "bring an avatar up that is not running",
-		run:   cmdHost,
+	"login": {
+		params: "NAME",
+		flags:  func() any { return new(forceOptions) },
+		brief:  "bring an avatar up that is not running",
+		run:    cmdLogin,
 	},
 	"logout": {
-		usage: "logout [-f] NAME",
-		brief: "log an avatar out and keep it out until asked for by name",
-		run:   cmdLogout,
+		params: "NAME",
+		flags:  func() any { return new(forceOptions) },
+		brief:  "log NAME out until it is logged back in via login",
+		run:    cmdLogout,
 	},
 	"auto": {
-		usage: "auto [-n N]",
+		flags: func() any { return new(autoOptions) },
 		brief: "the objects benchmarks run in; -n sets up that many",
 		run:   cmdAuto,
 	},
@@ -70,12 +77,12 @@ var objectCommands = map[string]*command{
 // "gave" is the honest report.
 func cmdGive(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	rest, done, err := subOptions("give", "WHO PATH", &o, out, args)
+	rest, done, err := subOptions("give", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(rest) < 2 {
-		return fmt.Errorf("give WHO PATH")
+		return usageError("give")
 	}
 
 	who, name, err := sh.who(ctx, rest[0])
@@ -107,12 +114,12 @@ func cmdGive(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 // asks the land nothing.
 func cmdCopy(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	rest, done, err := subOptions("cp", "PATH NAME", &o, out, args)
+	rest, done, err := subOptions("cp", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(rest) < 2 {
-		return fmt.Errorf("cp PATH NAME")
+		return usageError("cp")
 	}
 
 	e, err := sh.entryAt(ctx, rest[0])
@@ -146,14 +153,15 @@ func cmdCopy(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 // when given a region name.
 func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	rest, done, err := subOptions("tp", "X Y Z", &o, out, args)
+	rest, done, err := subOptions("tp", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(rest) != 3 {
-		return fmt.Errorf("tp X Y Z -- a position in this region.\n" +
-			"Another region needs a new circuit and new capabilities, which is\n" +
-			"slgod's to do and is not built; log in there instead (slgod -start).")
+		return usageError("tp",
+			"a position in this region; another region needs a new circuit and new",
+			"capabilities, which is slgod's to do and is not built -- log in there",
+			"instead (slgod -start)")
 	}
 
 	v, err := position(rest)
@@ -186,12 +194,12 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 // the thing is already in the world and all that changes is where.
 func cmdMove(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var flags helpOnly
-	rest, done, err := subOptions("move", "NAME X Y Z", &flags, out, args)
+	rest, done, err := subOptions("move", &flags, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(rest) != 4 {
-		return fmt.Errorf("move NAME X Y Z -- an object in this region, and where to put it")
+		return usageError("move", "an object in this region, and where to put it")
 	}
 
 	at, err := position(rest[1:])
@@ -255,7 +263,7 @@ func cmdMove(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 // in.
 func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	_, done, err := subOptions("agents", "", &o, out, args)
+	_, done, err := subOptions("agents", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -297,19 +305,27 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	return nil
 }
 
-// cmdHost brings an avatar up.
+// cmdLogin brings an avatar up.
 //
-// It has to be named.  Starting an avatar puts it in the world -- an
+// It has to be named.  Logging an avatar in puts it in the world -- an
 // arrival, a presence, a notice to whoever watches for it -- so it
 // follows from somebody asking rather than from a default.
-func cmdHost(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+//
+// This was "host" until the word was measured against what a person
+// asking for it has in mind.  Hosting is what the daemon does with a
+// session once it exists, which is slgod's half of the arrangement and
+// not a thing anybody types at a prompt; what the person wants is the
+// avatar logged in, and logout was already the word for the other
+// direction.  Nothing answers to "host" now: the pair reads login and
+// logout, and a half-renamed pair would be worse than either.
+func cmdLogin(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o forceOptions
-	rest, done, err := subOptions("host", "[-f] NAME", &o, out, args)
+	rest, done, err := subOptions("login", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(rest) != 1 {
-		return fmt.Errorf("host [-f] NAME -- which avatar to start; flags come before the name")
+		return usageError("login", "which avatar to log in; flags come before the name")
 	}
 	conn, ok := sh.conn()
 	if !ok {
@@ -329,15 +345,15 @@ func cmdHost(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	return nil
 }
 
-// cmdLogout puts one down and keeps it down.
+// cmdLogout logs one out and keeps it out until login asks for it.
 func cmdLogout(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o forceOptions
-	rest, done, err := subOptions("logout", "[-f] NAME", &o, out, args)
+	rest, done, err := subOptions("logout", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(rest) != 1 {
-		return fmt.Errorf("logout [-f] NAME -- which avatar to log out; flags come before the name")
+		return usageError("logout", "which avatar to log out; flags come before the name")
 	}
 	conn, ok := sh.conn()
 	if !ok {
@@ -351,7 +367,7 @@ func cmdLogout(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		}
 		return err
 	}
-	fmt.Fprintf(out, "%s logged out; it will not come back until asked for by name\n", rest[0])
+	fmt.Fprintf(out, "%s logged out; it will not come back until \"login %s\" asks for it\n", rest[0], rest[0])
 	return nil
 }
 
@@ -381,7 +397,7 @@ type autoOptions struct {
 // cmdAuto reports or sets up the objects benchmarks run in.
 func cmdAuto(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o autoOptions
-	_, done, err := subOptions("auto", "", &o, out, args)
+	_, done, err := subOptions("auto", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -458,9 +474,4 @@ func position(args []string) (msg.Vector3, error) {
 		*into[i] = float32(f)
 	}
 	return v, nil
-}
-
-// helpOnly is for a command whose only flag is --help.
-type helpOnly struct {
-	Help bool `getopt:"--help -h  show what this command takes"`
 }

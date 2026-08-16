@@ -13,7 +13,7 @@ import (
 // deletes permanently, so an abbreviation of it must not be accepted.
 func TestRmOptions(t *testing.T) {
 	var o rmOptions
-	rest, done, err := subOptions("rm", "PATH ...", &o, io.Discard,
+	rest, done, err := subOptions("rm", &o, io.Discard,
 		[]string{"--remove-all-copies", "/Scripts/slrun-bench"})
 	if err != nil || done {
 		t.Fatalf("done=%v err=%v", done, err)
@@ -27,14 +27,14 @@ func TestRmOptions(t *testing.T) {
 
 	// Without it, rm is its careful self.
 	o = rmOptions{}
-	if _, _, err := subOptions("rm", "PATH ...", &o, io.Discard, []string{"x"}); err != nil {
+	if _, _, err := subOptions("rm", &o, io.Discard, []string{"x"}); err != nil {
 		t.Fatal(err)
 	}
 	if o.AllCopies {
 		t.Error("all copies without being asked")
 	}
 
-	if _, _, err := subOptions("rm", "PATH ...", &rmOptions{}, io.Discard,
+	if _, _, err := subOptions("rm", &rmOptions{}, io.Discard,
 		[]string{"--remove-all"}); err == nil {
 		t.Error("a half-typed --remove-all should be refused, not guessed at")
 	}

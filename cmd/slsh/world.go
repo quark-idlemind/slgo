@@ -20,50 +20,55 @@ import (
 
 var worldCommands = map[string]*command{
 	"where": {
-		usage: "where",
+		flags: func() any { return new(helpOnly) },
 		brief: "the region and position this avatar is at",
 		run:   cmdWhere,
 	},
 	"who": {
-		usage: "who",
+		flags: func() any { return new(helpOnly) },
 		brief: "who else is in the region, nearest first",
 		run:   cmdWho,
 	},
 	"look": {
-		usage: "look",
+		flags: func() any { return new(helpOnly) },
 		brief: "what the simulator said about the region",
 		run:   cmdLook,
 	},
 	"caps": {
-		usage: "caps [TEXT]",
-		brief: "the capabilities this session was granted",
-		run:   cmdCaps,
+		params: "[TEXT]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "the capabilities this session was granted",
+		run:    cmdCaps,
 	},
 	"features": {
-		usage: "features [TEXT]",
-		brief: "what the simulator says it supports",
-		run:   cmdFeatures,
+		params: "[TEXT]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "what the simulator says it supports",
+		run:    cmdFeatures,
 	},
 	"lsl": {
-		usage: "lsl [-fcetam] [TEXT]",
-		brief: "the LSL this simulator implements: functions, constants, events, types",
-		run:   cmdLSL,
+		params: "[TEXT]",
+		flags:  func() any { return new(lslOptions) },
+		brief:  "the LSL this simulator implements: functions, constants, events, types",
+		run:    cmdLSL,
 	},
 	"worn": {
-		usage: "worn [-l] [TEXT]",
-		brief: "the objects being worn, and where; -l for the ids",
-		run:   cmdWorn,
+		params: "[TEXT]",
+		flags:  func() any { return new(wornOptions) },
+		brief:  "the objects being worn, and where; -l for the ids",
+		run:    cmdWorn,
 	},
 	"objects": {
-		usage: "objects [-c] [--owner WHO] [TEXT]",
-		brief: "the objects the region has described; -c for the prims inside each",
-		run:   cmdObjects,
+		params: "[TEXT]",
+		flags:  func() any { return new(objectsOptions) },
+		brief:  "the objects the region has described; -c for the prims inside each",
+		run:    cmdObjects,
 	},
 }
 
 func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("where", "", &o, out, args)
+	args, done, err := subOptions("where", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -85,7 +90,7 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 
 func cmdWho(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("who", "", &o, out, args)
+	args, done, err := subOptions("who", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -108,7 +113,7 @@ func cmdWho(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 
 func cmdLook(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("look", "", &o, out, args)
+	args, done, err := subOptions("look", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -130,7 +135,7 @@ func cmdLook(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 
 func cmdCaps(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("caps", "[TEXT]", &o, out, args)
+	args, done, err := subOptions("caps", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -150,7 +155,7 @@ func cmdCaps(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 
 func cmdFeatures(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("features", "[TEXT]", &o, out, args)
+	args, done, err := subOptions("features", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -199,7 +204,7 @@ type wornOptions struct {
 // called, and unlike the object it does not change.
 func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o wornOptions
-	rest, done, err := subOptions("worn", "[TEXT]", &o, out, args)
+	rest, done, err := subOptions("worn", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -302,7 +307,7 @@ type objectsOptions struct {
 // up.
 func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o objectsOptions
-	args, done, err := subOptions("objects", "[TEXT]", &o, out, args)
+	args, done, err := subOptions("objects", &o, out, args)
 	if err != nil || done {
 		return err
 	}

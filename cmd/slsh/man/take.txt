@@ -1,0 +1,59 @@
+take picks a rezzed object up off the ground and puts it into
+inventory.  It is the other direction of place, and the two of them are
+how an object is moved from one region to another, backed up, or copied
+out of the world into a folder.
+
+The object is named by the word the region calls it, or by its uuid,
+and a name with a space in it has to be quoted.  Names are not unique:
+where several objects answer to one word, take refuses and prints their
+uuids rather than picking, since taking the wrong one is not something
+that can be put back.  "objects TEXT" is the listing those uuids come
+from.
+
+An avatar can only take what it may take.  Somebody else's object comes
+back as a refusal from the region, and an object with several prims
+comes in as one item -- a linkset is one object, which is why "unlink"
+exists.
+
+# Options
+
+--copy asks for a copy and tries to leave the original standing.  It
+works where the object's permissions allow copying, and the report says
+which happened: a bare take says the object "is in inventory", and a
+--copy says it is there "and still where it was".
+
+--into names the folder it lands in.  Without it, a take lands in
+Objects, which is where the viewer puts one and therefore where a
+person will look for it.
+
+--wait is how long to let the region describe itself before giving up
+on finding the object, in seconds, and matters on a region with a lot
+in it or a slow link.
+
+# Taking loses where it stood
+
+Second Life does not remember where an object was before it was taken,
+so nothing can put it back for you.  A round trip that has to end where
+it started has to write the position down first: "objects NAME" prints
+it, and move puts the object back afterwards.
+
+# Examples
+
+Take one thing, by name:
+
+	take probe
+
+Take a copy and leave the original where it is, into a folder of its
+own:
+
+	take --copy --into Objects/experiments probe
+
+The whole round trip, position and all:
+
+	objects probe
+	take probe
+	place Objects/probe
+	move probe 33 73 1000
+
+See also: place, move, objects, perms, and unlink for an object that
+should not have come in as one item.

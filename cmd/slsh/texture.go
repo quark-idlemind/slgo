@@ -35,16 +35,16 @@ import (
 
 var textureCommands = map[string]*command{
 	"get": {
-		usage: "get [-o FILE] PATH|UUID",
-		brief: "save a texture as a PNG, by inventory path or by asset id",
-		run:   cmdGet,
+		params: "PATH|UUID",
+		flags:  func() any { return new(getFlags) },
+		brief:  "save a texture as a PNG, by inventory path or by asset id",
+		run:    cmdGet,
 	},
 	"put": {
-		usage: "put [-n NAME] [-f FOLDER] [--round MODE] [--filter NAME] [-N] FILE\n" +
-			"       put -o FILE [--round MODE] [--filter NAME] FILE\n" +
-			"       put --filters",
-		brief: "upload an image as a texture; costs L$, so -N says what it would do",
-		run:   cmdPut,
+		params: "FILE",
+		flags:  func() any { return new(putFlags) },
+		brief:  "upload an image as a texture; costs L$, so -N says what it would do",
+		run:    cmdPut,
 	},
 }
 
@@ -56,12 +56,12 @@ type getFlags struct {
 
 func cmdGet(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o getFlags
-	args, done, err := subOptions("get", "PATH|UUID", &o, out, args)
+	args, done, err := subOptions("get", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("usage: get [-o FILE] PATH|UUID")
+		return usageError("get")
 	}
 
 	// An id is an asset id here, not an item id: it is what the content
@@ -354,7 +354,7 @@ var codestreamExt = map[string]bool{".j2c": true, ".j2k": true, ".jpc": true, ".
 
 func cmdPut(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o putFlags
-	args, done, err := subOptions("put", "FILE", &o, out, args)
+	args, done, err := subOptions("put", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -363,7 +363,7 @@ func cmdPut(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return nil
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("usage: put [-n NAME] [-f FOLDER] FILE")
+		return usageError("put")
 	}
 	file := args[0]
 

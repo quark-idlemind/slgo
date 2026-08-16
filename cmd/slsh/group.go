@@ -97,9 +97,10 @@ import (
 
 var groupCommands = map[string]*command{
 	"group": {
-		usage: "group [NAME|UUID|none]",
-		brief: "what this avatar is acting as, and what it could act as; land rights hang on it",
-		run:   cmdGroup,
+		params: "[NAME|UUID|none]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "what this avatar is acting as, and what it could act as; land rights hang on it",
+		run:    cmdGroup,
 	},
 }
 
@@ -111,7 +112,7 @@ var groupCommands = map[string]*command{
 // to do.
 func cmdGroup(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("group", "[NAME|UUID|none]", &o, out, args)
+	args, done, err := subOptions("group", &o, out, args)
 	if err != nil || done {
 		return err
 	}

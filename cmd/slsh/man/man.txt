@@ -1,0 +1,12 @@
+A man page says what a command is for and where it will surprise you.
+It is the place the reasoning behind a command lives: why wear adds
+instead of replacing, why place takes exactly one argument, what a
+group invitation with a fee wants typed at it.
+
+For the flags, ask the command itself -- "place --help" -- which is
+also the only answer for a command whose page is not written yet.
+
+With no name, man lists the commands that have a page.
+
+	man place
+	man wear > wear.txt

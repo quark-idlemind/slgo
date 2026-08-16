@@ -607,9 +607,33 @@ func parse(line string) (words []string, redirect string, appending bool, err er
 
 // command is one thing slsh can do.
 type command struct {
-	usage string
+	// params is what the command takes after its flags, written the way
+	// a usage line writes it: "PATH DEST", "N [BUTTON|TEXT|L$FEE]".
+	// Empty for a command that takes nothing but flags.  This is the
+	// only part of a usage line anybody writes by hand -- see options.go
+	// for the rest of it, and for why.
+	params string
+
+	// flags makes a fresh option struct for this command.  A function
+	// rather than a value because parsing fills the struct in and every
+	// run wants an empty one, and because the usage line is read off a
+	// throwaway copy that nobody parses into.
+	//
+	// nil is a command with no flags at all, which is echo and nothing
+	// else: it has to be able to print the word "--help".
+	flags func() any
+
+	// brief is the one line help listings print beside the usage line.
 	brief string
-	run   func(ctx context.Context, sh *Shell, out io.Writer, args []string) error
+
+	// man is the long description, printed by "man NAME", or empty for
+	// a command that has not been written up yet.  It lives beside the
+	// command it describes rather than in one file of its own, so that
+	// changing what a command does and changing what is said about it
+	// are the same edit.  See man.go for how it is laid out.
+	man string
+
+	run func(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 }
 
 var commands map[string]*command
@@ -626,23 +650,24 @@ func commandNames() []string {
 
 func init() {
 	commands = map[string]*command{}
-	for _, set := range []map[string]*command{inventoryCommands, textureCommands, objectFileCommands, carryCommands, wearCommands, linkCommands, insideCommands, waitingCommands, worldCommands, groupCommands, socialCommands, objectCommands, sessionCommands, viewerCommands} {
+	for _, set := range []map[string]*command{inventoryCommands, textureCommands, objectFileCommands, carryCommands, wearCommands, linkCommands, insideCommands, waitingCommands, worldCommands, groupCommands, socialCommands, objectCommands, sessionCommands, viewerCommands, manCommands} {
 		for n, c := range set {
 			commands[n] = c
 		}
 	}
 
 	commands["help"] = &command{
-		usage: "help [GROUP|all]",
-		brief: "the command groups; \"help GROUP\" for one, \"help all\" for everything",
-		run:   cmdHelp,
+		params: "[GROUP|all]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "the command groups; \"help GROUP\" for one, \"help all\" for everything",
+		run:    cmdHelp,
 	}
 	commands["quit"] = &command{
-		usage: "quit",
+		flags: func() any { return new(helpOnly) },
 		brief: "leave slsh",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
-			if _, done, err := subOptions("quit", "", &flags, out, args); err != nil || done {
+			if _, done, err := subOptions("quit", &flags, out, args); err != nil || done {
 				return err
 			}
 			sh.Quit()
@@ -651,26 +676,28 @@ func init() {
 	}
 	commands["exit"] = commands["quit"]
 	commands["."] = &command{
-		usage: ". FILE",
-		brief: "run the commands in a file",
+		params: "FILE",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "run the commands in a file",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
-			args, done, err := subOptions(".", "FILE", &flags, out, args)
+			args, done, err := subOptions(".", &flags, out, args)
 			if err != nil || done {
 				return err
 			}
 			if len(args) != 1 {
-				return fmt.Errorf("usage: . FILE")
+				return usageError(".")
 			}
 			return sh.Source(ctx, args[0])
 		},
 	}
 	commands["source"] = commands["."]
 	commands["echo"] = &command{
-		usage: "echo [text ...]",
-		brief: "print the arguments, which is how to write a note into a file",
-		// No --help, deliberately.  echo exists to put a line into a
-		// file, so it has to be able to print the word "--help" like
+		params: "[text ...]",
+		brief:  "print the arguments, which is how to write a note into a file",
+		// No flags at all, deliberately, which is why this is the one
+		// command with no option struct.  echo exists to put a line into
+		// a file, so it has to be able to print the word "--help" like
 		// any other; a usage message there would be a command refusing
 		// to do the one thing it is for.  Unix echo makes the same
 		// choice for the same reason.

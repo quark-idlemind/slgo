@@ -36,7 +36,7 @@ package main
 // in the answer already, so neither costs anything -- but the item is
 // what goes on the wire.
 //
-// # Wearing adds, and --replace is the other one
+// # Wearing adds rather than replaces
 //
 // A point can hold more than one attachment, and which of the two
 // happens is the request's to say: the point travels in one byte with
@@ -185,14 +185,18 @@ import (
 
 var wearCommands = map[string]*command{
 	"wear": {
-		usage: "wear [--replace] [--at POINT] PATH|UUID",
-		brief: "put an inventory object on, alongside whatever is already on that point",
-		run:   cmdWear,
+		params: "PATH|UUID",
+		flags:  func() any { return new(wearFlags) },
+		brief:  "put an inventory object on, alongside whatever is already on that point",
+		man:    "wear",
+		run:    cmdWear,
 	},
 	"detach": {
-		usage: "detach NAME|PATH|UUID",
-		brief: "take a worn object off, by the name of the item it was worn from",
-		run:   cmdDetach,
+		params: "NAME|PATH|UUID",
+		flags:  func() any { return new(detachFlags) },
+		brief:  "take a worn object off, by the name of the item it was worn from",
+		man:    "detach",
+		run:    cmdDetach,
 	},
 }
 
@@ -242,12 +246,12 @@ type wearFlags struct {
 // attachment nameable, since until then there is no point to look up.
 func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o wearFlags
-	args, done, err := subOptions("wear", "PATH|UUID", &o, out, args)
+	args, done, err := subOptions("wear", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: wear [--replace] [--at POINT] PATH|UUID")
+		return usageError("wear")
 	}
 	point, err := attachPointArg(o.At)
 	if err != nil {
@@ -426,12 +430,12 @@ type detachFlags struct {
 // one more field costs nothing.
 func cmdDetach(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o detachFlags
-	args, done, err := subOptions("detach", "NAME|PATH|UUID", &o, out, args)
+	args, done, err := subOptions("detach", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: detach NAME|PATH|UUID")
+		return usageError("detach")
 	}
 	want := strings.Join(args, " ")
 

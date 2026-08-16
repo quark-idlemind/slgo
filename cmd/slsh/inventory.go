@@ -78,11 +78,11 @@ import (
 
 var inventoryCommands = map[string]*command{
 	"pwd": {
-		usage: "pwd",
+		flags: func() any { return new(helpOnly) },
 		brief: "where in inventory we are",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
-			if _, done, err := subOptions("pwd", "", &flags, out, args); err != nil || done {
+			if _, done, err := subOptions("pwd", &flags, out, args); err != nil || done {
 				return err
 			}
 			fmt.Fprintln(out, sh.Pwd())
@@ -90,49 +90,57 @@ var inventoryCommands = map[string]*command{
 		},
 	},
 	"cd": {
-		usage: "cd [PATH]",
-		brief: "change folder; no path goes to the root, .. goes up",
-		run:   cmdCd,
+		params: "[PATH]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "change folder; no path goes to the root, .. goes up",
+		run:    cmdCd,
 	},
 	"ls": {
-		usage: "ls [-l] [-r] [-t] [-T] [PATH]",
-		brief: "list a folder; -l for detail, -T the time as well, -t newest first, -r to descend",
-		run:   cmdLs,
+		params: "[PATH]",
+		flags:  func() any { return new(lsOptions) },
+		brief:  "list a folder; -l for detail, -T the time as well, -t newest first, -r to descend",
+		run:    cmdLs,
 	},
 	"cat": {
-		usage: "cat PATH",
-		brief: "print a notecard or a script",
-		run:   cmdCat,
+		params: "PATH",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "print a notecard or a script",
+		run:    cmdCat,
 	},
 	"save": {
-		usage: "save FILE PATH",
-		brief: "write a local file into a notecard or script that is already there",
-		run:   cmdSave,
+		params: "FILE PATH",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "write a local file into a notecard or script that is already there",
+		run:    cmdSave,
 	},
 	"mkdir": {
-		usage: "mkdir PATH",
-		brief: "make a folder",
-		run:   cmdMkdir,
+		params: "PATH",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "make a folder",
+		run:    cmdMkdir,
 	},
 	"mv": {
-		usage: "mv PATH DEST",
-		brief: "move into a folder, or rename if DEST is a plain name; folders too",
-		run:   cmdMv,
+		params: "PATH DEST",
+		flags:  func() any { return new(mvOptions) },
+		brief:  "move into a folder, or rename if DEST is a plain name; folders too",
+		run:    cmdMv,
 	},
 	"rm": {
-		usage: "rm [--remove-all-copies] PATH...",
-		brief: "delete items, permanently; --remove-all-copies for every one of a name",
-		run:   cmdRm,
+		params: "PATH ...",
+		flags:  func() any { return new(rmOptions) },
+		brief:  "delete items, permanently; --remove-all-copies for every one of a name",
+		run:    cmdRm,
 	},
 	"emptytrash": {
-		usage: "emptytrash",
+		flags: func() any { return new(emptyTrashOptions) },
 		brief: "throw away everything in the trash, permanently",
 		run:   cmdEmptyTrash,
 	},
 	"find": {
-		usage: "find TEXT [PATH]",
-		brief: "look for names containing TEXT, from here down",
-		run:   cmdFind,
+		params: "TEXT [PATH]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "look for names containing TEXT, from here down",
+		run:    cmdFind,
 	},
 }
 
@@ -288,12 +296,12 @@ func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, error) {
 
 func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("cd", "[PATH]", &o, out, args)
+	args, done, err := subOptions("cd", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) > 1 {
-		return fmt.Errorf("usage: cd [PATH]")
+		return usageError("cd")
 	}
 	// No path is the root, the way cd with no argument is home in a
 	// shell, and it has to be said outright: the empty path resolves
@@ -332,7 +340,7 @@ type lsOptions struct {
 
 func readLsOptions(out io.Writer, args []string) (lsOptions, error) {
 	var o lsOptions
-	rest, done, err := subOptions("ls", "[PATH]", &o, out, args)
+	rest, done, err := subOptions("ls", &o, out, args)
 	if err != nil {
 		return o, err
 	}
@@ -529,12 +537,12 @@ func catReadable(e sl.Entry) error {
 
 func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("cat", "PATH", &o, out, args)
+	args, done, err := subOptions("cat", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("usage: cat PATH")
+		return usageError("cat")
 	}
 	e, err := sh.entryAt(ctx, args[0])
 	if err != nil {
@@ -629,12 +637,12 @@ func saveTarget(e sl.Entry) (sl.AssetType, error) {
 // read and the item is written, which is the opposite of cat and get.
 func cmdSave(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("save", "FILE PATH", &o, out, args)
+	args, done, err := subOptions("save", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 2 {
-		return fmt.Errorf("usage: save FILE PATH")
+		return usageError("save")
 	}
 
 	// The file first, and the path takes the rest of the line as drop's
@@ -709,12 +717,12 @@ func cmdSave(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 
 func cmdMkdir(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("mkdir", "PATH", &o, out, args)
+	args, done, err := subOptions("mkdir", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("usage: mkdir PATH")
+		return usageError("mkdir")
 	}
 	names := sl.SplitPath(args[0])
 	if len(names) == 0 {
@@ -745,12 +753,12 @@ type mvOptions struct {
 
 func cmdMv(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o mvOptions
-	args, done, err := subOptions("mv", "PATH DEST", &o, out, args)
+	args, done, err := subOptions("mv", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) != 2 {
-		return fmt.Errorf("usage: mv PATH DEST")
+		return usageError("mv")
 	}
 	// Inside an object there is nowhere to move to -- an object holds
 	// no folders -- so this is a rename and nothing else.
@@ -804,12 +812,12 @@ type rmOptions struct {
 
 func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o rmOptions
-	args, done, err := subOptions("rm", "PATH ...", &o, out, args)
+	args, done, err := subOptions("rm", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) == 0 {
-		return fmt.Errorf("usage: rm [--remove-all-copies] PATH...")
+		return usageError("rm")
 	}
 	if o.In != "" {
 		return sh.removeInside(ctx, out, o.In, args)
@@ -908,12 +916,12 @@ type emptyTrashOptions struct {
 
 func cmdEmptyTrash(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o emptyTrashOptions
-	rest, done, err := subOptions("emptytrash", "", &o, out, args)
+	rest, done, err := subOptions("emptytrash", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(rest) > 0 {
-		return fmt.Errorf("usage: emptytrash")
+		return usageError("emptytrash")
 	}
 
 	trash, err := sh.s.TrashFolder(ctx)
@@ -939,12 +947,12 @@ func cmdEmptyTrash(ctx context.Context, sh *Shell, out io.Writer, args []string)
 
 func cmdFind(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("find", "TEXT [PATH]", &o, out, args)
+	args, done, err := subOptions("find", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 || len(args) > 2 {
-		return fmt.Errorf("usage: find TEXT [PATH]")
+		return usageError("find")
 	}
 	want := strings.ToLower(args[0])
 	path := ""

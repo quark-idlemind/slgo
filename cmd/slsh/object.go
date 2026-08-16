@@ -33,29 +33,34 @@ import (
 
 var objectFileCommands = map[string]*command{
 	"dump": {
-		usage: "dump [-o FILE] NAME|UUID",
-		brief: "describe an object as the simulator's JSON",
-		run:   cmdDump,
+		params: "NAME|UUID",
+		flags:  func() any { return new(dumpFlags) },
+		brief:  "describe an object as the simulator's JSON",
+		run:    cmdDump,
 	},
 	"rez": {
-		usage: "rez [--at X,Y,Z] FILE",
-		brief: "build the object a JSON file describes",
-		run:   cmdRez,
+		params: "FILE",
+		flags:  func() any { return new(rezFlags) },
+		brief:  "build the object a JSON file describes",
+		run:    cmdRez,
 	},
 	"touch": {
-		usage: "touch [-f FACE] [--uv U,V] [--at X,Y,Z] [-H SECONDS] NAME|UUID",
-		brief: "click an object, on a named face at a named point",
-		run:   cmdTouch,
+		params: "NAME|UUID [POINT ...]",
+		flags:  func() any { return new(touchFlags) },
+		brief:  "click an object, on a named face at a named point",
+		run:    cmdTouch,
 	},
 	"texture": {
-		usage: "texture [-f FACE] [--id UUID] [--repeats S,T] [--color R,G,B] NAME|UUID",
-		brief: "set what a face looks like, or with no flags say what it looks like",
-		run:   cmdTexture,
+		params: "NAME|UUID",
+		flags:  func() any { return new(textureFlags) },
+		brief:  "set what a face looks like, or with no flags say what it looks like",
+		run:    cmdTexture,
 	},
 	"reform": {
-		usage: "reform NAME|UUID FILE",
-		brief: "change an object to match a JSON file; what it omits is left alone",
-		run:   cmdReform,
+		params: "NAME|UUID FILE",
+		flags:  func() any { return new(reformFlags) },
+		brief:  "change an object to match a JSON file; what it omits is left alone",
+		run:    cmdReform,
 	},
 }
 
@@ -67,12 +72,12 @@ type dumpFlags struct {
 
 func cmdDump(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o dumpFlags
-	args, done, err := subOptions("dump", "NAME|UUID", &o, out, args)
+	args, done, err := subOptions("dump", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("usage: dump [-o FILE] NAME|UUID")
+		return usageError("dump")
 	}
 
 	target, err := sh.objectNamed(ctx, args[0], o.Wait)
@@ -108,12 +113,12 @@ type rezFlags struct {
 
 func cmdRez(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o rezFlags
-	args, done, err := subOptions("rez", "FILE", &o, out, args)
+	args, done, err := subOptions("rez", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("usage: rez [--at X,Y,Z] FILE")
+		return usageError("rez")
 	}
 
 	objs, err := readObjects(args[0])
@@ -161,12 +166,12 @@ type reformFlags struct {
 
 func cmdReform(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o reformFlags
-	args, done, err := subOptions("reform", "NAME|UUID FILE", &o, out, args)
+	args, done, err := subOptions("reform", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) != 2 {
-		return fmt.Errorf("usage: reform NAME|UUID FILE")
+		return usageError("reform")
 	}
 
 	objs, err := readObjects(args[1])
@@ -336,12 +341,12 @@ func parseTouchPoint(s string, base sl.Touch) (sl.Touch, error) {
 
 func cmdTouch(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o touchFlags
-	args, done, err := subOptions("touch", "NAME|UUID", &o, out, args)
+	args, done, err := subOptions("touch", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: touch [-f FACE] [--uv U,V] NAME|UUID [POINT ...]")
+		return usageError("touch")
 	}
 
 	seen, err := sh.seenNamed(ctx, args[0], 30)
@@ -469,7 +474,7 @@ type textureFlags struct {
 
 func cmdTexture(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	o := textureFlags{Face: sl.AllFaces, Alpha: -1, Shiny: -1, Glow: -1}
-	args, done, err := subOptions("texture", "NAME|UUID", &o, out, args)
+	args, done, err := subOptions("texture", &o, out, args)
 	if err != nil || done {
 		if done {
 			fmt.Fprint(out, "\nGiven none of these, it says what the faces look like now instead\n"+
@@ -478,7 +483,7 @@ func cmdTexture(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("usage: texture [-f FACE] [--repeats S,T] ... NAME|UUID")
+		return usageError("texture")
 	}
 	if o.Bright && o.Dark {
 		return fmt.Errorf("--fullbright and --no-fullbright are opposites")

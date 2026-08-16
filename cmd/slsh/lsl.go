@@ -62,7 +62,7 @@ func (o *lslOptions) wanted() (functions, constants, events, types, chosen bool)
 
 func cmdLSL(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o lslOptions
-	rest, done, err := subOptions("lsl", "[TEXT]", &o, out, args)
+	rest, done, err := subOptions("lsl", &o, out, args)
 	if err != nil || done {
 		return err
 	}

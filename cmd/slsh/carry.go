@@ -52,19 +52,24 @@ import (
 
 var carryCommands = map[string]*command{
 	"take": {
-		usage: "take [--copy] [--into FOLDER] NAME|UUID",
-		brief: "take a rezzed object into inventory; --copy tries to leave the original",
-		run:   cmdTake,
+		params: "NAME|UUID",
+		flags:  func() any { return new(takeFlags) },
+		brief:  "take a rezzed object into inventory; --copy tries to leave the original",
+		man:    "take",
+		run:    cmdTake,
 	},
 	"place": {
-		usage: "place [--at X,Y,Z] PATH|UUID",
-		brief: "put an inventory object into the world, which is what take undoes",
-		run:   cmdPlace,
+		params: "PATH|UUID",
+		flags:  func() any { return new(placeFlags) },
+		brief:  "put an inventory object into the world, which is what take undoes",
+		man:    "place",
+		run:    cmdPlace,
 	},
 	"perms": {
-		usage: "perms [--next LETTERS] [--group LETTERS] [--everyone LETTERS] NAME|UUID",
-		brief: "set what others may do with a rezzed object: c copy, m modify, t transfer, v move",
-		run:   cmdPerms,
+		params: "NAME|UUID",
+		flags:  func() any { return new(permsFlags) },
+		brief:  "set what others may do with a rezzed object: c copy, m modify, t transfer, v move",
+		run:    cmdPerms,
 	},
 }
 
@@ -77,12 +82,12 @@ type takeFlags struct {
 
 func cmdTake(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o takeFlags
-	args, done, err := subOptions("take", "NAME|UUID", &o, out, args)
+	args, done, err := subOptions("take", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: take [--copy] [--into FOLDER] NAME|UUID")
+		return usageError("take")
 	}
 
 	obj, err := sh.objectNamed(ctx, args[0], o.Wait)
@@ -139,7 +144,7 @@ type placeFlags struct {
 
 func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o placeFlags
-	args, done, err := subOptions("place", "PATH|UUID", &o, out, args)
+	args, done, err := subOptions("place", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -153,8 +158,9 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	// leaving the object the script meant to move exactly where it was.
 	// A usage error costs a re-run; a stray object costs finding it.
 	if len(args) != 1 {
-		return fmt.Errorf("usage: place [--at X,Y,Z] PATH|UUID -- one object, quoted if its name has spaces\n" +
-			"        (to move something already rezzed, that is \"move NAME X Y Z\")")
+		return usageError("place",
+			"one object, quoted if its name has spaces",
+			"to move something already rezzed, that is \"move NAME X Y Z\"")
 	}
 
 	e, err := sh.entryAt(ctx, args[0])
@@ -210,12 +216,12 @@ type permsFlags struct {
 
 func cmdPerms(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o permsFlags
-	args, done, err := subOptions("perms", "NAME|UUID", &o, out, args)
+	args, done, err := subOptions("perms", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: perms [--next LETTERS] [--group LETTERS] [--everyone LETTERS] NAME|UUID")
+		return usageError("perms")
 	}
 
 	set := []struct {

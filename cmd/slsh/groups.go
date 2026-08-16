@@ -20,10 +20,11 @@ package main
 // It is not where a command's own options are documented.  That is the
 // command's business and it answers for itself:
 //
-//	COMMAND --help
+//	COMMAND --help    what it takes
+//	man COMMAND       what it is for
 //
 // So "help" never describes one command in detail, and asking it to --
-// "help cat" -- is answered by pointing at the command instead.  A name
+// "help cat" -- is answered by pointing at those two instead.  A name
 // may therefore be both a group and a command without ambiguity, since
 // help only ever means the group.
 
@@ -109,7 +110,7 @@ var groups = []group{
 		// whether one of its sessions has been taken over -- and the
 		// question it answers, "how do I get eyes on this avatar", is
 		// asked next to status and watch.
-		members: []string{"agents", "host", "logout", "auto", "status", "watch", "viewer"},
+		members: []string{"agents", "login", "logout", "auto", "status", "watch", "viewer"},
 	},
 	{
 		name:    "simulator",
@@ -119,7 +120,7 @@ var groups = []group{
 	{
 		name:    "shell",
 		brief:   "slsh itself",
-		members: []string{"help", "quit", ".", "echo"},
+		members: []string{"help", "man", "quit", ".", "echo"},
 	},
 }
 
@@ -145,14 +146,14 @@ func groupNames() []string {
 // helpTail is the reminder that a command documents itself.  Printed
 // wherever a list of commands is, since that is where somebody is when
 // they want to know what one takes.
-const helpTail = `"COMMAND --help" for what one command takes.`
+const helpTail = `"COMMAND --help" for what one command takes, "man COMMAND" for what it is for.`
 
 // cmdHelp is help, with or without a group.
 func cmdHelp(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	// help answers --help too.  It tells everyone else to, so being the
 	// one command that did not would be a poor advertisement.
 	var flags helpOnly
-	args, done, err := subOptions("help", "[GROUP|all]", &flags, out, args)
+	args, done, err := subOptions("help", &flags, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -173,7 +174,7 @@ func cmdHelp(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	// lives rather than refusing -- this is the moment somebody wants
 	// to know, so it is the moment worth telling them.
 	if _, ok := commands[name]; ok {
-		fmt.Fprintf(out, "%s is a command, not a group.  Try:  %s --help\n", name, name)
+		fmt.Fprintf(out, "%s is a command, not a group.  Try:  %s --help, or man %s\n", name, name, name)
 		fmt.Fprintf(out, "Groups: %s\n", strings.Join(groupNames(), ", "))
 		return nil
 	}
@@ -185,7 +186,7 @@ func cmdHelp(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 func helpGroups(out io.Writer) error {
 	fmt.Fprintf(out, "Commands are grouped.  For a group:  help GROUP\n")
 	fmt.Fprintf(out, "For everything:        help all\n")
-	fmt.Fprintf(out, "For one command:       COMMAND --help\n\n")
+	fmt.Fprintf(out, "For one command:       COMMAND --help, or man COMMAND\n\n")
 	for _, g := range groups {
 		fmt.Fprintf(out, "  %-11s %-54s (%d)\n", g.name, g.brief, len(g.members))
 	}
@@ -200,7 +201,7 @@ func helpGroup(out io.Writer, g group) error {
 		if !ok {
 			continue
 		}
-		fmt.Fprintf(out, "  %-28s %s\n", c.usage, c.brief)
+		listCommand(out, "  ", n, c)
 	}
 	fmt.Fprintf(out, "\n%s\n", helpTail)
 	return nil
@@ -217,12 +218,31 @@ func helpAll(out io.Writer) error {
 			continue
 		}
 		seen[c] = true
-		fmt.Fprintf(out, "%-28s %s\n", c.usage, c.brief)
+		listCommand(out, "", n, c)
 	}
 	fmt.Fprintf(out, "\nA path may be quoted, and \\/ is a slash inside a name.\n")
 	fmt.Fprintf(out, "Output redirects with > and >>, and \". file\" runs a file of commands.\n")
 	fmt.Fprintf(out, "%s\n", helpTail)
 	return nil
+}
+
+// listCommand prints one command in a listing: how it is typed, and
+// what it is for.
+//
+// The usage line is derived now (options.go), which made some of them
+// far longer than the hand-written strings they replaced -- perms names
+// four flags where its old line named three, and put names eight.  A
+// line that does not fit the column takes one of its own and the
+// description goes underneath, rather than pushing every description on
+// the page out to where the longest line ends.
+func listCommand(out io.Writer, indent, name string, c *command) {
+	const col = 30
+	line := c.usage(name)
+	if len(line) > col {
+		fmt.Fprintf(out, "%s%s\n%s%*s%s\n", indent, line, indent, col+1, "", c.brief)
+		return
+	}
+	fmt.Fprintf(out, "%s%-*s %s\n", indent, col, line, c.brief)
 }
 
 // ungrouped is every command in no group, which is what a test asks

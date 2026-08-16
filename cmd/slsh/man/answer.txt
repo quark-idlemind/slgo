@@ -1,0 +1,60 @@
+answer says yes to one of the things waiting lists, by its number.
+
+What "yes" means depends on what is asking, and answer does the right
+one: a teleport is accepted, an offered item is taken into Objects, a
+friendship is accepted, a script is granted what it asked for, a group
+invitation is joined.  A dialog is different only in that it has
+buttons, so the word after the number picks one, either by its number
+in the listing or by its label.
+
+	answer 1
+	answer 3 Yes
+	answer 3 2
+
+A text box is the other one that takes words.  Everything after the
+number is the answer:
+
+	answer 4 the north gate
+
+and with nothing after the number it opens the multi-line form, where
+lines are typed until ^D ends them.  ESC starts the answer again and ^C
+sends nothing.  --file PATH takes the answer from a file instead,
+newlines and all, which is the way to send something written elsewhere.
+
+# A group invitation with a fee has to name the fee
+
+This is the only kind that can spend money, and a bare "answer 3" that
+quietly paid a joining fee would be the shell deciding to spend
+somebody's money for them.  So the fee is in the waiting listing, and
+where it is not zero it has to be typed back before the answer will go:
+
+	answer 3 L$50
+
+That is not a payment instruction and it caps nothing -- the simulator
+charges the group's fee whatever is sent.  It is the person saying the
+number out loud, which is the only part of this a shell can honestly
+ask of them.  An amount that does not match what the invitation said is
+refused, with both figures named.
+
+An invitation that did not say what joining costs is the harder case
+and is treated as the dangerous one: it too has to be answered with an
+amount, "answer N L$0" if you believe it is free, and the reply says
+plainly that the group will charge its fee whatever you typed.
+
+Nothing answers a join, so "group" is what says whether it worked.
+
+# Accepting a teleport ends this session
+
+A teleport out of this region needs a circuit and a set of capabilities
+that slgo does not open yet.  The warning is printed before the request
+goes, because after it there may be no session left to print anything
+with.  A lure to somewhere in the same region is fine.
+
+# Options
+
+--file PATH answers a text box from a file.  A shell reads a line at a
+time and a viewer's text box is a text editor, so the two shapes do not
+match; naming a file is the way through that does not involve inventing
+an escape for the newline and then having to escape the escape.
+
+See also: waiting, no, ignore.

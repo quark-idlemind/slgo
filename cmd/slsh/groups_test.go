@@ -70,9 +70,20 @@ func TestHelpAllListsEverything(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := b.String()
+	// An alias shares its command with another name and is listed once,
+	// under whichever of the names comes first -- so a command counts as
+	// mentioned if its usage line is there under any name it answers to.
+	listed := func(name string) bool {
+		c := commands[name]
+		for _, n := range commandNames() {
+			if commands[n] == c && strings.Contains(got, c.usage(n)) {
+				return true
+			}
+		}
+		return false
+	}
 	for _, name := range commandNames() {
-		// Aliases share a usage line with the name they alias.
-		if got == "" || !strings.Contains(got, commands[name].usage) {
+		if !listed(name) {
 			t.Errorf("help all does not mention %q", name)
 		}
 	}
@@ -208,7 +219,7 @@ func TestAGroupThatNamesAMissingCommandPrintsWhatItHas(t *testing.T) {
 // finding nothing rather than by everything being filed.
 func TestUngroupedFindsACommandNobodyFiled(t *testing.T) {
 	const name = "zz-not-in-any-group"
-	c := &command{usage: name, brief: "invented by a test"}
+	c := &command{brief: "invented by a test"}
 	commands[name] = c
 	defer delete(commands, name)
 

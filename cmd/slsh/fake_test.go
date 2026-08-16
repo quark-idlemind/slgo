@@ -18,7 +18,7 @@ package main
 // is what the commands actually read.
 //
 // newDaemonShell is the other half: the four commands that ask slgod
-// rather than the grid -- agents, host, logout, status -- reach it
+// rather than the grid -- agents, login, logout, status -- reach it
 // through client.Conn, which is a gRPC client and cannot be faked at
 // the Backend level at all.  So there is a real gRPC server, in this
 // process, on loopback, exactly as sl/hosted_test.go does it.

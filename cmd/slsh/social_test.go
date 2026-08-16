@@ -979,7 +979,7 @@ func TestProfileNeedsSomebodyToAskAbout(t *testing.T) {
 	x := newTestShell(t)
 	searching(t, x)
 
-	if got := x.do(t, "profile"); !strings.Contains(got, "usage: profile WHO") {
+	if got := x.do(t, "profile"); !strings.Contains(got, "usage: profile [-w SECONDS] WHO") {
 		t.Errorf("profile with nobody printed %q", got)
 	}
 	if got := x.do(t, "profile --help"); !strings.Contains(got, "WHO") ||

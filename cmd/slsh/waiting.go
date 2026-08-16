@@ -45,24 +45,31 @@ import (
 
 var waitingCommands = map[string]*command{
 	"waiting": {
-		usage: "waiting [-a]",
+		flags: func() any { return new(waitingFlags) },
 		brief: "what is waiting for an answer: teleports, dialogs, offers, permissions, invitations; -a includes ignored",
+		man:   "waiting",
 		run:   cmdWaiting,
 	},
 	"answer": {
-		usage: "answer [--file PATH] N [BUTTON|TEXT|L$FEE]",
-		brief: "answer one of them: yes, a button by name or number, what a text box wants, or the fee a group asks",
-		run:   cmdAnswer,
+		params: "N [BUTTON|TEXT|L$FEE]",
+		flags:  func() any { return new(answerFlags) },
+		brief:  "answer one of them: yes, a button by name or number, what a text box wants, or the fee a group asks",
+		man:    "answer",
+		run:    cmdAnswer,
 	},
 	"no": {
-		usage: "no N",
-		brief: "decline one, and tell whoever asked",
-		run:   cmdNo,
+		params: "N",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "decline one, and tell whoever asked",
+		man:    "no",
+		run:    cmdNo,
 	},
 	"ignore": {
-		usage: "ignore N",
-		brief: "leave it waiting, but stop counting it at the prompt",
-		run:   cmdIgnore,
+		params: "N",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "leave it waiting, but stop counting it at the prompt",
+		man:    "ignore",
+		run:    cmdIgnore,
 	},
 }
 
@@ -329,7 +336,7 @@ type waitingFlags struct {
 
 func cmdWaiting(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o waitingFlags
-	_, done, err := subOptions("waiting", "", &o, out, args)
+	_, done, err := subOptions("waiting", &o, out, args)
 	if err != nil || done {
 		return err
 	}
@@ -371,12 +378,12 @@ type answerFlags struct {
 
 func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o answerFlags
-	args, done, err := subOptions("answer", "N [BUTTON|TEXT|L$FEE]", &o, out, args)
+	args, done, err := subOptions("answer", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: answer N [BUTTON|TEXT|L$FEE]")
+		return usageError("answer")
 	}
 	w, err := sh.pick(args[0])
 	if err != nil {
@@ -571,12 +578,12 @@ func buttonOf(d sl.Dialog, text string) (string, error) {
 
 func cmdNo(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("no", "N", &o, out, args)
+	args, done, err := subOptions("no", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: no N")
+		return usageError("no")
 	}
 	w, err := sh.pick(args[0])
 	if err != nil {
@@ -622,12 +629,12 @@ func cmdNo(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 
 func cmdIgnore(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("ignore", "N", &o, out, args)
+	args, done, err := subOptions("ignore", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ignore N")
+		return usageError("ignore")
 	}
 	w, err := sh.pick(args[0])
 	if err != nil {

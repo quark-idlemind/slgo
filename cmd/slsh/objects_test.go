@@ -410,7 +410,7 @@ func TestTheDaemonCommandsSayWhenThereIsNoDaemon(t *testing.T) {
 	if got := x.do(t, "agents"); !strings.Contains(got, "logged in directly, not through a daemon") {
 		t.Errorf("agents printed %q", got)
 	}
-	for _, line := range []string{"host somebody", "logout somebody", "status"} {
+	for _, line := range []string{"login somebody", "logout somebody", "status"} {
 		if got := x.do(t, line); !strings.Contains(got, "logged in directly") {
 			t.Errorf("%q printed %q", line, got)
 		}
@@ -460,35 +460,42 @@ func TestAgentsListsInTheDaemonsOrder(t *testing.T) {
 	}
 }
 
-// TestHostIsSafeToRepeat: one already up comes back as already up
+// TestLoginIsSafeToRepeat: one already up comes back as already up
 // rather than being logged in a second time, which would kick the
 // session it has.
-func TestHostIsSafeToRepeat(t *testing.T) {
+//
+// This command was "host" until the pair was made to read login and
+// logout.  Nothing answers to the old name, and the first line here is
+// what would notice if an alias for it were ever added.
+func TestLoginIsSafeToRepeat(t *testing.T) {
 	x, d := newDaemonShell(t)
 	d.host = &pb.HostResponse{Agent: &pb.AgentInfo{
 		AvatarName: "One Resident", Region: "Test Region"}}
 
-	if got := x.do(t, "host first"); got != "first: One Resident in Test Region\n" {
-		t.Errorf("host printed %q", got)
+	if got := x.do(t, "host first"); !strings.Contains(got, "no such command") {
+		t.Errorf("host is not a command any more, and printed %q", got)
+	}
+	if got := x.do(t, "login first"); got != "first: One Resident in Test Region\n" {
+		t.Errorf("login printed %q", got)
 	}
 
 	d.host.Already = true
-	if got := x.do(t, "host first"); !strings.Contains(got, "was already up") {
-		t.Errorf("host of one already up printed %q", got)
+	if got := x.do(t, "login first"); !strings.Contains(got, "was already up") {
+		t.Errorf("login of one already up printed %q", got)
 	}
 
-	for _, line := range []string{"host", "host one two"} {
+	for _, line := range []string{"login", "login one two"} {
 		if got := x.do(t, line); !strings.Contains(got, "flags come before the name") {
 			t.Errorf("%q printed %q", line, got)
 		}
 	}
-	if got := x.do(t, "host --help"); !strings.Contains(got, "-f") {
-		t.Errorf("host --help printed %q", got)
+	if got := x.do(t, "login --help"); !strings.Contains(got, "-f") {
+		t.Errorf("login --help printed %q", got)
 	}
 
 	d.fail = errors.New("no profile of that name")
-	if got := x.do(t, "host first"); !strings.Contains(got, "no profile of that name") {
-		t.Errorf("host should report the failure, got %q", got)
+	if got := x.do(t, "login first"); !strings.Contains(got, "no profile of that name") {
+		t.Errorf("login should report the failure, got %q", got)
 	}
 }
 
@@ -498,7 +505,7 @@ func TestLogoutSaysItWillStayOut(t *testing.T) {
 	x, d := newDaemonShell(t)
 	d.logout = &pb.LogoutResponse{}
 
-	if got := x.do(t, "logout first"); !strings.Contains(got, "until asked for by name") {
+	if got := x.do(t, "logout first"); !strings.Contains(got, `until "login first" asks for it`) {
 		t.Errorf("logout printed %q", got)
 	}
 

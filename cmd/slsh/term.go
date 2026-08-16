@@ -130,6 +130,15 @@ func (t *Term) Rows() int {
 	return t.height
 }
 
+// Cols is how wide the terminal is, which is what decides where prose
+// is wrapped.  A pipe has no width and answers 80, the width a terminal
+// is assumed to have until one says otherwise.
+func (t *Term) Cols() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.width
+}
+
 // Keys is the decoded keystrokes.  It is closed when input ends.
 func (t *Term) Keys() <-chan rune { return t.keys }
 

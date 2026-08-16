@@ -1,0 +1,69 @@
+wear puts an inventory object on the avatar.  The argument is an
+inventory path, relative to the folder the shell is in, or the uuid of
+an item -- the same sort of argument place takes, because both of them
+are naming something in inventory.
+
+Where it lands is usually not something you say.  Without --at the
+object goes wherever the object itself says, which is the point its
+maker set, and the report names the point the region gave back rather
+than one guessed here:
+
+	wear Objects/hat
+	hat is worn on skull
+
+# Wearing adds rather than replaces
+
+A bare wear puts the object on alongside whatever is already on that
+point.  It does not take anything off; --replace is the other one.
+That is the viewer's Add rather than its Wear, and the difference
+between the two is one bit in the request, so which one a bare command
+means was ours to choose.
+
+It was chosen the hard way.  With "auto 11" already on HUD bottom
+right, "wear Objects/auto 3" with no --at at all put auto 3 there and
+took auto 11 off -- and nothing said so: not this command, which
+printed its one line about auto 3, and not the region.  A wrong add is
+visible and costs a detach.  A wrong replace is invisible and costs
+whatever was there.  Between two defaults, the one to have is the one
+whose mistake can be seen.
+
+--replace is the old behaviour, for when putting a thing where another
+thing is really is what is meant.  It names what it displaced --
+"X is worn on chest; Y came off" -- and it names it by looking
+afterwards rather than by predicting, because a replace displaces one
+attachment and not the whole point's worth of them.  Where the clause
+is missing, either nothing came off or the region has not caught up;
+the line is never a guess.
+
+# The same item twice is refused
+
+Adding makes it possible to wear one inventory item twice, and wear
+will not.  An attachment is known here by the item it came from, so two
+attachments from one item agree in every field a person could name one
+by: detach would find both and refuse as ambiguous, advising you to
+tell them apart by an item id that is precisely the thing they share.
+The refusal names the point the item is already on, and --replace and
+detach are the two ways on from there.
+
+# Options
+
+--at names the point, either the way the viewer names it -- "left
+hand", "HUD top right" -- or by its number.  The numbers run from 1 to
+127; a bigger one is refused, because the byte a point travels in also
+carries the bit that says add rather than replace.
+
+--replace takes off whatever is on that point instead of wearing
+alongside it.
+
+# Examples
+
+Put a HUD on wherever it asks to go:
+
+	wear Objects/auto 3
+
+Put one on a named point, over whatever is there:
+
+	wear --replace --at "HUD bottom right" Objects/auto 4
+
+See also: detach, worn for what is on and where, and place for putting
+an inventory object into the world instead of onto the avatar.

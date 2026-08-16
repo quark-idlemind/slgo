@@ -23,14 +23,15 @@ import (
 
 var sessionCommands = map[string]*command{
 	"status": {
-		usage: "status",
+		flags: func() any { return new(helpOnly) },
 		brief: "how this session and its circuit are doing",
 		run:   cmdStatus,
 	},
 	"watch": {
-		usage: "watch [-for D] [NAME...]",
-		brief: "print grid messages as they arrive; no NAME means everything",
-		run:   cmdWatch,
+		params: "[NAME...]",
+		flags:  func() any { return new(watchOptions) },
+		brief:  "print grid messages as they arrive; no NAME means everything",
+		run:    cmdWatch,
 	},
 }
 
@@ -43,7 +44,7 @@ var sessionCommands = map[string]*command{
 // announces itself.
 func cmdStatus(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var flags helpOnly
-	if _, done, err := subOptions("status", "", &flags, out, args); err != nil || done {
+	if _, done, err := subOptions("status", &flags, out, args); err != nil || done {
 		return err
 	}
 	conn, ok := sh.conn()
@@ -103,7 +104,7 @@ type watchOptions struct {
 // runs, and isolates both.
 func cmdWatch(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o watchOptions
-	names, done, err := subOptions("watch", "[NAME...]", &o, out, args)
+	names, done, err := subOptions("watch", &o, out, args)
 	if err != nil || done {
 		return err
 	}
