@@ -69,6 +69,39 @@ type EventQueue struct {
 // connections itself and handing on what they say, which is the same
 // piece of work as region crossing and is not built.
 //
+// EnableSimulator is the other half of that introduction and was
+// relayed for as long as this front end has existed, which made the
+// paragraph above half true at best.  It carries a neighbour's handle,
+// IP and port and no capability of any kind -- and a capability is not
+// what opening a circuit takes.  UseCircuitCode's whole content is the
+// circuit code, the session id and the agent id, and a viewer holding
+// this session already has all three: they are in the login response it
+// was replayed, and Circuit.checkCircuit exists precisely because the
+// viewer sends them back on attaching.  So an address is the only thing
+// it was missing, and this message is an address.  The seed in
+// EstablishAgentCommunication buys the neighbour's HTTP capabilities;
+// the UDP circuit, which is where the object updates arrive and where
+// anything a viewer might send AS this agent would go, needs none of
+// it.  The reference viewer does exactly this on receiving one --
+// enables the circuit and sends UseCircuitCode to the address it names
+// -- which is a reading of published viewer source rather than
+// something measured here, and the withholding does not rest on it: the
+// message plus what the viewer already holds is sufficient on its own.
+//
+// A neighbour circuit is worse than the one EstablishAgentCommunication
+// would open, not better.  Every absorb in this package -- the logout
+// that would end the grid session, the teleports, the circuit claim --
+// is enforced on the one circuit slgod owns, and a circuit the viewer
+// opened itself is under none of it.
+//
+// Withheld, then, and it is the older hole rather than one the teleport
+// work made: it has been relayed since this front end existed, and
+// stage 0's capture has three of them arriving every few seconds.  What
+// it costs is that a viewer no longer creates the neighbouring regions
+// at all, so anything it was managing to draw across a border stops --
+// which is the sentence above finally becoming true rather than a new
+// restriction.
+//
 // TeleportFinish is the same failure arriving by a different road, and
 // it opened when the daemon learned to follow a teleport.  It carries
 // the new simulator's address and its seed capability, and it does not
@@ -82,8 +115,17 @@ type EventQueue struct {
 // and Circuit.FromSim absorbs it on the circuit in case a grid ever
 // sends it there.
 //
-// TeleportFailed is NOT withheld, and it is the one of the four that
-// can be let through.  It carries no address and no invitation to
+// CrossedRegion is that message for an avatar that walked, and it is
+// held on the same terms.  It names a simulator and carries its seed,
+// nobody asked for it at all, and slgod acts on one itself when it
+// arrives (agent/crossing.go) -- so a viewer given it would be a second
+// thing following the same crossing, by its own circuit, with these
+// ids.  Withheld here and absorbed in Circuit.FromSim, both roads,
+// which costs nothing while no grid sends one and closes the hole the
+// day one does.
+//
+// TeleportFailed is NOT withheld, and it is the one of these that can
+// be let through.  It carries no address and no invitation to
 // connect anywhere: it is a reason string and, in a viewer, the message
 // that clears any teleport state and puts up a notice.  Nothing it can
 // do is worse than the truth it carries, and if a TeleportStart ever
@@ -100,8 +142,12 @@ type EventQueue struct {
 var withheldEvents = map[string]string{
 	"EstablishAgentCommunication": "neighbouring regions are not offered to the viewer, " +
 		"so it will draw this region and nothing beyond it",
+	"EnableSimulator": "a neighbouring simulator's address is not offered to the viewer: " +
+		"it needs no capability to open a circuit there with this session's own ids",
 	"TeleportFinish": "the avatar has teleported, and the viewer is not told where to: " +
 		"handed the address it would open a circuit to that simulator itself",
+	"CrossedRegion": "the avatar has crossed a border, and the viewer is not told where to: " +
+		"the daemon follows the crossing and the viewer would open its own circuit",
 }
 
 // WhyWithheld is why a viewer is not given this event, or empty for an

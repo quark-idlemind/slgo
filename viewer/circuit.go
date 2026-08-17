@@ -855,6 +855,22 @@ func (c *Circuit) FromSim(p *msg.Packet) {
 		// worth closing from both roads.
 		c.record(FromSim, p, Absorbed)
 		return
+
+	case "CrossedRegion", "EnableSimulator":
+		// The same address, offered for walking rather than for
+		// teleporting.  Both are UDPBlackListed and both are withheld
+		// from the event queue with the reasoning in caps.go; this arm
+		// is the other road, on the same terms as TeleportFinish above.
+		//
+		// CrossedRegion is the more speculative of the two, and
+		// deliberately so: nobody has seen one on this grid, so this
+		// costs nothing until a grid sends one and closes a hole the
+		// moment one does.  EnableSimulator is the opposite -- it
+		// arrives constantly, and on Agni it arrives on the queue, so
+		// what this arm covers is a grid that puts it where the
+		// template says it no longer goes.
+		c.record(FromSim, p, Absorbed)
+		return
 	}
 
 	select {

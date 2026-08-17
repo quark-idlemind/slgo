@@ -1045,3 +1045,41 @@ func TestAViewerIsToldWhenTheAvatarIsTeleportedFromSomewhereElse(t *testing.T) {
 		t.Errorf("the notice does not say what to do about it: %q", said)
 	}
 }
+
+// TestANeighboursAddressOnTheCircuitDoesNotReachTheViewer: both of
+// these are withheld from the event queue, which is where the template
+// says they go, and both would hand a viewer a simulator to open its
+// own circuit to if a grid ever sent them here instead.  Absorbing them
+// costs nothing: a viewer that is not offered neighbours draws this
+// region and no other either way.
+func TestANeighboursAddressOnTheCircuitDoesNotReachTheViewer(t *testing.T) {
+	sim, _, c, v, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	for _, m := range []msg.Message{
+		&msg.EnableSimulator{},
+		&msg.CrossedRegion{},
+	} {
+		c.FromSim(&msg.Packet{ID: msg.IDOf(m), Message: m, At: time.Now()})
+	}
+
+	// A chat line behind them, so that waiting for it proves the two
+	// were considered and dropped rather than merely still in flight.
+	chat := &msg.ChatFromSimulator{}
+	chat.ChatData.Message = []byte("after the border\x00")
+	c.FromSim(&msg.Packet{ID: msg.IDOf(chat), Message: chat, At: time.Now()})
+	v.waitSeen(t, "ChatFromSimulator", 5*time.Second)
+
+	for _, name := range []string{"EnableSimulator", "CrossedRegion"} {
+		for _, seen := range v.got() {
+			if seen == name {
+				t.Errorf("%s reached the viewer; it heard %v", name, v.got())
+			}
+		}
+	}
+	if census.Total() == 0 {
+		t.Fatal("nothing was recorded at all")
+	}
+}

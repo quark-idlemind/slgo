@@ -185,9 +185,10 @@ func (sh *Shell) watch(ctx context.Context) {
 	perms := sh.s.Permissions(0)
 	// The avatar arriving somewhere, which is news whoever asked for it:
 	// a lure accepted from another client attached to the same daemon, a
-	// session re-established after the circuit was lost, and one day an
-	// avatar walking over a border.  tp asks for its own and prints its
-	// own line as well -- see cmdTP for why both are wanted.
+	// session re-established after the circuit was lost, and an avatar
+	// that walked over a border and was told about it.  tp asks for its
+	// own and prints its own line as well -- see cmdTP for why both are
+	// wanted.
 	regions := sh.s.RegionChanges(0)
 	sh.s.OnDialog = func(d sl.Dialog) {
 		// A text box carries a sentinel where its buttons would be, and

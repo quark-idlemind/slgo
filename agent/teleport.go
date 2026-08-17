@@ -13,9 +13,10 @@ import (
 // the simulator this avatar has been handed to and the seed capability
 // to fetch that region's capabilities from, and nothing in this package
 // asked for it: a client sent the request, or somebody's lure was
-// accepted, or -- once there is a handler for CrossedRegion -- the
-// avatar walked over a border.  So this is the session being told that
-// it has already been moved, and moveTo is what it does about it.
+// accepted.  So this is the session being told that it has already been
+// moved, and moveTo is what it does about it.  An avatar that walked
+// over a border is told the same thing by a different message, which is
+// crossing.go, and the reading of the fields below is shared with it.
 //
 // Reading it is the whole of the work here, and stage 0 measured what
 // not reading it costs: the event was relayed to clients and nobody in
@@ -100,7 +101,18 @@ func (a *Agent) noteTeleportFinish(body any) {
 // that could not read one waits for the watchdog, which is what it did
 // before any of this existed.
 func teleportDestination(body any) (addr *net.UDPAddr, seed string, handle uint64) {
-	info := eventBlock(body, "Info")
+	return destination(eventBlock(body, "Info"))
+}
+
+// destination reads an address, a seed and a handle out of one block of
+// an event body.
+//
+// Every shape it expects was measured in the TeleportFinish above.
+// CrossedRegion's block is read by this same function, on the strength
+// of that measurement rather than one of its own; crossingDestination
+// says so where it asks for it, and says what it costs if the two ever
+// turn out to differ.
+func destination(info map[string]any) (addr *net.UDPAddr, seed string, handle uint64) {
 	if info == nil {
 		return nil, "", 0
 	}
@@ -134,20 +146,27 @@ func teleportDestination(body any) (addr *net.UDPAddr, seed string, handle uint6
 	}
 
 	// The seed is a string, and the one field used as it stands rather
-	// than decoded.  Anything that is not an absolute http URL is
-	// dropped instead of passed on: moveTo would ask it for the
-	// capability set, fail, and end the session over a field this
-	// daemon merely could not read, where an empty seed is a shape it
-	// has a documented answer for -- drop the old set rather than keep
-	// URLs into the region being left, and move the circuit anyway,
-	// which is the half of a teleport that cannot be done later.
-	seed = llsd.String(info, "SeedCapability")
-	if u, err := url.Parse(seed); err != nil || !u.IsAbs() ||
-		(u.Scheme != "http" && u.Scheme != "https") {
-		seed = ""
-	}
+	// than decoded.
+	seed = usableSeed(llsd.String(info, "SeedCapability"))
 
 	return &net.UDPAddr{IP: net.IPv4(ip[0], ip[1], ip[2], ip[3]), Port: int(port)}, seed, handle
+}
+
+// usableSeed is a seed capability this session could ask for a
+// capability set, or empty for one it could not.
+//
+// Anything that is not an absolute http URL is dropped instead of passed
+// on: moveTo would ask it for the capability set, fail, and end the
+// session over a field this daemon merely could not read, where an empty
+// seed is a shape it has a documented answer for -- drop the old set
+// rather than keep URLs into the region being left, and move the circuit
+// anyway, which is the half of a move that cannot be done later.
+func usableSeed(seed string) string {
+	if u, err := url.Parse(seed); err != nil || !u.IsAbs() ||
+		(u.Scheme != "http" && u.Scheme != "https") {
+		return ""
+	}
+	return seed
 }
 
 // eventBlock is the first row of a named block of an event body.
@@ -156,7 +175,9 @@ func teleportDestination(body any) (addr *net.UDPAddr, seed string, handle uint6
 // declares a single one: TeleportFinish.Info is Single and still came
 // back as Info[0] on every measurement.  So the array is the shape to
 // expect, and a bare map is taken as well, because a grid that sent one
-// would otherwise read as an event that never arrived at all.
+// would otherwise read as an event that never arrived at all.  Taking
+// both is what lets CrossedRegion, whose blocks are Single as well and
+// have never been seen, be read by the same function.
 func eventBlock(body any, name string) map[string]any {
 	m := llsd.Map(body)
 	if m == nil {

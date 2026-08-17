@@ -319,16 +319,18 @@ func (a *Agent) closeEventQueue(url string, ack any) {
 // Only what belongs to the session goes here. Everything else is the
 // clients' business and is passed through untouched.
 //
-// Both arms run inline, on the goroutine that polls the queue and hands
+// Every arm runs inline, on the goroutine that polls the queue and hands
 // events on, so a client is never told something about this session
-// before the session itself has acted on it.  For the teleport that is
-// not a nicety: see noteTeleportFinish.
+// before the session itself has acted on it.  For the two that move the
+// avatar that is not a nicety: see noteTeleportFinish.
 func (a *Agent) noteEvent(name string, body any) {
 	switch name {
 	case "AgentGroupDataUpdate":
 		a.noteGroups(body)
 	case "TeleportFinish":
 		a.noteTeleportFinish(body)
+	case "CrossedRegion":
+		a.noteCrossedRegion(body)
 	}
 }
 

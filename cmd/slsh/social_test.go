@@ -283,10 +283,11 @@ func TestAnOfferOfFriendshipSaysHowToAnswerIt(t *testing.T) {
 //
 // A region change reaches this shell whoever provoked it: a lure
 // accepted from another client attached to the same daemon, a session
-// re-established after the circuit was lost, and one day an avatar
-// walking over a border.  None of those is a command's answer, so
-// without this the shell would go on describing a region it had left and
-// nothing on the screen would say why the objects had all changed.
+// re-established after the circuit was lost, and an avatar that walked
+// over a border and was told about it.  None of those is a command's
+// answer, so without this the shell would go on describing a region it
+// had left and nothing on the screen would say why the objects had all
+// changed.
 func TestAnArrivalNobodyAskedForIsPrinted(t *testing.T) {
 	x := newTestShell(t)
 	watching(t, x)

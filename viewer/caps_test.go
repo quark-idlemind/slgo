@@ -266,3 +266,46 @@ func TestEventsAreCopied(t *testing.T) {
 		t.Fatalf("got %d events", len(events))
 	}
 }
+
+// TestANeighbouringSimulatorsAddressIsNeverGivenToAViewer: the hole
+// that has been open for as long as this front end has existed, and the
+// one that needed nothing to happen to reach it -- an ordinary region
+// introduces its neighbours several times a minute.
+//
+// EnableSimulator carries a handle, an IP and a port and no capability,
+// and a capability is not what opening a circuit takes: UseCircuitCode
+// is the circuit code, the session id and the agent id, all three of
+// which a viewer holding this session already has.  So the address is
+// the only thing it was short of, and this is the address.
+func TestANeighbouringSimulatorsAddressIsNeverGivenToAViewer(t *testing.T) {
+	q := NewEventQueue()
+	q.Add("EnableSimulator", []byte("<llsd><map/></llsd>"))
+	q.Add("CrossedRegion", []byte("<llsd><map/></llsd>"))
+	q.Add("ParcelProperties", []byte("<llsd><map/></llsd>"))
+
+	if _, _, withheld := q.Stats(); withheld != 2 {
+		t.Errorf("withheld %d events, want the neighbour and the crossing", withheld)
+	}
+	for _, name := range []string{"EnableSimulator", "CrossedRegion"} {
+		if why := WhyWithheld(name); why == "" {
+			t.Errorf("nothing says why a viewer is not given %s", name)
+		}
+	}
+
+	s := httptest.NewServer(q)
+	defer s.Close()
+	resp, err := http.Post(s.URL, "application/llsd+xml", strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	for _, name := range []string{"EnableSimulator", "CrossedRegion"} {
+		if strings.Contains(string(body), name) {
+			t.Errorf("%s was handed to the viewer anyway:\n%s", name, body)
+		}
+	}
+	if !strings.Contains(string(body), "ParcelProperties") {
+		t.Errorf("ordinary events stopped going across:\n%s", body)
+	}
+}

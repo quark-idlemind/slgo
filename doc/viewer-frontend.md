@@ -873,3 +873,14 @@ Places where the code could not answer the question and a spike has to.
   A viewer whose avatar is moved by another client is told to attach
   again, because replaying the new region to it is "follow", which is
   not built.
+
+  Stage 7 put two more on that list. `CrossedRegion` is the crossing's
+  `TeleportFinish` -- an address and a seed, for a move nobody asked
+  for -- and goes the same way, withheld from the queue and absorbed on
+  the circuit. `EnableSimulator` is the older one and was being relayed
+  the whole time: filtering `EstablishAgentCommunication` alone was half
+  a fix, because the seed it carries buys a neighbour's HTTP
+  capabilities while opening a *circuit* to a neighbour takes only its
+  address and the circuit code, session id and agent id the viewer
+  already holds. Withholding it is what makes "neighbours render empty"
+  true rather than hopeful.

@@ -503,6 +503,7 @@ func (a *Agent) register() {
 	a.objects.Store(newObjects())
 	a.trackObjects()
 	a.keepOffers()
+	a.followCrossings()
 
 	// AgentDataUpdate carries the active group, which decides whether a
 	// parcel lets this avatar build. It is sent at login and when the
