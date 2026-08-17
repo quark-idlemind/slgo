@@ -14,6 +14,8 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -53,11 +55,44 @@ func picture(t *testing.T, out string) string {
 	return ""
 }
 
-// drew runs the drawing and hands back everything it wrote.
+// drew runs the drawing with nothing picked out, which is every
+// picture that is not on its way to a terminal, and hands back
+// everything it wrote.
 func drew(g mapGrid, people ...sl.Person) string {
+	return drewIn(mapHighlight{}, g, people...)
+}
+
+// drewIn is drew with a highlight, for the pictures that have colour in
+// them.
+func drewIn(hl mapHighlight, g mapGrid, people ...sl.Person) string {
 	var b bytes.Buffer
-	drawMap(&b, g, mapMe, people)
+	drawMap(&b, g, mapMe, people, hl)
 	return b.String()
+}
+
+// The two ids the highlighting tests use.  The picture knows a friend
+// by their id and by nothing else -- the names are what it is not
+// paying for -- so a test has to give them one.
+var (
+	mapFriendID   = msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
+	mapStrangerID = msg.MustParseUUID("a0c27e57-7e57-c0de-9773-c8eaa2e796f4")
+)
+
+// atID is at with an id.
+func atID(id msg.UUID, name string, x, y, z float32) sl.Person {
+	p := at(name, x, y, z)
+	p.ID = id
+	return p
+}
+
+// befriending is the highlight that puts these ids on the friend list
+// and lets the picture use colour.
+func befriending(ids ...msg.UUID) mapHighlight {
+	hl := mapHighlight{colour: true, friends: map[msg.UUID]bool{}}
+	for _, id := range ids {
+		hl.friends[id] = true
+	}
+	return hl
 }
 
 // TestThePictureIsDrawnWhereThePeopleAre, one case at a time, with the
@@ -204,7 +239,7 @@ func TestTheStarIsWhereTheAvatarReallyIsInTheRegionPicture(t *testing.T) {
 	var b bytes.Buffer
 	// Ten metres in from the south-west corner, in a picture where a
 	// row is 64 metres and a column 32.
-	drawMap(&b, regionGrid(4), msg.Vector3{X: 10, Y: 10, Z: 25}, nil)
+	drawMap(&b, regionGrid(4), msg.Vector3{X: 10, Y: 10, Z: 25}, nil, mapHighlight{})
 	want := "" +
 		"+--------+\n" +
 		"|        |\n" +
@@ -219,7 +254,7 @@ func TestTheStarIsWhereTheAvatarReallyIsInTheRegionPicture(t *testing.T) {
 	// And the middle of the region is the middle of the picture, which
 	// is the same claim made the other way round.
 	b.Reset()
-	drawMap(&b, regionGrid(4), mapMe, nil)
+	drawMap(&b, regionGrid(4), mapMe, nil, mapHighlight{})
 	want = "" +
 		"+--------+\n" +
 		"|        |\n" +
@@ -351,7 +386,7 @@ func TestAVeryLongListOfPeopleOutsideStopsBeingAListing(t *testing.T) {
 // rather than looking like a drawing that failed.
 func TestAnAvatarOutsideTheRegionLeavesNoStar(t *testing.T) {
 	var b bytes.Buffer
-	drawMap(&b, regionGrid(4), msg.Vector3{X: 300, Y: 128, Z: 25}, nil)
+	drawMap(&b, regionGrid(4), msg.Vector3{X: 300, Y: 128, Z: 25}, nil, mapHighlight{})
 	if strings.Contains(picture(t, b.String()), "*") {
 		t.Errorf("there should be no star for an avatar outside the picture:\n%s", b.String())
 	}
@@ -420,6 +455,196 @@ func TestMapRefusesWhatItCannotDraw(t *testing.T) {
 		if got := x.do(t, c.line); !strings.Contains(got, c.want) {
 			t.Errorf("%q should be refused with %q, got:\n%s", c.line, c.want, got)
 		}
+	}
+}
+
+// TestAFriendIsGreenAndAStrangerIsNot, which is the whole of what the
+// colour claims.
+//
+// The escape sequences are looked for rather than looked at: a
+// character that is coloured and one that is not are the same character
+// on the screen and in the failure message, so the only way to check
+// this is to count what was actually written.
+func TestAFriendIsGreenAndAStrangerIsNot(t *testing.T) {
+	out := drewIn(befriending(mapFriendID), aroundGrid(4, 16, mapMe),
+		atID(mapFriendID, "Ozu Brantwick", 128, 132, 25),
+		atID(mapStrangerID, "Odile Marne", 132, 128, 25))
+
+	if want := mapFriendColour + "o" + mapColourOff; !strings.Contains(out, want) {
+		t.Errorf("the friend's mark should be coloured:\n%q", out)
+	}
+	// Twice in the whole picture: the friend's mark, and the word in
+	// the legend that says what the colour means.  The stranger is one
+	// of them only if the count is three.
+	if got := strings.Count(out, mapFriendColour); got != 2 {
+		t.Errorf("the picture is coloured %d times, want 2 (the friend and the legend):\n%q", got, out)
+	}
+	// And the row the stranger is in is exactly the row it was before
+	// there was any colour at all.
+	if !strings.Contains(out, "|    * o |") {
+		t.Errorf("the stranger's mark should be untouched:\n%s", out)
+	}
+}
+
+// TestACellWithAFriendInItColoursTheCount.  Two people in one cell are
+// drawn as a count, and "there is a friend in that cell" is the true
+// and useful thing to say about it -- more useful, for somebody looking
+// for one, than which of the two the mark would have been.
+func TestACellWithAFriendInItColoursTheCount(t *testing.T) {
+	out := drewIn(befriending(mapFriendID), aroundGrid(4, 16, mapMe),
+		atID(mapStrangerID, "Odile Marne", 132, 132, 25),
+		atID(mapFriendID, "Ozu Brantwick", 133, 133, 40))
+
+	if want := mapFriendColour + "2" + mapColourOff; !strings.Contains(out, want) {
+		t.Errorf("a cell with a friend in it should have a coloured count:\n%q", out)
+	}
+}
+
+// TestTheStarIsNeverColoured, however much company it has.  Two
+// highlights in one picture are no highlight, and a friend standing
+// where this avatar is standing is said in words underneath instead.
+func TestTheStarIsNeverColoured(t *testing.T) {
+	out := drewIn(befriending(mapFriendID), aroundGrid(4, 16, mapMe),
+		atID(mapFriendID, "Ozu Brantwick", 128, 128, 25))
+
+	if strings.Contains(out, mapFriendColour) {
+		t.Errorf("a friend under the star should colour nothing:\n%q", out)
+	}
+	if !strings.Contains(out, "under the *") {
+		t.Errorf("the friend under the star should still be said aloud:\n%s", out)
+	}
+}
+
+// TestAFriendOutsideThePictureIsGreenInTheLineThatNamesThem.  It is the
+// same fact about the same person, and that line is exactly where
+// somebody looks when the friend they wanted is not among the marks.
+func TestAFriendOutsideThePictureIsGreenInTheLineThatNamesThem(t *testing.T) {
+	out := drewIn(befriending(mapFriendID), aroundGrid(4, 16, mapMe),
+		atID(mapFriendID, "Ozu Brantwick", 128, 200, 25),
+		atID(mapStrangerID, "Odile Marne", 128, 20, 25))
+
+	if want := mapFriendColour + "Ozu Brantwick" + mapColourOff + " 72m"; !strings.Contains(out, want) {
+		t.Errorf("the friend outside should be coloured, and the distance not:\n%q", out)
+	}
+	if !strings.Contains(out, "Odile Marne 108m") {
+		t.Errorf("the stranger outside should be untouched:\n%q", out)
+	}
+	// Nothing is drawn in colour inside the frame, and the legend
+	// still belongs, because there is green in the picture.
+	if strings.Contains(picture(t, out), mapFriendColour) {
+		t.Errorf("nobody outside the picture should be drawn in it:\n%q", out)
+	}
+	if !strings.Contains(out, "is somebody on your friend list") {
+		t.Errorf("the legend should explain the green under the grid:\n%s", out)
+	}
+}
+
+// TestTheLegendOnlyExplainsAColourThatIsThere.
+//
+// A line explaining green to a picture with no green in it is a line
+// about nothing, and a picture on its way to a file has no colour to
+// explain at all.  With the colour off, the picture must be exactly the
+// picture it was before there was any colour to have.
+func TestTheLegendOnlyExplainsAColourThatIsThere(t *testing.T) {
+	const legend = "is somebody on your friend list"
+	g := aroundGrid(4, 16, mapMe)
+	friend := atID(mapFriendID, "Ozu Brantwick", 128, 132, 25)
+	stranger := atID(mapStrangerID, "Odile Marne", 132, 128, 25)
+
+	if got := drewIn(befriending(mapFriendID), g, friend); !strings.Contains(got, legend) {
+		t.Errorf("a picture with a friend in it should say what green means:\n%s", got)
+	}
+	if got := drewIn(befriending(mapFriendID), g, stranger); strings.Contains(got, legend) {
+		t.Errorf("a picture with no friend in it should not explain green:\n%s", got)
+	}
+
+	// The friend list is the same and only the colour is off, which is
+	// what a redirection and a pipe both look like from here.
+	plain := drewIn(mapHighlight{friends: map[msg.UUID]bool{mapFriendID: true}}, g, friend)
+	if strings.Contains(plain, legend) || strings.Contains(plain, "\x1b") {
+		t.Errorf("a picture drawn without colour should have none of it in it:\n%q", plain)
+	}
+	if got := drew(g, friend); got != plain {
+		t.Errorf("a friend with the colour off should draw\n%s\nand drew\n%s", got, plain)
+	}
+}
+
+// TestMapPicksFriendsOutOnlyOnTheTerminal, which is the other half of
+// it: a picture is only coloured when it is going somewhere that can
+// show a colour, and there are three ways for it not to be.
+func TestMapPicksFriendsOutOnlyOnTheTerminal(t *testing.T) {
+	// A terminal that is not a pipe, and a friend standing ten metres
+	// north of this avatar.
+	newShell := func(t *testing.T, terminal bool) *testShell {
+		t.Helper()
+		x := newTestShell(t)
+		x.term.plain = !terminal
+		x.grid.objects = []*sl.Seen{
+			{Object: sl.Object{ID: testSomebody, Local: 2}, PCode: pcodeAvatar,
+				Position: msg.Vector3{X: 128, Y: 138, Z: 25}},
+		}
+		x.grid.friends = []sl.Friend{{ID: testSomebody, Online: true}}
+		return x
+	}
+
+	// The environment is settled either way rather than inherited, so
+	// that the answer does not depend on whose shell ran the tests.
+	t.Setenv("NO_COLOR", "")
+
+	x := newShell(t, true)
+	got := x.do(t, "map")
+	if !strings.Contains(got, mapFriendColour) {
+		t.Errorf("a friend should be picked out on a terminal:\n%q", got)
+	}
+	if !strings.Contains(got, "is somebody on your friend list") {
+		t.Errorf("the terminal picture should say what green means:\n%s", got)
+	}
+
+	// A pipe, which is what -c, -f and a piped session all are.
+	if got := newShell(t, false).do(t, "map"); strings.Contains(got, "\x1b[3") {
+		t.Errorf("nothing should be coloured when the terminal is a pipe:\n%q", got)
+	}
+
+	// A redirection, where the command is handed a file instead of the
+	// shell's own writer.  The colour would end up in the file, which
+	// is usually on its way back through ". listing".
+	path := filepath.Join(t.TempDir(), "picture")
+	x = newShell(t, true)
+	x.do(t, "map > "+path)
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading the redirected picture: %v", err)
+	}
+	if strings.Contains(string(written), "\x1b") {
+		t.Errorf("a redirected picture should have no escapes in it:\n%q", written)
+	}
+	if !strings.Contains(string(written), "1 avatar in the picture") {
+		t.Errorf("the redirected picture should still be a picture:\n%s", written)
+	}
+
+	// And NO_COLOR, whose one rule is that any value at all means no.
+	t.Setenv("NO_COLOR", "0")
+	if got := newShell(t, true).do(t, "map"); strings.Contains(got, "\x1b[3") {
+		t.Errorf("NO_COLOR should turn the colour off, even set to 0:\n%q", got)
+	}
+}
+
+// TestMapDrawsThePictureWhenTheFriendListWillNot: the picture is worth
+// having without the colour, and the missing colour is said out loud,
+// since a picture with no green in it otherwise reads as a picture with
+// no friends in it.
+func TestMapDrawsThePictureWhenTheFriendListWillNot(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	x := newTestShell(t)
+	x.term.plain = false
+	x.grid.friendsErr = errors.New("the friend list never arrived")
+
+	got := x.do(t, "map")
+	if !strings.Contains(got, "the friend list never arrived") {
+		t.Errorf("map should say why nobody is picked out:\n%s", got)
+	}
+	if !strings.Contains(got, "nobody else is in range") {
+		t.Errorf("map should draw the picture anyway:\n%s", got)
 	}
 }
 

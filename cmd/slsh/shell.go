@@ -484,6 +484,36 @@ func remaining(sc *bufio.Scanner) int {
 // prompt, a line at a time.
 func (sh *Shell) stdout() io.Writer { return &termWriter{t: sh.term} }
 
+// colour reports whether a command writing to out may put escape
+// sequences in what it writes.
+//
+// Two things have to be true and neither of them is enough on its own.
+//
+// The writer has to be the shell's own, which is a question about the
+// type and not about the pointer: stdout() hands out a fresh
+// termWriter every time it is called, so there is nothing to compare
+// with, and a redirection -- "map > listing" -- hands the command an
+// *os.File instead.  Colour in a file is not colour, it is rubbish in
+// the middle of the text, and the file is usually on its way back
+// through ". listing".
+//
+// And the terminal has to be one.  "slsh -c" and "slsh -f" run with
+// the terminal reading /dev/null, and a session driven down a pipe
+// reads a pipe; all three are Plain, and all three are output on its
+// way to whatever ran slsh rather than to somebody looking at it.
+//
+// NO_COLOR is honoured as the convention has it, which has exactly one
+// rule: any value at all, "0" included, means no colour.
+func (sh *Shell) colour(out io.Writer) bool {
+	if _, ok := out.(*termWriter); !ok {
+		return false
+	}
+	if sh.term.Plain() {
+		return false
+	}
+	return os.Getenv("NO_COLOR") == ""
+}
+
 // termWriter turns writes into whole lines above the prompt.
 type termWriter struct {
 	t   *Term

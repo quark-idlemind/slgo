@@ -86,6 +86,52 @@ const mapRegionSize = 256
 // level with the ground under it.
 const mapLevel = 3
 
+// mapFriendColour is what a friend is picked out of the picture in,
+// and mapColourOff puts the terminal back to whatever it was doing.
+//
+// Green in the foreground rather than a block of it behind the mark.  A
+// background commits to one terminal's idea of paper -- a green slab is
+// the only thing the eye sees on a dark terminal, and dark text on it
+// is hard to read on a light one -- while green ink over whatever paper
+// is already there is legible on both, and leaves the mark itself
+// readable as the mark it is: an "o", a "^" and a count all still say
+// what they said.
+//
+// It is one named constant because the next thing anybody will want is
+// to choose it, and that should be a line changed here rather than a
+// hunt through the drawing.  When it does become a choice it belongs
+// in Config, beside the prefix key: the escape is read out of the
+// configuration file, cmdMap puts it in the mapHighlight where the
+// bool is now, and paint uses that instead of this.  Nothing else in
+// the picture has to move.
+const (
+	mapFriendColour = "\x1b[32m"
+	mapColourOff    = "\x1b[0m"
+)
+
+// mapHighlight is who the picture picks out, and whether it is allowed
+// to use colour to do it.
+//
+// Both are decided by the caller and neither is discovered here.  The
+// drawing has to work the same whether it is going to a terminal, to a
+// file or to a test's buffer, and a picture that reached for the
+// environment half way down would be a different picture depending on
+// who ran it.  See Shell.colour for what decides the second, and
+// cmdMap for where the ids come from.
+type mapHighlight struct {
+	friends map[msg.UUID]bool
+	colour  bool
+}
+
+// paint puts the friend colour round a piece of the picture, and hands
+// back what it was given when the picture is not in colour.
+func (hl mapHighlight) paint(s string) string {
+	if !hl.colour {
+		return s
+	}
+	return mapFriendColour + s + mapColourOff
+}
+
 // mapOptions is what map was asked for.
 type mapOptions struct {
 	Region bool `getopt:"--region -r     the whole region, rather than the ground around this avatar"`
@@ -149,6 +195,28 @@ func cmdMap(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return err
 	}
 
+	// Who to pick out, and whether there is anywhere to pick them out
+	// in.  The friend list is only asked for when there is: it is a
+	// call to whoever holds the session, and a picture on its way to a
+	// file has no use for the answer.
+	hl := mapHighlight{colour: sh.colour(out)}
+	if hl.colour {
+		ids, err := sh.s.FriendIDs(ctx)
+		switch {
+		case err != nil:
+			// Not fatal, because the picture is worth having without
+			// the colour.  Said out loud all the same: a picture with
+			// no green in it otherwise reads as a picture with no
+			// friends in it, and that is a different fact.
+			sh.errorf("map: no friend list, so nobody is picked out: %v", err)
+		case len(ids) > 0:
+			hl.friends = make(map[msg.UUID]bool, len(ids))
+			for _, id := range ids {
+				hl.friends[id] = true
+			}
+		}
+	}
+
 	// The heading says which of the two pictures this is and where the
 	// avatar is standing, in the wording "where" and tp both use: a
 	// grid of characters with no region named over it is a picture of
@@ -163,7 +231,7 @@ func cmdMap(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		head = fmt.Sprintf("the %dm around you in %s", span, positionLine(where))
 	}
 	fmt.Fprintln(out, head)
-	drawMap(out, g, where.Position, people)
+	drawMap(out, g, where.Position, people, hl)
 	return nil
 }
 
@@ -228,19 +296,27 @@ func (g mapGrid) at(p msg.Vector3) (col, row int, in bool) {
 
 // mapCell is what one character of the grid has in it: how many people,
 // and the mark for the one there is when there is only one.
+//
+// friend is true when anybody standing in the cell is on the friend
+// list, which is a fact about the cell rather than about whichever of
+// them the mark is for.  A cell with two people in it is drawn as a
+// count, and "there is a friend in that cell" is both true and the
+// thing somebody looking for one wants said.
 type mapCell struct {
-	n    int
-	mark byte
+	n      int
+	mark   byte
+	friend bool
 }
 
 // drawMap writes the picture and the lines that make it readable.
 //
-// It takes the grid, this avatar's position and everybody else's, and
-// writes to out and nothing else -- no session, no clock, no terminal
-// -- because this is the part that is easy to get subtly wrong and
-// impossible to check by eye in a live region, and a function of its
-// arguments is a function a table of positions can be run through.
-func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person) {
+// It takes the grid, this avatar's position, everybody else's, and who
+// is to be picked out; it writes to out and nothing else -- no session,
+// no clock, no terminal, no environment -- because this is the part
+// that is easy to get subtly wrong and impossible to check by eye in a
+// live region, and a function of its arguments is a function a table of
+// positions can be run through.
+func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl mapHighlight) {
 	cells := make([]mapCell, g.rows*g.cols())
 	meCol, meRow, meIn := g.at(me)
 
@@ -267,19 +343,45 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person) {
 		if c.n == 1 {
 			c.mark = markFor(me, p.Position)
 		}
+		if hl.friends[p.ID] {
+			c.friend = true
+		}
+	}
+
+	// The line naming whoever the picture does not reach is built
+	// before anything is written, because whether there is any green
+	// in it is part of what decides whether the legend above it
+	// explains what green means.
+	outsideLine, outsideGreen := "", false
+	if len(outside) > 0 {
+		outsideLine, outsideGreen = namesOutside(outside, hl)
 	}
 
 	frame := "+" + strings.Repeat("-", g.cols()) + "+"
 	fmt.Fprintln(out, frame)
+	green := false
+	var line strings.Builder
 	for row := 0; row < g.rows; row++ {
-		line := make([]byte, g.cols())
-		for col := range line {
-			line[col] = cellMark(cells[row*g.cols()+col])
+		line.Reset()
+		line.WriteByte('|')
+		for col := 0; col < g.cols(); col++ {
+			c := cells[row*g.cols()+col]
+			switch {
+			case meIn && row == meRow && col == meCol:
+				// The star is never coloured, however much company it
+				// has.  Two highlights in one picture are no highlight
+				// at all, and this avatar is the one thing in the
+				// picture nobody has to look for.
+				line.WriteByte('*')
+			case hl.colour && c.friend:
+				line.WriteString(hl.paint(string(cellMark(c))))
+				green = true
+			default:
+				line.WriteByte(cellMark(c))
+			}
 		}
-		if meIn && row == meRow {
-			line[meCol] = '*'
-		}
-		fmt.Fprintf(out, "|%s|\n", line)
+		line.WriteByte('|')
+		fmt.Fprintln(out, line.String())
 	}
 	fmt.Fprintln(out, frame)
 
@@ -287,6 +389,16 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person) {
 		tenth(g.perCol()), tenth(g.perRow()))
 	fmt.Fprintf(out, "* you   o within %dm of your height   ^ higher   v lower\n", mapLevel)
 	fmt.Fprintln(out, "a digit is that many in one cell, and + is more than nine")
+	if green || outsideGreen {
+		// Only when there is something green to explain.  A picture
+		// with no colour in it -- a redirection, a pipe, an avatar
+		// with no friend in sight -- must read exactly as it did
+		// before there was any colour at all, and a line explaining a
+		// colour to a file is nonsense.  The word is said in the
+		// colour it is about, the way the lines above it show the
+		// marks they are about rather than describing them.
+		fmt.Fprintf(out, "%s is somebody on your friend list\n", hl.paint("green"))
+	}
 
 	if !meIn {
 		// Only reachable in the region view, and only for an avatar the
@@ -307,7 +419,7 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person) {
 			under, plural(under, "is", "are"))
 	}
 	if len(outside) > 0 {
-		fmt.Fprintf(out, "%d outside it: %s\n", len(outside), namesOutside(outside))
+		fmt.Fprintf(out, "%d outside it: %s\n", len(outside), outsideLine)
 	}
 }
 
@@ -355,7 +467,15 @@ func markFor(me, them msg.Vector3) byte {
 // It stops at eight names.  A region with forty avatars in it and a
 // picture 64 metres across would otherwise print the whole of "who"
 // under the grid, and "who" is the command for that.
-func namesOutside(people []sl.Person) string {
+//
+// A friend is green here too, and the second answer says whether any
+// of them was.  Being outside the picture does not stop somebody being
+// a friend, and this line is exactly where a person looks when the
+// friend they wanted is not among the marks; leaving it plain would
+// mean the same fact was worth a colour three lines higher up and not
+// here.  The name is what is coloured and not the distance, since the
+// distance is not what makes them a friend.
+func namesOutside(people []sl.Person, hl mapHighlight) (line string, green bool) {
 	const most = 8
 	parts := make([]string, 0, most+1)
 	for i, p := range people {
@@ -363,7 +483,12 @@ func namesOutside(people []sl.Person) string {
 			parts = append(parts, fmt.Sprintf("and %d more", len(people)-most))
 			break
 		}
-		parts = append(parts, fmt.Sprintf("%s %.0fm", p.Name, p.Distance))
+		name := p.Name
+		if hl.colour && hl.friends[p.ID] {
+			name = hl.paint(name)
+			green = true
+		}
+		parts = append(parts, fmt.Sprintf("%s %.0fm", name, p.Distance))
 	}
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, ", "), green
 }

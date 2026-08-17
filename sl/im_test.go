@@ -892,6 +892,37 @@ func TestTheFriendListIsNamed(t *testing.T) {
 	}
 }
 
+// TestTheIdsOfTheFriendListCostNoNames: a caller that only has to ask
+// whether an id it already holds is a friend must not pay for the
+// names it will never print.
+//
+// The names are worth up to three seconds of waiting for a listing
+// somebody is going to read, and worth nothing at all to slsh's "map",
+// which colours its friends in on every picture.  So this asks the
+// wire: no name was requested, and the friend the grid would never
+// have named is in the answer like everybody else.
+func TestTheIdsOfTheFriendListCostNoNames(t *testing.T) {
+	w, f := newFakeSession(t)
+	nameless := msg.MustParseUUID("03717e57-7e57-c0de-f677-52aa7cece51e")
+	f.friends = []Friend{
+		{ID: somebody, Online: true},
+		{ID: nameless, Online: false},
+	}
+
+	ids, err := w.FriendIDs(context.Background())
+	if err != nil {
+		t.Fatalf("FriendIDs: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != somebody || ids[1] != nameless {
+		t.Errorf("the ids are %v, want %v and %v", ids, somebody, nameless)
+	}
+	for _, s := range f.Sent() {
+		if q, ok := s.Msg.(*msg.UUIDNameRequest); ok {
+			t.Errorf("a name was asked for: %+v", q)
+		}
+	}
+}
+
 // TestTheFriendListSaysWhenItCannotBeHad: the list comes from whoever
 // holds the session, so it can fail, and a failure must not look like
 // an avatar with no friends.
@@ -901,6 +932,9 @@ func TestTheFriendListSaysWhenItCannotBeHad(t *testing.T) {
 
 	if _, err := w.FriendList(context.Background()); err == nil {
 		t.Error("FriendList reported no friends rather than a failure")
+	}
+	if _, err := w.FriendIDs(context.Background()); err == nil {
+		t.Error("FriendIDs reported no friends rather than a failure")
 	}
 	if _, err := w.OnlineFriends(context.Background()); err == nil {
 		t.Error("OnlineFriends reported nobody rather than a failure")

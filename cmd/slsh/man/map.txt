@@ -40,6 +40,10 @@ could be walked over to and a "^" is somebody on the roof.  The height
 is compared with this avatar's in both views, so a picture of the whole
 region still says who is up in a skybox.
 
+A mark is drawn in green when it is somebody on the friend list, and
+the line under the grid says so when there is any green in the picture
+to say it about.  See "friends are green" below.
+
 Two or more people in one cell are drawn as the count -- 2 to 9 -- and
 ten or more as a "+", because there is no digit for ten and a 9 there
 would be a lie.  Somebody standing in the same cell as this avatar is
@@ -47,6 +51,40 @@ covered by the star, which wins its own cell: a picture whose reader
 cannot find themselves in it is a picture of nowhere.  The line under
 the grid says how many are under the star, since somebody hidden by a
 mark is exactly the person being looked for.
+
+# Friends are green
+
+The question a picture is usually being read for is not "who is here"
+-- who answers that -- but "where is the person I am looking for", and
+most of the time that person is on the friend list.  So a friend's mark
+is drawn in green, and everybody else's is left alone.  One thing
+picked out is what makes picking a thing out worth doing: the star is
+never coloured, however much company it has, and neither is anybody
+else.
+
+A cell with several people in it is drawn as a count, and the count is
+green when any one of them is a friend.  "There is a friend in that
+cell" is both true and the thing being looked for; which of the two the
+mark would otherwise have been is not.
+
+Somebody outside the picture is green in the line that names them
+underneath, for the same reason: it is the same fact about the same
+person, and that line is exactly where the eye goes when the friend is
+not among the marks.  Somebody standing in the same cell as this avatar
+is under the star and so has no mark of their own to colour; the count
+under the grid still says they are there.
+
+The colour only ever reaches a terminal.  A picture written to a file
+-- "map > listing" -- and a picture from "slsh -c" or "slsh -f" or a
+piped session have no escape sequences in them at all, since a colour
+in a file is not a colour, it is rubbish in the middle of the text, and
+that file is usually on its way back through ". listing".  NO_COLOR is
+honoured as the convention has it: set it to anything at all, "0"
+included, and nothing is coloured.  When there is no colour there is no
+line explaining one either, and the picture is character for character
+the picture it was before there was any colour to have.
+
+Green is the default and at present the only choice.
 
 # North is up and east is right
 
@@ -102,7 +140,8 @@ everything above it, which is a skybox reported as level with the roofs.
 # Examples
 
 The ground around this avatar, with somebody up a ladder, somebody in a
-cellar, and two people close enough together to share a cell:
+cellar, two people close enough together to share a cell, and one
+friend among them:
 
 	map
 
@@ -128,8 +167,14 @@ cellar, and two people close enough together to share a cell:
 	2m to a column, 4m to a row; north is up, east is right
 	* you   o within 3m of your height   ^ higher   v lower
 	a digit is that many in one cell, and + is more than nine
+	green is somebody on your friend list
 	6 avatars in the picture
 	1 outside it: Orla Pennywort 99m
+
+The friend is the "o" three rows above the star and four columns to the
+left of it, twelve metres north and eight west.  On a terminal it is
+green and the eye finds it without being told; this page has no colour
+in it, so it is said here instead.
 
 The same moment as a picture of the region.  A cell is now 8 metres by
 16, so it reaches the one who was too far away for the close picture and
@@ -160,8 +205,13 @@ few metres from it, who is now under the star:
 	8m to a column, 16m to a row; north is up, east is right
 	* you   o within 3m of your height   ^ higher   v lower
 	a digit is that many in one cell, and + is more than nine
+	green is somebody on your friend list
 	7 avatars in the picture
 	1 of them is where you are, under the *
+
+The friend has not moved -- twelve metres north and eight west is
+inside one row here -- so the same person is the "o" immediately to the
+left of the star, and is the green one again.
 
 A bigger picture, for a terminal with the room for it, and a smaller
 square of ground in more detail:
