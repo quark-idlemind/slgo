@@ -371,8 +371,11 @@ var settings = []setting{{
 		return nil
 	},
 }, {
-	name:  "map_ratio",
-	about: "the shape of a character cell in your font, height first",
+	name: "map_ratio",
+	// The only setting with a word of its own where a value goes, and
+	// the listing is where somebody would find that out.  See cmdSet,
+	// which is where "auto" is enforced against this one name.
+	about: "the shape of a character cell, height first; \"auto\" measures it",
 	show:  func(c *Config) string { return c.MapRatio.String() },
 	parse: func(c *Config, v string) error {
 		r, err := ParseCellRatio(v)

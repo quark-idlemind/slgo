@@ -92,21 +92,45 @@ map", which says what each of the map's five does.
 
 # Measuring your own font
 
-Most terminals will say.  Sending
+Most terminals will say, and slsh will ask them:
 
-	printf '\033[16t'
+	set map_ratio auto
 
-asks for the size of one character cell in pixels, and the answer comes
-back as ESC [ 6 ; HEIGHT ; WIDTH t -- so "6;18;10" is a cell eighteen
-pixels tall and ten wide, and "18:10" is the ratio to try.
+That sends \033[16t, which asks for the size of one character cell in
+pixels, and writes back whatever comes: a terminal that answers ESC [ 6
+; 18 ; 10 t leaves "map_ratio = 18:10" in the settings file, exactly as
+though it had been typed there.
+
+The numbers written are the ones reported, not reduced -- 18:10 rather
+than the 9:5 that means the same shape -- because the file is where the
+tweaking happens next and 18:9 is one digit away from 18:10 in a way it
+is not away from 9:5.
 
 Try rather than trust.  What the terminal reports is the cell it hands
 the font, which is not always the shape the letters look: on the machine
 this was written on the terminal said 18:10 and 18:9 drew the squarer
-picture.  So take the reported number as where to start, draw a region
+picture.  So take what "auto" writes as where to start, draw a region
 with "map --region", and change the ratio until a square region looks
 square -- that is the only test that matters, and it takes one line and
 one look.
+
+"auto" needs a terminal to ask.  It is refused where there is none --
+"slsh -c", "slsh -f", and a session with its input coming from a pipe --
+and refused again, naming what it tried, by a terminal that will not
+answer.  Both of those refusals mean measuring it by hand, which is the
+same question sent the same way:
+
+	printf '\033[16t'
+
+The answer comes back as ESC [ 6 ; HEIGHT ; WIDTH t -- so "6;18;10" is
+a cell eighteen pixels tall and ten wide, and "18:10" is the ratio to
+try.  A terminal that answers nothing at all to that is one that does
+not know the question, and then it is by eye: start from 2:1, draw a
+region, and go from there.
+
+map_ratio is the only setting that takes "auto", and every other one
+takes its value as it stands.  A word that might mean "work it out" in
+any row would be a word to check the meaning of in every row.
 
 # Examples
 
@@ -123,6 +147,12 @@ and put right, and it takes at once:
 
 	set map_ratio 2:1
 	map
+
+The same thing with the terminal asked rather than the eye, which
+writes the number it reports and says to try it:
+
+	set map_ratio auto
+	map --region
 
 A friend picked out in something other than green:
 

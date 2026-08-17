@@ -9,10 +9,13 @@ package main
 // would be a test that changed the shell they use.
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
@@ -351,6 +354,186 @@ func TestAMapDrawnToTheSettingsIsDrawnToTheSettings(t *testing.T) {
 	}
 	if got := x.do(t, "map"); !strings.Contains(got, "+"+strings.Repeat("-", 37)+"+") {
 		t.Errorf("the picture after a flag should be the settings' again:\n%s", got)
+	}
+}
+
+// newMeasuringShell is a settings shell whose terminal is a real one,
+// with somebody at the far end of it answering the cell-size question
+// -- or, when the answer is empty, saying nothing at all, which is what
+// a terminal that does not know the question does.
+//
+// The other tests here use a plain terminal, which is right for what
+// commands say and useless for this one thing: "auto" asks the terminal
+// and reads the reply out of the keyboard, and a pipe has neither end.
+func newMeasuringShell(t *testing.T, answer string) *testShell {
+	t.Helper()
+	t.Setenv("SLSH_CONFIG_DIR", t.TempDir())
+	cfg := DefaultConfig()
+	cfg.Addr = "fake:7807"
+	x := newTestShellOn(t, newFakeGrid(t), cfg)
+	x.term, _ = aTerminalThatAnswers(t, answer)
+	return x
+}
+
+// setOn runs "set" and takes the output here rather than off the
+// terminal, since a real terminal's drawing would have to be stripped
+// out of every assertion.  A command's output goes to its own writer in
+// any case; that is what makes "set > notes" work.
+func setOn(t *testing.T, x *testShell, args ...string) (string, error) {
+	t.Helper()
+	var b bytes.Buffer
+	err := cmdSet(context.Background(), x.Shell, &b, args)
+	return b.String(), err
+}
+
+// TestSetMapRatioAutoTakesWhatTheTerminalReports.
+//
+// The whole of it: the question goes out, the answer comes back through
+// the keyboard, the shell draws to it from then on, and the file has it
+// for tomorrow.  Written as numbers rather than as the word "auto",
+// because a file saying "auto" would measure again at every start and
+// throw away whatever had been tweaked into it.
+func TestSetMapRatioAutoTakesWhatTheTerminalReports(t *testing.T) {
+	x := newMeasuringShell(t, "\x1b[6;18;10t")
+
+	got, err := setOn(t, x, "map_ratio", "auto")
+	if err != nil {
+		t.Fatalf("set map_ratio auto: %v", err)
+	}
+	if !strings.Contains(got, "map_ratio = 18:10") {
+		t.Errorf("set should say what the ratio is now:\n%s", got)
+	}
+	if x.cfg.MapRatio != (CellRatio{Tall: 18, Wide: 10}) {
+		t.Errorf("the shell is still drawing at %s", x.cfg.MapRatio)
+	}
+
+	body := settingsFile(t)
+	if !strings.Contains(body, "map_ratio = 18:10") {
+		t.Errorf("the file should have the numbers, not the word:\n%s", body)
+	}
+	if strings.Contains(body, "auto") {
+		t.Errorf("the file should not say \"auto\", which would re-measure every time:\n%s", body)
+	}
+	// And it reads back, which is the point of writing what a person
+	// could have typed.
+	if c, err := LoadConfig(); err != nil || c.MapRatio != (CellRatio{Tall: 18, Wide: 10}) {
+		t.Errorf("the file should load as 18:10: %+v, %v", c.MapRatio, err)
+	}
+
+	// The answer says it is a starting point, and where to go next.
+	if !strings.Contains(got, "map --region") {
+		t.Errorf("the answer should say how to check it:\n%s", got)
+	}
+}
+
+// TestTheReportedNumbersAreKeptAsReported.
+//
+// 18:10 and 9:5 are the same ratio and are not the same starting point.
+// The person who measured this went from a reported 18:10 to 18:9 by
+// changing one digit; reducing it first would have taken that away and
+// bought nothing, since the picture is drawn from the shape and not
+// from the size of the numbers.
+func TestTheReportedNumbersAreKeptAsReported(t *testing.T) {
+	x := newMeasuringShell(t, "\x1b[6;18;10t")
+	if _, err := setOn(t, x, "map_ratio", "auto"); err != nil {
+		t.Fatalf("set map_ratio auto: %v", err)
+	}
+
+	if body := settingsFile(t); strings.Contains(body, "9:5") {
+		t.Errorf("the ratio was reduced on the way to the file:\n%s", body)
+	}
+	if r := x.cfg.MapRatio; r.Tall != 18 || r.Wide != 10 {
+		t.Errorf("the shell reduced it to %s", r)
+	}
+}
+
+// TestATerminalThatSaysNothingChangesNeitherTheShellNorTheFile.
+//
+// A terminal that does not know the question answers nothing at all, so
+// the only thing to do is stop waiting and say so.  What must not
+// happen is a half-measure: a ratio guessed at, or a file written with
+// something nobody measured in it.
+func TestATerminalThatSaysNothingChangesNeitherTheShellNorTheFile(t *testing.T) {
+	x := newMeasuringShell(t, "")
+
+	start := time.Now()
+	got, err := setOn(t, x, "map_ratio", "auto")
+	if err == nil {
+		t.Fatalf("a silent terminal should have been a refusal, got:\n%s", got)
+	}
+	if took := time.Since(start); took > 10*time.Second {
+		t.Errorf("it waited %v for an answer that was never coming", took)
+	}
+	// Naming what it tried, since the next thing to do is send it by
+	// hand -- and "man set" says how.
+	if !strings.Contains(err.Error(), `\033[16t`) {
+		t.Errorf("the refusal should name what it tried: %v", err)
+	}
+	if !strings.Contains(err.Error(), "man set") {
+		t.Errorf("the refusal should say where the by-hand method is: %v", err)
+	}
+	if x.cfg.MapRatio != mapDefaultRatio {
+		t.Errorf("the shell took a ratio nobody measured: %s", x.cfg.MapRatio)
+	}
+	if body := settingsFile(t); body != "" {
+		t.Errorf("a refusal wrote to the file:\n%s", body)
+	}
+}
+
+// TestAutoNeedsATerminalToAsk: "slsh -c", "slsh -f" and a piped session
+// have none, and the answer there is to measure by eye, which "man set"
+// explains.  Guessing would be worse than refusing: the picture would
+// come out a shape nobody chose and nothing would have said so.
+func TestAutoNeedsATerminalToAsk(t *testing.T) {
+	x := newSettingShell(t)
+	got := x.do(t, "set map_ratio auto")
+
+	if !strings.Contains(got, "no terminal here to ask") {
+		t.Errorf("auto on a pipe should say there is nothing to ask:\n%s", got)
+	}
+	if !strings.Contains(got, "man set") {
+		t.Errorf("the refusal should point at the by-eye method:\n%s", got)
+	}
+	if x.cfg.MapRatio != mapDefaultRatio {
+		t.Errorf("the ratio changed to %s", x.cfg.MapRatio)
+	}
+	if body := settingsFile(t); body != "" {
+		t.Errorf("a refusal wrote to the file:\n%s", body)
+	}
+}
+
+// TestOnlyMapRatioTakesAuto.
+//
+// A settings table where any row might have a magic word in it is a
+// table nobody can predict: the only way to find out whether "set addr
+// auto" measured something or set the address to the word would be to
+// type it and look afterwards.  So it is one setting's word, and every
+// other setting says so with that one's name in it.
+func TestOnlyMapRatioTakesAuto(t *testing.T) {
+	// The name the word is enforced against is a name in the table.  A
+	// misspelling there would refuse "auto" for everything, including
+	// the one setting it is for, and name something nobody can type.
+	if _, ok := findSetting(autoSetting); !ok {
+		t.Fatalf("%q is not a setting", autoSetting)
+	}
+
+	x := newSettingShell(t)
+	for _, line := range []string{
+		"set map_span auto",
+		"set addr auto",
+		"set map_friend_colour AUTO",
+	} {
+		got := x.do(t, line)
+		if !strings.Contains(got, "only map_ratio takes") {
+			t.Errorf("%q should be refused, naming the one that takes it:\n%s", line, got)
+		}
+		if body := settingsFile(t); body != "" {
+			t.Errorf("%q wrote to the file anyway:\n%s", line, body)
+		}
+	}
+	if x.cfg.MapSpan != mapDefaultSpan || x.cfg.Addr != "fake:7807" ||
+		x.cfg.MapFriendColour != mapDefaultFriendColour {
+		t.Errorf("a refused \"auto\" changed the shell: %+v", x.cfg)
 	}
 }
 

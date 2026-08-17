@@ -27,6 +27,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -83,6 +84,30 @@ func cmdSet(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	// remember; "set viewer_grid my grid" means what it looks like.
 	value := strings.Join(args[1:], " ")
 
+	// "auto" belongs to one setting, and typing it at any other is
+	// refused here, in the command, rather than left to a row of the
+	// table.  A table where any row might turn out to have a magic word
+	// in it is a table nobody can predict: the only way to find out
+	// whether "set addr auto" measured something or set the address to
+	// the word "auto" would be to type it and look afterwards.  So
+	// there is exactly one row the word means anything for, it is named
+	// here, and everywhere else it is an error with that name in it.
+	// The price is a viewer_grid that cannot be called "auto", which is
+	// a nickname nobody has, against a rule that can be stated in one
+	// line and holds for every setting there will ever be.
+	var note string
+	if strings.EqualFold(strings.TrimSpace(value), autoWord) {
+		if s.name != autoSetting {
+			return fmt.Errorf("%s: only %s takes %q; every other setting takes the value itself",
+				s.name, autoSetting, autoWord)
+		}
+		measured, err := measureCellRatio(sh.term)
+		if err != nil {
+			return fmt.Errorf("%s: %w", s.name, err)
+		}
+		value, note = measured, autoNote
+	}
+
 	// Parsed into a copy first, so that a value the setting will not
 	// take changes neither this shell nor the file.  What is printed
 	// afterwards is read back OUT of that copy rather than echoed:
@@ -117,7 +142,70 @@ func cmdSet(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if s.startup {
 		fmt.Fprintf(out, "%s\n", startupNote)
 	}
+	if note != "" {
+		fmt.Fprintf(out, "%s\n", note)
+	}
 	return nil
+}
+
+// autoWord is the word that says "measure it" where a value would go,
+// and autoSetting is the one setting it means anything for.  See
+// cmdSet, which is where that is enforced and why.
+const (
+	autoWord    = "auto"
+	autoSetting = "map_ratio"
+)
+
+// autoNote is what "auto" says after it has worked.
+//
+// It says the number is a starting point, because it is one: what the
+// terminal reports is the cell it hands the font, which is not always
+// the shape the letters look.  On the machine this was written on the
+// terminal said 18:10 and 18:9 drew the squarer picture.  So the last
+// word is a square region looked at, which takes one line and one look
+// -- and somebody who has just been given a number is exactly who is
+// in a position to try it.
+const autoNote = "what the terminal reports is where to start, not the answer:\n" +
+	"draw a region with \"map --region\" and tweak until a square one looks square"
+
+// measureCellRatio asks the terminal how big a character cell is and
+// writes the answer the way map_ratio is written.
+//
+// # The numbers are the ones reported, and are not reduced
+//
+// 18:10 and 9:5 are the same ratio and are not the same starting point.
+// The reported number is where somebody begins, not where they end --
+// see autoNote -- and the person who measured this went from a reported
+// 18:10 to 18:9 by changing one digit.  Reduced to 9:5 that same tweak
+// is a sum to do first and a bigger step to take, for nothing gained:
+// the picture is drawn from the shape of the ratio and not from the
+// size of its numbers, so carrying the reported ones costs nothing at
+// all.
+//
+// # Why it goes through ParseCellRatio like everything else
+//
+// So that what is written is a value the file can be read back with.
+// A terminal that reports its cells in the pixels of a very dense
+// screen can name numbers outside what map_ratio takes, and the honest
+// end of that is a refusal here, with the pixels in it, rather than a
+// settings file that will not load tomorrow morning.
+func measureCellRatio(t *Term) (string, error) {
+	if t.Plain() {
+		// "slsh -c", "slsh -f" and a piped session all land here.  There
+		// is a terminal in none of them to ask, and "man set" has the
+		// by-eye method that does not need one.
+		return "", errors.New("no terminal here to ask; see \"man set\" for measuring it by eye")
+	}
+	tall, wide, err := t.CellSize(cellSizeWait)
+	if err != nil {
+		return "", fmt.Errorf("%w; see \"man set\" for measuring it by eye", err)
+	}
+	r, err := ParseCellRatio(fmt.Sprintf("%d:%d", tall, wide))
+	if err != nil {
+		return "", fmt.Errorf("the terminal reports a cell %d pixels tall and %d wide: %w",
+			tall, wide, err)
+	}
+	return r.String(), nil
 }
 
 // showSetting is one setting in the listing: its value on one line and
