@@ -201,6 +201,14 @@ func main() {
 			// because a tap sees retransmissions and the far end
 			// cannot tell one of those from a second message.
 			opts.Relay = viewers.relayFor(name)
+			// The avatar moving out from under an attached
+			// viewer, which only the daemon finds out: the grid
+			// announces a teleport to the session, and a viewer
+			// that did not ask for one is told nothing at all.
+			// Set here and chained by server.StartAgent with the
+			// notice it sends its own clients, so neither loses
+			// the other.
+			opts.OnRegionChange = viewers.movedFor(name)
 		}
 		if *trace != "" {
 			// The tap, so this is the wire as it really was --

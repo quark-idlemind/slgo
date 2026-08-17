@@ -856,9 +856,20 @@ Places where the code could not answer the question and a spike has to.
 - **How the simulator reacts to an `AgentThrottle` arriving mid-session
   from a circuit that has never sent one.** Almost certainly fine;
   it is a change of regime for a live circuit and worth watching in stage 4.
-- **Region crossings and teleports.** Deliberately out of scope, and the
-  `EstablishAgentCommunication` filter in stage 3 is what keeps them out.
-  A viewer that teleports would take the agent to a simulator slgod is not
-  connected to and end the session. Either refuse the viewer's teleport
-  messages with a visible chat line, or accept that the session ends --
-  decide in stage 8, do not leave it to be discovered.
+- ~~**Region crossings and teleports.**~~ Decided 2026-08-16 by
+  `doc/teleport.md`'s stage 6: **refuse**. What this said before -- that
+  a viewer which teleports takes the agent to a simulator slgod is not
+  connected to and ends the session -- stopped being true when the
+  daemon learned to follow a teleport. What happens instead is quieter
+  and worse: the move succeeds, the daemon arrives, and the viewer is
+  told none of it, so it goes on drawing a region the avatar has left
+  while the new region's object updates land on top of the old ones
+  under local ids that now mean something else. Nothing reports an
+  error. So a teleport out of this region is absorbed in `fromViewer`
+  with a modal alert saying why and what does work; a teleport *within*
+  the region is still forwarded, told apart by the handle; and
+  `TeleportFinish` is withheld from the viewer's event queue beside
+  `EstablishAgentCommunication`, since `slsh tp` alone can put one there.
+  A viewer whose avatar is moved by another client is told to attach
+  again, because replaying the new region to it is "follow", which is
+  not built.

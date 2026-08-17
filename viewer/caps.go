@@ -68,9 +68,45 @@ type EventQueue struct {
 // regions are void.  Making them work means slgod holding the child
 // connections itself and handing on what they say, which is the same
 // piece of work as region crossing and is not built.
-var withheldEvents = map[string]bool{
-	"EstablishAgentCommunication": true,
+//
+// TeleportFinish is the same failure arriving by a different road, and
+// it opened when the daemon learned to follow a teleport.  It carries
+// the new simulator's address and its seed capability, and it does not
+// need a viewer to have asked for anything: `slsh tp` moves the
+// session, the simulator puts a TeleportFinish on the queue, slgod fans
+// it out, and a viewer handed it opens a circuit straight to the real
+// simulator with this session's agent id, session id and circuit code.
+// Half the session would then be in the daemon and half in the viewer,
+// with each one's sequence numbers meaningless to the other, and
+// nothing anywhere able to see both.  So it is withheld here as well,
+// and Circuit.FromSim absorbs it on the circuit in case a grid ever
+// sends it there.
+//
+// TeleportFailed is NOT withheld, and it is the one of the four that
+// can be let through.  It carries no address and no invitation to
+// connect anywhere: it is a reason string and, in a viewer, the message
+// that clears any teleport state and puts up a notice.  Nothing it can
+// do is worse than the truth it carries, and if a TeleportStart ever
+// does reach a viewer past the arm that absorbs it, this is the message
+// that gets the viewer out of the tunnel again.  Withholding it would
+// buy tidiness and cost the only safety net there is.
+//
+// TeleportStart and TeleportProgress arrive on the circuit rather than
+// here, and are absorbed in Circuit.FromSim; the reasoning is there.
+//
+// Each is held with the reason it is held, because the daemon says that
+// reason out loud once per kind and a sentence kept somewhere else
+// would end up describing the wrong one.
+var withheldEvents = map[string]string{
+	"EstablishAgentCommunication": "neighbouring regions are not offered to the viewer, " +
+		"so it will draw this region and nothing beyond it",
+	"TeleportFinish": "the avatar has teleported, and the viewer is not told where to: " +
+		"handed the address it would open a circuit to that simulator itself",
 }
+
+// WhyWithheld is why a viewer is not given this event, or empty for an
+// event it is given.
+func WhyWithheld(name string) string { return withheldEvents[name] }
 
 type event struct {
 	name string
@@ -97,7 +133,7 @@ func NewEventQueue() *EventQueue {
 // viewer that has stopped collecting must not be able to stop the
 // session's queue from draining.
 func (q *EventQueue) Add(name string, body []byte) {
-	if withheldEvents[name] {
+	if withheldEvents[name] != "" {
 		q.mu.Lock()
 		q.withheld++
 		q.mu.Unlock()

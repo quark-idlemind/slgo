@@ -48,6 +48,11 @@ type Agent struct {
 	// requests are being made through it.  Read them with Caps.
 	caps atomic.Pointer[Caps]
 
+	// seed is the capability the set above was fetched from, kept for
+	// the same reason and behind the same kind of pointer.  Read it
+	// with Seed.
+	seed atomic.Pointer[string]
+
 	// HTTP is used for capability and inventory requests.  A nil
 	// client gets a default with a sixty second timeout.
 	HTTP *http.Client
@@ -317,6 +322,7 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 		loggedOut: newSignal(),
 	}
 	a.SetCaps(Caps{})
+	a.setSeed(acct.SeedCapability)
 
 	a.seedFriends(acct.Buddies)
 

@@ -578,3 +578,46 @@ func TestArrivingAgainInTheRegionWeAreInIsNotAChange(t *testing.T) {
 	default:
 	}
 }
+
+// TestTheSeedFollowsTheAvatar: Account.SeedCapability names the region
+// this session LOGGED IN to and goes on naming it for the rest of the
+// session, so anything above this package that wants the current
+// region's capabilities -- slgod handing a viewer its seed -- has to be
+// able to ask for them.  moveTo is given the new seed, uses it and used
+// to drop it, which left the answer nowhere.
+func TestTheSeedFollowsTheAvatar(t *testing.T) {
+	a, from, to := twoRegions(t, Options{})
+
+	if got := a.Seed(); got != from.seed() {
+		t.Fatalf("seed = %q before the move, want the login region's %q", got, from.seed())
+	}
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if got := a.Seed(); got != to.seed() {
+		t.Errorf("seed = %q after the move, want the region arrived in, %q", got, to.seed())
+	}
+	// And the account is untouched, which is the whole reason this had
+	// to be asked for somewhere else: it is the login region's answer
+	// and stays right about the question it was asked.
+	if a.Account.SeedCapability != from.seed() {
+		t.Errorf("the account's seed = %q; it names the region logged in to",
+			a.Account.SeedCapability)
+	}
+}
+
+// TestAMoveWithNoSeedLeavesNoneBehind: an unusable seed drops the
+// capability set rather than keeping URLs into the region left behind,
+// and the seed itself has to go the same way.  Kept, it would hand a
+// viewer the login region's capabilities under the name of the one the
+// avatar is in.
+func TestAMoveWithNoSeedLeavesNoneBehind(t *testing.T) {
+	a, _, to := twoRegions(t, Options{})
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), ""); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if got := a.Seed(); got != "" {
+		t.Errorf("seed = %q after a move that carried none", got)
+	}
+}

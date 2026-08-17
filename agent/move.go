@@ -237,6 +237,14 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 	// Every URL this session holds addresses the simulator it has left,
 	// including the ones a capability reply offered along the way.
 	a.forgetURLs()
+
+	// The seed is recorded whatever is done with it below, including
+	// when it is empty and when capabilities were never wanted.  It is
+	// the answer to "where would this region's capabilities come from",
+	// which something above may need -- slgod hands it to a viewer --
+	// and the login response's answer to that stopped being true the
+	// moment the socket moved.
+	a.setSeed(seed)
 	switch {
 	case a.opts.SkipCaps:
 		// Asked not to have any, at login and still.
