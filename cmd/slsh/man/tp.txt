@@ -5,13 +5,80 @@ request.  What is printed afterwards is where the avatar actually ended
 up, read back, and not the point that was asked for.
 
 Three numbers and nothing else -- X Y Z, in this region's metres -- is a
-move inside this region.  Anything else is a region's name, joined with
-spaces so that a name with one in it needs no quoting, and the last
-three words are the position when all three are numbers:
+move to that position, which is usually inside this region and need not
+be: see below.  Anything else is a region's name, joined with spaces so
+that a name with one in it needs no quoting, and the last three words
+are the position when all three are numbers:
 
 	tp 128 128 25
 	tp Example Landing
 	tp Example Landing 33 73 1000.5
+
+# A position outside this region is the region it really is in
+
+A region is 256 metres square and the grid is regions laid edge to
+edge, so x of 300 is not an error and not a point in this region: it is
+44 metres into the region to the east.  x of -10 is 246 metres into the
+one to the west.  The shell works out which region owns the point and
+teleports there, in the same way that the 25th hour of Monday is one in
+the morning on Tuesday.
+
+	tp 300 128 25          44 metres into the region east of here
+	tp -10 128 25          246 metres into the region west of here
+	tp 128 -1 25           255 metres into the region to the south
+
+It generalises as far as the arithmetic does, because there is nothing
+special about one region over: the position is turned into a place on
+the grid, the region containing that place is worked out, and what is
+left over is where in it.  So x of 1000 is four regions east and 232
+metres in, and costs exactly what 300 does.
+
+The line printed before the waiting names the region by its square on
+the grid rather than by name, because this never asked the map about a
+name -- that is the saving.  What is printed after the arrival is the
+name, read back with the position.
+
+If nothing is standing on that square the grid answers "no_host", which
+is its own way of saying there is no region there.  A position that
+would be off the edge of the grid altogether is refused here instead,
+since there is no square west of the first one and a handle built from
+a negative coordinate would name somewhere real.
+
+# ~ moves by, rather than to
+
+A coordinate written with a leading ~ is measured from where the avatar
+is standing rather than from the region's corner.  "~" on its own is
+that axis left alone, "~10" is ten metres further along it, and "~-10"
+is ten metres back:
+
+	tp ~10 ~ ~             ten metres east, same y, same height
+	tp ~ ~ ~50             fifty metres up, without moving
+	tp 128 128 ~           the middle of the region, same height
+	tp ~-5 ~-5 ~           five metres back on both axes
+
+It is per axis, which is why it is a mark on the number and not an
+option: an option would make all three relative or none.
+
+The character is borrowed from the game consoles that have wanted the
+same thing, and it is here because the obvious spelling is taken.  A
+bare -10 already means ten metres west of this region's corner, which
+is a real place in the region next door, so a leading minus cannot also
+mean "ten metres back".
+
+Relative and outside-the-region compose, since one is worked out before
+the other: from x of 100, "tp ~300 ~ ~" is x of 400, which is 144
+metres into the region to the east.
+
+Two of the same relative teleport go twice as far, where two of the
+same absolute one go nowhere the second time.  That is the point of it.
+
+A position relative to the avatar cannot be given with the name of
+another region: the avatar is not standing in that region, so there is
+nothing for "~" to be measured from, and it is refused rather than
+resolved against a position somewhere else.  A position given with a
+region name is that region's own, and is not read as the next region
+along -- name the region you mean, or leave the name off and count in
+metres.
 
 A name with no position arrives in the middle of the region, at 128,
 128, which is where a viewer puts somebody who typed a name into the
@@ -132,9 +199,18 @@ as a name.
 # Examples
 
 	tp 128 128 25
+	tp ~10 ~ ~
+	tp 300 128 25
 	tp Example Landing
 	tp Example Landing 128 128 2001
 	tp --wait 60 Example Shallows
+
+# Examples that need no options
+
+The negative forms are worth one note.  "tp -10 128 25" begins with
+something that looks like an option, so the shell puts an end-of-options
+mark in front of the position for you; nothing has to be typed
+differently.
 
 See also: regions for finding out what a name matches and where it is,
 where for the position this is given in, look for what the region

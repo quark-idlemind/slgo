@@ -274,8 +274,12 @@ func TestTPReportsWhereItEndedUp(t *testing.T) {
 	}
 
 	// The read-back afterwards is a second question, and it can fail
-	// on its own.
-	x.grid.presenceCalls, x.grid.presenceFailAt = 0, 3
+	// on its own.  The fourth, because tp asks where the avatar is
+	// before it moves it -- a position may be given relative to that,
+	// and the region it is in decides which region the numbers name --
+	// and TeleportLocal then asks again for itself and once more to
+	// agree that the avatar arrived.
+	x.grid.presenceCalls, x.grid.presenceFailAt = 0, 4
 	if got := x.do(t, "tp 128 128 25"); !strings.Contains(got, "went away mid-command") {
 		t.Errorf("tp should report a failed read-back, got %q", got)
 	}
@@ -752,5 +756,166 @@ func TestLogoutRefusalNamesWhoIsUsingIt(t *testing.T) {
 
 	if got := x.do(t, "logout first"); !strings.Contains(got, "attached: autobench, slsh") {
 		t.Errorf("the refusal should name who is using it, got %q", got)
+	}
+}
+
+// TestAPositionOutsideThisRegionIsTheRegionItReallyIs.
+//
+// A region is 256 metres square and the grid is regions laid edge to
+// edge, so 300 on the x axis is not an error and not this region: it is
+// 44 metres into the one east of here.  The fake stands in square
+// (1, 1), so the answers below are its neighbours.
+func TestAPositionOutsideThisRegionIsTheRegionItReallyIs(t *testing.T) {
+	for _, c := range []struct {
+		line       string
+		wantX      uint32
+		wantY      uint32
+		wantAt     msg.Vector3
+		wantSquare string
+	}{
+		{"tp 300 128 25", 2, 1, msg.Vector3{X: 44, Y: 128, Z: 25}, "(2, 1)"},
+		{"tp -10 128 25", 0, 1, msg.Vector3{X: 246, Y: 128, Z: 25}, "(0, 1)"},
+		{"tp 128 -1 25", 1, 0, msg.Vector3{X: 128, Y: 255, Z: 25}, "(1, 0)"},
+		// Exactly a border: 256 is the first metre of the next one, and
+		// 0 is still this one, which is the half-open range the whole
+		// arithmetic rests on.
+		{"tp 256 128 25", 2, 1, msg.Vector3{X: 0, Y: 128, Z: 25}, "(2, 1)"},
+		// As far as the arithmetic goes, which is the point: four
+		// regions east is the same sum as one.
+		{"tp 1000 300 25", 4, 2, msg.Vector3{X: 232, Y: 44, Z: 25}, "(4, 2)"},
+	} {
+		x := newTestShell(t)
+		x.grid.AnswerTeleport(t, "Somewhere Else", msg.RegionHandle(c.wantX, c.wantY))
+
+		got := x.do(t, c.line)
+		// Said before the waiting, and by square rather than by name:
+		// this went from a position to a region without asking the map
+		// about one, so there is no name to hand.
+		if !strings.Contains(got, "teleporting to grid square "+c.wantSquare) {
+			t.Errorf("%q printed %q, want the square %s", c.line, got, c.wantSquare)
+		}
+		for _, m := range x.grid.Sent() {
+			if _, ok := m.(*msg.MapNameRequest); ok {
+				t.Errorf("%q asked the map about a region", c.line)
+			}
+		}
+		sent := lastTeleport(t, x)
+		if want := msg.RegionHandle(c.wantX, c.wantY); sent.Info.RegionHandle != want {
+			gx, gy := msg.GridCoords(sent.Info.RegionHandle)
+			t.Errorf("%q asked for square (%d, %d), want %s", c.line, gx, gy, c.wantSquare)
+		}
+		if sent.Info.Position != c.wantAt {
+			t.Errorf("%q asked to arrive at %v, want %v", c.line, sent.Info.Position, c.wantAt)
+		}
+	}
+}
+
+// TestAPositionOffTheEdgeOfTheGridIsRefused rather than wrapped.
+//
+// The square west of the first one is not a region that could answer
+// no_host: it is not a square at all, and a handle built from a negative
+// coordinate would wrap into somewhere real and teleport the avatar to a
+// place nobody asked for.
+func TestAPositionOffTheEdgeOfTheGridIsRefused(t *testing.T) {
+	x := newTestShell(t)
+
+	got := x.do(t, "tp -300 128 25")
+	if !strings.Contains(got, "off the edge of the grid") {
+		t.Errorf("a position off the grid printed %q", got)
+	}
+	// And says how far there is to go, since the answer depends on which
+	// square the avatar is standing in: (1, 1) leaves 256 metres.
+	if !strings.Contains(got, "-256") {
+		t.Errorf("the refusal does not say how far x may go: %q", got)
+	}
+	for _, m := range x.grid.Sent() {
+		if _, ok := m.(*msg.TeleportLocationRequest); ok {
+			t.Error("a position off the grid was asked for anyway")
+		}
+	}
+}
+
+// TestATildeIsAPositionRelativeToTheAvatar.
+//
+// "~" is that axis left alone and "~10" is ten metres along it.  The
+// spelling is not free: a bare -10 already means ten metres west of this
+// region's corner, which is a real place next door, so a leading minus
+// could not also mean "ten back".
+func TestATildeIsAPositionRelativeToTheAvatar(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerLocalTeleport()
+	// Where the fake says the avatar is standing.
+	x.grid.mu.Lock()
+	at := x.grid.presence.Position
+	x.grid.mu.Unlock()
+
+	if got := x.do(t, "tp ~10 ~ ~"); !strings.Contains(got, "Test Region") {
+		t.Fatalf("tp by ten metres printed %q", got)
+	}
+	sent := lastTeleport(t, x)
+	if want := (msg.Vector3{X: at.X + 10, Y: at.Y, Z: at.Z}); sent.Info.Position != want {
+		t.Errorf("tp ~10 ~ ~ asked for %v, want %v", sent.Info.Position, want)
+	}
+	if sent.Info.RegionHandle != testRegionHandle {
+		t.Error("a few metres away is not another region")
+	}
+
+	// Backwards, and mixed with an absolute -- and relative to where the
+	// avatar is NOW, which is ten metres east of where it began, because
+	// the teleport above moved it.  That is the whole meaning of the
+	// word: two "tp ~10 ~ ~" in a row go twenty metres, where two of an
+	// absolute position go nowhere the second time.
+	x.do(t, "tp ~-5 128 ~")
+	sent = lastTeleport(t, x)
+	if want := (msg.Vector3{X: at.X + 10 - 5, Y: 128, Z: at.Z}); sent.Info.Position != want {
+		t.Errorf("tp ~-5 128 ~ asked for %v, want %v", sent.Info.Position, want)
+	}
+}
+
+// TestARelativePositionCanLeaveTheRegion: the two rules compose, which
+// is the whole reason for doing the arithmetic rather than refusing a
+// number outside the region.
+func TestARelativePositionCanLeaveTheRegion(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.mu.Lock()
+	at := x.grid.presence.Position
+	x.grid.mu.Unlock()
+	x.grid.AnswerTeleport(t, "Somewhere Else", msg.RegionHandle(2, 1))
+
+	if got := x.do(t, "tp ~300 ~ ~"); !strings.Contains(got, "teleporting to grid square (2, 1)") {
+		t.Errorf("tp ~300 printed %q", got)
+	}
+	sent := lastTeleport(t, x)
+	if want := (msg.Vector3{X: at.X + 300 - 256, Y: at.Y, Z: at.Z}); sent.Info.Position != want {
+		t.Errorf("tp ~300 ~ ~ asked to arrive at %v, want %v", sent.Info.Position, want)
+	}
+}
+
+// TestATildeCannotBeUsedWithARegionName: "~" is from where the avatar is
+// standing, and the avatar is not standing in the region just named.
+func TestATildeCannotBeUsedWithARegionName(t *testing.T) {
+	x := newTestShell(t)
+
+	got := x.do(t, "tp Example Landing ~10 ~ ~")
+	if !strings.Contains(got, "cannot be used with the name of another region") {
+		t.Errorf("a relative position with a region name printed %q", got)
+	}
+	for _, m := range x.grid.Sent() {
+		if _, ok := m.(*msg.TeleportLocationRequest); ok {
+			t.Error("it was asked for anyway")
+		}
+	}
+}
+
+// TestAWordThatIsNotACoordinateIsStillARegionName, which is what stops
+// the tilde from swallowing a name.
+func TestAWordThatIsNotACoordinateIsStillARegionName(t *testing.T) {
+	if isCoord("~over there") {
+		t.Error("a tilde in front of a word does not make it a number")
+	}
+	for _, s := range []string{"~", "~10", "~-10", "10", "-10", "10,"} {
+		if !isCoord(s) {
+			t.Errorf("%q is one of tp's numbers", s)
+		}
 	}
 }

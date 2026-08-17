@@ -574,6 +574,30 @@ whole move -- would put the notice behind the object updates the new
 region is already sending. Worth knowing before something reacts to a
 region change by fetching.
 
+**The two arrival messages can be delivered out of order, and the
+session believes the second one it sees.** `agent/agent.go` says a move
+that has seen `AgentMovementComplete` has been through `RegionHandshake`
+already, because the simulator sends the handshake first. It does send
+it first -- and on 2026-08-17 a trace caught it **arriving 985ms
+afterwards**, seq=1 delivered behind seq=2:
+
+	14:07:28.404  <-- AgentMovementComplete  seq=2
+	14:07:29.389  <-- RegionHandshake        seq=1
+
+UDP does not promise order and this code assumed it did. What the
+window costs is worse than it looks. The handle and the position come
+from the movement message and the NAME, the object store and the
+terrain come from the handshake, so for most of a second the session
+knows it is in the new region, has that region's capabilities, and is
+still calling itself by the old region's name with the old region's
+object store attached -- and object updates arriving in that window go
+into the store of a region the avatar has left. It was found by a `tp`
+whose read-back line named the region it had just left, which is the
+harmless end of it.
+
+`moveTo` waits for the movement message alone. Waiting for both is the
+obvious fix and needs a decision about what to do when only one comes.
+
 **A dropped region change is worse than a dropped anything else.** Every
 hop from the daemon to a subscriber drops rather than blocks, because
 blocking any of them stops a stream or the dispatch goroutine; a session

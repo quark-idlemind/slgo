@@ -576,6 +576,35 @@ func (f *fakeGrid) AnswerTeleport(t *testing.T, region string, handle uint64) {
 	}
 }
 
+// AnswerLocalTeleport stands the avatar where a teleport inside this
+// region asked it to stand.
+//
+// A move within a region is answered by the position agreeing and by
+// nothing else -- there is no reply to a TeleportLocationRequest that
+// stays here -- so a fake that recorded the message and left the
+// presence alone would make every such teleport wait out its whole
+// timeout.  Most tests avoid it by asking for the position the fake is
+// already at; one that moves the avatar wants this.
+func (f *fakeGrid) AnswerLocalTeleport() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before := f.onSend
+	f.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		tp, ok := m.(*msg.TeleportLocationRequest)
+		if !ok {
+			return
+		}
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if tp.Info.RegionHandle == f.presence.RegionHandle {
+			f.presence.Position = tp.Info.Position
+		}
+	}
+}
+
 // AnswerTeleportWith makes the fake refuse instead, with a body of the
 // shape Agni sends: a key in one block and a sentence in the other.
 func (f *fakeGrid) AnswerTeleportWith(t *testing.T, body string) {
