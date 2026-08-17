@@ -92,7 +92,7 @@ map", which says what each of the map's five does.
 
 # Measuring your own font
 
-Most terminals will say, and slsh will ask them:
+Some terminals will say, and slsh will ask them:
 
 	set map_ratio auto
 
@@ -113,6 +113,13 @@ picture.  So take what "auto" writes as where to start, draw a region
 with "map --region", and change the ratio until a square region looks
 square -- that is the only test that matters, and it takes one line and
 one look.
+
+Whether a terminal answers at all is not something to expect either
+way, and it does not follow from how good the terminal is.  Measured:
+macOS Terminal.app does not answer, and a small hand-written ssh client
+for a tablet does.  So the refusal below is an ordinary outcome rather
+than a sign of anything being wrong, and a terminal that will not say is
+one where the ratio is found by eye in about a minute.
 
 "auto" needs a terminal to ask.  It is refused where there is none --
 "slsh -c", "slsh -f", and a session with its input coming from a pipe --
