@@ -399,13 +399,53 @@ progress bar of its own within-region teleport, and the trace prices
 that: `TeleportStart` and `TeleportLocal` arrived **twenty microseconds
 apart**, so the tunnel is entered and left in one burst.
 
-### Stage 7 -- walking over the border
+### Stage 7 -- walking over the border (done, unverified)
 
 A region crossing is the same move with a different trigger:
 `CrossedRegion` instead of `TeleportFinish`, and nothing asked for it.
 Nothing in the tree handles it today, so an avatar that walks over a
 border is in the same position as one that accepts a lure. Once stage 2
 exists this is a handler and a test.
+
+Built, and honestly labelled. Two things separate it from stage 3:
+
+- **Nobody has seen a `CrossedRegion` on this grid.** The block is
+  `RegionData` rather than `Info` -- which the template settles, and
+  which a reader copying stage 3's habit would get wrong, since
+  `CrossedRegion.Info` is the arrival position -- but every LLSD shape
+  inside it is carried over from the measured `TeleportFinish`. It fails
+  closed: an address that is not four bytes and a port in range reads as
+  a body with no destination, and nothing happens.
+- **It may never arrive.** A crossing is seamless for a viewer because
+  the region over the border was already talking to it. slgod holds no
+  child circuit, so whether a simulator hands over at all to a client
+  that never took the neighbour up is not settleable offline.
+
+The circuit-road handler is deliberately **not** `Inline`, and that one
+was measured rather than reasoned: a move waits for
+`AgentMovementComplete`, which is delivered inline on the dispatch
+goroutine, so an inline crossing handler *is* that goroutine and every
+crossing would wait out its timeout and end the session.
+
+**And the stage found an older hole.** `EnableSimulator` was relayed to
+an attached viewer for as long as the viewer front end has existed.
+Filtering `EstablishAgentCommunication` alone was half a fix: the seed
+that one carries buys a neighbour's *HTTP* capabilities, while opening a
+*circuit* to a neighbour takes only its address and the circuit code,
+session id and agent id a viewer holding this session already has. A
+circuit the viewer opened itself is under none of this package's
+absorbs -- not the logout that would end the grid session, not the
+teleports. Withheld now, with `CrossedRegion` beside it.
+
+Measured on Agni, and the measurement is the argument: within one second
+of login the daemon logged `EnableSimulator` withheld, and in the two
+minutes after it **`EstablishAgentCommunication` never arrived at all**.
+The neighbour message that was being filtered is the one this grid does
+not send; the one it sends every few seconds was going straight through.
+The likeliest reason is that the second follows the first -- a simulator
+introduces a neighbour properly once the client has taken up the circuit
+it was offered -- which would mean the original filter never had
+anything to catch.
 
 ## Testing: Pelmar Reach and back
 
@@ -557,10 +597,36 @@ seen a slow grid day. Stage 5 answered this for `slsh`, which uses
 thirty seconds of its own and no longer inherits the ninety; every other
 caller still does, and the constant itself is untouched.
 
-**`README.md` still says there is no teleport.** Its "Not done" section
-reads "No region crossing, no teleport beyond the current region". The
-second half has been false since `a2fd50b` and the first is stage 7, so
-the sentence wants splitting rather than deleting.
+**Does a crossing happen at all?** Stage 7's handler has never run,
+because nothing on this grid has been seen to send a `CrossedRegion` and
+nothing in `sl` or `slsh` can make the avatar walk. If a simulator will
+not hand over to a client holding no child circuit, the handler is dead
+code until the first bullet of "What this does not do" is built. One
+walk settles it.
+
+**A live crossing needs a viewer or a new API.** `Look.ControlFlags`
+exists and is written in exactly one place -- `viewer/circuit.go`,
+copying an attached viewer's `AgentUpdate` -- so the zero-code route is
+to attach a viewer, `tp` to a few metres inside a region edge, walk over
+it with `slgod -trace` running, and look for `CrossedRegion` on either
+road. The alternative is a small API to hold a control flag for the tens
+of seconds a walk takes, which is a movement feature rather than a
+teleport one.
+
+**The wire shape of `CrossedRegion` is unmeasured.** The cheap way to
+settle it without building neighbour circuits is to trace a plain viewer
+session -- logged in directly, not through slgod -- across a border and
+keep the body, the way stage 0 kept the `TeleportFinish`.
+`agent/crossing_test.go`'s fixture is where a real capture belongs.
+
+**Both roads could act on one crossing.** The queue handler and the
+circuit handler each check the handle before moving, and neither holds
+`moveMu` while it checks, so a grid that sent `CrossedRegion` on both
+roads at once could have both pass the check and move twice -- the
+second a redundant dial and handshake to the region just arrived in. No
+grid has been seen to send it on either road, let alone both, so this is
+written down rather than guarded against. The same shape does not arise
+for a teleport, where one goroutine delivers the queue serially.
 
 ### Not about teleport
 
