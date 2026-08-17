@@ -46,7 +46,8 @@ func main() {
 		viewerAt = flag.String("viewer", "",
 			"serve viewer logins on this address, so a real viewer can be handed a session")
 		neighbours = flag.Bool("neighbours", false,
-			"hold a circuit to each neighbouring region, so the avatar can walk over a border")
+			"hold a circuit to each neighbouring region, so the avatar can walk over a border;"+
+				" a profile's own neighbours setting wins over this")
 		group groupFlag
 	)
 	flag.Var(&group, "group",
@@ -191,14 +192,23 @@ func main() {
 			OnError: func(p *msg.Packet) {
 				log.Printf("%s: undecodable packet: %v", name, p.Err)
 			},
-			// Off unless asked for, and off changes nothing at
-			// all: see agent.Options.Neighbours.  A border
-			// crossing needs these circuits, and a daemon that
-			// only ever acts where its avatar stands does not.
-			Neighbours: *neighbours,
+			// Off unless asked for: a border crossing needs
+			// these circuits, and a daemon that only ever
+			// acts where its avatar stands does not.  The
+			// profile has the last word and the flag is what
+			// a profile with no opinion gets, because this
+			// is a property of an avatar rather than of the
+			// process -- one daemon holds an avatar somebody
+			// walks about with and another that runs
+			// benchmarks in one region.  Either can be
+			// turned over afterwards; see
+			// agent.SetNeighbours and slsh's neighbours.
+			Neighbours: holdNeighbours(login, *neighbours),
 			// So that a child circuit opening and closing is
-			// visible.  Nothing else says it yet -- no client
-			// can ask for a listing of them.
+			// visible.  A client can list what is held now,
+			// but only as it stands: one that opened and
+			// closed between two questions shows up here and
+			// nowhere else.
 			Log: func(format string, v ...any) {
 				log.Printf("%s: "+format, append([]any{name}, v...)...)
 			},
@@ -498,6 +508,32 @@ func main() {
 	defer cancel()
 	srv.Close(shutdown)
 	log.Print("done")
+}
+
+// holdNeighbours decides whether one session starts out holding
+// circuits to the regions around it.
+//
+// The profile wins where it has an opinion, and -neighbours is what the
+// rest get.  That order and not the other one: the flag is the daemon
+// speaking for every avatar it holds, and the profile is one avatar
+// saying what it is for -- so a daemon started with the flag for the
+// avatar somebody drives should not thereby put four extra circuits
+// under the one that runs benchmarks, and a profile that asks for them
+// should get them whatever the daemon was started with.
+//
+// -group goes the other way and is not an inconsistency: it can name
+// the profile it is for, so overruling one avatar there costs nobody
+// else anything, where a -neighbours that won would be paid for by
+// every session the daemon holds.
+//
+// Neither is the last word.  slsh's neighbours turns them over on a
+// session that is already up, which is the point of the whole thing;
+// this is only where it starts.
+func holdNeighbours(l agent.Login, flag bool) bool {
+	if l.Neighbours != nil {
+		return *l.Neighbours
+	}
+	return flag
 }
 
 func orUnknown(s string) string {

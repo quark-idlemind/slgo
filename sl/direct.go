@@ -280,6 +280,31 @@ func (d *Direct) Region(ctx context.Context) (*Region, bool, error) {
 	}, known, nil
 }
 
+// Neighbours reads the agent's own circuits, and sets the flag first
+// when asked to.
+//
+// Straight off the agent, where the hosted backend has a round trip in
+// the middle.  There is no difference to a caller: the set is applied
+// before the list is read either way, so an answer describes the session
+// as it is after the change and not before it.
+func (d *Direct) Neighbours(ctx context.Context, set *bool) (*Neighbours, error) {
+	if set != nil {
+		d.a.SetNeighbours(*set)
+	}
+	held := d.a.Neighbours()
+	out := &Neighbours{On: d.a.NeighboursOn(), Held: make([]Neighbour, 0, len(held))}
+	for _, n := range held {
+		out.Held = append(out.Held, Neighbour{
+			Handle:    n.Handle,
+			Addr:      n.Addr,
+			Name:      n.Name,
+			Handshook: n.Handshook,
+			Heard:     n.Heard,
+		})
+	}
+	return out, nil
+}
+
 // Lock is nothing to do here.
 //
 // A lock exists so that two clients of one slgod do not use the same

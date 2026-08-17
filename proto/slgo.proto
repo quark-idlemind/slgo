@@ -77,6 +77,22 @@ service Grid {
   // which happens once, before any client is listening.
   rpc Region(RegionRequest) returns (RegionInfo);
 
+  // Neighbours reads the circuits held to the regions AROUND that one,
+  // and can turn them on and off.
+  //
+  // The same division as Presence, for the same reason.  A simulator
+  // will not hand an avatar over a border to a client that holds no
+  // circuit to the region on the other side, and holding one costs a
+  // socket and a share of the traffic for as long as it is held -- so
+  // it belongs to the server, which owns the circuits and pays for
+  // them, and a client asks what it is and asks for it to be changed.
+  //
+  // Worth changing while a session is up, which is why this is not a
+  // daemon-wide switch: one avatar is being driven by a person who
+  // wants to walk out of the region, and the next is running a
+  // benchmark that wants nothing but the region it is in.
+  rpc Neighbours(NeighboursRequest) returns (NeighboursResponse);
+
   // Flush empties the object cache.
   //
   // It is done automatically when the region changes, since everything
@@ -744,6 +760,55 @@ message RegionInfo {
 
   // Known is false until the handshake has arrived.
   bool known = 16;
+}
+
+message NeighboursRequest {
+  string agent = 1;
+
+  // Set turns the child circuits on or off.  Absent asks without
+  // changing anything.
+  //
+  // Optional, so that the field has presence: "leave it alone" and
+  // "turn it off" are different requests and a plain bool spells them
+  // the same way.  Presence sets its draw distance from zero for want
+  // of this, which works there because no one wants a draw distance of
+  // zero and does not work here.
+  optional bool set = 2;
+}
+
+message NeighboursResponse {
+  // On is whether this session takes the offers up.  It can be true
+  // with nothing held: a simulator offers a neighbour when the avatar
+  // is near one, and offers none at all to an avatar in the middle of a
+  // region.
+  bool on = 1;
+
+  repeated NeighbourInfo neighbours = 2;
+}
+
+// NeighbourInfo is one region beside the one the avatar is in and what
+// the session has of it.
+message NeighbourInfo {
+  // Handle is the region's place on the grid, which the square is
+  // worked out from.
+  uint64 handle = 1;
+
+  // Address is where the offer said the simulator was.
+  string address = 2;
+
+  // Name is what the region called itself in its handshake, and is
+  // empty for a circuit that has not been answered.
+  string name = 3;
+
+  // Handshook says the simulator answered.  An address that never does
+  // is an offer that came to nothing, which is worth being able to
+  // see.
+  bool handshook = 4;
+
+  // Heard is how many packets have arrived on the circuit.  A
+  // neighbour describes itself fully and unprompted, so a circuit that
+  // is working counts up on its own.
+  uint64 heard = 5;
 }
 
 message FriendsRequest { string agent = 1; }

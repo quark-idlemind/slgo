@@ -138,5 +138,7 @@ as a name.
 
 See also: regions for finding out what a name matches and where it is,
 where for the position this is given in, look for what the region
-underfoot says about itself, move for shifting an object rather than the
-avatar, and answer for accepting a teleport somebody else offered.
+underfoot says about itself, neighbours for walking over a border into
+the next region rather than teleporting across the grid, move for
+shifting an object rather than the avatar, and answer for accepting a
+teleport somebody else offered.

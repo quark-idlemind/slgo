@@ -676,6 +676,21 @@ func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
 	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agent})
 }
 
+// Neighbours reads the circuits the server holds to the regions around
+// the one the avatar is in, and turns them on or off.
+//
+// A nil set asks without changing anything, which the wire spells as an
+// absent field rather than as a false: the difference between "leave it
+// alone" and "turn it off" is the whole reason the field has presence.
+//
+// It goes to the server for the reason Presence does: the circuits are
+// the server's, they cost a socket and a share of the traffic each for
+// as long as they are held, and a client that owned them would take
+// them away from every other client by exiting.
+func (c *Conn) Neighbours(ctx context.Context, set *bool) (*pb.NeighboursResponse, error) {
+	return c.grid.Neighbours(ctx, &pb.NeighboursRequest{Agent: c.agent, Set: set})
+}
+
 // Flush empties the server's object cache.
 func (c *Conn) Flush(ctx context.Context) (int, error) {
 	r, err := c.grid.Flush(ctx, &pb.FlushRequest{Agent: c.agent})

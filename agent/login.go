@@ -64,6 +64,23 @@ type Login struct {
 	// cmd/slgod.
 	Group string
 
+	// Neighbours says whether this avatar holds a circuit to the
+	// regions around it, so that it can walk over a border.
+	//
+	// Per account and not per invocation, like Group above and for the
+	// same kind of reason: an avatar somebody drives through a text
+	// viewer wants to be able to walk out of the region, and one that
+	// runs benchmarks in a single region wants none of the sockets or
+	// the traffic that costs.  One daemon holds both at once, so the
+	// answer cannot be the process's.
+	//
+	// A pointer because absent and false are different answers: unset
+	// leaves it to whoever starts the session -- slgod's -neighbours
+	// flag -- and set wins over that either way.  Nothing in this
+	// package acts on it; see cmd/slgod, and agent.Options.Neighbours
+	// for what it becomes.
+	Neighbours *bool
+
 	// Channel and Version identify the client to Linden Lab.
 	Channel string
 	Version string

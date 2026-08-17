@@ -119,6 +119,13 @@ type fakeGrid struct {
 	caps     map[string]string
 	lockedBy string
 
+	// neighbours is what the daemon holds of the regions around this
+	// one, changed by a set the way the real backends change it:
+	// turning them off drops the circuits rather than only refusing
+	// the next offer.
+	neighbours    sl.Neighbours
+	neighboursErr error
+
 	presenceErr, objectsErr, regionErr, friendsErr, sendErr, capErr error
 
 	// presenceCalls counts how many times the avatar has been asked
@@ -1124,6 +1131,23 @@ func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 		return nil, false, f.regionErr
 	}
 	return f.region, true, nil
+}
+
+func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.neighboursErr != nil {
+		return nil, f.neighboursErr
+	}
+	if set != nil {
+		f.neighbours.On = *set
+		if !*set {
+			f.neighbours.Held = nil
+		}
+	}
+	n := f.neighbours
+	n.Held = append([]sl.Neighbour(nil), f.neighbours.Held...)
+	return &n, nil
 }
 
 func (f *fakeGrid) Flush(ctx context.Context) (int, error) { return 0, nil }

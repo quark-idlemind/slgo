@@ -87,13 +87,19 @@ func neighbourly(t *testing.T) (*Agent, *fakeRegion, *fakeRegion, *fakeSim, uint
 	return a, from, to, sim, handle
 }
 
-// TestWithNeighboursOffAnOfferOpensNothingAndSendsNothing: the option is
-// off by default and off has to be indistinguishable from this file not
-// existing.  So the offer is made both ways it can arrive and the
-// neighbour hears nothing, no circuit is recorded, no handler is
-// registered -- the message on the circuit goes to the dispatcher's
-// unhandled pile, which is where it went before -- and the goroutine
-// count comes back to where it started.
+// TestWithNeighboursOffAnOfferOpensNothingAndSendsNothing: off by
+// default, and off has to cost the grid nothing.  So the offer is made
+// both ways it can arrive and the neighbour hears nothing, no circuit is
+// recorded, and the goroutine count comes back to where it started.
+//
+// It used to assert one thing more -- that EnableSimulator reached the
+// dispatcher's unhandled pile, which said no handler had been
+// registered.  That went when the flag became something a session can
+// turn over: a handler cannot be withdrawn once registered, so the one
+// in followNeighbours is registered either way and returns on its first
+// line when the flag is down.  What the test was really protecting is
+// all still here and is the half anybody cares about: with neighbours
+// off, no socket is opened and nothing is said to a neighbour.
 func TestWithNeighboursOffAnOfferOpensNothingAndSendsNothing(t *testing.T) {
 	a, from, _ := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
 	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
@@ -121,15 +127,143 @@ func TestWithNeighboursOffAnOfferOpensNothingAndSendsNothing(t *testing.T) {
 	if got := a.Neighbours(); len(got) != 0 {
 		t.Errorf("Neighbours = %+v with the option off", got)
 	}
-	// Nothing is registered for it, which is what "not a handler
-	// differs" means: the message arrives and the dispatcher counts it
-	// as one nobody wanted.
-	if info := msg.LookupName("EnableSimulator"); a.Disp.Unhandled()[info.ID] == 0 {
-		t.Error("EnableSimulator was handled on the circuit with the option off")
+	if a.NeighboursOn() {
+		t.Error("NeighboursOn is true for a session that did not ask for them")
 	}
 	waitFor(t, "the goroutine count to come back to where it was", func() bool {
 		return runtime.NumGoroutine() <= before
 	})
+}
+
+// TestTheOptionIsWhatTheFlagStartsAtAndNotWhatItStaysAt: Connect takes
+// the option as an opening position.  Everything after that is
+// SetNeighbours, so a session that was started one way can be asked for
+// the other without being logged in again.
+func TestTheOptionIsWhatTheFlagStartsAtAndNotWhatItStaysAt(t *testing.T) {
+	a, _, _ := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
+	if a.NeighboursOn() {
+		t.Error("a session started without the option is holding neighbours")
+	}
+	a.SetNeighbours(true)
+	if !a.NeighboursOn() {
+		t.Error("SetNeighbours(true) did not take")
+	}
+	a.SetNeighbours(false)
+	if a.NeighboursOn() {
+		t.Error("SetNeighbours(false) did not take")
+	}
+
+	on, _, _ := twoRegions(t, Options{Neighbours: true, OnEvent: func(string, []byte) {}})
+	if !on.NeighboursOn() {
+		t.Error("a session started with the option is not holding neighbours")
+	}
+}
+
+// TestNeighboursTurnedOnMidSessionTakeUpTheNextOffer: the whole reason
+// this is worth being a runtime flag.  Nothing is sent to ask for an
+// offer and there is nothing to ask -- the simulator repeats one for as
+// long as it goes untaken, 57 times in 200 seconds -- so a session that
+// turns them on has a circuit within seconds of the next repeat.
+//
+// The offer here is pushed twice for that reason: the first one arrives
+// while the flag is still down and is dropped, exactly as the ones a
+// session slept through are, and the second is the repeat that finds it
+// up.
+func TestNeighboursTurnedOnMidSessionTakeUpTheNextOffer(t *testing.T) {
+	a, from, _ := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
+	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	time.Sleep(300 * time.Millisecond)
+	if got := sim.got(); len(got) != 0 {
+		t.Fatalf("the neighbour was talked to before it was turned on: %v", got)
+	}
+
+	a.SetNeighbours(true)
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+
+	sim.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the neighbour to be listed", func() bool { return len(a.Neighbours()) == 1 })
+	waitFor(t, "the neighbour's handshake", func() bool { return a.Neighbours()[0].Handshook })
+	if name := a.Neighbours()[0].Name; name != "Pelmar Mill" {
+		t.Errorf("name = %q, want the one the handshake carried", name)
+	}
+}
+
+// TestNeighboursTurnedOffDropWhatIsHeldAndTakeNoMore: turning them off
+// has to stop the cost, and the cost is the circuits that are open
+// rather than the offers that have not arrived yet.  A session that only
+// stopped listening would go on holding the sockets and the traffic it
+// was told to stop paying for, and the simulator would go on believing
+// the avatar could be handed over the border.
+func TestNeighboursTurnedOffDropWhatIsHeldAndTakeNoMore(t *testing.T) {
+	var said logLines
+	a, from, _ := twoRegions(t, Options{
+		Neighbours: true,
+		OnEvent:    func(string, []byte) {},
+		Log:        said.log,
+	})
+	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	sim.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the neighbour to be listed", func() bool { return len(a.Neighbours()) == 1 })
+
+	a.SetNeighbours(false)
+
+	if got := a.Neighbours(); len(got) != 0 {
+		t.Errorf("Neighbours = %+v after being turned off", got)
+	}
+	if lines := said.saying("circuit closed"); len(lines) != 1 {
+		t.Errorf("closing was reported %d times: %v", len(lines), lines)
+	}
+
+	// And the offers that follow, which go on arriving whatever this
+	// session thinks: the simulator starts repeating one the moment it
+	// goes untaken again.
+	before := len(sim.got())
+	for range 3 {
+		from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	}
+	time.Sleep(500 * time.Millisecond)
+	if got := sim.got(); len(got) != before {
+		t.Errorf("the neighbour was talked to after being turned off: %v", got[before:])
+	}
+	if got := a.Neighbours(); len(got) != 0 {
+		t.Errorf("Neighbours = %+v after an offer arrived with them off", got)
+	}
+}
+
+// TestNeighboursTurnedOffAndOnAgainOpenAFreshCircuit: off is not a state
+// the session cannot come back from, and coming back must not depend on
+// anything that was kept from before -- the circuit was closed and the
+// map emptied, so what opens here is a new one from a new offer.
+func TestNeighboursTurnedOffAndOnAgainOpenAFreshCircuit(t *testing.T) {
+	a, from, _, sim, handle := neighbourly(t)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	sim.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the neighbour to be listed", func() bool { return len(a.Neighbours()) == 1 })
+
+	a.SetNeighbours(false)
+	if got := a.Neighbours(); len(got) != 0 {
+		t.Fatalf("Neighbours = %+v after being turned off", got)
+	}
+
+	a.SetNeighbours(true)
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	waitFor(t, "the circuit to open again", func() bool { return len(a.Neighbours()) == 1 })
+
+	n := 0
+	for _, name := range sim.got() {
+		if name == "UseCircuitCode" {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("the neighbour was dialled %d times, want one circuit each side of the off: %v",
+			n, sim.got())
+	}
 }
 
 // TestAnOfferTakenUpOpensACircuitToTheAddressItNames: the whole of stage

@@ -595,6 +595,45 @@ func (s *Server) Region(ctx context.Context, req *pb.RegionRequest) (*pb.RegionI
 	}, nil
 }
 
+// Neighbours answers what circuits this session holds to the regions
+// around it, and turns them on or off when asked to.
+//
+// The set is applied before the answer is read, so a client that turned
+// them off is told what it has now rather than what it had: off comes
+// back with nothing held, because turning them off drops the circuits
+// rather than merely refusing the next offer.  Turning them ON comes
+// back with nothing held too, and that is not a failure -- the offers
+// are the simulator's to repeat, which it does for as long as they go
+// untaken, so a circuit appears a second or two later without anything
+// being asked for.
+func (s *Server) Neighbours(ctx context.Context, req *pb.NeighboursRequest) (*pb.NeighboursResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	a := h.Agent()
+
+	if req.Set != nil {
+		a.SetNeighbours(req.GetSet())
+	}
+
+	held := a.Neighbours()
+	out := &pb.NeighboursResponse{
+		On:         a.NeighboursOn(),
+		Neighbours: make([]*pb.NeighbourInfo, 0, len(held)),
+	}
+	for _, n := range held {
+		out.Neighbours = append(out.Neighbours, &pb.NeighbourInfo{
+			Handle:    n.Handle,
+			Address:   n.Addr,
+			Name:      n.Name,
+			Handshook: n.Handshook,
+			Heard:     n.Heard,
+		})
+	}
+	return out, nil
+}
+
 // Friends is the friend list and who is logged in.
 //
 // Held here because the grid says both once and to whoever was there:

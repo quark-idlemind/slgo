@@ -160,11 +160,17 @@ type Agent struct {
 	// keeps its own, which is what a single direct login wants.
 	regions *Cache
 
+	// holdNeighbours is whether this session takes up the offers of
+	// the regions around it.  Options.Neighbours starts it and
+	// SetNeighbours turns it over; it is atomic and deliberately not
+	// under neighMu, which dropNeighbours takes.
+	holdNeighbours atomic.Bool
+
 	// neighbours are the circuits held to the regions around this
 	// one, by grid handle, and refused are the offers turned down for
 	// being past MaxNeighbours -- kept only so that one is logged
 	// once rather than every time it is offered again.  Both are nil
-	// unless Options.Neighbours is on; see neighbour.go.
+	// while neighbours are off; see neighbour.go.
 	neighMu    sync.Mutex
 	neighbours map[uint64]*child
 	refused    map[uint64]bool
@@ -294,14 +300,17 @@ type Options struct {
 	// which is where the whole of it lives, and doc/neighbours.md
 	// for what it measured.
 	//
-	// Off by default, and off is not a smaller version of on: no
-	// handler is registered, no offer is read and no socket is
-	// opened, so a session that does not ask for this behaves
-	// exactly as it did before it existed.  It costs a socket and a
-	// share of the traffic per neighbour -- four regions surround
-	// Pelmar Reach and eight can surround one anywhere -- which a
-	// daemon acting only where its avatar stands should not be made
-	// to pay.
+	// This is what the session STARTS as and not the whole truth:
+	// SetNeighbours turns them over while the session is up, which is
+	// what a person driving one avatar of several wants.  Ask
+	// NeighboursOn rather than reading this back.
+	//
+	// Off by default.  Off, no offer is read and no socket is opened,
+	// so a session that does not ask for this behaves as it did
+	// before any of it existed.  It costs a socket and a share of the
+	// traffic per neighbour -- four regions surround Pelmar Reach and
+	// eight can surround one anywhere -- which a daemon acting only
+	// where its avatar stands should not be made to pay.
 	Neighbours bool
 
 	// Log is where this session says the few things worth the
@@ -311,9 +320,10 @@ type Options struct {
 	//
 	// It is not a trace and not an error channel: what belongs here
 	// is what nothing else would ever say.  Today that is the child
-	// circuits opening and closing, which until a later stage gives
-	// clients a listing is the only way anyone can see that they are
-	// there at all.
+	// circuits opening and closing, which a client can now list --
+	// see Neighbours -- but only as they stand: a circuit that opened
+	// and closed between two of a client's questions was never there
+	// as far as the listing is concerned, and this is where it went.
 	Log func(format string, v ...any)
 
 	// Idle ends the session when nothing has arrived from the
@@ -360,6 +370,9 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	}
 	a.SetCaps(Caps{})
 	a.setSeed(acct.SeedCapability)
+	// The option is the starting value of a flag rather than a
+	// settled fact, so it is stored where the flag is read from.
+	a.holdNeighbours.Store(opts.Neighbours)
 
 	a.seedFriends(acct.Buddies)
 

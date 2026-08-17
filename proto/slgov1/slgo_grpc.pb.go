@@ -41,6 +41,7 @@ const (
 	Grid_Presence_FullMethodName         = "/slgo.v1.Grid/Presence"
 	Grid_Objects_FullMethodName          = "/slgo.v1.Grid/Objects"
 	Grid_Region_FullMethodName           = "/slgo.v1.Grid/Region"
+	Grid_Neighbours_FullMethodName       = "/slgo.v1.Grid/Neighbours"
 	Grid_Flush_FullMethodName            = "/slgo.v1.Grid/Flush"
 	Grid_Cap_FullMethodName              = "/slgo.v1.Grid/Cap"
 	Grid_Send_FullMethodName             = "/slgo.v1.Grid/Send"
@@ -103,6 +104,21 @@ type GridClient interface {
 	// Region is what the simulator said about itself in the handshake,
 	// which happens once, before any client is listening.
 	Region(ctx context.Context, in *RegionRequest, opts ...grpc.CallOption) (*RegionInfo, error)
+	// Neighbours reads the circuits held to the regions AROUND that one,
+	// and can turn them on and off.
+	//
+	// The same division as Presence, for the same reason.  A simulator
+	// will not hand an avatar over a border to a client that holds no
+	// circuit to the region on the other side, and holding one costs a
+	// socket and a share of the traffic for as long as it is held -- so
+	// it belongs to the server, which owns the circuits and pays for
+	// them, and a client asks what it is and asks for it to be changed.
+	//
+	// Worth changing while a session is up, which is why this is not a
+	// daemon-wide switch: one avatar is being driven by a person who
+	// wants to walk out of the region, and the next is running a
+	// benchmark that wants nothing but the region it is in.
+	Neighbours(ctx context.Context, in *NeighboursRequest, opts ...grpc.CallOption) (*NeighboursResponse, error)
 	// Flush empties the object cache.
 	//
 	// It is done automatically when the region changes, since everything
@@ -254,6 +270,16 @@ func (c *gridClient) Region(ctx context.Context, in *RegionRequest, opts ...grpc
 	return out, nil
 }
 
+func (c *gridClient) Neighbours(ctx context.Context, in *NeighboursRequest, opts ...grpc.CallOption) (*NeighboursResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(NeighboursResponse)
+	err := c.cc.Invoke(ctx, Grid_Neighbours_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Flush(ctx context.Context, in *FlushRequest, opts ...grpc.CallOption) (*FlushResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FlushResponse)
@@ -368,6 +394,21 @@ type GridServer interface {
 	// Region is what the simulator said about itself in the handshake,
 	// which happens once, before any client is listening.
 	Region(context.Context, *RegionRequest) (*RegionInfo, error)
+	// Neighbours reads the circuits held to the regions AROUND that one,
+	// and can turn them on and off.
+	//
+	// The same division as Presence, for the same reason.  A simulator
+	// will not hand an avatar over a border to a client that holds no
+	// circuit to the region on the other side, and holding one costs a
+	// socket and a share of the traffic for as long as it is held -- so
+	// it belongs to the server, which owns the circuits and pays for
+	// them, and a client asks what it is and asks for it to be changed.
+	//
+	// Worth changing while a session is up, which is why this is not a
+	// daemon-wide switch: one avatar is being driven by a person who
+	// wants to walk out of the region, and the next is running a
+	// benchmark that wants nothing but the region it is in.
+	Neighbours(context.Context, *NeighboursRequest) (*NeighboursResponse, error)
 	// Flush empties the object cache.
 	//
 	// It is done automatically when the region changes, since everything
@@ -452,6 +493,9 @@ func (UnimplementedGridServer) Objects(context.Context, *ObjectsRequest) (*Objec
 }
 func (UnimplementedGridServer) Region(context.Context, *RegionRequest) (*RegionInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method Region not implemented")
+}
+func (UnimplementedGridServer) Neighbours(context.Context, *NeighboursRequest) (*NeighboursResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Neighbours not implemented")
 }
 func (UnimplementedGridServer) Flush(context.Context, *FlushRequest) (*FlushResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Flush not implemented")
@@ -643,6 +687,24 @@ func _Grid_Region_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Neighbours_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NeighboursRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Neighbours(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Neighbours_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Neighbours(ctx, req.(*NeighboursRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_Flush_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FlushRequest)
 	if err := dec(in); err != nil {
@@ -789,6 +851,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Region",
 			Handler:    _Grid_Region_Handler,
+		},
+		{
+			MethodName: "Neighbours",
+			Handler:    _Grid_Neighbours_Handler,
 		},
 		{
 			MethodName: "Flush",

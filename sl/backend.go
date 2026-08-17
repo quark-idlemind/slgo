@@ -173,6 +173,17 @@ type Backend interface {
 	// whether it has arrived at all.
 	Region(ctx context.Context) (*Region, bool, error)
 
+	// Neighbours is the circuits held to the regions AROUND that one,
+	// and whether the session is holding any at all.  A non-nil set
+	// turns them on or off first, and the answer describes what is
+	// held after the change.
+	//
+	// A pointer rather than a bool, because there are three requests
+	// and not two: leave it alone, turn it on, turn it off.  Presence
+	// spells the first as a zero draw distance and gets away with it
+	// only because nobody wants a draw distance of zero.
+	Neighbours(ctx context.Context, set *bool) (*Neighbours, error)
+
 	// Lock takes exclusive use of something named, waiting for it,
 	// and Unlock gives it back.  Going away gives it back too.
 	//

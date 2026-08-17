@@ -247,6 +247,10 @@ func TestEveryCallSaysWhichAgentItCouldNotFind(t *testing.T) {
 			_, err := empty.Region(ctx, &pb.RegionRequest{Agent: n})
 			return err
 		},
+		"Neighbours": func(n string) error {
+			_, err := empty.Neighbours(ctx, &pb.NeighboursRequest{Agent: n})
+			return err
+		},
 		"Friends": func(n string) error {
 			_, err := empty.Friends(ctx, &pb.FriendsRequest{Agent: n})
 			return err
@@ -680,5 +684,86 @@ func TestASessionThatFellOverIsStillConnecting(t *testing.T) {
 	})
 	if h.info().GetConnected() {
 		t.Error("a session with no circuit reported itself connected")
+	}
+}
+
+// TestNeighboursAreAskedAboutAndTurnedOverThroughTheOneCall: the call
+// has three requests in it and the field's presence is what tells them
+// apart -- ask, turn on, turn off -- so each is made here and the answer
+// is read for what it says about the session afterwards.
+//
+// The circuit is opened by the session on its own, out of an offer the
+// simulator makes.  Nothing here dials anything: the offer names a
+// second simulator, and the whole of what this test does about it is
+// turn the flag on and wait.
+func TestNeighboursAreAskedAboutAndTurnedOverThroughTheOneCall(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+
+	// Asked without being changed, on a session that was started
+	// without them.
+	got, err := r.srv.Neighbours(ctx, &pb.NeighboursRequest{Agent: "example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetOn() || len(got.GetNeighbours()) != 0 {
+		t.Fatalf("neighbours = %v, on=%v before anything asked for them",
+			got.GetNeighbours(), got.GetOn())
+	}
+
+	// The neighbour, which is an ordinary simulator that answers a
+	// circuit: a child needs no event queue and no capability.
+	next := newSim(t)
+	t.Cleanup(next.close)
+	handle := msg.RegionHandle(43521, 43520)
+
+	on := true
+	got, err = r.srv.Neighbours(ctx, &pb.NeighboursRequest{Agent: "example", Set: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.GetOn() {
+		t.Fatal("the session was not turned on")
+	}
+	// On with nothing held is the ordinary answer to the request that
+	// turned them on: the circuit follows the next offer.
+	if len(got.GetNeighbours()) != 0 {
+		t.Errorf("neighbours = %v the instant they were turned on", got.GetNeighbours())
+	}
+
+	offer := &msg.EnableSimulator{}
+	offer.SimulatorInfo.Handle = handle
+	offer.SimulatorInfo.IP = msg.IPAddr{127, 0, 0, 1}
+	offer.SimulatorInfo.Port = msg.IPPort(next.addr().Port)
+	r.sim.send(offer, 0)
+
+	waitFor(t, 5*time.Second, "the neighbour to be answered", func() bool {
+		got, err = r.srv.Neighbours(ctx, &pb.NeighboursRequest{Agent: "example"})
+		return err == nil && len(got.GetNeighbours()) == 1 && got.GetNeighbours()[0].GetHandshook()
+	})
+	n := got.GetNeighbours()[0]
+	if n.GetHandle() != handle {
+		t.Errorf("handle = %d, want the one the offer named, %d", n.GetHandle(), handle)
+	}
+	if n.GetAddress() != next.addr().String() {
+		t.Errorf("address = %q, want %q", n.GetAddress(), next.addr())
+	}
+	if n.GetName() != "Testville" {
+		t.Errorf("name = %q, want what the handshake carried", n.GetName())
+	}
+	if n.GetHeard() == 0 {
+		t.Error("nothing was counted as heard on a circuit that answered")
+	}
+
+	// And off, which drops what is held rather than only refusing what
+	// comes next -- so the same answer says both halves.
+	off := false
+	got, err = r.srv.Neighbours(ctx, &pb.NeighboursRequest{Agent: "example", Set: &off})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetOn() || len(got.GetNeighbours()) != 0 {
+		t.Errorf("neighbours = %v, on=%v after being turned off",
+			got.GetNeighbours(), got.GetOn())
 	}
 }

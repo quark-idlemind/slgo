@@ -31,13 +31,17 @@ import (
 // for it.  See doc/neighbours.md, which is the plan this is stages one
 // and two of.
 //
-// **Off unless asked for.**  Neighbours cost a socket, a share of the
-// bandwidth and the simulator's attention, multiplied by however many
-// regions surround this one -- four for Pelmar Reach, up to eight
-// elsewhere.  A daemon that only ever acts in the region its avatar
-// stands in wants none of that, so Options.Neighbours is off by default
-// and off means nothing here runs at all: no handler is registered, no
-// offer is read, no socket is opened.
+// **Off unless asked for, and asked for per avatar.**  Neighbours cost
+// a socket, a share of the bandwidth and the simulator's attention,
+// multiplied by however many regions surround this one -- four for Pelmar
+// Reach, up to eight elsewhere.  A session running a benchmark in one
+// region wants none of that and one being driven by a person through a
+// text viewer wants all of it, and a daemon holds both at once -- so
+// this is a flag on the Agent rather than on the process, and it can be
+// turned over while the session is up.  Options.Neighbours is only what
+// it starts as; see SetNeighbours.  Off, no offer is read and no socket
+// is opened, and the one handler that is registered either way returns
+// on its first line.
 //
 // **Two handlers and no more.**  A child answers RegionHandshake and
 // StartPingCheck and counts everything else.  Both are measured
@@ -74,10 +78,9 @@ const MaxNeighbours = 8
 // A Neighbour is one region beside this one and what this session has
 // of it.
 //
-// Nothing above this package is told any of this yet -- there is no
-// listing for clients and no viewer sees a neighbour -- so this is here
-// for whoever runs the daemon and for the stage that gives clients
-// something.
+// Every field of it crosses to a client, which is what slsh's
+// neighbours prints; no viewer sees a neighbour, and what a viewer may
+// eventually be offered is a later stage of doc/neighbours.md.
 type Neighbour struct {
 	// Handle identifies the region on the grid.  msg.GridCoords turns
 	// it into the square.
@@ -136,11 +139,46 @@ type child struct {
 	heard atomic.Uint64
 }
 
+// NeighboursOn reports whether this session takes the offers up.
+//
+// Options.Neighbours is what it starts as and SetNeighbours is what
+// changes it.  On with nothing held is an ordinary state and not a
+// failure: a simulator offers a neighbour when the avatar is near one,
+// and offered nothing at all to an avatar in a skybox in the middle of
+// a region.
+func (a *Agent) NeighboursOn() bool { return a.holdNeighbours.Load() }
+
+// SetNeighbours turns the child circuits on or off for the rest of the
+// session, or until it is called again.
+//
+// Turning them ON asks for nothing.  The simulator repeats an offer for
+// as long as it goes untaken -- 57 times in a 200 second run naming four
+// regions -- so a session that turns this on picks the next repeat up
+// within seconds, and there is nothing here to send and no one to ask.
+//
+// Turning them OFF drops what is held rather than merely refusing what
+// comes next.  A circuit left open would go on costing the socket and
+// the share of the traffic this was turned off to stop paying, and the
+// simulator would go on believing the avatar could be handed over the
+// border at any moment.
+//
+// The flag is atomic and not under neighMu, which is what lets this be
+// called from anywhere: dropNeighbours takes that lock, so a flag kept
+// under it would be a caller holding the lock while waiting for it.
+func (a *Agent) SetNeighbours(on bool) {
+	if a.holdNeighbours.Swap(on) == on {
+		return
+	}
+	if !on {
+		a.dropNeighbours("neighbours were turned off")
+	}
+}
+
 // Neighbours is the regions this session holds a circuit to, in grid
 // handle order.
 //
-// Empty unless Options.Neighbours is on, and empty again after a move:
-// see dropNeighbours.
+// Empty unless the session is holding them -- see NeighboursOn -- and
+// empty again after a move: see dropNeighbours.
 func (a *Agent) Neighbours() []Neighbour {
 	a.neighMu.Lock()
 	out := make([]Neighbour, 0, len(a.neighbours))
@@ -178,7 +216,7 @@ func (a *Agent) Neighbours() []Neighbour {
 // syscall and UseCircuitCode is queued rather than sent, so the poll is
 // held up for microseconds.
 func (a *Agent) noteEnableSimulator(body any) {
-	if !a.opts.Neighbours {
+	if !a.NeighboursOn() {
 		return
 	}
 	for _, row := range offeredSimulators(body) {
@@ -249,17 +287,26 @@ func neighbourAddr(ip []byte, port int64) *net.UDPAddr {
 // as four bytes in network order and IPPORT as a port -- so what is
 // left to refuse is an address that names nowhere.
 //
-// It is registered only when the option is on, so that a session
-// without it dispatches exactly the handlers it did before.  It is not
-// Inline, because a dial in the middle of the packet path is worth
-// keeping off the dispatch goroutine; openNeighbour is serialized by
-// its own lock, so two arriving at once cannot open the same neighbour
-// twice.
+// **It is registered whether or not neighbours are on**, which reads
+// like a mistake beside noteEnableSimulator asking the flag instead, so:
+// this runs once, from register, and a registration cannot be withdrawn
+// -- Dispatcher has no way to remove a handler, and a second MustHandle
+// for one message panics.  A registration made when the flag went on
+// would therefore have to be made once and never again, and would still
+// have to check the flag for the case where it has since gone off.  That
+// is this, without the bookkeeping.  What it costs when neighbours are
+// off is a map entry and a returning function per EnableSimulator, where
+// before it was a message counted as unhandled.
+//
+// It is not Inline, because a dial in the middle of the packet path is
+// worth keeping off the dispatch goroutine; openNeighbour is serialized
+// by its own lock, so two arriving at once cannot open the same
+// neighbour twice.
 func (a *Agent) followNeighbours() {
-	if !a.opts.Neighbours {
-		return
-	}
 	a.Disp.MustHandle("EnableSimulator", func(p *msg.Packet) {
+		if !a.NeighboursOn() {
+			return
+		}
 		m, ok := p.Message.(*msg.EnableSimulator)
 		if !ok {
 			return
@@ -313,6 +360,18 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 
 	a.neighMu.Lock()
 	defer a.neighMu.Unlock()
+
+	// Asked again here, under the lock, which is what makes turning
+	// them off stick.  SetNeighbours puts the flag down and then takes
+	// this lock to close what is held, so an offer already past the
+	// check above either gets the lock first and is closed a moment
+	// later, or gets it afterwards and finds the flag down.  Without
+	// this, an offer in flight at the moment of the change would leave
+	// one circuit open on a session that had just been told to hold
+	// none.
+	if !a.NeighboursOn() {
+		return
+	}
 
 	// A neighbour already held is the offer being repeated, which is
 	// what happens until it is taken up.  The address is not compared:

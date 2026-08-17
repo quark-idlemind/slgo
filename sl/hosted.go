@@ -254,6 +254,24 @@ func (h *Hosted) Region(ctx context.Context) (*Region, bool, error) {
 	}, r.Known, nil
 }
 
+func (h *Hosted) Neighbours(ctx context.Context, set *bool) (*Neighbours, error) {
+	r, err := h.conn.Neighbours(ctx, set)
+	if err != nil {
+		return nil, err
+	}
+	out := &Neighbours{On: r.GetOn(), Held: make([]Neighbour, 0, len(r.GetNeighbours()))}
+	for _, n := range r.GetNeighbours() {
+		out.Held = append(out.Held, Neighbour{
+			Handle:    n.GetHandle(),
+			Addr:      n.GetAddress(),
+			Name:      n.GetName(),
+			Handshook: n.GetHandshook(),
+			Heard:     n.GetHeard(),
+		})
+	}
+	return out, nil
+}
+
 func (h *Hosted) Friends(ctx context.Context) ([]Friend, error) {
 	fs, err := h.conn.Friends(ctx)
 	if err != nil {

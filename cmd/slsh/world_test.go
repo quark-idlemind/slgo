@@ -447,8 +447,11 @@ func TestWorldCommandsAllAnswerForHelp(t *testing.T) {
 	x.grid.objectsErr = errors.New("this must not be reached")
 	x.grid.presenceErr = x.grid.objectsErr
 	x.grid.regionErr = x.grid.objectsErr
+	x.grid.neighboursErr = x.grid.objectsErr
 
-	for _, name := range []string{"where", "who", "look", "caps", "features", "worn", "objects"} {
+	for _, name := range []string{
+		"where", "who", "look", "neighbours", "caps", "features", "worn", "objects",
+	} {
 		got := x.do(t, name+" --help")
 		if !strings.Contains(got, name) {
 			t.Errorf("%s --help should print its own usage, got %q", name, got)
@@ -684,5 +687,139 @@ func TestObjectsFiltersByOwner(t *testing.T) {
 	// nothing quietly.
 	if got := x.do(t, "objects --owner '['"); !strings.Contains(got, "--owner wants a uuid or a pattern") {
 		t.Errorf("a broken pattern should be reported: %q", got)
+	}
+}
+
+// TestNeighboursSaysWhetherThisAvatarCanWalkOutOfTheRegion: off is the
+// answer somebody gets when the avatar has stopped at a border, so it
+// has to say what it means rather than printing an empty list.
+func TestNeighboursSaysWhetherThisAvatarCanWalkOutOfTheRegion(t *testing.T) {
+	x := newTestShell(t)
+
+	got := x.do(t, "neighbours")
+	if !strings.Contains(got, "off") || !strings.Contains(got, "walk over a border") {
+		t.Errorf("neighbours off printed %q", got)
+	}
+
+	// On with nothing held is the ordinary state away from a border,
+	// and reads nothing like a failure.
+	x.grid.neighbours = sl.Neighbours{On: true}
+	got = x.do(t, "neighbours")
+	if !strings.Contains(got, "on") || !strings.Contains(got, "no circuit is open") {
+		t.Errorf("neighbours on with nothing held printed %q", got)
+	}
+}
+
+// TestNeighboursListsWhatIsHeldTheWayRegionsDoes: the name and the grid
+// square are what say which region, which is why they lead the line, and
+// the packet count is what says the circuit is alive.
+func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.neighbours = sl.Neighbours{
+		On: true,
+		Held: []sl.Neighbour{
+			{
+				Handle: msg.RegionHandle(43646, 43648), Addr: "35.91.2.183:13032",
+				Name: "Pelmar Mill", Handshook: true, Heard: 412,
+			},
+			// One that was dialled and has not answered, which is
+			// what an offer that came to nothing looks like.
+			{Handle: msg.RegionHandle(43648, 43647), Addr: "35.91.2.184:13011"},
+		},
+	}
+
+	got := x.do(t, "neighbours")
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("neighbours printed %d lines, want a state and its two circuits:\n%s",
+			len(lines), got)
+	}
+	if !strings.Contains(lines[0], "2 circuits held") {
+		t.Errorf("the state line reads %q", lines[0])
+	}
+	for _, want := range []string{"Pelmar Mill", "43646, 43648", "35.91.2.183:13032", "412 heard"} {
+		if !strings.Contains(lines[1], want) {
+			t.Errorf("the listing should carry %q: %q", want, lines[1])
+		}
+	}
+	// A name arrives in the handshake, so a circuit without one has
+	// none to print and says so rather than leaving the column blank.
+	if !strings.Contains(lines[2], "no handshake yet") || !strings.Contains(lines[2], "43648, 43647") {
+		t.Errorf("an unanswered circuit reads %q", lines[2])
+	}
+	// The handle is deliberately not in the line: nothing is addressed
+	// by a neighbour's, and regions is where a number is wanted.
+	if strings.Contains(got, "47991483540340736") {
+		t.Errorf("the listing carries a handle nobody can use:\n%s", got)
+	}
+}
+
+// TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot: the change costs the
+// daemon a socket per neighbouring region for as long as it is on, so it
+// is worth being sure the word reached the session and that the answer
+// describes what is held afterwards rather than before.
+func TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot(t *testing.T) {
+	x := newTestShell(t)
+
+	if got := x.do(t, "neighbours on"); !strings.Contains(got, "on") {
+		t.Errorf("neighbours on printed %q", got)
+	}
+	if !x.grid.neighbours.On {
+		t.Error("the session was not turned on")
+	}
+
+	// Turning them off drops what is held, so the state and the listing
+	// have to agree about it in the one answer.
+	x.grid.neighbours.Held = []sl.Neighbour{
+		{Handle: msg.RegionHandle(43646, 43648), Name: "Pelmar Mill", Handshook: true},
+	}
+	got := x.do(t, "neighbours off")
+	if !strings.Contains(got, "off") || strings.Contains(got, "Pelmar Mill") {
+		t.Errorf("neighbours off printed %q", got)
+	}
+	if x.grid.neighbours.On || len(x.grid.neighbours.Held) != 0 {
+		t.Errorf("the session is %+v after being turned off", x.grid.neighbours)
+	}
+
+	// Case is not the argument's business: somebody typing at a prompt
+	// has the shift key wherever they left it.
+	if got := x.do(t, "neighbours ON"); !strings.Contains(got, "on") || !x.grid.neighbours.On {
+		t.Errorf("neighbours ON printed %q", got)
+	}
+}
+
+// TestNeighboursRefusesAWordItDoesNotUnderstand: anything taken as a
+// word it did not know would be a session left exactly as it was by a
+// command that looked like it had changed it.
+func TestNeighboursRefusesAWordItDoesNotUnderstand(t *testing.T) {
+	x := newTestShell(t)
+
+	for _, bad := range []string{"neighbours yes", "neighbours 1", "neighbours on off"} {
+		got := x.do(t, bad)
+		if !strings.Contains(got, "usage: neighbours") {
+			t.Errorf("%q printed %q, want the usage line", bad, got)
+		}
+		if x.grid.neighbours.On {
+			t.Fatalf("%q turned them on anyway", bad)
+		}
+	}
+	// The one that names a word says which word, since "on off" is a
+	// count and "yes" is a synonym somebody expected to work.
+	if got := x.do(t, "neighbours yes"); !strings.Contains(got, `"yes" is neither on nor off`) {
+		t.Errorf("the refusal should quote the word: %q", got)
+	}
+}
+
+// TestNeighboursSaysWhyItCannotAnswer rather than printing "off", which
+// is a real state and would be a lie.
+func TestNeighboursSaysWhyItCannotAnswer(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.neighboursErr = errors.New("the circuit is down")
+
+	if got := x.do(t, "neighbours"); !strings.Contains(got, "the circuit is down") {
+		t.Errorf("neighbours should report the failure, got %q", got)
+	}
+	if got := x.do(t, "neighbours on"); !strings.Contains(got, "the circuit is down") {
+		t.Errorf("neighbours on should report the failure, got %q", got)
 	}
 }

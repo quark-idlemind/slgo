@@ -116,6 +116,9 @@ func (b *fakeBackend) Objects(ctx context.Context, named, id string) ([]*sl.Seen
 func (b *fakeBackend) Region(ctx context.Context) (*sl.Region, bool, error) {
 	return &sl.Region{Name: "Nowhere"}, true, nil
 }
+func (b *fakeBackend) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
+	return &sl.Neighbours{}, nil
+}
 func (b *fakeBackend) Flush(ctx context.Context) (int, error) { return 0, nil }
 func (b *fakeBackend) Friends(ctx context.Context) ([]sl.Friend, error) {
 	return []sl.Friend{{ID: harnessOther, Online: true}}, nil

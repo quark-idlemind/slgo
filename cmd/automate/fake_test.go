@@ -344,6 +344,10 @@ func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 	return &sl.Region{Name: "Test Region"}, true, nil
 }
 
+func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
+	return &sl.Neighbours{}, nil
+}
+
 func (f *fakeGrid) Flush(ctx context.Context) (int, error)           { return 0, nil }
 func (f *fakeGrid) Friends(ctx context.Context) ([]sl.Friend, error) { return nil, nil }
 

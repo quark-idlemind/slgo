@@ -44,6 +44,13 @@ var worldCommands = map[string]*command{
 		man:    "regions",
 		run:    cmdRegions,
 	},
+	"neighbours": {
+		params: "[on|off]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "the circuits held to the regions around this one, which walking over a border needs",
+		man:    "neighbours",
+		run:    cmdNeighbours,
+	},
 	"caps": {
 		params: "[TEXT]",
 		flags:  func() any { return new(helpOnly) },
@@ -204,6 +211,96 @@ func printRegions(out io.Writer, found []sl.MapRegion) {
 	for _, r := range found {
 		fmt.Fprintf(out, "%-32s %5d, %-5d %-9s %d\n",
 			r.Name, r.X, r.Y, sl.AccessName(r.Access), r.Handle)
+	}
+}
+
+// cmdNeighbours says what circuits this session holds to the regions
+// around it, and turns them on and off.
+//
+// It is the one command here that costs the daemon something lasting:
+// on is a socket and a share of the traffic per neighbouring region --
+// four around Pelmar Reach, up to eight anywhere -- held for as long as it
+// is on.  That is why it is off unless somebody says so, and why the
+// state is printed after a change rather than the change being silent.
+//
+// The argument is a word and not a flag.  "neighbours on" reads as the
+// sentence somebody means, where "neighbours --set" would be a flag
+// whose value is the whole of the command.
+func cmdNeighbours(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("neighbours", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) > 1 {
+		return usageError("neighbours")
+	}
+
+	var n *sl.Neighbours
+	if len(args) == 1 {
+		// Nothing else is accepted, and "yes" is not a synonym here.
+		// Anything this took as a word it did not understand would be
+		// a session left as it was by a command that looked like it
+		// had changed it.
+		switch strings.ToLower(args[0]) {
+		case "on":
+			n, err = sh.s.SetNeighbours(ctx, true)
+		case "off":
+			n, err = sh.s.SetNeighbours(ctx, false)
+		default:
+			return usageError("neighbours",
+				fmt.Sprintf("%q is neither on nor off", args[0]))
+		}
+	} else {
+		n, err = sh.s.Neighbours(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	printNeighbours(out, n)
+	return nil
+}
+
+// printNeighbours writes the state and then a circuit to a line.
+//
+// It follows printRegions' shape, for the reason printRegions is shared
+// with tp: these are regions, and somebody who has just run regions
+// should not have to read a second layout to learn the same kind of
+// fact.  The name and the square come first because they are what says
+// WHICH region; the handle is left out entirely, where regions prints
+// it, because nothing is addressed by a neighbour's handle -- a border
+// is walked over rather than typed at.
+//
+// On with nothing held is a state worth spelling out.  A simulator
+// offers a neighbour when the avatar is near one and offers none at all
+// to an avatar in the middle of a region, so an empty listing usually
+// means "not near a border" rather than anything having gone wrong.
+func printNeighbours(out io.Writer, n *sl.Neighbours) {
+	switch {
+	case !n.On:
+		fmt.Fprintln(out, "neighbours are off; this avatar cannot walk over a border")
+		return
+	case len(n.Held) == 0:
+		fmt.Fprintln(out, "neighbours are on; no circuit is open, "+
+			"which is what being away from a border looks like")
+		return
+	}
+	fmt.Fprintf(out, "neighbours are on, %d %s held\n",
+		len(n.Held), plural(len(n.Held), "circuit", "circuits"))
+	for _, c := range n.Held {
+		x, y := msg.GridCoords(c.Handle)
+		name := c.Name
+		switch {
+		case !c.Handshook:
+			// The name arrives in the handshake, so a circuit
+			// without one has none to print.  Measured at about a
+			// second on Agni, which is quick enough that seeing this
+			// twice running means the offer came to nothing.
+			name = "(no handshake yet)"
+		case name == "":
+			name = "(unnamed)"
+		}
+		fmt.Fprintf(out, "%-32s %5d, %-5d %-21s %d heard\n", name, x, y, c.Addr, c.Heard)
 	}
 }
 

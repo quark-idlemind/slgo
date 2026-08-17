@@ -56,6 +56,7 @@ these programs refuse to read credentials anyone else can:
     password        = $1$<the md5 of the password>
     start           = last
     group           = Example Builders
+    neighbours      = yes
     viewer_password = $1$<a second one, for handing sessions to a viewer>
 
 The file name is the profile name: the one above as `~/.config/slgo/example`
@@ -64,8 +65,13 @@ is the profile `example`, which is what `slgod example` and
 
 `start` is where to arrive: `last`, `home`, or a region name. `group` is
 the group to act as, which decides more than it looks like -- see "The
-group an avatar acts as" below. `viewer_password` is what makes a
-session handable to a real viewer, and is described with `-viewer`.
+group an avatar acts as" below. `neighbours` is whether this avatar
+holds a circuit to the regions beside it, which is what walking over a
+border needs and what a benchmark has no use for; it wins over `slgod
+-neighbours`, which is what profiles that say nothing get, and `slsh
+neighbours` turns it over on a session that is already up.
+`viewer_password` is what makes a session handable to a real viewer, and
+is described with `-viewer`.
 
 Storing the `$1$...` digest rather than the plain password is worth
 doing. It is the only form that ever goes over the wire, so it loses
@@ -267,6 +273,7 @@ watching for an hour disturbs nothing.
 | `-group G`, `-group PROFILE=G` | the group to act as, overriding the profile's own |
 | `-start WHERE` | override every profile's start location |
 | `-viewer ADDR` | serve viewer logins here, so a real viewer can be handed a session |
+| `-neighbours` | hold a circuit to each neighbouring region, so an avatar can walk over a border; a profile's own `neighbours` setting wins over it |
 | `-trace FILE` | write a packet trace |
 | `-trace-messages NAMES` | trace only these; empty traces every one |
 | `-trace-bodies` | write each traced message out in full |

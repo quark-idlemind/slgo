@@ -109,6 +109,13 @@ type fakeBackend struct {
 	regionKnown bool
 	regionErr   error
 
+	// neighbours is what the far end holds, and it is changed by a
+	// set the way a real backend changes it: turning them off drops
+	// what is held rather than only refusing the next offer, which is
+	// the half of the behaviour a caller can see from here.
+	neighbours    Neighbours
+	neighboursErr error
+
 	objects    []*Seen
 	objectsErr error
 
@@ -657,6 +664,23 @@ func (f *fakeBackend) Objects(ctx context.Context, named, id string) ([]*Seen, e
 		out = append(out, o)
 	}
 	return out, nil
+}
+
+func (f *fakeBackend) Neighbours(ctx context.Context, set *bool) (*Neighbours, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.neighboursErr != nil {
+		return nil, f.neighboursErr
+	}
+	if set != nil {
+		f.neighbours.On = *set
+		if !*set {
+			f.neighbours.Held = nil
+		}
+	}
+	n := f.neighbours
+	n.Held = append([]Neighbour(nil), f.neighbours.Held...)
+	return &n, nil
 }
 
 func (f *fakeBackend) Region(ctx context.Context) (*Region, bool, error) {
