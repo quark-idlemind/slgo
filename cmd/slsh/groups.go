@@ -127,9 +127,14 @@ var groups = []group{
 		members: []string{"caps", "features", "lsl"},
 	},
 	{
-		name:    "shell",
-		brief:   "slsh itself",
-		members: []string{"help", "man", "quit", ".", "echo"},
+		name:  "shell",
+		brief: "slsh itself",
+		// set is here rather than under avatars: what it changes is
+		// this shell's own settings -- which map it draws, which key
+		// leaves chat -- and the question it answers, "how do I stop
+		// having to say this every time", is asked about slsh and not
+		// about any avatar.
+		members: []string{"help", "man", "set", "quit", ".", "echo"},
 	},
 }
 

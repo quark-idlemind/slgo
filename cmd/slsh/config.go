@@ -7,12 +7,21 @@ package main
 //	agent  = example
 //	escape = ESC
 //
+//	map_rows          = 16
+//	map_span          = 64
+//	map_ratio         = 7:3
+//	map_friend_colour = green
+//
 //	viewer_app     = Firestorm-OpenSim
 //	viewer_grid    = slgod
 //	viewer_launch  = open -a {app} --args --grid {grid} --login {first} {last} {password}
 //	viewer_running = pgrep -f {app}.app/Contents
 //
 // Flags win over the file, and the file over the defaults.
+//
+// The file is hand-edited and "set" edits it as well -- see set.go for
+// the command and settings below for the one table both of them work
+// from.
 
 import (
 	"bufio"
@@ -20,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -48,6 +58,70 @@ type Config struct {
 	ViewerGrid    string
 	ViewerLaunch  string
 	ViewerRunning string
+
+	// The shape and scale of the picture "map" draws: how many rows it
+	// is given, how much ground the close view covers, the shape of a
+	// character cell, how far off this avatar's height still counts as
+	// level, and the colour a friend is picked out in.  map.go holds
+	// the defaults and does the arithmetic; --rows and --span override
+	// the first two for one command, as a flag should.
+	MapRows         int
+	MapSpan         int
+	MapRatio        CellRatio
+	MapLevel        int
+	MapFriendColour string // a colour by name, never an escape sequence
+}
+
+// CellRatio is the shape of a character cell in whatever font somebody
+// reads a terminal in: how TALL it is against how WIDE, in that order.
+//
+// It is written the way it is measured -- "7:3" is a cell seven high
+// and three wide, which is what the mono font this was measured in
+// turned out to be -- and it is the whole reason a map is drawn with
+// more columns than rows.
+//
+// Height first is the one thing here worth saying twice, because a
+// ratio carries no units and an inverted one cannot be seen by looking
+// at anything: the picture comes out as tall and thin as a doorway and
+// reads as a perfectly ordinary picture of somewhere shaped like a
+// doorway.  See mapGrid.cols, which is the only place it is used.
+type CellRatio struct {
+	Tall int
+	Wide int
+}
+
+// String writes a ratio the way it is written in the file: height
+// first, so that what "set" prints is what the file would take back.
+func (r CellRatio) String() string { return fmt.Sprintf("%d:%d", r.Tall, r.Wide) }
+
+// ParseCellRatio reads "7:3", height first.
+//
+// Both parts have to be there.  A bare "7" would have to mean seven to
+// one or seven to three depending on who was reading it, and a setting
+// whose meaning depends on that is worse than one that is refused.
+func ParseCellRatio(s string) (CellRatio, error) {
+	tall, wide, ok := strings.Cut(strings.TrimSpace(s), ":")
+	if !ok {
+		return CellRatio{}, fmt.Errorf("want height:width, like 7:3, got %q", s)
+	}
+	var r CellRatio
+	for _, part := range []struct {
+		text string
+		into *int
+	}{{tall, &r.Tall}, {wide, &r.Wide}} {
+		n, err := strconv.Atoi(strings.TrimSpace(part.text))
+		if err != nil {
+			return CellRatio{}, fmt.Errorf("want height:width, like 7:3, got %q", s)
+		}
+		// The upper bound is not a fact about fonts; it is a refusal to
+		// turn a typed "70:3" into a picture 373 columns wide, which is
+		// a terminal full of frame and nothing a person can read.
+		if n < 1 || n > 20 {
+			return CellRatio{}, fmt.Errorf("a cell is between 1 and 20 characters either way, got %q", s)
+		}
+		*part.into = n
+	}
+	return r, nil
 }
 
 // DefaultConfig is what an empty file leaves you with.
@@ -56,7 +130,14 @@ type Config struct {
 // in a file and nothing on the command line, where slgod runs is a
 // question for sl-host, and a default here would answer it first.
 func DefaultConfig() Config {
-	c := Config{Prefix: 27}
+	c := Config{
+		Prefix:          27,
+		MapRows:         mapDefaultRows,
+		MapSpan:         mapDefaultSpan,
+		MapRatio:        mapDefaultRatio,
+		MapLevel:        mapDefaultLevel,
+		MapFriendColour: mapDefaultFriendColour,
+	}
 	c.ViewerApp, c.ViewerGrid, c.ViewerLaunch, c.ViewerRunning = viewerDefaults(runtime.GOOS)
 	return c
 }
@@ -149,6 +230,244 @@ func viewerDefaults(goos string) (app, grid, launch, running string) {
 	return "", "", "", ""
 }
 
+// setting is one thing somebody can set: what it is called, what it is
+// for, and the two halves of reading and writing it.
+//
+// # Why a table and not a switch
+//
+// Every setting used to be in three places at once -- a field of
+// Config, a case in the reader's switch, and a line of DefaultConfig --
+// and adding one meant remembering all three.  A name misspelled in the
+// switch was caught nowhere: the file would refuse it as unknown, which
+// reads as the person having typed it wrongly.
+//
+// So there is one row per setting and everything works from it: the
+// reader looks a key up here, "set" lists these and nothing else, and
+// the file writer is handed one of these rows.  A setting added here
+// can be written in the file, listed, and changed, with no other edit.
+//
+// The reader still refuses a key that is in no row, which is what that
+// check has always been for: a misspelled setting that silently did
+// nothing is a shell that comes up looking right and behaves as though
+// the line were not there.
+type setting struct {
+	name string
+
+	// also are the other spellings the file has always taken.  They
+	// stay because somebody's file has them in it; the name is what is
+	// printed and what a new file gets.
+	also []string
+
+	// about is what it is for, in a line, for the listing.
+	about string
+
+	// startup is a setting the running shell cannot take, because it
+	// had been used before there was a prompt to type "set" at: the
+	// session was attached with it, or the terminal was put in raw mode
+	// with it.  A flag may have overridden the file for this run as
+	// well, so applying one of these now would mean two different
+	// things depending on how slsh was started.  See startupNote for
+	// what is said about it, which is said in the listing and again
+	// when one is changed.
+	startup bool
+
+	// show is the value as the file would write it, and parse is the
+	// same thing backwards.  parse leaves the Config untouched when it
+	// refuses, so a bad value cannot half-apply.
+	show  func(c *Config) string
+	parse func(c *Config, value string) error
+}
+
+// startupNote is what a startup-only setting says.  Written out rather
+// than implied, because a setting that quietly did not take is worse
+// than one that refuses: the picture nobody expected is blamed on the
+// setting rather than on the shell not having read it yet.
+const startupNote = "this shell keeps the old value; the new one is for the next slsh"
+
+// settings is every setting there is, written in the order they belong
+// in -- the shell's own, then the viewer's, then the map's, and within
+// each the order somebody meets them in.
+//
+// They are LISTED alphabetically, which is not the same thing and is
+// deliberate; see sortedSettings.
+var settings = []setting{{
+	name:    "addr",
+	also:    []string{"server"},
+	about:   "the slgod to attach to; empty asks sl-host where it is",
+	startup: true,
+	show:    func(c *Config) string { return c.Addr },
+	parse:   func(c *Config, v string) error { c.Addr = v; return nil },
+}, {
+	name:    "agent",
+	also:    []string{"profile"},
+	about:   "the profile to drive: one slgod holds, or one on disk for --direct",
+	startup: true,
+	show:    func(c *Config) string { return c.Agent },
+	parse:   func(c *Config, v string) error { c.Agent = v; return nil },
+}, {
+	name:    "escape",
+	also:    []string{"prefix", "prefix_key"},
+	about:   "the key that leaves chat mode: ESC, ^G, or one character",
+	startup: true,
+	show:    func(c *Config) string { return KeyName(c.Prefix) },
+	parse: func(c *Config, v string) error {
+		r, err := ParseKey(v)
+		if err != nil {
+			return err
+		}
+		c.Prefix = r
+		return nil
+	},
+}, {
+	name:  "viewer_app",
+	about: "the viewer \"viewer --launch\" starts; the OpenSim build, not the other one",
+	show:  func(c *Config) string { return c.ViewerApp },
+	parse: func(c *Config, v string) error { c.ViewerApp = v; return nil },
+}, {
+	name:  "viewer_grid",
+	about: "what this grid is called in that viewer's own grid list",
+	show:  func(c *Config) string { return c.ViewerGrid },
+	parse: func(c *Config, v string) error { c.ViewerGrid = v; return nil },
+}, {
+	name:  "viewer_launch",
+	about: "the command that starts it: {app} {grid} {first} {last} {password}",
+	show:  func(c *Config) string { return c.ViewerLaunch },
+	parse: func(c *Config, v string) error { c.ViewerLaunch = v; return nil },
+}, {
+	name:  "viewer_running",
+	about: "the command that says whether one is up; empty skips the check",
+	show:  func(c *Config) string { return c.ViewerRunning },
+	// Deliberately settable to nothing: a person who would rather slsh
+	// did not run pgrep can empty it, and the launch then goes ahead
+	// without the check.
+	parse: func(c *Config, v string) error { c.ViewerRunning = v; return nil },
+}, {
+	name:  "map_rows",
+	about: "how many rows \"map\" draws in, unless --rows says otherwise",
+	show:  func(c *Config) string { return strconv.Itoa(c.MapRows) },
+	parse: func(c *Config, v string) error {
+		n, err := settingNumber(v, 2)
+		if err != nil {
+			return err
+		}
+		// The same bound the command refuses at, and for the same
+		// reason: past this the picture is wider than any terminal.
+		if n > mapMaxRows {
+			return fmt.Errorf("%d is more than the %d rows map will draw", n, mapMaxRows)
+		}
+		c.MapRows = n
+		return nil
+	},
+}, {
+	name:  "map_span",
+	about: "how much ground the close picture covers, in metres",
+	show:  func(c *Config) string { return strconv.Itoa(c.MapSpan) },
+	parse: func(c *Config, v string) error {
+		n, err := settingNumber(v, 2)
+		if err != nil {
+			return err
+		}
+		c.MapSpan = n
+		return nil
+	},
+}, {
+	name:  "map_ratio",
+	about: "the shape of a character cell in your font, height first",
+	show:  func(c *Config) string { return c.MapRatio.String() },
+	parse: func(c *Config, v string) error {
+		r, err := ParseCellRatio(v)
+		if err != nil {
+			return err
+		}
+		c.MapRatio = r
+		return nil
+	},
+}, {
+	name:  "map_level",
+	about: "how far above or below you still counts as level, in metres",
+	show:  func(c *Config) string { return strconv.Itoa(c.MapLevel) },
+	parse: func(c *Config, v string) error {
+		n, err := settingNumber(v, 1)
+		if err != nil {
+			return err
+		}
+		c.MapLevel = n
+		return nil
+	},
+}, {
+	name:  "map_friend_colour",
+	about: "the colour a friend is drawn in, by name; \"man map\" names them",
+	show:  func(c *Config) string { return c.MapFriendColour },
+	parse: func(c *Config, v string) error {
+		name, err := ParseColour(v)
+		if err != nil {
+			return err
+		}
+		c.MapFriendColour = name
+		return nil
+	},
+}}
+
+// findSetting is the row for a key, under its name or any spelling of
+// it the file has ever taken.
+func findSetting(key string) (setting, bool) {
+	key = strings.ToLower(strings.TrimSpace(key))
+	for _, s := range settings {
+		if s.name == key {
+			return s, true
+		}
+		for _, a := range s.also {
+			if a == key {
+				return s, true
+			}
+		}
+	}
+	return setting{}, false
+}
+
+// sortedSettings is every setting in the order they are printed in.
+//
+// Alphabetical, as every list of names in this shell is: these are read
+// by somebody looking for a name they already have in mind, and a list
+// in an order only its author can predict is one they have to read all
+// of.  See sortedNames in groups.go, which says the rest of it.  The
+// curation is still in the table, where it costs nothing and documents
+// what belongs with what.
+func sortedSettings() []setting {
+	out := append([]setting(nil), settings...)
+	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
+	return out
+}
+
+// settingNames is every setting, for a refusal that has to say what
+// there is.
+func settingNames() []string {
+	out := make([]string, 0, len(settings))
+	for _, s := range sortedSettings() {
+		out = append(out, s.name)
+	}
+	return out
+}
+
+// settingNumber reads a whole number that has to be at least something.
+//
+// There is no upper bound to give here in general: a map fifty metres
+// across and one four hundred metres across are both pictures somebody
+// might want, and the two settings that do have a ceiling say so
+// themselves.  The floor is where the setting stops meaning anything --
+// a picture one row tall, a span narrower than the avatar in the middle
+// of it -- and is worth refusing rather than drawing.
+func settingNumber(v string, low int) (int, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil {
+		return 0, fmt.Errorf("want a whole number, got %q", v)
+	}
+	if n < low {
+		return 0, fmt.Errorf("want %d or more, got %d", low, n)
+	}
+	return n, nil
+}
+
 // ConfigDir is where slchat keeps its settings.  SLSH_CONFIG_DIR
 // names it outright; otherwise it is slchat under XDG_CONFIG_HOME, or
 // under ~/.config when that is unset -- the same rule the profiles
@@ -167,14 +486,23 @@ func ConfigDir() (string, error) {
 	return filepath.Join(home, ".config", "slsh"), nil
 }
 
+// ConfigPath is the settings file itself, which "set" writes to and
+// names when it has.
+func ConfigPath() (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config"), nil
+}
+
 // LoadConfig reads the settings file, treating a missing one as empty.
 func LoadConfig() (Config, error) {
 	c := DefaultConfig()
-	dir, err := ConfigDir()
+	path, err := ConfigPath()
 	if err != nil {
 		return c, err
 	}
-	path := filepath.Join(dir, "config")
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -196,35 +524,127 @@ func LoadConfig() (Config, error) {
 		}
 		key = strings.ToLower(strings.TrimSpace(key))
 		value = strings.TrimSpace(value)
-		switch key {
-		case "addr", "server":
-			c.Addr = value
-		case "agent", "profile":
-			c.Agent = value
-		case "viewer_app":
-			c.ViewerApp = value
-		case "viewer_grid":
-			c.ViewerGrid = value
-		case "viewer_launch":
-			c.ViewerLaunch = value
-		case "viewer_running":
-			// Deliberately settable to nothing: a person who would
-			// rather slsh did not run pgrep can empty it, and the
-			// launch then goes ahead without the check.
-			c.ViewerRunning = value
-		case "escape", "prefix", "prefix_key":
-			r, err := ParseKey(value)
-			if err != nil {
-				return c, fmt.Errorf("slsh: %s line %d: %w", path, n, err)
-			}
-			c.Prefix = r
-		default:
+		s, ok := findSetting(key)
+		if !ok {
 			// A misspelled key would otherwise be a setting that
 			// silently does nothing.
 			return c, fmt.Errorf("slsh: %s line %d: unknown setting %q", path, n, key)
 		}
+		if err := s.parse(&c, value); err != nil {
+			// Named, because a file has several settings in it and the
+			// value being complained about is often one somebody
+			// copied from another line.
+			return c, fmt.Errorf("slsh: %s line %d: %s: %w", path, n, s.name, err)
+		}
 	}
 	return c, sc.Err()
+}
+
+// saveSetting writes one setting into the file and hands back the path
+// it wrote to.
+//
+// # Why this is not SaveProfile
+//
+// agent.SaveProfile rewrites a profile wholesale out of the struct,
+// which is right there: a profile is written by "login" and read by
+// programs.  A settings file is different in the one way that matters
+// -- it is hand-edited -- and the comments in it are somebody's notes
+// about why a viewer needs that particular grid nickname, or which
+// address was tried and did not answer.  Rewriting the file from the
+// struct would throw all of that away, silently, the first time
+// anybody typed "set".
+//
+// So the line for this setting changes and nothing else does: not the
+// other lines, not the comments, not the blank lines, not the spacing
+// on the line itself -- only the text after the "=".  A file that does
+// not mention the setting gets one line appended, and a file that is
+// not there at all is created, with its directory.
+func saveSetting(s setting, value string) (string, error) {
+	path, err := ConfigPath()
+	if err != nil {
+		return "", err
+	}
+
+	body, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return path, err
+	}
+
+	// The LAST line for this key, not the first.  The reader takes the
+	// file from the top and lets each line overwrite what came before,
+	// so in a file that mentions a setting twice it is the last one
+	// that is in force -- and changing any other would be a "set" that
+	// wrote the file and changed nothing anybody could see.
+	lines := strings.Split(string(body), "\n")
+	at := -1
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			// A commented-out setting is a note, and notes are kept.
+			continue
+		}
+		key, _, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		if got, ok := findSetting(key); ok && got.name == s.name {
+			at = i
+		}
+	}
+
+	text := string(body)
+	switch {
+	case at >= 0:
+		// Everything up to and including the "=" is left exactly as it
+		// was, which keeps the indentation, the column the values are
+		// lined up in, and whichever spelling of the name the file
+		// already used.
+		eq := strings.Index(lines[at], "=")
+		lines[at] = lines[at][:eq+1] + " " + value
+		text = strings.Join(lines, "\n")
+	default:
+		if text != "" && !strings.HasSuffix(text, "\n") {
+			// A file whose last line has no newline on it would
+			// otherwise have the new setting run onto the end of it.
+			text += "\n"
+		}
+		text += s.name + " = " + value + "\n"
+	}
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return path, err
+	}
+	// The mode the file already has, so that somebody who made theirs
+	// private keeps it private.  There is nothing secret in it -- the
+	// passwords are in the profiles, which agent.SaveProfile writes
+	// 0600 -- so a new one is an ordinary file.
+	mode := os.FileMode(0o644)
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
+	}
+
+	// Through a temporary file in the same directory, so that a failure
+	// half way cannot leave somebody with a settings file that has been
+	// truncated and not written.  Same directory because a rename is
+	// only atomic within one filesystem.
+	tmp, err := os.CreateTemp(dir, ".config.*")
+	if err != nil {
+		return path, err
+	}
+	defer os.Remove(tmp.Name())
+	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		return path, err
+	}
+	if _, err := tmp.WriteString(text); err != nil {
+		tmp.Close()
+		return path, err
+	}
+	if err := tmp.Close(); err != nil {
+		return path, err
+	}
+	return path, os.Rename(tmp.Name(), path)
 }
 
 // ParseKey reads the name of a key.
