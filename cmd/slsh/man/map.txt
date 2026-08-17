@@ -1,0 +1,175 @@
+map draws the other avatars as characters on a grid.  It is the half of
+the question "who" cannot answer: a listing says somebody is twenty
+metres away and nothing at all about which way, and three people at
+twenty metres are a crowd in one direction and a scattering in another.
+
+There are two pictures.  By default it is the ground around this avatar,
+sixty-four metres across, with the avatar in the middle of it.  With
+--region it is the whole region -- 256 metres -- with the avatar
+wherever in it the avatar really is.
+
+# The picture is twice as wide as it is tall, which is what makes it square
+
+A character cell is about twice as tall as it is wide in every terminal
+font, so a grid drawn with as many columns as rows comes out on the
+screen twice as tall as it is wide, and a square region looks like a
+doorway.  That matters more here than it would in a listing, because the
+whole point of a picture is that the eye reads the shape without doing
+any arithmetic.
+
+So the rows are what is chosen and the columns are always twice as many,
+and a column covers half the metres a row does.  With the sixteen rows
+it draws unless told otherwise, the picture is thirty-two columns wide:
+in the region view that is 256/16 = 16 metres to a row and 256/32 = 8
+metres to a column, and in the close view 4 metres to a row and 2 to a
+column.
+
+The line under the grid says both numbers every time, because "about
+square" is not a scale.  A picture with no scale under it is a drawing.
+
+# The marks
+
+	*   this avatar
+	o   somebody within three metres of this avatar's height
+	^   somebody higher than that
+	v   somebody lower than that
+
+Three metres is about one storey: an avatar is a couple of metres tall
+and a floor of a building is three or so, so an "o" is somebody who
+could be walked over to and a "^" is somebody on the roof.  The height
+is compared with this avatar's in both views, so a picture of the whole
+region still says who is up in a skybox.
+
+Two or more people in one cell are drawn as the count -- 2 to 9 -- and
+ten or more as a "+", because there is no digit for ten and a 9 there
+would be a lie.  Somebody standing in the same cell as this avatar is
+covered by the star, which wins its own cell: a picture whose reader
+cannot find themselves in it is a picture of nowhere.  The line under
+the grid says how many are under the star, since somebody hidden by a
+mark is exactly the person being looked for.
+
+# North is up and east is right
+
+Which is what every map does, and what the region's own coordinates
+already mean: y grows northward and x eastward, so the top of the
+picture is the high end of y and the right of it the high end of x.
+
+Anybody the picture does not reach is counted and named underneath it,
+with how far away they are, rather than being drawn at the edge.  An
+avatar drawn at the edge is a claim about where they are standing, and
+that claim would be false.  The names stop at eight and the rest are a
+count, because naming forty people under a grid is "who" printed twice.
+
+# Sixty-four metres is a judgement
+
+Nothing chooses the region view's scale -- a region is 256 metres and
+that is that -- but the close view has to cover something, and 64 metres
+is a choice rather than a measurement.  It is comfortably more than the
+twenty metres ordinary chat carries and rather less than the draw
+distance usually is, so it holds the people somebody is actually dealing
+with.  A picture that covered everything the session had been told about
+would put all of them in one cell in the middle.
+
+--span changes it, in metres across, and --rows changes how many rows
+either picture is drawn in.  --region has no span to change and says so
+rather than ignoring one.
+
+# It numbers nobody
+
+Every listing that prints a number down the left -- who, friends, lookup
+-- replaces what a number means for the commands that take one.  A
+picture cannot be numbered usefully, since two people in one cell are
+one character, so this deliberately leaves the last listing alone: after
+a map, "im 2" still means the second line of whatever printed one.
+
+# What it cannot show
+
+The avatars are the ones the simulator has described to this session,
+which is what is within the draw distance and not everyone in the
+region.  So --region draws the whole region and can only mark the people
+this session has been told about: an empty corner is a corner nobody has
+described, not a corner with nobody in it.  Use "where" and the count
+under the grid together rather than reading the blank cells as fact.
+
+The data a mini-map in a viewer is drawn from is CoarseLocationUpdate,
+which does carry every avatar in the region.  slgod reads its own entry
+out of it, to keep the camera with an avatar that walked, and keeps
+nothing about anybody else -- so there is nothing here to draw a whole
+region from yet.  It would also be a coarser picture than this one: its
+heights are one byte of four metre steps that stops at 1020 for
+everything above it, which is a skybox reported as level with the roofs.
+
+# Examples
+
+The ground around this avatar, with somebody up a ladder, somebody in a
+cellar, and two people close enough together to share a cell:
+
+	map
+
+	the 64m around you in Pelmar Reach at 128, 128, 25
+	+--------------------------------+
+	|                                |
+	|                      v         |
+	|                                |
+	|                                |
+	|            o                   |
+	|                                |
+	|                   o            |
+	|                *               |
+	|                                |
+	|               ^                |
+	|                           2    |
+	|                                |
+	|                                |
+	|                                |
+	|                                |
+	|                                |
+	+--------------------------------+
+	2m to a column, 4m to a row; north is up, east is right
+	* you   o within 3m of your height   ^ higher   v lower
+	a digit is that many in one cell, and + is more than nine
+	6 avatars in the picture
+	1 outside it: Orla Pennywort 99m
+
+The same moment as a picture of the region.  A cell is now 8 metres by
+16, so it reaches the one who was too far away for the close picture and
+loses the difference between this avatar and the neighbour standing a
+few metres from it, who is now under the star:
+
+	map --region
+
+	all 256m of Pelmar Reach at 128, 128, 25
+	+--------------------------------+
+	|                                |
+	|                                |
+	|                                |
+	|       o                        |
+	|                                |
+	|                                |
+	|                 v              |
+	|               o*               |
+	|               ^  2             |
+	|                                |
+	|                                |
+	|                                |
+	|                                |
+	|                                |
+	|                                |
+	|                                |
+	+--------------------------------+
+	8m to a column, 16m to a row; north is up, east is right
+	* you   o within 3m of your height   ^ higher   v lower
+	a digit is that many in one cell, and + is more than nine
+	7 avatars in the picture
+	1 of them is where you are, under the *
+
+A bigger picture, for a terminal with the room for it, and a smaller
+square of ground in more detail:
+
+	map --rows 24
+	map --span 24
+
+See also: who for the same people as a listing with their distances and
+the numbers other commands take, where for this avatar's own position,
+look for what the region says about itself, and tp for going to a
+position rather than reading one.

@@ -72,6 +72,14 @@ metres into the region to the east.
 Two of the same relative teleport go twice as far, where two of the
 same absolute one go nowhere the second time.  That is the point of it.
 
+It is measured from where the avatar is at the moment the command runs,
+which is worth remembering when that is changing.  An avatar standing
+on a skybox platform 2001 metres up was moved ten metres north with
+"tp ~ ~10 ~", which put it over the edge; it fell, and the next
+"tp ~ ~-10 ~" read the height it had fallen to and kept it.  Nothing
+went wrong -- relative means relative -- but an absolute height is the
+way back.
+
 A position relative to the avatar cannot be given with the name of
 another region: the avatar is not standing in that region, so there is
 nothing for "~" to be measured from, and it is refused rather than

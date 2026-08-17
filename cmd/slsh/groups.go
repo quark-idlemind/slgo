@@ -89,7 +89,7 @@ var groups = []group{
 		// question asked in two directions, and move sits with the
 		// other things done to an object that is already standing
 		// there rather than beside them.
-		members: []string{"where", "group", "tp", "who", "look", "regions", "neighbours",
+		members: []string{"where", "group", "tp", "who", "look", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "move", "dump", "rez", "reform", "touch", "texture",
 			"take", "place", "perms", "drop", "start", "stop", "link", "unlink"},

@@ -37,6 +37,12 @@ var worldCommands = map[string]*command{
 		man:   "look",
 		run:   cmdLook,
 	},
+	"map": {
+		flags: func() any { return new(mapOptions) },
+		brief: "a picture of who is around this avatar, or of the whole region",
+		man:   "map",
+		run:   cmdMap,
+	},
 	"regions": {
 		params: "NAME",
 		flags:  func() any { return new(regionsOptions) },

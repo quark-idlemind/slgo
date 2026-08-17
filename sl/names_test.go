@@ -273,6 +273,33 @@ func TestNearbyIsEverybodyButUs(t *testing.T) {
 	}
 }
 
+// TestNearbyKeepsWhereEverybodyIsStanding, and not only how far off they
+// are.
+//
+// A distance is what "who" prints and it is the wrong thing to draw
+// with: twenty metres says nothing about which way, and the position it
+// was worked out from cannot be got back out of it.  It is the region's
+// own metres, so that a caller can draw the region as well as the
+// ground around this avatar.
+func TestNearbyKeepsWhereEverybodyIsStanding(t *testing.T) {
+	w, f := newFakeSession(t)
+	f.objects = []*Seen{avatarAt(somebody, 140, 100, 61)}
+	f.AnswerNames(t, map[msg.UUID]string{somebody: "Ozu Brantwick"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	all, err := w.Nearby(ctx)
+	if err != nil {
+		t.Fatalf("Nearby: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("Nearby found %d, want the one avatar: %+v", len(all), all)
+	}
+	if want := (msg.Vector3{X: 140, Y: 100, Z: 61}); all[0].Position != want {
+		t.Errorf("position = %v, want %v, the region's own metres", all[0].Position, want)
+	}
+}
+
 // TestNearbySaysWhenItCannotTell: an empty region and a broken backend
 // look the same to a caller that is only handed a list, and one of them
 // means the answer is worth nothing.

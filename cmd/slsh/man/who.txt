@@ -36,5 +36,7 @@ Who is here, and then a word to the second of them:
 	who
 	im 2 is the lantern by the gate yours?
 
-See also: where, look, objects, lookup and profile for somebody who is
-not standing here, and im for talking to one who is.
+See also: map for the same people drawn as a picture, which says which
+way they are as well as how far, where, look, objects, lookup and
+profile for somebody who is not standing here, and im for talking to one
+who is.
