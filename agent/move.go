@@ -238,6 +238,14 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 	// including the ones a capability reply offered along the way.
 	a.forgetURLs()
 
+	// And so does every child circuit: they are the neighbours of the
+	// region the avatar was in, and on a crossing one of them is the
+	// region it has just arrived in, which would sit there as a second
+	// circuit to the simulator the root now talks to.  The new region
+	// offers its own within seconds.  See dropNeighbours, which also
+	// says why this is not the place a child is promoted instead.
+	a.dropNeighbours("the avatar moved to another region")
+
 	// The seed is recorded whatever is done with it below, including
 	// when it is empty and when capabilities were never wanted.  It is
 	// the answer to "where would this region's capabilities come from",

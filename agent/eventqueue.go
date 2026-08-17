@@ -331,6 +331,8 @@ func (a *Agent) noteEvent(name string, body any) {
 		a.noteTeleportFinish(body)
 	case "CrossedRegion":
 		a.noteCrossedRegion(body)
+	case "EnableSimulator":
+		a.noteEnableSimulator(body)
 	}
 }
 

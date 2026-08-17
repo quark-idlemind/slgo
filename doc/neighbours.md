@@ -205,7 +205,7 @@ The rest of what it measured, in the order it happened:
 - **The pings are real.** Five `StartPingCheck` in thirty seconds, so a
   child that does not answer will be dropped like any other circuit.
 
-### Stage 1 -- the option, and the neighbours we know of
+### Stage 1 -- the option, and the neighbours we know of (done)
 
 `Options.Neighbours` and `slgod -neighbours`, both off by default, and
 an `EnableSimulator` handler that records handle and address in a list
@@ -215,7 +215,7 @@ or a line in `look`.
 Standing on its own this is worth having -- it says what is around this
 region, which nothing can answer today.
 
-### Stage 2 -- a circuit that stays up
+### Stage 2 -- a circuit that stays up (done)
 
 The `child` type, opened for each neighbour on the list when the option
 is on: `UseCircuitCode`, answer `RegionHandshake` and the pings, and
@@ -223,6 +223,31 @@ nothing else. Everything the neighbour says is counted and dropped.
 
 That is a stage worth stopping at, because it is the whole of what a
 border crossing needs from us if stage 0 says so.
+
+Run 2026-08-16 against Agni, with `slgod -neighbours` doing the holding
+rather than a probe. Logged in at Pelmar Reach (12, 128) it opened a
+circuit to Pelmar Mill and had its handshake a second later; the avatar
+walked west and **was in Pelmar Mill four and a half seconds after the key
+went down**, with the region-change notice reaching a client on the way.
+The whole chain ran without a hand on it: offer, circuit, walk,
+`CrossedRegion`, `moveTo`, the notice, the viewer told nothing.
+
+Three things it showed that stage 0 could not:
+
+- **The set follows the avatar and rebuilds itself.** Walking toward the
+  corner, two more were offered and taken -- Orrick Gate (43648, 43647)
+  and Kelva Sands (43647, 43647) -- and on arriving in Pelmar Mill all
+  three were dropped and its own west neighbour (43646, 43648) was open
+  within a second.
+- **A teleport drops them the same way**, and from the skybox at 2001m
+  in the middle of the region **none is offered at all**: a simulator
+  introduces what is near, and nothing is near the middle.
+- **`EstablishAgentCommunication` follows the circuit here too**, which
+  is now three runs saying it.
+
+What is still true after this stage: a crossing costs a fresh dial,
+because `moveTo` does not know the circuit it wants is already open.
+That is stage 3.
 
 ### Stage 3 -- the crossing, by promotion
 

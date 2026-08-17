@@ -45,6 +45,8 @@ func main() {
 			"write each traced message out in full, rather than one line naming it")
 		viewerAt = flag.String("viewer", "",
 			"serve viewer logins on this address, so a real viewer can be handed a session")
+		neighbours = flag.Bool("neighbours", false,
+			"hold a circuit to each neighbouring region, so the avatar can walk over a border")
 		group groupFlag
 	)
 	flag.Var(&group, "group",
@@ -188,6 +190,17 @@ func main() {
 			},
 			OnError: func(p *msg.Packet) {
 				log.Printf("%s: undecodable packet: %v", name, p.Err)
+			},
+			// Off unless asked for, and off changes nothing at
+			// all: see agent.Options.Neighbours.  A border
+			// crossing needs these circuits, and a daemon that
+			// only ever acts where its avatar stands does not.
+			Neighbours: *neighbours,
+			// So that a child circuit opening and closing is
+			// visible.  Nothing else says it yet -- no client
+			// can ask for a listing of them.
+			Log: func(format string, v ...any) {
+				log.Printf("%s: "+format, append([]any{name}, v...)...)
 			},
 		}
 		if viewers != nil {

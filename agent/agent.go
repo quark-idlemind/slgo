@@ -160,6 +160,15 @@ type Agent struct {
 	// keeps its own, which is what a single direct login wants.
 	regions *Cache
 
+	// neighbours are the circuits held to the regions around this
+	// one, by grid handle, and refused are the offers turned down for
+	// being past MaxNeighbours -- kept only so that one is logged
+	// once rather than every time it is offered again.  Both are nil
+	// unless Options.Neighbours is on; see neighbour.go.
+	neighMu    sync.Mutex
+	neighbours map[uint64]*child
+	refused    map[uint64]bool
+
 	mu          sync.RWMutex
 	friends     map[msg.UUID]*Friend
 	look        Look
@@ -278,6 +287,34 @@ type Options struct {
 	// how much the simulator sends, so it is worth setting low for
 	// a client that does not care about objects.
 	DrawDistance float32
+
+	// Neighbours holds a circuit to each region around this one, so
+	// that the avatar can walk over a border: a simulator will not
+	// hand it over to a client that holds none.  See neighbour.go,
+	// which is where the whole of it lives, and doc/neighbours.md
+	// for what it measured.
+	//
+	// Off by default, and off is not a smaller version of on: no
+	// handler is registered, no offer is read and no socket is
+	// opened, so a session that does not ask for this behaves
+	// exactly as it did before it existed.  It costs a socket and a
+	// share of the traffic per neighbour -- four regions surround
+	// Pelmar Reach and eight can surround one anywhere -- which a
+	// daemon acting only where its avatar stands should not be made
+	// to pay.
+	Neighbours bool
+
+	// Log is where this session says the few things worth the
+	// attention of whoever is running the daemon.  Nil is silence,
+	// which is what a test wants; cmd/slgod passes log.Printf with
+	// the profile's name on the front.
+	//
+	// It is not a trace and not an error channel: what belongs here
+	// is what nothing else would ever say.  Today that is the child
+	// circuits opening and closing, which until a later stage gives
+	// clients a listing is the only way anyone can see that they are
+	// there at all.
+	Log func(format string, v ...any)
 
 	// Idle ends the session when nothing has arrived from the
 	// simulator for this long.  Default 60s; a negative value
@@ -483,6 +520,15 @@ func (a *Agent) spawn(fn func() error) {
 	}()
 }
 
+// logf says something to whoever is running the daemon, and nothing at
+// all when nobody is listening.
+func (a *Agent) logf(format string, v ...any) {
+	if a.opts.Log == nil {
+		return
+	}
+	a.opts.Log(format, v...)
+}
+
 func (a *Agent) fail(err error) {
 	if err != nil {
 		a.errOnce.Do(func() { a.err.Store(err) })
@@ -504,6 +550,7 @@ func (a *Agent) register() {
 	a.trackObjects()
 	a.keepOffers()
 	a.followCrossings()
+	a.followNeighbours()
 
 	// AgentDataUpdate carries the active group, which decides whether a
 	// parcel lets this avatar build. It is sent at login and when the
@@ -732,14 +779,25 @@ func (a *Agent) handshake(ctx context.Context, timeout time.Duration) error {
 // session ever talks to, which is why a teleport is not a relog: see
 // moveTo, the other caller.
 func (a *Agent) sendUseCircuitCode(ctx context.Context) error {
+	if err := a.Send.SendReliable(ctx, a.useCircuitCode()); err != nil {
+		return fmt.Errorf("agent: UseCircuitCode: %w", err)
+	}
+	return nil
+}
+
+// useCircuitCode is the message that opens a circuit, wherever it is
+// being opened.
+//
+// Its whole content is this session's three ids, which is why the same
+// one serves the region the avatar is in and every neighbour of it: see
+// openNeighbour, the other caller, and note that what makes a circuit
+// the root is CompleteAgentMovement rather than anything here.
+func (a *Agent) useCircuitCode() *msg.UseCircuitCode {
 	circuit := &msg.UseCircuitCode{}
 	circuit.CircuitCode.Code = a.Account.CircuitCode
 	circuit.CircuitCode.SessionID = a.Account.SessionID
 	circuit.CircuitCode.ID = a.Account.AgentID
-	if err := a.Send.SendReliable(ctx, circuit); err != nil {
-		return fmt.Errorf("agent: UseCircuitCode: %w", err)
-	}
-	return nil
+	return circuit
 }
 
 // sendCompleteAgentMovement puts the avatar in the region, and is
@@ -906,6 +964,10 @@ func (a *Agent) Close() {
 		a.cancel()
 	}
 	a.sock.Close()
+	// The children's goroutines are in the group below and the cancel
+	// above has already told them to stop; what this adds is their
+	// sockets, which nothing else would ever close.
+	a.dropNeighbours("the session ended")
 	a.wg.Wait()
 }
 
