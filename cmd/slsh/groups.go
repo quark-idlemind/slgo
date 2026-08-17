@@ -41,14 +41,22 @@ type group struct {
 	name  string
 	brief string
 
-	// members are in the order a person would meet them rather than
-	// alphabetical: pwd and cd before mkdir and rm, because that is the
-	// order somebody learns them in.
+	// members are written in the order a person would meet them --
+	// pwd and cd before mkdir and rm -- and are LISTED in alphabetical
+	// order, which is not the same thing and is deliberate.
+	//
+	// A teaching order is the right one for a page somebody reads
+	// through once.  This is not that: help is opened by somebody who
+	// knows what they want and is looking for its name, and a
+	// twenty-six line list in an order only its author can predict is
+	// one they have to read all of.  So the order that can be guessed
+	// wins over the order that has to be learned.  See sortedNames.
 	members []string
 }
 
-// groups are the headings, in the order help prints them: the ones most
-// often wanted first, and the shell itself last.
+// groups are the headings.  They are listed alphabetically wherever
+// they are listed, for members' reason above; the order here is the
+// order they were written in and decides nothing.
 var groups = []group{
 	{
 		name:  "inventory",
@@ -141,7 +149,26 @@ func groupNames() []string {
 	for _, g := range groups {
 		out = append(out, g.name)
 	}
-	return out
+	return sortedNames(out)
+}
+
+// sortedNames is any list of names help prints, in the one order a
+// reader can predict.
+//
+// Alphabetical, and everywhere: the groups, the commands in a group,
+// and the whole list.  Every one of these is read by somebody looking
+// for a name they already have in mind, and a list they cannot guess
+// the shape of is a list they have to read from the top.  The lists
+// here were curated once -- most-wanted first, and the order somebody
+// learns them in -- and it turns out that reads as no order at all to
+// anybody who did not write it.
+//
+// The curation is still in the source, where it costs nothing and
+// documents what belongs together; it is only the printing that is
+// sorted.
+func sortedNames(names []string) []string {
+	sort.Slice(names, func(i, j int) bool { return names[i] < names[j] })
+	return names
 }
 
 // helpTail is the reminder that a command documents itself.  Printed
@@ -188,7 +215,11 @@ func helpGroups(out io.Writer) error {
 	fmt.Fprintf(out, "Commands are grouped.  For a group:  help GROUP\n")
 	fmt.Fprintf(out, "For everything:        help all\n")
 	fmt.Fprintf(out, "For one command:       COMMAND --help, or man COMMAND\n\n")
-	for _, g := range groups {
+	for _, name := range groupNames() {
+		g, ok := findGroup(name)
+		if !ok {
+			continue
+		}
 		fmt.Fprintf(out, "  %-11s %-54s (%d)\n", g.name, g.brief, len(g.members))
 	}
 	return nil
@@ -197,7 +228,7 @@ func helpGroups(out io.Writer) error {
 // helpGroup lists one group's commands.
 func helpGroup(out io.Writer, g group) error {
 	fmt.Fprintf(out, "%s -- %s\n\n", g.name, g.brief)
-	for _, n := range g.members {
+	for _, n := range sortedNames(append([]string(nil), g.members...)) {
 		c, ok := commands[n]
 		if !ok {
 			continue

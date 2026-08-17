@@ -312,13 +312,12 @@ func TestTheRegionAndTheRelativeViewDisagreeAboutTheSameNeighbour(t *testing.T) 
 // both directions at once.
 func TestRowsChangeBothDimensions(t *testing.T) {
 	for _, c := range []struct {
-		rows           int
-		width          int
-		perCol, perRow string
+		rows  int
+		width int
 	}{
-		{rows: 4, width: 8, perCol: "8", perRow: "16"},
-		{rows: 8, width: 16, perCol: "4", perRow: "8"},
-		{rows: 16, width: 32, perCol: "2", perRow: "4"},
+		{rows: 4, width: 8},
+		{rows: 8, width: 16},
+		{rows: 16, width: 32},
 	} {
 		out := drew(aroundGrid(c.rows, mapSpan, mapMe))
 		lines := strings.Split(out, "\n")
@@ -328,9 +327,14 @@ func TestRowsChangeBothDimensions(t *testing.T) {
 		if got := strings.Count(picture(t, out), "\n"); got != c.rows+1 {
 			t.Errorf("%d rows drew %d lines of picture", c.rows, got)
 		}
-		want := c.perCol + "m to a column, " + c.perRow + "m to a row"
+		// And the ground covered is the same however finely it is
+		// drawn: rows buy detail, not reach.  That is the half of this
+		// somebody could get wrong by dividing in the wrong direction,
+		// and it is why the line says the size of the picture rather
+		// than the size of a cell.
+		want := "64m x 64m"
 		if !strings.Contains(out, want) {
-			t.Errorf("%d rows should say %q:\n%s", c.rows, want, out)
+			t.Errorf("%d rows should still say %q:\n%s", c.rows, want, out)
 		}
 	}
 }
@@ -344,7 +348,7 @@ func TestThePictureSaysWhatItIsShowing(t *testing.T) {
 		at("Odile Marne", 128, 200, 25),
 		at("Kerra Hartwood", 128, 20, 25))
 	for _, want := range []string{
-		"2m to a column, 4m to a row; north is up, east is right",
+		"16m x 16m; north is up, east is right",
 		"* you",
 		"o within 3m of your height",
 		"^ higher",
@@ -413,8 +417,8 @@ func TestMapDrawsWhatTheSessionKnows(t *testing.T) {
 
 	got := x.do(t, "map")
 	for _, want := range []string{
-		"the 64m around you in Test Region at 128, 128, 25",
-		"2m to a column, 4m to a row",
+		"around you in Test Region at 128, 128, 25",
+		"64m x 64m",
 		"1 avatar in the picture",
 		"1 outside it: Odile Marne 92m",
 	} {
@@ -428,8 +432,8 @@ func TestMapDrawsWhatTheSessionKnows(t *testing.T) {
 	// one.
 	got = x.do(t, "map --region")
 	for _, want := range []string{
-		"all 256m of Test Region at 128, 128, 25",
-		"8m to a column, 16m to a row",
+		"all of Test Region at 128, 128, 25",
+		"256m x 256m",
 		"2 avatars in the picture",
 	} {
 		if !strings.Contains(got, want) {

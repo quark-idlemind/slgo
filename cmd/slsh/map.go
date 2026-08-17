@@ -220,15 +220,16 @@ func cmdMap(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	// The heading says which of the two pictures this is and where the
 	// avatar is standing, in the wording "where" and tp both use: a
 	// grid of characters with no region named over it is a picture of
-	// somewhere.
+	// somewhere.  How big it is belongs under the grid rather than
+	// here, and is not said twice.
 	var g mapGrid
 	var head string
 	if o.Region {
 		g = regionGrid(rows)
-		head = fmt.Sprintf("all %dm of %s", mapRegionSize, positionLine(where))
+		head = fmt.Sprintf("all of %s", positionLine(where))
 	} else {
 		g = aroundGrid(rows, float32(span), where.Position)
-		head = fmt.Sprintf("the %dm around you in %s", span, positionLine(where))
+		head = fmt.Sprintf("around you in %s", positionLine(where))
 	}
 	fmt.Fprintln(out, head)
 	drawMap(out, g, where.Position, people, hl)
@@ -272,6 +273,18 @@ func (g mapGrid) cols() int { return 2 * g.rows }
 // square.
 func (g mapGrid) perCol() float32 { return g.span / float32(g.cols()) }
 func (g mapGrid) perRow() float32 { return g.span / float32(g.rows) }
+
+// width and height are how much ground the whole picture covers, which
+// is what the line under it says.
+//
+// The same number twice today, since a picture is a square of the world
+// however many rows it is drawn in -- that is what having twice as many
+// columns as rows is for.  They are worked out from the cells rather
+// than printed as the span, so that the line stays true if the shape
+// ever stops being square, and so that the two halves of the arithmetic
+// are checked against each other every time it is drawn.
+func (g mapGrid) width() float32  { return g.perCol() * float32(g.cols()) }
+func (g mapGrid) height() float32 { return g.perRow() * float32(g.rows) }
 
 // at is the cell a position falls in, and false for a position the
 // picture does not cover.
@@ -385,8 +398,8 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 	}
 	fmt.Fprintln(out, frame)
 
-	fmt.Fprintf(out, "%sm to a column, %sm to a row; north is up, east is right\n",
-		tenth(g.perCol()), tenth(g.perRow()))
+	fmt.Fprintf(out, "%sm x %sm; north is up, east is right\n",
+		tenth(g.width()), tenth(g.height()))
 	fmt.Fprintf(out, "* you   o within %dm of your height   ^ higher   v lower\n", mapLevel)
 	fmt.Fprintln(out, "a digit is that many in one cell, and + is more than nine")
 	if green || outsideGreen {

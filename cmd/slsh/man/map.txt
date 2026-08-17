@@ -24,8 +24,13 @@ in the region view that is 256/16 = 16 metres to a row and 256/32 = 8
 metres to a column, and in the close view 4 metres to a row and 2 to a
 column.
 
-The line under the grid says both numbers every time, because "about
-square" is not a scale.  A picture with no scale under it is a drawing.
+The line under the grid says how much ground the picture covers -- "64m
+x 64m" -- because that is the number somebody reads a map for, and
+because a picture with no size under it is a drawing.  It is the same
+number both ways, which is the point of the columns being doubled: the
+picture is a square of the world however finely it is drawn.  More rows
+buy detail rather than reach, so the size does not change when --rows
+does.
 
 # The marks
 
@@ -145,7 +150,7 @@ friend among them:
 
 	map
 
-	the 64m around you in Pelmar Reach at 128, 128, 25
+	around you in Pelmar Reach at 128, 128, 25
 	+--------------------------------+
 	|                                |
 	|                      v         |
@@ -164,7 +169,7 @@ friend among them:
 	|                                |
 	|                                |
 	+--------------------------------+
-	2m to a column, 4m to a row; north is up, east is right
+	64m x 64m; north is up, east is right
 	* you   o within 3m of your height   ^ higher   v lower
 	a digit is that many in one cell, and + is more than nine
 	green is somebody on your friend list
@@ -177,13 +182,14 @@ green and the eye finds it without being told; this page has no colour
 in it, so it is said here instead.
 
 The same moment as a picture of the region.  A cell is now 8 metres by
-16, so it reaches the one who was too far away for the close picture and
+16 rather than 2 by 4, so it reaches the one who was too far away for
+the close picture and
 loses the difference between this avatar and the neighbour standing a
 few metres from it, who is now under the star:
 
 	map --region
 
-	all 256m of Pelmar Reach at 128, 128, 25
+	all of Pelmar Reach at 128, 128, 25
 	+--------------------------------+
 	|                                |
 	|                                |
@@ -202,7 +208,7 @@ few metres from it, who is now under the star:
 	|                                |
 	|                                |
 	+--------------------------------+
-	8m to a column, 16m to a row; north is up, east is right
+	256m x 256m; north is up, east is right
 	* you   o within 3m of your height   ^ higher   v lower
 	a digit is that many in one cell, and + is more than nine
 	green is somebody on your friend list
