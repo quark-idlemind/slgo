@@ -353,7 +353,7 @@ teleport ends the session, `regions.txt` no longer says nothing
 teleports between regions, `waiting.txt` says an offer is followed. The
 same falsehood was in `waiting.go`'s `choices()`.
 
-### Stage 6 -- a viewer attached while it happens
+### Stage 6 -- a viewer attached while it happens (done)
 
 `doc/viewer-frontend.md` left this open deliberately and said to decide
 rather than discover. It is a real decision:
@@ -369,6 +369,35 @@ rather than discover. It is a real decision:
   machinery is the machinery a viewer needs on arrival.
 
 Refuse first. Follow when stage 2 has been running for a while.
+
+**Refused, done.** And the premise above was already out of date when it
+was written down: it assumed a viewer's teleport ends the session, which
+was true only while nothing in the daemon read `TeleportFinish`. Since
+stage 3 the move *succeeds* and the viewer is told nothing, which is
+quieter and worse — it draws the region the avatar left while the new
+region's updates land on top under local ids that now mean something
+else, and nothing reports an error.
+
+The stage found a hole that needed no viewer teleport at all:
+`TeleportFinish` on the event queue is an invitation to open a circuit
+to the real simulator with this session's own ids, and `slsh tp` alone
+puts one there. It is withheld beside `EstablishAgentCommunication`, and
+absorbed on the circuit too. `TeleportStart` and `TeleportProgress` go
+with it — they put a viewer in the teleport tunnel over a move it did
+not ask for, and the message that releases it is the one being withheld.
+`TeleportFailed` is deliberately let through: no address, and the only
+thing that takes a viewer back *out* of that state.
+
+A teleport **within** the region is still forwarded, told apart by the
+handle, because it changes nothing about the circuit.
+
+Measured on Agni: `slsh tp` with no viewer attached logged the withheld
+`TeleportFinish`, and the daemon's seed endpoint afterwards answered
+with Sandbox Goguen's simhost where before it would have answered with
+the login region's. Absorbing `TeleportStart` costs a viewer the
+progress bar of its own within-region teleport, and the trace prices
+that: `TeleportStart` and `TeleportLocal` arrived **twenty microseconds
+apart**, so the tunnel is entered and left in one burst.
 
 ### Stage 7 -- walking over the border
 
@@ -436,13 +465,22 @@ untried, so this stays open for whoever wants a second destination --
 and a moderate region beside a Linden Homes estate is the more
 interesting test of the two.
 
-**A viewer attached across a move gets the wrong seed (stage 6).**
-`a.Account.SeedCapability` still holds the region this session LOGGED IN
-to, and `cmd/slgod/viewer.go:449` serves exactly that to a viewer being
-handed the session. After a move it addresses a simulator the avatar has
-left. That is an argument for stage 6 refusing a viewer's teleport
-rather than following it, and for refusing to hand a session over at all
-while it is mid-move.
+**A viewer attached across a move gets the wrong seed.** Fixed in stage
+6: the agent keeps the seed it was handed when it moved and
+`cmd/slgod/viewer.go` serves that, because the agent is the only thing
+that knows one -- every seed after the first arrives inside a
+`TeleportFinish` that no other package reads. Handing a session to a
+viewer *mid-move* is still not refused, deliberately, and the reasoning
+is on `find()`.
+
+**The login response a viewer is replayed still names the login
+region.** `Handover.Raw` is the stored login response, and `region_x`,
+`region_y`, `look_at` and `start_location` all describe where this
+session started. A viewer attaching after a teleport builds its first
+region from those and is then sent an `AgentMovementComplete` and a
+`RegionHandshake` for a different handle. Same family as the seed, not
+fixed, and a reading of the response rather than a measurement -- so it
+may make the seed fix insufficient on its own for a post-move attach.
 
 **`sl.Direct` goes stale (stage 4).** `Info.Region` and `Info.Caps` are
 built once in `Login` (`sl/direct.go:73`) and never revised, so a direct
