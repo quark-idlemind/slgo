@@ -144,6 +144,69 @@ func TestACrossedRegionNobodyCanReadIsNotActedOn(t *testing.T) {
 	}
 }
 
+// agniCrossedRegion is a CrossedRegion as it came off the event queue on
+// Agni on 2026-08-16, when this avatar walked west out of Pelmar Reach and
+// into Pelmar Mill.
+//
+// Kept byte for byte.  Everything stage 7 inferred from the measured
+// TeleportFinish turned out to be right, and this is what says so: the
+// destination is in RegionData and not in Info, the handle is eight
+// binary bytes big endian, the address is four in network order, the
+// port is a plain integer and the seed is a string.  Info is the
+// arrival position -- 254.8, 128.0, 21.6, which is a stride the far side
+// of a border at x=0.
+//
+// What is not the grid's: the two uuids are made up and the seed's host
+// and capability id are invented.  Everything read here is the measured
+// value.
+const agniCrossedRegion = `<llsd><map>` +
+	`<key>AgentData</key><array><map>` +
+	`<key>AgentID</key><string>45d57e57-7e57-c0de-05ab-3469e908f363</string>` +
+	`<key>SessionID</key><string>c2ea7e57-7e57-c0de-4a06-e2d912d3d395</string>` +
+	`</map></array>` +
+	`<key>Info</key><array><map>` +
+	`<key>LookAt</key><array><real>-1</real><real>0</real><real>0</real></array>` +
+	`<key>Position</key><array><real>254.76400756835938</real>` +
+	`<real>128.0030059814453</real><real>21.62459945678711</real></array>` +
+	`</map></array>` +
+	`<key>RegionData</key><array><map>` +
+	`<key>SimPort</key><integer>13009</integer>` +
+	`<key>RegionHandle</key><binary>AKp/AACqgAA=</binary>` +
+	`<key>SeedCapability</key>` +
+	`<string>https://simhost-0aaaaaaaaaaaaaaa2.agni.secondlife.io:12043/cap/` +
+	`d8ad7e57-7e57-c0de-696c-d11016b60d1c</string>` +
+	`<key>SimIP</key><binary>ItwX3Q==</binary>` +
+	`</map></array></map></llsd>`
+
+// TestTheCrossingIsReadFromTheBytesTheGridSent: the decoding, against
+// the body that was captured rather than one built here.
+//
+// This is the test stage 7 could not write, and writing it retired the
+// stage's largest caveat.  Every shape in it was carried over from a
+// TeleportFinish on the strength of the two messages describing the same
+// thing, and a real CrossedRegion agrees in every field.
+func TestTheCrossingIsReadFromTheBytesTheGridSent(t *testing.T) {
+	addr, seed, handle := crossingDestination(decodeLLSD(t, agniCrossedRegion))
+	if addr == nil {
+		t.Fatal("the measured body was read as one with no destination in it")
+	}
+	if got := addr.String(); got != "34.220.23.221:13009" {
+		t.Errorf("address = %s, want 34.220.23.221:13009", got)
+	}
+	// The same address EnableSimulator had been offering for this
+	// neighbour all along, which is what makes a child circuit the thing
+	// a crossing walks into rather than a second dial.
+	if handle != 47990384028712960 {
+		t.Errorf("handle = %d, want 47990384028712960", handle)
+	}
+	if x, y := msg.GridCoords(handle); x != 1053 || y != 992 {
+		t.Errorf("the handle is grid square (%d, %d), want (43647, 43648)", x, y)
+	}
+	if !strings.HasSuffix(seed, "d8ad7e57-7e57-c0de-696c-d11016b60d1c") {
+		t.Errorf("seed = %q", seed)
+	}
+}
+
 // TestACrossingIsReadFromRegionDataAndNotInfo: CrossedRegion carries
 // both blocks and they mean opposite things -- RegionData is where the
 // avatar has been sent and Info is where it will be standing when it
@@ -180,12 +243,10 @@ func TestACrossingIsReadFromRegionDataAndNotInfo(t *testing.T) {
 // crossedRegionTo builds the body a simulator would put on the queue
 // when this avatar walks into another region's simulator.
 //
-// Inferred rather than measured: nobody has seen a CrossedRegion on this
-// grid.  The block names and the fields in them are the message
-// template's, and the LLSD shapes -- the handle and the address as
-// binary, the port as an integer, the seed as a string -- are the ones
-// stage 0 measured in a TeleportFinish.  If a real one differs, this
-// fixture is where the difference belongs.
+// Built rather than captured, because a test needs the fake region's
+// own address in it.  The shapes are the measured ones -- see
+// agniCrossedRegion above, which is a real body and agrees with every
+// one of them.
 func crossedRegionTo(r *fakeRegion) map[string]any {
 	addr := r.sim.addr()
 	at, handle := r.sim.arrival()

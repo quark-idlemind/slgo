@@ -628,10 +628,15 @@ The neighbour is not the explanation. `Pelmar Reach`'s west neighbour is
 have this avatar. It will not take him on foot.
 
 So the simulator will not hand an avatar over the border to a client
-holding no child circuit, which is what slgod is by choice. **Stage 7's
-handler is correct and unreachable**, and stays that way until the first
-bullet of "What this does not do" is built. It cost one walk to find
-out, and the handler was written to tolerate exactly this.
+holding no child circuit, which is what slgod is by choice.
+
+**Then a probe opened one by hand, and the same walk crossed in two
+seconds.** `CrossedRegion` arrived on the event queue exactly once and
+stage 7's handler followed it correctly without a line of change. That
+retires two caveats at a stroke: the handler is not dead code, and what
+it reads is no longer inferred -- a real body was captured and agrees
+with every field stage 7 guessed. Holding those circuits properly,
+rather than by hand in a throwaway, is `doc/neighbours.md`.
 
 **A client can walk the avatar after all.** The plan said nothing in
 `sl` or `slsh` could, which is true of the commands -- but
@@ -641,11 +646,11 @@ above were driven. Walking is a movement feature rather than a teleport
 one and nothing here needs it, but it is no longer true that it takes a
 viewer.
 
-**The wire shape of `CrossedRegion` is unmeasured.** The cheap way to
-settle it without building neighbour circuits is to trace a plain viewer
-session -- logged in directly, not through slgod -- across a border and
-keep the body, the way stage 0 kept the `TeleportFinish`.
-`agent/crossing_test.go`'s fixture is where a real capture belongs.
+**The wire shape of `CrossedRegion` is measured**, and stage 7's
+inference was right in every field: the destination is in `RegionData`,
+the handle is eight binary bytes big endian, the address four in network
+order, the port a plain integer and the seed a string. The captured body
+is `agniCrossedRegion` in `agent/crossing_test.go`.
 
 **Both roads could act on one crossing.** The queue handler and the
 circuit handler each check the handle before moving, and neither holds

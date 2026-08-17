@@ -1,6 +1,8 @@
 # Child circuits to the neighbouring regions
 
-Written 2026-08-16, against `d0584c2`. Nothing here is built.
+Written 2026-08-16, against `d0584c2`. Stage 0 has been run and what it
+measured is folded in below: where this says what happens, it was
+watched happening. Nothing else here is built.
 
 `doc/teleport.md` ends with a measurement and a wall. Stage 7 built the
 handler for `CrossedRegion`, and then a live walk showed the message
@@ -39,18 +41,17 @@ Both of these arrive on the event queue and both are `UDPBlackListed`.
 address and nothing else. Measured on Agni: **57 of them in one 200
 second run, naming only 4 distinct regions.** The simulator repeats the
 offer for as long as it goes untaken, which is both how it survives a
-lost packet and a signal worth watching: once a circuit is open the
-repetition should stop, and if it does not, the offer was not taken up
-the way the simulator expected.
+lost packet and a signal worth watching. Stage 0 confirmed it: take the
+offer up and it is made **once**.
 
 **`EstablishAgentCommunication`** carries the neighbour's seed
-capability. It has never been seen on this grid: two minutes of watching
-on 2026-08-16 recorded `EnableSimulator` within a second of login and
-not one `EstablishAgentCommunication`. The likeliest reading is that it
-follows the circuit rather than preceding it -- the simulator introduces
-a neighbour properly once the client has taken the address up -- which
-stage 0 can confirm in a minute. If that is right, the current filter in
-`viewer/caps.go` has never had anything to catch.
+capability, and **it follows the circuit rather than preceding it**. Two
+minutes of watching recorded `EnableSimulator` within a second of login
+and not one of these; stage 0 then opened a circuit and it arrived 1.04
+seconds later. So the simulator introduces a neighbour properly once the
+client has taken the address up, and the filter that has been in
+`viewer/caps.go` since the front end was built has never had anything to
+catch.
 
 Both are withheld from an attached viewer (`d0584c2`). That stays true
 while slgod holds the circuits: what a viewer may eventually be given is
@@ -140,24 +141,69 @@ speaks for a place and the root speaks for the avatar.
 
 ## Stages
 
-### Stage 0 -- take one offer up by hand
+### Stage 0 -- take one offer up by hand (done)
 
-Before any of it: a throwaway probe that reads one `EnableSimulator` off
-the relay, opens a UDP socket to the address it names, sends
-`UseCircuitCode` with this session's own ids, and watches. It answers
-nearly every open question in an afternoon:
+Run 2026-08-16 against Agni, twice, with a throwaway probe that logs in
+directly -- so that it has the circuit code, which a gRPC client is
+never given -- opens a socket to the address `EnableSimulator` names,
+sends `UseCircuitCode` with this session's own three ids, answers the
+handshake and the pings, and then walks the avatar at the border.
 
-- Does `RegionHandshake` come back? What else arrives unasked?
-- Does `EstablishAgentCommunication` then appear on the ROOT's event
-  queue, as predicted above?
-- Do the repeated `EnableSimulator` offers stop?
-- **Does the avatar then walk over the border?** Walk him at it with the
-  same `AgentUpdate` probe that measured the wall.
-- Does the neighbour expect anything else -- an `AgentThrottle`, an
-  `AgentUpdate` -- before it will describe itself?
+**It crosses.** Standing at Pelmar Reach (12, 128) with one child circuit
+open to Pelmar Mill, the avatar walked west and was in Pelmar Mill at
+x=251 **two seconds later** -- where the same walk with no child circuit
+had been pinned at x=0 for twelve seconds, and at x=255 for
+twenty-four from the other side. `CrossedRegion` arrived on the event
+queue exactly once, and stage 7 of `doc/teleport.md` followed it
+correctly without a line of change. Reproduced in a second run.
 
-Whatever this measures, the rest of the plan is written against it
-rather than against a reading of viewer source.
+**A circuit is all it takes.** No `AgentThrottle`, no `AgentUpdate` to
+the neighbour, no capability fetch, nothing sent but `UseCircuitCode`
+and an answer to what came back. That makes stage 2 below sufficient
+for crossings on its own, and everything after it an improvement rather
+than a prerequisite.
+
+The rest of what it measured, in the order it happened:
+
+- **The offer follows the avatar to the edge.** Logging in at (12, 128),
+  twelve metres from the west border, was offered **one** neighbour --
+  Pelmar Mill -- where standing in the middle at (28, 72, 2001) had been
+  offered four. The simulator introduces what is near.
+- **Taking it up stops the repetition.** Offered **once**, against 57
+  offers of four regions in a 200 second run where nothing ever
+  answered. The repeat was a retry, not a heartbeat.
+- **`RegionHandshake` comes back in about a second** (1.02s), and comes
+  back **twice** -- a retransmission, since nothing else changed -- so a
+  child has to be as idempotent about it as the root is.
+- **`EstablishAgentCommunication` follows the circuit**, as predicted:
+  it arrived 1.04 seconds after `UseCircuitCode` and had never been seen
+  in any run before. So the filter that has been in `viewer/caps.go`
+  since the front end was built never had anything to catch.
+- **Its shape is not the others'.** Where `TeleportFinish` and
+  `CrossedRegion` carry blocks as arrays of one map with binary fields,
+  this is a flat map with hyphenated lowercase keys and no binary at
+  all:
+
+	{"agent-id": "<uuid string>",
+	 "seed-capability": "https://simhost-....agni.secondlife.io:12043/cap/...",
+	 "sim-ip-and-port": "34.220.23.221:13009"}
+
+  The address arrives as a **`host:port` string**, which is a third
+  spelling of the same fact -- four binary bytes in `CrossedRegion`, a
+  `U32` and a `U16` in the message template, text here. Stage 5 will
+  want that written down.
+- **What a child hears, unasked, in thirty seconds**: `ObjectUpdate` 59,
+  `LayerData` 51, `ObjectUpdateCached` 40, `AttachedSound` 61,
+  `CoarseLocationUpdate` 21, `ImprovedTerseObjectUpdate` 17,
+  `StartPingCheck` 5, `SoundTrigger` 4, `ParcelOverlay` 4,
+  `RegionHandshake` 2. It describes itself fully and unprompted, which
+  is the point of holding the circuit.
+- **And what it does not send**: not one `ObjectUpdateCompressed`, where
+  the root had 1267 in the same half minute. Worth knowing before
+  anything concludes a neighbour is quiet from a handler that only
+  counts the compressed kind.
+- **The pings are real.** Five `StartPingCheck` in thirty seconds, so a
+  child that does not answer will be dropped like any other circuit.
 
 ### Stage 1 -- the option, and the neighbours we know of
 
@@ -179,6 +225,12 @@ That is a stage worth stopping at, because it is the whole of what a
 border crossing needs from us if stage 0 says so.
 
 ### Stage 3 -- the crossing, by promotion
+
+Stage 0 crossed without this, because `moveTo` dialled the new simulator
+afresh even though a child circuit to it was already open. So this stage
+is the difference between a crossing that works and one that is
+seamless, and it should be measured against the two seconds stage 0 took
+rather than assumed to be better.
 
 `CrossedRegion` names a handle. If it is a child we hold, the crossing
 is not `moveTo`: it is `CompleteAgentMovement` on the circuit that is
