@@ -507,9 +507,22 @@ func (c *Circuit) refuseTeleport() {
 // slsh waiting -- and the viewer is no part of that conversation.  In
 // an ordinary session the viewer is the client that asked, so the
 // protocol has nothing that says "you have been moved" to one that did
-// not: it goes on drawing the region left behind while the objects of
-// the region arrived in land on top of them, under local ids that are
-// the new region's numbering.
+// not.
+//
+// What a viewer does about that was measured on 2026-08-16 with
+// Firestorm attached, and it is not what this said when it was written.
+// It does not go on drawing the region left behind: within a second of
+// the move it put up "You have been logged out of slgod.  You were sent
+// to an invalid region." and sent a LogoutRequest.  That request is
+// absorbed like any other (see fromViewer), so the grid session stayed
+// up and the viewer dropped off it -- which is the outcome refusing was
+// for, arrived at by the viewer's own judgement rather than by this
+// telling it anything.
+//
+// The alert is still worth sending and is delivered before that
+// happens: it names the region and says what to do, where the viewer's
+// own message says only that something was invalid.  A person reading
+// the two together knows what became of their avatar.
 //
 // Telling is all this does.  Replaying the new region to a viewer that
 // believes it is in the old one is "follow", which is deferred, so the

@@ -394,7 +394,22 @@ handle, because it changes nothing about the circuit.
 Measured on Agni: `slsh tp` with no viewer attached logged the withheld
 `TeleportFinish`, and the daemon's seed endpoint afterwards answered
 with Sandbox Goguen's simhost where before it would have answered with
-the login region's. Absorbing `TeleportStart` costs a viewer the
+the login region's.
+
+**And with Firestorm actually attached, 2026-08-16, one of stage 6's own
+claims turned out to be wrong.** A viewer whose avatar another client
+teleports does *not* go on drawing the region left behind: within a
+second it put up "You have been logged out of slgod. You were sent to
+an invalid region." and sent a `LogoutRequest`, which slgod absorbed --
+so the grid session stayed up and the viewer dropped off it. That is the
+outcome refusing was for, reached by the viewer's own judgement rather
+than by anything said to it. The alert still arrives first and is still
+worth sending: it names the region and says what to do, where the
+viewer's own message says only that something was invalid.
+
+A teleport **within** the region, with the viewer attached, was followed
+by the viewer exactly as intended -- it moved to (12, 128, 22) and drew
+the new spot. Absorbing `TeleportStart` costs a viewer the
 progress bar of its own within-region teleport, and the trace prices
 that: `TeleportStart` and `TeleportLocal` arrived **twenty microseconds
 apart**, so the tunnel is entered and left in one burst.
@@ -597,21 +612,34 @@ seen a slow grid day. Stage 5 answered this for `slsh`, which uses
 thirty seconds of its own and no longer inherits the ninety; every other
 caller still does, and the constant itself is untouched.
 
-**Does a crossing happen at all?** Stage 7's handler has never run,
-because nothing on this grid has been seen to send a `CrossedRegion` and
-nothing in `sl` or `slsh` can make the avatar walk. If a simulator will
-not hand over to a client holding no child circuit, the handler is dead
-code until the first bullet of "What this does not do" is built. One
-walk settles it.
+**A crossing does not happen -- measured 2026-08-16, and this is the
+answer to the biggest question stage 7 left open.** The avatar was put
+on the ground 12 metres from Pelmar Reach's west edge and walked west by a
+client sending `AgentUpdate` with `AGENT_CONTROL_AT_POS` held down. He
+walked -- 12 metres in 8 seconds -- and then **stopped dead at x=0 and
+stayed there for the remaining 12 seconds**, bouncing between x=0 and
+x=1. Repeated from the other side with no viewer attached: from Pelmar
+Mill he walked to x=255 and was pinned there for 24 seconds. **No
+`CrossedRegion` arrived on either road, on either attempt.**
 
-**A live crossing needs a viewer or a new API.** `Look.ControlFlags`
-exists and is written in exactly one place -- `viewer/circuit.go`,
-copying an attached viewer's `AgentUpdate` -- so the zero-code route is
-to attach a viewer, `tp` to a few metres inside a region edge, walk over
-it with `slgod -trace` running, and look for `CrossedRegion` on either
-road. The alternative is a small API to hold a control flag for the tens
-of seconds a walk takes, which is a movement feature rather than a
-teleport one.
+The neighbour is not the explanation. `Pelmar Reach`'s west neighbour is
+**Pelmar Mill** (43647, 43648), which a teleport to its handle reached in
+1.4 seconds and which described 2258 objects -- a live region that will
+have this avatar. It will not take him on foot.
+
+So the simulator will not hand an avatar over the border to a client
+holding no child circuit, which is what slgod is by choice. **Stage 7's
+handler is correct and unreachable**, and stays that way until the first
+bullet of "What this does not do" is built. It cost one walk to find
+out, and the handler was written to tolerate exactly this.
+
+**A client can walk the avatar after all.** The plan said nothing in
+`sl` or `slsh` could, which is true of the commands -- but
+`sl.Session.Send` is exported, so a client can send `AgentUpdate` with a
+control flag and a body rotation directly, and that is how both walks
+above were driven. Walking is a movement feature rather than a teleport
+one and nothing here needs it, but it is no longer true that it takes a
+viewer.
 
 **The wire shape of `CrossedRegion` is unmeasured.** The cheap way to
 settle it without building neighbour circuits is to trace a plain viewer
