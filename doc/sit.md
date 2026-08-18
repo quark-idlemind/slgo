@@ -158,11 +158,40 @@ timeout, and those are three different results: seated, refused with the
 grid's own words, and heard nothing. `ErrSitRefused` carries the alert
 text.
 
-None of this needs a new RPC. Everything it sends goes through `Send`
-and everything it waits for is a subscription, so this is `sl` and
-`slsh` and no change to the proto -- which is worth saying out loud,
-because the neighbours work went the other way and it is not obvious
-from the outside which kind of feature this is.
+### One of these needs a new RPC, and this said otherwise
+
+**Corrected 2026-08-17, before stage 2 was built.** What this said was
+that nothing here needs a new RPC: everything it sends goes through
+`Send` and everything it waits for is a subscription. That is true of
+the object sit and false of the other two.
+
+A ground sit and a stand are control flags on `AgentUpdate`, and an
+`AgentUpdate` is not just its flags -- it carries the camera, its three
+axes, and the draw distance, and the simulator scopes its interest list
+by them. A client building one has none of that: it knows a position
+from `Presence` and no axes at all, so it would be guessing at the
+camera and inventing a draw distance, and the simulator would believe it
+until the daemon's own update a second later put it back. The probe that
+measured stage 0 did exactly this, with `Far` set to 128 on a session
+that may well run 256, and got away with it because it was a probe.
+
+The daemon owns `Look` and is the only thing that can send an
+`AgentUpdate` that is right about everything except the one bit being
+asked for. So the one-shot belongs in `agent`, and a client asks for it:
+
+	rpc Control(ControlRequest) returns (ControlResponse);
+
+carrying the flags and nothing else. `agent` builds the update from the
+current look with those bits set, sends it once, and forgets them --
+measured, they are edge triggered, and the presence update a second
+later carrying no flags did not undo either one.
+
+It is worth having as a primitive rather than as two named calls,
+because it is the same shape everything else that moves an avatar will
+need: fly, stop, jump, and the nudges a walk is made of.
+
+The object sit still needs nothing new: `AgentRequestSit` goes through
+`Send` as any message does.
 
 ### The subscription question
 
@@ -210,10 +239,10 @@ Measure: whether a subscription taken out at the moment of the command
 reliably catches the animation 144 milliseconds later, or whether it has
 to be standing when the command starts.
 
-### Stage 2 -- the verbs in `sl`
+### Stage 2 -- the one-shot control flag, and the verbs in `sl`
 
-`Sit`, `SitOnGround`, `Stand`, `Seat`, and `ErrSitRefused` carrying the
-alert. The alert text is trimmed of its NUL and otherwise passed through
+`Agent.Control`, the `Control` RPC above, and then `Sit`,
+`SitOnGround`, `Stand`, `Seat`, and `ErrSitRefused` carrying the alert. The alert text is trimmed of its NUL and otherwise passed through
 untouched.
 
 The one thing to be careful of: `AlertMessage` is a general channel and
