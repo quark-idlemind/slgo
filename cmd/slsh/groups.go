@@ -97,7 +97,15 @@ var groups = []group{
 		// question asked in two directions, and move sits with the
 		// other things done to an object that is already standing
 		// there rather than beside them.
-		members: []string{"where", "group", "tp", "who", "look", "map", "regions", "neighbours",
+		//
+		// sit and stand are here beside tp and touch rather than in a
+		// group of their own: a sit MOVES the avatar, up to about ten
+		// metres, so the question it answers is tp's -- how do I get
+		// this avatar over there -- and the thing it names is touch's.
+		// "unsit" is stand under another name and is not listed, since
+		// a listing that showed one command twice would say nothing
+		// extra about either.
+		members: []string{"where", "group", "tp", "sit", "stand", "who", "look", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "move", "dump", "rez", "reform", "touch", "texture",
 			"take", "place", "perms", "drop", "start", "stop", "link", "unlink"},
