@@ -254,16 +254,31 @@ func TestNeighboursTurnedOffAndOnAgainOpenAFreshCircuit(t *testing.T) {
 	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
 	waitFor(t, "the circuit to open again", func() bool { return len(a.Neighbours()) == 1 })
 
+	// And then for the dial itself, which is a separate moment.  The
+	// neighbour is listed when the circuit is created and the datagram
+	// that opens it goes out afterwards, so counting what the simulator
+	// has seen the instant the list changes is a race -- one this test
+	// won for years and then started losing when unrelated work shifted
+	// the timing by a few microseconds.
+	waitFor(t, "the neighbour to be dialled a second time", func() bool {
+		return dialled(sim) >= 2
+	})
+	if n := dialled(sim); n != 2 {
+		t.Errorf("the neighbour was dialled %d times, want one circuit each side of the off: %v",
+			n, sim.got())
+	}
+}
+
+// dialled is how many circuits have been opened to a simulator, which is
+// one UseCircuitCode each.
+func dialled(sim *fakeSim) int {
 	n := 0
 	for _, name := range sim.got() {
 		if name == "UseCircuitCode" {
 			n++
 		}
 	}
-	if n != 2 {
-		t.Errorf("the neighbour was dialled %d times, want one circuit each side of the off: %v",
-			n, sim.got())
-	}
+	return n
 }
 
 // TestAnOfferTakenUpOpensACircuitToTheAddressItNames: the whole of stage

@@ -74,6 +74,88 @@ func TestTheCacheIsSweptOnATimer(t *testing.T) {
 	}
 }
 
+// TestAControlFlagIsSentOnceAndNotRemembered: the flags are edge
+// triggered -- measured, one update carrying SIT_ON_GROUND was enough
+// and the presence update a second later carrying none did not undo it
+// -- so putting one in Look would be resending it for ever, and the
+// avatar would never be able to stand up again.
+func TestAControlFlagIsSentOnceAndNotRemembered(t *testing.T) {
+	a, w := offlineSession(t)
+	a.SetLook(Look{Center: msg.Vector3{X: 128, Y: 128, Z: 25}, Far: 64})
+
+	if err := a.Control(context.Background(), ControlSitOnGround); err != nil {
+		t.Fatalf("Control: %v", err)
+	}
+	w.waitFor(t, 1)
+
+	sent := w.messages(t)
+	u, ok := sent[0].(*msg.AgentUpdate)
+	if !ok {
+		t.Fatalf("a control flag went out as %s, want AgentUpdate", sent[0].MsgInfo().Name)
+	}
+	if u.AgentData.ControlFlags != ControlSitOnGround {
+		t.Errorf("the update carried flags %#x, want %#x",
+			u.AgentData.ControlFlags, ControlSitOnGround)
+	}
+	if got := a.Look().ControlFlags; got != 0 {
+		t.Errorf("the flag was remembered in the look as %#x; it would be resent for ever", got)
+	}
+
+	// And the rest of the update is the session's own camera rather than
+	// anything invented, because the simulator scopes its interest list
+	// by exactly those fields.
+	if u.AgentData.CameraCenter != (msg.Vector3{X: 128, Y: 128, Z: 25}) || u.AgentData.Far != 64 {
+		t.Errorf("the one-shot update described a camera at %v seeing %v metres",
+			u.AgentData.CameraCenter, u.AgentData.Far)
+	}
+}
+
+// TestAControlFlagDoesNotInterruptWhatIsAlreadyHeldDown: the flags a
+// session is continuously sending are movement, and an avatar walking
+// when it is asked to stand up must not stop walking for one update.
+func TestAControlFlagDoesNotInterruptWhatIsAlreadyHeldDown(t *testing.T) {
+	a, w := offlineSession(t)
+	const walking uint32 = 1 // AGENT_CONTROL_AT_POS
+	a.SetLook(Look{Center: msg.Vector3{X: 5}, Far: 64, ControlFlags: walking})
+
+	if err := a.Control(context.Background(), ControlStandUp); err != nil {
+		t.Fatalf("Control: %v", err)
+	}
+	w.waitFor(t, 1)
+
+	u := w.messages(t)[0].(*msg.AgentUpdate)
+	if want := walking | ControlStandUp; u.AgentData.ControlFlags != want {
+		t.Errorf("the update carried %#x, want %#x", u.AgentData.ControlFlags, want)
+	}
+	if got := a.Look().ControlFlags; got != walking {
+		t.Errorf("the look ended up carrying %#x, want the movement alone", got)
+	}
+}
+
+// TestAControlFlagGoesEvenWhileAViewerHoldsTheCamera: the deferral stops
+// this session ARGUING about where the camera is, which is a thing only
+// the viewer can be right about.  It is not a stop on being asked to do
+// things, and the viewer will never send a flag nobody told it about --
+// so refusing here would mean an avatar could not be sat down while
+// somebody was watching through it, which is when it is most wanted.
+func TestAControlFlagGoesEvenWhileAViewerHoldsTheCamera(t *testing.T) {
+	a, w := offlineSession(t)
+	a.SetLook(Look{Center: msg.Vector3{X: 5}, Far: 64})
+	a.DeferPresence(time.Now().Add(time.Minute))
+
+	if err := a.Control(context.Background(), ControlStandUp); err != nil {
+		t.Fatalf("Control: %v", err)
+	}
+	w.waitFor(t, 1)
+
+	if got := w.messages(t)[0].(*msg.AgentUpdate).AgentData.ControlFlags; got != ControlStandUp {
+		t.Errorf("the update carried %#x, want the stand up flag", got)
+	}
+	if !a.presenceDeferred() {
+		t.Error("sending one update took the camera back from the viewer")
+	}
+}
+
 // TestPresenceIsHandedOverAndComesBack: while a viewer holds the camera
 // this session must not also send AgentUpdate, and when the viewer stops
 // talking the session must start again on its own.

@@ -35,6 +35,11 @@ type Direct struct {
 
 var _ Backend = (*Direct)(nil)
 
+// Deliberately not a Watcher.  There is nothing between the socket and
+// the reader to filter with here, so everything the circuit carries is
+// already on the relay and there is no subscription to take out or give
+// back; see Watcher.
+
 // relayDepth is how far behind a reader may fall before messages are
 // dropped.  Dropping is right: the alternative is stalling the circuit,
 // and a message nobody could keep up with is worth less than the
@@ -195,6 +200,17 @@ func (d *Direct) Send(ctx context.Context, m msg.Message, reliable bool) error {
 		return d.a.Send.SendReliable(ctx, m)
 	}
 	return d.a.Send.Send(ctx, m)
+}
+
+// Control sends one AgentUpdate carrying these flags and forgets them.
+//
+// Straight to the agent, where the hosted backend has a round trip in
+// the middle.  It is the agent's either way for the same reason: the
+// camera and the draw distance in that update are the session's, not a
+// caller's, and only the side holding them can send one that is right
+// about everything except the bit being asked for.
+func (d *Direct) Control(ctx context.Context, flags uint32) error {
+	return d.a.Control(ctx, flags)
 }
 
 func (d *Direct) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {

@@ -120,6 +120,18 @@ type Backend interface {
 	// Send puts a message on the circuit.
 	Send(ctx context.Context, m msg.Message, reliable bool) error
 
+	// Control sends one AgentUpdate carrying these control flags and
+	// then forgets them.
+	//
+	// It is here rather than being built by the caller and handed to
+	// Send because an AgentUpdate carries the camera, its axes and the
+	// draw distance as well as the flags, and the simulator scopes its
+	// interest list by them.  Only the side that owns the camera can
+	// send one that is right about everything except the bit being
+	// asked for; a caller has none of it and would be inventing a
+	// camera the simulator would then believe.  See agent.Control.
+	Control(ctx context.Context, flags uint32) error
+
 	// Messages is the relay: every message this session subscribed
 	// to, undecoded.  Closed when the session ends.
 	Messages() <-chan *Message
@@ -226,4 +238,22 @@ type Backend interface {
 	// logged in; for a direct one it does not, since there is nobody
 	// else holding it.
 	Close() error
+}
+
+// A Watcher is a backend that filters what it relays and can be told to
+// filter differently while it runs.
+//
+// Only a hosted session is one.  A direct session relays everything the
+// circuit carries -- there is nothing between the socket and the reader
+// to filter with -- so it does not implement this, and a caller that
+// finds no Watcher should conclude that everything is already arriving
+// rather than that nothing can be asked for.
+//
+// What it is for is a message that is needed for the length of one
+// command and too expensive to keep: AvatarAnimation, which is the whole
+// of the evidence that a ground sit happened and which arrives for every
+// avatar in range, in full, about every three seconds.  See sit.go.
+type Watcher interface {
+	Watch(names ...string) error
+	Unwatch(names ...string) error
 }

@@ -24,12 +24,21 @@ var ErrTimeout = errors.New("sl: timed out waiting for the simulator")
 // Subscriptions are the messages this package needs relayed to it.
 // Passing anything less to Attach leaves it waiting for confirmations
 // that will not arrive.
+//
+// AvatarSitResponse is here and AvatarAnimation is not, and the
+// difference is what each costs.  The first arrives once, when this
+// avatar sits on something, and carries the seat offset; the second
+// arrives for every avatar in range, in full, about every three seconds,
+// which is a bill automate and autobench would pay for ever for
+// something only a sit reads.  So the sit borrows it for the length of
+// the command and gives it back; see sit.go.
 var Subscriptions = []string{
 	"ObjectUpdate", "ObjectUpdateCompressed", "ObjectProperties",
 	"ObjectPropertiesFamily", "KillObject",
 	"UpdateCreateInventoryItem", "ReplyTaskInventory",
 	"SendXferPacket", "AbortXfer", "TransferInfo", "TransferPacket",
 	"ChatFromSimulator", "AlertMessage",
+	"AvatarSitResponse",
 	"ImprovedInstantMessage", "UUIDNameReply", "AvatarPickerReply",
 	"AvatarPropertiesReply", "AvatarInterestsReply", "AvatarGroupsReply",
 	"OnlineNotification", "OfflineNotification",
@@ -64,6 +73,22 @@ type Session struct {
 	parents     map[uint32]uint32     // local id to parent local id
 	attach      map[msg.UUID]*Attached
 	killed      map[uint32]bool
+
+	// anims is what the simulator last said was playing on THIS
+	// avatar, and sitOn and sitOffset are the last AvatarSitResponse it
+	// sent us.  See sit.go: the animations are the whole of the
+	// evidence that a ground sit happened, and the offset is a detail
+	// of an object sit that the reparenting does not carry.
+	anims     []msg.UUID
+	sitOn     msg.UUID
+	sitOffset msg.Vector3
+
+	// animWatch is how many calls are holding the borrowed
+	// AvatarAnimation subscription.  A count rather than a flag,
+	// because there is one subscription set for the whole connection
+	// and the first of two overlapping sits to finish would otherwise
+	// take it away from the second.
+	animWatch int
 
 	// Replies keyed by what was asked.
 	created map[uint32]*msg.UpdateCreateInventoryItem_InventoryData
@@ -597,6 +622,34 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.mu.Lock()
 		w.taskInv[t.InventoryData.TaskID] = trimNul(t.InventoryData.Filename)
 		w.taskSeen[t.InventoryData.TaskID] = true
+		w.mu.Unlock()
+
+	// This avatar's own animation list, and nobody else's.  The message
+	// arrives for every avatar in range and keeping the crowd's would be
+	// keeping a list that grows with the region; agent.Posture makes the
+	// same choice and says more about it.  The list is replaced rather
+	// than merged, because the message is the whole of it every time and
+	// an animation that has stopped is simply absent from the next one
+	// -- which is the only way standing up from a ground sit is ever
+	// heard about.
+	case *msg.AvatarAnimation:
+		if t.Sender.ID == w.me {
+			ids := make([]msg.UUID, 0, len(t.AnimationList))
+			for _, an := range t.AnimationList {
+				ids = append(ids, an.AnimID)
+			}
+			w.mu.Lock()
+			w.anims = ids
+			w.mu.Unlock()
+		}
+
+	// Where the simulator put us on the thing we asked to sit on.  It is
+	// not what a sit waits for -- the reparenting is, and it arrives
+	// whether or not this does -- so this is kept and never blocked on.
+	case *msg.AvatarSitResponse:
+		w.mu.Lock()
+		w.sitOn = t.SitObject.ID
+		w.sitOffset = t.SitTransform.SitPosition
 		w.mu.Unlock()
 
 	case *msg.ChatFromSimulator:

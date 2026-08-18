@@ -99,7 +99,10 @@ is a genuinely different thing and should read differently.
 
 There is no message for it. It is a control flag on `AgentUpdate` --
 `AGENT_CONTROL_SIT_ON_GROUND`, `1<<17` -- and standing is another,
-`AGENT_CONTROL_STAND_UP`, `1<<16`. Measured, both are **edge
+`AGENT_CONTROL_STAND_UP`, `1<<16`. (Both were checked against a
+Firestorm checkout in stage 2 and both are right. They are declared in
+`indra/llcommon/indra_constants.h`, not the `llagentconstants.h` this
+first said: that file is not in the tree.) Measured, both are **edge
 triggered**: one update carrying the flag was enough, and the daemon's
 own presence update a second later, carrying no flags at all, did not
 undo it. So neither of these belongs in `Look.ControlFlags`, where it
@@ -205,6 +208,29 @@ and if that turns out to race the first animation after a ground sit,
 the fallback is a session option rather than a permanent subscription.
 Stage 1 measures which.
 
+**Settled in stage 2.** Borrowed and given back, and the cost really
+does stop: `client.Conn` has `Watch` and `Unwatch`, the daemon keeps one
+subscription set per client stream, and `Unwatch` subtracts from it. Two
+things had to be added around that. The borrow is counted, so that the
+first of two overlapping sits to finish does not take the subscription
+from the second; and `Hosted` remembers what the session named when it
+attached and will not hand back a name it was never lent.
+
+The race is real but harmless. `Watch` travels on the client's stream
+and the daemon reads that stream in order, so anything sent afterwards
+*on the stream* is safely after it -- but a ground sit is sent by
+`Control`, a unary call on another goroutine, so in principle the flag
+could go out before the subscription was applied. What saves it is the
+resending: the list arrives in full about every three seconds whether
+anything changed or not, so a subscription that landed late still hears
+the sit one resend later. Losing the race costs a wait and not an
+answer, which is why the default timeout is fifteen seconds rather than
+one.
+
+`AvatarSitResponse` went into `sl.Subscriptions` permanently, which the
+same argument allows: it arrives once, when this avatar sits on
+something, and it carries the seat offset. Nothing waits for it.
+
 ### `slsh`: `sit` and `stand`
 
 	sit             sit on the ground
@@ -251,6 +277,32 @@ arrives in the window is treated as the answer, which is right nearly
 always and wrong occasionally, and the wrongness is a spurious refusal
 rather than a false success. Say so in the doc comment.
 
+**Built 2026-08-17.** Two decisions this did not make, made:
+
+`Agent.Control` sends the flag even while presence is deferred to a
+viewer. The deferral stops this session *arguing* about the camera,
+which is a thing only the viewer can be right about; it is not a stop on
+being asked to do things, and the viewer will never send a flag nobody
+told it about. What goes out is the current `Look`, whose centre follows
+the avatar whether or not a viewer is attached, so it is exactly the
+update the session would have sent had the viewer not been there. The
+viewer re-asserts its own camera within a fraction of a second.
+
+`Control` is part of `sl.Backend`, which took six fake backends in five
+packages growing the method on the same day. It was built as an
+interface asserted at the point of use, to keep the change inside the
+packages stage 2 was allowed to touch, and that was the wrong shape for
+the reason `backend.go` gives at the top of itself: both real backends
+do it, nothing above the interface may care which it got, and an
+optional method is a way of caring. The fakes were changed instead.
+
+`sl.Watcher` stayed an assertion, and that one is not a compromise. A
+direct session relays everything the circuit carries, so there is no
+subscription to take out or give back; a caller that finds no `Watcher`
+should conclude the message is already arriving rather than that it
+cannot be asked for. That is a real difference between the two backends
+and not an accident of what was convenient to change.
+
 ### Stage 3 -- `sit` and `stand` in `slsh`
 
 The commands, the man pages, and the name resolution shared with
@@ -280,6 +332,16 @@ on something else. Stand from each.
 
 - **Whether the range limit is the simulator's or the parcel's.** Seven
   metres worked and eleven did not, in one skybox, on one parcel.
+
+- **A ground sit `sl` did not perform.** `sl.Seat` reads the object sit
+  off the reparenting, which is relayed always, and the ground sit off
+  the animation list, which is relayed only while one of the sit calls
+  is holding the borrowed subscription. So a ground sit this session
+  performed is reported and one performed by a viewer, or by another
+  client while this session was not listening, reads as standing. The
+  daemon knows the answer -- `agent.Posture` has it, permanently and for
+  nothing -- so the fix is a `Posture` RPC rather than a subscription,
+  and stage 3 will want one anyway to print what `sit` did.
 
 - **Other avatars' postures.** `AvatarAnimation` arrives for everybody
   in range, so "who is sitting" is answerable for the whole crowd at no

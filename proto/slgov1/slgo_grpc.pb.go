@@ -45,6 +45,7 @@ const (
 	Grid_Flush_FullMethodName            = "/slgo.v1.Grid/Flush"
 	Grid_Cap_FullMethodName              = "/slgo.v1.Grid/Cap"
 	Grid_Send_FullMethodName             = "/slgo.v1.Grid/Send"
+	Grid_Control_FullMethodName          = "/slgo.v1.Grid/Control"
 	Grid_Friends_FullMethodName          = "/slgo.v1.Grid/Friends"
 	Grid_NoteFriend_FullMethodName       = "/slgo.v1.Grid/NoteFriend"
 	Grid_ViewerCredential_FullMethodName = "/slgo.v1.Grid/ViewerCredential"
@@ -133,6 +134,24 @@ type GridClient interface {
 	// Send puts one message on the circuit without opening a stream, for
 	// a client that only wants to say one thing.
 	Send(ctx context.Context, in *SendRequest, opts ...grpc.CallOption) (*SendResponse, error)
+	// Control sends one AgentUpdate carrying control flags, and forgets
+	// them.  Sitting on the ground and standing up are nothing but this.
+	//
+	// It belongs to the server for the reason Presence does, and more
+	// sharply.  An AgentUpdate is not just its flags: it carries the
+	// camera, its three axes and the draw distance, and the simulator
+	// scopes its interest list by them.  A client has none of that -- it
+	// knows a position from Presence and no axes at all -- so a client
+	// that built one would be guessing at the camera and inventing a draw
+	// distance, and the simulator would believe it until the server's own
+	// update a second later put it back.  The server owns the camera, so
+	// the server is the only thing that can send an update that is right
+	// about everything except the one bit being asked for.
+	//
+	// A primitive rather than a sit call and a stand call, because it is
+	// the same shape as everything else that moves an avatar: fly, stop,
+	// jump, and the nudges a walk is made of.
+	Control(ctx context.Context, in *ControlRequest, opts ...grpc.CallOption) (*ControlResponse, error)
 	// Friends is who this avatar's friends are and which of them are
 	// logged in.
 	//
@@ -310,6 +329,16 @@ func (c *gridClient) Send(ctx context.Context, in *SendRequest, opts ...grpc.Cal
 	return out, nil
 }
 
+func (c *gridClient) Control(ctx context.Context, in *ControlRequest, opts ...grpc.CallOption) (*ControlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ControlResponse)
+	err := c.cc.Invoke(ctx, Grid_Control_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Friends(ctx context.Context, in *FriendsRequest, opts ...grpc.CallOption) (*FriendsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FriendsResponse)
@@ -423,6 +452,24 @@ type GridServer interface {
 	// Send puts one message on the circuit without opening a stream, for
 	// a client that only wants to say one thing.
 	Send(context.Context, *SendRequest) (*SendResponse, error)
+	// Control sends one AgentUpdate carrying control flags, and forgets
+	// them.  Sitting on the ground and standing up are nothing but this.
+	//
+	// It belongs to the server for the reason Presence does, and more
+	// sharply.  An AgentUpdate is not just its flags: it carries the
+	// camera, its three axes and the draw distance, and the simulator
+	// scopes its interest list by them.  A client has none of that -- it
+	// knows a position from Presence and no axes at all -- so a client
+	// that built one would be guessing at the camera and inventing a draw
+	// distance, and the simulator would believe it until the server's own
+	// update a second later put it back.  The server owns the camera, so
+	// the server is the only thing that can send an update that is right
+	// about everything except the one bit being asked for.
+	//
+	// A primitive rather than a sit call and a stand call, because it is
+	// the same shape as everything else that moves an avatar: fly, stop,
+	// jump, and the nudges a walk is made of.
+	Control(context.Context, *ControlRequest) (*ControlResponse, error)
 	// Friends is who this avatar's friends are and which of them are
 	// logged in.
 	//
@@ -505,6 +552,9 @@ func (UnimplementedGridServer) Cap(context.Context, *CapRequest) (*CapResponse, 
 }
 func (UnimplementedGridServer) Send(context.Context, *SendRequest) (*SendResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Send not implemented")
+}
+func (UnimplementedGridServer) Control(context.Context, *ControlRequest) (*ControlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Control not implemented")
 }
 func (UnimplementedGridServer) Friends(context.Context, *FriendsRequest) (*FriendsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Friends not implemented")
@@ -759,6 +809,24 @@ func _Grid_Send_Handler(srv interface{}, ctx context.Context, dec func(interface
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Control_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ControlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Control(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Control_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Control(ctx, req.(*ControlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_Friends_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FriendsRequest)
 	if err := dec(in); err != nil {
@@ -867,6 +935,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Send",
 			Handler:    _Grid_Send_Handler,
+		},
+		{
+			MethodName: "Control",
+			Handler:    _Grid_Control_Handler,
 		},
 		{
 			MethodName: "Friends",

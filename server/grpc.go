@@ -717,6 +717,25 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	return &pb.SendResponse{}, nil
 }
 
+// Control sends one AgentUpdate carrying the client's control flags.
+//
+// The whole of what the server contributes is the rest of the update:
+// the camera, its axes and the draw distance, which it owns and a client
+// does not have.  The bits themselves are passed through unread -- this
+// has no idea which of them is a sit -- and are not remembered, because
+// they are edge triggered and a state kept here would be resent for ever
+// by the presence loop.
+func (s *Server) Control(ctx context.Context, req *pb.ControlRequest) (*pb.ControlResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.Agent().Control(ctx, req.Flags); err != nil {
+		return nil, status.Errorf(codes.Unavailable, "%v", err)
+	}
+	return &pb.ControlResponse{}, nil
+}
+
 // lookup resolves an agent name, defaulting to the session that has
 // been hosted longest.  See Server.Default for why that one.
 func (s *Server) lookup(name string) (*Hosted, error) {

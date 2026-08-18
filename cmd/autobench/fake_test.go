@@ -464,6 +464,12 @@ func (f *fakeGrid) answer(m msg.Message) {
 
 func (f *fakeGrid) Info() *sl.Info { return f.info }
 
+// Control is nothing here.  Nothing this fake stands in for sits
+// down or stands up; the method exists because sl.Backend has it,
+// so that the one place an AgentUpdate is built stays the one place
+// that owns the camera.
+func (f *fakeGrid) Control(ctx context.Context, flags uint32) error { return nil }
+
 func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	f.mu.Lock()
 	err := f.sendErr

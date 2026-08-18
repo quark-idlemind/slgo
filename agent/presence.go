@@ -25,6 +25,25 @@ import (
 // DefaultDrawDistance is the Far value sent when none is set.
 const DefaultDrawDistance = 128
 
+// The control flags that are a request rather than a state.
+//
+// Both were read out of indra/llcommon/indra_constants.h in a Firestorm
+// checkout, where the whole set is declared -- doc/sit.md expected them
+// in llagentconstants.h, which no longer exists in that tree.  The
+// values there are written as a shift of a named index with the result
+// in a comment beside it, and the comments say 0x00010000 and
+// 0x00020000, which are these.
+//
+// They are one-shot.  Measured on Agni: a single AgentUpdate carrying
+// the flag was enough, and the session's own presence update a second
+// later, carrying no flags at all, undid neither the sit nor the stand.
+// So they do not belong in Look.ControlFlags, where they would be
+// resent for ever; see Control.
+const (
+	ControlStandUp     uint32 = 1 << 16
+	ControlSitOnGround uint32 = 1 << 17
+)
+
 // Look is where the avatar's camera is and what it can see.
 type Look struct {
 	Center msg.Vector3
@@ -92,21 +111,9 @@ func (a *Agent) sendPresence(ctx context.Context, every time.Duration) {
 		if a.presenceDeferred() {
 			return
 		}
-		l := a.Look()
-		m := &msg.AgentUpdate{}
-		d := &m.AgentData
-		d.AgentID = a.Account.AgentID
-		d.SessionID = a.Account.SessionID
-		d.CameraCenter = l.Center
-		d.CameraAtAxis = l.At
-		d.CameraLeftAxis = l.Left
-		d.CameraUpAxis = l.Up
-		d.Far = l.Far
-		d.ControlFlags = l.ControlFlags
-		d.State = l.State
 		// Unreliable on purpose: the next one is along shortly
 		// and a lost update is not worth retransmitting.
-		_ = a.Send.Send(ctx, m)
+		_ = a.Send.Send(ctx, a.agentUpdate(a.Look()))
 	}
 
 	send()
@@ -120,6 +127,75 @@ func (a *Agent) sendPresence(ctx context.Context, every time.Duration) {
 			send()
 		}
 	}
+}
+
+// agentUpdate is one AgentUpdate built from a Look.
+//
+// One place rather than two, so that the one-shot Control sends cannot
+// drift from what the presence loop sends: everything except the flags
+// has to be the same, because the simulator scopes its interest list by
+// the camera and would believe a one-shot that got it wrong.
+func (a *Agent) agentUpdate(l Look) *msg.AgentUpdate {
+	m := &msg.AgentUpdate{}
+	d := &m.AgentData
+	d.AgentID = a.Account.AgentID
+	d.SessionID = a.Account.SessionID
+	d.CameraCenter = l.Center
+	d.CameraAtAxis = l.At
+	d.CameraLeftAxis = l.Left
+	d.CameraUpAxis = l.Up
+	d.Far = l.Far
+	d.ControlFlags = l.ControlFlags
+	d.State = l.State
+	return m
+}
+
+// Control sends one AgentUpdate carrying these control flags, and then
+// forgets them.
+//
+// It is the whole of how an avatar is made to sit on the ground or stand
+// up: there is no message for either, only AGENT_CONTROL_SIT_ON_GROUND
+// and AGENT_CONTROL_STAND_UP on an update.  Measured on Agni, both are
+// edge triggered -- one update carrying the flag did it, and the
+// session's own presence update a second later carrying none did not
+// undo it -- so nothing is remembered here and Look.ControlFlags, which
+// is resent for ever, is left alone.  The bits it does carry are ORed in
+// rather than replaced, so a session that is holding a movement key does
+// not stop moving for one update.
+//
+// It lives here because an AgentUpdate is not just its flags.  It
+// carries the camera, its three axes and the draw distance, and the
+// simulator works out what to stream from them; a client has none of
+// that and would be guessing, which is why this is an RPC rather than
+// something a client builds and sends through Send.
+//
+// Reliably, unlike the presence loop's updates.  Those are unreliable
+// because the next one is a second away and a lost one costs nothing.
+// This one has no next one: a dropped datagram is a sit that silently
+// did not happen.
+//
+// # While a viewer holds the camera
+//
+// The flag still goes.  A deferral means a viewer is authoritative for
+// the camera and this session must not argue about where it is looking
+// -- see DeferPresence -- but it does not mean the session has stopped
+// being asked to do things, and the viewer is not going to send a flag
+// nobody told it about.  Refusing here would leave the caller with no
+// way at all to sit an avatar down while somebody is watching through
+// it, which is exactly when it is most likely to be wanted.
+//
+// What is sent is the current Look, which is what makes that safe.  The
+// camera in it follows the avatar whether or not a viewer is attached --
+// setCenter runs regardless -- so the update is exactly the one this
+// session would have sent had the viewer not been there, and not an
+// invention.  A viewer sends its own several times a second, so its
+// camera is re-asserted almost at once; the cost of the disagreement is
+// a fraction of a second of a slightly different interest list, and the
+// deferral itself is neither extended nor cleared.
+func (a *Agent) Control(ctx context.Context, flags uint32) error {
+	l := a.Look()
+	l.ControlFlags |= flags
+	return a.Send.SendReliable(ctx, a.agentUpdate(l))
 }
 
 // TrimInterval is how often the object cache is trimmed to the draw

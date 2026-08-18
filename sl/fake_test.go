@@ -39,7 +39,10 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-var _ Backend = (*fakeBackend)(nil)
+var (
+	_ Backend = (*fakeBackend)(nil)
+	_ Watcher = (*fakeBackend)(nil)
+)
 
 // Who the fake says we are.  New refuses a backend with no agent or
 // session id, so these are load bearing rather than decoration.
@@ -134,6 +137,23 @@ type fakeBackend struct {
 	// ServeCap.
 	caps   map[string]string
 	capErr error
+
+	// controls is every set of control flags Control was asked for, in
+	// order, and controlErr is what it answers with instead.  A slice
+	// rather than a union, because the flags are edge triggered: two
+	// stands are two events and a test that could not tell them apart
+	// would not notice one going missing.
+	controls   []uint32
+	controlErr error
+
+	// watching is what the relay has been asked for since the session
+	// started, and watched is the order Watch and Unwatch were called
+	// in.  Both are kept: what is subscribed NOW is what decides
+	// whether a message arrives, and the order is what says a borrowed
+	// subscription was given back rather than never taken.
+	watching map[string]bool
+	watched  []string
+	watchErr error
 }
 
 // newFake builds a backend that answers plausibly and reaches nothing.
@@ -154,12 +174,13 @@ func newFake(t *testing.T) *fakeBackend {
 			InventoryRoot: testInvRoot,
 			Channel:       "slgo test 1.0",
 		},
-		msgs:    make(chan *Message),
-		events:  make(chan *QueueEvent),
-		regions: make(chan *RegionChange),
-		done:    make(chan struct{}),
-		locks:   map[string]bool{},
-		caps:    map[string]string{},
+		msgs:     make(chan *Message),
+		events:   make(chan *QueueEvent),
+		regions:  make(chan *RegionChange),
+		done:     make(chan struct{}),
+		locks:    map[string]bool{},
+		caps:     map[string]string{},
+		watching: map[string]bool{},
 		presence: &Presence{
 			Position: msg.Vector3{X: 128, Y: 128, Z: 25},
 			LookAt:   msg.Vector3{X: 1},
@@ -614,6 +635,69 @@ func (f *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) er
 		onSend(m)
 	}
 	return nil
+}
+
+// Control records the flags a one-shot AgentUpdate was asked to carry.
+//
+// Nothing is sent and nothing is decoded: the update is built at the far
+// end, by whoever owns the camera, so the flags are the whole of what a
+// session can be held to here.
+func (f *fakeBackend) Control(ctx context.Context, flags uint32) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.controlErr != nil {
+		return f.controlErr
+	}
+	f.controls = append(f.controls, flags)
+	return nil
+}
+
+// Watch and Unwatch keep the subscription set a real daemon would keep,
+// so that a borrowed subscription can be seen being taken and given
+// back.
+func (f *fakeBackend) Watch(names ...string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.watchErr != nil {
+		return f.watchErr
+	}
+	for _, n := range names {
+		f.watching[n] = true
+		f.watched = append(f.watched, "+"+n)
+	}
+	return nil
+}
+
+func (f *fakeBackend) Unwatch(names ...string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, n := range names {
+		delete(f.watching, n)
+		f.watched = append(f.watched, "-"+n)
+	}
+	return nil
+}
+
+// Controls is every set of control flags the session asked for.
+func (f *fakeBackend) Controls() []uint32 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]uint32(nil), f.controls...)
+}
+
+// Watched is the subscription changes in order, each name prefixed with
+// + for a Watch and - for an Unwatch.
+func (f *fakeBackend) Watched() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.watched...)
+}
+
+// Watching reports whether a name is subscribed at this moment.
+func (f *fakeBackend) Watching(name string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.watching[name]
 }
 
 func (f *fakeBackend) Messages() <-chan *Message           { return f.msgs }

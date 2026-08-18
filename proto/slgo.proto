@@ -110,6 +110,25 @@ service Grid {
   // a client that only wants to say one thing.
   rpc Send(SendRequest) returns (SendResponse);
 
+  // Control sends one AgentUpdate carrying control flags, and forgets
+  // them.  Sitting on the ground and standing up are nothing but this.
+  //
+  // It belongs to the server for the reason Presence does, and more
+  // sharply.  An AgentUpdate is not just its flags: it carries the
+  // camera, its three axes and the draw distance, and the simulator
+  // scopes its interest list by them.  A client has none of that -- it
+  // knows a position from Presence and no axes at all -- so a client
+  // that built one would be guessing at the camera and inventing a draw
+  // distance, and the simulator would believe it until the server's own
+  // update a second later put it back.  The server owns the camera, so
+  // the server is the only thing that can send an update that is right
+  // about everything except the one bit being asked for.
+  //
+  // A primitive rather than a sit call and a stand call, because it is
+  // the same shape as everything else that moves an avatar: fly, stop,
+  // jump, and the nudges a walk is made of.
+  rpc Control(ControlRequest) returns (ControlResponse);
+
   // Friends is who this avatar's friends are and which of them are
   // logged in.
   //
@@ -567,6 +586,21 @@ message SendRequest {
 }
 
 message SendResponse {}
+
+message ControlRequest {
+  string agent = 1;
+
+  // Flags are the AGENT_CONTROL bits to set on one update, as the
+  // viewer's indra_constants.h numbers them: 0x00010000 stands the
+  // avatar up, 0x00020000 sits it on the ground.
+  //
+  // They are edge triggered, measured on Agni, so this is a request and
+  // not a state: the update after it carries none of them and undoes
+  // nothing.  Nothing here interprets the bits.
+  uint32 flags = 2;
+}
+
+message ControlResponse {}
 
 // ------------------------------------------------------------ presence
 

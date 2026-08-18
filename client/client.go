@@ -691,6 +691,25 @@ func (c *Conn) Neighbours(ctx context.Context, set *bool) (*pb.NeighboursRespons
 	return c.grid.Neighbours(ctx, &pb.NeighboursRequest{Agent: c.agent, Set: set})
 }
 
+// Control asks the server to send one AgentUpdate carrying these
+// control flags, and forget them.
+//
+// It goes to the server because an AgentUpdate is not just its flags: it
+// carries the camera, its three axes and the draw distance, and the
+// simulator scopes its interest list by them.  This side knows a
+// position and no axes at all, so a client that built one itself would
+// be guessing at the camera and inventing a draw distance, and the
+// simulator would believe it until the server's own update a second
+// later put it back.
+//
+// A single call rather than a sit and a stand, because the flags are the
+// same shape for everything that moves an avatar; agent.ControlStandUp
+// and agent.ControlSitOnGround are the two this repository has measured.
+func (c *Conn) Control(ctx context.Context, flags uint32) error {
+	_, err := c.grid.Control(ctx, &pb.ControlRequest{Agent: c.agent, Flags: flags})
+	return err
+}
+
 // Flush empties the server's object cache.
 func (c *Conn) Flush(ctx context.Context) (int, error) {
 	r, err := c.grid.Flush(ctx, &pb.FlushRequest{Agent: c.agent})
