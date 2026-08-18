@@ -954,6 +954,13 @@ func (a *Agent) Position() msg.Vector3 {
 	at := a.position
 	a.mu.RUnlock()
 
+	// An agent with no account is one nothing has logged in, which
+	// happens in tests and in the moments before a login answers.  It
+	// has no avatar in the store to be seated, and asking for one by a
+	// zero id would find whatever else has never been described.
+	if a.Account == nil {
+		return at
+	}
 	store := a.Objects()
 	own, ok := store.Get(a.Account.AgentID)
 	if !ok || own.Parent == 0 {
