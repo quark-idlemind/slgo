@@ -1,8 +1,10 @@
 # Sitting, and standing up again
 
-Written 2026-08-17, against `8389366`. Stage 0 has been run against Agni
-and what it measured is folded in below: where this says what happens,
-it was watched happening. Nothing else here is built.
+Written 2026-08-17, against `8389366`. **All of it is built**, and every
+stage was run against Agni: where this says what happens, it was watched
+happening. Two things it first said turned out to be wrong and are
+corrected in place rather than quietly edited away -- that no new RPC
+was needed, and that an edge triggered flag only has to be sent once.
 
 ## Why this before walking
 
@@ -351,22 +353,48 @@ certainly there for the second.
 The commands, the man pages, and the name resolution shared with
 `touch`. `where` after a sit should agree with what `sit` printed.
 
-### Stage 4 -- live, on the grid
+### Stage 4 -- live, on the grid (done)
 
-Sit on something scripted with a real `llSitTarget`, which stage 0 never
-tried: every measurement above is of the simulator's default seat on a
-plain box. Sit on something already occupied. Sit while already seated
-on something else. Stand from each.
+Run 2026-08-17 through `slsh` against Agni, on a scripted chair rezzed
+for it in the skybox at Pelmar Reach.
+
+**A scripted sit target behaves, and says what it was asked for.** A
+prim running `llSitTarget(<0, 0, 0.8>, ZERO_ROTATION)` answered with
+`SitPosition <0, 0, 1.15>` -- the target plus the 0.35 the simulator
+adds for where an avatar's root is against where it sits -- and the
+rotation as given. The same sit animation, the same reparenting, the
+same tenth of a second. Nothing in stage 2 needed changing for it, which
+was the thing worth checking: every earlier measurement was of the
+simulator's default seat on a bare box.
+
+**Sitting while already seated just works.** `sit perch` and then `sit`
+on another object without standing in between moved the avatar from one
+to the other. So `Sit` does not have to stand first, and its test for
+success -- the parent CHANGING rather than matching the object asked for
+-- is what makes it come out right.
+
+**And `where` was lying.** Not by much and not for long, but a sit that
+carried the avatar three metres read as the old position for about ten
+seconds afterwards, because a position comes from `CoarseLocationUpdate`
+and that arrives every few seconds. The exact answer was in hand the
+whole time: a seated avatar's own update carries its position as an
+offset from the seat. `agent.Position` now composes it back, and a sit
+reports where it left the avatar the instant it lands.
+
+Not done: **an occupied seat.** It wants a second avatar in the same
+region and the other sessions here are on another grid.
 
 ## Open questions
 
-- **What a scripted sit target does to `AvatarSitResponse`.** Everything
-  measured is the default seat. `llSitTarget` is the ordinary case in
-  the world and it was not tested.
+- ~~**What a scripted sit target does to `AvatarSitResponse`.**~~
+  Answered in stage 4: the sit target plus 0.35, and the rotation as
+  given.
 
-- **Sitting while seated.** Untested. Either the simulator moves the
-  avatar or refuses, and the answer decides whether `Sit` has to stand
-  first.
+- ~~**Sitting while seated.**~~ Answered in stage 4: the simulator moves
+  the avatar, and `Sit` needs no stand in front of it.
+
+- **An occupied seat.** Still untested, and the one thing stage 4 could
+  not do alone.
 
 - **Crossing a border while seated.** This is how vehicles work, and
   `agent/crossing.go` has never seen it. A seated avatar that crosses
@@ -383,8 +411,9 @@ on something else. Stand from each.
   performed is reported and one performed by a viewer, or by another
   client while this session was not listening, reads as standing. The
   daemon knows the answer -- `agent.Posture` has it, permanently and for
-  nothing -- so the fix is a `Posture` RPC rather than a subscription,
-  and stage 3 will want one anyway to print what `sit` did.
+  nothing -- so the fix is a `Posture` RPC rather than a subscription.
+  Stage 3 did not need one after all: `Sit` returns the seat and the
+  position comes from `Where`.
 
 - **Other avatars' postures.** `AvatarAnimation` arrives for everybody
   in range, so "who is sitting" is answerable for the whole crowd at no
