@@ -89,6 +89,11 @@ type Agent struct {
 	// reason.
 	appearance Appearances
 
+	// anims is what this avatar is animating, which is half of what
+	// posture is; the other half is the parent in the object cache.
+	// See posture.go.
+	anims animations
+
 	// offers is what was said to the person while no viewer was there
 	// to show it.
 	offers Offers
@@ -561,6 +566,7 @@ func (a *Agent) register() {
 	// this region's whatever it turns out to be called.
 	a.objects.Store(newObjects())
 	a.trackObjects()
+	a.trackPosture()
 	a.keepOffers()
 	a.followCrossings()
 	a.followNeighbours()

@@ -559,6 +559,23 @@ func (o *Objects) anchorLocked(local uint32) (msg.Vector3, bool) {
 	return msg.Vector3{}, false
 }
 
+// byLocal is one object by the local id the region numbers it with.
+//
+// It is a scan, for the reason kill is: the store is keyed by full id,
+// because that is the only name an object keeps, and the messages that
+// refer to one by local id alone are rare enough that a second index
+// would cost more to maintain than it saved.
+func (o *Objects) byLocal(local uint32) (*Object, bool) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	v := o.byLocalLocked(local)
+	if v == nil {
+		return nil, false
+	}
+	c := *v
+	return &c, true
+}
+
 func (o *Objects) byLocalLocked(local uint32) *Object {
 	for _, v := range o.byID {
 		if v.Local == local {
