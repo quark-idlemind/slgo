@@ -72,11 +72,17 @@ package sl
 //
 // There is no message for it.  It is a control flag on AgentUpdate --
 // AGENT_CONTROL_SIT_ON_GROUND -- and standing is another,
-// AGENT_CONTROL_STAND_UP, and both are edge triggered: one update
-// carrying the flag was enough, and the session's own presence update a
-// second later, carrying no flags, undid neither.  The update itself is
-// built by whoever owns the camera, which is never a client; see
+// AGENT_CONTROL_STAND_UP.  Both are edge triggered: one update carrying
+// the flag was enough, and the session's own presence update a second
+// later, carrying no flags, undid neither.  The update itself is built
+// by whoever owns the camera, which is never a client; see
 // Backend.Control and agent.Control.
+//
+// Edge triggered does not mean once is enough, which cost a live run to
+// find out: a flag that arrives while the avatar is still settling into
+// the last thing it was told to do is dropped without a word.  So these
+// calls hold the flag the way a viewer holds a key rather than sending
+// it and hoping; see controlUntil, which is where the measurement is.
 //
 // A ground sit then produces NO reply and NO reparenting:
 //
@@ -297,12 +303,10 @@ func (w *Session) SitOnGround(ctx context.Context, timeout time.Duration) error 
 	}
 	defer give()
 
-	if err := w.b.Control(ctx, agent.ControlSitOnGround); err != nil {
-		return err
-	}
-	return w.await(ctx, timeout, "the ground sit animation to start", func() bool {
-		return groundSitting(w.anims)
-	})
+	return w.controlUntil(ctx, agent.ControlSitOnGround, timeout,
+		"the ground sit animation to start", func() bool {
+			return groundSitting(w.anims)
+		})
 }
 
 // Stand gets the avatar up, from either kind of sit, and waits for
@@ -336,19 +340,19 @@ func (w *Session) Stand(ctx context.Context, timeout time.Duration) error {
 	ground := groundSitting(w.anims)
 	w.mu.Unlock()
 
-	if err := w.b.Control(ctx, agent.ControlStandUp); err != nil {
-		return err
-	}
-
 	switch {
 	case parent != 0:
-		return w.await(ctx, timeout, "this avatar to stop being parented to its seat",
+		return w.controlUntil(ctx, agent.ControlStandUp, timeout,
+			"this avatar to stop being parented to its seat",
 			func() bool { return w.seatLocal() == 0 })
 	case ground:
-		return w.await(ctx, timeout, "the ground sit animation to stop",
+		return w.controlUntil(ctx, agent.ControlStandUp, timeout,
+			"the ground sit animation to stop",
 			func() bool { return !groundSitting(w.anims) })
 	}
-	return nil
+	// Nothing to wait for, so nothing to resend either: one flag, in
+	// case what this session believes is out of date.
+	return w.b.Control(ctx, agent.ControlStandUp)
 }
 
 // Seat is what the avatar is sitting on, or nil if it is not sitting.
@@ -453,6 +457,76 @@ func groundSitting(anims []msg.UUID) bool {
 		}
 	}
 	return false
+}
+
+// resendControl is how often a control flag is sent again while waiting
+// for it to take.
+//
+// See controlUntil for why it is sent again at all.  Half a second is
+// slower than a viewer, which sends one every frame it has the key held,
+// and far faster than the wait it is trying to shorten.
+const resendControl = 500 * time.Millisecond
+
+// controlUntil sends a control flag, and keeps sending it until the
+// simulator does what it means or the wait runs out.
+//
+// # Once is not enough, measured
+//
+// The flag is edge triggered -- one update carrying it did it, every
+// time it was measured in isolation -- and that made a single send look
+// sufficient.  It is not, and the case that shows it took a while to
+// find:
+//
+//	sit on an object          seated,   101ms
+//	stand                     stood,    101ms
+//	sit on the ground         seated,   101ms
+//	stand                     IGNORED, and the avatar was still
+//	                          sitting twenty-three seconds later
+//
+// Each step went out as the one before was confirmed, so the last flag
+// left about a tenth of a second after the ground sit landed.  The trace
+// says slgod sent it: ControlFlags 65536, on the wire, acknowledged.
+// The simulator dropped it.  Leaving three seconds before the last step
+// -- and changing nothing else -- makes the same sequence work every
+// time.
+//
+// What the sequence has that a ground sit and a stand on their own do
+// not is the stand before it.  The reading that fits: the animation
+// saying the ground sit has begun is not the same as the avatar having
+// finished sitting down, and an avatar that was mid-way through standing
+// up off an object when it was told to sit takes longer to get there.  A
+// stand that arrives inside that window is swallowed.
+//
+// So this does what a viewer does, which is the part the one-shot got
+// wrong: a viewer does not send a stand, it HOLDS the key, and an update
+// carrying the flag goes out every frame until the avatar is up.  Half a
+// second apart rather than every frame is enough to turn a swallowed
+// flag into a wait nobody notices, and resending is free -- an edge
+// triggered flag that has already been obeyed asks for something that
+// has already happened.
+//
+// It also settles the other race for nothing: a borrowed subscription
+// that had not been applied when the first flag went out will be there
+// for the second.
+func (w *Session) controlUntil(ctx context.Context, flags uint32, timeout time.Duration,
+	what string, ok func() bool) error {
+
+	deadline := time.Now().Add(timeout)
+	for {
+		if err := w.b.Control(ctx, flags); err != nil {
+			return err
+		}
+		// Everything that has ever been measured answers in about a
+		// tenth of a second, so this is the one that is expected to end
+		// the loop; the resend is for the case that is not.
+		err := w.await(ctx, min(resendControl, time.Until(deadline)), what, ok)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, ErrTimeout) || !time.Now().Before(deadline) {
+			return err
+		}
+	}
 }
 
 // animationRelay is the message the ground sit and the stand borrow.

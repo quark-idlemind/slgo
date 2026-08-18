@@ -442,3 +442,36 @@ func TestTheSeatIsNamedFromWhatTheRegionHasDescribed(t *testing.T) {
 		t.Errorf("the seat came back as %v", seat)
 	}
 }
+
+// TestASwallowedFlagIsSentAgain: measured on Agni, a stand sent about a
+// tenth of a second after a ground sit -- which had itself followed a
+// stand off an object -- was dropped without a word, and the avatar was
+// still sitting twenty-three seconds later.  Three seconds' pause and
+// the same sequence worked every time.  So the flag is held rather than
+// sent once, the way a viewer holds the key down, and a simulator that
+// ignores the first one gets another half a second later.
+func TestASwallowedFlagIsSentAgain(t *testing.T) {
+	w, f := newFakeSession(t)
+	animate(t, f, agent.AnimSitGroundConstrained)
+
+	wait := asideErr(t, func() error {
+		return w.Stand(context.Background(), 5*time.Second)
+	})
+
+	// The first flag is ignored, as the simulator ignored it: nothing
+	// answers it, and the avatar goes on sitting.
+	waitFor(t, "the first stand flag", func() bool { return len(f.Controls()) > 0 })
+	waitFor(t, "the flag to be sent again", func() bool { return len(f.Controls()) > 1 })
+
+	for i, flags := range f.Controls() {
+		if flags != agent.ControlStandUp {
+			t.Errorf("flag %d was %#x, want %#x every time", i, flags, agent.ControlStandUp)
+		}
+	}
+
+	// And the second one is obeyed.
+	animate(t, f, agent.AnimStand)
+	if err := wait(); err != nil {
+		t.Fatalf("Stand: %v", err)
+	}
+}

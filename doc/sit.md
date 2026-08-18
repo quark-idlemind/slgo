@@ -303,6 +303,49 @@ should conclude the message is already arriving rather than that it
 cannot be asked for. That is a real difference between the two backends
 and not an accident of what was convenient to change.
 
+### Stage 2 went to the grid, and the grid had one more thing to say
+
+**Measured 2026-08-17, with stage 2 built.** Everything above works
+live, first time, at about a tenth of a second: an object sit, the seat
+named back, a stand, a ground sit, and a refusal quoting the grid word
+for word. One thing did not.
+
+	sit on an object          seated,   101ms
+	stand                     stood,    101ms
+	sit on the ground         seated,   101ms
+	stand                     IGNORED
+
+Not a slow answer -- ignored. An independent session watching the same
+avatar saw the ground sit animation still arriving at 3, 5, 12, 17 and
+23 seconds. The daemon's trace shows the flag went out and was
+acknowledged: `ControlFlags 65536`, on the wire, a tenth of a second
+after the ground sit landed. The simulator dropped it.
+
+It took a while to find because every simpler version works. A ground
+sit and a stand on their own work at any spacing, down to none at all.
+Two ground sits and two stands work. The same four steps sent by hand
+work. What fails is those four with each step following its own
+confirmation, and leaving three seconds before the last one -- changing
+nothing else -- makes it work every time.
+
+The reading that fits: **the animation saying a ground sit has begun is
+not the avatar having finished sitting down**, and an avatar that was
+still standing up off an object when it was told to sit takes longer to
+get there. A stand arriving inside that window is swallowed.
+
+So "edge triggered" was right and "once is enough" was the wrong thing
+to conclude from it. A viewer does not send a stand, it **holds the
+key**: an update carrying the flag goes out every frame until the avatar
+is up. `sl.controlUntil` does the same at half a second, which turns a
+swallowed flag into a wait nobody notices -- the failing sequence now
+stands in 201ms, or 1.2 seconds when it takes two goes. Resending is
+free: an edge triggered flag that has already been obeyed asks for
+something that has already happened.
+
+It settles the subscription race for nothing as well. A borrowed
+subscription that had not been applied when the first flag went out is
+certainly there for the second.
+
 ### Stage 3 -- `sit` and `stand` in `slsh`
 
 The commands, the man pages, and the name resolution shared with
