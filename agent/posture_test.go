@@ -347,3 +347,51 @@ func TestTheAnimationListIsCopiedOut(t *testing.T) {
 		t.Errorf("posture = %v after a caller edited the list it was handed", p)
 	}
 }
+
+// TestASeatedAvatarIsWhereItsSeatIs: sitting moves an avatar several
+// metres and the coarse update saying so is seconds behind -- measured
+// on Agni, about ten of them.  The exact answer is in hand the whole
+// time, because the update that seats an avatar gives its position as an
+// offset from the seat rather than as a place in the region.
+func TestASeatedAvatarIsWhereItsSeatIs(t *testing.T) {
+	t.Parallel()
+
+	a := standingSession(t)
+	seat := arriving(t, msg.ObjectUpdate_ObjectData{
+		ID:         theSeat,
+		FullID:     aSeat,
+		PCode:      9,
+		Scale:      msg.Vector3{X: 1, Y: 1, Z: 1},
+		ObjectData: placement(msg.Vector3{X: 30, Y: 72, Z: 2000}, msg.Quaternion{}),
+	})
+	// The offset a measured sit produced, on a seat a couple of metres
+	// from where the avatar had been standing.
+	on := arriving(t, msg.ObjectUpdate_ObjectData{
+		ID:         meLocally,
+		FullID:     a.Account.AgentID,
+		PCode:      pcodeAvatar,
+		ParentID:   theSeat,
+		ObjectData: avatarPlacement(msg.Vector3{X: -0.59, Y: 0, Z: 0.88}),
+	})
+	feed(t, a, seat, on)
+
+	at := a.Position()
+	want := msg.Vector3{X: 30 - 0.59, Y: 72, Z: 2000.88}
+	if at != want {
+		t.Errorf("a seated avatar is at %v, want %v: the seat's place plus the offset", at, want)
+	}
+}
+
+// TestAnAvatarOnNothingIsWhereTheSimulatorSaidItWas: the composition
+// above is for a seat and nothing else.  An avatar with no parent has a
+// position of its own, and nothing about it is an offset from anything.
+func TestAnAvatarOnNothingIsWhereTheSimulatorSaidItWas(t *testing.T) {
+	t.Parallel()
+
+	a := standingSession(t)
+	feed(t, a, ownUpdate(t, a, 0))
+
+	if at := a.Position(); at == (msg.Vector3{X: 29.41, Y: 72, Z: 2001.88}) {
+		t.Errorf("a standing avatar was placed as though it were seated: %v", at)
+	}
+}

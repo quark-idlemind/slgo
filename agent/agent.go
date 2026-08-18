@@ -929,11 +929,40 @@ func (a *Agent) RegionName() string {
 	return a.regionName
 }
 
-// Position is where the avatar arrived.
+// Position is where the avatar is.
+//
+// Ordinarily that is what the simulator last said outright --
+// AgentMovementComplete when the avatar arrived, and
+// CoarseLocationUpdate as it moves, which is whole metres and arrives
+// every few seconds.
+//
+// A seated avatar is the exception, and it is worth the special case.
+// Sitting on something MOVES the avatar, up to about ten metres, and the
+// coarse update saying where it ended up can be seconds behind: measured
+// on Agni, a sit that carried the avatar three metres still read as the
+// old position for about ten seconds afterwards.  Meanwhile the exact
+// answer is already in hand, because the update that seats an avatar
+// carries its position as an offset from the seat -- so a seated
+// position is composed out of the seat's own placement rather than
+// waited for.
+//
+// It falls back to the coarse answer whenever the seat cannot be
+// resolved, which is the ordinary case for a seat nothing has described:
+// stale by a few metres beats a confident zero.
 func (a *Agent) Position() msg.Vector3 {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.position
+	at := a.position
+	a.mu.RUnlock()
+
+	store := a.Objects()
+	own, ok := store.Get(a.Account.AgentID)
+	if !ok || own.Parent == 0 {
+		return at
+	}
+	if seated, _, ok := store.worldPlacement(own.Local); ok {
+		return seated
+	}
+	return at
 }
 
 // ChannelVersion is the simulator'a build string.
