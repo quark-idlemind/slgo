@@ -37,6 +37,13 @@ var worldCommands = map[string]*command{
 		man:   "look",
 		run:   cmdLook,
 	},
+	"parcel": {
+		params: "[X,Y]",
+		flags:  func() any { return new(parcelOptions) },
+		brief:  "the land under this avatar, or under a point in this region",
+		man:    "parcel",
+		run:    cmdParcel,
+	},
 	"map": {
 		flags: func() any { return new(mapOptions) },
 		brief: "a picture of who is around this avatar, or of the whole region",

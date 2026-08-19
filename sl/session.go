@@ -44,7 +44,7 @@ var Subscriptions = []string{
 	"OnlineNotification", "OfflineNotification",
 	"ScriptRunningReply", "ScriptQuestion", "ScriptDialog",
 	"TeleportLocal", "TeleportFailed", "TeleportFinish",
-	"AgentMovementComplete", "ParcelProperties",
+	"AgentMovementComplete", "ParcelProperties", "ParcelDwellReply",
 	"MapBlockReply",
 }
 
@@ -148,6 +148,14 @@ type Session struct {
 	// starts and stops on its own and a remembered answer would be a
 	// claim about the past dressed as one about now.
 	scriptFns []func(object, item msg.UUID, running bool)
+
+	// parcelFns and dwellFns are who is waiting for an answer about a
+	// piece of land.  See parcel.go: a ParcelProperties carries the
+	// sequence id it was asked with and the waiters sort themselves
+	// out by it, because the answer arrives on the queue where nothing
+	// else pairs it with its question.
+	parcelFns []func(*agent.Parcel)
+	dwellFns  []func(local int32, id msg.UUID, dwell float32)
 
 	// Permission requests seen, answered or not, in arrival order.
 	asked []*Permission
@@ -449,6 +457,10 @@ var eventHandlers = map[string]func(*Session, map[string]any){
 	// and stage 0 watched both come off the queue.
 	"TeleportFinish": (*Session).teleportFinishEvent,
 	"TeleportFailed": (*Session).teleportFailedEvent,
+
+	// The land under the avatar, which arrives here whether it was
+	// asked for or not.  See parcel.go.
+	"ParcelProperties": (*Session).parcelEvent,
 }
 
 // event dispatches one entry from the event queue.
@@ -543,6 +555,9 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			w.killed[d.ID] = true
 		}
 		w.mu.Unlock()
+
+	case *msg.ParcelDwellReply:
+		w.dwellReply(t.Data.LocalID, t.Data.ParcelID, t.Data.Dwell)
 
 	case *msg.ObjectPropertiesFamily:
 		w.mu.Lock()

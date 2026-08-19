@@ -258,6 +258,10 @@ func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, e
 	return append([]*sl.Seen(nil), f.worn...), nil
 }
 
+func (f *fakeGrid) Land(ctx context.Context) (*sl.Land, error) {
+	return &sl.Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
+}
+
 func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 	return &sl.Region{Name: "Test Region"}, true, nil
 }

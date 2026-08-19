@@ -185,6 +185,16 @@ type Backend interface {
 	// whether it has arrived at all.
 	Region(ctx context.Context) (*Region, bool, error)
 
+	// Land is what the session was told about the ground under the
+	// avatar: the parcel it was pushed when it arrived, and the
+	// region's parcel overlay.
+	//
+	// Here for the reason Region and Objects are: it arrives unasked,
+	// once, before a client is listening.  The overlay especially --
+	// four packets on arrival and none afterwards, so a session that
+	// has been up for hours is the only thing that still has it.
+	Land(ctx context.Context) (*Land, error)
+
 	// Neighbours is the circuits held to the regions AROUND that one,
 	// and whether the session is holding any at all.  A non-nil set
 	// turns them on or off first, and the answer describes what is

@@ -102,6 +102,10 @@ type fakeGrid struct {
 	sent   []msg.Message
 	onSend func(msg.Message)
 
+	// land is what Land answers, and landErr a daemon that will not.
+	land    *sl.Land
+	landErr error
+
 	// controls is every control flag the session has asked for, and
 	// onControl is the same hook for them that onSend is for messages.
 	//
@@ -1307,6 +1311,22 @@ func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, e
 		out = append(out, o)
 	}
 	return out, nil
+}
+
+// land is what the fake session was told about the ground it is on,
+// and landErr is a daemon that will not answer.  Both are set by the
+// tests that care; the default is a session that arrived before
+// anything was listening, which is the ordinary case for a shell.
+func (f *fakeGrid) Land(ctx context.Context) (*sl.Land, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.landErr != nil {
+		return nil, f.landErr
+	}
+	if f.land != nil {
+		return f.land, nil
+	}
+	return &sl.Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
 }
 
 func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {

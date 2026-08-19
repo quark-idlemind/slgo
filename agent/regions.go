@@ -150,6 +150,7 @@ func (a *Agent) enterRegion(region msg.UUID) {
 	if !first {
 		a.terrain.forget()
 		a.appearance.forget()
+		a.parcels.forget()
 	}
 
 	if a.regions == nil {

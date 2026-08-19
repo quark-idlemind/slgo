@@ -676,6 +676,17 @@ func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
 	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agent})
 }
 
+// Land is what the session was told about the ground it is on: the
+// parcel it was pushed on arrival, and the region's parcel overlay.
+//
+// It goes to the server for the reason Region does: both arrive once,
+// unasked, before any client is listening.  The overlay cannot be asked
+// for a second time at all, so a client that was not there when the
+// avatar arrived can get it here or nowhere.
+func (c *Conn) Land(ctx context.Context) (*pb.LandInfo, error) {
+	return c.grid.Land(ctx, &pb.LandRequest{Agent: c.agent})
+}
+
 // Neighbours reads the circuits the server holds to the regions around
 // the one the avatar is in, and turns them on or off.
 //

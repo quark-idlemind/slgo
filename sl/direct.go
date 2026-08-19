@@ -281,6 +281,15 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 	return out, nil
 }
 
+// Land reads what this process's own agent was told.
+func (d *Direct) Land(ctx context.Context) (*Land, error) {
+	out := &Land{Overlay: d.a.Overlay()}
+	if p := d.a.Parcel(); p != nil {
+		out.Told = &Told{Name: p.Name, LocalID: p.LocalID}
+	}
+	return out, nil
+}
+
 func (d *Direct) Region(ctx context.Context) (*Region, bool, error) {
 	r, known := d.a.Region()
 	return &Region{

@@ -595,6 +595,34 @@ func (s *Server) Region(ctx context.Context, req *pb.RegionRequest) (*pb.RegionI
 	}, nil
 }
 
+// Land answers what the session was told about the ground it is on.
+//
+// The overlay is the reason this exists: four packets on arrival and
+// none afterwards, so a client that was not attached when the avatar
+// arrived has no way to ask for it and this is the only place it can
+// come from.  The parcel is here because the same answer should say
+// what the session believes it is standing on, and because a client
+// whose ask goes unanswered has something to fall back on.
+func (s *Server) Land(ctx context.Context, req *pb.LandRequest) (*pb.LandInfo, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	a := h.Agent()
+	out := &pb.LandInfo{}
+	if p := a.Parcel(); p != nil {
+		out.ParcelKnown = true
+		out.ParcelName = p.Name
+		out.ParcelLocalId = p.LocalID
+	}
+	o := a.Overlay()
+	if q := o.Quarters(); q != 0 {
+		out.Overlay = o.Squares()
+		out.OverlayQuarters = uint32(q)
+	}
+	return out, nil
+}
+
 // Neighbours answers what circuits this session holds to the regions
 // around it, and turns them on or off when asked to.
 //

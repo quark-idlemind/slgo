@@ -104,10 +104,13 @@ func (b *fakeBackend) Messages() <-chan *sl.Message                             
 // Events is nothing: this fake exists so a real terminal can be driven
 // over a real pty, and nothing it drives reads the event queue.
 func (b *fakeBackend) Events() <-chan *sl.QueueEvent { return nil }
-func (b *fakeBackend) Done() <-chan struct{}         { return b.done }
-func (b *fakeBackend) Err() error                    { return nil }
-func (b *fakeBackend) Close() error                  { return nil }
-func (b *fakeBackend) HasCap(name string) bool       { return name == "InventoryAPIv3" }
+func (b *fakeBackend) Land(ctx context.Context) (*sl.Land, error) {
+	return &sl.Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
+}
+func (b *fakeBackend) Done() <-chan struct{}   { return b.done }
+func (b *fakeBackend) Err() error              { return nil }
+func (b *fakeBackend) Close() error            { return nil }
+func (b *fakeBackend) HasCap(name string) bool { return name == "InventoryAPIv3" }
 
 // RegionChanges is never told of one: nothing typed at this shell
 // leaves the region.

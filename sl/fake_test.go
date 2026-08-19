@@ -109,6 +109,8 @@ type fakeBackend struct {
 	presenceErr error
 
 	region      *Region
+	land        *Land
+	landErr     error
 	regionKnown bool
 	regionErr   error
 
@@ -774,6 +776,18 @@ func (f *fakeBackend) Region(ctx context.Context) (*Region, bool, error) {
 		return nil, false, f.regionErr
 	}
 	return f.region, f.regionKnown, nil
+}
+
+func (f *fakeBackend) Land(ctx context.Context) (*Land, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.landErr != nil {
+		return nil, f.landErr
+	}
+	if f.land == nil {
+		return &Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
+	}
+	return f.land, nil
 }
 
 func (f *fakeBackend) Lock(ctx context.Context, name string) error {

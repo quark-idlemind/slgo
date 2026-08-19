@@ -85,6 +85,10 @@ type Agent struct {
 	// terrain is the land, kept because it cannot be asked for twice.
 	terrain Terrain
 
+	// parcels is the land the avatar is standing on and the layout of
+	// the region round it, both of which arrive unasked.
+	parcels parcels
+
 	// appearance is how the avatars nearby look, kept for the same
 	// reason.
 	appearance Appearances
@@ -629,6 +633,15 @@ func (a *Agent) register() {
 	a.Disp.MustHandle("AvatarAppearance", func(p *msg.Packet) {
 		if m, ok := p.Message.(*msg.AvatarAppearance); ok {
 			a.appearance.note(m)
+		}
+	}, msg.Inline())
+
+	// The region's parcel layout, which arrives with the terrain and
+	// for the same reason is kept: four packets on arrival and none
+	// after, whatever asks later.
+	a.Disp.MustHandle("ParcelOverlay", func(p *msg.Packet) {
+		if m, ok := p.Message.(*msg.ParcelOverlay); ok {
+			a.parcels.noteOverlay(m)
 		}
 	}, msg.Inline())
 

@@ -105,7 +105,7 @@ var groups = []group{
 		// "unsit" is stand under another name and is not listed, since
 		// a listing that showed one command twice would say nothing
 		// extra about either.
-		members: []string{"where", "group", "tp", "sit", "stand", "who", "look", "map", "regions", "neighbours",
+		members: []string{"where", "parcel", "group", "tp", "sit", "stand", "who", "look", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "move", "dump", "rez", "reform", "touch", "texture",
 			"take", "place", "perms", "drop", "start", "stop", "link", "unlink"},

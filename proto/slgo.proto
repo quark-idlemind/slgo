@@ -77,6 +77,18 @@ service Grid {
   // which happens once, before any client is listening.
   rpc Region(RegionRequest) returns (RegionInfo);
 
+  // Land is what the session was told about the ground it is on: the
+  // parcel it was pushed on arrival, and the region's parcel overlay.
+  //
+  // Both arrive unasked, once, before any client is listening, and the
+  // overlay is the half that cannot be asked for again -- four packets
+  // on arrival and none afterwards, however politely a client asks.
+  // The parcel can be asked for, in a tenth of a second, so only its
+  // name and local id come back here: enough to say what the session
+  // believes it is standing on when the asking fails or is not worth
+  // the wait.
+  rpc Land(LandRequest) returns (LandInfo);
+
   // Neighbours reads the circuits held to the regions AROUND that one,
   // and can turn them on and off.
   //
@@ -794,6 +806,29 @@ message RegionInfo {
 
   // Known is false until the handshake has arrived.
   bool known = 16;
+}
+
+// ---------------------------------------------------------------- land
+
+message LandRequest { string agent = 1; }
+
+message LandInfo {
+  // The parcel the session was pushed when it arrived, if this region
+  // has pushed one.  Known is false where nothing has been heard --
+  // which is the ordinary case for a session that has been standing
+  // still since before the daemon attached to it.
+  bool parcel_known = 1;
+  string parcel_name = 2;
+  int32 parcel_local_id = 3;
+
+  // The region's parcel overlay: 4096 bytes, one for each 4 metre
+  // square.  Quarters is a bitmask of which of the four packets
+  // arrived, bit n for packet n -- a count would not do, because the
+  // squares of a packet that never arrived are zero, which reads as
+  // public land, and which quarter is missing is what says where that
+  // reading may not be trusted.
+  bytes overlay = 4;
+  uint32 overlay_quarters = 5;
 }
 
 message NeighboursRequest {

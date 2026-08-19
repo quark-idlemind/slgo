@@ -312,6 +312,22 @@ func (h *Hosted) Region(ctx context.Context) (*Region, bool, error) {
 	}, r.Known, nil
 }
 
+// Land reads what the daemon's session was told, and rebuilds the
+// overlay from the squares and the quarter mask it sent.
+func (h *Hosted) Land(ctx context.Context) (*Land, error) {
+	r, err := h.conn.Land(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &Land{
+		Overlay: agent.OverlayFrom(r.GetOverlay(), uint8(r.GetOverlayQuarters())),
+	}
+	if r.GetParcelKnown() {
+		out.Told = &Told{Name: r.GetParcelName(), LocalID: r.GetParcelLocalId()}
+	}
+	return out, nil
+}
+
 func (h *Hosted) Neighbours(ctx context.Context, set *bool) (*Neighbours, error) {
 	r, err := h.conn.Neighbours(ctx, set)
 	if err != nil {

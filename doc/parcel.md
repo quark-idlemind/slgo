@@ -1,8 +1,10 @@
 # Parcels: the land under the avatar
 
-Written 2026-08-18, against `ec9a8f0`. Stage 0 has been run against Agni
-and what it measured is folded in below: where this says what happens,
-it was watched happening. Nothing else here is built.
+Written 2026-08-18, against `ec9a8f0`, and rewritten the same day
+against `e686c99` after the first stage 0 turned out to have measured
+the probe rather than the grid. Where this says what happens, it was
+watched happening. Stages 1 to 4 were built and run the same day; what
+is left is under "Open questions" at the end.
 
 ## Why a parcel is worth knowing about
 
@@ -22,7 +24,8 @@ this, and nothing has ever read it.
 
 Run 2026-08-18 on Agni, against the session slgod holds, with a probe
 attached over gRPC that watches the circuit and the event queue and
-sends the requests by hand. Two avatars in two regions were used.
+sends the requests by hand. Two avatars in two regions were used, and
+one region -- Pelmar Reach -- was mapped parcel by parcel.
 
 ### The rich answer arrives unasked, on the event queue
 
@@ -33,63 +36,91 @@ name, description, owner, group, area, the AABB the parcel occupies,
 the prim counts and their allowances, sale and pass prices, media and
 music, the landing point, and the flags.
 
-**Every arrival in a region produced one**, in three of three
-teleports, naming the parcel the avatar landed on and no other. So
-after any teleport the session knows the parcel it is standing on
+**Every arrival produced one**, naming the parcel landed on and no
+other: three of three region crossings, and five of five moves within
+one region. The intra-region five included a teleport the parcel
+refused -- `tp 60 60 2002` failed, and the push named La Cardonna, the
+parcel that would not have this avatar. The push explains the refusal.
+
+So after any move the session knows the parcel it is standing on
 without asking, which is the case that matters most.
 
-### But asking is not answered at all
+### Asking is answered too, in about a tenth of a second
 
-This is the finding that shapes everything else. **Not one parcel query
-was ever answered**, over two sessions in two regions:
+All four ways of asking work. Measured against Pelmar Reach with no viewer
+attached anywhere:
 
-	ParcelPropertiesRequest      rectangle round the avatar   silent
-	  ... the whole region, 0,0 to 256,256                    silent
-	  ... a 4m square, snapped as the viewer snaps it         silent
-	  ... sequence ids -50000, -10000, -2, -1, 0, 1           silent
-	  ... SnapSelection both ways                             silent
-	  ... rectangles on four different parcels                silent
-	ParcelPropertiesRequestByID  the local id from a push     silent
-	ParcelInfoRequest            the id the capability gave   silent
-	ParcelDwellRequest           the local id from a push     silent
+	ParcelPropertiesRequest      4m square, any parcel   90-110ms
+	ParcelPropertiesRequestByID  the local id            122ms
+	ParcelDwellRequest           the local id            118ms
+	ParcelInfoRequest            the id the cap gave     127ms
 
-Waited out to 75 seconds, which is far past the tenth of a second a sit
-or a teleport answers in.
+The first two are answered by `ParcelProperties` on the event queue,
+the same 4 KB the push carries. The other two are answered on the
+circuit: `ParcelDwellReply` gives the parcel's global uuid and its
+dwell, and `ParcelInfoReply` gives name, owner, area, the region's name
+and the parcel's *global* grid coordinates.
 
-The request is not at fault, and that took some proving. The encoder
-round trips it, the daemon puts it on the wire under the right number,
-and the same client path -- a message forwarded through slgod from a
-gRPC client -- carries `AgentRequestSit` and `ObjectAdd` and
-`RequestObjectPropertiesFamily`, which are answered in milliseconds.
-Medium and Low frequency messages both work through it. What is
-different about these four is only that they ask about land.
+Asking works for a parcel the avatar is nowhere near. Six queries
+across Pelmar Reach named six different parcels correctly, which is how
+the region got mapped: 1 Protected Land (40640 m²), 2 Thrushmoor Home,
+3 Windlestraw Lodge, 4 Zorrim, 5 Thrushmoor, 6 OMEN, 7 La Cardonna,
+9 Quill Lodge.
 
-One thing that misled me for a while and is worth recording: **slgod's
-trace cannot decode a message a client forwarded**, so every one of them
-appears in the trace as `blocks: {}`. That is a limit of the trace and
-not an empty message -- `AgentRequestSit` traces the same way while the
-simulator plainly acts on it.
+**The sequence id is the only correlator.** A reply carries back the id
+the request asked with; a push carries a small rising counter of the
+simulator's own -- 0 for the first of a session, one more for each
+arrival after. Ask with a distinctive negative id, as the viewer does
+(-50000 hovering, -10000 selecting), and a reply can never be mistaken
+for a push, nor one reply for another.
 
-### Identity can be asked for, over HTTP
+### What the first stage 0 measured instead
 
-The `RemoteParcelRequest` capability answers, and it is the only thing
-that does. Given a point it returns the id of the parcel covering it:
+The first run of stage 0 recorded that not one parcel query was ever
+answered, over two sessions, nine request shapes and waits out to 75
+seconds. Every one of those requests was answered. The answers were
+thrown away inside the probe.
+
+`sl.Session.read` is, as its comment says, "the one goroutine that
+consumes both relays": it reads `conn.Events()` and `conn.Messages()`.
+The probe took a `Session` for `Where`, and then ranged over those same
+two channels itself. Two consumers of one channel do not each get a
+copy -- they split what arrives, and `client.Conn` delivers with a
+non-blocking send, so the loser gets nothing and is told nothing. The
+`Session`'s tight select loop won essentially every time.
+
+It was proved by instrumenting slgod: six queries in a row, each
+logged arriving on the queue with our own `seq=-10000`, each logged as
+relayed (`1 of 1 clients want it`), and the probe printing none of
+them. Taking the `Session` only where one is needed made it three of
+three, and then everything.
+
+This is the same hazard `viewer/caps.go` describes for the event queue
+one layer down, and it is worth stating in the client's own
+documentation: **a program that holds an `sl.Session` must not also
+read the `Conn` underneath it.** The measurement it corrupts looks
+exactly like a grid that does not answer.
+
+### Identity, over HTTP or over the circuit
+
+The `RemoteParcelRequest` capability turns a point into a parcel id:
 
 	POST {"location": [28, 72, 2001],
 	      "region_id": <uuid of this region>}
 	-> 200 {"parcel_id": <uuid>}
 
-Seven points across one region were asked and all seven answered.
+Seven points across one region were asked and all seven answered. A GET
+is 405. **Sending `region_handle` as well turns it into a 404**, which
+cost half an hour to find: the viewer sends the handle computed from a
+*global* position, ours was the region-local one, and the capability
+would rather refuse than reconcile them. Send `region_id` and
+`location`, and nothing else.
 
-**Sending `region_handle` as well turns it into a 404**, which cost half
-an hour to find. The viewer sends the handle computed from a *global*
-position; ours was the region-local one, and the capability would rather
-refuse than reconcile them. Send `region_id` and `location`, and nothing
-else.
-
-What comes back is an identity and not a description: a uuid, no name,
-no owner, no flags. Turning it into a description is `ParcelInfoRequest`
--- which is in the silent list above.
+What comes back is an identity and not a description. Two things turn
+it into one: `ParcelInfoRequest`, measured above, and `ParcelDwellReply`
+which carries the same uuid beside the local id and so ties the two
+namings of a parcel together. The local id is per region and short
+lived; the uuid is the grid-wide name.
 
 ### The layout arrives too, and nobody was reading it
 
@@ -109,107 +140,146 @@ That is a whole region's parcel *layout* for four packets nobody asked
 for, and it is how a viewer draws boundaries without asking about each
 parcel in turn. It says nothing about names or owners.
 
-### Intra-region movement pushes sometimes, and I cannot say when
-
-Four teleports within one region, to four points the capability
-confirmed were on four different parcels. Two produced a push, naming
-the parcel landed on, within two seconds. Two produced nothing at all,
-waited out for eighteen seconds each.
-
-The two that pushed were ordinary residential parcels of 2048 m²; the
-two that did not were a larger parcel and the region-wide protected land
-that surrounds everything. Neither of the pushing parcels was owned by
-this avatar or its group, so "your own land" is not the rule. I do not
-know what the rule is, and rather than guess, the design below assumes
-the push may not come.
-
 ## What this becomes
 
-The shape is forced by the measurements: **the session keeps what the
-grid volunteers, and nothing pretends to ask.** That is the same shape
-`map` already has -- "an empty corner is a corner nobody has described"
--- and it is honest here for the same reason.
+The session keeps what the grid volunteers, and asks for the rest. The
+push covers the parcel underfoot; asking covers every other parcel in
+the region, and the overlay covers the shape of all of them at once.
 
-### `agent`: the parcel this session was told about
+### `agent`: what the session was told, and what it asked
 
 A handler for the `ParcelProperties` event keeping the last one per
 region, and a handler for `ParcelOverlay` keeping the 4096 byte grid.
-Both are dropped on a region change beside everything else that is
-keyed to a region.
+Both are dropped on a region change beside everything else keyed to a
+region.
 
 The overlay wants assembling: four packets, each with a sequence number
 saying which quarter it is, and a region change can arrive between them.
 
+Asking wants a small correlator: a request takes the next id from a
+descending counter starting well below anything a simulator sends,
+records what was asked, and hands the answer to whoever waited for that
+id. A push -- a non-negative id nobody is waiting for -- updates the
+store instead. One place decides which of the two an arriving
+`ParcelProperties` is, and it decides on the sequence id alone.
+
 ### `sl` and `slsh`: `parcel`
 
 	parcel            the parcel under the avatar
+	parcel X,Y        the parcel covering a point in this region
 	parcel --region   every parcel the overlay can see, counted
-	parcel --map      the overlay drawn, in the shape "map" draws
+	parcel --map      the region's parcels drawn, a mark each
 
-What `parcel` prints is what is known, and it says which of the two
-sources each part came from, because they answer differently often
-enough that a person needs to know. If the push has been heard for this
-region it is the whole description. If it has not, what is left is the
-overlay's square -- who owns it in the coarsest terms, and where the
-boundaries are -- and the capability's id, and the command says so
-rather than printing nothing.
+`parcel` and `parcel X,Y` both ask, because asking is a tenth of a
+second and what it answers is true now, where the push is only as new as
+the last arrival. An unanswered ask falls back to the push and says so
+in as many words, so a remembered answer can never pass for a fresh one.
 
-The `--map` form is worth having precisely because the overlay is
-complete where the properties are not: it can always draw the whole
-region's parcels, however few of them have ever been described.
+`--region` and `--map` read the overlay, which is complete where the
+descriptions are not: it draws the whole region's parcels however few of
+them have ever been named. The overlay carries no names, so `--region`
+cuts the region along the property lines and then asks about a point
+inside each piece -- fourteen parcels in two seconds, measured on Pelmar
+Reach. That also corrects the count: one parcel can be two pieces of
+ground with a road between them, and the local id the answers carry is
+the only thing that says so.
 
 ### What is deliberately not built
 
 No `ParcelPropertiesUpdate`, which is the write side and would need the
 read side to be trustworthy first. No access lists, no banning, no
-buying, no dividing. No dwell.
+buying, no dividing. Dwell is one message away and `parcel` may as well
+print it, since it is the "Traffic" a person recognises from a viewer.
 
 ## Stages
 
-### Stage 1 -- what the session is told, in `agent`
+### Stage 1 -- what the session is told, in `agent` (built)
 
-The two handlers, the per-region store, and the drop on a region change.
-Tests against the fake sim for: a push kept and read back, four overlay
-packets assembled, a partial overlay reported as partial, and both
-dropped when the region changes.
+`agent/parcel.go`: the `ParcelProperties` handler and the store it
+fills, the `ParcelOverlay` handler and the four packets assembled, the
+drop on a region change beside the terrain, and the sequence-id split
+between a reply and a push. A push updates the store; a reply is left
+for whoever asked, because it describes the parcel they named.
 
-### Stage 2 -- `sl`, and the capability
+### Stage 2 -- `sl`, the capability, and one new RPC (built)
 
-`Session.Parcel(ctx)` for what is known here, `Session.ParcelAt(ctx,
-point)` for the capability's identity, and the overlay exposed as
-something a picture can be drawn from. `ParcelAt` sends `region_id` and
-`location` only, with the 404 measured above recorded in a comment so
-that nobody adds the handle back.
+`Session.ParcelAt` and `Session.ParcelByID` ask and wait for the answer
+with their own sequence id on it, `Session.Parcel` is `Where` and then
+`ParcelAt`, `Session.Dwell` is the traffic and the parcel's uuid in one
+reply, and `Session.ParcelID` is the capability -- `region_id` and
+`location` only, with the 404 recorded in a comment so that nobody adds
+the handle back.
 
-### Stage 3 -- `parcel` in `slsh`
+`Land` is the new RPC, and the overlay is why it exists: four packets on
+arrival and none afterwards, so a client that attached later can get it
+from the session that heard them or from nowhere. It carries the
+overlay's squares, a bitmask of which quarters arrived, and the name and
+local id of the parcel the session was pushed.
 
-The command, its three forms, and the man page. The man page has to say
-what cannot be asked for, since a person who types `parcel` on a parcel
-nothing has described will otherwise think the command is broken rather
-than the protocol quiet.
+The sequence ids count down from -2^20, well away from the viewer's own
+-50000 and -10000: a viewer attached to the same session asks on the
+same circuit and its answers arrive on the same queue.
 
-### Stage 4 -- live, on the grid
+### Stage 3 -- `parcel` in `slsh` (built)
 
-Teleport across several parcels and regions and see what the command
-says at each. Check the map against a viewer's own parcel overlay, which
-is the only independent check available.
+The command, its four forms, and the man page.
+
+### Stage 4 -- live, on the grid (run)
+
+Run on Agni 2026-08-18 against Pelmar Reach. `parcel` named Thrushmoor with
+its owner, group, area, box, prim counts and permissions; `parcel
+200,200` named Quill Lodge, a parcel the avatar has never stood on;
+`--region` found 14 pieces whose areas sum to exactly 65536 m², which is
+the region, and named all fourteen in two seconds -- including the 320
+m² piece that turned out to be "Protected Land - Rez zone" rather than
+an artefact of the flood fill; `--map` drew them.
+
+**The flags word was checked against a viewer's own panel**, which is
+the only independent reading of it there is. Thrushmoor's `0x56a4800b`
+against Firestorm's About Land, Options tab: fly on, build off for
+everyone and on for the group, object entry the same, scripts on for
+both, edit terrain off, damage off, search listing off -- every
+checkbox agreed with what `parcel` printed. That is what says the word
+is read most significant byte first; the other reading is a parcel
+nobody may fly over. The prim counts were checked the same way and
+agreed to the prim.
+
+It also caught two bits this code had wrong. 29 is voice chat and 30 is
+the estate's voice channel, where they had been written as 28 and 29,
+and there is no "group fly" flag at all -- 28 is group object entry.
+Nothing but the panel could have caught that: every one of those bits
+decodes to a plausible-looking answer.
+
+Two more things that came out of running it:
+
+**The ownership classes alone draw nothing.** Every square of Pelmar Reach
+reads "owned", so the first picture was one character from corner to
+corner. Drawing the boundaries over it was the second attempt and
+readable; drawing a mark per parcel is the third and is what the
+command does, since which parcel is which is the question a map of
+parcels answers. The mark is a letter and the colour is a colour: the
+letter is what survives the picture going down a pipe.
+
+**Opening About Land in an attached viewer shows the parcel the session
+last asked about**, not the one underfoot: a query moves the
+simulator's idea of the agent's selected parcel, and the viewer redraws
+to follow it. That is how this whole investigation started.
 
 ## Open questions
 
-- **What decides whether an intra-region move pushes.** Two of four, and
-  the pattern is not ownership. Until this is known, `parcel` will
-  sometimes have nothing but the overlay to go on.
-
-- **Whether any grid still answers `ParcelPropertiesRequest`.** Both
-  sessions here are Agni. An OpenSim grid almost certainly answers it,
-  since OpenSim implements the message; if so, the ask path is worth
-  building as a fallback that Agni will never use.
-
-- **Whether a viewer attached to slgod gets its About Land filled in.**
-  It would send the same request through the same circuit. If it is
-  answered and ours is not, something about our request differs after
-  all, and this whole design is built on a wrong measurement. It is the
-  one experiment that could overturn this, and it costs a viewer launch.
+- **Why two queries out of about a dozen were never answered.** Both
+  were measured after the instrument was fixed and the daemon logged no
+  event at all for them; one was three seconds after a teleport
+  arrival. Everything else answered inside 130ms, and nothing in stage
+  4 reproduced it -- `parcel` has not failed to get an answer yet. The
+  command falls back to the push and says so, which is the right
+  behaviour whatever the cause turns out to be.
 
 - **Whether the overlay is resent when a parcel is divided or sold.**
   Only arrival was measured.
+
+- **What a viewer's About Land takes its "Parcel ID" field from.** On a
+  session standing on Thrushmoor (local 5, `b48d7e57`) it showed
+  `bbb14d12`, which is Protected Land, local 1 -- a different parcel
+  from the one the rest of the panel described. Nothing here depends on
+  it, but it means that field is not a check on our own identity work.

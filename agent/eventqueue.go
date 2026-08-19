@@ -333,6 +333,8 @@ func (a *Agent) noteEvent(name string, body any) {
 		a.noteCrossedRegion(body)
 	case "EnableSimulator":
 		a.noteEnableSimulator(body)
+	case "ParcelProperties":
+		a.noteParcel(body)
 	}
 }
 

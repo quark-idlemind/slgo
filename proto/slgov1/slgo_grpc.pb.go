@@ -41,6 +41,7 @@ const (
 	Grid_Presence_FullMethodName         = "/slgo.v1.Grid/Presence"
 	Grid_Objects_FullMethodName          = "/slgo.v1.Grid/Objects"
 	Grid_Region_FullMethodName           = "/slgo.v1.Grid/Region"
+	Grid_Land_FullMethodName             = "/slgo.v1.Grid/Land"
 	Grid_Neighbours_FullMethodName       = "/slgo.v1.Grid/Neighbours"
 	Grid_Flush_FullMethodName            = "/slgo.v1.Grid/Flush"
 	Grid_Cap_FullMethodName              = "/slgo.v1.Grid/Cap"
@@ -105,6 +106,17 @@ type GridClient interface {
 	// Region is what the simulator said about itself in the handshake,
 	// which happens once, before any client is listening.
 	Region(ctx context.Context, in *RegionRequest, opts ...grpc.CallOption) (*RegionInfo, error)
+	// Land is what the session was told about the ground it is on: the
+	// parcel it was pushed on arrival, and the region's parcel overlay.
+	//
+	// Both arrive unasked, once, before any client is listening, and the
+	// overlay is the half that cannot be asked for again -- four packets
+	// on arrival and none afterwards, however politely a client asks.
+	// The parcel can be asked for, in a tenth of a second, so only its
+	// name and local id come back here: enough to say what the session
+	// believes it is standing on when the asking fails or is not worth
+	// the wait.
+	Land(ctx context.Context, in *LandRequest, opts ...grpc.CallOption) (*LandInfo, error)
 	// Neighbours reads the circuits held to the regions AROUND that one,
 	// and can turn them on and off.
 	//
@@ -289,6 +301,16 @@ func (c *gridClient) Region(ctx context.Context, in *RegionRequest, opts ...grpc
 	return out, nil
 }
 
+func (c *gridClient) Land(ctx context.Context, in *LandRequest, opts ...grpc.CallOption) (*LandInfo, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LandInfo)
+	err := c.cc.Invoke(ctx, Grid_Land_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Neighbours(ctx context.Context, in *NeighboursRequest, opts ...grpc.CallOption) (*NeighboursResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(NeighboursResponse)
@@ -423,6 +445,17 @@ type GridServer interface {
 	// Region is what the simulator said about itself in the handshake,
 	// which happens once, before any client is listening.
 	Region(context.Context, *RegionRequest) (*RegionInfo, error)
+	// Land is what the session was told about the ground it is on: the
+	// parcel it was pushed on arrival, and the region's parcel overlay.
+	//
+	// Both arrive unasked, once, before any client is listening, and the
+	// overlay is the half that cannot be asked for again -- four packets
+	// on arrival and none afterwards, however politely a client asks.
+	// The parcel can be asked for, in a tenth of a second, so only its
+	// name and local id come back here: enough to say what the session
+	// believes it is standing on when the asking fails or is not worth
+	// the wait.
+	Land(context.Context, *LandRequest) (*LandInfo, error)
 	// Neighbours reads the circuits held to the regions AROUND that one,
 	// and can turn them on and off.
 	//
@@ -540,6 +573,9 @@ func (UnimplementedGridServer) Objects(context.Context, *ObjectsRequest) (*Objec
 }
 func (UnimplementedGridServer) Region(context.Context, *RegionRequest) (*RegionInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method Region not implemented")
+}
+func (UnimplementedGridServer) Land(context.Context, *LandRequest) (*LandInfo, error) {
+	return nil, status.Error(codes.Unimplemented, "method Land not implemented")
 }
 func (UnimplementedGridServer) Neighbours(context.Context, *NeighboursRequest) (*NeighboursResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Neighbours not implemented")
@@ -737,6 +773,24 @@ func _Grid_Region_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Land_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Land(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Land_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Land(ctx, req.(*LandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_Neighbours_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(NeighboursRequest)
 	if err := dec(in); err != nil {
@@ -919,6 +973,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Region",
 			Handler:    _Grid_Region_Handler,
+		},
+		{
+			MethodName: "Land",
+			Handler:    _Grid_Land_Handler,
 		},
 		{
 			MethodName: "Neighbours",
