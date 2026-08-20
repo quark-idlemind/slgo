@@ -514,13 +514,57 @@ var parcelInks = []string{
 	"bright magenta", "bright cyan", "bright red",
 }
 
-// parcelMark is how the nth parcel of a region is drawn.
+// parcelDraw is how one parcel is drawn: a mark, and the colour it is
+// painted in where there is colour.
+type parcelDraw struct {
+	mark byte
+	ink  string
+}
+
+// parcelDraws decides a mark for each parcel.
 //
-// The letter and the colour turn over at different rates -- 52 and 12 --
-// so two parcels share a mark only after 624 of them, where a region
+// The letters and the colours turn over at different rates -- 52 and 12
+// -- so two parcels share a mark only after 624 of them, where a region
 // holds dozens.  Neighbouring parcels differ in both.
-func parcelMark(n int) (mark byte, ink string) {
-	return parcelMarks[n%len(parcelMarks)], parcelInks[n%len(parcelInks)]
+//
+// Linden's protected land is the exception, and it is drawn as ground
+// rather than as a parcel: blank for the roads and waterways a region
+// is laid out around, and "." for the rez zones inside them.  It is
+// most of a mainland region by area and none of it is anybody's, so
+// giving it a letter of its own puts the loudest mark in the picture on
+// the one parcel nobody is asking about -- and takes the eye off the
+// homes, which are what a person is looking for.  Named rather than
+// owner-matched because the name is what says which it is: "Protected
+// Land" and "Protected Land - Rez zone" on Pelmar Reach, measured
+// 2026-08-18.
+func parcelDraws(named []namedPiece) []parcelDraw {
+	out := make([]parcelDraw, len(named))
+	n := 0
+	for i, p := range named {
+		switch protected, rez := protectedLand(p.name); {
+		case protected && rez:
+			out[i] = parcelDraw{mark: '.'}
+		case protected:
+			out[i] = parcelDraw{mark: ' '}
+		default:
+			out[i] = parcelDraw{
+				mark: parcelMarks[n%len(parcelMarks)],
+				ink:  parcelInks[n%len(parcelInks)],
+			}
+			n++
+		}
+	}
+	return out
+}
+
+// protectedLand reads a parcel's name for Linden's own land, and
+// whether it is one of the rez zones inside it.
+func protectedLand(name string) (protected, rez bool) {
+	lower := strings.ToLower(name)
+	if !strings.HasPrefix(lower, "protected land") {
+		return false, false
+	}
+	return true, strings.Contains(lower, "rez")
 }
 
 // parcelMap draws the region's parcels, in the shape "map" draws a
@@ -555,6 +599,7 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 		return usageError("parcel", fmt.Sprintf("--rows wants 2 to %d", mapMaxRows))
 	}
 	g := regionGrid(sh.cfg, rows)
+	draws := parcelDraws(named)
 
 	drawn := map[int]bool{}
 	for row := 0; row < g.rows; row++ {
@@ -575,17 +620,18 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 				continue
 			}
 			drawn[at] = true
-			mark, ink := parcelMark(at)
-			if colour {
-				line.WriteString(mapColours[ink] + string(mark) + mapColourOff)
+			d := draws[at]
+			if colour && d.ink != "" {
+				line.WriteString(mapColours[d.ink] + string(d.mark) + mapColourOff)
 			} else {
-				line.WriteByte(mark)
+				line.WriteByte(d.mark)
 			}
 		}
 		fmt.Fprintf(out, "  %s\n", line.String())
 	}
 
-	fmt.Fprintf(out, "\n%.0f metres across, %d parcels\n", g.width(), len(named))
+	fmt.Fprintf(out, "\n%.0f metres across, %d parcels%s\n",
+		g.width(), len(named), protectedNote(named))
 	for i, n := range named {
 		if !drawn[i] {
 			// Too small to have won a cell.  Said rather than dropped:
@@ -593,10 +639,10 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 			// is a parcel a person concludes is not there.
 			continue
 		}
-		mark, ink := parcelMark(i)
-		shown := string(mark)
-		if colour {
-			shown = mapColours[ink] + shown + mapColourOff
+		d := draws[i]
+		shown := string(d.mark)
+		if colour && d.ink != "" {
+			shown = mapColours[d.ink] + shown + mapColourOff
 		}
 		name := n.name
 		if name == "" {
@@ -617,6 +663,28 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 			o.Packets())
 	}
 	return nil
+}
+
+// protectedNote explains the two quiet marks, and only where the
+// picture has them in it: a legend for a mark nobody can see is a line
+// of noise.
+func protectedNote(named []namedPiece) string {
+	var blank, rez bool
+	for _, p := range named {
+		if protected, isRez := protectedLand(p.name); protected {
+			blank = blank || !isRez
+			rez = rez || isRez
+		}
+	}
+	switch {
+	case blank && rez:
+		return "; protected land is blank, its rez zones \".\""
+	case blank:
+		return "; protected land is blank"
+	case rez:
+		return "; a protected rez zone is \".\""
+	}
+	return ""
 }
 
 // parcelWidth is how wide the name column has to be.

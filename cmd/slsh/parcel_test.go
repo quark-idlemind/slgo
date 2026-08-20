@@ -290,6 +290,82 @@ func TestTheMapDrawsAParcelPerMark(t *testing.T) {
 	}
 }
 
+// TestProtectedLandIsDrawnAsGround: it is most of a mainland region by
+// area and none of it is anybody's, so a letter of its own puts the
+// loudest mark in the picture on the parcel nobody is asking about.
+func TestProtectedLandIsDrawnAsGround(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.land = &sl.Land{Overlay: overlayOf()}
+
+	// The west half is Linden's, the east half somebody's home.
+	x.grid.onSend = func(m msg.Message) {
+		r, ok := m.(*msg.ParcelPropertiesRequest)
+		if !ok {
+			return
+		}
+		name, local := "A Home", 2
+		if r.ParcelData.West < 128 {
+			name, local = "Protected Land", 1
+		}
+		x.grid.RelayEvent(t, "ParcelProperties", fmt.Sprintf(
+			`<llsd><map><key>ParcelData</key><array><map>`+
+				`<key>Name</key><string>%s</string>`+
+				`<key>LocalID</key><integer>%d</integer>`+
+				`<key>SequenceID</key><integer>%d</integer>`+
+				`</map></array></map></llsd>`, name, local, r.ParcelData.SequenceID))
+	}
+
+	got := x.do(t, "parcel --map --rows 6")
+	first := strings.SplitN(got, "\n", 2)[0]
+	if !strings.HasPrefix(first, "   ") {
+		t.Errorf("the protected half should be blank ground:\n%s", got)
+	}
+	// The home keeps the first letter: the ground does not take one.
+	if !strings.Contains(first, "a") {
+		t.Errorf("the home should be drawn as a mark:\n%s", got)
+	}
+	if !strings.Contains(got, "a  A Home") {
+		t.Errorf("the key should name the home against its mark:\n%s", got)
+	}
+	if !strings.Contains(got, "protected land is blank") {
+		t.Errorf("the legend should say what the blank ground is:\n%s", got)
+	}
+}
+
+// TestARezZoneIsADot: the rez zones are protected land too, and they
+// are the one part of it somebody standing on the road cares about.
+func TestARezZoneIsADot(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.land = &sl.Land{Overlay: overlayOf()}
+	x.grid.onSend = func(m msg.Message) {
+		r, ok := m.(*msg.ParcelPropertiesRequest)
+		if !ok {
+			return
+		}
+		name, local := "Protected Land - Rez zone", 2
+		if r.ParcelData.West < 128 {
+			name, local = "Protected Land", 1
+		}
+		x.grid.RelayEvent(t, "ParcelProperties", fmt.Sprintf(
+			`<llsd><map><key>ParcelData</key><array><map>`+
+				`<key>Name</key><string>%s</string>`+
+				`<key>LocalID</key><integer>%d</integer>`+
+				`<key>SequenceID</key><integer>%d</integer>`+
+				`</map></array></map></llsd>`, name, local, r.ParcelData.SequenceID))
+	}
+
+	got := x.do(t, "parcel --map --rows 6")
+	if !strings.Contains(strings.SplitN(got, "\n", 2)[0], ".") {
+		t.Errorf("a rez zone should be drawn as a dot:\n%s", got)
+	}
+	if !strings.Contains(got, `rez zones "."`) {
+		t.Errorf("the legend should say what a dot is:\n%s", got)
+	}
+	if strings.Contains(got, "a  Protected Land") {
+		t.Errorf("no protected land should take a letter:\n%s", got)
+	}
+}
+
 // TestTheMapPaintsOnlyWhereThereIsColour: the mark has to survive the
 // colour being gone -- a picture down a pipe or under NO_COLOR has
 // nothing but the shape left, and one that told parcels apart by colour

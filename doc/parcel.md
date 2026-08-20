@@ -260,6 +260,12 @@ command does, since which parcel is which is the question a map of
 parcels answers. The mark is a letter and the colour is a colour: the
 letter is what survives the picture going down a pipe.
 
+Linden's protected land is drawn as ground rather than as a parcel --
+blank for the roads, `.` for the rez zones in them. It is 40640 of Pelmar
+Reach's 65536 square metres and none of it is anybody's, so a letter of
+its own is the loudest mark in the picture on the one parcel nobody is
+asking about.
+
 **Opening About Land in an attached viewer shows the parcel the session
 last asked about**, not the one underfoot: a query moves the
 simulator's idea of the agent's selected parcel, and the viewer redraws

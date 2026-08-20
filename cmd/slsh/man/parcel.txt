@@ -59,6 +59,13 @@ in a region of Linden Homes every square reads "owned", so the picture
 was one character from corner to corner.  Which parcel is which is the
 thing a map of parcels is for.
 
+Linden's own protected land is the exception and is drawn as ground: a
+blank for the roads and waterways a region is laid out around, and a
+"." for the rez zones inside them.  It is most of a mainland region by
+area and none of it is anybody's, so a letter of its own would put the
+loudest mark in the picture on the one parcel nobody is asking about,
+and take the eye off the homes.
+
 Each parcel is drawn as a letter, in a colour, and both matter.  The
 colour is what tells two parcels apart at a glance; the letter is what
 tells them apart at all, because a picture written to a file, down a
