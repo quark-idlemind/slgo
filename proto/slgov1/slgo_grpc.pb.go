@@ -41,9 +41,12 @@ const (
 	Grid_Presence_FullMethodName         = "/slgo.v1.Grid/Presence"
 	Grid_Objects_FullMethodName          = "/slgo.v1.Grid/Objects"
 	Grid_Region_FullMethodName           = "/slgo.v1.Grid/Region"
+	Grid_Land_FullMethodName             = "/slgo.v1.Grid/Land"
+	Grid_Neighbours_FullMethodName       = "/slgo.v1.Grid/Neighbours"
 	Grid_Flush_FullMethodName            = "/slgo.v1.Grid/Flush"
 	Grid_Cap_FullMethodName              = "/slgo.v1.Grid/Cap"
 	Grid_Send_FullMethodName             = "/slgo.v1.Grid/Send"
+	Grid_Control_FullMethodName          = "/slgo.v1.Grid/Control"
 	Grid_Friends_FullMethodName          = "/slgo.v1.Grid/Friends"
 	Grid_NoteFriend_FullMethodName       = "/slgo.v1.Grid/NoteFriend"
 	Grid_ViewerCredential_FullMethodName = "/slgo.v1.Grid/ViewerCredential"
@@ -103,6 +106,32 @@ type GridClient interface {
 	// Region is what the simulator said about itself in the handshake,
 	// which happens once, before any client is listening.
 	Region(ctx context.Context, in *RegionRequest, opts ...grpc.CallOption) (*RegionInfo, error)
+	// Land is what the session was told about the ground it is on: the
+	// parcel it was pushed on arrival, and the region's parcel overlay.
+	//
+	// Both arrive unasked, once, before any client is listening, and the
+	// overlay is the half that cannot be asked for again -- four packets
+	// on arrival and none afterwards, however politely a client asks.
+	// The parcel can be asked for, in a tenth of a second, so only its
+	// name and local id come back here: enough to say what the session
+	// believes it is standing on when the asking fails or is not worth
+	// the wait.
+	Land(ctx context.Context, in *LandRequest, opts ...grpc.CallOption) (*LandInfo, error)
+	// Neighbours reads the circuits held to the regions AROUND that one,
+	// and can turn them on and off.
+	//
+	// The same division as Presence, for the same reason.  A simulator
+	// will not hand an avatar over a border to a client that holds no
+	// circuit to the region on the other side, and holding one costs a
+	// socket and a share of the traffic for as long as it is held -- so
+	// it belongs to the server, which owns the circuits and pays for
+	// them, and a client asks what it is and asks for it to be changed.
+	//
+	// Worth changing while a session is up, which is why this is not a
+	// daemon-wide switch: one avatar is being driven by a person who
+	// wants to walk out of the region, and the next is running a
+	// benchmark that wants nothing but the region it is in.
+	Neighbours(ctx context.Context, in *NeighboursRequest, opts ...grpc.CallOption) (*NeighboursResponse, error)
 	// Flush empties the object cache.
 	//
 	// It is done automatically when the region changes, since everything
@@ -117,6 +146,24 @@ type GridClient interface {
 	// Send puts one message on the circuit without opening a stream, for
 	// a client that only wants to say one thing.
 	Send(ctx context.Context, in *SendRequest, opts ...grpc.CallOption) (*SendResponse, error)
+	// Control sends one AgentUpdate carrying control flags, and forgets
+	// them.  Sitting on the ground and standing up are nothing but this.
+	//
+	// It belongs to the server for the reason Presence does, and more
+	// sharply.  An AgentUpdate is not just its flags: it carries the
+	// camera, its three axes and the draw distance, and the simulator
+	// scopes its interest list by them.  A client has none of that -- it
+	// knows a position from Presence and no axes at all -- so a client
+	// that built one would be guessing at the camera and inventing a draw
+	// distance, and the simulator would believe it until the server's own
+	// update a second later put it back.  The server owns the camera, so
+	// the server is the only thing that can send an update that is right
+	// about everything except the one bit being asked for.
+	//
+	// A primitive rather than a sit call and a stand call, because it is
+	// the same shape as everything else that moves an avatar: fly, stop,
+	// jump, and the nudges a walk is made of.
+	Control(ctx context.Context, in *ControlRequest, opts ...grpc.CallOption) (*ControlResponse, error)
 	// Friends is who this avatar's friends are and which of them are
 	// logged in.
 	//
@@ -254,6 +301,26 @@ func (c *gridClient) Region(ctx context.Context, in *RegionRequest, opts ...grpc
 	return out, nil
 }
 
+func (c *gridClient) Land(ctx context.Context, in *LandRequest, opts ...grpc.CallOption) (*LandInfo, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LandInfo)
+	err := c.cc.Invoke(ctx, Grid_Land_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridClient) Neighbours(ctx context.Context, in *NeighboursRequest, opts ...grpc.CallOption) (*NeighboursResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(NeighboursResponse)
+	err := c.cc.Invoke(ctx, Grid_Neighbours_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Flush(ctx context.Context, in *FlushRequest, opts ...grpc.CallOption) (*FlushResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FlushResponse)
@@ -278,6 +345,16 @@ func (c *gridClient) Send(ctx context.Context, in *SendRequest, opts ...grpc.Cal
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SendResponse)
 	err := c.cc.Invoke(ctx, Grid_Send_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridClient) Control(ctx context.Context, in *ControlRequest, opts ...grpc.CallOption) (*ControlResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ControlResponse)
+	err := c.cc.Invoke(ctx, Grid_Control_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -368,6 +445,32 @@ type GridServer interface {
 	// Region is what the simulator said about itself in the handshake,
 	// which happens once, before any client is listening.
 	Region(context.Context, *RegionRequest) (*RegionInfo, error)
+	// Land is what the session was told about the ground it is on: the
+	// parcel it was pushed on arrival, and the region's parcel overlay.
+	//
+	// Both arrive unasked, once, before any client is listening, and the
+	// overlay is the half that cannot be asked for again -- four packets
+	// on arrival and none afterwards, however politely a client asks.
+	// The parcel can be asked for, in a tenth of a second, so only its
+	// name and local id come back here: enough to say what the session
+	// believes it is standing on when the asking fails or is not worth
+	// the wait.
+	Land(context.Context, *LandRequest) (*LandInfo, error)
+	// Neighbours reads the circuits held to the regions AROUND that one,
+	// and can turn them on and off.
+	//
+	// The same division as Presence, for the same reason.  A simulator
+	// will not hand an avatar over a border to a client that holds no
+	// circuit to the region on the other side, and holding one costs a
+	// socket and a share of the traffic for as long as it is held -- so
+	// it belongs to the server, which owns the circuits and pays for
+	// them, and a client asks what it is and asks for it to be changed.
+	//
+	// Worth changing while a session is up, which is why this is not a
+	// daemon-wide switch: one avatar is being driven by a person who
+	// wants to walk out of the region, and the next is running a
+	// benchmark that wants nothing but the region it is in.
+	Neighbours(context.Context, *NeighboursRequest) (*NeighboursResponse, error)
 	// Flush empties the object cache.
 	//
 	// It is done automatically when the region changes, since everything
@@ -382,6 +485,24 @@ type GridServer interface {
 	// Send puts one message on the circuit without opening a stream, for
 	// a client that only wants to say one thing.
 	Send(context.Context, *SendRequest) (*SendResponse, error)
+	// Control sends one AgentUpdate carrying control flags, and forgets
+	// them.  Sitting on the ground and standing up are nothing but this.
+	//
+	// It belongs to the server for the reason Presence does, and more
+	// sharply.  An AgentUpdate is not just its flags: it carries the
+	// camera, its three axes and the draw distance, and the simulator
+	// scopes its interest list by them.  A client has none of that -- it
+	// knows a position from Presence and no axes at all -- so a client
+	// that built one would be guessing at the camera and inventing a draw
+	// distance, and the simulator would believe it until the server's own
+	// update a second later put it back.  The server owns the camera, so
+	// the server is the only thing that can send an update that is right
+	// about everything except the one bit being asked for.
+	//
+	// A primitive rather than a sit call and a stand call, because it is
+	// the same shape as everything else that moves an avatar: fly, stop,
+	// jump, and the nudges a walk is made of.
+	Control(context.Context, *ControlRequest) (*ControlResponse, error)
 	// Friends is who this avatar's friends are and which of them are
 	// logged in.
 	//
@@ -453,6 +574,12 @@ func (UnimplementedGridServer) Objects(context.Context, *ObjectsRequest) (*Objec
 func (UnimplementedGridServer) Region(context.Context, *RegionRequest) (*RegionInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method Region not implemented")
 }
+func (UnimplementedGridServer) Land(context.Context, *LandRequest) (*LandInfo, error) {
+	return nil, status.Error(codes.Unimplemented, "method Land not implemented")
+}
+func (UnimplementedGridServer) Neighbours(context.Context, *NeighboursRequest) (*NeighboursResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Neighbours not implemented")
+}
 func (UnimplementedGridServer) Flush(context.Context, *FlushRequest) (*FlushResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Flush not implemented")
 }
@@ -461,6 +588,9 @@ func (UnimplementedGridServer) Cap(context.Context, *CapRequest) (*CapResponse, 
 }
 func (UnimplementedGridServer) Send(context.Context, *SendRequest) (*SendResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Send not implemented")
+}
+func (UnimplementedGridServer) Control(context.Context, *ControlRequest) (*ControlResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Control not implemented")
 }
 func (UnimplementedGridServer) Friends(context.Context, *FriendsRequest) (*FriendsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Friends not implemented")
@@ -643,6 +773,42 @@ func _Grid_Region_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Land_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Land(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Land_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Land(ctx, req.(*LandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_Neighbours_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NeighboursRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Neighbours(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Neighbours_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Neighbours(ctx, req.(*NeighboursRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_Flush_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FlushRequest)
 	if err := dec(in); err != nil {
@@ -693,6 +859,24 @@ func _Grid_Send_Handler(srv interface{}, ctx context.Context, dec func(interface
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridServer).Send(ctx, req.(*SendRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_Control_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ControlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Control(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Control_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Control(ctx, req.(*ControlRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -791,6 +975,14 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Grid_Region_Handler,
 		},
 		{
+			MethodName: "Land",
+			Handler:    _Grid_Land_Handler,
+		},
+		{
+			MethodName: "Neighbours",
+			Handler:    _Grid_Neighbours_Handler,
+		},
+		{
 			MethodName: "Flush",
 			Handler:    _Grid_Flush_Handler,
 		},
@@ -801,6 +993,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Send",
 			Handler:    _Grid_Send_Handler,
+		},
+		{
+			MethodName: "Control",
+			Handler:    _Grid_Control_Handler,
 		},
 		{
 			MethodName: "Friends",

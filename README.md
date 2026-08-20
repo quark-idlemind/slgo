@@ -1610,8 +1610,25 @@ back down.
 
 ## Not done
 
-No region crossing, no teleport beyond the current region, and no
-appearance. Inventory is no longer read only -- see the sections above.
+Teleport between regions works. `slsh tp REGION [X Y Z]` goes, an
+accepted lure is followed rather than fired and forgotten, and the
+daemon moves the circuit to the new simulator under everything holding
+it: forty moves on Agni at a median of 425ms, capabilities refetched
+from the new region's seed and every client told the region changed.
+
+Region crossing is followed but unverified. `CrossedRegion` is acted on
+the same way `TeleportFinish` is, on the event queue and on the circuit,
+and nobody has yet seen one arrive -- slgod connects to one simulator at
+a time and never opens the child circuits to neighbouring regions that a
+viewer keeps, so whether a simulator offers the message to a client that
+never took the neighbour up is not something that could be settled
+offline. What is certain is what it is not: neighbouring regions are
+neither connected to nor drawn, so a crossing here is a pause while the
+circuit moves and the new region describes itself from nothing, rather
+than the seamless step a viewer gives you.
+
+No appearance. Inventory is no longer read only -- see the sections
+above.
 
 Textures encode, decode and resize. Sounds, animations and meshes go
 up through the same `UploadAsset` and none has been tried.

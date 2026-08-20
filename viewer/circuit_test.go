@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"math"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -866,5 +867,219 @@ func TestAJoiningViewerIsToldHowAvatarsLook(t *testing.T) {
 	}
 	if string(got.ObjectData.TextureEntry) != "how she looks" {
 		t.Errorf("texture entry = %q", got.ObjectData.TextureEntry)
+	}
+}
+
+// absorbedFromViewer is how many of these the circuit took and did not
+// pass on.  It is the assertion an absorbing arm of fromViewer exists to
+// make: a message that never reached the grid but was recorded as
+// forwarded is a bug the census is the only witness to.
+func absorbedFromViewer(c *Census, name string) uint64 {
+	for _, row := range c.Counts() {
+		if row.Name == name && row.Dir == FromViewer {
+			return row.By[Absorbed]
+		}
+	}
+	return 0
+}
+
+// thisRegion is the handle simStub puts in its AgentMovementComplete, so
+// a test can ask for a teleport that stays here.  elsewhere is Sandbox
+// Goguen's real handle, which is not it.
+const (
+	thisRegion = uint64(0x0003_f000_0003_e800)
+	elsewhere  = uint64(1094014069892352)
+)
+
+// TestAViewerTeleportToAnotherRegionIsRefusedOutLoud: the daemon follows
+// a teleport now, so a forwarded one does not end the session -- it
+// moves the circuit and leaves the viewer drawing a region the avatar
+// has left, with nothing anywhere reporting an error.  The three
+// messages here are three different controls (a map click, a landmark,
+// and accepting somebody's offer) and none of them may reach the grid.
+func TestAViewerTeleportToAnotherRegionIsRefusedOutLoud(t *testing.T) {
+	sim, _, _, v, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	tp := &msg.TeleportLocationRequest{}
+	tp.Info.RegionHandle = elsewhere
+	tp.Info.Position = msg.Vector3{X: 128, Y: 128, Z: 26}
+	v.send(tp, msg.FlagReliable)
+
+	lm := &msg.TeleportLandmarkRequest{}
+	lm.Info.LandmarkID = msg.MustParseUUID("3b277e57-7e57-c0de-6c1a-995a5d4a9b60")
+	v.send(lm, msg.FlagReliable)
+
+	lure := &msg.TeleportLureRequest{}
+	lure.Info.LureID = msg.MustParseUUID("96d97e57-7e57-c0de-6273-3461e4f8d11b")
+	v.send(lure, msg.FlagReliable)
+
+	// The person is told, because a control that does nothing and says
+	// nothing looks exactly like a viewer that has frozen.
+	v.waitSeen(t, "AgentAlertMessage", 5*time.Second)
+	told := v.last(t, "AgentAlertMessage").(*msg.AgentAlertMessage)
+	if !told.AlertData.Modal {
+		t.Error("the refusal was not modal, so a viewer may show it as a tip that fades")
+	}
+	said := string(told.AlertData.Message)
+	if !strings.Contains(said, "slsh tp") {
+		t.Errorf("the refusal does not say what does work: %q", said)
+	}
+
+	// Absorbed means absorbed.
+	time.Sleep(200 * time.Millisecond)
+	for _, name := range []string{"TeleportLocationRequest", "TeleportLandmarkRequest", "TeleportLureRequest"} {
+		sim.never(t, name)
+		if n := absorbedFromViewer(census, name); n != 1 {
+			t.Errorf("%s was absorbed %d times, want 1:\n%s", name, n, census.Report())
+		}
+	}
+}
+
+// TestATeleportInsideThisRegionIsStillForwarded: double-click to move
+// and "teleport here" are ordinary things to do, they change nothing
+// about the circuit, and the same simulator answers them.  Refusing
+// them would break something that is not broken, so the handle in the
+// request is compared with the session's own rather than assumed.
+func TestATeleportInsideThisRegionIsStillForwarded(t *testing.T) {
+	sim, a, _, v, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	// The session has to know where it is, or every teleport is
+	// somewhere else by the safe-side rule.
+	deadline := time.Now().Add(5 * time.Second)
+	for a.RegionHandle() != thisRegion {
+		if time.Now().After(deadline) {
+			t.Fatalf("the session's handle is %#x, want the one the simulator gave", a.RegionHandle())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	tp := &msg.TeleportLocationRequest{}
+	tp.Info.RegionHandle = thisRegion
+	tp.Info.Position = msg.Vector3{X: 12, Y: 240, Z: 27}
+	v.send(tp, msg.FlagReliable)
+
+	sim.waitSeen(t, "TeleportLocationRequest", 5*time.Second)
+	if n := absorbedFromViewer(census, "TeleportLocationRequest"); n != 0 {
+		t.Errorf("a teleport within the region was absorbed %d times:\n%s", n, census.Report())
+	}
+	if n := sentToViewer(census, "AgentAlertMessage"); n != 0 {
+		t.Error("the person was told a teleport was refused when it was not")
+	}
+}
+
+// TestATeleportNobodyInTheViewerAskedForDoesNotTearDownItsWorld:
+// TeleportStart is the simulator announcing a move another client asked
+// for.  Handed over it puts the viewer in its teleport tunnel, and the
+// message that would take it out again -- TeleportFinish -- is withheld
+// on purpose, so it would sit there over something it neither asked for
+// nor could stop.
+func TestATeleportNobodyInTheViewerAskedForDoesNotTearDownItsWorld(t *testing.T) {
+	sim, _, c, v, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	for _, m := range []msg.Message{
+		&msg.TeleportStart{},
+		&msg.TeleportProgress{},
+		&msg.TeleportFinish{},
+	} {
+		c.FromSim(&msg.Packet{ID: msg.IDOf(m), Message: m, At: time.Now()})
+	}
+
+	// A chat line behind them, so that waiting for it proves the three
+	// were considered and dropped rather than merely still in flight.
+	chat := &msg.ChatFromSimulator{}
+	chat.ChatData.Message = []byte("after the teleport\x00")
+	c.FromSim(&msg.Packet{ID: msg.IDOf(chat), Message: chat, At: time.Now()})
+	v.waitSeen(t, "ChatFromSimulator", 5*time.Second)
+
+	for _, name := range []string{"TeleportStart", "TeleportProgress", "TeleportFinish"} {
+		for _, seen := range v.got() {
+			if seen == name {
+				t.Errorf("%s reached the viewer; it heard %v", name, v.got())
+			}
+		}
+	}
+	if census.Total() == 0 {
+		t.Fatal("nothing was recorded at all")
+	}
+}
+
+// TestAViewerIsToldWhenTheAvatarIsTeleportedFromSomewhereElse: another
+// client can move this session, and the viewer is no part of that
+// conversation -- it goes on drawing a region the avatar has left while
+// the new region's objects land on top under local ids that now mean
+// something different.  Replaying the new region to it is "follow",
+// which is not built, so what is owed is a plain sentence.
+func TestAViewerIsToldWhenTheAvatarIsTeleportedFromSomewhereElse(t *testing.T) {
+	sim, _, c, v, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	// Before anything attached there is nobody to tell, and a circuit
+	// exists from the first login whether a viewer ever arrived or not.
+	c.RegionChanged("Sandbox Goguen")
+	if n := sentToViewer(census, "AgentAlertMessage"); n != 0 {
+		t.Errorf("a viewer that never joined was told %d times", n)
+	}
+
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	c.RegionChanged("Sandbox Goguen")
+	v.waitSeen(t, "AgentAlertMessage", 5*time.Second)
+	told := v.last(t, "AgentAlertMessage").(*msg.AgentAlertMessage)
+	said := string(told.AlertData.Message)
+	if !strings.Contains(said, "Sandbox Goguen") {
+		t.Errorf("the notice does not say where the avatar went: %q", said)
+	}
+	if !strings.Contains(said, "log out") {
+		t.Errorf("the notice does not say what to do about it: %q", said)
+	}
+}
+
+// TestANeighboursAddressOnTheCircuitDoesNotReachTheViewer: both of
+// these are withheld from the event queue, which is where the template
+// says they go, and both would hand a viewer a simulator to open its
+// own circuit to if a grid ever sent them here instead.  Absorbing them
+// costs nothing: a viewer that is not offered neighbours draws this
+// region and no other either way.
+func TestANeighboursAddressOnTheCircuitDoesNotReachTheViewer(t *testing.T) {
+	sim, _, c, v, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	for _, m := range []msg.Message{
+		&msg.EnableSimulator{},
+		&msg.CrossedRegion{},
+	} {
+		c.FromSim(&msg.Packet{ID: msg.IDOf(m), Message: m, At: time.Now()})
+	}
+
+	// A chat line behind them, so that waiting for it proves the two
+	// were considered and dropped rather than merely still in flight.
+	chat := &msg.ChatFromSimulator{}
+	chat.ChatData.Message = []byte("after the border\x00")
+	c.FromSim(&msg.Packet{ID: msg.IDOf(chat), Message: chat, At: time.Now()})
+	v.waitSeen(t, "ChatFromSimulator", 5*time.Second)
+
+	for _, name := range []string{"EnableSimulator", "CrossedRegion"} {
+		for _, seen := range v.got() {
+			if seen == name {
+				t.Errorf("%s reached the viewer; it heard %v", name, v.got())
+			}
+		}
+	}
+	if census.Total() == 0 {
+		t.Fatal("nothing was recorded at all")
 	}
 }

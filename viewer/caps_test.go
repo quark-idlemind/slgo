@@ -94,6 +94,10 @@ func TestSeedPassesOnWhatItCannotRead(t *testing.T) {
 
 // TestEventsReachAViewerWaitingForThem: the poll is held open until
 // there is something to say, which is how the simulator's own works.
+//
+// ParcelProperties rather than the TeleportFinish this used to carry.
+// That one is withheld now, so a test that used it as a sample event
+// was measuring the withholding and calling it a delivery.
 func TestEventsReachAViewerWaitingForThem(t *testing.T) {
 	q := NewEventQueue()
 	s := httptest.NewServer(q)
@@ -101,7 +105,7 @@ func TestEventsReachAViewerWaitingForThem(t *testing.T) {
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		q.Add("TeleportFinish", encode(t, map[string]any{"Info": "somewhere"}))
+		q.Add("ParcelProperties", encode(t, map[string]any{"ParcelData": "somewhere"}))
 	}()
 
 	resp, err := http.Post(s.URL, "application/llsd+xml", strings.NewReader("<llsd><map/></llsd>"))
@@ -119,7 +123,7 @@ func TestEventsReachAViewerWaitingForThem(t *testing.T) {
 		t.Fatalf("got %d events, want 1: %#v", len(events), m)
 	}
 	got := llsd.Map(events[0])
-	if llsd.String(got, "message") != "TeleportFinish" {
+	if llsd.String(got, "message") != "ParcelProperties" {
 		t.Errorf("event = %#v", got)
 	}
 	if llsd.Map(got["body"]) == nil {
@@ -200,6 +204,47 @@ func TestNeighbourRegionsAreNotOfferedToTheViewer(t *testing.T) {
 	}
 }
 
+// TestTeleportFinishIsNeverGivenToAViewer is the hole the daemon opened
+// when it learned to follow a teleport, and it is reachable without any
+// viewer teleport at all: `slsh tp` moves the session, the simulator
+// puts the finish on the queue, and slgod fans it out.  A viewer handed
+// it opens a circuit to the real simulator with this session's own ids.
+//
+// TeleportFailed goes across in the same breath on purpose.  It carries
+// a reason and no address, it is what takes a viewer out of a teleport
+// it should never have been shown, and withholding it would buy
+// tidiness at the price of the only safety net there is.
+func TestTeleportFinishIsNeverGivenToAViewer(t *testing.T) {
+	q := NewEventQueue()
+	q.Add("TeleportFinish", []byte("<llsd><map/></llsd>"))
+	q.Add("TeleportFailed", []byte("<llsd><map/></llsd>"))
+
+	if _, _, withheld := q.Stats(); withheld != 1 {
+		t.Errorf("withheld %d events, want the finish and only the finish", withheld)
+	}
+	if why := WhyWithheld("TeleportFinish"); why == "" {
+		t.Error("nothing says why a viewer is not given the finish")
+	}
+	if why := WhyWithheld("TeleportFailed"); why != "" {
+		t.Errorf("TeleportFailed is withheld: %s", why)
+	}
+
+	s := httptest.NewServer(q)
+	defer s.Close()
+	resp, err := http.Post(s.URL, "application/llsd+xml", strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), "TeleportFinish") {
+		t.Errorf("the viewer was told where the avatar went:\n%s", body)
+	}
+	if !strings.Contains(string(body), "TeleportFailed") {
+		t.Errorf("the viewer was not told the teleport failed:\n%s", body)
+	}
+}
+
 // TestEventsAreCopied: the body belongs to the session's decoder and
 // keeping the slice would keep whatever it decoded next.
 func TestEventsAreCopied(t *testing.T) {
@@ -219,5 +264,48 @@ func TestEventsAreCopied(t *testing.T) {
 	events, _ := llsd.Map(v)["events"].([]any)
 	if len(events) != 1 {
 		t.Fatalf("got %d events", len(events))
+	}
+}
+
+// TestANeighbouringSimulatorsAddressIsNeverGivenToAViewer: the hole
+// that has been open for as long as this front end has existed, and the
+// one that needed nothing to happen to reach it -- an ordinary region
+// introduces its neighbours several times a minute.
+//
+// EnableSimulator carries a handle, an IP and a port and no capability,
+// and a capability is not what opening a circuit takes: UseCircuitCode
+// is the circuit code, the session id and the agent id, all three of
+// which a viewer holding this session already has.  So the address is
+// the only thing it was short of, and this is the address.
+func TestANeighbouringSimulatorsAddressIsNeverGivenToAViewer(t *testing.T) {
+	q := NewEventQueue()
+	q.Add("EnableSimulator", []byte("<llsd><map/></llsd>"))
+	q.Add("CrossedRegion", []byte("<llsd><map/></llsd>"))
+	q.Add("ParcelProperties", []byte("<llsd><map/></llsd>"))
+
+	if _, _, withheld := q.Stats(); withheld != 2 {
+		t.Errorf("withheld %d events, want the neighbour and the crossing", withheld)
+	}
+	for _, name := range []string{"EnableSimulator", "CrossedRegion"} {
+		if why := WhyWithheld(name); why == "" {
+			t.Errorf("nothing says why a viewer is not given %s", name)
+		}
+	}
+
+	s := httptest.NewServer(q)
+	defer s.Close()
+	resp, err := http.Post(s.URL, "application/llsd+xml", strings.NewReader(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	for _, name := range []string{"EnableSimulator", "CrossedRegion"} {
+		if strings.Contains(string(body), name) {
+			t.Errorf("%s was handed to the viewer anyway:\n%s", name, body)
+		}
+	}
+	if !strings.Contains(string(body), "ParcelProperties") {
+		t.Errorf("ordinary events stopped going across:\n%s", body)
 	}
 }

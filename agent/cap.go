@@ -66,7 +66,7 @@ func (a *Agent) http() *http.Client {
 
 // HasCap reports whether the simulator offered this capability.
 func (a *Agent) HasCap(name string) bool {
-	_, ok := a.Caps.Get(name)
+	_, ok := a.Caps().Get(name)
 	return ok
 }
 
@@ -80,7 +80,7 @@ func (a *Agent) DoCap(ctx context.Context, r CapRequest) (*CapResponse, error) {
 		}
 		url = r.URL
 	default:
-		base, ok := a.Caps.Get(r.Cap)
+		base, ok := a.Caps().Get(r.Cap)
 		if !ok {
 			return nil, fmt.Errorf("agent: no %s capability", r.Cap)
 		}
@@ -190,7 +190,7 @@ func (a *Agent) sameHostAsACap(u string) bool {
 	if err != nil || pu.Host == "" {
 		return false
 	}
-	for _, c := range a.Caps {
+	for _, c := range a.Caps() {
 		pc, err := neturl.Parse(c)
 		if err == nil && pc.Host == pu.Host {
 			return true

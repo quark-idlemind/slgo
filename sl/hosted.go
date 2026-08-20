@@ -23,9 +23,23 @@ import (
 type Hosted struct {
 	conn *client.Conn
 	info *Info
+
+	// standing is what this session asked to be relayed when it
+	// attached, and it is what Unwatch refuses to take away.
+	//
+	// Written once, before the Hosted is handed to anything, so it is
+	// read without a lock.  It exists because Unwatch is a subtraction
+	// from one set shared by everything using this connection: a caller
+	// that named AvatarAnimation at attach time meant to keep it, and a
+	// sit that borrowed the same name for a second must not hand back
+	// something it was never lent.
+	standing map[string]bool
 }
 
-var _ Backend = (*Hosted)(nil)
+var (
+	_ Backend = (*Hosted)(nil)
+	_ Watcher = (*Hosted)(nil)
+)
 
 // Attach connects to a slgod and attaches to one of its sessions.
 //
@@ -92,7 +106,11 @@ func AttachConn(ctx context.Context, conn *client.Conn, name string, subscribe .
 		}
 		return nil, fmt.Errorf("sl: cannot attach to %q: %w", name, err)
 	}
-	return &Hosted{conn: conn, info: infoFromPB(info)}, nil
+	standing := make(map[string]bool, len(subscribe))
+	for _, n := range subscribe {
+		standing[n] = true
+	}
+	return &Hosted{conn: conn, info: infoFromPB(info), standing: standing}, nil
 }
 
 // Conn is the connection underneath, for the few things that are only
@@ -127,6 +145,16 @@ func (h *Hosted) Done() <-chan struct{}     { return h.conn.Done() }
 // received.
 func (h *Hosted) Events() <-chan *QueueEvent { return h.conn.Events() }
 
+// RegionChanges is the daemon saying the avatar is somewhere else.
+//
+// It comes off the notice stream and not the message one, because it is
+// not something the grid said: it is something that happened to the
+// connection, like the session going away and coming back.  The daemon
+// is the only one in a position to know -- a teleport is announced to
+// the session it moves, and by the time a client could read the
+// announcement the daemon has already followed it.
+func (h *Hosted) RegionChanges() <-chan *RegionChange { return h.conn.RegionChanges() }
+
 func (h *Hosted) Err() error              { return h.conn.Err() }
 func (h *Hosted) Close() error            { return h.conn.Close() }
 func (h *Hosted) HasCap(name string) bool { return h.conn.HasCap(name) }
@@ -151,6 +179,46 @@ func (h *Hosted) Flush(ctx context.Context) (int, error) {
 
 func (h *Hosted) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	return h.conn.Send(ctx, m, reliable)
+}
+
+// Control asks the daemon to send one AgentUpdate carrying these flags.
+//
+// The daemon owns the camera, so it is the only thing that can send an
+// update that is right about everything except the bit being asked for;
+// see Backend.Control.
+func (h *Hosted) Control(ctx context.Context, flags uint32) error {
+	return h.conn.Control(ctx, flags)
+}
+
+// Watch adds message names to what the daemon relays to this session.
+//
+// It travels on the same stream the session's messages go out on, and
+// the daemon reads that stream in order, so a name asked for here is in
+// force before anything sent afterwards ON THE STREAM.  That does not
+// extend to the unary calls -- Control is one -- which are separate
+// requests the daemon may take up on another goroutine; see sit.go,
+// where the one place that matters is worked through.
+func (h *Hosted) Watch(names ...string) error { return h.conn.Watch(names...) }
+
+// Unwatch takes them away again, except for the ones this session asked
+// for when it attached.
+//
+// The exception is what makes borrowing a name safe.  There is one
+// subscription set per connection, so an unqualified Unwatch would let a
+// command that wanted AvatarAnimation for a second take it away from a
+// caller that attached asking for it and expects it for the whole
+// session.
+func (h *Hosted) Unwatch(names ...string) error {
+	drop := make([]string, 0, len(names))
+	for _, n := range names {
+		if !h.standing[n] {
+			drop = append(drop, n)
+		}
+	}
+	if len(drop) == 0 {
+		return nil
+	}
+	return h.conn.Unwatch(drop...)
 }
 
 func (h *Hosted) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
@@ -242,6 +310,40 @@ func (h *Hosted) Region(ctx context.Context) (*Region, bool, error) {
 		CPUClass: r.CpuClass, CPURatio: r.CpuRatio,
 		Protocols: r.Protocols,
 	}, r.Known, nil
+}
+
+// Land reads what the daemon's session was told, and rebuilds the
+// overlay from the squares and the quarter mask it sent.
+func (h *Hosted) Land(ctx context.Context) (*Land, error) {
+	r, err := h.conn.Land(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &Land{
+		Overlay: agent.OverlayFrom(r.GetOverlay(), uint8(r.GetOverlayQuarters())),
+	}
+	if r.GetParcelKnown() {
+		out.Told = &Told{Name: r.GetParcelName(), LocalID: r.GetParcelLocalId()}
+	}
+	return out, nil
+}
+
+func (h *Hosted) Neighbours(ctx context.Context, set *bool) (*Neighbours, error) {
+	r, err := h.conn.Neighbours(ctx, set)
+	if err != nil {
+		return nil, err
+	}
+	out := &Neighbours{On: r.GetOn(), Held: make([]Neighbour, 0, len(r.GetNeighbours()))}
+	for _, n := range r.GetNeighbours() {
+		out.Held = append(out.Held, Neighbour{
+			Handle:    n.GetHandle(),
+			Addr:      n.GetAddress(),
+			Name:      n.GetName(),
+			Handshook: n.GetHandshook(),
+			Heard:     n.GetHeard(),
+		})
+	}
+	return out, nil
 }
 
 func (h *Hosted) Friends(ctx context.Context) ([]Friend, error) {

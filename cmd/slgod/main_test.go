@@ -829,3 +829,31 @@ func TestAnUnnamedRegionIsStillSaidToBeARegion(t *testing.T) {
 		t.Errorf("orUnknown = %q", got)
 	}
 }
+
+// TestWhoDecidesWhetherAnAvatarHoldsItsNeighbours: the flag speaks for
+// the daemon and the profile speaks for one avatar, so the profile has
+// the last word and the flag is what an avatar with no opinion gets.
+// The case that matters is the daemon started with the flag and a
+// profile that says no: a benchmark avatar must not be given four extra
+// circuits because another avatar in the same daemon wanted them.
+func TestWhoDecidesWhetherAnAvatarHoldsItsNeighbours(t *testing.T) {
+	t.Parallel()
+
+	yes, no := true, false
+	for _, c := range []struct {
+		what    string
+		profile *bool
+		flag    bool
+		want    bool
+	}{
+		{"a profile that says nothing takes the flag", nil, true, true},
+		{"and takes it when it is off too", nil, false, false},
+		{"a profile that asks for them gets them", &yes, false, true},
+		{"and a profile that refuses them is not given them", &no, true, false},
+	} {
+		got := holdNeighbours(agent.Login{Neighbours: c.profile}, c.flag)
+		if got != c.want {
+			t.Errorf("%s: got %v, want %v", c.what, got, c.want)
+		}
+	}
+}

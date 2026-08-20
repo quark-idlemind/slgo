@@ -93,9 +93,18 @@ type Conn struct {
 	events   chan *Event
 	notices  chan *pb.AgentEvent
 
+	// regions is the region changes among the notices, on a channel of
+	// their own rather than sifted out of that one.
+	//
+	// A notice stream has one reader, and two things want these: a
+	// program showing a person what happened to their session, and the
+	// bookkeeping that has to throw away everything keyed on the region
+	// left behind.  Sifting would make the second steal from the first.
+	regions chan *RegionChange
+
 	// relaying says recvLoop is running, and closed says Close has
 	// been. Both are under mu, and the pair is what decides who closes
-	// the three channels above; see closeRelay.
+	// the four channels above; see closeRelay.
 	relaying bool
 	closed   bool
 
@@ -107,7 +116,7 @@ type Conn struct {
 	done      chan struct{}
 	err       atomic.Value
 
-	// relayOnce guards the close of the three relay channels, and
+	// relayOnce guards the close of the four relay channels, and
 	// relayDone is closed with them so that Close can wait.
 	relayOnce sync.Once
 	relayDone chan struct{}
@@ -146,6 +155,24 @@ type Event struct {
 	Name string
 	Body []byte // LLSD encoded
 	At   time.Time
+}
+
+// RegionChange is the avatar being somewhere else: the name and handle
+// of the region it is in now.
+//
+// It means more than it says.  Local ids are the region's own numbering
+// and are reused by the next one, an object cache describes a place the
+// avatar has left, and anything keyed on either is now a claim about
+// somewhere else.  So this is the news that what a client holds should
+// be dropped, and the name and handle are here so that it can be
+// dropped without a round trip asking where we are.
+//
+// A change with no name is still a change.  A server too old to fill
+// the fields in sends the kind alone, and the kind is what says the
+// avatar is somewhere else; the name is what saves asking where.
+type RegionChange struct {
+	Region string
+	Handle uint64
 }
 
 // Decode parses the event body.
@@ -202,6 +229,7 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 		messages:  make(chan *Message, 1024),
 		events:    make(chan *Event, 256),
 		notices:   make(chan *pb.AgentEvent, 32),
+		regions:   make(chan *RegionChange, 32),
 		done:      make(chan struct{}),
 		relayDone: make(chan struct{}),
 	}, nil
@@ -293,6 +321,7 @@ func (c *Conn) closeRelay() {
 		close(c.messages)
 		close(c.events)
 		close(c.notices)
+		close(c.regions)
 		close(c.relayDone)
 	})
 }
@@ -320,6 +349,13 @@ func (c *Conn) Events() <-chan *Event { return c.events }
 // Notices yields word about the grid connection itself -- it went
 // away, it came back -- rather than anything the grid said.
 func (c *Conn) Notices() <-chan *pb.AgentEvent { return c.notices }
+
+// RegionChanges yields the notices that say the avatar is in another
+// region, which is the one kind a client cannot afford to merely log:
+// see RegionChange.  It is closed with the rest when the stream ends.
+//
+// Every one of these is also a notice, and Notices still carries it.
+func (c *Conn) RegionChanges() <-chan *RegionChange { return c.regions }
 
 // Attach opens the packet stream against one of the server's agents and
 // subscribes to the named messages.  "*" means everything; naming
@@ -414,6 +450,25 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 			select {
 			case c.notices <- b.Notice:
 			default:
+			}
+			if b.Notice.GetKind() == pb.AgentEvent_REGION_CHANGED {
+				// Dropped like the rest when nobody is reading,
+				// and it is the drop that costs most: a session
+				// that missed one goes on believing it is in a
+				// region it has left.  Nothing here can do
+				// better -- blocking would stop this stream, and
+				// with it the messages, the events and the
+				// answers to locks -- so the buffer is what
+				// stands between the two, and these arrive one
+				// to a teleport where a message arrives one to a
+				// packet.
+				select {
+				case c.regions <- &RegionChange{
+					Region: b.Notice.GetRegion(),
+					Handle: b.Notice.GetRegionHandle(),
+				}:
+				default:
+				}
 			}
 		case *pb.ServerPacket_Locked:
 			// Never dropped: somebody is waiting on this, and losing
@@ -619,6 +674,51 @@ func (c *Conn) Logout(ctx context.Context, name string, force bool) (*pb.LogoutR
 
 func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
 	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agent})
+}
+
+// Land is what the session was told about the ground it is on: the
+// parcel it was pushed on arrival, and the region's parcel overlay.
+//
+// It goes to the server for the reason Region does: both arrive once,
+// unasked, before any client is listening.  The overlay cannot be asked
+// for a second time at all, so a client that was not there when the
+// avatar arrived can get it here or nowhere.
+func (c *Conn) Land(ctx context.Context) (*pb.LandInfo, error) {
+	return c.grid.Land(ctx, &pb.LandRequest{Agent: c.agent})
+}
+
+// Neighbours reads the circuits the server holds to the regions around
+// the one the avatar is in, and turns them on or off.
+//
+// A nil set asks without changing anything, which the wire spells as an
+// absent field rather than as a false: the difference between "leave it
+// alone" and "turn it off" is the whole reason the field has presence.
+//
+// It goes to the server for the reason Presence does: the circuits are
+// the server's, they cost a socket and a share of the traffic each for
+// as long as they are held, and a client that owned them would take
+// them away from every other client by exiting.
+func (c *Conn) Neighbours(ctx context.Context, set *bool) (*pb.NeighboursResponse, error) {
+	return c.grid.Neighbours(ctx, &pb.NeighboursRequest{Agent: c.agent, Set: set})
+}
+
+// Control asks the server to send one AgentUpdate carrying these
+// control flags, and forget them.
+//
+// It goes to the server because an AgentUpdate is not just its flags: it
+// carries the camera, its three axes and the draw distance, and the
+// simulator scopes its interest list by them.  This side knows a
+// position and no axes at all, so a client that built one itself would
+// be guessing at the camera and inventing a draw distance, and the
+// simulator would believe it until the server's own update a second
+// later put it back.
+//
+// A single call rather than a sit and a stand, because the flags are the
+// same shape for everything that moves an avatar; agent.ControlStandUp
+// and agent.ControlSitOnGround are the two this repository has measured.
+func (c *Conn) Control(ctx context.Context, flags uint32) error {
+	_, err := c.grid.Control(ctx, &pb.ControlRequest{Agent: c.agent, Flags: flags})
+	return err
 }
 
 // Flush empties the server's object cache.

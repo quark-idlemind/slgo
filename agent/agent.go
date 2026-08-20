@@ -12,7 +12,12 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// An Agent is a live UDP circuit to one simulator.
+// An Agent is a live UDP circuit to one simulator at a time.
+//
+// At a time, because the circuit can be moved: a teleport takes the same
+// session to another simulator, and the sender, the receiver and the
+// dispatcher keep their identity across it so that everything holding
+// one of them goes on working.  See moveTo.
 //
 // Connect performs the handshake the simulator expects -- UseCircuitCode
 // to open the circuit, then CompleteAgentMovement to put the avatar in
@@ -22,22 +27,46 @@ import (
 type Agent struct {
 	Account *Account
 
-	Conn *net.UDPConn
 	Recv *msg.Receiver
 	Send *msg.Sender
 	Disp *msg.Dispatcher
 
-	// Caps are the capability URLs the simulator offered, and
-	// Inventory is this agent'a folder tree.  Both belong to the
-	// session: nothing here is package level, so one process can
-	// hold as many sessions as it likes.
-	Caps      Caps
+	// sock is the connection those three were built over.  It was an
+	// exported *net.UDPConn until the circuit had to be able to move:
+	// a teleport dials another simulator and stores it here, and the
+	// sender, the receiver and everyone holding them go on as they
+	// were.  Nothing outside this package ever used the field.
+	sock *socket
+
+	// Inventory is this agent's folder tree.  It belongs to the
+	// session: nothing here is package level, so one process can hold
+	// as many sessions as it likes.
 	Inventory *Inventory
+
+	// caps are the capability URLs the region offered, behind a
+	// pointer because a move replaces the whole set at once while
+	// requests are being made through it.  Read them with Caps.
+	caps atomic.Pointer[Caps]
+
+	// seed is the capability the set above was fetched from, kept for
+	// the same reason and behind the same kind of pointer.  Read it
+	// with Seed.
+	seed atomic.Pointer[string]
 
 	// HTTP is used for capability and inventory requests.  A nil
 	// client gets a default with a sixty second timeout.
 	HTTP *http.Client
 
+	// opts is how this session was asked for.  A move re-reads
+	// Timeout, Caps, SkipCaps and OnEvent from it: the new region has
+	// to be handshaken, asked for capabilities and polled on the same
+	// terms as the one before it.
+	opts Options
+
+	// runCtx is the session's own lifetime, cancelled by cancel.  A
+	// move spawns against it, so that what it starts ends when the
+	// session does rather than when the move returns.
+	runCtx context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
@@ -56,9 +85,18 @@ type Agent struct {
 	// terrain is the land, kept because it cannot be asked for twice.
 	terrain Terrain
 
+	// parcels is the land the avatar is standing on and the layout of
+	// the region round it, both of which arrive unasked.
+	parcels parcels
+
 	// appearance is how the avatars nearby look, kept for the same
 	// reason.
 	appearance Appearances
+
+	// anims is what this avatar is animating, which is half of what
+	// posture is; the other half is the parent in the object cache.
+	// See posture.go.
+	anims animations
 
 	// offers is what was said to the person while no viewer was there
 	// to show it.
@@ -79,6 +117,33 @@ type Agent struct {
 	inRegion  signal
 	handshook signal
 	loggedOut signal
+
+	// arrived, when a move has installed one, is fired by the next
+	// AgentMovementComplete to arrive.
+	//
+	// The four signals above are closed once and stay closed, which is
+	// what Connect and WaitForRegionHandshake want: they ask whether
+	// something has happened, and anyone asking later is answered at
+	// once.  A move asks the other question -- whether it has happened
+	// AGAIN -- and re-arming inRegion to answer it would take the
+	// first answer away from everyone already holding it.  A signal
+	// the move installs and removes is smaller and leaves Connect's
+	// handshake exactly as it was.
+	//
+	// One is enough.  A simulator introduces the region before it
+	// answers the movement request and both handlers are Inline, so a
+	// move that has seen AgentMovementComplete has been through
+	// RegionHandshake already: a second handshook would have nothing
+	// left to wait for.
+	arrived atomic.Pointer[signal]
+
+	// moveMu serializes moves; see moveTo.
+	moveMu sync.Mutex
+
+	// forgetSeen asks the dispatch goroutine to forget the sequence
+	// numbers it has seen.  msg.Dispatcher.Forget is safe on that
+	// goroutine and nowhere else, and the tap is that goroutine.
+	forgetSeen atomic.Bool
 
 	eq eventQueue
 
@@ -103,6 +168,21 @@ type Agent struct {
 	// regions hands out those stores.  A nil cache means this agent
 	// keeps its own, which is what a single direct login wants.
 	regions *Cache
+
+	// holdNeighbours is whether this session takes up the offers of
+	// the regions around it.  Options.Neighbours starts it and
+	// SetNeighbours turns it over; it is atomic and deliberately not
+	// under neighMu, which dropNeighbours takes.
+	holdNeighbours atomic.Bool
+
+	// neighbours are the circuits held to the regions around this
+	// one, by grid handle, and refused are the offers turned down for
+	// being past MaxNeighbours -- kept only so that one is logged
+	// once rather than every time it is offered again.  Both are nil
+	// while neighbours are off; see neighbour.go.
+	neighMu    sync.Mutex
+	neighbours map[uint64]*child
+	refused    map[uint64]bool
 
 	mu          sync.RWMutex
 	friends     map[msg.UUID]*Friend
@@ -196,6 +276,23 @@ type Options struct {
 	// that does not care.
 	OnEvent EventHandler
 
+	// OnRegionChange is told that the avatar is in a different
+	// region from the one it was in, with that region's name and
+	// handle.  See regionChanged for when it fires and, as
+	// importantly, when it does not.
+	//
+	// It is what lets something above this package throw away what
+	// belongs to the region left behind, which is most of what a
+	// client holds: local ids are the region's own numbering and an
+	// object cache describes somewhere else.  This package does not
+	// know what a client is and does not learn it here -- the
+	// callback is the whole of what it says.
+	//
+	// It runs on the dispatch goroutine, like Relay, so keep it
+	// quick and do not block in it: a slow one stops this session
+	// reading anything at all.
+	OnRegionChange RegionChangeHandler
+
 	// Presence is how often AgentUpdate is sent.  Default one
 	// second; a negative value stops it, which also stops the
 	// simulator streaming any object data.
@@ -205,6 +302,38 @@ type Options struct {
 	// how much the simulator sends, so it is worth setting low for
 	// a client that does not care about objects.
 	DrawDistance float32
+
+	// Neighbours holds a circuit to each region around this one, so
+	// that the avatar can walk over a border: a simulator will not
+	// hand it over to a client that holds none.  See neighbour.go,
+	// which is where the whole of it lives, and doc/neighbours.md
+	// for what it measured.
+	//
+	// This is what the session STARTS as and not the whole truth:
+	// SetNeighbours turns them over while the session is up, which is
+	// what a person driving one avatar of several wants.  Ask
+	// NeighboursOn rather than reading this back.
+	//
+	// Off by default.  Off, no offer is read and no socket is opened,
+	// so a session that does not ask for this behaves as it did
+	// before any of it existed.  It costs a socket and a share of the
+	// traffic per neighbour -- four regions surround Pelmar Reach and
+	// eight can surround one anywhere -- which a daemon acting only
+	// where its avatar stands should not be made to pay.
+	Neighbours bool
+
+	// Log is where this session says the few things worth the
+	// attention of whoever is running the daemon.  Nil is silence,
+	// which is what a test wants; cmd/slgod passes log.Printf with
+	// the profile's name on the front.
+	//
+	// It is not a trace and not an error channel: what belongs here
+	// is what nothing else would ever say.  Today that is the child
+	// circuits opening and closing, which a client can now list --
+	// see Neighbours -- but only as they stand: a circuit that opened
+	// and closed between two of a client's questions was never there
+	// as far as the listing is concerned, and this is where it went.
+	Log func(format string, v ...any)
 
 	// Idle ends the session when nothing has arrived from the
 	// simulator for this long.  Default 60s; a negative value
@@ -237,10 +366,10 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 
 	a := &Agent{
 		Account:   acct,
-		Conn:      conn,
+		sock:      newSocket(conn),
 		HTTP:      opts.HTTP,
 		Inventory: newInventory(acct.InventoryRoot),
-		Caps:      Caps{},
+		opts:      opts,
 		regions:   opts.Regions,
 		done:      make(chan struct{}),
 		anyPacket: newSignal(),
@@ -248,6 +377,11 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 		handshook: newSignal(),
 		loggedOut: newSignal(),
 	}
+	a.SetCaps(Caps{})
+	a.setSeed(acct.SeedCapability)
+	// The option is the starting value of a flag rather than a
+	// settled fact, so it is stored where the flag is read from.
+	a.holdNeighbours.Store(opts.Neighbours)
 
 	a.seedFriends(acct.Buddies)
 
@@ -255,13 +389,22 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	if opts.SendTap != nil {
 		sendOpts = append(sendOpts, msg.WithSendTap(opts.SendTap))
 	}
-	a.Send = msg.NewSender(conn, sendOpts...)
-	a.Recv = msg.NewReceiver(conn, opts.Recv...)
+	// Both are given the holder rather than the connection, which is
+	// what lets a move change the connection without changing them.
+	a.Send = msg.NewSender(a.sock, sendOpts...)
+	a.Recv = msg.NewReceiver(a.sock, opts.Recv...)
 
 	dopts := []msg.DispatcherOption{
 		msg.WithSender(a.Send),
 		msg.WithConcurrency(opts.Concurrency),
 		msg.WithTap(func(p *msg.Packet) {
+			// A move asks here because this runs on the dispatch
+			// goroutine, ahead of duplicate suppression: whatever
+			// packet carries this out, the new simulator's own
+			// packets are all judged against an empty ring.
+			if a.forgetSeen.CompareAndSwap(true, false) {
+				a.Disp.Forget()
+			}
 			a.lastPacket.Store(time.Now().UnixNano())
 			a.anyPacket.fire()
 			if opts.Tap != nil {
@@ -282,7 +425,7 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	a.register()
 
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	a.cancel = cancel
+	a.runCtx, a.cancel = runCtx, cancel
 
 	a.lastPacket.Store(time.Now().UnixNano())
 	if opts.Idle == 0 {
@@ -326,13 +469,13 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 			a.Close()
 			return nil, err
 		}
-		a.Caps = caps
+		a.SetCaps(caps)
 	}
 
 	// The queue needs the capability, so it starts after the
 	// capabilities have been fetched rather than with the circuit.
 	if opts.OnEvent != nil {
-		a.spawn(func() error { a.runEventQueue(runCtx, opts.OnEvent); return nil })
+		a.startEventQueue(runCtx, opts.OnEvent)
 	}
 	return a, nil
 }
@@ -377,6 +520,19 @@ func (a *Agent) watchdog(ctx context.Context, idle time.Duration) {
 }
 
 func (a *Agent) spawn(fn func() error) {
+	// Nothing is started for a session that is over.  Close waits on
+	// this group, and an Add that lands after the wait has begun
+	// panics; a move, which spawns the new region's poll long after
+	// Connect returned, is the only caller that can be racing a Close
+	// at all.  It narrows the window rather than closing it -- see
+	// moveTo, which refuses outright -- and what is left is a goroutine
+	// spawned into a session that is shutting down, which returns at
+	// once because everything it waits on is already cancelled.
+	select {
+	case <-a.done:
+		return
+	default:
+	}
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
@@ -384,6 +540,15 @@ func (a *Agent) spawn(fn func() error) {
 			a.fail(err)
 		}
 	}()
+}
+
+// logf says something to whoever is running the daemon, and nothing at
+// all when nobody is listening.
+func (a *Agent) logf(format string, v ...any) {
+	if a.opts.Log == nil {
+		return
+	}
+	a.opts.Log(format, v...)
 }
 
 func (a *Agent) fail(err error) {
@@ -405,7 +570,10 @@ func (a *Agent) register() {
 	// this region's whatever it turns out to be called.
 	a.objects.Store(newObjects())
 	a.trackObjects()
+	a.trackPosture()
 	a.keepOffers()
+	a.followCrossings()
+	a.followNeighbours()
 
 	// AgentDataUpdate carries the active group, which decides whether a
 	// parcel lets this avatar build. It is sent at login and when the
@@ -468,6 +636,15 @@ func (a *Agent) register() {
 		}
 	}, msg.Inline())
 
+	// The region's parcel layout, which arrives with the terrain and
+	// for the same reason is kept: four packets on arrival and none
+	// after, whatever asks later.
+	a.Disp.MustHandle("ParcelOverlay", func(p *msg.Packet) {
+		if m, ok := p.Message.(*msg.ParcelOverlay); ok {
+			a.parcels.noteOverlay(m)
+		}
+	}, msg.Inline())
+
 	a.Disp.MustHandle("RegionHandshake", func(p *msg.Packet) {
 		m := p.Message.(*msg.RegionHandshake)
 		a.mu.Lock()
@@ -479,8 +656,10 @@ func (a *Agent) register() {
 		a.setHandshake(m)
 		a.setRegion(r)
 		// Whichever region this is, its objects are kept apart from
-		// the last one's.  Nothing says a region has changed and
-		// nothing will, so this handshake is the notice.
+		// the last one's.  What tells anything ABOVE this package
+		// that the region changed is fired from
+		// AgentMovementComplete rather than here, because this
+		// message does not carry the handle; see regionChanged.
 		a.enterRegion(r.ID)
 
 		reply := &msg.RegionHandshakeReply{}
@@ -493,6 +672,12 @@ func (a *Agent) register() {
 	a.Disp.MustHandle("AgentMovementComplete", func(p *msg.Packet) {
 		m := p.Message.(*msg.AgentMovementComplete)
 		a.mu.Lock()
+		// The handle this session held until now, which is what
+		// says whether the avatar has arrived somewhere it was not,
+		// and the name the handshake just recorded, which is the
+		// new region's; both are read under the one lock so that
+		// the pair cannot be half of each region.
+		was, name := a.handle, a.regionName
 		a.position = m.Data.Position
 		a.lookAt = m.Data.LookAt
 		a.handle = m.Data.RegionHandle
@@ -500,6 +685,12 @@ func (a *Agent) register() {
 		a.mu.Unlock()
 		a.setCenter(m.Data.Position)
 		a.inRegion.fire()
+		// A move is waiting for this one rather than for the first
+		// one ever, which inRegion has already answered.
+		if s := a.arrived.Load(); s != nil {
+			s.fire()
+		}
+		a.regionChanged(was, m.Data.RegionHandle, name)
 	}, msg.Inline())
 
 	// Keep the camera on the avatar.  AgentUpdate is what puts a
@@ -600,22 +791,50 @@ func (a *Agent) register() {
 }
 
 func (a *Agent) handshake(ctx context.Context, timeout time.Duration) error {
-	// UseCircuitCode opens the circuit.  The simulator does not
-	// answer it with anything in particular, so the circuit is up
-	// once anything at all comes back.
-	circuit := &msg.UseCircuitCode{}
-	circuit.CircuitCode.Code = a.Account.CircuitCode
-	circuit.CircuitCode.SessionID = a.Account.SessionID
-	circuit.CircuitCode.ID = a.Account.AgentID
-	if err := a.Send.SendReliable(ctx, circuit); err != nil {
-		return fmt.Errorf("agent: UseCircuitCode: %w", err)
+	if err := a.sendUseCircuitCode(ctx); err != nil {
+		return err
 	}
 	if err := a.await(ctx, a.anyPacket.wait(), timeout, "circuit to come up"); err != nil {
 		return err
 	}
+	if err := a.sendCompleteAgentMovement(ctx); err != nil {
+		return err
+	}
+	return a.await(ctx, a.inRegion.wait(), timeout, "AgentMovementComplete")
+}
 
-	// CompleteAgentMovement puts the avatar in the region, and is
-	// answered with AgentMovementComplete.
+// sendUseCircuitCode opens the circuit.  The simulator does not answer
+// it with anything in particular, so the circuit is up once anything at
+// all comes back.
+//
+// The same circuit code opens the circuit at every simulator this
+// session ever talks to, which is why a teleport is not a relog: see
+// moveTo, the other caller.
+func (a *Agent) sendUseCircuitCode(ctx context.Context) error {
+	if err := a.Send.SendReliable(ctx, a.useCircuitCode()); err != nil {
+		return fmt.Errorf("agent: UseCircuitCode: %w", err)
+	}
+	return nil
+}
+
+// useCircuitCode is the message that opens a circuit, wherever it is
+// being opened.
+//
+// Its whole content is this session's three ids, which is why the same
+// one serves the region the avatar is in and every neighbour of it: see
+// openNeighbour, the other caller, and note that what makes a circuit
+// the root is CompleteAgentMovement rather than anything here.
+func (a *Agent) useCircuitCode() *msg.UseCircuitCode {
+	circuit := &msg.UseCircuitCode{}
+	circuit.CircuitCode.Code = a.Account.CircuitCode
+	circuit.CircuitCode.SessionID = a.Account.SessionID
+	circuit.CircuitCode.ID = a.Account.AgentID
+	return circuit
+}
+
+// sendCompleteAgentMovement puts the avatar in the region, and is
+// answered with AgentMovementComplete.
+func (a *Agent) sendCompleteAgentMovement(ctx context.Context) error {
 	move := &msg.CompleteAgentMovement{}
 	move.AgentData.AgentID = a.Account.AgentID
 	move.AgentData.SessionID = a.Account.SessionID
@@ -623,7 +842,7 @@ func (a *Agent) handshake(ctx context.Context, timeout time.Duration) error {
 	if err := a.Send.SendReliable(ctx, move); err != nil {
 		return fmt.Errorf("agent: CompleteAgentMovement: %w", err)
 	}
-	return a.await(ctx, a.inRegion.wait(), timeout, "AgentMovementComplete")
+	return nil
 }
 
 func (a *Agent) await(ctx context.Context, ch <-chan struct{}, timeout time.Duration, what string) error {
@@ -723,11 +942,47 @@ func (a *Agent) RegionName() string {
 	return a.regionName
 }
 
-// Position is where the avatar arrived.
+// Position is where the avatar is.
+//
+// Ordinarily that is what the simulator last said outright --
+// AgentMovementComplete when the avatar arrived, and
+// CoarseLocationUpdate as it moves, which is whole metres and arrives
+// every few seconds.
+//
+// A seated avatar is the exception, and it is worth the special case.
+// Sitting on something MOVES the avatar, up to about ten metres, and the
+// coarse update saying where it ended up can be seconds behind: measured
+// on Agni, a sit that carried the avatar three metres still read as the
+// old position for about ten seconds afterwards.  Meanwhile the exact
+// answer is already in hand, because the update that seats an avatar
+// carries its position as an offset from the seat -- so a seated
+// position is composed out of the seat's own placement rather than
+// waited for.
+//
+// It falls back to the coarse answer whenever the seat cannot be
+// resolved, which is the ordinary case for a seat nothing has described:
+// stale by a few metres beats a confident zero.
 func (a *Agent) Position() msg.Vector3 {
 	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.position
+	at := a.position
+	a.mu.RUnlock()
+
+	// An agent with no account is one nothing has logged in, which
+	// happens in tests and in the moments before a login answers.  It
+	// has no avatar in the store to be seated, and asking for one by a
+	// zero id would find whatever else has never been described.
+	if a.Account == nil {
+		return at
+	}
+	store := a.Objects()
+	own, ok := store.Get(a.Account.AgentID)
+	if !ok || own.Parent == 0 {
+		return at
+	}
+	if seated, _, ok := store.worldPlacement(own.Local); ok {
+		return seated
+	}
+	return at
 }
 
 // ChannelVersion is the simulator'a build string.
@@ -776,7 +1031,11 @@ func (a *Agent) Close() {
 	if a.cancel != nil {
 		a.cancel()
 	}
-	a.Conn.Close()
+	a.sock.Close()
+	// The children's goroutines are in the group below and the cancel
+	// above has already told them to stop; what this adds is their
+	// sockets, which nothing else would ever close.
+	a.dropNeighbours("the session ended")
 	a.wg.Wait()
 }
 

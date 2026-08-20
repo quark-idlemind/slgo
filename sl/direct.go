@@ -26,9 +26,19 @@ type Direct struct {
 	info     *Info
 	messages chan *Message
 	events   chan *QueueEvent
+
+	// regions is the third relay.  A hosted session is told the avatar
+	// moved by the daemon that moved it; here the agent in this
+	// process is the daemon, and it says so through a callback.
+	regions chan *RegionChange
 }
 
 var _ Backend = (*Direct)(nil)
+
+// Deliberately not a Watcher.  There is nothing between the socket and
+// the reader to filter with here, so everything the circuit carries is
+// already on the relay and there is no subscription to take out or give
+// back; see Watcher.
 
 // relayDepth is how far behind a reader may fall before messages are
 // dropped.  Dropping is right: the alternative is stalling the circuit,
@@ -50,6 +60,11 @@ func Login(ctx context.Context, l agent.Login) (*Direct, error) {
 	d := &Direct{
 		messages: make(chan *Message, relayDepth),
 		events:   make(chan *QueueEvent, relayDepth),
+		// Shallower than the other two on purpose: these arrive one to
+		// a teleport rather than one to a packet, and a buffer that
+		// held a thousand of them would be holding the whole history
+		// of somewhere the avatar has been.
+		regions: make(chan *RegionChange, 32),
 	}
 	opts := agent.Options{
 		// Keeping the undecoded body is what lets one tap feed the
@@ -61,6 +76,10 @@ func Login(ctx context.Context, l agent.Login) (*Direct, error) {
 		// the right default for a one-shot client and meant a direct
 		// session never heard a UDPDeprecated message in its life.
 		OnEvent: d.event,
+		// And this is what a hosted session gets off the daemon's
+		// notice stream.  Nothing above Backend may be able to tell
+		// the two apart, which is the whole of why it is here.
+		OnRegionChange: d.regionChanged,
 	}
 	if d.a, err = agent.Connect(ctx, acct, opts); err != nil {
 		return nil, err
@@ -73,7 +92,7 @@ func Login(ctx context.Context, l agent.Login) (*Direct, error) {
 		Region:        d.a.RegionName(),
 		InventoryRoot: acct.InventoryRoot,
 		Channel:       d.a.ChannelVersion(),
-		Caps:          d.a.Caps.Names(),
+		Caps:          d.a.Caps().Names(),
 	}
 	return d, nil
 }
@@ -139,12 +158,32 @@ func (d *Direct) event(name string, body []byte) {
 	}
 }
 
-func (d *Direct) Info() *Info                { return d.info }
-func (d *Direct) Messages() <-chan *Message  { return d.messages }
-func (d *Direct) Events() <-chan *QueueEvent { return d.events }
-func (d *Direct) Done() <-chan struct{}      { return d.a.Done() }
-func (d *Direct) Err() error                 { return d.a.Err() }
-func (d *Direct) HasCap(name string) bool    { return d.a.HasCap(name) }
+// regionChanged turns the agent's word that the avatar has been moved
+// into what the daemon would have relayed.
+//
+// It runs on the dispatch goroutine, so it hands over and returns, for
+// the reason tap does.  Dropping is the wrong thing here and there is
+// nothing better available: a reader that missed this goes on believing
+// it is in a region it has left.  What makes it tolerable is the rate
+// -- one per teleport against one per packet -- and the buffer, which
+// is sized for that rather than for the relay.
+//
+// Info is deliberately not revised.  It is what was known at attach
+// time and says so; see Info.Region.
+func (d *Direct) regionChanged(region string, handle uint64) {
+	select {
+	case d.regions <- &RegionChange{Region: region, Handle: handle}:
+	default:
+	}
+}
+
+func (d *Direct) Info() *Info                         { return d.info }
+func (d *Direct) Messages() <-chan *Message           { return d.messages }
+func (d *Direct) Events() <-chan *QueueEvent          { return d.events }
+func (d *Direct) RegionChanges() <-chan *RegionChange { return d.regions }
+func (d *Direct) Done() <-chan struct{}               { return d.a.Done() }
+func (d *Direct) Err() error                          { return d.a.Err() }
+func (d *Direct) HasCap(name string) bool             { return d.a.HasCap(name) }
 
 // Close ends the session.  Unlike a hosted one there is nobody else
 // holding it, so this logs out rather than merely hanging up.
@@ -161,6 +200,17 @@ func (d *Direct) Send(ctx context.Context, m msg.Message, reliable bool) error {
 		return d.a.Send.SendReliable(ctx, m)
 	}
 	return d.a.Send.Send(ctx, m)
+}
+
+// Control sends one AgentUpdate carrying these flags and forgets them.
+//
+// Straight to the agent, where the hosted backend has a round trip in
+// the middle.  It is the agent's either way for the same reason: the
+// camera and the draw distance in that update are the session's, not a
+// caller's, and only the side holding them can send one that is right
+// about everything except the bit being asked for.
+func (d *Direct) Control(ctx context.Context, flags uint32) error {
+	return d.a.Control(ctx, flags)
 }
 
 func (d *Direct) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
@@ -231,6 +281,15 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 	return out, nil
 }
 
+// Land reads what this process's own agent was told.
+func (d *Direct) Land(ctx context.Context) (*Land, error) {
+	out := &Land{Overlay: d.a.Overlay()}
+	if p := d.a.Parcel(); p != nil {
+		out.Told = &Told{Name: p.Name, LocalID: p.LocalID}
+	}
+	return out, nil
+}
+
 func (d *Direct) Region(ctx context.Context) (*Region, bool, error) {
 	r, known := d.a.Region()
 	return &Region{
@@ -244,6 +303,31 @@ func (d *Direct) Region(ctx context.Context) (*Region, bool, error) {
 		CPUClass: r.CPUClass, CPURatio: r.CPURatio,
 		Protocols: r.Protocols,
 	}, known, nil
+}
+
+// Neighbours reads the agent's own circuits, and sets the flag first
+// when asked to.
+//
+// Straight off the agent, where the hosted backend has a round trip in
+// the middle.  There is no difference to a caller: the set is applied
+// before the list is read either way, so an answer describes the session
+// as it is after the change and not before it.
+func (d *Direct) Neighbours(ctx context.Context, set *bool) (*Neighbours, error) {
+	if set != nil {
+		d.a.SetNeighbours(*set)
+	}
+	held := d.a.Neighbours()
+	out := &Neighbours{On: d.a.NeighboursOn(), Held: make([]Neighbour, 0, len(held))}
+	for _, n := range held {
+		out.Held = append(out.Held, Neighbour{
+			Handle:    n.Handle,
+			Addr:      n.Addr,
+			Name:      n.Name,
+			Handshook: n.Handshook,
+			Heard:     n.Heard,
+		})
+	}
+	return out, nil
 }
 
 // Lock is nothing to do here.

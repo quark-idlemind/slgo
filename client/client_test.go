@@ -1157,3 +1157,63 @@ func TestHangingUpDoesNotCloseTheRelayUnderItsSender(t *testing.T) {
 		}
 	}
 }
+
+// TestARegionChangeArrivesOnBothChannels: it is a notice like any
+// other, and it is also the one a session cannot afford to miss.  Two
+// things want it -- something showing a person what happened, and the
+// bookkeeping that drops everything keyed on the region left behind --
+// and a notice stream has one reader, so sifting it out of that one
+// would make the second steal from the first.
+func TestARegionChangeArrivesOnBothChannels(t *testing.T) {
+	t.Parallel()
+	d, conn := attachFake(t)
+
+	// Sandbox Goguen's handle on Agni.
+	const goguen = uint64(1094014069892352)
+	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Notice{Notice: &pb.AgentEvent{
+		Kind:         pb.AgentEvent_REGION_CHANGED,
+		Detail:       "the avatar is now in Sandbox Goguen",
+		Region:       "Sandbox Goguen",
+		RegionHandle: goguen,
+	}}}
+
+	select {
+	case c := <-conn.RegionChanges():
+		if c.Region != "Sandbox Goguen" || c.Handle != goguen {
+			t.Errorf("the region change came out as %+v", c)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing came back on RegionChanges")
+	}
+
+	select {
+	case n := <-conn.Notices():
+		if n.Kind != pb.AgentEvent_REGION_CHANGED || n.Region != "Sandbox Goguen" {
+			t.Errorf("the notice came out as %+v", n)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a region change was taken off Notices by the channel beside it")
+	}
+}
+
+// TestOnlyARegionChangeIsOne: the notice stream carries disconnections
+// too, and a session that took one of those for a move would throw away
+// everything it holds every time the circuit blinked.
+func TestOnlyARegionChangeIsOne(t *testing.T) {
+	t.Parallel()
+	d, conn := attachFake(t)
+
+	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Notice{Notice: &pb.AgentEvent{
+		Kind: pb.AgentEvent_DISCONNECTED, Detail: "the circuit went away",
+	}}}
+	select {
+	case <-conn.Notices():
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing came back on Notices")
+	}
+	select {
+	case c := <-conn.RegionChanges():
+		t.Errorf("a disconnection came out as a region change: %+v", c)
+	default:
+	}
+}

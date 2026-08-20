@@ -26,6 +26,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/xml"
 	"fmt"
@@ -73,6 +74,12 @@ var (
 	testSomebody  = msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000001")
 )
 
+// testRegionHandle is where the fake says the avatar is standing: grid
+// square (1, 1), packed the way every message that names a region packs
+// one.  Named because a teleport is addressed by handle, so a test about
+// one has to be able to say which region it means.
+const testRegionHandle = 1099511628032
+
 // fakeGrid is an sl.Backend with nothing behind it.
 //
 // Every field is read under the lock, so a test may change an answer
@@ -85,6 +92,7 @@ type fakeGrid struct {
 
 	msgs     chan *sl.Message
 	events   chan *sl.QueueEvent
+	regions  chan *sl.RegionChange
 	done     chan struct{}
 	doneOnce sync.Once
 
@@ -93,6 +101,22 @@ type fakeGrid struct {
 	// test can have the far end answer.
 	sent   []msg.Message
 	onSend func(msg.Message)
+
+	// land is what Land answers, and landErr a daemon that will not.
+	land    *sl.Land
+	landErr error
+
+	// controls is every control flag the session has asked for, and
+	// onControl is the same hook for them that onSend is for messages.
+	//
+	// They are kept apart because they are apart: a control flag is not
+	// a message and does not go through Send.  An AgentUpdate carries
+	// the camera as well as the flags, so only whoever owns the camera
+	// can build one, and a client asks for the bit instead -- which is
+	// why sitting on the ground and standing up leave nothing at all in
+	// sent.  See sl.controlUntil and agent.Control.
+	controls  []uint32
+	onControl func(uint32)
 
 	presence *sl.Presence
 	region   *sl.Region
@@ -110,6 +134,13 @@ type fakeGrid struct {
 	// it over.
 	caps     map[string]string
 	lockedBy string
+
+	// neighbours is what the daemon holds of the regions around this
+	// one, changed by a set the way the real backends change it:
+	// turning them off drops the circuits rather than only refusing
+	// the next offer.
+	neighbours    sl.Neighbours
+	neighboursErr error
 
 	presenceErr, objectsErr, regionErr, friendsErr, sendErr, capErr error
 
@@ -166,10 +197,11 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 			Channel:       "slsh test 1.0",
 			Caps:          []string{"SimulatorFeatures", "ViewerAsset", "LSLSyntax"},
 		},
-		msgs:   make(chan *sl.Message),
-		events: make(chan *sl.QueueEvent),
-		done:   make(chan struct{}),
-		caps:   map[string]string{},
+		msgs:    make(chan *sl.Message),
+		events:  make(chan *sl.QueueEvent),
+		regions: make(chan *sl.RegionChange),
+		done:    make(chan struct{}),
+		caps:    map[string]string{},
 		presence: &sl.Presence{
 			Position:     msg.Vector3{X: 128, Y: 128, Z: 25},
 			LookAt:       msg.Vector3{X: 1},
@@ -472,6 +504,18 @@ func (f *fakeGrid) Sent() []msg.Message {
 	return append([]msg.Message(nil), f.sent...)
 }
 
+// Controls is every control flag the session has asked for, in order.
+//
+// There may be more of them than a command asked for and that is not a
+// fault: a flag is held rather than sent once, so a confirmation that
+// takes longer than half a second is answered with the same flag again.
+// See sl.controlUntil.
+func (f *fakeGrid) Controls() []uint32 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]uint32(nil), f.controls...)
+}
+
 // Relay hands a message to the session as though the grid had sent it.
 //
 // Unlike the one in package sl this does not wait for the reader: the
@@ -505,6 +549,121 @@ func (f *fakeGrid) RelayEvent(t *testing.T, name, body string) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("nothing read the event relay: is a session attached to this backend?")
 	}
+}
+
+// RelayRegion tells the session the avatar is in another region, as the
+// daemon does once it has followed a teleport somewhere.
+//
+// It is the only way the news arrives.  Polling for the position would
+// answer with the new region as well, so a shell that has to act at the
+// moment -- print a line, drop what it holds -- has to be told rather
+// than to look.
+func (f *fakeGrid) RelayRegion(t *testing.T, region string, handle uint64) {
+	t.Helper()
+	select {
+	case f.regions <- &sl.RegionChange{Region: region, Handle: handle}:
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing read the region relay: is a session attached to this backend?")
+	}
+}
+
+// AnswerTeleport makes the fake take the avatar to another region when
+// it is asked to.
+//
+// Two things have to happen or a teleport would never return.  The
+// finish arrives on the EVENT QUEUE rather than on the circuit, which is
+// where Second Life sends it and what a fake answering on the circuit
+// would let a session get away with reading.  And the presence has to
+// start answering with the new region afterwards, because the finish
+// says only that the simulator being left has let go: what says the
+// avatar arrived is this session reporting the region the finish named.
+//
+// Whatever the fake was already answering is answered as well, since a
+// teleport by name asks the map first and there is one hook between
+// them.
+func (f *fakeGrid) AnswerTeleport(t *testing.T, region string, handle uint64) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before := f.onSend
+	f.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		// Both ways of asking, since an accepted lure is answered with
+		// the same finish and differs only in what was sent.
+		switch m.(type) {
+		case *msg.TeleportLocationRequest, *msg.TeleportLureRequest:
+		default:
+			return
+		}
+		f.RelayEvent(t, "TeleportFinish", teleportFinish(handle))
+		f.mu.Lock()
+		f.presence.Region, f.presence.RegionHandle = region, handle
+		f.mu.Unlock()
+	}
+}
+
+// AnswerLocalTeleport stands the avatar where a teleport inside this
+// region asked it to stand.
+//
+// A move within a region is answered by the position agreeing and by
+// nothing else -- there is no reply to a TeleportLocationRequest that
+// stays here -- so a fake that recorded the message and left the
+// presence alone would make every such teleport wait out its whole
+// timeout.  Most tests avoid it by asking for the position the fake is
+// already at; one that moves the avatar wants this.
+func (f *fakeGrid) AnswerLocalTeleport() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before := f.onSend
+	f.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		tp, ok := m.(*msg.TeleportLocationRequest)
+		if !ok {
+			return
+		}
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if tp.Info.RegionHandle == f.presence.RegionHandle {
+			f.presence.Position = tp.Info.Position
+		}
+	}
+}
+
+// AnswerTeleportWith makes the fake refuse instead, with a body of the
+// shape Agni sends: a key in one block and a sentence in the other.
+func (f *fakeGrid) AnswerTeleportWith(t *testing.T, body string) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before := f.onSend
+	f.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		switch m.(type) {
+		case *msg.TeleportLocationRequest, *msg.TeleportLureRequest:
+			f.RelayEvent(t, "TeleportFailed", body)
+		}
+	}
+}
+
+// teleportFinish is the grid saying the region it has handed this avatar
+// to.  The handle is LLSD binary, eight bytes big endian; the address
+// and the seed beside it in a real one are for whoever moves the
+// circuit, which is the daemon, and nothing here reads them.
+func teleportFinish(handle uint64) string {
+	h := binary.BigEndian.AppendUint64(nil, handle)
+	return `<llsd><map><key>Info</key><array><map>` +
+		`<key>AgentID</key><uuid>` + testMe.String() + `</uuid>` +
+		`<key>RegionHandle</key><binary>` +
+		base64.StdEncoding.EncodeToString(h) + `</binary>` +
+		`<key>SimAccess</key><integer>13</integer>` +
+		`<key>SimPort</key><integer>13032</integer>` +
+		`</map></array></map></llsd>`
 }
 
 // AnswerNames makes the fake reply to UUIDNameRequest the way a
@@ -565,6 +724,43 @@ func (f *fakeGrid) AnswerProfile(t *testing.T, replies ...msg.Message) {
 		for _, r := range replies {
 			f.Relay(t, r)
 		}
+	}
+}
+
+// AnswerMap makes the fake answer a MapNameRequest with these blocks and
+// the end of the list after them.
+//
+// The end marker is added here rather than left to the caller because
+// every reply has one and nothing returns without it: a fake that
+// answered with regions alone would leave every lookup waiting out its
+// deadline.  Its shape is the measured one -- no coordinates, an access
+// code of 255, and the query lowercased with its last character taken
+// off -- so that a command reading it as a region would be caught.
+func (f *fakeGrid) AnswerMap(t *testing.T, blocks ...msg.MapBlockReply_Data) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		q, ok := m.(*msg.MapNameRequest)
+		if !ok {
+			return
+		}
+		asked := strings.ToLower(strings.TrimRight(string(q.NameData.Name), "\x00"))
+		if asked != "" {
+			asked = asked[:len(asked)-1]
+		}
+		r := &msg.MapBlockReply{Data: append(append([]msg.MapBlockReply_Data(nil), blocks...),
+			msg.MapBlockReply_Data{Name: append([]byte(asked), 0), Access: 255})}
+		r.AgentData.AgentID = testMe
+		f.Relay(t, r)
+	}
+}
+
+// mapBlock is one region as the map describes it, with the fields Second
+// Life sends as zero left as zero.
+func mapBlock(name string, x, y uint16, access uint8) msg.MapBlockReply_Data {
+	return msg.MapBlockReply_Data{
+		X: x, Y: y, Name: append([]byte(name), 0), Access: access,
 	}
 }
 
@@ -773,6 +969,119 @@ func (f *fakeGrid) AnswerLinking(t *testing.T) {
 	}
 }
 
+// AnswerPosture makes the fake sit the avatar down and stand it up
+// again, in the three ways a simulator does it.
+//
+// Three, because the two kinds of sit share nothing on the wire.  An
+// object sit is a message, and the answer to it is this avatar's own
+// object update coming back with the seat's local id in it: there is no
+// reply of any other kind, and that reparenting is what a sit waits
+// for.  A ground sit is a control flag answered by nothing whatever
+// except the animation list, so a fake that spoke only the first would
+// leave every ground sit waiting out its timeout and passing for a
+// reason that has nothing to do with the command.  A stand is another
+// flag, which un-parents from an object sit and stops the animation
+// from a ground one.
+//
+// mine is the local id the region has given this avatar.  It rides in
+// that same update, which is why nothing need have described the avatar
+// beforehand: a session that has not been told which object it is
+// cannot read its own parent, and the update that seats it says both
+// things at once.
+func (f *fakeGrid) AnswerPosture(t *testing.T, mine uint32) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	before := f.onSend
+	f.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		r, ok := m.(*msg.AgentRequestSit)
+		if !ok {
+			return
+		}
+		f.mu.Lock()
+		var seat uint32
+		for _, o := range f.objects {
+			if o.ID == r.TargetObject.TargetID {
+				seat = o.Local
+			}
+		}
+		f.mu.Unlock()
+		// An id that names nothing here is answered with nothing at
+		// all, which is not what a simulator does -- it refuses in
+		// words, and AnswerSitRefused is that -- but it is what a
+		// request nobody answered looks like.
+		if seat == 0 {
+			return
+		}
+		f.Relay(t, parentedTo(mine, seat))
+	}
+
+	f.onControl = func(flags uint32) {
+		switch {
+		case flags&agent.ControlSitOnGround != 0:
+			f.Relay(t, animating(agent.AnimSitGroundConstrained))
+		case flags&agent.ControlStandUp != 0:
+			// Both halves of getting up, since one flag does it from
+			// either kind of sit and this does not track which the
+			// avatar is in: the parent goes back to nothing, and the
+			// animation list comes back with the stand in it and no sit.
+			f.Relay(t, parentedTo(mine, 0))
+			f.Relay(t, animating(agent.AnimStand))
+		}
+	}
+}
+
+// AnswerSitRefused makes the fake refuse a sit the way Agni does: an
+// alert, in its own words, ending in the NUL byte that has to be
+// trimmed off before anybody reads it.
+func (f *fakeGrid) AnswerSitRefused(t *testing.T, said string) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before := f.onSend
+	f.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		if _, ok := m.(*msg.AgentRequestSit); !ok {
+			return
+		}
+		r := &msg.AlertMessage{}
+		r.AlertData.Message = append([]byte(said), 0)
+		f.Relay(t, r)
+	}
+}
+
+// parentedTo is this avatar's own object update, saying what it is
+// sitting on: a seat's local id, or zero for the ground and for
+// standing.
+func parentedTo(mine, seat uint32) *msg.ObjectUpdate {
+	return &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{
+		FullID: testMe, ID: mine, ParentID: seat,
+	}}}
+}
+
+// animating is the animation list for this avatar.
+//
+// The whole list every time, because that is how it arrives: an
+// animation that has stopped is simply absent from the next one, and
+// that absence is the only way standing up from a ground sit is ever
+// heard about.
+func animating(ids ...msg.UUID) *msg.AvatarAnimation {
+	m := &msg.AvatarAnimation{}
+	m.Sender.ID = testMe
+	for i, id := range ids {
+		m.AnimationList = append(m.AnimationList, msg.AvatarAnimation_AnimationList{
+			AnimID: id, AnimSequenceID: int32(i + 1),
+		})
+	}
+	return m
+}
+
 // heldItem is one thing inside a fake object and, when it is a script,
 // what it will do about being started or stopped.
 type heldItem struct {
@@ -928,6 +1237,25 @@ func taskInventoryFile(task msg.UUID, held []*heldItem) []byte {
 
 func (f *fakeGrid) Info() *sl.Info { return f.info }
 
+// Control takes a control flag the way a daemon does: it is recorded,
+// and whatever the test has arranged to happen next happens outside the
+// lock, since answering usually means relaying something back.
+//
+// The flag itself is not turned into an AgentUpdate here.  What builds
+// one is the thing that owns the camera, and nothing in this package
+// does; the point of the hook is that a ground sit and a stand have no
+// other way of being answered at all.
+func (f *fakeGrid) Control(ctx context.Context, flags uint32) error {
+	f.mu.Lock()
+	f.controls = append(f.controls, flags)
+	on := f.onControl
+	f.mu.Unlock()
+	if on != nil {
+		on(flags)
+	}
+	return nil
+}
+
 func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	f.mu.Lock()
 	err, onSend := f.sendErr, f.onSend
@@ -948,6 +1276,8 @@ func (f *fakeGrid) Messages() <-chan *sl.Message  { return f.msgs }
 func (f *fakeGrid) Events() <-chan *sl.QueueEvent { return f.events }
 func (f *fakeGrid) Done() <-chan struct{}         { return f.done }
 func (f *fakeGrid) Err() error                    { return nil }
+
+func (f *fakeGrid) RegionChanges() <-chan *sl.RegionChange { return f.regions }
 
 func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Presence, error) {
 	f.mu.Lock()
@@ -983,6 +1313,22 @@ func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, e
 	return out, nil
 }
 
+// land is what the fake session was told about the ground it is on,
+// and landErr is a daemon that will not answer.  Both are set by the
+// tests that care; the default is a session that arrived before
+// anything was listening, which is the ordinary case for a shell.
+func (f *fakeGrid) Land(ctx context.Context) (*sl.Land, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.landErr != nil {
+		return nil, f.landErr
+	}
+	if f.land != nil {
+		return f.land, nil
+	}
+	return &sl.Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
+}
+
 func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -990,6 +1336,23 @@ func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 		return nil, false, f.regionErr
 	}
 	return f.region, true, nil
+}
+
+func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.neighboursErr != nil {
+		return nil, f.neighboursErr
+	}
+	if set != nil {
+		f.neighbours.On = *set
+		if !*set {
+			f.neighbours.Held = nil
+		}
+	}
+	n := f.neighbours
+	n.Held = append([]sl.Neighbour(nil), f.neighbours.Held...)
+	return &n, nil
 }
 
 func (f *fakeGrid) Flush(ctx context.Context) (int, error) { return 0, nil }
@@ -1067,6 +1430,7 @@ func (f *fakeGrid) Close() error {
 	f.doneOnce.Do(func() {
 		close(f.msgs)
 		close(f.events)
+		close(f.regions)
 		close(f.done)
 	})
 	return nil

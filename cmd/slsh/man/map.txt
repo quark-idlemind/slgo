@@ -1,0 +1,268 @@
+map draws the other avatars as characters on a grid.  It is the half of
+the question "who" cannot answer: a listing says somebody is twenty
+metres away and nothing at all about which way, and three people at
+twenty metres are a crowd in one direction and a scattering in another.
+
+There are two pictures.  By default it is the ground around this avatar,
+sixty-four metres across, with the avatar in the middle of it.  With
+--region it is the whole region -- 256 metres -- with the avatar
+wherever in it the avatar really is.
+
+# The picture is wider than it is tall, which is what makes it look square
+
+A character cell is taller than it is wide, so a grid drawn with as many
+columns as rows comes out on the screen taller than it is wide, and a
+square region looks like a doorway.  That matters more here than it
+would in a listing, because the whole point of a picture is that the eye
+reads the shape without doing any arithmetic.
+
+So the rows are what is chosen and the columns follow: as many as it
+takes for a square of ground to look square, which is the rows
+multiplied by the shape of a cell.  How much taller than wide a cell is
+belongs to the font somebody reads a terminal in rather than to
+anything here, so it is a setting -- map_ratio -- and it is written the
+way it is measured, height first.  The default is 7:3, a cell seven
+high and three wide, which is what the mono font this was measured in
+turned out to be.  Twice as tall as wide was the guess before anybody
+measured, and "set map_ratio 2:1" is how to have that back.
+
+With the sixteen rows it draws unless told otherwise, 7:3 is 16 * 7 / 3
+= 37 columns, rounded from 37.3: in the region view that is 256/16 = 16
+metres to a row and 256/37, a shade under 7, to a column, and in the
+close view 4 metres to a row and about 1.7 to a column.
+
+The line under the grid says how much ground the picture covers -- "64m
+x 64m" -- because that is the number somebody reads a map for, and
+because a picture with no size under it is a drawing.  It is the same
+number both ways, which is the point of there being more columns than
+rows: the picture is a square of the world however finely it is drawn.
+More rows buy detail rather than reach, so the size does not change when
+--rows does.
+
+The ratio itself is not printed.  It is a fact about somebody's font and
+not about the region, it is the same for every picture they will ever
+draw, and the numbers that are printed are the ones a person wanted
+when they asked for a map.
+
+# The marks
+
+	*   this avatar
+	o   somebody within three metres of this avatar's height
+	^   somebody higher than that
+	v   somebody lower than that
+
+Three metres is about one storey: an avatar is a couple of metres tall
+and a floor of a building is three or so, so an "o" is somebody who
+could be walked over to and a "^" is somebody on the roof.  It is the
+map_level setting, and whatever it is set to is the number in the line
+under the grid -- so a picture always says how much "level" it meant.
+The height is compared with this avatar's in both views, so a picture of
+the whole region still says who is up in a skybox.
+
+A mark is drawn in colour when it is somebody on the friend list, and
+the line under the grid says so when there is any colour in the picture
+to say it about.  See "a friend is picked out in colour" below.
+
+Two or more people in one cell are drawn as the count -- 2 to 9 -- and
+ten or more as a "+", because there is no digit for ten and a 9 there
+would be a lie.  Somebody standing in the same cell as this avatar is
+covered by the star, which wins its own cell: a picture whose reader
+cannot find themselves in it is a picture of nowhere.  The line under
+the grid says how many are under the star, since somebody hidden by a
+mark is exactly the person being looked for.
+
+# A friend is picked out in colour
+
+The question a picture is usually being read for is not "who is here"
+-- who answers that -- but "where is the person I am looking for", and
+most of the time that person is on the friend list.  So a friend's mark
+is drawn in colour, and everybody else's is left alone.  One thing
+picked out is what makes picking a thing out worth doing: the star is
+never coloured, however much company it has, and neither is anybody
+else.
+
+Green unless map_friend_colour says otherwise.  The colours are named
+rather than spelled as escape sequences -- black, red, green, yellow,
+blue, magenta, cyan, white, and "bright" before any of them -- because
+a name is a thing that can be checked and refused where it was typed,
+and because "set map_friend_colour bright cyan" is a sentence.  The
+line under the grid says the colour's own name, in that colour, so the
+picture always names the word to type to change it.
+
+A cell with several people in it is drawn as a count, and the count is
+coloured when any one of them is a friend.  "There is a friend in that
+cell" is both true and the thing being looked for; which of the two the
+mark would otherwise have been is not.
+
+Somebody outside the picture is coloured in the line that names them
+underneath, for the same reason: it is the same fact about the same
+person, and that line is exactly where the eye goes when the friend is
+not among the marks.  Somebody standing in the same cell as this avatar
+is under the star and so has no mark of their own to colour; the count
+under the grid still says they are there.
+
+The colour only ever reaches a terminal.  A picture written to a file
+-- "map > listing" -- and a picture from "slsh -c" or "slsh -f" or a
+piped session have no escape sequences in them at all, since a colour
+in a file is not a colour, it is rubbish in the middle of the text, and
+that file is usually on its way back through ". listing".  NO_COLOR is
+honoured as the convention has it: set it to anything at all, "0"
+included, and nothing is coloured.  When there is no colour there is no
+line explaining one either, and the picture is character for character
+the picture it was before there was any colour to have.
+
+# North is up and east is right
+
+Which is what every map does, and what the region's own coordinates
+already mean: y grows northward and x eastward, so the top of the
+picture is the high end of y and the right of it the high end of x.
+
+Anybody the picture does not reach is counted and named underneath it,
+with how far away they are, rather than being drawn at the edge.  An
+avatar drawn at the edge is a claim about where they are standing, and
+that claim would be false.  The names stop at eight and the rest are a
+count, because naming forty people under a grid is "who" printed twice.
+
+# Sixty-four metres is a judgement
+
+Nothing chooses the region view's scale -- a region is 256 metres and
+that is that -- but the close view has to cover something, and 64 metres
+is a choice rather than a measurement.  It is comfortably more than the
+twenty metres ordinary chat carries and rather less than the draw
+distance usually is, so it holds the people somebody is actually dealing
+with.  A picture that covered everything the session had been told about
+would put all of them in one cell in the middle.
+
+--span changes it for one picture, in metres across, and --rows changes
+how many rows either picture is drawn in.  --region has no span to
+change and says so rather than ignoring one.
+
+# What can be set
+
+	map_rows           how many rows a picture is drawn in
+	map_span           how much ground the close picture covers, in metres
+	map_ratio          the shape of a character cell, height first
+	map_level          how far above or below still counts as level
+	map_friend_colour  the colour a friend is drawn in
+
+"set" lists them with the values they have now, and "set NAME VALUE"
+changes one and writes it to the settings file, so that the next picture
+and every picture after it is drawn that way.  --rows and --span
+override the first two for one command and change nothing, which is what
+a flag is for.
+
+# It numbers nobody
+
+Every listing that prints a number down the left -- who, friends, lookup
+-- replaces what a number means for the commands that take one.  A
+picture cannot be numbered usefully, since two people in one cell are
+one character, so this deliberately leaves the last listing alone: after
+a map, "im 2" still means the second line of whatever printed one.
+
+# What it cannot show
+
+The avatars are the ones the simulator has described to this session,
+which is what is within the draw distance and not everyone in the
+region.  So --region draws the whole region and can only mark the people
+this session has been told about: an empty corner is a corner nobody has
+described, not a corner with nobody in it.  Use "where" and the count
+under the grid together rather than reading the blank cells as fact.
+
+The data a mini-map in a viewer is drawn from is CoarseLocationUpdate,
+which does carry every avatar in the region.  slgod reads its own entry
+out of it, to keep the camera with an avatar that walked, and keeps
+nothing about anybody else -- so there is nothing here to draw a whole
+region from yet.  It would also be a coarser picture than this one: its
+heights are one byte of four metre steps that stops at 1020 for
+everything above it, which is a skybox reported as level with the roofs.
+
+# Examples
+
+The ground around this avatar, with somebody up a ladder, somebody in a
+cellar, two people close enough together to share a cell, and one
+friend among them:
+
+	map
+
+	around you in Pelmar Reach at 128, 128, 25
+	+-------------------------------------+
+	|                                     |
+	|                         v           |
+	|                                     |
+	|                                     |
+	|             o                       |
+	|                                     |
+	|                    o                |
+	|                  *                  |
+	|                                     |
+	|                ^                    |
+	|                            2        |
+	|                                     |
+	|                                     |
+	|                                     |
+	|                                     |
+	|                                     |
+	+-------------------------------------+
+	64m x 64m; north is up, east is right
+	* you   o within 3m of your height   ^ higher   v lower
+	a digit is that many in one cell, and + is more than nine
+	green is somebody on your friend list
+	6 avatars in the picture
+	1 outside it: Orla Pennywort 99m
+
+The friend is the "o" three rows above the star and five columns to the
+left of it: twelve metres north, which is three rows of four metres, and
+eight west, which is a little over four and a half columns and lands in
+the fifth.  On a terminal it is green and the eye finds it without being
+told; this page has no colour in it, so it is said here instead.
+
+The same moment as a picture of the region.  A cell is now a shade under
+7 metres by 16 rather than about 1.7 by 4, so it reaches the
+one who was too far away for the close picture and loses the difference
+between this avatar and the neighbour standing a few metres from it, who
+is now under the star:
+
+	map --region
+
+	all of Pelmar Reach at 128, 128, 25
+	+-------------------------------------+
+	|                                     |
+	|                  o                  |
+	|                                     |
+	|                                     |
+	|                                     |
+	|                                     |
+	|                    v                |
+	|                 o*                  |
+	|                 ^   2               |
+	|                                     |
+	|                                     |
+	|                                     |
+	|                                     |
+	|                                     |
+	|                                     |
+	|                                     |
+	+-------------------------------------+
+	256m x 256m; north is up, east is right
+	* you   o within 3m of your height   ^ higher   v lower
+	a digit is that many in one cell, and + is more than nine
+	green is somebody on your friend list
+	7 avatars in the picture
+	1 of them is where you are, under the *
+
+The friend has not moved -- twelve metres north is inside one sixteen
+metre row here, and eight metres west is one column -- so the same
+person is the "o" immediately to the left of the star, and is the green
+one again.
+
+A bigger picture, for a terminal with the room for it, and a smaller
+square of ground in more detail:
+
+	map --rows 24
+	map --span 24
+
+See also: set for the settings above and everything else slsh keeps,
+who for the same people as a listing with their distances and the
+numbers other commands take, where for this avatar's own position, look
+for what the region says about itself, and tp for going to a position
+rather than reading one.

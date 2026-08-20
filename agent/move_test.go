@@ -1,0 +1,623 @@
+package agent
+
+import (
+	"context"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"runtime"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/quark-idlemind/slgo/llsd"
+	"github.com/quark-idlemind/slgo/msg"
+)
+
+// fakeRegion is a simulator and the HTTP half that goes with it: a seed
+// capability naming this region's own event queue, and the queue.
+//
+// Two of these are what a move is tested against.  Everything that has
+// to change when the avatar arrives somewhere else -- the address, the
+// sequence numbers, the capability URLs, the queue -- is different
+// between them, so a move that half worked shows up as one of them still
+// pointing at the region left behind.
+type fakeRegion struct {
+	sim   *fakeSim
+	eq    *eqServer
+	http  *httptest.Server
+	polls atomic.Int64
+}
+
+func newRegion(t *testing.T, name string, id msg.UUID) *fakeRegion {
+	t.Helper()
+
+	r := &fakeRegion{sim: newFakeSim(t), eq: &eqServer{}}
+	r.sim.regionNm = name
+	r.sim.regionID = id
+
+	queue := r.eq.handler()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/seed", func(w http.ResponseWriter, _ *http.Request) {
+		body, err := llsd.Encode(map[string]any{
+			EventQueueCap:       r.http.URL + "/event",
+			"SimulatorFeatures": r.http.URL + "/features",
+		})
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		w.Write(body)
+	})
+	mux.HandleFunc("/event", func(w http.ResponseWriter, req *http.Request) {
+		r.polls.Add(1)
+		// A simulator holds a poll open until it has something to say.
+		// eqServer answers an empty one at once, and a poll loop
+		// spinning at that rate is enough on its own to move a
+		// goroutine count around.
+		time.Sleep(20 * time.Millisecond)
+		queue.ServeHTTP(w, req)
+	})
+	r.http = httptest.NewServer(mux)
+
+	go r.sim.run()
+	t.Cleanup(func() {
+		r.http.Close()
+		r.sim.close()
+	})
+	return r
+}
+
+func (r *fakeRegion) seed() string { return r.http.URL + "/seed" }
+
+func (r *fakeRegion) saw(name string) bool { return r.count(name) > 0 }
+
+func (r *fakeRegion) count(name string) int {
+	n := 0
+	for _, seen := range r.sim.got() {
+		if seen == name {
+			n++
+		}
+	}
+	return n
+}
+
+// twoRegions stands a session up in the first of two regions.
+func twoRegions(t *testing.T, opts Options) (*Agent, *fakeRegion, *fakeRegion) {
+	t.Helper()
+
+	from := newRegion(t, "the region left", msg.MustParseUUID("12b57e57-7e57-c0de-efe3-b327af5dfe62"))
+	to := newRegion(t, "the region arrived at", msg.MustParseUUID("1c117e57-7e57-c0de-da64-e42aeda52a0a"))
+
+	// Two neighbouring grid squares, and an avatar standing at a
+	// different spot in each.  Every one of those is something a move
+	// has to carry across, and two regions that agreed about them would
+	// hide a move that carried none of them.
+	from.sim.arrivalAt(msg.Vector3{X: 188.4, Y: 202.8, Z: 26.3}, msg.RegionHandle(43648, 43648))
+	to.sim.arrivalAt(msg.Vector3{X: 12.5, Y: 240.25, Z: 2001}, msg.RegionHandle(43649, 43648))
+
+	acct := testAccount(from.sim)
+	acct.SeedCapability = from.seed()
+	if opts.Timeout == 0 {
+		opts.Timeout = 5 * time.Second
+	}
+	a, err := Connect(context.Background(), acct, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	return a, from, to
+}
+
+// TestAMoveTakesTheSessionToTheOtherSimulator: the whole of stage 2 in
+// one assertion -- the session handshakes at the new address and answers
+// with the new region afterwards.
+func TestAMoveTakesTheSessionToTheOtherSimulator(t *testing.T) {
+	a, from, to := twoRegions(t, Options{})
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	if !to.saw("UseCircuitCode") || !to.saw("CompleteAgentMovement") {
+		t.Errorf("the new simulator saw %v", to.sim.got())
+	}
+	if got := a.RegionName(); got != to.sim.regionNm {
+		t.Errorf("region = %q, want %q", got, to.sim.regionNm)
+	}
+	if got := a.RegionHandle(); got == 0 {
+		t.Error("no region handle after the move")
+	}
+	// The capabilities are the new region's, fetched from the seed the
+	// move was given.
+	if u, _ := a.Caps().Get(EventQueueCap); !strings.HasPrefix(u, to.http.URL) {
+		t.Errorf("%s = %q, want one of %s", EventQueueCap, u, to.http.URL)
+	}
+	// The circuit was opened once at each simulator: the same circuit
+	// code, which is what makes this a teleport rather than a relog,
+	// but not a second claim on the circuit already open.
+	if n := from.count("UseCircuitCode"); n != 1 {
+		t.Errorf("the region left saw UseCircuitCode %d times", n)
+	}
+	select {
+	case <-a.Done():
+		t.Fatalf("the session ended: %v", a.Err())
+	default:
+	}
+}
+
+// TestTheThingsHoldingTheCircuitSurviveAMove: six places outside this
+// package hold a.Send, a.Recv or a.Disp and none of them is told a
+// teleport happened, so a move must change the socket underneath them
+// rather than replace them.
+func TestTheThingsHoldingTheCircuitSurviveAMove(t *testing.T) {
+	a, from, to := twoRegions(t, Options{SkipCaps: true})
+	send, recv, disp := a.Send, a.Recv, a.Disp
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if a.Send != send || a.Recv != recv || a.Disp != disp {
+		t.Fatal("a move replaced the sender, receiver or dispatcher; " +
+			"everything holding one of them is now writing nowhere")
+	}
+
+	// And what goes into the one they are all holding comes out at the
+	// new simulator.
+	if err := send.Send(context.Background(), &msg.AgentPause{}); err != nil {
+		t.Fatal(err)
+	}
+	to.sim.waitSeen(t, "AgentPause", 5*time.Second)
+	if from.saw("AgentPause") {
+		t.Error("the message went to the region the avatar left")
+	}
+}
+
+// TestTheNewSimulatorsSequenceNumbersAreNotTakenForRetransmissions: the
+// new simulator numbers its packets from one, and the dispatcher's ring
+// still holds the old simulator's one.  Without Dispatcher.Forget its
+// handshake is dropped as a retransmission and the move never completes
+// at all; this then goes on to check a message after the handshake,
+// under a number the old region certainly used.
+func TestTheNewSimulatorsSequenceNumbersAreNotTakenForRetransmissions(t *testing.T) {
+	a, from, to := twoRegions(t, Options{SkipCaps: true})
+
+	var stats atomic.Int64
+	if err := a.Handle("SimStats", func(*msg.Packet) { stats.Add(1) }); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fill the ring with the old region's numbering, well past
+	// anything the new simulator will reach during its handshake.
+	const filled = 30
+	for i := 0; i < filled; i++ {
+		from.sim.send(&msg.SimStats{}, 0)
+	}
+	waitFor(t, "the old region's packets to arrive", func() bool {
+		return stats.Load() >= filled
+	})
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	was := stats.Load()
+	to.sim.send(&msg.SimStats{}, 0)
+	waitFor(t, "the new region's packet to be delivered", func() bool {
+		return stats.Load() > was
+	})
+}
+
+// TestAReliableMessageToTheOldSimulatorIsNotResentToTheNewOne: a
+// reliable message in flight when the avatar leaves will never be
+// acknowledged, and the retransmission would arrive at a simulator it
+// was not addressed to and was never true of.
+func TestAReliableMessageToTheOldSimulatorIsNotResentToTheNewOne(t *testing.T) {
+	t.Parallel()
+
+	a, from, to := twoRegions(t, Options{SkipCaps: true})
+
+	// Let the handshake settle before the old simulator goes quiet, so
+	// that what is left unacknowledged is only what is sent below.
+	from.sim.waitSeen(t, "RegionHandshakeReply", 5*time.Second)
+	time.Sleep(200 * time.Millisecond)
+
+	from.sim.mu.Lock()
+	from.sim.silent = true
+	from.sim.mu.Unlock()
+
+	if err := a.Send.SendReliable(context.Background(), &msg.AgentPause{}); err != nil {
+		t.Fatal(err)
+	}
+	from.sim.waitSeen(t, "AgentPause", 5*time.Second)
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	// Long enough for the sender's first retransmission, which is one
+	// timeout after the message went out.
+	time.Sleep(4500 * time.Millisecond)
+	if to.saw("AgentPause") {
+		t.Errorf("a message meant for the region left was resent into the new one: %v",
+			to.sim.got())
+	}
+}
+
+// TestASimulatorThatNeverCompletesTheMovementEndsTheSession: there is
+// nothing to go back to.  The origin hands the agent off before it says
+// where to, so a circuit restored to it would be a circuit to a region
+// the avatar is not in -- which reads as a healthy session and is not
+// one.  Ending it says which move failed, and lets whatever hosts the
+// session log in again rather than wait out the watchdog.
+func TestASimulatorThatNeverCompletesTheMovementEndsTheSession(t *testing.T) {
+	t.Parallel()
+
+	a, _, to := twoRegions(t, Options{SkipCaps: true, Timeout: 500 * time.Millisecond})
+	to.sim.mu.Lock()
+	to.sim.noMovement = true
+	to.sim.mu.Unlock()
+
+	err := a.moveTo(context.Background(), to.sim.addr(), to.seed())
+	if err == nil {
+		t.Fatal("a simulator that never answered was taken for a successful move")
+	}
+	for _, want := range []string{"move to", to.sim.addr().String(), "AgentMovementComplete"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not say %q", err, want)
+		}
+	}
+
+	select {
+	case <-a.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the session outlived the move that failed")
+	}
+	if got := a.Err(); got == nil || !strings.Contains(got.Error(), "move to") {
+		t.Errorf("Err = %v, want the move that ended it", got)
+	}
+}
+
+// TestADialThatFailsLeavesTheSessionWhereItWas: the dial is first
+// because it is the one failure that changes nothing.
+func TestADialThatFailsLeavesTheSessionWhereItWas(t *testing.T) {
+	a, from, _ := twoRegions(t, Options{SkipCaps: true})
+
+	// An address with an IP that is neither four bytes nor sixteen.
+	err := a.moveTo(context.Background(), &net.UDPAddr{IP: net.IP{1, 2, 3}, Port: 1}, "")
+	if err == nil {
+		t.Fatal("moveTo accepted an address it cannot have dialled")
+	}
+	select {
+	case <-a.Done():
+		t.Fatalf("a failed dial ended the session: %v", a.Err())
+	default:
+	}
+
+	if err := a.Send.Send(context.Background(), &msg.AgentPause{}); err != nil {
+		t.Fatal(err)
+	}
+	from.sim.waitSeen(t, "AgentPause", 5*time.Second)
+}
+
+// TestASessionThatHasEndedIsNotMoved: Close closes done, cancels,
+// closes the socket and then waits on the session's goroutines.  A move
+// is the first thing here that spawns after Connect returned, so a move
+// racing a Close would add the new region's poll to that group during
+// the wait -- which panics -- and would dial a connection nothing would
+// ever close.  A teleport for a session that is over is not something to
+// half-perform, so it is refused.
+func TestASessionThatHasEndedIsNotMoved(t *testing.T) {
+	a, _, to := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
+	a.Close()
+
+	err := a.moveTo(context.Background(), to.sim.addr(), to.seed())
+	if err == nil {
+		t.Fatal("a session that had ended was moved anyway")
+	}
+	if !strings.Contains(err.Error(), "the session has ended") {
+		t.Errorf("error %q does not say the session was over", err)
+	}
+	if to.saw("UseCircuitCode") {
+		t.Error("the new simulator was talked to on behalf of a session that had ended")
+	}
+	// Nothing was spawned into the group Close had finished waiting on.
+	if n := to.polls.Load(); n != 0 {
+		t.Errorf("the new region's queue was polled %d times after Close", n)
+	}
+}
+
+// TestAMovePollsTheNewRegionsQueueAndClosesTheOld: the queue is one long
+// poll keeping an acknowledgement sequence, and both halves of it are
+// per region.
+func TestAMovePollsTheNewRegionsQueueAndClosesTheOld(t *testing.T) {
+	events := make(chan string, 8)
+	a, from, to := twoRegions(t, Options{
+		OnEvent: func(name string, _ []byte) {
+			select {
+			case events <- name:
+			default:
+			}
+		},
+	})
+
+	// An event, so that the poll has an id to acknowledge -- which is
+	// what the done that closes the queue carries.
+	from.eq.push("ParcelProperties", map[string]any{"x": int64(1)})
+	select {
+	case <-events:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the queue in the first region was never polled")
+	}
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	to.eq.push("ParcelProperties", map[string]any{"x": int64(2)})
+	select {
+	case <-events:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the queue in the new region is not being polled")
+	}
+
+	waitFor(t, "the old region's queue to be told we are finished", func() bool {
+		from.eq.mu.Lock()
+		defer from.eq.mu.Unlock()
+		return from.eq.dones > 0
+	})
+
+	// And nothing is still polling the region the avatar left.
+	settled := from.polls.Load()
+	time.Sleep(300 * time.Millisecond)
+	if now := from.polls.Load(); now != settled {
+		t.Errorf("the old region was polled %d more times after the move", now-settled)
+	}
+}
+
+// TestAMoveLeavesNoPollBehind: the poll is a goroutine per region, so
+// getting this wrong leaks one per teleport rather than failing.
+func TestAMoveLeavesNoPollBehind(t *testing.T) {
+	a, from, to := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
+
+	a.eq.mu.Lock()
+	stopped := a.eq.stopped
+	a.eq.mu.Unlock()
+	if stopped == nil {
+		t.Fatal("no poll was running to leave behind")
+	}
+	waitFor(t, "the first region to be polled", func() bool { return from.polls.Load() > 0 })
+
+	before := runtime.NumGoroutine()
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the poll against the region left behind is still running")
+	}
+	waitFor(t, "the new region to be polled", func() bool { return to.polls.Load() > 0 })
+
+	// One poll before and one after, whatever the run of things around
+	// them: a move that started a second poll without stopping the
+	// first would show up here as a goroutine that never came back.
+	waitFor(t, "the goroutine count to come back to where it was", func() bool {
+		return runtime.NumGoroutine() <= before
+	})
+}
+
+// TestAMoveEntersTheNewRegionsObjectStore: nothing new was written for
+// this.  enterRegion swaps the store on every RegionHandshake and the
+// new simulator sends one, so a move should get it for free -- and this
+// is the first time that path has ever run.
+func TestAMoveEntersTheNewRegionsObjectStore(t *testing.T) {
+	cache := NewCache()
+	a, _, to := twoRegions(t, Options{SkipCaps: true, Regions: cache})
+
+	was := a.Objects()
+	if n := cache.Regions(); n != 1 {
+		t.Fatalf("%d regions held before the move, want one", n)
+	}
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	if a.Objects() == was {
+		t.Error("the new region kept the old region's objects")
+	}
+	if n := cache.Regions(); n != 1 {
+		t.Errorf("%d regions held after the move, want one: "+
+			"the store of the region left was not given back", n)
+	}
+}
+
+// waitFor polls a condition rather than sleeping for one, because
+// everything here is a network round trip.
+func waitFor(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestTheLookIsRefreshedAfterAMove: the camera is what the simulator
+// works its interest list out from, so a session that arrived somewhere
+// else with its camera left behind is described nothing that is near it
+// -- including its own attachments -- while reporting that the teleport
+// worked.
+//
+// Nothing in moveTo does this and nothing needs to.  The
+// AgentMovementComplete handler calls setCenter with the position the
+// new simulator gave, and setCenter keeps the draw distance the session
+// is using rather than resetting it to the one it was asked for at
+// login.  That is worth a test rather than a reading, because it is two
+// files away from the move and would be silently lost by a change to
+// either.
+func TestTheLookIsRefreshedAfterAMove(t *testing.T) {
+	a, _, to := twoRegions(t, Options{SkipCaps: true})
+
+	l := a.Look()
+	l.Far = 96
+	a.SetLook(l)
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	got := a.Look()
+	if at, _ := to.sim.arrival(); got.Center != at {
+		t.Errorf("the camera is at %v, want the arrival position %v", got.Center, at)
+	}
+	if got.Far != 96 {
+		t.Errorf("draw distance = %v, want the 96 this session was using", got.Far)
+	}
+	if got.At == (msg.Vector3{}) || got.Up == (msg.Vector3{}) || got.Left == (msg.Vector3{}) {
+		t.Errorf("the view after the move is not a direction: %+v", got)
+	}
+}
+
+// TestTheFirstArrivalOfASessionIsNotARegionChange: the notice means
+// "everything you were holding is stale", and a session that has just
+// connected was holding nothing.  Firing on the first arrival would have
+// every client throw away a cache it had not filled yet, and would make
+// a reconnect say it twice -- once for the fresh session's own arrival
+// and once from whatever hosts it.
+func TestTheFirstArrivalOfASessionIsNotARegionChange(t *testing.T) {
+	told := make(chan string, 4)
+	a, _, _ := twoRegions(t, Options{SkipCaps: true,
+		OnRegionChange: func(name string, _ uint64) { told <- name }})
+
+	// Connect does not return until AgentMovementComplete has been
+	// handled, so anything this was going to say has been said.
+	select {
+	case name := <-told:
+		t.Errorf("arriving in %q for the first time was reported as a region change", name)
+	default:
+	}
+	if a.RegionName() == "" {
+		t.Error("the session never got a handshake, so it proves nothing")
+	}
+}
+
+// TestAMoveSaysWhichRegionTheAvatarIsInNow is the assertion the rest of
+// stage 4 rests on, and the one that catches the trap in it.  The two
+// halves of the answer come from different messages -- the name from
+// RegionHandshake and the handle from the AgentMovementComplete that
+// follows it -- so a notice fired at the obvious moment carries the new
+// region's name beside the handle of the region the avatar has left, and
+// looks entirely reasonable while doing it.
+func TestAMoveSaysWhichRegionTheAvatarIsInNow(t *testing.T) {
+	type where struct {
+		name   string
+		handle uint64
+	}
+	told := make(chan where, 4)
+	a, from, to := twoRegions(t, Options{SkipCaps: true,
+		OnRegionChange: func(name string, handle uint64) { told <- where{name, handle} }})
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	var got where
+	select {
+	case got = <-told:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a move said nothing about the region changing")
+	}
+
+	_, arrived := to.sim.arrival()
+	if got.name != to.sim.regionNm || got.handle != arrived {
+		_, left := from.sim.arrival()
+		t.Errorf("told %q handle %d, want %q handle %d; the region left is %q handle %d",
+			got.name, got.handle, to.sim.regionNm, arrived, from.sim.regionNm, left)
+	}
+
+	// Exactly one.  A second would have a client throw away the object
+	// cache it had just been handed by the region it arrived in.
+	select {
+	case again := <-told:
+		t.Errorf("one move was reported twice; the second was %+v", again)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// TestArrivingAgainInTheRegionWeAreInIsNotAChange: an
+// AgentMovementComplete naming the handle this session already has says
+// the avatar is where it was.  There is nothing stale to drop, and the
+// notice costs a client everything it holds.
+func TestArrivingAgainInTheRegionWeAreInIsNotAChange(t *testing.T) {
+	told := make(chan string, 4)
+	a, from, _ := twoRegions(t, Options{SkipCaps: true,
+		OnRegionChange: func(name string, _ uint64) { told <- name }})
+
+	// The same region and the same handle, at a different spot, which is
+	// what makes the arrival visible from here without asking the
+	// dispatcher anything.
+	_, handle := from.sim.arrival()
+	at := msg.Vector3{X: 33, Y: 44, Z: 55}
+	amc := &msg.AgentMovementComplete{}
+	amc.Data.Position = at
+	amc.Data.LookAt = msg.Vector3{X: 1}
+	amc.Data.RegionHandle = handle
+	from.sim.send(amc, msg.FlagReliable)
+
+	waitFor(t, "the second arrival to be handled", func() bool { return a.Position() == at })
+	select {
+	case name := <-told:
+		t.Errorf("arriving again in %q was reported as a change of region", name)
+	default:
+	}
+}
+
+// TestTheSeedFollowsTheAvatar: Account.SeedCapability names the region
+// this session LOGGED IN to and goes on naming it for the rest of the
+// session, so anything above this package that wants the current
+// region's capabilities -- slgod handing a viewer its seed -- has to be
+// able to ask for them.  moveTo is given the new seed, uses it and used
+// to drop it, which left the answer nowhere.
+func TestTheSeedFollowsTheAvatar(t *testing.T) {
+	a, from, to := twoRegions(t, Options{})
+
+	if got := a.Seed(); got != from.seed() {
+		t.Fatalf("seed = %q before the move, want the login region's %q", got, from.seed())
+	}
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if got := a.Seed(); got != to.seed() {
+		t.Errorf("seed = %q after the move, want the region arrived in, %q", got, to.seed())
+	}
+	// And the account is untouched, which is the whole reason this had
+	// to be asked for somewhere else: it is the login region's answer
+	// and stays right about the question it was asked.
+	if a.Account.SeedCapability != from.seed() {
+		t.Errorf("the account's seed = %q; it names the region logged in to",
+			a.Account.SeedCapability)
+	}
+}
+
+// TestAMoveWithNoSeedLeavesNoneBehind: an unusable seed drops the
+// capability set rather than keeping URLs into the region left behind,
+// and the seed itself has to go the same way.  Kept, it would hand a
+// viewer the login region's capabilities under the name of the one the
+// avatar is in.
+func TestAMoveWithNoSeedLeavesNoneBehind(t *testing.T) {
+	a, _, to := twoRegions(t, Options{})
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), ""); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if got := a.Seed(); got != "" {
+		t.Errorf("seed = %q after a move that carried none", got)
+	}
+}

@@ -57,13 +57,15 @@ type fakeDaemon struct {
 	sent   chan *pb.ClientPacket
 	locked func(*pb.Lock) *pb.Locked
 
-	presence *pb.PresenceResponse
-	objects  []*pb.ObjectInfo
-	region   *pb.RegionInfo
-	friends  []*pb.Friend
-	agents   []*pb.AgentInfo
-	cap      *pb.CapResponse
-	noted    chan *pb.NoteFriendRequest
+	presence   *pb.PresenceResponse
+	neighbours *pb.NeighboursResponse
+
+	objects []*pb.ObjectInfo
+	region  *pb.RegionInfo
+	friends []*pb.Friend
+	agents  []*pb.AgentInfo
+	cap     *pb.CapResponse
+	noted   chan *pb.NoteFriendRequest
 
 	// fail, when set, is what every unary call answers with, which is
 	// how the error half of each translation is reached.
@@ -206,6 +208,26 @@ func (d *fakeDaemon) Region(context.Context, *pb.RegionRequest) (*pb.RegionInfo,
 		return nil, d.fail
 	}
 	return d.region, nil
+}
+
+// Neighbours answers the way the server does, which is what makes this
+// worth having as a fake at all: the set is applied before the list is
+// read, and turning them off drops the circuits rather than only
+// refusing the next offer.
+func (d *fakeDaemon) Neighbours(_ context.Context, r *pb.NeighboursRequest) (*pb.NeighboursResponse, error) {
+	if d.fail != nil {
+		return nil, d.fail
+	}
+	if d.neighbours == nil {
+		d.neighbours = &pb.NeighboursResponse{}
+	}
+	if r.Set != nil {
+		d.neighbours.On = r.GetSet()
+		if !r.GetSet() {
+			d.neighbours.Neighbours = nil
+		}
+	}
+	return d.neighbours, nil
 }
 
 func (d *fakeDaemon) Flush(context.Context, *pb.FlushRequest) (*pb.FlushResponse, error) {

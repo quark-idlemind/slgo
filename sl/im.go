@@ -421,8 +421,18 @@ func (w *Session) forget(from msg.UUID) {
 	w.mu.Unlock()
 }
 
-// FriendList is the friend list with names filled in.
-func (w *Session) FriendList(ctx context.Context) ([]Person, error) {
+// FriendIDs is the friend list as ids, and nothing else.
+//
+// This is the whole of the list as the grid keeps it: a friendship is
+// an id, and the names are something asked for afterwards.  FriendList
+// asks, and waits up to three seconds for the answers, which is the
+// right price for a listing that prints the names and quite the wrong
+// one for a caller that only has to decide whether an id it already
+// holds is a friend.  slsh's "map" picks its friends out of the
+// picture that way, on every picture, and a map that stopped for three
+// seconds to look up names it will never print would be a worse
+// command than one with no colour in it.
+func (w *Session) FriendIDs(ctx context.Context) ([]msg.UUID, error) {
 	fs, err := w.b.Friends(ctx)
 	if err != nil {
 		return nil, err
@@ -431,11 +441,20 @@ func (w *Session) FriendList(ctx context.Context) ([]Person, error) {
 	for _, f := range fs {
 		ids = append(ids, f.ID)
 	}
+	return ids, nil
+}
+
+// FriendList is the friend list with names filled in.
+func (w *Session) FriendList(ctx context.Context) ([]Person, error) {
+	ids, err := w.FriendIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
 	w.Names(ctx, ids, 3*time.Second)
 
-	out := make([]Person, 0, len(fs))
-	for _, f := range fs {
-		out = append(out, Person{ID: f.ID, Name: w.NameOr(f.ID)})
+	out := make([]Person, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, Person{ID: id, Name: w.NameOr(id)})
 	}
 	return out, nil
 }

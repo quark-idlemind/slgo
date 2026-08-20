@@ -35,5 +35,7 @@ is the name that says whether this is the group the land wants.
 	Testville at 33, 73, 1000
 	acting as group Example Builders (d8467e57-…)
 
-See also: look, who, objects, tp for moving the avatar within the
-region, and group for setting the one this reports.
+See also: look, who, map for this position and everybody else's drawn
+as a picture, objects, tp for moving the avatar about or to another
+region, regions for where a region the avatar is not in stands, and
+group for setting the one this reports.

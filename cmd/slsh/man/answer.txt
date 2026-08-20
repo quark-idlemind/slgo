@@ -43,12 +43,25 @@ plainly that the group will charge its fee whatever you typed.
 
 Nothing answers a join, so "group" is what says whether it worked.
 
-# Accepting a teleport ends this session
+# Accepting a teleport waits for the avatar to arrive
 
-A teleport out of this region needs a circuit and a set of capabilities
-that slgo does not open yet.  The warning is printed before the request
-goes, because after it there may be no session left to print anything
-with.  A lure to somewhere in the same region is fine.
+A teleport out of this region is followed rather than fired off: the
+session moves with the avatar, and answer returns once it is standing in
+the region it was invited to, which takes about half a second and has
+been measured at five.  So a line is printed before the request goes,
+saying whose offer is being taken, and another afterwards saying where
+the avatar ended up -- read back, because a lure is the one teleport
+whose destination nobody knows in advance.  The offer names who made it
+and whatever they typed with it; the region is not in the message at
+all.  A lure to somewhere in the same region arrives at once.
+
+Waiting stops after thirty seconds.  Running out is not usually a slow
+grid: a teleport asked for while another is under way is answered with
+nothing whatever, for ever, so it is what accepting a second offer too
+soon looks like.  where says whether the avatar moved.
+
+Everything this shell knew about the region left behind is gone on
+arrival -- see tp, which says what goes and what survives.
 
 # Options
 
@@ -57,4 +70,5 @@ time and a viewer's text box is a text editor, so the two shapes do not
 match; naming a file is the way through that does not involve inventing
 an escape for the newline and then having to escape the escape.
 
-See also: waiting, no, ignore.
+See also: waiting, no, ignore, and tp for going somewhere nobody
+offered.

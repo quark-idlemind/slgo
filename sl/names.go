@@ -168,9 +168,22 @@ func (w *Session) Find(want string) []msg.UUID {
 
 // Person is somebody, with as much as is known about where they are.
 type Person struct {
-	ID       msg.UUID
-	Name     string
-	Distance float32 // metres, and zero when position is not the question
+	ID   msg.UUID
+	Name string
+
+	// Distance is how far away they are, in metres, and Position is
+	// where they are standing in the region's own metres.  Both are
+	// zero when position is not the question: FriendList hands back
+	// this same type for people who are not in the region at all, and a
+	// zero here is "nobody said" rather than the corner of the region.
+	//
+	// The two are kept separately because they answer different
+	// questions and one cannot be had from the other: a distance is
+	// what "who" sorts and prints, and a position is what a picture of
+	// the region needs, since 20 metres away says nothing about which
+	// way.
+	Distance float32
+	Position msg.Vector3
 }
 
 // Nearby is who else is in the region, nearest first.
@@ -197,7 +210,17 @@ func (w *Session) Nearby(ctx context.Context) ([]Person, error) {
 		dx := o.Position.X - where.Position.X
 		dy := o.Position.Y - where.Position.Y
 		dz := o.Position.Z - where.Position.Z
-		out = append(out, Person{ID: o.ID, Distance: sqrt(dx*dx + dy*dy + dz*dz)})
+		// The position is kept as well as the distance it was worked
+		// out from.  It is the region's own metres rather than the
+		// offset, so that a caller drawing the region and a caller
+		// drawing the ground around this avatar both have what they
+		// need; the offset is a subtraction away and the region
+		// coordinate is not recoverable from a distance.
+		out = append(out, Person{
+			ID:       o.ID,
+			Distance: sqrt(dx*dx + dy*dy + dz*dz),
+			Position: o.Position,
+		})
 		ids = append(ids, o.ID)
 	}
 

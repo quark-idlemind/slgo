@@ -32,6 +32,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -194,7 +195,7 @@ func (w waiter) choices() string {
 		}
 		return strings.Join(b, ", ")
 	case w.lure != nil:
-		return "answer (ends this session unless it is the same region), no, ignore"
+		return "answer (takes it, and waits for the arrival), no, ignore"
 	case w.invite != nil && !w.invite.Stated:
 		return "answer N L$AMOUNT (it did not say what joining costs), no, ignore"
 	case w.invite != nil && w.invite.Fee > 0:
@@ -431,13 +432,39 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		fmt.Fprintf(out, "pressed %q on %s\n", label, w.who())
 
 	case w.lure != nil:
-		// The warning is printed before the message goes, because
-		// after it there may be no session to print anything with.
+		// Said before the request goes, because accepting now waits for
+		// the arrival rather than returning once the message has gone,
+		// and a person watching a shell that has stopped answering
+		// deserves to know what it is waiting for.
 		fmt.Fprintf(out, "accepting a teleport from %s\n", w.who())
-		if err := sh.s.AcceptLure(ctx, w.lure); err != nil {
+
+		// The shell's own deadline rather than the ninety seconds
+		// AcceptLure defaults to, which were set before a teleport had
+		// been timed -- see shellTeleportTimeout.  A context is the whole
+		// of it: the wait for the arrival selects on one, so there is
+		// nothing missing from sl to add here.
+		moving, cancel := context.WithTimeout(ctx, shellTeleportTimeout)
+		defer cancel()
+		if err := sh.s.AcceptLure(moving, w.lure); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				// A deadline of this shell's is not a fault to report as
+				// one: the grid answers a teleport asked for while
+				// another is under way with nothing at all, ever, and
+				// that is what running out of time here usually means.
+				return fmt.Errorf("the teleport %s offered was not answered in %s; "+
+					"an offer accepted while another teleport is under way is answered "+
+					"with silence, and where says whether the avatar moved",
+					w.who(), shellTeleportTimeout)
+			}
 			return err
 		}
-		fmt.Fprintf(out, "if that is another region this session ends: a crossing needs a circuit slgo does not open yet\n")
+		// Where the avatar ended up, read back, because a lure is the
+		// one teleport whose destination nobody knew in advance: the
+		// offer says who made it and whatever they typed with it, and
+		// the region is not in the message at all.
+		if p, err := sh.s.Where(ctx); err == nil {
+			fmt.Fprintf(out, "arrived in %s\n", positionLine(p))
+		}
 
 	case w.item != nil:
 		into, err := sh.s.ObjectsFolder(ctx)

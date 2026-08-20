@@ -301,6 +301,12 @@ func (f *fakeGrid) answer(m msg.Message) {
 
 func (f *fakeGrid) Info() *sl.Info { return f.info }
 
+// Control is nothing here.  Nothing this fake stands in for sits
+// down or stands up; the method exists because sl.Backend has it,
+// so that the one place an AgentUpdate is built stays the one place
+// that owns the camera.
+func (f *fakeGrid) Control(ctx context.Context, flags uint32) error { return nil }
+
 func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	f.mu.Lock()
 	err := f.sendErr
@@ -340,8 +346,16 @@ func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, e
 	return out, nil
 }
 
+func (f *fakeGrid) Land(ctx context.Context) (*sl.Land, error) {
+	return &sl.Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
+}
+
 func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 	return &sl.Region{Name: "Test Region"}, true, nil
+}
+
+func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
+	return &sl.Neighbours{}, nil
 }
 
 func (f *fakeGrid) Flush(ctx context.Context) (int, error)           { return 0, nil }
@@ -405,3 +419,6 @@ func (f *fakeGrid) Close() error {
 	f.once.Do(func() { close(f.done) })
 	return nil
 }
+
+// RegionChanges is never told of one: nothing here teleports.
+func (f *fakeGrid) RegionChanges() <-chan *sl.RegionChange { return nil }

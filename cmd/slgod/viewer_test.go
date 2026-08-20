@@ -11,11 +11,17 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/llsd"
+	"github.com/quark-idlemind/slgo/server"
 )
 
 // mintingHost is a viewer host with nothing behind it but a profile
@@ -232,5 +238,186 @@ func TestNoEndpointMeansNoLoginURI(t *testing.T) {
 	}
 	if v.Attached("example") {
 		t.Error("a viewer is attached to a host with no endpoint")
+	}
+}
+
+// The seed a viewer is served.
+//
+// A viewer fetches its capabilities from slgod's seed, which is a proxy
+// of the simulator's with the event queue pointed here.  Which
+// simulator's is the question this pair of tests answers, and it is a
+// question because a session moves: Account.SeedCapability names the
+// region the session logged in to and goes on naming it after every
+// teleport.
+
+// capsServer is a region's seed capability, answering with one
+// capability named after the region so that a proxied reply says which
+// region it came from.
+func capsServer(t *testing.T, region string) *httptest.Server {
+	t.Helper()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := llsd.Encode(map[string]any{
+			"EventQueueGet":     "https://" + region + ".invalid/cap/event",
+			"SimulatorFeatures": "https://" + region + ".invalid/cap/features",
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		w.Write(body)
+	}))
+	t.Cleanup(s.Close)
+	return s
+}
+
+// seededLoginServer is loginServer with a seed capability in the
+// response, which is what makes the session fetch capabilities at all.
+func seededLoginServer(t *testing.T, sim *fakeSim, seed string) *httptest.Server {
+	t.Helper()
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
+		  <member><name>login</name><value><string>true</string></value></member>
+		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</string></value></member>
+		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-f4f4-19d29d124acf</string></value></member>
+		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-d169-d9847afe641e</string></value></member>
+		  <member><name>circuit_code</name><value><int>4242</int></value></member>
+		  <member><name>sim_ip</name><value><string>%s</string></value></member>
+		  <member><name>sim_port</name><value><int>%d</int></value></member>
+		  <member><name>seed_capability</name><value><string>%s</string></value></member>
+		  <member><name>first_name</name><value><string>"Example"</string></value></member>
+		  <member><name>last_name</name><value><string>Resident</string></value></member>
+		</struct></value></param></params></methodResponse>`, sim.addr().IP, sim.addr().Port, seed)
+	}))
+	t.Cleanup(s.Close)
+	return s
+}
+
+// servedSeed stands up a hosted session and the capability endpoints in
+// front of it, and hands back a way to ask for the seed a viewer would
+// be given.
+func servedSeed(t *testing.T, seed string) (*server.Server, *viewerHost, func() string) {
+	t.Helper()
+	sim := newSim(t)
+	hs := seededLoginServer(t, sim, seed)
+
+	srv := server.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		stop, done := context.WithTimeout(context.Background(), 10*time.Second)
+		defer done()
+		srv.Close(stop)
+		cancel()
+	})
+
+	login := agent.Login{First: "Example", Last: "Resident", Password: "secret", URL: hs.URL}
+	if _, err := srv.StartAgent(ctx, "example", login, agent.Options{Idle: -1}); err != nil {
+		t.Fatalf("hosting a session: %v", err)
+	}
+
+	vh := newViewerHost(ctx, "127.0.0.1", srv,
+		func(string) string { return "" }, nil, nil, func(string, ...any) {})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/cap/", vh.serveCap)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	vh.base = ts.URL
+
+	return srv, vh, func() string {
+		t.Helper()
+		resp, err := http.Post(ts.URL+"/cap/example/seed", "application/llsd+xml",
+			strings.NewReader("<llsd><array/></llsd>"))
+		if err != nil {
+			t.Fatalf("asking for the seed: %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("the seed answered %s: %s", resp.Status, body)
+		}
+		return string(body)
+	}
+}
+
+// TestTheSeedAViewerIsServedIsTheRegionItIsInNow: after a teleport,
+// a.Account.SeedCapability still addresses the simulator the avatar
+// logged in to and has since left, so a viewer handed it fetches its
+// inventory, its textures and its uploads from somewhere else.  The
+// agent is asked instead, because the agent is the only thing that
+// knows: every region after the first names its seed inside a
+// TeleportFinish that nothing above that package reads.
+//
+// The divergence is made the other way round here, because a session
+// with a fake simulator has no event queue and so cannot be teleported
+// in a test: the ACCOUNT is pointed at another region's seed, which is
+// exactly the state a move leaves it in, and the seed served must still
+// be the region's.
+func TestTheSeedAViewerIsServedIsTheRegionItIsInNow(t *testing.T) {
+	here := capsServer(t, "here")
+	left := capsServer(t, "left")
+
+	srv, _, ask := servedSeed(t, here.URL)
+
+	if body := ask(); !strings.Contains(body, "here.invalid") {
+		t.Fatalf("the seed did not come from the region the avatar is in:\n%s", body)
+	}
+
+	h, ok := srv.Agent("example")
+	if !ok {
+		t.Fatal("the session is not hosted")
+	}
+	h.Agent().Account.SeedCapability = left.URL
+
+	body := ask()
+	if strings.Contains(body, "left.invalid") {
+		t.Errorf("the viewer was served the seed of the region the avatar logged in to:\n%s", body)
+	}
+	if !strings.Contains(body, "here.invalid") {
+		t.Errorf("the viewer was not served the region's own seed:\n%s", body)
+	}
+	// And the one entry that has to be ours, or two things poll the
+	// simulator's queue and split the events between them.
+	if !strings.Contains(body, "/cap/example/event") {
+		t.Errorf("the event queue was not pointed at the daemon:\n%s", body)
+	}
+}
+
+// TestASessionWithNoCapabilitiesSaysSoRatherThanProxyingNowhere: a
+// session started with SkipCaps, or one whose move carried a seed that
+// would not parse, has no seed to hand on.  Proxying to an empty URL
+// answers a viewer with whatever an empty request produces, which is a
+// worse answer than none.
+func TestASessionWithNoCapabilitiesSaysSoRatherThanProxyingNowhere(t *testing.T) {
+	sim := newSim(t)
+	hs := loginServer(t, sim) // no seed capability in the response
+
+	srv := server.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	t.Cleanup(func() {
+		stop, done := context.WithTimeout(context.Background(), 10*time.Second)
+		defer done()
+		srv.Close(stop)
+	})
+	login := agent.Login{First: "Example", Last: "Resident", Password: "secret", URL: hs.URL}
+	if _, err := srv.StartAgent(ctx, "example", login, agent.Options{Idle: -1}); err != nil {
+		t.Fatalf("hosting a session: %v", err)
+	}
+
+	vh := newViewerHost(ctx, "127.0.0.1", srv,
+		func(string) string { return "" }, nil, nil, func(string, ...any) {})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/cap/", vh.serveCap)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+	vh.base = ts.URL
+
+	resp, err := http.Post(ts.URL+"/cap/example/seed", "application/llsd+xml", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %s, want a refusal that says why", resp.Status)
 	}
 }

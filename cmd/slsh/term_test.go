@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -282,6 +283,124 @@ func TestDecodeSkipsWhatItDoesNotKnow(t *testing.T) {
 	// as the replacement character.
 	if got := feed(t, []byte{0xff}); len(got) != 0 {
 		t.Errorf("an invalid byte gave %v", got)
+	}
+}
+
+// TestDecodeSwallowsTheWholeOfASequenceItDoesNotKnow.
+//
+// This is the bug the cell-size query walked into.  The decoder read
+// ESC, the bracket and ONE more byte, and gave up on anything it did
+// not recognise -- which left the rest of the sequence in the stream to
+// be delivered as ordinary keys.  A terminal reporting its cell size
+// typed ";18;10t" at the prompt, and a paste in bracketed mode typed
+// "00~", neither of which anybody had pressed.
+//
+// A CSI sequence ends at the first byte in the range 0x40 to 0x7E, so
+// there is never any doubt about where it stops.
+func TestDecodeSwallowsTheWholeOfASequenceItDoesNotKnow(t *testing.T) {
+	for _, in := range []string{
+		"\x1b[6;18;10ta",      // a report of the cell size
+		"\x1b[200~a",          // the start of a bracketed paste
+		"\x1b[?1049ha",        // switching to the alternate screen
+		"\x1b[38;2;90;90;9ma", // a colour
+		"\x1b[Za",             // a back tab, which this editor has no use for
+	} {
+		got := feed(t, []byte(in))
+		if len(got) != 1 || got[0] != 'a' {
+			t.Errorf("%q gave %v, want the a alone", in, got)
+		}
+	}
+}
+
+// TestAModifiedArrowIsStillThatArrow: a terminal saying Ctrl-Right --
+// ESC [ 1 ; 5 C -- is saying right, and a line editor has nothing else
+// to do with the Ctrl.  Before the whole sequence was read, this hunted
+// for a "~" that was never coming and ate what was typed next.
+func TestAModifiedArrowIsStillThatArrow(t *testing.T) {
+	got := feed(t, []byte("\x1b[1;5C\x1b[1;2Dx"))
+	want := []rune{keyRight, keyLeft, 'x'}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("key %d = %d, want %d", i, got[i], want[i])
+		}
+	}
+}
+
+// TestAReportNobodyAskedForIsNotTypedAtThePrompt.
+//
+// A report can arrive with nobody waiting for it: somebody types the
+// query by hand, or the answer to one that timed out turns up late.  It
+// is kept if there is room and dropped if there is not, and either way
+// it is not a keystroke and does not stop the keyboard.
+func TestAReportNobodyAskedForIsNotTypedAtThePrompt(t *testing.T) {
+	term := &Term{
+		keys:  make(chan rune, 8),
+		cells: make(chan cellSize, 1),
+		done:  make(chan struct{}),
+	}
+	in := []byte("\x1b[6;18;10t\x1b[6;20;12ta")
+	raw := make(chan byte, len(in))
+	for _, b := range in {
+		raw <- b
+	}
+	close(raw)
+	go term.decode(raw)
+
+	var got []rune
+	for r := range term.keys {
+		got = append(got, r)
+	}
+	if string(got) != "a" {
+		t.Errorf("the reports arrived as keys: %q", string(got))
+	}
+
+	// The first is there to be had, and the second went nowhere rather
+	// than leaving the decoder holding it.
+	select {
+	case c := <-term.cells:
+		if c.tall != 18 || c.wide != 10 {
+			t.Errorf("the report came through as %d by %d, want 18 by 10", c.tall, c.wide)
+		}
+	default:
+		t.Error("the report was thrown away")
+	}
+}
+
+// TestOnlyACellSizeReportIsTakenForOne: the other answers about the
+// window come back through the same final letter, and none of them is
+// the size of a cell.
+func TestOnlyACellSizeReportIsTakenForOne(t *testing.T) {
+	for _, params := range []string{
+		"4;600;800", // the window in pixels
+		"8;24;80",   // the window in characters
+		"6;18",      // a cell with a number missing
+		"6;18;10;2", // one number too many
+		"6;0;10",    // a cell no pixels tall
+		"6;x;10",    // not a number at all
+	} {
+		term := &Term{
+			keys:  make(chan rune, 8),
+			cells: make(chan cellSize, 1),
+			done:  make(chan struct{}),
+		}
+		in := []byte("\x1b[" + params + "t")
+		raw := make(chan byte, len(in))
+		for _, b := range in {
+			raw <- b
+		}
+		close(raw)
+		go term.decode(raw)
+		for range term.keys {
+		}
+
+		select {
+		case c := <-term.cells:
+			t.Errorf("%q was taken for a cell of %d by %d", params, c.tall, c.wide)
+		default:
+		}
 	}
 }
 
@@ -642,6 +761,148 @@ func TestALoneEscapeIsTheEscapeKeyAfterAWait(t *testing.T) {
 		t.Fatal("a lone escape never arrived")
 	}
 	close(raw)
+}
+
+// answeringTerm is the far end of a terminal: it keeps what slsh wrote
+// and, when that includes the cell-size question, types the answer back
+// the way a terminal would.
+//
+// An empty answer is a terminal that does not know the question, which
+// is not a refusal but a silence -- the case the timeout exists for.
+type answeringTerm struct {
+	mu     sync.Mutex
+	b      strings.Builder
+	back   io.Writer // the other side of the pty: what goes here is typed
+	answer string
+}
+
+func (a *answeringTerm) Write(p []byte) (int, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	n, err := a.b.Write(p)
+	if a.answer != "" && bytes.Contains(p, []byte("\x1b[16t")) {
+		io.WriteString(a.back, a.answer)
+	}
+	return n, err
+}
+
+func (a *answeringTerm) String() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.b.String()
+}
+
+// aTerminalThatAnswers is a real terminal on a pty with somebody at the
+// far end of it, for the one thing a pipe cannot be asked: a question
+// whose answer comes back through the keyboard.
+func aTerminalThatAnswers(t *testing.T, answer string) (*Term, *answeringTerm) {
+	t.Helper()
+	ptmx, tty, err := pty.Open()
+	if err != nil {
+		t.Skipf("no pty available: %v", err)
+	}
+	t.Cleanup(func() { ptmx.Close(); tty.Close() })
+
+	far := &answeringTerm{back: ptmx, answer: answer}
+	tm, err := NewTerm(tty, far)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(tm.Close)
+	return tm, far
+}
+
+// TestTheTerminalIsAskedHowBigACharacterCellIs.
+//
+// \033[16t is the question and ESC [ 6 ; HEIGHT ; WIDTH t the answer,
+// which arrives through the keyboard because that is the only way back
+// a terminal has.  What is typed while it is on its way is untouched:
+// here somebody is in the middle of "xy" when the report lands between
+// the two letters, and both letters arrive as keys.
+func TestTheTerminalIsAskedHowBigACharacterCellIs(t *testing.T) {
+	tm, far := aTerminalThatAnswers(t, "x\x1b[6;18;10ty")
+
+	tall, wide, err := tm.CellSize(5 * time.Second)
+	if err != nil {
+		t.Fatalf("CellSize: %v", err)
+	}
+	if tall != 18 || wide != 10 {
+		t.Errorf("the cell came back as %d by %d, want 18 by 10", tall, wide)
+	}
+	if !strings.Contains(far.String(), "\x1b[16t") {
+		t.Errorf("the question was never asked: %q", far.String())
+	}
+
+	for i, want := range []rune{'x', 'y'} {
+		select {
+		case got := <-tm.Keys():
+			if got != want {
+				t.Errorf("key %d = %d, want %d", i, got, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("what was typed while the terminal was being asked never arrived (key %d)", i)
+		}
+	}
+}
+
+// TestATerminalThatWillNotSayIsNotWaitedOnForEver.
+//
+// A terminal that does not know the question says nothing at all, so
+// there is no refusal to wait for and the shell would sit there.  What
+// it gets instead is an answer naming what was tried, and what was
+// typed meanwhile is still waiting to be read.
+func TestATerminalThatWillNotSayIsNotWaitedOnForEver(t *testing.T) {
+	tm, far := aTerminalThatAnswers(t, "")
+	ptmx := far.back.(*os.File)
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		ptmx.WriteString("hi")
+	}()
+
+	start := time.Now()
+	_, _, err := tm.CellSize(300 * time.Millisecond)
+	if err == nil {
+		t.Fatal("a silent terminal should not have given an answer")
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("it waited %v", took)
+	}
+	// Named as it would be typed, since somebody reading this is being
+	// sent to try it by hand.
+	if !strings.Contains(err.Error(), `\033[16t`) {
+		t.Errorf("the refusal should name what it tried, got %v", err)
+	}
+	if !strings.Contains(far.String(), "\x1b[16t") {
+		t.Errorf("the question was never asked: %q", far.String())
+	}
+
+	for i, want := range []rune{'h', 'i'} {
+		select {
+		case got := <-tm.Keys():
+			if got != want {
+				t.Errorf("key %d = %d, want %d", i, got, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("typing during the wait was lost (key %d)", i)
+		}
+	}
+}
+
+// TestAPipeHasNoCellSizeToGive, and says so rather than waiting out the
+// timeout for an answer that cannot come: there is nothing at the other
+// end of it to ask.
+func TestAPipeHasNoCellSizeToGive(t *testing.T) {
+	tm := &Term{plain: true, done: make(chan struct{})}
+	start := time.Now()
+	if _, _, err := tm.CellSize(5 * time.Second); err == nil {
+		t.Fatal("a pipe answered a question about its font")
+	} else if !strings.Contains(err.Error(), "not a terminal") {
+		t.Errorf("the refusal should say why, got %v", err)
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("a pipe should be refused at once, not after %v", took)
+	}
 }
 
 // TestKillingAWordCrossesTheSpacesBehindIt, so that Ctrl-W at the end

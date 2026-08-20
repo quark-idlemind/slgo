@@ -43,6 +43,14 @@ type Message = client.Message
 // each other and the shorter name was there first.
 type QueueEvent = client.Event
 
+// RegionChange is the avatar being somewhere else: the name and handle
+// of the region it is in now.
+//
+// An alias for the same reason Message is one: the hosted backend is
+// handed these by the client package and would otherwise copy each one
+// to rename it.
+type RegionChange = client.RegionChange
+
 // Info is what the session knows about itself before anything is
 // asked.
 type Info struct {
@@ -53,8 +61,19 @@ type Info struct {
 	AgentID   msg.UUID
 	SessionID msg.UUID
 
-	AvatarName    string
-	Region        string
+	AvatarName string
+
+	// Region is where the avatar was when this session attached, and
+	// it is not revised afterwards.
+	//
+	// That is the contract above working as written rather than a
+	// fault to fix: this whole struct is what was known at attach time,
+	// and a field that quietly changed under a caller would be worse
+	// than one that plainly does not.  An avatar that teleports is
+	// somewhere else and this still says where it started, so ask
+	// Session.Where, or subscribe to Session.RegionChanges to be told.
+	Region string
+
 	InventoryRoot msg.UUID
 
 	// Channel is the client name and version the login server was
@@ -101,6 +120,18 @@ type Backend interface {
 	// Send puts a message on the circuit.
 	Send(ctx context.Context, m msg.Message, reliable bool) error
 
+	// Control sends one AgentUpdate carrying these control flags and
+	// then forgets them.
+	//
+	// It is here rather than being built by the caller and handed to
+	// Send because an AgentUpdate carries the camera, its axes and the
+	// draw distance as well as the flags, and the simulator scopes its
+	// interest list by them.  Only the side that owns the camera can
+	// send one that is right about everything except the bit being
+	// asked for; a caller has none of it and would be inventing a
+	// camera the simulator would then believe.  See agent.Control.
+	Control(ctx context.Context, flags uint32) error
+
 	// Messages is the relay: every message this session subscribed
 	// to, undecoded.  Closed when the session ends.
 	Messages() <-chan *Message
@@ -118,6 +149,20 @@ type Backend interface {
 	// A nil channel is a valid answer from a backend that has no
 	// queue to offer, and blocks rather than ending the session.
 	Events() <-chan *QueueEvent
+
+	// RegionChanges is the third relay: the avatar has been moved to
+	// another region, and everything keyed on the one it was in is
+	// stale.
+	//
+	// A relay rather than a question, because there is no question to
+	// ask.  Where says which region the avatar is in now and cannot
+	// tell one teleport from two, so a caller that has to act at the
+	// moment it happens -- to drop what it holds, or to say something
+	// to a person -- must be told rather than look.
+	//
+	// A nil channel is a valid answer, as for Events, and is what a
+	// backend with no way of hearing about one gives.
+	RegionChanges() <-chan *RegionChange
 
 	// Done closes when the session ends, and Err says why.
 	Done() <-chan struct{}
@@ -139,6 +184,27 @@ type Backend interface {
 	// Region is what the simulator said in the handshake, and
 	// whether it has arrived at all.
 	Region(ctx context.Context) (*Region, bool, error)
+
+	// Land is what the session was told about the ground under the
+	// avatar: the parcel it was pushed when it arrived, and the
+	// region's parcel overlay.
+	//
+	// Here for the reason Region and Objects are: it arrives unasked,
+	// once, before a client is listening.  The overlay especially --
+	// four packets on arrival and none afterwards, so a session that
+	// has been up for hours is the only thing that still has it.
+	Land(ctx context.Context) (*Land, error)
+
+	// Neighbours is the circuits held to the regions AROUND that one,
+	// and whether the session is holding any at all.  A non-nil set
+	// turns them on or off first, and the answer describes what is
+	// held after the change.
+	//
+	// A pointer rather than a bool, because there are three requests
+	// and not two: leave it alone, turn it on, turn it off.  Presence
+	// spells the first as a zero draw distance and gets away with it
+	// only because nobody wants a draw distance of zero.
+	Neighbours(ctx context.Context, set *bool) (*Neighbours, error)
 
 	// Lock takes exclusive use of something named, waiting for it,
 	// and Unlock gives it back.  Going away gives it back too.
@@ -182,4 +248,22 @@ type Backend interface {
 	// logged in; for a direct one it does not, since there is nobody
 	// else holding it.
 	Close() error
+}
+
+// A Watcher is a backend that filters what it relays and can be told to
+// filter differently while it runs.
+//
+// Only a hosted session is one.  A direct session relays everything the
+// circuit carries -- there is nothing between the socket and the reader
+// to filter with -- so it does not implement this, and a caller that
+// finds no Watcher should conclude that everything is already arriving
+// rather than that nothing can be asked for.
+//
+// What it is for is a message that is needed for the length of one
+// command and too expensive to keep: AvatarAnimation, which is the whole
+// of the evidence that a ground sit happened and which arrives for every
+// avatar in range, in full, about every three seconds.  See sit.go.
+type Watcher interface {
+	Watch(names ...string) error
+	Unwatch(names ...string) error
 }

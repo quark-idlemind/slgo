@@ -18,10 +18,12 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -51,6 +53,30 @@ const (
 // outlast the scheduler, not the network.
 const escapeWait = 40 * time.Millisecond
 
+// cellSizeWait is how long CellSize waits for the terminal to say how
+// big a character cell is.
+//
+// A terminal that does not know the question answers nothing at all --
+// there is no refusal to receive -- so the only way to stop waiting is
+// to stop waiting.  The whole of this wait is therefore paid by exactly
+// the people who are about to be told their terminal will not say,
+// which is what decides the length: a second is far longer than the
+// round trip to a terminal at the far end of an ssh link, and short
+// enough that it reads as an answer rather than as a shell that has
+// hung.
+const cellSizeWait = time.Second
+
+// maxCSIParams bounds how much of an escape sequence is swallowed while
+// looking for the byte that ends it.  Nothing sends a sequence a
+// quarter this long; the bound is there so that a stray ESC [ in a
+// paste cannot eat the keyboard until a bracket happens to arrive.
+const maxCSIParams = 64
+
+// cellSize is how big one character cell is in pixels, as the terminal
+// reports it: height first, the order a cell is written in everywhere
+// here.  See CellRatio, which is the same order for the same reason.
+type cellSize struct{ tall, wide int }
+
 // Term is the terminal, in raw mode, with a line being edited on the
 // bottom line.
 type Term struct {
@@ -59,6 +85,23 @@ type Term struct {
 
 	keys chan rune
 	done chan struct{}
+
+	// cells carries the terminal's answer about its cell size back from
+	// the decoder, which is where it arrives: the reply comes in
+	// through the keyboard, being the only way back a terminal has.
+	//
+	// One deep, and never blocked on.  A report nobody is waiting for
+	// is a real thing to receive -- somebody can type the query by hand
+	// at the prompt, and a terminal may answer one this gave up on --
+	// and the goroutine that would be left holding it is the one
+	// reading the keyboard.
+	cells chan cellSize
+
+	// asking is held for the length of one question to the terminal, so
+	// that two of them cannot be outstanding at once.  Nothing here
+	// needs two, and two answers arriving on one channel could not be
+	// told apart if it did.
+	asking sync.Mutex
 
 	mu      sync.Mutex
 	prompt  string
@@ -91,6 +134,7 @@ func NewTerm(in *os.File, out io.Writer) (*Term, error) {
 		in:     in,
 		out:    out,
 		keys:   make(chan rune, 64),
+		cells:  make(chan cellSize, 1),
 		done:   make(chan struct{}),
 		width:  80,
 		height: 24,
@@ -247,12 +291,45 @@ func (t *Term) decode(raw <-chan byte) {
 				pending, havePending = b2, true
 				continue
 			}
-			b3, ok := next()
-			if !ok {
-				return
+			// The whole of the sequence is read, however little of it
+			// is understood.  ESC O is three bytes and the third ends
+			// it; a CSI sequence runs until a byte in the range 0x40 to
+			// 0x7E, with its parameters -- the digits and semicolons of
+			// "6;18;10" -- in front of that.
+			//
+			// Reading to the end matters as much for the sequences
+			// nothing here answers to as for the ones it does.  This
+			// used to stop at the third byte and give up on anything it
+			// did not recognise, which left the REST of the sequence in
+			// the stream to be decoded as ordinary keys: a report of
+			// the cell size, ESC [ 6 ; 18 ; 10 t, typed ";18;10t" at
+			// the prompt, and a bracketed paste typed "00~".
+			var params []byte
+			var final byte
+			if b2 == 'O' {
+				// One byte, and that is the whole of it.
+				if final, ok = next(); !ok {
+					return
+				}
+			} else {
+				var ended bool
+				if params, final, ended = readCSI(next); ended {
+					return
+				}
+				if final == 0 {
+					// A sequence that ran on past being one.  What was
+					// read is dropped and what follows is ordinary keys
+					// again.
+					continue
+				}
 			}
+
+			// The parameters are ignored for the letters, because a
+			// terminal saying Ctrl-Right -- ESC [ 1 ; 5 C -- is saying
+			// right, and a line editor has nothing else to do with the
+			// Ctrl.
 			var r rune
-			switch b3 {
+			switch final {
 			case 'A':
 				r = keyUp
 			case 'B':
@@ -265,27 +342,30 @@ func (t *Term) decode(raw <-chan byte) {
 				r = keyHome
 			case 'F':
 				r = keyEnd
-			case '1', '3', '4', '7', '8':
-				// A numbered sequence, ending in '~'.
-				for {
-					b4, ok := next()
-					if !ok {
-						return
-					}
-					if b4 == '~' {
-						break
-					}
-				}
-				switch b3 {
-				case '1', '7':
+			case '~':
+				// The numbered spellings of the same keys, which is
+				// what some terminals send instead.
+				switch string(params) {
+				case "1", "7":
 					r = keyHome
-				case '3':
+				case "3":
 					r = keyDelete
-				case '4', '8':
+				case "4", "8":
 					r = keyEnd
 				}
-			default:
-				continue // a sequence nobody here knows
+			case 't':
+				// The terminal answering a question about its window,
+				// which is it talking back rather than anything anybody
+				// typed.  See CellSize.
+				if c, ok := parseCellSize(params); ok {
+					select {
+					case t.cells <- c:
+					default:
+						// Nobody is waiting for it, or the one who was
+						// has given up.  Dropped rather than held on
+						// to: this goroutine is the keyboard.
+					}
+				}
 			}
 			if r != 0 && !emit(r) {
 				return
@@ -311,6 +391,114 @@ func (t *Term) decode(raw <-chan byte) {
 				return
 			}
 		}
+	}
+}
+
+// readCSI reads the rest of an escape sequence that began ESC [ : the
+// parameter bytes, and the byte in the range 0x40 to 0x7E that ends it.
+//
+// ended says the input ran out half way, which is the caller's cue to
+// stop altogether.  A final byte of zero with ended false is a sequence
+// that ran on past maxCSIParams and so is not a sequence at all: what
+// was read is thrown away and decoding carries on with the next byte.
+func readCSI(next func() (byte, bool)) (params []byte, final byte, ended bool) {
+	for {
+		c, ok := next()
+		if !ok {
+			return nil, 0, true
+		}
+		if c >= 0x40 && c <= 0x7e {
+			return params, c, false
+		}
+		if len(params) >= maxCSIParams {
+			return nil, 0, false
+		}
+		params = append(params, c)
+	}
+}
+
+// parseCellSize reads the parameters of the answer to \033[16t, which
+// arrives whole as ESC [ 6 ; HEIGHT ; WIDTH t.
+//
+// The leading 6 is the terminal saying which question it is answering,
+// and it is checked rather than skipped: \033[14t and \033[18t come
+// back through the same final letter with a 4 and an 8 in front of
+// them, and neither of those is the size of a cell.
+func parseCellSize(params []byte) (cellSize, bool) {
+	f := strings.Split(string(params), ";")
+	if len(f) != 3 || f[0] != "6" {
+		return cellSize{}, false
+	}
+	tall, err := strconv.Atoi(f[1])
+	if err != nil || tall < 1 {
+		return cellSize{}, false
+	}
+	wide, err := strconv.Atoi(f[2])
+	if err != nil || wide < 1 {
+		return cellSize{}, false
+	}
+	return cellSize{tall: tall, wide: wide}, true
+}
+
+// CellSize asks the terminal how big one character cell is and answers
+// with its height and its width, in pixels.
+//
+// \033[16t is the question, and the answer comes back through the
+// KEYBOARD, that being the only way a terminal has of replying: the
+// decoder picks ESC [ 6 ; HEIGHT ; WIDTH t out of what it is reading
+// and hands it over here, rather than delivering ";18;10t" as though
+// somebody had typed it.
+//
+// Anything actually typed while this waits is untouched.  It goes down
+// the same channel it always does and is read when whatever called this
+// returns, which is the same queue a key pressed during any other
+// command waits in.
+//
+// A terminal that does not know the question says nothing at all, so
+// the wait is bounded and a refusal is what a shell gets rather than a
+// hang; see cellSizeWait, which the caller passes.
+func (t *Term) CellSize(timeout time.Duration) (tall, wide int, err error) {
+	if t.plain {
+		return 0, 0, errors.New("this is a pipe, not a terminal, so there is nothing to ask")
+	}
+
+	// One question at a time.  See asking.
+	t.asking.Lock()
+	defer t.asking.Unlock()
+
+	// Anything already waiting belongs to a question that is over -- one
+	// that timed out, or one nobody asked -- and would otherwise be
+	// handed back as the answer to this one.
+	select {
+	case <-t.cells:
+	default:
+	}
+
+	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		return 0, 0, errors.New("the terminal has been closed")
+	}
+	// Nothing is drawn by this and nothing needs drawing again: the
+	// question is not displayed, so the prompt under it is untouched.
+	_, err = fmt.Fprint(t.out, "\x1b[16t")
+	t.mu.Unlock()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case c := <-t.cells:
+		return c.tall, c.wide, nil
+	case <-t.done:
+		return 0, 0, errors.New("the terminal has been closed")
+	case <-timer.C:
+		// Written as it would be typed, since somebody who reads this is
+		// being sent to try it by hand.  An ESC in a message would go to
+		// the terminal as an ESC.
+		return 0, 0, errors.New("this terminal did not answer \\033[16t")
 	}
 }
 

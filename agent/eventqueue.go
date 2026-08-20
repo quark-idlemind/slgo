@@ -3,7 +3,10 @@ package agent
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -44,6 +47,53 @@ type eventQueue struct {
 	events   atomic.Uint64
 	timeouts atomic.Uint64
 	errors   atomic.Uint64
+
+	// The poll that is running, if one is.  A move ends the poll
+	// against the region being left and starts another against the
+	// one arrived at; stopped closes when the first has finished, so
+	// that "no poll was left behind" is something a caller can watch
+	// rather than assume.
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	stopped chan struct{}
+}
+
+// startEventQueue spawns the poll against whatever queue the current
+// capabilities name.
+func (a *Agent) startEventQueue(ctx context.Context, fn EventHandler) {
+	qctx, cancel := context.WithCancel(ctx)
+	stopped := make(chan struct{})
+
+	a.eq.mu.Lock()
+	a.eq.cancel, a.eq.stopped = cancel, stopped
+	a.eq.mu.Unlock()
+
+	a.spawn(func() error {
+		defer close(stopped)
+		defer cancel()
+		a.runEventQueue(qctx, fn)
+		return nil
+	})
+}
+
+// stopEventQueue ends the poll against the region being left.
+//
+// It does not wait for the goroutine to have gone, and that is
+// deliberate.  The poll's last act is a done post over HTTP to a
+// simulator that has just handed this agent away, which is allowed five
+// seconds; and the caller may be the event handler itself, which runs on
+// that very goroutine, so waiting for it could be waiting for the
+// caller.  Nothing needs it gone: its context is cancelled so it cannot
+// poll again, and it holds the URL it started on rather than reading the
+// capability set that is about to be replaced.
+func (a *Agent) stopEventQueue() {
+	a.eq.mu.Lock()
+	cancel := a.eq.cancel
+	a.eq.cancel, a.eq.stopped = nil, nil
+	a.eq.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 // EventStats reports on the event queue.
@@ -69,8 +119,15 @@ var eventBackoff = []time.Duration{
 
 // runEventQueue polls until the context is cancelled or the session
 // ends.
+//
+// The URL is resolved once, here, and never looked up again.  The queue
+// belongs to one region: a poll that read the capability by name each
+// time round would, the moment a move replaced the set, acknowledge the
+// region it had left to the region it had arrived in -- and post the
+// done that closes the old queue to the new one.
 func (a *Agent) runEventQueue(ctx context.Context, fn EventHandler) {
-	if !a.HasCap(EventQueueCap) {
+	url, ok := a.Caps().Get(EventQueueCap)
+	if !ok {
 		return
 	}
 
@@ -80,7 +137,7 @@ func (a *Agent) runEventQueue(ctx context.Context, fn EventHandler) {
 	// Every way out of this loop tells the simulator we are
 	// finished, including a poll cancelled in flight -- which is the
 	// usual way it ends, and was the one path that used to skip it.
-	defer func() { a.closeEventQueue(ack) }()
+	defer func() { a.closeEventQueue(url, ack) }()
 
 	for {
 		select {
@@ -96,12 +153,7 @@ func (a *Agent) runEventQueue(ctx context.Context, fn EventHandler) {
 			return
 		}
 		a.eq.polls.Add(1)
-		resp, err := a.DoCap(ctx, CapRequest{
-			Cap:    EventQueueCap,
-			Method: http.MethodPost,
-			Body:   body,
-			Type:   "application/llsd+xml",
-		})
+		status, reply, err := a.postEventQueue(ctx, url, body)
 
 		switch {
 		case err != nil:
@@ -116,9 +168,9 @@ func (a *Agent) runEventQueue(ctx context.Context, fn EventHandler) {
 			fails++
 			continue
 
-		case resp.Status == http.StatusOK:
+		case status == http.StatusOK:
 			fails = 0
-			id, n := a.deliver(resp.Body, fn)
+			id, n := a.deliver(reply, fn)
 			if n == 0 {
 				a.eq.timeouts.Add(1)
 			}
@@ -126,14 +178,14 @@ func (a *Agent) runEventQueue(ctx context.Context, fn EventHandler) {
 				ack = id
 			}
 
-		case resp.Status == http.StatusBadGateway, resp.Status == 499:
+		case status == http.StatusBadGateway, status == 499:
 			// The classic "nothing happened, ask again"
 			// answer.  Not an error and not worth counting
 			// as one.
 			fails = 0
 			a.eq.timeouts.Add(1)
 
-		case resp.Status == http.StatusNotFound, resp.Status == http.StatusGone:
+		case status == http.StatusNotFound, status == http.StatusGone:
 			// The queue is finished with us, so there is
 			// nothing to close.  The circuit's watchdog
 			// decides whether the session is over.
@@ -213,9 +265,40 @@ func (a *Agent) deliver(body []byte, fn EventHandler) (any, int) {
 	return m["id"], n
 }
 
+// postEventQueue posts one poll and reads the answer.
+//
+// It does not go through DoCap, which resolves a capability by name out
+// of the set the session holds now.  This request is addressed to the
+// queue the poll was started against and has to reach it whether or not
+// that is still the region the avatar is in -- which is the whole
+// difficulty of closing the old queue after a move.
+func (a *Agent) postEventQueue(ctx context.Context, url string, body []byte) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Content-Type", "application/llsd+xml")
+	req.Header.Set("Accept", "application/llsd+xml")
+
+	resp, err := a.http().Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("agent: %s: %w", EventQueueCap, err)
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	if err != nil {
+		return 0, nil, fmt.Errorf("agent: %s: %w", EventQueueCap, err)
+	}
+	// An event can carry a URL to fetch or post to next, and one the
+	// simulator offered is one this session may use.  DoCap does this
+	// for every capability reply; the queue is a capability reply too.
+	a.rememberURLs(b)
+	return resp.StatusCode, b, nil
+}
+
 // closeEventQueue tells the simulator we are finished, so it does not
 // hold a poll open for a session that has gone.
-func (a *Agent) closeEventQueue(ack any) {
+func (a *Agent) closeEventQueue(url string, ack any) {
 	if ack == nil {
 		return
 	}
@@ -223,24 +306,40 @@ func (a *Agent) closeEventQueue(ack any) {
 	if err != nil {
 		return
 	}
+	// Its own context: the usual way here is a poll whose context has
+	// just been cancelled, and one more request has to be allowed
+	// after that or the queue is never closed at all.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, _ = a.DoCap(ctx, CapRequest{
-		Cap:    EventQueueCap,
-		Method: http.MethodPost,
-		Body:   body,
-		Type:   "application/llsd+xml",
-	})
+	_, _, _ = a.postEventQueue(ctx, url, body)
 }
 
-// noteEvent records session state carried by an event.
+// noteEvent acts on what an event says about this session.
 //
 // Only what belongs to the session goes here. Everything else is the
 // clients' business and is passed through untouched.
+//
+// Every arm runs inline, on the goroutine that polls the queue and hands
+// events on, so a client is never told something about this session
+// before the session itself has acted on it.  For the two that move the
+// avatar that is not a nicety: see noteTeleportFinish.
 func (a *Agent) noteEvent(name string, body any) {
-	if name != "AgentGroupDataUpdate" {
-		return
+	switch name {
+	case "AgentGroupDataUpdate":
+		a.noteGroups(body)
+	case "TeleportFinish":
+		a.noteTeleportFinish(body)
+	case "CrossedRegion":
+		a.noteCrossedRegion(body)
+	case "EnableSimulator":
+		a.noteEnableSimulator(body)
+	case "ParcelProperties":
+		a.noteParcel(body)
 	}
+}
+
+// noteGroups records the memberships an AgentGroupDataUpdate carries.
+func (a *Agent) noteGroups(body any) {
 	m := llsd.Map(body)
 	if m == nil {
 		return

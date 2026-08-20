@@ -135,16 +135,40 @@ func (v *viewerHost) queueFor(profile string) *viewer.EventQueue {
 // neither would know it was missing any.
 func (v *viewerHost) eventsFor(profile string) func(string, []byte) {
 	q := v.queueFor(profile)
-	// Said once per session rather than per event: a region with four
-	// neighbours introduces them repeatedly, and this is a standing
-	// limitation rather than news.
-	var said sync.Once
+	// Said once per KIND of withheld event rather than once per event
+	// or once per session.  A region with four neighbours introduces
+	// them over and over, so the first is unreadable; and a session
+	// that has said its piece about neighbours would otherwise say
+	// nothing at all the first time a teleport is withheld, which is
+	// different news about a different thing.
+	var mu sync.Mutex
+	said := map[string]bool{}
 	return func(name string, body []byte) {
+		_, _, before := q.Stats()
 		q.Add(name, body)
-		if _, _, withheld := q.Stats(); withheld > 0 {
-			said.Do(func() {
-				v.logf("viewer: %s: neighbouring regions are not offered to the viewer, so it will draw this region and nothing beyond it", profile)
-			})
+		if _, _, after := q.Stats(); after == before {
+			return
+		}
+		mu.Lock()
+		first := !said[name]
+		said[name] = true
+		mu.Unlock()
+		if first {
+			v.logf("viewer: %s: %s", profile, viewer.WhyWithheld(name))
+		}
+	}
+}
+
+// movedFor is the hook a session hands a region change to.
+//
+// A viewer attached to a session that another client teleports is told
+// nothing by the protocol, because in an ordinary session the viewer is
+// the client that asked.  See viewer.Circuit.RegionChanged for what is
+// said and why that is all that is said.
+func (v *viewerHost) movedFor(profile string) func(string, uint64) {
+	return func(region string, _ uint64) {
+		if c, ok := v.circuits.Load(profile); ok {
+			c.(*viewer.Circuit).RegionChanged(region)
 		}
 	}
 }
@@ -304,6 +328,21 @@ func newViewerPassword() (string, error) {
 
 // find answers the login endpoint's question: is there a session for
 // this name, and if so, on what terms.
+//
+// A session that is mid-teleport is handed over like any other, which
+// was worth a second look and is deliberate.  Nothing here is read at
+// login time and used later: the address is slgod's own and does not
+// move, the seed is a URL back to this daemon that resolves the current
+// region when the viewer asks, and the region is described from the
+// session when the viewer completes its movement -- seconds after this,
+// and long after the 400 milliseconds a move measured on Agni.  What
+// would be left to refuse is a window nothing has been seen to fall
+// into, and the only refusal this endpoint has is "There is no such
+// session here", which is what a wrong password gets and is
+// deliberately vague.  Telling a person their session has gone, fifty
+// seconds after they started a viewer, because it was busy for a
+// moment, needs a second kind of refusal carried through Lookup,
+// Handover and the login handler.  Left undone rather than done badly.
 func (v *viewerHost) find(first, last string) *viewer.Handover {
 	name := first + " " + last
 	profile, h := v.hostedNamed(name)
@@ -445,8 +484,27 @@ func (v *viewerHost) serveCap(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "that session is not up", http.StatusServiceUnavailable)
 			return
 		}
+		// The seed of the region the avatar is in NOW, which is not
+		// Account.SeedCapability: that names the region this session
+		// logged in to and goes on naming it after every teleport, so
+		// a viewer attaching after a move was being handed the
+		// capabilities of a simulator the avatar had left -- its
+		// inventory, its textures, its uploads, all of them answered
+		// by somewhere else or not at all.  The agent is asked
+		// because the agent is the only thing that knows: the seed of
+		// every region after the first arrives inside a
+		// TeleportFinish that nothing above that package reads.
+		seed := a.Seed()
+		if seed == "" {
+			// A session with no capabilities at all: SkipCaps, or a
+			// move whose seed would not parse.  Saying so beats
+			// proxying to an empty URL and answering a viewer with
+			// whatever that produces.
+			http.Error(w, "this session has no capabilities to hand on", http.StatusServiceUnavailable)
+			return
+		}
 		(&viewer.Seed{
-			Real:       a.Account.SeedCapability,
+			Real:       seed,
 			EventQueue: v.base + "/cap/" + profile + "/event",
 			Logf:       v.logf,
 		}).ServeHTTP(w, r)

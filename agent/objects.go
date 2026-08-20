@@ -559,6 +559,23 @@ func (o *Objects) anchorLocked(local uint32) (msg.Vector3, bool) {
 	return msg.Vector3{}, false
 }
 
+// byLocal is one object by the local id the region numbers it with.
+//
+// It is a scan, for the reason kill is: the store is keyed by full id,
+// because that is the only name an object keeps, and the messages that
+// refer to one by local id alone are rare enough that a second index
+// would cost more to maintain than it saved.
+func (o *Objects) byLocal(local uint32) (*Object, bool) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	v := o.byLocalLocked(local)
+	if v == nil {
+		return nil, false
+	}
+	c := *v
+	return &c, true
+}
+
 func (o *Objects) byLocalLocked(local uint32) *Object {
 	for _, v := range o.byID {
 		if v.Local == local {
@@ -827,4 +844,48 @@ func (a *Agent) Redescribe() int {
 	// caller is usually a dispatch loop that must not stall.
 	go a.requestCachedObjects(ids)
 	return len(ids)
+}
+
+// worldPlacement is where an object really is, resolved through
+// whatever it is attached to.
+//
+// A child prim's position is an offset from its root, an attachment's
+// from the avatar wearing it, and a seated avatar's from its seat, so
+// for anything with a parent the position in the store is not a place
+// in the region at all.  This composes back up the chain: each step
+// turns an offset into a place by rotating it into the parent's frame
+// and adding the parent's own position, which is the same arithmetic a
+// viewer does to draw the thing.
+//
+// It gives up when the chain runs out of described objects rather than
+// guessing at the missing link, since a wrong answer here is a position
+// somebody would act on.  Eight steps for the reason anchorLocked has
+// eight: a linkset that deep is a loop, and a loop must not be walked
+// for ever.
+func (o *Objects) worldPlacement(local uint32) (msg.Vector3, msg.Quaternion, bool) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	v := o.byLocalLocked(local)
+	if v == nil {
+		return msg.Vector3{}, msg.Quaternion{}, false
+	}
+	at, facing := v.Position, v.Rotation
+	for up := 0; up < 8 && v.Parent != 0; up++ {
+		p := o.byLocalLocked(v.Parent)
+		if p == nil {
+			return msg.Vector3{}, msg.Quaternion{}, false
+		}
+		at = addVec(p.Position, p.Rotation.Rotate(at))
+		facing = p.Rotation.Mul(facing)
+		v = p
+	}
+	if v.Parent != 0 {
+		return msg.Vector3{}, msg.Quaternion{}, false
+	}
+	return at, facing, true
+}
+
+func addVec(a, b msg.Vector3) msg.Vector3 {
+	return msg.Vector3{X: a.X + b.X, Y: a.Y + b.Y, Z: a.Z + b.Z}
 }

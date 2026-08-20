@@ -1,0 +1,127 @@
+sit sits the avatar down: on an object when one is named, and on the
+ground when nothing is.  It waits for the simulator to say what became
+of the request rather than reporting that the request went out, and
+what it prints is what happened -- what the avatar is now sitting on,
+and where that left it.
+
+	sit                     on the ground, where the avatar is
+	sit greeter             on the object called greeter
+	sit d8467e57-…          on the object with that key
+
+# A sit moves the avatar
+
+This is the part to know before anything else.  A sit is not a request
+to sit on something already within reach: the simulator picks the
+avatar up and puts it on the seat, over whatever is in the way, from
+several metres off.  Measured on Agni, a box seven metres away seated
+the avatar as readily as one half a metre away, in about a tenth of a
+second, with no walk on the wire at all -- one object update, already
+parented.  Eleven metres was refused.  So there is a range, it is
+somewhere between seven and eleven metres, and the number itself is
+not worth pinning down: what matters is that a near thing is sat on
+and a far one is refused in words.
+
+Standing up afterwards does not undo the journey.  The avatar seated on
+the box seven metres away was left six metres from where it had been
+standing -- 29, 72, 2001 before, 35, 72, 2001 after.  That is why a
+second line says where the avatar now is.  It is read back from the
+session rather than worked out from anything this command knew
+beforehand, and it is printed in the words where and tp use, so where
+run afterwards agrees with it instead of merely being close:
+
+	sit greeter
+	sat on "greeter" d8467e57-… (local 8360)
+	Pelmar Reach at 35, 72, 2001
+
+The local id in that line is the region's own numbering and is the
+simulator's answer rather than an echo of the question.  Where the two
+differ, the simulator's wins: an object is a linkset, and which prim of
+one it seats an avatar on is its business.
+
+# The ground and an object are not the same mechanism
+
+They share nothing on the wire, and the argument is the only thing that
+tells them apart -- which is why a bare sit means the ground rather
+than being a shorthand somebody thought of afterwards.
+
+Sitting on an object is a message.  The simulator answers it by
+sending this avatar's own object update back with the seat's id in it,
+which is the reparenting, and that is what this waits for: it is what
+the simulator itself believes, and it arrives whether or not anything
+else does.
+
+Sitting on the ground is not a message at all.  It is a control flag on
+the update a session sends about itself, the simulator replies to it
+with nothing whatever, and the only evidence anywhere that it happened
+is the animation list -- which arrived 144 milliseconds after the flag
+when it was measured.  So a ground sit is confirmed by hearing the
+avatar begin the animation and by nothing else, and the shell has to
+ask for that animation to be relayed to it for the length of the
+command and give it back afterwards.
+
+A ground sit moves nothing, so the position line after one says the
+avatar is where it was.  That is the confirmation and not an oversight:
+the command has one shape of answer whichever mechanism it used.
+
+# When the grid says no
+
+A refusal arrives as an alert, in about a tenth of a second, and is
+printed in the grid's own words:
+
+	sit on something eleven metres off
+	  No room to sit here, try another spot.
+
+Those words are printed as they arrived and nothing here rewords them,
+because they are the only part of a refusal anybody can act on -- and
+because the grid's are not always accurate.  A key that names no object
+at all is refused with "Try moving closer.  Can't sit on object because
+it is not in the same region as you", which is wrong twice over and is
+still the only thing said.  A shell that turned that into a tidier
+sentence of its own would have thrown away the evidence and kept the
+tidiness.
+
+That particular alert is not one this command can produce, as it
+happens: a key the region has never described is refused here, before
+anything is sent, in the same words touch and take use for it.  The
+grid's version is what a client that asked anyway would be told, and it
+is written down because it is what the shell is choosing not to
+imitate.
+
+An alert is a general channel, so something else alerting while a sit
+is in flight can be read as the answer to it.  That is arranged to
+fail the safe way round: the reparenting is looked at first, so the
+mistake this can make is a refusal that was somebody else's news, and
+never a sit reported as having worked when it did not.
+
+# Nothing answering is a third thing
+
+A sit is answered one way or the other in about a tenth of a second, so
+silence is neither a yes nor a no: the request may have taken effect
+without this hearing about it.  It is reported as what it is, in
+different words from a refusal, and the wait before it gives up is
+fifteen seconds -- far longer than the answer needs, because a ground
+sit that missed the first animation hears the next full list about
+three seconds later.  Give it a different number of seconds with the
+wait flag.
+
+# One object, and only one
+
+An object is named by the word the region calls it or by its key, which
+is how touch and take name one, and this uses the same resolver.  A key
+is taken as itself.  A name is looked up among the objects the region
+has described, and a name that two of them answer to is refused, with
+both keys, rather than guessed at.  Guessing costs more here than it
+does for touch: the wrong guess moves the avatar.
+
+A name with a space in it is one argument, so quote it.
+
+# Examples
+
+	sit
+	sit greeter
+	sit "the long bench"
+	sit --wait 30 greeter
+
+See also: stand for getting up again, where for the position this
+prints, objects for finding the thing to sit on, touch for clicking it
+instead, and tp for moving the avatar somewhere a sit cannot reach.

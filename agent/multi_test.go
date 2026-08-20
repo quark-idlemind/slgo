@@ -96,7 +96,7 @@ func TestManySessionsAtOnce(t *testing.T) {
 		if got := r.sess.Inventory.Root(); got != msg.MustParseUUID(uid(300+i)) {
 			t.Errorf("session %d inventory root = %v", i, got)
 		}
-		if r.sess.Conn.LocalAddr().String() == rigs[0].sess.Conn.LocalAddr().String() && i != 0 {
+		if r.sess.sock.local().String() == rigs[0].sess.sock.local().String() && i != 0 {
 			t.Errorf("session %d shares a socket with session 0", i)
 		}
 	}

@@ -1,0 +1,78 @@
+stand gets the avatar up, from either kind of sit, and waits for the
+simulator to show that it happened before saying so.  It takes no
+argument: an avatar sits on one thing at a time and the simulator knows
+which, so there is nothing here for anybody to name.
+
+unsit is the same command under a second name.  stand is what the world
+calls the button and what somebody types without thinking; unsit is
+what a script calls the function, and both spellings work so that
+neither has to be remembered.
+
+# It says where that left the avatar
+
+The second line is the position, in the words where and tp use, and it
+is more surprising here than it is after a sit.  Standing up does not
+undo the journey the sit made.  Measured on Agni, an avatar seated on a
+box seven metres away was left six metres from where it had been
+standing when it got up again -- 29, 72, 2001 before the sit, 35, 72,
+2001 after the stand.  So this line is where the avatar is now, and not
+where it was before any of it began.
+
+# What counts as having stood up
+
+From an object sit it is the un-parenting: the avatar's own update
+comes back with no seat in it and an absolute position again, 126
+milliseconds after the flag when it was measured.  From a ground sit
+there is no such thing, because a ground sit reparented nothing in the
+first place, so what says the avatar is up is the ground animation
+stopping -- and this shell hears animations only while one of these
+commands is running, having asked for them and given them back.
+
+There is a gap in that, and it is worth knowing rather than being
+surprised by.  A ground sit this shell's session performed is known
+about; one performed by a viewer driving the same avatar, or by another
+client while this session was not listening, is not, and reads here as
+standing.  A stand then sends the flag -- the avatar does get up --
+and returns at once, having had nothing to wait for.
+
+# It may take a moment, and that is the flag being held
+
+A stand is a control flag rather than a message, and a flag is edge
+triggered: one update carrying it is enough, most of the time.  Once is
+not enough all of the time, which cost a live run to find out.  These
+four steps, each sent as the one before was confirmed, work three times
+and then do nothing at all:
+
+	sit on an object          seated,   101ms
+	stand                     stood,    101ms
+	sit on the ground         seated,   101ms
+	stand                     ignored
+
+Not slow -- ignored.  The trace showed the flag on the wire and
+acknowledged, and another session watching the same avatar saw the
+ground sit animation still arriving twenty-three seconds later.
+Leaving three seconds before the last step, and changing nothing else,
+makes the same sequence work every time.
+
+The reading that fits is that the animation saying a ground sit has
+begun is not the avatar having finished sitting down, and an avatar
+still standing up off an object when it is told to sit takes longer to
+get there; a stand arriving inside that window is swallowed.  So this
+does what a viewer does, which is not to send a stand but to hold the
+key: the flag goes out again every half second until the avatar is up.
+The sequence above now stands in 201 milliseconds, or about 1.2 seconds
+on the go that used to fail.  Resending costs nothing, since a flag
+that has already been obeyed asks for something that has already
+happened.
+
+Fifteen seconds is how long it keeps asking before giving up and saying
+so.  Give it a different number of seconds with the wait flag.
+
+# Examples
+
+	stand
+	unsit
+	stand --wait 30
+
+See also: sit for going the other way, where for the position this
+prints, and tp for moving the avatar somewhere sitting cannot reach.

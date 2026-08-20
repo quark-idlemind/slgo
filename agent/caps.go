@@ -67,6 +67,60 @@ func (c Caps) Names() []string {
 	return out
 }
 
+// Caps are the capability URLs the region this session is in offered.
+//
+// It is a method rather than the field it used to be because the set
+// belongs to the region and not to the session: a teleport replaces
+// every URL in it at once, while requests are being made through it, and
+// a plain field read as that happened was a data race.  The map is the
+// live one and is not to be written to; a URL taken out of it is worth
+// no more than the moment it was read, since the avatar may have left.
+func (a *Agent) Caps() Caps {
+	if c := a.caps.Load(); c != nil {
+		return *c
+	}
+	return Caps{}
+}
+
+// Seed is the capability the set above was fetched from: the seed of
+// the region the avatar is in NOW.
+//
+// It lives here rather than being worked out by the caller because
+// there is nowhere else to work it out from.  Account.SeedCapability is
+// the region this session LOGGED IN to and stays that for the rest of
+// the session; the seed of every region after the first arrives inside
+// a TeleportFinish that only this package reads, and moveTo was handed
+// it, used it and dropped it.  Anything above wanting to hand a viewer
+// or a client this region's capabilities could only guess, and the
+// guess is right until the first teleport and wrong afterwards -- which
+// is the worst shape a bug can have.
+//
+// Empty means there is no seed for the region we are in: a login
+// response that carried none, or a move whose TeleportFinish named a
+// seed that was not a URL.  SkipCaps does not empty it -- that says not
+// to fetch the set, not that there is nowhere to fetch it from -- so a
+// session that skipped them still says where they would have come from.
+// What is never returned is the login seed after a move: a URL into a
+// region the avatar has left is worse than none.
+func (a *Agent) Seed() string {
+	if s := a.seed.Load(); s != nil {
+		return *s
+	}
+	return ""
+}
+
+func (a *Agent) setSeed(s string) { a.seed.Store(&s) }
+
+// SetCaps replaces the set, for a caller that got them from somewhere
+// this package did not: a session handed capabilities by whatever
+// arranged the login, or a test.
+func (a *Agent) SetCaps(c Caps) {
+	if c == nil {
+		c = Caps{}
+	}
+	a.caps.Store(&c)
+}
+
 // RequestCaps asks a seed capability for the URLs of the named
 // capabilities.
 //

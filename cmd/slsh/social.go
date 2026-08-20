@@ -183,6 +183,13 @@ func (sh *Shell) watch(ctx context.Context) {
 	lines := sh.s.Chat(sl.ChatFilter{}, 256)
 	ims := sh.s.IMs(0)
 	perms := sh.s.Permissions(0)
+	// The avatar arriving somewhere, which is news whoever asked for it:
+	// a lure accepted from another client attached to the same daemon, a
+	// session re-established after the circuit was lost, and an avatar
+	// that walked over a border and was told about it.  tp asks for its
+	// own and prints its own line as well -- see cmdTP for why both are
+	// wanted.
+	regions := sh.s.RegionChanges(0)
 	sh.s.OnDialog = func(d sl.Dialog) {
 		// A text box carries a sentinel where its buttons would be, and
 		// printing that at somebody is showing them the plumbing.
@@ -218,6 +225,16 @@ func (sh *Shell) watch(ctx context.Context) {
 			}
 			sh.noticef("%s wants %s -- waiting lists it, answer N grants it",
 				q.ObjectName, q.Wants)
+		case c, ok := <-regions:
+			if !ok {
+				return
+			}
+			// What was described in the region left behind is gone, and
+			// saying so is the useful half of the line: a script or a
+			// person holding an object from a moment ago is holding
+			// something the new region has never heard of.
+			sh.noticef("the avatar is now in %s -- what the last region "+
+				"described is gone", c.Region)
 		}
 	}
 }

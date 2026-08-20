@@ -24,18 +24,28 @@ var ErrTimeout = errors.New("sl: timed out waiting for the simulator")
 // Subscriptions are the messages this package needs relayed to it.
 // Passing anything less to Attach leaves it waiting for confirmations
 // that will not arrive.
+//
+// AvatarSitResponse is here and AvatarAnimation is not, and the
+// difference is what each costs.  The first arrives once, when this
+// avatar sits on something, and carries the seat offset; the second
+// arrives for every avatar in range, in full, about every three seconds,
+// which is a bill automate and autobench would pay for ever for
+// something only a sit reads.  So the sit borrows it for the length of
+// the command and gives it back; see sit.go.
 var Subscriptions = []string{
 	"ObjectUpdate", "ObjectUpdateCompressed", "ObjectProperties",
 	"ObjectPropertiesFamily", "KillObject",
 	"UpdateCreateInventoryItem", "ReplyTaskInventory",
 	"SendXferPacket", "AbortXfer", "TransferInfo", "TransferPacket",
 	"ChatFromSimulator", "AlertMessage",
+	"AvatarSitResponse",
 	"ImprovedInstantMessage", "UUIDNameReply", "AvatarPickerReply",
 	"AvatarPropertiesReply", "AvatarInterestsReply", "AvatarGroupsReply",
 	"OnlineNotification", "OfflineNotification",
 	"ScriptRunningReply", "ScriptQuestion", "ScriptDialog",
 	"TeleportLocal", "TeleportFailed", "TeleportFinish",
-	"AgentMovementComplete", "ParcelProperties",
+	"AgentMovementComplete", "ParcelProperties", "ParcelDwellReply",
+	"MapBlockReply",
 }
 
 // Session is a connection to a hosted agent, with the bookkeeping needed
@@ -64,6 +74,22 @@ type Session struct {
 	attach      map[msg.UUID]*Attached
 	killed      map[uint32]bool
 
+	// anims is what the simulator last said was playing on THIS
+	// avatar, and sitOn and sitOffset are the last AvatarSitResponse it
+	// sent us.  See sit.go: the animations are the whole of the
+	// evidence that a ground sit happened, and the offset is a detail
+	// of an object sit that the reparenting does not carry.
+	anims     []msg.UUID
+	sitOn     msg.UUID
+	sitOffset msg.Vector3
+
+	// animWatch is how many calls are holding the borrowed
+	// AvatarAnimation subscription.  A count rather than a flag,
+	// because there is one subscription set for the whole connection
+	// and the first of two overlapping sits to finish would otherwise
+	// take it away from the second.
+	animWatch int
+
 	// Replies keyed by what was asked.
 	created map[uint32]*msg.UpdateCreateInventoryItem_InventoryData
 
@@ -80,11 +106,12 @@ type Session struct {
 	// thing that ever touches a subscription's channel: the only
 	// writer and the only closer.  Closing from anywhere else races
 	// with a send no matter how it is locked.
-	chatSubs map[<-chan Line]*chatSub
-	permSubs map[<-chan *Permission]*permSub
-	imSubs   map[<-chan *IM]*imSub
-	chatCtl  chan chatCmd
-	readDone chan struct{}
+	chatSubs   map[<-chan Line]*chatSub
+	permSubs   map[<-chan *Permission]*permSub
+	imSubs     map[<-chan *IM]*imSub
+	regionSubs map[<-chan *RegionChange]*regionSub
+	chatCtl    chan chatCmd
+	readDone   chan struct{}
 
 	// subsClosed says closeChat has been, so that a subscription asked
 	// for after the session ended is handed back closed rather than
@@ -104,11 +131,31 @@ type Session struct {
 	// from three messages safe for the caller to read.
 	profileFns []func(*avatarReply)
 
+	// mapFns are who is waiting for the blocks a MapNameRequest is
+	// answered with.  See worldmap.go: they are called with mu held,
+	// which is what makes an answer assembled from several packets safe
+	// for the caller to read.
+	mapFns []func([]msg.MapBlockReply_Data)
+
+	// teleportFns are who is waiting to hear what became of a teleport
+	// they asked for.  See teleport.go: they are called with mu held,
+	// like the two above, and for the same reason -- the answer is put
+	// together on the reader goroutine and read on another.
+	teleportFns []func(*teleportAnswer)
+
 	// scriptFns are who is waiting for a ScriptRunningReply.  See
 	// ScriptRunning: the state is not remembered, because a script
 	// starts and stops on its own and a remembered answer would be a
 	// claim about the past dressed as one about now.
 	scriptFns []func(object, item msg.UUID, running bool)
+
+	// parcelFns and dwellFns are who is waiting for an answer about a
+	// piece of land.  See parcel.go: a ParcelProperties carries the
+	// sequence id it was asked with and the waiters sort themselves
+	// out by it, because the answer arrives on the queue where nothing
+	// else pairs it with its question.
+	parcelFns []func(*agent.Parcel)
+	dwellFns  []func(local int32, id msg.UUID, dwell float32)
 
 	// Permission requests seen, answered or not, in arrival order.
 	asked []*Permission
@@ -232,6 +279,7 @@ func New(b Backend) (*Session, error) {
 		chatSubs:    map[<-chan Line]*chatSub{},
 		permSubs:    map[<-chan *Permission]*permSub{},
 		imSubs:      map[<-chan *IM]*imSub{},
+		regionSubs:  map[<-chan *RegionChange]*regionSub{},
 		names:       map[msg.UUID]string{},
 		asking:      map[msg.UUID]bool{},
 		offers:      map[msg.UUID]*Offer{},
@@ -328,10 +376,12 @@ func (w *Session) Alerts() []string {
 // The circuit is what says the session is over.  The event queue ending
 // is not the same thing -- a simulator answers 404 to a queue it has
 // finished with while the circuit carries on -- so a closed event
-// channel only stops this listening to it.
+// channel only stops this listening to it.  The same goes for the
+// region changes, which a backend may not have at all.
 func (w *Session) read(ctx context.Context) {
 	msgs := w.b.Messages()
 	events := w.b.Events()
+	regions := w.b.RegionChanges()
 	defer func() {
 		close(w.readDone)
 		w.closeChat()
@@ -369,6 +419,19 @@ func (w *Session) read(ctx context.Context) {
 				continue
 			}
 			w.event(e)
+
+		// The avatar is in another region, so most of what this
+		// session remembers is about somewhere else.  Handled here
+		// rather than by whoever teleported, because a teleport is
+		// not the only way it happens: an accepted lure, a border
+		// crossing, and a session re-established after the circuit
+		// was lost all arrive as this and nothing else.
+		case c, ok := <-regions:
+			if !ok {
+				regions = nil
+				continue
+			}
+			w.regionChanged(c)
 		}
 	}
 }
@@ -388,6 +451,16 @@ func (w *Session) read(ctx context.Context) {
 // already -- see scriptRunningEvent.
 var eventHandlers = map[string]func(*Session, map[string]any){
 	"ScriptRunningReply": (*Session).scriptRunningEvent,
+
+	// Both halves of a teleport's answer arrive here rather than on the
+	// circuit.  The template says so of the first and not of the second,
+	// and stage 0 watched both come off the queue.
+	"TeleportFinish": (*Session).teleportFinishEvent,
+	"TeleportFailed": (*Session).teleportFailedEvent,
+
+	// The land under the avatar, which arrives here whether it was
+	// asked for or not.  See parcel.go.
+	"ParcelProperties": (*Session).parcelEvent,
 }
 
 // event dispatches one entry from the event queue.
@@ -483,6 +556,9 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		}
 		w.mu.Unlock()
 
+	case *msg.ParcelDwellReply:
+		w.dwellReply(t.Data.LocalID, t.Data.ParcelID, t.Data.Dwell)
+
 	case *msg.ObjectPropertiesFamily:
 		w.mu.Lock()
 		w.owners[t.ObjectData.ObjectID] = t.ObjectData.OwnerID
@@ -529,6 +605,26 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		// the work there is scriptRunningEvent.
 		w.scriptRunning(t.Script.ObjectID, t.Script.ItemID, t.Script.Running)
 
+	// A teleport inside this region, which the simulator does itself and
+	// announces on the circuit.  It is the whole answer to a lure to
+	// somewhere nearby: there is no finish for one of those and waiting
+	// for one waits for the timeout.
+	case *msg.TeleportLocal:
+		w.teleportAnswered(&teleportAnswer{local: true})
+
+	// These two are the queue's on Second Life -- see eventHandlers --
+	// and these arms are for a grid that still sends them on the
+	// circuit, as the ScriptRunningReply arm above is.
+	case *msg.TeleportFinish:
+		w.teleportAnswered(&teleportAnswer{handle: t.Info.RegionHandle})
+
+	case *msg.TeleportFailed:
+		a := &teleportAnswer{failed: true, reason: trimNul(t.Info.Reason)}
+		if len(t.AlertInfo) > 0 {
+			a.key = trimNul(t.AlertInfo[0].Message)
+		}
+		w.teleportAnswered(a)
+
 	case *msg.UpdateCreateInventoryItem:
 		w.mu.Lock()
 		for i := range t.InventoryData {
@@ -541,6 +637,34 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.mu.Lock()
 		w.taskInv[t.InventoryData.TaskID] = trimNul(t.InventoryData.Filename)
 		w.taskSeen[t.InventoryData.TaskID] = true
+		w.mu.Unlock()
+
+	// This avatar's own animation list, and nobody else's.  The message
+	// arrives for every avatar in range and keeping the crowd's would be
+	// keeping a list that grows with the region; agent.Posture makes the
+	// same choice and says more about it.  The list is replaced rather
+	// than merged, because the message is the whole of it every time and
+	// an animation that has stopped is simply absent from the next one
+	// -- which is the only way standing up from a ground sit is ever
+	// heard about.
+	case *msg.AvatarAnimation:
+		if t.Sender.ID == w.me {
+			ids := make([]msg.UUID, 0, len(t.AnimationList))
+			for _, an := range t.AnimationList {
+				ids = append(ids, an.AnimID)
+			}
+			w.mu.Lock()
+			w.anims = ids
+			w.mu.Unlock()
+		}
+
+	// Where the simulator put us on the thing we asked to sit on.  It is
+	// not what a sit waits for -- the reparenting is, and it arrives
+	// whether or not this does -- so this is kept and never blocked on.
+	case *msg.AvatarSitResponse:
+		w.mu.Lock()
+		w.sitOn = t.SitObject.ID
+		w.sitOffset = t.SitTransform.SitPosition
 		w.mu.Unlock()
 
 	case *msg.ChatFromSimulator:
@@ -573,6 +697,12 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 
 	case *msg.AvatarGroupsReply:
 		w.avatarReplyTo(&avatarReply{Avatar: t.AgentData.AvatarID, Groups: t})
+
+	// One name asked about is answered with as many of these as it
+	// takes, so the blocks go to whoever asked and the list is put back
+	// together there; see worldmap.go.
+	case *msg.MapBlockReply:
+		w.mapBlocks(t.Data)
 
 	case *msg.AlertMessage:
 		s := trimNul(t.AlertData.Message)

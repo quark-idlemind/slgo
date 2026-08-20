@@ -37,6 +37,33 @@ var worldCommands = map[string]*command{
 		man:   "look",
 		run:   cmdLook,
 	},
+	"parcel": {
+		params: "[X,Y]",
+		flags:  func() any { return new(parcelOptions) },
+		brief:  "the land under this avatar, or under a point in this region",
+		man:    "parcel",
+		run:    cmdParcel,
+	},
+	"map": {
+		flags: func() any { return new(mapOptions) },
+		brief: "a picture of who is around this avatar, or of the whole region",
+		man:   "map",
+		run:   cmdMap,
+	},
+	"regions": {
+		params: "NAME",
+		flags:  func() any { return new(regionsOptions) },
+		brief:  "find regions on the grid's map by the start of a name",
+		man:    "regions",
+		run:    cmdRegions,
+	},
+	"neighbours": {
+		params: "[on|off]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "the circuits held to the regions around this one, which walking over a border needs",
+		man:    "neighbours",
+		run:    cmdNeighbours,
+	},
 	"caps": {
 		params: "[TEXT]",
 		flags:  func() any { return new(helpOnly) },
@@ -84,7 +111,7 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "%s at %.0f, %.0f, %.0f\n", p.Region, p.Position.X, p.Position.Y, p.Position.Z)
+	fmt.Fprintln(out, positionLine(p))
 	if !p.ActiveGroup.IsZero() {
 		// Named where a name is to be had.  The key is what everything
 		// else takes and stays in the line for that reason, but it is
@@ -132,13 +159,162 @@ func cmdLook(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	fmt.Fprintf(out, "%s\n", r.Name)
 	fmt.Fprintf(out, "  id       %s\n", r.ID)
 	fmt.Fprintf(out, "  owner    %s\n", r.Owner)
-	fmt.Fprintf(out, "  access   %d\n", r.Access)
+	// In the same words "regions" uses.  It is one datum, and the two
+	// commands are run one after the other: a "21" here beside a
+	// "moderate" there reads as two different facts.
+	fmt.Fprintf(out, "  access   %s\n", sl.AccessName(r.Access))
 	fmt.Fprintf(out, "  water    %.1fm\n", r.WaterHeight)
 	fmt.Fprintf(out, "  product  %s\n", r.ProductName)
 	if n, err := sh.s.Known(ctx); err == nil {
 		fmt.Fprintf(out, "  objects  %d described so far\n", n)
 	}
 	return nil
+}
+
+// regionsOptions is what regions was asked for.
+type regionsOptions struct {
+	Wait int  `getopt:"--wait -w=SECONDS  how long to give the map to answer [15]"`
+	Help bool `getopt:"--help -h          show what this command takes"`
+}
+
+// cmdRegions says where a region is, for a region the avatar is not in.
+//
+// It is "look" asked about somewhere else, and it can say much less:
+// what the map answers with is a position, a maturity rating and a
+// handle, because the rest of the block -- how many people are there,
+// what the region allows, where the water is -- came back zero for every
+// region on every run (see sl.FindRegions).
+//
+// Plural, because the search is by prefix and a listing is what comes
+// back: "Sandbox" finds thirty-three regions and none of them is called
+// Sandbox, and an exact name is one row among however many begin with
+// it.  Picking the closest match would be this command deciding which of
+// thirty-three places somebody meant, and doing it silently.
+//
+// The handle is in the line because it is the number a teleport is
+// addressed to, and nothing else in the shell will tell anybody what it
+// is.
+func cmdRegions(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o regionsOptions
+	args, done, err := subOptions("regions", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) == 0 {
+		return usageError("regions")
+	}
+	// Joined with spaces: a region name has them in it, and quoting one
+	// at a prompt is a thing to have to remember.
+	found, err := sh.s.FindRegions(ctx, strings.Join(args, " "),
+		time.Duration(o.Wait)*time.Second)
+	if err != nil {
+		return err
+	}
+	printRegions(out, found)
+	return nil
+}
+
+// printRegions writes what the map answered, a region to a line.
+//
+// Shared rather than copied, because tp prints the same listing when a
+// name matched several and it has to be the same listing: somebody
+// reading a refusal and then running regions to look again should not be
+// shown the same rows in two different shapes.
+func printRegions(out io.Writer, found []sl.MapRegion) {
+	for _, r := range found {
+		fmt.Fprintf(out, "%-32s %5d, %-5d %-9s %d\n",
+			r.Name, r.X, r.Y, sl.AccessName(r.Access), r.Handle)
+	}
+}
+
+// cmdNeighbours says what circuits this session holds to the regions
+// around it, and turns them on and off.
+//
+// It is the one command here that costs the daemon something lasting:
+// on is a socket and a share of the traffic per neighbouring region --
+// four around Pelmar Reach, up to eight anywhere -- held for as long as it
+// is on.  That is why it is off unless somebody says so, and why the
+// state is printed after a change rather than the change being silent.
+//
+// The argument is a word and not a flag.  "neighbours on" reads as the
+// sentence somebody means, where "neighbours --set" would be a flag
+// whose value is the whole of the command.
+func cmdNeighbours(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("neighbours", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) > 1 {
+		return usageError("neighbours")
+	}
+
+	var n *sl.Neighbours
+	if len(args) == 1 {
+		// Nothing else is accepted, and "yes" is not a synonym here.
+		// Anything this took as a word it did not understand would be
+		// a session left as it was by a command that looked like it
+		// had changed it.
+		switch strings.ToLower(args[0]) {
+		case "on":
+			n, err = sh.s.SetNeighbours(ctx, true)
+		case "off":
+			n, err = sh.s.SetNeighbours(ctx, false)
+		default:
+			return usageError("neighbours",
+				fmt.Sprintf("%q is neither on nor off", args[0]))
+		}
+	} else {
+		n, err = sh.s.Neighbours(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	printNeighbours(out, n)
+	return nil
+}
+
+// printNeighbours writes the state and then a circuit to a line.
+//
+// It follows printRegions' shape, for the reason printRegions is shared
+// with tp: these are regions, and somebody who has just run regions
+// should not have to read a second layout to learn the same kind of
+// fact.  The name and the square come first because they are what says
+// WHICH region; the handle is left out entirely, where regions prints
+// it, because nothing is addressed by a neighbour's handle -- a border
+// is walked over rather than typed at.
+//
+// On with nothing held is a state worth spelling out.  A simulator
+// offers a neighbour when the avatar is near one and offers none at all
+// to an avatar in the middle of a region, so an empty listing usually
+// means "not near a border" rather than anything having gone wrong.
+func printNeighbours(out io.Writer, n *sl.Neighbours) {
+	switch {
+	case !n.On:
+		fmt.Fprintln(out, "neighbours are off; this avatar cannot walk over a border")
+		return
+	case len(n.Held) == 0:
+		fmt.Fprintln(out, "neighbours are on; no circuit is open, "+
+			"which is what being away from a border looks like")
+		return
+	}
+	fmt.Fprintf(out, "neighbours are on, %d %s held\n",
+		len(n.Held), plural(len(n.Held), "circuit", "circuits"))
+	for _, c := range n.Held {
+		x, y := msg.GridCoords(c.Handle)
+		name := c.Name
+		switch {
+		case !c.Handshook:
+			// The name arrives in the handshake, so a circuit
+			// without one has none to print.  Measured at about a
+			// second on Agni, which is quick enough that seeing this
+			// twice running means the offer came to nothing.
+			name = "(no handshake yet)"
+		case name == "":
+			name = "(unnamed)"
+		}
+		fmt.Fprintf(out, "%-32s %5d, %-5d %-21s %d heard\n", name, x, y, c.Addr, c.Heard)
+	}
 }
 
 func cmdCaps(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

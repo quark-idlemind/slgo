@@ -92,16 +92,29 @@ func (b *fakeBackend) Info() *sl.Info {
 	}
 }
 
+// Control is nothing here.  Nothing this fake stands in for sits
+// down or stands up; the method exists because sl.Backend has it,
+// so that the one place an AgentUpdate is built stays the one place
+// that owns the camera.
+func (b *fakeBackend) Control(ctx context.Context, flags uint32) error { return nil }
+
 func (b *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) error { return nil }
 func (b *fakeBackend) Messages() <-chan *sl.Message                                 { return b.messages }
 
 // Events is nothing: this fake exists so a real terminal can be driven
 // over a real pty, and nothing it drives reads the event queue.
 func (b *fakeBackend) Events() <-chan *sl.QueueEvent { return nil }
-func (b *fakeBackend) Done() <-chan struct{}         { return b.done }
-func (b *fakeBackend) Err() error                    { return nil }
-func (b *fakeBackend) Close() error                  { return nil }
-func (b *fakeBackend) HasCap(name string) bool       { return name == "InventoryAPIv3" }
+func (b *fakeBackend) Land(ctx context.Context) (*sl.Land, error) {
+	return &sl.Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
+}
+func (b *fakeBackend) Done() <-chan struct{}   { return b.done }
+func (b *fakeBackend) Err() error              { return nil }
+func (b *fakeBackend) Close() error            { return nil }
+func (b *fakeBackend) HasCap(name string) bool { return name == "InventoryAPIv3" }
+
+// RegionChanges is never told of one: nothing typed at this shell
+// leaves the region.
+func (b *fakeBackend) RegionChanges() <-chan *sl.RegionChange { return nil }
 
 func (b *fakeBackend) Presence(ctx context.Context, d float32) (*sl.Presence, error) {
 	return &sl.Presence{Region: "Nowhere"}, nil
@@ -111,6 +124,9 @@ func (b *fakeBackend) Objects(ctx context.Context, named, id string) ([]*sl.Seen
 }
 func (b *fakeBackend) Region(ctx context.Context) (*sl.Region, bool, error) {
 	return &sl.Region{Name: "Nowhere"}, true, nil
+}
+func (b *fakeBackend) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
+	return &sl.Neighbours{}, nil
 }
 func (b *fakeBackend) Flush(ctx context.Context) (int, error) { return 0, nil }
 func (b *fakeBackend) Friends(ctx context.Context) ([]sl.Friend, error) {

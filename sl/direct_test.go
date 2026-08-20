@@ -36,7 +36,7 @@ import (
 func aDirectSession(t *testing.T) *Direct {
 	t.Helper()
 	return &Direct{
-		a:        &agent.Agent{Caps: agent.Caps{}},
+		a:        &agent.Agent{},
 		messages: make(chan *Message, relayDepth),
 		info: &Info{
 			Name: "direct", AgentID: testAgentID, SessionID: testSessionID,
@@ -295,7 +295,7 @@ func TestADirectCapabilityGoesStraightToTheSimulator(t *testing.T) {
 	}
 
 	srv := newTestCapServer(t)
-	d.a.Caps["SimulatorFeatures"] = srv
+	d.a.SetCaps(agent.Caps{"SimulatorFeatures": srv})
 	if !d.HasCap("SimulatorFeatures") {
 		t.Error("HasCap missed a capability that was offered")
 	}

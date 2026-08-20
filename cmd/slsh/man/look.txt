@@ -4,9 +4,10 @@ of the water, and which product it runs as.  "where" is the same
 question asked about the avatar rather than about the land, and
 "objects" is what is standing on it.
 
-It takes no argument.  The access rating is printed as the number that
-arrived, because nothing here translates those numbers into the words a
-viewer shows.
+It takes no argument.  The access rating is printed in the words a
+viewer shows -- general, moderate, adult -- and as its number where the
+grid sends one nothing here has a word for, which is the same rendering
+"regions" gives it.
 
 # It was said once, before anybody was listening
 
@@ -38,10 +39,11 @@ rather than as a census.
 	Testville
 	  id       d8467e57-…
 	  owner    7e7c7e57-…
-	  access   13
+	  access   general
 	  water    20.0m
 	  product  Estate / Full Region
 	  objects  195 described so far
 
-See also: where, who, objects, caps and features for what this
+See also: where, who, objects, regions for the same question asked
+about somewhere else on the grid, caps and features for what this
 simulator offers a client, and lsl for the language it implements.

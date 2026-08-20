@@ -317,6 +317,89 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 			c.answerPing(p)
 		}
 
+	// ---- absorbed: a teleport out of this region ----
+	//
+	// A viewer's teleport is refused rather than followed, and what
+	// forwarding one would now do is not what doc/viewer-frontend.md
+	// said until this stage.  That sentence -- the agent goes to a
+	// simulator slgod is not connected to and the session ends -- was
+	// written when nothing in the daemon read TeleportFinish, and the
+	// daemon follows a teleport now.  So the session does not end, and
+	// what happens instead is harder to see and worse to be in: the
+	// request is granted, slgod moves the circuit to the new simulator,
+	// and the viewer is told none of it, because TeleportFinish is
+	// withheld from its event queue.  It goes on drawing a region the
+	// avatar has left, pushing a camera around it that the new
+	// simulator is deciding what to stream from, and taking object
+	// updates whose local ids are the new region's numbering laid over
+	// the old region's.  Nothing anywhere reports an error.  A session
+	// that ends at least says so.
+	//
+	// Following properly is a second circuit on a second port and a
+	// rewritten TeleportFinish -- doc/teleport.md's other option, which
+	// is deliberately not built.  So these are absorbed the way
+	// UseCircuitCode and LogoutRequest are, and the person is told:
+	// a control that does nothing and says nothing is indistinguishable
+	// from a viewer that has stopped working.
+	//
+	// StartLure is deliberately not among them and goes on being
+	// forwarded.  Offering somebody else a teleport to where this
+	// avatar is standing moves this avatar nowhere, and it is a thing a
+	// viewer does far better than a shell does.
+
+	case "TeleportLocationRequest":
+		// The map, a SLurl, and "teleport here" off the double-click
+		// menu -- and the last of those is the one that must not be
+		// refused.  A teleport within this region changes nothing
+		// about the circuit: the same simulator answers it, with a
+		// TeleportLocal that goes back to the viewer like any other
+		// message, and refusing it would break something that is not
+		// broken.  The Info block carries the destination's handle and
+		// the session knows its own, so the two are told apart by
+		// asking rather than by guessing.
+		if c.withinThisRegion(p.Message) {
+			c.forward(p)
+			break
+		}
+		c.record(FromViewer, p, Absorbed)
+		c.refuseTeleport()
+
+	case "TeleportRequest":
+		// The same thing addressed by region id rather than by handle.
+		// Compared the same way and for the same reason: a spot in the
+		// region we are standing in is not a move.
+		if c.withinThisRegion(p.Message) {
+			c.forward(p)
+			break
+		}
+		c.record(FromViewer, p, Absorbed)
+		c.refuseTeleport()
+
+	case "TeleportLandmarkRequest":
+		// A landmark, and -- with a null landmark id -- "teleport
+		// home".  Neither says where it goes: the id is resolved by
+		// the grid, so there is nothing here to compare against this
+		// region and nothing to forward safely.  Home is somewhere
+		// else by construction.
+		c.record(FromViewer, p, Absorbed)
+		c.refuseTeleport()
+
+	case "TeleportLureRequest":
+		// Accepting somebody's offer, which is the same move with
+		// somebody else's finger on it.  slsh accepts lures and
+		// follows them (sl.Session.AcceptLure); a viewer cannot,
+		// for the reason above.
+		c.record(FromViewer, p, Absorbed)
+		c.refuseTeleport()
+
+	case "TeleportCancel":
+		// Absorbed without a word.  There is nothing of the viewer's
+		// to cancel -- its requests never left this daemon -- and
+		// forwarded it would cancel a teleport ANOTHER client asked
+		// for, which is the one thing it must not do.  No alert,
+		// because a cancel that cancels nothing is not news.
+		c.record(FromViewer, p, Absorbed)
+
 	// ---- forwarded, but read on the way past ----
 
 	case "AgentUpdate":
@@ -376,6 +459,119 @@ func (c *Circuit) checkCircuit(p *msg.Packet) {
 		c.logf("viewer: a viewer claimed circuit %d session %s, but this session is %d/%s",
 			m.CircuitCode.Code, m.CircuitCode.SessionID, acct.CircuitCode, acct.SessionID)
 	}
+}
+
+// withinThisRegion reports whether a teleport request names the region
+// the avatar is already in.
+//
+// Anything else is treated as somewhere else, including a session that
+// does not yet know its own handle or region id.  That is the safe way
+// round: the only request worth forwarding is one positively known to
+// stay here, and "I do not know where I am" is not that.
+func (c *Circuit) withinThisRegion(m msg.Message) bool {
+	a := c.session()
+	if a == nil {
+		return false
+	}
+	switch t := m.(type) {
+	case *msg.TeleportLocationRequest:
+		here := a.RegionHandle()
+		return here != 0 && t.Info.RegionHandle == here
+	case *msg.TeleportRequest:
+		here, known := a.Region()
+		return known && !here.ID.IsZero() && t.Info.RegionID == here.ID
+	}
+	return false
+}
+
+// refuseTeleport says why the teleport the person just asked for did
+// not happen, and what to do instead.
+//
+// The wording is the only explanation there will be, so it says all
+// three things: that nothing was sent, why, and the way that does work.
+// "slsh tp" is that way -- it moves the session, and the daemon follows
+// it -- and the viewer has to be attached again afterwards because
+// replaying a new region to a viewer that believes it is in the old one
+// is the part that is not built.
+func (c *Circuit) refuseTeleport() {
+	c.tell("slgod is holding this session, so the teleport was not sent: " +
+		"a viewer cannot follow the avatar to another simulator yet. " +
+		"Move with \"slsh tp\", then log this viewer out and in again.")
+	c.logf("viewer: a teleport out of this region was refused; the session stays where it is")
+}
+
+// RegionChanged tells an attached viewer that the avatar is somewhere
+// else now.
+//
+// Another client moves this session -- slsh tp, or a lure accepted from
+// slsh waiting -- and the viewer is no part of that conversation.  In
+// an ordinary session the viewer is the client that asked, so the
+// protocol has nothing that says "you have been moved" to one that did
+// not.
+//
+// What a viewer does about that was measured on 2026-08-16 with
+// Firestorm attached, and it is not what this said when it was written.
+// It does not go on drawing the region left behind: within a second of
+// the move it put up "You have been logged out of slgod.  You were sent
+// to an invalid region." and sent a LogoutRequest.  That request is
+// absorbed like any other (see fromViewer), so the grid session stayed
+// up and the viewer dropped off it -- which is the outcome refusing was
+// for, arrived at by the viewer's own judgement rather than by this
+// telling it anything.
+//
+// The alert is still worth sending and is delivered before that
+// happens: it names the region and says what to do, where the viewer's
+// own message says only that something was invalid.  A person reading
+// the two together knows what became of their avatar.
+//
+// Telling is all this does.  Replaying the new region to a viewer that
+// believes it is in the old one is "follow", which is deferred, so the
+// person gets the one thing that is true and can be acted on.  A viewer
+// that never joined is not told: there is nobody at the other end, and
+// a circuit exists from the first login whether anything attached or
+// not.
+func (c *Circuit) RegionChanged(name string) {
+	if !c.Joined() {
+		return
+	}
+	where := name
+	if where == "" {
+		where = "another region"
+	}
+	c.tell("The avatar has been teleported to " + where + ". " +
+		"This viewer is still drawing the region it left; " +
+		"log out and in again to follow it.")
+	c.logf("viewer: the avatar moved to %s under an attached viewer; it was told to attach again", where)
+}
+
+// tell says something to the person, in the one place a viewer will
+// always draw it.
+//
+// AgentAlertMessage with Modal set, rather than a line of chat.  What
+// there is to say here is always about a control that did nothing or a
+// window that is now a lie, and the person's next move depends on
+// having read it.  Nearby chat is the wrong place for that: the window
+// can be closed, collapsed or scrolled past, its toasts can be turned
+// off in the preferences, and a line in it reads as something somebody
+// in the region said.  A modal alert is the simulator addressing this
+// avatar by id, and a viewer draws it in front of the world with a
+// button on it.
+//
+// Sent from whichever goroutine noticed, including the grid session's
+// dispatch goroutine by way of RegionChanged.  That is one message onto
+// the sender's buffered channel, served by a goroutine that does
+// nothing but write UDP, which is as close to not blocking there as
+// this side gets.
+func (c *Circuit) tell(text string) {
+	a := c.session()
+	if a == nil {
+		return
+	}
+	m := &msg.AgentAlertMessage{}
+	m.AgentData.AgentID = a.Account.AgentID
+	m.AlertData.Modal = true
+	m.AlertData.Message = []byte(text + "\x00")
+	c.toViewer(m, msg.FlagReliable)
 }
 
 // sendMovementComplete answers CompleteAgentMovement with where the
@@ -630,6 +826,62 @@ func (c *Circuit) FromSim(p *msg.Packet) {
 		// The session's business, not the viewer's.  Whether a
 		// viewer should be told its session is ending is a
 		// question for when detaching cleanly exists.
+		c.record(FromSim, p, Absorbed)
+		return
+
+	case "TeleportStart", "TeleportProgress":
+		// The messages here about something the viewer did not ask
+		// for.  Its own teleports out of this region are refused in
+		// fromViewer, so a start on this circuit is always another
+		// client's -- slsh tp, or a lure accepted somewhere else.
+		//
+		// Handed over, TeleportStart puts a viewer in the teleport
+		// tunnel: the world torn down, a progress bar, and no way
+		// out except TeleportFinish, TeleportLocal or
+		// TeleportFailed.  TeleportFinish is withheld from the
+		// event queue (see caps.go) precisely because it is the
+		// dangerous one, so a viewer sent the start would sit in the
+		// tunnel over a teleport it did not ask for and could not
+		// have stopped.  TeleportProgress is the same message with a
+		// caption on it and goes the same way.
+		//
+		// What absorbing them costs is the progress bar of a
+		// WITHIN-region teleport, which is the viewer's own and is
+		// forwarded -- and that cost was measured on Agni rather
+		// than guessed at.  A local teleport IS announced with a
+		// start: the simulator sent TeleportStart and TeleportLocal
+		// twenty microseconds apart, in the same burst.  So the
+		// viewer is put in the tunnel and taken straight out of it
+		// again by the message it is really waiting for, and
+		// absorbing the start costs it those twenty microseconds of
+		// progress bar.
+		c.record(FromSim, p, Absorbed)
+		return
+
+	case "TeleportFinish":
+		// Belt and braces, and cheap.  The template marks this
+		// UDPBlackListed, so on Agni it arrives on the event queue
+		// and is withheld there; a grid that sent it on the circuit
+		// instead would hand a viewer the address, the seed and the
+		// invitation to open a connection to the real simulator with
+		// this session's own ids.  That failure is bad enough to be
+		// worth closing from both roads.
+		c.record(FromSim, p, Absorbed)
+		return
+
+	case "CrossedRegion", "EnableSimulator":
+		// The same address, offered for walking rather than for
+		// teleporting.  Both are UDPBlackListed and both are withheld
+		// from the event queue with the reasoning in caps.go; this arm
+		// is the other road, on the same terms as TeleportFinish above.
+		//
+		// CrossedRegion is the more speculative of the two, and
+		// deliberately so: nobody has seen one on this grid, so this
+		// costs nothing until a grid sends one and closes a hole the
+		// moment one does.  EnableSimulator is the opposite -- it
+		// arrives constantly, and on Agni it arrives on the queue, so
+		// what this arm covers is a grid that puts it where the
+		// template says it no longer goes.
 		c.record(FromSim, p, Absorbed)
 		return
 	}

@@ -107,25 +107,60 @@ func (w *Session) ForgetLure(l *Lure) {
 	w.mu.Unlock()
 }
 
-// AcceptLure takes the teleport.
+// AcceptLure takes the teleport, and waits until the avatar is where it
+// was invited to.
 //
-// It is worth knowing what this costs before calling it: a teleport to
-// another region ends this session, because a region crossing needs a
-// new circuit and new capabilities and this client has neither.  A lure
-// to somewhere in the region already occupied is ordinary.
+// Where that is cannot be known before it happens.  An offer says who
+// made it and whatever they typed with it; the region is not a field of
+// the message, and the only place the grid ever names the destination is
+// the TeleportFinish that arrives once the teleport is already under
+// way.  So this waits for wherever the avatar turns out to be going,
+// where Teleport waits for the region it asked for.
+//
+// A lure to somewhere in the region already occupied is answered with a
+// TeleportLocal and no finish at all, which is the ordinary case and
+// returns as soon as it arrives rather than waiting out the timeout.
+//
+// The offer is forgotten as soon as the request has gone, before any of
+// the waiting.  A lure id is spent by being used: it answers one offer
+// once, whether or not the teleport it asked for succeeds, and keeping
+// it while this waits would leave it there for somebody to accept a
+// second time.
+//
+// It costs DefaultTeleportTimeout at worst.  The errors are Teleport's
+// and mean the same things.
 func (w *Session) AcceptLure(ctx context.Context, l *Lure) error {
 	if l == nil {
 		return fmt.Errorf("sl: no teleport offer to accept")
 	}
+
+	where, err := w.Where(ctx)
+	if err != nil {
+		return err
+	}
+
 	m := &msg.TeleportLureRequest{}
 	m.Info.AgentID, m.Info.SessionID = w.agentBlock()
 	m.Info.LureID = l.ID
 	m.Info.TeleportFlags = teleportViaLure
+
+	// Watching before asking, for teleport.go's reason: the answer is
+	// about a third of a second behind the request.  A TeleportLocal
+	// counts as one here, where it does not for Teleport: an offer from
+	// somebody standing nearby is answered with that and nothing else.
+	watch := w.watchTeleport(where.RegionHandle, true)
+	defer watch.stop()
+
 	if err := w.Send(ctx, m); err != nil {
 		return err
 	}
 	w.ForgetLure(l)
-	return nil
+
+	who := l.Name
+	if who == "" {
+		who = l.From.String()
+	}
+	return watch.arrive(ctx, "the teleport "+who+" offered", DefaultTeleportTimeout)
 }
 
 // DeclineLure says no, and tells the person who offered.

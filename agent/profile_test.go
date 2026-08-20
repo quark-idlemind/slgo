@@ -337,6 +337,107 @@ options          = inventory-root, buddy-list , , login-flags
 	}
 }
 
+// TestAProfileSaysWhetherThisAvatarHoldsItsNeighbours: three answers
+// and not two.  A profile that says nothing leaves the decision to
+// whoever starts the session -- slgod's -neighbours flag -- and one that
+// says either overrules it, so "absent" cannot be spelled the same way
+// as "no".
+func TestAProfileSaysWhetherThisAvatarHoldsItsNeighbours(t *testing.T) {
+	dir := tempConfig(t)
+
+	for _, c := range []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"yes", "yes", true},
+		{"on", "on", true},
+		{"true", "TRUE", true},
+		{"one", "1", true},
+		{"no", "no", false},
+		{"off", "off", false},
+		{"false", "False", false},
+		{"zero", "0", false},
+	} {
+		writeProfile(t, dir, c.name,
+			"first=A\nlast=B\npassword=x\nneighbours = "+c.value+"\n", 0o600)
+		l, err := LoadProfile(c.name)
+		if err != nil {
+			t.Fatalf("%q: %v", c.value, err)
+		}
+		if l.Neighbours == nil {
+			t.Errorf("neighbours = %q was not read at all", c.value)
+			continue
+		}
+		if *l.Neighbours != c.want {
+			t.Errorf("neighbours = %q gave %v, want %v", c.value, *l.Neighbours, c.want)
+		}
+	}
+
+	// Said nothing, which is not the same as having said no.
+	writeProfile(t, dir, "quiet", "first=A\nlast=B\npassword=x\n", 0o600)
+	l, err := LoadProfile("quiet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Neighbours != nil {
+		t.Errorf("a profile that says nothing gave %v", *l.Neighbours)
+	}
+
+	// The American spelling, since it is a word with two of them and a
+	// profile that used the other one would otherwise be an unknown
+	// setting.
+	writeProfile(t, dir, "spelled", "first=A\nlast=B\npassword=x\nneighbors = yes\n", 0o600)
+	if l, err := LoadProfile("spelled"); err != nil || l.Neighbours == nil || !*l.Neighbours {
+		t.Errorf("neighbors = yes gave %v, %v", l.Neighbours, err)
+	}
+
+	// And a value that is neither, which has asked for something and
+	// must not be answered with the default in silence.
+	writeProfile(t, dir, "vague", "first=A\nlast=B\npassword=x\nneighbours = sometimes\n", 0o600)
+	if _, err := LoadProfile("vague"); err == nil ||
+		!strings.Contains(err.Error(), "line 4") ||
+		!strings.Contains(err.Error(), "yes or no") {
+		t.Errorf("err = %v, should name the line and say what it wanted", err)
+	}
+}
+
+// TestANeighboursSettingSurvivesBeingSavedAndReadBack: SaveProfile and
+// LoadProfile are two halves of one format, and this is the setting most
+// easily lost in the middle -- a bool that is written unconditionally
+// would turn a profile with no opinion into one that overrules the
+// daemon.
+func TestANeighboursSettingSurvivesBeingSavedAndReadBack(t *testing.T) {
+	tempConfig(t)
+
+	on, off := true, false
+	for _, c := range []struct {
+		name string
+		set  *bool
+	}{
+		{"holds", &on},
+		{"refuses", &off},
+		{"quiet", nil},
+	} {
+		l := Login{First: "Example", Last: "Resident", Password: "x", Neighbours: c.set}
+		if err := SaveProfile(c.name, l); err != nil {
+			t.Fatal(err)
+		}
+		got, err := LoadProfile(c.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch {
+		case c.set == nil && got.Neighbours != nil:
+			t.Errorf("%s: saved no opinion, read back %v", c.name, *got.Neighbours)
+		case c.set != nil && got.Neighbours == nil:
+			t.Errorf("%s: saved %v, read back nothing", c.name, *c.set)
+		case c.set != nil && *got.Neighbours != *c.set:
+			t.Errorf("%s: saved %v, read back %v", c.name, *c.set, *got.Neighbours)
+		}
+	}
+}
+
 // TestALineThatIsNotASetting: the file is edited by hand, so a line that
 // is neither blank, a comment, nor key = value has to say where it is.
 func TestALineThatIsNotASetting(t *testing.T) {

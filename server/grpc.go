@@ -595,6 +595,73 @@ func (s *Server) Region(ctx context.Context, req *pb.RegionRequest) (*pb.RegionI
 	}, nil
 }
 
+// Land answers what the session was told about the ground it is on.
+//
+// The overlay is the reason this exists: four packets on arrival and
+// none afterwards, so a client that was not attached when the avatar
+// arrived has no way to ask for it and this is the only place it can
+// come from.  The parcel is here because the same answer should say
+// what the session believes it is standing on, and because a client
+// whose ask goes unanswered has something to fall back on.
+func (s *Server) Land(ctx context.Context, req *pb.LandRequest) (*pb.LandInfo, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	a := h.Agent()
+	out := &pb.LandInfo{}
+	if p := a.Parcel(); p != nil {
+		out.ParcelKnown = true
+		out.ParcelName = p.Name
+		out.ParcelLocalId = p.LocalID
+	}
+	o := a.Overlay()
+	if q := o.Quarters(); q != 0 {
+		out.Overlay = o.Squares()
+		out.OverlayQuarters = uint32(q)
+	}
+	return out, nil
+}
+
+// Neighbours answers what circuits this session holds to the regions
+// around it, and turns them on or off when asked to.
+//
+// The set is applied before the answer is read, so a client that turned
+// them off is told what it has now rather than what it had: off comes
+// back with nothing held, because turning them off drops the circuits
+// rather than merely refusing the next offer.  Turning them ON comes
+// back with nothing held too, and that is not a failure -- the offers
+// are the simulator's to repeat, which it does for as long as they go
+// untaken, so a circuit appears a second or two later without anything
+// being asked for.
+func (s *Server) Neighbours(ctx context.Context, req *pb.NeighboursRequest) (*pb.NeighboursResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	a := h.Agent()
+
+	if req.Set != nil {
+		a.SetNeighbours(req.GetSet())
+	}
+
+	held := a.Neighbours()
+	out := &pb.NeighboursResponse{
+		On:         a.NeighboursOn(),
+		Neighbours: make([]*pb.NeighbourInfo, 0, len(held)),
+	}
+	for _, n := range held {
+		out.Neighbours = append(out.Neighbours, &pb.NeighbourInfo{
+			Handle:    n.Handle,
+			Address:   n.Addr,
+			Name:      n.Name,
+			Handshook: n.Handshook,
+			Heard:     n.Heard,
+		})
+	}
+	return out, nil
+}
+
 // Friends is the friend list and who is logged in.
 //
 // Held here because the grid says both once and to whoever was there:
@@ -678,6 +745,25 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	return &pb.SendResponse{}, nil
 }
 
+// Control sends one AgentUpdate carrying the client's control flags.
+//
+// The whole of what the server contributes is the rest of the update:
+// the camera, its axes and the draw distance, which it owns and a client
+// does not have.  The bits themselves are passed through unread -- this
+// has no idea which of them is a sit -- and are not remembered, because
+// they are edge triggered and a state kept here would be resent for ever
+// by the presence loop.
+func (s *Server) Control(ctx context.Context, req *pb.ControlRequest) (*pb.ControlResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.Agent().Control(ctx, req.Flags); err != nil {
+		return nil, status.Errorf(codes.Unavailable, "%v", err)
+	}
+	return &pb.ControlResponse{}, nil
+}
+
 // lookup resolves an agent name, defaulting to the session that has
 // been hosted longest.  See Server.Default for why that one.
 func (s *Server) lookup(name string) (*Hosted, error) {
@@ -748,7 +834,7 @@ func (h *Hosted) info() *pb.AgentInfo {
 		Region:         a.RegionName(),
 		ChannelVersion: a.ChannelVersion(),
 		InventoryRoot:  a.Account.InventoryRoot.String(),
-		Caps:           a.Caps.Names(),
+		Caps:           a.Caps().Names(),
 		// Connected and State answer different questions and are both
 		// kept: Connected is whether a circuit is up this instant,
 		// State is what may be done about it.  A client too old to know
