@@ -272,9 +272,15 @@ func TestTheHelpFlagIsNotInTheUsageLineButIsStillUnderIt(t *testing.T) {
 		if c.flags == nil {
 			continue // echo, which has no flags at all
 		}
+		// Read as flags and not as text.  A long flag may perfectly
+		// well have "-h" inside it -- landmark's --home does -- and a
+		// substring test would refuse the word rather than the flag.
 		line := c.usage(name)
-		if strings.Contains(line, "--help") || strings.Contains(line, "-h") {
-			t.Errorf("%s: the help flag is still in the usage line: %q", name, line)
+		for _, g := range strings.Fields(line) {
+			g = strings.Trim(g, "[]")
+			if g == "--help" || (isShortCluster(g) && strings.ContainsRune(g[1:], 'h')) {
+				t.Errorf("%s: the help flag is still in the usage line: %q", name, line)
+			}
 		}
 
 		var help bytes.Buffer
