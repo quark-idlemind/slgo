@@ -37,9 +37,35 @@ into what is now empty air is an arrival in empty air followed by a
 fall: one pointed at 1000 metres was measured putting the avatar on the
 ground a minute later, with nothing reported by anybody.
 
-A parcel that refuses this avatar refuses the arrival, and a teleport
-refused inside a region produces no reply of any kind.  See tp, which
-has the same trap for the same reason.
+# Arriving somewhere is not the same as staying there
+
+This command reports the arrival and stops watching, and that is not
+always the end of the story.  Measured twice on Agni: a landmark into a
+parcel with a security orb on it SUCCEEDED.  The avatar arrived, the
+command printed the position it had arrived at, and about one and a
+third seconds later the parcel's own object teleported it home.
+
+	going to Ravensdon Boutique Shop
+	Dell of Ashes at 113, 109, 1011      true for about 1.3 seconds
+
+So a position printed here can be true when it is printed and false a
+moment afterwards, and nothing said so.  What the grid sent was two
+alerts and another teleport -- "You have been ejected from this land.",
+then "You have been teleported home by the object ... on the parcel
+...", and then a teleport home the avatar did not ask for.  Nothing in
+this command's path reads those alerts, so the ejection is invisible to
+it; reading them is work that has not been done rather than a decision
+that they do not matter.  If a landmark lands somewhere it should not
+be, run "where" again.
+
+The narrower case is still unmeasured: what a parcel that refuses this
+avatar by its ACCESS SETTINGS does to a landmark arrival, as against
+one that admits everybody and then throws them out.  Every landmark
+this avatar holds points somewhere that admits it, and every parcel
+probed across the home region allows landmarks, so there was nothing to
+try it on.  A teleport refused inside a region produces no reply of any
+kind -- see tp -- so if that is what happens, it will look like
+silence.
 
 # Where it goes is an id and stays one
 
@@ -132,8 +158,14 @@ it will not read, the item is made anyway and the command says so.
 
 A name is not made unique by anything.  Two landmarks called the same
 thing are two landmarks called the same thing, and naming one of them
-afterwards is refused with both listed -- say which by its whole path,
-or by the id printed beside it.
+afterwards is refused with both listed.  Where they are in different
+folders the whole path chooses between them; where they are in the same
+folder -- which is the ordinary way to end up with two, since making
+one twice files both under Landmarks -- the path is the same for both
+and the id beside each is the only thing that tells them apart.  The
+listing prints those ids for exactly those lines, and making a landmark
+of a name that is already taken says so at the time rather than leaving
+it to be discovered later.
 
 # What a teleport to one costs
 

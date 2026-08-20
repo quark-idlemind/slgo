@@ -69,6 +69,27 @@ func withLandmarks(x *testShell) {
 			InvType: 3, Asset: testStrayAsset, Created: 1754000500})
 }
 
+// twiceOver adds a second landmark of a name that is already in
+// /Landmarks, which is what making one twice does.
+//
+// Stage 3 made this pair on purpose against Agni and it is still in
+// qi's inventory: one name, one folder, two items, and nothing but the
+// ids to choose between them.
+func twiceOver(x *testShell, name string, id, asset msg.UUID) {
+	x.grid.mu.Lock()
+	defer x.grid.mu.Unlock()
+	for _, d := range x.grid.inv.Dirs {
+		if d.ID == testLandmarksDir {
+			d.Items = append(d.Items, &invItem{
+				ID: id, Name: name, Type: int(sl.AssetLandmark),
+				InvType: 3, Asset: asset, Created: 1754001000,
+			})
+			return
+		}
+	}
+	panic("the fake inventory has no Landmarks folder")
+}
+
 // intoTheTrash puts a landmark in the fake inventory's trash.
 //
 // The trash is a folder like any other and is the trash because of its
@@ -732,6 +753,181 @@ func TestTheTrashIsFoundByItsTypeAndNotItsName(t *testing.T) {
 		}
 	}
 }
+
+// TestOneNameInOneFolderIsToldApartByItsIdAndNothingElse.
+//
+// Stage 3 typed the whole path of a duplicated landmark and was told to
+// say which by its whole path, which is what it had just typed.  When
+// the matching paths are equal the path is not an answer and the advice
+// must not pretend it is.
+func TestOneNameInOneFolderIsToldApartByItsIdAndNothingElse(t *testing.T) {
+	x := newTestShell(t)
+	withLandmarks(x)
+	twiceOver(x, "Thrushmoor", testDeleted, testDeletedAsset)
+
+	for _, line := range []string{"landmark Thrushmoor", "landmark /Landmarks/Thrushmoor"} {
+		got := x.do(t, line)
+		if !strings.Contains(got, "the id beside each is the only thing that can") {
+			t.Errorf("%s should offer the id and not the path:\n%s", line, got)
+		}
+		if strings.Contains(got, "say which by its whole path") {
+			t.Errorf("%s sent the person round the same loop:\n%s", line, got)
+		}
+		for _, id := range []msg.UUID{testThrushmoor, testDeleted} {
+			if !strings.Contains(got, id.String()) {
+				t.Errorf("%s should print %s, which is the only way to choose:\n%s",
+					line, id, got)
+			}
+		}
+	}
+
+	// A name in two DIFFERENT folders is the other case, and there the
+	// path is a real answer, so it is still offered.
+	y := newTestShell(t)
+	withLandmarks(y)
+	twiceOver(y, "A Sandbox", testDeleted, testDeletedAsset)
+	got := y.do(t, "landmark A Sandbox")
+	if !strings.Contains(got, "say which by its whole path") {
+		t.Errorf("two folders apart, the path is the way to choose:\n%s", got)
+	}
+	if !strings.Contains(got, "/Objects/A Sandbox") || !strings.Contains(got, "/Landmarks/A Sandbox") {
+		t.Errorf("both paths should be listed:\n%s", got)
+	}
+}
+
+// TestTheListingTellsTwoOfOneNameApart: two identical lines with
+// nothing to choose between them is not a listing, and the id is put on
+// those lines only -- a column of ids on every row would pay for one
+// collision with noise on every inventory that has none.
+func TestTheListingTellsTwoOfOneNameApart(t *testing.T) {
+	x := newTestShell(t)
+	withLandmarks(x)
+	twiceOver(x, "Thrushmoor", testDeleted, testDeletedAsset)
+
+	got := x.do(t, "landmark")
+	for _, id := range []msg.UUID{testThrushmoor, testDeleted} {
+		if !strings.Contains(got, id.String()) {
+			t.Errorf("the listing should tell the two Thrushmoors apart by %s:\n%s", id, got)
+		}
+	}
+	// The landmarks that are not duplicated keep their plain line.
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, "A Sandbox") && strings.Contains(line, "-") &&
+			strings.Contains(line, testStray.String()) {
+			t.Errorf("an id was printed for a landmark that needed none:\n%s", got)
+		}
+	}
+}
+
+// TestMakingASecondLandmarkOfANameSaysSo.
+//
+// Nothing stops it and the consequence is silent and late: from then on
+// the name is refused as ambiguous and only an id will do.  The command
+// that created that is the one that should mention it.
+func TestMakingASecondLandmarkOfANameSaysSo(t *testing.T) {
+	x := newTestShell(t)
+	withLandmarks(x)
+	serveLandmarkAssets(t, x, map[msg.UUID]string{testDeletedAsset: workshopAsset})
+
+	// The simulator files the new one under Landmarks, beside the
+	// "Thrushmoor" that is already there.
+	x.grid.mu.Lock()
+	x.grid.onSend = func(m msg.Message) {
+		c, ok := m.(*msg.CreateInventoryItem)
+		if !ok {
+			return
+		}
+		twiceOver(x, "Thrushmoor", testDeleted, testDeletedAsset)
+		x.grid.Relay(t, &msg.UpdateCreateInventoryItem{
+			InventoryData: []msg.UpdateCreateInventoryItem_InventoryData{{
+				CallbackID: c.InventoryBlock.CallbackID,
+				ItemID:     testDeleted,
+				FolderID:   testLandmarksDir,
+				AssetID:    testDeletedAsset,
+				Name:       []byte("Thrushmoor\x00"),
+				Type:       3, InvType: 3,
+			}},
+		})
+	}
+	x.grid.mu.Unlock()
+
+	got := x.do(t, "landmark --make Thrushmoor")
+	if !strings.Contains(got, "made Thrushmoor") {
+		t.Errorf("--make should say what it made:\n%s", got)
+	}
+	if !strings.Contains(got, `there are now 2 landmarks called "Thrushmoor"`) {
+		t.Errorf("--make should say the name is now taken twice:\n%s", got)
+	}
+	if !strings.Contains(got, "mv") {
+		t.Errorf("--make should say what to do about it:\n%s", got)
+	}
+
+	// A name nobody else has says nothing extra.
+	y := newTestShell(t)
+	withLandmarks(y)
+	serveLandmarkAssets(t, y, map[msg.UUID]string{testWorkshopAsset: workshopAsset})
+	y.grid.mu.Lock()
+	y.grid.onSend = func(m msg.Message) {
+		c, ok := m.(*msg.CreateInventoryItem)
+		if !ok {
+			return
+		}
+		y.grid.Relay(t, &msg.UpdateCreateInventoryItem{
+			InventoryData: []msg.UpdateCreateInventoryItem_InventoryData{{
+				CallbackID: c.InventoryBlock.CallbackID,
+				ItemID:     testDeleted, FolderID: testLandmarksDir,
+				AssetID: testWorkshopAsset, Name: []byte("Somewhere New\x00"),
+				Type: 3, InvType: 3,
+			}},
+		})
+	}
+	y.grid.mu.Unlock()
+	if got := y.do(t, "landmark --make Somewhere New"); strings.Contains(got, "there are now") {
+		t.Errorf("a name nobody else has should say nothing extra:\n%s", got)
+	}
+}
+
+// TestARefusalNamesWhatWasTypedAndNotAUuid.
+//
+// The commonest failure there is: going to a landmark the avatar is
+// already standing on.  Stage 3 saw it identify the destination by an
+// asset id nobody typed, on the line under one that had just said the
+// name.
+func TestARefusalNamesWhatWasTypedAndNotAUuid(t *testing.T) {
+	x := newTestShell(t)
+	withLandmarks(x)
+	x.grid.mu.Lock()
+	x.grid.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.TeleportLandmarkRequest); ok {
+			x.grid.RelayEvent(t, "TeleportFailed", agniCouldNotGoCloser)
+		}
+	}
+	x.grid.mu.Unlock()
+
+	got := x.do(t, "landmark --go Thrushmoor")
+	if !strings.Contains(got, `"Thrushmoor"`) {
+		t.Errorf("the refusal should name what was typed:\n%s", got)
+	}
+	if strings.Contains(got, testThrushmoorAsset.String()) {
+		t.Errorf("the refusal names a uuid nobody typed:\n%s", got)
+	}
+	if n := strings.Count(got, "the teleport"); n != 1 {
+		t.Errorf("the refusal says \"the teleport\" %d times:\n%s", n, got)
+	}
+	if !strings.Contains(got, "already standing there") {
+		t.Errorf("the refusal should say what this one usually means:\n%s", got)
+	}
+}
+
+// agniCouldNotGoCloser is what Agni answers a landmark the avatar is
+// standing on, sent 2026-08-19.
+const agniCouldNotGoCloser = `<llsd><map>` +
+	`<key>AlertInfo</key><array><map>` +
+	`<key>ExtraParams</key><string></string>` +
+	`<key>Message</key><string>CouldntTPCloser</string></map></array>` +
+	`<key>Info</key><array><map>` +
+	`<key>Reason</key><string>Could not teleport closer to destination` +
+	`</string></map></array></map></llsd>`
 
 // TestParentPathIsTheFolderAnItemWasFoundIn, including the root, which
 // has no name and prints as nothing after the separator.

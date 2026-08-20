@@ -284,7 +284,7 @@ func TestGoToWaitsForTheTeleportAnswer(t *testing.T) {
 	}
 	f.mu.Unlock()
 
-	if err := w.GoTo(context.Background(), aLandmarkAsset, 5*time.Second); err != nil {
+	if err := w.GoTo(context.Background(), aLandmarkAsset, "Thrushmoor", 5*time.Second); err != nil {
 		t.Fatalf("GoTo: %v", err)
 	}
 	m := onlySent[*msg.TeleportLandmarkRequest](t, f)
@@ -321,7 +321,7 @@ func TestGoToCountsALocalMoveAsArrival(t *testing.T) {
 
 	// The fake never moves and never sends a finish, so this can only
 	// return by having counted the local move.
-	if err := w.GoTo(context.Background(), aLandmarkAsset, 5*time.Second); err != nil {
+	if err := w.GoTo(context.Background(), aLandmarkAsset, "Thrushmoor", 5*time.Second); err != nil {
 		t.Fatalf("GoTo: %v", err)
 	}
 }
@@ -338,7 +338,7 @@ func TestGoToAnsweredWithSilenceBlamesTheItemId(t *testing.T) {
 	f.presence.RegionHandle = 1099511628032
 	f.mu.Unlock()
 
-	err := w.GoTo(context.Background(), aLandmarkAsset, 300*time.Millisecond)
+	err := w.GoTo(context.Background(), aLandmarkAsset, "Thrushmoor", 300*time.Millisecond)
 	if !errors.Is(err, ErrTimeout) {
 		t.Fatalf("GoTo = %v, want a timeout", err)
 	}
@@ -359,7 +359,7 @@ func TestGoToRefusesTheNullId(t *testing.T) {
 	f.presence.RegionHandle = 1099511628032
 	f.mu.Unlock()
 
-	err := w.GoTo(context.Background(), msg.UUID{}, time.Second)
+	err := w.GoTo(context.Background(), msg.UUID{}, "Thrushmoor", time.Second)
 	if err == nil {
 		t.Fatal("GoTo accepted the null id, which the grid obeys as a trip home")
 	}
@@ -422,6 +422,97 @@ func TestGoHomeReportsARefusalAsARefusal(t *testing.T) {
 	}
 }
 
+// agniCouldNotGoCloser is the commonest refusal a landmark gets, as
+// Agni sent it on 2026-08-19: going to one the avatar is standing on.
+const agniCouldNotGoCloser = `<llsd><map>` +
+	`<key>AlertInfo</key><array><map>` +
+	`<key>ExtraParams</key><string></string>` +
+	`<key>Message</key><string>CouldntTPCloser</string></map></array>` +
+	`<key>Info</key><array><map>` +
+	`<key>Reason</key><string>Could not teleport closer to destination` +
+	`</string></map></array></map></llsd>`
+
+// TestARefusedGoToNamesWhatTheCallerCalledItAndSaysTeleportOnce.
+//
+// The line a person sees is this error inside ErrTeleportRefused's
+// wrapper, which already says "the grid refused the teleport" -- so a
+// `what` beginning "the teleport to" says it twice, and one built from
+// the asset id names the destination by a uuid nobody typed and nothing
+// else prints.  Both were on the screen in stage 3.
+func TestARefusedGoToNamesWhatTheCallerCalledItAndSaysTeleportOnce(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.RegionHandle = 1099511628032
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.TeleportLandmarkRequest); ok {
+			f.RelayEvent(t, "TeleportFailed", agniCouldNotGoCloser)
+		}
+	}
+	f.mu.Unlock()
+
+	err := w.GoTo(context.Background(), aLandmarkAsset, `"stage 0 here"`, 5*time.Second)
+	if !errors.Is(err, ErrTeleportRefused) {
+		t.Fatalf("GoTo = %v, want a refusal", err)
+	}
+	got := err.Error()
+	if !strings.Contains(got, `"stage 0 here"`) {
+		t.Errorf("the refusal %q does not name what the caller called it", got)
+	}
+	if strings.Contains(got, aLandmarkAsset.String()) {
+		t.Errorf("the refusal %q names an id nobody typed", got)
+	}
+	// "the teleport" is ours and appears once, in the wrapper.  The
+	// bare word appears again inside the grid's own sentence, which is
+	// quoted verbatim and is not this package's to tidy.
+	if n := strings.Count(got, "the teleport"); n != 1 {
+		t.Errorf("the refusal says \"the teleport\" %d times:\n%s", n, got)
+	}
+	// And it says what the grid's own words do not: this is what going
+	// to a landmark you are standing on looks like.
+	if !strings.Contains(got, "already standing there") {
+		t.Errorf("the refusal %q does not say what CouldntTPCloser usually means", got)
+	}
+}
+
+// TestAGoToWithNoNameFallsBackToTheAssetId: a caller with nothing to
+// call it is better served by the id than by a sentence about "the
+// landmark" with no landmark in it.
+func TestAGoToWithNoNameFallsBackToTheAssetId(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.RegionHandle = 1099511628032
+	f.mu.Unlock()
+
+	err := w.GoTo(context.Background(), aLandmarkAsset, "", 300*time.Millisecond)
+	if !errors.Is(err, ErrTimeout) {
+		t.Fatalf("GoTo = %v, want a timeout", err)
+	}
+	if !strings.Contains(err.Error(), aLandmarkAsset.String()) {
+		t.Errorf("the timeout %q names nothing at all", err)
+	}
+}
+
+// TestGoHomeSaysTeleportOnceToo.
+func TestGoHomeSaysTeleportOnceToo(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.RegionHandle = 1099511628032
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.TeleportLandmarkRequest); ok {
+			f.RelayEvent(t, "TeleportFailed", agniNoSuchRegion)
+		}
+	}
+	f.mu.Unlock()
+
+	err := w.GoHome(context.Background(), 5*time.Second)
+	if got := err.Error(); strings.Count(got, "the teleport") != 1 {
+		t.Errorf("the refusal says \"the teleport\" more than once:\n%s", got)
+	}
+}
+
 // TestGoToThatCouldNotBeSentIsNotATeleport: the request goes over the
 // wire, and a circuit that has gone is not a landmark the grid could
 // not find.
@@ -433,7 +524,7 @@ func TestGoToThatCouldNotBeSentIsNotATeleport(t *testing.T) {
 	f.mu.Unlock()
 	f.FailSends(errors.New("the circuit is gone"))
 
-	err := w.GoTo(context.Background(), aLandmarkAsset, time.Second)
+	err := w.GoTo(context.Background(), aLandmarkAsset, "Thrushmoor", time.Second)
 	if err == nil || errors.Is(err, ErrTimeout) {
 		t.Errorf("GoTo = %v, want the send's own failure", err)
 	}

@@ -55,6 +55,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -188,7 +189,22 @@ func landmarkList(ctx context.Context, sh *Shell, out io.Writer) error {
 		return nil
 	}
 	fmt.Fprintf(out, "%d %s\n", len(kept), plural(len(kept), "landmark", "landmarks"))
+
+	// A path that appears twice is two landmarks of one name in one
+	// folder, and printing it twice is two identical lines with nothing
+	// to choose between them -- which is what stage 3 saw.  Those lines
+	// get the id, and only those: a listing that put an id on every row
+	// would pay for one collision with a column of noise on every
+	// inventory that has none.
+	seen := map[string]int{}
 	for _, e := range kept {
+		seen[strings.ToLower(e.Path)]++
+	}
+	for _, e := range kept {
+		if seen[strings.ToLower(e.Path)] > 1 {
+			fmt.Fprintf(out, "  /%-40s %s\n", e.Path, e.ID)
+			continue
+		}
 		fmt.Fprintf(out, "  /%s\n", e.Path)
 	}
 	return nil
@@ -262,6 +278,7 @@ func landmarkMake(ctx context.Context, sh *Shell, out io.Writer, name string) er
 		return err
 	}
 	fmt.Fprintf(out, "made %s\n", it.Name)
+	defer sayIfTheNameIsTaken(ctx, sh, out, it.Name)
 
 	if it.AssetID.IsZero() {
 		// Nothing to read and nothing to go to.  Said plainly, because
@@ -281,6 +298,37 @@ func landmarkMake(ctx context.Context, sh *Shell, out io.Writer, name string) er
 	}
 	printLandmark(out, lm, it.ID)
 	return nil
+}
+
+// sayIfTheNameIsTaken warns when the landmark just made is not the only
+// one of its name.
+//
+// Nothing stops it: inventory takes the same name any number of times,
+// and stage 3 made "stage 3 Thrushmoor" twice in one folder without a
+// word said.  The consequence is silent and arrives later -- from then
+// on the name is refused as ambiguous and only an id will do -- so the
+// command that created it is the one that should mention it.
+//
+// After the make and not before.  Before would be a check on a name
+// that might not get used, and it would race anything else filing an
+// item; after, the count includes what was just made and is simply
+// true.  It costs the one listing the rest of the command pays for
+// anyway, and a listing that fails says nothing rather than turning a
+// landmark that was made into a command that failed.
+//
+// Written as a deferred call so that every way out of landmarkMake goes
+// through it: a duplicate name is worth saying whether or not the asset
+// could be read back.
+func sayIfTheNameIsTaken(ctx context.Context, sh *Shell, out io.Writer, name string) {
+	_, kept, _, err := landmarksHeld(ctx, sh)
+	if err != nil {
+		return
+	}
+	if n := len(matchLandmarks(kept, name)); n > 1 {
+		fmt.Fprintf(out, "there are now %d landmarks called %q; a name that means "+
+			"several is refused here, so this one is reached by its id until one of "+
+			"them is renamed with \"mv\"\n", n, name)
+	}
 }
 
 // readMadeLandmark reads a landmark that has just been created, with
@@ -321,11 +369,17 @@ func landmarkGo(ctx context.Context, sh *Shell, out io.Writer, name string, wait
 		return err
 	}
 	fmt.Fprintf(out, "going to %s\n", e.Name)
-	if err := sh.s.GoTo(ctx, e.Asset, wait); err != nil {
-		// Left as it comes.  A refusal is ErrTeleportRefused with the
-		// grid's own two voices in it, and a timeout already blames the
-		// likeliest cause -- the item id where the asset id was wanted
-		// -- which is a thing nothing else will ever say.
+
+	// The name goes down with the request so that a refusal names what
+	// was typed.  Stage 3 met the line without it: "the teleport to
+	// landmark 27987e57-..." identified the destination by a uuid
+	// nobody typed, on the line under one that had just said the name.
+	if err := sh.s.GoTo(ctx, e.Asset, strconv.Quote(e.Name), wait); err != nil {
+		// Otherwise left as it comes.  A refusal is ErrTeleportRefused
+		// with the grid's own two voices in it, a timeout already
+		// blames the likeliest cause -- the item id where the asset id
+		// was wanted -- and a refusal to shorten a journey already says
+		// what it usually means.  None of that is worth restating.
 		return err
 	}
 	return sh.sayPosition(ctx, out)
@@ -492,11 +546,18 @@ func findLandmark(ctx context.Context, sh *Shell, out io.Writer, name string) (s
 		return sl.Entry{}, noSuchLandmark(all, trashed, name)
 	}
 
-	// Two landmarks in one folder can share a name outright, so the
-	// path is not always enough and the id is printed beside it.  That
-	// is as far as a name can be taken.
+	// Two landmarks in one folder can share a name outright -- stage 3
+	// made a pair on purpose and qi's inventory has them -- and then
+	// the path they share is exactly what was typed.  Telling somebody
+	// to say which by its whole path sends them round the same loop, so
+	// the advice is what is actually left: the id, and only the id.
 	for _, e := range match {
 		fmt.Fprintf(out, "  /%-40s %s\n", e.Path, e.ID)
+	}
+	if sharePath(match) {
+		return sl.Entry{}, fmt.Errorf("%d landmarks answer to %q and they are one name "+
+			"in one folder, so the path cannot tell them apart and the id beside each "+
+			"is the only thing that can", len(match), name)
 	}
 	return sl.Entry{}, fmt.Errorf("%d landmarks answer to %q; say which by its whole "+
 		"path, or by the id beside it", len(match), name)
@@ -516,6 +577,22 @@ func withAsset(e sl.Entry) (sl.Entry, error) {
 			"and nothing to go to", e.Name)
 	}
 	return e, nil
+}
+
+// sharePath says whether everything here sits at the same path, which
+// is what a name in one folder twice comes to.
+//
+// Compared without regard to case, as everything else that matches a
+// path here is: two names differing only in case are not two names a
+// person can tell apart at a prompt, so offering the path as the way to
+// choose between them would be offering nothing.
+func sharePath(es []sl.Entry) bool {
+	for _, e := range es[1:] {
+		if !strings.EqualFold(e.Path, es[0].Path) {
+			return false
+		}
+	}
+	return true
 }
 
 // noSuchLandmark says what there is instead, which is nearly always the

@@ -304,13 +304,30 @@ func (w *Session) MakeLandmark(ctx context.Context, name, desc string) (*Item, e
 // ErrTeleportRefused for a grid that said no, ErrTeleportLost for a
 // grid that handed this avatar on and a daemon that did not follow, and
 // ErrTimeout for silence.  A zero timeout is DefaultTeleportTimeout.
-func (w *Session) GoTo(ctx context.Context, asset msg.UUID, timeout time.Duration) error {
+//
+// called is what to call the destination when one of those errors has
+// to be written, and it is what the CALLER calls it -- an inventory
+// name somebody typed -- because nothing the grid knows about a
+// landmark is a thing a person would recognise.  Stage 3 met the
+// alternative on Agni: a refusal that named the asset id read
+//
+//	the grid refused the teleport: the teleport to landmark
+//	27987e57-...: CouldntTPCloser: "Could not teleport closer"
+//
+// which says "teleport" twice and identifies the destination by a uuid
+// nobody typed and nothing else prints.  Empty falls back to the asset
+// id, which is better than nothing and is all a caller with no name for
+// it has.
+func (w *Session) GoTo(ctx context.Context, asset msg.UUID, called string, timeout time.Duration) error {
 	if asset.IsZero() {
 		return fmt.Errorf("sl: GoTo was given the null landmark id, which the grid " +
 			"reads as HOME and obeys; if that is what was wanted, GoHome says so, " +
 			"and if it is not, the asset id has gone missing on the way here")
 	}
-	err := w.goToLandmark(ctx, asset, timeout, "the teleport to landmark "+asset.String())
+	if called == "" {
+		called = "landmark " + asset.String()
+	}
+	err := w.goToLandmark(ctx, asset, timeout, "going to "+called)
 	if errors.Is(err, ErrTimeout) {
 		// Measured on Agni 2026-08-18: the ITEM id, and a uuid that is
 		// nothing at all, are both answered with perfect silence out to
@@ -321,8 +338,29 @@ func (w *Session) GoTo(ctx context.Context, asset msg.UUID, timeout time.Duratio
 			"find, and the usual reason is the ITEM id where the ASSET id was "+
 			"wanted -- Entry.Asset and Item.AssetID are the one it takes", err)
 	}
+	if errors.Is(err, ErrTeleportRefused) && strings.Contains(err.Error(), tooCloseToGo) {
+		// Measured on Agni 2026-08-19, and it is the commonest refusal
+		// a landmark gets: going to one the avatar is already standing
+		// on.  "Could not teleport closer to destination" is the grid
+		// describing its own arithmetic and says nothing about why
+		// anybody would meet it, so the meaning is added here rather
+		// than left for every caller to work out.
+		return fmt.Errorf("%w; on a landmark that almost always means the avatar "+
+			"is already standing there", err)
+	}
 	return err
 }
+
+// tooCloseToGo is the grid's key for a teleport it will not shorten.
+//
+// Matched in the message rather than against a field, because the key
+// is not kept anywhere else: teleportAnswer holds it and is private,
+// and refusal() folds it into a sentence.  Giving the refusal a type
+// with the key on it is the right answer and a wider change than this
+// -- every caller and every test of a refused teleport reads the string
+// today -- so it is written down here as the thing to do rather than
+// done in passing.
+const tooCloseToGo = "CouldntTPCloser"
 
 // GoHome takes the avatar to wherever this account's home is set.
 //
@@ -335,7 +373,9 @@ func (w *Session) GoTo(ctx context.Context, asset msg.UUID, timeout time.Duratio
 // id, because a zero id is what a missing id looks like: see GoTo.  The
 // errors are Teleport's.
 func (w *Session) GoHome(ctx context.Context, timeout time.Duration) error {
-	return w.goToLandmark(ctx, msg.UUID{}, timeout, "the teleport home")
+	// "going home" and not "the teleport home", for GoTo's reason: the
+	// errors that quote this already say the word teleport themselves.
+	return w.goToLandmark(ctx, msg.UUID{}, timeout, "going home")
 }
 
 // goToLandmark sends the one message and waits for the answer the
