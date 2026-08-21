@@ -21,6 +21,15 @@ lines are typed until ^D ends them.  ESC starts the answer again and ^C
 sends nothing.  --file PATH takes the answer from a file instead,
 newlines and all, which is the way to send something written elsewhere.
 
+Whichever of the three is used, a text box carries 254 bytes and no
+more.  The reply travels in the field a button label travels in, and
+the message template gives that field a one-byte length, so 255 with
+the terminator is the whole of what there is.  A longer answer is
+refused outright rather than cut short -- half an answer arriving is
+worse than none -- and the refusal says how many bytes were offered
+against the 254 there was room for.  A file is the way to send
+newlines; it is not a way to send more.
+
 # A group invitation with a fee has to name the fee
 
 This is the only kind that can spend money, and a bare "answer 3" that
@@ -62,6 +71,22 @@ soon looks like.  where says whether the avatar moved.
 
 Everything this shell knew about the region left behind is gone on
 arrival -- see tp, which says what goes and what survives.
+
+# An item and a permission are still waiting afterwards
+
+A dialog, a teleport, a friendship and a group invitation are forgotten
+as they are answered.  An offered item and a script's request for
+permission are not: the answer goes, and the thing stays in the waiting
+list under the number it already had, counted at the prompt as though
+nothing had been done about it.  Answering it again sends the whole
+answer again -- a second acceptance of the same offer, a second grant
+of the same permission -- to somebody who has already had one.
+
+It is a fault in this command rather than in waiting: an offer is taken
+up by calling into the session and the session is never told the offer
+is spent, where the other four kinds are.  What answer printed is the
+record of what happened; the line still in the listing is not evidence
+that it did not.
 
 # Options
 

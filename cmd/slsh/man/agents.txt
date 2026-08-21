@@ -4,38 +4,67 @@ It is the listing login and logout act on, and the name in the first
 column is the name those two take -- the profile the daemon hosts an
 avatar under, which is not the avatar's own name beside it.
 
-The order is the daemon's and is not alphabetical.  The sessions come
-first, longest held first, then whatever is not up.  A star marks the
-first session, which is the one a command that names no avatar drives,
-and a session this shell is attached to says so at the end of its line.
-The two are often the same and do not have to be.
+The order is the daemon's and is not alphabetical.  Everything the
+daemon is holding a session for comes first, longest held first, and a
+session that was stopped goes to the end of that group rather than
+keeping its place in it; then every other profile the daemon knows of
+and holds no session for, in the order its own list of them gives.  A
+star marks the first session that is up, which is the one a command
+that names no avatar drives, and a session this shell is attached to
+says so at the end of its line.  The two are often the same and do not
+have to be.
 
 # What stands where the region would
 
-A session that is up shows the region its avatar is in.  Anything else
-shows its state instead, with the reason after it where there is one:
+A session that is up shows the region its avatar is in, and there is no
+word for that state in the listing: the region is the word.  Anything
+else shows its state instead, with the reason after it where there is
+one:
 
-	hosted      logged in and serving
-	connecting  a login is in flight; wait for it
+	connecting  a login in flight, or a session being brought back
 	configured  a profile exists and nothing has asked for it
-	stopped     deliberately down, and staying down
+	stopped     down and staying down; the reason says which sort
 	failed      a login was tried and refused; the detail says how
 
-The last three are what the listing is for.  Told only whether a
-session is connected, a profile nobody has ever started and an avatar
-somebody logged out an hour ago look identical -- and the second is not
-a fault at all, it is somebody using that avatar in a viewer.
+"connecting" is two situations wearing one word and they are not the
+same news.  One is a login that has not finished, and the reason reads
+"logging in".  The other is a session the daemon holds and has lost the
+circuit to, which its supervisor is already reconnecting; that one has
+the error as its reason, and it is not lost -- waiting is the right
+thing to do about either.
 
-# Why the star sits on the oldest session
+"stopped" is two as well.  Either something asked for it -- logout --
+or the grid threw the avatar off, which is what happens when somebody
+logs that avatar into a viewer, and the daemon then stays down rather
+than fight them for it.  The reason tells them apart: "logged out"
+against the grid's own words after "ended by the grid".
 
-It moves only when the session it is on goes away.  Bringing another
-avatar up does not move it, attaching does not move it, and a session
-that drops and is reconnected keeps its place.  Nothing done casually
-can change which avatar a bare command drives, which is the point: a
-benchmark run against the wrong avatar is not an error, it is a
-plausible number.  An avatar that has been logged out gives up its
-place, so logging it back in puts it at the end of the queue rather
-than at the head of it.
+Configured, stopped and failed are what the listing is for.  Told only
+whether a session is connected, a profile nobody has ever started and
+an avatar somebody logged out an hour ago look identical -- and the
+second is not a fault at all, it is somebody using that avatar in a
+viewer.
+
+# Why the default sits on the oldest session
+
+The daemon's default moves only when the session it is on goes away.
+Bringing another avatar up does not move it, attaching does not move
+it, and a session that drops and is reconnected keeps its place -- the
+place belongs to the session the daemon holds and not to the connection
+under it, which is the one that goes.  Nothing done casually can change
+which avatar a bare command drives, which is the point: a benchmark run
+against the wrong avatar is not an error, it is a plausible number.  An
+avatar that has been logged out gives up its place, so logging it back
+in puts it at the end of the queue rather than at the head of it.
+
+The star is a picture of that and not the thing itself, and the two
+part company for as long as a reconnection lasts.  The star is put on
+the first line that is up at the moment of printing, and a session
+being reconnected is not up; the daemon meanwhile still has the same
+default, because a reconnection never cost it its place.  So a listing
+taken during one shows the star on the second session while a bare
+command still drives the first.  Read the star as "up and oldest",
+which is what it is drawn from, and where it matters name the avatar.
 
 A shell that logged in for itself has no daemon to ask, and says so
 with the one avatar it has.

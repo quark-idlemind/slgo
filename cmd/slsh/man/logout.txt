@@ -13,7 +13,16 @@ The session also gives up its place in the queue, so the avatar a bare
 command drives moves on to the next one up.  Logging it back in later
 puts it at the end of that queue rather than back at the head.
 
-Asking for one that is already down is not an error.
+Not every name in that listing is one this will take, though.  Only a
+session the daemon is holding can be logged out, and a profile listed
+as configured is one it has never been asked to bring up, so naming it
+is answered with "no agent named ..." rather than with a shrug.  There
+is nothing there to put down; login is what that line is for.
+
+Asking for one that is already down is not an error, and it is not a
+correction either: it reports the logout as though it had just done it,
+because from the caller's side the wanted state has been reached
+either way.
 
 # It refuses while somebody is using it
 

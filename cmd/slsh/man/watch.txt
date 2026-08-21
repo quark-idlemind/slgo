@@ -7,7 +7,14 @@ ChatFromSimulator, ObjectUpdate -- and naming none means everything.
 A name this build has never heard of is subscribed to rather than
 refused, since the daemon may know a message the shell does not, and
 nothing arriving under it is then the answer.  It runs for half a
-minute unless told otherwise and prints how many messages it saw.
+minute unless -t says otherwise, and prints how many messages it saw.
+
+-t takes a length of time and not a number of seconds, so it has to
+carry a unit: "-t 30s", "-t 5m".  A bare "-t 30" is refused with "time:
+missing unit in duration", which is worth recognising, because a shell
+that is asked for thirty and given thirty nanoseconds would come back
+instantly with nothing and look like a quiet region.  --for is the same
+flag written out.
 
 # It opens a connection of its own
 
@@ -24,6 +31,11 @@ and keeps the two apart.
 It attaches to this shell's avatar by name rather than taking whatever
 the daemon would hand out, because the daemon's default could have
 moved since this shell started.
+
+A shell that logged in for itself has no daemon to open that second
+connection to, and no relay to subscribe on, so this is one of the few
+things such a shell cannot do at all and it says so rather than showing
+an empty watch.
 
 # What will not appear
 

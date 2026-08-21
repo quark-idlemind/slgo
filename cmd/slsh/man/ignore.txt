@@ -19,4 +19,11 @@ something here does not reach it.
 "waiting -a" lists what has been set aside, and answering or declining
 one takes it out of the set again.
 
+That last part has a sharp edge on the two kinds answer and no do not
+finish with.  An offered item and a script asking permission stay in
+the waiting list after they have been answered, so answering one that
+had been ignored un-ignores a thing that is still there, and it comes
+back into the count at the prompt having been dealt with.  Ignoring it
+a second time is the way out, and waiting says why.
+
 See also: waiting, answer, no.

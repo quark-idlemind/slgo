@@ -1,8 +1,10 @@
 viewer hands a running session to a real viewer: it says where the
 daemon serves viewer logins and whether one has taken this session,
-and with --launch starts a viewer and logs it in as this avatar.  It
-is how to get eyes on an avatar the shell drives without logging that
-avatar out and in again elsewhere.
+and with --launch, which is -l for short, starts a viewer and logs it
+in as this avatar.  It is how to get eyes on an avatar the shell drives
+without logging that avatar out and in again elsewhere.  A shell that
+logged in for itself has no daemon serving viewer logins, so there is
+nothing for it to hand over and it says so.
 
 Serving viewer logins is not the daemon's default.  One that serves
 none says so in words, and names the flag it would have to be

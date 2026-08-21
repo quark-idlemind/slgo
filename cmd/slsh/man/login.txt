@@ -16,12 +16,18 @@ between them for the same reason.
 
 # What it will not do without being told twice
 
-A session that was logged out is left alone.  Something stopped it on
-purpose, and the likeliest something is a person now using that avatar
-in a viewer, so bringing it back takes -f as well as the name -- which
-is the only thing that flag overrules.  The refusal says when it went
-down, and is worth reading before overruling: taking the avatar back is
-the fight this whole arrangement exists to avoid.
+A session that is down and staying down is left alone.  Something
+stopped it, and the likeliest something is a person now using that
+avatar in a viewer, so bringing it back takes -f as well as the name --
+which is the only thing that flag overrules.
+
+The refusal says why it went down rather than when, and that is the
+part worth reading before overruling.  "logged out" is somebody having
+asked for it here.  Anything beginning "ended by the grid" is the
+avatar having been thrown off, and the grid's own words follow; the
+commonest cause of that is the avatar being logged in somewhere else,
+which means -f would take it back off whoever has it.  That is the
+fight this whole arrangement exists to avoid.
 
 A login that was refused is a different case and -f does not help it.
 The daemon remembers the refusal and will not try again for a while,
