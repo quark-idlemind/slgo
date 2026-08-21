@@ -31,15 +31,15 @@ func answerParcel(t *testing.T, x *testShell, body func(seq int32) string) {
 	}
 }
 
-// Thrushmoor is a parcel with the numbers Pelmar Reach really answered with.
-func Thrushmoor(seq int32) string {
+// thrushmoor is a parcel with the numbers Pelmar Reach really answered with.
+func thrushmoor(seq int32) string {
 	return fmt.Sprintf(`<llsd><map><key>ParcelData</key><array><map>
 	  <key>Name</key><string>Thrushmoor</string>
 	  <key>Desc</key><string></string>
 	  <key>LocalID</key><integer>5</integer>
 	  <key>SequenceID</key><integer>%d</integer>
 	  <key>Area</key><integer>2048</integer>
-	  <key>OwnerID</key><string>e34a7e57-7e57-c0de-432d-e2701ced4688</string>
+	  <key>OwnerID</key><string>f5d57e57-7e57-c0de-a382-9ae02a25038c</string>
 	  <key>MaxPrims</key><integer>937</integer>
 	  <key>TotalPrims</key><integer>486</integer>
 	  <key>OwnerPrims</key><integer>485</integer>
@@ -55,13 +55,13 @@ func Thrushmoor(seq int32) string {
 // on.
 func TestParcelAsksAndSaysWhatItGot(t *testing.T) {
 	x := newTestShell(t)
-	answerParcel(t, x, Thrushmoor)
+	answerParcel(t, x, thrushmoor)
 
 	got := x.do(t, "parcel")
 	for _, want := range []string{
 		"Thrushmoor",
 		"local    5",
-		"e34a7e57-7e57-c0de-432d-e2701ced4688",
+		"f5d57e57-7e57-c0de-a382-9ae02a25038c",
 		"area     2048 m²",
 		"prims    486 of 937",
 		// The flags word decoded.  Read the other way round this
@@ -79,7 +79,7 @@ func TestParcelAsksAndSaysWhatItGot(t *testing.T) {
 // on is the case the remembered answer can never cover.
 func TestParcelTakesAPointInTheRegion(t *testing.T) {
 	x := newTestShell(t)
-	answerParcel(t, x, Thrushmoor)
+	answerParcel(t, x, thrushmoor)
 
 	got := x.do(t, "parcel 60,60")
 	if !strings.Contains(got, "asked    the parcel at 60, 60") {

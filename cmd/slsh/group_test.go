@@ -145,7 +145,7 @@ func TestGroupActivatesByNameWhateverTheCase(t *testing.T) {
 	)
 	x.grid.AnswerActivateGroup()
 
-	got := x.do(t, "group Pelmar Reach BUILDERS")
+	got := x.do(t, "group pelmar reach BUILDERS")
 	if !strings.Contains(got, "acting as Pelmar Reach Builders") {
 		t.Errorf("group did not report what it activated: %q", got)
 	}

@@ -692,7 +692,7 @@ somebody wearing another's is the case worth the words.
 
 `--owner` narrows it to one person:
 
-    objects --owner Kerra                    # a pattern, ignoring case
+    objects --owner kerra                    # a pattern, ignoring case
     objects --owner '^Perrick.*Engineer$'     # it is a regular expression
     objects --owner 372d7e57-…                # or exactly whom you mean
     objects --owner perrick Box               # with the name filter as well
@@ -1178,7 +1178,7 @@ tell which happened, is worse than being told.
 A texture is a JPEG 2000 codestream, which nothing on a desktop opens,
 so `slsh` deals in PNGs at both ends:
 
-    get 89a47e57-7e57-c0de-80c1-7f0bfad0ac8e     # by asset id
+    get 46f67e57-7e57-c0de-6781-d23a564357eb     # by asset id
     get -o wall.png /Textures/brick              # by inventory path
     get --raw /Textures/brick                    # the codestream, undecoded
 

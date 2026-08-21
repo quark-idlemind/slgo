@@ -636,27 +636,27 @@ func TestObjectsSaysWhoIsWearingSomethingOnlyWhenItIsNotTheirs(t *testing.T) {
 // so "only mine" and "only theirs" are the questions being asked.
 func TestObjectsFiltersByOwner(t *testing.T) {
 	x := newTestShell(t)
-	Kerra := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000a")
+	kerra := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000a")
 	somebody := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000b")
 	theirs := msg.MustParseUUID("95647e57-7e57-c0de-4d18-16ea29724ad6")
 	nameless := msg.MustParseUUID("f3a97e57-7e57-c0de-02ff-92b46275fd1b")
 	unknown := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000e")
 	x.grid.objects = []*sl.Seen{
-		{Object: sl.Object{ID: testLamp, Local: 1, Name: "a lamp"}, PCode: 9, Owner: Kerra},
+		{Object: sl.Object{ID: testLamp, Local: 1, Name: "a lamp"}, PCode: 9, Owner: kerra},
 		{Object: sl.Object{ID: theirs, Local: 2, Name: "a bench"}, PCode: 9, Owner: somebody},
 		{Object: sl.Object{ID: nameless, Local: 3, Name: "a mystery"}, PCode: 9, Owner: unknown},
 	}
 	x.grid.AnswerNames(t, map[msg.UUID]string{
-		Kerra: "Kerra Yule", somebody: "Somebody Else",
+		kerra: "Kerra Yule", somebody: "Somebody Else",
 	})
 
 	// A pattern, matched without regard to case: nobody types a
 	// resident's capitals the way they were registered.
-	got := x.do(t, "objects --owner Kerra")
+	got := x.do(t, "objects --owner kerra")
 	if !strings.Contains(got, "a lamp") || strings.Contains(got, "a bench") {
-		t.Errorf("--owner Kerra should be one person's things:\n%s", got)
+		t.Errorf("--owner kerra should be one person's things:\n%s", got)
 	}
-	if got2 := x.do(t, "objects --owner Kerra"); got2 != got {
+	if got2 := x.do(t, "objects --owner KERRA"); got2 != got {
 		t.Errorf("the match should ignore case:\n%s", got2)
 	}
 	// It is a regular expression, not a word.
@@ -678,7 +678,7 @@ func TestObjectsFiltersByOwner(t *testing.T) {
 	// A pattern cannot match a name nobody has answered with, and how
 	// many were passed over that way is worth saying: it is the
 	// difference between "nobody here owns one" and "nobody has said".
-	got = x.do(t, "objects --owner Kerra")
+	got = x.do(t, "objects --owner kerra")
 	if !strings.Contains(got, "1 prim whose owner nobody has named") {
 		t.Errorf("the unnamed owners passed over should be counted:\n%s", got)
 	}

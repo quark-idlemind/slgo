@@ -100,7 +100,7 @@ type Landmark struct {
 // The whole of one, as measured on Agni 2026-08-18 -- 96 bytes:
 //
 //	Landmark version 2
-//	region_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385
+//	region_id a8377e57-7e57-c0de-49f1-463af55b7a68
 //	local_pos 32.00 70.00 1000.09
 //
 // Strictness here is not fussiness.  The null region id is what the
@@ -312,7 +312,7 @@ func (w *Session) MakeLandmark(ctx context.Context, name, desc string) (*Item, e
 // alternative on Agni: a refusal that named the asset id read
 //
 //	the grid refused the teleport: the teleport to landmark
-//	27987e57-...: CouldntTPCloser: "Could not teleport closer"
+//	0d9b7e57-...: CouldntTPCloser: "Could not teleport closer"
 //
 // which says "teleport" twice and identifies the destination by a uuid
 // nobody typed and nothing else prints.  Empty falls back to the asset

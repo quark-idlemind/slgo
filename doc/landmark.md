@@ -29,7 +29,7 @@ all four in about a second each.
 `sl.Asset` fetches it with `AssetLandmark`, and this is the whole of it:
 
 	Landmark version 2
-	region_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385
+	region_id a8377e57-7e57-c0de-49f1-463af55b7a68
 	local_pos 32.00 70.00 1000.09
 
 A region **id** and a position within it. Not a handle, not a region
@@ -49,7 +49,7 @@ folder preferred for the type -- Landmarks, without being asked -- and
 answers with the item in 300ms:
 
 	standing in Pelmar Reach at 28.0, 72.0, 2001.2
-	made item=fc617e57-… asset=27987e57-… parent=46957e57-…
+	made item=d9c27e57-… asset=0d9b7e57-… parent=684b7e57-…
 	asset is 96 bytes: … local_pos 28.00 71.95 2001.20
 
 The asset was readable 200ms after the item arrived, so nothing has to

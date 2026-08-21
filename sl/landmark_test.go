@@ -25,15 +25,15 @@ import (
 // agniLandmark is the whole of one landmark asset, 96 bytes of it, as
 // Agni served it.  The trailing newline is the grid's and is kept.
 const agniLandmark = "Landmark version 2\n" +
-	"region_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385\n" +
+	"region_id a8377e57-7e57-c0de-49f1-463af55b7a68\n" +
 	"local_pos 32.00 70.00 1000.09\n"
 
 // pelmarReach is the region id in the asset above.
-var pelmarReach = msg.MustParseUUID("5cf27e57-7e57-c0de-e8ce-271cf9bf3385")
+var pelmarReach = msg.MustParseUUID("a8377e57-7e57-c0de-49f1-463af55b7a68")
 
 // aLandmarkAsset is an asset id to fetch by.  It is not an item id, and
 // the difference is the whole of what this file is careful about.
-var aLandmarkAsset = msg.MustParseUUID("97747e57-7e57-c0de-6eb9-326758b2e7f4")
+var aLandmarkAsset = msg.MustParseUUID("0d9b7e57-7e57-c0de-494f-4774cba562fe")
 
 // TestALandmarkIsAPointInARegion: 96 bytes naming a region and a place
 // in it, and nothing else.  Not a handle, not a name, nothing about the
@@ -66,9 +66,9 @@ func TestALandmarkIsAPointInARegion(t *testing.T) {
 func TestAVersionNobodyHasSeenIsRefused(t *testing.T) {
 	t.Parallel()
 	for _, text := range []string{
-		"Landmark version 3\nregion_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385\n" +
+		"Landmark version 3\nregion_id a8377e57-7e57-c0de-49f1-463af55b7a68\n" +
 			"local_pos 32.00 70.00 1000.09\n",
-		"Landmark version 1\nregion_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385\n" +
+		"Landmark version 1\nregion_id a8377e57-7e57-c0de-49f1-463af55b7a68\n" +
 			"local_pos 32.00 70.00 1000.09\n",
 	} {
 		lm, err := ParseLandmark([]byte(text))
@@ -120,11 +120,11 @@ func TestARegionIdThatWillNotParseIsRefusedRatherThanBecomingHome(t *testing.T) 
 	// smaller reason: a zero position is a corner of the region rather
 	// than another region entirely.
 	for _, bad := range []string{
-		"Landmark version 2\nregion_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385\n" +
+		"Landmark version 2\nregion_id a8377e57-7e57-c0de-49f1-463af55b7a68\n" +
 			"local_pos 32.00 70.00\n",
-		"Landmark version 2\nregion_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385\n" +
+		"Landmark version 2\nregion_id a8377e57-7e57-c0de-49f1-463af55b7a68\n" +
 			"local_pos here there everywhere\n",
-		"Landmark version 2\nregion_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385\n",
+		"Landmark version 2\nregion_id a8377e57-7e57-c0de-49f1-463af55b7a68\n",
 	} {
 		if lm, err := ParseLandmark([]byte(bad)); err == nil {
 			t.Errorf("ParseLandmark read %q as position %v", bad, lm.Position)
@@ -139,7 +139,7 @@ func TestARegionIdThatWillNotParseIsRefusedRatherThanBecomingHome(t *testing.T) 
 func TestAnAddedLineDoesNotTakeOutEveryLandmarkOnTheGrid(t *testing.T) {
 	t.Parallel()
 	lm, err := ParseLandmark([]byte("Landmark version 2\n" +
-		"region_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385\n" +
+		"region_id a8377e57-7e57-c0de-49f1-463af55b7a68\n" +
 		"look_at 1.00 0.00 0.00\n" +
 		"local_pos 32.00 70.00 1000.09\n"))
 	if err != nil {
@@ -241,8 +241,8 @@ func TestMakingALandmarkSendsBothTypeNumbersAndNoFolder(t *testing.T) {
 	f.Relay(t, &msg.UpdateCreateInventoryItem{
 		InventoryData: []msg.UpdateCreateInventoryItem_InventoryData{{
 			CallbackID: b.CallbackID,
-			ItemID:     msg.MustParseUUID("7d0c7e57-7e57-c0de-251f-1c6a0825436f"),
-			FolderID:   msg.MustParseUUID("45937e57-7e57-c0de-f351-8711ac387fe4"),
+			ItemID:     msg.MustParseUUID("d9c27e57-7e57-c0de-895b-e1c7b55f5ad8"),
+			FolderID:   msg.MustParseUUID("684b7e57-7e57-c0de-4225-a08f4acab31b"),
 			AssetID:    aLandmarkAsset,
 			Name:       []byte("Thrushmoor\x00"),
 			Type:       3, InvType: 3,

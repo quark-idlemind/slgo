@@ -304,7 +304,7 @@ func landmarkMake(ctx context.Context, sh *Shell, out io.Writer, name string) er
 // one of its name.
 //
 // Nothing stops it: inventory takes the same name any number of times,
-// and stage 3 made "stage 3 Thrushmoor" twice in one folder without a
+// and stage 3 made "stage 3 thrushmoor" twice in one folder without a
 // word said.  The consequence is silent and arrives later -- from then
 // on the name is refused as ambiguous and only an id will do -- so the
 // command that created it is the one that should mention it.
@@ -372,7 +372,7 @@ func landmarkGo(ctx context.Context, sh *Shell, out io.Writer, name string, wait
 
 	// The name goes down with the request so that a refusal names what
 	// was typed.  Stage 3 met the line without it: "the teleport to
-	// landmark 27987e57-..." identified the destination by a uuid
+	// landmark 0d9b7e57-..." identified the destination by a uuid
 	// nobody typed, on the line under one that had just said the name.
 	if err := sh.s.GoTo(ctx, e.Asset, strconv.Quote(e.Name), wait); err != nil {
 		// Otherwise left as it comes.  A refusal is ErrTeleportRefused

@@ -24,25 +24,25 @@ import (
 // deliberately unmistakable: half the assertions here are about which
 // of the two ended up in a message.
 var (
-	testLandmarksDir  = msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
-	testThrushmoor      = msg.MustParseUUID("a0c27e57-7e57-c0de-9773-c8eaa2e796f4")
-	testThrushmoorAsset = msg.MustParseUUID("6ab17e57-7e57-c0de-6176-dacb69eb6ae7")
-	testWorkshop      = msg.MustParseUUID("c4d37e57-7e57-c0de-5e7c-d93454466d61")
-	testWorkshopAsset = msg.MustParseUUID("83857e57-7e57-c0de-08f7-d2cb69fa7777")
-	testStray         = msg.MustParseUUID("5b417e57-7e57-c0de-e3e0-129c8cd4a774")
-	testStrayAsset    = msg.MustParseUUID("4f4f7e57-7e57-c0de-111c-42140bdbb649")
-	testDeleted       = msg.MustParseUUID("09f87e57-7e57-c0de-fd40-d1b3ac24ba32")
-	testDeletedAsset  = msg.MustParseUUID("3aeb7e57-7e57-c0de-ec51-2fb19d690fdd")
+	testLandmarksDir    = msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
+	testThrushmoor      = msg.MustParseUUID("e3097e57-7e57-c0de-57ef-49ccef800593")
+	testThrushmoorAsset = msg.MustParseUUID("f0367e57-7e57-c0de-9664-e4c990815167")
+	testWorkshop        = msg.MustParseUUID("e85b7e57-7e57-c0de-1289-41a87927a423")
+	testWorkshopAsset   = msg.MustParseUUID("ee9b7e57-7e57-c0de-0447-c20f90110020")
+	testStray           = msg.MustParseUUID("d9e17e57-7e57-c0de-bf11-593aab90391d")
+	testStrayAsset      = msg.MustParseUUID("ed6a7e57-7e57-c0de-d481-13c635d5488e")
+	testDeleted         = msg.MustParseUUID("dbf67e57-7e57-c0de-bb0c-07a7d6f84fc5")
+	testDeletedAsset    = msg.MustParseUUID("ec737e57-7e57-c0de-b60c-ebb396229373")
 )
 
-// ThrushmoorAsset is a landmark asset with the bytes Agni really served:
+// thrushmoorAsset is a landmark asset with the bytes Agni really served:
 // a version line, a region id and three numbers, and nothing else.
-const ThrushmoorAsset = "Landmark version 2\n" +
-	"region_id 5cf27e57-7e57-c0de-e8ce-271cf9bf3385\n" +
+const thrushmoorAsset = "Landmark version 2\n" +
+	"region_id a8377e57-7e57-c0de-49f1-463af55b7a68\n" +
 	"local_pos 32.00 70.00 1000.09\n"
 
 const workshopAsset = "Landmark version 2\n" +
-	"region_id 66957e57-7e57-c0de-b3b8-cf5d36b0bfd4\n" +
+	"region_id b8eb7e57-7e57-c0de-96e0-5c57c027acb3\n" +
 	"local_pos 28.00 71.95 2001.20\n"
 
 // withLandmarks puts landmarks in the fake inventory: two where the
@@ -217,15 +217,15 @@ func TestLandmarkSaysWhereOneGoesWithoutGoing(t *testing.T) {
 	x := newTestShell(t)
 	withLandmarks(x)
 	serveLandmarkAssets(t, x, map[msg.UUID]string{
-		testThrushmoorAsset: ThrushmoorAsset,
-		testWorkshopAsset: workshopAsset,
+		testThrushmoorAsset: thrushmoorAsset,
+		testWorkshopAsset:   workshopAsset,
 	})
 
 	got := x.do(t, "landmark Thrushmoor")
 	for _, want := range []string{
 		"Thrushmoor",
 		"in       /Landmarks",
-		"region   5cf27e57-7e57-c0de-e8ce-271cf9bf3385",
+		"region   a8377e57-7e57-c0de-49f1-463af55b7a68",
 		"at       32.00, 70.00, 1000.09",
 		"item     " + testThrushmoor.String(),
 		"asset    " + testThrushmoorAsset.String(),
@@ -246,8 +246,8 @@ func TestLandmarkReadsTheOneItWasAskedAbout(t *testing.T) {
 	x := newTestShell(t)
 	withLandmarks(x)
 	serveLandmarkAssets(t, x, map[msg.UUID]string{
-		testThrushmoorAsset: ThrushmoorAsset,
-		testWorkshopAsset: workshopAsset,
+		testThrushmoorAsset: thrushmoorAsset,
+		testWorkshopAsset:   workshopAsset,
 	})
 
 	got := x.do(t, "landmark Pelmar Reach Workshop")
@@ -268,7 +268,7 @@ func TestLandmarkReadsTheOneItWasAskedAbout(t *testing.T) {
 func TestLandmarkTakesEitherOfAnItemsTwoIds(t *testing.T) {
 	x := newTestShell(t)
 	withLandmarks(x)
-	serveLandmarkAssets(t, x, map[msg.UUID]string{testThrushmoorAsset: ThrushmoorAsset})
+	serveLandmarkAssets(t, x, map[msg.UUID]string{testThrushmoorAsset: thrushmoorAsset})
 
 	for _, id := range []msg.UUID{testThrushmoor, testThrushmoorAsset} {
 		if got := x.do(t, "landmark "+id.String()); !strings.Contains(got, "1000.09") {
@@ -287,7 +287,7 @@ func TestLandmarkRefusesAUuidItDoesNotHold(t *testing.T) {
 	x := newTestShell(t)
 	withLandmarks(x)
 
-	got := x.do(t, "landmark --go 0ab97e57-7e57-c0de-6acd-9a7f987bfcc0")
+	got := x.do(t, "landmark --go 8ac37e57-7e57-c0de-5e59-f53ae6dd2fe7")
 	if !strings.Contains(got, "no landmark in inventory has the id") {
 		t.Errorf("a uuid nobody holds should be refused, got %q", got)
 	}
@@ -311,9 +311,9 @@ func TestLandmarkRefusesANameThatMeansSeveral(t *testing.T) {
 	x.grid.mu.Lock()
 	x.grid.inv.Dirs[len(x.grid.inv.Dirs)-1].Items = append(
 		x.grid.inv.Dirs[len(x.grid.inv.Dirs)-1].Items,
-		&invItem{ID: msg.MustParseUUID("85a47e57-7e57-c0de-b130-34cff7013ed0"),
+		&invItem{ID: msg.MustParseUUID("e85d7e57-7e57-c0de-588c-536826492cc4"),
 			Name: "Thrushmoor", Type: int(sl.AssetLandmark), InvType: 3,
-			Asset:   msg.MustParseUUID("71ed7e57-7e57-c0de-537b-0faae2121a1c"),
+			Asset:   msg.MustParseUUID("ecc57e57-7e57-c0de-6269-d4a71dda1ca8"),
 			Created: 1754000600})
 	x.grid.mu.Unlock()
 
@@ -518,7 +518,7 @@ func TestLandmarkMakeReadsBackWhatTheSimulatorWrote(t *testing.T) {
 	got := x.do(t, "landmark --make Pelmar Reach Workshop")
 	for _, want := range []string{
 		"made Pelmar Reach Workshop",
-		"region   66957e57-7e57-c0de-b3b8-cf5d36b0bfd4",
+		"region   b8eb7e57-7e57-c0de-96e0-5c57c027acb3",
 		// Read back out of the asset, not out of where the shell
 		// thought the avatar was: the fake stands at 128, 128, 25.
 		"at       28.00, 71.95, 2001.20",
@@ -647,7 +647,7 @@ func TestATrashedLandmarkIsNotOne(t *testing.T) {
 		ID: testDeleted, Name: "Thrushmoor", Type: int(sl.AssetLandmark),
 		InvType: 3, Asset: testDeletedAsset, Created: 1754000800,
 	})
-	serveLandmarkAssets(t, x, map[msg.UUID]string{testThrushmoorAsset: ThrushmoorAsset})
+	serveLandmarkAssets(t, x, map[msg.UUID]string{testThrushmoorAsset: thrushmoorAsset})
 	answerLandmarkTeleport(t, x)
 
 	got := x.do(t, "landmark")
