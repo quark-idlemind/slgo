@@ -8,6 +8,16 @@ refused rather than guessed at, since moving the wrong one is a thing
 somebody then has to find.  The position is three numbers -- X Y Z,
 separated by spaces, in this region's metres.
 
+A key will not do in place of the name, and this is the one command
+here of which that is true: take, perms, touch, dump, link and unlink
+all accept a uuid where a name would go, and move looks its argument up
+as a name and as nothing else.  A uuid typed there is refused with "no
+object named" and the uuid back again, which reads like the thing has
+gone rather than like the form is wrong.  So the way past a name
+several objects answer to is the one the refusal itself names --
+rename one of them -- and not the key every neighbouring command would
+have taken.
+
 It waits for the object to have arrived rather than reporting the
 request and stopping.  Nothing answers a move; the simulator sends an
 ObjectUpdate when it gets round to it, so a position read back

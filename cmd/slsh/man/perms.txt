@@ -8,6 +8,13 @@ least one of the four groups has to be named, because a command that
 changes things and was told to change nothing has been mistyped rather
 than asked for a report.
 
+The flags go in front of the name.  Option parsing stops at the first
+argument that is not a flag, so "perms lantern --next cm" is a line
+with an object named and no group named at all, and what comes back is
+the refusal above: a complaint that none of four flags was given, to
+somebody who has just typed one of them.  Read that message as saying
+the flag is in the wrong place.
+
 # The letters
 
 c is copy, m is modify, t is transfer and v is move.  "all" is the four

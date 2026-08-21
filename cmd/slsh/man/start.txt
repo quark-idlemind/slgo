@@ -45,6 +45,16 @@ says what the object thinks now.  The count of those that did not
 agree is what the command finally fails with, once the listing that
 explains it is already on the screen.
 
+One kind of "no answer" never turns into anything else.  A script put
+into an object with "drop" has been copied in and not compiled, so
+there is no bytecode for the switch to turn on, and the object will not
+agree that it is running however long it is asked: fifteen seconds, and
+then twenty on a second attempt, both ending in the same line.  Nothing
+here can mend that, because the mending is to have put the script in
+with "new --in", which compiles it.  So a start that will not take on a
+script that was dropped in is not a slow event queue; it is the wrong
+way of getting the script into the object, and "man drop" says why.
+
 # Examples
 
 	start lantern

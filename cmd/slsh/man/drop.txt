@@ -21,6 +21,15 @@ so dropping the same item in twice leaves two entries of nearly one
 name, and it is worth listing the object rather than assuming the
 second drop overwrote the first.
 
+Ask twice.  A listing run straight after a drop is the listing from
+before it: "ls --in" is answered out of the contents the simulator last
+sent, and the copy that has just gone in is not among those yet.  Three
+drops in a row were each followed at once by a listing without the new
+item in it, and then by a second listing that had it -- the first of
+the three showing an empty object a moment after a notecard had gone
+into it.  Nothing has gone wrong when that happens: the object has the
+item and the listing has not caught up.
+
 # A script dropped in does not run
 
 Copying a script into an object leaves it there uncompiled, and

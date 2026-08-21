@@ -30,6 +30,27 @@ person will look for it.
 on finding the object, in seconds, and matters on a region with a lot
 in it or a slow link.
 
+# The flags come before the name
+
+Option parsing stops at the first argument that is not a flag, and on
+this command that argument is the object, so anything after it is not
+read as an option at all.  "take probe --into experiments" takes probe
+and puts it in Objects: the two words after the name are dropped, the
+folder is never looked at, and the report says the object is in
+inventory without saying where.  "take --into experiments probe" is the
+same line with the flag in front of the name, and does what it says.
+
+--copy goes the same way and costs more.  After the name it is ignored,
+so the object is taken rather than copied and the original is gone from
+the region -- and the line printed is the bare take's, which is the
+only sign that what happened was not what was asked for.
+
+The rule is getopt's rather than this command's, and every command in
+the shell shares it.  It is worth a section here because take is where
+it is quietest: the object leaves the region either way, so nothing
+looks wrong until somebody opens the folder they named and finds it
+empty.
+
 # Taking loses where it stood
 
 Second Life does not remember where an object was before it was taken,

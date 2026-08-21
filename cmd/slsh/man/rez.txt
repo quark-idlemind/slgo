@@ -26,6 +26,13 @@ edited: the root lands on the point given and every other prim keeps
 the vector from the root that the file gave it, which is what makes
 moving a linkset different from putting every prim in one place.
 
+--at is three numbers, and two are refused with a message naming all
+three.  place's --at is the other way round: it takes two or three, and
+fills in a zero for the Z it was not given, so a pair of numbers that
+place accepts without a word is a usage error here.  The two flags are
+spelt alike and do not parse alike, which is worth knowing before
+copying a line from one command to the other.
+
 # Half a build is worse than none
 
 A build can fail partway -- most often on a script that will not
@@ -34,12 +41,16 @@ that nobody asked for and nothing owns.  So a failure removes what it
 made and says it has.  -k is for the case where the wreckage is the
 interesting part, and keeps it standing.
 
-Only scripts and notecards can be made from a description.  The rest of
-what a file may name is an asset this avatar may not have, and a
-texture named by key is not something a client can conjure into an
-object it does not already own a copy of.  Names and descriptions are
-set after the linking, since linking is what decides which prim is the
-root and the root's name is the object's.
+Only the scripts in a description are made.  The rest of what a file
+may name is an asset this avatar may not have, and a texture named by
+key is not something a client can conjure into an object it does not
+already own a copy of.  A notecard is the one to watch, because it is
+written in the same list as a script and reads as though it would be
+made too: a file describing a notecard with a body in it builds a prim
+whose contents are empty, and says nothing about the notecard it did
+not write.  Names and descriptions are set after the linking, since
+linking is what decides which prim is the root and the root's name is
+the object's.
 
 # Examples
 
