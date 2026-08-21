@@ -18,8 +18,9 @@ below applies to it as well.
 
 ## Connecting
 
-There are two ways to be connected, and every one of these programs
-supports both.
+There are two ways to be connected, and `automate`, `autobench` and
+`slsh` all support both. `slgod` has neither flag and needs neither: it
+is the thing the others connect to.
 
 **Through `slgod`** (the default). `slgod` holds the connection to the
 grid. Programs attach to it, so they start instantly and leave the
@@ -30,6 +31,24 @@ at the same time.
 holds the session for as long as it runs. Quitting logs the avatar out.
 This needs no daemon, but every start pays for a fresh login -- several
 seconds, against none.
+
+### Options come before the first argument
+
+Every one of these programs stops reading options at the first thing
+that is not one, and anything after that is taken as an argument. There
+is no warning:
+
+    automate --rez script.lsl      rezzes a prim
+    automate script.lsl --rez      uses the shared object, and says nothing
+
+`slgod` is Go's `flag` package rather than getopt and stops in the same
+place, which is at least louder about it, because its arguments are
+profile names: `slgod example -v` reads `-v` as a second profile to log
+in, and says
+
+    -v: NOT hosted: agent: profile "-v": open .../slgo/-v: no such file or directory
+
+before carrying on with the one it could read.
 
 ### Saying where slgod is
 
@@ -43,7 +62,11 @@ If you do not say, the address is worked out for you:
 3. this machine, if you have no `sl-host`.
 
 That last case is the normal one when you run your own `slgod`, so
-usually you need not pass anything at all.
+usually you need not pass anything at all. Not being on `$PATH` is what
+means "this machine"; an `sl-host` that IS installed and then fails is
+reported, and does not fall back here. Falling back would turn "sl-host
+is misconfigured" into a connection refused against localhost, which
+points at the wrong problem entirely.
 
 ### Profiles
 
@@ -83,7 +106,11 @@ password without echo -- so a profile is optional:
 
     automate --direct --first Example --last Resident script.lsl
 
-With exactly one profile on disk it is used without being named.
+With exactly one profile on disk, `--direct` uses it without being
+named and says which -- "using the example profile". That rule is the
+direct login's alone. Through `slgod` an avatar nobody named is the
+daemon's default instead, which is a different question and is answered
+under "Which avatar a program uses".
 
 ### The shared secret
 
@@ -150,7 +177,8 @@ The first is worth asking again for, and is asked again for. A grid hands
 back a dead seed capability often enough that a daemon which gives up on
 the first one is a daemon somebody has to go and restart. The second
 cannot be cleared by waiting, so that profile is left alone and the rest
-carry on. Only if **nothing** comes up does `slgod` stop.
+carry on. `slgod` stops only when **nothing** came up and nothing is
+still being retried -- "no session came up; nothing to serve".
 
 ### The group an avatar acts as
 
@@ -195,16 +223,24 @@ plausible number.
 `slsh agents` is the readable view of what the daemon holds, and the
 states differ in what to do about them:
 
-    * example     Example Resident      Testville   <- this shell
-      builder     Builder Resident      Testville
-      helper                            stopped: logged out
-      spare                             configured
+    * example     Example Resident          Testville   <- this shell
+      builder     Builder Resident          Testville
+      helper      Helper Resident           stopped: logged out
+      spare                                 configured
 
-`configured` exists on disk and can be started. `stopped` was put down
-deliberately and is left alone until asked for by name. `failed` will
+`configured` exists on disk and can be started, and has no avatar beside
+it because nothing has ever logged one in under it. `stopped` was put
+down deliberately and is left alone until asked for by name; it keeps
+the avatar's name, because there was a session there. `failed` will
 waste a login attempt if asked again too soon, and says how long it is
-waiting. The star is the default -- what a program that names no avatar
-gets.
+waiting. `connecting` is a login still in flight or a session being
+reconnected -- the reason after it tells those two apart.
+
+The star is the first line that is **up**, which is what a program that
+names no avatar gets. It is a picture of the daemon's default rather
+than the thing itself, and the two part company while a session is
+reconnecting: that session is not up, so the star moves down a line
+while a bare command still drives the same avatar.
 
 ### Letting a viewer have one
 
@@ -245,6 +281,14 @@ That password is the viewer's, not the account's -- what a viewer sends
 here never reaches Linden Lab, and a password kept for this cannot be
 used to log the account in anywhere.
 
+`slsh viewer` is the other end of it: it says where the daemon serves
+viewer logins and whether one has taken this session, and `viewer -l`
+starts a viewer and logs it in. That does not use the profile's
+password. The daemon mints a fresh one, good for a single login and a
+few minutes, because it reaches the viewer's argv where any process this
+user owns can read it. A profile with no `viewer_password` is refused
+there too -- the setting is what marks a profile as handable at all.
+
 The design, and what it costs, is written up in
 [doc/viewer-frontend.md](viewer-frontend.md); what happens with more than
 one viewer is in [doc/two-viewers.md](two-viewers.md).
@@ -260,9 +304,12 @@ A trace is worth taking before there is anything to debug: a baseline of
 what an ordinary session receives is what an unusual one has to be
 compared against, and it cannot be collected afterwards.
 
-`slsh watch` is the lighter way to see the same thing from outside, by
-message name or `*` for everything. It opens a connection of its own, so
-watching for an hour disturbs nothing.
+`slsh watch` is the lighter way to see the same thing from outside:
+message names as the protocol spells them, and naming none means every
+one. It opens a connection of its own, so it never steals messages from
+the reader keeping the shell's idea of the world up to date. It runs for
+half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
+5m`, not `-t 5`.
 
 ### Options
 
@@ -314,6 +361,11 @@ costs the whole timeout. Use `--done TEXT` for a different word, or
 The `DONE` line itself is not printed -- it is the script talking to
 `automate`, not to you.
 
+The match is a **substring** one: the first line *containing* the word
+ends the run, and that line is not printed. So a script that says
+"checked 3 files, none DONE" has stopped there and said nothing about
+it. Pick a word the output cannot contain by accident.
+
 ### Where the script runs
 
 A script needs an object to run in, and by default that is `auto`: one
@@ -328,9 +380,10 @@ run, against about 10 seconds when every run rezzed its own prim.
 That holds across logins. A worn object is rezzed afresh, with a new
 key, every time it is put on and every time the avatar logs in, so its
 key is worth nothing between sessions -- but the inventory item it was
-worn from does not change, and `slgod` remembers which worn object came
-from which item. Nothing is written down on your machine, and there is
-no cache to go stale.
+worn from does not change, and the simulator says which item each worn
+object came from, in an `AttachItemID` line of the object's NameValue.
+So the tie is re-read off the wire every session. Nothing is written
+down on your machine, and there is no cache to go stale.
 
     --object NAME    run in some other object already in the region
     --rez            rez a throwaway prim for this run, as before
@@ -392,9 +445,9 @@ compiled, ran and finished.
 | `--object NAME` | run in this object instead of the shared `auto` one |
 | `--rez` | rez a throwaway prim for this run, and do not queue |
 | `--keep` | leave a rezzed prim behind |
-| `--done TEXT` | the text that means "finished" (default `DONE`) |
-| `--timeout DUR` | how long to wait for it (default `1m`) |
-| `--script NAME` | what to call the script inside the object |
+| `--done TEXT` | the text that means "finished" (default `DONE`); matched as a substring |
+| `--timeout DUR` | how long to wait for it (default `1m0s`); a bare number is refused -- the unit is required |
+| `--script NAME` | what to call the script inside the object (default `automate`, which is the name a fault is reported under) |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there -- a simulator, or a viewer daemon -- instead of in Second Life |
 
 ---
@@ -425,9 +478,10 @@ costs outright. They differ by whatever the construct pays once and then
 shares. `First copy` appears only when the two could be told apart --
 see "Reading the numbers honestly" below.
 
-**Padding mode** (`-1`) uses a single copy and adds filler a byte at a
-time until memory steps to the next block, which locates the boundary
-exactly. It costs more runs:
+**Padding mode** (`-1`) uses a single copy and finds how much filler it
+can still carry before memory steps to the next block, which locates the
+boundary exactly. It costs more runs, because that boundary has to be
+found twice -- once for the base script and once with the copy in it:
 
     $ autobench -1 --code "integer gCNT;"
     Base mem: 5412
@@ -440,9 +494,16 @@ exactly. It costs more runs:
 the readings behind it: the base script at that padding, sitting exactly
 on a block boundary; the same script with one copy of the code in it;
 and the filler that copy can still carry before it spills into the next
-block. The size is the difference of the two readings less that filler --
-one block was allocated, and 488 bytes of it went unused, so the code
-cost 24.
+block. The size is the difference of the two readings less that filler:
+5932 - 5412 is 520, of which 488 was filler the copy could still have
+carried, so the copy cost 32.
+
+The 520 is worth a second look, because it is not a whole block. One
+512-byte block of code was allocated and 488 bytes of it went unused, so
+24 of the 32 is code; the other 8 is the heap the global integer
+occupies, and heap is not block-allocated at all. That is why the same
+construct comes back at 32 rather than at 24, and
+[doc/memory.md](memory.md) takes the two apart.
 
 ### Describing the code to measure
 
@@ -545,14 +606,22 @@ is.
 
 `--ipad N` still asserts a padding outright and skips all of this,
 `--check-ipad` confirms it, and `--no-cache` neither reads nor writes
-the file. Nothing measured with `--test` is ever remembered: the
-offline model has no compiler, and its paddings are arithmetic rather
-than measurements.
+the file. Only readings that came from Second Life are remembered at
+all: the backend is asked whether it is the grid, so neither `--test`
+nor a `--backend` simulator writes to the file or reads from it. The
+offline model has no compiler and its paddings are arithmetic rather
+than measurements, and one of those in the file would be read by every
+later benchmark on the account as though the grid had said it.
 
 ### Checking your connection
 
     $ autobench --probe
     SL Live
+
+It sends a script and checks what comes back, through whichever backend
+was chosen -- so `--backend` or `--test` answers `Backend live` instead.
+That is the one place a person is asking whether they are talking to
+Second Life, and it will not say so about a model.
 
 ### Options
 
@@ -568,15 +637,15 @@ than measurements.
 | `--check-ipad` | confirm `--ipad` before trusting it |
 | `--no-cache` | do not remember or reuse the padding |
 | `--objects N` | how many objects to run in at once (default 4: one to measure in, three to probe with) |
-| `--fast` | skip the padding search |
+| `--fast` | skip the padding search; `Size` then comes with a `±` margin, because there is no boundary to measure against |
 | `--max N` | most copies to use (default 512) |
 | `--object NAME`, `--rez`, `--keep` | as for `automate` |
 | `--pad PAD` | extra filler in the base script |
 | `--debug` | say what the search is doing |
-| `--timeout DUR` | how long one script may take |
+| `--timeout DUR` | how long one script may take (default `1m0s`); a bare number is refused -- the unit is required |
 | `-v` | print each script before running it |
 | `--probe` | check the connection and exit |
-| `--test PAD,SIZE[,...]` | measure against the offline model in this process, without a grid |
+| `--test PAD,SIZE[,MARGINAL[,LIMIT]]` | measure against the offline model in this process, without a grid |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there, instead of in Second Life |
 
 ### Reading the numbers honestly
@@ -592,13 +661,15 @@ shared, so an extra copy pays only for what it cannot share. That is a
 real property of the construct, and copy mode reports both halves of it
 from one benchmark.
 
-**Precision.** `-1` mode answers `4n + k`, where `k` is the heap the
-construct allocates -- 0 for anything that declares no globals, 2 for a
-construct declaring one string, whatever its literal. Code is 4-aligned,
-so two measurements of the same construct that differ by 4 differ by one
-quantum. Measured across a dozen live runs, the same construct came back
-364 or 368 depending on what unrelated globals the script carried, so 4
-bytes is the resolution to expect rather than the exact byte.
+**Precision.** `-1` mode answers `4n + k`, where `k` is what the
+construct's heap leaves over a multiple of 4: 0 for anything that
+declares no globals, 0 again for one integer, whose 8 bytes of heap are
+themselves 4-aligned, and 2 for a construct declaring one string,
+whatever its literal. Code is 4-aligned, so two measurements of the same
+construct that differ by 4 differ by one quantum. Measured across a
+dozen live runs, the same construct came back 364 or 368 depending on
+what unrelated globals the script carried, so 4 bytes is the resolution
+to expect rather than the exact byte.
 
 **`First copy` is withheld when it cannot be resolved.** It is the
 second-order term -- the difference of two differences -- and live it

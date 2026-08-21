@@ -87,9 +87,10 @@ reference is on the heap, and it does not grow with the literal:
 
 ## Code is 4-aligned
 
-A construct's measured cost is `4n + k`, where `k` is the heap it
-allocates. For anything declaring no globals, `k` is zero and the cost
-is a multiple of 4 exactly:
+A construct's measured cost is `4n + k`, where `k` is what the heap it
+allocates leaves over mod 4 -- the code is 4-aligned and the heap is
+not, so only the remainder shows. For anything declaring no globals,
+`k` is zero and the cost is a multiple of 4 exactly:
 
 | construct | cost | mod 4 |
 |---|---|---|
