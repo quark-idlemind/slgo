@@ -58,7 +58,8 @@ Build what a file says, where it says:
 
 	rez lantern.json
 
-Build a simulator's file here instead of wherever it was written for:
+Build one here rather than at the position the file records, which is
+how a file written for another region gets built in this one:
 
 	rez --at 128,128,25 probe.json
 

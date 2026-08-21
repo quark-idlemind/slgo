@@ -265,8 +265,19 @@ func cmdNew(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return sh.newInside(ctx, out, o, names, body)
 	}
 
+	// The folder part goes through resolveDir, the way mkdir's does,
+	// so that a path without a leading slash is read from the working
+	// folder.  Calling folderAt straight was the bug, and this was the
+	// only command with it: with the shell in /new-check, "new README"
+	// made the notecard at /README, and "new sub/note" was refused
+	// with no folder "sub" while /new-check/sub was there.
 	name := names[len(names)-1]
-	parent, err := sh.folderAt(ctx, names[:len(names)-1])
+	parentPath := ""
+	if strings.HasPrefix(path, "/") {
+		parentPath = "/"
+	}
+	parentPath += sl.JoinPath(names[:len(names)-1]...)
+	_, parent, err := sh.resolveDir(ctx, parentPath)
 	if err != nil {
 		return err
 	}

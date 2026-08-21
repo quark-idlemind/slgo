@@ -73,6 +73,83 @@ func TestNewRefusesAKindItCannotMake(t *testing.T) {
 	}
 }
 
+// TestNewPutsItWhereTheWorkingFolderIs.
+//
+// new used to resolve its path from the root whatever cd had said, and
+// it was the only path-taking command that did: it called folderAt
+// directly instead of going through resolveDir.  Measured against a
+// live shell sitting in /new-check, "new README" made the notecard at
+// /README, and "new sub/note" was refused with no folder "sub" while
+// /new-check/sub was there to be written into.  It now splits off the
+// last name and resolves the rest the way mkdir does.
+func TestNewPutsItWhereTheWorkingFolderIs(t *testing.T) {
+	x := newTestShell(t)
+
+	// A folder below Objects, so a relative path has something to
+	// travel through: the fake's tree is otherwise one deep.
+	nest := msg.MustParseUUID("ab6c7e57-7e57-c0de-e0ce-9f8b1da5cee8")
+	x.grid.inv.Dirs[0].Dirs = append(x.grid.inv.Dirs[0].Dirs, &invDir{ID: nest, Name: "nest"})
+
+	// The grid confirms the item, which is what CreateItem waits for,
+	// and the move that follows is the message these checks read: it
+	// carries the folder the shell resolved.
+	made := msg.MustParseUUID("e1c87e57-7e57-c0de-3ad9-0cdb6c24e8f4")
+	x.grid.mu.Lock()
+	x.grid.onSend = func(m msg.Message) {
+		c, ok := m.(*msg.CreateInventoryItem)
+		if !ok {
+			return
+		}
+		x.grid.Relay(t, &msg.UpdateCreateInventoryItem{
+			InventoryData: []msg.UpdateCreateInventoryItem_InventoryData{{
+				CallbackID: c.InventoryBlock.CallbackID,
+				ItemID:     made,
+				Name:       c.InventoryBlock.Name,
+				Type:       c.InventoryBlock.Type,
+				InvType:    c.InventoryBlock.InvType,
+			}},
+		})
+	}
+	x.grid.mu.Unlock()
+
+	// wentTo runs one new and answers with the folder the item was
+	// moved into, which is the whole of what is being asked here.
+	wentTo := func(line string) msg.UUID {
+		t.Helper()
+		if got := x.do(t, line); !strings.Contains(got, made.String()) {
+			t.Fatalf("%q printed %q, want the id of the new item", line, got)
+		}
+		sent := x.grid.Sent()
+		for i := len(sent) - 1; i >= 0; i-- {
+			if mv, ok := sent[i].(*msg.MoveInventoryItem); ok {
+				return mv.InventoryData[0].FolderID
+			}
+		}
+		t.Fatalf("%q moved nothing", line)
+		return msg.UUID{}
+	}
+
+	x.do(t, "cd Objects")
+	if got := wentTo("new note"); got != testObjects {
+		t.Errorf("a bare name in /Objects went to %v, want Objects", got)
+	}
+	if got := wentTo("new nest/note"); got != nest {
+		t.Errorf("a relative path through a subfolder went to %v, want nest", got)
+	}
+	// A leading slash still means the root, wherever the shell stands.
+	if got := wentTo("new /note"); got != testRoot {
+		t.Errorf("an absolute path went to %v, want the root", got)
+	}
+	if got := wentTo("new ../Scripts/note"); got != testScripts {
+		t.Errorf("a path back up went to %v, want Scripts", got)
+	}
+
+	// And a folder that is genuinely not there still names itself.
+	if got := x.do(t, "new nowhere/note"); !strings.Contains(got, `no folder "nowhere"`) {
+		t.Errorf("new under a folder that is not there printed %q", got)
+	}
+}
+
 // TestStartingEveryScriptSaysWhatBecameOfEachOne.
 //
 // "start Box1" is one request per script and they need not agree with

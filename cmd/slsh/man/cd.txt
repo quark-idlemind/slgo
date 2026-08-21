@@ -1,8 +1,6 @@
 cd changes which inventory folder the shell is in.  Every command that
 takes a path takes it relative to that folder unless the path begins
-with a slash -- every command but new, which reads its path from the
-root whatever cd said, and says so on its own page -- and pwd says
-which folder it is.
+with a slash, and pwd says which folder it is.
 
 The argument is a folder path: a leading slash starts from the root,
 ".." goes up a level, "." stays, and the names between the slashes are

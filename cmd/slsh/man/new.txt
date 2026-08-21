@@ -3,10 +3,11 @@ counterpart and writes into one that does; between them, making an
 item and filling it are two commands rather than one guess about which
 was meant.
 
-The argument is where it lands: a path whose last name is the item and
-whose folders must already be there.  Without --kind it is a notecard,
-and --from gives it the contents of a file -- without that it is
-empty.  What is printed is the name and the new item's id.
+The argument is where it lands: a path relative to the folder the
+shell is in, whose last name is the item and whose folders must
+already be there.  Without --kind it is a notecard, and --from gives
+it the contents of a file -- without that it is empty.  What is
+printed is the name and the new item's id.
 
 Both kinds cost nothing, and that is not a detail: uploading a texture
 costs L$ and this does not, because a notecard and a script go up
@@ -17,21 +18,6 @@ A script made with no source is given a skeleton -- an empty default
 state -- because a script with none at all is a compile error waiting
 to happen the moment anything runs it.  A script that did not compile
 says so and is in inventory all the same.
-
-# The path is from the root, whatever cd said
-
-Alone among the commands that take a path, this one does not read it
-from the folder the shell is in.  It is walked from the inventory
-root, with a leading slash or without one, so a bare name makes the
-item at the root however deep the shell has gone, and a path through a
-folder that is here rather than at the root is refused with "no
-folder" for a folder that is plainly there.  Naming the whole path is
-the way to be sure of where it lands; mv is the way out when one has
-already landed at the root.
-
-That was measured rather than reasoned about, and it is not what the
-rest of the shell does with a path, so it is a thing to work around
-rather than to build a habit on.
 
 # Making one inside an object is a different act
 
@@ -59,8 +45,8 @@ the notecard with a plain "new" and put it in with "drop".
 
 An empty notecard, and one with a file in it:
 
-	new /Notecards/README
-	new --from notes.txt /Notecards/README
+	new Notecards/README
+	new --from notes.txt Notecards/README
 
 A script in inventory, and the same source compiled and running inside
 a rezzed object:
