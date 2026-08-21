@@ -5,8 +5,17 @@ asked.
 
 It takes nothing.  Both kinds are in one list because from where a
 person sits they are the same thing -- somebody offered something and
-it has not been answered -- and each line says what it is, what it is
-called, how long it has been waiting, and for an item who sent it.
+it has not been answered.  Each line begins with what it is, and the
+two kinds fill the rest of the line differently, because they have
+different things worth saying:
+
+	friendship  Example Resident             12s ago
+	object      a lantern                    4s ago   from Another Resident
+
+A friendship offer has no name of its own, so the second column is
+whoever made it; an item has one, so the second column is what it was
+called and the sender comes at the end.  The names above are invented,
+as everywhere in these pages.
 
 Nothing is answered by being looked at.  A viewer draws an offer on the
 screen and leaves it there; a shell has none, so an offer nobody
@@ -20,9 +29,23 @@ This shell subscribes when it starts, so anything offered before that
 is not in this list -- and it is still open on the other side, which is
 the awkward part: they are waiting, and nothing here shows it.
 
-The same follows for two shells on one avatar.  Each has its own idea
-of what is waiting, and answering in one does not update the listing in
-the other until it looks again.
+The same follows for two shells on one avatar.  The daemon hands the
+offer to every client that asked for instant messages, so both hold it,
+and each holds its own copy: answering in one takes it out of that
+one's list and leaves the other's alone for as long as that shell
+lives.  Looking again does not help, because there is nothing to look
+at -- the list is what this process caught, not something the grid can
+be asked for a second time.
+
+Answering through "waiting" has the same hole nearer home.  "answer N"
+and "no N" on an inventory offer send the answer and leave the offer in
+place, so it is still in this listing afterwards and "accept" will
+happily send a second answer to an offer already taken up; measured,
+"answer 1" on a lone item printed that it was taken and "offers"
+printed the item again immediately after.  A friendship offer answered
+the same way does leave both listings.  Until that is fixed, answering
+a thing twice is the mistake to watch for, and it is the listing that
+is wrong rather than the answer.
 
 A friendship offer can only ever be answered by the client that
 received it, since the answer has to quote the identifier the offer

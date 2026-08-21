@@ -12,7 +12,11 @@ to say.
 The prompt is where the next line will go: "Local" for the region's
 open chat, or somebody's name for an instant message to them.  That
 prompt is the only thing standing between a command and a remark said
-out loud, which is why it says so plainly.
+out loud, which is why it says so plainly.  A count in brackets may
+stand in front of it, as in "(2) Local>", and that half belongs to
+"waiting" rather than to the conversation: it is how many things are
+waiting for an answer, and it stands in front of the command prompt in
+the same way.
 
 # The two modes each keep their own half-typed line
 
@@ -31,15 +35,22 @@ what was said is not a command to run again.  Ctrl-C on an empty line
 returns to command mode rather than leaving the shell.
 
 The escape key is what leaves, and slsh takes a key of its own if
-escape is awkward on a particular terminal; "slsh --help" says how.
+escape is awkward on a particular terminal: "slsh --escape=^G" for one
+run, or "set escape ^G" to have it remembered.  Both are read when the
+shell starts, so a setting changed at the prompt is the next shell's
+escape key and not this one's -- "set escape" says so, and says which
+key is in force.
 
 # Everything heard is printed in either mode
 
 Arriving chat has nothing to do with what the keyboard is for, so
 remarks, instant messages and notices are printed above whatever is
-being typed whichever mode is in force.  Time-stamped, and marked with
-"<" for heard and ">" for said, since the two are otherwise hard to
-tell apart in a column.
+being typed whichever mode is in force.  Time-stamped, and then one
+character that says which kind of line it is: "<" for heard, ">" for
+said, and "*" for a notice.  The first two are the pair that has to be
+told apart, since a remark and a reply read the same in a column; the
+third is the shell speaking rather than anybody in the world, and a
+line marked that way was said to nobody and heard by nobody.
 
 # Examples
 

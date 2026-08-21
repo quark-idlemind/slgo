@@ -6,8 +6,9 @@ something else.
 Everything after the flags is what is said, joined with spaces, so
 nothing needs quoting except a word the shell would otherwise take for
 something of its own.  It goes out at ordinary speaking volume and is
-heard by whoever is near enough, and the line is printed back with the
-channel it went to, since nothing else on the screen would show for it.
+heard by whoever is near enough, and the line is printed back marked
+with where it went -- "Local" for open chat, "channel N" for any other
+-- since nothing else on the screen would show for it.
 
 Nothing says whether anybody heard it.  Chat is not acknowledged by
 anything, so a line that went out is the whole of what can be

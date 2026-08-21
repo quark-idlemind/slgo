@@ -8,6 +8,11 @@ the listing is what the next command means by a number -- "friends"
 then "im 2" is the ordinary way round, and the same number works for
 profile, offer or give.
 
+A word after it is dropped rather than refused: "friends someone"
+prints the whole online list, exactly as "friends" does, because there
+is nothing here to search.  The search is "lookup", and it goes to the
+grid rather than to this list.
+
 # Where the list comes from, and what it is not
 
 Both halves of this arrive once and never again.  The list itself is
@@ -46,5 +51,5 @@ Write to the second person listed:
 	im 2 are you still at the build
 
 See also: offer for making a friendship, offers for one waiting to be
-answered, who for the people in the region who are not friends, and
-lookup for everybody else.
+answered, who for everybody in the region whether or not they are
+friends, and lookup for everybody else.

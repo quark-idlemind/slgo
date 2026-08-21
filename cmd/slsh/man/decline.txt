@@ -4,9 +4,16 @@ names what it means in exactly the same fashion.
 
 With nothing after it, it refuses the only offer waiting.  With
 something after it, that names one: part of the name of whoever offered
-friendship, or the name of the item offered or of whoever sent it.
-Where one of each is waiting the bare command means the friendship
-offer, and the item has to be named.
+friendship, or part of the name of the item offered, or the whole name
+of whoever sent it.  Where one of each is waiting the bare command
+means the friendship offer, and the item has to be named.
+
+The traps are accept's traps, since it is the same picking done twice
+over, and they are written out there: what is typed is tried against
+the items first; a word matching two items refuses the older of them
+silently rather than asking which; and two items with nothing else
+waiting answer a bare command with "no offers waiting", which is the
+refusal saying the wrong thing about itself.
 
 # Saying no is not the same as saying nothing
 
@@ -31,6 +38,7 @@ One of several, by who sent it or what it is called:
 	decline lantern
 
 See also: accept, offers, and the pair of no and ignore in "waiting" --
-"no" is this same refusal for everything else that asks, and "ignore"
-is the other thing entirely: it leaves the offer waiting and says
-nothing to anybody.
+"no" is this same refusal reached by the number that listing prints,
+and it answers these two kinds along with teleports, dialogs,
+permissions and group invitations, while "ignore" is the other thing
+entirely: it leaves the offer waiting and says nothing to anybody.

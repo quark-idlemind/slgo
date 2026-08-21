@@ -15,25 +15,43 @@ chat mode, or naming the person to "im" or "chat".  A conversation that
 opened while this listing was on the screen has moved the numbers under
 it, which is the other reason not to type one.
 
+The danger is that typing one is not refused.  A number given to "im",
+"offer", "give" or "profile" means the last listing "who", "friends" or
+"lookup" printed, and this is not one of those: it leaves that listing
+exactly as it was.  So "talk" and then "im 2" writes to the second
+person of whatever was listed before, who has every chance of being
+somebody else entirely, and the shell reports it as a success because
+nothing about it went wrong.  With no such listing at all it says there
+is no 2 in the last listing, which is the harmless half of the same
+thing.
+
 # A conversation opens by itself and does not close
 
-The list grows when somebody sends an instant message, as well as when
-this side starts one, and a notice says so at the moment it happens --
-that notice is worth reading, because it means tab now has one more
-stop on it.  Nothing removes an entry; the list is the session's memory
-of who has been talked to, and it ends when the shell does.  Local
-cannot be closed either, which is what makes tab a cycle: pressing it
-enough times always comes back to speaking out loud.
+The list grows when somebody sends an instant message, and a notice
+says so at the moment it happens -- that notice is worth reading,
+because it means tab now has one more stop on it.  It grows quietly
+when this side starts one: "im WHO TEXT" that opens a conversation says
+so, but "chat WHO" and "im WHO" with nothing to say simply switch to a
+row that was not there before.  Nothing removes an entry; the list is
+the session's memory of who has been talked to, and it ends when the
+shell does.  Local cannot be closed either, which is what makes tab a
+cycle: pressing it enough times always comes back to speaking out
+loud.
 
-The names can improve.  An instant message carries a key and sometimes
-no name at all, so a conversation can appear as the first few
-characters of a key in brackets -- (d8467e57) -- until the grid says
-who that is, and the row takes the better name when it arrives.
+The names can improve, but not by themselves.  An instant message
+carries a key and sometimes no name at all, so a conversation can
+appear as the first eight characters of a key in brackets --
+(d8467e57).  Nothing here then asks the grid who that is, and a name
+the grid volunteers afterwards does not reach the row: with the name
+learned between one message and the next, the listing was measured
+still saying (d8467e57).  What relabels it is a later message from that
+person that does carry a name, or a command naming them by key -- "chat
+d8467e57-…" asks the grid and puts the answer in the row.
 
 # Examples
 
 	talk
 
 See also: chat for entering the mode this describes, im for opening a
-conversation with somebody, and who for the people in the region who
-are not in a conversation yet.
+conversation with somebody, and who for everybody in the region,
+whether or not there is a conversation with them.

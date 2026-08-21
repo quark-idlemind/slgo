@@ -5,9 +5,10 @@ to be accepted or refused, exactly as theirs lands in "waiting" and
 
 Who is named by a name, by a key, or by the number beside a name in the
 last listing.  Anything after the name is the note that goes with the
-offer, and with nothing there a plain greeting is sent, because the
-message is not optional in the protocol and an empty one would arrive
-as a blank line.
+offer, and with nothing there the shell writes one -- "Would you be my
+friend?" -- because the message is not optional in the protocol and an
+empty one would arrive as a blank line.  That sentence is what the
+other side reads, so a note of one's own is usually worth typing.
 
 As with im, the name is the longest run of one or two words at the
 front that answers to somebody, and the rest is the note.  A name with
@@ -22,8 +23,11 @@ mode the shell is in -- and the friend list is the other place to look,
 since a friendship formed while the session is up is added there as it
 happens.
 
-An offer nobody answers stays pending on their side indefinitely, and
-sending a second one does not cancel the first.
+An offer nobody answers stays pending on their side, and sending a
+second one does not cancel the first.  That is read from what the
+messages carry -- there is nothing in either of them that could cancel
+anything -- rather than watched happening, since watching it would mean
+offering friendship twice to somebody who had not asked for it once.
 
 # Who a name may be
 

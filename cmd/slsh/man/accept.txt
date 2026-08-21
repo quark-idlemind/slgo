@@ -4,9 +4,20 @@ and both of them are what "offers" lists.
 
 With nothing after it, it takes the only offer waiting.  With something
 after it, that names one: part of the name of whoever offered
-friendship, or the name of the item offered or of whoever sent it.
-Naming is how an ambiguity is settled, and there is no default, because
-accepting the wrong one of two offers cannot be undone from here.
+friendship, or part of the name of the item offered, or the whole name
+of whoever sent it.  What is typed is tried against the items first and
+only then against the friendship offers, so a word that could be either
+takes the item.
+
+Naming settles an ambiguity between friendship offers and does not
+settle one between items.  A word matching two friendship offers is
+refused and says how many it matched, so nothing is answered by
+accident.  Items are matched one at a time and the first hit wins,
+oldest first: with two offers waiting under the same item name, naming
+it answered the older of them and left the newer sitting there, saying
+nothing at all about the one it had not touched.  So an item is worth
+naming in full, and the report is worth reading, since it says both the
+item and who sent it.
 
 # An item lands in the folder the shell is in
 
@@ -23,9 +34,15 @@ choose.
 # Which kind a bare command means
 
 Where one of each is waiting, the bare command keeps its older meaning
-and takes the friendship offer; the item has to be named.  Two items
-and nothing else waiting is an ambiguity as well, and is refused in the
-same way.
+and takes the friendship offer; the item has to be named.
+
+Two items and nothing else waiting is refused, but not in a way that
+says so: the bare command looks for an item, finds two and declines to
+choose, and then falls through to the friendship offers, of which there
+are none.  So it answers "no offers waiting" while two of them sit in
+"offers" -- measured, with two items and no friendship offer, both
+"accept" and "decline" said exactly that.  It is the sentence that is
+wrong and not the refusal; naming one of the two is what to do next.
 
 # What it cannot tell you
 
