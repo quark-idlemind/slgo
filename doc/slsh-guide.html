@@ -400,6 +400,7 @@
         <li><a href="#prompt">The prompt and its modes</a></li>
         <li><a href="#inventory">Inventory</a></li>
         <li><a href="#region">Where you are</a></li>
+        <li><a href="#moving">Getting somewhere else</a></li>
         <li><a href="#wearing">Wearing things</a></li>
         <li><a href="#objects">Objects in the world</a></li>
         <li><a href="#scripts">Notecards and scripts</a></li>
@@ -445,6 +446,14 @@ acting as group Example Builders (87f07e57-…)</span>
           instantly because there is no login to wait for, several programs can
           drive one avatar at the same time, and closing the shell leaves the
           avatar standing where it was.
+        </p>
+
+        <p>
+          <code>quit</code> is what leaves, and <code>exit</code> is the same
+          command under a second name, so neither has to be remembered; at an
+          empty prompt <strong>^D</strong> does it too. None of them takes a
+          daemon-held avatar down. That is <code>logout</code>, against a named
+          avatar, and it is <a href="#daemon">a separate act</a> on purpose.
         </p>
 
         <p>
@@ -514,7 +523,7 @@ acting as group Example Builders (87f07e57-…)</span>
         <h2><span class="num">2</span>Finding your way about</h2>
 
         <p>
-          There are sixty-odd commands, and three ways to ask about them. They
+          There are seventy-odd commands, and three ways to ask about them. They
           answer different questions and it is worth knowing which is which.
         </p>
 
@@ -529,7 +538,7 @@ acting as group Example Builders (87f07e57-…)</span>
         </div>
 
         <p>
-          <code>help</code> is grouped because one list of sixty is a wall
+          <code>help</code> is grouped because one list of seventy is a wall
           rather than an answer. A command can be in more than one group where
           it belongs in both.
         </p>
@@ -539,13 +548,16 @@ acting as group Example Builders (87f07e57-…)</span>
 <pre><span class="p">/$</span> <span class="c">help</span>
 <span class="o">Commands are grouped.  For a group:  help GROUP
 For everything:        help all
-For one command:       COMMAND --help
+For one command:       COMMAND --help, or man COMMAND
 
-  inventory   folders and items: what you have, and moving it about  (15)
-  waiting     things that want an answer, and how to give one         (7)
+  avatars     the avatars slgod holds, and how their sessions are doing (7)
+  giving      handing items to somebody, and taking what is offered  (6)
+  inventory   folders and items: what you have, and moving it about  (14)
   people      finding people, talking to them, friendship            (12)
-  region      where this avatar is and what is around it             (18)
-  …</span></pre>
+  region      where this avatar is and what is around it             (30)
+  shell       slsh itself                                            (6)
+  simulator   what this grid supports                                (3)
+  waiting     things that want an answer, and how to give one        (7)</span></pre>
         </div>
 
         <p>
@@ -757,10 +769,11 @@ beside the date</span>
           <table>
             <tbody>
               <tr><td class="cmd">where</td><td class="what">the region, the position, and the group being acted as</td></tr>
+              <tr><td class="cmd">parcel</td><td class="what">the land underfoot: who owns it, and what it permits</td></tr>
               <tr><td class="cmd">who</td><td class="what">who else is here, nearest first, with their keys</td></tr>
+              <tr><td class="cmd">map</td><td class="what">the same people as a picture, which says which way rather than how far</td></tr>
               <tr><td class="cmd">look</td><td class="what">what the simulator said about the region when this session arrived</td></tr>
               <tr><td class="cmd">objects</td><td class="what">the objects the region has described; <code>-c</code> for the prims inside each</td></tr>
-              <tr><td class="cmd">tp X Y Z</td><td class="what">move to a position in this region</td></tr>
               <tr><td class="cmd">caps · features · lsl</td><td class="what">what this simulator grants, supports and implements</td></tr>
             </tbody>
           </table>
@@ -773,12 +786,143 @@ beside the date</span>
           remembers. <code>objects</code> groups what it found by owner.
         </p>
 
+        <p>
+          <code>where</code> and <code>parcel</code> are the two halves of one
+          answer, and everything that puts the avatar somewhere else — a
+          position, another region, a place kept in inventory, a seat — is
+          <a href="#moving">the chapter after this one</a>.
+        </p>
+
+        <h3>The land under you, which is the half that decides things</h3>
+        <p>
+          A region is one place to the protocol and several places to everybody
+          standing in it. What decides whether an avatar may build, fly, run a
+          script, hear a stream or stay at all is not the region: it is the
+          <em>parcel</em>, and a region holds dozens of them. So when building
+          stops working for no reason the region explains, <code>parcel</code>
+          is the command that answers it — and <code>where</code>, which names
+          the region and the coordinates, is only half of where you are.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">where</span>
+<span class="o">Pelmar Reach at 28, 72, 2001
+acting as group Lorn Family (5adb7e57-…)</span>
+<span class="p">/$</span> <span class="c">parcel</span>
+<span class="o">Thrushmoor
+  local    5
+  owner    6cb77e57-…  KerraYule Resident
+  group    5adb7e57-…  Lorn Family
+  area     2048 m², within 12,48 to 44,112
+  prims    486 of 937  (owner 485, group 1, other 0, selected 0)
+  allows   group build, fly, group object entry, scripts, group scripts, landmarks
+  refuses  build, object entry, terraform, damage, voice, search listing
+  pass     L$10 for 1 hour
+  claimed  2024-05-03</span></pre>
+        </div>
+
+        <p>
+          The two lists are what the command is for. This parcel allows
+          <em>group</em> build and refuses build, which is one line saying that
+          an avatar acting as Lorn Family may rez here and the same avatar
+          acting as nobody may not — and when the refusal comes it will talk
+          about the land, which sends you looking in the wrong place. That is
+          the same trap as the group below, seen from the other end.
+        </p>
+
+        <p>
+          The parcel is asked for rather than remembered, and asking is quick:
+          measured on Agni, every kind of parcel question was answered between
+          90 and 130 milliseconds. The round trip is worth it, because land is
+          sold, renamed and divided under a standing avatar, and an answer kept
+          from the moment of arrival would be exactly as old as the arrival. If
+          the ask goes unanswered the command falls back to what the session was
+          told when it got there and says so in as many words, so a stale answer
+          can never be mistaken for a fresh one.
+        </p>
+
+        <p>
+          A point describes any parcel in this region rather than the one
+          underfoot — <code>parcel 60,60</code> for the land two parcels over,
+          in metres from the region's south-west corner, the same numbers
+          <code>where</code> prints. The avatar does not move and nothing is
+          asked of it. <code>--region</code> lists every parcel in the region,
+          and <code>--map</code> draws them, one character to a parcel, with a
+          key underneath.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">parcel --map</span>
+<span class="o">                        llllllllll
+                        llllllllll
+           kkkkkkkkkk
+    hhhhh  kkkkkkkkkk        ggggg   jjjjj
+    hhhhh                    ggggg   jjjjj
+    hhhhh  iiiiiiiiii        ggggg   jjjjj
+    hhhhh  iiiiiiiiii        ggggg   jjjj
+
+                 ..
+    ddddd  fffff  ..          cccc   eeeee
+    ddddd  fffff              ccccc  eeeee
+    ddddd  fffff        bbbbb ccccc  eeeee
+    ddddd  fffff        bbbbb ccccc  eeeee
+          aaaaaaaaa     bbbbb
+          aaaaaaaaaa    bbbbb
+
+
+256 metres across, 14 parcels; protected land is blank, its rez zones "."
+     Protected Land              40640 m²  owned
+  a  Thrushmoor Home                2048 m²  owned
+  b  Windlestraw Lodge         2048 m²  owned
+  c  Zorrim                       2048 m²  owned
+  d  Thrushmoor                     2048 m²  owned
+  e  OMEN                       2048 m²  owned
+  f  La Cardonna                  2048 m²  owned
+  .  Protected Land - Rez zone     320 m²  owned
+  g  Quill Lodge                   2048 m²  owned
+  h  Garrow''s Hideaway           2048 m²  owned
+  i  Rue&amp;Reed                 2048 m²  owned
+  j  Sorrel Home                    2048 m²  owned
+  k  Slow Shoal Estate             2048 m²  owned
+  l  Ulmar                        2048 m²  owned</span></pre>
+        </div>
+
+        <p>
+          The blanks are Linden's own protected land — the roads and waterways a
+          mainland region is laid out around — and the <code>.</code> is a rez
+          zone inside them. They are drawn as ground rather than as a letter
+          because that land is most of the region by area and none of it is
+          anybody's, so a letter would put the loudest mark in the picture on
+          the one parcel nobody is asking about. Each parcel is a letter
+          <em>and</em> a colour on a terminal: the colour is what tells two
+          apart at a glance, and the letter is what tells them apart at all,
+          since a picture in a file or down a pipe has no colour in it.
+        </p>
+
+        <p>
+          Both of those pictures want something the region only ever says once.
+          The overlay carrying the property lines arrives in four packets as the
+          avatar arrives and never again — a request for it is answered with
+          silence, and the only way to fetch it is to arrive again. So they come
+          from whatever held the session at that moment: a shell attached to a
+          daemon that has been up for hours gets them, and a session that has
+          just logged in and not moved may not, in which case the command says
+          so rather than drawing an empty region. The names on top of the shapes
+          are a question apiece, about a tenth of a second each, so fourteen
+          parcels take two seconds.
+        </p>
+
         <div class="note">
           <p>
-            <code>tp</code> moves <strong>within</strong> the region only.
-            Another region is a different simulator, needing a new circuit and
-            a new set of capabilities, which slgod does not do yet — so
-            arriving somewhere else is still a matter of logging in there.
+            Asking about a parcel moves the simulator's idea of which parcel
+            this agent has <em>selected</em>. A viewer attached to the same
+            session through slgod will notice: its About Land floater redraws to
+            show the parcel that was asked about, which is not the one under its
+            avatar. That is the grid working as designed, but somebody watching
+            the screen while somebody else types <code>parcel 200,200</code>
+            sees the panel change under them.
           </p>
         </div>
 
@@ -807,11 +951,624 @@ beside the date</span>
           list shortly after login and answers no question about it, so "no
           groups are known here" means either none joined or none told yet.
         </p>
+
+        <h3>Who is about, as a picture</h3>
+        <p>
+          <code>who</code> answers half the question and cannot answer the
+          other half: a listing says somebody is twenty metres away and nothing
+          at all about which way, and three people at twenty metres are a crowd
+          in one direction and a scattering in another. <code>map</code> is the
+          other half, drawn as characters on a grid.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">map</span>
+<span class="o">around you in Pelmar Reach at 28, 72, 2001
++----------------------------------------+
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                    *2                  |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
+|                                        |
++----------------------------------------+
+64m x 64m; north is up, east is right
+* you   o within 3m of your height   ^ higher   v lower
+a digit is that many in one cell, and + is more than nine
+2 avatars in the picture</span></pre>
+        </div>
+
+        <p>
+          North is up and east is right, which is what the region's own
+          coordinates already mean. The star is this avatar, an <code>o</code>
+          is somebody within three metres of its height, a <code>^</code>
+          somebody higher and a <code>v</code> somebody lower — three metres
+          being about one storey, so an <code>o</code> is somebody who could be
+          walked over to and a <code>^</code> is somebody on the roof. Two or
+          more people in one cell are drawn as the count, and ten or more as a
+          <code>+</code>, because a 9 there would be a lie.
+        </p>
+
+        <p>
+          The picture is wider than it is tall on purpose. A character cell is
+          taller than it is wide, so a grid with as many columns as rows comes
+          out taller than it is wide and a square region looks like a doorway.
+          The rows are what is chosen and the columns follow, as many as it
+          takes for a square of ground to look square. How much taller than wide
+          a cell is belongs to the font you read a terminal in rather than to
+          anything here, so it is the <code>map_ratio</code> setting, written
+          height first; 7:3 is what the font this was measured in turned out to
+          be, and <code>set map_ratio 2:1</code> is how to have the obvious
+          guess back.
+        </p>
+
+        <p>
+          <code>--region</code> draws the whole 256 metres rather than the 64
+          around the avatar, <code>--span</code> changes how much ground the
+          close picture covers, and <code>--rows</code> changes how finely
+          either is drawn — more rows buy detail rather than reach, which is why
+          the size printed under the grid does not change when they do.
+          Somebody on the friend list is drawn in colour and nobody else is,
+          because the question a picture is usually being read for is not "who
+          is here", which <code>who</code> answers, but "where is the person I
+          am looking for". The colour only ever reaches a terminal: a picture
+          written to a file, or one from <code>-c</code> or <code>-f</code>, has
+          no escape sequences in it at all, since that file is usually on its
+          way back through <code>. listing</code>.
+        </p>
+
+        <div class="note">
+          <p>
+            The avatars drawn are the ones the simulator has described to this
+            session, which is what is within the draw distance and not everyone
+            in the region. So <code>--region</code> draws the whole region and
+            can still only mark the people this session has been told about: an
+            empty corner is a corner nobody has described, not a corner with
+            nobody in it. Read it with <code>where</code> and the count under
+            the grid rather than reading the blank cells as fact.
+          </p>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------- moving -->
+      <section id="moving">
+        <h2><span class="num">6</span>Getting somewhere else</h2>
+
+        <p>
+          There are four ways for an avatar to end up somewhere it was not, and
+          they are separate mechanisms rather than variations on one another: a
+          position, a region's name, a landmark out of inventory, and a seat.
+          All of them wait for the arrival rather than reporting that the
+          request went out, and what each prints afterwards is where the avatar
+          actually ended up, read back from the session.
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="cmd">tp X Y Z</td><td class="what">a position — in this region, or in whichever region that position is really in</td></tr>
+              <tr><td class="cmd">tp REGION [X Y Z]</td><td class="what">another region, by name, anywhere on the grid</td></tr>
+              <tr><td class="cmd">regions NAME</td><td class="what">what a name matches on the grid's map, and where each one is</td></tr>
+              <tr><td class="cmd">landmark</td><td class="what">the places kept in inventory; <code>--go</code> goes to one, <code>--home</code> goes home</td></tr>
+              <tr><td class="cmd">neighbours</td><td class="what">the circuits a border crossing needs; <code>on</code> and <code>off</code> change it</td></tr>
+              <tr><td class="cmd">sit · stand</td><td class="what">onto a seat and off it again, which moves the avatar several metres</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Three numbers, and what they mean past the edge</h3>
+        <p>
+          <code>tp 128 128 25</code> is a position in this region, in metres
+          from its south-west corner — the numbers <code>where</code> prints. A
+          region is 256 metres square and the grid is regions laid edge to edge,
+          so <code>tp 300 128 25</code> is neither an error nor a point in this
+          region: it is 44 metres into the region to the east. The shell works
+          out which region owns the point and teleports there, in the way that
+          the twenty-fifth hour of Monday is one in the morning on Tuesday. It
+          generalises as far as the arithmetic does, so an x of 1000 is four
+          regions east and 232 metres in, and costs exactly what 300 does.
+        </p>
+
+        <p>
+          A coordinate written with a leading <code>~</code> is measured from
+          where the avatar is standing rather than from the region's corner:
+          <code>~</code> on its own is that axis left alone, <code>~10</code> is
+          ten metres further along it, <code>~-10</code> is ten metres back. It
+          is per axis, which is why it is a mark on the number and not an option
+          — an option would make all three relative or none. Two of the same
+          relative teleport go twice as far, where two of the same absolute one
+          go nowhere the second time, and that is the point of it.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">tp 128 128 25</span>              <span class="n">a position in this region</span>
+<span class="p">/$</span> <span class="c">tp ~10 ~ ~</span>                 <span class="n">ten metres east, same y, same height</span>
+<span class="p">/$</span> <span class="c">tp ~ ~ ~50</span>                 <span class="n">fifty metres up, without moving</span>
+<span class="p">/$</span> <span class="c">tp 300 128 25</span>              <span class="n">44 metres into the region east of here</span>
+<span class="p">/$</span> <span class="c">tp -10 128 25</span>              <span class="n">246 metres into the one to the west</span>
+<span class="p">/$</span> <span class="c">tp 128 -1 25</span>               <span class="n">255 metres into the region to the south</span></pre>
+        </div>
+
+        <p>
+          The height is the simulator's to settle, and what it does with it was
+          measured rather than guessed: the avatar arrives at whichever is
+          higher of the height asked for and the ground under the point, plus
+          about a metre. A request for 30 came back as 31, one for 2001 as 2002,
+          and one for 0 as the ground. So asking for nothing is asking for
+          ground level rather than for a fall, and asking for a height above the
+          ground is honoured rather than corrected.
+        </p>
+
+        <h3>A region by name</h3>
+        <p>
+          Anything that is not three numbers is a region's name, joined back up
+          with spaces, so a name with a space in it needs no quoting; and the
+          last three words are a position when all three are numbers. A name
+          with no position arrives in the middle of the region, at 128, 128,
+          which is where a viewer puts somebody who typed a name into the world
+          map and said nothing about where in it.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">tp Example Landing</span>
+<span class="p">/$</span> <span class="c">tp Example Landing 33 73 1000.5</span>
+<span class="p">/$</span> <span class="c">tp --wait 60 Example Shallows</span></pre>
+        </div>
+
+        <p>
+          The height asked for by a bare name is nothing, which the simulator
+          reads as ground level — and ground level in the middle of a region is
+          sometimes under water. Sandbox Goguen's water is at 5 metres and its
+          middle is below that, so <code>tp Sandbox Goguen</code> arrives there
+          submerged. Name a height to land somewhere else.
+        </p>
+
+        <p>
+          The name goes to the grid's map, whose search matches from the start
+          of a name and ignores case. So one word finds every region beginning
+          with it, and <code>regions</code> is that same search run for its own
+          sake — which is how to find out whether a name is enough before typing
+          it at <code>tp</code>.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">regions Pelmar</span>
+<span class="o">Pelmar Reach                         43648, 43648   moderate  47991483540340736
+Pelmara                           43712, 43584  general   48061852284502016
+Pelmar Bay                     43584, 43584   moderate  47921114796146688</span></pre>
+        </div>
+
+        <p>
+          Each line is a region: its name, the square it occupies on the grid,
+          its maturity rating, and its handle — the square's south-west corner
+          in metres packed into one number, which is how every message that
+          names a region names it. Several matches is the ordinary case and not
+          a mistake, and there is no way to ask for an exact name because the
+          map has no such question in it.
+        </p>
+
+        <p>
+          A name that matches one of them exactly is that one as far as
+          <code>tp</code> is concerned, even where longer names share its
+          prefix — a name typed in full is not an ambiguous name. Anything else
+          that matched more than once is printed in that same listing, and
+          refused. Refused rather than guessed at, because
+          the guess is not a listing you can read again: it is an avatar
+          somewhere it was not sent, with everything the shell knew about the
+          region it left thrown away on the way.
+        </p>
+
+        <div class="note">
+          <p>
+            The map's reply has fields in it for how many avatars are in a
+            region, what the region allows, and how high its water is, and
+            Second Life sends all three as zero for every region every time. So
+            <code>regions</code> cannot say whether a region is up, or busy, or
+            empty. A region listed there is a region that exists; it is not a
+            region that will have this avatar, since an estate can refuse an
+            arrival for reasons the map has no field for.
+          </p>
+        </div>
+
+        <h3>What a teleport costs, and what it throws away</h3>
+        <p>
+          About four hundred milliseconds, and up to about five seconds. Twenty
+          round trips between Pelmar Reach and Sandbox Goguen — forty moves — were
+          measured end to end at between 355 milliseconds and 4.95 seconds, with
+          a median of 425 and none of them failing. So it is quick, and the slow
+          tail is seconds rather than fractions of one, which is worth knowing
+          before anything treats a teleport as instant. The line saying where it
+          is going is printed before the waiting starts, because a shell that
+          has silently stopped answering is indistinguishable from one that has
+          hung. The wait is thirty seconds, and <code>--wait</code> changes it.
+        </p>
+
+        <p>
+          The session goes with the avatar. slgod hands the circuit to the next
+          simulator rather than logging in again, so the avatar that arrives is
+          the same session that left, a viewer that had taken it keeps it, and
+          every shell attached to the daemon carries on as it was. That is a
+          good part of why a teleport is cheaper than the relog it replaces.
+        </p>
+
+        <p>
+          What does not go with it is everything the old region said. Local ids
+          are the region's own numbering and the next region hands the same
+          numbers out again, so what the shell knew about objects is not merely
+          stale after a teleport — it would name something here as confidently
+          as it named something there. All of it is dropped: the objects, who
+          owns them, what they are called, what is inside them. Anything a
+          script was holding across a <code>tp</code> has to be asked for again.
+          What survives is what was never a region's to say: who people are,
+          inventory, friends, and the offers and dialogs still waiting for an
+          answer.
+        </p>
+
+        <p>
+          A line of notice says so: <code>the avatar is now in Sandbox Goguen
+          -- what the last region described is gone</code>. It comes from the
+          same place arriving chat does, so it appears whoever asked for the
+          move — another client attached to the same daemon, a lure somebody
+          offered and you accepted, a session re-established after the circuit
+          was lost. It appears for your own <code>tp</code> too, alongside the
+          command's own answer. A teleport therefore prints twice, and the two
+          lines say different things: one is the session's news, the other is
+          the answer to what was typed.
+        </p>
+
+        <p>
+          A refusal is the grid's and not the shell's, and it arrives in two
+          voices — a key a program could act on and a sentence meant for a
+          person — both of which are printed, because they are not always the
+          same string. The session is left standing where it was: a refusal
+          costs the request and nothing else. Silence is the third answer, and
+          it is why the command waits and reads back at all: a teleport
+          <em>within</em> a region that is refused produces no error and no
+          reply of any kind, so without the reading back a refusal would be
+          indistinguishable from success and every position computed afterwards
+          would be wrong.
+        </p>
+
+        <h3>Landmarks, which are places said by name</h3>
+        <p>
+          <code>landmark</code> is the command for a place said by name, where
+          <code>tp</code> is the command for a place said in numbers. A landmark
+          is an ordinary inventory item — the grid's own way of writing a place
+          down — and this lists the ones the avatar holds, says where one of
+          them goes, makes one of wherever the avatar is standing, and goes to
+          one.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">landmark</span>
+<span class="o">8 landmarks
+  /Favorites/Workspace
+  /Ravensdon/Ravensdon Boutique Shop
+  /Landmarks/stage 0 here
+  /Landmarks/stage 0 Daskwell
+  /Landmarks/stage 3 Thrushmoor               3bea7e57-…
+  /Landmarks/stage 3 Thrushmoor               656a7e57-…
+  /Landmarks/stage 3 Daskwell hub
+  /Landmarks/Workspace</span>
+<span class="p">/$</span> <span class="c">landmark stage 3 Daskwell hub</span>
+<span class="o">stage 3 Daskwell hub
+  in       /Landmarks
+  region   8cf47e57-…
+  at       132.97, 145.62, 76.59
+  item     40b37e57-…
+  asset    b86e7e57-…</span></pre>
+        </div>
+
+        <p>
+          They are listed as paths so that two landmarks of one name can be told
+          apart, and where the path is the same for both — which is the ordinary
+          way to end up with two, since making one twice files both under
+          Landmarks — the id printed beside each is the only thing that does.
+          The avatar moves in <code>--go</code> and <code>--home</code> and in
+          nothing else. That is deliberate: if going somewhere were the bare
+          form, reading a landmark and being somewhere else afterwards would be
+          one typo apart. For the same reason none of the three verbs has a
+          short letter, since <code>-g</code> beside <code>-m</code> is exactly
+          the typo a whole word prevents.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">landmark --make Pelmar Reach Workshop</span>   <span class="n">of where the avatar stands</span>
+<span class="p">/$</span> <span class="c">landmark --go Thrushmoor</span>
+<span class="p">/$</span> <span class="c">landmark --home</span></pre>
+        </div>
+
+        <p>
+          What the asset holds is a region and three numbers, and that is the
+          whole of it: 96 bytes of text, with no region name, no parcel, no
+          owner and no description of anything in it. That is why the
+          <code>region</code> line above is a uuid rather than a name — the only
+          way this program has of finding a region is the map's search by
+          <em>name</em>, and a landmark carries no name to search for, so a line
+          that printed something place-shaped beside it would be an invention.
+          Going there needs no lookup at all, because the simulator turns the
+          region id into a handle itself, which is why this is not
+          <code>tp</code> with a map lookup in front of it: three measured trips
+          took 1.0 seconds each.
+        </p>
+
+        <p>
+          It is also why a landmark remembers where you stood and nothing
+          whatever about what was there. The parcel may have been sold, the
+          platform stood on taken away, the region emptied — and none of that is
+          in the asset and none of it is said on arrival. A landmark into what
+          is now empty air is an arrival in empty air followed by a fall: one
+          pointed at 1000 metres was measured putting the avatar on the ground a
+          minute later, with nothing reported by anybody. <code>parcel</code> is
+          the command that asks what the far end turned out to be.
+        </p>
+
+        <p>
+          <strong>Arriving somewhere is not the same as staying there.</strong>
+          The command reports the arrival and stops watching. Measured twice on
+          Agni, a landmark into a parcel with a security orb on it
+          <em>succeeded</em>: the avatar arrived, the command printed the
+          position it had arrived at, and about one and a third seconds later
+          the parcel's own object teleported it home.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">landmark --go Ravensdon Boutique Shop</span>
+<span class="o">going to Ravensdon Boutique Shop
+Dell of Ashes at 113, 109, 1011</span>
+<span class="p">/$</span> <span class="c">where</span>                        <span class="n">one second later</span>
+<span class="o">Pelmar Reach at 26, 66, 24</span></pre>
+        </div>
+
+        <p>
+          Those two answers are a second apart and they disagree about which
+          region the avatar is in, with nothing between them saying why. What
+          the grid sent afterwards was two alerts and another teleport —
+          "You have been ejected from this land.", then "You have been
+          teleported home by the object … on the parcel …" — and nothing in this
+          command's path reads those alerts, so the ejection is invisible to it.
+          A position printed here can be true when it is printed and false a
+          moment afterwards, with nothing saying so. If a landmark lands
+          somewhere it should not be, run <code>where</code> again.
+        </p>
+
+        <div class="note">
+          <p>
+            Every inventory item has an <em>item</em> id and an <em>asset</em>
+            id. <code>ls -l</code> prints the first, and the second is the one
+            every landmark message takes. They are both uuids and nothing about
+            either says which it is — and sent the wrong one, the grid says
+            nothing at all: the item id, and a uuid that was nothing whatever,
+            were each answered with perfect silence, waited out to twelve
+            seconds apiece.
+          </p>
+          <p>
+            That is why a name is what you type here. A name is looked up in the
+            listing, which is the one place the two ids are told apart
+            correctly; a uuid may be typed and is looked up in that same listing
+            as either of an item's two ids, and one this avatar does not hold is
+            refused rather than sent. The one wrong id the grid is not silent
+            about is the null one, which it reads as <em>home</em> and obeys in
+            about a second — so a landmark with no asset id in it is refused
+            rather than being allowed to become a quiet trip home.
+          </p>
+        </div>
+
+        <p>
+          A link to a landmark is not a landmark and is left out of the listing,
+          because a link's asset id is the item id of the thing it points at, so
+          following one would produce exactly that silence. So is anything in
+          the trash: <code>rm</code> moves things there rather than destroying
+          them, and a deleted landmark still has a name and would still teleport
+          perfectly well, which is the problem. A name whose only answer is in
+          the trash is told so, and told where it is, and <code>mv</code> moves
+          it back out — after which it is a landmark again.
+        </p>
+
+        <h3>Walking over a border</h3>
+        <p>
+          A teleport crosses the grid; walking crosses a border, and the second
+          needs something the first does not. A simulator will not hand an
+          avatar over the edge of a region to a client that holds no circuit to
+          the region on the other side — it does not refuse, it simply does not
+          do it — so with <code>neighbours off</code> the avatar walks to the
+          border and stops there. Measured: at Pelmar Reach's west edge, pinned at
+          x=0 for twelve seconds, and at x=255 for twenty-four seconds coming
+          the other way. With a circuit open to Pelmar Mill the same walk was over
+          the border in two seconds.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">neighbours</span>
+<span class="o">neighbours are off; this avatar cannot walk over a border</span>
+<span class="p">/$</span> <span class="c">neighbours on</span>
+<span class="o">neighbours are on; no circuit is open, which is what being away from a border looks like</span>
+<span class="p">/$</span> <span class="c">neighbours</span>                   <span class="n">a few seconds later</span>
+<span class="o">neighbours are on, 3 circuits held
+Kelva Sands                     43647, 43647   35.89.159.4:13021     44 heard
+Pelmar Mill                         43647, 43648   44.243.2.255:13010    41 heard
+Orrick Gate                      43648, 43647   18.236.135.160:12035  100 heard</span></pre>
+        </div>
+
+        <p>
+          The middle answer is the ordinary one and not a failure. Turning them
+          on asks for nothing and opens nothing: the simulator offers a
+          neighbour of its own accord and repeats the offer for as long as it
+          goes untaken, so a session that has just said <code>on</code> picks
+          the next repeat up within a second or two, and the way to see the
+          circuits is to run <code>neighbours</code> again — which is the third
+          line above, a few seconds later, with three of them held.
+        </p>
+
+        <p>
+          The address on each line is the simulator's own, and it is there to
+          say which host that circuit is to. It is not an address to type
+          anywhere: a region moves between machines, so the number is true of
+          that circuit at that moment and of nothing else.
+        </p>
+
+        <p>
+          It is off unless somebody asks because each neighbour costs a socket
+          and a share of the traffic for as long as it is held, and the number
+          of them is however many regions surround this one — four around Pelmar
+          Reach, up to eight anywhere on the open grid. A neighbour describes
+          itself fully and unprompted, 59 object updates and 51 pieces of
+          terrain in the first thirty seconds when it was measured, and none of
+          it is kept. That is a price worth paying for an avatar somebody is
+          walking about with and a waste for one running a benchmark in a single
+          region, which is why it is a property of the avatar rather than of the
+          daemon holding it, and why it can be turned over while the session is
+          up.
+        </p>
+
+        <p>
+          An empty listing usually means the avatar is not near a border, which
+          is what the middle line above is saying: standing twelve metres
+          from the west edge, one neighbour was offered, and standing in the
+          middle of the same region at 2001 metres, none at all. The set changes
+          as the avatar moves, and a teleport or a crossing throws all of them
+          away and opens the new region's own.
+        </p>
+
+        <p>
+          It belongs to the session and not to this shell. Turning neighbours on
+          turns them on for the avatar, in whatever is holding the session, and
+          it stays on after this shell exits; another client attached to the
+          same daemon sees the same answer and can change it too. An avatar that
+          is always driven by a person wants <code>neighbours = yes</code> in
+          its profile under <code>~/.config/slgo</code>, which is the right
+          place for it.
+        </p>
+
+        <div class="note">
+          <p>
+            Nothing this shell can ask about lives in another region. What is
+            over the border is not in <code>objects</code>, not in
+            <code>who</code> and not in the object cache, because local ids are
+            each region's own numbering and a neighbour's would name this
+            region's objects. The packet count in the listing is there to say
+            the circuit is alive, and a line reading "(no handshake yet)" a
+            moment after it opened is an offer that came to nothing.
+          </p>
+        </div>
+
+        <h3>Sitting down, which is also a way of moving</h3>
+        <p>
+          <code>sit</code> is filed here rather than with the furniture because
+          a sit moves the avatar, and that is the part to know before anything
+          else. It is not a request to sit on something already within reach:
+          the simulator picks the avatar up and puts it on the seat, over
+          whatever is in the way, from several metres off. Measured on Agni, a
+          box seven metres away seated the avatar as readily as one half a metre
+          away, in about a tenth of a second, with no walk on the wire at all.
+          Eleven metres was refused. So there is a range, it is somewhere
+          between seven and eleven metres, and the number is not worth pinning
+          down: what matters is that a near thing is sat on and a far one is
+          refused in words.
+        </p>
+
+        <p>
+          Standing up afterwards does not undo the journey. That same run left
+          the avatar six metres from where it had been standing when it got up
+          again — 29, 72, 2001 before the sit, 35, 72, 2001 after the stand.
+          Which is why both commands answer with a second line saying where the
+          avatar now is, read back from the session and printed in the words
+          <code>where</code> and <code>tp</code> use, so that
+          <code>where</code> run afterwards agrees with it instead of merely
+          being close. That run is written up in <code>man sit</code> and
+          <code>man stand</code>, which are where the numbers above come from.
+        </p>
+
+        <p>
+          An object is named by the word the region calls it or by its key,
+          which is how <code>touch</code> and <code>take</code> name one, and a
+          name that two of them answer to is refused with both keys rather than
+          guessed at — guessing costs more here than it does for
+          <code>touch</code>, because the wrong guess moves the avatar.
+        </p>
+
+        <p>
+          A bare <code>sit</code> is the ground, and it is the case that moves
+          the avatar nowhere at all — which is the sharpest way to see what an
+          object sit does, since the position afterwards is the position
+          before:
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">sit</span>
+<span class="o">sat on the ground
+Pelmar Reach at 28, 72, 2001</span>
+<span class="p">/$</span> <span class="c">stand</span>
+<span class="o">stood up
+Pelmar Reach at 28, 72, 2001</span></pre>
+        </div>
+
+        <p>
+          The two position lines are the same, and that is the whole of it:
+          the avatar is exactly where it was standing. The ground is a different
+          mechanism rather than a shorthand somebody thought of afterwards.
+          Sitting on an object is a message, which the simulator answers by
+          sending this avatar's own update back with the seat's id in it;
+          sitting on the ground is a control flag the simulator replies to with
+          nothing whatever, and what says it happened is the animation, which
+          arrived 144 milliseconds after the flag when it was measured — so the
+          shell asks for that animation to be relayed to it for the length of
+          the command, and gives it back afterwards. A ground sit moves nothing,
+          so the position line after one says the avatar is where it was, which
+          is the confirmation and not an oversight: the command has one shape of
+          answer whichever mechanism it used.
+        </p>
+
+        <p>
+          <code>stand</code> takes no argument, since an avatar sits on one
+          thing at a time and the simulator knows which, and
+          <code>unsit</code> is the same command under a second name: one is
+          what the world calls the button and the other is what a script calls
+          the function. It may take a moment, and that is the flag being held.
+          A flag is edge triggered and once turned out not to be enough all of
+          the time — a sit, a stand, a ground sit and a stand, each sent as the
+          one before was confirmed, worked three times and then did nothing at
+          all — so this does what a viewer does, which is not to send a stand
+          but to hold the key, half a second at a time until the avatar is up.
+        </p>
+
+        <p>
+          A refusal arrives as an alert in about a tenth of a second and is
+          printed in the grid's own words, unreworded, because they are the only
+          part of a refusal anybody can act on — <code>No room to sit here, try
+          another spot.</code> is what eleven metres gets. It is worth knowing
+          that the grid's words are not always accurate: a key naming no object
+          at all is refused with "Try moving closer. Can't sit on object because
+          it is not in the same region as you", which is wrong twice over and is
+          still the only thing said. Nothing answering is a third thing, and is
+          reported as itself in different words again, because a sit is answered
+          one way or the other in about a tenth of a second and silence is
+          neither a yes nor a no.
+        </p>
       </section>
 
       <!-- --------------------------------------------------- wearing -->
       <section id="wearing">
-        <h2><span class="num">6</span>Wearing things</h2>
+        <h2><span class="num">7</span>Wearing things</h2>
 
         <p>
           <code>worn</code> lists the attachments, <code>wear</code> puts one
@@ -850,7 +1607,7 @@ left hand          lantern</span>
 
       <!-- --------------------------------------------------- objects -->
       <section id="objects">
-        <h2><span class="num">7</span>Objects in the world</h2>
+        <h2><span class="num">8</span>Objects in the world</h2>
 
         <p>
           <code>take</code> and <code>place</code> are a pair:
@@ -925,7 +1682,7 @@ everyone may now nothing</span>
 
       <!-- --------------------------------------------------- scripts -->
       <section id="scripts">
-        <h2><span class="num">8</span>Notecards and scripts</h2>
+        <h2><span class="num">9</span>Notecards and scripts</h2>
 
         <p>
           <code>cat</code> prints a notecard or a script. <code>new</code>
@@ -987,7 +1744,7 @@ everyone may now nothing</span>
 
       <!-- ---------------------------------------------------- people -->
       <section id="people">
-        <h2><span class="num">9</span>Talking to people</h2>
+        <h2><span class="num">10</span>Talking to people</h2>
 
         <p>
           <code>say</code> puts one line into local chat without leaving
@@ -1087,7 +1844,7 @@ everyone may now nothing</span>
 
       <!-- --------------------------------------------------- waiting -->
       <section id="waiting">
-        <h2><span class="num">10</span>Things waiting for an answer</h2>
+        <h2><span class="num">11</span>Things waiting for an answer</h2>
 
         <p>
           A script puts up a dialog, somebody offers a teleport, an object asks
@@ -1163,7 +1920,7 @@ everyone may now nothing</span>
 
       <!-- ---------------------------------------------------- daemon -->
       <section id="daemon">
-        <h2><span class="num">11</span>The daemon and its avatars</h2>
+        <h2><span class="num">12</span>The daemon and its avatars</h2>
 
         <p>
           <code>agents</code> lists the sessions slgod holds, then the profiles
@@ -1235,7 +1992,7 @@ everyone may now nothing</span>
 
       <!-- ---------------------------------------------------- viewer -->
       <section id="viewer">
-        <h2><span class="num">12</span>A viewer, when you want eyes</h2>
+        <h2><span class="num">13</span>A viewer, when you want eyes</h2>
 
         <p>
           slgod can hand its live session to a real viewer: the avatar never
@@ -1281,7 +2038,7 @@ everyone may now nothing</span>
 
       <!-- ----------------------------------------------------- files -->
       <section id="files">
-        <h2><span class="num">13</span>Files and redirection</h2>
+        <h2><span class="num">14</span>Files and redirection</h2>
 
         <p>
           Any command's output can be redirected, and a file of commands can be
@@ -1321,7 +2078,7 @@ slsh: stopped; 43 lines were not run</span></pre>
 
       <!-- ---------------------------------------------------- config -->
       <section id="config">
-        <h2><span class="num">14</span>The configuration file</h2>
+        <h2><span class="num">15</span>The configuration file</h2>
 
         <p>
           <code>~/.config/slsh/config</code>, as <code>key = value</code> lines
@@ -1356,7 +2113,7 @@ viewer_running = how to tell whether one is running already</span></pre>
 
       <!-- ------------------------------------------------------ keys -->
       <section id="keys">
-        <h2><span class="num">15</span>Keys</h2>
+        <h2><span class="num">16</span>Keys</h2>
 
         <div class="tablewrap">
           <table>
@@ -1388,7 +2145,7 @@ viewer_running = how to tell whether one is running already</span></pre>
 
       <!-- ------------------------------------------------- reference -->
       <section id="reference">
-        <h2><span class="num">16</span>Every command</h2>
+        <h2><span class="num">17</span>Every command</h2>
 
         <p>
           As <code>help</code> groups them. Every command answers
@@ -1416,7 +2173,10 @@ viewer_running = how to tell whether one is running already</span></pre>
               <tr><td class="cmd">offer · give</td><td class="what">friendship; an inventory item</td></tr>
 
               <tr><td class="group-title" colspan="2">Region</td></tr>
-              <tr><td class="cmd">where · look · tp · group</td><td class="what">where you are, what it is, moving, and who you act as</td></tr>
+              <tr><td class="cmd">where · parcel · look · map</td><td class="what">the region, the land under you, what it says of itself, and who is about</td></tr>
+              <tr><td class="cmd">tp · regions · landmark</td><td class="what">going to a position, finding a region by name, going to a place kept</td></tr>
+              <tr><td class="cmd">neighbours · sit · stand</td><td class="what">walking over a border; onto a seat and off it again</td></tr>
+              <tr><td class="cmd">group</td><td class="what">who you act as, which is what land rights hang on</td></tr>
               <tr><td class="cmd">objects · dump · rez · reform</td><td class="what">what is here, described, built and changed</td></tr>
               <tr><td class="cmd">worn · wear · detach</td><td class="what">attachments</td></tr>
               <tr><td class="cmd">take · place · move · drop</td><td class="what">between the world and inventory, and about the region</td></tr>
@@ -1432,7 +2192,8 @@ viewer_running = how to tell whether one is running already</span></pre>
               <tr><td class="cmd">caps · features · lsl</td><td class="what">what this grid grants, supports and implements</td></tr>
 
               <tr><td class="group-title" colspan="2">The shell itself</td></tr>
-              <tr><td class="cmd">help · man · echo · . FILE · quit</td><td class="what">help, the long description, a note into a file, a file of commands, and leaving</td></tr>
+              <tr><td class="cmd">help · man · echo · set</td><td class="what">help, the long description, a note into a file, and what slsh remembers</td></tr>
+              <tr><td class="cmd">. FILE · quit · exit</td><td class="what">running a file of commands, and leaving</td></tr>
             </tbody>
           </table>
         </div>

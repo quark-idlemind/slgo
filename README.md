@@ -1,8 +1,24 @@
-# slgo — Second Life message layer in Go
+# slgo — Second Life in Go
 
-The first piece of a Go rewrite of the C client one directory up: the
-UDP messages of Linden Lab's `message_template.msg`, as Go structs that
-encode and decode themselves.
+Second Life without a viewer: `slgod`, a daemon that holds grid
+sessions; `slsh`, a shell to drive them from; and the library `slsh` and
+everything else here is written on. It began as a Go rewrite of the C
+client one directory up, and most of what is written down below is still
+about the wire.
+
+**Start at `sl`.** It is the package a program uses, and the only one
+most programs need: objects, inventory, chat, teleport, sitting, land,
+textures, scripts -- said as calls that return when the thing has been
+observed to have happened, rather than as messages sent into a protocol
+that mostly does not answer. `slsh` is written on it and so should
+anything else be.
+
+    s, err := sl.Dial(ctx, "localhost:7807", "example")  // through slgod
+    s, err := sl.LoginDirect(ctx, login)                 // this process holds it
+
+Everything under `sl` is there because `sl` needed it. The bottom of it
+is the UDP messages of Linden Lab's `message_template.msg`, as Go
+structs that encode and decode themselves.
 
     go generate ./msg      # fetch the template and regenerate
     go test ./...
@@ -13,28 +29,69 @@ else it is published, and why that one is the default.
 
 ## Layout
 
-    cmd/msggen/         fetches message_template.msg, writes Go
-    cmd/slgod/          holds grid connections, serves clients
-    cmd/slsh/           the shell: inventory, the world, and chat
-    cmd/automate/       runs LSL scripts, prints what they said
-    cmd/autobench/      measures what LSL constructs cost in memory
-    internal/session/   get a session, and an object to run scripts in
-    server/lock.go      exclusive use of a named thing, for as long as a client lives
-    internal/slhost/    where slgod is, asking sl-host when it is there
-    sl/                 the client library: everything an avatar can do
+`sl` is the front door and the rest is underneath it. A program that
+reaches past `sl` is either watching the wire or handling something `sl`
+does not model yet; both are legitimate and neither is the ordinary
+case.
+
+    sl/                 the package to write against: everything an avatar can do
+    sl/session.go       Dial through slgod, or LoginDirect and hold it here
     sl/backend.go       one interface, two ways to be connected
+    sl/object.go        an object: rez it, name it, link it, take it away
+    sl/build.go         a multi-prim object in one call
+    sl/inventory.go     folders, items, notecards, scripts, task inventory
+    sl/list.go          inventory as a filesystem: paths, listings, depth
+    sl/query.go         where the avatar is, and what the region has described
+    sl/teleport.go      going somewhere else, within a region or across the grid
+    sl/worldmap.go      finding a region on the grid's map, by name
+    sl/landmark.go      a remembered place: read one, make one, go to one
+    sl/parcel.go        the land under the avatar
+    sl/sit.go           sitting on a thing, or on the ground
+    sl/neighbour.go     the circuits held to the regions around this one
+    sl/script.go        run a script and wait for what it said
     sl/image.go         textures as pictures: jpeg 2000 in, png out
     sl/resize.go        getting a picture to a size the grid takes
     sl/shape.go         what a prim is shaped like, packed and unpacked
     sl/objectjson.go    objects in the eLSL simulator's JSON
     sl/touch.go         touching a named point on a named face
-    client/profile.go   credentials under ~/.config/slgo
-    client/xmlrpc.go    XML-RPC decoding
-    client/llsd.go      LLSD decoding and encoding
-    client/login.go     login_to_simulator
-    client/session.go   the UDP circuit and its handshake
-    client/caps.go      the seed capability
-    client/inventory.go the folder tree, over AIS v3
+
+    cmd/slsh/           the shell: inventory, the world, and chat
+    cmd/slgod/          holds grid connections, serves clients
+    cmd/automate/       runs LSL scripts, prints what they said
+    cmd/autobench/      measures what LSL constructs cost in memory
+    cmd/msggen/         fetches message_template.msg, writes Go
+
+    agent/              one avatar's connection: login, then the circuit
+    agent/profile.go    credentials under ~/.config/slgo
+    agent/login.go      login_to_simulator, and the refusals it answers with
+    agent/agent.go      the UDP circuit, its handshake, and the message handlers
+    agent/caps.go       the seed capability
+    agent/eventqueue.go the long poll the UDP-deprecated messages arrive on
+    agent/inventory.go  the folder tree, over AIS v3
+    agent/objects.go    what the region said about the things standing in it
+    agent/regions.go    one object store per region, shared by the agents there
+    agent/teleport.go   moving a live circuit to another simulator
+    agent/crossing.go   the same move, when the avatar walked over a border
+    agent/neighbour.go  child circuits, which a border crossing needs
+    agent/parcel.go     what the simulator says about the land
+    agent/posture.go    seated or standing, and on what
+    agent/appearance.go what each avatar nearby looks like, said once and kept
+
+    client/             attaching to slgod over gRPC, and holding no grid state
+    client/xfer.go      the old UDP file transfer, reassembled
+    client/transfer.go  the UDP asset transfer, reassembled
+    server/             slgod's side: holds the circuits, relays the bytes
+    server/lock.go      exclusive use of a named thing, for as long as a client lives
+    viewer/             handing a live session over to a real viewer
+    auth/               TLS, and mutual authentication between slsh and slgod
+    llsd/               LLSD decoding and encoding
+    proto/              slgo.proto, script.proto, and the Go they generate
+    scripttest/         a script-running backend with no LSL and no grid in it
+    internal/session/   get a session, and an object to run scripts in
+    internal/slhost/    where slgod is, asking sl-host when it is there
+    internal/creds/     who to log in as, when a program logs in itself
+    internal/xmlrpc/    the login wire format, read and written
+
     msg/types.go        UUID, Vector3, Quaternion, IPAddr, Info, ...
     msg/buffer.go       little endian read/write primitives
     msg/codec.go        the generic tag-driven encoder and decoder
@@ -46,6 +103,23 @@ else it is published, and why that one is the default.
     msg/messages_gen.go generated: 483 messages, ~14700 lines
     doc/messages.txt    what each of those 483 is for, and which way it goes
     doc/capabilities.txt the http capabilities that can be asked for
+
+The design documents in `doc/` were written alongside the work and each
+one carries what it measured, which is usually the part that is not
+written down anywhere else:
+
+    doc/guide.md            slgod, automate and autobench, for a user
+    doc/slsh-guide.html     slsh, for a user
+    doc/teleport.md         cross-region teleport
+    doc/neighbours.md       child circuits, and the border that was a wall
+    doc/sit.md              sitting, and standing up again
+    doc/parcel.md           parcels: the land under the avatar
+    doc/landmark.md         landmarks: a place kept, and gone back to
+    doc/viewer-frontend.md  slgod as a viewer frontend
+    doc/two-viewers.md      two viewers on one slgod session
+    doc/many-avatars.md     several avatars in one slgod
+    doc/login-parameters.md what a viewer sends to log in
+    doc/memory.md           how Second Life allocates script memory
 
 ## How it works
 
@@ -382,7 +456,7 @@ all 483 messages through Ruby's Psych to check the subset is real.
 - packet header, appended acks, zero coding round trip and the C's
   extended 256-zero run form
 - the two forgiveness rules, and that ordinary truncation still errors
-- generator parse errors: 15 malformed templates, each expected to fail
+- generator parse errors: 40 malformed templates, each expected to fail
   with a specific message
 
 ## Logging in
@@ -393,16 +467,32 @@ Credentials live one file per account under a private directory:
     ~/.config/slgo/example      mode 600
 
     # slgo profile "example"
-    first    = Example
-    last     = Resident
-    password = $1$<the md5 of the password>
-    start    = last
+    first      = Example
+    last       = Resident
+    password   = $1$<the md5 of the password>
+    start      = last
+    group      = Builders
+    neighbours = yes
 
-and a session is three calls:
+Not every key is part of the login request. `group` is which group the
+avatar acts as once it is up, `neighbours` is whether to hold the child
+circuits a border crossing needs, and `viewer_password` is what a real
+viewer must type to be handed this session -- deliberately not the
+account password, since nothing on the grid has ever seen it. `url`,
+`channel`, `version`, `mac`, `id0`, `platform`, `platform_version`,
+`platform_string` and `options` are the login request's, and are there
+for an account that has to look like something in particular.
 
-    acct, err := client.LoginAs(ctx, "example")
-    s, err := client.Connect(ctx, acct, client.Options{})
-    defer s.Logout(ctx, 10*time.Second)
+The login itself is `agent`'s, and a session is three calls:
+
+    acct, err := agent.LoginAs(ctx, "example")
+    a, err := agent.Connect(ctx, acct, agent.Options{})
+    defer a.Logout(ctx, 10*time.Second)
+
+A program does not normally write that. `agent.LoadProfile` reads a
+profile into an `agent.Login`, and `sl.LoginDirect` takes one and does
+those three calls with a `Session` on top; `sl.Dial` gets the same
+`Session` from a daemon that has already done them.
 
 `LoadProfile` refuses a profile anyone but its owner can read, and a
 directory anyone but its owner can list, the way ssh does. An unknown
@@ -459,16 +549,19 @@ of what a viewer sends, read out of the Firestorm source: every
 parameter, the options array, the refusal reasons, and which of them we
 deliberately do not send.
 
-`Connect` dials the simulator, starts the receiver, sender and
+`agent.Connect` dials the simulator, starts the receiver, sender and
 dispatcher, and runs the handshake: `UseCircuitCode` to open the
 circuit, then `CompleteAgentMovement`, which the simulator answers with
 `AgentMovementComplete`. For the life of the session it answers
 `StartPingCheck` and replies to `RegionHandshake`; everything else is
 yours through `Handle`.
 
-The XML-RPC decoder maps `<int>` to int64, `<struct>` to a map and so
-on, and — the part that matters — renders a type it has never seen as
-the text inside it rather than failing. That is the exact thing that
+The XML-RPC is `internal/xmlrpc`, in both directions -- slgod has to
+*say* it as well as read it, since a viewer handed a running session
+speaks the ordinary login protocol at slgod and expects a
+`methodResponse` back. The decoder maps `<int>` to int64, `<struct>` to
+a map and so on, and — the part that matters — renders a type it has
+never seen as the text inside it rather than failing. That is the exact thing that
 stopped the C client logging in when Linden Lab's response grew `<int>`
 fields. The test fixture is a real 29KB response from the live grid,
 348 members deep, with the identifiers scrubbed.
@@ -479,18 +572,21 @@ reachable.
 
 ## Capabilities and inventory
 
-`Connect` asks the seed capability for `DefaultCaps` and leaves the
-result on the session, because almost everything above the circuit
-needs them:
+`agent.Connect` asks the seed capability for `agent.DefaultCaps` and
+leaves the result on the agent, because almost everything above the
+circuit needs them:
 
-    url, ok := s.Caps.Get("InventoryAPIv3")
+    url, ok := a.Caps().Get(agent.InventoryCap)   // "InventoryAPIv3"
 
 Inventory comes over AIS v3, an HTTPS GET per folder:
 
-    err := s.FetchInventory(ctx, client.FetchOptions{Concurrency: 8})
-    for _, f := range s.Inventory.Children(s.Inventory.Root()) {
-        fmt.Println(f.Name, len(s.Inventory.Contents(f.ID)))
+    err := a.FetchInventory(ctx, agent.FetchOptions{Concurrency: 8})
+    for _, f := range a.Inventory.Children(a.Inventory.Root()) {
+        fmt.Println(f.Name, len(a.Inventory.Contents(f.ID)))
     }
+
+Through `sl` the same tree is `ListInventory`, which asks AIS for the
+depth it wants rather than walking -- see below.
 
 The UDP `FetchInventoryDescendents` the C client uses was retired by
 Linden Lab -- the simulator accepts it and never answers -- so this is
@@ -509,16 +605,19 @@ message used to put it.
 
 ## More than one account at a time
 
-Nothing in either package keeps per-connection state at package level.
+Nothing in `msg` or `agent` keeps per-connection state at package level.
 The message registry and the codec's plan cache are read-only after
 init and shared safely; everything else -- sockets, sequence numbers,
 retransmission queues, duplicate windows, capabilities, inventories,
-every counter -- hangs off a `Session`.
+every counter -- hangs off an `Agent`.
 
-    a, _ := client.LoginAs(ctx, "example")
-    b, _ := client.LoginAs(ctx, "builder")
-    sa, _ := client.Connect(ctx, a, client.Options{})
-    sb, _ := client.Connect(ctx, b, client.Options{})
+    x, _ := agent.LoginAs(ctx, "example")
+    y, _ := agent.LoginAs(ctx, "builder")
+    ax, _ := agent.Connect(ctx, x, agent.Options{})
+    ay, _ := agent.Connect(ctx, y, agent.Options{})
+
+That is what lets one slgod hold several avatars at once; see
+[doc/many-avatars.md](doc/many-avatars.md).
 
 `TestManySessionsAtOnce` connects five sessions to five simulators
 simultaneously and checks each lands in its own region with its own
@@ -712,11 +811,13 @@ built on. Rezzing a prim and waiting for it to appear is how that was
 found -- the object really was created, and the simulator simply never
 mentioned it.
 
-So the server sends it, once a second, from wherever the avatar
-arrived. It belongs there for the reason the circuit does: it has to
-keep being sent, and a client that stopped would silently take object
-streaming with it. A client that wants to move the camera or set a
-draw distance uses `Agent.SetLook`; `Options.Presence` turns it off.
+So `agent` sends it, once a second, from wherever the avatar arrived,
+and it belongs beside the circuit for the reason the circuit does: it
+has to keep being sent, and an attached client that stopped would
+silently take object streaming with it. Something that wants to move
+the camera, set a draw distance or hold a control flag down uses
+`Agent.SetLook`; `agent.Options.Presence` is the interval and a
+negative value stops it.
 
 ## The event queue
 
@@ -727,10 +828,16 @@ circuit: `ParcelProperties`, `TeleportFinish`,
 `EventQueueGet`, a long poll whose replies carry an id that the next
 poll acknowledges.
 
-That poll lives in the server, beside the circuit, for the same reason
-the circuit does: it has to run continuously, and a client restart
-would lose the sequence and drop whatever arrived in the gap.  This is
-the one place where "do it in the client" does not work.
+That poll is `agent/eventqueue.go`, beside the circuit, for the same
+reason the circuit is there: it has to run continuously, and a client
+restart would lose the sequence and drop whatever arrived in the gap.
+This is the one place where "do it in the client" does not work.
+
+Most of what moves an avatar arrives this way. `TeleportFinish` and
+`CrossedRegion` are how a session learns it is somewhere else, and
+`EnableSimulator` and `EstablishAgentCommunication` are how it learns
+what is next door -- none of them on the circuit, whatever the template
+says.
 
 Events reach clients on their own channel, because their bodies are
 LLSD rather than the binary message encoding:
@@ -751,9 +858,9 @@ not tell", and that is exactly the wrong way for this to fail.
 
 ## Building, from the client
 
-`sl.Build` puts up a multi-prim object in one call, and `slsh watch`
-prints what crosses the wire.  Both are client side -- the server relays
-bytes and knows nothing about prims or chat.
+`Session.Build` puts up a multi-prim object in one call, and `slsh
+watch` prints what crosses the wire.  Both are client side -- the server
+relays bytes and knows nothing about prims or chat.
 
     slsh -c "watch --for 1h ChatFromSimulator" > chat.log
 
@@ -856,10 +963,43 @@ typed in it. The prompt says which mode and where:
     /Objects$
 
 Inventory is a filesystem: `cd`, `ls`, `pwd`, `cat`, `mkdir`, `mv`,
-`rm`, `find`. The world is `who`, `where`, `look`, `objects`. The
-simulator will describe itself with `caps`, `features` and `lsl`.
-Talking is `chat`, `say`, `im`, `friends`, `lookup`, `offer`, `offers`,
-`accept`, `decline` and `talk`.
+`cp`, `rm`, `find`, `emptytrash`, with `new` and `save` for notecards
+and scripts and `get` and `put` for textures.
+
+The region is where the shell has grown most. `where` is the region and
+the position, `look` is what the simulator said about the region, `who`
+lists the avatars nearest first and `map` draws them. `objects` is what
+the region has described standing there and `worn` is what this avatar
+is carrying; `rez`, `place`, `move`, `link`, `unlink`, `take`, `wear`,
+`detach`, `drop`, `perms`, `texture`, `touch`, `dump` and `reform` do
+things to it, and `start` and `stop` run the scripts inside it.
+
+Going somewhere is `tp`, which takes a region name and crosses the grid
+to it, or coordinates to move inside this one; `regions` finds a region
+on the grid's map by the start of its name. `sit` sits on a thing or on
+the ground and `stand` gets up from either. `parcel` is the land under
+the avatar, drawn or listed, and `landmark` lists the landmarks in
+inventory, says where one goes, makes one and goes to one.
+`neighbours` says which circuits are held to the regions around this
+one -- which is what walking over a border needs, and is off unless
+asked for.
+
+The simulator describes itself with `caps`, `features` and `lsl`.
+Talking is `chat`, `say`, `im`, `talk`, `friends`, `lookup`, `offer`,
+`give` and `profile`. Anything that wants an answer -- a teleport
+offer, a script's dialog, a friendship, an inventory offer, a
+permission request, a group invitation -- is counted at the prompt and
+listed by `waiting`, and answered with `answer`, `accept`, `decline`,
+`no` or `ignore`.
+
+`agents`, `status`, `login`, `logout` and `viewer` are about the daemon
+rather than the grid: which avatars it holds, how each circuit is
+doing, and where a real viewer can take one over. `watch` prints grid
+messages as they arrive. `set` lists the shell's own settings and
+changes one, remembering it for the next slsh.
+
+`help` lists the command groups, `help all` lists every command with
+what it takes, and `man NAME` is the long description of one.
 
 Tab completes commands and inventory paths in command mode, and moves
 between conversations in chat mode -- which is the argument for having
@@ -901,8 +1041,9 @@ slgod does not always run on the machine talking to it, and the machine
 it does run on moves between networks, so no client hardcodes an
 address. In order:
 
-1. `--addr HOST:PORT` (or `-server`), if given;
-2. `addr = ...` in `~/.config/slsh/config`, for slsh;
+1. `--addr HOST:PORT`, if given;
+2. `addr = ...` in `~/.config/slsh/config`, for slsh -- `server` is
+   accepted as another spelling of the same setting;
 3. what the `sl-host` command prints, if it is on `$PATH`, with port
    7807 joined to it -- sl-host prints a bare host and no port;
 4. this machine, when sl-host is not installed.
@@ -1615,31 +1756,35 @@ accepted lure is followed rather than fired and forgotten, and the
 daemon moves the circuit to the new simulator under everything holding
 it: forty moves on Agni at a median of 425ms, capabilities refetched
 from the new region's seed and every client told the region changed.
+[doc/teleport.md](doc/teleport.md) is the whole of it, stage by stage.
 
-Region crossing is followed but unverified. `CrossedRegion` is acted on
-the same way `TeleportFinish` is, on the event queue and on the circuit,
-and nobody has yet seen one arrive -- slgod connects to one simulator at
-a time and never opens the child circuits to neighbouring regions that a
-viewer keeps, so whether a simulator offers the message to a client that
-never took the neighbour up is not something that could be settled
-offline. What is certain is what it is not: neighbouring regions are
-neither connected to nor drawn, so a crossing here is a pause while the
-circuit moves and the new region describes itself from nothing, rather
-than the seamless step a viewer gives you.
+Walking over a border works, but only with `neighbours` on. A simulator
+will not hand an avatar over to a client holding no child circuit to the
+region it is walking into, which is why the border used to be a wall: an
+avatar walked to Pelmar Reach's west edge, stopped dead at x=0 and stayed
+there. Hold the circuits -- `slsh neighbours on`, `slgod -neighbours`,
+`neighbours = yes` in a profile -- and the same walk was in Pelmar Mill
+four and a half seconds after the key went down, with the region change
+reaching a client on the way. Off by default, because it costs a socket
+and a share of the traffic per surrounding region and a daemon acting
+only where its avatar stands should not be made to pay.
 
-No appearance. Inventory is no longer read only -- see the sections
-above.
+What that still does not do is cross *seamlessly*: `moveTo` dials the
+new simulator afresh even when a child circuit to it is already open, so
+the capabilities are fetched again and the new region describes itself
+from nothing. Promoting the child instead is stage 3 of
+[doc/neighbours.md](doc/neighbours.md), and objects in a neighbouring
+region do not reach a client at all -- local ids are the region's own
+numbering and nothing above `agent` carries a region alongside one.
+
+No appearance is ever sent. What other avatars look like *is* kept --
+`AvatarAppearance` is said once and cannot be asked for again, so
+`agent/appearance.go` remembers it for a viewer that attaches hours
+later -- but this avatar never sends an `AgentSetAppearance` of its own
+and is whatever the grid last stored for it.
 
 Textures encode, decode and resize. Sounds, animations and meshes go
 up through the same `UploadAsset` and none has been tried.
-
-The sender writes to an `io.Writer`, which suits the connected socket a
-single simulator needs. Neighbouring simulators at once will want a
-`WriteTo` variant and a session per circuit.
-
-`AgentUpdate` is not sent. Nothing needs it yet, and sending it once is
-worse than not at all — see the note above about what it does and does
-not prove.
 
 `Receiver` allocates a message per packet through `New`. At the packet
 rates in the C client's stats — 600k in a long session — that is worth
