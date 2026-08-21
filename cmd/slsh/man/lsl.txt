@@ -1,9 +1,9 @@
 lsl is the language this simulator implements, from the simulator
 itself: every function with its arguments, return type, energy and
 sleep, every constant with its type and value, every event with its
-arguments, and the types and keywords.  It is what the built-in editor
-colours and completes from, and it comes from the machine that will run
-the script rather than from a page somebody edited.
+arguments, and the type names.  It is what the built-in editor colours
+and completes from, and it comes from the machine that will run the
+script rather than from a page somebody edited.
 
 That makes it the authority rather than a reference.  A function this
 does not list does not exist here; a constant whose value differs from
@@ -16,6 +16,21 @@ names containing that word, without regard to case, and the flags
 narrow that to one kind or another.  A function's line carries its
 energy and sleep where either is not zero, and says where it is
 deprecated or needs god mode.
+
+# There are four kinds, and the keywords are not one of them
+
+The document the simulator sends also names the control keywords -- if,
+else, for, jump and the rest -- and nothing prints them.  The flag for
+the types is described as "the types and keywords", which is what was
+meant rather than what happens: it prints the type names alone.  The
+summary counts four kinds and not five, and the machine form has no
+record whose first field is anything but function, constant, event or
+type.  Measured: "lsl -a" printed exactly as many lines as the
+summary's four counts add to, so there is nothing else hiding in it.
+
+So a compiler reading this gets the language's vocabulary and not its
+grammar, which is the right way round -- the grammar is the half that
+does not change from one grid to the next.
 
 # The form meant for a program
 
@@ -49,6 +64,13 @@ tooltips are not in it, since a tooltip could contain anything.
 The whole language is about half a megabyte, so it is fetched once and
 kept.  Asking again costs one small request for the id that says
 whether it has changed, and, where it has not, nothing else.
+
+Kept by the session, which means for as long as this shell is running
+and no longer: a fresh slsh pays for the document again.  Measured, one
+shell asking five times took twice what one shell asking once took,
+while five separate "slsh -c lsl" took four times as long as the shell
+that asked five times.  So a script that wants the language more than
+once is a script to run in one shell, which is what "." is for.
 
 # Examples
 

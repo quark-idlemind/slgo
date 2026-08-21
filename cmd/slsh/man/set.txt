@@ -20,21 +20,35 @@ whose value is a command line of its own:
 
 A setting that lasted until the shell was closed would be a setting to
 type again after every reboot, which is the whole of what this exists
-not to be.  So every change is written to the settings file --
-~/.config/slsh/config, or $SLSH_CONFIG_DIR -- and the file is created,
-with its directory, if it is not there yet.  The path is printed every
-time, since the file is the thing that will still be true tomorrow.
+not to be.  So every change is written to the settings file -- named
+outright by $SLSH_CONFIG_DIR, otherwise slsh/config under
+$XDG_CONFIG_HOME, otherwise ~/.config/slsh/config -- and the file is
+created, with its directory, if it is not there yet.  The path is
+printed every time, since the file is the thing that will still be true
+tomorrow.
 
 What changes in that file is the one line for the one setting, and
-nothing else: the value after the "=" is replaced and the rest of the
-line is left as it stands, so the indentation, the column the values
-are lined up in, and whichever spelling of the name is already there
-all survive.  Every other line survives untouched, comments included.
+nothing else.  Everything up to and including the "=" is left exactly
+as it stands, so the indentation, the column the equals signs are lined
+up in, and whichever spelling of the name is already there all survive;
+what follows the "=" is replaced by one space and the new value.  A
+file whose values were padded out to a column of their own loses that
+padding on the one line that changed and keeps it everywhere else.
+Every other line survives untouched, comments included.
 A settings file is written by hand and the comments in it are somebody's
 notes -- which grid nickname the viewer wants, which address was tried
 and did not answer -- and a command that rewrote the file from what it
 had in memory would throw all of that away the first time it was used.
 A setting the file does not mention is appended, one line, at the end.
+
+A comment has to be on a line of its own, and that is worth knowing
+before writing one, because nothing warns about it until the next
+start.  A "#" after a value is part of the value rather than a note
+about it: a line reading "map_ratio = 7:3  # measured here" is a
+map_ratio of "7:3  # measured here", which is not a ratio, and since a
+value the setting will not take is refused when the file is read, it is
+a shell that will not come up until the line is edited.  Nothing here
+writes a line like that; it is one to have typed in by hand.
 
 If the file names a setting twice, it is the last of the two that is in
 force, since the file is read from the top and each line overwrites what
@@ -51,8 +65,9 @@ would mean two different things depending on how slsh was started.
 
 They are written to the file all the same, and both the listing and the
 answer to a change say so outright.  Nothing here pretends a change took
-effect that did not: the listing marks them, and changing one prints the
-sentence about the next slsh under it.
+effect that did not: the listing ends their line with "at startup only",
+and changing one prints the sentence about the next slsh under it.  The
+three are addr, agent and escape, and they are the only three.
 
 Everything else takes at once.  "set map_ratio 2:1" and then "map"
 draws the new shape.
@@ -64,10 +79,11 @@ defaults.  So a shell started with "--escape ^G" is running with ^G
 whatever the file says, which is the other half of why the three above
 are left for the next run.
 
-The names are the names in the file, and the file has always taken a
-second spelling of some of them -- "server" for addr, "profile" for
-agent, "prefix" for escape.  Those still load; the name "set" prints is
-the one to type.
+The names are the names in the file, and the file has always taken
+another spelling of some of them -- "server" for addr, "profile" for
+agent, "prefix" or "prefix_key" for escape.  Those still load, and set
+answers to them as well: "set server" prints the setting under the name
+addr, which is the answer to what to type as well as to what it is.
 
 A value a setting will not take is refused, with the setting named, and
 neither the shell nor the file is touched: "set map_ratio sideways"
@@ -170,8 +186,7 @@ And one that has to wait, which says so:
 	set addr lab.local:7807
 	addr = lab.local:7807
 	written to /home/somebody/.config/slsh/config
-	this shell is already running with the old value; the new one is
-	for the next slsh
+	this shell keeps the old value; the new one is for the next slsh
 
 See also: map for what the map settings do to the picture, viewer for
 what the viewer settings start, and chat for the key the escape setting

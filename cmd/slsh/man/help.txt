@@ -27,7 +27,22 @@ moment somebody wants to know -- and a word that is neither a group nor
 a command is an error, since it is a typo.
 
 It also means a name can be both a group and a command without
-ambiguity: here it always means the group.
+ambiguity: here it always means the group.  "waiting" is both, and
+"help waiting" is the group.
+
+# Two names for one command are listed once
+
+Some commands answer to two names -- quit and exit, "." and source,
+stand and unsit -- and they are not two entries but one entry reached
+twice.  "help all" walks the commands rather than the names, so each of
+those appears once, under whichever of its names sorts first: exit, and
+".", and stand.  The other name is neither missing nor discouraged and
+it is not a spelling that will stop working; it is the same command.
+
+A group, on the other hand, lists whichever name its own line names, so
+"help shell" says quit where "help all" says exit.  Anyone searching a
+listing for a name they know is there wants man's: it is the one that
+lists every name rather than every command.
 
 # Examples
 

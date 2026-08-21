@@ -14,6 +14,12 @@ exactly this reason.
 Taking a daemon-held avatar down is a separate act against a named
 avatar, which is what logout is for; no way of ending a shell does it.
 
+The two names are one entry rather than two, which shows in the
+listings: "help all" prints each command once, under whichever name
+sorts first, so it shows exit and not quit, while "help shell" shows
+quit and man answers to either and prints the same page.  Neither name
+is the deprecated one and neither is going away.
+
 # The keys that also end it
 
 At an empty command prompt, either interrupt or end-of-input leaves.
