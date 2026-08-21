@@ -3,9 +3,19 @@ what "wear" adds to and what "detach" takes from, and the listing
 detach matches a name against -- so a thing that is not here is a thing
 detach will say is not worn.
 
-With no argument it is everything; with a word it is what matches,
-without regard to case.  The lines are sorted by attachment point, so
-the HUD ones fall together.
+With no argument it is everything; with a word it is the lines whose
+name holds that word, without regard to case.  The name and nothing
+else -- so "worn hud" does not list the HUD attachments.  It lists
+whatever is called something with "hud" in it, which on the avatar this
+was tried on was nothing at all: the things hanging off those points
+are called "auto", "auto 2" and so on, and the word "hud" is in the
+point beside the name rather than in the name.  The lines are sorted by
+attachment point anyway, so the HUD ones fall together without being
+asked for.
+
+The word comes last.  Flags are read only until the first ordinary
+argument, so "worn -l auto" is the long listing of the auto objects and
+"worn auto -l" searches for the name "auto -l" and matches nothing.
 
 # The names come from inventory, not from the objects
 
@@ -32,6 +42,14 @@ previous session names nothing.
 The item id is also what tells two attachments apart when their names
 agree, which is the refusal detach gives for a word that is worn twice.
 
+Watched happening: one object put on, taken off and put on again three
+times in the same session kept its item id throughout -- 82977e57-...
+every time -- and came back under a different object key on each of the
+three attaches.  No logout came into it -- going on again is enough to
+mint a new one.  So a key copied out of one listing named nothing by
+the next, and it is the first of the two columns that is worth writing
+down.
+
 # What this can and cannot see
 
 The region describes an attachment when it goes on, and again at every
@@ -42,7 +60,7 @@ still sees the full list.  What no one heard, no one can list.
 # Examples
 
 	worn
-	worn -l hud
+	worn -l auto
 	detach lantern
 
 See also: wear, detach, objects for the same things as the region sees

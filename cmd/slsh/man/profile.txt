@@ -27,9 +27,19 @@ answering to the name are listed, numbered, and a number picks one.
 # Two fields that are easy to misread
 
 "none on file" and "not revealed" are different facts about payment: an
-account with a caption on it has its payment information withheld
-rather than absent, and the caption is printed beside it so the line
-does not read as a title somebody chose.
+account carrying a caption -- a Linden, or one of the special accounts
+-- has its payment information withheld rather than absent, and the
+flags for it say nothing at all rather than no.  Where there is caption
+text, it is printed under the payment line as a field of its own called
+"account", so that it does not read as a title somebody chose for
+themselves.
+
+Where there is not, the payment line stands alone.  Governor Linden's
+profile reads "not revealed" with no account line under it, because a
+Linden is known by the number the caption comes with and the text
+beside that number is empty.  So a "not revealed" with nothing
+explaining it is the answer rather than a field that went missing on
+the way.
 
 The groups are only the ones their owner published, which is why the
 count says so: somebody may be in a dozen and show none.
@@ -51,7 +61,7 @@ say.
 
 # Examples
 
-	profile Example Resident
+	profile Quark Idlemind
 	lookup another
 	profile 2
 

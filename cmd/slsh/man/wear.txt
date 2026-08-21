@@ -8,8 +8,15 @@ object goes wherever the object itself says, which is the point its
 maker set, and the report names the point the region gave back rather
 than one guessed here:
 
-	wear Objects/hat
-	hat is worn on skull
+	wear Objects/place-probe
+	place-probe is worn on HUD top
+
+Nobody typed "HUD top" there, and nothing here could have worked it
+out: it is the point the object itself carries, sent back in the
+region's answer and read off that.  The names are the viewer's own, so
+"chest" and "left hand" and "HUD top right" are points and "skull"
+is not -- a word that is not one of them is refused rather than
+guessed at.
 
 # Wearing adds rather than replaces
 

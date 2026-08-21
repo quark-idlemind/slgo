@@ -49,9 +49,17 @@ says so in those words.
 
 # Examples
 
-Ask what is there, then fill the pool up:
+Ask what is there:
 
 	auto
+	8 auto objects worn; 2 groups of 4, so 2 runs at once
+	auto -n 12 sets up the rest
+
+The first line of that is the answer to the question at the top of this
+page.  The second is the report's own advice, printed only while there
+is room to grow, and the twelve in it is the whole pool rather than a
+suggestion: it is how many entries the list of points has.  Taking it:
+
 	auto -n 12
 
 See also: worn for the same objects as attachments, wear and detach for
