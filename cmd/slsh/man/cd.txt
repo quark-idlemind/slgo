@@ -1,6 +1,8 @@
 cd changes which inventory folder the shell is in.  Every command that
 takes a path takes it relative to that folder unless the path begins
-with a slash, and pwd says which folder it is.
+with a slash -- every command but new, which reads its path from the
+root whatever cd said, and says so on its own page -- and pwd says
+which folder it is.
 
 The argument is a folder path: a leading slash starts from the root,
 ".." goes up a level, "." stays, and the names between the slashes are
@@ -11,9 +13,14 @@ already is, so a bare cd would otherwise do nothing whatever.
 
 # Only a folder, and only by name
 
-An item is not somewhere to be, so a path naming one is refused;
-"nothing called that here" and "no folder called that" are different
-answers on purpose.
+An item is not somewhere to be, so a path naming one is refused, and
+the refusal is "no folder" with the name in it -- word for word what a
+name that is nothing at all gets.  cd asks for a folder of that name
+and there is not one either way, so nothing here can tell the two cases
+apart.  The other answer, "nothing called that here", belongs to the
+commands that do take an item: cat and ls say it, and meeting one
+sentence rather than the other says which command was typed rather than
+which kind of thing the name turned out to be.
 
 A uuid names an item to cat, rm and the rest, and does not work here.
 This walks names rather than looking a path up whole, because a path
