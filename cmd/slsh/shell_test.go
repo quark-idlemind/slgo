@@ -23,6 +23,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // TestParseSplitsAndRedirects is the whole of the command line syntax.
@@ -554,8 +556,8 @@ func TestCtrlCLeavesChatRatherThanTheShell(t *testing.T) {
 	}
 }
 
-// TestHistoryWalksWhatWasTyped, in command mode only: in chat the
-// arrows are not the shell's to take.
+// TestHistoryWalksWhatWasTyped, at a command prompt.  The chat ring is
+// TestChatHasAHistoryOfItsOwn, below.
 func TestHistoryWalksWhatWasTyped(t *testing.T) {
 	ctx := context.Background()
 	x := newTestShell(t)
@@ -572,8 +574,8 @@ func TestHistoryWalksWhatWasTyped(t *testing.T) {
 	}
 
 	// The same command twice running is one entry, as in a shell.
-	if len(x.history) != 2 {
-		t.Fatalf("history is %q, want the repeat collapsed", x.history)
+	if len(x.history.lines) != 2 {
+		t.Fatalf("history is %q, want the repeat collapsed", x.history.lines)
 	}
 
 	x.key(ctx, keyUp)
@@ -602,12 +604,164 @@ func TestHistoryWalksWhatWasTyped(t *testing.T) {
 		t.Errorf("down past the end twice gave %q", got)
 	}
 
-	// In chat mode the arrows are left alone.
+	// None of it is reachable from chat, where nothing has been said
+	// yet: up leaves the half-typed sentence where it is rather than
+	// offering a command to say out loud.
 	x.setMode(modeChat)
 	x.term.SetLine("mid sentence")
 	x.key(ctx, keyUp)
 	if got := x.term.Line(); got != "mid sentence" {
-		t.Errorf("the arrows should not walk history in chat mode: %q", got)
+		t.Errorf("the command history reached a chat prompt: %q", got)
+	}
+	x.key(ctx, keyDown)
+	if got := x.term.Line(); got != "mid sentence" {
+		t.Errorf("down on an empty chat history cleared the line: %q", got)
+	}
+}
+
+// TestChatHasAHistoryOfItsOwn.
+//
+// A line said in chat used to be unrecallable: the arrows were guarded
+// with "if !chat" and did nothing there at all.  Now they walk what was
+// said -- a ring of its own, because a command recalled at a chat
+// prompt would be said out loud to whoever is listening.
+func TestChatHasAHistoryOfItsOwn(t *testing.T) {
+	ctx := context.Background()
+	x := newTestShell(t)
+
+	// One command, so there is something in the other ring to leak.
+	x.term.SetLine("echo a command")
+	x.key(ctx, '\r')
+
+	x.setMode(modeChat)
+	for _, line := range []string{"the door is open", "   ", "the lamp is lit", "the lamp is lit"} {
+		x.term.SetLine(line)
+		x.key(ctx, '\r')
+	}
+
+	// A line of nothing was not said and is not kept, and the same
+	// line twice running is one entry -- both the rules the command
+	// ring already had.
+	want := []string{"the door is open", "the lamp is lit"}
+	if got := x.said.lines; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("what was said is %q, want %q", got, want)
+	}
+
+	x.key(ctx, keyUp)
+	if got := x.term.Line(); got != "the lamp is lit" {
+		t.Errorf("up in chat gave %q", got)
+	}
+	x.key(ctx, keyUp)
+	if got := x.term.Line(); got != "the door is open" {
+		t.Errorf("up twice in chat gave %q", got)
+	}
+	x.key(ctx, keyUp) // and no further, and never into the commands
+	if got := x.term.Line(); got != "the door is open" {
+		t.Errorf("up past the start of the chat history gave %q", got)
+	}
+	x.key(ctx, keyDown)
+	if got := x.term.Line(); got != "the lamp is lit" {
+		t.Errorf("down in chat gave %q", got)
+	}
+	x.key(ctx, keyDown)
+	if got := x.term.Line(); got != "" {
+		t.Errorf("down past the end in chat gave %q", got)
+	}
+
+	// Recalling put the line back to be edited and sent nothing.  What
+	// went out is the three lines that were entered -- the repeat was
+	// said twice and is collapsed only in the ring, exactly as a
+	// command run twice runs twice.
+	if got := len(x.grid.Sent()); got != 3 {
+		t.Errorf("%d things went to the grid, want the 3 lines that were entered", got)
+	}
+
+	// And the other direction: the command ring is where it was left,
+	// with no remark in it.
+	x.setMode(modeCommand)
+	x.key(ctx, keyUp)
+	if got := x.term.Line(); got != "echo a command" {
+		t.Errorf("up at a command prompt gave %q", got)
+	}
+}
+
+// TestARecalledLineIsEditedAndSentByReturn, which is the difference
+// between a history and a repeat key: what comes back is on the line
+// to be changed, and nothing goes until Enter.
+func TestARecalledLineIsEditedAndSentByReturn(t *testing.T) {
+	ctx := context.Background()
+	x := newTestShell(t)
+	x.setMode(modeChat)
+
+	x.term.SetLine("the door is open")
+	x.key(ctx, '\r')
+	x.out.Reset()
+
+	x.key(ctx, keyUp)
+	if got := x.term.Line(); got != "the door is open" {
+		t.Fatalf("up gave %q", got)
+	}
+	if got := x.out.String(); got != "" {
+		t.Errorf("the recall itself said something: %q", got)
+	}
+
+	for range len("open") {
+		x.key(ctx, 127) // backspace
+	}
+	for _, r := range "shut" {
+		x.key(ctx, r)
+	}
+	x.key(ctx, '\r')
+	if got := x.out.String(); !strings.Contains(got, "> [Local] the door is shut") {
+		t.Errorf("the edited line went out as %q", got)
+	}
+
+	// Both are kept, in the order they were said.
+	want := []string{"the door is open", "the door is shut"}
+	if got := x.said.lines; len(got) != len(want) || got[1] != want[1] {
+		t.Fatalf("what was said is %q, want %q", got, want)
+	}
+}
+
+// TestALineSaidInTheWrongPlaceIsResentInTheRight.
+//
+// This is the case the whole thing was asked for.  A remark goes to
+// local chat when it was meant for one person: tab moves to that
+// conversation, up brings the line back, and Enter sends it there.  It
+// works because the ring belongs to the shell and not to the
+// conversation, so tab leaves what is on offer alone.
+func TestALineSaidInTheWrongPlaceIsResentInTheRight(t *testing.T) {
+	ctx := context.Background()
+	x := newTestShell(t)
+	c, _ := x.talk.Open(testSomebody, "Some Body")
+	x.setMode(modeChat)
+
+	// Said out loud, and it should not have been.
+	x.term.SetLine("the key is under the mat")
+	x.key(ctx, '\r')
+	if got := x.out.String(); !strings.Contains(got, "> [Local] the key is under the mat") {
+		t.Fatalf("the remark went %q", got)
+	}
+
+	// Tab to the conversation it was meant for.
+	x.key(ctx, '\t')
+	if got := x.talk.Current(); got != c {
+		t.Fatalf("tab left us in %q", got.Label())
+	}
+
+	// Up, and there it is: the ring did not change under the tab.
+	x.key(ctx, keyUp)
+	if got := x.term.Line(); got != "the key is under the mat" {
+		t.Fatalf("up after tabbing gave %q", got)
+	}
+
+	x.out.Reset()
+	x.key(ctx, '\r')
+	if got := x.out.String(); !strings.Contains(got, "> [IM Some Body] the key is under the mat") {
+		t.Errorf("the resent line went %q", got)
+	}
+	if _, ok := x.grid.Sent()[1].(*msg.ImprovedInstantMessage); !ok {
+		t.Errorf("the resent line left as %T, want an instant message", x.grid.Sent()[1])
 	}
 }
 

@@ -30,9 +30,23 @@ sent or run by the switch.
 Tab moves to the next conversation, rather than completing a word as
 it does at a command prompt, and it does nothing at all while
 something is half typed -- moving then would send the line somewhere
-nobody meant.  The arrow keys do not walk the history in chat mode:
-what was said is not a command to run again.  Ctrl-C on an empty line
-returns to command mode rather than leaving the shell.
+nobody meant.  Ctrl-C on an empty line returns to command mode rather
+than leaving the shell.
+
+Up and down walk what has been said, which is a history of its own:
+a command is never offered at a chat prompt, where it would be said
+out loud rather than run, and a remark is never offered at a command
+one.  It keeps the lines that were entered, so a line of nothing, a
+repeat of the line before it, and a line abandoned rather than entered
+are all left out -- the same three rules the command history has.  A
+line the grid refused is kept, since that is the one most wanted back.
+
+The ring belongs to the shell rather than to the conversation, and
+that is what makes a line said in the wrong place recoverable: tab to
+the conversation it was meant for, press up until it comes back, and
+press return to send it there.  What comes back lands on the line to
+be edited, exactly as a recalled command does, and nothing is sent
+until it is entered.
 
 The escape key is what leaves, and slsh takes a key of its own if
 escape is awkward on a particular terminal: "slsh --escape=^G" for one

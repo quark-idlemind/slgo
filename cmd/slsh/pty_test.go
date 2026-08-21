@@ -298,6 +298,52 @@ func TestPTYHistory(t *testing.T) {
 	s.waitPrompt("/Objects$ cd Objects")
 }
 
+// TestPTYChatHistory: the arrows walk what was said, over a real
+// terminal and with the arrows arriving as the three bytes a terminal
+// sends.  They did nothing at all in chat mode before this.
+func TestPTYChatHistory(t *testing.T) {
+	s := start(t, 24, 80)
+
+	// A command first, so there is something in the other ring.
+	s.send("pwd\r")
+	s.waitText("/$ pwd")
+
+	s.send("chat\r")
+	s.waitPrompt("Local>")
+	s.send("hello there\r")
+	s.waitText("> [Local] hello there")
+
+	// Up brings it back to the line, and does not say it again.
+	s.send("\x1b[A")
+	s.waitPrompt("Local> hello there")
+	if n := strings.Count(s.text(), "> [Local] hello there"); n != 1 {
+		t.Errorf("the recall said the line again: %d of them\n%s", n, s.text())
+	}
+
+	// Up again stays where it is rather than reaching the commands.
+	s.send("\x1b[A")
+	time.Sleep(200 * time.Millisecond)
+	if got := s.prompt(); got != "Local> hello there" {
+		t.Errorf("up past the start of the chat history gave %q", got)
+	}
+
+	// What came back is editable, and goes only when Enter says so.
+	s.send("\x7f\x7f\x7f\x7f\x7f") // backspace over "there"
+	s.send("again")
+	s.waitPrompt("Local> hello again")
+	s.send("\r")
+	s.waitText("> [Local] hello again")
+
+	// And the command ring is untouched by any of it: the two commands
+	// that were run, newest first, with nothing said in between them.
+	s.send("\x1b")
+	s.waitPrompt("/$")
+	s.send("\x1b[A")
+	s.waitPrompt("/$ chat")
+	s.send("\x1b[A")
+	s.waitPrompt("/$ pwd")
+}
+
 // TestPTYCompletion: tab finishes a command in command mode, and does
 // not in chat mode, where it moves between conversations instead.
 func TestPTYCompletion(t *testing.T) {

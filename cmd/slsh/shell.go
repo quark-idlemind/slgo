@@ -73,10 +73,13 @@ type Shell struct {
 	// entry is the multi-line answer being typed, if one is.
 	entry *entry
 
-	// history is what has been typed, oldest first, and histAt is
-	// where the arrows have got to.
-	history []string
-	histAt  int
+	// history is what has been typed at a command prompt, and said is
+	// what has been typed at a chat one.  Two rings rather than one,
+	// because neither is any use where the other belongs: a command
+	// recalled in chat would be said out loud, and a remark recalled
+	// at a command prompt would be run.  See ring, and recall.
+	history ring
+	said    ring
 
 	talk  *Conversations
 	quit  chan struct{}
@@ -167,9 +170,7 @@ func (sh *Shell) key(ctx context.Context, r rune) {
 		sh.Quit()
 		return
 	case keyUp, keyDown:
-		if !chat {
-			sh.recall(r == keyUp)
-		}
+		sh.recall(r == keyUp)
 		return
 	}
 
@@ -216,6 +217,11 @@ func (sh *Shell) enter(ctx context.Context) {
 		// told apart.
 		line := sh.term.Take()
 		if strings.TrimSpace(line) != "" {
+			// Remembered before it goes, and whether or not it goes.
+			// The command ring keeps a command that failed for the
+			// same reason: a line the circuit would not take is
+			// exactly the line somebody wants back.
+			sh.remember(line)
 			sh.send(ctx, line)
 		}
 		return
@@ -247,37 +253,75 @@ func (sh *Shell) enter(ctx context.Context) {
 	sh.Do(ctx, line)
 }
 
-// recall walks the history.
-func (sh *Shell) recall(back bool) {
-	sh.mu.Lock()
-	defer sh.mu.Unlock()
-	if len(sh.history) == 0 {
-		return
+// ring is one history: the lines that were entered, oldest first, and
+// where the arrows have got to.  at == len(lines) is the fresh line
+// below the newest entry, which is where typing starts.
+type ring struct {
+	lines []string
+	at    int
+}
+
+// add records a line that was entered.
+func (r *ring) add(line string) {
+	// The same line twice running is one entry, as in a shell.
+	if n := len(r.lines); n == 0 || r.lines[n-1] != line {
+		r.lines = append(r.lines, line)
+	}
+	r.at = len(r.lines)
+}
+
+// walk moves one step and answers with what to put on the line, and
+// whether there was anything to move through at all: an empty history
+// leaves what is half typed alone rather than clearing it.
+func (r *ring) walk(back bool) (string, bool) {
+	if len(r.lines) == 0 {
+		return "", false
 	}
 	if back {
-		if sh.histAt > 0 {
-			sh.histAt--
+		if r.at > 0 {
+			r.at--
 		}
-	} else {
-		if sh.histAt < len(sh.history) {
-			sh.histAt++
-		}
+	} else if r.at < len(r.lines) {
+		r.at++
 	}
-	if sh.histAt >= len(sh.history) {
-		sh.term.SetLine("")
-		return
+	if r.at >= len(r.lines) {
+		// Past the newest: a fresh line, not the last entry again.
+		return "", true
 	}
-	sh.term.SetLine(sh.history[sh.histAt])
+	return r.lines[r.at], true
+}
+
+// recall walks the history of the mode the keyboard is in.
+//
+// What comes back lands on the line to be edited and is not sent or
+// run by the recall, in either mode.  That is the whole of the case
+// this was asked for: a line said in the wrong conversation is got
+// back by tabbing to the right one and pressing up, and the ring
+// belongs to the SHELL rather than to the conversation, so tabbing
+// does not change what is on offer.
+func (sh *Shell) recall(back bool) {
+	sh.mu.Lock()
+	line, ok := sh.ringLocked().walk(back)
+	sh.mu.Unlock()
+	if ok {
+		sh.term.SetLine(line)
+	}
 }
 
 func (sh *Shell) remember(line string) {
 	sh.mu.Lock()
 	defer sh.mu.Unlock()
-	// The same command twice running is one entry, as in a shell.
-	if n := len(sh.history); n == 0 || sh.history[n-1] != line {
-		sh.history = append(sh.history, line)
+	sh.ringLocked().add(line)
+}
+
+// ringLocked is the history the mode in force walks.  A multi-line
+// answer walks the command ring, as it always has: it is not chat, and
+// the line before it was a command.
+func (sh *Shell) ringLocked() *ring {
+	if sh.mode == modeChat {
+		return &sh.said
 	}
-	sh.histAt = len(sh.history)
+	return &sh.history
 }
 
 // ---------------------------------------------------------------- modes

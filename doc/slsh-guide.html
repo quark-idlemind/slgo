@@ -599,7 +599,9 @@ For one command:       COMMAND --help, or man COMMAND
           Command mode is the outer one, because that is what a keyboard is
           mostly for. <code>chat</code> goes inward and Escape comes back out.
           Each mode remembers the line you had half-typed in it, so switching
-          never loses what you were saying.
+          never loses what you were saying, and each has a
+          <a href="#keys">history</a> of its own, so the arrows never offer a
+          command where a remark belongs.
         </p>
 
         <div class="term">
@@ -2138,7 +2140,7 @@ viewer_running = how to tell whether one is running already</span></pre>
             </thead>
             <tbody>
               <tr><td class="keys">Tab</td><td class="what">complete a command or a path</td><td class="what">next conversation</td></tr>
-              <tr><td class="keys">↑ ↓</td><td class="what">walk through what you have typed</td><td class="what">—</td></tr>
+              <tr><td class="keys">↑ ↓</td><td class="what">walk through the commands you have typed</td><td class="what">walk through what you have said</td></tr>
               <tr><td class="keys">← →</td><td class="what">move along the line</td><td class="what">the same</td></tr>
               <tr><td class="keys">^A · ^E</td><td class="what">to the start of the line, to the end</td><td class="what">the same</td></tr>
               <tr><td class="keys">^U · ^W · ^K</td><td class="what">kill back to the start, the word before, to the end</td><td class="what">the same</td></tr>
@@ -2151,11 +2153,27 @@ viewer_running = how to tell whether one is running already</span></pre>
         </div>
 
         <p>
-          The history is command mode's alone: <strong>up</strong> and
-          <strong>down</strong> do nothing in chat, where what was said a
-          moment ago has already gone out. While a multi-line answer is being
-          typed the same editing keys apply to the line in hand, and the three
-          that end it are described under
+          Each mode has a history of its own and neither reaches the other's:
+          at a command prompt <strong>up</strong> and <strong>down</strong>
+          walk commands, and at a chat prompt they walk what you have said. A
+          command offered in chat would be said out loud rather than run, which
+          is why the two are kept apart. What comes back lands on the line to
+          be edited; nothing is sent or run until you press Return.
+        </p>
+
+        <p>
+          The chat history belongs to the shell rather than to the
+          conversation, which is what to reach for when a line goes to the
+          wrong place: <strong>Tab</strong> to the conversation you meant,
+          <strong>up</strong> until the line comes back, and Return sends it
+          there. It keeps the lines you entered, so a blank line, a repeat of
+          the line before it and a line you abandoned are all left out — the
+          same rules the command history has.
+        </p>
+
+        <p>
+          While a multi-line answer is being typed the same editing keys apply
+          to the line in hand, and the three that end it are described under
           <a href="#waiting">Things waiting</a>. Through slgod, leaving the
           shell leaves the avatar logged in; with <code>--direct</code> it does
           not.
