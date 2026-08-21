@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,9 +38,11 @@ var flagDefaults = flags
 func reset(t *testing.T) {
 	t.Helper()
 	flags = flagDefaults
+	tagWidth = 0
 	getopt.CommandLine = getopt.New()
 	t.Cleanup(func() {
 		flags = flagDefaults
+		tagWidth = 0
 		getopt.CommandLine = getopt.New()
 	})
 }
@@ -344,12 +347,12 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsSent(t *testing.T) {
 	opts := session.Options{Addr: "127.0.0.1:1", Channel: "automate"}
 
 	flags.Object = "workbench"
-	if _, _, _, err := runIn(context.Background(), opts); err == nil {
+	if _, _, _, err := runIn(context.Background(), opts, 1); err == nil {
 		t.Error("runIn found a named object through a daemon that is not there")
 	}
 
 	flags.Object, flags.Rez = "", true
-	if _, _, _, err := runIn(context.Background(), opts); err == nil {
+	if _, _, _, err := runIn(context.Background(), opts, 1); err == nil {
 		t.Error("runIn rezzed a prim through a daemon that is not there")
 	}
 
@@ -357,7 +360,7 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsSent(t *testing.T) {
 	// about it: it asks the daemon who it is holding before it asks for
 	// anything to run in.
 	flags.Rez = false
-	if _, _, _, err := runIn(context.Background(), opts); err == nil {
+	if _, _, _, err := runIn(context.Background(), opts, 1); err == nil {
 		t.Error("runIn took an auto object from a daemon that is not there")
 	}
 }
@@ -393,5 +396,335 @@ func TestTheProgramLeavesQuietlyWhenThereIsNothingWrong(t *testing.T) {
 
 	if got := stdoutOf(t, main); !strings.Contains(got, "--done") {
 		t.Errorf("--help did not print the usage:\n%s", got)
+	}
+}
+
+// -------------------------------------------------- several at once
+
+// runs records what a stub run did: which places ran which scripts, and
+// how many were running at the same moment.  What runAll decides is
+// invisible from the outside except as that, which is why it is counted
+// here rather than watched on a grid.
+type runs struct {
+	mu      sync.Mutex
+	now     int   // running at this moment
+	most    int   // the most that were ever running at once
+	byPlace []int // how many scripts each place took
+	order   []string
+}
+
+func (r *runs) start(place int, path string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.now++
+	if r.now > r.most {
+		r.most = r.now
+	}
+	for len(r.byPlace) <= place {
+		r.byPlace = append(r.byPlace, 0)
+	}
+	r.byPlace[place]++
+	r.order = append(r.order, path)
+}
+
+func (r *runs) end() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.now--
+}
+
+// sources is n scripts named a.lsl, b.lsl and so on.
+func sources(n int) []source {
+	var srcs []source
+	for i := 0; i < n; i++ {
+		srcs = append(srcs, source{string(rune('a'+i)) + ".lsl", "default {}"})
+	}
+	return srcs
+}
+
+// TestEveryPlaceRunsAScriptAndEveryScriptRunsOnce: the whole of what
+// running several at once buys is that four objects are four scripts in
+// the time of one, so "how many were running at the same moment" is the
+// measurement, not the wall clock.  Every script running exactly once is
+// the other half: a work queue that dropped one or ran it twice would
+// look like a fast run.
+func TestEveryPlaceRunsAScriptAndEveryScriptRunsOnce(t *testing.T) {
+	reset(t)
+	srcs := sources(8)
+	var r runs
+	started := make(chan struct{}, len(srcs))
+	release := make(chan struct{})
+
+	go func() {
+		// Let the first four in, then let them all go: without a
+		// barrier a fast stub can finish before the next place starts
+		// and four at once would never be seen even when four are
+		// running.  The clock is the other end of it -- if only one
+		// place is running, nothing else is coming and this has to
+		// report that rather than wait for it.
+		defer close(release)
+		for i := 0; i < 4; i++ {
+			select {
+			case <-started:
+			case <-time.After(5 * time.Second):
+				return
+			}
+		}
+	}()
+
+	ok := runAll(srcs, 4, func(place int, path, src string) bool {
+		r.start(place, path)
+		defer r.end()
+		started <- struct{}{}
+		<-release
+		return true
+	})
+	if !ok {
+		t.Error("a run in which nothing failed was reported as failed")
+	}
+	if r.most != 4 {
+		t.Errorf("%d scripts ran at once, want the 4 places there were", r.most)
+	}
+	if len(r.order) != len(srcs) {
+		t.Errorf("%d scripts ran, want %d", len(r.order), len(srcs))
+	}
+	seen := map[string]int{}
+	for _, path := range r.order {
+		seen[path]++
+	}
+	for _, src := range srcs {
+		if seen[src.path] != 1 {
+			t.Errorf("%s ran %d times", src.path, seen[src.path])
+		}
+	}
+}
+
+// TestAPlaceTakesTheNextScriptRatherThanItsShare: scripts are not the
+// same length, and a place that has finished should take somebody else's
+// work rather than sit idle -- which is the difference between a work
+// queue and dealing the scripts out in advance.  Dealt out, the two
+// places here would take two each and the whole run would wait for the
+// slow one to be followed by a fast one.
+func TestAPlaceTakesTheNextScriptRatherThanItsShare(t *testing.T) {
+	reset(t)
+	srcs := sources(4)
+	var r runs
+	slow := make(chan struct{})
+
+	ok := runAll(srcs, 2, func(place int, path, src string) bool {
+		r.start(place, path)
+		defer r.end()
+		if path == "a.lsl" {
+			// Held until every other script has been taken, which is
+			// what a script that runs for a minute does to the place
+			// it is in and must not do to the others.  The clock is
+			// for the case being guarded against: one place at a time
+			// means nothing else is ever taken, and that has to be
+			// reported rather than waited on.
+			select {
+			case <-slow:
+			case <-time.After(5 * time.Second):
+			}
+			return true
+		}
+		r.mu.Lock()
+		done := len(r.order)
+		r.mu.Unlock()
+		if done == len(srcs) {
+			close(slow)
+		}
+		return true
+	})
+	if !ok {
+		t.Error("a run in which nothing failed was reported as failed")
+	}
+	// Which of the two places took the slow script is the scheduler's
+	// business; that the other one took everything else is not.
+	stuck, free := r.byPlace[0], r.byPlace[1]
+	if stuck > free {
+		stuck, free = free, stuck
+	}
+	if stuck != 1 || free != 3 {
+		t.Errorf("the places ran %d and %d scripts, want 1 and 3: the free one "+
+			"waited its turn instead of taking the next script", stuck, free)
+	}
+}
+
+// TestOneAtATimeIsTheOrderTheyWereNamed: --jobs 1 is what a set of
+// scripts that leave things in the object for one another needs, and the
+// whole of what it promises is that the second starts after the first
+// has finished.
+func TestOneAtATimeIsTheOrderTheyWereNamed(t *testing.T) {
+	reset(t)
+	srcs := sources(4)
+	var r runs
+
+	runAll(srcs, 1, func(place int, path, src string) bool {
+		r.start(place, path)
+		defer r.end()
+		return true
+	})
+	if r.most != 1 {
+		t.Errorf("%d scripts ran at once where one at a time was asked for", r.most)
+	}
+	want := []string{"a.lsl", "b.lsl", "c.lsl", "d.lsl"}
+	if strings.Join(r.order, " ") != strings.Join(want, " ") {
+		t.Errorf("they ran %v, want the order they were named", r.order)
+	}
+}
+
+// TestMorePlacesThanScriptsUsesOnlyThePlacesItNeeds: a second object
+// held for a single script is an object taken from something else for
+// nothing, and a place index past the end of what was granted is a
+// crash rather than a waste.
+func TestMorePlacesThanScriptsUsesOnlyThePlacesItNeeds(t *testing.T) {
+	reset(t)
+	srcs := sources(2)
+	var r runs
+
+	runAll(srcs, 4, func(place int, path, src string) bool {
+		if place >= len(srcs) {
+			t.Errorf("a script ran in place %d, which was never granted", place)
+		}
+		r.start(place, path)
+		defer r.end()
+		return true
+	})
+	if len(r.order) != 2 {
+		t.Errorf("%d scripts ran, want 2", len(r.order))
+	}
+}
+
+// TestAFailedScriptFailsTheRunAndDoesNotStopTheOthers: the exit status
+// is whether every script got to the end, and it must not depend on
+// which place a failure happened in or on how many were running.  The
+// others still run: a person who named six scripts wants the six
+// answers, not the first failure.
+func TestAFailedScriptFailsTheRunAndDoesNotStopTheOthers(t *testing.T) {
+	reset(t)
+	srcs := sources(6)
+	var r runs
+
+	ok := runAll(srcs, 3, func(place int, path, src string) bool {
+		r.start(place, path)
+		defer r.end()
+		return path != "c.lsl"
+	})
+	if ok {
+		t.Error("a run with a failed script in it was reported as a success")
+	}
+	if len(r.order) != len(srcs) {
+		t.Errorf("%d scripts ran; a failure stopped the rest", len(r.order))
+	}
+}
+
+// TestTheTagIsAColumnWhenThereAreSeveralAndJustTheNameWhenThereIsOne:
+// with several scripts running at once the tags are what the eye follows
+// down the page, so they are padded to the widest -- and with one script
+// there is no column to line up and nothing is padded.
+func TestTheTagIsAColumnWhenThereAreSeveralAndJustTheNameWhenThereIsOne(t *testing.T) {
+	reset(t)
+	if got := tag("a.lsl"); got != "a.lsl: " {
+		t.Errorf("tag = %q, want the name and nothing else", got)
+	}
+
+	tagWidth = len("scripts/concatenate.lsl") + 2
+	short, long := tag("a.lsl"), tag("scripts/concatenate.lsl")
+	if len(short) != len(long) {
+		t.Errorf("tags %q and %q are different widths", short, long)
+	}
+	if !strings.HasPrefix(short, "a.lsl: ") {
+		t.Errorf("tag = %q, want the name, a colon and then the padding", short)
+	}
+}
+
+// TestARefusalArrivesInOnePieceWithSomethingElsePrinting: a compiler
+// refusal is several lines that mean one thing, and another script
+// printing at the same moment must not land in the middle of it.  What
+// would go wrong is not a crash but a page that reads as though the
+// compiler complained about the wrong script.
+func TestARefusalArrivesInOnePieceWithSomethingElsePrinting(t *testing.T) {
+	reset(t)
+	tagWidth = len("chatter.lsl") + 2
+	errs := []string{"(1,1) : ERROR : one", "(2,1) : ERROR : two", "(3,1) : ERROR : three"}
+
+	got := stdoutOf(t, func() {
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				say("%s%s\n", tag("chatter.lsl"), "hello")
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 20; i++ {
+				verdict("a.lsl", false, errs, "", false)
+			}
+		}()
+		wg.Wait()
+	})
+
+	// Every refusal is three lines with nothing between them.
+	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+	blocks := 0
+	for i, line := range lines {
+		if !strings.Contains(line, "ERROR : one") {
+			continue
+		}
+		blocks++
+		if i+2 >= len(lines) ||
+			!strings.Contains(lines[i+1], "ERROR : two") ||
+			!strings.Contains(lines[i+2], "ERROR : three") {
+			t.Fatalf("a refusal was split up:\n%s", strings.Join(lines[i:min(i+4, len(lines))], "\n"))
+		}
+	}
+	if blocks != 20 {
+		t.Errorf("%d refusals were printed whole, want 20", blocks)
+	}
+}
+
+// TestOneObjectIsOnePlaceAndJobsCannotConjureMore: --object was given an
+// object and there is only the one, and --rez rezzes one prim.  Asking
+// for four jobs there is asking for three places that do not exist, and
+// quietly running one at a time would be a person watching for a speed-up
+// that was never going to come.
+func TestOneObjectIsOnePlaceAndJobsCannotConjureMore(t *testing.T) {
+	reset(t)
+	// Nothing is dialled: the refusal is decided before anything
+	// connects, which is also why this can be tested at all.
+	opts := session.Options{Addr: "127.0.0.1:1", Channel: "automate"}
+	flags.Jobs = 4
+
+	flags.Object = "workbench"
+	_, _, _, err := runIn(context.Background(), opts, 4)
+	if err == nil || !strings.Contains(err.Error(), "--object") {
+		t.Errorf("--object with --jobs 4 = %v, want it to say there is one object", err)
+	}
+
+	flags.Object, flags.Rez = "", true
+	_, _, _, err = runIn(context.Background(), opts, 4)
+	if err == nil || !strings.Contains(err.Error(), "--rez") {
+		t.Errorf("--rez with --jobs 4 = %v, want it to say there is one prim", err)
+	}
+}
+
+// TestMoreJobsThanAGroupIsRefusedRatherThanQuietlyCutDown: objects are
+// taken a whole group at a time, because a caller holding some of one
+// group and waiting for some of another is a deadlock.  So five jobs is
+// not four jobs -- it is a number nobody can be given, and running four
+// would be a speed-up somebody counted on and did not get.
+func TestMoreJobsThanAGroupIsRefusedRatherThanQuietlyCutDown(t *testing.T) {
+	reset(t)
+	opts := session.Options{Addr: "127.0.0.1:1", Channel: "automate"}
+	flags.Jobs = session.AutoGroupSize + 1
+
+	_, _, _, err := runIn(context.Background(), opts, flags.Jobs)
+	if err == nil {
+		t.Fatal("--jobs past a group was taken, from a daemon that is not there")
+	}
+	if !strings.Contains(err.Error(), "group") {
+		t.Errorf("--jobs %d = %v, want it to say what a group is", flags.Jobs, err)
 	}
 }

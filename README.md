@@ -1070,9 +1070,13 @@ thing between them and the grid is a session.
     automate --object "Test HUD" a.lsl
     autobench -1 --title "global integer" --code "integer g;"
 
-A script needs an object to run in, so both find one or make one:
-`--object` names one already in the region, and without it a prim is
-rezzed beside the avatar and trashed afterwards. `--keep` leaves it.
+A script needs an object to run in, so both take some: the shared `auto`
+objects the avatar wears, a group of four held for as long as the run
+lasts. `--object` names one object already in the region instead, and
+`--rez` rezzes a prim beside the avatar and trashes it afterwards, which
+`--keep` leaves. `automate` runs a script in each of the four at once --
+17.5 seconds of scripts in 5.2, measured -- and `--jobs 1` puts them
+back in the order they were named.
 
 The contract with a script is one line: it says `DONE` when it has
 finished. Without a sentinel there is nothing to wait for but the

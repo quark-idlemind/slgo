@@ -5,9 +5,17 @@
 //	automate --object "Test HUD" --done DONE a.lsl
 //	automate --direct --first Quark --last Idlemind a.lsl
 //
-// A script needs an object to run in, so automate finds one or makes
-// one: --object names an object already in the region, and without it a
-// prim is rezzed beside the avatar for the run and deleted afterwards.
+// A script needs an object to run in, so automate takes some: the shared
+// auto objects the avatar wears, a group of four held for as long as the
+// run lasts.  --object names one object of somebody's own instead, and
+// --rez rezzes a throwaway prim beside the avatar and deletes it
+// afterwards; both of those are one object, and so one script at a time.
+//
+// Several scripts run at once, one in each object the shared group has --
+// four, which is what the group is.  They finish in whatever order they
+// finish in, so every line printed says which script said it.  --jobs 1
+// puts them back in the order they were named, which is what a set of
+// scripts that leave things in the object for one another needs.
 //
 // Second Life is not the only thing that runs LSL, and none of what
 // automate does is particular to it -- put a script somewhere, watch what
@@ -41,6 +49,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -62,6 +71,7 @@ var flags = struct {
 	Backend string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life"`
 	Rez     bool          `getopt:"--rez             rez a throwaway prim instead of using the shared auto object"`
 	Script  string        `getopt:"--script=NAME     what to call the script inside the object"`
+	Jobs    int           `getopt:"--jobs=N -j       how many scripts to run at once; one per object, 4 at most, 1 to run them in order"`
 	Done    string        `getopt:"--done=TEXT       the text that means the script has finished"`
 	Timeout time.Duration `getopt:"--timeout=DUR     how long to wait for it"`
 	Keep    bool          `getopt:"--keep            leave the rezzed object behind"`
@@ -72,6 +82,11 @@ var flags = struct {
 	Start:   "last",
 	Timeout: time.Minute,
 }
+
+// source is a script as it was named on the command line and as it was
+// read.  The path is what every line it says is printed under: with
+// several running at once it is the only thing saying which said what.
+type source struct{ path, text string }
 
 // errScript means a script failed, which has already been reported
 // line by line and needs no second telling.
@@ -99,7 +114,6 @@ func run() error {
 
 	// Read every script before connecting.  A typo in a filename is
 	// worth finding out about now rather than after a login.
-	type source struct{ path, text string }
 	srcs := make([]source, 0, len(args))
 	for _, path := range args {
 		data, err := os.ReadFile(path)
@@ -112,22 +126,29 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Every line is printed with the script it came from in front of it,
+	// so the names are lined up: with several running at once the tags
+	// are a column the eye follows down the page rather than a word at
+	// the start of each line.
+	tagWidth = 0
+	for _, src := range srcs {
+		if w := len(src.path) + 2; w > tagWidth {
+			tagWidth = w
+		}
+	}
+
 	// Where the scripts run.  Both transports come down to the same
-	// thing -- a function that runs one script, prints what it said as it
-	// says it, and reports whether it got to the end -- which is what
-	// lets everything else here be written once.
-	run1, done, err := somewhereToRun(ctx, len(srcs))
+	// thing -- a function that runs one script in one of the places
+	// there are, prints what it said as it says it, and reports whether
+	// it got to the end -- which is what lets everything else here be
+	// written once.
+	run1, places, done, err := somewhereToRun(ctx, len(srcs))
 	if err != nil {
 		return err
 	}
 	defer done()
 
-	failed := false
-	for _, src := range srcs {
-		if !run1(src.path, src.text) {
-			failed = true
-		}
-	}
+	failed := !runAll(srcs, places, run1)
 	// A failed script is a failed run.  The original always exited 0,
 	// which left a caller no way to tell without scraping stdout.
 	// Returning rather than exiting here is what lets the deferred
@@ -139,33 +160,129 @@ func run() error {
 	return nil
 }
 
-// somewhereToRun gets a place for the scripts and answers with the one
-// thing the rest of this program needs of it.
+// runAll runs every script, at most one in each place at a time, and
+// says whether all of them got to the end.
 //
-// n is how many scripts there are, which the contract path turns into
-// whether to hold an object: several scripts run in the order they were
-// named and one that leaves something behind for the next has to find it
-// there.  The grid path holds one object either way, because that is what
-// it has -- a session with an object in it.
-func somewhereToRun(ctx context.Context, n int) (run func(path, src string) bool, done func(), err error) {
+// A place runs its next script the moment it is free, so a long script
+// holds up nothing but the object it is in.  What that costs is order:
+// the lines come out as they are said, and with four running at once
+// they are interleaved.  That is what the tag on every line is for, and
+// why the tag is padded -- the alternative would be holding a script's
+// output until it finished, which would mean watching nothing happen for
+// a minute in a program whose whole point is watching a script run.
+//
+// The exit status does not depend on the order at all: it is whether
+// every script got to the end.
+func runAll(srcs []source, places int, run func(place int, path, src string) bool) bool {
+	if places > len(srcs) {
+		places = len(srcs)
+	}
+	if places < 1 {
+		places = 1
+	}
+
+	got := make([]bool, len(srcs))
+	next := make(chan int)
+	var wg sync.WaitGroup
+	wg.Add(places)
+	for p := 0; p < places; p++ {
+		go func(p int) {
+			defer wg.Done()
+			// Taken from a channel rather than sliced up in advance:
+			// scripts are not the same length, and a place that has
+			// finished its share should take somebody else's rather
+			// than sit idle.
+			for i := range next {
+				got[i] = run(p, srcs[i].path, srcs[i].text)
+			}
+		}(p)
+	}
+	for i := range srcs {
+		next <- i
+	}
+	close(next)
+	wg.Wait()
+
+	for _, ok := range got {
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// tagWidth is how much room the script names take, and say is how
+// anything is printed.
+//
+// Both are about several scripts printing at once.  A line and the lines
+// of a compiler refusal have to arrive whole and together rather than
+// spliced through somebody else's, which is one lock held for as long as
+// it takes to write them.
+var (
+	tagWidth int
+	saying   sync.Mutex
+)
+
+func say(format string, args ...any) {
+	saying.Lock()
+	defer saying.Unlock()
+	fmt.Printf(format, args...)
+}
+
+// tag is a script name as it appears in front of what the script said.
+// It pads to whatever the widest name on the command line was, and to
+// its own width when nobody has said -- one script needs no column.
+func tag(path string) string {
+	w := tagWidth
+	if least := len(path) + 2; w < least {
+		w = least
+	}
+	return fmt.Sprintf("%-*s", w, path+":")
+}
+
+// somewhereToRun gets places for the scripts and answers with the one
+// thing the rest of this program needs of them.
+//
+// n is how many scripts there are, and it is a ceiling on how many
+// places are worth having: a second object for a single script is an
+// object taken from something else for nothing.
+//
+// How many places there are is answered here and not asked for, because
+// each way of getting one has a different number to give -- a group of
+// four, a named object, a lease of whatever the backend granted -- and
+// the count comes back with the places so that the caller never has to
+// guess.
+func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src string) bool, places int, done func(), err error) {
 	if flags.Backend != "" {
 		switch {
 		case flags.Object != "":
 			// A backend supplies the object and names it itself; there is
 			// nothing in the contract that asks for one by name.  Refused
 			// rather than ignored: a person who named an object meant it.
-			return nil, nil, fmt.Errorf("--object names an object in a region, " +
+			return nil, 0, nil, fmt.Errorf("--object names an object in a region, " +
 				"which a script.v1 backend does not have: it supplies the object " +
 				"and how it came to exist is its business")
 		case flags.Keep:
-			return nil, nil, fmt.Errorf("--keep leaves a rezzed prim behind, and a " +
+			return nil, 0, nil, fmt.Errorf("--keep leaves a rezzed prim behind, and a " +
 				"script.v1 backend rezzes nothing: the object it ran in is its own")
 		}
-		r, err := openBackend(flags.Backend, n > 1 || flags.Rez)
-		if err != nil {
-			return nil, nil, err
+		// One, unless somebody asked for more.  A group of auto objects is
+		// four because this program put four there; what a backend has is
+		// its own business, and asking a one-object simulator for four
+		// would queue for three that are never coming.
+		want := 1
+		if flags.Jobs > 1 {
+			want = flags.Jobs
+			if want > n {
+				want = n
+			}
 		}
-		return func(path, src string) bool { return r.once(ctx, path, src) }, r.Close, nil
+		r, err := openBackend(flags.Backend, want, n > 1 || flags.Rez)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		return func(place int, path, src string) bool { return r.once(ctx, place, path, src) },
+			r.places(), r.Close, nil
 	}
 
 	opts := session.Options{
@@ -173,14 +290,17 @@ func somewhereToRun(ctx context.Context, n int) (run func(path, src string) bool
 		First: flags.First, Last: flags.Last, Start: flags.Start,
 		Channel: "automate",
 	}
-	s, obj, cleanup, err := runIn(ctx, opts)
+	s, objs, cleanup, err := runIn(ctx, opts, n)
 	if err != nil {
-		return nil, nil, err
+		return nil, 0, nil, err
 	}
 	if flags.Keep {
-		fmt.Printf("running in %s\n", obj)
+		for _, obj := range objs {
+			fmt.Printf("running in %s\n", obj)
+		}
 	}
-	return func(path, src string) bool { return once(ctx, s, obj, path, src) },
+	return func(place int, path, src string) bool { return once(ctx, s, objs[place], path, src) },
+		len(objs),
 		func() {
 			if cleanup != nil {
 				cleanup()
@@ -208,11 +328,11 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 			if l.Debug() || (flags.Done != "" && strings.Contains(l.Text, flags.Done)) {
 				return
 			}
-			fmt.Printf("%s: %s\n", path, l.Text)
+			say("%s%s\n", tag(path), l.Text)
 		},
 	})
 	if err != nil {
-		fmt.Printf("%s: %v\n", path, err)
+		say("%s%v\n", tag(path), err)
 		return false
 	}
 	var fault string
@@ -232,34 +352,53 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 func verdict(path string, compiled bool, errs []string, fault string, finished bool) bool {
 	switch {
 	case !compiled:
+		// Under one lock, so that a refusal several lines long stays in
+		// one piece with another script printing at the same time.
+		saying.Lock()
+		defer saying.Unlock()
 		for _, e := range errs {
-			fmt.Printf("%s: %s\n", path, e)
+			fmt.Printf("%s%s\n", tag(path), e)
 		}
 		if len(errs) == 0 {
-			fmt.Printf("%s: it would not compile, and the compiler did not say why\n", path)
+			fmt.Printf("%sit would not compile, and the compiler did not say why\n", tag(path))
 		}
 		return false
 
 	case fault != "":
-		fmt.Printf("%s: %s\n", path, fault)
+		say("%s%s\n", tag(path), fault)
 		return false
 
 	case !finished && flags.Done != "":
-		fmt.Printf("%s: it did not say %s within %v\n", path, flags.Done, flags.Timeout)
+		say("%sit did not say %s within %v\n", tag(path), flags.Done, flags.Timeout)
 		return false
 	}
 	return true
 }
 
-// runIn gets somewhere to run scripts.
+// runIn gets somewhere to run n scripts.
 //
-// The shared auto object by default: it is worn, so it costs nothing to
-// find, and the script inside it already exists, which is the seconds
-// that matter.  --object names a different one, and --rez goes back to
-// a throwaway prim per run, which is what to use when the shared object
-// is wanted by something else and waiting will not do.
-func runIn(ctx context.Context, o session.Options) (*sl.Session, *sl.Object, func(), error) {
+// The shared auto objects by default: they are worn, so they cost
+// nothing to find, and the script inside each already exists, which is
+// the seconds that matter.  --object names one object of somebody's own,
+// and --rez goes back to a throwaway prim, which is what to use when the
+// shared group is wanted by something else and waiting will not do.
+//
+// Both of those are one object and so one script at a time.  That is a
+// limit and not an oversight: --object was given an object and there is
+// only the one, and rezzing a prim per job would put a heap of them
+// beside the avatar for a saving the shared group already offers.
+func runIn(ctx context.Context, o session.Options, n int) (*sl.Session, []*sl.Object, func(), error) {
 	if flags.Object != "" || flags.Rez {
+		if flags.Jobs > 1 {
+			what := "--rez rezzes one prim"
+			if flags.Object != "" {
+				what = "--object names one object"
+			}
+			return nil, nil, nil, fmt.Errorf("%s, so there is one place to run and "+
+				"--jobs %d has nowhere to put the other %d: the shared auto objects "+
+				"are the ones there are several of",
+				what, flags.Jobs, flags.Jobs-1)
+		}
 		s, err := session.Connect(ctx, o)
 		if err != nil {
 			return nil, nil, nil, err
@@ -269,19 +408,38 @@ func runIn(ctx context.Context, o session.Options) (*sl.Session, *sl.Object, fun
 			s.Close()
 			return nil, nil, nil, err
 		}
-		return s, obj, cleanup, nil
+		return s, []*sl.Object{obj}, cleanup, nil
 	}
 
-	// One object is all a script needs, but it is taken as a whole
-	// GROUP: the group is the unit of exclusion, and taking a single
-	// object out of one would let a benchmark holding that group use it
-	// at the same time.
-	a, err := session.UseAutoAnywhere(ctx, o, 1)
+	if flags.Jobs > session.AutoGroupSize {
+		// The pool refuses this too, and in its own words -- about
+		// benchmarks and deadlock, which is what the rule is there for.
+		// Said here as well because a person running scripts is owed the
+		// number rather than the reasoning behind it.
+		return nil, nil, nil, fmt.Errorf("--jobs %d wants %d objects and a group is %d; "+
+			"a group is the unit an object is taken in, and holding two of them "+
+			"is how two runs deadlock",
+			flags.Jobs, flags.Jobs, session.AutoGroupSize)
+	}
+
+	// Objects are taken as a whole GROUP however few are wanted: the
+	// group is the unit of exclusion, and taking a single object out of
+	// one would let a benchmark holding that group use it at the same
+	// time.  So asking for all four costs nothing that asking for one
+	// did not already cost.
+	want := flags.Jobs
+	if want < 1 {
+		want = session.AutoGroupSize
+	}
+	if want > n {
+		want = n
+	}
+	a, err := session.UseAutoAnywhere(ctx, o, want)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if o.Agent == "" {
 		fmt.Fprintf(os.Stderr, "running as %s\n", a.Agent)
 	}
-	return a.Session, a.Objects[0], a.Release, nil
+	return a.Session, a.Objects, a.Release, nil
 }

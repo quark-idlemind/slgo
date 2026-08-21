@@ -558,7 +558,7 @@ func TestAnObjectThatIsNotThereClosesTheSessionItOpened(t *testing.T) {
 	_, addr := newFakeDaemon(t)
 
 	flags.Object = "no such workbench"
-	_, _, _, err := runIn(context.Background(), session.Options{Addr: addr, Channel: "automate"})
+	_, _, _, err := runIn(context.Background(), session.Options{Addr: addr, Channel: "automate"}, 1)
 	if err == nil {
 		t.Fatal("runIn found an object that is not in the region")
 	}

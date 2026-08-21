@@ -369,9 +369,10 @@ it. Pick a word the output cannot contain by accident.
 
 ### Where the script runs
 
-A script needs an object to run in, and by default that is `auto`: one
-prim, worn, kept. If it is not being worn it is put on; if it does not
-exist it is made, taken into inventory and put on. That happens once.
+A script needs an object to run in, and by default those are the `auto`
+objects: a group of four prims, worn, kept. Any that are not being worn
+are put on; any that do not exist are made, taken into inventory and put
+on. That happens once.
 
 Keeping it is what makes runs quick. The first script put into an
 object takes several seconds to appear; replacing one already there
@@ -389,6 +390,51 @@ down on your machine, and there is no cache to go stale.
     --object NAME    run in some other object already in the region
     --rez            rez a throwaway prim for this run, as before
     --keep           leave a rezzed prim behind
+
+### Several scripts at once
+
+Scripts named on one command line run in different objects at the same
+time, four at once because the group is four:
+
+    $ automate a.lsl b.lsl c.lsl d.lsl
+    c.lsl: c starting
+    b.lsl: b starting
+    d.lsl: d starting
+    a.lsl: a starting
+    c.lsl: c finished
+    ...
+
+Measured on the grid, four scripts that each sleep three seconds:
+**17.5 seconds one at a time and 5.2 seconds four at once.** Six of them
+take 9.1 seconds -- four, then the other two as objects come free, since
+an object takes the next script the moment it is free rather than
+waiting for its neighbours.
+
+They finish in whatever order they finish in and the lines are
+interleaved, which is what the tag in front of every line is for. The
+tags are padded to the widest name on the command line so that they read
+as a column.
+
+`--jobs N` is how many run at once, four at most.
+
+`--jobs 1` runs them in the order they were named, one after another,
+and is what a set of scripts that leave something in the object for one
+another needs: with four running there is no shared object to leave
+anything in.
+
+Each script is installed under the same name -- `--script`, `automate`
+by default -- because each is in an object of its own. That is why the
+fan-out is one script per object and not several: measured, a second
+script uploaded into one object under the same name destroys the first,
+and then **both** runs report the survivor's output as their own and
+both say they finished. Chat carries the object a line came from and
+never the script's name, so one script per object is also what makes the
+tag on each line true.
+
+`--object` and `--rez` are one object between them, so they are one
+script at a time; `--jobs` with either is refused rather than quietly
+ignored, because a person watching for a speed-up that was never coming
+is worse off than one who was told.
 
 ### Several runs at once
 
@@ -449,6 +495,7 @@ compiled, ran and finished.
 | `--done TEXT` | the text that means "finished" (default `DONE`); matched as a substring |
 | `--timeout DUR` | how long to wait for it (default `1m0s`); a bare number is refused -- the unit is required |
 | `--script NAME` | what to call the script inside the object (default `automate`, which is the name a fault is reported under) |
+| `--jobs N`, `-j N` | how many scripts to run at once, one per object and four at most (the default); `1` runs them in the order they were named |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there -- a simulator, or a viewer daemon -- instead of in Second Life |
 
 ---

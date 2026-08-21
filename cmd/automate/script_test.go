@@ -87,14 +87,14 @@ func TestABackendPrintsWhatTheScriptSaidAndNotTheSentinel(t *testing.T) {
 	addr, _ := backendAt(t)
 	flags.Backend = addr
 
-	run1, done, err := somewhereToRun(context.Background(), 1)
+	run1, _, done, err := somewhereToRun(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("somewhere to run: %v", err)
 	}
 	defer done()
 
 	got := stdoutOf(t, func() {
-		if !run1("a.lsl", speaks) {
+		if !run1(0, "a.lsl", speaks) {
 			t.Error("a script that said DONE was reported as having failed")
 		}
 	})
@@ -133,7 +133,7 @@ func TestALineThroughABackendIsPrintedBeforeTheRunHasEnded(t *testing.T) {
 	})
 	flags.Backend = addr.String()
 
-	run1, done, err := somewhereToRun(context.Background(), 1)
+	run1, _, done, err := somewhereToRun(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("somewhere to run: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestALineThroughABackendIsPrintedBeforeTheRunHasEnded(t *testing.T) {
 	os.Stdout = w
 
 	ended := make(chan bool, 1)
-	go func() { ended <- run1("a.lsl", speaks) }()
+	go func() { ended <- run1(0, "a.lsl", speaks) }()
 
 	line, readErr := bufio.NewReader(r).ReadString('\n')
 	early := len(ended) == 0
@@ -187,7 +187,7 @@ func TestSeveralScriptsTakeOneObjectAndASingleScriptTakesNone(t *testing.T) {
 	addr, c := backendAt(t)
 	flags.Backend = addr
 
-	_, done, err := somewhereToRun(context.Background(), 1)
+	_, _, done, err := somewhereToRun(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("somewhere to run: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestSeveralScriptsTakeOneObjectAndASingleScriptTakesNone(t *testing.T) {
 	}
 	done()
 
-	_, done, err = somewhereToRun(context.Background(), 2)
+	_, _, done, err = somewhereToRun(context.Background(), 2)
 	if err != nil {
 		t.Fatalf("somewhere to run: %v", err)
 	}
@@ -219,12 +219,12 @@ func TestAnObjectByNameIsNotSomethingABackendHas(t *testing.T) {
 	flags.Backend = addr
 
 	flags.Object = "workbench"
-	if _, _, err := somewhereToRun(context.Background(), 1); err == nil {
+	if _, _, _, err := somewhereToRun(context.Background(), 1); err == nil {
 		t.Error("--object was honoured by a backend that has no such thing")
 	}
 
 	flags.Object, flags.Keep = "", true
-	if _, _, err := somewhereToRun(context.Background(), 1); err == nil {
+	if _, _, _, err := somewhereToRun(context.Background(), 1); err == nil {
 		t.Error("--keep left behind an object that was never rezzed")
 	}
 }
@@ -258,5 +258,109 @@ func TestAScriptABackendWillNotCompileIsAFailedRun(t *testing.T) {
 	}
 	if !strings.Contains(got, "Syntax error") {
 		t.Errorf("the compiler's own words were not printed:\n%s", got)
+	}
+}
+
+// TestABackendIsAskedForOneObjectUnlessJobsAsksForMore: a group of auto
+// objects is four because this program put four there and knows it.
+// What is behind the contract is somebody else's business -- it may have
+// one object -- and asking a one-object backend for four would queue for
+// three that are never coming.  So the default is one however many
+// scripts there are, and --jobs is how somebody who knows what is behind
+// it asks for more.
+func TestABackendIsAskedForOneObjectUnlessJobsAsksForMore(t *testing.T) {
+	reset(t)
+	addr, _ := backendAt(t)
+	flags.Backend = addr
+
+	_, places, done, err := somewhereToRun(context.Background(), 4)
+	if err != nil {
+		t.Fatalf("somewhere to run: %v", err)
+	}
+	if places != 1 {
+		t.Errorf("four scripts took %d objects from a backend that was never asked "+
+			"how many it has", places)
+	}
+	done()
+
+	flags.Jobs = 3
+	_, places, done, err = somewhereToRun(context.Background(), 4)
+	if err != nil {
+		t.Fatalf("somewhere to run: %v", err)
+	}
+	defer done()
+	if places != 3 {
+		t.Errorf("--jobs 3 got %d objects", places)
+	}
+}
+
+// TestJobsAsksForNoMoreObjectsThanThereAreScripts: an object held for a
+// script that does not exist is an object taken from something else for
+// nothing, and a backend with three objects would refuse a lease of four
+// outright.
+func TestJobsAsksForNoMoreObjectsThanThereAreScripts(t *testing.T) {
+	reset(t)
+	addr, _ := backendAt(t)
+	flags.Backend = addr
+	flags.Jobs = 4
+
+	_, places, done, err := somewhereToRun(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("somewhere to run: %v", err)
+	}
+	defer done()
+	if places != 2 {
+		t.Errorf("--jobs 4 with two scripts took %d objects", places)
+	}
+}
+
+// TestScriptsThroughABackendRunAtOnceAndInDifferentObjects: the two
+// halves of running several at once, end to end rather than against a
+// stub -- they overlap in time, and each is in an object of its own.
+// Sharing one object would be the naive version of this change, where the
+// second script overwrites the first and both report the other's output.
+func TestScriptsThroughABackendRunAtOnceAndInDifferentObjects(t *testing.T) {
+	reset(t)
+	s := scripttest.New(scripttest.Options{})
+	addr, err := s.Listen("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("serving a backend: %v", err)
+	}
+	t.Cleanup(s.Stop)
+	// Two lines a fifth of a second apart, so a run is about four
+	// tenths of a second and four of them one after another would be
+	// most of two seconds.
+	s.SetBehaviour("", scripttest.Behaviour{
+		LineDelay: 200 * time.Millisecond,
+		Lines:     []string{"working", "DONE"},
+	})
+	flags.Backend = addr.String()
+	flags.Jobs = 4
+
+	srcs := sources(4)
+	run1, places, done, err := somewhereToRun(context.Background(), len(srcs))
+	if err != nil {
+		t.Fatalf("somewhere to run: %v", err)
+	}
+	defer done()
+	if places != 4 {
+		t.Fatalf("%d objects to run four scripts in", places)
+	}
+
+	start := time.Now()
+	var ok bool
+	got := stdoutOf(t, func() { ok = runAll(srcs, places, run1) })
+	took := time.Since(start)
+
+	if !ok {
+		t.Errorf("a run in which every script said DONE was reported as failed:\n%s", got)
+	}
+	if took > time.Second {
+		t.Errorf("four scripts of about 0.4s took %v, which is one after another", took)
+	}
+	for _, src := range srcs {
+		if !strings.Contains(got, src.path+":") {
+			t.Errorf("%s said nothing:\n%s", src.path, got)
+		}
 	}
 }

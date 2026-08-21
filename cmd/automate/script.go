@@ -20,15 +20,23 @@ package main
 //
 // What is left is the two ways the contract offers of saying where:
 //
-//   - A lease of one target, held for the whole run.  Every script goes
-//     in the same object, which is what the grid path does and what a
-//     series of scripts that leave things for one another needs.
+//   - A lease of one target or several, held for the whole run.  One
+//     target is every script in the same object, in the order they were
+//     named, which is what a series that leaves things for one another
+//     needs; several is several at once, one to a target.
 //   - An empty target, which means anywhere: the backend takes somewhere,
 //     runs, and gives it back.  It holds nothing while a person reads the
 //     output, and it is the whole of what a single script needs.
 //
 // The first is taken when there is more than one script to run or when
 // --rez asks for a place of automate's own; otherwise the second.
+//
+// One target is the default even with scripts enough for four, where the
+// grid path takes the whole group.  A group is four because this program
+// put four objects there and knows it; what a backend has is its own
+// business, and asking a one-object simulator for four would queue for
+// three that are never coming.  --jobs is how somebody who knows what is
+// behind the contract asks for more.
 //
 // # Why this is not shared with autobench's copy
 //
@@ -58,10 +66,10 @@ import (
 type remote struct {
 	c scriptv1.RunnerClient
 
-	// target is where to run.  Empty is "anywhere", which is the
-	// contract's own word for it: the backend takes somewhere, runs, and
-	// gives it back.
-	target string
+	// targets is where to run, one per script at a time.  A single empty
+	// target is "anywhere", which is the contract's own word for it: the
+	// backend takes somewhere, runs, and gives it back.
+	targets []string
 
 	// shut is what closing has to undo, innermost first.  Cancelling the
 	// lease is how the object goes back, and so is dying -- which is the
@@ -72,16 +80,18 @@ type remote struct {
 // openBackend dials a backend and gets somewhere to run.
 //
 // hold asks for a lease rather than a target of "anywhere", which is what
-// several scripts on one command line need: they run in the order they
-// were named, in the same object, and one that leaves something behind
-// for the next finds it there.
+// several scripts on one command line need: they run in objects held for
+// the whole run rather than borrowed one at a time, so that a script
+// leaving something behind for the next finds it there.  want is how many
+// objects to hold, and a backend that grants fewer than were asked for is
+// taken at its word -- the scripts share what there is.
 //
 // Insecure, and deliberately: the contract carries no credentials and the
 // backends it is for are a simulator or a viewer daemon on this machine
 // or a trusted one.  A backend that wants authentication puts something
 // in front of it; inventing a scheme here would be inventing one nobody
 // else implements.
-func openBackend(addr string, hold bool) (*remote, error) {
+func openBackend(addr string, want int, hold bool) (*remote, error) {
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("dialling the backend at %s: %w", addr, err)
@@ -104,20 +114,29 @@ func openBackend(addr string, hold bool) (*remote, error) {
 			h.GetBackend(), h.GetWhy())
 	}
 	if !hold {
+		// Anywhere, one script at a time: a borrowed object is borrowed
+		// for the length of one run.
+		r.targets = []string{""}
 		return r, nil
 	}
-	if err := r.lease(); err != nil {
+	if err := r.lease(want); err != nil {
 		r.Close()
 		return nil, err
 	}
 	return r, nil
 }
 
-// lease holds one object until this process ends.
-func (r *remote) lease() error {
+// places is how many scripts can run at once.
+func (r *remote) places() int { return len(r.targets) }
+
+// lease holds n objects until this process ends.
+func (r *remote) lease(n int) error {
+	if n < 1 {
+		n = 1
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	stream, err := r.c.Lease(ctx, &scriptv1.LeaseRequest{
-		Targets: 1, Agent: flags.Agent, Who: "automate",
+		Targets: int32(n), Agent: flags.Agent, Who: "automate",
 	})
 	if err != nil {
 		cancel()
@@ -143,7 +162,9 @@ func (r *remote) lease() error {
 			cancel()
 			return fmt.Errorf("the backend granted a lease with nothing in it")
 		}
-		r.target = g.GetTargets()[0].GetId()
+		for _, t := range g.GetTargets() {
+			r.targets = append(r.targets, t.GetId())
+		}
 		// Which avatar, when nobody said.  The grid path says the same
 		// thing for the same reason: with several hosted, the choice is
 		// the far side's and the reader cannot work it out.
@@ -178,13 +199,13 @@ func seconds(d time.Duration) int64 {
 // script talking to us, not to the person reading -- and neither is the
 // debug channel, where the region comments on the script rather than the
 // script speaking.
-func (r *remote) once(ctx context.Context, path, src string) bool {
+func (r *remote) once(ctx context.Context, place int, path, src string) bool {
 	stream, err := r.c.Run(ctx, &scriptv1.RunRequest{
-		Target: r.target, Name: flags.Script, Source: src,
+		Target: r.targets[place], Name: flags.Script, Source: src,
 		Done: flags.Done, TimeoutSeconds: seconds(flags.Timeout),
 	})
 	if err != nil {
-		fmt.Printf("%s: %v\n", path, err)
+		say("%s%v\n", tag(path), err)
 		return false
 	}
 
@@ -200,7 +221,7 @@ func (r *remote) once(ctx context.Context, path, src string) bool {
 			break
 		}
 		if err != nil {
-			fmt.Printf("%s: %v\n", path, err)
+			say("%s%v\n", tag(path), err)
 			return false
 		}
 		switch {
@@ -212,7 +233,7 @@ func (r *remote) once(ctx context.Context, path, src string) bool {
 			if l.GetDebug() || (flags.Done != "" && strings.Contains(l.GetText(), flags.Done)) {
 				continue
 			}
-			fmt.Printf("%s: %s\n", path, l.GetText())
+			say("%s%s\n", tag(path), l.GetText())
 		case ev.GetFault() != nil:
 			f := ev.GetFault()
 			fault = f.GetScript() + ": run-time error"
