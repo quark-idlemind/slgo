@@ -89,7 +89,10 @@ compiled=0
 for f in $files; do
 	p=$root/$f
 	[ -f "$p" ] || continue
-	case $(file -b "$p" 2>/dev/null) in
+	desc=$(file -b "$p" 2>/dev/null)
+	# A shell script is "text executable" and is not what this is for.
+	case $desc in *text*) continue ;; esac
+	case $desc in
 	*executable*|*"Mach-O"*|*"ELF "*|*archive*)
 		if [ "$compiled" -eq 0 ]; then
 			echo "check-identities: this is a compiled binary and cannot be committed:"
