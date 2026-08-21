@@ -710,21 +710,32 @@ func TestOneObjectIsOnePlaceAndJobsCannotConjureMore(t *testing.T) {
 	}
 }
 
-// TestMoreJobsThanAGroupIsRefusedRatherThanQuietlyCutDown: objects are
-// taken a whole group at a time, because a caller holding some of one
-// group and waiting for some of another is a deadlock.  So five jobs is
-// not four jobs -- it is a number nobody can be given, and running four
-// would be a speed-up somebody counted on and did not get.
-func TestMoreJobsThanAGroupIsRefusedRatherThanQuietlyCutDown(t *testing.T) {
+// TestMoreJobsThanTheAvatarHasObjectsIsRefused: more than a group is
+// more groups, and there are only so many of those -- a pool is what an
+// avatar wears.  Past the end of it there is nothing to round down to
+// that would not be a speed-up somebody counted on and did not get, so
+// it is refused, with the number and how to make more.
+func TestMoreJobsThanTheAvatarHasObjectsIsRefused(t *testing.T) {
 	reset(t)
 	opts := session.Options{Addr: "127.0.0.1:1", Channel: "automate"}
-	flags.Jobs = session.AutoGroupSize + 1
+	flags.Jobs = session.AutoPool() + 1
 
 	_, _, _, err := runIn(context.Background(), opts, flags.Jobs)
 	if err == nil {
-		t.Fatal("--jobs past a group was taken, from a daemon that is not there")
+		t.Fatal("--jobs past the pool was taken, from a daemon that is not there")
 	}
-	if !strings.Contains(err.Error(), "group") {
-		t.Errorf("--jobs %d = %v, want it to say what a group is", flags.Jobs, err)
+	if !strings.Contains(err.Error(), "slsh auto") {
+		t.Errorf("--jobs %d = %v, want it to say how more objects are made",
+			flags.Jobs, err)
+	}
+
+	// A group's worth more than a group is two groups and is fine: what
+	// is refused is past the end of the pool, not past the end of one
+	// group.
+	reset(t)
+	flags.Jobs = session.AutoGroupSize + 1
+	_, _, _, err = runIn(context.Background(), opts, flags.Jobs)
+	if err != nil && strings.Contains(err.Error(), "slsh auto") {
+		t.Errorf("--jobs %d was refused as too many: %v", flags.Jobs, err)
 	}
 }

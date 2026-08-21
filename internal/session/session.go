@@ -154,6 +154,10 @@ const AutoGroupSize = 4
 // AutoGroups is how many benchmarks one avatar can run at once.
 func AutoGroups() int { return len(AutoPoints) / AutoGroupSize }
 
+// AutoPool is how many objects one avatar's pool holds when every group
+// is there -- the ceiling on how many scripts it can run at once.
+func AutoPool() int { return AutoGroups() * AutoGroupSize }
+
 // AutoGroupLock names the lock covering one group.
 //
 // NOT the old bare "auto", deliberately: a client old enough to lock

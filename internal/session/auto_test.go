@@ -552,3 +552,153 @@ func TestUseAutoAnywhereNeedsADaemonAtAll(t *testing.T) {
 		t.Error("UseAutoAnywhere ran somewhere with no daemon to run it on")
 	}
 }
+
+// ------------------------------------------------ more than one group
+
+// objectsOf is every object in a set of groups, and how many distinct
+// ones there were.  Two groups handing back the same object is the
+// failure these tests are for, and it is invisible in a count alone.
+func objectsOf(as []*Auto) (n int, distinct int) {
+	seen := map[string]bool{}
+	for _, a := range as {
+		for _, o := range a.Objects {
+			n++
+			seen[o.ID.String()] = true
+		}
+	}
+	return n, len(seen)
+}
+
+// TestWorkThatWantsMoreThanAGroupGetsMoreGroups: four is the size of a
+// group because four is what a benchmark's search uses, not because four
+// is all anybody may have.  A program with twelve things to do at once
+// wants twelve objects, and the group is the unit they arrive in.
+func TestWorkThatWantsMoreThanAGroupGetsMoreGroups(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+
+	as := takeGroups(context.Background(), s, 2*AutoGroupSize)
+	if len(as) != 2 {
+		t.Fatalf("%d groups were taken for two groups' worth of work", len(as))
+	}
+	n, distinct := objectsOf(as)
+	if n != 2*AutoGroupSize || distinct != n {
+		t.Errorf("%d objects and %d of them distinct, want %d of each",
+			n, distinct, 2*AutoGroupSize)
+	}
+	if as[0].Group == as[1].Group {
+		t.Errorf("both groups were group %d", as[0].Group)
+	}
+}
+
+// TestAGroupAlreadyHeldIsNotTakenTwice: the daemon's lock is RE-ENTRANT
+// -- a client that asks for one it already holds is given it, because
+// asking twice and holding once is the sensible answer to a client that
+// asks twice.  For a caller gathering groups it is a trap: taking a
+// group it already has would wear the same objects a second time and
+// hand two scripts the same object, which is the one thing running
+// several at once must not do.  So the groups already held are named,
+// and the pass over the pool skips them.
+func TestAGroupAlreadyHeldIsNotTakenTwice(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+
+	first, err := useAutoOn(context.Background(), s, AutoGroupSize, true)
+	if err != nil {
+		t.Fatalf("useAutoOn: %v", err)
+	}
+
+	// The lock says yes to the group we are holding, which is what
+	// makes this worth a test at all.
+	if got, _, err := s.TryLock(context.Background(), AutoGroupLock(first.Group)); err != nil || !got {
+		t.Fatalf("the daemon refused a lock its own client holds: %v, %v", got, err)
+	}
+
+	rest := takeGroups(context.Background(), s, 2*AutoGroupSize, first.Group)
+	for _, a := range rest {
+		if a.Group == first.Group {
+			t.Errorf("group %d was taken twice", a.Group)
+		}
+	}
+	all := append([]*Auto{first}, rest...)
+	if n, distinct := objectsOf(all); n != distinct {
+		t.Errorf("%d objects between the groups and only %d of them distinct: "+
+			"two scripts would run in one object", n, distinct)
+	}
+}
+
+// TestWhatIsFreeIsWhatComesBack: every group after the first is taken
+// only if it is free right now.  Waiting for one while holding another
+// is the hold-and-wait that whole groups exist to prevent, so the answer
+// is simply smaller and the caller is expected to look at what it got.
+func TestWhatIsFreeIsWhatComesBack(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+	f.mu.Lock()
+	f.busy[AutoGroupLock(1)] = "a benchmark"
+	f.mu.Unlock()
+
+	as := takeGroups(context.Background(), s, AutoPool())
+	n, _ := objectsOf(as)
+	if want := AutoPool() - AutoGroupSize; n != want {
+		t.Errorf("%d objects came back with one group busy, want %d", n, want)
+	}
+	for _, a := range as {
+		if a.Group == 1 {
+			t.Error("the busy group was taken")
+		}
+	}
+	if got := f.Waited(); len(got) != 0 {
+		t.Errorf("waited on %v while holding a group", got)
+	}
+}
+
+// TestNoRoomIsAnEmptyAnswerAndNotAFailure: a caller asking for more than
+// one group already has one, so nothing free is slower rather than
+// wrong.  An error here would turn a run that could have gone ahead into
+// one that did not.
+func TestNoRoomIsAnEmptyAnswerAndNotAFailure(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+	allBusy(f, "somebody else")
+
+	if as := takeGroups(context.Background(), s, AutoPool()); len(as) != 0 {
+		t.Errorf("%d groups came back when every one was busy", len(as))
+	}
+}
+
+// TestAskingForOneGroupsWorthTakesOneGroup: the ceiling is what was
+// asked for and not what is free -- a run of four scripts that took
+// twelve objects would leave eight idle and a benchmark queueing behind
+// them.
+func TestAskingForOneGroupsWorthTakesOneGroup(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+
+	as := takeGroups(context.Background(), s, AutoGroupSize)
+	if len(as) != 1 {
+		t.Errorf("%d groups were taken for one group's worth of work", len(as))
+	}
+}
+
+// TestAPartGroupWearsOnlyWhatIsWanted: putting an object on costs
+// seconds, and the last group of a run that wants six objects needs two
+// of its four.  The lock still covers the whole group, which is what
+// makes it safe; the wearing is what is trimmed.
+func TestAPartGroupWearsOnlyWhatIsWanted(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+
+	as := takeGroups(context.Background(), s, AutoGroupSize+2)
+	n, _ := objectsOf(as)
+	if n != AutoGroupSize+2 {
+		t.Errorf("%d objects were worn for %d objects' worth of work",
+			n, AutoGroupSize+2)
+	}
+}

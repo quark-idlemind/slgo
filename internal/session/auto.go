@@ -170,6 +170,101 @@ func UseAutoAnywhere(ctx context.Context, o Options, n int) (*Auto, error) {
 	return a, nil
 }
 
+// UseAutoGroups finds somewhere to run n objects' worth of work, in as
+// many whole groups as that takes.
+//
+// This is the wider door beside UseAutoAnywhere, which takes one group
+// and is what a benchmark wants: four is the size of a group because
+// four is what quarterSearch uses, and a benchmark asking for more would
+// be asking for objects it would leave idle.  A program that simply has
+// twelve things to do at once wants twelve objects, and the group is the
+// unit they come in rather than a ceiling on how many can be had.
+//
+// It never waits while holding anything.  The first group is taken the
+// ordinary way, queue and all, because a caller that gets nothing at all
+// has to wait somewhere; every group after that is taken only if it is
+// free right now.  So the answer may be narrower than the question --
+// four objects where twelve were asked for -- and the caller is expected
+// to look at what it got rather than at what it wanted.  Waiting for the
+// second group while holding the first is the hold-and-wait that the
+// whole-group rule exists to prevent.
+//
+// Every group is on ONE avatar, the one the first group was found on.
+// Spreading across avatars would run some of the scripts as somebody
+// else, which is a different thing from running them faster.
+//
+// All of the sessions in the answer are that one session, and it is the
+// caller's to close -- once.
+func UseAutoGroups(ctx context.Context, o Options, n int) ([]*Auto, error) {
+	if n < 1 {
+		n = 1
+	}
+	want := n
+	if want > AutoGroupSize {
+		want = AutoGroupSize
+	}
+	first, err := UseAutoAnywhere(ctx, o, want)
+	if err != nil {
+		return nil, err
+	}
+	out := []*Auto{first}
+	have := len(first.Objects)
+	if have >= n {
+		return out, nil
+	}
+	return append(out, takeGroups(ctx, first.Session, n-have, first.Group)...), nil
+}
+
+// takeGroups takes what is free of the groups on one session, in ONE
+// pass, and gives back up to n objects' worth of them.
+//
+// One pass because a lock is re-entrant for the client holding it: the
+// daemon's acquire says so in as many words, since a client that asks
+// twice still holds it once.  That is right for a client asking again
+// and wrong for this -- a second pass would take a group this caller
+// already has, wear the same objects a second time, and hand two callers
+// the same object to run a script in.  Which group each Auto came from
+// is what says a group has been dealt with, so the ones already held are
+// named rather than discovered.
+//
+// Nothing here waits.  A group that is busy is somebody else's and the
+// answer is simply smaller.
+func takeGroups(ctx context.Context, s *sl.Session, n int, held ...int) []*Auto {
+	skip := map[int]bool{}
+	for _, g := range held {
+		skip[g] = true
+	}
+
+	var out []*Auto
+	for g := 0; g < AutoGroups() && n > 0; g++ {
+		if skip[g] {
+			continue
+		}
+		got, _, err := s.TryLock(ctx, AutoGroupLock(g))
+		if err != nil || !got {
+			continue
+		}
+		want := n
+		if want > AutoGroupSize {
+			want = AutoGroupSize
+		}
+		a, err := wearGroup(ctx, s, g, want)
+		if err != nil || len(a.Objects) == 0 {
+			s.Unlock(AutoGroupLock(g))
+			// Not fatal and not silent: an object that will not go on
+			// is one fewer script at a time, which is slower rather
+			// than wrong.
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "group %d: %v\n", g, err)
+			}
+			continue
+		}
+		out = append(out, a)
+		n -= len(a.Objects)
+	}
+	return out
+}
+
 // useAutoOn takes a group on one session.
 //
 // It tries every group without waiting first.  Only if wait is set, and

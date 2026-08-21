@@ -11,11 +11,13 @@
 // --rez rezzes a throwaway prim beside the avatar and deletes it
 // afterwards; both of those are one object, and so one script at a time.
 //
-// Several scripts run at once, one in each object the shared group has --
-// four, which is what the group is.  They finish in whatever order they
-// finish in, so every line printed says which script said it.  --jobs 1
-// puts them back in the order they were named, which is what a set of
-// scripts that leave things in the object for one another needs.
+// Several scripts run at once, one to an object: four of them by
+// default, which is a group, and --jobs asks for more -- eight or twelve
+// take two groups or three, as many as are free at the time.  They
+// finish in whatever order they finish in, so every line printed says
+// which script said it.  --jobs 1 puts them back in the order they were
+// named, which is what a set of scripts that leave things in the object
+// for one another needs.
 //
 // Second Life is not the only thing that runs LSL, and none of what
 // automate does is particular to it -- put a script somewhere, watch what
@@ -71,7 +73,7 @@ var flags = struct {
 	Backend string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life"`
 	Rez     bool          `getopt:"--rez             rez a throwaway prim instead of using the shared auto object"`
 	Script  string        `getopt:"--script=NAME     what to call the script inside the object"`
-	Jobs    int           `getopt:"--jobs=N -j       how many scripts to run at once; one per object, 4 at most, 1 to run them in order"`
+	Jobs    int           `getopt:"--jobs=N -j       how many scripts to run at once, one per object; 4 by default, more takes more groups, 1 runs them in order"`
 	Done    string        `getopt:"--done=TEXT       the text that means the script has finished"`
 	Timeout time.Duration `getopt:"--timeout=DUR     how long to wait for it"`
 	Keep    bool          `getopt:"--keep            leave the rezzed object behind"`
@@ -411,22 +413,18 @@ func runIn(ctx context.Context, o session.Options, n int) (*sl.Session, []*sl.Ob
 		return s, []*sl.Object{obj}, cleanup, nil
 	}
 
-	if flags.Jobs > session.AutoGroupSize {
-		// The pool refuses this too, and in its own words -- about
-		// benchmarks and deadlock, which is what the rule is there for.
-		// Said here as well because a person running scripts is owed the
-		// number rather than the reasoning behind it.
-		return nil, nil, nil, fmt.Errorf("--jobs %d wants %d objects and a group is %d; "+
-			"a group is the unit an object is taken in, and holding two of them "+
-			"is how two runs deadlock",
-			flags.Jobs, flags.Jobs, session.AutoGroupSize)
+	if most := session.AutoPool(); flags.Jobs > most {
+		return nil, nil, nil, fmt.Errorf("--jobs %d wants %d objects and an avatar "+
+			"has %d, in %d groups of %d; \"slsh auto -n %d\" is what makes more",
+			flags.Jobs, flags.Jobs, most, session.AutoGroups(), session.AutoGroupSize,
+			flags.Jobs)
 	}
 
 	// Objects are taken as a whole GROUP however few are wanted: the
 	// group is the unit of exclusion, and taking a single object out of
 	// one would let a benchmark holding that group use it at the same
-	// time.  So asking for all four costs nothing that asking for one
-	// did not already cost.
+	// time.  So asking for all four of a group costs nothing that asking
+	// for one did not already cost, and past four it is another group.
 	want := flags.Jobs
 	if want < 1 {
 		want = session.AutoGroupSize
@@ -434,12 +432,29 @@ func runIn(ctx context.Context, o session.Options, n int) (*sl.Session, []*sl.Ob
 	if want > n {
 		want = n
 	}
-	a, err := session.UseAutoAnywhere(ctx, o, want)
+	as, err := session.UseAutoGroups(ctx, o, want)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if o.Agent == "" {
-		fmt.Fprintf(os.Stderr, "running as %s\n", a.Agent)
+
+	var objs []*sl.Object
+	for _, a := range as {
+		objs = append(objs, a.Objects...)
 	}
-	return a.Session, a.Objects, a.Release, nil
+	if o.Agent == "" {
+		fmt.Fprintf(os.Stderr, "running as %s\n", as[0].Agent)
+	}
+	// Said when it is short, and only then.  Somebody who asked for
+	// twelve and got four is owed the number: the run is slower than
+	// they planned for and nothing else about it looks wrong.
+	if len(objs) < want {
+		fmt.Fprintf(os.Stderr,
+			"%d of the %d objects asked for are free; running %d at a time\n",
+			len(objs), want, len(objs))
+	}
+	return as[0].Session, objs, func() {
+		for _, a := range as {
+			a.Release()
+		}
+	}, nil
 }

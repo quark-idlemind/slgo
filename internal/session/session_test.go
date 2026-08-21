@@ -432,13 +432,19 @@ func (f *fakeGrid) Unlock(name string) error {
 	return nil
 }
 
+// TryLock takes a lock, and takes one this caller already holds AGAIN --
+// which is what the daemon does, and is worth copying rather than
+// tidying.  server/lock.go's acquire says it in as many words: a client
+// that asks twice still holds it once.  A fake that refused instead
+// would hide the one bug this can cause, which is a caller taking a
+// group it already has and being handed the same objects a second time.
 func (f *fakeGrid) TryLock(ctx context.Context, name string) (bool, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.lockErr != nil {
 		return false, "", f.lockErr
 	}
-	if by := f.busy[name]; by != "" {
+	if by := f.busy[name]; by != "" && by != "us" {
 		return false, by, nil
 	}
 	f.busy[name] = "us"

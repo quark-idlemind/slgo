@@ -394,7 +394,7 @@ down on your machine, and there is no cache to go stale.
 ### Several scripts at once
 
 Scripts named on one command line run in different objects at the same
-time, four at once because the group is four:
+time, four at once by default because four is a group:
 
     $ automate a.lsl b.lsl c.lsl d.lsl
     c.lsl: c starting
@@ -415,7 +415,27 @@ interleaved, which is what the tag in front of every line is for. The
 tags are padded to the widest name on the command line so that they read
 as a column.
 
-`--jobs N` is how many run at once, four at most.
+`--jobs N` is how many run at once. Past four it takes another group:
+`--jobs 8` is two groups and `--jobs 12` is three, which is the whole of
+what one avatar wears. Eight scripts of three seconds each took **6.9
+seconds** measured, against about 35 one at a time.
+
+Only the FIRST group is queued for. The ones after it are taken if they
+are free at that moment and skipped if they are not, because waiting for
+a second group while holding the first is the one thing that could
+deadlock two runs against each other. So `--jobs 12` on a busy avatar may
+get four objects, and when it does it says so:
+
+    4 of the 12 objects asked for are free; running 4 at a time
+
+Asking for more than the avatar has is refused rather than rounded down,
+and says how to make more (`slsh auto -n 12`).
+
+An object that has never run a script from `automate` is slower the
+first time: creating the script item costs about eight seconds where
+replacing one already there costs about one. Measured, the first
+`--jobs 8` run took 14.5 seconds because three of its objects were new
+to it, and the next took 6.9.
 
 `--jobs 1` runs them in the order they were named, one after another,
 and is what a set of scripts that leave something in the object for one
@@ -495,7 +515,7 @@ compiled, ran and finished.
 | `--done TEXT` | the text that means "finished" (default `DONE`); matched as a substring |
 | `--timeout DUR` | how long to wait for it (default `1m0s`); a bare number is refused -- the unit is required |
 | `--script NAME` | what to call the script inside the object (default `automate`, which is the name a fault is reported under) |
-| `--jobs N`, `-j N` | how many scripts to run at once, one per object and four at most (the default); `1` runs them in the order they were named |
+| `--jobs N`, `-j N` | how many scripts to run at once, one per object; four (a group) by default, more takes more groups, `1` runs them in the order they were named |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there -- a simulator, or a viewer daemon -- instead of in Second Life |
 
 ---
