@@ -98,6 +98,13 @@ var groups = []group{
 		// other things done to an object that is already standing
 		// there rather than beside them.
 		//
+		// landmark is beside tp because the two are one question asked
+		// in two ways: tp is a place said in numbers and landmark is
+		// the same place said by name, and the name is the half that
+		// survives being written down.  It is also an inventory
+		// command, and it is not listed under inventory: what a person
+		// wants from it is to be somewhere else.
+		//
 		// sit and stand are here beside tp and touch rather than in a
 		// group of their own: a sit MOVES the avatar, up to about ten
 		// metres, so the question it answers is tp's -- how do I get
@@ -105,7 +112,7 @@ var groups = []group{
 		// "unsit" is stand under another name and is not listed, since
 		// a listing that showed one command twice would say nothing
 		// extra about either.
-		members: []string{"where", "parcel", "group", "tp", "sit", "stand", "who", "look", "map", "regions", "neighbours",
+		members: []string{"where", "parcel", "group", "tp", "landmark", "sit", "stand", "who", "look", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "move", "dump", "rez", "reform", "touch", "texture",
 			"take", "place", "perms", "drop", "start", "stop", "link", "unlink"},
