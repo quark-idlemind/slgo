@@ -2,6 +2,7 @@ package sl
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/quark-idlemind/slgo/msg"
@@ -152,5 +153,181 @@ func TestOffsetsAndRotationAreQuantised(t *testing.T) {
 	}
 	if d := tt + 0.5; d > 1e-4 || d < -1e-4 {
 		t.Errorf("offset t came back %v", tt)
+	}
+}
+
+// ------------------------------------------------ reading it back again
+
+// aRegionThatKeepsTheAppearance is a fake grid that behaves the way a
+// measured one does: an ObjectImage changes what the object really
+// looks like and the region says nothing about it afterwards, so the
+// only way to see the change is to ask for the object to be described
+// again.
+//
+// The session's own store is modelled too, since that is where the lag
+// lives: the appearance held there is dropped when the change goes out
+// -- agent.Objects.sent does that on the daemon -- and filled in again
+// when the region answers a request.
+func aRegionThatKeepsTheAppearance(t *testing.T, f *fakeBackend, faces []Face) func() []Face {
+	t.Helper()
+	truth := append([]Face(nil), faces...)
+	var mu sync.Mutex
+
+	te, err := EncodeTextureEntry(truth)
+	if err != nil {
+		t.Fatalf("EncodeTextureEntry: %v", err)
+	}
+	f.mu.Lock()
+	f.objects = []*Seen{{Object: Object{ID: thePrim, Local: 4242, Name: "a thing"}, TextureEntry: te}}
+	f.onSend = func(m msg.Message) {
+		switch v := m.(type) {
+		case *msg.ObjectImage:
+			got, err := DecodeTextureEntry(v.ObjectData[0].TextureEntry, len(truth))
+			if err != nil {
+				t.Errorf("the blob that went out does not decode: %v", err)
+				return
+			}
+			mu.Lock()
+			truth = got
+			mu.Unlock()
+			// What the session held is now wrong and nothing will
+			// correct it.
+			f.mu.Lock()
+			f.objects[0].TextureEntry = nil
+			f.mu.Unlock()
+		case *msg.RequestMultipleObjects:
+			mu.Lock()
+			b, err := EncodeTextureEntry(truth)
+			mu.Unlock()
+			if err != nil {
+				t.Errorf("EncodeTextureEntry: %v", err)
+				return
+			}
+			f.mu.Lock()
+			f.objects[0].TextureEntry = b
+			f.mu.Unlock()
+		}
+	}
+	f.mu.Unlock()
+
+	return func() []Face {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]Face(nil), truth...)
+	}
+}
+
+// TestFacesAsksTheRegionWhenNothingHasDescribedTheAppearance.
+//
+// An object with no appearance held against it is the state a change
+// leaves behind, so reading one has to be an asking rather than a
+// shrug: answering plain white there is answering with the wrong
+// object.
+func TestFacesAsksTheRegionWhenNothingHasDescribedTheAppearance(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	red := PlainFaces(8)
+	for i := range red {
+		red[i].SetColour(255, 0, 0)
+	}
+	aRegionThatKeepsTheAppearance(t, f, red)
+
+	// Nothing here has described it: the appearance is only had by
+	// asking.
+	f.mu.Lock()
+	f.objects[0].TextureEntry = nil
+	f.mu.Unlock()
+
+	got, err := w.Faces(context.Background(), aThing())
+	if err != nil {
+		t.Fatalf("Faces: %v", err)
+	}
+	if len(sentOf[*msg.RequestMultipleObjects](f)) != 1 {
+		t.Fatalf("the region was asked %d times to describe it, want 1; all of them: %s",
+			len(sentOf[*msg.RequestMultipleObjects](f)), f.describe())
+	}
+	if got[0].Colour != [4]uint8{255, 0, 0, 255} {
+		t.Errorf("face 0 read back as %v, want the red the region holds", got[0].Colour)
+	}
+}
+
+// TestFacesAsksNothingWhenItAlreadyKnows: the asking is what a change
+// costs, and a read of a settled object must not pay it.
+func TestFacesAsksNothingWhenItAlreadyKnows(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	aRegionThatKeepsTheAppearance(t, f, PlainFaces(8))
+
+	if _, err := w.Faces(context.Background(), aThing()); err != nil {
+		t.Fatalf("Faces: %v", err)
+	}
+	if n := len(sentOf[*msg.RequestMultipleObjects](f)); n != 0 {
+		t.Errorf("%d requests went out for an appearance already known", n)
+	}
+}
+
+// TestTwoChangesInARowCompose, which is the whole point of forgetting
+// an appearance that has been replaced.
+//
+// Measured on a live region before any of this: colouring every face
+// and then one face alone left the other five as they had been before
+// the first change, because the second read the appearance from before
+// it.
+func TestTwoChangesInARowCompose(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	truth := aRegionThatKeepsTheAppearance(t, f, PlainFaces(8))
+
+	ctx := context.Background()
+	if err := w.SetFace(ctx, aThing(), AllFaces, func(fc *Face) { fc.SetColour(255, 0, 0) }); err != nil {
+		t.Fatalf("colouring every face: %v", err)
+	}
+	if err := w.SetFace(ctx, aThing(), 2, func(fc *Face) { fc.SetColour(0, 255, 0) }); err != nil {
+		t.Fatalf("colouring face 2: %v", err)
+	}
+
+	for i, fc := range truth() {
+		want := [4]uint8{255, 0, 0, 255}
+		if i == 2 {
+			want = [4]uint8{0, 255, 0, 255}
+		}
+		if fc.Colour != want {
+			t.Errorf("face %d ended up %v, want %v", i, fc.Colour, want)
+		}
+	}
+}
+
+// TestAChangeRefusesAnAppearanceNothingHasDescribed.
+//
+// A report can settle for plain white, since a prim nothing has
+// described is a plain white prim.  A change cannot: it sends every
+// face, so the stand-in would go out as the object's real appearance
+// and wipe whatever it wore.  Refusing costs a retry; the other way
+// costs the object.
+func TestAChangeRefusesAnAppearanceNothingHasDescribed(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	// Described, but never described a look -- and nothing answers the
+	// asking either.
+	f.objects = []*Seen{{Object: Object{ID: thePrim, Local: 4242, Name: "a thing"}}}
+	f.mu.Unlock()
+
+	err := w.SetFace(context.Background(), aThing(), 0, func(fc *Face) { fc.SetColour(255, 0, 0) })
+	if err == nil {
+		t.Fatal("a change went out against an appearance nothing had described")
+	}
+	if n := len(sentOf[*msg.ObjectImage](f)); n != 0 {
+		t.Errorf("%d changes went out anyway", n)
+	}
+
+	// The report is still answered, because white is the truth about
+	// such a prim.
+	faces, err := w.Faces(context.Background(), aThing())
+	if err != nil {
+		t.Fatalf("Faces: %v", err)
+	}
+	if faces[0].Colour != [4]uint8{255, 255, 255, 255} {
+		t.Errorf("the report read %v, want plain white", faces[0].Colour)
 	}
 }

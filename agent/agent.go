@@ -347,6 +347,27 @@ type Options struct {
 	Idle time.Duration
 }
 
+// sendTap is the hook every message this session puts on the wire goes
+// through, wrapping whatever the caller asked for.
+//
+// It is the one place every path out reaches: a direct caller, a client
+// of the daemon sending raw bytes, and a viewer bridged onto this
+// circuit all end up here.  What it is for is Objects.sent -- a change
+// to an appearance makes what this session knows wrong, and nothing
+// arrives afterwards to say so.
+//
+// The caller's tap is still called, after.  It is a trace, and a trace
+// that stopped working because something else wanted the hook would be
+// a bad trade.
+func (a *Agent) sendTap(user msg.Handler) msg.SenderOption {
+	return msg.WithSendTap(func(p *msg.Packet) {
+		a.Objects().sent(p)
+		if user != nil {
+			user(p)
+		}
+	})
+}
+
 // Connect opens the circuit and completes the handshake.
 func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	if acct == nil {
@@ -385,13 +406,9 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 
 	a.seedFriends(acct.Buddies)
 
-	var sendOpts []msg.SenderOption
-	if opts.SendTap != nil {
-		sendOpts = append(sendOpts, msg.WithSendTap(opts.SendTap))
-	}
 	// Both are given the holder rather than the connection, which is
 	// what lets a move change the connection without changing them.
-	a.Send = msg.NewSender(a.sock, sendOpts...)
+	a.Send = msg.NewSender(a.sock, a.sendTap(opts.SendTap))
 	a.Recv = msg.NewReceiver(a.sock, opts.Recv...)
 
 	dopts := []msg.DispatcherOption{

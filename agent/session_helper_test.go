@@ -111,7 +111,6 @@ func offlineSession(t *testing.T) (*Agent, *sentPackets) {
 			FirstName: "Example",
 			LastName:  "Resident",
 		},
-		Send:      msg.NewSender(w),
 		Disp:      msg.NewDispatcher(),
 		done:      make(chan struct{}),
 		anyPacket: newSignal(),
@@ -119,6 +118,10 @@ func offlineSession(t *testing.T) (*Agent, *sentPackets) {
 		handshook: newSignal(),
 		loggedOut: newSignal(),
 	}
+	// The sender is built the way Connect builds it, tap and all, so
+	// that what a test sends goes through what a session sends
+	// through.
+	a.Send = msg.NewSender(w, a.sendTap(nil))
 	a.register()
 
 	ctx, cancel := context.WithCancel(context.Background())

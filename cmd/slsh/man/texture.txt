@@ -8,30 +8,34 @@ The object is named by the word the region calls it or by its key.
 Without --face every face is meant, which is what "make this thing red"
 usually means; with it, one face, counting as LSL counts them.
 
-# One command, not several in a row
+# A change reads the object first, and asks
 
 The message that changes an appearance carries the whole of it -- every
 face, together -- so a change has to read what the object looks like
-now and send it all back with one face altered.  What it reads is the
-last appearance the region described, and the region does not describe
-a new one when the change lands: the reading stays as it was.
+now and send it all back with one face altered.
 
-Two runs therefore both start from the appearance before either, and
-the second undoes the first everywhere it did not touch.  Measured:
-texturing every face and then face 2 alone left faces 0 and 1 plain.
+The region never describes the result, and waiting does not change
+that.  Measured: colouring every face of a box red, waiting forty
+seconds, and then colouring face 0 green left face 0 green and every
+other face exactly as it had been before the red -- the red was gone
+from all six.  The reading had not moved in those forty seconds either:
+the report still described the box as it was before the first run.
+What brought it up to date was taking the box into inventory and
+putting it out again, which is a new object and gets described afresh.
 
-Waiting does not get round it, which was worth measuring because it is
-the obvious thing to try.  Colouring every face of a box red, waiting
-forty seconds, and then colouring face 0 green left face 0 green and
-every other face exactly as it had been before the red -- the red was
-gone from all six.  The reading had not moved in those forty seconds
-either: the report still described the box as it was before the first
-run.
+So the session forgets instead.  A change drops the appearance it holds
+for that object as the message goes out, and the next read of that
+object asks the region to describe it again: two tenths of a second,
+measured, and paid only when somebody looks.  Two runs in a row then
+compose -- every face red and then face 2 green leaves five red faces
+and a green one -- which was watched happening with a build that asked
+on every read, the asking being the same request either way.
 
-So several changes to one object belong in one command line, where they
-are applied to one reading and sent once.  Everything is parsed before
-anything is sent, so a typo in the last flag refuses the lot rather
-than leaving the object half changed.
+Several changes to one object still belong in one command line, where
+they are applied to one reading and sent once and nothing has to be
+asked for in between.  Everything is parsed before anything is sent, so
+a typo in the last flag refuses the lot rather than leaving the object
+half changed.
 
 # What the report says, and what it is reading
 
@@ -45,17 +49,16 @@ or a hollow has opened new surfaces.  Where the shape is not known the
 answer is the eight a prim can have at most, which costs a little space
 and loses nothing.
 
-A prim nothing has described the appearance of reads as plain white.
-That is the truth about it rather than a guess: an object can be known
-to be there before anything has said what it looks like, and a prim
-with no appearance recorded against it is a plain white prim.
+A prim nothing has described the appearance of is asked about first,
+and reads as plain white if the region does not answer within three
+seconds.  White is the truth about such a prim rather than a guess: an
+object can be known to be there before anything has said what it looks
+like, and a prim with no appearance recorded against it is a plain
+white prim.
 
-What the report is reading is the cache a change starts from, so it
-lags in the same way and for as long: after a change, what it prints
-is the appearance from before it.  What brings it up to date is the
-object being described afresh, which in the measurement above meant
-taking the box into inventory and putting it out again -- the reading
-was then the one the changes had actually left behind.
+The report reads what a change reads and asks for the same reason, so
+an object whose appearance was dropped by a change is described again
+before it is printed.  What it prints is what the region says now.
 
 # Examples
 

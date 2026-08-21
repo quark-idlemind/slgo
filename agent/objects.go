@@ -623,6 +623,86 @@ func (o *Objects) kill(local uint32) {
 	}
 }
 
+// forgetAppearance drops what the store believes these objects look
+// like, keeping everything else known about them, and returns how many
+// it forgot.
+//
+// By local id, because the message that changes an appearance names
+// objects that way, so this is the same scan kill is.
+func (o *Objects) forgetAppearance(locals ...uint32) int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	n := 0
+	for _, local := range locals {
+		for _, v := range o.byID {
+			if v.Local != local {
+				continue
+			}
+			if v.TextureEntry != nil {
+				v.TextureEntry = nil
+				n++
+			}
+			break
+		}
+	}
+	return n
+}
+
+// objectImage is the message that changes an appearance, looked up once.
+var objectImage = (&msg.ObjectImage{}).MsgInfo().ID
+
+// sent is what the store makes of a message this session has just put
+// on the wire.
+//
+// Only one message matters: ObjectImage replaces every face of an
+// object at once, and the region does NOT describe the result.  Nothing
+// arrives to correct the appearance held here, so what is held goes on
+// describing the object as it was before the change -- for as long as
+// the session lasts.
+//
+// Measured on a live region, on a box of six faces: every face
+// coloured red, and forty seconds later the reading had not moved --
+// it still described the box as it had been before the red.  Worse,
+// the next change starts from that reading, since a client must send
+// every face and so reads the appearance first: colouring every face
+// blue and then face 0 white left face 0 white and the other five back
+// at the red they had been before the blue.
+//
+// So the appearance is forgotten rather than corrected.  Correcting it
+// means asking the region to describe the object again, which is a
+// round trip nothing has asked for yet; forgetting costs nothing and
+// leaves the next reader to ask, which sl.Session.Faces does.
+//
+// It is forgotten whether or not the change is one the region will
+// accept.  A refused change is never reported -- ObjectImage has no
+// reply of any kind -- so "it may not have worked" is not a state that
+// can be told from "it worked", and the only cache that is honest
+// about both is no cache.
+func (o *Objects) sent(p *msg.Packet) {
+	if p == nil || p.Message == nil || p.ID != objectImage {
+		return
+	}
+	m, ok := p.Message.(*msg.ObjectImage)
+	if !ok {
+		// A client of the daemon sends bytes rather than a type: what
+		// goes on the wire for it is a msg.Raw, and Encode gives the
+		// body back unchanged.
+		b, err := p.Message.Encode()
+		if err != nil {
+			return
+		}
+		m = &msg.ObjectImage{}
+		if err := m.Decode(b); err != nil {
+			return
+		}
+	}
+	locals := make([]uint32, 0, len(m.ObjectData))
+	for i := range m.ObjectData {
+		locals = append(locals, m.ObjectData[i].ObjectLocalID)
+	}
+	o.forgetAppearance(locals...)
+}
+
 // trackObjects registers the handlers that keep the registry current.
 //
 // They are inline so that the picture is up to date before anything

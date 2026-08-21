@@ -953,3 +953,120 @@ func TestCachedObjectsStopWhenTheCircuitHasGone(t *testing.T) {
 		t.Errorf("%d datagrams went out on a closed circuit", n)
 	}
 }
+
+// ------------------------------------- what this session's own sends do
+
+// TestASentObjectImageForgetsTheAppearance.
+//
+// ObjectImage replaces every face of an object at once and the region
+// describes nothing afterwards, so what is held here goes on describing
+// the object as it was.  Forgetting is what makes the next read ask.
+func TestASentObjectImageForgetsTheAppearance(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	o.compressed(decodeCompressed(t, compressedObject{
+		id: aPrim, local: 1, pcode: 9, owner: anOwner,
+		text: someText, texture: []byte{7},
+	}), msg.Vector3{}, 0)
+
+	m := &msg.ObjectImage{}
+	m.ObjectData = []msg.ObjectImage_ObjectData{{ObjectLocalID: 1, TextureEntry: []byte{9}}}
+	o.sent(&msg.Packet{ID: m.MsgInfo().ID, Message: m})
+
+	got, ok := o.Get(aPrim)
+	if !ok {
+		t.Fatal("the object itself was forgotten, and only its appearance should have been")
+	}
+	if len(got.TextureEntry) != 0 {
+		t.Errorf("the appearance survived the change: %v", got.TextureEntry)
+	}
+	// Everything else about it was heard from the region and is still
+	// true.
+	if got.Owner != anOwner || got.Text != someText || got.Local != 1 {
+		t.Errorf("forgetting the appearance took the rest with it: %+v", got)
+	}
+}
+
+// TestAClientsObjectImageForgetsItToo: a client of the daemon sends
+// bytes and a message number, so what goes on the wire for it is a
+// msg.Raw and not the type.  Reading only the type would fix the
+// direct sessions and leave every client of slgod -- which is what
+// "slsh texture" is -- exactly as it was.
+func TestAClientsObjectImageForgetsItToo(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	o.compressed(decodeCompressed(t, compressedObject{
+		id: aPrim, local: 288331, pcode: 9, texture: []byte{7},
+	}), msg.Vector3{}, 0)
+
+	m := &msg.ObjectImage{}
+	m.ObjectData = []msg.ObjectImage_ObjectData{{ObjectLocalID: 288331, TextureEntry: []byte{9}}}
+	body, err := m.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	raw := msg.NewRaw(m.MsgInfo().ID, body)
+	o.sent(&msg.Packet{ID: raw.MsgInfo().ID, Message: raw})
+
+	got, _ := o.Get(aPrim)
+	if len(got.TextureEntry) != 0 {
+		t.Errorf("a client's change left the appearance in place: %v", got.TextureEntry)
+	}
+}
+
+// TestOtherMessagesLeaveTheAppearanceAlone: everything this session
+// sends passes the same hook, and forgetting on the wrong one would
+// cost a request for every message that went out.
+func TestOtherMessagesLeaveTheAppearanceAlone(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	o.compressed(decodeCompressed(t, compressedObject{
+		id: aPrim, local: 1, pcode: 9, texture: []byte{7},
+	}), msg.Vector3{}, 0)
+
+	sel := &msg.ObjectSelect{}
+	sel.ObjectData = []msg.ObjectSelect_ObjectData{{ObjectLocalID: 1}}
+	o.sent(&msg.Packet{ID: sel.MsgInfo().ID, Message: sel})
+
+	got, _ := o.Get(aPrim)
+	if len(got.TextureEntry) != 1 {
+		t.Errorf("selecting an object forgot what it looks like: %v", got.TextureEntry)
+	}
+}
+
+// TestTheChangeIsNoticedOnTheWayOut: the forgetting hangs off the send
+// tap, which is the one place a direct caller, a client of the daemon
+// and a bridged viewer all pass through.  Without the tap installed
+// every test above still passes and nothing whatsoever is forgotten.
+func TestTheChangeIsNoticedOnTheWayOut(t *testing.T) {
+	t.Parallel()
+
+	a, w := offlineSession(t)
+	a.Objects().compressed(decodeCompressed(t, compressedObject{
+		id: aPrim, local: 1, pcode: 9, texture: []byte{7},
+	}), msg.Vector3{}, 0)
+
+	m := &msg.ObjectImage{}
+	m.ObjectData = []msg.ObjectImage_ObjectData{{ObjectLocalID: 1, TextureEntry: []byte{9}}}
+	if err := a.Send.Send(context.Background(), m); err != nil {
+		t.Fatalf("sending the change: %v", err)
+	}
+	w.waitFor(t, 1)
+
+	// The tap runs after the datagram is written, so the write being
+	// recorded is not yet the forgetting having happened.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		got, _ := a.Objects().Get(aPrim)
+		if len(got.TextureEntry) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the appearance survived a change on the wire: %v", got.TextureEntry)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}

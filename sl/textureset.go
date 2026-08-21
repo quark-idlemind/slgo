@@ -240,31 +240,106 @@ func (w *Session) SetFaces(ctx context.Context, o *Object, faces []Face) error {
 // since the blob does not say -- a face that never differed from the
 // default leaves no trace in it.
 //
-// A prim nothing has described yet reads as plain white rather than as
-// an error: an object can be known to be there before anything has said
-// what it looks like, and a prim with no appearance recorded against it
-// is a plain white prim, so PlainFaces is the truth about it rather
-// than a guess.
+// A prim nothing has described the appearance of is asked about before
+// it is answered for, because that is the state a change leaves
+// behind: the session forgets an appearance it has just replaced,
+// since the region will not mention the replacement.  See
+// agent.Objects.sent.
 //
-// What comes back is the last appearance the REGION described, which
-// lags a change made a moment ago; see SetFace.
+// One the region does not describe when asked reads as plain white
+// rather than as an error: an object can be known to be there before
+// anything has said what it looks like, and a prim with no appearance
+// recorded against it is a plain white prim, so PlainFaces is the
+// truth about it rather than a guess.
 func (w *Session) Faces(ctx context.Context, o *Object) ([]Face, error) {
+	faces, _, err := w.faces(ctx, o)
+	return faces, err
+}
+
+// faces is Faces, saying as well whether anything actually described
+// the appearance or the answer is the plain white stand-in.
+//
+// The difference does not matter to a report and matters entirely to a
+// change: a change sends every face, so building one on the stand-in
+// would blank whatever the object really looks like.  See SetFace.
+func (w *Session) faces(ctx context.Context, o *Object) ([]Face, bool, error) {
 	if o == nil {
-		return nil, fmt.Errorf("sl: nothing to look at")
+		return nil, false, fmt.Errorf("sl: nothing to look at")
 	}
 	seen, err := w.ObjectByID(ctx, o.ID, 30*time.Second)
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	if len(seen.TextureEntry) == 0 {
+		again, err := w.describeAgain(ctx, seen)
+		if err != nil {
+			return nil, false, err
+		}
+		if again != nil {
+			seen = again
+		}
 	}
 	n := facesOf(seen)
 	faces, err := seen.Faces(n)
 	if err != nil {
 		if len(seen.TextureEntry) > 0 {
-			return nil, fmt.Errorf("sl: reading what %s looks like: %w", o, err)
+			return nil, false, fmt.Errorf("sl: reading what %s looks like: %w", o, err)
 		}
-		return PlainFaces(n), nil
+		return PlainFaces(n), false, nil
 	}
-	return faces, nil
+	return faces, true, nil
+}
+
+// describeAgainFor is how long to wait for the region to say what an
+// object looks like, having been asked.
+//
+// Measured on a live region: a full update carrying the appearance came
+// back 100 to 200ms after the request, every time it was tried.  Three
+// seconds is that with room for a busy simulator, and running out is
+// not an error -- an object nothing will describe reads as plain white,
+// which is what it did before anything asked.
+const describeAgainFor = 3 * time.Second
+
+// describeAgain asks the region to describe an object it has already
+// described, and waits for the answer.
+//
+// The request is the one a viewer sends for a cache miss, which is
+// exactly what this is: the session is missing an appearance it once
+// had.  What comes back is an ordinary full update, so it lands in the
+// object store the same way everything else does and this reads it from
+// there rather than watching for the packet.
+//
+// A nil answer means nothing arrived in time and the caller should make
+// do with what it had.
+func (w *Session) describeAgain(ctx context.Context, seen *Seen) (*Seen, error) {
+	if seen.Local == 0 {
+		return nil, nil
+	}
+	m := &msg.RequestMultipleObjects{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.ObjectData = []msg.RequestMultipleObjects_ObjectData{
+		// Miss type 0 is "I have nothing at all", which is the truth
+		// once the appearance has been forgotten.
+		{CacheMissType: 0, ID: seen.Local},
+	}
+	if err := w.Send(ctx, m); err != nil {
+		return nil, err
+	}
+
+	deadline := time.Now().Add(describeAgainFor)
+	for time.Now().Before(deadline) {
+		if err := w.Settle(ctx, 100*time.Millisecond); err != nil {
+			return nil, err
+		}
+		found, err := w.fetch(ctx, "", seen.ID.String())
+		if err != nil {
+			return nil, err
+		}
+		if len(found) > 0 && len(found[0].TextureEntry) > 0 {
+			return found[0], nil
+		}
+	}
+	return nil, nil
 }
 
 // SetFace changes one face and leaves the others as they are.
@@ -278,23 +353,35 @@ func (w *Session) Faces(ctx context.Context, o *Object) ([]Face, error) {
 // blob, since faces that never differed from the default leave no
 // trace in it.
 //
-// # It reads a cache, and the cache lags
+// # What it reads, and what that costs
 //
-// What it reads back is the last appearance the region described, and
-// the region does not describe one the instant it is changed.  Two
-// SetFace calls in quick succession therefore both start from the
-// appearance BEFORE either -- the second undoes the first everywhere
-// it did not touch.  Measured: texturing every face and then face 2
-// alone left faces 0 and 1 plain.
+// The region does not describe an appearance when it is changed, so
+// the session forgets the one it held as the change went out -- see
+// agent.Objects.sent -- and the read here asks the region for it
+// again.  Measured on a live region: the answer came back in 100 to
+// 200ms, and two changes in a row then composed, every face red
+// followed by face 2 green leaving five red faces and a green one.
+// Without the asking they did not: the red was gone from all six.
+// The composing was watched with a build that asked on every read
+// rather than only on a forgotten one; the request that goes out and
+// the answer that comes back are the same either way.
 //
-// So SetFace is for one change at a time against an object that has
-// settled.  A caller making several should keep the faces it built and
-// send them with SetFaces, which is the whole appearance in one
-// message and has nothing to read back.
+// A caller changing several faces should still send them together with
+// SetFaces, which is the whole appearance in one message and asks the
+// region nothing.
+//
+// If the region will not say what the object looks like, this refuses
+// rather than working from the plain white a report settles for.  The
+// message replaces every face, so a change built on that stand-in would
+// wipe whatever the object really wore -- which is the thing this whole
+// arrangement exists to stop, and refusing costs a retry.
 func (w *Session) SetFace(ctx context.Context, o *Object, face int, change func(*Face)) error {
-	faces, err := w.Faces(ctx, o)
+	faces, known, err := w.faces(ctx, o)
 	if err != nil {
 		return err
+	}
+	if !known {
+		return fmt.Errorf("sl: nothing has said what %s looks like, and a change would replace every face of it", o)
 	}
 	switch {
 	case face == AllFaces:
