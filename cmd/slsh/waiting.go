@@ -471,7 +471,12 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		if err != nil {
 			return err
 		}
-		if err := sh.s.AcceptInventoryOffer(ctx, w.item, into); err != nil {
+		// The offer's own Accept, not the session call underneath it:
+		// that one sends the answer and leaves the offer on the books.
+		// Answering through it left the item in this listing, under the
+		// same number and still counted, so "answer N" a second time
+		// sent the grid a second acceptance of an offer already taken.
+		if err := w.item.Accept(ctx, into); err != nil {
 			return err
 		}
 		fmt.Fprintf(out, "took %q from %s\n", w.item.Name, w.who())
@@ -629,7 +634,10 @@ func cmdNo(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		}
 		fmt.Fprintf(out, "declined the teleport from %s\n", w.who())
 	case w.item != nil:
-		if err := sh.s.DeclineInventoryOffer(ctx, w.item); err != nil {
+		// The offer's own Decline: the session call underneath it sends
+		// the refusal without forgetting the offer, which left it here
+		// to be refused again.  See cmdAnswer.
+		if err := w.item.Decline(ctx); err != nil {
 			return err
 		}
 		fmt.Fprintf(out, "declined %q from %s\n", w.item.Name, w.who())

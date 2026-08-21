@@ -1228,15 +1228,67 @@ func TestAnInventoryOfferIsNotWhatAcceptMeansWhileAFriendshipOfferWaits(t *testi
 		t.Errorf("accept of a named inventory offer printed %q", got)
 	}
 
-	// Two of them and nothing else waiting is an ambiguity as well.
+	// Two of them and nothing else waiting is an ambiguity as well, and
+	// is refused as one -- see the test below, which is where that used
+	// to come out as "no offers waiting".
 	x.grid.Relay(t, offering(testFriend, "A Friend", "a lamp", sl.AssetObject, testLamp))
 	x.grid.Relay(t, offering(testOther, "Some Other", "a notecard", sl.AssetNotecard, testNote))
 	waitForOffers(t, x, 0, 2)
-	if got := x.do(t, "accept"); !strings.Contains(got, "no offers waiting") {
+	if got := x.do(t, "accept"); !strings.Contains(got, "2 items offered") {
 		t.Errorf("accept with two inventory offers printed %q", got)
 	}
 	if got := x.do(t, "decline a notecard"); !strings.Contains(got, `declined "a notecard"`) {
 		t.Errorf("decline of a named inventory offer printed %q", got)
+	}
+}
+
+// TestTwoItemsWaitingIsAnAmbiguityRatherThanAnEmptyList.
+//
+// Measured: with two inventory offers waiting, no friendship offer and
+// nothing typed, both accept and decline said "no offers waiting"
+// while "offers" listed both of them.  A bare command looked for an
+// item, found two, declined to choose, and then fell through to the
+// friendship offers -- of which there were none, and it was the
+// friendship path that wrote the sentence.
+//
+// The rule the friendship offers already keep is the one to match: an
+// ambiguity is refused with a count, and nothing is answered by
+// accident.
+func TestTwoItemsWaitingIsAnAmbiguityRatherThanAnEmptyList(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.Relay(t, offering(testFriend, "A Friend", "a lamp", sl.AssetObject, testLamp))
+	x.grid.Relay(t, offering(testOther, "Some Other", "a lamp stand", sl.AssetObject, testNote))
+	waitForOffers(t, x, 0, 2)
+
+	for _, cmd := range []string{"accept", "decline"} {
+		got := x.do(t, cmd)
+		if strings.Contains(got, "no offers waiting") {
+			t.Errorf("%s with two items offered says there are none: %q", cmd, got)
+		}
+		if !strings.Contains(got, "2 items offered") {
+			t.Errorf("%s should say how many are offered: %q", cmd, got)
+		}
+	}
+
+	// A word that fits both is the same ambiguity reached by naming.
+	// This answered the older of the two and said nothing whatever
+	// about the newer.
+	if got := x.do(t, "accept lamp"); !strings.Contains(got, "matches 2 offered items") {
+		t.Errorf("an item name matching two offers printed %q", got)
+	}
+	if n := len(x.grid.Sent()); n != 0 {
+		t.Fatalf("%d messages went out while nothing had been chosen", n)
+	}
+
+	// The whole of a name is not ambiguous even where it is the
+	// beginning of another's, or an item could be named out of reach by
+	// what somebody else sent.
+	if got := x.do(t, "accept a lamp"); !strings.Contains(got, `accepted "a lamp"`) {
+		t.Errorf("accept of the item named in full printed %q", got)
+	}
+	// And with one left, the bare command means it again.
+	if got := x.do(t, "decline"); !strings.Contains(got, `declined "a lamp stand"`) {
+		t.Errorf("decline of the one item left printed %q", got)
 	}
 }
 

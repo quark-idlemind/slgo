@@ -301,24 +301,37 @@ func (w *Session) InventoryOffers() []*InventoryOffer {
 	return out
 }
 
-// InventoryOfferFor returns a waiting offer by the name it was offered
-// under, or the only one waiting.
-func (w *Session) InventoryOfferFor(name string) (*InventoryOffer, bool) {
+// InventoryOffersFor returns the waiting offers a name could mean,
+// oldest first.  An empty name means all of them.
+//
+// The whole of a name -- the item's or the giver's -- wins outright
+// over part of one, because somebody who typed all of it has already
+// said which they mean, and an item whose name is the beginning of
+// another's would otherwise never be nameable on its own.
+//
+// Nothing here picks between the matches, and that is the point: this
+// used to hand back the first hit, so two offers under the one name
+// answered the older of them and said nothing whatever about the other.
+// Whoever is asking decides what more than one means.
+func (w *Session) InventoryOffersFor(name string) []*InventoryOffer {
 	os := w.InventoryOffers()
 	if name == "" {
-		if len(os) == 1 {
-			return os[0], true
-		}
-		return nil, false
+		return os
 	}
 	lower := strings.ToLower(name)
+	var whole, part []*InventoryOffer
 	for _, o := range os {
-		if strings.EqualFold(o.Name, name) || strings.EqualFold(o.FromName, name) ||
-			strings.Contains(strings.ToLower(o.Name), lower) {
-			return o, true
+		switch {
+		case strings.EqualFold(o.Name, name) || strings.EqualFold(o.FromName, name):
+			whole = append(whole, o)
+		case strings.Contains(strings.ToLower(o.Name), lower):
+			part = append(part, o)
 		}
 	}
-	return nil, false
+	if len(whole) > 0 {
+		return whole
+	}
+	return part
 }
 
 // forgetOffer drops one that has been answered.
@@ -361,6 +374,12 @@ func (o *InventoryOffer) Decline(ctx context.Context) error {
 // Whether the item actually arrives is a separate question -- the
 // simulator does the moving, and says nothing about it -- so a caller
 // that needs to know looks in inventory afterwards.
+//
+// The offer's own Accept is what a caller normally wants.  This one
+// sends the answer and leaves the offer where it was, so anything
+// listing what is still waiting goes on offering to answer it: that is
+// how "answer N" in slsh came to send a second acceptance of an offer
+// already taken.
 func (w *Session) AcceptInventoryOffer(ctx context.Context, o *InventoryOffer, into msg.UUID) error {
 	dialog := uint8(DialogInventoryAccepted)
 	m := w.im(o.From, dialog, "")
@@ -374,6 +393,9 @@ func (w *Session) AcceptInventoryOffer(ctx context.Context, o *InventoryOffer, i
 
 // DeclineInventoryOffer refuses one.  Saying so matters: an offer left
 // unanswered stays pending, and the giver is told nothing either way.
+//
+// Decline is the one to reach for; this leaves the offer waiting, the
+// same trap AcceptInventoryOffer describes.
 func (w *Session) DeclineInventoryOffer(ctx context.Context, o *InventoryOffer) error {
 	m := w.im(o.From, DialogInventoryDeclined, "")
 	m.MessageBlock.ID = o.Transaction

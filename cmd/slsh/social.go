@@ -753,10 +753,13 @@ func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	if err != nil || done {
 		return err
 	}
-	// An inventory offer is looked for first, and only by an argument
-	// that names one, so "accept" with a friendship offer waiting still
-	// means what it always did.
-	if o, ok := sh.inventoryOffer(args); ok {
+	// An inventory offer is looked for first, so "accept" with a
+	// friendship offer waiting still means what it always did.
+	o, ok, err := sh.inventoryOffer(args)
+	if err != nil {
+		return err
+	}
+	if ok {
 		// Into the folder the shell is in, so that "cd Objects; accept"
 		// puts it where it was wanted.  A zero folder would let the
 		// grid choose.
@@ -771,14 +774,14 @@ func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		return nil
 	}
 
-	o, err := sh.offer(args)
+	f, err := sh.offer(args)
 	if err != nil {
 		return err
 	}
-	if err := o.Accept(ctx); err != nil {
+	if err := f.Accept(ctx); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "accepted %s\n", o.Name)
+	fmt.Fprintf(out, "accepted %s\n", f.Name)
 	return nil
 }
 
@@ -788,7 +791,11 @@ func cmdDecline(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	if err != nil || done {
 		return err
 	}
-	if o, ok := sh.inventoryOffer(args); ok {
+	o, ok, err := sh.inventoryOffer(args)
+	if err != nil {
+		return err
+	}
+	if ok {
 		if err := o.Decline(ctx); err != nil {
 			return err
 		}
@@ -796,38 +803,64 @@ func cmdDecline(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 		return nil
 	}
 
-	o, err := sh.offer(args)
+	f, err := sh.offer(args)
 	if err != nil {
 		return err
 	}
-	if err := o.Decline(ctx); err != nil {
+	if err := f.Decline(ctx); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "declined %s\n", o.Name)
+	fmt.Fprintf(out, "declined %s\n", f.Name)
 	return nil
 }
 
 // inventoryOffer finds the inventory offer a command means.
 //
 // With no argument it answers only when an inventory offer is the ONLY
-// thing waiting, so that "accept" with a friendship offer pending keeps
-// meaning the friendship offer.  Ambiguity is resolved by naming.
-func (sh *Shell) inventoryOffer(args []string) (*sl.InventoryOffer, bool) {
+// kind waiting, so that "accept" with a friendship offer pending keeps
+// meaning the friendship offer, which is the older rule and the one
+// people have in their fingers.
+//
+// The error is what tells "not this command's business" apart from
+// "this command's business and I will not guess", and both callers
+// have to know the difference.  A word that names no item at all is
+// not an error: it goes on to be tried against the friendship offers,
+// which is how accept has always read its argument.  Anything else
+// that cannot be narrowed to one is.
+//
+// Before this there was no error and both cases fell through to the
+// friendship offers -- so two items waiting and no friendship offer
+// answered a bare "accept" with "no offers waiting" while "offers"
+// listed both of them.  Measured, on both accept and decline.
+func (sh *Shell) inventoryOffer(args []string) (*sl.InventoryOffer, bool, error) {
 	items := sh.s.InventoryOffers()
 	if len(items) == 0 {
-		return nil, false
+		return nil, false, nil
 	}
 	want := strings.TrimSpace(strings.Join(args, " "))
 	if want == "" {
 		if len(sh.s.Offers()) > 0 {
-			return nil, false // a friendship offer is waiting too; say which
+			return nil, false, nil // a friendship offer is waiting too; say which
 		}
 		if len(items) == 1 {
-			return items[0], true
+			return items[0], true, nil
 		}
-		return nil, false
+		return nil, false, fmt.Errorf("%d items offered; name one, or pick it by number in waiting",
+			len(items))
 	}
-	return sh.s.InventoryOfferFor(want)
+	hits := sh.s.InventoryOffersFor(want)
+	switch len(hits) {
+	case 1:
+		return hits[0], true, nil
+	case 0:
+		// Not ours; the friendship offers get the same word next.
+		return nil, false, nil
+	}
+	// Two offers can carry the same name from the same person, so
+	// naming harder is not always a way out -- but the numbered listing
+	// always is, and answering the oldest without saying so is not.
+	return nil, false, fmt.Errorf("%q matches %d offered items; name one exactly, "+
+		"or pick it by number in waiting", want, len(hits))
 }
 
 func cmdTalk(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

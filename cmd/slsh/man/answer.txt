@@ -72,22 +72,6 @@ soon looks like.  where says whether the avatar moved.
 Everything this shell knew about the region left behind is gone on
 arrival -- see tp, which says what goes and what survives.
 
-# An item and a permission are still waiting afterwards
-
-A dialog, a teleport, a friendship and a group invitation are forgotten
-as they are answered.  An offered item and a script's request for
-permission are not: the answer goes, and the thing stays in the waiting
-list under the number it already had, counted at the prompt as though
-nothing had been done about it.  Answering it again sends the whole
-answer again -- a second acceptance of the same offer, a second grant
-of the same permission -- to somebody who has already had one.
-
-It is a fault in this command rather than in waiting: an offer is taken
-up by calling into the session and the session is never told the offer
-is spent, where the other four kinds are.  What answer printed is the
-record of what happened; the line still in the listing is not evidence
-that it did not.
-
 # Options
 
 --file PATH answers a text box from a file.  A shell reads a line at a

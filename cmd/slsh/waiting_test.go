@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
@@ -462,5 +463,177 @@ func TestAnsweringALureFollowsTheTeleportRatherThanFiringItOff(t *testing.T) {
 	}
 	if got := x.do(t, "waiting"); !strings.Contains(got, "nothing waiting") {
 		t.Errorf("an accepted lure is still waiting:\n%s", got)
+	}
+}
+
+// asking builds a script's request for permission, which arrives on
+// its own message rather than as an instant message.
+func asking(object string, wants sl.Perms) *msg.ScriptQuestion {
+	q := &msg.ScriptQuestion{}
+	q.Data.TaskID = testLamp
+	q.Data.ItemID = testProbe
+	q.Data.ObjectName = append([]byte(object), 0)
+	q.Data.ObjectOwner = append([]byte("Quark Idlemind"), 0)
+	q.Data.Questions = int32(wants)
+	return q
+}
+
+// waitForAsked waits for a relayed request to have been recorded,
+// since it is read off the wire on the session's own goroutine.
+func waitForAsked(t *testing.T, x *testShell, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(x.s.Asked()) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("waited for %d permission requests, have %d", n, len(x.s.Asked()))
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// inventoryAnswers is every acceptance or refusal of an inventory
+// offer that reached the wire, which is what "answered once" has to be
+// counted against.
+func inventoryAnswers(x *testShell) []*msg.ImprovedInstantMessage {
+	var out []*msg.ImprovedInstantMessage
+	for _, m := range x.grid.Sent() {
+		im, ok := m.(*msg.ImprovedInstantMessage)
+		if !ok {
+			continue
+		}
+		switch im.MessageBlock.Dialog {
+		case sl.DialogInventoryAccepted, sl.DialogInventoryDeclined:
+			out = append(out, im)
+		}
+	}
+	return out
+}
+
+// scriptAnswers is every answer to a script's request for permission
+// that reached the wire.  There is no ScriptAnswerNo: a refusal is this
+// message with no bits set.
+func scriptAnswers(x *testShell) []*msg.ScriptAnswerYes {
+	var out []*msg.ScriptAnswerYes
+	for _, m := range x.grid.Sent() {
+		if a, ok := m.(*msg.ScriptAnswerYes); ok {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// TestAnAnsweredInventoryOfferStopsWaiting.
+//
+// answer and no called into the session directly, where accept and
+// decline call the offer's own Accept and Decline -- and only those
+// two tell the session that the offer is spent.  So an offer answered
+// by its number stayed in the listing under that number, stayed
+// counted at the prompt, and could be answered a second time: another
+// acceptance of the same offer, sent to somebody who had already had
+// one.
+func TestAnAnsweredInventoryOfferStopsWaiting(t *testing.T) {
+	x := newTestShell(t)
+
+	x.grid.Relay(t, offering(testFriend, "A Friend", "a lamp", sl.AssetObject, testLamp))
+	waitForOffers(t, x, 0, 1)
+	if got := x.do(t, "waiting"); !strings.Contains(got, "1  inventory") {
+		t.Fatalf("an offer should be one thing waiting:\n%s", got)
+	}
+
+	if got := x.do(t, "answer 1"); !strings.Contains(got, `took "a lamp"`) {
+		t.Fatalf("answering an inventory offer: %s", got)
+	}
+	if got := x.do(t, "waiting"); !strings.Contains(got, "nothing waiting") {
+		t.Errorf("an accepted offer is still waiting:\n%s", got)
+	}
+	if n := x.waitingCount(); n != 0 {
+		t.Errorf("an accepted offer is still counted at the prompt: %d", n)
+	}
+	if got := x.do(t, "answer 1"); !strings.Contains(got, "nothing is waiting") {
+		t.Errorf("an accepted offer could be accepted again: %s", got)
+	}
+	if n := len(inventoryAnswers(x)); n != 1 {
+		t.Errorf("%d answers reached the grid, want the one", n)
+	}
+}
+
+// TestARefusedInventoryOfferStopsWaiting is the same hole in "no",
+// where it has a second edge: declining also stops a thing being
+// ignored, so an offer that had been set aside came back into the
+// count at the prompt by being refused, which is the opposite of what
+// was wanted.
+func TestARefusedInventoryOfferStopsWaiting(t *testing.T) {
+	x := newTestShell(t)
+
+	x.grid.Relay(t, offering(testFriend, "A Friend", "a lamp", sl.AssetObject, testLamp))
+	waitForOffers(t, x, 0, 1)
+	x.do(t, "ignore 1")
+
+	if got := x.do(t, "no 1"); !strings.Contains(got, `declined "a lamp"`) {
+		t.Fatalf("declining an inventory offer: %s", got)
+	}
+	if n := x.waitingCount(); n != 0 {
+		t.Errorf("a refused offer is counted at the prompt again: %d", n)
+	}
+	if got := x.do(t, "waiting -a"); !strings.Contains(got, "nothing waiting") {
+		t.Errorf("a refused offer is still waiting:\n%s", got)
+	}
+	if got := x.do(t, "no 1"); !strings.Contains(got, "nothing is waiting") {
+		t.Errorf("a refused offer could be refused again: %s", got)
+	}
+	if n := len(inventoryAnswers(x)); n != 1 {
+		t.Errorf("%d refusals reached the grid, want the one", n)
+	}
+}
+
+// TestAnAnsweredPermissionStopsWaiting.
+//
+// This one was never forgotten anywhere: the session appended each
+// request to a list nothing ever removed from, so every script that
+// had ever asked stayed listed, counted and answerable for the life of
+// the shell -- and granting twice grants twice.
+func TestAnAnsweredPermissionStopsWaiting(t *testing.T) {
+	x := newTestShell(t)
+
+	x.grid.Relay(t, asking("a lamp", sl.PermissionTakeControls))
+	waitForAsked(t, x, 1)
+	if got := x.do(t, "waiting"); !strings.Contains(got, "1  permission") {
+		t.Fatalf("a request should be one thing waiting:\n%s", got)
+	}
+
+	if got := x.do(t, "answer 1"); !strings.Contains(got, "granted take controls") {
+		t.Fatalf("granting a permission: %s", got)
+	}
+	if got := x.do(t, "waiting"); !strings.Contains(got, "nothing waiting") {
+		t.Errorf("a granted permission is still waiting:\n%s", got)
+	}
+	if n := x.waitingCount(); n != 0 {
+		t.Errorf("a granted permission is still counted at the prompt: %d", n)
+	}
+	if got := x.do(t, "answer 1"); !strings.Contains(got, "nothing is waiting") {
+		t.Errorf("a granted permission could be granted again: %s", got)
+	}
+
+	// And a refusal is an answer too, which is worth its own half: it
+	// goes out as the same message with no bits set, so a listing that
+	// kept it would offer to refuse it again.
+	x.grid.Relay(t, asking("a door", sl.PermissionDebit))
+	waitForAsked(t, x, 1)
+	if got := x.do(t, "no 1"); !strings.Contains(got, "refused debit") {
+		t.Fatalf("refusing a permission: %s", got)
+	}
+	if got := x.do(t, "waiting"); !strings.Contains(got, "nothing waiting") {
+		t.Errorf("a refused permission is still waiting:\n%s", got)
+	}
+
+	sent := scriptAnswers(x)
+	if len(sent) != 2 {
+		t.Fatalf("%d answers reached the grid, want one each", len(sent))
+	}
+	if got := sl.Perms(sent[0].Data.Questions); got != sl.PermissionTakeControls {
+		t.Errorf("the grant sent %s", got)
+	}
+	if got := sl.Perms(sent[1].Data.Questions); got != 0 {
+		t.Errorf("the refusal sent %s, want nothing", got)
 	}
 }

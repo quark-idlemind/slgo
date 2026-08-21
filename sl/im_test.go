@@ -362,15 +362,15 @@ func TestAnOfferFromSomebodyUnnamedTakesTheNameWeHave(t *testing.T) {
 	}
 
 	// An inventory offer is filled in the same way, and matters more:
-	// InventoryOfferFor looks the giver up by name, so an offer with
+	// InventoryOffersFor looks the giver up by name, so an offer with
 	// no giver's name on it cannot be answered that way at all.
 	inv := arrivingIM(somebody, "", DialogInventoryOffered, msg.UUID{3}, "a box")
 	inv.MessageBlock.BinaryBucket = offerBucket(AssetObject, msg.UUID{4})
 	f.Relay(t, inv)
-	if o, ok := w.InventoryOfferFor("Quark Idlemind"); !ok {
-		t.Error("an unnamed inventory offer cannot be found by its giver")
-	} else if o.FromName != "Quark Idlemind" {
-		t.Errorf("the offer says it is from %q", o.FromName)
+	if hits := w.InventoryOffersFor("Quark Idlemind"); len(hits) != 1 {
+		t.Errorf("an unnamed inventory offer was found by its giver %d times", len(hits))
+	} else if hits[0].FromName != "Quark Idlemind" {
+		t.Errorf("the offer says it is from %q", hits[0].FromName)
 	}
 }
 
@@ -483,11 +483,11 @@ func relayInventoryOffer(t *testing.T, w *Session, f *fakeBackend,
 	m.MessageBlock.BinaryBucket = offerBucket(AssetObject, msg.UUID{0xaa})
 	f.Relay(t, m)
 
-	o, ok := w.InventoryOfferFor(name)
-	if !ok {
-		t.Fatalf("the offer of %q was not kept", name)
+	hits := w.InventoryOffersFor(name)
+	if len(hits) != 1 {
+		t.Fatalf("the offer of %q was kept %d times, want once", name, len(hits))
 	}
-	return o
+	return hits[0]
 }
 
 // TestAnInventoryOfferIsKeptUntilItIsAnswered: nothing arrives in
@@ -661,44 +661,57 @@ func TestFriendshipOffersComeBackOldestFirst(t *testing.T) {
 	}
 }
 
-// TestInventoryOfferForNarrowsHowAPersonWould: a caller answering an
+// TestInventoryOffersForNarrowHowAPersonWould: a caller answering an
 // offer names it the way it was said to them -- part of what it is
-// called, or who sent it -- and asking for "the offer" is only
-// meaningful when there is exactly one.
-func TestInventoryOfferForNarrowsHowAPersonWould(t *testing.T) {
-	box := &InventoryOffer{Name: "A Big Box", FromName: "Quark Idlemind"}
-	script := &InventoryOffer{Name: "hovertext.lsl", FromName: "Someone Else"}
+// called, or who sent it -- and every offer that could be meant comes
+// back, because deciding what two of them mean is the caller's job and
+// not this one's.
+func TestInventoryOffersForNarrowHowAPersonWould(t *testing.T) {
+	// The arrival times are set because a match of two comes back
+	// oldest first, and offers are held in a map: two with the same
+	// time would come back in whichever order the map felt like.
+	base := time.Now()
+	box := &InventoryOffer{Name: "A Big Box", FromName: "Quark Idlemind", At: base}
+	script := &InventoryOffer{Name: "hovertext.lsl", FromName: "Someone Else",
+		At: base.Add(time.Second)}
+	// One whose name contains the other's whole name, which is what
+	// makes part-of-a-name and the-whole-of-a-name two different
+	// questions rather than one.
+	lamp := &InventoryOffer{Name: "a lamp", FromName: "Someone Else", At: base}
+	stand := &InventoryOffer{Name: "a lamp stand", FromName: "Quark Idlemind",
+		At: base.Add(time.Second)}
 
 	cases := []struct {
 		name   string
 		asking string
 		have   []*InventoryOffer
-		want   string // the offer's name, or "" for none
+		want   []string // the offers' names, oldest first
 	}{
-		{"the only one waiting", "", []*InventoryOffer{box}, "A Big Box"},
-		{"which of two", "", []*InventoryOffer{box, script}, ""},
-		{"none at all", "", nil, ""},
-		{"by name", "A Big Box", []*InventoryOffer{box, script}, "A Big Box"},
-		{"by name, any case", "a big BOX", []*InventoryOffer{box, script}, "A Big Box"},
-		{"by part of the name", "box", []*InventoryOffer{box, script}, "A Big Box"},
-		{"by who sent it", "Someone Else", []*InventoryOffer{box, script}, "hovertext.lsl"},
-		{"by something nobody said", "trousers", []*InventoryOffer{box, script}, ""},
+		{"the only one waiting", "", []*InventoryOffer{box}, []string{"A Big Box"}},
+		{"which of two is not decided here", "", []*InventoryOffer{box, script},
+			[]string{"A Big Box", "hovertext.lsl"}},
+		{"none at all", "", nil, nil},
+		{"by name", "A Big Box", []*InventoryOffer{box, script}, []string{"A Big Box"}},
+		{"by name, any case", "a big BOX", []*InventoryOffer{box, script}, []string{"A Big Box"}},
+		{"by part of the name", "box", []*InventoryOffer{box, script}, []string{"A Big Box"}},
+		{"by who sent it", "Someone Else", []*InventoryOffer{box, script}, []string{"hovertext.lsl"}},
+		{"by something nobody said", "trousers", []*InventoryOffer{box, script}, nil},
+		// The whole of a name beats part of another, or an item called
+		// the beginning of something else could never be asked for.
+		{"the whole of a name that starts another", "a lamp",
+			[]*InventoryOffer{lamp, stand}, []string{"a lamp"}},
+		{"part of a name two of them share", "lamp",
+			[]*InventoryOffer{lamp, stand}, []string{"a lamp", "a lamp stand"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			w := waiting(c.have...)
-			o, ok := w.InventoryOfferFor(c.asking)
-			if c.want == "" {
-				if ok {
-					t.Fatalf("found %q, want nothing", o.Name)
-				}
-				return
+			var got []string
+			for _, o := range w.InventoryOffersFor(c.asking) {
+				got = append(got, o.Name)
 			}
-			if !ok {
-				t.Fatalf("found nothing, want %q", c.want)
-			}
-			if o.Name != c.want {
-				t.Errorf("found %q, want %q", o.Name, c.want)
+			if strings.Join(got, ",") != strings.Join(c.want, ",") {
+				t.Errorf("found %v, want %v", got, c.want)
 			}
 		})
 	}

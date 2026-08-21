@@ -9,15 +9,18 @@ of whoever sent it.  What is typed is tried against the items first and
 only then against the friendship offers, so a word that could be either
 takes the item.
 
-Naming settles an ambiguity between friendship offers and does not
-settle one between items.  A word matching two friendship offers is
-refused and says how many it matched, so nothing is answered by
-accident.  Items are matched one at a time and the first hit wins,
-oldest first: with two offers waiting under the same item name, naming
-it answered the older of them and left the newer sitting there, saying
-nothing at all about the one it had not touched.  So an item is worth
-naming in full, and the report is worth reading, since it says both the
-item and who sent it.
+Naming settles an ambiguity, and a name that does not settle one is
+refused rather than guessed at: a word matching two friendship offers,
+or two of the items, says how many it matched and answers neither.  So
+an item is worth naming in full, and the report is worth reading, since
+it says both the item and who sent it.
+
+The whole of a name beats part of another, which is what makes naming
+in full work at all: an item called "a lamp" is still reachable while
+"a lamp stand" is on offer beside it.  Two items with the same name
+from the same person is the one ambiguity no name will settle, and
+"waiting" is the way through -- it numbers them, and "answer N" takes
+the one meant.
 
 # An item lands in the folder the shell is in
 
@@ -36,13 +39,10 @@ choose.
 Where one of each is waiting, the bare command keeps its older meaning
 and takes the friendship offer; the item has to be named.
 
-Two items and nothing else waiting is refused, but not in a way that
-says so: the bare command looks for an item, finds two and declines to
-choose, and then falls through to the friendship offers, of which there
-are none.  So it answers "no offers waiting" while two of them sit in
-"offers" -- measured, with two items and no friendship offer, both
-"accept" and "decline" said exactly that.  It is the sentence that is
-wrong and not the refusal; naming one of the two is what to do next.
+Where only items are waiting, the bare command means them: the only one
+is taken, and two or more are refused with a count, since choosing
+between offers is not the shell's to do.  Naming one of the two is what
+to do next.
 
 # What it cannot tell you
 

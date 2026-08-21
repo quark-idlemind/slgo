@@ -2,6 +2,7 @@ package sl
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -104,6 +105,68 @@ func TestPermissionsDropRatherThanBlock(t *testing.T) {
 	}
 	if len(w.Asked()) != 5 {
 		t.Errorf("Asked kept %d, want all 5", len(w.Asked()))
+	}
+}
+
+// TestAnAnsweredPermissionIsForgotten.
+//
+// Nothing ever removed one.  A request went into the list on arrival
+// and stayed there for the life of the session, so anything asking
+// what still wants an answer -- which is all this list is for --
+// counted a script that had been answered and offered to answer it
+// again.
+//
+// Two requests from the same script, because that is what the removal
+// has to get right: the simulator files its pending request under the
+// object and the script inside it, and dropping by that pair would
+// forget the one nobody has answered along with the one they did.
+func TestAnAnsweredPermissionIsForgotten(t *testing.T) {
+	w, stop := newTestSession(t)
+	defer stop()
+	w.sendFn = func(msg.Message) error { return nil }
+
+	w.permission(testScriptQuestion(PermissionAttach))
+	w.permission(testScriptQuestion(PermissionDebit))
+	if n := len(w.Asked()); n != 2 {
+		t.Fatalf("Asked = %d, want both", n)
+	}
+
+	if err := w.Asked()[0].GrantAll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	left := w.Asked()
+	if len(left) != 1 {
+		t.Fatalf("granting one of two left %d waiting", len(left))
+	}
+	if left[0].Wants != PermissionDebit {
+		t.Errorf("the request left waiting is %s, want the one nobody answered", left[0].Wants)
+	}
+
+	// Refusing is an answer as well, and goes out as the same message
+	// with no bits set.
+	if err := left[0].Deny(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(w.Asked()); n != 0 {
+		t.Errorf("a refused request is still waiting: %d", n)
+	}
+}
+
+// TestAPermissionWhoseAnswerNeverWentIsStillWaiting: forgotten on the
+// way out and only after the send, the same shape an inventory offer
+// keeps.  A request whose answer never left the house is one the script
+// is still waiting on.
+func TestAPermissionWhoseAnswerNeverWentIsStillWaiting(t *testing.T) {
+	w, stop := newTestSession(t)
+	defer stop()
+	w.sendFn = func(msg.Message) error { return errors.New("the circuit is down") }
+
+	w.permission(testScriptQuestion(PermissionAttach))
+	if err := w.Asked()[0].GrantAll(context.Background()); err == nil {
+		t.Fatal("GrantAll reported success though nothing was sent")
+	}
+	if n := len(w.Asked()); n != 1 {
+		t.Errorf("a request whose answer never went out was forgotten: %d left", n)
 	}
 }
 

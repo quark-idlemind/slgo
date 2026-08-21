@@ -35,21 +35,8 @@ either an error or, worse, something else.  The list can therefore look
 sparse, which is the honest picture: the thing that was 2 is still 2.
 When nothing is left waiting the numbers start again at one.
 
-# Two kinds stay listed after they have been answered
-
-A dialog, a teleport, a friendship and a group invitation are dropped
-as they are answered, so they leave the listing and the count at the
-prompt falls.  An offered item and a script asking permission are not.
-The answer goes to the grid and the thing stays exactly where it was:
-still listed, still under the same number, and still counted -- so
-"answer" or "no" on it a second time sends a second answer to somebody
-who has already had one, and an inventory offer can be accepted twice.
-
-That is a fault in answer and no rather than in this listing, and it is
-written here because the listing is where it shows.  Until it is
-mended, what answer and no printed is the record of what happened --
-"took ..." or "declined ..." means the answer has gone -- and the line
-still sitting in waiting is not evidence that it has not.
+Every kind leaves the listing as it is answered, whichever command
+answered it, so the count at the prompt falls by one.
 
 # Options
 

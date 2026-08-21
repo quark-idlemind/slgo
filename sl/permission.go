@@ -175,7 +175,39 @@ func (q *Permission) answer(ctx context.Context, granted Perms) error {
 	m.Data.TaskID = q.Object
 	m.Data.ItemID = q.Item
 	m.Data.Questions = int32(granted)
-	return q.w.Send(ctx, m)
+	if err := q.w.Send(ctx, m); err != nil {
+		return err
+	}
+	// Answered is answered, whichever bits went.  Asked is what a
+	// caller reads to find what still needs deciding, and a request
+	// that has had its one message back does not.  Granting part of
+	// what was asked is no exception: the rest is withheld rather than
+	// held over, since nothing here will send a second answer to the
+	// same request.
+	//
+	// Only after the send, and only on the way out: a request whose
+	// answer never left the house is still waiting.  Same shape as
+	// forgetOffer.
+	q.w.forgetPermission(q)
+	return nil
+}
+
+// forgetPermission drops a request that has been answered.
+//
+// By identity rather than by the object and script it names.  The
+// simulator files its pending request under that pair, but nothing
+// stops a script asking a second time, and matching on the pair would
+// then forget a request nobody has answered along with the one they
+// did.
+func (w *Session) forgetPermission(q *Permission) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for i, x := range w.asked {
+		if x == q {
+			w.asked = append(w.asked[:i], w.asked[i+1:]...)
+			return
+		}
+	}
 }
 
 // permission builds one and hands it to whoever is listening.
@@ -208,8 +240,14 @@ func (w *Session) permission(m *msg.ScriptQuestion) {
 	}
 }
 
-// Asked returns the permission requests seen so far, oldest first,
-// answered or not.
+// Asked returns the requests still waiting for an answer, oldest
+// first.
+//
+// One that has been answered is gone from here, because the only thing
+// this list is for is deciding what still needs deciding -- a listing
+// that kept them would count a script twice over and offer to answer
+// it again.  It is not a history: nothing keeps one of these after
+// Grant, GrantAll or Deny has sent.
 func (w *Session) Asked() []*Permission {
 	w.mu.Lock()
 	defer w.mu.Unlock()

@@ -10,10 +10,9 @@ means the friendship offer, and the item has to be named.
 
 The traps are accept's traps, since it is the same picking done twice
 over, and they are written out there: what is typed is tried against
-the items first; a word matching two items refuses the older of them
-silently rather than asking which; and two items with nothing else
-waiting answer a bare command with "no offers waiting", which is the
-refusal saying the wrong thing about itself.
+the items first, so a word that could be either takes the item; and a
+word that matches two of anything is refused with a count, so nothing
+is answered by accident.
 
 # Saying no is not the same as saying nothing
 

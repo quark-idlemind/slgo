@@ -16,20 +16,4 @@ here and lets it expire where it was raised.
 Declining something that was being ignored also stops it being ignored,
 since it is dealt with now either way.
 
-# An item and a permission are still waiting afterwards
-
-A declined teleport, friendship or group invitation leaves the list as
-it is declined, and so does a dialog dropped here.  An offered item and
-a script's request for permission do not: the refusal goes to the grid
-and the thing stays listed under the number it already had.  Since
-declining also stops it being ignored, one that had been set aside
-comes back into the count at the prompt by being refused, which is the
-opposite of what was wanted.
-
-It is a fault in this command rather than in waiting -- the session is
-never told the offer is spent, where for the other kinds it is -- and
-"no" on the same number a second time sends a second refusal.  What no
-printed is the record of what happened; the line still in the listing
-is not evidence that it did not.
-
 See also: waiting, answer, ignore.
