@@ -75,6 +75,26 @@ than failing on them.
 When a measurement brings a new name in, add it to that list at the
 same time; a checker is only as good as what it has been told about.
 
+## Never commit a binary
+
+Nothing compiled belongs in this repository. Go leaves a binary beside
+its source when built inside a `cmd` directory and in the root when
+built by path, and both are ignored by name in `.gitignore` -- a list
+that only works if a new command is added to it, so add it when you add
+the command.
+
+Two binaries were committed once and rode in the history for months, 36
+MB between them, because neither list had heard of their names. They
+were found by accident, while grepping the whole object database for
+something else. A compiled binary also carries whatever string
+constants the source had at the time, which is the other reason not to
+keep one: it is a copy of the tree that no sweep of the tree will ever
+reach.
+
+`tools/check-identities` refuses a staged file that looks compiled, and
+says what to add to `.gitignore`. If you find one already committed, it
+goes in `.gitignore` and out of the tree in the same change.
+
 ## Measurements
 
 Where a document here says what happens, it was watched happening. Do

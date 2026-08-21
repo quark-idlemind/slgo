@@ -82,6 +82,34 @@ for f in $files; do
 done
 [ -n "$text" ] || { echo "check-identities: nothing to check"; exit 0; }
 
+# Nothing compiled belongs in the repository.  A Go binary also carries
+# whatever string constants the source had when it was built, so it is a copy
+# of the tree that no sweep of the tree can reach -- see CLAUDE.md.
+compiled=0
+for f in $files; do
+	p=$root/$f
+	[ -f "$p" ] || continue
+	case $(file -b "$p" 2>/dev/null) in
+	*executable*|*"Mach-O"*|*"ELF "*|*archive*)
+		if [ "$compiled" -eq 0 ]; then
+			echo "check-identities: this is a compiled binary and cannot be committed:"
+			echo
+		fi
+		compiled=1
+		printf '  %s\n' "$f"
+		;;
+	esac
+done
+if [ "$compiled" -ne 0 ]; then
+	cat <<'BIN'
+
+Add its name to .gitignore -- under /cmd/*/ if it is built beside its source,
+and in the root list if it is built by path -- and take it out of the change.
+A binary committed once stays in the history for as long as the history does.
+BIN
+	exit 1
+fi
+
 found=0
 # Read the list, skipping comments and blank lines.  A uuid is also looked for
 # by its first eight characters, because the documentation elides them that way

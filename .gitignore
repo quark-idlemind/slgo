@@ -10,10 +10,18 @@
 /msggen
 
 # And in the root, which is where "go build ./cmd/slsh" leaves it.
+#
+# A new command wants both: its name here and under /cmd/*/ above.  Two
+# compiled binaries were committed once and lived in the history for
+# months -- 36 MB of them -- because neither list had heard of them.
 /slsh
 /slgod
 /automate
 /autobench
+/msggen
+/slgo
+/slgo-multiattach
+/slchat
 
 # Linden Lab's message template.  msggen fetches it; a copy pulled down
 # for offline work is theirs and does not belong in this repository.
