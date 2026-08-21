@@ -164,6 +164,20 @@ while IFS="$(printf '\t')" read -r real repl; do
 	hits=$(grep -RIniF -- "$real" $text 2>/dev/null || true)
 	report "$hits" "$repl" "$real"
 
+	# The same name written with its punctuation as HTML entities.  A
+	# parcel called "Rue&Reed" is "Rue&amp;Reed" in the guide, and a
+	# grep for the literal walks straight past it -- which is how one
+	# real name survived a scrub of this repository.
+	case $real in
+	*[\&\'\"\<\>]*)
+		entity=$(printf '%s' "$real" |
+			sed -e 's/&/\&amp;/g' -e "s/'/\&#39;/g" -e 's/"/\&quot;/g' \
+			    -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
+		hits=$(grep -RIniF -- "$entity" $text 2>/dev/null || true)
+		report "$hits" "$repl" "$entity"
+		;;
+	esac
+
 	# A uuid is also elided to its first eight characters in the
 	# documentation, and eight characters of somebody's id is still theirs.
 	# Not when more hex follows, or a placeholder of repeated nibbles

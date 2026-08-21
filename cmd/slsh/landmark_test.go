@@ -635,7 +635,7 @@ func TestLandmarkRefusesTwoVerbsAtOnce(t *testing.T) {
 
 // TestATrashedLandmarkIsNotOne.
 //
-// rm in this shell moves things to the trash, so a used inventory has
+// A viewer's delete moves things to the trash, so a used inventory has
 // deleted landmarks in it -- qi's had two of seven, and one of them
 // made a live landmark ambiguous with its own corpse.  A deleted
 // landmark still has a name, an asset and a working teleport, so

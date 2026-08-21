@@ -409,8 +409,10 @@ func landmarkHome(ctx context.Context, sh *Shell, out io.Writer, wait time.Durat
 //
 // # Why the trash is a heap of its own
 //
-// rm in this shell moves things to the trash, so an inventory that has
-// been used has deleted landmarks in it, and qi's has two of seven.  A
+// A viewer's delete moves things to the trash, so an inventory that has
+// been used through one has deleted landmarks in it -- two of seven in
+// the account this was written against.  (rm in this shell does not put
+// them there: it is an AIS DELETE and the item is gone.)  A
 // deleted landmark still has a name, an asset and a working teleport,
 // so without this the shell would refuse a live landmark as ambiguous
 // with its own corpse and --go would travel to a deleted one as

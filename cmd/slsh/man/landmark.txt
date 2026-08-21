@@ -119,7 +119,7 @@ the landmark itself.
 
 # What is in the trash is not reached from here
 
-rm in this shell moves things to the trash rather than destroying them,
+A viewer's delete moves things to the trash rather than destroying them,
 so any inventory that has been used has deleted landmarks in it -- two
 of the seven in the avatar this was written against.  A deleted
 landmark still has a name, still has an asset and would still teleport

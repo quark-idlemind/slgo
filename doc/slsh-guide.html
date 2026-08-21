@@ -383,9 +383,9 @@
       <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">cd Objects</span>
 <span class="p">/Objects$</span> <span class="c">ls -l lantern</span>
-<span class="o">object     2026-08-02T15:09:30  40f17e57-…  /Objects/lantern</span>
+<span class="o">object     2026-08-02T15:09:30 40f17e57-… /Objects/lantern</span>
 <span class="p">/Objects$</span> <span class="c">place lantern</span>
-<span class="o">"lantern" a8de7e57-… is at 129, 128, 25</span>
+<span class="o">"lantern" a8de7e57-… (local 83565482) is at 129, 128, 25</span>
 <span class="p">/Objects$</span> <span class="c">start lantern</span>
 <span class="o">started    flicker</span></pre>
     </div>
@@ -434,8 +434,8 @@
 <span class="o">Testville at 128, 128, 25
 acting as group Example Builders (87f07e57-…)</span>
 <span class="p">/$</span> <span class="c">who</span>
-<span class="o"> 1  Example Resident                  3.1m  d8467e57-…
- 2  Another Resident                 12.4m  7ed37e57-…</span>
+<span class="o"> 1  Example Resident                    3.1m  d8467e57-…
+ 2  Another Resident                   12.4m  7ed37e57-…</span>
 <span class="p">/$</span> <span class="c">quit</span></pre>
         </div>
 
@@ -590,7 +590,7 @@ For one command:       COMMAND --help, or man COMMAND
               <tr><td class="cmd">/Objects$</td><td class="what">command mode, in the folder /Objects</td></tr>
               <tr><td class="cmd">(2) /Objects$</td><td class="what">the same, with two things waiting for an answer</td></tr>
               <tr><td class="cmd">Local&gt;</td><td class="what">chat mode, talking to the region</td></tr>
-              <tr><td class="cmd">1 text&gt;</td><td class="what">typing a multi-line answer to question 1</td></tr>
+              <tr><td class="cmd">1 text&gt;</td><td class="what">typing the first line of a multi-line answer</td></tr>
             </tbody>
           </table>
         </div>
@@ -644,9 +644,9 @@ For one command:       COMMAND --help, or man COMMAND
 /Objects/sign
 /Objects/spares</span>
 <span class="p">/Objects$</span> <span class="c">ls -l</span>                    <span class="n">kind, when, id, path</span>
-<span class="o">object     2026-08-02T15:09:30  40f17e57-…  /Objects/lantern
-object     2026-07-29T09:41:12  91357e57-…  /Objects/sign
-folder     -                    1ae57e57-…  /Objects/spares</span>
+<span class="o">object     2026-08-02T15:09:30 40f17e57-… /Objects/lantern
+object     2026-07-29T09:41:12 91357e57-… /Objects/sign
+folder     -                   1ae57e57-… /Objects/spares</span>
 <span class="p">/Objects$</span> <span class="c">ls -lt</span>                   <span class="n">newest first</span>
 <span class="p">/Objects$</span> <span class="c">ls -r spares</span>             <span class="n">and everything below it</span>
 <span class="p">/Objects$</span> <span class="c">ls -l lantern</span>            <span class="n">not a folder: lists what it names</span>
@@ -679,9 +679,9 @@ folder     -                    1ae57e57-…  /Objects/spares</span>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">ls -l /Scripts/greeter</span>
-<span class="o">script     2026-08-07T12:06:57  cb567e57-…  /Scripts/greeter
-script     2026-08-07T11:26:01  e9d97e57-…  /Scripts/greeter
-script     2026-08-07T11:25:53  7e277e57-…  /Scripts/greeter</span>
+<span class="o">script     2026-08-07T12:06:57 cb567e57-… /Scripts/greeter
+script     2026-08-07T11:26:01 e9d97e57-… /Scripts/greeter
+script     2026-08-07T11:25:53 7e277e57-… /Scripts/greeter</span>
 <span class="p">/$</span> <span class="c">ls /Scripts/greeter</span>          <span class="n">without -l, three identical lines</span>
 <span class="o">/Scripts/greeter
 /Scripts/greeter
@@ -736,7 +736,8 @@ beside the date</span>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/Scripts$</span> <span class="c">rm *</span>
-<span class="o">*: means every item in this folder: say rm --remove-all-copies * if that is what you want</span>
+<span class="o">slsh: rm: * means every item in this folder: say rm --remove-all-copies * if that
+is what you want</span>
 <span class="p">/Scripts$</span> <span class="c">rm --remove-all-copies *</span>
 <span class="o">*: removed 645 items</span></pre>
         </div>
@@ -745,10 +746,12 @@ beside the date</span>
           Each removal is a round trip, so six hundred of them take minutes.
           The count climbs in place while it works, and is written to the
           terminal rather than to a file, so a redirect catches the result and
-          not the flicker. <code>emptytrash</code> throws away everything in
-          the trash, permanently, and finds the trash by what it is rather than
-          what it is called — so it works on an account whose viewer named it
-          something else.
+          not the flicker. Nothing here goes to the trash on its way out:
+          <code>rm</code> deletes at once, and what is in the trash is what a
+          viewer put there. <code>emptytrash</code> throws that away,
+          permanently, and finds the trash by what it is rather than what it is
+          called — so it works on an account whose viewer named it something
+          else.
         </p>
 
         <div class="note">
@@ -874,18 +877,18 @@ acting as group Lorn Family (488f7e57-…)</span>
 
 256 metres across, 14 parcels; protected land is blank, its rez zones "."
      Protected Land              40640 m²  owned
-  a  Thrushmoor Home                2048 m²  owned
+  a  Thrushmoor Home              2048 m²  owned
   b  Windlestraw Lodge         2048 m²  owned
   c  Zorrim                       2048 m²  owned
-  d  Thrushmoor                     2048 m²  owned
-  e  OMEN                       2048 m²  owned
+  d  Thrushmoor                   2048 m²  owned
+  e  OMEN                         2048 m²  owned
   f  La Cardonna                  2048 m²  owned
   .  Protected Land - Rez zone     320 m²  owned
-  g  Quill Lodge                   2048 m²  owned
-  h  Garrow''s Hideaway           2048 m²  owned
-  i  Rue&amp;Reed                 2048 m²  owned
-  j  Sorrel Home                    2048 m²  owned
-  k  Slow Shoal Estate             2048 m²  owned
+  g  Quill Lodge                  2048 m²  owned
+  h  Garrow''s Hideaway          2048 m²  owned
+  i  Rue&amp;Reed                     2048 m²  owned
+  j  Sorrel Home                  2048 m²  owned
+  k  Slow Shoal Estate            2048 m²  owned
   l  Ulmar                        2048 m²  owned</span></pre>
         </div>
 
@@ -1147,9 +1150,9 @@ a digit is that many in one cell, and + is more than nine
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">regions Pelmar</span>
-<span class="o">Pelmar Reach                         43648, 43648   moderate  47991483540340736
+<span class="o">Pelmar Reach                      43648, 43648   moderate  47991483540340736
 Pelmara                           43712, 43584  general   48061852284502016
-Pelmar Bay                     43584, 43584   moderate  47921114796146688</span></pre>
+Pelmar Bay                        43584, 43584   moderate  47921114796146688</span></pre>
         </div>
 
         <p>
@@ -1261,8 +1264,8 @@ Pelmar Bay                     43584, 43584   moderate  47921114796146688</span>
   /Ravensdon/Ravensdon Boutique Shop
   /Landmarks/stage 0 here
   /Landmarks/stage 0 daskwell
-  /Landmarks/stage 3 thrushmoor               3bea7e57-…
-  /Landmarks/stage 3 thrushmoor               656a7e57-…
+  /Landmarks/stage 3 thrushmoor             3bea7e57-…
+  /Landmarks/stage 3 thrushmoor             656a7e57-…
   /Landmarks/stage 3 daskwell hub
   /Landmarks/Workspace</span>
 <span class="p">/$</span> <span class="c">landmark stage 3 daskwell hub</span>
@@ -1375,11 +1378,12 @@ Dell of Ashes at 113, 109, 1011</span>
           A link to a landmark is not a landmark and is left out of the listing,
           because a link's asset id is the item id of the thing it points at, so
           following one would produce exactly that silence. So is anything in
-          the trash: <code>rm</code> moves things there rather than destroying
-          them, and a deleted landmark still has a name and would still teleport
-          perfectly well, which is the problem. A name whose only answer is in
-          the trash is told so, and told where it is, and <code>mv</code> moves
-          it back out — after which it is a landmark again.
+          the trash — which is what a viewer deleted, since <code>rm</code> here
+          destroys rather than files away. A landmark in the trash still has a
+          name and would still teleport perfectly well, which is the problem. A
+          name whose only answer is in the trash is told so, and told where it
+          is, and <code>mv</code> moves it back out — after which it is a
+          landmark again.
         </p>
 
         <h3>Walking over a border</h3>
@@ -1620,7 +1624,7 @@ left hand          lantern</span>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">place Objects/lantern</span>
-<span class="o">"lantern" a8de7e57-… is at 129, 128, 25</span>
+<span class="o">"lantern" a8de7e57-… (local 83565482) is at 129, 128, 25</span>
 <span class="p">/$</span> <span class="c">move lantern 128 130 25</span>
 <span class="o">lantern is at 128.0, 130.0, 25.0</span>
 <span class="p">/$</span> <span class="c">touch lantern</span>
@@ -1648,12 +1652,13 @@ left hand          lantern</span>
 <pre><span class="p">/$</span> <span class="c">link chair seat "left leg" "right leg"</span>
 <span class="o">"chair" 5ef67e57-… (local 83565482) is one object of 4 prims</span>
 <span class="p">/$</span> <span class="c">unlink chair</span>
-<span class="o">"chair" came apart into 4 objects:
-  5ef67e57-…                          chair
-  76167e57-…                          Object
-  8b537e57-…                          Object
-  8c617e57-…                          Object
-more than one of these is called "Object"; name one by its key</span></pre>
+<span class="o">"chair" 5ef67e57-… (local 83565482) came apart into 4 objects:
+  5ef67e57-…                           chair
+  76167e57-…                           Object
+  8b537e57-…                           Object
+  8c617e57-…                           Object
+more than one of these is called "Object"; name one by its key, which "objects -c"
+prints too</span></pre>
         </div>
 
         <p>
@@ -1664,9 +1669,11 @@ more than one of these is called "Object"; name one by its key</span></pre>
 
         <h3>Permissions and faces</h3>
         <p>
-          <code>perms</code> sets what the next owner, the group or everyone
-          may do with a rezzed object, in letters: <code>c</code>opy,
-          <code>m</code>odify, <code>t</code>ransfer, mo<code>v</code>e.
+          <code>perms</code> sets what the owner, the group, everyone or the
+          next owner may do with a rezzed object, in letters:
+          <code>c</code>opy, <code>m</code>odify, <code>t</code>ransfer,
+          mo<code>v</code>e. It answers in that order whatever order the flags
+          were typed in, and at least one of them has to be.
           <code>texture</code> sets what a face looks like, or with no flags
           says what it looks like now.
         </p>
@@ -1674,8 +1681,8 @@ more than one of these is called "Object"; name one by its key</span></pre>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">perms --next cmt --everyone none lantern</span>
-<span class="o">the next owner may now copy, modify, transfer
-everyone may now nothing</span>
+<span class="o">everyone may now nothing
+the next owner may now copy, modify, transfer</span>
 <span class="p">/$</span> <span class="c">texture -f 2 --id d8467e57-… lantern</span></pre>
         </div>
       </section>
@@ -1814,6 +1821,7 @@ everyone may now nothing</span>
   key       d8467e57-…
   born      9/15/2004
   payment   not revealed
+  partner   nobody
   about     Building things, mostly badly.
   groups    2 listed, which is not every group they are in
   87f07e57-… Apprentice           Example Builders</span></pre>
@@ -1860,9 +1868,9 @@ everyone may now nothing</span>
 2  teleport    Another Resident offers a teleport: "Come and see this!"
                 answer, no, ignore</span>
 <span class="p">(2) /$</span> <span class="c">answer 1 on</span>
-<span class="o">pressed "on"</span>
+<span class="o">pressed "on" on a lantern</span>
 <span class="p">(1) /$</span> <span class="c">ignore 2</span>
-<span class="o">2 is still waiting; "waiting -a" shows it</span></pre>
+<span class="o">2 is still waiting, and no longer counted; waiting -a lists it</span></pre>
         </div>
 
         <p>
@@ -1894,9 +1902,10 @@ everyone may now nothing</span>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">(1) /$</span> <span class="c">answer 1</span>
-<span class="o">a sign asks: your name?  — type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
+<span class="o">a sign asks: your name?
+type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
 <span class="p">1 text&gt;</span> <span class="c">Example Resident</span>
-<span class="p">1 text&gt;</span> <span class="c">of no fixed abode</span>
+<span class="p">2 text&gt;</span> <span class="c">of no fixed abode</span>
 <span class="n">&lt;^D&gt;</span>
 <span class="o">told a sign 2 lines</span></pre>
         </div>
@@ -1931,10 +1940,10 @@ everyone may now nothing</span>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">agents</span>
-<span class="o">* example     Example Resident      Testville   &lt;- this shell
-  builder     Builder Resident      Testville
-  helper                            stopped: logged out
-  spare                             configured</span></pre>
+<span class="o">* example     Example Resident          Testville   &lt;- this shell
+  builder     Builder Resident          Testville
+  helper                                stopped: logged out
+  spare                                 configured</span></pre>
         </div>
 
         <p>
@@ -2007,16 +2016,21 @@ everyone may now nothing</span>
 <pre><span class="p">/$</span> <span class="c">viewer</span>
 <span class="o">viewer logins at http://127.0.0.1:9000/
   add a grid with that login URI and log in as Example Resident
-  no viewer has taken this session</span>
+  no viewer has taken this session
+  "viewer --launch" starts one and logs it in, with a password good for that one login</span>
 <span class="p">/$</span> <span class="c">viewer --launch</span>
 <span class="o">starting a viewer at http://127.0.0.1:9000/, logged in as Example Resident
+  open -a Firestorm-OpenSim --args --grid slgod --login Example Resident PASSWORD
   the password it was given works once and expires in 5 minutes</span></pre>
         </div>
 
         <p>
           The password is minted by the daemon for that one login and expires.
           Nothing is stored: a profile keeps only a digest, which is why the
-          launcher cannot simply read one.
+          launcher cannot simply read one. The command that was run is printed
+          underneath with the password replaced by the word
+          <code>PASSWORD</code>, so what happened can be read, and pasted,
+          without the credential going with it.
         </p>
 
         <div class="note">
@@ -2084,7 +2098,9 @@ slsh: stopped; 43 lines were not run</span></pre>
           <code>~/.config/slsh/config</code>, as <code>key = value</code> lines
           with <code>#</code> for comments. A command-line flag always beats
           the file, and a misspelled key is an error rather than a setting that
-          silently does nothing.
+          silently does nothing. A <code>#</code> is a comment only where a line
+          begins with one: written after a value it becomes part of the value,
+          and the shell will not start with it there.
         </p>
 
         <div class="term">
@@ -2122,21 +2138,24 @@ viewer_running = how to tell whether one is running already</span></pre>
             </thead>
             <tbody>
               <tr><td class="keys">Tab</td><td class="what">complete a command or a path</td><td class="what">next conversation</td></tr>
-              <tr><td class="keys">↑ ↓</td><td class="what">walk through what you have typed</td><td class="what">the same</td></tr>
+              <tr><td class="keys">↑ ↓</td><td class="what">walk through what you have typed</td><td class="what">—</td></tr>
               <tr><td class="keys">← →</td><td class="what">move along the line</td><td class="what">the same</td></tr>
               <tr><td class="keys">^A · ^E</td><td class="what">to the start of the line, to the end</td><td class="what">the same</td></tr>
-              <tr><td class="keys">^U · ^W · ^K</td><td class="what">kill the line, the word before, to the end</td><td class="what">the same</td></tr>
+              <tr><td class="keys">^U · ^W · ^K</td><td class="what">kill back to the start, the word before, to the end</td><td class="what">the same</td></tr>
               <tr><td class="keys">backspace · delete</td><td class="what">the character before, the character under</td><td class="what">the same</td></tr>
               <tr><td class="keys">&lt;ESC&gt;</td><td class="what">—</td><td class="what">back to command mode</td></tr>
-              <tr><td class="keys">^C</td><td class="what">clear the line</td><td class="what">clear the line</td></tr>
-              <tr><td class="keys">^D</td><td class="what">leave slsh, on an empty line</td><td class="what">—</td></tr>
+              <tr><td class="keys">^C</td><td class="what">clear the line; leave slsh on an empty one</td><td class="what">clear the line; back to command mode on an empty one</td></tr>
+              <tr><td class="keys">^D</td><td class="what">leave slsh, on an empty line</td><td class="what">the same</td></tr>
             </tbody>
           </table>
         </div>
 
         <p>
-          While a multi-line answer is being typed the same editing keys apply
-          to the line in hand, and the three that end it are described under
+          The history is command mode's alone: <strong>up</strong> and
+          <strong>down</strong> do nothing in chat, where what was said a
+          moment ago has already gone out. While a multi-line answer is being
+          typed the same editing keys apply to the line in hand, and the three
+          that end it are described under
           <a href="#waiting">Things waiting</a>. Through slgod, leaving the
           shell leaves the avatar logged in; with <code>--direct</code> it does
           not.
