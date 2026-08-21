@@ -74,6 +74,9 @@ text=""
 for f in $files; do
 	case "$f" in
 	*.png|*.jpg|*.jpeg|*.jp2|*.gz|*.pdf) continue ;;
+	# Generated dependency hashes, where a short handle matches inside
+	# base64 and means nothing.
+	go.sum|*/go.sum) continue ;;
 	esac
 	[ -f "$root/$f" ] && text="$text $root/$f"
 done

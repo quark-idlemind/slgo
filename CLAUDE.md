@@ -12,8 +12,15 @@ their groups belongs in a file here.** Not in documentation, not in a
 test fixture, not in a comment, not in an example, and not in a commit
 message.
 
-The one exception is Quark, who owns this repository and its avatars:
-Quark Idlemind and the alts the profiles name.
+The one exception is the person who owns this repository, and the one
+avatar that is his: **Quark Idlemind**, whose profile is `qi`.
+
+Nobody else is an exception, and in particular the other avatars a
+daemon here may hold are NOT. They belong to other people, who lent
+them for measuring; their names, their profile handles and anything
+they own are elided exactly like a stranger's. Do not reason from a
+credential being in somebody's config file to the account being theirs
+-- that inference has been made here before and it was wrong.
 
 Linden Lab's own published constants stay as they are, because they are
 protocol rather than people: the built-in animation asset ids in
