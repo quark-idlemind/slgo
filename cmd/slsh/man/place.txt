@@ -7,10 +7,14 @@ The argument is an inventory path, relative to the folder the shell is
 in, or the uuid of an item.  A folder is refused: place puts out one
 object, not the contents of a folder.
 
-Without --at it lands a metre in front of the avatar, which is where
-somebody standing there would expect a thing they had just put down to
-appear.  --at is a position in this region -- three numbers with commas
-between them and no spaces.
+Without --at it lands a metre east of the avatar: the avatar's own
+position with one metre added to X, which is near enough to hand for
+something that is about to be looked at.  East and not in front --
+nothing here asks which way the avatar is facing, so a thing put down
+behind somebody goes down east of them all the same.  Measured: the
+position it reported back was the avatar's, X one larger and Y and Z
+unchanged.  --at is a position in this region -- three numbers with
+commas between them and no spaces.
 
 The active group matters more than it looks.  A parcel usually grants
 "create objects" to a group rather than to a person, so an avatar with

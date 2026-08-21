@@ -319,8 +319,9 @@ func checkTextureDims(w, h int) error {
 // It is the viewer's own rounding, from LLImageRaw::biasedDimToPowerOfTwo:
 // the nearest power of two, biased downwards -- a dimension goes up only
 // when it is more than 1.75 times the power of two below it, since the
-// bandwidth saved is worth more than the detail lost. 1000 becomes 512
-// and 1800 becomes 2048.
+// bandwidth saved is worth more than the detail lost. So 800 becomes
+// 512 and 1000 becomes 1024, both of them a shade either side of the
+// same threshold, and 1800 becomes 2048.
 //
 // Both dimensions round independently, so any power of two by any other
 // is a texture: 1024x64 uploads as happily as 512x512.

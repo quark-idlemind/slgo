@@ -200,8 +200,12 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	return nil
 }
 
-// beside is a metre in front of the avatar, which is where a person
-// standing there would expect a thing they just rezzed to appear.
+// beside is a metre EAST of the avatar, near enough to reach and clear
+// of the avatar itself.
+//
+// Not a metre in front, which is what this said until somebody measured
+// it: the rotation is never consulted, so where the thing appears has
+// nothing to do with which way the avatar is facing.
 func beside(at msg.Vector3) msg.Vector3 {
 	return msg.Vector3{X: at.X + 1, Y: at.Y, Z: at.Z}
 }

@@ -14,18 +14,24 @@ The message that changes an appearance carries the whole of it -- every
 face, together -- so a change has to read what the object looks like
 now and send it all back with one face altered.  What it reads is the
 last appearance the region described, and the region does not describe
-one the instant it changes.
+a new one when the change lands: the reading stays as it was.
 
-Two runs in quick succession therefore both start from the appearance
-before either, and the second undoes the first everywhere it did not
-touch.  Measured: texturing every face and then face 2 alone left faces
-0 and 1 plain.
+Two runs therefore both start from the appearance before either, and
+the second undoes the first everywhere it did not touch.  Measured:
+texturing every face and then face 2 alone left faces 0 and 1 plain.
+
+Waiting does not get round it, which was worth measuring because it is
+the obvious thing to try.  Colouring every face of a box red, waiting
+forty seconds, and then colouring face 0 green left face 0 green and
+every other face exactly as it had been before the red -- the red was
+gone from all six.  The reading had not moved in those forty seconds
+either: the report still described the box as it was before the first
+run.
 
 So several changes to one object belong in one command line, where they
-are applied to one reading and sent once.  Where they cannot be, let
-the object settle between them.  Everything is parsed before anything
-is sent, so a typo in the last flag refuses the lot rather than leaving
-the object half changed.
+are applied to one reading and sent once.  Everything is parsed before
+anything is sent, so a typo in the last flag refuses the lot rather
+than leaving the object half changed.
 
 # What the report says, and what it is reading
 
@@ -43,6 +49,13 @@ A prim nothing has described the appearance of reads as plain white.
 That is the truth about it rather than a guess: an object can be known
 to be there before anything has said what it looks like, and a prim
 with no appearance recorded against it is a plain white prim.
+
+What the report is reading is the cache a change starts from, so it
+lags in the same way and for as long: after a change, what it prints
+is the appearance from before it.  What brings it up to date is the
+object being described afresh, which in the measurement above meant
+taking the box into inventory and putting it out again -- the reading
+was then the one the changes had actually left behind.
 
 # Examples
 

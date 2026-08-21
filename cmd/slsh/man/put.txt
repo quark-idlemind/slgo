@@ -5,9 +5,10 @@ get, which does not.
 The argument is a file.  PNG, JPEG, GIF, BMP and TIFF are read, and
 the orientation a camera left in the file is applied, since a texture
 that arrives sideways stays sideways.  The item is called after the
-file unless --name says otherwise and lands in Textures unless
---folder does.  The line printed before anything is uploaded says what
-would go up, how many bytes it is, and the fee.
+file unless --name says otherwise, carries whatever --desc says, and
+lands in Textures unless --folder does.  The line printed before
+anything is uploaded says what would go up, how many bytes it is, and
+the fee.
 
 # What it costs, and why the figure is named
 
@@ -27,15 +28,29 @@ wants to upload already satisfies that, so the picture is resampled
 and the report says from what size to what.
 
 The rounding is the viewer's own, biased downwards: a side goes up
-only past about 1.75 times the power of two below it, so 1000 becomes
-512 and 1800 becomes 2048.  --round says otherwise, and --round-x and
---round-y say it for one side, since a wide banner rounded up in one
-direction and down in the other is a reasonable thing to want.  Which
-resampling filter suits which picture is not something a shell can
-decide, so --filter asks and --filters is a guide keyed by the sort of
-picture rather than by the name of the filter.  None of it matters
-when both sides are already powers of two, because then nothing is
-resized.
+only past 1.75 times the power of two below it, so 800 becomes 512 and
+900 becomes 1024.  Measured with -N, and nothing uploaded to measure
+it: an 800x900 picture goes up as 512x1024, one side down and the
+other up in the same picture, and 1000x1800 goes up as 1024x2048.
+--round says otherwise, and --round-x and --round-y say it for one
+side, since a wide banner rounded up in one direction and down in the
+other is a reasonable thing to want.  Which resampling filter suits
+which picture is not something a shell can decide, so --filter asks
+and --filters is a guide keyed by the sort of picture rather than by
+the name of the filter.  None of it matters when both sides are
+already powers of two, because then nothing is resized.
+
+How much of the picture survives the encoding is the other question,
+and the fee does not turn on it at all: the price is settled by the
+dimensions, so compressing harder buys somebody else's download time
+rather than lindens.  What goes up aims at about eight to one, which is
+where Second Life's own textures sit -- the stock plywood is 98282
+bytes for 512x512 -- and --ratio asks for something else.  --lossless
+keeps every pixel instead, at several times the size: measured on one
+1024x2048 picture, 145889 bytes against 35118.  Anything 128x128 or
+smaller is stored losslessly whether it was asked for or not, since
+that is what the viewer does with the small textures that are usually
+a bit of interface.
 
 # Looking before paying
 
