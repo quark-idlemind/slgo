@@ -477,10 +477,10 @@ type profileOptions struct {
 //	  key       d22b7e57-7e57-c0de-0e4e-000000000001
 //	  born      5/21/2010
 //	  payment   on file, and used
-//	  partner   a0c27e57-7e57-c0de-9773-c8eaa2e796f4  Somebody Resident
+//	  partner   dc047e57-7e57-c0de-1117-911169260e8b  Somebody Resident
 //	  about     I build things.
 //	  groups    1 listed, which is not every group they are in
-//	  5adb7e57-7e57-c0de-f28b-a359208f6cdd  Officer   Lorn Rangers
+//	  4cac7e57-7e57-c0de-07c7-d7093839ea77  Officer   Lorn Rangers
 //
 // Every field says what it does not know rather than printing an empty
 // column, because a blank beside "born" reads as a shell that lost the

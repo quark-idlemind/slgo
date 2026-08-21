@@ -41,7 +41,7 @@ func TestWhereIsTheRegionAndThePosition(t *testing.T) {
 	// A group is worth saying, because building fails without one and
 	// the land blames itself rather than the avatar.  Until the
 	// membership list arrives there is nothing to call it but its key.
-	group := msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
+	group := msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
 	x.grid.presence.ActiveGroup = group
 	if got := x.do(t, "where"); !strings.Contains(got, "acting as group "+group.String()) {
 		t.Errorf("where should name the active group, got %q", got)

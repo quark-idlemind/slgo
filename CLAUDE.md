@@ -41,7 +41,8 @@ entirely.
 
 Names hide in the same way. They wrap across comment lines, they appear
 downcased in tests that check case-insensitive matching, they turn up
-as Go identifiers (`ThrushmoorAsset`), and one region name may be the
+as Go identifiers (a name welded to a word, like `<place>Asset`),
+and one region name may be the
 prefix another test searches by.
 
 ### Checking before a commit that adds captured output
@@ -52,10 +53,20 @@ saving it. A transcript of `parcel --region` is a list of the
 neighbours' parcels. A landmark listing names the places somebody has
 been. `objects --owner` names people.
 
-    git grep -niE 'a name you know is real|another one'
+    tools/check-identities            what is staged
+    tools/check-identities --all      the whole tree
+    tools/check-identities --install-hook
 
-is the whole of the check, and it takes a moment. Do it while the
-output is fresh, rather than leaving it for whoever reviews the branch.
+It reads the list of real names from `~/.config/slgo/identities.tsv`,
+or from `$SLGO_IDENTITIES`. That list is deliberately not in this
+repository -- writing the names down here is the thing being prevented
+-- so it lives on the machine that did the measuring, one
+`real<TAB>replacement` per line. Somebody who has never touched the
+live grid has no such file, and the check says so and passes rather
+than failing on them.
+
+When a measurement brings a new name in, add it to that list at the
+same time; a checker is only as good as what it has been told about.
 
 ## Measurements
 

@@ -1,0 +1,137 @@
+#!/bin/sh
+# check-identities looks for real people and places in what is about to be
+# committed.
+#
+# Most of what is written down in this repository was measured on a live grid,
+# standing next to other people's homes, and the output that carries a
+# measurement carries their names with it: "parcel --region" lists the
+# neighbours' parcels, a landmark listing says where somebody has been,
+# "objects --owner" names people.  The rule is in CLAUDE.md; this is the check
+# that catches the rule being broken by accident.
+#
+# The list of real names is NOT in this repository, because writing them down
+# here is the thing being prevented.  It lives on the machine that did the
+# measuring:
+#
+#     ~/.config/slgo/identities.tsv        real<TAB>replacement, # for comments
+#
+# or wherever SLGO_IDENTITIES points.  Somebody who has never touched the live
+# grid has no such file and nothing to hide, so a missing list is not an error:
+# the check says so and passes.
+#
+# Usage:
+#     tools/check-identities                 what is staged for commit
+#     tools/check-identities --worktree      what is changed but not staged
+#     tools/check-identities --all           every tracked file
+#     tools/check-identities FILE...         the files named
+#     tools/check-identities --install-hook  run it before every commit
+#
+# It prints the file and line of anything it finds, and what to write instead.
+# Exit status is 1 when something was found, 0 when nothing was.
+
+set -eu
+
+map=${SLGO_IDENTITIES:-$HOME/.config/slgo/identities.tsv}
+root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+if [ "${1:-}" = "--install-hook" ]; then
+	hook=$(git rev-parse --git-dir)/hooks/pre-commit
+	if [ -e "$hook" ] && ! grep -q check-identities "$hook" 2>/dev/null; then
+		printf 'a pre-commit hook already exists and does not call this:\n  %s\n' "$hook" >&2
+		exit 1
+	fi
+	cat > "$hook" <<'HOOK'
+#!/bin/sh
+exec "$(git rev-parse --show-toplevel)/tools/check-identities"
+HOOK
+	chmod +x "$hook"
+	echo "installed $hook"
+	exit 0
+fi
+
+if [ ! -r "$map" ]; then
+	echo "check-identities: no list at $map, so nothing to check against"
+	echo "  (that is the ordinary case for anybody who has not measured on the grid)"
+	exit 0
+fi
+
+# What to look at.  Staged additions by default, because that is what a commit
+# is about to make public.
+scope=${1:---staged}
+case "$scope" in
+--staged)   files=$(git diff --cached --name-only --diff-filter=ACMR) ;;
+--worktree) files=$(git diff --name-only --diff-filter=ACMR) ;;
+--all)      files=$(git ls-files) ;;
+-*)         echo "check-identities: no such option $scope" >&2; exit 2 ;;
+*)          files=$* ;;
+esac
+
+[ -n "$files" ] || { echo "check-identities: nothing to check"; exit 0; }
+
+# Text only: a texture is not going to name anybody, and grep on a jpeg is
+# noise.
+text=""
+for f in $files; do
+	case "$f" in
+	*.png|*.jpg|*.jpeg|*.jp2|*.gz|*.pdf) continue ;;
+	esac
+	[ -f "$root/$f" ] && text="$text $root/$f"
+done
+[ -n "$text" ] || { echo "check-identities: nothing to check"; exit 0; }
+
+found=0
+# Read the list, skipping comments and blank lines.  A uuid is also looked for
+# by its first eight characters, because the documentation elides them that way
+# -- eight characters of somebody's id is still theirs.
+while IFS="$(printf '\t')" read -r real repl; do
+	case "$real" in ''|\#*) continue ;; esac
+	[ -n "$repl" ] || continue
+
+	# The whole string first.  Not word-split into its parts: "Pelmar Reach"
+	# is one name, and looking for "Pelmar" and "Reach" separately reports
+	# the same line twice and matches things that are neither.
+	report() {   # $1 hits, $2 what to write instead, $3 what was found
+		[ -n "$1" ] || return 0
+		if [ "$found" -eq 0 ]; then
+			echo "check-identities: this names real people or places:"
+			echo
+		fi
+		found=1
+		printf '%s\n' "$1" | sed "s|^$root/||" | sort -u | while IFS= read -r hit; do
+			printf '  %s\n' "$hit"
+		done
+		printf '      ^ write %s instead of %s\n\n' "$2" "$3"
+	}
+
+	hits=$(grep -RIniF -- "$real" $text 2>/dev/null || true)
+	report "$hits" "$repl" "$real"
+
+	# A uuid is also elided to its first eight characters in the
+	# documentation, and eight characters of somebody's id is still theirs.
+	# Not when more hex follows, or a placeholder of repeated nibbles
+	# matches every other placeholder.
+	case "$real" in
+	*-*-*-*-*)
+		short=$(printf '%s' "$real" | cut -c1-8)
+		hits=$(grep -RIniE -- "$short([^0-9a-fA-F]|$)" $text 2>/dev/null |
+			grep -viF -- "$real" || true)
+		report "$hits" "$(printf '%s' "$repl" | cut -c1-8)" "$short"
+		;;
+	esac
+done < "$map"
+
+if [ "$found" -ne 0 ]; then
+	cat <<'WHY'
+Nothing that identifies a real resident, their land, their objects or their
+groups belongs in this repository, which is public.  Invent a name and invent
+the uuid, keeping the first four characters of the uuid so that anything
+sorting by id still sorts the same way.  CLAUDE.md has the whole of it.
+
+If one of these is a false positive -- an ordinary word that happens to match
+-- the answer is to make the entry in the list more specific rather than to
+skip the check.
+WHY
+	exit 1
+fi
+
+echo "check-identities: nothing real in what was checked"

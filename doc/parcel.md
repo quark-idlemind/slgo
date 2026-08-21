@@ -285,7 +285,7 @@ to follow it. That is how this whole investigation started.
   Only arrival was measured.
 
 - **What a viewer's About Land takes its "Parcel ID" field from.** On a
-  session standing on Thrushmoor (local 5, `b48d7e57`) it showed
+  session standing on Thrushmoor (local 5, `3c8f7e57`) it showed
   `bbb14d12`, which is Protected Land, local 1 -- a different parcel
   from the one the rest of the panel described. Nothing here depends on
   it, but it means that field is not a check on our own identity work.

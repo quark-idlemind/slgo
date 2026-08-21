@@ -74,8 +74,8 @@ func drewIn(hl mapHighlight, g mapGrid, people ...sl.Person) string {
 // by their id and by nothing else -- the names are what it is not
 // paying for -- so a test has to give them one.
 var (
-	mapFriendID   = msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
-	mapStrangerID = msg.MustParseUUID("a0c27e57-7e57-c0de-9773-c8eaa2e796f4")
+	mapFriendID   = msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
+	mapStrangerID = msg.MustParseUUID("dc047e57-7e57-c0de-1117-911169260e8b")
 )
 
 // atID is at with an id.

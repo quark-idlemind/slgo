@@ -30,8 +30,8 @@ func dialogFrom(name, message string, channel int32, buttons ...string) *msg.Scr
 // into.  Neither is an avatar: the sender of a group invitation is the
 // group itself, which is the fact the shell's handling turns on.
 var (
-	testGroup = msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
-	testRole  = msg.MustParseUUID("a0c27e57-7e57-c0de-9773-c8eaa2e796f4")
+	testGroup = msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
+	testRole  = msg.MustParseUUID("dc047e57-7e57-c0de-1117-911169260e8b")
 )
 
 // inviting builds a group invitation: from the group, naming whoever
@@ -260,7 +260,7 @@ func TestAGroupInvitationIsOneMoreThingWaiting(t *testing.T) {
 	x := newTestShell(t)
 	watching(t, x)
 
-	txn := msg.MustParseUUID("24f67e57-7e57-c0de-57e0-6fb484e1a15e")
+	txn := msg.MustParseUUID("f0367e57-7e57-c0de-e242-539cb34f0bd2")
 	x.grid.Relay(t, inviting("quark.idlemind", "Quark invites you to Lorn Family", 0, txn))
 	waits(t, x, "invites you into a group")
 
@@ -308,7 +308,7 @@ func TestABareAnswerWillNotSpendMoney(t *testing.T) {
 	x := newTestShell(t)
 	watching(t, x)
 
-	txn := msg.MustParseUUID("6ab17e57-7e57-c0de-6176-dacb69eb6ae7")
+	txn := msg.MustParseUUID("f0367e57-7e57-c0de-9664-e4c990815167")
 	x.grid.Relay(t, inviting("quark.idlemind", "Quark invites you to Lorn Family", 50, txn))
 	waits(t, x, "invites you into a group")
 
@@ -398,7 +398,7 @@ func TestNoDeclinesAGroupInvitation(t *testing.T) {
 	x := newTestShell(t)
 	watching(t, x)
 
-	txn := msg.MustParseUUID("83857e57-7e57-c0de-08f7-d2cb69fa7777")
+	txn := msg.MustParseUUID("f16c7e57-7e57-c0de-f489-4d4aee88fd0b")
 	x.grid.Relay(t, inviting("quark.idlemind", "Quark invites you to Lorn Family", 50, txn))
 	waits(t, x, "invites you into a group")
 

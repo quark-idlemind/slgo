@@ -64,8 +64,8 @@ func TestTheGroupListCrossesToAClient(t *testing.T) {
 		t.Errorf("groups = %v before the simulator said anything", p.GetGroups())
 	}
 
-	builders := msg.MustParseUUID("431c7e57-7e57-c0de-3436-9a8a7819a5e2")
-	explorers := msg.MustParseUUID("5adb7e57-7e57-c0de-d129-851548d0e1c3")
+	builders := msg.MustParseUUID("488f7e57-7e57-c0de-054d-127bee068aa2")
+	explorers := msg.MustParseUUID("4baf7e57-7e57-c0de-23d9-34c5d2bd3ec7")
 	m := &msg.AgentGroupDataUpdate{}
 	m.AgentData.AgentID = h.Agent().Account.AgentID
 	m.GroupData = []msg.AgentGroupDataUpdate_GroupData{

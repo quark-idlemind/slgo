@@ -23,11 +23,11 @@ import (
 
 // The prims and the scripts these tests work with.
 var (
-	aBox      = msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
-	aGreeter  = msg.MustParseUUID("72a47e57-7e57-c0de-61cf-35aab6d46a79")
-	aListener = msg.MustParseUUID("46357e57-7e57-c0de-aacc-8812f9835614")
-	aWatcher  = msg.MustParseUUID("285f7e57-7e57-c0de-16a0-5a60c5ef8785")
-	aReadme   = msg.MustParseUUID("f5b27e57-7e57-c0de-d46a-2fe30bdca05e")
+	aBox      = msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
+	aGreeter  = msg.MustParseUUID("df8f7e57-7e57-c0de-8a30-80d6e78abfcb")
+	aListener = msg.MustParseUUID("e0b57e57-7e57-c0de-398e-bee79e38dd6f")
+	aWatcher  = msg.MustParseUUID("e1307e57-7e57-c0de-7684-a7b26150cdf3")
+	aReadme   = msg.MustParseUUID("e1697e57-7e57-c0de-1068-228efc6bfe1b")
 )
 
 // aBoxHolding puts one object in the region and fills it, which is the

@@ -707,7 +707,7 @@ func TestLookupSaysSoWhenNobodyMatched(t *testing.T) {
 
 // testGroupID is a group somebody lists in their profile, which is not
 // one this avatar has joined: a profile's groups are somebody else's.
-var testGroupID = msg.MustParseUUID("93fc7e57-7e57-c0de-5bb7-3940f4894ffa")
+var testGroupID = msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
 
 // TestProfileShowsWhatAProfileSays.
 //
@@ -812,7 +812,7 @@ func TestProfileSaysWhatItDoesNotKnow(t *testing.T) {
 // fact missing from the screen.
 func TestAKeyTheGridHasNeverHeardOfIsASentenceAndNotAFailure(t *testing.T) {
 	x := newTestShell(t)
-	nobody := msg.MustParseUUID("71ed7e57-7e57-c0de-537b-0faae2121a1c")
+	nobody := msg.MustParseUUID("f2537e57-7e57-c0de-f6ea-ead72a026c9b")
 	x.grid.AnswerNames(t, map[msg.UUID]string{})
 	x.grid.AnswerProfile(t, avatarGroups(nobody))
 

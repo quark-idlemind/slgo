@@ -19,9 +19,9 @@ import (
 // The prims these tests build with: a chair of three, or three things
 // standing on their own, depending on what each one sets up.
 var (
-	aChair = msg.MustParseUUID("24f67e57-7e57-c0de-57e0-6fb484e1a15e")
-	aLeg   = msg.MustParseUUID("6ab17e57-7e57-c0de-6176-dacb69eb6ae7")
-	aSeat  = msg.MustParseUUID("83857e57-7e57-c0de-08f7-d2cb69fa7777")
+	aChair = msg.MustParseUUID("f0367e57-7e57-c0de-e242-539cb34f0bd2")
+	aLeg   = msg.MustParseUUID("f0367e57-7e57-c0de-9664-e4c990815167")
+	aSeat  = msg.MustParseUUID("f16c7e57-7e57-c0de-f489-4d4aee88fd0b")
 )
 
 // aPrim is one object the region has described, named and with a parent

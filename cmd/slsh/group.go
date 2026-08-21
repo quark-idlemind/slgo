@@ -12,7 +12,7 @@ package main
 // which group it is acting as and not on who it is.  Measured on Agni,
 // in Pelmar Reach, with two avatars a couple of metres apart:
 //
-//	hobb       Pelmar Reach at 33, 75, 2001 / acting as group 5adb7e57-...
+//	hobb       Pelmar Reach at 33, 75, 2001 / acting as group 488f7e57-...
 //	holt  Pelmar Reach at 31, 73, 2001
 //
 // Rezzing a prim as hobb worked.  As holt it failed, with the
