@@ -175,7 +175,7 @@ const agniCrossedRegion = `<llsd><map>` +
 	`<key>SeedCapability</key>` +
 	`<string>https://simhost-0aaaaaaaaaaaaaaa2.agni.secondlife.io:12043/cap/` +
 	`d8ad7e57-7e57-c0de-696c-d11016b60d1c</string>` +
-	`<key>SimIP</key><binary>ItwX3Q==</binary>` +
+	`<key>SimIP</key><binary>ywBxCg==</binary>` +
 	`</map></array></map></llsd>`
 
 // TestTheCrossingIsReadFromTheBytesTheGridSent: the decoding, against
@@ -190,8 +190,8 @@ func TestTheCrossingIsReadFromTheBytesTheGridSent(t *testing.T) {
 	if addr == nil {
 		t.Fatal("the measured body was read as one with no destination in it")
 	}
-	if got := addr.String(); got != "34.220.23.221:13009" {
-		t.Errorf("address = %s, want 34.220.23.221:13009", got)
+	if got := addr.String(); got != "203.0.113.10:13009" {
+		t.Errorf("address = %s, want 203.0.113.10:13009", got)
 	}
 	// The same address EnableSimulator had been offering for this
 	// neighbour all along, which is what makes a child circuit the thing

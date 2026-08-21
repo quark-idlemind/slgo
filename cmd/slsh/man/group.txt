@@ -19,10 +19,22 @@ back was "You cannot create objects here.  The owner of this land does
 not allow it." -- which is untrue as it stands.  The land does allow
 it; the request simply arrived from nobody in particular.
 
-A viewer remembers the active group from one session to the next.  A
-headless login starts with none, so this is the ordinary state of every
-avatar brought up by the daemon, and a refusal that blames the land is
-the first sign of it.
+A viewer remembers the active group from one session to the next and a
+headless login does not: the login itself always comes up acting as
+nobody, and a refusal that blames the land is the first sign of it.
+
+The daemon does not leave it there.  When slgod brings a session up it
+settles the group as well: a profile under ~/.config/slgo may carry
+
+	group = Example Builders
+
+by name or by key, "-group NAME" or "-group PROFILE=GROUP" on the
+daemon's own command line overrules the profile, and an avatar that has
+joined exactly one group and said nothing about it gets that one.  So an
+avatar the daemon brought up may well be acting as something already,
+and this is the command that says which -- an avatar acting as nobody is
+what a profile that says nothing and a membership list with none or
+several in it leaves behind.
 
 # Acting as nobody is spelled "none"
 

@@ -32,7 +32,7 @@ func TestTheNeighboursCrossTheWireFieldByField(t *testing.T) {
 		Neighbours: []*pb.NeighbourInfo{
 			{
 				Handle:    handle,
-				Address:   "35.91.2.183:13032",
+				Address:   "203.0.113.11:13032",
 				Name:      "Pelmar Mill",
 				Handshook: true,
 				Heard:     412,
@@ -40,7 +40,7 @@ func TestTheNeighboursCrossTheWireFieldByField(t *testing.T) {
 			// One that was dialled and never answered, which is an
 			// offer that came to nothing and has to be visible as
 			// one.
-			{Handle: msg.RegionHandle(43648, 43647), Address: "35.91.2.184:13011"},
+			{Handle: msg.RegionHandle(43648, 43647), Address: "203.0.113.12:13011"},
 		},
 	}
 
@@ -52,7 +52,7 @@ func TestTheNeighboursCrossTheWireFieldByField(t *testing.T) {
 		t.Fatalf("Neighbours = %+v", n)
 	}
 	if n.Held[0] != (Neighbour{
-		Handle: handle, Addr: "35.91.2.183:13032", Name: "Pelmar Mill",
+		Handle: handle, Addr: "203.0.113.11:13032", Name: "Pelmar Mill",
 		Handshook: true, Heard: 412,
 	}) {
 		t.Errorf("the first neighbour came out as %+v", n.Held[0])

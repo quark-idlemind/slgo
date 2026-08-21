@@ -27,12 +27,20 @@ What is printed is the names alone.  Each one is served by a URL, and
 the URL stays with whatever holds the session, which is what does the
 asking; nothing about it would be usable from here.
 
-# It describes this session and no other
+# It describes this session where it is standing now
 
-Capabilities are granted per session, by the simulator the session
-logged in to, so two avatars in the same region can have different
-lists -- and the same avatar logged in again may too.  A listing saved
-from an earlier session says what was true then.
+Capabilities are granted by the simulator, to one session, for one
+region.  So two avatars in the same region can have different lists, the
+same avatar logged in again may too, and a listing saved from an earlier
+session says what was true then.
+
+A teleport replaces them.  The URLs served the region the avatar left,
+so they are dropped on arrival and the whole list is asked for again,
+from the new region's own seed.  What is printed after a teleport is
+therefore the new simulator's answer rather than a carried-over one,
+which is a change nothing on the screen shows: twenty-one names came
+back before a teleport from a mainland region to a sandbox and
+twenty-one after it.  It is the URLs behind them that moved.
 
 # Examples
 

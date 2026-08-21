@@ -24,7 +24,11 @@ anything here, so it is a setting -- map_ratio -- and it is written the
 way it is measured, height first.  The default is 7:3, a cell seven
 high and three wide, which is what the mono font this was measured in
 turned out to be.  Twice as tall as wide was the guess before anybody
-measured, and "set map_ratio 2:1" is how to have that back.
+measured, and "set map_ratio 2:1" is how to have that back.  A terminal
+can be asked rather than guessed at: "set map_ratio auto" measures the
+cell and writes down what came back, which is where to start rather than
+the answer, since what a terminal reports is the box it hands the font
+and not the shape the letters look.  "man set" has the rest of it.
 
 With the sixteen rows it draws unless told otherwise, 7:3 is 16 * 7 / 3
 = 37 columns, rounded from 37.3: in the region view that is 256/16 = 16

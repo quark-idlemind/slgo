@@ -159,12 +159,14 @@ typed.
 
 A refusal is the grid's and not this shell's, and it arrives in two
 voices: a key a program could act on and a sentence meant for a person.
-Both are printed, because they are not always the same string.
-"no_host" is a handle that is no region, and says the same word twice;
-"MustHaveVIPStatus" comes with a sentence about being a premium
-subscriber.  An estate can refuse an arrival for reasons the map has no
-field for, so a region the map listed is not a region that will have
-this avatar.
+They are not always the same string, so both are printed where they
+differ -- "MustHaveVIPStatus" comes with a sentence about being a
+premium subscriber, and the line carries the key and the sentence.
+Where the grid puts the same word in both places the line carries it
+once, which is what a handle that is no region does: the refusal for one
+of those ends in "no_host" and says it once, not twice.  An estate can
+refuse an arrival for reasons the map has no field for, so a region the
+map listed is not a region that will have this avatar.
 
 The session is left standing where it was: a refusal costs the request
 and nothing else.
@@ -184,7 +186,10 @@ as 2002, and one for 0 as the ground.  So asking for nothing is asking
 for ground level rather than for a fall, and asking for a height above
 the ground is honoured rather than corrected.  Anything within a few
 metres counts as having arrived, and the line printed afterwards is the
-position to believe.
+position to believe -- with the one exception "where" explains at
+length.  Above 1020 metres nothing that follows a moving avatar can say
+its height, so a read-back up there is the height the arrival stated
+and not the height the avatar may since have fallen or settled to.
 
 A teleport within a region that is refused -- a parcel that will not
 have the avatar, a point outside the region -- produces no error and no

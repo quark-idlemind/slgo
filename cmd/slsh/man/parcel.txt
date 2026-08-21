@@ -55,9 +55,10 @@ key under it naming them.  A "?" is a quarter of the overlay that never
 arrived.
 
 Drawing who OWNS each square was the first attempt and it drew nothing:
-in a region of Linden Homes every square reads "owned", so the picture
-was one character from corner to corner.  Which parcel is which is the
-thing a map of parcels is for.
+every square of the mainland region this was measured in reads "owned",
+Linden's own roads and rez zones included, so the picture was one
+character from corner to corner.  Which parcel is which is the thing a
+map of parcels is for.
 
 Linden's own protected land is the exception and is drawn as ground: a
 blank for the roads and waterways a region is laid out around, and a

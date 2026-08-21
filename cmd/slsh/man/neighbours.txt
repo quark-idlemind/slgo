@@ -48,6 +48,13 @@ simulator introduces what is near: standing twelve metres from the west
 edge, one neighbour was offered; standing in the middle of the same
 region at 2001 metres, none at all.
 
+It is the distance to a border and not the height that decides it.
+Measured on the same region and at that same 2001 metres, but 28 metres
+in from the west edge and 72 from the south, three circuits were offered
+and taken up inside four seconds: the two regions across those edges and
+the one across the corner between them.  A skybox is not out of reach of
+its neighbours; the middle of a region is.
+
 The set changes as the avatar moves.  Walking toward a corner brought
 two more, and arriving in the next region dropped all three and opened
 that region's own within a second: the circuits belong to the region
@@ -60,8 +67,13 @@ calls itself, the square it occupies on the grid, the address of the
 simulator, and how many packets have arrived on the circuit.
 
 	neighbours are on, 2 circuits held
-	Pelmar Mill                         43647, 43648   34.220.23.221:13009   412 heard
-	Orrick Gate                      43648, 43647   54.218.220.28:13006   87 heard
+	Pelmar Mill                       43647, 43648   203.0.113.9:13009     412 heard
+	Orrick Gate                       43648, 43647   203.0.113.28:13006    87 heard
+
+The addresses above are made up, and deliberately: a simulator's address
+says which machine a region is on as plainly as its name says which
+region it is, and this file is public.  What comes back is an ordinary
+address and port.
 
 The handle is not in the line, where "regions" prints it, because
 nothing is addressed by a neighbour's handle: a border is walked over

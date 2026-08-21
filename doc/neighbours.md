@@ -186,7 +186,7 @@ The rest of what it measured, in the order it happened:
 
 	{"agent-id": "<uuid string>",
 	 "seed-capability": "https://simhost-....agni.secondlife.io:12043/cap/...",
-	 "sim-ip-and-port": "34.220.23.221:13009"}
+	 "sim-ip-and-port": "203.0.113.10:13009"}
 
   The address arrives as a **`host:port` string**, which is a third
   spelling of the same fact -- four binary bytes in `CrossedRegion`, a

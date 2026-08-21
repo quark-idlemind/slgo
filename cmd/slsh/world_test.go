@@ -719,12 +719,12 @@ func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
 		On: true,
 		Held: []sl.Neighbour{
 			{
-				Handle: msg.RegionHandle(43646, 43648), Addr: "35.91.2.183:13032",
+				Handle: msg.RegionHandle(43646, 43648), Addr: "203.0.113.11:13032",
 				Name: "Pelmar Mill", Handshook: true, Heard: 412,
 			},
 			// One that was dialled and has not answered, which is
 			// what an offer that came to nothing looks like.
-			{Handle: msg.RegionHandle(43648, 43647), Addr: "35.91.2.184:13011"},
+			{Handle: msg.RegionHandle(43648, 43647), Addr: "203.0.113.12:13011"},
 		},
 	}
 
@@ -737,7 +737,7 @@ func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
 	if !strings.Contains(lines[0], "2 circuits held") {
 		t.Errorf("the state line reads %q", lines[0])
 	}
-	for _, want := range []string{"Pelmar Mill", "43646, 43648", "35.91.2.183:13032", "412 heard"} {
+	for _, want := range []string{"Pelmar Mill", "43646, 43648", "203.0.113.11:13032", "412 heard"} {
 		if !strings.Contains(lines[1], want) {
 			t.Errorf("the listing should carry %q: %q", want, lines[1])
 		}

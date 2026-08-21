@@ -34,7 +34,7 @@ const agniTeleportFinish = `<llsd><map><key>Info</key><array><map>` +
 	`<string>https://simhost-0aaaaaaaaaaaaaaa2.agni.secondlife.io:12043/cap/` +
 	`fd277e57-7e57-c0de-69d1-a1764bce3849</string>` +
 	`<key>SimAccess</key><integer>13</integer>` +
-	`<key>SimIP</key><binary>I1sCtw==</binary>` +
+	`<key>SimIP</key><binary>ywBxCw==</binary>` +
 	`<key>SimPort</key><integer>13032</integer>` +
 	`<key>TeleportFlags</key><binary>AAAAEA==</binary>` +
 	`</map></array></map></llsd>`
@@ -43,10 +43,10 @@ const agniTeleportFinish = `<llsd><map><key>Info</key><array><map>` +
 // decoding, against the body that was captured rather than one built
 // here.
 //
-// The address is what has teeth.  35.91.2.183 is the four bytes
+// The address is what has teeth.  203.0.113.11 is the four bytes
 // cb 00 71 0b in the order they arrived; read as a big endian integer
 // and formatted it would be 3405803787, and read as a little endian one
-// it would be 183.2.91.35 -- somebody else's address entirely, dialled
+// it would be 203.0.113.13 -- somebody else's address entirely, dialled
 // forever.  Neither mistake can show up anywhere but on a live grid,
 // which is why the fixture is a measurement.
 func TestTheDestinationIsReadFromTheBytesTheGridSent(t *testing.T) {
@@ -54,8 +54,8 @@ func TestTheDestinationIsReadFromTheBytesTheGridSent(t *testing.T) {
 	if addr == nil {
 		t.Fatal("the measured body was read as one with no destination in it")
 	}
-	if got := addr.String(); got != "35.91.2.183:13032" {
-		t.Errorf("address = %s, want 35.91.2.183:13032", got)
+	if got := addr.String(); got != "203.0.113.11:13032" {
+		t.Errorf("address = %s, want 203.0.113.11:13032", got)
 	}
 	if handle != 1094014069892352 {
 		t.Errorf("handle = %d, want 1094014069892352", handle)

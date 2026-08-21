@@ -617,7 +617,7 @@ func TestTheOfferIsReadInTheShapesTheGridSends(t *testing.T) {
 	rows := offeredSimulators(map[string]any{
 		"SimulatorInfo": []any{map[string]any{
 			"Handle": handleBytes(msg.RegionHandle(995, 997)),
-			"IP":     []byte{35, 91, 2, 183},
+			"IP":     []byte{203, 0, 113, 11},
 			"Port":   int64(13032),
 		}},
 	})
@@ -628,8 +628,8 @@ func TestTheOfferIsReadInTheShapesTheGridSends(t *testing.T) {
 		t.Errorf("handle = %d, want %d", got, msg.RegionHandle(995, 997))
 	}
 	addr := neighbourAddr(rows[0]["IP"].([]byte), 13032)
-	if addr == nil || addr.String() != "35.91.2.183:13032" {
-		t.Errorf("address = %v, want 35.91.2.183:13032", addr)
+	if addr == nil || addr.String() != "203.0.113.11:13032" {
+		t.Errorf("address = %v, want 203.0.113.11:13032", addr)
 	}
 
 	// A block that arrived bare rather than in an array, which

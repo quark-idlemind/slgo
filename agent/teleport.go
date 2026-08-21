@@ -31,7 +31,7 @@ import (
 //
 //	{"Info":[{"AgentID":"...","LocationID":"AAAAAw==",
 //	  "RegionHandle":"AAPjAAAD5QA=","SimAccess":13,
-//	  "SimIP":"I1sCtw==","SimPort":13032,"TeleportFlags":"AAAAEA==",
+//	  "SimIP":"ywBxCw==","SimPort":13032,"TeleportFlags":"AAAAEA==",
 //	  "SeedCapability":"https://simhost-....agni.secondlife.io:12043/cap/..."}]}
 //
 // Almost every field there is a different shape from the one beside it,
@@ -125,8 +125,8 @@ func destination(info map[string]any) (addr *net.UDPAddr, seed string, handle ui
 	// are read by nothing here.
 	handle = uint64(llsd.Int(info, "RegionHandle"))
 
-	// SimIP is binary and is NOT a number.  The measured "I1sCtw==" is
-	// the four bytes cb 00 71 0b, which is 35.91.2.183 in network
+	// SimIP is binary and is NOT a number.  The measured "ywBxCw==" is
+	// the four bytes cb 00 71 0b, which is 203.0.113.11 in network
 	// order; read as an integer and formatted it would come out
 	// backwards or as a nine-digit number, and either would be a bug
 	// that only shows on a live grid.  So the bytes are used as bytes,

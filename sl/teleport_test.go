@@ -162,7 +162,7 @@ const agniFinish = `<llsd><map><key>Info</key><array><map>` +
 	`<string>https://simhost-0aaaaaaaaaaaaaaa2.agni.secondlife.io:12043/cap/` +
 	`fd277e57-7e57-c0de-69d1-a1764bce3849</string>` +
 	`<key>SimAccess</key><integer>13</integer>` +
-	`<key>SimIP</key><binary>I1sCtw==</binary>` +
+	`<key>SimIP</key><binary>ywBxCw==</binary>` +
 	`<key>SimPort</key><integer>13032</integer>` +
 	`<key>TeleportFlags</key><binary>AAAAEA==</binary>` +
 	`</map></array></map></llsd>`

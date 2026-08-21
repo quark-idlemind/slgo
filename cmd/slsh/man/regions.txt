@@ -22,12 +22,26 @@ There is no way to ask for an exact name, because the map has no such
 question in it.  So this prints what matched and picks none of it: the
 line to read is the one whose name is the name, and choosing that line
 here would mean choosing between somebody's several possibilities
-without showing them.  A common word typed in comes back with thirty
-regions, of which one is the place meant and the rest are its
-namesakes.
+without showing them.  Measured: "Sandbox" comes back with thirty-three
+regions, of which one is the place meant and the rest are its namesakes,
+and not one of them is called Sandbox.  Nothing caps the other end
+either: a single letter answered with 1586 regions, inside a second, and
+every one of them was printed.  A short name is a long listing rather
+than a refusal.
 
 A name that matches nothing is an error saying which name, since that
 is the map's own answer rather than a listing that came back empty.
+
+# How long the map is given
+
+The answer comes back over the message circuit in however many packets
+it takes, ended by a block that says the list is finished.  Fifteen
+seconds are allowed for the whole of it and --wait, in seconds, changes
+that.  Running out is a real timeout and not "no such region": what
+arrived is a fragment of the list, and a fragment printed as the answer
+would be a shorter grid than the real one.  The error says how many had
+come in by then, since nothing at all and most of an answer are
+different things to do something about.
 
 # The handle is the number a teleport is addressed to
 

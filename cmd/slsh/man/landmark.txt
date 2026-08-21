@@ -5,9 +5,16 @@ this lists the ones this avatar holds, says where one of them goes,
 makes one of wherever the avatar is standing, and goes to one.
 
 With no arguments it lists them, as paths, so that two landmarks of one
-name can be told apart.  With a name it reads that one and prints where
-it goes, without moving.  Going there is asked for separately, and so
-is going home:
+name can be told apart.  The whole of inventory is looked in and not
+just Landmarks, because nothing stops one being dragged into a folder of
+its own -- but only four levels down, which is one request rather than
+one per folder and reaches everything anybody files by hand.  A landmark
+buried deeper than that is not listed and is not found by name, and what
+comes back is "no landmark called that" rather than anything about
+depth.  "find" and "ls" still see it.
+
+With a name it reads that one and prints where it goes, without moving.
+Going there is asked for separately, and so is going home:
 
 	landmark
 	landmark Thrushmoor

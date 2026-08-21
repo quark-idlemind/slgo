@@ -12,9 +12,30 @@ place's --at takes.
 It is exact on arriving in a region and after a teleport, because both
 of those are answered with a position.  While the avatar is walking
 about, what carries it is the message a viewer draws the dots on its
-map with, and that message has a metre's resolution -- so a walking
-avatar's position is right to the metre and no better.  Nothing here
-can do better, and nothing this shell does needs to.
+map with, and that message is coarse in two different amounts: one byte
+of x and one of y, which is whole metres across the region, and one byte
+of the height in four metre steps.  So a walking avatar is right to the
+metre on the flat and to about four metres up and down.
+
+# Above 1020 metres the height stops moving altogether
+
+The height byte runs out at 255, and 255 is both 1020 metres and
+everything above it.  Believing it would put a skybox level with the
+roofs, and everything the region then described would be judged against
+a place the avatar is not, so the session does not: where the byte is at
+its ceiling it keeps the last height something stated in full, which is
+the arrival or the teleport.  The consequence is that above 1020 metres
+the height printed here is where the avatar was PUT and not where it has
+got to since.
+
+Measured: standing on a platform 2001 metres up, this said 28, 72, 2002
+while the simulator's own answer -- the position it wrote into a
+landmark made at that instant -- was 28.00, 71.95, 2001.20.  The avatar
+had arrived a metre above the height it was sent to, the way an arrival
+does, and had settled onto the platform since; nothing that follows a
+moving avatar could say so.  So "landmark --make" is the way to read a
+height up there that is not the one the arrival stated, and x and y are
+still good to the metre the whole time.
 
 # The group line, and why it is not decoration
 
@@ -35,7 +56,8 @@ is the name that says whether this is the group the land wants.
 	Testville at 33, 73, 1000
 	acting as group Example Builders (d8467e57-…)
 
-See also: look, who, map for this position and everybody else's drawn
-as a picture, objects, tp for moving the avatar about or to another
-region, regions for where a region the avatar is not in stands, and
-group for setting the one this reports.
+See also: parcel for which piece of the region this position is on,
+look, who, map for this position and everybody else's drawn as a
+picture, objects, tp for moving the avatar about or to another region,
+regions for where a region the avatar is not in stands, and group for
+setting the one this reports.

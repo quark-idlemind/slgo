@@ -20,7 +20,7 @@ func storedResponse() map[string]any {
 		"agent_id":         "876e7e57-7e57-c0de-9eeb-1bd0e1ec6995",
 		"session_id":       "8d1b7e57-7e57-c0de-f4f4-19d29d124acf",
 		"circuit_code":     int64(690139535),
-		"sim_ip":           "44.249.124.154",
+		"sim_ip":           "203.0.113.14",
 		"sim_port":         int64(13003),
 		"seed_capability":  "https://simhost.invalid/cap/real",
 		"first_name":       `"Taren"`,
@@ -183,7 +183,7 @@ func TestHandoverDoesNotDisturbTheStoredResponse(t *testing.T) {
 			t.Fatalf("handover %d refused: %v", i, got["message"])
 		}
 	}
-	if h.Raw["sim_ip"] != "44.249.124.154" {
+	if h.Raw["sim_ip"] != "203.0.113.14" {
 		t.Errorf("the stored response was overwritten: sim_ip = %v", h.Raw["sim_ip"])
 	}
 	if h.Raw["seed_capability"] != "https://simhost.invalid/cap/real" {
