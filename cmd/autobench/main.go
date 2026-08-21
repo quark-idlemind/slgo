@@ -43,6 +43,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
 
 	"github.com/quark-idlemind/slgo/internal/session"
@@ -82,6 +83,7 @@ var flags = struct {
 	Timeout   time.Duration `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
 	Test      string        `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model in this process, see the source code"`
 	Backend   string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life; --test is the same contract answered by a model here"`
+	Help      bool          `getopt:"--help -h show this message"`
 }{
 	Start:   "last",
 	Timeout: time.Minute,
@@ -652,6 +654,21 @@ func main() {
 		}
 	}()
 	args := options.RegisterAndParse(&flags)
+
+	// --help before anything is decided, so that asking what the flags
+	// are never rezzes a prim or dials anything.
+	//
+	// It has to be a flag of its own: without one, getopt treats --help
+	// as an option it has never heard of, which prints this same usage
+	// with "unknown option: --help" on the front of it and exits 1 --
+	// an error report for somebody who asked the question correctly.
+	// To stdout, as automate does it, because here it is the answer and
+	// not a complaint.
+	if flags.Help {
+		getopt.PrintUsage(os.Stdout)
+		return
+	}
+
 	// What this benchmark cost, in the unit the cost is paid in.  Deferred so
 	// it is reported even when the benchmark ends in a panic -- a run that
 	// failed still spent everything it spent.

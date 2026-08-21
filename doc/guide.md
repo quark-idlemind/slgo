@@ -236,11 +236,12 @@ waste a login attempt if asked again too soon, and says how long it is
 waiting. `connecting` is a login still in flight or a session being
 reconnected -- the reason after it tells those two apart.
 
-The star is the first line that is **up**, which is what a program that
-names no avatar gets. It is a picture of the daemon's default rather
-than the thing itself, and the two part company while a session is
-reconnecting: that session is not up, so the star moves down a line
-while a bare command still drives the same avatar.
+The star is the first line the daemon still **holds** a session for,
+which is what a program that names no avatar gets. A session that is
+reconnecting keeps it: the place belongs to the session and not to the
+circuit under it, so a bare command still drives that avatar and waits
+for it. Only `stopped` gives the place up, and a profile with no
+session behind it never had one.
 
 ### Letting a viewer have one
 

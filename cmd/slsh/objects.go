@@ -734,9 +734,9 @@ func cmdMove(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 // cmdAgents lists what the daemon is holding.
 //
 // In the daemon's order, which is not alphabetical: oldest first, and
-// the first is what a command that names no agent gets.  That order is
-// the information -- it is also the order a run looks for free objects
-// in.
+// the first session it still holds is what a command that names no
+// agent gets.  That order is the information -- it is also the order a
+// run looks for free objects in.
 func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
 	_, done, err := subOptions("agents", &o, out, args)
@@ -757,10 +757,10 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	here := sh.s.Info().Name
 	first := true
 	for _, a := range agents {
-		// The mark is the daemon's first choice, which is only
-		// meaningful among the ones it is actually holding.
+		// The mark is the daemon's first choice, and it has to be the
+		// daemon's rule for that and not one that looks like it.
 		mark := " "
-		if a.GetState() == pb.AgentInfo_HOSTED && first {
+		if first && canBeTheDefault(a.GetState()) {
 			mark, first = "*", false
 		}
 		note := ""
@@ -779,6 +779,29 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 			mark, a.GetName(), a.GetAvatarName(), where, note)
 	}
 	return nil
+}
+
+// canBeTheDefault says whether a listed agent is one a command that
+// names no avatar could be given, which is the whole of what the star
+// means.
+//
+// The state is all the listing has to go on and it is enough, because
+// the daemon's rule (Server.defaultLocked) is "the first session I hold
+// that was not deliberately stopped" and the two halves of that are
+// both readable here: the listing arrives in the daemon's own order,
+// held sessions first and stopped ones at the end of that group, and
+// only a held session is ever HOSTED or CONNECTING.  CONFIGURED and
+// FAILED are profiles the daemon holds no session for at all, so they
+// can no more be the default than a name it has never heard of.
+//
+// CONNECTING is the one that matters and it was the bug: a circuit that
+// dropped and is being rebuilt never costs a session its place, so the
+// daemon still answers with it, while a star drawn on the first HOSTED
+// row moved to the second session for as long as the reconnection took
+// -- the listing and the daemon disagreeing exactly when somebody is
+// reading the listing to find out what is going on.
+func canBeTheDefault(state pb.AgentInfo_State) bool {
+	return state == pb.AgentInfo_HOSTED || state == pb.AgentInfo_CONNECTING
 }
 
 // cmdLogin brings an avatar up.

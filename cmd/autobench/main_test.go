@@ -370,6 +370,42 @@ func readBack(t *testing.T, path string) string {
 	return string(data)
 }
 
+// TestAskingWhatTheFlagsAreIsNotAnError: --help was not a flag, so
+// getopt read it as an option it had never heard of -- which prints
+// "unknown option: --help", then the very usage that was asked for,
+// then exits 1.  The usage was already right; being told off for asking
+// correctly was the whole of the fault.
+//
+// This runs main in this process, which the unfixed program could not
+// survive: the os.Exit inside getopt's parse would have taken the test
+// binary with it.  That is the point of the test.
+func TestAskingWhatTheFlagsAreIsNotAnError(t *testing.T) {
+	out, said := autobench(t, "--help")
+	if !strings.Contains(out, "Usage: autobench") {
+		t.Errorf("--help printed no usage:\n%s", out)
+	}
+	// Not just the summary line: the flags and what they take are what
+	// somebody asking is after.
+	for _, want := range []string{"--test=PAD,SIZE", "--backend=HOST:PORT", "--help"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the usage does not mention %q:\n%s", want, out)
+		}
+	}
+	// To stdout, and nothing on stderr: an answer, not a complaint.
+	if said != "" {
+		t.Errorf("--help wrote to standard error:\n%s", said)
+	}
+	if strings.Contains(out, "unknown option") {
+		t.Errorf("--help is a flag now and is not unknown:\n%s", out)
+	}
+
+	// -h is the same question and gets the same answer; it was free,
+	// nothing else here uses that letter.
+	if short, _ := autobench(t, "-h"); short != out {
+		t.Errorf("-h and --help printed different things:\n%s\nand\n%s", short, out)
+	}
+}
+
 // TestTheProgramPrintsWhatTheModeMeasured: the output is what everything
 // else reads autobench through -- the skill that drives it parses these
 // lines -- so the labels and the order they come in are part of what the

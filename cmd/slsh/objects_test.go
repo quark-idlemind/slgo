@@ -677,6 +677,51 @@ func TestAgentsListsInTheDaemonsOrder(t *testing.T) {
 	}
 }
 
+// TestTheStarIsWhatTheDaemonWouldPick, including while the session it
+// belongs to is reconnecting.
+//
+// The daemon's default is the first session it HOLDS that was not
+// deliberately stopped, and a circuit that dropped and is being rebuilt
+// -- CONNECTING -- never costs a session its place.  A star drawn on
+// the first HOSTED line instead moved to the second session for as long
+// as the first was reconnecting, while a bare command still drove the
+// first: the listing and the daemon disagreeing exactly when somebody is
+// reading the listing to find out what is going on.
+func TestTheStarIsWhatTheDaemonWouldPick(t *testing.T) {
+	x, d := newDaemonShell(t)
+	d.agents = []*pb.AgentInfo{
+		{Name: "first", AvatarName: "One Resident",
+			State: pb.AgentInfo_CONNECTING, Detail: "connection reset by peer"},
+		{Name: "fake", AvatarName: "Quark Idlemind", Region: "Test Region",
+			State: pb.AgentInfo_HOSTED},
+	}
+
+	lines := strings.Split(strings.TrimRight(x.do(t, "agents"), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("agents printed %d lines:\n%s", len(lines), strings.Join(lines, "\n"))
+	}
+	if !strings.HasPrefix(lines[0], "* first") {
+		t.Errorf("a reconnecting session keeps the default, so it keeps the star: %q", lines[0])
+	}
+	if strings.HasPrefix(lines[1], "*") {
+		t.Errorf("only one line is the default: %q", lines[1])
+	}
+
+	// A profile the daemon holds no session for is not a candidate at
+	// all, however far up the listing it is: it has nothing to send.  So
+	// with every held session stopped there is no star, which is the
+	// daemon answering "none" to the same question.
+	d.agents = []*pb.AgentInfo{
+		{Name: "stopped", AvatarName: "Old Resident",
+			State: pb.AgentInfo_STOPPED, Detail: "logged out on request"},
+		{Name: "never", State: pb.AgentInfo_CONFIGURED},
+		{Name: "refused", State: pb.AgentInfo_FAILED, Detail: "login refused"},
+	}
+	if got := x.do(t, "agents"); strings.Contains(got, "*") {
+		t.Errorf("nothing the daemon could hand over, so nothing to star:\n%s", got)
+	}
+}
+
 // TestLoginIsSafeToRepeat: one already up comes back as already up
 // rather than being logged in a second time, which would kick the
 // session it has.
