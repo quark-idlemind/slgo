@@ -8,15 +8,16 @@ package main
 // see backend.go for what a benchmark asks of any of them, and script.go
 // for the one that goes through the script.v1 contract instead.
 //
-// # One object, every run
+// # A session per object
 //
-// A benchmark carries its base reading from the cnt=0 script to the
-// cnt>0 scripts through the object's LINKSET DATA, so every run of one
-// benchmark has to happen in the SAME object or the difference being
-// measured is between two unrelated numbers.  Under slrund that was a
-// guarantee the server made and the client checked.  Here it is
-// structural: the runner holds one object for its lifetime, and there
-// is no pool to hand it a different one.
+// The objects a benchmark runs in need not belong to one avatar, so
+// each is held with the session that can reach it.  It used to be one
+// session and a list of objects, back when a benchmark carried its base
+// reading between scripts through the measured object's LINKSET DATA:
+// that made one object special, and one avatar enough.  The script
+// reports one number now and the arithmetic is done here, so a reading
+// is a reading wherever it was taken -- and what a benchmark asks for is
+// N places to run scripts, exactly as automate does.
 
 import (
 	"context"
@@ -35,17 +36,21 @@ const scriptName = "autobench"
 
 var _ backend = (*runner)(nil)
 
-// runner runs benchmark scripts in one object of a live grid session.
-type runner struct {
+// place is one object and the session that reaches it.  Two places can
+// be two avatars' -- which is why the session travels with the object
+// rather than sitting beside the list.
+type place struct {
 	s   *sl.Session
 	obj *sl.Object
+}
 
-	// spare are further objects to run in, for probes that can be
-	// taken at the same time.  They are never obj: obj is the object
-	// the measured sequence runs in, and its LINKSET DATA carries the
-	// base reading from the cnt=0 script to the cnt>0 ones.  A probe
-	// dropped into it would overwrite that.
-	spare []*sl.Object
+// runner runs benchmark scripts in the objects of a live grid.
+type runner struct {
+	// places[0] is where the measured sequence runs and the rest are
+	// spares, for readings that can be taken at the same time.  The
+	// first is first and nothing more: no object is special to the
+	// arithmetic any more.
+	places []place
 
 	// Timeout bounds one run.  Zero means sl's own default.
 	Timeout time.Duration
@@ -60,22 +65,23 @@ type runner struct {
 
 // Send runs the script in the measured object.
 func (r *runner) Send(src string) (results, info []string, err error) {
-	return r.sendIn(r.obj, src)
+	return r.sendIn(r.places[0], src)
 }
 
 // SendSpare runs the script in the nth spare object.
 func (r *runner) SendSpare(n int, src string) (results, info []string, err error) {
-	return r.sendIn(r.spare[n], src)
+	return r.sendIn(r.places[n+1], src)
 }
 
-func (r *runner) Spares() int { return len(r.spare) }
+func (r *runner) Spares() int { return len(r.places) - 1 }
 
 // Grid: these readings are Second Life's, which is what makes a padding
 // found here worth remembering in a file later benchmarks read.
 func (r *runner) Grid() bool { return true }
 
-// sendIn runs a script in a named object.
-func (r *runner) sendIn(obj *sl.Object, src string) (results, info []string, err error) {
+// sendIn runs a script in a named place.
+func (r *runner) sendIn(p place, src string) (results, info []string, err error) {
+	obj := p.obj
 	ctx := context.Background()
 	if r.Timeout > 0 {
 		// Room for sl to report its own overrun rather than having the
@@ -85,7 +91,7 @@ func (r *runner) sendIn(obj *sl.Object, src string) (results, info []string, err
 		defer cancel()
 	}
 
-	res, err := r.s.Run(ctx, sl.Script{
+	res, err := p.s.Run(ctx, sl.Script{
 		In:      obj,
 		Name:    scriptName,
 		Source:  src,
@@ -141,16 +147,20 @@ func (r *runner) Compile(src string) (*compilation, error) {
 	// something compiles cannot replace the script a measurement is
 	// using.
 	start := time.Now()
-	up, err := r.s.InstallScript(ctx, r.obj, scriptName+"-compile", src, false)
+	up, err := r.places[0].s.InstallScript(ctx,
+		r.places[0].obj, scriptName+"-compile", src, false)
 	if err != nil {
 		return nil, err
 	}
 	return &compilation{OK: up.Compiled, Errors: up.Errors, Elapsed: time.Since(start)}, nil
 }
 
+// Close gives back whatever getting the places took, which includes the
+// sessions: a grant covering several avatars holds a session for each,
+// and they go back together with the grant.
 func (r *runner) Close() error {
 	if r.cleanup != nil {
 		r.cleanup()
 	}
-	return r.s.Close()
+	return nil
 }

@@ -45,7 +45,11 @@ func liveBench(t *testing.T) *runner {
 		s.Close()
 		t.Fatal(err)
 	}
-	b := &runner{s: s, obj: obj, cleanup: cleanup, Timeout: 2 * time.Minute}
+	b := &runner{
+		places:  []place{{s, obj}},
+		cleanup: func() { cleanup(); s.Close() },
+		Timeout: 2 * time.Minute,
+	}
 	t.Cleanup(func() { b.Close() })
 	return b
 }

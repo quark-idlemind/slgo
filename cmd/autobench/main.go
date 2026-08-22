@@ -48,7 +48,6 @@ import (
 
 	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/scripttest"
-	"github.com/quark-idlemind/slgo/sl"
 )
 
 var flags = struct {
@@ -755,15 +754,15 @@ func main() {
 			First: flags.First, Last: flags.Last, Start: flags.Start,
 			Channel: "autobench",
 		}
-		s, obj, spare, cleanup, err := runIn(ctx, opts)
+		places, cleanup, err := runIn(ctx, opts)
 		if err != nil {
 			errf("%v\n", err)
 		}
 		if flags.Keep {
-			fmt.Printf("running in %s\n", obj)
+			fmt.Printf("running in %s\n", places[0].obj)
 		}
 		b = &runner{
-			s: s, obj: obj, spare: spare, cleanup: cleanup,
+			places: places, cleanup: cleanup,
 			Timeout: flags.Timeout,
 			Info:    flags.Show, // -v: surface INFO: chat lines (COUNT/PADDING/*_MEM)
 		}
@@ -1593,56 +1592,69 @@ func mkVar(s string) (string, error) {
 	}
 }
 
-// runIn gets somewhere to run scripts: the measured object, and any
-// spare objects to take readings in alongside it.
+// runIn gets somewhere to run scripts: as many places as the search will
+// use at once, each with the session that reaches it.
 //
-// See automate's for why the object is worn and kept.  The spares are
-// this program's own: a padding search is a dozen readings of one
-// script that do not depend on each other, and two objects can take two
-// of them at once.
-func runIn(ctx context.Context, o session.Options) (*sl.Session, *sl.Object, []*sl.Object, func(), error) {
+// See automate's for why the objects are worn and kept.  Running several
+// at once is this program's own reason: a padding search is a dozen
+// readings of one script that do not depend on each other, and N places
+// can take N of them at a time.
+func runIn(ctx context.Context, o session.Options) ([]place, func(), error) {
 	if flags.Object != "" || flags.Rez {
 		s, err := session.Connect(ctx, o)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, err
 		}
 		obj, cleanup, err := session.RunIn(ctx, s, flags.Object, flags.Keep)
 		if err != nil {
 			s.Close()
-			return nil, nil, nil, nil, err
+			return nil, nil, err
 		}
-		return s, obj, nil, func() { cleanup(); s.Close() }, nil
+		return []place{{s, obj}}, func() { cleanup(); s.Close() }, nil
 	}
 
-	// One avatar, and that is a limitation of THIS code rather than
-	// anything the measurement needs.  runner holds a single session and
-	// sends every script through it, so an object belonging to another
-	// avatar could not be run in; nothing about the readings requires
-	// it.  What is shared between the objects is the base reading in the
-	// measured object's own linkset data, which the spares never touch
-	// -- see runner.spare.
+	// N places to run scripts in, and no opinion about whose they are.
+	// A benchmark that wants 32 of them is asking for more than any one
+	// avatar has, and there is no reason it should have to know that:
+	// the readings are independent, the arithmetic is done here, and
+	// what the pool grants is places.
 	//
-	// Lifting it is giving runner a session per object, the way
-	// automate's place does, and asking through UseAutoSpread.  Then
-	// "all on one avatar" would only ever be something a person asked
-	// for by name.  Worth doing; not done, and worth knowing that the
-	// reason is plumbing.
+	// Naming an avatar still gets that avatar's, because UseAutoSpread
+	// takes --agent to mean it.
 	//
-	// (One thing to check when it is: Second Life runs different
-	// simulator versions on different channels, so two avatars can be in
-	// regions with two LSL compilers.  Whether that moves a reading is
-	// unmeasured -- and the same doubt already applies between one run
-	// and the next.)
-	a, err := session.UseAutoAnywhere(ctx, o, flags.Parts)
+	// (One thing this makes possible and nobody has measured: Second
+	// Life runs different simulator versions on different channels, so
+	// two avatars can be in regions with two LSL compilers.  Whether
+	// that moves a reading is unknown -- and the same doubt already
+	// applied between one run and the next.)
+	as, err := session.UseAutoSpread(ctx, o, flags.Parts)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, err
 	}
+
+	var places []place
+	for _, a := range as {
+		for _, obj := range a.Objects {
+			places = append(places, place{a.Session, obj})
+		}
+	}
+
 	// Which avatar, when nobody said.  With several hosted this is the
 	// daemon's choice and the reader cannot work it out; and a benchmark
 	// attributed to the wrong avatar is not an error, it is a plausible
-	// number.
+	// number.  Several avatars is now an ordinary answer rather than an
+	// impossible one, so it is said the same way, one line each.
 	if o.Agent == "" {
-		fmt.Fprintf(os.Stderr, "running as %s, objects %s\n", a.Agent, a.Where())
+		for _, a := range as {
+			fmt.Fprintf(os.Stderr, "running as %s, objects %s\n", a.Agent, a.Where())
+		}
 	}
-	return a.Session, a.Objects[0], a.Objects[1:], a.Release, nil
+
+	// One release for the whole grant however many avatars it covers, so
+	// releasing any of them releases all of them; the rest are no-ops.
+	return places, func() {
+		for _, a := range as {
+			a.Release()
+		}
+	}, nil
 }

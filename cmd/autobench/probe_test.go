@@ -120,7 +120,7 @@ func TestAskingForAPadTwiceCostsOneRun(t *testing.T) {
 func TestAProbeThatFailedIsRunTheOrdinaryWay(t *testing.T) {
 	probeReset(t)
 	b, f := newFakeRunner(t, 474, 368, 3)
-	f.refuse[b.spare[1].ID] = []string{"Internal server compile error"}
+	f.refuse[b.places[2].obj.ID] = []string{"Internal server compile error"}
 
 	pads := []int{600, 700, 800}
 	got := probeBase(b, pads)

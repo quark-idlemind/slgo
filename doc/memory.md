@@ -315,20 +315,30 @@ would then have had to work around.
 Measured on Agni on 2026-08-22, one avatar, `--no-cache` so every run
 paid for its own search, the statement `llSin(1.0);`:
 
-| `--parts` | scripts/round | `-1` rounds | `-1` runs | `-1` time | copy rounds | copy runs | copy time |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2  | 1  | 26 | 26 | 34s | 39 | 39 | -- |
-| 4  | 3  | 18 | 34 | 24s | 29 | 53 | 58s |
-| 8  | 7  | 14 | 50 | 21s | 23 | 77 | 54s |
-| 12 | 11 | 14 | 57 | 22s | 23 | 87 | 54s |
+| `--parts` | avatars | scripts/round | rounds | runs | time | s/round |
+|---:|---:|---:|---:|---:|---:|---:|
+| 2  | 1 | 1  | 26 | 26  | 34s | 1.31 |
+| 4  | 1 | 3  | 18 | 34  | 24s | 1.33 |
+| 8  | 1 | 7  | 14 | 50  | 21s | 1.50 |
+| 12 | 1 | 11 | 14 | 57  | 22s | 1.57 |
+| 16 | 2 | 15 | 14 | 70  | 22s | 1.57 |
+| 24 | 2 | 23 | 12 | 94  | 26s | 2.17 |
+| 32 | 3 | 31 | 12 | 100 | 25s | 2.08 |
+
+Copy mode, one avatar, the same statement: 29 rounds and 58s at four
+parts, 23 and 54s at eight, 23 and 54s at twelve.
 
 Two separate things stop it, and they stop it at different places.
 
-**The scripts stay cheap.** Dividing the time by the rounds gives what a
-round cost: 1.31s for one script, 1.33s for three, 1.50s for seven,
-1.57s for eleven. Eleven scripts at once cost 20% more than one, not
-eleven times more. Parallelism is very nearly free here, which is the
-result that makes the flag worth having at all.
+**The scripts stay cheap, up to a point.** Dividing the time by the
+rounds gives what a round cost: 1.31s for one script, 1.33s for three,
+1.50s for seven, 1.57s for eleven and for fifteen. Fifteen scripts at
+once cost 20% more than one, not fifteen times more, and parallelism
+being nearly free is what makes the flag worth having.
+
+It stops being free somewhere past that: 23 scripts a round cost 2.17s
+and 31 cost 2.08s, about a third more than 15. Still cheap for the
+scripts -- 31 at once for 1.3 times what 7 cost -- but no longer free.
 
 **The rounds stop falling.** ceil(log_N 512) is 9, 5, 3, 3, 2, 2 for N
 of 2, 4, 8, 16, 32, 64, so eight parts and sixteen cost the same rounds
@@ -341,10 +351,11 @@ confirmations and the re-reads -- which is why 26 rounds become 18, 14
 and then 12 offline at 32 parts rather than falling towards zero. Even
 an infinitely wide search would leave 10.
 
-So the knee is at **eight parts**: below it every doubling is worth
-about 20% of the wall clock, above it the round count plateaus while the
-per-round cost keeps creeping up. Twelve parts measured slightly SLOWER
-than eight in `-1` mode, for seven more runs.
+So the knee is at **eight parts**, and the measurements past it say so
+plainly: 21s at eight, 22s at twelve and at sixteen, 26s at twenty-four,
+25s at thirty-two. The round count does fall -- 14 to 12 -- and the
+rounds cost more than the fall is worth. Four times the parts, four
+times the scripts, and three seconds SLOWER.
 
 `--parts=2` is not a special case any more, only the worst one: a
 two-part round is a bisection sent one script at a time, so the search
@@ -355,17 +366,32 @@ several rounds and calling them one.
 
 ### What is not measured here
 
-Twelve is where this stops because `autobench` takes its objects from a
-single avatar and an avatar has twelve. The next step down -- 32 parts,
-two rounds a search -- needs 32 objects, which needs readings taken
-across several avatars at once. The slot pool grants exactly that (see
-[slots.md](slots.md)); `autobench` does not yet ask for it, so
-`--parts=32` is refused at once, naming the avatar and the twelve it
-has, rather than waiting or quietly taking fewer.
+Twelve was where the measurements above stopped, because `autobench`
+took its objects from a single avatar and an avatar has twelve. It does
+not any more: it asks the pool for N places and takes them wherever they
+are, several avatars at a time, holding a session per object the way
+`automate` does (see [slots.md](slots.md)). Naming an avatar still gets
+that avatar's, because that is then something a person asked for rather
+than something the program assumed.
 
-Whether a round of 31 scripts stays as cheap as a round of 11 is
-therefore unmeasured. The trend through 11 is mild and the mechanism is
-the sim compiling them concurrently, but 31 has not been watched.
+So 32 parts is now a matter of having 32 objects logged in rather than a
+restriction in the code. The measurements above have not been retaken
+across avatars.
+
+Whether readings from different avatars are comparable was the doubt
+worth having, because every size here is a difference of two readings
+and Second Life runs different simulator versions on different channels
+-- two avatars can be in regions with two LSL compilers.
+
+On this grid on this day they agree. Every row of the table above
+reported `Size: 380`, over one avatar, two and three, and the rows that
+spread did not agree less than the rows that did not. That is one
+statement measured once and it is not a proof that the compilers are
+always the same; it is the reason the spreading is worth doing.
+
+Asking for more objects than the daemon's avatars have between them is
+refused at once, saying so and saying how many there are, rather than
+waiting or quietly taking fewer.
 
 ## Method, and what it does not cover
 

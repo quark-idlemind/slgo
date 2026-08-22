@@ -106,7 +106,7 @@ func TestInfoLinesAreSeparatedWhenAsked(t *testing.T) {
 func TestAScriptSecondLifeWillNotCompileComesBackAsARefusal(t *testing.T) {
 	resetFlags()
 	b, f := newFakeRunner(t, 474, 368, 0)
-	f.refuse[b.obj.ID] = []string{"(1,1) : ERROR : Syntax error"}
+	f.refuse[b.places[0].obj.ID] = []string{"(1,1) : ERROR : Syntax error"}
 
 	_, _, err := b.Send(buildScript(1, 474))
 	var ce *compileError
@@ -126,8 +126,8 @@ func TestAScriptSecondLifeWillNotCompileComesBackAsARefusal(t *testing.T) {
 	// Second Life refusing without saying why is the case that actually
 	// happens at 512 copies, where its entire message is "Internal server
 	// compile error" -- and sometimes there is not even that.
-	f.refuse[b.obj.ID] = []string{}
-	f.refuse[b.obj.ID] = nil
+	f.refuse[b.places[0].obj.ID] = []string{}
+	f.refuse[b.places[0].obj.ID] = nil
 	c := &compilation{}
 	if got := c.Error(); !strings.Contains(got, "said nothing about why") {
 		t.Errorf("a silent refusal reads as %q", got)
@@ -142,7 +142,7 @@ func TestARunTimeErrorBeatsTheSilenceItCaused(t *testing.T) {
 	resetFlags()
 	b, f := newFakeRunner(t, 474, 368, 0)
 	b.Timeout = 2 * time.Second
-	f.fault[b.obj.ID] = "Stack-Heap Collision"
+	f.fault[b.places[0].obj.ID] = "Stack-Heap Collision"
 
 	_, _, err := b.Send(buildScript(256, 474))
 	var re *runtimeError
@@ -167,7 +167,7 @@ func TestARunTimeErrorBeatsTheSilenceItCaused(t *testing.T) {
 	// and it no longer does -- sl reads the simulator's words and the
 	// verdict is carried down.  A struct with the field left false would
 	// prove nothing about whether anything sets it.
-	f.fault[b.obj.ID] = "Math Error"
+	f.fault[b.places[0].obj.ID] = "Math Error"
 	_, _, err = b.Send(buildScript(256, 474))
 	var other *runtimeError
 	if !errors.As(err, &other) {
@@ -191,7 +191,7 @@ func TestAScriptThatSaysNothingIsATimeoutAndNotAFault(t *testing.T) {
 	resetFlags()
 	b, f := newFakeRunner(t, 474, 368, 0)
 	b.Timeout = time.Second
-	f.silent[b.obj.ID] = true
+	f.silent[b.places[0].obj.ID] = true
 
 	results, _, err := b.Send(buildScript(0, 474))
 	if err == nil {
@@ -273,7 +273,7 @@ func TestCompilingDoesNotRunAnything(t *testing.T) {
 
 	// A refusal is a RESULT and not an error: err is for not being able
 	// to ask at all.
-	f.refuse[b.obj.ID] = []string{"Internal server compile error"}
+	f.refuse[b.places[0].obj.ID] = []string{"Internal server compile error"}
 	if c, err = b.Compile(buildScript(512, 474)); err != nil {
 		t.Fatalf("Compile: %v", err)
 	}

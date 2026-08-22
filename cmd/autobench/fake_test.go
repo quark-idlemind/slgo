@@ -173,9 +173,12 @@ func newFakeRunner(t *testing.T, crossing, codeSize, spares int) (*runner, *fake
 	}
 	t.Cleanup(func() { s.Close() })
 
-	b := &runner{s: s, obj: f.object(100), Timeout: 20 * time.Second}
+	b := &runner{
+		places:  []place{{s, f.object(100)}},
+		Timeout: 20 * time.Second,
+	}
 	for i := 0; i < spares; i++ {
-		b.spare = append(b.spare, f.object(uint32(101+i)))
+		b.places = append(b.places, place{s, f.object(uint32(101 + i))})
 	}
 	return b, f
 }

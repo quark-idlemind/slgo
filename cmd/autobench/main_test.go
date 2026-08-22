@@ -627,12 +627,12 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsMeasured(t *testing.T) {
 	opts := session.Options{Addr: "127.0.0.1:1", Channel: "autobench"}
 
 	flags.Object = "workbench"
-	if _, _, _, _, err := runIn(context.Background(), opts); err == nil {
+	if _, _, err := runIn(context.Background(), opts); err == nil {
 		t.Error("runIn found a named object through a daemon that is not there")
 	}
 
 	flags.Object, flags.Rez = "", true
-	if _, _, _, _, err := runIn(context.Background(), opts); err == nil {
+	if _, _, err := runIn(context.Background(), opts); err == nil {
 		t.Error("runIn rezzed a prim through a daemon that is not there")
 	}
 
@@ -640,7 +640,7 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsMeasured(t *testing.T) {
 	// about it: it asks the daemon who it is holding before it asks for
 	// objects.
 	flags.Rez = false
-	if _, _, _, _, err := runIn(context.Background(), opts); err == nil {
+	if _, _, err := runIn(context.Background(), opts); err == nil {
 		t.Error("runIn took objects from a daemon that is not there")
 	}
 }
