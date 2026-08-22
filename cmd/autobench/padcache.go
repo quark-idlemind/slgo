@@ -17,15 +17,15 @@ package main
 //
 // # What the key is
 //
-// The rendered base script, with one normalisation: the title is
-// replaced by a run of one character of the same length.  A title is a
-// string literal, so what it costs is its length rather than its text,
-// and without this the title -- which differs for every benchmark --
-// would be the one thing keeping otherwise identical bases apart.
+// The rendered base script, hashed, and nothing else.
 //
-// If that assumption is ever wrong the answer is confirmed before it is
-// used, and a wrong one is thrown away and searched for again.  It
-// costs two runs to find out, not a wrong measurement.
+// It used to need a normalisation, because the script said the title and
+// so the caller's own text was part of the shape being identified: the
+// title was replaced by a run of one character of the same length, on
+// the grounds that a string literal costs its length rather than its
+// text.  The script does not say the title any more, so two runs of one
+// shape under two names are one shape, and the length is not in the key
+// either.
 //
 // # Why a file, and why staleness is not a worry
 //
