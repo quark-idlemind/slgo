@@ -273,8 +273,8 @@ func TestAPaddingIsTheLastPadInsideItsBlock(t *testing.T) {
 // is free beside it -- but the count is for whoever asked for --debug,
 // not for a caller parsing stdout.
 func TestTheCostIsReportedUnderDebugAndNowhereElse(t *testing.T) {
-	spentRuns, spentRereads, spentCompiles = 11, 6, 1
-	t.Cleanup(func() { spentRuns, spentRereads, spentCompiles = 0, 0, 0 })
+	spentRuns, spentRereads, spentRounds, spentCompiles = 11, 6, 7, 1
+	t.Cleanup(func() { spentRuns, spentRereads, spentRounds, spentCompiles = 0, 0, 0, 0 })
 
 	flags.Debug = false
 	t.Cleanup(func() { flags.Debug = false })
@@ -284,7 +284,7 @@ func TestTheCostIsReportedUnderDebugAndNowhereElse(t *testing.T) {
 
 	flags.Debug = true
 	said := stderrOf(t, reportCost)
-	if !strings.Contains(said, "Spent 11 runs (6 of them re-reads) and 1 compiles") {
+	if !strings.Contains(said, "Spent 11 runs (6 of them re-reads) in 7 rounds, and 1 compiles") {
 		t.Errorf("--debug did not report the cost:\n%s", said)
 	}
 }

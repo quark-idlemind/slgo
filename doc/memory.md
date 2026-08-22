@@ -292,6 +292,81 @@ in this document says what it was measured against.
 
 ---
 
+## What `--parts` buys, and where it stops
+
+The padding search looks for one byte in a 512-byte block: the pad at
+which the reading steps up to the next block. A bisection finds it in
+nine rounds and spends nine runs doing it.
+
+`--parts=N` cuts the range into N parts a round instead of two, which
+takes N-1 readings -- one per division between the parts -- and takes
+them all at once. A round is one wait however many scripts are in it, so
+the trade is runs for rounds: ceil(log_N 512) rounds instead of nine.
+Powers of two divide the block evenly and are the natural choice, but
+nothing requires one.
+
+It is the lease size as well, and there is nothing else to decide: a
+round runs one script per division and one more object holds the script
+being measured, so the objects a benchmark wants ARE its parts, and
+slgod keeps track of them. There used to be an `--objects` beside it,
+which after this change could only ever have said something the search
+would then have had to work around.
+
+Measured on Agni on 2026-08-22, one avatar, `--no-cache` so every run
+paid for its own search, the statement `llSin(1.0);`:
+
+| `--parts` | scripts/round | `-1` rounds | `-1` runs | `-1` time | copy rounds | copy runs | copy time |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2  | 1  | 26 | 26 | 34s | 39 | 39 | -- |
+| 4  | 3  | 18 | 34 | 24s | 29 | 53 | 58s |
+| 8  | 7  | 14 | 50 | 21s | 23 | 77 | 54s |
+| 12 | 11 | 14 | 57 | 22s | 23 | 87 | 54s |
+
+Two separate things stop it, and they stop it at different places.
+
+**The scripts stay cheap.** Dividing the time by the rounds gives what a
+round cost: 1.31s for one script, 1.33s for three, 1.50s for seven,
+1.57s for eleven. Eleven scripts at once cost 20% more than one, not
+eleven times more. Parallelism is very nearly free here, which is the
+result that makes the flag worth having at all.
+
+**The rounds stop falling.** ceil(log_N 512) is 9, 5, 3, 3, 2, 2 for N
+of 2, 4, 8, 16, 32, 64, so eight parts and sixteen cost the same rounds
+and so do thirty-two and sixty-four. The measured 14 rounds at both 8
+and 12 parts is that arithmetic and not a limit anywhere in the code.
+
+**And the search is not the whole benchmark.** In `-1` mode the rounds
+come to two searches plus a fixed eight -- the base runs, the walk, the
+confirmations and the re-reads -- which is why 26 rounds become 18, 14
+and then 12 offline at 32 parts rather than falling towards zero. Even
+an infinitely wide search would leave 10.
+
+So the knee is at **eight parts**: below it every doubling is worth
+about 20% of the wall clock, above it the round count plateaus while the
+per-round cost keeps creeping up. Twelve parts measured slightly SLOWER
+than eight in `-1` mode, for seven more runs.
+
+`--parts=2` is not a special case any more, only the worst one: a
+two-part round is a bisection sent one script at a time, so the search
+declines it and the bisection underneath does the work. The same
+happens if a lease comes back smaller than was asked for -- the search
+cuts its parts down to the objects it actually got, rather than sending
+several rounds and calling them one.
+
+### What is not measured here
+
+Twelve is where this stops because `autobench` takes its objects from a
+single avatar and an avatar has twelve. The next step down -- 32 parts,
+two rounds a search -- needs 32 objects, which needs readings taken
+across several avatars at once. The slot pool grants exactly that (see
+[slots.md](slots.md)); `autobench` does not yet ask for it, so
+`--parts=32` is refused at once, naming the avatar and the twelve it
+has, rather than waiting or quietly taking fewer.
+
+Whether a round of 31 scripts stays as cheap as a round of 11 is
+therefore unmeasured. The trend through 11 is mild and the mechanism is
+the sim compiling them concurrently, but 31 has not been watched.
+
 ## Method, and what it does not cover
 
 Every figure was taken with `autobench` against Agni on 2026-08-08,

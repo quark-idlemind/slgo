@@ -116,6 +116,10 @@ func probeConcurrently(b backend, cnt int, todo []probeJob, out []int) []probeJo
 			end = len(todo)
 		}
 
+		probeMu.Lock()
+		spentRounds++
+		probeMu.Unlock()
+
 		var wg sync.WaitGroup
 		failed := make([]bool, end-start)
 		for k := start; k < end; k++ {

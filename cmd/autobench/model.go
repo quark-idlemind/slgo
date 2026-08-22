@@ -40,8 +40,8 @@ import (
 // openModel starts the offline backend in this process and takes a lease
 // on it.
 //
-// targets is how many objects to hold, and it is --objects like any other
-// backend: readings taken in spare objects are what the quartering search
+// targets is how many objects to hold, and it is --parts like any other
+// backend: readings taken in spare objects are what the part search
 // spends, and a model that granted one object would quietly measure a
 // benchmark the live path does not run.  The model's objects behave as
 // the real ones do in the way that matters -- only a cnt=0 script that

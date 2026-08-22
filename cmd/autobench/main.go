@@ -79,7 +79,7 @@ var flags = struct {
 	Debug     bool          `getopt:"--debug enable debugging"`
 	Probe     bool          `getopt:"--probe send a simple script to LSL as a probe"`
 	NoCache   bool          `getopt:"--no-cache do not remember or reuse the padding for this base script"`
-	Objects   int           `getopt:"--objects=N how many objects to take readings in at once"`
+	Parts     int           `getopt:"--parts=N cut the padding search into N parts a round, running N-1 scripts at once; a power of 2"`
 	Timeout   time.Duration `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
 	Test      string        `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model in this process, see the source code"`
 	Backend   string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life; --test is the same contract answered by a model here"`
@@ -88,10 +88,14 @@ var flags = struct {
 	Start:   "last",
 	Timeout: time.Minute,
 	Max:     512,
-	// Four: one to measure in and three to take readings in.  Three is
-	// what quarters a range, and quartering is what turns the nine
-	// rounds of a bisection into four or five.
-	Objects: 4,
+	// Four parts: one object to measure in and three to take the
+	// readings that cut the range into quarters, which is what turns
+	// the nine rounds of a bisection into five.
+	//
+	// It is the lease size too.  There is nothing else to decide: a
+	// round runs one script per division, so the objects a benchmark
+	// wants ARE its parts, and slgod is what keeps track of them.
+	Parts: 4,
 }
 
 // testModel reads --test=PAD,SIZE[,MARGINAL[,LIMIT]] into the model the
@@ -197,52 +201,89 @@ func findPadding(b backend, cnt, pad int, r *Results) (offset, base int) {
 	}
 }
 
-// quarterSearch narrows the range by asking three pads at once instead
-// of one at a time.
+// partSearch narrows the range by cutting it into PARTS at once instead
+// of into two.
 //
-// A bisection halves the range per round and spends one reading doing
-// it.  This quarters it and spends three -- and three readings taken
-// together cost about what one costs, since they are three round trips
-// in flight rather than three in a row.  Nine rounds become four or
-// five.
+// A bisection cuts the range in two and spends one reading doing it.
+// This cuts it into parts and spends parts-1 -- the divisions between
+// them -- and those readings are taken TOGETHER, which is why it is
+// worth spending them: three round trips in flight cost about what one
+// costs, and nine rounds of a bisection become five at four parts and
+// two at thirty-two.
 //
-// The three answers are read in order, which is the whole of the logic:
-// the first pad whose memory has grown is above the crossing and puts
-// the ceiling there, and everything below the last pad that has NOT
-// grown is settled.
+// The readings are read in order, which is the whole of the logic: the
+// first pad whose memory has grown is above the crossing and puts the
+// ceiling there, and everything below the last pad that has NOT grown is
+// settled. Two parts is exactly the bisection below, so it declines
+// rather than doing that work twice.
 //
-// It stops while the range is still wider than the probes can usefully
-// split.  Below that the quarters collide -- at a range of one they are
-// all the same pad, and a round that learns nothing would repeat for
-// ever -- so the last few bytes go to the bisection, which is one or
-// two more rounds and has the walk and the confirmation after it.
+// Parts is what the caller asked for, capped by the objects there are to
+// run in: parts-1 readings need parts-1 spare objects, so --parts=32
+// wants 32 objects and gets as many parts as it has places. Powers of
+// two are the natural choice -- they divide the block evenly -- but
+// nothing here requires one.
 //
-// Never in the measured object: see probe.go for why that is safe for a
-// script with copies in it as well as for the base.
-func quarterSearch(b backend, cnt, pad, base, low, high int) (int, int) {
-	if b == nil || b.Spares() < 3 {
+// When the range gets down to where a single round could ask about every
+// remaining pad, it does exactly that: the step is 1 rather than 0, and
+// the answer is exact in one more round instead of a bisection's several.
+//
+// It narrows to a range of one and leaves the walk and the confirmation
+// to the caller. Never in the measured object: see probe.go for why that
+// is safe for a script with copies in it as well as for the base.
+func partSearch(b backend, cnt, pad, base, low, high, parts int) (int, int) {
+	if b == nil {
+		return low, high
+	}
+	if n := b.Spares() + 1; n < parts {
+		parts = n
+	}
+	if parts < 3 {
 		return low, high
 	}
 
-	for high-low >= 8 {
-		q := (high - low) / 4
-		p := []int{low + q, low + 2*q, low + 3*q}
-
-		mem := probeAt(b, cnt, []int{p[0] + pad, p[1] + pad, p[2] + pad})
-
-		switch {
-		case mem[0] > base:
-			high = p[0]
-		case mem[1] > base:
-			low, high = p[0], p[1]
-		case mem[2] > base:
-			low, high = p[1], p[2]
-		default:
-			low = p[2]
+	for high-low > 1 {
+		// One probe per division, at most one per interior pad: a
+		// step of nought would ask the same pad several times and
+		// learn nothing, for ever.
+		n := parts - 1
+		if n > high-low-1 {
+			n = high - low - 1
 		}
-		debugf("Quarter[%d] %d < ... < %d\n", cnt, low, high)
+		step := (high - low) / (n + 1)
+
+		pads := make([]int, n)
+		for i := range pads {
+			pads[i] = low + (i+1)*step
+		}
+
+		mem := probeAt(b, cnt, addTo(pads, pad))
+
+		grew := n
+		for i, m := range mem {
+			if m > base {
+				grew = i
+				break
+			}
+		}
+		if grew > 0 {
+			low = pads[grew-1]
+		}
+		if grew < n {
+			high = pads[grew]
+		}
+		debugf("Part[%d] %d < ... < %d\n", cnt, low, high)
 	}
 	return low, high
+}
+
+// addTo offsets every pad by the run padding, which is what the search
+// reasons in and what a script has to be sent.
+func addTo(pads []int, pad int) []int {
+	out := make([]int, len(pads))
+	for i, p := range pads {
+		out[i] = p + pad
+	}
+	return out
 }
 
 // searchPadding is one attempt at findPadding: bisect the block, walk to the
@@ -259,9 +300,10 @@ func searchPadding(b backend, cnt, pad int, r *Results, getBase func() int) (off
 	low := 0
 	high := blockSize
 
-	// Quarter the range while there is enough of it to quarter, asking
-	// three pads at once.  What is left is bisected below.
-	low, high = quarterSearch(b, cnt, pad, base, low, high)
+	// Cut the range into parts, asking about every division at once.
+	// What it leaves -- everything, if there is nowhere to run in
+	// parallel -- is bisected below.
+	low, high = partSearch(b, cnt, pad, base, low, high, flags.Parts)
 
 	for high-low > 1 {
 		mid = low + (high-low)/2
@@ -694,13 +736,13 @@ func main() {
 		errf("Only one of --test or --backend may be specified\n")
 	case flags.Test != "":
 		var err error
-		if b, err = openModel(testModel(flags.Test), flags.Objects); err != nil {
+		if b, err = openModel(testModel(flags.Test), flags.Parts); err != nil {
 			errf("%v\n", err)
 		}
 		defer b.Close()
 	case flags.Backend != "":
 		var err error
-		if b, err = openBackend(flags.Backend, flags.Objects); err != nil {
+		if b, err = openBackend(flags.Backend, flags.Parts); err != nil {
 			errf("%v\n", err)
 		}
 		defer b.Close()
@@ -793,6 +835,12 @@ func main() {
 		// start.  Refuse rather than quietly measuring something else: --max is
 		// how a caller bounds a benchmark, and silently ignoring it was A3.
 		errf("--max %d: a benchmark needs at least one copy of the code under test\n", flags.Max)
+	case flags.Parts < 2:
+		// One part is not a division, and nought is not a number of
+		// them.  Two is the bisection, which is allowed and is what
+		// partSearch declines to duplicate.  It is also the smallest
+		// lease there is: one object to measure in and one to probe in.
+		errf("--parts %d: a round divides the range into at least two\n", flags.Parts)
 	case flags.IPad != 0 && !expressiblePadding(flags.IPad):
 		errf("--ipad %d: not an expressible padding -- the filler emits 5 bytes for 1 and for 3, 2 is measured at 3, and a negative pad emits nothing; 0 means search for it\n", flags.IPad)
 	}
@@ -1223,12 +1271,23 @@ var spentRuns int
 // confidence rather than an answer.
 var spentRereads int
 
+// spentRounds counts the ROUND TRIPS, which is the unit wall-clock time
+// is paid in.  A run is what a benchmark costs the grid; a round is what
+// it costs the person waiting.  They are the same number until something
+// runs in parallel: the quartering search sends three scripts at once and
+// waits for all three, and that is one round and three runs.
+//
+// It is the number to watch when asking what --parts buys: a wider
+// search spends more runs to spend fewer rounds, and only one of those
+// two is time.
+var spentRounds int
+
 // reportCost says what the benchmark spent, under --debug.  It is on stderr
 // with the rest of the debug output so that a caller parsing the Size: line
 // does not have to know about it.
 func reportCost() {
-	debugf("Spent %d runs (%d of them re-reads) and %d compiles\n",
-		spentRuns, spentRereads, spentCompiles)
+	debugf("Spent %d runs (%d of them re-reads) in %d rounds, and %d compiles\n",
+		spentRuns, spentRereads, spentRounds, spentCompiles)
 }
 
 // mustRun runs the script and treats any error as fatal.  Used where an error
@@ -1380,6 +1439,7 @@ func runScript(b backend, cnt, pad int, r *Results) error {
 		debugf("Using cache for %v\n", key)
 	} else {
 		spentRuns++
+		spentRounds++
 		script := buildScript(cnt, pad)
 		if flags.Show {
 			fmt.Println(script)
@@ -1573,7 +1633,7 @@ func runIn(ctx context.Context, o session.Options) (*sl.Session, *sl.Object, []*
 	// regions with two LSL compilers.  Whether that moves a reading is
 	// unmeasured -- and the same doubt already applies between one run
 	// and the next.)
-	a, err := session.UseAutoAnywhere(ctx, o, flags.Objects)
+	a, err := session.UseAutoAnywhere(ctx, o, flags.Parts)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

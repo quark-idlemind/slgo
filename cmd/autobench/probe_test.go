@@ -24,7 +24,7 @@ func probeReset(t *testing.T) {
 	put := func() {
 		resetFlags()
 		clear(cache)
-		spentRuns = 0
+		spentRuns, spentRounds = 0, 0
 	}
 	put()
 	t.Cleanup(put)
@@ -153,22 +153,37 @@ func TestMoreProbesThanObjectsGoInRounds(t *testing.T) {
 			t.Errorf("the base script at pad %d read %d, want %d", pad, got[i], want)
 		}
 	}
+
+	// Five pads, two places to run them: three rounds, the last of them
+	// holding a single pad.  The runs are what the grid was asked for and
+	// the rounds are what the caller waited through, which is the whole
+	// reason for counting them separately.
+	if spentRuns != 5 || spentRounds != 3 {
+		t.Errorf("five pads in two objects cost %d runs in %d rounds, want 5 in 3",
+			spentRuns, spentRounds)
+	}
 }
 
-// TestQuarteringNeedsThreePlacesToPutItsProbes: the round asks three pads
-// at once, and with fewer objects than that the readings would be taken
-// one at a time -- which is the bisection, and the bisection is already
-// below it.  So it declines rather than doing the same work twice.
-func TestQuarteringNeedsThreePlacesToPutItsProbes(t *testing.T) {
+// TestTwoPartsIsTheBisectionAndIsDeclined: a round that cuts the range
+// in two spends one reading doing it, which is the bisection below.
+// With one spare object -- or none, or no runner at all -- that is all
+// the parts there are, so it declines rather than doing the same work
+// twice.
+func TestTwoPartsIsTheBisectionAndIsDeclined(t *testing.T) {
 	probeReset(t)
-	b, _ := newFakeRunner(t, 474, 368, 2)
+	b, _ := newFakeRunner(t, 474, 368, 1)
 
-	low, high := quarterSearch(b, 0, minpad, 0, 0, blockSize)
+	low, high := partSearch(b, 0, minpad, 0, 0, blockSize, 32)
 	if low != 0 || high != blockSize {
-		t.Errorf("quarterSearch narrowed %d..%d with two objects to probe in", low, high)
+		t.Errorf("partSearch narrowed %d..%d with one object to probe in", low, high)
 	}
-	if low, high := quarterSearch(nil, 0, minpad, 0, 0, blockSize); low != 0 || high != blockSize {
-		t.Errorf("quarterSearch narrowed %d..%d with no runner at all", low, high)
+	if low, high := partSearch(nil, 0, minpad, 0, 0, blockSize, 4); low != 0 || high != blockSize {
+		t.Errorf("partSearch narrowed %d..%d with no runner at all", low, high)
+	}
+
+	b, _ = newFakeRunner(t, 474, 368, 8)
+	if low, high := partSearch(b, 0, minpad, 0, 0, blockSize, 2); low != 0 || high != blockSize {
+		t.Errorf("partSearch narrowed %d..%d when asked for two parts", low, high)
 	}
 }
 
@@ -288,4 +303,74 @@ func TestNoCacheSearchesEveryTime(t *testing.T) {
 	if f.ran <= 2 {
 		t.Errorf("the second run spent %d runs, so it read an answer it was told not to", f.ran)
 	}
+}
+
+// TestMorePartsAreFewerRounds is what --parts is for: every part is a
+// reading spent to save a round, and the rounds are what a caller waits
+// through.  The counts are the arithmetic -- a round of P parts divides
+// what is left by P, so the whole 512-byte block takes ceil(log_P 512)
+// of them -- and they are asserted rather than described because the
+// point of the flag is that the number goes down.
+func TestMorePartsAreFewerRounds(t *testing.T) {
+	for _, c := range []struct{ parts, rounds, runs int }{
+		{3, 6, 11},
+		{4, 5, 13},
+		{8, 3, 21},
+		{16, 3, 31},
+		{32, 2, 46},
+	} {
+		probeReset(t)
+		b, f := newFakeRunner(t, 474, 368, c.parts-1)
+
+		base := memAt(b, 0, minpad)
+		rounds, runs := spentRounds, spentRuns
+		low, high := partSearch(b, 0, minpad, base, 0, blockSize, c.parts)
+
+		// The crossing itself, not merely a narrower range: the walk
+		// that follows a search this exact has nothing left to do.
+		// low is the last pad that did NOT grow, so it is the one below
+		// the fake's crossing.
+		if want := f.crossing - minpad - 1; low != want || high != want+1 {
+			t.Errorf("%d parts narrowed to %d..%d, want %d..%d",
+				c.parts, low, high, want, want+1)
+		}
+		if got, want := spentRounds-rounds, c.rounds; got != want {
+			t.Errorf("%d parts took %d rounds, want %d", c.parts, got, want)
+		}
+		if got, want := spentRuns-runs, c.runs; got != want {
+			t.Errorf("%d parts spent %d runs, want %d", c.parts, got, want)
+		}
+	}
+}
+
+// TestPartsAreCappedByTheObjectsThereAre: --parts asks, the objects
+// decide.  A benchmark told to cut the range thirty-two ways with four
+// objects to run in cuts it four ways, rather than sending eight rounds
+// of four and calling it one.
+func TestPartsAreCappedByTheObjectsThereAre(t *testing.T) {
+	probeReset(t)
+	b, _ := newFakeRunner(t, 474, 368, 3)
+	base := memAt(b, 0, minpad)
+	rounds := spentRounds
+	low, high := partSearch(b, 0, minpad, base, 0, blockSize, 32)
+	capped := spentRounds - rounds
+
+	probeReset(t)
+	b, _ = newFakeRunner(t, 474, 368, 3)
+	base = memAt(b, 0, minpad)
+	rounds = spentRounds
+	lo4, hi4 := partSearch(b, 0, minpad, base, 0, blockSize, 4)
+
+	if low != lo4 || high != hi4 || capped != spentRounds-rounds {
+		t.Errorf("32 parts in 4 objects narrowed to %d..%d in %d rounds; "+
+			"4 parts to %d..%d in %d", low, high, capped, lo4, hi4, spentRounds-rounds)
+	}
+}
+
+// memAt is the base the search compares against, read the way the search
+// reads it.
+func memAt(b backend, cnt, pad int) int {
+	var r Results
+	mustRun(b, cnt, pad, &r)
+	return memOf(cnt, r)
 }
