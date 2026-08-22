@@ -350,9 +350,21 @@ type place struct {
 // So it is --clear, and off: a certain two thirds of the upload budget
 // spent on a hazard nobody here has yet seen.  What it is for is the day
 // somebody DOES see foreign lines in their output.
-func clearPlaces(ctx context.Context, places []place) error {
+//
+// An object that will not come clean is dropped rather than fatal.  It
+// used to end the whole run, and thirty scripts went nowhere because one
+// object out of thirty would not answer -- which is a worse answer than
+// running twenty-nine.  What is left is narrower and still true: this
+// caller does not know what is in that object, so it does not listen to
+// it.
+// clearOne is the grid work, apart from the deciding, so that what this
+// does with a failure can be tested without a fake that would have to
+// compile LSL to answer a clearing.
+var clearOne = session.Clear
+
+func clearPlaces(ctx context.Context, places []place) ([]place, error) {
 	if !flags.Clear {
-		return nil
+		return places, nil
 	}
 	var (
 		wg   sync.WaitGroup
@@ -365,18 +377,31 @@ func clearPlaces(ctx context.Context, places []place) error {
 		wg.Add(1)
 		go func(i int, p place) {
 			defer wg.Done()
-			errs[i] = session.Clear(ctx, p.session, p.object)
+			errs[i] = clearOne(ctx, p.session, p.object)
 		}(i, p)
 	}
 	wg.Wait()
 
-	for _, err := range errs {
-		if err != nil {
-			return fmt.Errorf("%w\n        (the object could not be made ready; "+
-				"--rez takes one of its own)", err)
+	kept := make([]place, 0, len(places))
+	for i, p := range places {
+		if errs[i] != nil {
+			fmt.Fprintf(os.Stderr, "not using %s: %v\n", p.object, errs[i])
+			continue
 		}
+		kept = append(kept, p)
 	}
-	return nil
+	if len(kept) == 0 {
+		return nil, fmt.Errorf("none of the %d objects could be made ready\n"+
+			"        (--rez takes one of its own)", len(places))
+	}
+	if len(kept) < len(places) {
+		// Said out loud: fewer places is a slower run, and a person who
+		// asked for thirty at once should know they got fewer rather
+		// than wonder why it took longer.
+		fmt.Fprintf(os.Stderr, "%d of %d objects are usable; running %d at a time\n",
+			len(kept), len(places), len(kept))
+	}
+	return kept, nil
 }
 
 // once runs one script and prints what it said, reporting whether it
@@ -527,7 +552,8 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 	}
 
 	// Only when asked.  See clearPlaces.
-	if err := clearPlaces(ctx, places); err != nil {
+	places, err = clearPlaces(ctx, places)
+	if err != nil {
 		for _, a := range as {
 			a.Release()
 			a.Session.Close()

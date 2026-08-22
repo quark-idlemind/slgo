@@ -115,6 +115,7 @@ written down anywhere else:
     doc/sit.md              sitting, and standing up again
     doc/parcel.md           parcels: the land under the avatar
     doc/landmark.md         landmarks: a place kept, and gone back to
+    doc/slots.md            sharing the objects that scripts run in
     doc/viewer-frontend.md  slgod as a viewer frontend
     doc/two-viewers.md      two viewers on one slgod session
     doc/many-avatars.md     several avatars in one slgod

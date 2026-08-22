@@ -27,6 +27,7 @@ import (
 	"github.com/pborman/getopt/v2"
 
 	"github.com/quark-idlemind/slgo/internal/session"
+	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -744,3 +745,97 @@ func TestMoreJobsThanTheNamedAvatarHasIsRefused(t *testing.T) {
 			flags.Jobs, err)
 	}
 }
+
+// TestAnObjectThatWillNotComeCleanIsDroppedAndNotFatal: measured on the
+// grid, one object out of thirty failing to clear ended the whole run
+// and not one script executed.  Twenty-nine scripts is a better answer
+// than none, and the object that would not answer is simply not used --
+// this caller does not know what is in it, so it does not listen to it.
+func TestAnObjectThatWillNotComeCleanIsDroppedAndNotFatal(t *testing.T) {
+	reset(t)
+	flags.Clear = true
+
+	// Three places, of which the middle one cannot be cleared.
+	good1, bad, good2 := somewhere(), somewhere(), somewhere()
+	clearing(t, map[*sl.Object]bool{bad.object: true})
+
+	kept, err := clearPlaces(context.Background(), []place{good1, bad, good2})
+	if err != nil {
+		t.Fatalf("clearPlaces = %v, want the two that came clean", err)
+	}
+	if len(kept) != 2 {
+		t.Errorf("kept %d places, want the 2 that came clean", len(kept))
+	}
+	for _, p := range kept {
+		if p.object == bad.object {
+			t.Error("the object that would not come clean was kept")
+		}
+	}
+}
+
+// TestNoObjectComingCleanIsAFailedRun: dropping them one at a time is
+// right until there are none left, and a run with nowhere to run is not
+// a run that succeeded quietly.
+func TestNoObjectComingCleanIsAFailedRun(t *testing.T) {
+	reset(t)
+	flags.Clear = true
+
+	one, two := somewhere(), somewhere()
+	clearing(t, map[*sl.Object]bool{one.object: true, two.object: true})
+
+	_, err := clearPlaces(context.Background(), []place{one, two})
+	if err == nil {
+		t.Fatal("a run with no usable object came back well")
+	}
+	if !strings.Contains(err.Error(), "none of the 2") {
+		t.Errorf("clearPlaces = %v, want it to say how many it tried", err)
+	}
+}
+
+// TestNothingIsClearedUnlessAsked: the cost is certain and the hazard is
+// not, so --clear is off -- and a place the daemon called dirty is used
+// as it is.
+func TestNothingIsClearedUnlessAsked(t *testing.T) {
+	reset(t)
+	flags.Clear = false
+
+	bad := somewhere()
+	clearing(t, map[*sl.Object]bool{bad.object: true})
+
+	kept, err := clearPlaces(context.Background(), []place{bad})
+	if err != nil {
+		t.Fatalf("clearPlaces with nothing asked of it = %v", err)
+	}
+	if len(kept) != 1 {
+		t.Errorf("kept %d places without being asked to clear any", len(kept))
+	}
+}
+
+// clearing makes the grid half of a clearing answer as the test says,
+// by the object it was asked about.
+//
+// The deciding is what these tests are about; the work itself is
+// session.Clear, which installs a script and waits to hear the object
+// say a word of its own -- a fake that answered THAT would have to
+// pretend to be a compiler.
+func clearing(t *testing.T, fails map[*sl.Object]bool) {
+	t.Helper()
+	was := clearOne
+	clearOne = func(ctx context.Context, s *sl.Session, o *sl.Object) error {
+		if fails[o] {
+			return errNoCircuit
+		}
+		return nil
+	}
+	t.Cleanup(func() { clearOne = was })
+}
+
+// somewhere is a place with an object of its own to be told apart from
+// the others, and nothing behind it: these tests never reach a grid.
+func somewhere() place {
+	return place{object: &sl.Object{ID: msg.UUID{15: byte(nextPlace())}}, dirty: true}
+}
+
+var placeCount int
+
+func nextPlace() int { placeCount++; return placeCount }
