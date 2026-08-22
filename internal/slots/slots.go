@@ -68,6 +68,12 @@ import (
 	"time"
 )
 
+// timeNow is the clock, so that a test can run a lease out rather than
+// wait it out.  A test that replaces it puts it back and does not run in
+// parallel with another that does: it is the whole package's clock and
+// not one pool's.
+var timeNow = time.Now
+
 // DefaultTimeout is how long a grant lasts when the caller does not say.
 const DefaultTimeout = time.Minute
 
@@ -151,17 +157,17 @@ type Pool struct {
 	// pool's own goroutine and must not call back into the pool.
 	Present func(data any) bool
 
-	// now is the clock, so that a test can run a lease out rather than
-	// wait it out.  Set before Run and never after: the pool's goroutine
-	// is the only thing that reads it.
-	now func() time.Time
-
 	req  chan any
 	wake chan time.Time
 	done chan struct{}
 
-	id       uint64
-	free     map[ID]*Slot
+	id uint64
+
+	// free is what nobody has, oldest first.  Sorted rather than a set
+	// because the order is the answer to "which of these should go out
+	// next", and an order maintained as slots come and go is cheaper and
+	// plainer than one worked out afresh on every request.
+	free     []*Slot
 	assigned map[ID]*lease
 	wait     chan struct{}
 }
@@ -180,11 +186,9 @@ type lease struct {
 // it answer.
 func New() *Pool {
 	return &Pool{
-		now:      time.Now,
 		req:      make(chan any),
 		wake:     make(chan time.Time, 1),
 		done:     make(chan struct{}),
-		free:     map[ID]*Slot{},
 		assigned: map[ID]*lease{},
 	}
 }
@@ -348,7 +352,7 @@ type renewed struct {
 func (p *Pool) Run() {
 	defer close(p.done)
 	for r := range p.req {
-		now := p.now()
+		now := timeNow()
 		switch req := r.(type) {
 		case getReq:
 			req.reply <- p.get(now, req)
@@ -364,7 +368,7 @@ func (p *Pool) Run() {
 			for _, s := range req.slots {
 				s.id = p.nextID()
 				s.removed = false
-				p.free[s.id] = s
+				p.insert(s)
 			}
 			if len(req.slots) > 0 {
 				// Somebody waiting for four may be waiting for exactly
@@ -376,7 +380,7 @@ func (p *Pool) Run() {
 		case removeReq:
 			for _, s := range req.slots {
 				s.removed = true
-				delete(p.free, s.id)
+				p.drop(s.id)
 			}
 			close(req.done)
 
@@ -417,7 +421,6 @@ func (p *Pool) get(now time.Time, req getReq) Response {
 
 	r := Response{ID: id, Slots: make([]Slot, 0, len(got)), Expire: l.until}
 	for _, s := range got {
-		delete(p.free, s.id)
 		r.Slots = append(r.Slots, *s)
 	}
 	p.sayWhenToWake()
@@ -426,38 +429,64 @@ func (p *Pool) get(now time.Time, req getReq) Response {
 
 // take finds n slots that are free and still there, or nothing.
 //
-// In ID order, which is the order they were added: the caller of a pool
+// Oldest first, which is the order they were added: the caller of a pool
 // holding several avatars' objects gets the first avatar's before the
 // second's, so a request that fits on one avatar stays on one avatar
 // without this package knowing what an avatar is.
+//
+// It stops as soon as it has enough, so Present is asked about the slots
+// that were candidates and not about the whole pool.
 func (p *Pool) take(n int) []*Slot {
-	var got []*Slot
-	for _, s := range p.inOrder() {
+	var (
+		got  []*Slot
+		seen int
+	)
+	for seen = 0; seen < len(p.free) && len(got) < n; seen++ {
+		s := p.free[seen]
 		if p.Present != nil && !p.Present(s.Data) {
 			// Gone since it was added -- taken off, deleted, or left
-			// behind by a logout.  Dropped rather than handed out.
+			// behind by a logout.  Dropped rather than handed out, and
+			// not put back below.
 			s.removed = true
-			delete(p.free, s.id)
 			continue
 		}
 		got = append(got, s)
-		if len(got) == n {
-			return got
-		}
 	}
-	// Not enough.  Nothing was taken out of free on the way, so there is
-	// nothing to put back.
-	return nil
+
+	// Everything up to seen has been decided: granted, or dropped.  The
+	// rest is untouched and keeps its order.
+	rest := append([]*Slot{}, p.free[seen:]...)
+	if len(got) < n {
+		// Not enough.  What was collected is still free, and still the
+		// oldest, so it goes back in front.
+		p.free = append(got, rest...)
+		return nil
+	}
+	p.free = rest
+	return got
 }
 
-// inOrder is the free slots, oldest first.
-func (p *Pool) inOrder() []*Slot {
-	out := make([]*Slot, 0, len(p.free))
-	for _, s := range p.free {
-		out = append(out, s)
+// insert files a slot among the free ones, oldest first.
+//
+// By ID, which is by age: they are handed out in the order this package
+// assigned them, and it assigns them upwards.
+func (p *Pool) insert(s *Slot) {
+	i := sort.Search(len(p.free), func(i int) bool { return p.free[i].id.id >= s.id.id })
+	p.free = append(p.free, nil)
+	copy(p.free[i+1:], p.free[i:])
+	p.free[i] = s
+}
+
+// drop takes a slot out of the free ones.  A slot that is not there --
+// because somebody has it -- is not an error: Remove marks it, and it
+// goes when it comes back.
+func (p *Pool) drop(id ID) {
+	for i, s := range p.free {
+		if s.id == id {
+			p.free = append(p.free[:i], p.free[i+1:]...)
+			return
+		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].id.id < out[j].id.id })
-	return out
 }
 
 // renew puts a grant's deadline back.
@@ -489,7 +518,7 @@ func (p *Pool) give(id ID) {
 			// that finally happens.
 			continue
 		}
-		p.free[s.id] = s
+		p.insert(s)
 	}
 	p.wakeWaiters()
 	p.sayWhenToWake()
@@ -508,7 +537,7 @@ func (p *Pool) reclaim(now time.Time) bool {
 			if s.removed {
 				continue
 			}
-			p.free[s.id] = s
+			p.insert(s)
 			took = true
 		}
 	}

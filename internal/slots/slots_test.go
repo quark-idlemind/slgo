@@ -24,6 +24,9 @@ import (
 // The pool reads a clock but owns no timer, which is what makes a whole
 // lease -- granted, run out, taken back -- something a test can do in no
 // time at all rather than something it has to sit through.
+//
+// It is the package's clock rather than one pool's, so nothing here runs
+// in parallel and each test puts it back.
 type clock struct {
 	mu sync.Mutex
 	at time.Time
@@ -65,9 +68,13 @@ func stopped(t *testing.T) (*Pool, *clock) {
 	// A time of its own, so that a lease reaching its end is something
 	// this test did rather than something that happened to it.
 	c := &clock{at: time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)}
+	was := timeNow
+	timeNow = c.now
 	p := New()
-	p.now = c.now
-	t.Cleanup(func() { p.Close() })
+	t.Cleanup(func() {
+		p.Close()
+		timeNow = was
+	})
 	return p, c
 }
 
@@ -673,5 +680,63 @@ func TestAnIDSaysWhichSlotAndWhetherItIsOne(t *testing.T) {
 	}
 	if got := r.ID.String(); got == "" || got == none.String() {
 		t.Errorf("ID.String() = %q, which does not tell two apart", got)
+	}
+}
+
+// TestWhatComesBackGoesBackWhereItWas: the free slots are kept oldest
+// first, so a grant that is returned has to go back among them rather
+// than on the end.  Otherwise the order decays with every run until the
+// oldest-first promise means nothing.
+func TestWhatComesBackGoesBackWhereItWas(t *testing.T) {
+	p, _ := running(t, 4)
+
+	first := get(t, p, 2) // 1 and 2, the oldest
+	if !first.Filled() {
+		t.Fatal("two slots would not go to one caller")
+	}
+	if err := p.Return(first.ID); err != nil {
+		t.Fatalf("Return: %v", err)
+	}
+
+	// 3 and 4 were never taken and are now the younger ones, so the two
+	// that came back have to be handed out before them.
+	r := get(t, p, 2)
+	if !r.Filled() {
+		t.Fatal("the returned pair could not be had")
+	}
+	if got := which(r); !got[1] || !got[2] {
+		t.Errorf("got %v after returning 1 and 2, want them back before 3 and 4", got)
+	}
+}
+
+// TestASlotRemovedWhileNobodyHasItGoesAtOnce: an avatar logging out
+// while its objects are idle.  There is nobody to wait for, so the slot
+// goes now -- and the ones around it keep their order.
+func TestASlotRemovedWhileNobodyHasItGoesAtOnce(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	slots := []*Slot{{Data: 1}, {Data: 2}, {Data: 3}, {Data: 4}}
+	if err := p.Add(slots...); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if err := p.Remove(slots[1]); err != nil { // the second, from the middle
+		t.Fatalf("Remove: %v", err)
+	}
+
+	if r := get(t, p, 4); r.Filled() {
+		t.Errorf("four slots came out of a pool of three: %v", which(r))
+	}
+	r := get(t, p, 3)
+	if !r.Filled() {
+		t.Fatal("the three that were left could not be had")
+	}
+	if got := which(r); got[2] {
+		t.Errorf("got %v, and slot 2 was removed", got)
+	}
+	// Taken from the middle without disturbing what was on either side.
+	if r.Slots[0].Data != 1 || r.Slots[1].Data != 3 || r.Slots[2].Data != 4 {
+		t.Errorf("got %v, %v, %v, want 1, 3, 4 in that order",
+			r.Slots[0].Data, r.Slots[1].Data, r.Slots[2].Data)
 	}
 }
