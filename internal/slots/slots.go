@@ -131,13 +131,17 @@ type Slot struct {
 	//
 	// It is run on a goroutine of its own and NOT on the pool's, because
 	// it goes to the grid and everybody else's request would wait behind
-	// it.  The slot is nobody's until it finishes.  It must come back:
-	// one that hangs is a slot lost, so whatever it does is on a clock
-	// of its own.
+	// it.  A slot with tidying to do LEAVES the pool when it is given
+	// back, and comes back only when Clean says so by calling Cleaned.
 	//
-	// An error means the slot is no good -- the object has gone, or will
-	// not answer -- and it is dropped rather than handed on.
-	Clean func() error
+	// So a slot that is really gone -- the object detached, deleted,
+	// left behind by a logout -- needs no error and no telling: Clean
+	// looks, decides there is nothing to tidy and nothing to hand on,
+	// and says nothing.  The slot is out of the pool because it was
+	// never put back.  A Clean that hangs has the same effect by
+	// accident, which is the reason to put whatever it does on a clock
+	// of its own.
+	Clean func()
 
 	id      ID
 	removed bool
@@ -198,12 +202,6 @@ type Pool struct {
 	free     []*Slot
 	assigned map[ID]*lease
 	wait     chan struct{}
-
-	// cleaning is the slots that are nobody's and not yet free: given
-	// back, and being made fit for the next caller.  A slot in here is
-	// not in either of the two above, which is the whole of what the
-	// third state means.
-	cleaning map[ID]*Slot
 }
 
 // A lease is what one caller was granted.
@@ -224,7 +222,6 @@ func New() *Pool {
 		wake:     make(chan time.Time, 1),
 		done:     make(chan struct{}),
 		assigned: map[ID]*lease{},
-		cleaning: map[ID]*Slot{},
 	}
 }
 
@@ -295,6 +292,23 @@ func (p *Pool) Add(slots ...*Slot) error {
 // run that had them will find that out from its own session.
 func (p *Pool) Remove(slots ...*Slot) error {
 	r := removeReq{slots: slots, done: make(chan struct{})}
+	_, err := ask(p, r, r.done)
+	return err
+}
+
+// Cleaned puts a slot back after its Clean has made it fit to be used
+// again, keeping the ID it already had -- it is the same thing, and its
+// place in the order is its age.
+//
+// This is the only way back for a slot with tidying to do, and not
+// calling it is how Clean says the slot is gone: there is nothing to
+// hand on, so nothing is.
+//
+// A slot that is already in the pool, or that was taken out while it was
+// away, is ignored rather than added: putting the same one in twice
+// would be one object handed to two callers.
+func (p *Pool) Cleaned(s *Slot) error {
+	r := cleanedReq{slot: s, done: make(chan struct{})}
 	_, err := ask(p, r, r.done)
 	return err
 }
@@ -370,8 +384,8 @@ type (
 		done  chan struct{}
 	}
 	cleanedReq struct {
-		id  ID
-		err error
+		slot *Slot
+		done chan struct{}
 	}
 	expiryReq struct{ done chan struct{} }
 	stopReq   struct{}
@@ -404,7 +418,10 @@ func (p *Pool) Run() {
 			close(req.done)
 
 		case cleanedReq:
-			p.cleaned(req)
+			if p.insert(req.slot) {
+				p.wakeWaiters()
+			}
+			close(req.done)
 
 		case addReq:
 			for _, s := range req.slots {
@@ -412,6 +429,7 @@ func (p *Pool) Run() {
 				s.removed = false
 				p.insert(s)
 			}
+
 			if len(req.slots) > 0 {
 				// Somebody waiting for four may be waiting for exactly
 				// what has just arrived.
@@ -515,15 +533,31 @@ func (p *Pool) take(n int) []*Slot {
 	return got
 }
 
-// insert files a slot among the free ones, oldest first.
+// insert files a slot among the free ones, oldest first, and says
+// whether it took it.
 //
 // By ID, which is by age: they are handed out in the order this package
 // assigned them, and it assigns them upwards.
-func (p *Pool) insert(s *Slot) {
+//
+// It refuses a slot that is already there, which is the one mistake that
+// must not get through: the same slot in the free list twice is one
+// object handed to two callers, which is what all of this exists to
+// prevent.  Finding out costs nothing, because the place it would go is
+// the place to look.  It refuses one that has been taken out of the pool
+// for the same sort of reason -- a slot removed while it was away being
+// tidied must not come back.
+func (p *Pool) insert(s *Slot) bool {
+	if s == nil || s.removed || s.id.IsZero() {
+		return false
+	}
 	i := sort.Search(len(p.free), func(i int) bool { return p.free[i].id.id >= s.id.id })
+	if i < len(p.free) && p.free[i].id == s.id {
+		return false
+	}
 	p.free = append(p.free, nil)
 	copy(p.free[i+1:], p.free[i:])
 	p.free[i] = s
+	return true
 }
 
 // drop takes a slot out of the free ones.  A slot that is not there --
@@ -583,52 +617,15 @@ func (p *Pool) release(slots []*Slot) bool {
 			// Taken out of the pool while it was in use.  This is where
 			// that finally happens.
 		case s.Clean != nil:
-			p.startClean(s)
+			// Out of the pool until its own tidying puts it back.
+			go s.Clean()
 		default:
-			p.insert(s)
-			freed = true
+			if p.insert(s) {
+				freed = true
+			}
 		}
 	}
 	return freed
-}
-
-// startClean sets a slot's tidying going, on a goroutine of its own.
-//
-// The pool holds no state while it runs and answers everybody else as
-// usual; the slot is in neither the free list nor a grant until the
-// answer comes back through the same door as every other request.
-func (p *Pool) startClean(s *Slot) {
-	p.cleaning[s.id] = s
-	id, clean := s.id, s.Clean
-	go func() {
-		err := clean()
-		select {
-		case p.req <- cleanedReq{id: id, err: err}:
-		case <-p.done:
-			// The pool has stopped and there is nobody to tell.
-		}
-	}()
-}
-
-// cleaned files a slot whose tidying has finished.
-func (p *Pool) cleaned(req cleanedReq) {
-	s, ok := p.cleaning[req.id]
-	if !ok {
-		return
-	}
-	delete(p.cleaning, req.id)
-	if req.err != nil {
-		// The object has gone, or will not answer.  Handing it on would
-		// be handing on a run that fails in the middle.
-		s.removed = true
-		return
-	}
-	if s.removed {
-		// Taken out of the pool while it was being tidied.
-		return
-	}
-	p.insert(s)
-	p.wakeWaiters()
 }
 
 // reclaim takes back every grant whose time is up, and says whether it

@@ -754,12 +754,13 @@ func TestASlotIsNotHandedOnUntilItHasBeenTidied(t *testing.T) {
 	go p.Run()
 
 	tidying := make(chan struct{})
-	done := make(chan struct{})
-	s := &Slot{Data: 1, Clean: func() error {
+	release := make(chan struct{})
+	s := &Slot{Data: 1}
+	s.Clean = func() {
 		close(tidying)
-		<-done
-		return nil
-	}}
+		<-release
+		p.Cleaned(s)
+	}
 	if err := p.Add(s); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -776,19 +777,26 @@ func TestASlotIsNotHandedOnUntilItHasBeenTidied(t *testing.T) {
 	if r := get(t, p, 1); r.Filled() {
 		t.Error("a slot was handed on while it was still being tidied")
 	}
-	close(done)
+	close(release)
 
-	// And once the tidying is over it is somebody else's to have.  The
-	// answer arrives through the pool's own door, so this waits for it.
+	if !waitFor(t, p, 1) {
+		t.Error("a slot that had been tidied never came back")
+	}
+}
+
+// waitFor asks until n slots can be had, and says whether they ever
+// could.  A slot comes back from its tidying on a goroutine of its own,
+// so there is a moment between the tidying finishing and the pool having
+// heard about it.
+func waitFor(t *testing.T, p *Pool, n int) bool {
+	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if r := get(t, p, 1); r.Filled() {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("a slot that had been tidied never came back")
+	for time.Now().Before(deadline) {
+		if r := get(t, p, n); r.Filled() {
+			return true
 		}
 	}
+	return false
 }
 
 // TestTidyingDoesNotStopThePoolAnsweringEverybodyElse: tidying goes to
@@ -802,11 +810,12 @@ func TestTidyingDoesNotStopThePoolAnsweringEverybodyElse(t *testing.T) {
 
 	tidying := make(chan struct{})
 	release := make(chan struct{})
-	slow := &Slot{Data: 1, Clean: func() error {
+	slow := &Slot{Data: 1}
+	slow.Clean = func() {
 		close(tidying)
 		<-release
-		return nil
-	}}
+		p.Cleaned(slow)
+	}
 	if err := p.Add(slow, &Slot{Data: 2}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -815,6 +824,7 @@ func TestTidyingDoesNotStopThePoolAnsweringEverybodyElse(t *testing.T) {
 	if !first.Filled() || !which(first)[1] {
 		t.Fatalf("got %v, want the slot that tidies slowly", which(first))
 	}
+
 	// Returning does not wait for the tidying either: the caller has
 	// finished with the slot and has nothing to do with what happens to
 	// it next.
@@ -847,20 +857,23 @@ func TestTidyingDoesNotStopThePoolAnsweringEverybodyElse(t *testing.T) {
 	close(release)
 }
 
-// TestASlotThatWillNotComeCleanIsDropped: an object that has gone, or
-// will not answer, fails its tidying -- and handing it on would be
-// handing on a run that fails in the middle with half its scripts
-// installed.
-func TestASlotThatWillNotComeCleanIsDropped(t *testing.T) {
+// TestASlotCleanNeverSpeaksForIsGone: an object that has gone, or will
+// not answer, needs no error and no telling.  Clean looks, finds nothing
+// to hand on, and says nothing -- and the slot is out of the pool
+// because it was never put back.
+func TestASlotCleanNeverSpeaksForIsGone(t *testing.T) {
 	p, _ := stopped(t)
 	go p.Run()
 
-	tried := make(chan struct{})
-	bad := &Slot{Data: 1, Clean: func() error {
-		close(tried)
-		return errors.New("the object is not there")
-	}}
-	if err := p.Add(bad, &Slot{Data: 2}); err != nil {
+	looked := make(chan struct{})
+	good := &Slot{Data: 2}
+	bad := &Slot{Data: 1}
+	bad.Clean = func() {
+		// Nothing to tidy and nothing to hand on.
+		close(looked)
+	}
+	good.Clean = func() { p.Cleaned(good) }
+	if err := p.Add(bad, good); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 
@@ -871,25 +884,44 @@ func TestASlotThatWillNotComeCleanIsDropped(t *testing.T) {
 	if err := p.Return(held.ID); err != nil {
 		t.Fatalf("Return: %v", err)
 	}
-	<-tried
+	<-looked
 
-	// The good one comes back and the bad one does not, however long
-	// anybody waits.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		r := get(t, p, 1)
-		if r.Filled() {
-			if !which(r)[2] {
-				t.Errorf("got %v, want the slot that came clean", which(r))
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the slot that came clean never came back")
-		}
+	if !waitFor(t, p, 1) {
+		t.Fatal("the slot that came clean never came back")
 	}
 	if r := get(t, p, 1); r.Filled() {
-		t.Errorf("the slot that would not come clean was handed on: %v", which(r))
+		t.Errorf("the slot nothing spoke for was handed on: %v", which(r))
+	}
+}
+
+// TestASlotCannotBeHandedBackTwice: the one mistake that must not get
+// through.  A Clean with a bug, or one that gave up and then found both
+// its attempts had worked, calls Cleaned twice -- and the same slot in
+// the free list twice is one object handed to two callers, which is what
+// all of this exists to prevent.
+func TestASlotCannotBeHandedBackTwice(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	s := &Slot{Data: 1}
+	if err := p.Add(s); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	// Twice from the free list, twice from a tidying, and once for a
+	// slot the pool never had.
+	if err := p.Cleaned(s); err != nil {
+		t.Fatalf("Cleaned: %v", err)
+	}
+	if err := p.Cleaned(&Slot{Data: 99}); err != nil {
+		t.Fatalf("Cleaned: %v", err)
+	}
+
+	first := get(t, p, 1)
+	if !first.Filled() {
+		t.Fatal("the one slot would not go to one caller")
+	}
+	if r := get(t, p, 1); r.Filled() {
+		t.Errorf("a second caller was given a slot as well: %v", which(r))
 	}
 }
 
@@ -901,7 +933,7 @@ func TestTidyingIsNotSomethingTheCallerIsHanded(t *testing.T) {
 	p, _ := stopped(t)
 	go p.Run()
 
-	if err := p.Add(&Slot{Data: 1, Clean: func() error { return nil }}); err != nil {
+	if err := p.Add(&Slot{Data: 1, Clean: func() {}}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 	r := get(t, p, 1)
@@ -923,11 +955,13 @@ func TestAWaiterIsWokenWhenTheTidyingIsDoneAndNotBefore(t *testing.T) {
 
 	tidying := make(chan struct{})
 	release := make(chan struct{})
-	if err := p.Add(&Slot{Data: 1, Clean: func() error {
+	s := &Slot{Data: 1}
+	s.Clean = func() {
 		close(tidying)
 		<-release
-		return nil
-	}}); err != nil {
+		p.Cleaned(s)
+	}
+	if err := p.Add(s); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 
@@ -956,8 +990,8 @@ func TestAWaiterIsWokenWhenTheTidyingIsDoneAndNotBefore(t *testing.T) {
 }
 
 // TestASlotRemovedWhileBeingTidiedDoesNotComeBack: an avatar that logged
-// out while its object was being tidied.  The tidying finishes -- or
-// fails, having nothing to talk to -- and either way the slot is not the
+// out while its object was being tidied.  The tidying finishes and hands
+// the slot back, and the pool refuses it: what it stands for is not the
 // pool's any more.
 func TestASlotRemovedWhileBeingTidiedDoesNotComeBack(t *testing.T) {
 	p, _ := stopped(t)
@@ -965,11 +999,12 @@ func TestASlotRemovedWhileBeingTidiedDoesNotComeBack(t *testing.T) {
 
 	tidying := make(chan struct{})
 	release := make(chan struct{})
-	s := &Slot{Data: 1, Clean: func() error {
+	s := &Slot{Data: 1}
+	s.Clean = func() {
 		close(tidying)
 		<-release
-		return nil
-	}}
+		p.Cleaned(s)
+	}
 	if err := p.Add(s); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -998,10 +1033,7 @@ func TestASlotIsTidiedWhenItsGrantRunsOutToo(t *testing.T) {
 	go p.Run()
 
 	tidied := make(chan struct{})
-	if err := p.Add(&Slot{Data: 1, Clean: func() error {
-		close(tidied)
-		return nil
-	}}); err != nil {
+	if err := p.Add(&Slot{Data: 1, Clean: func() { close(tidied) }}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 
