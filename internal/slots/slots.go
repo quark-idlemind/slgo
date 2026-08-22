@@ -37,24 +37,28 @@
 // and a scheme that could not be reasoned about would be the worse
 // trade.
 //
-// # Leases, and why the caller is told when its own runs out
+// # Leases, and who makes them safe
 //
 // A grant lasts a while rather than for ever, so that a caller which
 // wedges without dying does not take objects out of use permanently.
-// That is only safe if the holder knows: a pool that quietly re-lets an
-// object somebody is still writing a script into has caused exactly the
-// collision it exists to prevent.  So Response.Expire is what the caller
-// was given, and it is the caller's business to have FINISHED by then --
-// not merely to have started.  Measured against the grid, replacing a
-// script in an object costs about 0.9s and creating one about 8.1s, so
-// "will this finish in what is left?" is a real question and not a
-// formality.  Renew is for work that cannot say in advance how long it
-// will take.
+// Response.Expire is when it runs out, and Renew puts it back for work
+// that cannot say in advance how long it will take -- a search finishes
+// when it converges.  A caller that watches its deadline and renews is
+// never surprised.
 //
-// The pool holds each grant for a little longer than the caller was told
-// -- see grace -- which covers the gap between a caller checking its
-// deadline and its write reaching the grid.  It does not cover the work
-// itself.
+// What makes a caller that does NOT watch harmless is not this package.
+// The pool hands out names for things it knows nothing about, and it
+// cannot stop anybody using one it has taken back.  That belongs to
+// whoever owns the things themselves: the daemon that writes a script
+// into an object can see which slot the object is, and refuse a write
+// from a caller that no longer holds it.  So a caller which overruns is
+// refused at the moment it writes, loudly and attributably, rather than
+// landing in somebody else's object.  (Intended rather than built: as
+// this is written nothing enforces it, and the pool is the only thing
+// standing between two callers.)
+//
+// grace is the other half of that, and it is why the deadline is not a
+// cliff.  See it below.
 //
 // Nothing here reads a clock of its own.  Expiry happens when
 // ExpiryCheck says so, and Wake says when that would be worth doing.  A
@@ -80,12 +84,17 @@ const DefaultTimeout = time.Minute
 // grace is how much longer than the caller was told the pool holds a
 // grant before re-letting it.
 //
-// It covers the gap between a caller looking at its deadline and its
-// write arriving -- scheduling, a round trip, a retry -- and nothing
-// else.  A caller that starts an eight second write with a second left
-// is outside it, and no grace that is not a second timeout would save
-// it; having finished by the deadline is the caller's half of the
-// bargain.
+// Without it every deadline is a cliff: a caller that looks at the clock
+// a moment before its grant runs out, and whose write arrives a moment
+// after, is refused for a race it could not have avoided and nobody else
+// wanted the slot anyway.  Holding on a little turns that into a write
+// that simply works.
+//
+// It is not what makes overrunning safe -- see the package comment --
+// and it is not sized for the work itself.  Measured against the grid,
+// replacing a script in an object costs about 0.9s and creating one
+// about 8.1s, so a caller that starts a create with a second left is
+// past this and ought to have renewed.
 const grace = 10 * time.Second
 
 // Errors a caller can act on.  A lease that is gone is not an error the
@@ -133,8 +142,9 @@ type Response struct {
 	// Slots is what was granted, in the order the pool holds them.
 	Slots []Slot
 
-	// Expire is when the grant runs out.  The caller must be FINISHED
-	// with the slots by then -- see the package comment.
+	// Expire is when the grant runs out.  A caller with work still to do
+	// renews before then; one that does not is liable to be refused when
+	// it writes.  See the package comment.
 	Expire time.Time
 
 	// Wait is closed when the pool has changed in a way that might make
