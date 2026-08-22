@@ -579,8 +579,12 @@ func TestAutoCountsWhatIsWornAndSaysWhatThatBuys(t *testing.T) {
 	x.grid.mu.Unlock()
 
 	got := x.do(t, "auto")
-	if !strings.Contains(got, "so 3 runs at once") {
-		t.Errorf("auto should say how many benchmarks fit:\n%s", got)
+	// What is worn is what can run at once, one object apiece, and a
+	// benchmark is the one thing that wants several -- so both numbers
+	// are worth saying, and neither is the other.
+	if !strings.Contains(got, "so 12 scripts at once") ||
+		!strings.Contains(got, "3 benchmarks of 4") {
+		t.Errorf("auto should say what the objects buy:\n%s", got)
 	}
 	if strings.Contains(got, "sets up the rest") {
 		t.Errorf("a full set has no rest to set up:\n%s", got)

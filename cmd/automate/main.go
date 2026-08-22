@@ -415,16 +415,15 @@ func runIn(ctx context.Context, o session.Options, n int) (*sl.Session, []*sl.Ob
 
 	if most := session.AutoPool(); flags.Jobs > most {
 		return nil, nil, nil, fmt.Errorf("--jobs %d wants %d objects and an avatar "+
-			"has %d, in %d groups of %d; \"slsh auto -n %d\" is what makes more",
-			flags.Jobs, flags.Jobs, most, session.AutoGroups(), session.AutoGroupSize,
-			flags.Jobs)
+			"has %d; \"slsh auto -n %d\" is what makes more",
+			flags.Jobs, flags.Jobs, most, flags.Jobs)
 	}
 
-	// Objects are taken as a whole GROUP however few are wanted: the
-	// group is the unit of exclusion, and taking a single object out of
-	// one would let a benchmark holding that group use it at the same
-	// time.  So asking for all four of a group costs nothing that asking
-	// for one did not already cost, and past four it is another group.
+	// As many objects as there are scripts to run at once, and they are
+	// taken all together or not at all: the pool hands out any number up
+	// to what the avatar wears.  Four by default because that is a
+	// useful width without being the whole pool, and because it leaves
+	// room for a benchmark alongside.
 	want := flags.Jobs
 	if want < 1 {
 		want = session.AutoGroupSize
@@ -432,29 +431,12 @@ func runIn(ctx context.Context, o session.Options, n int) (*sl.Session, []*sl.Ob
 	if want > n {
 		want = n
 	}
-	as, err := session.UseAutoGroups(ctx, o, want)
+	a, err := session.UseAutoAnywhere(ctx, o, want)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
-	var objs []*sl.Object
-	for _, a := range as {
-		objs = append(objs, a.Objects...)
-	}
 	if o.Agent == "" {
-		fmt.Fprintf(os.Stderr, "running as %s\n", as[0].Agent)
+		fmt.Fprintf(os.Stderr, "running as %s\n", a.Agent)
 	}
-	// Said when it is short, and only then.  Somebody who asked for
-	// twelve and got four is owed the number: the run is slower than
-	// they planned for and nothing else about it looks wrong.
-	if len(objs) < want {
-		fmt.Fprintf(os.Stderr,
-			"%d of the %d objects asked for are free; running %d at a time\n",
-			len(objs), want, len(objs))
-	}
-	return as[0].Session, objs, func() {
-		for _, a := range as {
-			a.Release()
-		}
-	}, nil
+	return a.Session, a.Objects, a.Release, nil
 }

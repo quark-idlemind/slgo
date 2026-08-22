@@ -1530,9 +1530,7 @@ func runIn(ctx context.Context, o session.Options) (*sl.Session, *sl.Object, []*
 	// attributed to the wrong avatar is not an error, it is a plausible
 	// number.
 	if o.Agent == "" {
-		fmt.Fprintf(os.Stderr, "running as %s, objects %d-%d\n",
-			a.Agent, a.Group*session.AutoGroupSize,
-			a.Group*session.AutoGroupSize+len(a.Objects)-1)
+		fmt.Fprintf(os.Stderr, "running as %s, objects %s\n", a.Agent, a.Where())
 	}
 	return a.Session, a.Objects[0], a.Objects[1:], a.Release, nil
 }

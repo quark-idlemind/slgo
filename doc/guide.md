@@ -370,9 +370,9 @@ it. Pick a word the output cannot contain by accident.
 ### Where the script runs
 
 A script needs an object to run in, and by default those are the `auto`
-objects: a group of four prims, worn, kept. Any that are not being worn
-are put on; any that do not exist are made, taken into inventory and put
-on. That happens once.
+objects: four of the prims the avatar wears, kept. Any that are not
+being worn are put on; any that do not exist are made, taken into
+inventory and put on. That happens once.
 
 Keeping it is what makes runs quick. The first script put into an
 object takes several seconds to appear; replacing one already there
@@ -415,20 +415,18 @@ interleaved, which is what the tag in front of every line is for. The
 tags are padded to the widest name on the command line so that they read
 as a column.
 
-`--jobs N` is how many run at once. Past four it takes another group:
-`--jobs 8` is two groups and `--jobs 12` is three, which is the whole of
-what one avatar wears. Eight scripts of three seconds each took **6.9
-seconds** measured, against about 35 one at a time.
+`--jobs N` is how many run at once, up to the twelve objects an avatar
+wears. Eight scripts of three seconds each took **6.9 seconds**
+measured, against about 35 one at a time.
 
-Only the FIRST group is queued for. The ones after it are taken if they
-are free at that moment and skipped if they are not, because waiting for
-a second group while holding the first is the one thing that could
-deadlock two runs against each other. So `--jobs 12` on a busy avatar may
-get four objects, and when it does it says so:
+The objects are taken all together or not at all. `--jobs 8` on an
+avatar with six free does not run six: it waits until eight are free,
+and says what it is waiting for. That is not fussiness -- a run that
+took the six and waited for the other two would be holding six objects
+that nobody else can use while it waits for somebody who may be doing
+exactly the same thing, and neither would ever finish.
 
-    4 of the 12 objects asked for are free; running 4 at a time
-
-Asking for more than the avatar has is refused rather than rounded down,
+Asking for more than the avatar has is refused rather than waited for,
 and says how to make more (`slsh auto -n 12`).
 
 An object that has never run a script from `automate` is slower the
@@ -458,10 +456,11 @@ is worse off than one who was told.
 
 ### Several runs at once
 
-A run takes a **group** of four objects and holds it until it finishes.
-An avatar wears twelve, so three runs fit on one avatar, and if `slgod`
-is holding several avatars a run that finds them all busy moves on to the
-next avatar rather than queueing.
+A run takes as many objects as it asked for and holds them until it
+finishes. An avatar wears twelve, so three benchmarks fit on one avatar,
+or a benchmark and eight scripts, or any other way twelve divides up --
+and if `slgod` is holding several avatars a run that finds them all busy
+moves on to the next avatar rather than queueing.
 
 That order is the daemon's, not alphabetical: the default avatar first,
 then the rest. So nine runs started together against three avatars simply
@@ -474,14 +473,32 @@ for, so a run waits for it rather than quietly using another. That is
 worth knowing before setting the variable in a shell you then start nine
 things from.
 
-Why a whole group rather than one object at a time: a benchmark carries
-its base reading in the object's linkset data, which belongs to the
-object rather than to the script, and the script is installed under a
-fixed name -- so two runs sharing an object would overwrite each other's
-reading and each other's script. Taking objects one at a time would let
-two runs each hold some and wait for the rest, which is a deadlock;
-taking a whole group cannot deadlock, because nothing ever holds one
-group while waiting for another.
+Why a run gets its objects to itself: a benchmark carries its base
+reading in the object's linkset data, which belongs to the object rather
+than to the script, and the script is installed under a fixed name -- so
+two runs sharing an object would overwrite each other's reading and each
+other's script.
+
+Objects are locked one at a time, and on its own that deadlocks: three
+runs each wanting four of twelve can end up holding three apiece and
+waiting for a fourth that nobody is going to give back. What prevents it
+is one more lock. A run takes an **allocation lock** first, and under it
+takes all the objects it wants or none of them -- trying each, never
+waiting for any. If it cannot be served it gives back everything it
+took, drops the allocation lock, and only then waits. Nothing is ever
+held while waiting for anything else, so there is no cycle to deadlock
+on.
+
+What that leaves is starvation: a run wanting twelve can in principle be
+stepped over by a stream of runs wanting one. Nothing prevents that,
+deliberately -- these are programs run by hand or from a script rather
+than a service under load, so the queue drains.
+
+This used to be done by dividing the pool into fixed groups of four and
+locking a whole group, four being what a benchmark's search happens to
+use. That could not deadlock either, but it made four the unit of
+everything: a run wanting six had to hold eight, and one wanting twelve
+could not be served at all.
 
 Set an avatar up with `slsh auto -n 12`, once per account. An avatar that
 is not allowed to build can still be set up, provided somebody who can

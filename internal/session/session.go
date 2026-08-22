@@ -138,42 +138,32 @@ func AutoName(n int) string {
 	return fmt.Sprintf("%s %d", AutoObject, n+1)
 }
 
-// AutoGroupSize is how many objects one benchmark takes at once.
-//
-// The pool is divided into fixed groups of this size and a run takes a
-// WHOLE group, which is what makes several runs at once safe.  Taking
-// slots one at a time would let two runs each hold some and wait for the
-// rest, which is a deadlock; one lock per group cannot deadlock because
-// nothing ever holds one while waiting for another.
+// AutoGroupSize is how many objects a benchmark takes at once.
 //
 // Four because that is what the search uses: quarterSearch takes three
-// readings at once alongside the measured object.  A bigger group would
-// idle, and a smaller one would slow the search down.
+// readings at once alongside the measured object.  It is autobench's
+// number and not the pool's -- the pool hands out any count up to
+// AutoPool, and a program running scripts asks for one object per script
+// it wants going at once.
 const AutoGroupSize = 4
 
-// AutoGroups is how many benchmarks one avatar can run at once.
-func AutoGroups() int { return len(AutoPoints) / AutoGroupSize }
+// AutoPool is how many objects one avatar's pool holds -- the ceiling on
+// how many things can run on it at once.
+func AutoPool() int { return len(AutoPoints) }
 
-// AutoPool is how many objects one avatar's pool holds when every group
-// is there -- the ceiling on how many scripts it can run at once.
-func AutoPool() int { return AutoGroups() * AutoGroupSize }
-
-// AutoGroupLock names the lock covering one group.
+// AutoSlotLock names the lock over one place in the pool, and
+// AutoAllocLock the one held while deciding who gets which.
 //
-// NOT the old bare "auto", deliberately: a client old enough to lock
-// that name would not exclude against these, and the two would quietly
-// share objects.  A different name makes the mismatch visible -- the old
-// client takes a lock nobody else wants -- rather than silent.
-func AutoGroupLock(g int) string { return fmt.Sprintf("%s/%d", AutoLock, g) }
+// NOT the old bare "auto", nor the "auto/0" that named a group of four,
+// deliberately: a client old enough to lock either would not exclude
+// against these, and the two would quietly share objects.  A different
+// name makes the mismatch visible -- the old client takes a lock nobody
+// else wants -- rather than silent.
+func AutoSlotLock(i int) string { return fmt.Sprintf("%s/slot/%d", AutoLock, i) }
 
-// autoGroupSlots is which slots belong to a group.
-func autoGroupSlots(g, n int) []int {
-	out := make([]int, 0, n)
-	for i := 0; i < n && g*AutoGroupSize+i < len(AutoPoints); i++ {
-		out = append(out, g*AutoGroupSize+i)
-	}
-	return out
-}
+// AutoAllocLock is held while a caller decides which places it is
+// taking, and never while it waits for one.  See auto.go.
+var AutoAllocLock = AutoLock + "/alloc"
 
 // EnsureAutoItems makes sure the first n auto items exist in inventory,
 // by COPYING the first one rather than building each.
@@ -256,22 +246,27 @@ func SetupAuto(ctx context.Context, s *sl.Session, n int) ([]*sl.Object, error) 
 		n = len(AutoPoints)
 	}
 
+	// Every place, and the allocation lock over them: setting up moves
+	// attachments about, and an object moving under a running benchmark
+	// is a wrong number rather than a failure.  The allocation lock
+	// first, so that a caller part way through choosing finishes and
+	// nobody starts choosing while this holds half the pool.
 	var held []string
 	defer func() {
-		for _, name := range held {
-			s.Unlock(name)
+		for i := len(held) - 1; i >= 0; i-- {
+			s.Unlock(held[i])
 		}
 	}()
-	for g := 0; g < AutoGroups(); g++ {
-		name := AutoGroupLock(g)
+	for _, name := range append([]string{AutoAllocLock}, autoSlotLocks()...) {
 		got, holder, err := s.TryLock(ctx, name)
 		if err != nil {
 			return nil, fmt.Errorf("asking for the %s objects: %w", AutoObject, err)
 		}
 		if !got {
-			return nil, fmt.Errorf("group %d is in use by %s; "+
-				"setting up moves attachments about and cannot be done under a running benchmark",
-				g, holderOr(holder))
+			return nil, fmt.Errorf("%s is in use by %s; "+
+				"setting up moves attachments about and cannot be done "+
+				"under a running benchmark",
+				name, holderOr(holder))
 		}
 		held = append(held, name)
 	}
@@ -390,4 +385,13 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 			fmt.Fprintf(os.Stderr, "%s is still there: %v\n", obj, err)
 		}
 	}, nil
+}
+
+// autoSlotLocks names every place in the pool.
+func autoSlotLocks() []string {
+	out := make([]string, 0, AutoPool())
+	for i := 0; i < AutoPool(); i++ {
+		out = append(out, AutoSlotLock(i))
+	}
+	return out
 }

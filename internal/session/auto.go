@@ -1,30 +1,48 @@
 package session
 
-// Finding somewhere to run, when there are several avatars and several
-// groups of objects on each.
+// Finding somewhere to run, when there are several avatars and a pool of
+// objects on each.
 //
 // # The shape of the problem
 //
-// A benchmark needs AutoGroupSize objects to itself for as long as it
-// runs, because each carries its base reading in its own linkset data.
-// One avatar wears enough for several benchmarks at once, and a daemon
-// may hold several avatars.  So "where do I run?" has two answers to
-// find, and the second depends on the first.
+// A benchmark needs several objects to itself for as long as it runs,
+// because each carries its base reading in its own linkset data; a
+// program running scripts wants one object per script it runs at once.
+// One avatar wears enough for several of either, and a daemon may hold
+// several avatars.  So "where do I run?" has two answers to find, and
+// the second depends on the first.
 //
 // # Why it is not a queue
 //
 // The old arrangement was one lock over one set of objects: a second
 // benchmark waited for the first even when objects were going spare.
 // With a pool the wait should be the LAST resort, so this tries every
-// group on every avatar before it queues on any of them.
+// avatar before it queues on any of them.
 //
-// # Why whole groups
+// # Why an allocation lock, and not a lock per group
 //
-// A group is taken with ONE lock covering all of it.  Taking objects one
-// at a time would let two benchmarks each hold some and wait for the
-// rest, which is a deadlock where a queue is merely slow.  Nothing here
-// ever holds one lock while waiting for another, so there is nothing to
-// deadlock.
+// Objects locked one at a time deadlock: four callers each wanting four
+// of twelve can end up holding three apiece and waiting for a fourth
+// that nobody is going to give back.  Taking them in fixed groups of
+// four avoids that, and was what this did, but it makes the group the
+// unit of everything -- a caller wanting six has to hold eight, a caller
+// wanting twelve cannot be served at all, and four is a number that came
+// from what one benchmark's search happens to use.
+//
+// The deadlock is not caused by the granularity.  It is caused by
+// callers taking objects incrementally while others do the same.  One
+// more lock settles it: an allocation lock that one caller holds at a
+// time, under which a caller takes ALL of the objects it wants or none
+// of them.  Nothing is ever held while waiting for anything else -- the
+// allocation lock is dropped, and everything taken under it given back,
+// before the caller waits -- so there is no cycle to deadlock on.
+//
+// What is left is starvation: a caller wanting twelve can in principle
+// be stepped over for ever by a stream of callers wanting one.  Nothing
+// here prevents that, deliberately.  These are a handful of programs run
+// by hand or from a script, not a service under load; the requests
+// drain, and a scheme that could not be reasoned about would be the
+// worse trade.
 //
 // # Why the avatar is chosen here and not by the daemon
 //
@@ -39,10 +57,17 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/quark-idlemind/slgo/sl"
 )
+
+// lockWait is how long to queue for a lock before giving up.  Long
+// enough for a benchmark ahead of us to finish, short enough that a
+// daemon holding a lock nobody will release is noticed the same day.
+const lockWait = 15 * time.Minute
 
 // Auto is somewhere to run: a session, objects held for as long as
 // Release is uncalled, and which avatar it turned out to be.
@@ -54,11 +79,23 @@ type Auto struct {
 	// did not name one should say out loud.
 	Agent string
 
-	// Group is which group of the pool this is, for a person reading a
-	// log and wondering what else was running.
-	Group int
+	// Slots is which of the pool's places these objects came from, for a
+	// person reading a log and wondering what else was running.
+	Slots []int
 
 	release func()
+}
+
+// Where names the places held, for a log line.
+func (a *Auto) Where() string {
+	var b strings.Builder
+	for i, s := range a.Slots {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(strconv.Itoa(s))
+	}
+	return b.String()
 }
 
 // Release gives the objects back.  So does going away: the daemon frees
@@ -76,11 +113,14 @@ func (a *Auto) Release() {
 
 // UseAutoAnywhere finds somewhere to run n objects' worth of work.
 //
-// With an avatar named, it uses that one and waits its turn if every
-// group is busy.  With none named it takes the first free group on the
-// first avatar that has one, in the daemon's order -- the default
-// first, then the rest -- and only queues, on the default, when nothing
-// anywhere is free.
+// With an avatar named, it uses that one and waits its turn if the
+// objects are busy.  With none named it takes the first avatar that can
+// supply all n at once, in the daemon's order -- the default first, then
+// the rest -- and only queues, on the default, when no avatar can.
+//
+// All n or none.  A caller given four of the eight it asked for would
+// either hold them while waiting for the rest, which is the deadlock, or
+// give them back -- which is what this does for it.
 //
 // The session it returns belongs to the caller and must be closed by
 // it.  Sessions opened to avatars that turned out to be busy are closed
@@ -94,10 +134,10 @@ func UseAutoAnywhere(ctx context.Context, o Options, n int) (*Auto, error) {
 	if n < 1 {
 		n = 1
 	}
-	if n > AutoGroupSize {
-		return nil, fmt.Errorf("a benchmark takes at most %d objects at once; "+
-			"asking for %d would need more than one group and could deadlock",
-			AutoGroupSize, n)
+	if n > AutoPool() {
+		return nil, fmt.Errorf("%d objects were asked for and an avatar has %d; "+
+			"waiting for objects that do not exist would be waiting for ever",
+			n, AutoPool())
 	}
 
 	// A named avatar, or a direct login, is the simple case: there is
@@ -161,7 +201,7 @@ func UseAutoAnywhere(ctx context.Context, o Options, n int) (*Auto, error) {
 	// Everything is busy.  Queue on the default rather than on whichever
 	// avatar was asked last, so that waiting is predictable.
 	fmt.Fprintf(os.Stderr,
-		"every group on every avatar is busy; waiting for one on %s\n", deflt)
+		"no avatar has %d objects free; waiting for them on %s\n", n, deflt)
 	a, err := useAutoOn(ctx, first, n, true)
 	if err != nil {
 		first.Close()
@@ -170,163 +210,139 @@ func UseAutoAnywhere(ctx context.Context, o Options, n int) (*Auto, error) {
 	return a, nil
 }
 
-// UseAutoGroups finds somewhere to run n objects' worth of work, in as
-// many whole groups as that takes.
-//
-// This is the wider door beside UseAutoAnywhere, which takes one group
-// and is what a benchmark wants: four is the size of a group because
-// four is what quarterSearch uses, and a benchmark asking for more would
-// be asking for objects it would leave idle.  A program that simply has
-// twelve things to do at once wants twelve objects, and the group is the
-// unit they come in rather than a ceiling on how many can be had.
-//
-// It never waits while holding anything.  The first group is taken the
-// ordinary way, queue and all, because a caller that gets nothing at all
-// has to wait somewhere; every group after that is taken only if it is
-// free right now.  So the answer may be narrower than the question --
-// four objects where twelve were asked for -- and the caller is expected
-// to look at what it got rather than at what it wanted.  Waiting for the
-// second group while holding the first is the hold-and-wait that the
-// whole-group rule exists to prevent.
-//
-// Every group is on ONE avatar, the one the first group was found on.
-// Spreading across avatars would run some of the scripts as somebody
-// else, which is a different thing from running them faster.
-//
-// All of the sessions in the answer are that one session, and it is the
-// caller's to close -- once.
-func UseAutoGroups(ctx context.Context, o Options, n int) ([]*Auto, error) {
-	if n < 1 {
-		n = 1
-	}
-	want := n
-	if want > AutoGroupSize {
-		want = AutoGroupSize
-	}
-	first, err := UseAutoAnywhere(ctx, o, want)
+// useAutoOn takes n objects on one session and puts them on.
+func useAutoOn(ctx context.Context, s *sl.Session, n int, wait bool) (*Auto, error) {
+	slots, err := takeSlots(ctx, s, n, wait)
 	if err != nil {
 		return nil, err
 	}
-	out := []*Auto{first}
-	have := len(first.Objects)
-	if have >= n {
-		return out, nil
-	}
-	return append(out, takeGroups(ctx, first.Session, n-have, first.Group)...), nil
-}
-
-// takeGroups takes what is free of the groups on one session, in ONE
-// pass, and gives back up to n objects' worth of them.
-//
-// One pass because a lock is re-entrant for the client holding it: the
-// daemon's acquire says so in as many words, since a client that asks
-// twice still holds it once.  That is right for a client asking again
-// and wrong for this -- a second pass would take a group this caller
-// already has, wear the same objects a second time, and hand two callers
-// the same object to run a script in.  Which group each Auto came from
-// is what says a group has been dealt with, so the ones already held are
-// named rather than discovered.
-//
-// Nothing here waits.  A group that is busy is somebody else's and the
-// answer is simply smaller.
-func takeGroups(ctx context.Context, s *sl.Session, n int, held ...int) []*Auto {
-	skip := map[int]bool{}
-	for _, g := range held {
-		skip[g] = true
-	}
-
-	var out []*Auto
-	for g := 0; g < AutoGroups() && n > 0; g++ {
-		if skip[g] {
-			continue
-		}
-		got, _, err := s.TryLock(ctx, AutoGroupLock(g))
-		if err != nil || !got {
-			continue
-		}
-		want := n
-		if want > AutoGroupSize {
-			want = AutoGroupSize
-		}
-		a, err := wearGroup(ctx, s, g, want)
-		if err != nil || len(a.Objects) == 0 {
-			s.Unlock(AutoGroupLock(g))
-			// Not fatal and not silent: an object that will not go on
-			// is one fewer script at a time, which is slower rather
-			// than wrong.
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "group %d: %v\n", g, err)
-			}
-			continue
-		}
-		out = append(out, a)
-		n -= len(a.Objects)
-	}
-	return out
-}
-
-// useAutoOn takes a group on one session.
-//
-// It tries every group without waiting first.  Only if wait is set, and
-// nothing was free, does it queue -- on group 0, because a queue has to
-// form somewhere and the alternative is a caller waiting on a group that
-// frees later than another.
-func useAutoOn(ctx context.Context, s *sl.Session, n int, wait bool) (*Auto, error) {
-	for g := 0; g < AutoGroups(); g++ {
-		got, holder, err := s.TryLock(ctx, AutoGroupLock(g))
-		if err != nil {
-			return nil, fmt.Errorf("asking for objects on %s: %w\n"+
-				"        (an slgod older than the lock does not answer; --rez avoids it)",
-				s.Info().Name, err)
-		}
-		if !got {
-			_ = holder
-			continue
-		}
-		a, err := wearGroup(ctx, s, g, n)
-		if err != nil {
-			s.Unlock(AutoGroupLock(g))
-			return nil, err
-		}
-		return a, nil
-	}
-
-	if !wait {
-		return nil, fmt.Errorf("every group on %s is busy", s.Info().Name)
-	}
-
-	lockCtx, cancel := context.WithTimeout(ctx, 15*time.Minute)
-	defer cancel()
-	if err := s.Lock(lockCtx, AutoGroupLock(0)); err != nil {
-		return nil, fmt.Errorf("waiting for objects on %s: %w", s.Info().Name, err)
-	}
-	a, err := wearGroup(ctx, s, 0, n)
+	a, err := wearSlots(ctx, s, slots)
 	if err != nil {
-		s.Unlock(AutoGroupLock(0))
+		releaseSlots(s, slots)
 		return nil, err
 	}
 	return a, nil
 }
 
-// wearGroup makes sure the group's objects exist and are on.
-func wearGroup(ctx context.Context, s *sl.Session, g, n int) (*Auto, error) {
+// takeSlots takes n of the pool's places, all of them or none.
+//
+// The allocation lock is what makes taking them one at a time safe.  One
+// caller holds it, and under it every place is TRIED and none is waited
+// for -- so a caller can never be left holding some of what it wants
+// while somebody else holds the rest.  A caller that cannot be served
+// gives back everything it took, drops the allocation lock, and only
+// then waits, holding nothing at all.
+//
+// What it excludes is other CLIENTS.  The daemon's lock is re-entrant --
+// a client that asks for a place it already holds is given it -- so a
+// program that called this twice would be handed the same objects twice.
+// A program takes what it needs in one call, which is also the only way
+// all-or-nothing can mean anything.
+//
+// What it waits ON is one of the places somebody else has.  There is no
+// message for "something was given back", and this says the same thing
+// with the locks that already exist: the wait ends when that place comes
+// free, which is the moment it is worth looking again.  It is given
+// straight back, because keeping it would be holding one thing while
+// waiting for the others, which is the deadlock this is all for.
+func takeSlots(ctx context.Context, s *sl.Session, n int, wait bool) ([]int, error) {
+	said := false
+	for {
+		// Not TryLock: the allocation lock is held for as long as it
+		// takes to try the places, which is a round trip each and no
+		// waiting at all, so queueing on it is the queue working.
+		allocCtx, cancel := context.WithTimeout(ctx, lockWait)
+		err := s.Lock(allocCtx, AutoAllocLock)
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("asking for objects on %s: %w\n"+
+				"        (an slgod older than the lock does not answer; --rez avoids it)",
+				s.Info().Name, err)
+		}
+
+		var (
+			got    []int
+			busy   = -1 // one place somebody else has, to wait on
+			holder string
+		)
+		for i := 0; i < AutoPool() && len(got) < n; i++ {
+			ok, by, err := s.TryLock(ctx, AutoSlotLock(i))
+			if err != nil {
+				releaseSlots(s, got)
+				s.Unlock(AutoAllocLock)
+				return nil, fmt.Errorf("asking for objects on %s: %w\n"+
+					"        (an slgod older than the lock does not answer; --rez avoids it)",
+					s.Info().Name, err)
+			}
+			if ok {
+				got = append(got, i)
+				continue
+			}
+			if busy < 0 {
+				busy, holder = i, by
+			}
+		}
+		if len(got) == n {
+			s.Unlock(AutoAllocLock)
+			return got, nil
+		}
+
+		// Not enough.  Everything taken goes back before anything is
+		// waited for, and the allocation lock goes back with it so that
+		// whoever CAN be served is not stuck behind us.
+		releaseSlots(s, got)
+		s.Unlock(AutoAllocLock)
+
+		if !wait {
+			return nil, fmt.Errorf("%s has %d of the %d objects free",
+				s.Info().Name, len(got), n)
+		}
+		if !said {
+			// Said out loud, because from outside a queue and a hang
+			// look the same and one of them is worth waiting through.
+			fmt.Fprintf(os.Stderr,
+				"%d of the %d objects on %s are busy; waiting for %s\n",
+				n-len(got), n, s.Info().Name, holderOr(holder))
+			said = true
+		}
+
+		waitCtx, cancel := context.WithTimeout(ctx, lockWait)
+		err = s.Lock(waitCtx, AutoSlotLock(busy))
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("waiting for objects on %s: %w", s.Info().Name, err)
+		}
+		s.Unlock(AutoSlotLock(busy))
+	}
+}
+
+// releaseSlots gives back places that were taken and not used.
+func releaseSlots(s *sl.Session, slots []int) {
+	for _, i := range slots {
+		s.Unlock(AutoSlotLock(i))
+	}
+}
+
+// wearSlots makes sure the objects for these places exist and are on.
+func wearSlots(ctx context.Context, s *sl.Session, slots []int) (*Auto, error) {
+	if len(slots) == 0 {
+		return nil, fmt.Errorf("no objects to run in")
+	}
 	folder, err := objectsFolder(ctx, s)
 	if err != nil {
 		return nil, err
 	}
 
-	slots := autoGroupSlots(g, n)
-	if len(slots) == 0 {
-		return nil, fmt.Errorf("group %d has no slots", g)
-	}
-
 	// The items have to exist before any of them can be worn, and the
-	// highest slot in this group is how far that has to reach.
+	// highest place asked for is how far that has to reach.
 	if err := EnsureAutoItems(ctx, s, folder, slots[len(slots)-1]+1); err != nil {
 		return nil, err
 	}
 
-	var objs []*sl.Object
+	var (
+		objs []*sl.Object
+		used []int
+	)
 	for _, slot := range slots {
 		// AttachAdd, because past the eighth slot two objects share a
 		// point and a bare attach would throw the first one off.
@@ -340,15 +356,22 @@ func wearGroup(ctx context.Context, s *sl.Session, g, n int) (*Auto, error) {
 		}
 		obj := a.Object
 		objs = append(objs, &obj)
+		used = append(used, slot)
 	}
 
-	name := AutoGroupLock(g)
+	// A place whose object would not go on goes back at once: a lock
+	// over an object nobody got is a place taken from somebody who could
+	// have used it.
+	if len(used) < len(slots) {
+		releaseSlots(s, slots[len(used):])
+	}
+
 	return &Auto{
 		Session: s,
 		Objects: objs,
 		Agent:   s.Info().Name,
-		Group:   g,
-		release: func() { s.Unlock(name) },
+		Slots:   used,
+		release: func() { releaseSlots(s, used) },
 	}, nil
 }
 

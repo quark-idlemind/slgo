@@ -5,7 +5,7 @@ package session
 // Everything here is a function of a *sl.Session, and a session is a
 // function of an sl.Backend -- so a fake backend is the difference
 // between testing this package and testing its arithmetic.  Without one
-// a test can reach AutoName and autoGroupSlots and nothing else, which
+// a test can reach AutoName and the lock names and nothing else, which
 // is why the whole of it was only ever exercised by autobench against a
 // live avatar.
 //
@@ -116,6 +116,10 @@ type fakeGrid struct {
 	// waited is every lock that was queued on rather than tried, which
 	// is how a test tells "took a free one" from "waited its turn".
 	waited []string
+
+	// onLock is called at the moment a queued Lock is about to be
+	// granted, with nothing held.  See Lock.
+	onLock func(name string)
 
 	// inv is the inventory tree, served over the capability rather than
 	// answered from here: everything that reads inventory goes through
@@ -411,17 +415,29 @@ func (f *fakeGrid) NoteFriend(ctx context.Context, id msg.UUID, online bool) err
 // Lock is the queueing form and is granted at once: what a test wants
 // from it is which name was waited for, since waiting rather than
 // trying is the decision this package makes.
+//
+// onLock is called before the lock is granted and with nothing held, so
+// that a test can look at what the caller was holding at the moment it
+// decided to wait -- which is the one thing that cannot be seen
+// afterwards, because by then it has either given up or been served.
 func (f *fakeGrid) Lock(ctx context.Context, name string) error {
 	f.mu.Lock()
+	lockErr, waitErr, hook := f.lockErr, f.waitErr, f.onLock
+	f.mu.Unlock()
+	if lockErr != nil {
+		return lockErr
+	}
+	if waitErr != nil {
+		return waitErr
+	}
+	if hook != nil {
+		hook(name)
+	}
+
+	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.lockErr != nil {
-		return f.lockErr
-	}
-	if f.waitErr != nil {
-		return f.waitErr
-	}
 	f.waited = append(f.waited, name)
-	delete(f.busy, name)
+	f.busy[name] = "us"
 	return nil
 }
 
@@ -674,10 +690,24 @@ func (d *fakeDaemon) busy(names ...string) {
 	for _, n := range names {
 		taken[n] = true
 	}
+	// Busy until somebody queues for a place and is handed it, which is
+	// the holder giving it back: from then on the pool is free.  Without
+	// that the avatar is busy for ever, and a caller that waits and then
+	// looks again -- which is what taking objects one at a time has to
+	// do -- would go round for ever being refused.
+	var (
+		mu    sync.Mutex
+		given bool
+	)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.locked = func(who string, l *pb.Lock) *pb.Locked {
-		if taken[who] && l.Try {
+		mu.Lock()
+		defer mu.Unlock()
+		if !l.Try && strings.HasPrefix(l.Name, AutoLock+"/slot/") {
+			given = true
+		}
+		if taken[who] && l.Try && !given {
 			return &pb.Locked{Name: l.Name, Held: false, Holder: "somebody else"}
 		}
 		// A wait is answered by handing it over, since queueing is what
@@ -827,51 +857,35 @@ func TestTheFirstAutoObjectKeepsTheBareName(t *testing.T) {
 	}
 }
 
-// TestAGroupIsTakenWholeOrNotAtAll: the pool is divided into fixed
-// groups and a run takes all of one, which is what makes several runs at
-// once safe -- taking slots one at a time would let two runs each hold
-// some and wait for the rest, which is a deadlock rather than a queue.
-func TestAGroupIsTakenWholeOrNotAtAll(t *testing.T) {
+// TestEveryPlaceHasItsOwnLockAndTheAllocationLockIsApart: a place is
+// locked one at a time, which is only safe because the allocation lock
+// says one caller chooses at a time.  Both names have to be their own:
+// the allocation lock is not a place, and neither is the old bare name.
+func TestEveryPlaceHasItsOwnLockAndTheAllocationLockIsApart(t *testing.T) {
 	t.Parallel()
-	if AutoGroups() != len(AutoPoints)/AutoGroupSize {
-		t.Errorf("AutoGroups = %d over %d points", AutoGroups(), len(AutoPoints))
-	}
-	// The lock is NOT the old bare name: a client old enough to take
-	// that one would not exclude against these, and the two would
-	// quietly share objects.
-	if AutoGroupLock(0) == AutoLock {
-		t.Error("the group lock is the old bare name, which an old client would not exclude against")
-	}
-	if got := AutoGroupLock(2); got != "auto/2" {
-		t.Errorf("AutoGroupLock(2) = %q", got)
+	if AutoPool() != len(AutoPoints) {
+		t.Errorf("AutoPool = %d over %d points", AutoPool(), len(AutoPoints))
 	}
 
-	// Slots belong to exactly one group, and every point is in one.
-	seen := map[int]bool{}
-	for g := 0; g < AutoGroups(); g++ {
-		slots := autoGroupSlots(g, AutoGroupSize)
-		if len(slots) != AutoGroupSize {
-			t.Fatalf("group %d has %d slots", g, len(slots))
+	// NOT the old bare name, and not the "auto/0" that named a group of
+	// four: a client old enough to take either would not exclude against
+	// these, and the two would quietly share objects.
+	seen := map[string]bool{AutoLock: true, "auto/0": true}
+	for i := 0; i < AutoPool(); i++ {
+		name := AutoSlotLock(i)
+		if seen[name] {
+			t.Errorf("place %d is locked as %q, which is somebody else's name", i, name)
 		}
-		for _, s := range slots {
-			if seen[s] {
-				t.Errorf("slot %d is in two groups", s)
-			}
-			seen[s] = true
-		}
+		seen[name] = true
 	}
-	if len(seen) != AutoGroups()*AutoGroupSize {
-		t.Errorf("%d slots are in a group, of %d points", len(seen), len(AutoPoints))
+	if seen[AutoAllocLock] {
+		t.Errorf("the allocation lock is %q, which is also a place", AutoAllocLock)
 	}
-
-	// Asking for fewer than a whole group gives fewer, and asking past
-	// the end of the pool gives nothing rather than a slot that is not
-	// there.
-	if got := autoGroupSlots(0, 2); len(got) != 2 {
-		t.Errorf("autoGroupSlots(0, 2) = %v", got)
+	if got := AutoSlotLock(2); got != "auto/slot/2" {
+		t.Errorf("AutoSlotLock(2) = %q", got)
 	}
-	if got := autoGroupSlots(AutoGroups(), AutoGroupSize); len(got) != 0 {
-		t.Errorf("autoGroupSlots past the end = %v", got)
+	if len(autoSlotLocks()) != AutoPool() {
+		t.Errorf("%d locks name a pool of %d", len(autoSlotLocks()), AutoPool())
 	}
 }
 
@@ -1270,7 +1284,7 @@ func TestSetupTakesEveryGroupBeforeMovingAnything(t *testing.T) {
 	}
 }
 
-// TestSetupRefusesUnderARunningBenchmark: the refusal names the group
+// TestSetupRefusesUnderARunningBenchmark: the refusal names the place
 // and whoever has it, because "in use" without either leaves the reader
 // with nothing to do about it.
 func TestSetupRefusesUnderARunningBenchmark(t *testing.T) {
@@ -1278,7 +1292,7 @@ func TestSetupRefusesUnderARunningBenchmark(t *testing.T) {
 	s, f := newFakeSession(t)
 	f.stock(len(AutoPoints))
 	f.mu.Lock()
-	f.busy[AutoGroupLock(1)] = "autobench on quark"
+	f.busy[AutoSlotLock(1)] = "autobench on quark"
 	f.mu.Unlock()
 
 	_, err := SetupAuto(context.Background(), s, 4)
@@ -1286,14 +1300,14 @@ func TestSetupRefusesUnderARunningBenchmark(t *testing.T) {
 		t.Fatal("SetupAuto moved attachments about under a running benchmark")
 	}
 	if !strings.Contains(err.Error(), "autobench on quark") {
-		t.Errorf("SetupAuto = %v, want it to name who has the group", err)
+		t.Errorf("SetupAuto = %v, want it to name who has the object", err)
 	}
 
-	// A daemon that says a group is taken without saying by whom still
+	// A daemon that says a place is taken without saying by whom still
 	// has to produce a sentence.
 	f.mu.Lock()
-	f.busy[AutoGroupLock(1)] = ""
-	f.busy[AutoGroupLock(0)] = ""
+	f.busy[AutoSlotLock(1)] = ""
+	f.busy[AutoSlotLock(0)] = ""
 	f.mu.Unlock()
 	if got := holderOr(""); got != "something else" {
 		t.Errorf("holderOr = %q with nobody named", got)

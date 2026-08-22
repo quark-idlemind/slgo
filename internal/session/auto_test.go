@@ -3,7 +3,7 @@ package session
 // Choosing where to run, when there are several avatars and several
 // groups of objects on each.
 //
-// Two halves, and they need different fakes.  useAutoOn and wearGroup
+// Two halves, and they need different fakes.  takeSlots and wearSlots
 // are decisions about ONE session and are driven through the fake
 // backend in session_test.go.  UseAutoAnywhere is the other half -- it
 // dials once per avatar it considers, and closes the sessions it does
@@ -12,9 +12,10 @@ package session
 //
 // What is worth holding on to here is the ORDER of things: a queue is
 // the last resort, a named avatar is honoured exactly including its
-// wait, and a group is taken whole or not at all.  None of that is
-// visible in a single run; it only shows up as two benchmarks quietly
-// sharing an object, which is a wrong number rather than a failure.
+// wait, and objects are taken all together or not at all.  None of that
+// is visible in a single run; it only shows up as two benchmarks quietly
+// sharing an object, which is a wrong number rather than a failure, or
+// as two callers waiting on each other for ever.
 
 import (
 	"context"
@@ -25,14 +26,79 @@ import (
 	"github.com/quark-idlemind/slgo/sl"
 )
 
-// allBusy makes every group taken by somebody else, which is one avatar
+// fourSlots is a benchmark's worth of the pool, for the tests that are
+// about wearing objects rather than about which places they came from.
+var fourSlots = []int{0, 1, 2, 3}
+
+// allBusy makes every place taken by somebody else, which is one avatar
 // with nothing to spare.
 func allBusy(f *fakeGrid, by string) {
+	busy(f, by, 0, AutoPool())
+}
+
+// busy makes the places from lo up to hi somebody else's.
+func busy(f *fakeGrid, by string, lo, hi int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for g := 0; g < AutoGroups(); g++ {
-		f.busy[AutoGroupLock(g)] = by
+	for i := lo; i < hi; i++ {
+		f.busy[AutoSlotLock(i)] = by
 	}
+}
+
+// snapshot is every lock the fake says is held, by name.
+func snapshot(f *fakeGrid) map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := map[string]string{}
+	for name, by := range f.busy {
+		if by != "" {
+			out[name] = by
+		}
+	}
+	return out
+}
+
+// atWait runs fn and answers with what was held the first time the
+// caller waited for a place.  The allocation lock is queued on every
+// time and is not a wait for a place, so it does not count as one.
+func atWait(f *fakeGrid, fn func()) map[string]string {
+	var during map[string]string
+	f.mu.Lock()
+	f.onLock = func(name string) {
+		if name == AutoAllocLock || during != nil {
+			return
+		}
+		during = snapshot(f)
+	}
+	f.mu.Unlock()
+	fn()
+	return during
+}
+
+// held is which places the fake says are taken, and by whom.
+func held(f *fakeGrid) map[int]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := map[int]string{}
+	for i := 0; i < AutoPool(); i++ {
+		if by := f.busy[AutoSlotLock(i)]; by != "" {
+			out[i] = by
+		}
+	}
+	return out
+}
+
+// slotsWaitedFor is the places that were queued on rather than tried.
+// The allocation lock is always queued on -- that is what it is for --
+// and is not what these tests are about.
+func slotsWaitedFor(f *fakeGrid) []string {
+	var out []string
+	for _, name := range f.Waited() {
+		if name != AutoAllocLock {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // TestReleasingTwiceGivesBackOneLock: Release is called from a defer and
@@ -53,27 +119,27 @@ func TestReleasingTwiceGivesBackOneLock(t *testing.T) {
 	(&Auto{}).Release()
 }
 
-// TestAFreeGroupIsTakenWithoutQueueing: with a pool the wait should be
+// TestFreeObjectsAreTakenWithoutQueueing: with a pool the wait should be
 // the LAST resort -- the old arrangement was one lock over one set of
 // objects, and a second benchmark waited for the first even when objects
 // were going spare.
-func TestAFreeGroupIsTakenWithoutQueueing(t *testing.T) {
+func TestFreeObjectsAreTakenWithoutQueueing(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
 	f.stock(len(AutoPoints))
-	f.mu.Lock()
-	f.busy[AutoGroupLock(0)] = "somebody else"
-	f.mu.Unlock()
+	busy(f, "somebody else", 0, AutoGroupSize)
 
 	a, err := useAutoOn(context.Background(), s, AutoGroupSize, true)
 	if err != nil {
 		t.Fatalf("useAutoOn: %v", err)
 	}
-	if a.Group != 1 {
-		t.Errorf("took group %d, want the first one that was free", a.Group)
-	}
 	if len(a.Objects) != AutoGroupSize {
-		t.Errorf("took %d objects, want a whole group", len(a.Objects))
+		t.Errorf("took %d objects, want the %d asked for", len(a.Objects), AutoGroupSize)
+	}
+	for _, slot := range a.Slots {
+		if slot < AutoGroupSize {
+			t.Errorf("took place %d, which somebody else has", slot)
+		}
 	}
 	if a.Agent != "quark" {
 		t.Errorf("the objects belong to %q", a.Agent)
@@ -81,23 +147,51 @@ func TestAFreeGroupIsTakenWithoutQueueing(t *testing.T) {
 	if a.Session != s {
 		t.Error("the session that came back is not the one the objects are on")
 	}
-	if got := f.Waited(); len(got) != 0 {
-		t.Errorf("queued on %v with a group going spare", got)
+	if got := slotsWaitedFor(f); len(got) != 0 {
+		t.Errorf("queued on %v with objects going spare", got)
 	}
 
 	a.Release()
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.busy[AutoGroupLock(1)] != "" {
-		t.Error("releasing did not give the group back")
+	for slot, by := range held(f) {
+		if by == "us" {
+			t.Errorf("releasing did not give place %d back", slot)
+		}
 	}
 }
 
-// TestEveryGroupBusyIsAWaitOrARefusal: waiting is right when this is the
+// TestObjectsAreTakenOneAtATimeAndAcrossWhateverIsFree: the pool hands
+// out a COUNT and not a block.  Six objects out of a pool whose first
+// five are busy is six of the seven that are left, which the old fixed
+// groups of four could not express at all.
+func TestObjectsAreTakenOneAtATimeAndAcrossWhateverIsFree(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+	busy(f, "somebody else", 0, 5)
+
+	a, err := useAutoOn(context.Background(), s, 6, true)
+	if err != nil {
+		t.Fatalf("useAutoOn: %v", err)
+	}
+	if len(a.Objects) != 6 {
+		t.Errorf("took %d objects, want the 6 asked for", len(a.Objects))
+	}
+	if got := slotsWaitedFor(f); len(got) != 0 {
+		t.Errorf("queued on %v with six objects going spare", got)
+	}
+	for _, slot := range a.Slots {
+		if slot < 5 {
+			t.Errorf("took place %d, which somebody else has", slot)
+		}
+	}
+}
+
+// TestEverythingBusyIsAWaitOrARefusal: waiting is right when this is the
 // avatar that was asked for and wrong when there are others to try, so
-// the choice is the caller's -- and a wait forms on group 0 because a
-// queue has to form somewhere.
-func TestEveryGroupBusyIsAWaitOrARefusal(t *testing.T) {
+// the choice is the caller's -- and the wait forms on one of the places
+// somebody else has, because that is what "something was given back"
+// looks like with only locks to say it.
+func TestEverythingBusyIsAWaitOrARefusal(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
 	f.stock(len(AutoPoints))
@@ -115,11 +209,83 @@ func TestEveryGroupBusyIsAWaitOrARefusal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("useAutoOn: %v", err)
 	}
-	if a.Group != 0 {
-		t.Errorf("queued on group %d, want the one a queue forms on", a.Group)
+	if len(a.Objects) != 1 {
+		t.Errorf("took %d objects after waiting for one", len(a.Objects))
 	}
-	if got := f.Waited(); len(got) != 1 || got[0] != AutoGroupLock(0) {
-		t.Errorf("waited on %v", got)
+	if got := slotsWaitedFor(f); len(got) != 1 || got[0] != AutoSlotLock(0) {
+		t.Errorf("waited on %v, want one of the places somebody else had", got)
+	}
+}
+
+// TestNothingIsHeldWhileWaiting: this is the whole of why there is an
+// allocation lock.  A caller that took what it could and then waited for
+// the rest would sit holding objects nobody else can use, waiting for a
+// caller that is doing the same thing -- and neither would ever finish.
+// So everything taken goes back BEFORE anything is waited for.
+func TestNothingIsHeldWhileWaiting(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+	// Half the pool is somebody else's, so a caller wanting the whole
+	// of it cannot be served and has to wait.  It could take six on the
+	// way past, and that is exactly what it must not do.
+	busy(f, "a benchmark", 0, AutoPool()/2)
+
+	during := atWait(f, func() {
+		useAutoOn(context.Background(), s, AutoPool(), true)
+	})
+	if during == nil {
+		t.Fatal("a caller that could not be served did not wait for anything")
+	}
+	for name, by := range during {
+		if by == "us" {
+			t.Errorf("%s was still ours at the moment of waiting; "+
+				"holding one object while waiting for another is the deadlock",
+				name)
+		}
+	}
+}
+
+// TestTheAllocationLockIsGivenBackBeforeWaiting: it is one lock over the
+// whole pool, so a caller that waited while holding it would stop
+// everybody else from being served -- including the caller whose objects
+// it is waiting for, if that caller wants more of them.
+func TestTheAllocationLockIsGivenBackBeforeWaiting(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+	allBusy(f, "somebody else")
+
+	during := atWait(f, func() {
+		useAutoOn(context.Background(), s, 1, true)
+	})
+	if during == nil {
+		t.Fatal("a caller with nothing free did not wait for anything")
+	}
+	if by := during[AutoAllocLock]; by != "" {
+		t.Errorf("the allocation lock was held by %q while waiting, "+
+			"which stops everybody else being served -- including whoever "+
+			"holds the objects being waited for", by)
+	}
+}
+
+// TestPartOfWhatWasWantedIsGivenBackRatherThanKept: four of the eight
+// asked for is not a smaller answer, it is objects taken out of the pool
+// that the caller cannot use -- and the next caller, who wanted four,
+// finds nothing.
+func TestPartOfWhatWasWantedIsGivenBackRatherThanKept(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+	busy(f, "a benchmark", 0, AutoPool()-3)
+
+	if _, err := useAutoOn(context.Background(), s, 8, false); err == nil {
+		t.Fatal("useAutoOn took eight objects out of the three that were free")
+	}
+	for slot, by := range held(f) {
+		if by == "us" {
+			t.Errorf("place %d was kept out of an allocation that failed", slot)
+		}
 	}
 }
 
@@ -143,13 +309,13 @@ func TestADaemonTooOldToLockIsNotWorkedAround(t *testing.T) {
 	}
 }
 
-// TestAGroupTakenAndThenUnusableIsGivenBack: holding a lock over
-// objects that could not be worn would leave the group unusable to
+// TestPlacesTakenAndThenUnusableAreGivenBack: holding a lock over
+// objects that could not be worn would leave them unusable to
 // everybody, including the next run of this same program.
-func TestAGroupTakenAndThenUnusableIsGivenBack(t *testing.T) {
+func TestPlacesTakenAndThenUnusableAreGivenBack(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a group taken without waiting", func(t *testing.T) {
+	t.Run("taken without waiting", func(t *testing.T) {
 		t.Parallel()
 		s, f := newFakeSession(t)
 		f.mu.Lock()
@@ -159,14 +325,14 @@ func TestAGroupTakenAndThenUnusableIsGivenBack(t *testing.T) {
 		if _, err := useAutoOn(context.Background(), s, 1, false); err == nil {
 			t.Fatal("useAutoOn used objects it could not find")
 		}
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		if f.busy[AutoGroupLock(0)] != "" {
-			t.Error("the group is still held after the objects could not be worn")
+		for slot, by := range held(f) {
+			if by == "us" {
+				t.Errorf("place %d is still held after the objects could not be worn", slot)
+			}
 		}
 	})
 
-	t.Run("a group waited for", func(t *testing.T) {
+	t.Run("waited for", func(t *testing.T) {
 		t.Parallel()
 		s, f := newFakeSession(t)
 		allBusy(f, "somebody else")
@@ -177,13 +343,13 @@ func TestAGroupTakenAndThenUnusableIsGivenBack(t *testing.T) {
 		if _, err := useAutoOn(context.Background(), s, 1, true); err == nil {
 			t.Fatal("useAutoOn used objects it could not find")
 		}
-		if got := f.Waited(); len(got) != 1 {
+		if got := slotsWaitedFor(f); len(got) != 1 {
 			t.Errorf("waited on %v", got)
 		}
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		if f.busy[AutoGroupLock(0)] != "" {
-			t.Error("the group is still held after the objects could not be worn")
+		for slot, by := range held(f) {
+			if by == "us" {
+				t.Errorf("place %d is still held after the objects could not be worn", slot)
+			}
 		}
 	})
 }
@@ -209,19 +375,19 @@ func TestAWaitThatEndsWithoutTheLockIsReported(t *testing.T) {
 	}
 }
 
-// TestWearingAGroupMakesTheItemsFirst: the items have to exist before
-// any of them can be worn, and the highest slot in the group is how far
-// that has to reach -- a group at the end of the pool needs every item
-// below it to exist as well, because they are all copies of the first.
-func TestWearingAGroupMakesTheItemsFirst(t *testing.T) {
+// TestWearingMakesTheItemsFirst: the items have to exist before any of
+// them can be worn, and the highest place asked for is how far that has
+// to reach -- a place at the end of the pool needs every item below it
+// to exist as well, because they are all copies of the first.
+func TestWearingMakesTheItemsFirst(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
 	f.stock(1)
 	answerCopies(f)
 
-	a, err := wearGroup(context.Background(), s, 1, AutoGroupSize)
+	a, err := wearSlots(context.Background(), s, []int{4, 5, 6, 7})
 	if err != nil {
-		t.Fatalf("wearGroup: %v", err)
+		t.Fatalf("wearSlots: %v", err)
 	}
 	if len(a.Objects) != AutoGroupSize {
 		t.Errorf("wore %d objects", len(a.Objects))
@@ -235,17 +401,32 @@ func TestWearingAGroupMakesTheItemsFirst(t *testing.T) {
 	}
 }
 
-// TestAGroupPastTheEndOfThePoolHasNoSlots: the arithmetic is the only
-// thing standing between a group number and an index into AutoPoints,
-// and a group that is not there has to say so rather than wear nothing
-// and report success.
-func TestAGroupPastTheEndOfThePoolHasNoSlots(t *testing.T) {
+// TestWearingNothingIsRefused: nowhere to run is not somewhere to run
+// with no objects in it, and a caller handed an empty Auto would divide
+// by the length of it.
+func TestWearingNothingIsRefused(t *testing.T) {
 	t.Parallel()
 	s, _ := newFakeSession(t)
 
-	_, err := wearGroup(context.Background(), s, AutoGroups()+1, AutoGroupSize)
-	if err == nil || !strings.Contains(err.Error(), "no slots") {
-		t.Errorf("wearGroup = %v, want it to say the group is not there", err)
+	_, err := wearSlots(context.Background(), s, nil)
+	if err == nil || !strings.Contains(err.Error(), "no objects") {
+		t.Errorf("wearSlots = %v, want it to say there is nowhere to run", err)
+	}
+}
+
+// TestMoreObjectsThanTheAvatarHasIsRefusedRatherThanWaitedFor: the
+// allocation is all or nothing, so asking for thirteen out of twelve is
+// not slow -- it never comes back at all.  The refusal is what turns
+// that into a message.
+func TestMoreObjectsThanTheAvatarHasIsRefusedRatherThanWaitedFor(t *testing.T) {
+	t.Parallel()
+	// A port with nothing on it, so that a refusal which stopped being
+	// one would fail rather than quietly find the daemon on this
+	// machine and take objects on a live avatar.
+	_, err := UseAutoAnywhere(context.Background(),
+		Options{Addr: "127.0.0.1:1"}, AutoPool()+1)
+	if err == nil || !strings.Contains(err.Error(), "for ever") {
+		t.Errorf("UseAutoAnywhere = %v, want it to say why it cannot wait", err)
 	}
 }
 
@@ -264,8 +445,8 @@ func TestWearingStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 		f.sendErr = fmt.Errorf("the circuit is gone")
 		f.mu.Unlock()
 
-		if _, err := wearGroup(context.Background(), s, 0, AutoGroupSize); err == nil {
-			t.Error("wearGroup reported success without its first object")
+		if _, err := wearSlots(context.Background(), s, fourSlots); err == nil {
+			t.Error("wearSlots reported success without its first object")
 		}
 	})
 
@@ -280,9 +461,9 @@ func TestWearingStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 		f.presenceErr = fmt.Errorf("the parcel will not have it")
 		f.mu.Unlock()
 
-		a, err := wearGroup(context.Background(), s, 0, AutoGroupSize)
+		a, err := wearSlots(context.Background(), s, fourSlots)
 		if err != nil {
-			t.Fatalf("wearGroup: %v", err)
+			t.Fatalf("wearSlots: %v", err)
 		}
 		if len(a.Objects) != 2 {
 			t.Errorf("wore %d objects, want the two that exist", len(a.Objects))
@@ -296,8 +477,8 @@ func TestWearingStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 		f.capErr = fmt.Errorf("the capability is not answering")
 		f.mu.Unlock()
 
-		if _, err := wearGroup(context.Background(), s, 0, 1); err == nil {
-			t.Error("wearGroup found objects in an inventory it could not read")
+		if _, err := wearSlots(context.Background(), s, []int{0}); err == nil {
+			t.Error("wearSlots found objects in an inventory it could not read")
 		}
 	})
 
@@ -308,8 +489,8 @@ func TestWearingStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 		f.presenceErr = fmt.Errorf("the parcel will not have it")
 		f.mu.Unlock()
 
-		if _, err := wearGroup(context.Background(), s, 0, AutoGroupSize); err == nil {
-			t.Error("wearGroup wore objects that were never made")
+		if _, err := wearSlots(context.Background(), s, fourSlots); err == nil {
+			t.Error("wearSlots wore objects that were never made")
 		}
 	})
 }
@@ -351,18 +532,6 @@ func TestOnlyAHostedSessionKnowsWhoElseThereIs(t *testing.T) {
 }
 
 // ------------------------------------------------- choosing an avatar
-
-// TestABenchmarkCannotAskForMoreThanOneGroup: more than a group would
-// have to be two locks, and nothing here ever holds one while waiting
-// for another -- which is the whole reason this cannot deadlock.  So it
-// is refused rather than quietly rounded down.
-func TestABenchmarkCannotAskForMoreThanOneGroup(t *testing.T) {
-	t.Parallel()
-	_, err := UseAutoAnywhere(context.Background(), Options{}, AutoGroupSize+1)
-	if err == nil || !strings.Contains(err.Error(), "deadlock") {
-		t.Errorf("UseAutoAnywhere = %v, want it to say why the limit is there", err)
-	}
-}
 
 // TestANamedAvatarIsHonouredExactly: asking for qi and being given
 // example would be worse than being slow, so a named avatar is used and
@@ -553,152 +722,128 @@ func TestUseAutoAnywhereNeedsADaemonAtAll(t *testing.T) {
 	}
 }
 
-// ------------------------------------------------ more than one group
+// ----------------------------------------------- more than a group
 
-// objectsOf is every object in a set of groups, and how many distinct
-// ones there were.  Two groups handing back the same object is the
-// failure these tests are for, and it is invisible in a count alone.
-func objectsOf(as []*Auto) (n int, distinct int) {
-	seen := map[string]bool{}
-	for _, a := range as {
-		for _, o := range a.Objects {
-			n++
-			seen[o.ID.String()] = true
+// TestAnyCountUpToThePoolCanBeAskedFor: four was the size of a group
+// because four is what a benchmark's search uses.  It was never a
+// statement about how many objects a program may hold, and a program
+// with twelve scripts to run at once wants twelve.
+func TestAnyCountUpToThePoolCanBeAskedFor(t *testing.T) {
+	t.Parallel()
+	for _, n := range []int{1, 2, AutoGroupSize, AutoGroupSize + 2, AutoPool()} {
+		s, f := newFakeSession(t)
+		f.stock(len(AutoPoints))
+
+		a, err := useAutoOn(context.Background(), s, n, false)
+		if err != nil {
+			t.Errorf("%d objects: %v", n, err)
+			continue
+		}
+		if len(a.Objects) != n {
+			t.Errorf("asked for %d objects and got %d", n, len(a.Objects))
+		}
+		if len(a.Slots) != n {
+			t.Errorf("asked for %d places and got %v", n, a.Slots)
 		}
 	}
-	return n, len(seen)
 }
 
-// TestWorkThatWantsMoreThanAGroupGetsMoreGroups: four is the size of a
-// group because four is what a benchmark's search uses, not because four
-// is all anybody may have.  A program with twelve things to do at once
-// wants twelve objects, and the group is the unit they arrive in.
-func TestWorkThatWantsMoreThanAGroupGetsMoreGroups(t *testing.T) {
+// TestNoPlaceIsHandedOutTwice: the daemon's lock is RE-ENTRANT -- a
+// client that asks for one it already holds is given it, because asking
+// twice and holding once is the sensible answer to a client that asks
+// twice.  For anything gathering objects that is a trap, and the same
+// object handed out twice is two scripts in one place, which is the one
+// thing running several at once must not do.
+func TestNoPlaceIsHandedOutTwice(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
 	f.stock(len(AutoPoints))
 
-	as := takeGroups(context.Background(), s, 2*AutoGroupSize)
-	if len(as) != 2 {
-		t.Fatalf("%d groups were taken for two groups' worth of work", len(as))
+	// The lock does say yes to a place we are already holding, which is
+	// what makes this worth a test at all.
+	if got, _, err := s.TryLock(context.Background(), AutoSlotLock(0)); err != nil || !got {
+		t.Fatalf("the daemon refused a lock its own client holds: %v, %v", got, err)
 	}
-	n, distinct := objectsOf(as)
-	if n != 2*AutoGroupSize || distinct != n {
-		t.Errorf("%d objects and %d of them distinct, want %d of each",
-			n, distinct, 2*AutoGroupSize)
-	}
-	if as[0].Group == as[1].Group {
-		t.Errorf("both groups were group %d", as[0].Group)
-	}
-}
+	s.Unlock(AutoSlotLock(0))
 
-// TestAGroupAlreadyHeldIsNotTakenTwice: the daemon's lock is RE-ENTRANT
-// -- a client that asks for one it already holds is given it, because
-// asking twice and holding once is the sensible answer to a client that
-// asks twice.  For a caller gathering groups it is a trap: taking a
-// group it already has would wear the same objects a second time and
-// hand two scripts the same object, which is the one thing running
-// several at once must not do.  So the groups already held are named,
-// and the pass over the pool skips them.
-func TestAGroupAlreadyHeldIsNotTakenTwice(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-
-	first, err := useAutoOn(context.Background(), s, AutoGroupSize, true)
+	a, err := useAutoOn(context.Background(), s, AutoPool(), false)
 	if err != nil {
 		t.Fatalf("useAutoOn: %v", err)
 	}
-
-	// The lock says yes to the group we are holding, which is what
-	// makes this worth a test at all.
-	if got, _, err := s.TryLock(context.Background(), AutoGroupLock(first.Group)); err != nil || !got {
-		t.Fatalf("the daemon refused a lock its own client holds: %v, %v", got, err)
+	seen := map[int]bool{}
+	for _, slot := range a.Slots {
+		if seen[slot] {
+			t.Errorf("place %d was handed out twice", slot)
+		}
+		seen[slot] = true
 	}
+	ids := map[string]bool{}
+	for _, o := range a.Objects {
+		if ids[o.ID.String()] {
+			t.Errorf("object %s was handed out twice", o.ID)
+		}
+		ids[o.ID.String()] = true
+	}
+}
 
-	rest := takeGroups(context.Background(), s, 2*AutoGroupSize, first.Group)
-	for _, a := range rest {
-		if a.Group == first.Group {
-			t.Errorf("group %d was taken twice", a.Group)
+// TestTakingWhatIsAskedForAndNoMore: a run of four scripts that took the
+// whole pool would leave eight objects idle and a benchmark queueing
+// behind them.
+func TestTakingWhatIsAskedForAndNoMore(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+
+	if _, err := useAutoOn(context.Background(), s, AutoGroupSize, false); err != nil {
+		t.Fatalf("useAutoOn: %v", err)
+	}
+	if got := len(held(f)); got != AutoGroupSize {
+		t.Errorf("%d places are held for a run that asked for %d", got, AutoGroupSize)
+	}
+}
+
+// TestABenchmarkAndAScriptRunShareThePool: the point of counting
+// objects rather than groups is that what is left over is usable.  Eight
+// held for scripts leaves four for a benchmark -- which under fixed
+// groups of four was true only because eight happens to divide by four.
+func TestABenchmarkAndAScriptRunShareThePool(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(len(AutoPoints))
+	// Somebody else's script run, holding eight.
+	busy(f, "automate --jobs 8", 0, AutoPool()-AutoGroupSize)
+
+	a, err := useAutoOn(context.Background(), s, AutoGroupSize, false)
+	if err != nil {
+		t.Fatalf("the benchmark: %v", err)
+	}
+	if len(a.Objects) != AutoGroupSize {
+		t.Errorf("the benchmark got %d objects", len(a.Objects))
+	}
+	for _, slot := range a.Slots {
+		if slot < AutoPool()-AutoGroupSize {
+			t.Errorf("the benchmark took place %d, which the scripts have", slot)
 		}
 	}
-	all := append([]*Auto{first}, rest...)
-	if n, distinct := objectsOf(all); n != distinct {
-		t.Errorf("%d objects between the groups and only %d of them distinct: "+
-			"two scripts would run in one object", n, distinct)
+	if got := slotsWaitedFor(f); len(got) != 0 {
+		t.Errorf("the benchmark queued on %v with four objects going spare", got)
 	}
 }
 
-// TestWhatIsFreeIsWhatComesBack: every group after the first is taken
-// only if it is free right now.  Waiting for one while holding another
-// is the hold-and-wait that whole groups exist to prevent, so the answer
-// is simply smaller and the caller is expected to look at what it got.
-func TestWhatIsFreeIsWhatComesBack(t *testing.T) {
+// TestOneObjectShortIsARefusalAndNotEleven: all or nothing is the whole
+// contract.  A caller that wanted twelve and can be given eleven has
+// nothing it can do with them -- and eleven taken out of the pool is
+// eleven nobody else can have either.
+func TestOneObjectShortIsARefusalAndNotEleven(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
 	f.stock(len(AutoPoints))
-	f.mu.Lock()
-	f.busy[AutoGroupLock(1)] = "a benchmark"
-	f.mu.Unlock()
+	busy(f, "a benchmark", AutoPool()-1, AutoPool())
 
-	as := takeGroups(context.Background(), s, AutoPool())
-	n, _ := objectsOf(as)
-	if want := AutoPool() - AutoGroupSize; n != want {
-		t.Errorf("%d objects came back with one group busy, want %d", n, want)
+	if _, err := useAutoOn(context.Background(), s, AutoPool(), false); err == nil {
+		t.Fatal("useAutoOn came back with fewer objects than the caller can use")
 	}
-	for _, a := range as {
-		if a.Group == 1 {
-			t.Error("the busy group was taken")
-		}
-	}
-	if got := f.Waited(); len(got) != 0 {
-		t.Errorf("waited on %v while holding a group", got)
-	}
-}
-
-// TestNoRoomIsAnEmptyAnswerAndNotAFailure: a caller asking for more than
-// one group already has one, so nothing free is slower rather than
-// wrong.  An error here would turn a run that could have gone ahead into
-// one that did not.
-func TestNoRoomIsAnEmptyAnswerAndNotAFailure(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-	allBusy(f, "somebody else")
-
-	if as := takeGroups(context.Background(), s, AutoPool()); len(as) != 0 {
-		t.Errorf("%d groups came back when every one was busy", len(as))
-	}
-}
-
-// TestAskingForOneGroupsWorthTakesOneGroup: the ceiling is what was
-// asked for and not what is free -- a run of four scripts that took
-// twelve objects would leave eight idle and a benchmark queueing behind
-// them.
-func TestAskingForOneGroupsWorthTakesOneGroup(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-
-	as := takeGroups(context.Background(), s, AutoGroupSize)
-	if len(as) != 1 {
-		t.Errorf("%d groups were taken for one group's worth of work", len(as))
-	}
-}
-
-// TestAPartGroupWearsOnlyWhatIsWanted: putting an object on costs
-// seconds, and the last group of a run that wants six objects needs two
-// of its four.  The lock still covers the whole group, which is what
-// makes it safe; the wearing is what is trimmed.
-func TestAPartGroupWearsOnlyWhatIsWanted(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-
-	as := takeGroups(context.Background(), s, AutoGroupSize+2)
-	n, _ := objectsOf(as)
-	if n != AutoGroupSize+2 {
-		t.Errorf("%d objects were worn for %d objects' worth of work",
-			n, AutoGroupSize+2)
+	if got := len(held(f)); got != 1 {
+		t.Errorf("%d places are held, want only the one somebody else had", got)
 	}
 }

@@ -1,7 +1,7 @@
-auto is about the worn objects a benchmark runs its scripts in.  With
-no flags it reports what this avatar has: how many of the objects are
-worn, and therefore how many benchmarks can run at once.  With -n it
-sets that many up, and prints which object went to which slot.
+auto is about the worn objects that automate and autobench run their
+scripts in.  With no flags it reports what this avatar has: how many of
+the objects are worn, and therefore how much can run at once.  With -n
+it sets that many up, and prints which object went to which slot.
 
 Nothing else in this shell needs it.  It is here because the answer to
 "why will only two benchmarks run at a time" is a number nothing else
@@ -24,35 +24,45 @@ is what the listing after -n is for: past the eighth slot the only way
 to see the pool is arranged as intended is to read which point each one
 landed on.
 
-# Groups of four, and why a run takes a whole one
+# One object at a time, under an allocation lock
 
-The pool is divided into fixed groups and a benchmark takes an entire
-group, which is what makes several runs at once safe.  Handing out
-objects one at a time would let two runs each hold some and wait for
-the rest, which is a deadlock; one lock per group cannot deadlock,
-because nothing ever holds one while waiting for another.
+A run asks for a NUMBER of objects and gets that many or none.  What it
+asks for is the width of what it is doing: a benchmark wants four,
+because its search takes three readings at once alongside the object
+being measured, and a program running scripts wants one per script it
+runs at once.
 
-Four to a group because that is what the search uses: three readings
-taken at once alongside the object being measured.  A larger group
-would idle and a smaller one would slow the search down.
+Handing objects out one at a time is on its own a deadlock -- three
+runs each wanting four of twelve can hold three apiece and wait for a
+fourth nobody will give back.  What prevents it is one more lock.  A
+run takes the allocation lock first, and under it tries for every
+object it wants without waiting for any of them; if it cannot have them
+all it gives back what it took, drops the allocation lock, and only
+then waits.  Nothing is ever held while waiting for anything else, so
+there is no cycle to deadlock on.
+
+A run wanting many can in principle be stepped over by a stream of runs
+wanting one.  Nothing prevents that, deliberately: these are programs
+run by hand or from a script rather than a service under load, and the
+queue drains.
 
 # Setting up while something is running
 
--n takes every group before it does anything, and refuses if any of
-them is busy.  Wearing things is not something to do underneath a
+-n takes the whole pool before it does anything, and refuses if any of
+it is busy.  Wearing things is not something to do underneath a
 benchmark: an attach replaces what is on the point, and a run whose
 object went away reports nothing useful about why it failed.
 
 Getting fewer objects than were asked for is not a failure and does not
-read as one.  Fewer objects means fewer runs at once, and the report
-says so in those words.
+read as one.  Fewer objects means less at once, and the report says so
+in those words.
 
 # Examples
 
 Ask what is there:
 
 	auto
-	8 auto objects worn; 2 groups of 4, so 2 runs at once
+	8 auto objects worn, so 8 scripts at once or 2 benchmarks of 4
 	auto -n 12 sets up the rest
 
 The first line of that is the answer to the question at the top of this

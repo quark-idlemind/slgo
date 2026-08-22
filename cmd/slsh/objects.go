@@ -934,9 +934,9 @@ func cmdAuto(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 			have++
 		}
 	}
-	fmt.Fprintf(out, "%d auto objects worn; %d groups of %d, so %d runs at once\n",
-		have, have/session.AutoGroupSize, session.AutoGroupSize,
-		have/session.AutoGroupSize)
+	fmt.Fprintf(out, "%d auto objects worn, so %d scripts at once "+
+		"or %d benchmarks of %d\n",
+		have, have, have/session.AutoGroupSize, session.AutoGroupSize)
 	if have < len(session.AutoPoints) {
 		fmt.Fprintf(out, "auto -n %d sets up the rest\n", len(session.AutoPoints))
 	}
