@@ -755,12 +755,11 @@ func TestASlotIsNotHandedOnUntilItHasBeenTidied(t *testing.T) {
 
 	tidying := make(chan struct{})
 	release := make(chan struct{})
-	s := &Slot{Data: 1}
-	s.Clean = func() {
+	s := &Slot{Data: 1, Clean: func(s *Slot) {
 		close(tidying)
 		<-release
 		p.Cleaned(s)
-	}
+	}}
 	if err := p.Add(s); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -810,12 +809,11 @@ func TestTidyingDoesNotStopThePoolAnsweringEverybodyElse(t *testing.T) {
 
 	tidying := make(chan struct{})
 	release := make(chan struct{})
-	slow := &Slot{Data: 1}
-	slow.Clean = func() {
+	slow := &Slot{Data: 1, Clean: func(s *Slot) {
 		close(tidying)
 		<-release
-		p.Cleaned(slow)
-	}
+		p.Cleaned(s)
+	}}
 	if err := p.Add(slow, &Slot{Data: 2}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -866,13 +864,11 @@ func TestASlotCleanNeverSpeaksForIsGone(t *testing.T) {
 	go p.Run()
 
 	looked := make(chan struct{})
-	good := &Slot{Data: 2}
-	bad := &Slot{Data: 1}
-	bad.Clean = func() {
+	bad := &Slot{Data: 1, Clean: func(*Slot) {
 		// Nothing to tidy and nothing to hand on.
 		close(looked)
-	}
-	good.Clean = func() { p.Cleaned(good) }
+	}}
+	good := &Slot{Data: 2, Clean: func(s *Slot) { p.Cleaned(s) }}
 	if err := p.Add(bad, good); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -933,7 +929,7 @@ func TestTidyingIsNotSomethingTheCallerIsHanded(t *testing.T) {
 	p, _ := stopped(t)
 	go p.Run()
 
-	if err := p.Add(&Slot{Data: 1, Clean: func() {}}); err != nil {
+	if err := p.Add(&Slot{Data: 1, Clean: func(*Slot) {}}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 	r := get(t, p, 1)
@@ -955,12 +951,11 @@ func TestAWaiterIsWokenWhenTheTidyingIsDoneAndNotBefore(t *testing.T) {
 
 	tidying := make(chan struct{})
 	release := make(chan struct{})
-	s := &Slot{Data: 1}
-	s.Clean = func() {
+	s := &Slot{Data: 1, Clean: func(s *Slot) {
 		close(tidying)
 		<-release
 		p.Cleaned(s)
-	}
+	}}
 	if err := p.Add(s); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -999,12 +994,11 @@ func TestASlotRemovedWhileBeingTidiedDoesNotComeBack(t *testing.T) {
 
 	tidying := make(chan struct{})
 	release := make(chan struct{})
-	s := &Slot{Data: 1}
-	s.Clean = func() {
+	s := &Slot{Data: 1, Clean: func(s *Slot) {
 		close(tidying)
 		<-release
 		p.Cleaned(s)
-	}
+	}}
 	if err := p.Add(s); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -1033,7 +1027,7 @@ func TestASlotIsTidiedWhenItsGrantRunsOutToo(t *testing.T) {
 	go p.Run()
 
 	tidied := make(chan struct{})
-	if err := p.Add(&Slot{Data: 1, Clean: func() { close(tidied) }}); err != nil {
+	if err := p.Add(&Slot{Data: 1, Clean: func(*Slot) { close(tidied) }}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 

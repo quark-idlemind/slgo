@@ -141,7 +141,11 @@ type Slot struct {
 	// never put back.  A Clean that hangs has the same effect by
 	// accident, which is the reason to put whatever it does on a clock
 	// of its own.
-	Clean func()
+	//
+	// It is handed the slot rather than closing over it, so that one
+	// function can serve every slot in the pool: what it is tidying is
+	// in Data, and what it hands back is what it was given.
+	Clean func(*Slot)
 
 	id      ID
 	removed bool
@@ -618,7 +622,7 @@ func (p *Pool) release(slots []*Slot) bool {
 			// that finally happens.
 		case s.Clean != nil:
 			// Out of the pool until its own tidying puts it back.
-			go s.Clean()
+			go s.Clean(s)
 		default:
 			if p.insert(s) {
 				freed = true
