@@ -97,6 +97,40 @@ var flags = struct {
 	Parts: 4,
 }
 
+// leaseSize is how many objects a benchmark holds.
+//
+// One to measure in and one per division of the search, which is --parts
+// of them, and three more.  The three are what lets warmTheSearch put a
+// remembered padding's confirmation and the opening of the search it may
+// need into a single round: the two readings that confirm, and the one
+// at the anchor the search starts from.
+//
+// Measured live, they are close to free -- fifteen scripts in a round
+// cost 1.57s against 1.50s for seven -- and they are only ever held, not
+// necessarily used.
+func leaseSize() int { return flags.Parts + 3 }
+
+// openLease asks for the places the speculation wants and settles for
+// the places the search needs.
+//
+// The three extra are an optimisation and nothing depends on having
+// them: warmTheSearch checks the room it has and does nothing when
+// there is not enough, so a pool that cannot spare them costs a
+// confirmation its overlap and not a benchmark its measurement.
+// Refusing to measure at all over an optimisation would be the wrong
+// way round -- and it is a real case, a backend that grants four
+// objects being enough to run the default benchmark and not enough to
+// warm it.
+func openLease(open func(int) (backend, error)) (backend, error) {
+	b, err := open(leaseSize())
+	if err == nil || leaseSize() == flags.Parts {
+		return b, err
+	}
+	debugf("could not hold %d objects (%v); asking for the %d the search needs\n",
+		leaseSize(), err, flags.Parts)
+	return open(flags.Parts)
+}
+
 // testModel reads --test=PAD,SIZE[,MARGINAL[,LIMIT]] into the model the
 // offline backend answers from.
 //
@@ -152,6 +186,78 @@ func debugf(format string, v ...any) {
 const plusminus = "±"
 const blockSize = int(512)
 const minpad = 0
+
+// warmTheSearch sends, in ONE round, the two readings that confirm a
+// remembered padding and the readings the benchmark will want NEXT if it
+// holds.
+//
+// It can, because -1 mode's second search is as fixed as the first: if
+// the remembered padding stands, oneMode reads the one-copy script at
+// that padding and then opens a search whose first round is
+// partPads(0, blockSize, parts) above it.  None of that depends on
+// anything not already known.
+//
+// # It is a bet, and it is placed on the padding HOLDING
+//
+// The first version of this bet the other way -- it carried the opening
+// of the SEARCH a failed confirmation would need -- and measured, live
+// at 8 parts, that is a losing bet:
+//
+//	                              rounds  runs  time
+//	cold, no cache                  14     50    21s
+//	padding holds                    8     27    12s
+//	padding holds, warmed for a      8     35    12.7s
+//	  failure
+//	padding wrong                   15     51    22s
+//	padding wrong, warmed for a     13     51    19s
+//	  failure
+//
+// Three seconds saved when the padding is wrong, seven tenths spent
+// every time it is right: worth it only if a remembered padding is
+// wrong about a quarter of the time.  It is not -- eight independent
+// searches of one shape returned the same answer -- so the readings to
+// carry are the ones wanted when it holds.
+//
+// The failure case is left as it was, and does not need help: a
+// confirmation that fails costs 15 rounds where a cold search costs 14,
+// which is a fifteenth and not the third it looks like when the search
+// is counted as its three rounds of narrowing rather than the seven it
+// really is.
+//
+// # Only for -1 mode
+//
+// Copy mode calls basePadding too, and what follows it there is the
+// shrink ladder at a count nothing here can predict.  Warming would
+// send scripts nothing is going to ask for.
+func warmTheSearch(b backend, remembered int) {
+	if !flags.One {
+		return
+	}
+	parts := usableParts(b, flags.Parts)
+	if parts == 0 {
+		// Nowhere to run them in parallel, so there is no round to
+		// share and every reading sent here would be a round of its
+		// own -- which is the cost this exists to avoid.
+		return
+	}
+
+	// The question being asked, then the answers wanted if it comes back
+	// yes.  A reading already known costs nothing: probeReadings reads
+	// the cache first.
+	want := []reading{{0, remembered}, {0, remembered + 1}, {1, remembered}}
+	for _, p := range partPads(0, blockSize, parts) {
+		want = append(want, reading{1, remembered + p})
+	}
+
+	if len(want) > b.Spares() {
+		// One round is the whole point.  Sending these in two would
+		// spend the round the confirmation was going to spend and
+		// another beside it, which is worse than not warming at all.
+		debugf("not warming: %d readings, %d places\n", len(want), b.Spares())
+		return
+	}
+	probeReadings(b, want)
+}
 
 // findPadding returns an OFFSET FROM pad, not a pad: the largest offset at
 // which cnt copies of the code under test still fit inside the 512-byte block
@@ -230,34 +336,20 @@ func findPadding(b backend, cnt, pad int, r *Results) (offset, base int) {
 // to the caller. Never in the measured object: see probe.go for why that
 // is safe for a script with copies in it as well as for the base.
 func partSearch(b backend, cnt, pad, base, low, high, parts int) (int, int) {
-	if b == nil {
-		return low, high
-	}
-	if n := b.Spares() + 1; n < parts {
-		parts = n
-	}
-	if parts < 3 {
+	parts = usableParts(b, parts)
+	if parts == 0 {
 		return low, high
 	}
 
 	for high-low > 1 {
-		// One probe per division, at most one per interior pad: a
-		// step of nought would ask the same pad several times and
-		// learn nothing, for ever.
-		n := parts - 1
-		if n > high-low-1 {
-			n = high - low - 1
-		}
-		step := (high - low) / (n + 1)
-
-		pads := make([]int, n)
-		for i := range pads {
-			pads[i] = low + (i+1)*step
+		pads := partPads(low, high, parts)
+		if len(pads) == 0 {
+			break
 		}
 
 		mem := probeAt(b, cnt, addTo(pads, pad))
 
-		grew := n
+		grew := len(pads)
 		for i, m := range mem {
 			if m > base {
 				grew = i
@@ -267,12 +359,57 @@ func partSearch(b backend, cnt, pad, base, low, high, parts int) (int, int) {
 		if grew > 0 {
 			low = pads[grew-1]
 		}
-		if grew < n {
+		if grew < len(pads) {
 			high = pads[grew]
 		}
 		debugf("Part[%d] %d < ... < %d\n", cnt, low, high)
 	}
 	return low, high
+}
+
+// usableParts is how many parts a search will really cut a range into:
+// what was asked for, capped by the places there are to run in.  Nought
+// means it will not run at all -- two parts is the bisection, which is
+// below it and would be the same work done twice.
+//
+// It is a function of its own because the speculation in basePadding has
+// to ask the same question and get the same answer: it sends the pads a
+// search WOULD ask for before knowing whether the search will happen, and
+// a pad it guessed differently is a run spent on nothing.
+func usableParts(b backend, parts int) int {
+	if b == nil {
+		return 0
+	}
+	if n := b.Spares() + 1; n < parts {
+		parts = n
+	}
+	if parts < 3 {
+		return 0
+	}
+	return parts
+}
+
+// partPads is where one round's probes go: the divisions between parts
+// equal pieces of low..high, at most one per interior pad.
+//
+// A step of nought would ask about the same pad several times and learn
+// nothing, for ever, so the count comes down to what the range can hold
+// -- and when it is that small the step is 1 and the round asks about
+// every remaining pad, which ends the search exactly.
+func partPads(low, high, parts int) []int {
+	n := parts - 1
+	if n > high-low-1 {
+		n = high - low - 1
+	}
+	if n < 1 {
+		return nil
+	}
+	step := (high - low) / (n + 1)
+	pads := make([]int, n)
+	for i := range pads {
+		pads[i] = low + (i+1)*step
+	}
+	return pads
 }
 
 // addTo offsets every pad by the run padding, which is what the search
@@ -504,6 +641,7 @@ func basePadding(b backend, r *Results) int {
 	key := baseKey()
 	if !flags.NoCache && b.Grid() {
 		if e, ok := loadPadCache()[key]; ok {
+			warmTheSearch(b, e.Padding)
 			if held, at, above := paddingHolds(b, e.Padding); held {
 				debugf("padding %d remembered and confirmed (%d -> %d)\n",
 					e.Padding, at, above)
@@ -729,13 +867,16 @@ func main() {
 		errf("Only one of --test or --backend may be specified\n")
 	case flags.Test != "":
 		var err error
-		if b, err = openModel(testModel(flags.Test), flags.Parts); err != nil {
+		m := testModel(flags.Test)
+		if b, err = openLease(func(n int) (backend, error) { return openModel(m, n) }); err != nil {
 			errf("%v\n", err)
 		}
 		defer b.Close()
 	case flags.Backend != "":
 		var err error
-		if b, err = openBackend(flags.Backend, flags.Parts); err != nil {
+		if b, err = openLease(func(n int) (backend, error) {
+			return openBackend(flags.Backend, n)
+		}); err != nil {
 			errf("%v\n", err)
 		}
 		defer b.Close()
@@ -1631,7 +1772,17 @@ func runIn(ctx context.Context, o session.Options) ([]place, func(), error) {
 	// two avatars can be in regions with two LSL compilers.  Whether
 	// that moves a reading is unknown -- and the same doubt already
 	// applied between one run and the next.)
-	as, err := session.UseAutoSpread(ctx, o, flags.Parts)
+	as, err := session.UseAutoSpread(ctx, o, leaseSize())
+	if err != nil && leaseSize() != flags.Parts {
+		// The three extra places are what lets a remembered padding be
+		// confirmed in the same round as the search it may need; see
+		// warmTheSearch.  Nothing depends on having them, so an avatar
+		// with room for the search and not for the warming still
+		// measures.
+		debugf("could not hold %d objects (%v); asking for the %d the search needs\n",
+			leaseSize(), err, flags.Parts)
+		as, err = session.UseAutoSpread(ctx, o, flags.Parts)
+	}
 	if err != nil {
 		return nil, nil, err
 	}

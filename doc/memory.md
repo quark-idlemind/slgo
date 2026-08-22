@@ -364,6 +364,50 @@ happens if a lease comes back smaller than was asked for -- the search
 cuts its parts down to the objects it actually got, rather than sending
 several rounds and calling them one.
 
+### Confirming a remembered padding
+
+A padding is remembered in a file and confirmed rather than trusted: two
+readings, at the padding and one byte above it, which have to be a block
+apart. Confirming costs one round where searching costs seven, so the
+saving is large -- and the question is what a confirmation that FAILS
+costs, since it is a round spent before the seven.
+
+Measured live on 2026-08-22, `-1` mode at eight parts:
+
+| | rounds | runs | time |
+|---|---:|---:|---:|
+| no cache at all | 14 | 50 | 21s |
+| padding holds | 8 | 27 | 12s |
+| padding holds, readings carried | 6 | 27 | 10s |
+| padding wrong | 15 | 51 | 22s |
+| padding wrong, readings carried | 15 | 59 | 22s |
+
+A failed confirmation costs 15 rounds against 14 for no cache at all --
+a fifteenth, not the third it appears to be when a search is counted as
+its three rounds of narrowing rather than the seven rounds it really is.
+The narrowing is the part that runs in parallel; the anchor reading, the
+walk onto the crossing and the two readings that confirm it are four
+more rounds that do not.
+
+**The readings carried** are the last two rows. The confirmation's round
+has room in it, and what `-1` mode wants next is known before the
+confirmation answers: the one-copy reading at that same padding, and the
+first round of the search above it. Sending them in the confirmation's
+round costs no extra runs at all -- 27 either way -- because they are
+exactly the readings that were going to be asked for. Eight rounds
+become six.
+
+When the padding turns out to be wrong they are wasted: 59 runs against
+51, and the same 15 rounds and 22s, because the waste is scripts and not
+rounds.
+
+The first version of this bet the other way, carrying the opening of the
+search a failed confirmation would need. That saved 3s on the failure
+and cost 0.7s on every success, which pays only if a remembered padding
+is wrong about a quarter of the time. Eight independent searches of one
+shape returned the same answer, so it is not, and betting on the failure
+measured slower overall.
+
 ### What is not measured here
 
 Twelve was where the measurements above stopped, because `autobench`

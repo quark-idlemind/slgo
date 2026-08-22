@@ -41,8 +41,11 @@ import (
 	"sync"
 )
 
-// probeJob is one reading to take: which pad, and where its answer goes.
-type probeJob struct{ at, pad int }
+// probeJob is one reading to take, and where its answer goes.
+type probeJob struct {
+	at   int
+	want reading
+}
 
 // probeMu guards the caches and the counters while probes run alongside
 // each other.  Everything else in this program is sequential.
@@ -62,30 +65,50 @@ func probeBase(b backend, pads []int) []int { return probeAt(b, 0, pads) }
 // once, and returns the reading the search compares: BASE_MEM for the
 // base script, TEST_MEM for one with copies in it.
 func probeAt(b backend, cnt int, pads []int) []int {
-	out := make([]int, len(pads))
+	want := make([]reading, len(pads))
+	for i, pad := range pads {
+		want[i] = reading{cnt, pad}
+	}
+	return probeReadings(b, want)
+}
+
+// reading is one measurement a caller wants: a script of some copy count
+// at some pad.
+//
+// A round is not obliged to be all of one count.  It was, while probeAt
+// took a count and a list of pads, and that shape is what a search wants
+// -- but warmTheSearch wants a round holding the two readings that
+// confirm a remembered padding AND the one-copy readings that come next
+// if it holds, which is two counts in one round.
+type reading struct{ cnt, pad int }
+
+// probeReadings measures each of them, as many at a time as there are
+// places to run in, and returns them in the order asked.
+func probeReadings(b backend, want []reading) []int {
+	out := make([]int, len(want))
 
 	var todo []probeJob
-	for i, pad := range pads {
-		if m, ok := probed(cnt, pad); ok {
+	for i, w := range want {
+		if m, ok := probed(w.cnt, w.pad); ok {
 			out[i] = m
 			continue
 		}
-		todo = append(todo, probeJob{i, pad})
+		todo = append(todo, probeJob{i, w})
 	}
 	if len(todo) == 0 {
 		return out
 	}
 
 	if b.Spares() > 0 {
-		todo = probeConcurrently(b, cnt, todo, out)
+		todo = probeConcurrently(b, todo, out)
 	}
 
 	// Whatever is left goes the ordinary way: a run that failed, or a
 	// benchmark with nowhere to run in parallel.
 	for _, j := range todo {
 		var r Results
-		mustRun(b, cnt, j.pad, &r)
-		out[j.at] = memOf(cnt, r)
+		mustRun(b, j.want.cnt, j.want.pad, &r)
+		out[j.at] = memOf(j.want.cnt, r)
 	}
 	return out
 }
@@ -107,7 +130,7 @@ func probed(cnt, pad int) (int, bool) {
 
 // probeConcurrently runs what it can in the spare objects and returns
 // the jobs it did not manage.
-func probeConcurrently(b backend, cnt int, todo []probeJob, out []int) []probeJob {
+func probeConcurrently(b backend, todo []probeJob, out []int) []probeJob {
 	var left []probeJob
 
 	for start := 0; start < len(todo); start += b.Spares() {
@@ -127,7 +150,7 @@ func probeConcurrently(b backend, cnt int, todo []probeJob, out []int) []probeJo
 			wg.Add(1)
 			go func(slot int) {
 				defer wg.Done()
-				src := buildScript(cnt, j.pad)
+				src := buildScript(j.want.cnt, j.want.pad)
 				results, _, err := b.SendSpare(spare, src)
 				if err != nil {
 					// Not reported here.  Running it again the ordinary
@@ -148,7 +171,7 @@ func probeConcurrently(b backend, cnt int, todo []probeJob, out []int) []probeJo
 
 				probeMu.Lock()
 				spentRuns++
-				cache[Cache{Count: cnt, Padding: j.pad}] = mem
+				cache[Cache{Count: j.want.cnt, Padding: j.want.pad}] = mem
 				probeMu.Unlock()
 
 				out[j.at] = mem

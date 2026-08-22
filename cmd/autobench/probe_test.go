@@ -374,3 +374,126 @@ func memAt(b backend, cnt, pad int) int {
 	mustRun(b, cnt, pad, &r)
 	return memOf(cnt, r)
 }
+
+// TestARememberedPaddingIsConfirmedInTheRoundThatUsesIt: confirming
+// costs a round, and the readings wanted next are known before the
+// confirmation answers, so they travel in it.
+//
+// Two things are asserted and the second is the point.  Fewer ROUNDS,
+// because that is what a caller waits through.  And exactly the same
+// RUNS, because the readings carried are the ones the search was going
+// to ask for anyway -- a version of this that carried readings for the
+// case where the padding does NOT hold spent eight runs a benchmark to
+// save three seconds on a case that essentially never happens, and
+// measured slower overall.
+func TestARememberedPaddingIsConfirmedInTheRoundThatUsesIt(t *testing.T) {
+	t.Setenv("SLGO_CONFIG_DIR", t.TempDir())
+
+	// The one-copy search that follows a confirmation, measured from a
+	// file that already holds the answer.  spares is what decides
+	// whether the readings can travel: warmTheSearch declines without
+	// room for all of them at once.
+	measure := func(spares int) (rounds, runs int) {
+		probeReset(t)
+		flags.One, flags.Parts = true, 4
+		t.Cleanup(func() { flags.One, flags.Parts = false, 4 })
+		b, _ := newFakeRunner(t, 474, 368, spares)
+
+		var r Results
+		if got := basePadding(b, &r); got != 473 {
+			t.Fatalf("basePadding = %d, want 473", got)
+		}
+
+		// A benchmark of the same shape in a fresh process: the run
+		// cache is gone and the file is not.
+		clear(cache)
+		wasRounds, wasRuns := spentRounds, spentRuns
+		pad := basePadding(b, &r)
+		findPadding(b, 1, pad, &r)
+		return spentRounds - wasRounds, spentRuns - wasRuns
+	}
+
+	warmRounds, warmRuns := measure(leaseSize() - 1)
+	bareRounds, bareRuns := measure(leaseSize() - 2)
+
+	if warmRounds >= bareRounds {
+		t.Errorf("carrying the next readings in the confirmation's round took "+
+			"%d rounds against %d without", warmRounds, bareRounds)
+	}
+	if warmRuns != bareRuns {
+		t.Errorf("it took %d runs against %d: what is carried is meant to be "+
+			"what the search would have asked for, not extra scripts",
+			warmRuns, bareRuns)
+	}
+}
+
+// TestTheSearchIsNotWarmedWithoutRoomForAWholeRound: sending the
+// readings in two rounds would spend the confirmation's round and
+// another beside it, which is worse than not carrying them at all.
+func TestTheSearchIsNotWarmedWithoutRoomForAWholeRound(t *testing.T) {
+	probeReset(t)
+	t.Setenv("SLGO_CONFIG_DIR", t.TempDir())
+	flags.One, flags.Parts = true, 4
+	t.Cleanup(func() { flags.One, flags.Parts = false, 4 })
+
+	// One short of what the carrying needs.
+	b, f := newFakeRunner(t, 474, 368, leaseSize()-2)
+
+	var r Results
+	if got := basePadding(b, &r); got != 473 {
+		t.Fatalf("basePadding = %d, want 473", got)
+	}
+
+	clear(cache)
+	f.mu.Lock()
+	f.ran = 0
+	f.mu.Unlock()
+
+	before := spentRounds
+	if got := basePadding(b, &r); got != 473 {
+		t.Errorf("the remembered padding came back as %d", got)
+	}
+	if got := spentRounds - before; got != 1 {
+		t.Errorf("confirming took %d rounds, want 1", got)
+	}
+	f.mu.Lock()
+	spent := f.ran
+	f.mu.Unlock()
+	if spent != 2 {
+		t.Errorf("confirming cost %d runs, want the two either side of the padding", spent)
+	}
+}
+
+// TestCopyModeIsNotWarmed: basePadding is copy mode's too, and what
+// follows it there is the shrink ladder at a count nothing can predict.
+// Carrying one-copy readings would be sending scripts nobody is going
+// to ask for.
+func TestCopyModeIsNotWarmed(t *testing.T) {
+	probeReset(t)
+	t.Setenv("SLGO_CONFIG_DIR", t.TempDir())
+	flags.One, flags.Parts = false, 4
+	t.Cleanup(func() { flags.Parts = 4 })
+
+	b, f := newFakeRunner(t, 474, 368, leaseSize()-1)
+
+	var r Results
+	if got := basePadding(b, &r); got != 473 {
+		t.Fatalf("basePadding = %d, want 473", got)
+	}
+
+	clear(cache)
+	f.mu.Lock()
+	f.ran = 0
+	f.mu.Unlock()
+
+	if got := basePadding(b, &r); got != 473 {
+		t.Errorf("the remembered padding came back as %d", got)
+	}
+	f.mu.Lock()
+	spent := f.ran
+	f.mu.Unlock()
+	if spent != 2 {
+		t.Errorf("copy mode's confirmation cost %d runs, want the two either "+
+			"side of the padding", spent)
+	}
+}
