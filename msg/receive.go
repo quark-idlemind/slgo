@@ -53,6 +53,17 @@ type Stats struct {
 	Unknown uint64 // message number not in the template
 	Failed  uint64 // header, ack, zero coding or body decode failures
 	Dropped uint64 // discarded because the channel was full
+
+	// Peak is the most packets ever waiting for the consumer at once,
+	// and Buffer is how many there is room for.
+	//
+	// Peak is the useful one when Dropped is nought, which is the
+	// ordinary case: it is the difference between knowing there is room
+	// and knowing how much of it has ever been wanted.  A Peak that
+	// creeps towards Buffer is a warning; a Peak of a handful says the
+	// consumer keeps up and the size is not what to worry about.
+	Peak   uint64
+	Buffer uint64
 }
 
 // Receiver reads datagrams from a PacketSource, takes them apart and
@@ -67,6 +78,8 @@ type Receiver struct {
 	drop   bool
 	keep   bool
 	onDrop func(*Packet)
+	onPeak func(depth, capacity int)
+	peak   atomic.Uint64
 
 	// Owned by the Run goroutine.
 	buf  []byte
@@ -138,6 +151,24 @@ func DropWhenFull() ReceiverOption {
 	return func(r *Receiver) { r.drop = true }
 }
 
+// OnPeak is called whenever the backlog reaches a depth it has never
+// reached before, with that depth and the room there is for it.
+//
+// Every increase, not a summary at the end: a queue filling is a thing
+// happening NOW, and the shape of it -- how fast it climbs, what it
+// climbs during -- is the diagnosis.  A count read afterwards says only
+// how bad it got.
+//
+// A consumer that keeps up produces two or three of these in a session
+// and then silence for ever, because the peak only moves when the queue
+// is deeper than it has ever been.  A stall produces a burst as it
+// climbs, which is the point: the burst IS the report.
+//
+// It runs on the reading goroutine and must not block.
+func OnPeak(fn func(depth, capacity int)) ReceiverOption {
+	return func(r *Receiver) { r.onPeak = fn }
+}
+
 // OnDrop is called for each packet thrown away when the channel is full.
 // It implies DropWhenFull.
 //
@@ -181,6 +212,8 @@ func (r *Receiver) Stats() Stats {
 		Unknown: r.unknown.Load(),
 		Failed:  r.failed.Load(),
 		Dropped: r.dropped.Load(),
+		Peak:    r.peak.Load(),
+		Buffer:  uint64(cap(r.ch)),
 	}
 }
 
@@ -240,6 +273,18 @@ func (r *Receiver) Run(ctx context.Context) error {
 		p := r.parse(r.buf[:n], addr, at)
 		if p == nil {
 			continue
+		}
+
+		// The backlog before this packet goes in, kept at its highest.
+		// A drop count that reads zero says only that the queue never
+		// quite overflowed; this says how close it came, which is the
+		// difference between "there is room" and "there was room that
+		// time".
+		if n := uint64(len(r.ch)); n > r.peak.Load() {
+			r.peak.Store(n)
+			if r.onPeak != nil {
+				r.onPeak(int(n), cap(r.ch))
+			}
 		}
 
 		if r.drop {

@@ -434,6 +434,31 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 	if res.Fault != nil {
 		fault = res.Fault.String()
 	}
+	if !res.Compiled {
+		// The rest of what the capability said, when it said anything.
+		// "(0, 0) : ERROR : Syntax error" is the compiler's answer to a
+		// script wrong at its first character AND to an upload that
+		// reached it empty, so everything else in the answer is worth
+		// putting in front of whoever has to tell those apart.
+		if res.State != "" && res.State != "complete" {
+			say("%sthe upload came back %q\n", tag(path), res.State)
+		}
+		if res.Message != "" {
+			say("%s%s\n", tag(path), res.Message)
+		}
+		if len(res.Answer) > 0 {
+			// Everything the capability said, not just the fields
+			// anything here knows how to read.  It is one line, once, on
+			// a failure -- and when the failure is "(0, 0) : ERROR :
+			// Syntax error" against a script that is not wrong, it is
+			// the only place the reason could be hiding.
+			answer := string(res.Answer)
+			if len(answer) > 400 {
+				answer = answer[:400] + "..."
+			}
+			say("%sthe capability answered: %s\n", tag(path), answer)
+		}
+	}
 	return verdict(path, res.Compiled, res.Errors, fault, res.Finished)
 }
 

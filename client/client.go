@@ -94,6 +94,11 @@ type Conn struct {
 	dropped atomic.Uint64
 	onDrop  func(what string)
 
+	// peak is the most messages ever waiting to be read at once.  It is
+	// what dropped cannot tell you when it reads nought: whether the
+	// queue is comfortable or was one busy moment from overflowing.
+	peak atomic.Uint64
+
 	mu   sync.RWMutex
 	info *pb.AgentInfo
 	caps map[string]bool
@@ -446,6 +451,9 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 			}
 			if m.ReceivedAt != 0 {
 				out.At = time.UnixMicro(m.ReceivedAt)
+			}
+			if n := uint64(len(c.messages)); n > c.peak.Load() {
+				c.peak.Store(n)
 			}
 			select {
 			case c.messages <- out:
@@ -820,4 +828,14 @@ func (c *Conn) noteDrop(what string) {
 	if fn != nil {
 		fn(what)
 	}
+}
+
+// Backlog is the most messages that have ever been waiting to be read at
+// once, and how many there is room for.
+//
+// Worth more than Dropped when Dropped is nought, which is the ordinary
+// case: it says whether the queue is comfortable or was one slow moment
+// away from losing something.
+func (c *Conn) Backlog() (peak, size int) {
+	return int(c.peak.Load()), cap(c.messages)
 }

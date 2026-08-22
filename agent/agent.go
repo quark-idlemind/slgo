@@ -426,6 +426,12 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 			a.logf("dropped %s: the session is not keeping up with the region",
 				p.ID)
 		}),
+		// Said as it climbs rather than counted for later.  A backlog
+		// that is growing is something happening now, and how fast it
+		// grows and what it grows during is what says why.
+		msg.OnPeak(func(depth, size int) {
+			a.logf("backlog %d of %d packets", depth, size)
+		}),
 	}, opts.Recv...)
 	a.Recv = msg.NewReceiver(a.sock, recv...)
 

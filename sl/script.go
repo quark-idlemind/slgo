@@ -76,6 +76,22 @@ type Result struct {
 	Compiled bool
 	Errors   []string
 
+	// State and Message are the rest of what the capability said, which
+	// is worth keeping for the times the errors alone do not explain
+	// themselves.  "(0, 0) : ERROR : Syntax error" is the compiler's
+	// answer both to a script that is wrong at its first character and
+	// to an upload that reached it EMPTY, and telling those apart from
+	// one line of output is not possible -- so the rest of the answer is
+	// carried rather than thrown away.
+	State   string
+	Message string
+
+	// Answer is the capability's reply as it arrived, kept only when
+	// the script did not compile.  The parsed fields are what a caller
+	// acts on; this is for the times they do not add up and somebody has
+	// to look at what was actually said.
+	Answer []byte
+
 	// Item is the script's id inside the object, which is not the id
 	// of the inventory item it was copied from.
 	Item msg.UUID
@@ -207,7 +223,12 @@ func (w *Session) Run(ctx context.Context, s Script) (*Result, error) {
 	res := &Result{
 		Compiled: up.Compiled,
 		Errors:   up.Errors,
+		State:    up.State,
+		Message:  up.Message,
 		Item:     task.ID,
+	}
+	if !up.Compiled {
+		res.Answer = up.Body
 	}
 	if !up.Compiled {
 		// Nothing will be said, so do not wait for it.
