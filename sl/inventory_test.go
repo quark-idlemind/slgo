@@ -31,6 +31,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
+	"sync/atomic"
 )
 
 // theObjectsFolder is a folder as AIS describes it, which is what a
@@ -1008,5 +1009,157 @@ func TestFirstNonEmptyStrPrefersTheFirst(t *testing.T) {
 	}
 	if got := firstNonEmptyStr("", "b"); got != "b" {
 		t.Errorf("firstNonEmptyStr(, b) = %q", got)
+	}
+}
+
+// ------------------------------------- asking a capability again
+
+// describeAttempts serves the first half of an upload, failing the first
+// n times it is asked and then answering properly, and counts the asks.
+func describeAttempts(t *testing.T, f *fakeBackend, cap string, fail int) (*uploadServer, *atomic.Int32) {
+	t.Helper()
+	u := &uploadServer{body: make(chan []byte, 4), asked: make(chan []byte, 4)}
+	u.dest = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := readAllBody(r)
+		u.body <- b
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		fmt.Fprint(w, `<llsd><map><key>state</key><string>complete</string>`+
+			`<key>compiled</key><boolean>true</boolean></map></llsd>`)
+	}))
+	t.Cleanup(u.dest.Close)
+
+	var asks atomic.Int32
+	f.ServeCap(t, cap, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := readAllBody(r)
+		u.asked <- b
+		if int(asks.Add(1)) <= fail {
+			// What Second Life's own service does when it is having a
+			// bad moment: a 500 with a Python stack trace in it.
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `<html><body><dl><dt>stack-trace</dt><dd>[{'method': 'handle_request'`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		fmt.Fprintf(w, `<llsd><map><key>state</key><string>upload</string>`+
+			`<key>uploader</key><string>%s/upload</string></map></llsd>`, u.dest.URL)
+	})
+	return u, &asks
+}
+
+// TestAnUploadAsksAgainWhenTheCapabilityHasABadMoment: measured on Agni,
+// thirty scripts at once drew one or two 500s per run out of
+// UpdateScriptTask, carrying a Python stack trace from Linden Lab's own
+// service.  Every one of them was the FIRST half of the upload, which
+// writes nothing -- so a whole run of thirty was thrown away over a
+// hiccup that could have been asked again.
+func TestAnUploadAsksAgainWhenTheCapabilityHasABadMoment(t *testing.T) {
+	s, f := newFakeSession(t)
+	_, asks := describeAttempts(t, f, "UpdateScriptAgent", 1)
+
+	res, err := s.SaveScript(context.Background(), msg.UUID{15: 1}, "default {}")
+	if err != nil {
+		t.Fatalf("SaveScript: %v", err)
+	}
+	if !res.Compiled {
+		t.Errorf("the script did not compile: %+v", res)
+	}
+	if got := asks.Load(); got != 2 {
+		t.Errorf("the capability was asked %d times, want the failure and one more", got)
+	}
+}
+
+// TestAnUploadAsksAgainOnlyOnce: a far end still failing a second later
+// is having more than a moment, and a program that kept asking would be
+// adding to whatever is wrong.
+func TestAnUploadAsksAgainOnlyOnce(t *testing.T) {
+	s, f := newFakeSession(t)
+	_, asks := describeAttempts(t, f, "UpdateScriptAgent", 99)
+
+	_, err := s.SaveScript(context.Background(), msg.UUID{15: 1}, "default {}")
+	if err == nil {
+		t.Fatal("an upload came back well from a capability that never answered")
+	}
+	if !strings.Contains(err.Error(), "status 500") {
+		t.Errorf("SaveScript = %v, want what the capability said", err)
+	}
+	if got := asks.Load(); got != 2 {
+		t.Errorf("the capability was asked %d times, want two", got)
+	}
+}
+
+// TestAnUploadDoesNotAskAgainWhenItWasRefused: a 4xx is this end having
+// asked for something it will not get however often it asks -- no such
+// item, not allowed, not enough money.  Asking again is a second failure
+// and a wait for nothing.
+func TestAnUploadDoesNotAskAgainWhenItWasRefused(t *testing.T) {
+	s, f := newFakeSession(t)
+
+	var asks atomic.Int32
+	f.ServeCap(t, "UpdateScriptAgent", func(w http.ResponseWriter, r *http.Request) {
+		asks.Add(1)
+		http.Error(w, "no such item", http.StatusNotFound)
+	})
+
+	if _, err := s.SaveScript(context.Background(), msg.UUID{15: 1}, "default {}"); err == nil {
+		t.Fatal("a refused upload came back well")
+	}
+	if got := asks.Load(); got != 1 {
+		t.Errorf("a refusal was asked about %d times", got)
+	}
+}
+
+// TestOnlyTheHalfThatWritesNothingIsAskedAgain: the second half hands
+// over the bytes, so an answer that went missing may have been an upload
+// that landed.  Asking again there could install a script twice, make a
+// second inventory item, or pay a second time -- upload is shared by the
+// capability that creates items and charges for them.
+func TestOnlyTheHalfThatWritesNothingIsAskedAgain(t *testing.T) {
+	s, f := newFakeSession(t)
+
+	var writes atomic.Int32
+	dest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writes.Add(1)
+		http.Error(w, "the service is unwell", http.StatusInternalServerError)
+	}))
+	t.Cleanup(dest.Close)
+	f.ServeCap(t, "UpdateScriptAgent", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		fmt.Fprintf(w, `<llsd><map><key>state</key><string>upload</string>`+
+			`<key>uploader</key><string>%s/upload</string></map></llsd>`, dest.URL)
+	})
+
+	if _, err := s.SaveScript(context.Background(), msg.UUID{15: 1}, "default {}"); err == nil {
+		t.Fatal("an upload whose write failed came back well")
+	}
+	if got := writes.Load(); got != 1 {
+		t.Errorf("the bytes were sent %d times; a write that may have landed "+
+			"must not be sent again", got)
+	}
+}
+
+// TestGivingUpWhileWaitingToAskAgain: the pause before a second ask is a
+// pause a cancelled command must not sit through.
+func TestGivingUpWhileWaitingToAskAgain(t *testing.T) {
+	s, f := newFakeSession(t)
+	describeAttempts(t, f, "UpdateScriptAgent", 99)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.SaveScript(ctx, msg.UUID{15: 1}, "default {}")
+		done <- err
+	}()
+	// The first ask has to have failed before the wait can be
+	// interrupted, so give it a moment and then give up.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("SaveScript = %v, want the cancellation", err)
+		}
+	case <-time.After(uploadRetryWait + 2*time.Second):
+		t.Error("giving up did not interrupt the wait before asking again")
 	}
 }

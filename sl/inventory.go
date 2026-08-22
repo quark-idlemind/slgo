@@ -3,6 +3,7 @@ package sl
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -144,8 +145,26 @@ type UploadResult struct {
 	State    string
 	NewAsset msg.UUID
 	Compiled bool
-	Errors   []string
-	Body     []byte
+
+	// Errors is what the compiler said, verbatim, in its own form:
+	//
+	//	(4, 10) : ERROR : Syntax error
+	//
+	// The two numbers are the line and the column and BOTH COUNT FROM
+	// ZERO.  Measured: a bad token on the fifth line of a script is
+	// reported as line 4.  It is worth knowing before writing anything
+	// that acts on the numbers, and worth knowing for a second reason:
+	//
+	// An EMPTY upload -- a body that did not arrive -- comes back as
+	// "(0, 0) : ERROR : Syntax error", and so does a real syntax error
+	// on the first character of a real script.  Measured, both, and they
+	// are indistinguishable.  So nothing here may treat (0, 0) as
+	// evidence that the upload was empty and ask again: for the person
+	// whose script has a typo in its first line, that would be a second
+	// upload and the same answer.
+	Errors []string
+
+	Body []byte
 
 	// NewItem is the inventory item a file upload made, and is zero
 	// for the capabilities that write to an item that already exists.
@@ -157,6 +176,15 @@ type UploadResult struct {
 	Message string
 }
 
+// uploadRetryWait is how long to leave it before asking a capability
+// again that answered with a server error.
+//
+// Long enough that a service having a bad moment has had one, short
+// enough that a person waiting on a script install does not notice.  It
+// is a guess: what was measured is that the failures come in bursts
+// under load, not how long a burst lasts.
+const uploadRetryWait = 500 * time.Millisecond
+
 // upload runs the two step asset upload: describe what is being
 // written, then write it to the URL that comes back.
 func (w *Session) upload(ctx context.Context, capName string, fields map[string]any, body []byte) (*UploadResult, error) {
@@ -164,9 +192,7 @@ func (w *Session) upload(ctx context.Context, capName string, fields map[string]
 	if err != nil {
 		return nil, err
 	}
-	first, err := w.capDo(ctx, agent.CapRequest{
-		Cap: capName, Method: "POST", Type: "application/llsd+xml", Body: req,
-	})
+	first, err := w.describeUpload(ctx, capName, req)
 	if err != nil {
 		return nil, err
 	}
@@ -205,6 +231,57 @@ func (w *Session) upload(ctx context.Context, capName string, fields map[string]
 		}
 	}
 	return res, nil
+}
+
+// describeUpload is the first half of an upload -- saying what is about
+// to be written and being told where -- and asks a second time when the
+// far end answers with a server error.
+//
+// Only this half, and only a 5xx.  The first half writes NOTHING: it
+// hands over a description and is given a URL, so asking again cannot
+// install anything twice, cannot make a second inventory item, and
+// cannot be charged for twice.  That is what makes it safe to retry
+// without knowing which capability it was for, and none of it is true of
+// the second half, where an answer that went missing may have been an
+// upload that landed.
+//
+// Measured on Agni in August 2026: automate running thirty scripts at
+// once, with the objects cleared first, produced one or two of these per
+// run --
+//
+//	sl: UpdateScriptTask: status 500: <html> ... 'method': 'handle_request'
+//
+// -- a Python stack trace out of Linden Lab's own web service.  They
+// were all this half: the name in the error is the capability, and the
+// second half names the uploader URL instead.  So nothing had been
+// written when they happened, and a run of thirty scripts was thrown
+// away over a hiccup that could have been asked again.
+//
+// Once, and then the error stands.  A far end that is still failing a
+// second later is having more than a moment, and a program that kept
+// asking would be adding to whatever is wrong.
+func (w *Session) describeUpload(ctx context.Context, capName string, req []byte) ([]byte, error) {
+	ask := func() ([]byte, error) {
+		return w.capDo(ctx, agent.CapRequest{
+			Cap: capName, Method: "POST", Type: "application/llsd+xml", Body: req,
+		})
+	}
+
+	got, err := ask()
+	if err == nil {
+		return got, nil
+	}
+	var ce *CapError
+	if !errors.As(err, &ce) || !ce.Temporary() {
+		return nil, err
+	}
+
+	select {
+	case <-time.After(uploadRetryWait):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return ask()
 }
 
 func decodeLLSD(b []byte) any {

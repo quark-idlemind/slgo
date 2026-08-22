@@ -74,6 +74,7 @@ var flags = struct {
 	Rez     bool          `getopt:"--rez             rez a throwaway prim instead of using the shared auto object"`
 	Script  string        `getopt:"--script=NAME     what to call the script inside the object"`
 	Jobs    int           `getopt:"--jobs=N -j       how many scripts to run at once, one per object; 4 by default, more takes more groups, 1 runs them in order"`
+	Clear   bool          `getopt:"--clear          empty every script out of the objects before running, for when something else is talking in them"`
 	Done    string        `getopt:"--done=TEXT       the text that means the script has finished"`
 	Timeout time.Duration `getopt:"--timeout=DUR     how long to wait for it"`
 	Keep    bool          `getopt:"--keep            leave the rezzed object behind"`
@@ -322,12 +323,37 @@ type place struct {
 	dirty bool
 }
 
-// clearPlaces silences whatever the last holder left running.
+// clearPlaces silences whatever the last holder left running, and does
+// nothing at all unless asked.
 //
-// Only the ones the daemon could not promise for: an object given back
-// by somebody who said they had cleared it is one nobody has spoken in
-// since, and clearing it again would cost a second for nothing.
+// The worry it answers is that chat carries the OBJECT a line came from
+// and never the script's name, so a script still talking in an object
+// this run was given is a line this run would print as its own.  That is
+// real, and it is also narrower than it sounds: installing a script over
+// one of the same name destroys what was there, measured, so the
+// previous run's script -- which is nearly always another automate --
+// stops the moment this one starts.  What is left is a script under a
+// DIFFERENT name that goes on saying things after it has finished, and
+// neither of the two programs that share these objects writes one: both
+// say what they have to say from state_entry and fall silent.
+//
+// Against that, the cost is certain.  Measured on Agni: clearing writes
+// an empty script over every script an object holds, and the pool
+// objects hold two -- "auto -n" makes the extra objects by COPYING the
+// first, so each carries whatever that one had.  Thirty scripts meant
+// ninety uploads rather than thirty, and it was the clearing that broke:
+// thirty installs on their own ran clean, while thirty installs behind
+// sixty clears failed every time, on Second Life's own capability,
+// with 500s carrying a Python stack trace and with compile errors
+// against an empty body.
+//
+// So it is --clear, and off: a certain two thirds of the upload budget
+// spent on a hazard nobody here has yet seen.  What it is for is the day
+// somebody DOES see foreign lines in their output.
 func clearPlaces(ctx context.Context, places []place) error {
+	if !flags.Clear {
+		return nil
+	}
 	var (
 		wg   sync.WaitGroup
 		errs = make([]error, len(places))
@@ -500,11 +526,7 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 		fmt.Fprintf(os.Stderr, "running as %s\n", whose(as))
 	}
 
-	// Whatever the last holder left running has to stop before anything
-	// here starts listening: chat carries the object a line came from
-	// and never the script's name, so a script still going is a line
-	// this run would print as its own.  All at once, because they are
-	// separate objects and it is a second apiece.
+	// Only when asked.  See clearPlaces.
 	if err := clearPlaces(ctx, places); err != nil {
 		for _, a := range as {
 			a.Release()

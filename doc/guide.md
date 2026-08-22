@@ -530,6 +530,10 @@ Each is reported and each makes the run fail:
     script.lsl: automate: Math Error                   crashed while running
     script.lsl: it did not say DONE within 1m0s        never finished
 
+The compiler's line and column **count from zero**: `(3, 4)` is the
+fourth line. Measured, and worth knowing before counting lines in a file
+to find it.
+
 `automate` exits non-zero if **any** script failed, so it can be used
 from a Makefile or a test script. It exits 0 only if every script
 compiled, ran and finished.

@@ -795,10 +795,41 @@ func (w *Session) capDo(ctx context.Context, r agent.CapRequest) ([]byte, error)
 		if name == "" {
 			name = r.URL
 		}
-		return nil, fmt.Errorf("sl: %s: status %d: %s", name, resp.Status, snippet(resp.Body))
+		return nil, &CapError{What: name, Status: resp.Status, Body: snippet(resp.Body)}
 	}
 	return resp.Body, nil
 }
+
+// A CapError is a capability that answered with a status rather than
+// with what was asked for.
+//
+// The status is kept rather than only printed because what to do about
+// one depends on it: a 5xx is the far end having a bad moment and may
+// be worth asking again, where a 4xx is this end having asked for
+// something it will not get however often it asks.
+//
+// What is named is the CAPABILITY for the first half of an upload and
+// the URL for the second, since that is all the request carries -- which
+// is also how a reader can tell which half of a two step upload failed.
+type CapError struct {
+	// What is the capability's name, or the URL when the request went
+	// to one directly.
+	What string
+
+	// Status is the HTTP status it answered with.
+	Status int
+
+	// Body is the beginning of what came back, for a person to read.
+	Body string
+}
+
+func (e *CapError) Error() string {
+	return fmt.Sprintf("sl: %s: status %d: %s", e.What, e.Status, e.Body)
+}
+
+// Temporary is whether asking again might do better: the far end
+// failed, rather than refusing.
+func (e *CapError) Temporary() bool { return e.Status >= 500 }
 
 func snippet(b []byte) string {
 	const n = 300
