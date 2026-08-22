@@ -84,6 +84,16 @@ type Conn struct {
 
 	agent string
 
+	// dropped counts what this connection threw away because nobody was
+	// reading fast enough, and OnDrop says what each one was.
+	//
+	// It used to do neither.  A chat line lost here looked exactly like a
+	// line the script never said, which for a benchmark is a number that
+	// is quietly wrong rather than a run that failed -- and that is the
+	// one thing a measurement must not do.
+	dropped atomic.Uint64
+	onDrop  func(what string)
+
 	mu   sync.RWMutex
 	info *pb.AgentInfo
 	caps map[string]bool
@@ -439,7 +449,13 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 			}
 			select {
 			case c.messages <- out:
-			default: // a client that stops reading loses messages
+			default:
+				// A client that stops reading loses messages.
+				// Counted, because the alternative is what it
+				// was: a chat line that never arrives and no
+				// way for anybody to know one went missing.
+				c.dropped.Add(1)
+				c.noteDrop("message " + m.Name)
 			}
 		case *pb.ServerPacket_Event:
 			e := &Event{Name: b.Event.Message, Body: b.Event.Body}
@@ -449,11 +465,15 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 			select {
 			case c.events <- e:
 			default:
+				c.dropped.Add(1)
+				c.noteDrop("event " + e.Name)
 			}
 		case *pb.ServerPacket_Notice:
 			select {
 			case c.notices <- b.Notice:
 			default:
+				c.dropped.Add(1)
+				c.noteDrop("notice")
 			}
 			if b.Notice.GetKind() == pb.AgentEvent_REGION_CHANGED {
 				// Dropped like the rest when nobody is reading,
@@ -472,6 +492,8 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 					Handle: b.Notice.GetRegionHandle(),
 				}:
 				default:
+					c.dropped.Add(1)
+					c.noteDrop("region change")
 				}
 			}
 		case *pb.ServerPacket_Granted:
@@ -772,4 +794,30 @@ func (c *Conn) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapRespons
 		return nil, err
 	}
 	return &agent.CapResponse{Status: int(resp.Status), Body: resp.Body}, nil
+}
+
+// Dropped is how many messages, events and notices this connection has
+// thrown away because nobody was reading them fast enough.
+//
+// Anything but zero means something was missed, and what was missed is
+// gone: there is no way to ask for it again.  It is worth looking at
+// after a run whose answer surprised you.
+func (c *Conn) Dropped() uint64 { return c.dropped.Load() }
+
+// OnDrop sets what to call when something is dropped, which is how a
+// program says so in its own words.  It is called on the receiving
+// goroutine and must not block.
+func (c *Conn) OnDrop(fn func(what string)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.onDrop = fn
+}
+
+func (c *Conn) noteDrop(what string) {
+	c.mu.RLock()
+	fn := c.onDrop
+	c.mu.RUnlock()
+	if fn != nil {
+		fn(what)
+	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
+	"sync"
 )
 
 // Options says how to get a session.
@@ -70,6 +71,7 @@ func Connect(ctx context.Context, o Options) (*sl.Session, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w\n        --direct logs in without slgod", err)
 		}
+		sayWhenDropped(s)
 		return s, nil
 	}
 
@@ -370,4 +372,36 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 			fmt.Fprintf(os.Stderr, "%s is still there: %v\n", obj, err)
 		}
 	}, nil
+}
+
+// sayWhenDropped makes a lost message say so.
+//
+// The daemon sends what a region said and this connection holds it in a
+// queue until something reads it; a queue that fills throws the rest
+// away, because the alternative is one slow reader stopping the session.
+// That is the right answer and it used to be a silent one -- a chat line
+// lost here looked exactly like a line the script never said, which for
+// a benchmark is a number that is quietly wrong rather than a run that
+// failed.
+//
+// Once, and then a count at the end of it: a queue that has overflowed
+// is usually overflowing, and a line per lost packet would bury whatever
+// the program was actually saying.
+func sayWhenDropped(s *sl.Session) {
+	type dropper interface {
+		OnDrop(func(what string))
+		Dropped() uint64
+	}
+	d, ok := s.Backend().(dropper)
+	if !ok {
+		return
+	}
+	var once sync.Once
+	d.OnDrop(func(what string) {
+		once.Do(func() {
+			fmt.Fprintf(os.Stderr,
+				"lost a %s: this session is not keeping up with the region, "+
+					"and what it missed is gone\n", what)
+		})
+	})
 }

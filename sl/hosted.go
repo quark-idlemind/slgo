@@ -445,3 +445,14 @@ func (h *Hosted) RenewSlots(ctx context.Context, id string, timeout time.Duratio
 func (h *Hosted) ReleaseSlots(id string, clean bool) error {
 	return h.conn.ReleaseSlots(id, clean)
 }
+
+// Dropped is how many messages the daemon sent that this connection
+// threw away because nothing was reading them fast enough.
+//
+// Anything but zero means something arrived and was lost, and there is
+// no asking for it again.  A run whose answer surprises you is worth
+// checking against this before it is believed.
+func (h *Hosted) Dropped() uint64 { return h.conn.Dropped() }
+
+// OnDrop says what to call when one is thrown away.
+func (h *Hosted) OnDrop(fn func(what string)) { h.conn.OnDrop(fn) }

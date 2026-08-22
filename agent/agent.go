@@ -409,7 +409,25 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	// Both are given the holder rather than the connection, which is
 	// what lets a move change the connection without changing them.
 	a.Send = msg.NewSender(a.sock, a.sendTap(opts.SendTap))
-	a.Recv = msg.NewReceiver(a.sock, opts.Recv...)
+	// Dropping rather than blocking, and said out loud when it happens.
+	//
+	// What is on the other end of the receiver's channel is the dispatch
+	// goroutine, which runs every handler for a packet before it takes
+	// the next; anything slow in one of them stops the socket being read.
+	// Blocking there does not save the packet -- the kernel discards it
+	// instead, once its own buffer fills -- it only makes the loss
+	// invisible, and stalls this session's acknowledgements behind the
+	// same slow handler, so the simulator resends what it already sent.
+	//
+	// The caller's own options come after these, so anything it feels
+	// strongly about it can still say.
+	recv := append([]msg.ReceiverOption{
+		msg.OnDrop(func(p *msg.Packet) {
+			a.logf("dropped %s: the session is not keeping up with the region",
+				p.ID)
+		}),
+	}, opts.Recv...)
+	a.Recv = msg.NewReceiver(a.sock, recv...)
 
 	dopts := []msg.DispatcherOption{
 		msg.WithSender(a.Send),

@@ -62,10 +62,11 @@ type Stats struct {
 // Header.Reliable and Header.Sequence are handed to the caller so the
 // session layer above can do that.
 type Receiver struct {
-	conn PacketSource
-	ch   chan *Packet
-	drop bool
-	keep bool
+	conn   PacketSource
+	ch     chan *Packet
+	drop   bool
+	keep   bool
+	onDrop func(*Packet)
 
 	// Owned by the Run goroutine.
 	buf  []byte
@@ -82,7 +83,25 @@ type Receiver struct {
 // ReceiverOption configures a Receiver.
 type ReceiverOption func(*Receiver)
 
-// WithBuffer sets the channel capacity.  The default is 256.
+// DefaultBuffer is how many packets a Receiver holds for its consumer.
+//
+// Generous on purpose.  What is on the other end of this channel is one
+// goroutine that dispatches a packet and runs every handler for it
+// before taking the next, so anything slow in a handler stops the socket
+// being read -- and 256 packets is a fraction of a second of a busy
+// region.  Sized to ride out a consumer that stalls for seconds rather
+// than milliseconds.
+//
+// The cost is memory, and it is worth being plain about it: the channel
+// itself is a pointer apiece, but the packets it holds are not freed
+// until they are taken, so a full one is this many packets of decoded
+// message.  Most are small; the worst case is this times MaxPacketSize,
+// which is tens of megabytes, and a machine hosting a grid session can
+// afford that far more easily than it can afford a measurement that
+// silently read nothing.
+const DefaultBuffer = 16384
+
+// WithBuffer sets the channel capacity.  The default is DefaultBuffer.
 func WithBuffer(n int) ReceiverOption {
 	return func(r *Receiver) {
 		if n < 0 {
@@ -101,14 +120,38 @@ func KeepBody() ReceiverOption {
 }
 
 // DropWhenFull discards packets instead of blocking when the channel is
-// full, counting them in Stats.Dropped.
+// full, counting them in Stats.Dropped and telling OnDrop.
 //
 // The default is to block, which pushes back on the network and lets
-// the kernel drop datagrams instead -- honest for UDP, but it also
-// stalls the caller's acknowledgements behind a slow consumer.  Choose
-// deliberately.
+// the kernel drop datagrams instead.  That is honest for UDP and it is
+// also INVISIBLE: the kernel keeps no count anything here can read, so a
+// session that lost a chat line to a stalled consumer looks exactly like
+// one that was never sent it.  A dropped packet is going to be dropped
+// either way once the consumer is far enough behind; the question is
+// only whether anybody finds out.  Blocking also stalls
+// acknowledgements behind the slow consumer, so the simulator resends
+// what it has already sent and the pile-up grows.
+//
+// Choose deliberately, and prefer this one with a buffer big enough that
+// it means something.
 func DropWhenFull() ReceiverOption {
 	return func(r *Receiver) { r.drop = true }
+}
+
+// OnDrop is called for each packet thrown away when the channel is full.
+// It implies DropWhenFull.
+//
+// It is handed the packet rather than a count because which message went
+// missing is the whole question: a lost object update is a stale
+// position that the next one corrects, and a lost chat line is a
+// measurement that quietly read nothing.  It runs on the reading
+// goroutine, so it must not block -- what it is for is a counter or a
+// log line.
+func OnDrop(fn func(*Packet)) ReceiverOption {
+	return func(r *Receiver) {
+		r.onDrop = fn
+		r.drop = true
+	}
 }
 
 // NewReceiver prepares a Receiver.  Nothing is read until Run is
@@ -116,7 +159,7 @@ func DropWhenFull() ReceiverOption {
 func NewReceiver(conn PacketSource, opts ...ReceiverOption) *Receiver {
 	r := &Receiver{
 		conn: conn,
-		ch:   make(chan *Packet, 256),
+		ch:   make(chan *Packet, DefaultBuffer),
 		buf:  make([]byte, MaxPacketSize),
 		zbuf: make([]byte, 0, MaxPacketSize),
 	}
@@ -204,6 +247,9 @@ func (r *Receiver) Run(ctx context.Context) error {
 			case r.ch <- p:
 			default:
 				r.dropped.Add(1)
+				if r.onDrop != nil {
+					r.onDrop(p)
+				}
 			}
 			continue
 		}
