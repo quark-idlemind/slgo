@@ -151,7 +151,7 @@ func debugf(format string, v ...any) {
 
 const plusminus = "±"
 const blockSize = int(512)
-const minpad = 5
+const minpad = 0
 
 // findPadding returns an OFFSET FROM pad, not a pad: the largest offset at
 // which cnt copies of the code under test still fit inside the 512-byte block
@@ -586,31 +586,25 @@ Drop --check-ipad to use %d anyway.
 // is the one thing autobench does know better than the caller: whether it can
 // carry out the instruction at all.
 //
-// The filler emits an even count as a chain of +i in 2-byte steps, and an odd
-// one as a 5-byte jump/label pair plus a chain for the remaining pad-5.  So it
-// expresses 0, 2, 4 and every count from minpad up, and nothing else: 1 and 3
-// both fall back to the bare jump/label pair and come out as 5, and a negative
-// pad emits nothing at all.  Accepting one of those would measure at a padding
-// other than the one named and report it as the one named.
+// The filler emits 5+pad bytes for every pad from nought up: an even one
+// as the 5-byte jump/label pair plus pad/2 of the 2-byte +i terms, an odd
+// one as (pad+5)/2 terms and no pair.  So every non-negative count is
+// expressible, to the byte, and a negative one is not -- it emits nothing
+// at all, which would measure at a padding other than the one named and
+// report it as the one named.
 //
-// The runs happen at pad+1, so both pad and pad+1 have to be expressible.  That
-// leaves 4 -- emitted as i+i, with its runs at minpad's jump/label pair -- and
-// everything from minpad up.  4 rests on no assumption that minpad does not:
-// reading 5 and 6 as one byte apart already requires a bare `i;` to cost 2,
-// which is the same thing that makes 4 and 5 one byte apart.
-//
-// 4 is NOT refused on the grounds that no Padding: line can print it (true --
-// the search starts at minpad, so basePadding cannot return less).  --ipad is
-// not restricted to numbers Padding: has printed: 985 was never printed by any
-// search either, and it is a perfectly good padding.  Refusing a value autobench
-// can emit, because of where its own search happens to start, is second-guessing
-// the caller, and the caller owns that call.
+// It used to be less than that.  The pair was spent only when the pad was
+// odd, so 1 and 3 both came out as the bare pair and measured 5, and the
+// search had to start above them at a minpad of 5 -- which every padding
+// this program printed then carried, putting them in [5, 517) for a block
+// that is [0, 512).  Both are gone; the pair is a constant in every
+// script now, which is where a constant belongs.
 //
 // There is deliberately no upper bound.  Boundaries repeat every blockSize
 // bytes, so one shape has many paddings and a caller may legitimately name any
 // of them: live on 2026-08-03, --ipad 473 and --ipad 985 were the same shape one
 // block apart and both reported Size: 368.
-func expressiblePadding(pad int) bool { return pad >= minpad-1 }
+func expressiblePadding(pad int) bool { return pad >= 0 }
 
 // oneMode is the whole of -1 mode: one copy of CODE, measured as the memory it
 // added rounded up to a whole block, less the part of that last block it did
@@ -841,7 +835,7 @@ func main() {
 		// lease there is: one object to measure in and one to probe in.
 		errf("--parts %d: a round divides the range into at least two\n", flags.Parts)
 	case flags.IPad != 0 && !expressiblePadding(flags.IPad):
-		errf("--ipad %d: not an expressible padding -- the filler emits 5 bytes for 1 and for 3, 2 is measured at 3, and a negative pad emits nothing; 0 means search for it\n", flags.IPad)
+		errf("--ipad %d: not an expressible padding -- a negative pad emits nothing, so it would be measured at a padding other than the one named\n", flags.IPad)
 	}
 	var globals string
 	for _, g := range flags.Globals {
@@ -886,8 +880,8 @@ func main() {
 	if flags.One {
 		size, basePad, pad := oneMode(b, &r)
 
-		if r.Title != "" {
-			fmt.Printf("Title: %s\n", r.Title)
+		if flags.Title != "" {
+			fmt.Printf("Title: %s\n", flags.Title)
 		}
 		// The two readings the size is the difference of: the base script
 		// at the padding, sitting exactly on a block boundary, and the
@@ -909,8 +903,8 @@ func main() {
 		// used to end in a crash rather than an explanation.
 		return
 	}
-	if r.Title != "" {
-		fmt.Printf("Title: %s\n", r.Title)
+	if flags.Title != "" {
+		fmt.Printf("Title: %s\n", flags.Title)
 	}
 	if padding != 0 {
 		// Report it here too, not just in -1 mode: this is the number to feed
@@ -1236,10 +1230,9 @@ func resultPayload(s string) (string, bool) {
 // field here; oneMode keeps its base memory that way, and not doing so was a
 // real bug that only showed up on a cache hit.
 type Results struct {
-	Title string
-	Base  int
-	Test  int
-	Size  float64
+	Base int
+	Test int
+	Size float64
 }
 
 type Cache struct {
@@ -1377,13 +1370,6 @@ func buildScript(cnt, pad int) string {
 		buf.WriteString(flags.Postamble)
 		buf.WriteString("\n")
 	}
-	var title string
-	if flags.Title != "" {
-		title = `llOwnerSay("\nRESULT: TITLE=` + flags.Title + `");`
-	}
-	// The pad the harness REPORTS is the one it was asked for; the filler
-	// below consumes its copy.  Keep them apart.
-	reported := pad
 	// A builder rather than a string appended to in the loop below.  The
 	// +i chain adds two bytes at a time, and appending to a string copies
 	// the whole of it each time, so rendering a pad of n cost n^2/4 bytes
@@ -1395,32 +1381,51 @@ func buildScript(cnt, pad int) string {
 	// change.
 	var pb strings.Builder
 	pb.WriteString(flags.Pad)
-	// `integer i;` backs the +i filler chain below.  Emit it unconditionally
-	// so its cost is a fixed constant across every pad value; the old
-	// `if pad > 0` made the pad 0 -> 1 transition a variable-declaration-sized
-	// jump instead of one byte.
-	pb.WriteString("integer i;\n")
-	// The +i chain moves in 2-byte steps, so on its own it can only express
-	// even byte counts.  A jump/label pair is the one odd-sized (5-byte)
-	// filler, so spend it whenever pad is odd; pad-5 is then even.  Callers
-	// keep pad >= minpad -- the searches start there and expressiblePadding
-	// holds --ipad to it -- so this never drives pad negative and every count
-	// from minpad up is representable to the byte, with no upper limit.
-	if pad%2 != 0 {
-		pb.WriteString("jump Z; @Z;\n")
-		pad -= 5
-	}
-	if pad >= 2 {
-		pb.WriteString("i")
-		pad -= 2
-		for pad >= 2 {
-			pb.WriteString("+i")
-			pad -= 2
+
+	// The filler emits exactly pad bytes more than pad 0 does, for every
+	// pad from 0 upward.  Two pieces, at 5 bytes and 2:
+	//
+	//	pad 0	jump Z; @Z;
+	//	pad 1	i + i + i;
+	//	pad 2	jump Z; @Z; i;
+	//	pad 3	i + i + i + i;
+	//	pad 4	jump Z; @Z; i + i;
+	//
+	// An even pad spends the 5-byte jump/label pair and pad/2 of the
+	// 2-byte terms; an odd one spends (pad+5)/2 terms and no pair.  Both
+	// come to 5+pad bytes, so pad 0 is the pair on its own and every
+	// count above it costs one byte more than the last.
+	//
+	// The pair being spent at pad NOUGHT is the whole of the difference
+	// from what this used to do.  It used to be spent only when the pad
+	// was odd, which made 1 and 3 cost the same 5 bytes as each other:
+	// two pads that could not be told apart, a minimum pad of 5 to keep
+	// the search above them, and every padding this program reported
+	// carrying that 5 -- a range of [5, 517) where the block is [0, 512).
+	// Moving the pair to the bottom costs the same 5 bytes in every
+	// script, where a constant belongs, and buys back both.
+	//
+	// `integer i;` is in the harness rather than here, for the same
+	// reason: it backs the chain, every script needs it, and a
+	// declaration that came and went with the pad would be a step of its
+	// own size at whichever pad it appeared.
+	if pad >= 0 {
+		terms := pad / 2
+		if pad%2 != 0 {
+			terms = (pad + 5) / 2
+		} else {
+			pb.WriteString("jump Z; @Z;\n")
 		}
-		pb.WriteString(";\n")
+		if terms > 0 {
+			pb.WriteString("i")
+			for k := 1; k < terms; k++ {
+				pb.WriteString("+i")
+			}
+			pb.WriteString(";\n")
+		}
 	}
 
-	fmt.Fprintf(&buf, code, cnt, reported, title, pb.String())
+	fmt.Fprintf(&buf, code, cnt, pad, pb.String())
 	return buf.String()
 }
 
@@ -1483,35 +1488,34 @@ func runScript(b backend, cnt, pad int, r *Results) error {
 // and not in the transport: nothing else about running a script
 // requires a script to label its output.
 func absorbResults(results []string, r *Results) (mem int, ok bool) {
-	const (
-		MEM   = "MEM="
-		TITLE = "TITLE="
-	)
+	const MEM = "MEM="
 	for _, raw := range results {
 		s, found := resultPayload(raw)
 		if !found {
 			continue
 		}
-		switch {
-		case strings.HasPrefix(s, MEM):
+		if strings.HasPrefix(s, MEM) {
 			n, err := strconv.Atoi(s[len(MEM):])
 			if err != nil {
 				continue
 			}
 			mem, ok = n, true
-		case strings.HasPrefix(s, TITLE):
-			r.Title = s[len(TITLE):]
 		}
 	}
 	return mem, ok
 }
 
-// code is the boilerplate for autobench.  It is printed with 4 positional
+// code is the boilerplate for autobench.  It is printed with 3 positional
 // parameters:
-//  1. statement to print title (if any)
-//  2. the number of times the CODE was repeated
-//  3. the amount of padding added
-//  4. instructions to pad the code size
+//  1. the number of times the CODE was repeated
+//  2. the amount of padding added
+//  3. instructions to pad the code size
+//
+// The title used to be a fourth, said by the script and read back out of
+// what it said.  A script can only ever have repeated the --title it was
+// handed, so the round trip could not produce a fact -- and it put the
+// caller's text in the bytecode, which is why baseKey had to blank it
+// before hashing a script to identify its shape.  main prints the flag.
 //
 // code is the benchmark script, and everything it does not do is
 // deliberate.
@@ -1559,11 +1563,11 @@ default {
     state_entry() {
         integer mem = llGetUsedMemory();
         llOwnerSay("\n");
-        %s                  // Title
         llOwnerSay("RESULT:MEM=" + (string)mem);
         llOwnerSay("DONE");
     }
     timer() {
+        integer i;
         %s                  // Padding
     }
 }`

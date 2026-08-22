@@ -127,7 +127,7 @@ func TestOnlyLabelledMeasurementsAreAbsorbed(t *testing.T) {
 		"RESULT:SOMETHING_ELSE=1",
 	}, &r)
 
-	if !ok || mem != 5924 || r.Title != "global integer" {
+	if !ok || mem != 5924 {
 		t.Errorf("absorbResults = %d, %v, and left %+v", mem, ok, r)
 	}
 
@@ -155,33 +155,67 @@ func TestOnlyLabelledMeasurementsAreAbsorbed(t *testing.T) {
 // output to show it.  The shape of what it emits is asserted rather than
 // the byte count, since the byte count is SL's compiler's opinion and not
 // available here.
+//
+// The table is the contract: 5 bytes for the jump/label pair, 2 for each
+// term of the chain, and 5+pad bytes altogether for every pad from
+// nought up.
 func TestTheFillerEmitsExactlyThePadAsked(t *testing.T) {
 	resetFlags()
 	t.Cleanup(resetFlags)
 
-	// `integer i;` is unconditional: it backs the +i chain, and emitting
-	// it only when there is padding made the 0 -> 1 transition cost a
-	// declaration instead of a byte.
-	bare := buildScript(0, 0)
-	if !contains(bare, "integer i;") {
-		t.Error("the filler's variable is not declared when the pad is nought")
-	}
-	if contains(bare, "i+i") || contains(bare, "jump Z") {
-		t.Errorf("a pad of nought emitted filler:\n%s", bare)
+	for _, c := range []struct {
+		pad  int
+		want string
+	}{
+		{0, "jump Z; @Z;"},
+		{1, "i+i+i;"},
+		{2, "jump Z; @Z;\ni;"},
+		{3, "i+i+i+i;"},
+		{4, "jump Z; @Z;\ni+i;"},
+		{5, "i+i+i+i+i;"},
+		{6, "jump Z; @Z;\ni+i+i;"},
+	} {
+		if got := filler(t, buildScript(0, c.pad)); got != c.want {
+			t.Errorf("pad %d emitted %q, want %q", c.pad, got, c.want)
+		}
 	}
 
-	// An even pad is the +i chain alone, two bytes a step.
-	if got := buildScript(0, 6); !contains(got, "i+i+i;") || contains(got, "jump Z") {
-		t.Errorf("pad 6 should be three 2-byte steps and no jump:\n%s", got)
+	// `integer i;` is in the harness rather than the filler: it backs the
+	// chain, every script needs it, and a declaration that came and went
+	// with the pad would be a step of its own size at whichever pad it
+	// appeared at.
+	if bare := buildScript(0, 0); !contains(bare, "integer i;") {
+		t.Errorf("the filler's variable is not declared at a pad of nought:\n%s", bare)
 	}
-	// An odd one spends the 5-byte jump/label pair first and pads the
-	// even remainder with the chain.
-	if got := buildScript(0, minpad); !contains(got, "jump Z; @Z;") || contains(got, "i+i") {
-		t.Errorf("pad %d should be the jump/label pair alone:\n%s", minpad, got)
+
+	// And no two pads may emit the same thing.  This is what the old
+	// filler got wrong: it spent the pair only on an odd pad, so 1 and 3
+	// both came out as the bare pair and measured the same 5 bytes --
+	// two paddings a search could not tell apart, and the reason it had
+	// to start at 5 rather than at nought.
+	seen := map[string]int{}
+	for pad := 0; pad < 3*blockSize; pad++ {
+		got := filler(t, buildScript(0, pad))
+		if was, dup := seen[got]; dup {
+			t.Fatalf("pad %d and pad %d both emit %q", was, pad, got)
+		}
+		seen[got] = pad
 	}
-	if got := buildScript(0, 9); !contains(got, "jump Z; @Z;") || !contains(got, "i+i;") {
-		t.Errorf("pad 9 should be the pair plus two steps:\n%s", got)
+}
+
+// filler is what the harness's timer() holds, which is the padding and
+// nothing else.
+func filler(t *testing.T, src string) string {
+	t.Helper()
+	_, rest, ok := strings.Cut(src, "integer i;\n")
+	if !ok {
+		t.Fatalf("the script has no filler variable:\n%s", src)
 	}
+	pad, _, ok := strings.Cut(rest, "// Padding")
+	if !ok {
+		t.Fatalf("the script has no filler:\n%s", src)
+	}
+	return strings.TrimSpace(pad)
 }
 
 // TestTheScriptIsTheHarnessAroundTheCodeUnderTest: the copies are
@@ -202,7 +236,6 @@ func TestTheScriptIsTheHarnessAroundTheCodeUnderTest(t *testing.T) {
 		"foo_001(){llDie();}",
 		"foo_002(){llDie();}",
 		"// after",
-		`RESULT: TITLE=a benchmark`,
 	} {
 		if !contains(got, want) {
 			t.Errorf("the script is missing %q:\n%s", want, got)
@@ -214,7 +247,7 @@ func TestTheScriptIsTheHarnessAroundTheCodeUnderTest(t *testing.T) {
 	// which costs nothing -- measured, 604 bytes of comment moved the
 	// reading not at all -- so the digits of a count cannot change what
 	// is being measured.
-	if !contains(got, "// autobench cnt=3 pad=5") {
+	if !contains(got, "// autobench cnt=3 pad=0") {
 		t.Errorf("the harness does not report the count and pad it was built with:\n%s", got)
 	}
 
@@ -230,11 +263,16 @@ func TestTheScriptIsTheHarnessAroundTheCodeUnderTest(t *testing.T) {
 		t.Errorf("the script does not report its reading:\n%s", got)
 	}
 
-	// A shape with no title says nothing rather than saying nothing at
-	// length: the title is a string literal and costs its own length.
-	flags.Title = ""
-	if got := buildScript(0, minpad); contains(got, "TITLE=") {
-		t.Errorf("a benchmark with no title emitted one:\n%s", got)
+	// The title is not in the script at all, whether or not one was
+	// given.  A script could only ever have repeated the --title it was
+	// handed, so saying it bought no fact -- and it put the caller's own
+	// text in the bytecode, where a twenty-seven character title moved
+	// the measured padding from 377 to 349.
+	for _, title := range []string{"a benchmark", ""} {
+		flags.Title = title
+		if got := buildScript(0, minpad); contains(got, "TITLE") {
+			t.Errorf("the script says its title (%q):\n%s", title, got)
+		}
 	}
 }
 
@@ -263,7 +301,9 @@ func TestAPaddingIsTheLastPadInsideItsBlock(t *testing.T) {
 	// A pad the filler cannot emit is refused without spending a run,
 	// because measuring at a pad other than the one named and reporting it
 	// as the one named is the one wrong answer here that cannot be seen.
-	if held, at, above := paddingHolds(b, 3); held || at != 0 || above != 0 {
+	// Only a negative pad is left: the filler emits every count from
+	// nought up, and nothing at all below it.
+	if held, at, above := paddingHolds(b, -1); held || at != 0 || above != 0 {
 		t.Error("an inexpressible pad was measured rather than refused")
 	}
 }

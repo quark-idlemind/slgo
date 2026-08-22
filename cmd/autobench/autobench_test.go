@@ -469,21 +469,29 @@ func TestACopyRunDividesByTheBaseRunBeforeIt(t *testing.T) {
 // boundary" -- the caller asserts that -- but "can the filler emit exactly this
 // many bytes, and one more".  In particular a padding a whole block up is
 // perfectly real, so there is no upper bound to enforce.
+//
+// Every pad from nought up is expressible now.  1, 2 and 3 were not,
+// while the jump/label pair was spent only on an odd pad: 1 and 3 both
+// came out as the bare pair and measured 5, and 2 could not have the
+// pad above it.  Only a negative one is left, and it is refused because
+// the filler emits nothing at all for it.
 func TestExpressiblePadding(t *testing.T) {
 	for _, tc := range []struct {
 		pad  int
 		want bool
 	}{
 		{-4, false},
-		{1, false},
-		{2, false},
-		{3, false},
-		{4, true}, // i+i, with its runs at minpad's jump/label pair
-		{minpad, true},
+		{-1, false},
+		{0, true},
+		{1, true},
+		{2, true},
+		{3, true},
+		{4, true},
 		{6, true},
 		{473, true},
-		{blockSize + minpad, true}, // A11 checked --ipad 985 live
+		{480, true}, // measured live on 2026-08-22
 		{985, true},
+		{992, true}, // and its boundary a block up
 		{1497, true},
 	} {
 		if got := expressiblePadding(tc.pad); got != tc.want {

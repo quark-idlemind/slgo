@@ -31,24 +31,25 @@ func TestBaseKeyIgnoresTheCodeUnderTest(t *testing.T) {
 	}
 }
 
-// TestBaseKeyFollowsTheTitleLength: a title is a string literal, so
-// what it costs is its length.  Two titles of one length share an
-// answer; a longer one does not, and must not -- measured live, a
-// twenty-seven character title moved the padding from 377 to 349.
-func TestBaseKeyFollowsTheTitleLength(t *testing.T) {
+// TestBaseKeyIgnoresTheTitle: what a benchmark is CALLED is not part of
+// its shape, so two runs of one shape under two names share a padding.
+//
+// This used to be the other way about, and had to be: the title was said
+// by the script, so it was a string literal in the bytecode and it moved
+// the measurement -- live, a twenty-seven character title moved the
+// padding from 377 to 349.  The key followed its LENGTH, which was the
+// least wrong thing available.  The script does not say it any more.
+func TestBaseKeyIgnoresTheTitle(t *testing.T) {
 	resetFlags()
 
-	flags.Title = "global integer" // 14
+	flags.Title = "global integer"
 	same := baseKey()
 
-	flags.Title = "global boolean" // also 14
-	if got := baseKey(); got != same {
-		t.Errorf("titles of one length should share a key: %s then %s", same, got)
-	}
-
-	flags.Title = "a considerably longer title"
-	if got := baseKey(); got == same {
-		t.Error("a longer title must not share the key; it moves the padding")
+	for _, title := range []string{"global boolean", "a considerably longer title", ""} {
+		flags.Title = title
+		if got := baseKey(); got != same {
+			t.Errorf("--title %q changed the base key: %s then %s", title, same, got)
+		}
 	}
 }
 

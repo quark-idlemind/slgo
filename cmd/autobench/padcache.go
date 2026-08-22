@@ -59,12 +59,13 @@ type padEntry struct {
 
 // baseKey identifies the base script this benchmark will use.
 func baseKey() string {
-	title := flags.Title
-	flags.Title = strings.Repeat("t", len(title))
-	src := buildScript(0, minpad)
-	flags.Title = title
-
-	sum := sha256.Sum256([]byte(src))
+	// The title is not in the script any more, so there is nothing to
+	// blank before hashing it: it used to be said by the script, which
+	// put the caller's own text in the shape being identified and made
+	// two runs of the same benchmark under different titles look like
+	// two different shapes.  It was blanked to a run of 't's of the same
+	// length, which kept the LENGTH in the key for no reason at all.
+	sum := sha256.Sum256([]byte(buildScript(0, minpad)))
 	return hex.EncodeToString(sum[:16])
 }
 

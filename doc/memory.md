@@ -393,6 +393,50 @@ Asking for more objects than the daemon's avatars have between them is
 refused at once, saying so and saying how many there are, rather than
 waiting or quietly taking fewer.
 
+## The filler, and what a jump costs
+
+The padding filler has to be able to emit any number of bytes, exactly,
+because a padding search asks for one pad after another and every size
+reported is a distance between two of them. It has two pieces:
+
+| bytes | code |
+|---:|---|
+| 0 | `jump Z; @Z;` |
+| 1 | `i + i + i;` |
+| 2 | `jump Z; @Z; i;` |
+| 3 | `i + i + i + i;` |
+| 4 | `jump Z; @Z; i + i;` |
+
+An even pad spends the jump/label pair and `pad/2` of the two-byte `+i`
+terms; an odd one spends `(pad+5)/2` terms and no pair. Both come to
+`5+pad` bytes. `integer i;` backs the chain and is part of the harness,
+not the filler, so that it is a constant rather than a step at whichever
+pad it first appeared at.
+
+That the pair costs **exactly 5 bytes** was previously inferred. It is
+measured now, because the whole scheme rests on it: an even pad and the
+odd pad above it are built out of different pieces, so if the pair were
+4 or 6 the two parities would drift apart and the staircase would not be
+one byte a step.
+
+Live on 2026-08-22, the base script read 3876 at pads 476 through 480
+and 4388 at 481 through 483 -- one step, in the right place, across the
+even-to-odd seam. And a full block higher it read 4388 at 991 and 992,
+4900 at 993 and 994: the next boundary at **992 = 480 + 512**, exactly a
+block away, after 512 pads made of about 256 fillers of each parity. A
+pair costing anything but 5 could not land it there.
+
+### What this replaced
+
+The pair used to be spent only when the pad was odd. Pads 1 and 3 then
+both came out as the bare pair and measured the same 5 bytes -- two
+paddings a search could not tell apart -- so the search had to start
+above them, at a minimum pad of 5. Every padding this program printed
+carried that 5, putting them in [5, 517) for a block that is [0, 512).
+Moving the pair to the bottom costs the same 5 bytes in every script,
+where a constant belongs, and buys back both: every pad from nought is
+expressible, and a padding is a number inside the block it describes.
+
 ## Method, and what it does not cover
 
 Every figure was taken with `autobench` against Agni on 2026-08-08,
@@ -406,9 +450,12 @@ Not covered, and worth knowing:
 - **The allocator itself.** The remainder tracks globals, but the exact
   rule -- why four integers cost 16 and three assorted globals cost 68
   when their individual costs sum to 76 -- is not established here.
-- **The ±4.** Its most likely source is the padding filler: an odd pad
-  spends a `jump Z; @Z;` pair charged at exactly 5 bytes, and nearly
-  every padding these searches found was odd. Not confirmed.
+- **The ±4.** Its most likely source was the padding filler, which
+  spent a `jump Z; @Z;` pair only on an odd pad, and nearly every
+  padding these searches found was odd. The pair is in every script now
+  (see [the filler](#the-filler-and-what-a-jump-costs)), so if that was
+  the source it cancels; whether it did is still not confirmed, and
+  these figures were taken before the change either way.
 - **The compile ceiling.** A base script with 9000 bytes of preamble was
   refused with "Internal server compile error", as was a padding of
   2009. The practical limit is lower than the 62KB `autobench` assumes
