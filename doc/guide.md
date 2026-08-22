@@ -530,9 +530,19 @@ Each is reported and each makes the run fail:
     script.lsl: automate: Math Error                   crashed while running
     script.lsl: it did not say DONE within 1m0s        never finished
 
-The compiler's line and column **count from zero**: `(3, 4)` is the
-fourth line. Measured, and worth knowing before counting lines in a file
-to find it.
+The compiler's line and column **count from zero** -- measured, a bad
+token on the fifth line of a script reports line 4 -- but `sl` sends
+every script with a newline in front of it, so the numbers you see here
+are one higher than that and land on the line your editor shows. `(3,
+4)` is the fourth line of your file.
+
+The newline is there for a different reason. An upload sometimes reaches
+Second Life's compiler EMPTY, and the compiler says the same thing about
+that as about a script wrong at its very first character: `(0, 0) :
+ERROR : Syntax error`. With a newline in front, nothing we send has
+anything on line 0, so `(0, 0)` can only be an upload that went missing
+-- and one that did is simply sent again. Measured on thirty scripts at
+once: three runs in eight failed that way before, none in eight after.
 
 `automate` exits non-zero if **any** script failed, so it can be used
 from a Makefile or a test script. It exits 0 only if every script

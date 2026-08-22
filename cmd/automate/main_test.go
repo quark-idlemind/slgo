@@ -102,7 +102,10 @@ func TestALineIsPrintedAsItArrivesAndTaggedWithItsScript(t *testing.T) {
 	if f.ran != 1 {
 		t.Errorf("%d scripts ran", f.ran)
 	}
-	if len(f.sources) != 1 || f.sources[0] != "default {}" {
+	// sl puts a newline in front of every script it installs, so that an
+	// upload which arrived empty can be told from one whose first line is
+	// wrong.  What matters here is that the source went up at all.
+	if len(f.sources) != 1 || strings.TrimPrefix(f.sources[0], "\n") != "default {}" {
 		t.Errorf("what was sent was %q", f.sources)
 	}
 }

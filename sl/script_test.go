@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
+	"sync/atomic"
 )
 
 // objectSaid is one line of chat from an object, which is the only way a
@@ -170,7 +171,10 @@ func TestRunListensBeforeItCompiles(t *testing.T) {
 		!strings.Contains(got, thePrim.String()) || !strings.Contains(got, "mono") {
 		t.Errorf("the capability was asked %q", got)
 	}
-	if got := string(<-up.body); got != "default {}" {
+	// With a newline in front of it, which is what makes an upload that
+	// arrived empty tell itself apart from a script that is wrong at its
+	// first character.  See leadingNewline.
+	if got := string(<-up.body); got != "\ndefault {}" {
 		t.Errorf("uploaded %q", got)
 	}
 
@@ -1340,5 +1344,97 @@ func TestTheEventQueueEndingIsNotTheSessionEnding(t *testing.T) {
 	case <-w.readDone:
 		t.Error("the session ended because its event queue did")
 	default:
+	}
+}
+
+// TestAnUploadThatArrivedEmptyIsSentAgain: measured on Agni, an upload
+// sometimes reaches Second Life's compiler with nothing in it -- the
+// body leaves here whole, goes to an uploader URL nothing else is using,
+// and the capability answers that it completed and made an asset that
+// compiles as nothing.  Three runs in eight of thirty scripts hit it.
+//
+// It is worth asking again exactly because it cannot be the caller's
+// fault: every script goes out with a newline in front, so nothing of
+// theirs is on the line the compiler names.
+func TestAnUploadThatArrivedEmptyIsSentAgain(t *testing.T) {
+	w, f := newFakeSession(t)
+	var tries atomic.Int32
+	up := serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
+		if tries.Add(1) == 1 {
+			return 200, `<llsd><map><key>state</key><string>complete</string>` +
+				`<key>compiled</key><boolean>0</boolean>` +
+				`<key>errors</key><array><string>(0, 0) : ERROR : Syntax error` +
+				`</string></array></map></llsd>`
+		}
+		return 200, `<llsd><map><key>state</key><string>complete</string>` +
+			`<key>compiled</key><boolean>1</boolean></map></llsd>`
+	})
+	_ = up
+
+	res, err := w.install(context.Background(), msg.UUID{15: 1}, msg.UUID{15: 2},
+		"default { state_entry() {} }", true)
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if !res.Compiled {
+		t.Errorf("an upload that arrived empty was not sent again: %+v", res)
+	}
+	if got := tries.Load(); got != 2 {
+		t.Errorf("the script was uploaded %d times, want the empty one and one more", got)
+	}
+}
+
+// TestAScriptWrongAtItsFirstCharacterIsNotSentAgain: the newline in
+// front is what makes this distinguishable.  Without it the compiler
+// says "(0, 0)" about a caller's own mistake as well, and asking again
+// would cost an upload and answer the same thing.
+func TestAScriptWrongAtItsFirstCharacterIsNotSentAgain(t *testing.T) {
+	w, f := newFakeSession(t)
+	var tries atomic.Int32
+	serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
+		tries.Add(1)
+		// Line ONE, because the newline this package adds pushed the
+		// caller's first line down.
+		return 200, `<llsd><map><key>state</key><string>complete</string>` +
+			`<key>compiled</key><boolean>0</boolean>` +
+			`<key>errors</key><array><string>(1, 0) : ERROR : Syntax error` +
+			`</string></array></map></llsd>`
+	})
+
+	res, err := w.install(context.Background(), msg.UUID{15: 1}, msg.UUID{15: 2},
+		"123 456", true)
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if res.Compiled {
+		t.Fatal("a script that will not compile was reported as having")
+	}
+	if got := tries.Load(); got != 1 {
+		t.Errorf("a caller's own mistake was uploaded %d times", got)
+	}
+}
+
+// TestTheScriptGoesOutWithANewlineInFrontOfIt: the whole of the above
+// rests on it, and it is one character that nothing else would notice
+// going missing.
+func TestTheScriptGoesOutWithANewlineInFrontOfIt(t *testing.T) {
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
+		return 200, `<llsd><map><key>state</key><string>complete</string>` +
+			`<key>compiled</key><boolean>1</boolean></map></llsd>`
+	})
+
+	const src = "default { state_entry() {} }"
+	if _, err := w.install(context.Background(), msg.UUID{15: 1}, msg.UUID{15: 2},
+		src, true); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	select {
+	case got := <-up.body:
+		if string(got) != "\n"+src {
+			t.Errorf("sent %q, want it with a newline in front", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("nothing was uploaded")
 	}
 }
