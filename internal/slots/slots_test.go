@@ -740,3 +740,282 @@ func TestASlotRemovedWhileNobodyHasItGoesAtOnce(t *testing.T) {
 			r.Slots[0].Data, r.Slots[1].Data, r.Slots[2].Data)
 	}
 }
+
+// ------------------------------------------------------- tidying up
+
+// TestASlotIsNotHandedOnUntilItHasBeenTidied: the whole point of the
+// hook.  For an object that a script ran in, tidying is stopping that
+// script from talking -- and a slot handed on before it has stopped is a
+// caller reading somebody else's output as its own, which is measured
+// behaviour and not a worry: chat carries the object a line came from
+// and never the script's name.
+func TestASlotIsNotHandedOnUntilItHasBeenTidied(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	tidying := make(chan struct{})
+	done := make(chan struct{})
+	s := &Slot{Data: 1, Clean: func() error {
+		close(tidying)
+		<-done
+		return nil
+	}}
+	if err := p.Add(s); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	held := get(t, p, 1)
+	if !held.Filled() {
+		t.Fatal("the one slot would not go to one caller")
+	}
+	if err := p.Return(held.ID); err != nil {
+		t.Fatalf("Return: %v", err)
+	}
+	<-tidying
+
+	if r := get(t, p, 1); r.Filled() {
+		t.Error("a slot was handed on while it was still being tidied")
+	}
+	close(done)
+
+	// And once the tidying is over it is somebody else's to have.  The
+	// answer arrives through the pool's own door, so this waits for it.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if r := get(t, p, 1); r.Filled() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a slot that had been tidied never came back")
+		}
+	}
+}
+
+// TestTidyingDoesNotStopThePoolAnsweringEverybodyElse: tidying goes to
+// the grid -- a read, a write, and waiting to hear the object stop -- so
+// a pool that ran it on its own goroutine would answer nobody for a
+// second or more each time a slot came back, and eight at once would
+// stop everything for eight seconds.
+func TestTidyingDoesNotStopThePoolAnsweringEverybodyElse(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	tidying := make(chan struct{})
+	release := make(chan struct{})
+	slow := &Slot{Data: 1, Clean: func() error {
+		close(tidying)
+		<-release
+		return nil
+	}}
+	if err := p.Add(slow, &Slot{Data: 2}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	first := get(t, p, 1) // the oldest, which is the slow one
+	if !first.Filled() || !which(first)[1] {
+		t.Fatalf("got %v, want the slot that tidies slowly", which(first))
+	}
+	// Returning does not wait for the tidying either: the caller has
+	// finished with the slot and has nothing to do with what happens to
+	// it next.
+	returned := make(chan error, 1)
+	go func() { returned <- p.Return(first.ID) }()
+	select {
+	case err := <-returned:
+		if err != nil {
+			t.Fatalf("Return: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Return waited for the tidying it set going")
+	}
+	<-tidying
+
+	// The pool is mid-tidy.  Everything else still works.
+	answered := make(chan bool, 1)
+	go func() {
+		r, err := p.Get(1, time.Minute)
+		answered <- err == nil && r.Filled() && which(r)[2]
+	}()
+	select {
+	case ok := <-answered:
+		if !ok {
+			t.Error("the other slot could not be had while one was being tidied")
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("the pool answered nobody while a slot was being tidied")
+	}
+	close(release)
+}
+
+// TestASlotThatWillNotComeCleanIsDropped: an object that has gone, or
+// will not answer, fails its tidying -- and handing it on would be
+// handing on a run that fails in the middle with half its scripts
+// installed.
+func TestASlotThatWillNotComeCleanIsDropped(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	tried := make(chan struct{})
+	bad := &Slot{Data: 1, Clean: func() error {
+		close(tried)
+		return errors.New("the object is not there")
+	}}
+	if err := p.Add(bad, &Slot{Data: 2}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	held := get(t, p, 2)
+	if !held.Filled() {
+		t.Fatal("two slots would not go to one caller")
+	}
+	if err := p.Return(held.ID); err != nil {
+		t.Fatalf("Return: %v", err)
+	}
+	<-tried
+
+	// The good one comes back and the bad one does not, however long
+	// anybody waits.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		r := get(t, p, 1)
+		if r.Filled() {
+			if !which(r)[2] {
+				t.Errorf("got %v, want the slot that came clean", which(r))
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the slot that came clean never came back")
+		}
+	}
+	if r := get(t, p, 1); r.Filled() {
+		t.Errorf("the slot that would not come clean was handed on: %v", which(r))
+	}
+}
+
+// TestTidyingIsNotSomethingTheCallerIsHanded: the hook is the owner's,
+// and a copy of it in the hands of whoever holds the slot is a way for
+// the tidying to happen twice, or at the wrong moment, or by somebody
+// who does not know what tidying this thing needs.
+func TestTidyingIsNotSomethingTheCallerIsHanded(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	if err := p.Add(&Slot{Data: 1, Clean: func() error { return nil }}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	r := get(t, p, 1)
+	if !r.Filled() {
+		t.Fatal("the one slot would not go to one caller")
+	}
+	if r.Slots[0].Clean != nil {
+		t.Error("the slot handed to the caller carries the owner's tidying")
+	}
+}
+
+// TestAWaiterIsWokenWhenTheTidyingIsDoneAndNotBefore: a slot given back
+// is not a slot anybody can have yet, so waking a waiter then would send
+// it to look at a pool that has nothing in it.  The wake belongs at the
+// end of the tidying.
+func TestAWaiterIsWokenWhenTheTidyingIsDoneAndNotBefore(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	tidying := make(chan struct{})
+	release := make(chan struct{})
+	if err := p.Add(&Slot{Data: 1, Clean: func() error {
+		close(tidying)
+		<-release
+		return nil
+	}}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	held := get(t, p, 1)
+	short := get(t, p, 1)
+	if short.Filled() {
+		t.Fatal("one slot went to two callers")
+	}
+	if err := p.Return(held.ID); err != nil {
+		t.Fatalf("Return: %v", err)
+	}
+	<-tidying
+
+	select {
+	case <-short.Wait:
+		t.Fatal("the waiter was woken before the slot was fit to be had")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case <-short.Wait:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the waiter was not woken when the tidying finished")
+	}
+}
+
+// TestASlotRemovedWhileBeingTidiedDoesNotComeBack: an avatar that logged
+// out while its object was being tidied.  The tidying finishes -- or
+// fails, having nothing to talk to -- and either way the slot is not the
+// pool's any more.
+func TestASlotRemovedWhileBeingTidiedDoesNotComeBack(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	tidying := make(chan struct{})
+	release := make(chan struct{})
+	s := &Slot{Data: 1, Clean: func() error {
+		close(tidying)
+		<-release
+		return nil
+	}}
+	if err := p.Add(s); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	held := get(t, p, 1)
+	p.Return(held.ID)
+	<-tidying
+	if err := p.Remove(s); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	close(release)
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if r := get(t, p, 1); r.Filled() {
+			t.Fatal("a slot removed while it was being tidied came back into the pool")
+		}
+	}
+}
+
+// TestASlotIsTidiedWhenItsGrantRunsOutToo: a caller that wedged is
+// exactly the caller whose script is still running, so the road back
+// through expiry needs the tidying more than the polite one does.
+func TestASlotIsTidiedWhenItsGrantRunsOutToo(t *testing.T) {
+	p, c := stopped(t)
+	go p.Run()
+
+	tidied := make(chan struct{})
+	if err := p.Add(&Slot{Data: 1, Clean: func() error {
+		close(tidied)
+		return nil
+	}}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	if held := get(t, p, 1); !held.Filled() {
+		t.Fatal("the one slot would not go to one caller")
+	}
+	c.pass(time.Minute + grace + time.Second)
+	if err := p.ExpiryCheck(); err != nil {
+		t.Fatalf("ExpiryCheck: %v", err)
+	}
+
+	select {
+	case <-tidied:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a slot taken back from a caller that ran out was not tidied")
+	}
+}

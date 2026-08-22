@@ -121,6 +121,24 @@ func (id ID) IsZero() bool { return id.id == 0 }
 // time it is put on and every time the avatar logs in, where the item it
 // came from does not change.
 type Slot struct {
+	// Clean, when set, is what has to happen to a slot before anybody
+	// else can have it, and is set by whoever added it.  For an object
+	// that a script was run in it is writing an empty script over what
+	// is there, so that the last caller's script stops talking before
+	// the next caller starts listening -- chat carries the object a line
+	// came from and never the script's name, so a script left running is
+	// a line the next caller reads as its own.
+	//
+	// It is run on a goroutine of its own and NOT on the pool's, because
+	// it goes to the grid and everybody else's request would wait behind
+	// it.  The slot is nobody's until it finishes.  It must come back:
+	// one that hangs is a slot lost, so whatever it does is on a clock
+	// of its own.
+	//
+	// An error means the slot is no good -- the object has gone, or will
+	// not answer -- and it is dropped rather than handed on.
+	Clean func() error
+
 	id      ID
 	removed bool
 	Data    any
@@ -180,6 +198,12 @@ type Pool struct {
 	free     []*Slot
 	assigned map[ID]*lease
 	wait     chan struct{}
+
+	// cleaning is the slots that are nobody's and not yet free: given
+	// back, and being made fit for the next caller.  A slot in here is
+	// not in either of the two above, which is the whole of what the
+	// third state means.
+	cleaning map[ID]*Slot
 }
 
 // A lease is what one caller was granted.
@@ -200,6 +224,7 @@ func New() *Pool {
 		wake:     make(chan time.Time, 1),
 		done:     make(chan struct{}),
 		assigned: map[ID]*lease{},
+		cleaning: map[ID]*Slot{},
 	}
 }
 
@@ -344,6 +369,10 @@ type (
 		slots []*Slot
 		done  chan struct{}
 	}
+	cleanedReq struct {
+		id  ID
+		err error
+	}
 	expiryReq struct{ done chan struct{} }
 	stopReq   struct{}
 )
@@ -373,6 +402,9 @@ func (p *Pool) Run() {
 		case returnReq:
 			p.give(req.id)
 			close(req.done)
+
+		case cleanedReq:
+			p.cleaned(req)
 
 		case addReq:
 			for _, s := range req.slots {
@@ -431,7 +463,14 @@ func (p *Pool) get(now time.Time, req getReq) Response {
 
 	r := Response{ID: id, Slots: make([]Slot, 0, len(got)), Expire: l.until}
 	for _, s := range got {
-		r.Slots = append(r.Slots, *s)
+		// Without the hook: it is the pool's to run and the owner's to
+		// have written, and a copy of it in somebody else's hands is a
+		// way to have the tidying happen twice, or at the wrong moment,
+		// or by whoever is holding the slot rather than by whoever
+		// knows what tidying it needs.
+		c := *s
+		c.Clean = nil
+		r.Slots = append(r.Slots, c)
 	}
 	p.sayWhenToWake()
 	return r
@@ -522,16 +561,74 @@ func (p *Pool) give(id ID) {
 		return
 	}
 	delete(p.assigned, id)
-	for _, s := range l.slots {
-		if s.removed {
+	if p.release(l.slots) {
+		p.wakeWaiters()
+	}
+	p.sayWhenToWake()
+}
+
+// release lets go of slots nobody has any more, and says whether any of
+// them reached the free list.
+//
+// Some do not: one taken out of the pool while it was in use goes now,
+// and one with tidying to do goes to be tidied and arrives later.  What
+// this answers is whether there is anything new for a caller to be woken
+// about -- waking somebody to look at a pool that has not changed is a
+// round trip for nothing.
+func (p *Pool) release(slots []*Slot) bool {
+	freed := false
+	for _, s := range slots {
+		switch {
+		case s.removed:
 			// Taken out of the pool while it was in use.  This is where
 			// that finally happens.
-			continue
+		case s.Clean != nil:
+			p.startClean(s)
+		default:
+			p.insert(s)
+			freed = true
 		}
-		p.insert(s)
 	}
+	return freed
+}
+
+// startClean sets a slot's tidying going, on a goroutine of its own.
+//
+// The pool holds no state while it runs and answers everybody else as
+// usual; the slot is in neither the free list nor a grant until the
+// answer comes back through the same door as every other request.
+func (p *Pool) startClean(s *Slot) {
+	p.cleaning[s.id] = s
+	id, clean := s.id, s.Clean
+	go func() {
+		err := clean()
+		select {
+		case p.req <- cleanedReq{id: id, err: err}:
+		case <-p.done:
+			// The pool has stopped and there is nobody to tell.
+		}
+	}()
+}
+
+// cleaned files a slot whose tidying has finished.
+func (p *Pool) cleaned(req cleanedReq) {
+	s, ok := p.cleaning[req.id]
+	if !ok {
+		return
+	}
+	delete(p.cleaning, req.id)
+	if req.err != nil {
+		// The object has gone, or will not answer.  Handing it on would
+		// be handing on a run that fails in the middle.
+		s.removed = true
+		return
+	}
+	if s.removed {
+		// Taken out of the pool while it was being tidied.
+		return
+	}
+	p.insert(s)
 	p.wakeWaiters()
-	p.sayWhenToWake()
 }
 
 // reclaim takes back every grant whose time is up, and says whether it
@@ -543,11 +640,7 @@ func (p *Pool) reclaim(now time.Time) bool {
 			continue
 		}
 		delete(p.assigned, id)
-		for _, s := range l.slots {
-			if s.removed {
-				continue
-			}
-			p.insert(s)
+		if p.release(l.slots) {
 			took = true
 		}
 	}
