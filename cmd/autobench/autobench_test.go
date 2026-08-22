@@ -115,10 +115,8 @@ func offlineWith(t *testing.T, o scripttest.Options) *modelled {
 	// Everything a benchmark accumulates as it goes, put back to what a
 	// fresh process would have.  The run cache is keyed on {count, pad}
 	// only, so a reading taken under one model would be served to the
-	// next; lsdPad names the pad the measured object is anchored at and
-	// this object has just been leased, holding nothing; and the verdict
-	// on one copy is about the code under test, which the next case
-	// changes.
+	// next; and the verdict on one copy is about the code under test,
+	// which the next case changes.
 	reset := func() {
 		flags.IPad = 0
 		flags.ICheck = false
@@ -127,8 +125,6 @@ func offlineWith(t *testing.T, o scripttest.Options) *modelled {
 		// blockSize is the default the flag block sets.
 		flags.Max = blockSize
 		clear(cache)
-		clear(probeTest)
-		lsdPad = -1
 		oneCopyVerdict = nil
 		spentRuns, spentRereads, spentCompiles = 0, 0, 0
 	}
@@ -760,11 +756,11 @@ func TestASearchThroughTheModelUsesTheSpareObjects(t *testing.T) {
 		t.Errorf("Size: %d Padding: %d Result pad: %d, want 368/473/144",
 			size, padding, pad)
 	}
-	// probeTest is written by nothing but a reading taken in a spare, so an
-	// empty one means the whole search went the sequential way and this has
-	// asserted the one-object case twice.
-	if len(probeTest) == 0 {
-		t.Error("no reading was taken in a spare object")
+	// A search with spares takes more readings than it sends scripts
+	// sequentially; an empty cache would mean the whole thing went the
+	// one-object way and this has asserted that case twice.
+	if len(cache) == 0 {
+		t.Error("no reading was taken at all")
 	}
 }
 

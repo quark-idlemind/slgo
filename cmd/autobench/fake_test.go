@@ -13,8 +13,8 @@ package main
 // arrive over xfer, the compile is an http upload to a capability served
 // by httptest on loopback, and the output is chat relayed back as though
 // the script had said it.  What it says is worked out from the script
-// itself: buildScript emits the copy count and the pad into the harness
-// call, so the fake reads them out and answers with the same staircase
+// itself: buildScript writes the copy count and the pad into a comment,
+// so the fake reads them out and answers with the same staircase
 // the --test model uses.  A benchmark can therefore be run end to end
 // through the real transport, which is the only way the transport is
 // exercised at all.
@@ -64,8 +64,8 @@ type fakeObject struct {
 	// probe dropped into the measured object would overwrite the base
 	// the measured sequence divides against, and that is the mistake
 	// probe.go exists to make impossible.
-	mem    int
-	hasMem bool
+	mem int
+	ran bool
 }
 
 // fakeGrid answers what a simulator would, for the few things running a
@@ -98,6 +98,12 @@ type fakeGrid struct {
 	// silent names objects whose scripts run and never say DONE, which
 	// is the timeout the runner has to report rather than hang on.
 	silent map[msg.UUID]bool
+
+	// commentary is said after the reading, as an INFO line.  The
+	// benchmark harness says none -- it reports one number and nothing
+	// else -- so a test that is about SIFTING what a script says has to
+	// supply something to sift.
+	commentary string
 
 	// refuseOver and faultOver are Second Life's two size limits, as copy
 	// counts.  They are not the same limit and the difference is what
@@ -198,11 +204,11 @@ func (f *fakeGrid) mem(cnt, pad int) int {
 }
 
 // harnessCall reads the copy count and the pad back out of a rendered
-// script.  buildScript emits them into the harness call, so the fake
+// script.  buildScript writes them into a COMMENT, so the fake
 // knows what it is being asked to run without being told separately --
 // and a script whose harness call went missing would be a script the
 // benchmark could not read either.
-var harnessCall = regexp.MustCompile(`result\(llGetUsedMemory\(\), (\d+), (-?\d+)\)`)
+var harnessCall = regexp.MustCompile(`(?m)^// autobench cnt=(\d+) pad=(-?\d+)$`)
 
 func (f *fakeGrid) readHarness(src string) (cnt, pad int, ok bool) {
 	m := harnessCall.FindStringSubmatch(src)
@@ -311,10 +317,7 @@ func (f *fakeGrid) run(id msg.UUID, src string) {
 		fault = "Stack-Heap Collision"
 	}
 	mem := f.mem(cnt, pad)
-	old := o.mem
-	if ok && cnt == 0 {
-		o.mem, o.hasMem = mem, true
-	}
+	o.ran = true
 	name := o.obj.Name
 	f.mu.Unlock()
 
@@ -334,16 +337,13 @@ func (f *fakeGrid) run(id msg.UUID, src string) {
 		return
 	}
 
+	// One number, which is the whole of what a benchmark script says: the
+	// arithmetic that used to happen in LSL happens in the program now.
 	f.say(id, sl.ChatSay, "")
-	if cnt == 0 {
-		f.say(id, sl.ChatSay, fmt.Sprintf("RESULT:BASE_MEM=%d", mem))
-	} else {
-		f.say(id, sl.ChatSay, fmt.Sprintf("INFO:COUNT=%d", cnt))
-		f.say(id, sl.ChatSay, fmt.Sprintf("RESULT:SIZE=%f", float64(mem-old)/float64(cnt)))
-		f.say(id, sl.ChatSay, fmt.Sprintf("RESULT:TEST_MEM=%d", mem))
-		f.say(id, sl.ChatSay, fmt.Sprintf("INFO:BASE_MEM=%d", old))
+	f.say(id, sl.ChatSay, fmt.Sprintf("RESULT:MEM=%d", mem))
+	if f.commentary != "" {
+		f.say(id, sl.ChatSay, "INFO:"+f.commentary)
 	}
-	f.say(id, sl.ChatSay, fmt.Sprintf("INFO:PADDING=%d", pad))
 	if silent {
 		return
 	}

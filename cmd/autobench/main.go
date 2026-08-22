@@ -918,20 +918,18 @@ func copyMode(b backend, r *Results) (padding, cnt, first int) {
 		pad = basePadding(b, r)
 		runpad = pad
 	}
-	// Get the base result.  This is also what leaves the base memory in linkset
-	// data for the copy runs to divide against, so it has to be the last cnt=0
-	// run to actually EXECUTE -- and a cache hit does not execute.  The search
-	// ends on runpad only in the sense that runpad is the last pad it reads: it
-	// meets the crossing partway through its bisection and then narrows below
-	// it, so the last script it really sent is usually the one at the padding,
-	// one block down.  Serving this run from that cache entry gets the right
-	// reading and leaves the wrong base in world, which is +512/count on every
-	// Size, silently, for half of all shapes.  So force the run when the world
-	// is not already anchored here; when it is -- --ipad, --check-ipad, or a
-	// search that happened to end on the crossing -- this costs nothing.
-	if lsdPad != runpad {
-		delete(cache, Cache{Count: 0, Padding: runpad})
-	}
+	// Get the base result.  A cache hit is as good as a run: the base is
+	// a number in this process now rather than something left in the
+	// object's linkset data, so nothing here has to care whether the
+	// script that produced it actually executed.
+	//
+	// It did have to care, and the cost of getting it wrong is worth
+	// remembering.  The search meets the crossing partway through its
+	// bisection and then narrows BELOW it, so the last cnt=0 script it
+	// really sent was usually the one at the padding, a block down --
+	// and serving this run from that cache entry got the right reading
+	// while leaving the wrong base in world.  That is +512/count on
+	// every size reported, silently, for half of all shapes.
 	mustRun(b, 0, runpad, r)
 
 	// Probe upward for a copy count whose memory delta registers (Size != 0).
@@ -1202,22 +1200,10 @@ type Cache struct {
 	Padding int
 }
 
-// cache prevents us from running the exact same script twice.
-var cache = map[Cache]Results{}
-
-// lsdPad is the pad of the last cnt=0 script that ACTUALLY RAN, or -1 if none
-// has.  It shadows the "mem" key of the benchmark's linkset data, which is the
-// base every cnt>0 script divides against and which only an executing cnt=0
-// script writes.
-//
-// The cache is why this has to be tracked rather than assumed.  A cache hit
-// returns the reading and sends no script, so the cache and the linkset data
-// drift apart -- and they do: the padding search finds the crossing partway
-// through its bisection and then keeps narrowing BELOW it, so the last cnt=0
-// script to really run is usually the one at the padding, a block lower, while
-// the run at runPad is served from cache.  A base one block low is 512/count on
-// every Size copy mode reports, with nothing in the output to show it.
-var lsdPad = -1
+// cache prevents us from running the exact same script twice.  It holds
+// the READING, which is all the script says; everything else about a run
+// is worked out from it here.
+var cache = map[Cache]int{}
 
 // spentRuns counts the scripts a benchmark actually SENT -- cache hits
 // excluded, because a hit costs nothing.  It is the price of a benchmark in the
@@ -1376,38 +1362,58 @@ func buildScript(cnt, pad int) string {
 		pb.WriteString(";\n")
 	}
 
-	fmt.Fprintf(&buf, code, title, cnt, reported, pb.String())
+	fmt.Fprintf(&buf, code, cnt, reported, title, pb.String())
 	return buf.String()
 }
 
+// runScript takes one reading and works out what it means.
+//
+// What is cached is the READING and nothing else.  The script says one
+// number and everything else is arithmetic done here, so a cache hit and
+// a run are the same thing to everything downstream -- which they were
+// not while the base lived in the object's linkset data, because a hit
+// sent no script and so wrote no base, and the two drifted apart.
 func runScript(b backend, cnt, pad int, r *Results) error {
 	key := Cache{Count: cnt, Padding: pad}
-	if or, ok := cache[key]; ok {
+	mem, ok := cache[key]
+	if ok {
 		debugf("Using cache for %v\n", key)
-		*r = or
+	} else {
+		spentRuns++
+		script := buildScript(cnt, pad)
+		if flags.Show {
+			fmt.Println(script)
+		}
+		results, info, err := b.Send(script)
+		if err != nil {
+			return err
+		}
+		if flags.Show {
+			for _, s := range info {
+				fmt.Println("INFO:", s)
+			}
+		}
+		mem, ok = absorbResults(results, r)
+		if !ok {
+			// The script ran and did not say what it read.  Whatever
+			// happened -- a line lost on the way, a script that did not
+			// get that far -- a reading of nothing is not a reading of
+			// zero, and taking it as one is how a benchmark reports a
+			// number nobody can tell is wrong.
+			return fmt.Errorf("the script at count %d padding %d said nothing "+
+				"about its memory", cnt, pad)
+		}
+		cache[key] = mem
+	}
+
+	if cnt == 0 {
+		r.Base = mem
 		return nil
 	}
-	spentRuns++
-	script := buildScript(cnt, pad)
-	if flags.Show {
-		fmt.Println(script)
+	r.Test = mem
+	if r.Base != 0 {
+		r.Size = float64(r.Test-r.Base) / float64(cnt)
 	}
-	results, info, err := b.Send(script)
-	if err != nil {
-		return err
-	}
-	if cnt == 0 {
-		// This script wrote linkset data; record where, so a later base run
-		// that a cache hit would silence can be forced to run instead.
-		lsdPad = key.Padding
-	}
-	if flags.Show {
-		for _, s := range info {
-			fmt.Println("INFO:", s)
-		}
-	}
-	absorbResults(results, r)
-	cache[key] = *r
 	return nil
 }
 
@@ -1417,29 +1423,28 @@ func runScript(b backend, cnt, pad int, r *Results) error {
 // ones, so the convention is applied here.  It belongs in the benchmark
 // and not in the transport: nothing else about running a script
 // requires a script to label its output.
-func absorbResults(results []string, r *Results) {
+func absorbResults(results []string, r *Results) (mem int, ok bool) {
 	const (
-		BM    = "BASE_MEM="
-		TM    = "TEST_MEM="
-		SZ    = "SIZE="
+		MEM   = "MEM="
 		TITLE = "TITLE="
 	)
 	for _, raw := range results {
-		s, ok := resultPayload(raw)
-		if !ok {
+		s, found := resultPayload(raw)
+		if !found {
 			continue
 		}
 		switch {
-		case strings.HasPrefix(s, BM):
-			r.Base, _ = strconv.Atoi(s[len(BM):])
-		case strings.HasPrefix(s, TM):
-			r.Test, _ = strconv.Atoi(s[len(TM):])
-		case strings.HasPrefix(s, SZ):
-			r.Size, _ = strconv.ParseFloat(s[len(SZ):], 64)
+		case strings.HasPrefix(s, MEM):
+			n, err := strconv.Atoi(s[len(MEM):])
+			if err != nil {
+				continue
+			}
+			mem, ok = n, true
 		case strings.HasPrefix(s, TITLE):
 			r.Title = s[len(TITLE):]
 		}
 	}
+	return mem, ok
 }
 
 // code is the boilerplate for autobench.  It is printed with 4 positional
@@ -1448,30 +1453,58 @@ func absorbResults(results []string, r *Results) {
 //  2. the number of times the CODE was repeated
 //  3. the amount of padding added
 //  4. instructions to pad the code size
+//
+// code is the benchmark script, and everything it does not do is
+// deliberate.
+//
+// It says ONE number: what llGetUsedMemory answered.  It used to keep
+// the base reading in the object's linkset data and divide against it in
+// LSL, which made the base a piece of WORLD state -- so the object that
+// held it was special, only a cnt=0 script that actually RAN could write
+// it, and a cache hit here left the two disagreeing.  What that cost is
+// on the record: a base one block low is 512/count on every size
+// reported, silently, for half of all shapes.  The arithmetic is
+// arithmetic; it belongs where it can be seen.
+//
+// The reading is taken FIRST, before anything is said, because building
+// the strings to say it allocates.
+//
+// Nothing else varies.  There is no count or padding in it -- the
+// program chose both and does not need telling -- so the harness is
+// byte-for-byte identical in every script, which is what a measurement
+// made by differencing two compiles wants.  The old one put both in as
+// integer literals and branched on the count, so the base script and the
+// test scripts were not quite the same program.
+//
+// The padding goes in a timer() that nothing starts.  Measured: code in
+// an event that never fires counts towards llGetUsedMemory exactly as
+// code that runs does -- padding in the timer, in state_entry and in a
+// function all read 4388 -- and code that never runs cannot allocate,
+// cannot take time, and cannot hit a limit however much of it there is.
+//
+// The count and the padding go in as a COMMENT.  Measured: 604 bytes of
+// comment moved llGetUsedMemory not at all, so the digits cost nothing
+// and the compiled harness stays byte-for-byte identical however many
+// copies or however much padding this run happens to want.  What reads
+// them is anything standing in for Second Life -- see scripttest's
+// Harness -- and anybody looking at --show.
+//
+// Printed with four positional parameters:
+//  1. the copy count
+//  2. the padding
+//  3. statement to print title (if any)
+//  4. instructions to pad the code size
 var code = `
-result(integer mem, integer count, integer padding) {
-	llOwnerSay("\n");
-    %s                      // Title
-    if (count) {
-        integer old = (integer)llLinksetDataRead("mem");
-        string s = llLinksetDataRead("name");
-		llOwnerSay("INFO:COUNT=" + (string)count);
-		llOwnerSay("RESULT:SIZE=" + (string)((float)(mem - old)/(float)count));
-		llOwnerSay("RESULT:TEST_MEM=" + (string)mem);
-		llOwnerSay("INFO:BASE_MEM=" + (string)old);
-    } else {
-        llLinksetDataWrite("mem", (string)mem);
-        llOwnerSay("RESULT:BASE_MEM=" + (string)mem);
-    }
-    llOwnerSay("INFO:LAST_MEM=" + (string)llGetUsedMemory());
-	llOwnerSay("INFO:PADDING=" + (string)padding);
-    llOwnerSay("DONE");
-	return;
-}
-
+// autobench cnt=%d pad=%d
 default {
     state_entry() {
-		result(llGetUsedMemory(), %d, %d);
+        integer mem = llGetUsedMemory();
+        llOwnerSay("\n");
+        %s                  // Title
+        llOwnerSay("RESULT:MEM=" + (string)mem);
+        llOwnerSay("DONE");
+    }
+    timer() {
         %s                  // Padding
     }
 }`

@@ -51,8 +51,8 @@ func TestARunSaysCompiledFirstAndFinishedExactlyOnceAtTheEnd(t *testing.T) {
 		if !tr.finished[0].GetSentinel() {
 			t.Error("Finished says the sentinel was not seen, and the script said DONE")
 		}
-		if !strings.Contains(tr.text(), "RESULT:TEST_MEM=") {
-			t.Errorf("the object said:\n%s\nwant the benchmark harness's own labels", tr.text())
+		if !strings.Contains(tr.text(), "RESULT:MEM=") {
+			t.Errorf("the object said:\n%s\nwant the benchmark harness's own label", tr.text())
 		}
 		// Which object spoke, which is worth having when several are talking
 		// at once and is the only way a caller can attribute a line.
@@ -287,58 +287,12 @@ func TestAskingForCompileOnlyWhereItIsNotHonouredIsAnError(t *testing.T) {
 	})
 }
 
-// TestAnObjectKeepsItsBaseReadingBetweenRunsOfALease is what a benchmark
-// carrying a number from one run to the next depends on: the cnt=0
-// script writes the base and the cnt>0 scripts divide against it.
-// Without it every run would start from nothing and every size reported
-// would be the whole of the script's memory rather than the code's.
-func TestAnObjectKeepsItsBaseReadingBetweenRunsOfALease(t *testing.T) {
-	bothWays(t, func(t *testing.T, r reach) {
-		mem := scripttest.Memory{Pad: 137, CodeSize: 340}
-		_, c := serve(t, r, scripttest.Options{Memory: mem})
-
-		g, done := lease(t, c, &scriptv1.LeaseRequest{Who: "autobench"})
-		defer done()
-		target := g.GetTargets()[0].GetId()
-
-		if _, err := collect(t, c, &scriptv1.RunRequest{
-			Target: target, Source: benchScript(0, 137), Done: "DONE",
-		}); err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		tr, err := collect(t, c, &scriptv1.RunRequest{
-			Target: target, Source: benchScript(8, 137), Done: "DONE",
-		})
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		want := mem.Reading(0, 137)
-		if got := tr.text(); !strings.Contains(got, "INFO:BASE_MEM="+strconv.Itoa(want)) {
-			t.Errorf("the object said:\n%s\nwant the base the cnt=0 run left behind (%d)", got, want)
-		}
-
-		// And a backend without the capability says so and forgets, which a
-		// caller has to be able to cope with rather than discover.
-		_, c2 := serve(t, r, scripttest.Options{Memory: mem, NoPersistence: true})
-		g2, done2 := lease(t, c2, &scriptv1.LeaseRequest{})
-		defer done2()
-		t2 := g2.GetTargets()[0].GetId()
-		if _, err := collect(t, c2, &scriptv1.RunRequest{
-			Target: t2, Source: benchScript(0, 137), Done: "DONE",
-		}); err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		tr, err = collect(t, c2, &scriptv1.RunRequest{
-			Target: t2, Source: benchScript(8, 137), Done: "DONE",
-		})
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		if got := tr.text(); !strings.Contains(got, "INFO:BASE_MEM=0") {
-			t.Errorf("without persistence the object said:\n%s\nwant a base of nothing", got)
-		}
-	})
-}
+// The base a benchmark carries from one run to the next used to live in
+// the OBJECT, written by the cnt=0 script into its linkset data and
+// divided against by the cnt>0 ones -- and a test here held the backend
+// to modelling that.  The script says one number now and the arithmetic
+// happens in the program, so there is no per-object memory to keep and
+// nothing left for that test to hold anybody to.
 
 // TestATargetFromAnEndedLeaseNamesNothing. The ids are the only proof
 // this backend has that a run belongs to a lease the caller still holds,
@@ -491,7 +445,7 @@ func TestTheSameScriptCanBeReadTwiceAndAnswerDifferently(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
-			return said(t, tr, "RESULT:TEST_MEM=")
+			return said(t, tr, "RESULT:MEM=")
 		}
 
 		first, second := read(), read()
@@ -539,7 +493,7 @@ func TestNoiseDoesNotMoveTheCompilersRefusal(t *testing.T) {
 			t.Fatalf("Compiled = %v, want the script taken: what it really costs is under the limit",
 				tr.compiled)
 		}
-		if got, want := said(t, tr, "RESULT:TEST_MEM="), mem.Reading(1, 137)+2*512; got != want {
+		if got, want := said(t, tr, "RESULT:MEM="), mem.Reading(1, 137)+2*512; got != want {
 			t.Errorf("the run reported %d, want the noisy %d", got, want)
 		}
 	})

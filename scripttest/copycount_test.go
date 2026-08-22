@@ -46,9 +46,14 @@ const (
 // uses.  A cnt=0 script reports BASE_MEM and a cnt>0 script reports
 // TEST_MEM and SIZE -- the asymmetry is the harness's and the search
 // depends on it.
+// results is one reading and what this search makes of it.
+//
+// The script says the reading and nothing else; size is worked out here,
+// as it is in cmd/autobench.  It used to come back from the script,
+// which divided against a base its object held in linkset data -- so
+// this had to model that too, and did.
 type results struct {
-	base int
-	test int
+	mem  int
 	size float64
 }
 
@@ -147,13 +152,8 @@ func absorb(line string, r *results) {
 		return
 	}
 	s := strings.TrimSpace(line[i+len("RESULT:"):])
-	switch {
-	case strings.HasPrefix(s, "BASE_MEM="):
-		r.base, _ = strconv.Atoi(s[len("BASE_MEM="):])
-	case strings.HasPrefix(s, "TEST_MEM="):
-		r.test, _ = strconv.Atoi(s[len("TEST_MEM="):])
-	case strings.HasPrefix(s, "SIZE="):
-		r.size, _ = strconv.ParseFloat(s[len("SIZE="):], 64)
+	if strings.HasPrefix(s, "MEM=") {
+		r.mem, _ = strconv.Atoi(s[len("MEM="):])
 	}
 }
 
@@ -172,11 +172,17 @@ func (b *bench) mustRun(cnt, pad int) results {
 // left.  Both ways of being too big halve, because a smaller count is
 // the thing to try either way -- but they are different limits, and a
 // backend that could not tell them apart would leave this untestable.
-func (b *bench) shrink(cnt, pad int) (int, results) {
+func (b *bench) shrink(cnt, pad int, base int) (int, results) {
 	b.t.Helper()
 	for {
 		r, err := b.run(cnt, pad)
 		if err == nil {
+			// What a copy costs, which the script used to work out and
+			// this now does: the reading against the base, over the
+			// copies between them.
+			if cnt > 0 {
+				r.size = float64(r.mem-base) / float64(cnt)
+			}
 			return cnt, r
 		}
 		if cnt <= 1 {
@@ -203,14 +209,14 @@ func (b *bench) shrink(cnt, pad int) (int, results) {
 // have it.
 func (b *bench) padding() int {
 	b.t.Helper()
-	base := b.mustRun(0, minpad).base
+	base := b.mustRun(0, minpad).mem
 	lo, hi := minpad, minpad+blockSize
-	if b.mustRun(0, hi).base == base {
+	if b.mustRun(0, hi).mem == base {
 		b.t.Fatalf("the reading did not grow across a whole block from pad %d", minpad)
 	}
 	for lo+1 < hi {
 		mid := (lo + hi) / 2
-		if b.mustRun(0, mid).base > base {
+		if b.mustRun(0, mid).mem > base {
 			hi = mid
 		} else {
 			lo = mid
@@ -225,12 +231,11 @@ func (b *bench) padding() int {
 func (b *bench) copyCount(pad, max int) (cnt int, size float64) {
 	b.t.Helper()
 
-	// The base run has to be the last cnt=0 script that actually
-	// EXECUTED, because it is what leaves the reading inside the object
-	// for the copy runs to divide against.  A cache hit executes
-	// nothing, so the entry is dropped rather than trusted.
-	delete(b.cache, [2]int{0, pad})
-	base := b.mustRun(0, pad).base
+	// A cache hit is as good as a run: the base is a number here now
+	// rather than something left inside the object, so nothing depends
+	// on which cnt=0 script executed last.  It did, and the entry was
+	// dropped rather than trusted.
+	base := b.mustRun(0, pad).mem
 
 	// Probe upward until the difference between two readings registers.
 	// Eight copies to start, because one copy of a small construct can
@@ -239,7 +244,7 @@ func (b *bench) copyCount(pad, max int) (cnt int, size float64) {
 	capped := false
 	var r results
 	for {
-		used, got := b.shrink(d, pad)
+		used, got := b.shrink(d, pad, base)
 		r = got
 		if used < d {
 			capped, d = true, used
@@ -271,7 +276,7 @@ func (b *bench) copyCount(pad, max int) (cnt int, size float64) {
 		cnt = max
 	}
 
-	cnt, r = b.shrink(cnt, pad)
+	cnt, r = b.shrink(cnt, pad, base)
 	return cnt, r.size
 }
 

@@ -118,27 +118,32 @@ func TestAVariablesTypeComesFromItsFirstLetter(t *testing.T) {
 func TestOnlyLabelledMeasurementsAreAbsorbed(t *testing.T) {
 	t.Parallel()
 	var r Results
-	absorbResults([]string{
+	mem, ok := absorbResults([]string{
 		"",
-		"INFO:COUNT=8",
-		"INFO:BASE_MEM=9999",
+		"INFO:MEM=9999",
 		"just talking",
 		"RESULT: TITLE=global integer",
-		"RESULT:BASE_MEM=5412",
-		"RESULT:TEST_MEM=5924",
-		"RESULT:SIZE=64.0",
+		"RESULT:MEM=5924",
 		"RESULT:SOMETHING_ELSE=1",
 	}, &r)
 
-	if r.Title != "global integer" || r.Base != 5412 || r.Test != 5924 || r.Size != 64 {
-		t.Errorf("absorbResults left %+v", r)
+	if !ok || mem != 5924 || r.Title != "global integer" {
+		t.Errorf("absorbResults = %d, %v, and left %+v", mem, ok, r)
 	}
 
-	// INFO:BASE_MEM above is the trap: a cnt>0 script reports the base it
-	// divided against as commentary, and reading it as a measurement would
-	// overwrite the base the search is comparing to.
-	if r.Base == 9999 {
+	// INFO:MEM above is the trap: only what a script labels a RESULT is a
+	// measurement, and reading commentary as one would be reading a number
+	// nobody promised.
+	if mem == 9999 {
 		t.Error("an INFO line was absorbed as a measurement")
+	}
+
+	// A script that ran and said nothing about its memory is not a script
+	// that read nothing.  Taking it as zero is how a benchmark reports a
+	// size nobody can tell is wrong, which is what the base living in the
+	// object's linkset data used to cost when a run was served from cache.
+	if _, ok := absorbResults([]string{"", "just talking", "DONE"}, &r); ok {
+		t.Error("a script that said nothing about its memory was read as a measurement")
 	}
 }
 
@@ -205,9 +210,24 @@ func TestTheScriptIsTheHarnessAroundTheCodeUnderTest(t *testing.T) {
 	}
 
 	// The pad the harness REPORTS is the one it was asked for, not what
-	// is left of it after the filler has taken its copy.
-	if !contains(got, "result(llGetUsedMemory(), 3, 5)") {
+	// is left of it after the filler has taken its copy.  In a comment,
+	// which costs nothing -- measured, 604 bytes of comment moved the
+	// reading not at all -- so the digits of a count cannot change what
+	// is being measured.
+	if !contains(got, "// autobench cnt=3 pad=5") {
 		t.Errorf("the harness does not report the count and pad it was built with:\n%s", got)
+	}
+
+	// And what it SAYS is one number.  The arithmetic that used to
+	// happen in LSL, against a base kept in the object's linkset data,
+	// happens in this program now.
+	for _, gone := range []string{"llLinksetData", "RESULT:SIZE", "BASE_MEM", "TEST_MEM"} {
+		if contains(got, gone) {
+			t.Errorf("the script still does its own arithmetic (%s):\n%s", gone, got)
+		}
+	}
+	if !contains(got, `RESULT:MEM=`) {
+		t.Errorf("the script does not report its reading:\n%s", got)
 	}
 
 	// A shape with no title says nothing rather than saying nothing at
@@ -331,16 +351,14 @@ func autobench(t *testing.T, args ...string) (stdout, stderr string) {
 	flags = flagDefaults
 	getopt.CommandLine = getopt.New()
 	clear(cache)
-	clear(probeTest)
-	lsdPad, oneCopyVerdict = -1, nil
+	oneCopyVerdict = nil
 	spentRuns, spentRereads, spentCompiles = 0, 0, 0
 
 	t.Cleanup(func() {
 		os.Args, os.Stdout, os.Stderr = saveArgs, saveOut, saveErr
 		flags = flagDefaults
 		clear(cache)
-		clear(probeTest)
-		lsdPad, oneCopyVerdict = -1, nil
+		oneCopyVerdict = nil
 	})
 
 	main()

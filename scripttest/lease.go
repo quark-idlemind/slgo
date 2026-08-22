@@ -51,13 +51,6 @@ type poolTarget struct {
 	// minted at grant time and cleared when the lease ends.
 	id string
 
-	// mem is what the last cnt=0 script left behind, which live travels
-	// from that script to the cnt>0 ones through the object's linkset
-	// data.  Per object, because a probe dropped into the measured
-	// object would overwrite the base the measured sequence divides
-	// against.
-	mem int
-
 	beh Behaviour
 }
 
@@ -117,15 +110,6 @@ func (s *Server) giveBack(g *poolGroup) {
 
 	for _, t := range g.targets {
 		t.id = ""
-		// What the object holds is forgotten between LEASES even where
-		// it is kept between runs.  A caller that took an object after
-		// somebody else would otherwise divide its readings against a
-		// base it never wrote, which is a wrong answer rather than a
-		// failure.  It is a judgement call -- a real object keeps its
-		// linkset data until something clears it -- and it is made this
-		// way because a test wants the same object twice to behave the
-		// same way twice.
-		t.mem = 0
 	}
 	g.held, g.heldBy = false, ""
 

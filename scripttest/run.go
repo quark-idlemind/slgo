@@ -96,7 +96,6 @@ func (s *Server) execute(ctx context.Context, stream grpc.ServerStreamingServer[
 	s.mu.Lock()
 	beh := t.beh
 	mem := s.opt.Memory
-	old := t.mem
 	s.mu.Unlock()
 
 	finish := func(sentinel bool) error {
@@ -164,7 +163,7 @@ func (s *Server) execute(ctx context.Context, stream grpc.ServerStreamingServer[
 			if beh.Silent {
 				done = ""
 			}
-			lines = mem.transcript(cnt, pad, reading, old, done)
+			lines = mem.transcript(cnt, pad, reading, done)
 		default:
 			lines = spoken(req.GetSource())
 			if len(lines) == 0 && !beh.Silent && req.GetDone() != "" {
@@ -195,13 +194,6 @@ func (s *Server) execute(ctx context.Context, stream grpc.ServerStreamingServer[
 		if !req.GetIgnoreFault() {
 			return finish(false)
 		}
-	} else if benchmark && cnt == 0 && s.caps.PersistentTargets {
-		// Only a cnt=0 script that ACTUALLY RAN writes the base the
-		// cnt>0 runs divide against.  A script that faulted wrote
-		// nothing, which is why this is in the other arm.
-		s.mu.Lock()
-		t.mem = reading
-		s.mu.Unlock()
 	}
 
 	timeout := s.seconds(req.GetTimeoutSeconds())

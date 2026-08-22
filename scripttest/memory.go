@@ -154,13 +154,20 @@ func (m Memory) collides(cnt, pad int) bool {
 // harnessCall reads the copy count and the pad back out of a rendered
 // benchmark script.
 //
-// autobench's buildScript emits both into the harness call, so a backend
-// knows what it is being asked to run without being told separately --
-// and a script whose harness call went missing is a script the benchmark
-// could not read the answer from either.  cmd/autobench's protocol-level
-// fake matches on the same line for the same reason; the convention is
-// the script's, not either fake's.
-var harnessCall = regexp.MustCompile(`result\(llGetUsedMemory\(\), (\d+), (-?\d+)\)`)
+// autobench's buildScript writes both into a COMMENT, so a backend knows
+// what it is being asked to run without being told separately -- and a
+// script whose line went missing is a script the benchmark could not
+// read the answer from either.  cmd/autobench's protocol-level fake
+// matches on the same line for the same reason; the convention is the
+// script's, not either fake's.
+//
+// A comment because a comment is free.  Measured: 604 bytes of it moved
+// llGetUsedMemory not at all, the compiler having thrown it away before
+// there was any bytecode to count -- so the count and the pad can be
+// carried in the script without the digits of either changing what is
+// being measured.  They used to go into the harness call as integer
+// literals, where their SIZE varied with their value.
+var harnessCall = regexp.MustCompile(`(?m)^// autobench cnt=(\d+) pad=(-?\d+)$`)
 
 // Harness is the copy count and padding a benchmark script announces in
 // its source, and whether it announced any.
@@ -174,27 +181,18 @@ func Harness(src string) (cnt, pad int, ok bool) {
 	return cnt, pad, true
 }
 
-// transcript is the benchmark script speaking: the same labels in the
-// same order as the harness in cmd/autobench, because the caller parses
-// them and a transcript that differed would be testing the parser
-// against itself.
+// transcript is the benchmark script speaking: the same label in the
+// same place as the harness in cmd/autobench, because the caller parses
+// it and a transcript that differed would be testing the parser against
+// itself.
 //
-// old is what the last cnt=0 run left behind, which live travels from
-// the cnt=0 script to the cnt>0 ones through the object's linkset data.
-func (m Memory) transcript(cnt, pad, mem, old int, done string) []string {
-	out := []string{""}
-	if cnt == 0 {
-		out = append(out, fmt.Sprintf("RESULT:BASE_MEM=%d", mem))
-	} else {
-		out = append(out,
-			fmt.Sprintf("INFO:COUNT=%d", cnt),
-			fmt.Sprintf("RESULT:SIZE=%f", float64(mem-old)/float64(cnt)),
-			fmt.Sprintf("RESULT:TEST_MEM=%d", mem),
-			fmt.Sprintf("INFO:BASE_MEM=%d", old))
-	}
-	out = append(out,
-		fmt.Sprintf("INFO:LAST_MEM=%d", mem),
-		fmt.Sprintf("INFO:PADDING=%d", pad))
+// One number, which is the whole of what a benchmark script says now.
+// It used to keep the base reading in its object's linkset data and do
+// the arithmetic in LSL, so this had to model that too -- a per-target
+// base, and a probe in the wrong object dividing against a zero.  All of
+// it went when the arithmetic moved to where it could be seen.
+func (m Memory) transcript(cnt, pad, mem int, done string) []string {
+	out := []string{"", fmt.Sprintf("RESULT:MEM=%d", mem)}
 	if done != "" {
 		out = append(out, done)
 	}

@@ -27,17 +27,15 @@ package main
 // the same thing as a run in this one, for cnt>0 as much as for cnt=0.
 //
 // What DOES depend on the object is everything the script works out
-// afterwards.  A cnt>0 script divides against the base reading its
-// object holds in LINKSET DATA, and a spare object holds none, so its
-// SIZE and BASE_MEM are arithmetic on a zero.  Those must not be
-// allowed anywhere near the run cache, which copy mode reads Size from
-// -- so a cnt>0 probe is kept in a cache of its own that only the
-// search consults, holding the one number that travels.
+// afterwards.  A probe is a reading like any other now: the script says
+// what llGetUsedMemory answered and nothing else, so where it ran does
+// not change what the number means.
 //
-// Probes also leave lsdPad alone, which names the last cnt=0 script to
-// run IN THE MEASURED OBJECT.  copyMode forces a real run there when
-// what it wants is not what lsdPad names, and that is what keeps a
-// probe's reading from being mistaken for the base in world.
+// It did.  A cnt>0 script used to divide against a base its own object
+// held in LINKSET DATA, and a spare object holds none, so a probe's size
+// and base were arithmetic on a zero and had to be kept in a cache of
+// their own that copy mode would never read.  All of that went with the
+// arithmetic.
 
 import (
 	"sync"
@@ -49,14 +47,6 @@ type probeJob struct{ at, pad int }
 // probeMu guards the caches and the counters while probes run alongside
 // each other.  Everything else in this program is sequential.
 var probeMu sync.Mutex
-
-// probeTest holds TEST_MEM for cnt>0 probes taken in spare objects.
-//
-// Apart from the run cache on purpose.  Everything else in that
-// Results -- Size, Base -- is what the script worked out from linkset
-// data the spare object does not have, and copy mode reads Size from
-// the run cache.  Only the memory reading travels, so only it is kept.
-var probeTest = map[Cache]int{}
 
 // probeBase measures the base script at each of several pads, taking as
 // many at a time as there are spare objects.
@@ -95,32 +85,24 @@ func probeAt(b backend, cnt int, pads []int) []int {
 	for _, j := range todo {
 		var r Results
 		mustRun(b, cnt, j.pad, &r)
-		out[j.at] = reading(cnt, r)
+		out[j.at] = memOf(cnt, r)
 	}
 	return out
 }
 
-// reading is what a search compares for this copy count.
-func reading(cnt int, r Results) int {
-	if cnt == 0 {
-		return r.Base
-	}
-	return r.Test
-}
-
-// probed answers from whichever cache holds this count.
+// probed answers from the cache, whatever the count.
+//
+// One cache for every reading, which it was not while a script did its
+// own arithmetic: a probe taken in a spare object had no base in that
+// object's linkset data to divide against, so its size and base were
+// arithmetic on a zero and had to be kept somewhere copy mode would
+// never look.  The script says one number now, and a reading is a
+// reading wherever it was taken.
 func probed(cnt, pad int) (int, bool) {
 	probeMu.Lock()
 	defer probeMu.Unlock()
-	key := Cache{Count: cnt, Padding: pad}
-	if r, ok := cache[key]; ok {
-		return reading(cnt, r), true
-	}
-	if cnt != 0 {
-		m, ok := probeTest[key]
-		return m, ok
-	}
-	return 0, false
+	m, ok := cache[Cache{Count: cnt, Padding: pad}]
+	return m, ok
 }
 
 // probeConcurrently runs what it can in the spare objects and returns
@@ -151,20 +133,21 @@ func probeConcurrently(b backend, cnt int, todo []probeJob, out []int) []probeJo
 					return
 				}
 				var r Results
-				absorbResults(results, &r)
+				mem, ok := absorbResults(results, &r)
+				if !ok {
+					// It ran and said nothing about its memory.  Left
+					// for the sequential path, which will run it again
+					// and report properly if it does it twice.
+					failed[slot] = true
+					return
+				}
 
 				probeMu.Lock()
 				spentRuns++
-				if cnt == 0 {
-					// A base script reports its own memory and nothing
-					// else, so all of it travels.
-					cache[Cache{Count: 0, Padding: j.pad}] = r
-				} else {
-					probeTest[Cache{Count: cnt, Padding: j.pad}] = r.Test
-				}
+				cache[Cache{Count: cnt, Padding: j.pad}] = mem
 				probeMu.Unlock()
 
-				out[j.at] = reading(cnt, r)
+				out[j.at] = mem
 			}(k - start)
 		}
 		wg.Wait()
@@ -176,4 +159,12 @@ func probeConcurrently(b backend, cnt int, todo []probeJob, out []int) []probeJo
 		}
 	}
 	return left
+}
+
+// memOf is the reading a run left in a Results, whichever count it was.
+func memOf(cnt int, r Results) int {
+	if cnt == 0 {
+		return r.Base
+	}
+	return r.Test
 }

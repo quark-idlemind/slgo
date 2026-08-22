@@ -48,9 +48,9 @@ func TestARunReturnsWhatTheScriptSaidAndNothingElse(t *testing.T) {
 	}
 
 	var r Results
-	absorbResults(results, &r)
-	if want := f.mem(0, 474); r.Base != want {
-		t.Errorf("the base script read %d, want %d", r.Base, want)
+	mem, ok := absorbResults(results, &r)
+	if want := f.mem(0, 474); !ok || mem != want {
+		t.Errorf("the base script read %d (found=%v), want %d", mem, ok, want)
 	}
 	if f.ran != 1 {
 		t.Errorf("%d scripts were sent for one run", f.ran)
@@ -60,9 +60,15 @@ func TestARunReturnsWhatTheScriptSaidAndNothingElse(t *testing.T) {
 // TestInfoLinesAreSeparatedWhenAsked: -v is for watching a benchmark work
 // rather than reading its answer, and the commentary has to be told from
 // the measurements or the reader has to grep for the difference.
+//
+// The commentary is the fake's here.  The benchmark harness says none of
+// its own any more -- it reports one number and the program works out
+// the rest -- but sifting what a script says is not about the harness:
+// the code under test can say whatever it likes.
 func TestInfoLinesAreSeparatedWhenAsked(t *testing.T) {
 	resetFlags()
-	b, _ := newFakeRunner(t, 474, 368, 0)
+	b, f := newFakeRunner(t, 474, 368, 0)
+	f.commentary = "COUNT=4"
 	b.Info = true
 
 	results, info, err := b.Send(buildScript(4, 474))
@@ -83,12 +89,12 @@ func TestInfoLinesAreSeparatedWhenAsked(t *testing.T) {
 		}
 	}
 
-	// The measurements still arrive: separating the commentary must not
-	// take a reading with it.
+	// The measurement still arrives: separating the commentary must not
+	// take the reading with it.
 	var r Results
-	absorbResults(results, &r)
-	if r.Test == 0 || r.Size == 0 {
-		t.Errorf("the readings did not survive the separation: %+v", r)
+	mem, ok := absorbResults(results, &r)
+	if !ok || mem == 0 {
+		t.Errorf("the reading did not survive the separation: %d, %v", mem, ok)
 	}
 }
 
@@ -406,7 +412,8 @@ func recovered(fn func()) (p any) {
 // and the INFO lines the harness says about it.
 func TestShowPrintsTheScriptAndTheCommentary(t *testing.T) {
 	resetFlags()
-	b, _ := newFakeRunner(t, 474, 368, 0)
+	b, f := newFakeRunner(t, 474, 368, 0)
+	f.commentary = "COUNT=4"
 
 	flags.Show = true
 	b.Info = true

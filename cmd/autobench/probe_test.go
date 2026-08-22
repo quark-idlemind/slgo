@@ -17,40 +17,32 @@ import (
 	"testing"
 )
 
-// probeReset puts the caches back, since both are package level and a
+// probeReset puts the cache back, since it is package level and a
 // reading taken under one model would otherwise be served to the next.
 func probeReset(t *testing.T) {
 	t.Helper()
-	resetFlags()
-	clear(cache)
-	clear(probeTest)
-	lsdPad = -1
-	spentRuns = 0
-	t.Cleanup(func() {
+	put := func() {
 		resetFlags()
 		clear(cache)
-		clear(probeTest)
-		lsdPad = -1
 		spentRuns = 0
-	})
+	}
+	put()
+	t.Cleanup(put)
 }
 
-// TestProbesRunInTheSpareObjectsAndNeverInTheMeasuredOne: a cnt>0 script
-// divides against the base reading its object holds in linkset data, and
-// the measured object's is the one the whole benchmark is anchored to.  A
-// probe dropped into it would overwrite that, and the benchmark would go
-// on reporting plausible numbers.
-func TestProbesRunInTheSpareObjectsAndNeverInTheMeasuredOne(t *testing.T) {
+// TestProbesRunInTheSpareObjects: taking three readings at once is the
+// whole reason the spares are held, and a search that quietly ran them
+// one after another would be correct and slow -- which is the kind of
+// thing nothing notices.
+//
+// It used to matter for a second reason that has gone: a cnt>0 script
+// divided against a base its own object held in linkset data, so a probe
+// dropped into the measured object overwrote what the benchmark was
+// anchored to, and it went on reporting plausible numbers.  The script
+// says one number now, and where it ran does not change what it means.
+func TestProbesRunInTheSpareObjects(t *testing.T) {
 	probeReset(t)
 	b, f := newFakeRunner(t, 474, 368, 3)
-
-	// The measured object is carrying the base reading a benchmark would
-	// have left in it.
-	var r Results
-	mustRun(b, 0, 474, &r)
-	f.mu.Lock()
-	anchored := f.objects[100].mem
-	f.mu.Unlock()
 
 	pads := []int{600, 700, 800}
 	got := probeBase(b, pads)
@@ -62,24 +54,22 @@ func TestProbesRunInTheSpareObjectsAndNeverInTheMeasuredOne(t *testing.T) {
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.objects[100].mem != anchored {
-		t.Errorf("a probe wrote %d over the measured object's base of %d",
-			f.objects[100].mem, anchored)
-	}
-	// And they really did go elsewhere: each spare ran one of them.
 	for local := uint32(101); local <= 103; local++ {
-		if !f.objects[local].hasMem {
+		if !f.objects[local].ran {
 			t.Errorf("spare object %d took no probe", local)
 		}
 	}
 }
 
-// TestOnlyTheReadingTravelsFromACopyProbe: everything else a cnt>0 script
-// reports -- SIZE, BASE_MEM -- is worked out from linkset data the spare
-// object does not have, so it is arithmetic on a zero.  Only the memory
-// reading means anything, so only it is kept, and it is kept apart from
-// the run cache.
-func TestOnlyTheReadingTravelsFromACopyProbe(t *testing.T) {
+// TestAProbesReadingIsAReadingLikeAnyOther: it goes into the one cache,
+// and anything asking for that count at that pad is given it.
+//
+// There were two caches.  A probe taken in a spare object had no base in
+// that object's linkset data to divide against, so the size and base its
+// script reported were arithmetic on a zero and had to be kept somewhere
+// copy mode would never read them.  The arithmetic moved into the
+// program and the second cache went with it.
+func TestAProbesReadingIsAReadingLikeAnyOther(t *testing.T) {
 	probeReset(t)
 	b, f := newFakeRunner(t, 474, 368, 3)
 
@@ -92,12 +82,8 @@ func TestOnlyTheReadingTravelsFromACopyProbe(t *testing.T) {
 	}
 
 	for _, pad := range pads {
-		key := Cache{Count: 1, Padding: pad}
-		if _, ok := cache[key]; ok {
-			t.Errorf("a probe's Size reached the run cache at pad %d", pad)
-		}
-		if _, ok := probeTest[key]; !ok {
-			t.Errorf("the reading from pad %d did not travel", pad)
+		if _, ok := cache[Cache{Count: 1, Padding: pad}]; !ok {
+			t.Errorf("the reading from pad %d did not reach the cache", pad)
 		}
 	}
 }
@@ -147,7 +133,7 @@ func TestAProbeThatFailedIsRunTheOrdinaryWay(t *testing.T) {
 	// is where the ordinary path runs.
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if !f.objects[100].hasMem {
+	if !f.objects[100].ran {
 		t.Error("the failed probe was not taken again the ordinary way")
 	}
 }
