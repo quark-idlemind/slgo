@@ -704,10 +704,15 @@ func (d *fakeDaemon) busy(names ...string) {
 	d.locked = func(who string, l *pb.Lock) *pb.Locked {
 		mu.Lock()
 		defer mu.Unlock()
-		if !l.Try && strings.HasPrefix(l.Name, AutoLock+"/slot/") {
+		slot := strings.HasPrefix(l.Name, AutoLock+"/slot/")
+		if !l.Try && slot {
 			given = true
 		}
-		if taken[who] && l.Try && !given {
+		// Only the OBJECTS are taken.  The allocation lock is held for
+		// as long as it takes somebody to choose and is never held
+		// across a wait, so a fake that kept it for ever would be a
+		// daemon no caller could ever get an answer out of.
+		if taken[who] && l.Try && slot && !given {
 			return &pb.Locked{Name: l.Name, Held: false, Holder: "somebody else"}
 		}
 		// A wait is answered by handing it over, since queueing is what

@@ -224,95 +224,119 @@ func useAutoOn(ctx context.Context, s *sl.Session, n int, wait bool) (*Auto, err
 	return a, nil
 }
 
-// takeSlots takes n of the pool's places, all of them or none.
+// tryOn takes up to want of one avatar's places, without waiting for
+// anything at all.
 //
-// The allocation lock is what makes taking them one at a time safe.  One
-// caller holds it, and under it every place is TRIED and none is waited
-// for -- so a caller can never be left holding some of what it wants
-// while somebody else holds the rest.  A caller that cannot be served
-// gives back everything it took, drops the allocation lock, and only
-// then waits, holding nothing at all.
+// The allocation lock is what makes taking places one at a time safe.
+// One caller holds it, and under it every place is TRIED and none is
+// waited for.  That is the invariant everything else here rests on:
+// NOTHING EVER BLOCKS WHILE HOLDING AN ALLOCATION LOCK, so a caller can
+// wait for one while holding places, and two callers can gather from the
+// same avatars in any order, without a cycle being possible.
 //
-// What it excludes is other CLIENTS.  The daemon's lock is re-entrant --
+// What is excluded is other CLIENTS.  The daemon's lock is re-entrant --
 // a client that asks for a place it already holds is given it -- so a
 // program that called this twice would be handed the same objects twice.
 // A program takes what it needs in one call, which is also the only way
 // all-or-nothing can mean anything.
 //
-// What it waits ON is one of the places somebody else has.  There is no
-// message for "something was given back", and this says the same thing
-// with the locks that already exist: the wait ends when that place comes
-// free, which is the moment it is worth looking again.  It is given
-// straight back, because keeping it would be holding one thing while
-// waiting for the others, which is the deadlock this is all for.
-func takeSlots(ctx context.Context, s *sl.Session, n int, wait bool) ([]int, error) {
-	said := false
-	for {
-		// Not TryLock: the allocation lock is held for as long as it
-		// takes to try the places, which is a round trip each and no
-		// waiting at all, so queueing on it is the queue working.
-		allocCtx, cancel := context.WithTimeout(ctx, lockWait)
-		err := s.Lock(allocCtx, AutoAllocLock)
-		cancel()
+// busy is something to wait on when the answer was short: a place
+// somebody else holds, or this avatar's allocation lock when another
+// caller was choosing at that moment.  Either is a thing that will come
+// free, which is all a waiter needs.
+func tryOn(ctx context.Context, s *sl.Session, want int) (got []int, busy string, err error) {
+	if want < 1 {
+		return nil, "", nil
+	}
+	ok, _, err := s.TryLock(ctx, AutoAllocLock)
+	if err != nil {
+		return nil, "", fmt.Errorf("asking for objects on %s: %w\n"+
+			"        (an slgod older than the lock does not answer; --rez avoids it)",
+			s.Info().Name, err)
+	}
+	if !ok {
+		// Somebody else is choosing.  They cannot be waiting for
+		// anything while they do it, so this is worth looking at again
+		// in a moment rather than queueing behind their whole run.
+		return nil, AutoAllocLock, nil
+	}
+	defer s.Unlock(AutoAllocLock)
+
+	for i := 0; i < AutoPool() && len(got) < want; i++ {
+		ok, _, err := s.TryLock(ctx, AutoSlotLock(i))
 		if err != nil {
-			return nil, fmt.Errorf("asking for objects on %s: %w\n"+
+			releaseSlots(s, got)
+			return nil, "", fmt.Errorf("asking for objects on %s: %w\n"+
 				"        (an slgod older than the lock does not answer; --rez avoids it)",
 				s.Info().Name, err)
 		}
+		if ok {
+			got = append(got, i)
+			continue
+		}
+		if busy == "" {
+			busy = AutoSlotLock(i)
+		}
+	}
+	return got, busy, nil
+}
 
-		var (
-			got    []int
-			busy   = -1 // one place somebody else has, to wait on
-			holder string
-		)
-		for i := 0; i < AutoPool() && len(got) < n; i++ {
-			ok, by, err := s.TryLock(ctx, AutoSlotLock(i))
-			if err != nil {
-				releaseSlots(s, got)
-				s.Unlock(AutoAllocLock)
-				return nil, fmt.Errorf("asking for objects on %s: %w\n"+
-					"        (an slgod older than the lock does not answer; --rez avoids it)",
-					s.Info().Name, err)
-			}
-			if ok {
-				got = append(got, i)
-				continue
-			}
-			if busy < 0 {
-				busy, holder = i, by
-			}
+// waitFor queues for one lock and gives it straight back.
+//
+// There is no message for "something was given back", and this says the
+// same thing with the locks that already exist: the wait ends when that
+// lock comes free, which is the moment it is worth looking again.  It is
+// handed back at once, because keeping it would be holding one thing
+// while waiting for the others -- the deadlock this is all for.
+//
+// The caller must be holding NOTHING when it calls this.
+func waitFor(ctx context.Context, s *sl.Session, name string) error {
+	waitCtx, cancel := context.WithTimeout(ctx, lockWait)
+	defer cancel()
+	if err := s.Lock(waitCtx, name); err != nil {
+		return fmt.Errorf("waiting for objects on %s: %w", s.Info().Name, err)
+	}
+	s.Unlock(name)
+	return nil
+}
+
+// takeSlots takes n of one avatar's places, all of them or none.
+func takeSlots(ctx context.Context, s *sl.Session, n int, wait bool) ([]int, error) {
+	said := false
+	for {
+		got, busy, err := tryOn(ctx, s, n)
+		if err != nil {
+			return nil, err
 		}
 		if len(got) == n {
-			s.Unlock(AutoAllocLock)
 			return got, nil
 		}
 
 		// Not enough.  Everything taken goes back before anything is
-		// waited for, and the allocation lock goes back with it so that
-		// whoever CAN be served is not stuck behind us.
+		// waited for.
 		releaseSlots(s, got)
-		s.Unlock(AutoAllocLock)
 
 		if !wait {
 			return nil, fmt.Errorf("%s has %d of the %d objects free",
 				s.Info().Name, len(got), n)
 		}
+		if busy == "" {
+			// Nothing is held by anybody and there is still not enough:
+			// only possible if the pool is smaller than the ask, which
+			// is refused before now.  Saying so beats waiting for ever.
+			return nil, fmt.Errorf("%s has %d objects free of the %d asked for, "+
+				"and nothing is holding the rest", s.Info().Name, len(got), n)
+		}
 		if !said {
 			// Said out loud, because from outside a queue and a hang
 			// look the same and one of them is worth waiting through.
-			fmt.Fprintf(os.Stderr,
-				"%d of the %d objects on %s are busy; waiting for %s\n",
-				n-len(got), n, s.Info().Name, holderOr(holder))
+			fmt.Fprintf(os.Stderr, "%d of the %d objects on %s are busy; waiting\n",
+				n-len(got), n, s.Info().Name)
 			said = true
 		}
-
-		waitCtx, cancel := context.WithTimeout(ctx, lockWait)
-		err = s.Lock(waitCtx, AutoSlotLock(busy))
-		cancel()
-		if err != nil {
-			return nil, fmt.Errorf("waiting for objects on %s: %w", s.Info().Name, err)
+		if err := waitFor(ctx, s, busy); err != nil {
+			return nil, err
 		}
-		s.Unlock(AutoSlotLock(busy))
 	}
 }
 
@@ -385,4 +409,202 @@ func sessionNames(ctx context.Context, s *sl.Session) ([]string, error) {
 		return nil, fmt.Errorf("not a hosted session")
 	}
 	return h.Sessions(ctx)
+}
+
+// ------------------------------------------------- across avatars
+
+// UseAutoSpread finds n places to run, taking them from as many of the
+// daemon's avatars as it needs -- four on qi and four on example, if
+// that is what is free.
+//
+// It is for work that is simply WIDE: a program with twelve scripts to
+// run at once wants twelve objects and does not care whose they are.  It
+// is not for work whose parts have to agree with one another, which is
+// why autobench does not use it: its objects are compared against each
+// other, and two avatars may be standing in different regions.
+//
+// A named avatar, or a direct login, is honoured exactly and is one
+// avatar -- asking for qi and being given some of example would be worse
+// than being slow.
+//
+// All n or none, as with one avatar, and for the same reason.  What
+// makes gathering across several safe is the invariant tryOn describes:
+// nothing ever blocks while an allocation lock is held, and this holds
+// one at a time in any case.  When it cannot be served it gives back
+// everything it took on every avatar before it waits.
+//
+// That is about the ALLOCATION.  An object that will not go on afterwards
+// is the same as it has always been: fewer places than were asked for,
+// which is a slower run rather than a failure, and the caller is
+// expected to count what it got.
+//
+// Each Auto in the answer has its own session, which the caller must
+// close -- once each, and they may be the same one.  Sessions opened to
+// avatars that turned out not to be used are closed here.
+func UseAutoSpread(ctx context.Context, o Options, n int) ([]*Auto, error) {
+	o.Agent = AgentName(o.Agent)
+	if n < 1 {
+		n = 1
+	}
+	if o.Agent != "" || o.Direct {
+		a, err := UseAutoAnywhere(ctx, o, n)
+		if err != nil {
+			return nil, err
+		}
+		return []*Auto{a}, nil
+	}
+
+	first, err := Connect(ctx, o)
+	if err != nil {
+		return nil, err
+	}
+	names, err := sessionNames(ctx, first)
+	if err != nil || len(names) <= 1 {
+		// One avatar, or a daemon too old to say: there is nothing to
+		// spread across.
+		a, err := useAutoOn(ctx, first, n, true)
+		if err != nil {
+			first.Close()
+			return nil, err
+		}
+		return []*Auto{a}, nil
+	}
+	if most := AutoPool() * len(names); n > most {
+		first.Close()
+		return nil, fmt.Errorf("%d objects were asked for and the daemon's %d avatars "+
+			"have %d between them; waiting for objects that do not exist would be "+
+			"waiting for ever", n, len(names), most)
+	}
+
+	sp := &spread{o: o, deflt: first.Info().Name, open: map[string]*sl.Session{}}
+	sp.open[sp.deflt] = first
+	defer sp.closeUnused()
+
+	as, err := sp.gather(ctx, names, n)
+	if err != nil {
+		return nil, err
+	}
+	return as, nil
+}
+
+// spread is the sessions a gathering across avatars has opened.
+//
+// They are opened as they are wanted and closed at the end unless
+// something was taken on them: a connection to an avatar we did not use
+// is a stream the daemon is holding for nothing.
+type spread struct {
+	o     Options
+	deflt string
+	open  map[string]*sl.Session
+	used  map[string]bool
+}
+
+// session dials an avatar, or answers with the one already open.
+func (sp *spread) session(ctx context.Context, name string) (*sl.Session, error) {
+	if s, ok := sp.open[name]; ok {
+		return s, nil
+	}
+	next := sp.o
+	next.Agent = name
+	s, err := Connect(ctx, next)
+	if err != nil {
+		return nil, err
+	}
+	sp.open[name] = s
+	return s, nil
+}
+
+func (sp *spread) closeUnused() {
+	for name, s := range sp.open {
+		if !sp.used[name] {
+			s.Close()
+		}
+	}
+}
+
+// gather takes n places across the avatars, all of them or none.
+func (sp *spread) gather(ctx context.Context, names []string, n int) ([]*Auto, error) {
+	said := false
+	for {
+		var (
+			took     = map[string][]int{}
+			total    int
+			waitOn   *sl.Session
+			waitName string
+		)
+		for _, name := range names {
+			if total >= n {
+				break
+			}
+			s, err := sp.session(ctx, name)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
+				continue
+			}
+			got, busy, err := tryOn(ctx, s, n-total)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
+				continue
+			}
+			if len(got) > 0 {
+				took[name] = got
+				total += len(got)
+			}
+			if busy != "" && waitName == "" {
+				waitOn, waitName = s, busy
+			}
+		}
+
+		if total >= n {
+			return sp.wear(ctx, names, took)
+		}
+
+		// Short.  Everything goes back, everywhere, before anything is
+		// waited for: places held on one avatar while waiting for
+		// another is exactly the shape this is built to avoid.
+		for name, slots := range took {
+			releaseSlots(sp.open[name], slots)
+		}
+		if waitName == "" {
+			return nil, fmt.Errorf("%d objects are free of the %d asked for, "+
+				"and nothing is holding the rest", total, n)
+		}
+		if !said {
+			fmt.Fprintf(os.Stderr,
+				"%d of the %d objects are busy across %d avatars; waiting\n",
+				n-total, n, len(names))
+			said = true
+		}
+		if err := waitFor(ctx, waitOn, waitName); err != nil {
+			return nil, err
+		}
+	}
+}
+
+// wear puts on what was taken, in the daemon's order of avatars so that
+// the places come back in a settled order rather than a map's.
+func (sp *spread) wear(ctx context.Context, names []string, took map[string][]int) ([]*Auto, error) {
+	sp.used = map[string]bool{}
+	var out []*Auto
+	for _, name := range names {
+		slots := took[name]
+		if len(slots) == 0 {
+			continue
+		}
+		s := sp.open[name]
+		a, err := wearSlots(ctx, s, slots)
+		if err != nil {
+			// One avatar's objects failing is the end of it: the
+			// caller asked for a number and this is fewer.  Everything
+			// taken goes back, here and on the others.
+			releaseSlots(s, slots)
+			for _, done := range out {
+				done.Release()
+			}
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		sp.used[name] = true
+		out = append(out, a)
+	}
+	return out, nil
 }

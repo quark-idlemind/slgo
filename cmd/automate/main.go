@@ -292,23 +292,30 @@ func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src s
 		First: flags.First, Last: flags.Last, Start: flags.Start,
 		Channel: "automate",
 	}
-	s, objs, cleanup, err := runIn(ctx, opts, n)
+	ps, cleanup, err := runIn(ctx, opts, n)
 	if err != nil {
 		return nil, 0, nil, err
 	}
 	if flags.Keep {
-		for _, obj := range objs {
-			fmt.Printf("running in %s\n", obj)
+		for _, p := range ps {
+			fmt.Printf("running in %s\n", p.object)
 		}
 	}
-	return func(place int, path, src string) bool { return once(ctx, s, objs[place], path, src) },
-		len(objs),
-		func() {
-			if cleanup != nil {
-				cleanup()
-			}
-			s.Close()
-		}, nil
+	return func(place int, path, src string) bool {
+		p := ps[place]
+		return once(ctx, p.session, p.object, path, src)
+	}, len(ps), cleanup, nil
+}
+
+// place is one object and the session it lives on.
+//
+// The session is part of it because the objects need not all belong to
+// one avatar: twelve scripts at once may be eight of qi's objects and
+// four of somebody else's, and a script is run by the session that holds
+// the object it is going in.
+type place struct {
+	session *sl.Session
+	object  *sl.Object
 }
 
 // once runs one script and prints what it said, reporting whether it
@@ -389,41 +396,50 @@ func verdict(path string, compiled bool, errs []string, fault string, finished b
 // limit and not an oversight: --object was given an object and there is
 // only the one, and rezzing a prim per job would put a heap of them
 // beside the avatar for a saving the shared group already offers.
-func runIn(ctx context.Context, o session.Options, n int) (*sl.Session, []*sl.Object, func(), error) {
+func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), error) {
 	if flags.Object != "" || flags.Rez {
 		if flags.Jobs > 1 {
 			what := "--rez rezzes one prim"
 			if flags.Object != "" {
 				what = "--object names one object"
 			}
-			return nil, nil, nil, fmt.Errorf("%s, so there is one place to run and "+
+			return nil, nil, fmt.Errorf("%s, so there is one place to run and "+
 				"--jobs %d has nowhere to put the other %d: the shared auto objects "+
 				"are the ones there are several of",
 				what, flags.Jobs, flags.Jobs-1)
 		}
 		s, err := session.Connect(ctx, o)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		obj, cleanup, err := session.RunIn(ctx, s, flags.Object, flags.Keep)
 		if err != nil {
 			s.Close()
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
-		return s, []*sl.Object{obj}, cleanup, nil
+		return []place{{s, obj}}, func() {
+			if cleanup != nil {
+				cleanup()
+			}
+			s.Close()
+		}, nil
 	}
 
-	if most := session.AutoPool(); flags.Jobs > most {
-		return nil, nil, nil, fmt.Errorf("--jobs %d wants %d objects and an avatar "+
+	// An avatar named is an avatar honoured exactly, so its pool is the
+	// ceiling and it is known without asking anybody.  Unnamed, the
+	// ceiling is every avatar the daemon holds and the refusal comes
+	// from there, where the count is.
+	if most := session.AutoPool(); flags.Agent != "" && flags.Jobs > most {
+		return nil, nil, fmt.Errorf("--jobs %d wants %d objects and %s "+
 			"has %d; \"slsh auto -n %d\" is what makes more",
-			flags.Jobs, flags.Jobs, most, flags.Jobs)
+			flags.Jobs, flags.Jobs, flags.Agent, most, flags.Jobs)
 	}
 
-	// As many objects as there are scripts to run at once, and they are
-	// taken all together or not at all: the pool hands out any number up
-	// to what the avatar wears.  Four by default because that is a
-	// useful width without being the whole pool, and because it leaves
-	// room for a benchmark alongside.
+	// As many objects as there are scripts to run at once, taken all
+	// together or not at all, and from more than one avatar if that is
+	// what it takes.  Four by default because it is a useful width
+	// without being anybody's whole pool, and because it leaves room for
+	// a benchmark alongside.
 	want := flags.Jobs
 	if want < 1 {
 		want = session.AutoGroupSize
@@ -431,12 +447,46 @@ func runIn(ctx context.Context, o session.Options, n int) (*sl.Session, []*sl.Ob
 	if want > n {
 		want = n
 	}
-	a, err := session.UseAutoAnywhere(ctx, o, want)
+	as, err := session.UseAutoSpread(ctx, o, want)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
+	}
+
+	var places []place
+	for _, a := range as {
+		for _, obj := range a.Objects {
+			places = append(places, place{a.Session, obj})
+		}
 	}
 	if o.Agent == "" {
-		fmt.Fprintf(os.Stderr, "running as %s\n", a.Agent)
+		fmt.Fprintf(os.Stderr, "running as %s\n", whose(as))
 	}
-	return a.Session, a.Objects, a.Release, nil
+	return places, func() {
+		for _, a := range as {
+			a.Release()
+			a.Session.Close()
+		}
+	}, nil
+}
+
+// whose names the avatars the objects came from, with how many each
+// supplied when there is more than one -- because "running as qi" is a
+// different thing from "running as qi (8) and example (4)", and a person
+// reading the output of a script that misbehaved on one avatar needs to
+// know it ran on two.
+func whose(as []*session.Auto) string {
+	if len(as) == 1 {
+		return as[0].Agent
+	}
+	var b strings.Builder
+	for i, a := range as {
+		switch {
+		case i == len(as)-1 && i > 0:
+			b.WriteString(" and ")
+		case i > 0:
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "%s (%d)", a.Agent, len(a.Objects))
+	}
+	return b.String()
 }

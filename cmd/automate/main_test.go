@@ -347,12 +347,12 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsSent(t *testing.T) {
 	opts := session.Options{Addr: "127.0.0.1:1", Channel: "automate"}
 
 	flags.Object = "workbench"
-	if _, _, _, err := runIn(context.Background(), opts, 1); err == nil {
+	if _, _, err := runIn(context.Background(), opts, 1); err == nil {
 		t.Error("runIn found a named object through a daemon that is not there")
 	}
 
 	flags.Object, flags.Rez = "", true
-	if _, _, _, err := runIn(context.Background(), opts, 1); err == nil {
+	if _, _, err := runIn(context.Background(), opts, 1); err == nil {
 		t.Error("runIn rezzed a prim through a daemon that is not there")
 	}
 
@@ -360,7 +360,7 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsSent(t *testing.T) {
 	// about it: it asks the daemon who it is holding before it asks for
 	// anything to run in.
 	flags.Rez = false
-	if _, _, _, err := runIn(context.Background(), opts, 1); err == nil {
+	if _, _, err := runIn(context.Background(), opts, 1); err == nil {
 		t.Error("runIn took an auto object from a daemon that is not there")
 	}
 }
@@ -698,29 +698,33 @@ func TestOneObjectIsOnePlaceAndJobsCannotConjureMore(t *testing.T) {
 	flags.Jobs = 4
 
 	flags.Object = "workbench"
-	_, _, _, err := runIn(context.Background(), opts, 4)
+	_, _, err := runIn(context.Background(), opts, 4)
 	if err == nil || !strings.Contains(err.Error(), "--object") {
 		t.Errorf("--object with --jobs 4 = %v, want it to say there is one object", err)
 	}
 
 	flags.Object, flags.Rez = "", true
-	_, _, _, err = runIn(context.Background(), opts, 4)
+	_, _, err = runIn(context.Background(), opts, 4)
 	if err == nil || !strings.Contains(err.Error(), "--rez") {
 		t.Errorf("--rez with --jobs 4 = %v, want it to say there is one prim", err)
 	}
 }
 
-// TestMoreJobsThanTheAvatarHasObjectsIsRefused: more than a group is
-// more groups, and there are only so many of those -- a pool is what an
-// avatar wears.  Past the end of it there is nothing to round down to
-// that would not be a speed-up somebody counted on and did not get, so
-// it is refused, with the number and how to make more.
-func TestMoreJobsThanTheAvatarHasObjectsIsRefused(t *testing.T) {
+// TestMoreJobsThanTheNamedAvatarHasIsRefused: an avatar named is an
+// avatar honoured exactly, so its pool is the ceiling and it is known
+// without asking anybody.  Past the end of it there is nothing to round
+// down to that would not be a speed-up somebody counted on and did not
+// get, so it is refused, with the number and how to make more.
+//
+// Unnamed, the ceiling is every avatar the daemon holds, and the
+// refusal comes from where that count is rather than from here.
+func TestMoreJobsThanTheNamedAvatarHasIsRefused(t *testing.T) {
 	reset(t)
 	opts := session.Options{Addr: "127.0.0.1:1", Channel: "automate"}
+	flags.Agent = "quark"
 	flags.Jobs = session.AutoPool() + 1
 
-	_, _, _, err := runIn(context.Background(), opts, flags.Jobs)
+	_, _, err := runIn(context.Background(), opts, flags.Jobs)
 	if err == nil {
 		t.Fatal("--jobs past the pool was taken, from a daemon that is not there")
 	}
@@ -729,13 +733,14 @@ func TestMoreJobsThanTheAvatarHasObjectsIsRefused(t *testing.T) {
 			flags.Jobs, err)
 	}
 
-	// A group's worth more than a group is two groups and is fine: what
-	// is refused is past the end of the pool, not past the end of one
-	// group.
+	// More than one avatar's worth is not refused here: with nobody
+	// named it may be spread across several, and how many there are is
+	// the daemon's to say.
 	reset(t)
-	flags.Jobs = session.AutoGroupSize + 1
-	_, _, _, err = runIn(context.Background(), opts, flags.Jobs)
+	flags.Jobs = session.AutoPool() + 1
+	_, _, err = runIn(context.Background(), opts, flags.Jobs)
 	if err != nil && strings.Contains(err.Error(), "slsh auto") {
-		t.Errorf("--jobs %d was refused as too many: %v", flags.Jobs, err)
+		t.Errorf("--jobs %d was refused without asking how many avatars there are: %v",
+			flags.Jobs, err)
 	}
 }

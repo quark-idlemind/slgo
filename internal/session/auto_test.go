@@ -847,3 +847,152 @@ func TestOneObjectShortIsARefusalAndNotEleven(t *testing.T) {
 		t.Errorf("%d places are held, want only the one somebody else had", got)
 	}
 }
+
+// ------------------------------------------------- across avatars
+
+// namedFakeSession is one avatar's session, with a name of its own so
+// that a test can tell two of them apart.
+func namedFakeSession(t *testing.T, name string) (*sl.Session, *fakeGrid) {
+	t.Helper()
+	s, f := newFakeSession(t)
+	f.mu.Lock()
+	f.info.Name = name
+	f.mu.Unlock()
+	f.stock(len(AutoPoints))
+	return s, f
+}
+
+// twoAvatars is a gathering across two avatars, with the daemon's order
+// being the first one first.
+func twoAvatars(t *testing.T) (*spread, []string, *fakeGrid, *fakeGrid) {
+	t.Helper()
+	s1, f1 := namedFakeSession(t, "quark")
+	s2, f2 := namedFakeSession(t, "example")
+	sp := &spread{
+		deflt: "quark",
+		open:  map[string]*sl.Session{"quark": s1, "example": s2},
+	}
+	return sp, []string{"quark", "example"}, f1, f2
+}
+
+// TestOneAvatarsPoolIsNotTheCeiling: a request is for a NUMBER of
+// objects and the daemon may be holding several avatars.  Six wanted
+// where the first avatar has two free is two from that one and four from
+// the next -- which is the whole point of counting objects rather than
+// asking whose they are.
+func TestOneAvatarsPoolIsNotTheCeiling(t *testing.T) {
+	t.Parallel()
+	sp, names, f1, _ := twoAvatars(t)
+	busy(f1, "a benchmark", 0, AutoPool()-2)
+
+	as, err := sp.gather(context.Background(), names, 6)
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+
+	total := 0
+	from := map[string]int{}
+	for _, a := range as {
+		total += len(a.Objects)
+		from[a.Agent] += len(a.Objects)
+	}
+	if total != 6 {
+		t.Errorf("gathered %d objects, want the 6 asked for", total)
+	}
+	if from["quark"] != 2 {
+		t.Errorf("took %d from the avatar with two free", from["quark"])
+	}
+	if from["example"] != 4 {
+		t.Errorf("took %d from the avatar that was free", from["example"])
+	}
+}
+
+// TestTheFirstAvatarIsFilledBeforeTheNextIsTouched: spreading is what to
+// do when one avatar cannot supply the lot, not a thing to do for its
+// own sake.  A run that fits on the default avatar should be on the
+// default avatar -- one session, one region, one set of objects.
+func TestTheFirstAvatarIsFilledBeforeTheNextIsTouched(t *testing.T) {
+	t.Parallel()
+	sp, names, _, f2 := twoAvatars(t)
+
+	as, err := sp.gather(context.Background(), names, AutoGroupSize)
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	if len(as) != 1 || as[0].Agent != "quark" {
+		t.Errorf("a run that fits on one avatar was spread over %d", len(as))
+	}
+	for slot, by := range held(f2) {
+		if by == "us" {
+			t.Errorf("place %d was taken on the second avatar for nothing", slot)
+		}
+	}
+}
+
+// TestNothingIsHeldOnOneAvatarWhileWaitingForAnother: the deadlock this
+// is all built to avoid, in its cross-avatar shape.  Two runs each
+// wanting more than one avatar can supply could sit holding one avatar's
+// objects apiece, each waiting for the other's, for ever.  So everything
+// goes back -- on every avatar -- before anything is waited for.
+func TestNothingIsHeldOnOneAvatarWhileWaitingForAnother(t *testing.T) {
+	t.Parallel()
+	sp, names, f1, f2 := twoAvatars(t)
+	// More than the two of them can supply between them, so it has to
+	// wait -- having been able to take a good deal on the way past.
+	busy(f1, "a benchmark", 0, AutoPool()-3)
+	busy(f2, "another benchmark", 0, AutoPool()-3)
+
+	var during []map[int]string
+	f1.mu.Lock()
+	f1.onLock = func(name string) {
+		if name == AutoAllocLock || during != nil {
+			return
+		}
+		during = []map[int]string{held(f1), held(f2)}
+	}
+	f1.mu.Unlock()
+
+	sp.gather(context.Background(), names, AutoPool())
+
+	if during == nil {
+		t.Fatal("a gathering that could not be served did not wait for anything")
+	}
+	for i, what := range during {
+		for slot, by := range what {
+			if by == "us" {
+				t.Errorf("place %d on avatar %d was still ours at the moment of "+
+					"waiting; holding one avatar's objects while waiting for "+
+					"another's is the deadlock", slot, i)
+			}
+		}
+	}
+}
+
+// TestASpreadThatCannotBeServedTakesNothing: all or nothing means all or
+// nothing everywhere.  Objects held on two avatars by a run that never
+// started are objects two other runs cannot have.
+func TestASpreadThatCannotBeServedTakesNothing(t *testing.T) {
+	t.Parallel()
+	sp, names, f1, f2 := twoAvatars(t)
+	allBusy(f1, "a benchmark")
+	busy(f2, "another benchmark", 0, AutoPool()-1)
+	for _, f := range []*fakeGrid{f1, f2} {
+		f.mu.Lock()
+		f.waitErr = fmt.Errorf("the daemon went away")
+		f.mu.Unlock()
+	}
+
+	// One object free in the whole daemon and two wanted, and the wait
+	// fails, so this comes back rather than going round again.
+	if _, err := sp.gather(context.Background(), names, 2); err == nil {
+		t.Fatal("gather came back with fewer objects than were asked for")
+	}
+	for i, f := range []*fakeGrid{f1, f2} {
+		for slot, by := range held(f) {
+			if by == "us" {
+				t.Errorf("place %d on avatar %d was kept out of a gathering that failed",
+					slot, i)
+			}
+		}
+	}
+}

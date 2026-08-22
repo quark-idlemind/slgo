@@ -415,19 +415,31 @@ interleaved, which is what the tag in front of every line is for. The
 tags are padded to the widest name on the command line so that they read
 as a column.
 
-`--jobs N` is how many run at once, up to the twelve objects an avatar
-wears. Eight scripts of three seconds each took **6.9 seconds**
-measured, against about 35 one at a time.
+`--jobs N` is how many run at once. Eight scripts of three seconds each
+took **6.9 seconds** measured, against about 35 one at a time.
 
-The objects are taken all together or not at all. `--jobs 8` on an
-avatar with six free does not run six: it waits until eight are free,
-and says what it is waiting for. That is not fussiness -- a run that
-took the six and waited for the other two would be holding six objects
-that nobody else can use while it waits for somebody who may be doing
-exactly the same thing, and neither would ever finish.
+The ceiling is not one avatar. If `slgod` is holding three, a run that
+wants more objects than any one of them has free takes them from
+whichever have them -- and says so, because "running as qi" and
+"running as qi (8) and example (4)" are different facts about where the
+output came from:
 
-Asking for more than the avatar has is refused rather than waited for,
-and says how to make more (`slsh auto -n 12`).
+    running as qi (8) and example (4)
+
+Two avatars may be standing in different regions, so a script that cares
+where it is may not say the same thing on both. `autobench` deliberately
+does not spread for that reason: its objects are compared against each
+other. Naming an avatar with `--agent` turns it off and uses that one.
+
+The objects are taken all together or not at all. `--jobs 8` where six
+are free does not run six: it waits until eight are free, and says what
+it is waiting for. That is not fussiness -- a run that took the six and
+waited for the other two would be holding six objects nobody else can
+use while it waits for somebody who may be doing exactly the same
+thing, and neither would ever finish.
+
+Asking for more than the daemon has between all its avatars is refused
+rather than waited for, and says how to make more (`slsh auto -n 12`).
 
 An object that has never run a script from `automate` is slower the
 first time: creating the script item costs about eight seconds where
