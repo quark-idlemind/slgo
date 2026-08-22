@@ -39,6 +39,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -166,6 +167,10 @@ type fakeDaemon struct {
 
 	grid *fakeGrid
 	auth *auth.Server
+
+	// grants names what it has handed out, so that a run can give back
+	// what it was given.
+	grants int
 
 	// sendMu is because a stream has two writers -- the relay pump and
 	// the answers to what the client asked -- and a gRPC stream may not
@@ -351,6 +356,34 @@ func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Serve
 			l := p.GetLock()
 			d.send(s, &pb.ServerPacket{Body: &pb.ServerPacket_Locked{
 				Locked: &pb.Locked{Name: l.Name, Held: true},
+			}})
+
+		case p.GetSlots() != nil:
+			// One object, which is what this grid has, and it is handed
+			// over without argument for the same reason a lock is:
+			// whose turn it is belongs to the daemon's own tests.
+			//
+			// Clean, so that a run here is not made to clear an object
+			// before it uses it.  What a dirty one costs is a script
+			// write and a wait, which is grid work this fake would have
+			// to play out to no purpose.
+			want := int(p.GetSlots().GetWant())
+			g := &pb.SlotsGranted{Expires: time.Now().Add(time.Hour).Unix()}
+			if want == 1 {
+				d.grants++
+				g.Grant = fmt.Sprintf("g%d", d.grants)
+				g.Held = []*pb.SlotHeld{{Agent: "quark", Slot: 0}}
+			} else {
+				g.Why = fmt.Sprintf("this grid has one object and %d were asked for", want)
+			}
+			d.send(s, &pb.ServerPacket{Body: &pb.ServerPacket_Granted{Granted: g}})
+
+		case p.GetRenewSlots() != nil:
+			d.send(s, &pb.ServerPacket{Body: &pb.ServerPacket_Granted{
+				Granted: &pb.SlotsGranted{
+					Grant:   p.GetRenewSlots().GetGrant(),
+					Expires: time.Now().Add(time.Hour).Unix(),
+				},
 			}})
 		}
 	}

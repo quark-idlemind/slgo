@@ -295,6 +295,10 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	defer func() {
 		c.closed.Store(true)
 		h.detach(c)
+		// Whatever it was holding goes back.  A stream that ended said
+		// nothing about having left the objects fit to use, so the next
+		// caller is told to clear them.
+		s.slotsOf().releaseAll(c)
 		s.clients.Add(-1)
 		h.dropped.Add(c.dropped.Load())
 	}()
@@ -348,6 +352,16 @@ func (s *Server) streamRecv(ctx context.Context, stream pb.Grid_StreamServer, c 
 			c.lock(ctx, h, b.Lock)
 		case *pb.ClientPacket_Unlock:
 			h.lockSet().giveUp(b.Unlock.GetName(), c)
+		case *pb.ClientPacket_Slots:
+			// In a goroutine for the reason a waiting lock is: a client
+			// queued for objects still sends and receives, and blocking
+			// the reader here would stop relaying its grid traffic
+			// while it waited.
+			go s.slotsOf().ask(ctx, c, b.Slots)
+		case *pb.ClientPacket_RenewSlots:
+			s.slotsOf().renew(c, b.RenewSlots)
+		case *pb.ClientPacket_ReleaseSlots:
+			s.slotsOf().release(c, b.ReleaseSlots.GetGrant(), b.ReleaseSlots.GetClean())
 		case *pb.ClientPacket_Attach:
 			return status.Error(codes.InvalidArgument, "attach may only be the first frame")
 		}

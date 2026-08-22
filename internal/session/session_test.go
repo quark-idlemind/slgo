@@ -862,35 +862,14 @@ func TestTheFirstAutoObjectKeepsTheBareName(t *testing.T) {
 	}
 }
 
-// TestEveryPlaceHasItsOwnLockAndTheAllocationLockIsApart: a place is
-// locked one at a time, which is only safe because the allocation lock
-// says one caller chooses at a time.  Both names have to be their own:
-// the allocation lock is not a place, and neither is the old bare name.
-func TestEveryPlaceHasItsOwnLockAndTheAllocationLockIsApart(t *testing.T) {
+// TestThePoolIsAsBigAsThePointsThereAre: a place is a number, and the
+// numbers run as far as there are points to wear an object on.  A daemon
+// that believed in more places than this would hand out one nothing here
+// can wear.
+func TestThePoolIsAsBigAsThePointsThereAre(t *testing.T) {
 	t.Parallel()
 	if AutoPool() != len(AutoPoints) {
 		t.Errorf("AutoPool = %d over %d points", AutoPool(), len(AutoPoints))
-	}
-
-	// NOT the old bare name, and not the "auto/0" that named a group of
-	// four: a client old enough to take either would not exclude against
-	// these, and the two would quietly share objects.
-	seen := map[string]bool{AutoLock: true, "auto/0": true}
-	for i := 0; i < AutoPool(); i++ {
-		name := AutoSlotLock(i)
-		if seen[name] {
-			t.Errorf("place %d is locked as %q, which is somebody else's name", i, name)
-		}
-		seen[name] = true
-	}
-	if seen[AutoAllocLock] {
-		t.Errorf("the allocation lock is %q, which is also a place", AutoAllocLock)
-	}
-	if got := AutoSlotLock(2); got != "auto/slot/2" {
-		t.Errorf("AutoSlotLock(2) = %q", got)
-	}
-	if len(autoSlotLocks()) != AutoPool() {
-		t.Errorf("%d locks name a pool of %d", len(autoSlotLocks()), AutoPool())
 	}
 }
 
@@ -1289,33 +1268,32 @@ func TestSetupTakesEveryGroupBeforeMovingAnything(t *testing.T) {
 	}
 }
 
-// TestSetupRefusesUnderARunningBenchmark: the refusal names the place
-// and whoever has it, because "in use" without either leaves the reader
-// with nothing to do about it.
+// TestSetupRefusesUnderARunningBenchmark: setting up moves attachments
+// about, and an object moving under a running benchmark is a wrong
+// number rather than a failure.  The refusal carries what the daemon
+// said, because "in use" on its own leaves the reader nothing to do
+// about it -- and it is a refusal rather than a wait, because somebody
+// at a terminal wants to be told, not hung.
 func TestSetupRefusesUnderARunningBenchmark(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-	f.mu.Lock()
-	f.busy[AutoSlotLock(1)] = "autobench on quark"
-	f.mu.Unlock()
+	s, g := newGranting(t, "quark")
+	g.free["quark"] = 2 // not the whole pool: somebody is running
 
 	_, err := SetupAuto(context.Background(), s, 4)
 	if err == nil {
 		t.Fatal("SetupAuto moved attachments about under a running benchmark")
 	}
-	if !strings.Contains(err.Error(), "autobench on quark") {
-		t.Errorf("SetupAuto = %v, want it to name who has the object", err)
+	if !strings.Contains(err.Error(), "only 2 free") {
+		t.Errorf("SetupAuto = %v, want it to carry what the daemon said", err)
 	}
 
-	// A daemon that says a place is taken without saying by whom still
-	// has to produce a sentence.
-	f.mu.Lock()
-	f.busy[AutoSlotLock(1)] = ""
-	f.busy[AutoSlotLock(0)] = ""
-	f.mu.Unlock()
-	if got := holderOr(""); got != "something else" {
-		t.Errorf("holderOr = %q with nobody named", got)
+	// The whole pool free, and it goes ahead -- and gives the places
+	// back afterwards, since it holds them only while it moves things.
+	g.free["quark"] = SlotsPerAgentForTest
+	if _, err := SetupAuto(context.Background(), s, 4); err != nil {
+		t.Fatalf("SetupAuto with nothing running: %v", err)
+	}
+	if got := g.gaveBack(); len(got) != 1 {
+		t.Errorf("setup gave the objects back %d times: %v", len(got), got)
 	}
 }
 

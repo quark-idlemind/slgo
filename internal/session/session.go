@@ -151,20 +151,6 @@ const AutoGroupSize = 4
 // how many things can run on it at once.
 func AutoPool() int { return len(AutoPoints) }
 
-// AutoSlotLock names the lock over one place in the pool, and
-// AutoAllocLock the one held while deciding who gets which.
-//
-// NOT the old bare "auto", nor the "auto/0" that named a group of four,
-// deliberately: a client old enough to lock either would not exclude
-// against these, and the two would quietly share objects.  A different
-// name makes the mismatch visible -- the old client takes a lock nobody
-// else wants -- rather than silent.
-func AutoSlotLock(i int) string { return fmt.Sprintf("%s/slot/%d", AutoLock, i) }
-
-// AutoAllocLock is held while a caller decides which places it is
-// taking, and never while it waits for one.  See auto.go.
-var AutoAllocLock = AutoLock + "/alloc"
-
 // EnsureAutoItems makes sure the first n auto items exist in inventory,
 // by COPYING the first one rather than building each.
 //
@@ -246,29 +232,28 @@ func SetupAuto(ctx context.Context, s *sl.Session, n int) ([]*sl.Object, error) 
 		n = len(AutoPoints)
 	}
 
-	// Every place, and the allocation lock over them: setting up moves
+	// Every place this avatar has, taken as one grant.  Setting up moves
 	// attachments about, and an object moving under a running benchmark
-	// is a wrong number rather than a failure.  The allocation lock
-	// first, so that a caller part way through choosing finishes and
-	// nobody starts choosing while this holds half the pool.
-	var held []string
-	defer func() {
-		for i := len(held) - 1; i >= 0; i-- {
-			s.Unlock(held[i])
-		}
-	}()
-	for _, name := range append([]string{AutoAllocLock}, autoSlotLocks()...) {
-		got, holder, err := s.TryLock(ctx, name)
+	// is a wrong number rather than a failure -- so this happens when
+	// nothing else is using any of them, or it does not happen.
+	//
+	// Without waiting: a person who ran this while a benchmark was going
+	// wants to be told, not to have their terminal hang until it
+	// finishes.
+	if g, ok := s.Backend().(granter); ok {
+		got, err := g.TrySlots(ctx, AutoPool(), time.Hour, s.Info().Name)
 		if err != nil {
 			return nil, fmt.Errorf("asking for the %s objects: %w", AutoObject, err)
 		}
-		if !got {
-			return nil, fmt.Errorf("%s is in use by %s; "+
+		if !got.Held() {
+			return nil, fmt.Errorf("the %s objects are in use (%s); "+
 				"setting up moves attachments about and cannot be done "+
 				"under a running benchmark",
-				name, holderOr(holder))
+				AutoObject, got.Why)
 		}
-		held = append(held, name)
+		// Left dirty deliberately: this moved things about, and what was
+		// in them is not what the next caller put there.
+		defer g.ReleaseSlots(got.ID, false)
 	}
 
 	folder, err := objectsFolder(ctx, s)
@@ -385,13 +370,4 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 			fmt.Fprintf(os.Stderr, "%s is still there: %v\n", obj, err)
 		}
 	}, nil
-}
-
-// autoSlotLocks names every place in the pool.
-func autoSlotLocks() []string {
-	out := make([]string, 0, AutoPool())
-	for i := 0; i < AutoPool(); i++ {
-		out = append(out, AutoSlotLock(i))
-	}
-	return out
 }

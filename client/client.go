@@ -112,6 +112,10 @@ type Conn struct {
 	// of.  See lock.go.
 	locks locking
 
+	// grants is what this connection has asked slgod for out of the
+	// shared objects.  See slots.go.
+	grants granting
+
 	closeOnce sync.Once
 	done      chan struct{}
 	err       atomic.Value
@@ -470,6 +474,8 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 				default:
 				}
 			}
+		case *pb.ServerPacket_Granted:
+			c.grants.deliver(b.Granted)
 		case *pb.ServerPacket_Locked:
 			// Never dropped: somebody is waiting on this, and losing
 			// it would leave them waiting for a lock they have been

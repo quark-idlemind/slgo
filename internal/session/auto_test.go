@@ -1,111 +1,163 @@
 package session
 
-// Choosing where to run, when there are several avatars and several
-// groups of objects on each.
+// Turning a grant into objects.
 //
-// Two halves, and they need different fakes.  takeSlots and wearSlots
-// are decisions about ONE session and are driven through the fake
-// backend in session_test.go.  UseAutoAnywhere is the other half -- it
-// dials once per avatar it considers, and closes the sessions it does
-// not use -- so it needs a daemon holding several, which is the gRPC
-// server on loopback that session_test.go builds.
-//
-// What is worth holding on to here is the ORDER of things: a queue is
-// the last resort, a named avatar is honoured exactly including its
-// wait, and objects are taken all together or not at all.  None of that
-// is visible in a single run; it only shows up as two benchmarks quietly
-// sharing an object, which is a wrong number rather than a failure, or
-// as two callers waiting on each other for ever.
+// What the daemon decides is tested where it is decided, over the wire
+// that carries it -- see server/slots_test.go.  What is left here is the
+// half the daemon cannot do and the choosing this side still makes:
+// which avatar to ask about, what to do when one cannot supply the lot,
+// and turning a place into an object that exists and is worn.
 
 import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
-// fourSlots is a benchmark's worth of the pool, for the tests that are
-// about wearing objects rather than about which places they came from.
-var fourSlots = []int{0, 1, 2, 3}
+// grantingGrid is a backend that answers for places the way slgod does.
+//
+// It is a fakeGrid with the three methods that make a session a granter,
+// which is how this package tells a hosted session from a direct one: a
+// direct session has no daemon, so there is nobody to ask and nothing to
+// share with.
+type grantingGrid struct {
+	*fakeGrid
+	names []string
 
-// allBusy makes every place taken by somebody else, which is one avatar
-// with nothing to spare.
-func allBusy(f *fakeGrid, by string) {
-	busy(f, by, 0, AutoPool())
+	mu sync.Mutex
+
+	// free is how many places each avatar has, by name.  An avatar that
+	// is not in it has none.
+	free map[string]int
+
+	// dirty marks places that come back needing clearing.
+	dirty map[string]bool
+
+	asked    []string // "agent:n:try", in order
+	released []string
+	nextID   int
 }
 
-// busy makes the places from lo up to hi somebody else's.
-func busy(f *fakeGrid, by string, lo, hi int) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for i := lo; i < hi; i++ {
-		f.busy[AutoSlotLock(i)] = by
+func newGranting(t *testing.T, names ...string) (*sl.Session, *grantingGrid) {
+	t.Helper()
+	g := &grantingGrid{
+		fakeGrid: newFakeGrid(t),
+		names:    names,
+		free:     map[string]int{},
+		dirty:    map[string]bool{},
 	}
+	g.fakeGrid.stock(len(AutoPoints))
+	for _, n := range names {
+		g.free[n] = SlotsPerAgentForTest
+	}
+	if len(names) > 0 {
+		g.fakeGrid.info.Name = names[0]
+	}
+	s, err := sl.New(g)
+	if err != nil {
+		t.Fatalf("sl.New: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	// A grant may name an avatar this session is not attached to, and
+	// opening one for it is the only thing here that dials.  Hand back a
+	// session of the test's own instead.
+	was := dialFor
+	dialFor = func(ctx context.Context, o Options) (*sl.Session, error) {
+		other := &grantingGrid{
+			fakeGrid: newFakeGrid(t),
+			names:    names,
+			free:     g.free,
+			dirty:    g.dirty,
+		}
+		other.fakeGrid.stock(len(AutoPoints))
+		other.fakeGrid.info.Name = o.Agent
+		s2, err := sl.New(other)
+		if err != nil {
+			return nil, err
+		}
+		t.Cleanup(func() { s2.Close() })
+		return s2, nil
+	}
+	t.Cleanup(func() { dialFor = was })
+
+	return s, g
 }
 
-// snapshot is every lock the fake says is held, by name.
-func snapshot(f *fakeGrid) map[string]string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	out := map[string]string{}
-	for name, by := range f.busy {
-		if by != "" {
-			out[name] = by
+// SlotsPerAgentForTest is what these fakes pretend a daemon holds.  It
+// is the pool's number and not this package's: what this side knows is
+// how to wear a place, not how many there are.
+const SlotsPerAgentForTest = 12
+
+func (g *grantingGrid) Sessions(context.Context) ([]string, error) { return g.names, nil }
+
+func (g *grantingGrid) Slots(ctx context.Context, n int, d time.Duration, agent string) (*client.Grant, error) {
+	return g.grant(n, agent, false)
+}
+
+func (g *grantingGrid) TrySlots(ctx context.Context, n int, d time.Duration, agent string) (*client.Grant, error) {
+	return g.grant(n, agent, true)
+}
+
+func (g *grantingGrid) ReleaseSlots(id string, clean bool) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.released = append(g.released, fmt.Sprintf("%s:%v", id, clean))
+	return nil
+}
+
+// grant hands out places the way the daemon would: from one avatar when
+// one was named, and from wherever they are otherwise.
+func (g *grantingGrid) grant(n int, agent string, try bool) (*client.Grant, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.asked = append(g.asked, fmt.Sprintf("%s:%d:%v", agent, n, try))
+
+	from := g.names
+	if agent != "" {
+		from = []string{agent}
+	}
+	var places []client.Place
+	for _, name := range from {
+		for i := 0; i < g.free[name] && len(places) < n; i++ {
+			places = append(places, client.Place{
+				Agent: name, Slot: i, Dirty: g.dirty[name],
+			})
 		}
 	}
-	return out
-}
-
-// atWait runs fn and answers with what was held the first time the
-// caller waited for a place.  The allocation lock is queued on every
-// time and is not a wait for a place, so it does not count as one.
-func atWait(f *fakeGrid, fn func()) map[string]string {
-	var during map[string]string
-	f.mu.Lock()
-	f.onLock = func(name string) {
-		if name == AutoAllocLock || during != nil {
-			return
-		}
-		during = snapshot(f)
+	if len(places) < n {
+		return &client.Grant{Why: fmt.Sprintf("only %d free", len(places))}, nil
 	}
-	f.mu.Unlock()
-	fn()
-	return during
+	g.nextID++
+	return &client.Grant{
+		ID:      fmt.Sprintf("g%d", g.nextID),
+		Places:  places,
+		Expires: time.Now().Add(time.Hour),
+	}, nil
 }
 
-// held is which places the fake says are taken, and by whom.
-func held(f *fakeGrid) map[int]string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	out := map[int]string{}
-	for i := 0; i < AutoPool(); i++ {
-		if by := f.busy[AutoSlotLock(i)]; by != "" {
-			out[i] = by
-		}
-	}
-	return out
+func (g *grantingGrid) askedFor() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]string(nil), g.asked...)
 }
 
-// slotsWaitedFor is the places that were queued on rather than tried.
-// The allocation lock is always queued on -- that is what it is for --
-// and is not what these tests are about.
-func slotsWaitedFor(f *fakeGrid) []string {
-	var out []string
-	for _, name := range f.Waited() {
-		if name != AutoAllocLock {
-			out = append(out, name)
-		}
-	}
-	return out
+func (g *grantingGrid) gaveBack() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]string(nil), g.released...)
 }
 
-// TestReleasingTwiceGivesBackOneLock: Release is called from a defer and
-// often from the caller as well, and a second Unlock would give back a
-// lock that by then belongs to whoever was queued behind us.
-func TestReleasingTwiceGivesBackOneLock(t *testing.T) {
-	t.Parallel()
+// TestReleasingTwiceGivesBackOneGrant: Release is called from a defer
+// and often from the caller as well, and a second one would give back a
+// grant that by then belongs to whoever was waiting for it.
+func TestReleasingTwiceGivesBackOneGrant(t *testing.T) {
 	n := 0
 	a := &Auto{release: func() { n++ }}
 	a.Release()
@@ -119,259 +171,162 @@ func TestReleasingTwiceGivesBackOneLock(t *testing.T) {
 	(&Auto{}).Release()
 }
 
-// TestFreeObjectsAreTakenWithoutQueueing: with a pool the wait should be
-// the LAST resort -- the old arrangement was one lock over one set of
-// objects, and a second benchmark waited for the first even when objects
-// were going spare.
-func TestFreeObjectsAreTakenWithoutQueueing(t *testing.T) {
-	t.Parallel()
+// TestASessionWithNoDaemonNeedsNoArbitration: a direct login is one
+// process and one avatar.  There is nobody to contend with and nobody to
+// ask, so it takes the first places and gets on with it.
+func TestASessionWithNoDaemonNeedsNoArbitration(t *testing.T) {
 	s, f := newFakeSession(t)
 	f.stock(len(AutoPoints))
-	busy(f, "somebody else", 0, AutoGroupSize)
 
-	a, err := useAutoOn(context.Background(), s, AutoGroupSize, true)
+	a, err := useAutoOn(context.Background(), Options{Direct: true}, s, 4)
 	if err != nil {
 		t.Fatalf("useAutoOn: %v", err)
 	}
-	if len(a.Objects) != AutoGroupSize {
-		t.Errorf("took %d objects, want the %d asked for", len(a.Objects), AutoGroupSize)
+	if len(a.Objects) != 4 {
+		t.Errorf("wore %d objects", len(a.Objects))
 	}
-	for _, slot := range a.Slots {
-		if slot < AutoGroupSize {
-			t.Errorf("took place %d, which somebody else has", slot)
-		}
-	}
-	if a.Agent != "quark" {
-		t.Errorf("the objects belong to %q", a.Agent)
-	}
-	if a.Session != s {
-		t.Error("the session that came back is not the one the objects are on")
-	}
-	if got := slotsWaitedFor(f); len(got) != 0 {
-		t.Errorf("queued on %v with objects going spare", got)
-	}
-
-	a.Release()
-	for slot, by := range held(f) {
-		if by == "us" {
-			t.Errorf("releasing did not give place %d back", slot)
+	// Nothing was said to be dirty, because nobody said anything: with
+	// one process there is nobody whose script could still be running.
+	for i, d := range a.Dirty {
+		if d {
+			t.Errorf("object %d came back dirty from a session with no daemon", i)
 		}
 	}
 }
 
-// TestObjectsAreTakenOneAtATimeAndAcrossWhateverIsFree: the pool hands
-// out a COUNT and not a block.  Six objects out of a pool whose first
-// five are busy is six of the seven that are left, which the old fixed
-// groups of four could not express at all.
-func TestObjectsAreTakenOneAtATimeAndAcrossWhateverIsFree(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-	busy(f, "somebody else", 0, 5)
+// TestANamedAvatarIsAskedForByName: asking for qi and being given
+// example would be worse than being slow, so the name goes to the daemon
+// rather than being something this side hopes for.
+func TestANamedAvatarIsAskedForByName(t *testing.T) {
+	s, g := newGranting(t, "quark", "example")
 
-	a, err := useAutoOn(context.Background(), s, 6, true)
+	a, err := useAutoOn(context.Background(), Options{Agent: "example"}, s, 4)
 	if err != nil {
 		t.Fatalf("useAutoOn: %v", err)
 	}
-	if len(a.Objects) != 6 {
-		t.Errorf("took %d objects, want the 6 asked for", len(a.Objects))
+	if a.Agent != "example" {
+		t.Errorf("ran on %q", a.Agent)
 	}
-	if got := slotsWaitedFor(f); len(got) != 0 {
-		t.Errorf("queued on %v with six objects going spare", got)
+	asked := g.askedFor()
+	if len(asked) != 1 || !strings.HasPrefix(asked[0], "example:4:") {
+		t.Errorf("asked %v, want one request naming the avatar", asked)
 	}
-	for _, slot := range a.Slots {
-		if slot < 5 {
-			t.Errorf("took place %d, which somebody else has", slot)
-		}
+	// And it waits for that avatar rather than falling over to another.
+	if strings.HasSuffix(asked[0], ":true") {
+		t.Error("a named avatar was asked about without waiting")
 	}
 }
 
-// TestEverythingBusyIsAWaitOrARefusal: waiting is right when this is the
-// avatar that was asked for and wrong when there are others to try, so
-// the choice is the caller's -- and the wait forms on one of the places
-// somebody else has, because that is what "something was given back"
-// looks like with only locks to say it.
-func TestEverythingBusyIsAWaitOrARefusal(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-	allBusy(f, "somebody else")
+// TestEveryAvatarIsTriedBeforeAnyIsWaitedFor: this is what the pool is
+// for.  Queueing on the first avatar while another is idle is the
+// arrangement it replaced.
+func TestEveryAvatarIsTriedBeforeAnyIsWaitedFor(t *testing.T) {
+	s, g := newGranting(t, "quark", "example")
+	g.free["quark"] = 0 // busy
 
-	_, err := useAutoOn(context.Background(), s, 1, false)
-	if err == nil {
-		t.Fatal("useAutoOn took a group when every one of them was busy")
-	}
-	if !strings.Contains(err.Error(), "quark") {
-		t.Errorf("useAutoOn = %v, want it to name the avatar", err)
-	}
-
-	a, err := useAutoOn(context.Background(), s, 1, true)
+	a, err := useAutoOn(context.Background(), Options{}, s, 4)
 	if err != nil {
 		t.Fatalf("useAutoOn: %v", err)
 	}
-	if len(a.Objects) != 1 {
-		t.Errorf("took %d objects after waiting for one", len(a.Objects))
+	if a.Agent != "example" {
+		t.Errorf("ran on %q, want the avatar that was free", a.Agent)
 	}
-	if got := slotsWaitedFor(f); len(got) != 1 || got[0] != AutoSlotLock(0) {
-		t.Errorf("waited on %v, want one of the places somebody else had", got)
-	}
-}
-
-// TestNothingIsHeldWhileWaiting: this is the whole of why there is an
-// allocation lock.  A caller that took what it could and then waited for
-// the rest would sit holding objects nobody else can use, waiting for a
-// caller that is doing the same thing -- and neither would ever finish.
-// So everything taken goes back BEFORE anything is waited for.
-func TestNothingIsHeldWhileWaiting(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-	// Half the pool is somebody else's, so a caller wanting the whole
-	// of it cannot be served and has to wait.  It could take six on the
-	// way past, and that is exactly what it must not do.
-	busy(f, "a benchmark", 0, AutoPool()/2)
-
-	during := atWait(f, func() {
-		useAutoOn(context.Background(), s, AutoPool(), true)
-	})
-	if during == nil {
-		t.Fatal("a caller that could not be served did not wait for anything")
-	}
-	for name, by := range during {
-		if by == "us" {
-			t.Errorf("%s was still ours at the moment of waiting; "+
-				"holding one object while waiting for another is the deadlock",
-				name)
+	for _, ask := range g.askedFor() {
+		if strings.HasSuffix(ask, ":false") {
+			t.Errorf("waited on %q with an avatar going spare", ask)
 		}
 	}
 }
 
-// TestTheAllocationLockIsGivenBackBeforeWaiting: it is one lock over the
-// whole pool, so a caller that waited while holding it would stop
-// everybody else from being served -- including the caller whose objects
-// it is waiting for, if that caller wants more of them.
-func TestTheAllocationLockIsGivenBackBeforeWaiting(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-	allBusy(f, "somebody else")
+// TestNoAvatarFreeIsAWaitOnTheDefault: the wait is the last resort, and
+// it forms on the default rather than on whichever avatar was asked
+// last, so that waiting is predictable.
+func TestNoAvatarFreeIsAWaitOnTheDefault(t *testing.T) {
+	s, g := newGranting(t, "quark", "example")
+	g.free["quark"] = 0
+	g.free["example"] = 0
 
-	during := atWait(f, func() {
-		useAutoOn(context.Background(), s, 1, true)
-	})
-	if during == nil {
-		t.Fatal("a caller with nothing free did not wait for anything")
+	if _, err := useAutoOn(context.Background(), Options{}, s, 4); err == nil {
+		t.Fatal("objects came out of a daemon holding none free")
 	}
-	if by := during[AutoAllocLock]; by != "" {
-		t.Errorf("the allocation lock was held by %q while waiting, "+
-			"which stops everybody else being served -- including whoever "+
-			"holds the objects being waited for", by)
+	asked := g.askedFor()
+	last := asked[len(asked)-1]
+	if !strings.HasPrefix(last, "quark:4:") || !strings.HasSuffix(last, ":false") {
+		t.Errorf("the last request was %q, want a wait on the default", last)
 	}
 }
 
-// TestPartOfWhatWasWantedIsGivenBackRatherThanKept: four of the eight
-// asked for is not a smaller answer, it is objects taken out of the pool
-// that the caller cannot use -- and the next caller, who wanted four,
-// finds nothing.
-func TestPartOfWhatWasWantedIsGivenBackRatherThanKept(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-	busy(f, "a benchmark", 0, AutoPool()-3)
+// TestOneRequestCanBeAnsweredOutOfSeveralAvatars: the whole reason the
+// daemon does the deciding.  Twelve scripts at once is twelve objects
+// from wherever they are, and each avatar's are worn on that avatar's
+// own session.
+func TestOneRequestCanBeAnsweredOutOfSeveralAvatars(t *testing.T) {
+	s, g := newGranting(t, "quark", "example")
+	g.free["quark"] = 2
+	g.free["example"] = 4
 
-	if _, err := useAutoOn(context.Background(), s, 8, false); err == nil {
-		t.Fatal("useAutoOn took eight objects out of the three that were free")
+	as, err := spreadOn(context.Background(), Options{}, s, 6)
+	if err != nil {
+		t.Fatalf("spreadOn: %v", err)
 	}
-	for slot, by := range held(f) {
-		if by == "us" {
-			t.Errorf("place %d was kept out of an allocation that failed", slot)
+	if len(as) != 2 {
+		t.Fatalf("six objects came back in %d lots, want one per avatar", len(as))
+	}
+	total := 0
+	for _, a := range as {
+		total += len(a.Objects)
+		if a.Session == nil {
+			t.Errorf("%s came back with no session to run on", a.Agent)
+		}
+		if a.Agent != a.Session.Info().Name {
+			t.Errorf("%s's objects are on %s's session", a.Agent, a.Session.Info().Name)
 		}
 	}
-}
-
-// TestADaemonTooOldToLockIsNotWorkedAround: the lock is the whole of
-// what makes several runs at once safe, so one that cannot be asked for
-// is not something to carry on without -- and the message says what to
-// do instead, because an operator with an old daemon can still run.
-func TestADaemonTooOldToLockIsNotWorkedAround(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.mu.Lock()
-	f.lockErr = fmt.Errorf("unknown method Lock")
-	f.mu.Unlock()
-
-	_, err := useAutoOn(context.Background(), s, 1, true)
-	if err == nil {
-		t.Fatal("useAutoOn used objects it could not lock")
-	}
-	if !strings.Contains(err.Error(), "--rez") {
-		t.Errorf("useAutoOn = %v, want it to say what avoids the lock", err)
+	if total != 6 {
+		t.Errorf("%d objects between them, want 6", total)
 	}
 }
 
-// TestPlacesTakenAndThenUnusableAreGivenBack: holding a lock over
-// objects that could not be worn would leave them unusable to
-// everybody, including the next run of this same program.
-func TestPlacesTakenAndThenUnusableAreGivenBack(t *testing.T) {
-	t.Parallel()
+// TestOneGrantIsGivenBackOnce: a grant is granted at once and goes back
+// at once, however many avatars it turned out to cover.  Giving it back
+// once per avatar would hand the rest to somebody else while this caller
+// was still using them.
+func TestOneGrantIsGivenBackOnce(t *testing.T) {
+	s, g := newGranting(t, "quark", "example")
+	g.free["quark"] = 2
+	g.free["example"] = 4
 
-	t.Run("taken without waiting", func(t *testing.T) {
-		t.Parallel()
-		s, f := newFakeSession(t)
-		f.mu.Lock()
-		f.capErr = fmt.Errorf("the capability is not answering")
-		f.mu.Unlock()
-
-		if _, err := useAutoOn(context.Background(), s, 1, false); err == nil {
-			t.Fatal("useAutoOn used objects it could not find")
-		}
-		for slot, by := range held(f) {
-			if by == "us" {
-				t.Errorf("place %d is still held after the objects could not be worn", slot)
-			}
-		}
-	})
-
-	t.Run("waited for", func(t *testing.T) {
-		t.Parallel()
-		s, f := newFakeSession(t)
-		allBusy(f, "somebody else")
-		f.mu.Lock()
-		f.capErr = fmt.Errorf("the capability is not answering")
-		f.mu.Unlock()
-
-		if _, err := useAutoOn(context.Background(), s, 1, true); err == nil {
-			t.Fatal("useAutoOn used objects it could not find")
-		}
-		if got := slotsWaitedFor(f); len(got) != 1 {
-			t.Errorf("waited on %v", got)
-		}
-		for slot, by := range held(f) {
-			if by == "us" {
-				t.Errorf("place %d is still held after the objects could not be worn", slot)
-			}
-		}
-	})
+	as, err := spreadOn(context.Background(), Options{}, s, 6)
+	if err != nil {
+		t.Fatalf("spreadOn: %v", err)
+	}
+	for _, a := range as {
+		a.Release()
+	}
+	if got := g.gaveBack(); len(got) != 1 {
+		t.Errorf("the grant was given back %d times: %v", len(got), got)
+	}
 }
 
-// TestAWaitThatEndsWithoutTheLockIsReported: the queue is the last
-// resort, so it ending badly is the end of the road -- the daemon went
-// away, or the fifteen minutes ran out, and either way there is nowhere
-// else to look.
-func TestAWaitThatEndsWithoutTheLockIsReported(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	allBusy(f, "somebody else")
-	f.mu.Lock()
-	f.waitErr = fmt.Errorf("the daemon went away")
-	f.mu.Unlock()
+// TestAPlaceThatWasNotLeftCleanSaysSo: a script left running in an
+// object is a line the next holder reads as its own, so what the daemon
+// says about a place has to reach the caller that has to clear it.
+func TestAPlaceThatWasNotLeftCleanSaysSo(t *testing.T) {
+	s, g := newGranting(t, "quark")
+	g.dirty["quark"] = true
 
-	_, err := useAutoOn(context.Background(), s, 1, true)
-	if err == nil {
-		t.Fatal("useAutoOn came back holding a lock it never got")
+	a, err := useAutoOn(context.Background(), Options{}, s, 2)
+	if err != nil {
+		t.Fatalf("useAutoOn: %v", err)
 	}
-	if !strings.Contains(err.Error(), "quark") {
-		t.Errorf("useAutoOn = %v, want it to name the avatar waited on", err)
+	if len(a.Dirty) != len(a.Objects) {
+		t.Fatalf("%d objects and %d of them said to be dirty or not",
+			len(a.Objects), len(a.Dirty))
+	}
+	for i, d := range a.Dirty {
+		if !d {
+			t.Errorf("object %d came back clean when the daemon said otherwise", i)
+		}
 	}
 }
 
@@ -380,24 +335,23 @@ func TestAWaitThatEndsWithoutTheLockIsReported(t *testing.T) {
 // to reach -- a place at the end of the pool needs every item below it
 // to exist as well, because they are all copies of the first.
 func TestWearingMakesTheItemsFirst(t *testing.T) {
-	t.Parallel()
 	s, f := newFakeSession(t)
 	f.stock(1)
 	answerCopies(f)
 
-	a, err := wearSlots(context.Background(), s, []int{4, 5, 6, 7})
+	a, err := wearSlots(context.Background(), s, []int{4, 5, 6, 7}, nil)
 	if err != nil {
 		t.Fatalf("wearSlots: %v", err)
 	}
-	if len(a.Objects) != AutoGroupSize {
+	if len(a.Objects) != 4 {
 		t.Errorf("wore %d objects", len(a.Objects))
 	}
 	items, err := s.FolderItems(context.Background(), testObjects)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2*AutoGroupSize {
-		t.Errorf("%d items exist, want everything up to the top of the group", len(items))
+	if len(items) != 8 {
+		t.Errorf("%d items exist, want everything up to the highest place", len(items))
 	}
 }
 
@@ -405,39 +359,17 @@ func TestWearingMakesTheItemsFirst(t *testing.T) {
 // with no objects in it, and a caller handed an empty Auto would divide
 // by the length of it.
 func TestWearingNothingIsRefused(t *testing.T) {
-	t.Parallel()
 	s, _ := newFakeSession(t)
-
-	_, err := wearSlots(context.Background(), s, nil)
-	if err == nil || !strings.Contains(err.Error(), "no objects") {
-		t.Errorf("wearSlots = %v, want it to say there is nowhere to run", err)
-	}
-}
-
-// TestMoreObjectsThanTheAvatarHasIsRefusedRatherThanWaitedFor: the
-// allocation is all or nothing, so asking for thirteen out of twelve is
-// not slow -- it never comes back at all.  The refusal is what turns
-// that into a message.
-func TestMoreObjectsThanTheAvatarHasIsRefusedRatherThanWaitedFor(t *testing.T) {
-	t.Parallel()
-	// A port with nothing on it, so that a refusal which stopped being
-	// one would fail rather than quietly find the daemon on this
-	// machine and take objects on a live avatar.
-	_, err := UseAutoAnywhere(context.Background(),
-		Options{Addr: "127.0.0.1:1"}, AutoPool()+1)
-	if err == nil || !strings.Contains(err.Error(), "for ever") {
-		t.Errorf("UseAutoAnywhere = %v, want it to say why it cannot wait", err)
+	if _, err := wearSlots(context.Background(), s, nil, nil); err == nil {
+		t.Error("wearSlots answered with nowhere to run")
 	}
 }
 
 // TestWearingStopsAtTheFirstObjectAndCarriesOnAfterIt: no objects at all
-// is no benchmark; some of them is a slower one, and the caller already
-// copes with getting fewer than it asked for.
+// is nowhere to run; some of them is a slower run, and the caller
+// already copes with getting fewer than it asked for.
 func TestWearingStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
-	t.Parallel()
-
 	t.Run("nothing to wear", func(t *testing.T) {
-		t.Parallel()
 		s, f := newFakeSession(t)
 		f.stock(4)
 		f.mu.Lock()
@@ -445,13 +377,12 @@ func TestWearingStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 		f.sendErr = fmt.Errorf("the circuit is gone")
 		f.mu.Unlock()
 
-		if _, err := wearSlots(context.Background(), s, fourSlots); err == nil {
+		if _, err := wearSlots(context.Background(), s, fourSlots, nil); err == nil {
 			t.Error("wearSlots reported success without its first object")
 		}
 	})
 
 	t.Run("some of them", func(t *testing.T) {
-		t.Parallel()
 		s, f := newFakeSession(t)
 		// Two objects exist and are on; nothing can be copied to make
 		// the rest, and nothing can be built either.
@@ -461,538 +392,29 @@ func TestWearingStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 		f.presenceErr = fmt.Errorf("the parcel will not have it")
 		f.mu.Unlock()
 
-		a, err := wearSlots(context.Background(), s, fourSlots)
+		a, err := wearSlots(context.Background(), s, fourSlots, nil)
 		if err != nil {
 			t.Fatalf("wearSlots: %v", err)
 		}
 		if len(a.Objects) != 2 {
 			t.Errorf("wore %d objects, want the two that exist", len(a.Objects))
 		}
-	})
-
-	t.Run("nowhere to look", func(t *testing.T) {
-		t.Parallel()
-		s, f := newFakeSession(t)
-		f.mu.Lock()
-		f.capErr = fmt.Errorf("the capability is not answering")
-		f.mu.Unlock()
-
-		if _, err := wearSlots(context.Background(), s, []int{0}); err == nil {
-			t.Error("wearSlots found objects in an inventory it could not read")
-		}
-	})
-
-	t.Run("nothing to make them from", func(t *testing.T) {
-		t.Parallel()
-		s, f := newFakeSession(t)
-		f.mu.Lock()
-		f.presenceErr = fmt.Errorf("the parcel will not have it")
-		f.mu.Unlock()
-
-		if _, err := wearSlots(context.Background(), s, fourSlots); err == nil {
-			t.Error("wearSlots wore objects that were never made")
+		if len(a.Slots) != 2 {
+			t.Errorf("%d places came back for %d objects", len(a.Slots), len(a.Objects))
 		}
 	})
 }
+
+// fourSlots is a benchmark's worth of the pool, for the tests that are
+// about wearing objects rather than about which places they came from.
+var fourSlots = []int{0, 1, 2, 3}
 
 // TestOnlyAHostedSessionKnowsWhoElseThereIs: a direct session is the
 // only session there is, and mistaking it for a daemon holding one
 // avatar would have this looking for others that cannot exist.
 func TestOnlyAHostedSessionKnowsWhoElseThereIs(t *testing.T) {
-	t.Parallel()
 	s, _ := newFakeSession(t)
 	if _, err := sessionNames(context.Background(), s); err == nil {
 		t.Error("a direct session was asked who else the daemon holds")
-	}
-
-	hosted, err := sl.New(&listsSessions{
-		fakeGrid: newFakeGrid(t),
-		names:    []string{"quark", "example"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { hosted.Close() })
-	got, err := sessionNames(context.Background(), hosted)
-	if err != nil || len(got) != 2 {
-		t.Errorf("sessionNames = %v, %v", got, err)
-	}
-
-	refuses, err := sl.New(&listsSessions{
-		fakeGrid: newFakeGrid(t),
-		err:      fmt.Errorf("the daemon is going down"),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { refuses.Close() })
-	if _, err := sessionNames(context.Background(), refuses); err == nil {
-		t.Error("sessionNames answered from a daemon that refused")
-	}
-}
-
-// ------------------------------------------------- choosing an avatar
-
-// TestANamedAvatarIsHonouredExactly: asking for qi and being given
-// example would be worse than being slow, so a named avatar is used and
-// waited for rather than fallen over from.
-func TestANamedAvatarIsHonouredExactly(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.agents = []string{"quark", "example"}
-	d.busy("quark")
-
-	a, err := UseAutoAnywhere(context.Background(), Options{Addr: addr, Agent: "quark"}, 1)
-	if err != nil {
-		t.Fatalf("UseAutoAnywhere: %v", err)
-	}
-	defer a.Session.Close()
-	if a.Agent != "quark" {
-		t.Errorf("asked for quark and was given %q", a.Agent)
-	}
-	if len(a.Objects) != 1 {
-		t.Errorf("took %d objects", len(a.Objects))
-	}
-	a.Release()
-}
-
-// TestAnAvatarThatCannotBeReachedIsReported: with one named there is
-// nothing to fall over to, so a daemon that is not there is the answer
-// rather than something to work around.
-func TestAnAvatarThatCannotBeReachedIsReported(t *testing.T) {
-	newFakeDaemon(t)
-	if _, err := UseAutoAnywhere(context.Background(),
-		Options{Addr: "127.0.0.1:1", Agent: "quark"}, 1); err == nil {
-		t.Error("UseAutoAnywhere reached a daemon on a port nothing is listening on")
-	}
-}
-
-// TestASessionOpenedAndThenUnusableIsClosed: the session it returns
-// belongs to the caller, and one it opened and could not use belongs to
-// nobody -- leaving it open holds a stream on the daemon for as long as
-// the program runs.
-func TestASessionOpenedAndThenUnusableIsClosed(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.capFail = true
-
-	if _, err := UseAutoAnywhere(context.Background(),
-		Options{Addr: addr, Agent: "quark"}, 1); err == nil {
-		t.Error("UseAutoAnywhere used objects it could not find")
-	}
-}
-
-// TestOneAvatarIsUsedWithoutBeingChosenBetween: a daemon holding one
-// session, or one too old to say what it holds, has nothing to choose
-// between -- so the connection already open is the one used.
-func TestOneAvatarIsUsedWithoutBeingChosenBetween(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.agents = []string{"quark"}
-
-	a, err := UseAutoAnywhere(context.Background(), Options{Addr: addr}, AutoGroupSize)
-	if err != nil {
-		t.Fatalf("UseAutoAnywhere: %v", err)
-	}
-	defer a.Session.Close()
-	if a.Agent != "quark" || len(a.Objects) != AutoGroupSize {
-		t.Errorf("ran on %q with %d objects", a.Agent, len(a.Objects))
-	}
-}
-
-// TestTheOnlyAvatarFailingIsTheEndOfIt: with one session there is
-// nothing to fall over to, so the session opened for it is closed and
-// the failure is passed on rather than turned into a search.
-func TestTheOnlyAvatarFailingIsTheEndOfIt(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.agents = []string{"quark"}
-	d.capFail = true
-
-	if _, err := UseAutoAnywhere(context.Background(), Options{Addr: addr}, 1); err == nil {
-		t.Error("UseAutoAnywhere used objects it could not find")
-	}
-}
-
-// TestTheDefaultAvatarIsTriedWithoutReconnecting: the daemon has already
-// attached us to one, and dialling it again to find out whether it is
-// free would be a second connection to the same session.
-func TestTheDefaultAvatarIsTriedWithoutReconnecting(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.agents = []string{"quark", "example"}
-
-	a, err := UseAutoAnywhere(context.Background(), Options{Addr: addr}, 1)
-	if err != nil {
-		t.Fatalf("UseAutoAnywhere: %v", err)
-	}
-	defer a.Session.Close()
-	if a.Agent != "quark" {
-		t.Errorf("ran on %q, want the daemon's own first choice", a.Agent)
-	}
-}
-
-// TestABusyDefaultMovesOnToTheNextAvatar: this is what the pool is for.
-// The old arrangement queued on the first avatar however many others
-// were idle, and the wait is meant to be the last resort.
-func TestABusyDefaultMovesOnToTheNextAvatar(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.agents = []string{"quark", "example"}
-	d.busy("quark")
-
-	a, err := UseAutoAnywhere(context.Background(), Options{Addr: addr}, 1)
-	if err != nil {
-		t.Fatalf("UseAutoAnywhere: %v", err)
-	}
-	defer a.Session.Close()
-	if a.Agent != "example" {
-		t.Errorf("ran on %q, want the avatar that was free", a.Agent)
-	}
-}
-
-// TestAnAvatarThatCannotBeReachedIsSkippedRatherThanFatal: one of
-// several being unreachable is a reason to try the next, not a reason to
-// stop -- the daemon may be holding a session that has just gone down.
-func TestAnAvatarThatCannotBeReachedIsSkippedRatherThanFatal(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.agents = []string{"quark", "gone", "example"}
-	d.refuseAttach["gone"] = true
-	d.busy("quark")
-
-	a, err := UseAutoAnywhere(context.Background(), Options{Addr: addr}, 1)
-	if err != nil {
-		t.Fatalf("UseAutoAnywhere: %v", err)
-	}
-	defer a.Session.Close()
-	if a.Agent != "example" {
-		t.Errorf("ran on %q, want the avatar past the one that was gone", a.Agent)
-	}
-}
-
-// TestEveryAvatarIsTriedBeforeAnyIsWaitedFor: with everything busy the
-// queue forms on the DEFAULT rather than on whichever avatar happened to
-// be asked last, so that waiting is predictable from one run to the next.
-func TestEveryAvatarIsTriedBeforeAnyIsWaitedFor(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.agents = []string{"quark", "example"}
-	d.busy("quark", "example")
-
-	a, err := UseAutoAnywhere(context.Background(), Options{Addr: addr}, 1)
-	if err != nil {
-		t.Fatalf("UseAutoAnywhere: %v", err)
-	}
-	defer a.Session.Close()
-	if a.Agent != "quark" {
-		t.Errorf("queued on %q, want the default", a.Agent)
-	}
-}
-
-// TestAWaitOnTheDefaultThatFailsIsReported: the last resort failing is
-// the end of the road -- there is nowhere else to look, and the session
-// opened for it is closed on the way out.
-func TestAWaitOnTheDefaultThatFailsIsReported(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.agents = []string{"quark", "example"}
-	d.busy("quark", "example")
-	d.capFail = true
-
-	if _, err := UseAutoAnywhere(context.Background(), Options{Addr: addr}, 1); err == nil {
-		t.Error("UseAutoAnywhere used objects it could not find")
-	}
-}
-
-// TestAskingForNoObjectsAsksForOne: the number comes off a command line
-// and nought objects is not a thing a benchmark can run on, so it is
-// rounded up rather than refused.
-func TestAskingForNoObjectsAsksForOne(t *testing.T) {
-	d, addr := newFakeDaemon(t)
-	d.agents = []string{"quark"}
-
-	a, err := UseAutoAnywhere(context.Background(), Options{Addr: addr}, 0)
-	if err != nil {
-		t.Fatalf("UseAutoAnywhere: %v", err)
-	}
-	defer a.Session.Close()
-	if len(a.Objects) != 1 {
-		t.Errorf("asking for none took %d objects", len(a.Objects))
-	}
-}
-
-// TestUseAutoAnywhereNeedsADaemonAtAll: with nobody named there is still
-// a first connection to make, and it failing is the end of it.
-func TestUseAutoAnywhereNeedsADaemonAtAll(t *testing.T) {
-	newFakeDaemon(t)
-	if _, err := UseAutoAnywhere(context.Background(), Options{Addr: "127.0.0.1:1"}, 1); err == nil {
-		t.Error("UseAutoAnywhere ran somewhere with no daemon to run it on")
-	}
-}
-
-// ----------------------------------------------- more than a group
-
-// TestAnyCountUpToThePoolCanBeAskedFor: four was the size of a group
-// because four is what a benchmark's search uses.  It was never a
-// statement about how many objects a program may hold, and a program
-// with twelve scripts to run at once wants twelve.
-func TestAnyCountUpToThePoolCanBeAskedFor(t *testing.T) {
-	t.Parallel()
-	for _, n := range []int{1, 2, AutoGroupSize, AutoGroupSize + 2, AutoPool()} {
-		s, f := newFakeSession(t)
-		f.stock(len(AutoPoints))
-
-		a, err := useAutoOn(context.Background(), s, n, false)
-		if err != nil {
-			t.Errorf("%d objects: %v", n, err)
-			continue
-		}
-		if len(a.Objects) != n {
-			t.Errorf("asked for %d objects and got %d", n, len(a.Objects))
-		}
-		if len(a.Slots) != n {
-			t.Errorf("asked for %d places and got %v", n, a.Slots)
-		}
-	}
-}
-
-// TestNoPlaceIsHandedOutTwice: the daemon's lock is RE-ENTRANT -- a
-// client that asks for one it already holds is given it, because asking
-// twice and holding once is the sensible answer to a client that asks
-// twice.  For anything gathering objects that is a trap, and the same
-// object handed out twice is two scripts in one place, which is the one
-// thing running several at once must not do.
-func TestNoPlaceIsHandedOutTwice(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-
-	// The lock does say yes to a place we are already holding, which is
-	// what makes this worth a test at all.
-	if got, _, err := s.TryLock(context.Background(), AutoSlotLock(0)); err != nil || !got {
-		t.Fatalf("the daemon refused a lock its own client holds: %v, %v", got, err)
-	}
-	s.Unlock(AutoSlotLock(0))
-
-	a, err := useAutoOn(context.Background(), s, AutoPool(), false)
-	if err != nil {
-		t.Fatalf("useAutoOn: %v", err)
-	}
-	seen := map[int]bool{}
-	for _, slot := range a.Slots {
-		if seen[slot] {
-			t.Errorf("place %d was handed out twice", slot)
-		}
-		seen[slot] = true
-	}
-	ids := map[string]bool{}
-	for _, o := range a.Objects {
-		if ids[o.ID.String()] {
-			t.Errorf("object %s was handed out twice", o.ID)
-		}
-		ids[o.ID.String()] = true
-	}
-}
-
-// TestTakingWhatIsAskedForAndNoMore: a run of four scripts that took the
-// whole pool would leave eight objects idle and a benchmark queueing
-// behind them.
-func TestTakingWhatIsAskedForAndNoMore(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-
-	if _, err := useAutoOn(context.Background(), s, AutoGroupSize, false); err != nil {
-		t.Fatalf("useAutoOn: %v", err)
-	}
-	if got := len(held(f)); got != AutoGroupSize {
-		t.Errorf("%d places are held for a run that asked for %d", got, AutoGroupSize)
-	}
-}
-
-// TestABenchmarkAndAScriptRunShareThePool: the point of counting
-// objects rather than groups is that what is left over is usable.  Eight
-// held for scripts leaves four for a benchmark -- which under fixed
-// groups of four was true only because eight happens to divide by four.
-func TestABenchmarkAndAScriptRunShareThePool(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-	// Somebody else's script run, holding eight.
-	busy(f, "automate --jobs 8", 0, AutoPool()-AutoGroupSize)
-
-	a, err := useAutoOn(context.Background(), s, AutoGroupSize, false)
-	if err != nil {
-		t.Fatalf("the benchmark: %v", err)
-	}
-	if len(a.Objects) != AutoGroupSize {
-		t.Errorf("the benchmark got %d objects", len(a.Objects))
-	}
-	for _, slot := range a.Slots {
-		if slot < AutoPool()-AutoGroupSize {
-			t.Errorf("the benchmark took place %d, which the scripts have", slot)
-		}
-	}
-	if got := slotsWaitedFor(f); len(got) != 0 {
-		t.Errorf("the benchmark queued on %v with four objects going spare", got)
-	}
-}
-
-// TestOneObjectShortIsARefusalAndNotEleven: all or nothing is the whole
-// contract.  A caller that wanted twelve and can be given eleven has
-// nothing it can do with them -- and eleven taken out of the pool is
-// eleven nobody else can have either.
-func TestOneObjectShortIsARefusalAndNotEleven(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
-	busy(f, "a benchmark", AutoPool()-1, AutoPool())
-
-	if _, err := useAutoOn(context.Background(), s, AutoPool(), false); err == nil {
-		t.Fatal("useAutoOn came back with fewer objects than the caller can use")
-	}
-	if got := len(held(f)); got != 1 {
-		t.Errorf("%d places are held, want only the one somebody else had", got)
-	}
-}
-
-// ------------------------------------------------- across avatars
-
-// namedFakeSession is one avatar's session, with a name of its own so
-// that a test can tell two of them apart.
-func namedFakeSession(t *testing.T, name string) (*sl.Session, *fakeGrid) {
-	t.Helper()
-	s, f := newFakeSession(t)
-	f.mu.Lock()
-	f.info.Name = name
-	f.mu.Unlock()
-	f.stock(len(AutoPoints))
-	return s, f
-}
-
-// twoAvatars is a gathering across two avatars, with the daemon's order
-// being the first one first.
-func twoAvatars(t *testing.T) (*spread, []string, *fakeGrid, *fakeGrid) {
-	t.Helper()
-	s1, f1 := namedFakeSession(t, "quark")
-	s2, f2 := namedFakeSession(t, "example")
-	sp := &spread{
-		deflt: "quark",
-		open:  map[string]*sl.Session{"quark": s1, "example": s2},
-	}
-	return sp, []string{"quark", "example"}, f1, f2
-}
-
-// TestOneAvatarsPoolIsNotTheCeiling: a request is for a NUMBER of
-// objects and the daemon may be holding several avatars.  Six wanted
-// where the first avatar has two free is two from that one and four from
-// the next -- which is the whole point of counting objects rather than
-// asking whose they are.
-func TestOneAvatarsPoolIsNotTheCeiling(t *testing.T) {
-	t.Parallel()
-	sp, names, f1, _ := twoAvatars(t)
-	busy(f1, "a benchmark", 0, AutoPool()-2)
-
-	as, err := sp.gather(context.Background(), names, 6)
-	if err != nil {
-		t.Fatalf("gather: %v", err)
-	}
-
-	total := 0
-	from := map[string]int{}
-	for _, a := range as {
-		total += len(a.Objects)
-		from[a.Agent] += len(a.Objects)
-	}
-	if total != 6 {
-		t.Errorf("gathered %d objects, want the 6 asked for", total)
-	}
-	if from["quark"] != 2 {
-		t.Errorf("took %d from the avatar with two free", from["quark"])
-	}
-	if from["example"] != 4 {
-		t.Errorf("took %d from the avatar that was free", from["example"])
-	}
-}
-
-// TestTheFirstAvatarIsFilledBeforeTheNextIsTouched: spreading is what to
-// do when one avatar cannot supply the lot, not a thing to do for its
-// own sake.  A run that fits on the default avatar should be on the
-// default avatar -- one session, one region, one set of objects.
-func TestTheFirstAvatarIsFilledBeforeTheNextIsTouched(t *testing.T) {
-	t.Parallel()
-	sp, names, _, f2 := twoAvatars(t)
-
-	as, err := sp.gather(context.Background(), names, AutoGroupSize)
-	if err != nil {
-		t.Fatalf("gather: %v", err)
-	}
-	if len(as) != 1 || as[0].Agent != "quark" {
-		t.Errorf("a run that fits on one avatar was spread over %d", len(as))
-	}
-	for slot, by := range held(f2) {
-		if by == "us" {
-			t.Errorf("place %d was taken on the second avatar for nothing", slot)
-		}
-	}
-}
-
-// TestNothingIsHeldOnOneAvatarWhileWaitingForAnother: the deadlock this
-// is all built to avoid, in its cross-avatar shape.  Two runs each
-// wanting more than one avatar can supply could sit holding one avatar's
-// objects apiece, each waiting for the other's, for ever.  So everything
-// goes back -- on every avatar -- before anything is waited for.
-func TestNothingIsHeldOnOneAvatarWhileWaitingForAnother(t *testing.T) {
-	t.Parallel()
-	sp, names, f1, f2 := twoAvatars(t)
-	// More than the two of them can supply between them, so it has to
-	// wait -- having been able to take a good deal on the way past.
-	busy(f1, "a benchmark", 0, AutoPool()-3)
-	busy(f2, "another benchmark", 0, AutoPool()-3)
-
-	var during []map[int]string
-	f1.mu.Lock()
-	f1.onLock = func(name string) {
-		if name == AutoAllocLock || during != nil {
-			return
-		}
-		during = []map[int]string{held(f1), held(f2)}
-	}
-	f1.mu.Unlock()
-
-	sp.gather(context.Background(), names, AutoPool())
-
-	if during == nil {
-		t.Fatal("a gathering that could not be served did not wait for anything")
-	}
-	for i, what := range during {
-		for slot, by := range what {
-			if by == "us" {
-				t.Errorf("place %d on avatar %d was still ours at the moment of "+
-					"waiting; holding one avatar's objects while waiting for "+
-					"another's is the deadlock", slot, i)
-			}
-		}
-	}
-}
-
-// TestASpreadThatCannotBeServedTakesNothing: all or nothing means all or
-// nothing everywhere.  Objects held on two avatars by a run that never
-// started are objects two other runs cannot have.
-func TestASpreadThatCannotBeServedTakesNothing(t *testing.T) {
-	t.Parallel()
-	sp, names, f1, f2 := twoAvatars(t)
-	allBusy(f1, "a benchmark")
-	busy(f2, "another benchmark", 0, AutoPool()-1)
-	for _, f := range []*fakeGrid{f1, f2} {
-		f.mu.Lock()
-		f.waitErr = fmt.Errorf("the daemon went away")
-		f.mu.Unlock()
-	}
-
-	// One object free in the whole daemon and two wanted, and the wait
-	// fails, so this comes back rather than going round again.
-	if _, err := sp.gather(context.Background(), names, 2); err == nil {
-		t.Fatal("gather came back with fewer objects than were asked for")
-	}
-	for i, f := range []*fakeGrid{f1, f2} {
-		for slot, by := range held(f) {
-			if by == "us" {
-				t.Errorf("place %d on avatar %d was kept out of a gathering that failed",
-					slot, i)
-			}
-		}
 	}
 }

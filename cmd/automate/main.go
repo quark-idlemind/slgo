@@ -316,6 +316,41 @@ func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src s
 type place struct {
 	session *sl.Session
 	object  *sl.Object
+
+	// dirty says the daemon could not promise this object was left fit
+	// to use.  See clearPlaces.
+	dirty bool
+}
+
+// clearPlaces silences whatever the last holder left running.
+//
+// Only the ones the daemon could not promise for: an object given back
+// by somebody who said they had cleared it is one nobody has spoken in
+// since, and clearing it again would cost a second for nothing.
+func clearPlaces(ctx context.Context, places []place) error {
+	var (
+		wg   sync.WaitGroup
+		errs = make([]error, len(places))
+	)
+	for i, p := range places {
+		if !p.dirty {
+			continue
+		}
+		wg.Add(1)
+		go func(i int, p place) {
+			defer wg.Done()
+			errs[i] = session.Clear(ctx, p.session, p.object)
+		}(i, p)
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		if err != nil {
+			return fmt.Errorf("%w\n        (the object could not be made ready; "+
+				"--rez takes one of its own)", err)
+		}
+	}
+	return nil
 }
 
 // once runs one script and prints what it said, reporting whether it
@@ -417,7 +452,10 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 			s.Close()
 			return nil, nil, err
 		}
-		return []place{{s, obj}}, func() {
+		// Not dirty: --object was named by somebody who knows what is in
+		// it, and --rez made it a moment ago.  Neither is a place taken
+		// from a pool where somebody else was last.
+		return []place{{session: s, object: obj}}, func() {
 			if cleanup != nil {
 				cleanup()
 			}
@@ -454,12 +492,25 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 
 	var places []place
 	for _, a := range as {
-		for _, obj := range a.Objects {
-			places = append(places, place{a.Session, obj})
+		for i, obj := range a.Objects {
+			places = append(places, place{a.Session, obj, a.Dirty[i]})
 		}
 	}
 	if o.Agent == "" {
 		fmt.Fprintf(os.Stderr, "running as %s\n", whose(as))
+	}
+
+	// Whatever the last holder left running has to stop before anything
+	// here starts listening: chat carries the object a line came from
+	// and never the script's name, so a script still going is a line
+	// this run would print as its own.  All at once, because they are
+	// separate objects and it is a second apiece.
+	if err := clearPlaces(ctx, places); err != nil {
+		for _, a := range as {
+			a.Release()
+			a.Session.Close()
+		}
+		return nil, nil, err
 	}
 	return places, func() {
 		for _, a := range as {

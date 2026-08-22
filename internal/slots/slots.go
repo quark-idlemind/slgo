@@ -246,10 +246,25 @@ func (p *Pool) Wake() <-chan time.Time { return p.wake }
 // timeout is how long the caller wants them for; it defaults to
 // DefaultTimeout.  Look at Filled before Slots.
 func (p *Pool) Get(n int, timeout time.Duration) (Response, error) {
+	return p.GetWhere(n, timeout, nil)
+}
+
+// GetWhere asks for n slots out of those match accepts.
+//
+// It is for a caller whose slots have to have something in common with
+// each other rather than merely being enough of them: a benchmark
+// compares its objects against one another, so four spread over three
+// avatars is four readings that cannot be compared.  All or nothing
+// applies to what match accepts, and the rest of the pool is neither
+// taken nor waited for.
+//
+// match is called from the pool's goroutine and must not call back into
+// the pool.  Nil accepts everything.
+func (p *Pool) GetWhere(n int, timeout time.Duration, match func(data any) bool) (Response, error) {
 	if n < 1 {
 		return Response{}, fmt.Errorf("slots: a request for %d slots", n)
 	}
-	r := getReq{n: n, timeout: timeout, reply: make(chan Response, 1)}
+	r := getReq{n: n, timeout: timeout, match: match, reply: make(chan Response, 1)}
 	return ask(p, r, r.reply)
 }
 
@@ -368,6 +383,7 @@ type (
 	getReq struct {
 		n       int
 		timeout time.Duration
+		match   func(data any) bool
 		reply   chan Response
 	}
 	renewReq struct {
@@ -470,7 +486,7 @@ func (p *Pool) get(now time.Time, req getReq) Response {
 	// nothing else is going to notice them until the next ExpiryCheck.
 	p.reclaim(now)
 
-	got := p.take(req.n)
+	got := p.take(req.n, req.match)
 	if got == nil {
 		return Response{Wait: p.waiter()}
 	}
@@ -507,13 +523,20 @@ func (p *Pool) get(now time.Time, req getReq) Response {
 //
 // It stops as soon as it has enough, so Present is asked about the slots
 // that were candidates and not about the whole pool.
-func (p *Pool) take(n int) []*Slot {
+func (p *Pool) take(n int, match func(any) bool) []*Slot {
 	var (
-		got  []*Slot
-		seen int
+		got    []*Slot
+		passed []*Slot // looked at and not wanted, which stay free
+		seen   int
 	)
 	for seen = 0; seen < len(p.free) && len(got) < n; seen++ {
 		s := p.free[seen]
+		if match != nil && !match(s.Data) {
+			// Not one of the ones this caller can use.  It keeps its
+			// place: it is somebody else's answer.
+			passed = append(passed, s)
+			continue
+		}
 		if p.Present != nil && !p.Present(s.Data) {
 			// Gone since it was added -- taken off, deleted, or left
 			// behind by a logout.  Dropped rather than handed out, and
@@ -524,17 +547,29 @@ func (p *Pool) take(n int) []*Slot {
 		got = append(got, s)
 	}
 
-	// Everything up to seen has been decided: granted, or dropped.  The
-	// rest is untouched and keeps its order.
+	// Everything up to seen has been decided: granted, passed over, or
+	// dropped.  The rest is untouched and keeps its order.
 	rest := append([]*Slot{}, p.free[seen:]...)
 	if len(got) < n {
-		// Not enough.  What was collected is still free, and still the
-		// oldest, so it goes back in front.
-		p.free = append(got, rest...)
+		// Not enough.  What was collected is still free, and so is what
+		// was passed over, and both are older than the rest.
+		p.free = merge(got, passed, rest)
 		return nil
 	}
-	p.free = rest
+	p.free = merge(passed, rest, nil)
 	return got
+}
+
+// merge puts three runs of slots back together, oldest first.  Each is
+// already in order and they interleave, since they were taken out of one
+// ordered list by what they are rather than by where they were.
+func merge(a, b, c []*Slot) []*Slot {
+	out := make([]*Slot, 0, len(a)+len(b)+len(c))
+	out = append(out, a...)
+	out = append(out, b...)
+	out = append(out, c...)
+	sort.Slice(out, func(i, j int) bool { return out[i].id.id < out[j].id.id })
+	return out
 }
 
 // insert files a slot among the free ones, oldest first, and says

@@ -1382,6 +1382,33 @@ func (f *fakeGrid) TryLock(ctx context.Context, name string) (bool, string, erro
 	return true, "", nil
 }
 
+// Slots, TrySlots and ReleaseSlots are the shared objects, which the
+// daemon hands out a number at a time.  lockedBy stands in for somebody
+// else having them, as it does for a lock: what is being checked is that
+// a command which must not run while they are in use finds them in use.
+func (f *fakeGrid) Slots(ctx context.Context, n int, d time.Duration, agent string) (*client.Grant, error) {
+	return f.slots(n)
+}
+
+func (f *fakeGrid) TrySlots(ctx context.Context, n int, d time.Duration, agent string) (*client.Grant, error) {
+	return f.slots(n)
+}
+
+func (f *fakeGrid) ReleaseSlots(id string, clean bool) error { return nil }
+
+func (f *fakeGrid) slots(n int) (*client.Grant, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.lockedBy != "" {
+		return &client.Grant{Why: "in use by " + f.lockedBy}, nil
+	}
+	g := &client.Grant{ID: "g1", Expires: time.Now().Add(time.Hour)}
+	for i := 0; i < n; i++ {
+		g.Places = append(g.Places, client.Place{Agent: "quark", Slot: i})
+	}
+	return g, nil
+}
+
 func (f *fakeGrid) HasCap(name string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()

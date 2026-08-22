@@ -1045,3 +1045,85 @@ func TestASlotIsTidiedWhenItsGrantRunsOutToo(t *testing.T) {
 		t.Fatal("a slot taken back from a caller that ran out was not tidied")
 	}
 }
+
+// TestSlotsCanBeAskedForByWhatTheyAre: a caller whose slots have to have
+// something in common with each other -- a benchmark compares its
+// objects, so four spread over three avatars is four readings that
+// cannot be compared -- asks for the ones it can use, and all or nothing
+// applies to those.
+func TestSlotsCanBeAskedForByWhatTheyAre(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	// Two kinds, interleaved, so that taking the second kind means
+	// stepping over the first.
+	var list []*Slot
+	for i := 0; i < 8; i++ {
+		list = append(list, &Slot{Data: i % 2}) // 0,1,0,1,...
+	}
+	if err := p.Add(list...); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	ones := func(data any) bool { return data.(int) == 1 }
+	r, err := p.GetWhere(4, time.Minute, ones)
+	if err != nil {
+		t.Fatalf("GetWhere: %v", err)
+	}
+	if !r.Filled() {
+		t.Fatal("the four of that kind could not be had")
+	}
+	for _, s := range r.Slots {
+		if s.Data.(int) != 1 {
+			t.Errorf("got a slot of kind %v", s.Data)
+		}
+	}
+
+	// A fifth of that kind is not there, and the other kind is
+	// untouched: what was passed over on the way is somebody else's
+	// answer, not this caller's to take or to wait for.
+	if more, _ := p.GetWhere(1, time.Minute, ones); more.Filled() {
+		t.Error("a fifth slot of a kind there are four of was granted")
+	}
+	others, err := p.GetWhere(4, time.Minute, func(data any) bool { return data.(int) == 0 })
+	if err != nil {
+		t.Fatalf("GetWhere: %v", err)
+	}
+	if !others.Filled() {
+		t.Error("the other kind was taken or lost while the first was being chosen")
+	}
+}
+
+// TestWhatWasPassedOverKeepsItsPlace: the free list is oldest first, and
+// a request that steps over slots it cannot use must put them back where
+// they were.  Otherwise asking for one kind quietly reorders the other,
+// and oldest-first decays into whatever the last caller happened to want.
+func TestWhatWasPassedOverKeepsItsPlace(t *testing.T) {
+	p, _ := stopped(t)
+	go p.Run()
+
+	var list []*Slot
+	for i := 1; i <= 6; i++ {
+		list = append(list, &Slot{Data: i})
+	}
+	if err := p.Add(list...); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	// Take the fourth, stepping over 1, 2 and 3.
+	r, err := p.GetWhere(1, time.Minute, func(data any) bool { return data.(int) == 4 })
+	if err != nil || !r.Filled() {
+		t.Fatalf("GetWhere: %v %v", r, err)
+	}
+
+	// The three stepped over are still the oldest, in their old order.
+	rest := get(t, p, 3)
+	if !rest.Filled() {
+		t.Fatal("the three that were stepped over could not be had")
+	}
+	for i, want := range []int{1, 2, 3} {
+		if got := rest.Slots[i].Data.(int); got != want {
+			t.Errorf("place %d came back as %d, want %d", i, got, want)
+		}
+	}
+}

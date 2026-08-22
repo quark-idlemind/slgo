@@ -1521,6 +1521,25 @@ func runIn(ctx context.Context, o session.Options) (*sl.Session, *sl.Object, []*
 		return s, obj, nil, func() { cleanup(); s.Close() }, nil
 	}
 
+	// One avatar, and that is a limitation of THIS code rather than
+	// anything the measurement needs.  runner holds a single session and
+	// sends every script through it, so an object belonging to another
+	// avatar could not be run in; nothing about the readings requires
+	// it.  What is shared between the objects is the base reading in the
+	// measured object's own linkset data, which the spares never touch
+	// -- see runner.spare.
+	//
+	// Lifting it is giving runner a session per object, the way
+	// automate's place does, and asking through UseAutoSpread.  Then
+	// "all on one avatar" would only ever be something a person asked
+	// for by name.  Worth doing; not done, and worth knowing that the
+	// reason is plumbing.
+	//
+	// (One thing to check when it is: Second Life runs different
+	// simulator versions on different channels, so two avatars can be in
+	// regions with two LSL compilers.  Whether that moves a reading is
+	// unmeasured -- and the same doubt already applies between one run
+	// and the next.)
 	a, err := session.UseAutoAnywhere(ctx, o, flags.Objects)
 	if err != nil {
 		return nil, nil, nil, nil, err

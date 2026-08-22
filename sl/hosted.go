@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
@@ -416,4 +417,31 @@ func shapeFromPB(p *pb.PrimShape) msg.PrimShape {
 		ProfileBegin: uint16(p.ProfileBegin), ProfileEnd: uint16(p.ProfileEnd),
 		ProfileHollow: uint16(p.ProfileHollow),
 	}
+}
+
+// Slots asks the daemon for n of the shared objects at once, all of them
+// or none, and waits its turn.
+//
+// It is not part of Backend.  A direct session has no daemon and so no
+// pool: there is one process and one avatar, nothing to contend with,
+// and a caller that finds this missing knows it is talking to a session
+// that needs no arbitration.  See internal/session.
+func (h *Hosted) Slots(ctx context.Context, n int, timeout time.Duration, agent string) (*client.Grant, error) {
+	return h.conn.Slots(ctx, n, timeout, agent)
+}
+
+// TrySlots asks and comes back at once either way.
+func (h *Hosted) TrySlots(ctx context.Context, n int, timeout time.Duration, agent string) (*client.Grant, error) {
+	return h.conn.TrySlots(ctx, n, timeout, agent)
+}
+
+// RenewSlots puts a grant's clock back.
+func (h *Hosted) RenewSlots(ctx context.Context, id string, timeout time.Duration) (*client.Grant, error) {
+	return h.conn.RenewSlots(ctx, id, timeout)
+}
+
+// ReleaseSlots gives a grant back, saying whether the objects were left
+// fit for the next caller.
+func (h *Hosted) ReleaseSlots(id string, clean bool) error {
+	return h.conn.ReleaseSlots(id, clean)
 }

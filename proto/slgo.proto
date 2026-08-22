@@ -225,7 +225,68 @@ message ClientPacket {
     // unplugged, and that needs no heartbeat of its own.
     Lock lock = 4;
     Unlock unlock = 5;
+
+    // Asking for a number of the shared objects at once, and giving
+    // them back.  On the stream for the same reason a lock is, and
+    // more so: what a client holds has to be given back when it goes
+    // away, however it went.
+    Slots slots = 6;
+    RenewSlots renew_slots = 7;
+    ReleaseSlots release_slots = 8;
   }
+}
+
+// Slots asks for a number of the shared objects at once.
+//
+// It is answered all of them or none.  A caller given four of the eight
+// it asked for could only hold them while waiting for the rest, which is
+// how two callers deadlock against each other, or give them back -- so
+// the daemon gives them back for it and answers with nothing.
+//
+// They need not all belong to one avatar.  A request is for a COUNT, and
+// a daemon holding three avatars answers it out of whichever have places
+// free; the answer says which avatar each came from.
+message Slots {
+  // Want is how many.  More than the daemon has anywhere is refused
+  // rather than waited for.
+  uint32 want = 1;
+
+  // Seconds is how long they are wanted for.  Zero takes the daemon's
+  // own default.  A grant that runs out is taken back, so work that
+  // cannot say in advance how long it will take renews instead of
+  // guessing high.
+  uint32 seconds = 2;
+
+  // Try asks for an answer now rather than a turn.  Waiting is the
+  // default, for the reason Lock gives.
+  bool try = 3;
+
+  // Agent asks for places on one avatar rather than from wherever they
+  // are free.  It is for work whose objects have to have something in
+  // common with each other -- a benchmark compares its readings, and
+  // four objects spread over three avatars may be in three regions --
+  // and for a caller that named an avatar and meant it.  Empty is
+  // anywhere.
+  string agent = 4;
+}
+
+// RenewSlots puts a grant's clock back, for work that cannot say in
+// advance how long it will take.
+message RenewSlots {
+  string grant = 1;
+  uint32 seconds = 2;
+}
+
+// ReleaseSlots gives a grant back.  Ending the stream does the same
+// thing.
+message ReleaseSlots {
+  string grant = 1;
+
+  // Clean says the objects were left fit for the next caller: nothing
+  // of this caller's is still running in them.  Without it the next
+  // caller is told they need clearing before it uses them, because a
+  // script left running is a line that caller would read as its own.
+  bool clean = 2;
 }
 
 // Lock asks for exclusive use of something named.
@@ -325,7 +386,45 @@ message ServerPacket {
 
     // The answer to a Lock.
     Locked locked = 5;
+
+    // The answer to Slots or RenewSlots.
+    SlotsGranted granted = 6;
   }
+}
+
+// SlotsGranted answers Slots and RenewSlots.
+message SlotsGranted {
+  // Grant names what was given and is what RenewSlots and ReleaseSlots
+  // take.  Empty when nothing was given.
+  string grant = 1;
+
+  // Held is where to run, one entry per object.
+  repeated SlotHeld held = 2;
+
+  // Expires is when the grant runs out, in seconds since the epoch.
+  // The holder should renew before then; a write after it may be
+  // refused, because by then the objects may be somebody else's.
+  int64 expires = 3;
+
+  // Why nothing was given, when nothing was.  For a person to read.
+  string why = 4;
+}
+
+// SlotHeld is one place to run.
+message SlotHeld {
+  // Agent is which avatar's object this is.  One grant may name more
+  // than one, so a client works out which session to run in from here.
+  string agent = 1;
+
+  // Slot is which of that avatar's places, counted from zero.  It is
+  // the number, not the object: the object is rezzed afresh with a new
+  // id every time it is worn, and finding it is the client's business.
+  uint32 slot = 2;
+
+  // Dirty says the last holder did not say it left this fit to use, so
+  // whatever it was running may still be running.  Clear it before
+  // listening to it.
+  bool dirty = 3;
 }
 
 // InboundEvent is one entry from EventQueueGet.

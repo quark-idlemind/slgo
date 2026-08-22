@@ -65,6 +65,10 @@ type Server struct {
 	// not work, and what is already being tried.
 	starts agentState
 
+	// slots is the shared objects, handed out a number at a time and
+	// across avatars.  Started on first use; see slots.go.
+	slots *slotPool
+
 	// regions is one object store per region, shared by every avatar
 	// hosted here.  What a region says about its objects is true for
 	// all of them, so keeping a copy each would be three answers to
@@ -730,4 +734,18 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		return nil
 	}
 	return err
+}
+
+// hosted is every avatar this daemon holds, by name.
+func (s *Server) hosted() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]string, 0, len(s.agents))
+	for name, h := range s.agents {
+		if h != nil {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
