@@ -430,6 +430,30 @@ So `--extra=1` reports 48 and `--extra=2` reports 48, both confidently
 and both wrong by one byte, while 3, 5, 6, 7 and 9 report 46.67, 47.2,
 47.33, 46.86 and 47.11.
 
+A second construct, `foo_CNT(){llDie();}`, says the same about multiples
+of 4 and something worse about everything else:
+
+| N | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 12 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `llSin(1.0);` | 48 | 48 | 46.67 | **47** | 47.2 | 47.33 | 46.86 | **47** | **47** |
+| `foo_CNT(){llDie();}` | 348 | 342 | 344 | **343** | 344 | 342.7 | 343.4 | **343** | **343** |
+
+Every multiple of 4 agrees, in both. But N=1 is off by 5 for the
+function, not by 1: the error is the per-copy offset from the straight
+line, `(d(N+1) - d(1))/N`, and while `d` has period 4 for both -- which
+is why multiples of 4 cancel -- its amplitude belongs to the construct.
+About 2 for the statement, about 5 for the function. So the rule is a
+multiple of 4, and failing that a LARGE N, since whatever the amplitude
+is it is divided by N: the function is off by 5 at N=1 and by 0.4 at
+N=7.
+
+One thing that does not fit. The function's offsets run 0, +5, -2, +3,
+and 4-alignment alone cannot produce a spread of 7 -- the residues cycle
+correctly mod 4, but the magnitudes are larger than alignment explains.
+Something else varies from copy to copy, plausibly a per-function cost
+that depends on position. Not established, and worth knowing before
+trusting a marginal cost measured at small N.
+
 The fraction is the tell, and it is worth noticing that it is not a
 complete one: 8 copies came to 376, which divides by 8 exactly, so
 `--extra=8` reports a whole 47 for the right reason while `--extra=2`
