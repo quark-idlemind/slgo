@@ -25,11 +25,16 @@ package main
 //
 // # Where a page lives
 //
-// In cmd/slsh/man, one text file per command, named after it, embedded
+// In cmd/slsh/man, one file per command, named after it, embedded
 // into the binary.  A page is prose and is written and read as prose;
 // as a Go string constant it was prose being edited inside a quoting
 // construct, where a stray backtick is a compile error and no editor
 // wraps or spell-checks a paragraph.
+//
+// Two names for the same stem: NAME.md, and NAME.txt.  Markdown is
+// preferred when both are there, because it can be rendered with the
+// styling a .txt page has to shout for.  The .txt form stays until a
+// page is rewritten, and is still the layout described below.
 //
 // The whole directory is embedded rather than a pattern like "man/*.txt",
 // because a pattern is a thing a file can silently fall outside of and a
@@ -60,13 +65,14 @@ package main
 //   - a line starting with a tab is an example, and is printed as it
 //     was written.
 //
-// A heading is printed in capitals, which is man(7)'s own convention and
-// the only one available: nothing here has styling to reach for -- term.go
-// emits "\r\x1b[K" and nothing else -- and a page goes to a file or a pipe
-// as often as to a screen, so bold would arrive as rubbish where it did
-// not simply vanish.  A blank line above a sentence in ordinary case is
-// not a heading; it is a paragraph, and a page written that way is one
-// column nobody can skim for the trap.
+// A heading on a .txt page is printed in capitals, which is man(7)'s
+// own convention and the only one that form has: term.go emits
+// "\r\x1b[K" and nothing else, and a page goes to a file or a pipe as
+// often as to a screen.  Markdown is the other form, and package md
+// can send bold, so those headings keep the case they were written in.
+// A blank line above a sentence in ordinary case is not a heading; it
+// is a paragraph, and a .txt page written that way is one column
+// nobody can skim for the trap.
 //
 // The consequence for whoever writes a page: keep flag names, paths and
 // anything else case-sensitive out of a heading, because the heading is
@@ -93,6 +99,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/quark-idlemind/slgo/md"
 )
 
 // manPages is cmd/slsh/man, as it was on the day this was built.
@@ -111,21 +119,38 @@ var manPages embed.FS
 // manDir is where the pages are, in the embedded copy and on disk.
 const manDir = "man"
 
-// manFile is the page a command's man field names.
-func manFile(page string) string { return manDir + "/" + page + ".txt" }
+// manFile is the page a command's man field names: the markdown if
+// it is there, otherwise the text.
+func manFile(page string) string {
+	file, _, err := manOpen(page)
+	if err != nil {
+		return manDir + "/" + page + ".txt"
+	}
+	return file
+}
+
+// manOpen is one page's path and text.
+//
+// Markdown first, then text.  An error here means the field names a
+// file that is not there, which TestEveryManFieldNamesAPageThatIsThere
+// makes impossible to ship; the message says which page all the same,
+// since a wrong answer about where the text went would send somebody
+// looking in the wrong place.
+func manOpen(page string) (file, text string, err error) {
+	for _, ext := range []string{"md", "txt"} {
+		file = manDir + "/" + page + "." + ext
+		b, err := manPages.ReadFile(file)
+		if err == nil {
+			return file, string(b), nil
+		}
+	}
+	return "", "", fmt.Errorf("the page %s is not in this build; it should be cmd/slsh/%s.md or cmd/slsh/%s.txt", page, manDir+"/"+page, manDir+"/"+page)
+}
 
 // manRead is one page's text.
-//
-// An error here means the field names a file that is not there, which
-// TestEveryManFieldNamesAPageThatIsThere makes impossible to ship; the
-// message says which page all the same, since a wrong answer about
-// where the text went would send somebody looking in the wrong place.
 func manRead(page string) (string, error) {
-	b, err := manPages.ReadFile(manFile(page))
-	if err != nil {
-		return "", fmt.Errorf("the page %s is not in this build; it should be cmd/slsh/%s", page, manFile(page))
-	}
-	return string(b), nil
+	_, text, err := manOpen(page)
+	return text, err
 }
 
 // manFileNames is every page in the directory, for the test that asks
@@ -188,12 +213,16 @@ func cmdMan(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	// The heading and the usage line are already out, so a page that
 	// cannot be read leaves a person with the two lines and a reason
 	// rather than with nothing at all.
-	text, err := manRead(c.man)
+	file, text, err := manOpen(c.man)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(out)
-	manText(out, text, width)
+	if strings.HasSuffix(file, ".md") {
+		fmt.Fprint(out, md.RenderWidth(text, width))
+	} else {
+		manText(out, text, width)
+	}
 	return nil
 }
 

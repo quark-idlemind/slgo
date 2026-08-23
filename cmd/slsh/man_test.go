@@ -8,6 +8,50 @@ import (
 	"testing"
 )
 
+// TestAMarkdownPageIsRenderedNotShouted.
+//
+// cd has both forms, and markdown wins.  The point of preferring it is
+// that a heading can stay in the case it was written -- the .txt layout
+// has to shout, because it has no other mark.  If man cd still came out
+// in capitals, we would be reading the .txt or laying the .md out as
+// one, and neither is the thing we just added markdown for.
+func TestAMarkdownPageIsRenderedNotShouted(t *testing.T) {
+	var b bytes.Buffer
+	if err := cmdMan(context.Background(), &Shell{}, &b, []string{"cd"}); err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	if strings.Contains(got, "ONLY A FOLDER") {
+		t.Errorf("man cd shouted a markdown heading:\n%s", got)
+	}
+	if !strings.Contains(got, "Only a folder, and only by name") {
+		t.Errorf("man cd is missing the markdown heading:\n%s", got)
+	}
+	if !strings.Contains(got, "\x1b[1m") {
+		t.Errorf("man cd should be rendered, not printed raw:\n%s", got)
+	}
+	if !strings.Contains(got, "cd Objects/lanterns") {
+		t.Errorf("man cd lost its examples:\n%s", got)
+	}
+	if !strings.Contains(got, "cd -- ") {
+		t.Errorf("man cd should still say the name and brief:\n%s", got)
+	}
+}
+
+// TestATextPageIsStillLaidOutAsText, which is every page that has not
+// been rewritten.  Markdown must not leak into that path: a heading
+// that stayed in ordinary case would be the first sign that it had.
+func TestATextPageIsStillLaidOutAsText(t *testing.T) {
+	var b bytes.Buffer
+	if err := cmdMan(context.Background(), &Shell{}, &b, []string{"place"}); err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	if strings.Contains(got, "\x1b[") {
+		t.Errorf("man place is a .txt page and should not carry SGR:\n%q", got)
+	}
+}
+
 // TestManPrintsThePageAndSaysHowTheCommandIsTyped.
 //
 // A page is prose and nothing else, deliberately: it does not repeat
@@ -177,22 +221,28 @@ func TestAHeadingDoesNotComeOutLookingLikeAParagraph(t *testing.T) {
 // nobody can type -- "--REPLACE".  The rule is to keep them in the
 // paragraph underneath, and this is what keeps the rule.
 func TestNoManPageShoutsAFlagName(t *testing.T) {
-	for _, name := range commandNames() {
-		if commands[name].man == "" {
+	// Only .txt pages: those headings are uppercased.  Markdown keeps
+	// the case it was written in, so a flag in one is still the flag.
+	files, err := manFileNames()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if !strings.HasSuffix(f, ".txt") {
 			continue
 		}
-		text, err := manRead(commands[name].man)
+		body, err := manPages.ReadFile(manDir + "/" + f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, line := range strings.Split(text, "\n") {
+		for _, line := range strings.Split(string(body), "\n") {
 			if !strings.HasPrefix(line, "# ") {
 				continue
 			}
 			for _, w := range strings.Fields(line[2:]) {
 				if strings.HasPrefix(w, "-") {
-					t.Errorf("man %s: the heading %q names %q, which uppercasing would make untypeable",
-						name, line[2:], w)
+					t.Errorf("cmd/slsh/%s/%s: the heading %q names %q, which uppercasing would make untypeable",
+						manDir, f, line[2:], w)
 				}
 			}
 		}
@@ -287,8 +337,9 @@ func TestEveryManFieldNamesAPageThatIsThere(t *testing.T) {
 		if page == "" {
 			continue
 		}
-		if _, err := manPages.ReadFile(manFile(page)); err != nil {
-			t.Errorf("%s names the page %q, and cmd/slsh/%s is not there", name, page, manFile(page))
+		if _, _, err := manOpen(page); err != nil {
+			t.Errorf("%s names the page %q, and neither cmd/slsh/%s.md nor cmd/slsh/%s.txt is there",
+				name, page, manDir+"/"+page, manDir+"/"+page)
 		}
 	}
 }
@@ -297,7 +348,9 @@ func TestEveryManFieldNamesAPageThatIsThere(t *testing.T) {
 // direction: a page nothing points at is prose nobody will ever be
 // shown, and it goes wrong silently -- most likely a command renamed
 // without its page, which is exactly the case this series created when
-// host became login.
+// host became login.  Both .md and .txt of one stem count as named:
+// markdown wins at print time, and the text is the fallback, not a
+// page of its own.
 func TestEveryPageInTheDirectoryIsNamedBySomeCommand(t *testing.T) {
 	files, err := manFileNames()
 	if err != nil {
@@ -309,18 +362,30 @@ func TestEveryPageInTheDirectoryIsNamedBySomeCommand(t *testing.T) {
 	named := map[string]bool{}
 	for _, name := range commandNames() {
 		if page := commands[name].man; page != "" {
-			named[manFile(page)] = true
+			named[page] = true
 		}
 	}
 	for _, f := range files {
-		if !strings.HasSuffix(f, ".txt") {
-			t.Errorf("cmd/slsh/%s/%s is not a .txt page; man reads nothing else", manDir, f)
+		stem, ok := manStem(f)
+		if !ok {
+			t.Errorf("cmd/slsh/%s/%s is not a .md or .txt page; man reads nothing else", manDir, f)
 			continue
 		}
-		if !named[manDir+"/"+f] {
+		if !named[stem] {
 			t.Errorf("cmd/slsh/%s/%s is a page no command names, so nobody can reach it", manDir, f)
 		}
 	}
+}
+
+// manStem is the command a page file is named for.
+func manStem(filename string) (string, bool) {
+	switch {
+	case strings.HasSuffix(filename, ".md"):
+		return strings.TrimSuffix(filename, ".md"), true
+	case strings.HasSuffix(filename, ".txt"):
+		return strings.TrimSuffix(filename, ".txt"), true
+	}
+	return "", false
 }
 
 // TestNoManPageQuotesAWholeKey.
