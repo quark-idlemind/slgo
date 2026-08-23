@@ -451,7 +451,8 @@ acting as group Example Builders (87f07e57-…)</span>
         <p>
           <code>quit</code> is what leaves, and <code>exit</code> is the same
           command under a second name, so neither has to be remembered; at an
-          empty prompt <strong>^D</strong> does it too. None of them takes a
+          empty prompt <strong>^D</strong> does it too — at the end of a
+          line, that is; in front of anything it deletes forward instead. None of them takes a
           daemon-held avatar down. That is <code>logout</code>, against a named
           avatar, and it is <a href="#daemon">a separate act</a> on purpose.
         </p>
@@ -639,9 +640,18 @@ For one command:       COMMAND --help, or man COMMAND
 
         <p>
           <code>cd</code>, <code>ls</code>, <code>pwd</code>, <code>mkdir</code>,
-          <code>mv</code>, <code>cp</code>, <code>rm</code> and <code>find</code>
-          all mean what they mean in any shell. The tree is the one the viewer
-          shows, and <code>/</code> is the root of it.
+          <code>mv</code> and <code>rm</code> mean what they mean in any shell.
+          Two do not: <code>cp PATH NAME</code> copies an item under a new name
+          rather than to a destination, and <code>find TEXT [PATH]</code> looks
+          for names containing TEXT rather than taking a path and predicates.
+          The tree is the one the viewer shows, and <code>/</code> is the root
+          of it.
+
+          <p>
+          Ids are shortened to their first eight characters throughout these
+          transcripts — <code>40f17e57-…</code> — so the columns are narrower
+          here than on a real terminal. Everything else is byte for byte what
+          the command prints.
         </p>
 
         <div class="term">
@@ -976,24 +986,24 @@ acting as group Lorn Family (488f7e57-…)</span>
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">map</span>
 <span class="o">around you in Pelmar Reach at 28, 72, 2001
-+----------------------------------------+
-|                                        |
-|                                        |
-|                                        |
-|                                        |
-|                                        |
-|                                        |
-|                                        |
-|                    *2                  |
-|                                        |
-|                                        |
-|                                        |
-|                                        |
-|                                        |
-|                                        |
-|                                        |
-|                                        |
-+----------------------------------------+
++-------------------------------------+
+|                                     |
+|                                     |
+|                                     |
+|                                     |
+|                                     |
+|                                     |
+|                                     |
+|                  *2                 |
+|                                     |
+|                                     |
+|                                     |
+|                                     |
+|                                     |
+|                                     |
+|                                     |
+|                                     |
++-------------------------------------+
 64m x 64m; north is up, east is right
 * you   o within 3m of your height   ^ higher   v lower
 a digit is that many in one cell, and + is more than nine
@@ -1659,9 +1669,9 @@ HUD top right      badge</span>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">link chair seat "left leg" "right leg"</span>
-<span class="o">"chair" 5ef67e57-… (local 83565482) is one object of 4 prims</span>
+<span class="o">"chair" 5ef67e57-… (local 83565614) is one object of 4 prims</span>
 <span class="p">/$</span> <span class="c">unlink chair</span>
-<span class="o">"chair" 5ef67e57-… (local 83565482) came apart into 4 objects:
+<span class="o">"chair" 5ef67e57-… (local 83565614) came apart into 4 objects:
   5ef67e57-…                           chair
   76167e57-…                           Object
   8b537e57-…                           Object
@@ -2029,7 +2039,12 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
           logs in twice, so the session a script is driving and the session you
           are looking at are the same one. <code>viewer</code> says where that
           is offered and whether anybody has taken it;
-          <code>viewer --launch</code> starts one and logs it in.
+          <code>viewer --launch</code> starts one and logs it in — and
+          refuses when a viewer is already running, because
+          <code>open -a</code> raises an application that is already up
+          without passing it the arguments again. A second launch would
+          bring the viewer to the front, log nobody in, and report success,
+          which is the one outcome worth refusing outright.
         </p>
 
         <div class="term">
@@ -2107,7 +2122,11 @@ slsh: stopped; 43 lines were not run</span></pre>
           Two listings of a folder that has not changed are identical, which is
           what makes them worth diffing and worth editing into commands.
           <code>echo</code> prints its arguments, which is how to write a note
-          into a file you are building.
+          into a file you are building. It is the one command with no
+          <code>--help</code>: it exists to put a line into a file, so it has
+          to be able to print the word <code>--help</code> like any other, and
+          a usage message there would be a command refusing to do the one
+          thing it is for.
         </p>
       </section>
 
@@ -2220,6 +2239,16 @@ viewer_running = how to tell whether one is running already</span></pre>
         <div class="tablewrap">
           <table>
             <tbody>
+              <tr><td class="group-title" colspan="2">Avatars and the daemon</td></tr>
+              <tr><td class="cmd">agents · login · logout · status · watch</td><td class="what">the sessions slgod holds</td></tr>
+              <tr><td class="cmd">viewer</td><td class="what">where a real viewer can take over, and starting one</td></tr>
+              <tr><td class="cmd">auto</td><td class="what">the objects benchmarks run in</td></tr>
+
+              <tr><td class="group-title" colspan="2">Giving</td></tr>
+              <tr><td class="cmd">give · cp</td><td class="what">hand somebody an item; copy one into an object</td></tr>
+              <tr><td class="cmd">offers · accept · decline</td><td class="what">what has been offered to you, and taking or refusing it</td></tr>
+              <tr><td class="cmd">perms</td><td class="what">what an object is asking to be allowed to do</td></tr>
+
               <tr><td class="group-title" colspan="2">Inventory</td></tr>
               <tr><td class="cmd">pwd · cd · ls · find</td><td class="what">where you are, moving about, and looking</td></tr>
               <tr><td class="cmd">cat · get · put</td><td class="what">read a notecard or script; save a texture; upload one</td></tr>
@@ -2227,19 +2256,10 @@ viewer_running = how to tell whether one is running already</span></pre>
               <tr><td class="cmd">new · save</td><td class="what">make a notecard or script; write a file into one</td></tr>
               <tr><td class="cmd">emptytrash</td><td class="what">throw away everything in the trash</td></tr>
 
-              <tr><td class="group-title" colspan="2">Waiting</td></tr>
-              <tr><td class="cmd">waiting · answer · no · ignore</td><td class="what">what wants an answer, and how to give one</td></tr>
-              <tr><td class="cmd">offers · accept · decline</td><td class="what">the older way to the same two kinds</td></tr>
-
               <tr><td class="group-title" colspan="2">People</td></tr>
               <tr><td class="cmd">who · lookup · profile · friends</td><td class="what">who is about, who they are</td></tr>
               <tr><td class="cmd">say · chat · im · talk</td><td class="what">talking, and the conversations you have open</td></tr>
               <tr><td class="cmd">offer</td><td class="what">friendship</td></tr>
-
-              <tr><td class="group-title" colspan="2">Giving</td></tr>
-              <tr><td class="cmd">give · cp</td><td class="what">hand somebody an item; copy one into an object</td></tr>
-              <tr><td class="cmd">offers · accept · decline</td><td class="what">what has been offered to you, and taking or refusing it</td></tr>
-              <tr><td class="cmd">perms</td><td class="what">what an object is asking to be allowed to do</td></tr>
 
               <tr><td class="group-title" colspan="2">Region</td></tr>
               <tr><td class="cmd">where · parcel · look · map</td><td class="what">the region, the land under you, what it says of itself, and who is about</td></tr>
@@ -2253,19 +2273,18 @@ viewer_running = how to tell whether one is running already</span></pre>
               <tr><td class="cmd">link · unlink · perms · texture · touch</td><td class="what">building, permissions, faces, clicking</td></tr>
               <tr><td class="cmd">start · stop</td><td class="what">scripts inside an object</td></tr>
 
-              <tr><td class="group-title" colspan="2">Avatars and the daemon</td></tr>
-              <tr><td class="cmd">agents · login · logout · status · watch</td><td class="what">the sessions slgod holds</td></tr>
-              <tr><td class="cmd">viewer</td><td class="what">where a real viewer can take over, and starting one</td></tr>
-              <tr><td class="cmd">auto</td><td class="what">the objects benchmarks run in</td></tr>
-
-              <tr><td class="group-title" colspan="2">Simulator</td></tr>
-              <tr><td class="cmd">caps · features · lsl</td><td class="what">what this grid grants, supports and implements</td></tr>
-
               <tr><td class="group-title" colspan="2">The shell itself</td></tr>
               <tr><td class="cmd">help · man · echo · set</td><td class="what">help, the long description, a note into a file, and what slsh remembers</td></tr>
               <tr><td class="cmd">. FILE · quit · exit</td><td class="what">running a file of commands, and leaving</td></tr>
             </tbody>
-          </table>
+          <tr><td class="group-title" colspan="2">Simulator</td></tr>
+              <tr><td class="cmd">caps · features · lsl</td><td class="what">what this grid grants, supports and implements</td></tr>
+
+              <tr><td class="group-title" colspan="2">Waiting</td></tr>
+              <tr><td class="cmd">waiting · answer · no · ignore</td><td class="what">what wants an answer, and how to give one</td></tr>
+              <tr><td class="cmd">offers · accept · decline</td><td class="what">the older way to the same two kinds</td></tr>
+
+              </table>
         </div>
       </section>
 
