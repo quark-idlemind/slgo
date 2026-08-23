@@ -502,9 +502,14 @@ acting as group Example Builders (87f07e57-…)</span>
         </div>
 
         <p>
-          When a command does not name one it says which it used. That is worth
-          reading, because the default depends on the daemon's history and
-          nothing on disk records it.
+          Interactive <code>slsh</code> says at the top which avatar it
+          got, whether or not one was named — worth reading, because the
+          default depends on the daemon's history and nothing on disk
+          records it. It is the avatar's display name rather than the
+          profile handle, and it is the region and the daemon's address
+          beside it. A <code>-c</code> or <code>-f</code> run prints no
+          banner at all, so a script that cares which avatar it drove has
+          to name one.
         </p>
 
         <div class="note">
@@ -650,7 +655,7 @@ For one command:       COMMAND --help, or man COMMAND
 object     2026-07-29T09:41:12 91357e57-… /Objects/sign
 folder     -                   1ae57e57-… /Objects/spares</span>
 <span class="p">/Objects$</span> <span class="c">ls -lt</span>                   <span class="n">newest first</span>
-<span class="p">/Objects$</span> <span class="c">ls -r spares</span>             <span class="n">and everything below it</span>
+<span class="p">/Objects$</span> <span class="c">ls -r spares</span>             <span class="n">and four levels below it</span>
 <span class="p">/Objects$</span> <span class="c">ls -l lantern</span>            <span class="n">not a folder: lists what it names</span>
 <span class="p">/Objects$</span> <span class="c">find lantern</span>             <span class="n">names containing it, from here down</span></pre>
         </div>
@@ -1081,7 +1086,7 @@ a digit is that many in one cell, and + is more than nine
           region: it is 44 metres into the region to the east. The shell works
           out which region owns the point and teleports there, in the way that
           the twenty-fifth hour of Monday is one in the morning on Tuesday. It
-          generalises as far as the arithmetic does, so an x of 1000 is four
+          generalises as far as the arithmetic does, so an x of 1000 is three
           regions east and 232 metres in, and costs exactly what 300 does.
         </p>
 
@@ -1589,8 +1594,8 @@ Pelmar Reach at 28, 72, 2001</span></pre>
 <pre><span class="p">/$</span> <span class="c">wear Objects/badge</span>
 <span class="o">badge is worn on HUD top right</span>
 <span class="p">/$</span> <span class="c">worn</span>
-<span class="o">HUD top right      badge
-left hand          lantern</span>
+<span class="o">left hand          lantern
+HUD top right      badge</span>
 <span class="p">/$</span> <span class="c">detach badge</span>
 <span class="o">badge is no longer worn on HUD top right</span></pre>
         </div>
@@ -1722,9 +1727,12 @@ the next owner may now copy, modify, transfer</span>
 
         <h3>Inside an object</h3>
         <p>
-          An object holds inventory of its own, with its own ids. The same
-          three verbs reach it with <code>--in</code>, and scripts have three
-          commands more.
+          An object holds inventory of its own, with its own ids.
+          <code>ls</code>, <code>rm</code> and <code>mv</code> reach it with
+          <code>--in OBJECT</code>, and so does <code>new</code> — making a
+          script is an operation that exists in both places, and
+          <code>--in</code> says which. The others above
+          (<code>cat</code>, <code>save</code>) work on inventory only.
         </p>
 
         <div class="term">
@@ -1865,10 +1873,10 @@ the next owner may now copy, modify, transfer</span>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">(2) /$</span> <span class="c">waiting</span>
-<span class="o">1  dialog      a lantern asks: on or off?
-                answer 1 on, answer 1 off, no, ignore
-2  teleport    Another Resident offers a teleport: "Come and see this!"
-                answer, no, ignore</span>
+<span class="o">1  dialog      a lantern "on or off?"
+                1 on, 2 off
+2  teleport    Another Resident teleport: "Come and see this!"
+                answer (takes it, and waits for the arrival), no, ignore</span>
 <span class="p">(2) /$</span> <span class="c">answer 1 on</span>
 <span class="o">pressed "on" on a lantern</span>
 <span class="p">(1) /$</span> <span class="c">ignore 2</span>
@@ -1879,9 +1887,11 @@ the next owner may now copy, modify, transfer</span>
           A number keeps meaning the same thing. Answering one does not
           renumber the rest, so an <code>answer 2</code> you had already
           half-typed still means what you meant; numbering starts again at 1
-          once the list is empty. <code>no</code> declines and tells whoever
-          asked — silence would leave them watching a dialog that never
-          resolves.
+          once the list is empty. <code>no</code> declines and tells whoever asked
+          — a lure, an offered item, friendship, a permission request, a
+          group invitation. A dialog is the exception: there is no message
+          for its close box, so <code>no</code> drops it here and says
+          <code>a dialog cannot be declined, only left to expire</code>.
         </p>
 
         <h3>A text box wants several lines</h3>
@@ -2207,7 +2217,12 @@ viewer_running = how to tell whether one is running already</span></pre>
               <tr><td class="group-title" colspan="2">People</td></tr>
               <tr><td class="cmd">who · lookup · profile · friends</td><td class="what">who is about, who they are</td></tr>
               <tr><td class="cmd">say · chat · im · talk</td><td class="what">talking, and the conversations you have open</td></tr>
-              <tr><td class="cmd">offer · give</td><td class="what">friendship; an inventory item</td></tr>
+              <tr><td class="cmd">offer</td><td class="what">friendship</td></tr>
+
+              <tr><td class="group-title" colspan="2">Giving</td></tr>
+              <tr><td class="cmd">give · cp</td><td class="what">hand somebody an item; copy one into an object</td></tr>
+              <tr><td class="cmd">offers · accept · decline</td><td class="what">what has been offered to you, and taking or refusing it</td></tr>
+              <tr><td class="cmd">perms</td><td class="what">what an object is asking to be allowed to do</td></tr>
 
               <tr><td class="group-title" colspan="2">Region</td></tr>
               <tr><td class="cmd">where · parcel · look · map</td><td class="what">the region, the land under you, what it says of itself, and who is about</td></tr>

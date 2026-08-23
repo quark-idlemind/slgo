@@ -30,7 +30,7 @@ the morning on Tuesday.
 It generalises as far as the arithmetic does, because there is nothing
 special about one region over: the position is turned into a place on
 the grid, the region containing that place is worked out, and what is
-left over is where in it.  So x of 1000 is four regions east and 232
+left over is where in it.  So x of 1000 is three regions east and 232
 metres in, and costs exactly what 300 does.
 
 The line printed before the waiting names the region by its square on

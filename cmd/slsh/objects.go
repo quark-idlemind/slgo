@@ -428,7 +428,7 @@ func coords(args []string) (c [3]coord, rel bool, err error) {
 // It generalises as far as the arithmetic does.  There is nothing
 // special about one region over: the position is turned into a place on
 // the grid, the region containing that place is worked out, and what is
-// left over is where in it.  1000 is four regions east and 232 metres
+// left over is where in it.  1000 is three regions east and 232 metres
 // in, and it costs exactly what 300 does.  A region nothing is standing
 // on answers no_host, which is the grid's own way of saying there is
 // nothing there and is reported as it arrives.
