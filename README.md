@@ -2,9 +2,9 @@
 
 Second Life without a viewer: `slgod`, a daemon that holds grid
 sessions; `slsh`, a shell to drive them from; and the library `slsh` and
-everything else here is written on. It began as a Go rewrite of the C
-client one directory up, and most of what is written down below is still
-about the wire.
+everything else here is written on. It began as a Go rewrite of a C
+client that is not part of this repository, and most of what is written
+down below is still about the wire.
 
 **Start at `sl`.** It is the package a program uses, and the only one
 most programs need: objects, inventory, chat, teleport, sitting, land,
@@ -439,8 +439,9 @@ fields render as text when the bytes are text — dropping the NUL that
 not. Quaternions show the recovered `W` alongside the three components
 that actually travel, because that is what the value means.
 
-Every scalar is quoted, so nothing is read back as an accidental number
-or boolean. There is no YAML dependency: the emitter is a hundred lines
+Strings are quoted, so nothing is read back as an accidental number or
+boolean; numbers, booleans, UUIDs, vectors and quaternions go out bare,
+which is why `sequence: 1234` above has no quotes around it. There is no YAML dependency: the emitter is a hundred lines
 against a deliberately small subset, and `TestDumpParsesAsYAML` feeds
 all 483 messages through Ruby's Psych to check the subset is real.
 
@@ -536,8 +537,14 @@ The operating system is described the way a viewer describes it --
 `platform`, `platform_version`, `platform_string` and `address_size`,
 so `mac`, `15.7.7`, `macOS 15.7.7`, `64` -- all four taken from the host
 this is running on, since naming one system in `platform` and another
-in `platform_string` would be a worse answer than naming none. A profile
-may override them, as a set.
+in `platform_string` would be a worse answer than naming none.
+
+A profile may override the first three, and `platform` travels alone:
+it is the two DESCRIPTIONS that go together, so `platform_version` and
+`platform_string` are filled in from the host only when neither was set
+by hand. `address_size` is not a profile key at all -- an unrecognised
+key is a hard error rather than a setting that silently does nothing, so
+a profile written to name one fails to load.
 
 The login also asks for `extended_errors`, which is what makes a refusal
 answerable in code: alongside the sentence meant for a person, the
@@ -822,12 +829,15 @@ negative value stops it.
 
 ## The event queue
 
-Some messages no longer come over UDP.  The template marks them
-`UDPDeprecated` and the simulator simply does not answer them on the
-circuit: `ParcelProperties`, `TeleportFinish`,
-`EstablishAgentCommunication` and a growing list.  They arrive on
-`EventQueueGet`, a long poll whose replies carry an id that the next
-poll acknowledges.
+Some messages no longer come over UDP.  The template says so two
+different ways and they mean different things: `UDPDeprecated`, which
+`ParcelProperties` is, and `UDPBlackListed`, which `TeleportFinish`,
+`CrossedRegion` and `EnableSimulator` are.  The generator keeps them
+apart.  `EstablishAgentCommunication` is in neither list because it is
+not in the template at all -- there is no UDP message of that name, only
+the event.  Either way the simulator does not answer them on the
+circuit, and they arrive on `EventQueueGet`, a long poll whose replies
+carry an id that the next poll acknowledges.
 
 That poll is `agent/eventqueue.go`, beside the circuit, for the same
 reason the circuit is there: it has to run continuously, and a client

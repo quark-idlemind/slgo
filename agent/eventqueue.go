@@ -17,8 +17,10 @@ import (
 // The event queue is a long poll against a capability, carrying what
 // UDP no longer does: ParcelProperties, TeleportFinish,
 // EstablishAgentCommunication and a growing list of others.  The
-// template marks those UDPDeprecated and the simulator simply does not
-// answer them on the circuit any more.
+// template says so two ways -- ParcelProperties is UDPDeprecated and
+// TeleportFinish is UDPBlackListed -- and EstablishAgentCommunication
+// is in neither, being an event with no UDP message behind it at all.
+// Whichever, the simulator does not answer them on the circuit.
 //
 // A poll is posted, the simulator holds it open until it has something
 // or it times out, and the reply carries an id that the next poll
