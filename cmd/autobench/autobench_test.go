@@ -329,7 +329,7 @@ func TestOneModeReportsTheCodeSize(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			b := offline(t, tc.crossing, tc.codeSize)
 			var r Results
-			size, padding, _ := oneMode(b, &r)
+			size, padding, _, _, _ := oneMode(b, &r)
 			if size != tc.codeSize {
 				t.Errorf("Size: %d, want %d", size, tc.codeSize)
 			}
@@ -354,7 +354,7 @@ func TestOneModeIsPaddingIndependent(t *testing.T) {
 			b := offline(t, 474, codeSize)
 			flags.IPad = ipad
 			var r Results
-			size, padding, _ := oneMode(b, &r)
+			size, padding, _, _, _ := oneMode(b, &r)
 			if size != codeSize {
 				t.Errorf("Size: %d, want %d", size, codeSize)
 			}
@@ -627,7 +627,7 @@ func TestOneModeSurvivesAReadingOneBlockHigh(t *testing.T) {
 	b := noisy(t, 474, 368, noise)
 
 	var r Results
-	size, padding, pad := oneMode(b, &r)
+	size, padding, pad, _, _ := oneMode(b, &r)
 	if *fired != 1 {
 		t.Fatalf("the bad reading was never taken (%d times); pad 601 is not on the "+
 			"search's path any more and this test is asserting nothing", *fired)
@@ -655,7 +655,7 @@ func TestOneModeSurvivesAReadingOneBlockLow(t *testing.T) {
 	b := noisy(t, 474, 368, noise)
 
 	var r Results
-	size, padding, pad := oneMode(b, &r)
+	size, padding, pad, _, _ := oneMode(b, &r)
 	if *fired != 1 {
 		t.Fatalf("the bad reading was never taken (%d times)", *fired)
 	}
@@ -680,7 +680,7 @@ func TestOneModeSurvivesAMisreadBase(t *testing.T) {
 	b := noisy(t, 474, 368, noise)
 
 	var r Results
-	size, padding, pad := oneMode(b, &r)
+	size, padding, pad, _, _ := oneMode(b, &r)
 	if *fired != 1 {
 		t.Fatalf("the bad reading was never taken (%d times)", *fired)
 	}
@@ -710,7 +710,7 @@ func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
 	spentRuns, spentRereads = 0, 0
 
 	var r Results
-	if size, _, _ := oneMode(b, &r); size != 368 {
+	if size, _, _, _, _ := oneMode(b, &r); size != 368 {
 		t.Fatalf("Size: %d, want 368", size)
 	}
 	if spentRereads != 6 {
@@ -766,7 +766,7 @@ func TestASearchThroughTheModelUsesTheSpareObjects(t *testing.T) {
 	}
 
 	var r Results
-	size, padding, pad := oneMode(b, &r)
+	size, padding, pad, _, _ := oneMode(b, &r)
 	if size != 368 || padding != 473 || pad != 144 {
 		t.Errorf("Size: %d Padding: %d Result pad: %d, want 368/473/144",
 			size, padding, pad)
@@ -982,7 +982,7 @@ func TestOneCopyIsWhatTellsTheTwoRefusalsApart(t *testing.T) {
 func TestOneModeIsExactEverywhere(t *testing.T) {
 	run := func(crossing, size int) int {
 		b := refusesOver(t, crossing, size, noLimit)
-		got, _, _ := oneMode(b, &Results{})
+		got, _, _, _, _ := oneMode(b, &Results{})
 		return got
 	}
 
@@ -1071,7 +1071,7 @@ func TestOneModeMeasuresTheFirstCopy(t *testing.T) {
 			b := affine(t, tc.crossing, tc.abs, tc.marg, 0)
 
 			var r Results
-			size, _, _ := oneMode(b, &r)
+			size, _, _, _, _ := oneMode(b, &r)
 			if size != tc.abs {
 				t.Errorf("Size: %d, want the first copy's %d", size, tc.abs)
 			}
@@ -1179,7 +1179,7 @@ func TestWithoutParanoidAReadingABlockOutIsBelieved(t *testing.T) {
 	b := noisy(t, 474, 368, noise)
 
 	var r Results
-	size, _, pad := oneMode(b, &r)
+	size, _, pad, _, _ := oneMode(b, &r)
 	if *fired != 1 {
 		t.Fatalf("the bad reading was never taken (%d times)", *fired)
 	}
@@ -1191,5 +1191,90 @@ func TestWithoutParanoidAReadingABlockOutIsBelieved(t *testing.T) {
 			"If this now comes out 368/144 the crossing is being caught some "+
 			"other way and --paranoid may have stopped earning its round",
 			size, pad)
+	}
+}
+
+// ------------------------------------------- what a copy after the first costs
+
+// TestExtraMeasuresWhatEachCopyAfterTheFirstCosts: --extra=N measures
+// the script with N further copies at the same padding, and the
+// difference from the one-copy script is N marginal copies and nothing
+// else -- the part a construct pays once and shares cancels.
+//
+// That is the number copy mode exists to produce, got from a script with
+// a handful of copies rather than one with up to 512.
+func TestExtraMeasuresWhatEachCopyAfterTheFirstCosts(t *testing.T) {
+	for _, c := range []struct{ abs, marginal, extra int }{
+		{600, 44, 1}, // the smallest N there is: two scripts, one copy apart
+		{600, 44, 8},
+		{368, 368, 3}, // pays nothing once, so a copy costs the same either way
+		{1000, 20, 5}, // pays almost all of it once
+		{412, 1, 16},  // and a marginal cost of a single byte
+	} {
+		b := affine(t, 474, c.abs, c.marginal, 0)
+		flags.One, flags.Extra = true, c.extra
+		t.Cleanup(func() { flags.One, flags.Extra = false, 0 })
+
+		var r Results
+		size, _, _, marginal, ok := oneMode(b, &r)
+		if size != c.abs {
+			t.Errorf("abs %d marginal %d extra %d: Size %d, want %d",
+				c.abs, c.marginal, c.extra, size, c.abs)
+		}
+		if !ok {
+			t.Errorf("abs %d marginal %d extra %d: no marginal cost was measured",
+				c.abs, c.marginal, c.extra)
+			continue
+		}
+		if marginal != float64(c.marginal) {
+			t.Errorf("abs %d marginal %d extra %d: Marginal %g, want %d",
+				c.abs, c.marginal, c.extra, marginal, c.marginal)
+		}
+		// And the split.  What one copy costs outright is the shared
+		// part plus one marginal copy, so the shared part is the
+		// difference -- a number nothing else in this program reports.
+		if shared, want := size-int(marginal), c.abs-c.marginal; shared != want {
+			t.Errorf("abs %d marginal %d: Shared %d, want %d",
+				c.abs, c.marginal, shared, want)
+		}
+	}
+}
+
+// TestExtraCostsScriptsAndNotRounds is why --extra is worth having at
+// all rather than running the benchmark twice.
+//
+// The two searches are anchored at the same padding and narrow in
+// lockstep, so the second rides in the first's rounds.  It spends
+// scripts -- a script is a script -- and no time.
+func TestExtraCostsScriptsAndNotRounds(t *testing.T) {
+	measure := func(extra int) (rounds, runs int) {
+		searchesAtOnce = 1
+		if extra > 0 {
+			searchesAtOnce = 2
+		}
+		flags.One, flags.Extra, flags.Parts = true, extra, 8
+		t.Cleanup(func() {
+			flags.One, flags.Extra, flags.Parts, searchesAtOnce = false, 0, 4, 1
+		})
+		b := offlineWith(t, scripttest.Options{
+			Memory:    scripttest.Memory{Pad: 474, CodeSize: 600, Marginal: 44},
+			GroupSize: leaseSize(),
+		})
+		spentRounds, spentRuns = 0, 0
+		var r Results
+		oneMode(b, &r)
+		return spentRounds, spentRuns
+	}
+
+	alone, aloneRuns := measure(0)
+	with, withRuns := measure(8)
+
+	if with != alone {
+		t.Errorf("--extra took %d rounds against %d without it; the second search "+
+			"is meant to ride in the first's rounds", with, alone)
+	}
+	if withRuns <= aloneRuns {
+		t.Errorf("--extra spent %d runs against %d: a second search is a second "+
+			"script at every pad and cannot be free in scripts", withRuns, aloneRuns)
 	}
 }

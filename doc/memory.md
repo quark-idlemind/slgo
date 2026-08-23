@@ -364,6 +364,84 @@ happens if a lease comes back smaller than was asked for -- the search
 cuts its parts down to the objects it actually got, rather than sending
 several rounds and calling them one.
 
+## What a copy after the first costs, without a big script
+
+A construct pays part of its cost once and shares it, so what C copies
+cost is that once-paid part plus C marginal ones. Copy mode gets the
+marginal cost by amortising: it builds a script with as many copies as
+will fit -- up to 512 -- and fits a line through two counts. `-1
+--extra=N` gets it from two small scripts instead, one copy and N+1
+copies, measured at the same padding. The difference is N marginal
+copies and nothing else, because the once-paid part cancels.
+
+Three numbers come out where copy mode gives one:
+
+| | |
+|---|---|
+| `Size` | what one copy costs outright -- the shared part plus one marginal |
+| `Marginal` | what each copy after the first costs |
+| `Shared` | the difference: what the construct pays once |
+
+Measured on Agni on 2026-08-22, `llSin(1.0);` at eight parts,
+`--no-cache`:
+
+| | rounds | runs | time | answer |
+|---|---:|---:|---:|---|
+| `-1` | 6 | 44 | 11s | Size 380 |
+| `-1 --extra=8` | 6 | 66 | 15s | Size 380, Marginal 47, Shared 333 |
+| copy mode | 23 | 77 | 53s | Size 47 |
+
+**The two agree on 47**, which is the result that matters: the marginal
+cost measured from a nine-copy script is the one measured from a script
+with up to 512 in it.
+
+The rounds are identical with and without `--extra`. The two searches
+are anchored at the same padding and narrow in lockstep -- a round
+divides a range by parts exactly, so both take three rounds whatever
+their answers are -- and the second rides in the first's rounds. It
+costs 22 more scripts and four more seconds, which is the rounds being
+wider and the nine-copy scripts taking longer to compile, not more
+waiting.
+
+Why this is worth preferring: installing 128 copies took 5.07s, 256 took
+12.70s, and 512 was refused outright. The copy-count ladder that finds
+how many will fit is most of copy mode's cost, and none of it is spent
+here.
+
+### N should be a multiple of 4
+
+`--extra=1` is the cheapest possible measurement -- two scripts one copy
+apart -- and it gives the wrong answer. Sweeping N for the same
+statement and turning each `Marginal` back into a total size
+(`380 + N x Marginal`):
+
+| copies | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| size | 380 | 428 | 476 | 520 | 568 | 616 | 664 | 708 | 756 |
+| step | | +48 | +48 | +44 | +48 | +48 | +48 | +44 | +48 |
+
+Copies cost **48, 48, 48, 44** repeating. That sums to 188, which is
+exactly four copies of 47 -- and 47 is what N of 4, 8, 12, 16 and 20 all
+report. It is the 4-alignment above showing through: a copy whose real
+cost is not a multiple of 4 is charged a little more or less than its
+neighbours, and only a multiple of four copies averages it out.
+
+So `--extra=1` reports 48 and `--extra=2` reports 48, both confidently
+and both wrong by one byte, while 3, 5, 6, 7 and 9 report 46.67, 47.2,
+47.33, 46.86 and 47.11.
+
+The fraction is the tell, and it is worth noticing that it is not a
+complete one: 8 copies came to 376, which divides by 8 exactly, so
+`--extra=8` reports a whole 47 for the right reason while `--extra=2`
+reports a whole 48 for the wrong one. A whole number is not by itself
+evidence that the copies agree; a multiple of 4 is what makes it one.
+
+If `Marginal` does not divide evenly it is printed as a fraction and
+`Shared` is not reported. Both readings are exact to the byte, so the
+only way the division comes out uneven is that the copies do not all
+cost the same -- a fact about the code under test rather than a rounding
+error.
+
 ### Confirming a remembered padding
 
 A padding is remembered in a file and confirmed rather than trusted: two

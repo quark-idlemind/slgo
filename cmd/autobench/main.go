@@ -35,6 +35,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/bits"
 	"os"
 	"os/signal"
@@ -71,6 +72,7 @@ var flags = struct {
 	Locals    []string      `getopt:"--locals=NAME,... locals used with --statement"`
 	Globals   []string      `getopt:"--globals=NAME,... declare globals"`
 	One       bool          `getopt:"-1 Using padding and a single copy of CODE"`
+	Extra     int           `getopt:"--extra=N with -1, also measure N further copies, giving what each copy after the first costs; a multiple of 4"`
 	IPad      int           `getopt:"--ipad=N the base padding, as reported by an earlier Padding: line"`
 	ICheck    bool          `getopt:"--check-ipad spend two runs confirming --ipad before using it"`
 	Max       int           `getopt:"--max=N maximum number of copies"`
@@ -1010,7 +1012,7 @@ func expressiblePadding(pad int) bool { return pad >= 0 }
 //
 // It is a function rather than a block inside main so that a test can drive it
 // against the offline model and no Second Life at hand.  See autobench_test.go.
-func oneMode(b backend, r *Results) (size, padding, headroom int) {
+func oneMode(b backend, r *Results) (size, padding, headroom int, marginal float64, marginalOK bool) {
 	// BASEPAD: the most filler the base script carries without spilling.
 	// This is the number Padding: reports and --ipad takes, and the runs
 	// happen at it rather than a byte past it -- there is one pad in this
@@ -1036,6 +1038,17 @@ func oneMode(b backend, r *Results) (size, padding, headroom int) {
 	//
 	// findPadding answers both: the reading at the pad it starts from,
 	// and the most that can be added to it before memory grows.
+	//
+	// With --extra, the script with N further copies is searched for at
+	// the same padding, and the two searches share their rounds: they
+	// are anchored at the same pad and narrow in lockstep, so the second
+	// one costs scripts and no time.  See warmPaddings.
+	counts := []int{1}
+	if flags.Extra > 0 {
+		counts = append(counts, 1+flags.Extra)
+	}
+	warmPaddings(b, counts, padding)
+
 	headroom, testMem := findPadding(b, 1, padding, r)
 
 	// The base sat exactly on a boundary, so testMem - baseMem can only be
@@ -1044,12 +1057,33 @@ func oneMode(b backend, r *Results) (size, padding, headroom int) {
 	// to the byte, whatever its size.
 	size = (testMem - baseMem) - headroom
 
+	// What each copy AFTER the first costs.
+	//
+	// A construct pays some of its cost once and shares it, so what N+1
+	// copies cost is that once-paid part plus N+1 marginal ones.  One
+	// copy costs the same once-paid part plus one.  The difference is N
+	// marginal copies and nothing else -- the shared part cancels, which
+	// is the whole reason for measuring two counts rather than dividing
+	// one by its count.
+	//
+	// It is the number copy mode exists to produce, and it is got here
+	// from a script with a handful of copies in it rather than one with
+	// up to 512: measured live, installing 128 copies took 5.07s, 256
+	// took 12.70s and 512 was refused.
+	if flags.Extra > 0 {
+		var more Results
+		headroomN, testMemN := findPadding(b, 1+flags.Extra, padding, &more)
+		sizeN := (testMemN - baseMem) - headroomN
+		marginal = float64(sizeN-size) / float64(flags.Extra)
+		marginalOK = true
+	}
+
 	// What the two labelled lines report, said outright rather than left
 	// to whichever run happened to write r last.  They now mean what they
 	// have always been called: the base script's memory, and the one-copy
 	// script's.
 	r.Base, r.Test = baseMem, testMem
-	return size, padding, headroom
+	return size, padding, headroom, marginal, marginalOK
 }
 
 const probeScript = `
@@ -1081,6 +1115,12 @@ func main() {
 	if flags.Help {
 		getopt.PrintUsage(os.Stdout)
 		return
+	}
+
+	// Two searches share every round when --extra is asked for, so the
+	// lease has to carry both.  Set before anything is leased.
+	if flags.Extra > 0 && flags.One {
+		searchesAtOnce = 2
 	}
 
 	// What this benchmark cost, in the unit the cost is paid in.  Deferred so
@@ -1210,6 +1250,14 @@ func main() {
 		// start.  Refuse rather than quietly measuring something else: --max is
 		// how a caller bounds a benchmark, and silently ignoring it was A3.
 		errf("--max %d: a benchmark needs at least one copy of the code under test\n", flags.Max)
+	case flags.Extra < 0:
+		errf("--extra %d: a count of further copies cannot be negative\n", flags.Extra)
+	case flags.Extra > 0 && !flags.One:
+		// --extra measures what a copy after the first costs, against
+		// the one copy that -1 mode measures.  Copy mode answers the
+		// same question its own way and has no first copy to compare
+		// against.
+		errf("--extra is for -1 mode; copy mode measures the marginal cost already\n")
 	case flags.Parts < 2:
 		// One part is not a division, and nought is not a number of
 		// them.  Two is the bisection, which is allowed and is what
@@ -1260,7 +1308,7 @@ func main() {
 	var r Results
 
 	if flags.One {
-		size, basePad, pad := oneMode(b, &r)
+		size, basePad, pad, marginal, haveMarginal := oneMode(b, &r)
 
 		if flags.Title != "" {
 			fmt.Printf("Title: %s\n", flags.Title)
@@ -1274,6 +1322,36 @@ func main() {
 		fmt.Printf("Result pad: %d\n", pad)
 
 		fmt.Printf("Size: %d\n", size)
+		if haveMarginal {
+			// A whole number or it is not a constant cost per copy.
+			// Both readings are exact to the byte, so the only way this
+			// divides unevenly is that the copies do not cost the same
+			// as each other -- which is a fact about the code under
+			// test and not a rounding error, and saying it as a
+			// fraction is how it is visible at all.
+			if marginal == math.Trunc(marginal) {
+				fmt.Printf("Marginal: %d\n", int(marginal))
+				fmt.Printf("Shared: %d\n", size-int(marginal))
+			} else {
+				fmt.Printf("Marginal: %.4g\n", marginal)
+				noticef("%d further copies cost %.4g bytes each, which is not a whole "+
+					"number, so the copies do not all cost the same and there is no "+
+					"one marginal cost; Shared is not reported\n",
+					flags.Extra, marginal)
+				if flags.Extra%4 != 0 {
+					// Code is 4-aligned, so a copy whose true cost is
+					// not a multiple of 4 is charged a little more or
+					// less than its neighbours -- measured, copies of
+					// llSin(1.0); cost 48, 48, 48, 44 repeating, which
+					// is four copies of 47.  A multiple of four copies
+					// averages that out; anything else divides the
+					// alignment as well as the cost.
+					noticef("code is 4-aligned, so individual copies quantise around "+
+						"their real cost; --extra %d is not a multiple of 4, and one "+
+						"that is would average the alignment out\n", flags.Extra)
+				}
+			}
+		}
 		fmt.Printf("Padding: %d\n", basePad)
 		return
 	}
