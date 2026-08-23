@@ -42,6 +42,14 @@
 *.test
 *.out
 
+# Review notes written against this tree.  They quote what they found,
+# which means they quote the live grid -- real avatars, real parcels --
+# and check-identities is the only thing standing between one of them
+# and a public repository.  It caught this file being swept up by
+# "git add -A", twice.  Working notes about the code are not the code.
+/*-audit-*.md
+/*-review-*.md
+
 # Notes written while raising coverage: what is still uncovered and why.
 # They are working notes about the tests, not documentation of the code.
 /coverage-notes/
