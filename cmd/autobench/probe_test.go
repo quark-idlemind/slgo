@@ -395,8 +395,8 @@ func TestARememberedPaddingIsConfirmedInTheRoundThatUsesIt(t *testing.T) {
 	// room for all of them at once.
 	measure := func(spares int) (rounds, runs int) {
 		probeReset(t)
-		flags.One, flags.Parts = true, 4
-		t.Cleanup(func() { flags.One, flags.Parts = false, 4 })
+		flags.Parts = 4
+		t.Cleanup(func() { flags.Parts = 8 })
 		b, _ := newFakeRunner(t, 474, 368, spares)
 
 		var r Results
@@ -413,8 +413,8 @@ func TestARememberedPaddingIsConfirmedInTheRoundThatUsesIt(t *testing.T) {
 		return spentRounds - wasRounds, spentRuns - wasRuns
 	}
 
-	warmRounds, warmRuns := measure(leaseSize() - 1)
-	bareRounds, bareRuns := measure(leaseSize() - 2)
+	warmRounds, warmRuns := measure(flags.Parts + 2)
+	bareRounds, bareRuns := measure(flags.Parts + 1)
 
 	if warmRounds >= bareRounds {
 		t.Errorf("carrying the next readings in the confirmation's round took "+
@@ -433,11 +433,11 @@ func TestARememberedPaddingIsConfirmedInTheRoundThatUsesIt(t *testing.T) {
 func TestTheSearchIsNotWarmedWithoutRoomForAWholeRound(t *testing.T) {
 	probeReset(t)
 	t.Setenv("SLGO_CONFIG_DIR", t.TempDir())
-	flags.One, flags.Parts = true, 4
-	t.Cleanup(func() { flags.One, flags.Parts = false, 4 })
+	flags.Parts = 4
+	t.Cleanup(func() { flags.Parts = 8 })
 
 	// One short of what the carrying needs.
-	b, f := newFakeRunner(t, 474, 368, leaseSize()-2)
+	b, f := newFakeRunner(t, 474, 368, flags.Parts+1)
 
 	var r Results
 	if got := basePadding(b, &r); got != 473 {
@@ -464,40 +464,6 @@ func TestTheSearchIsNotWarmedWithoutRoomForAWholeRound(t *testing.T) {
 	}
 }
 
-// TestCopyModeIsNotWarmed: basePadding is copy mode's too, and what
-// follows it there is the shrink ladder at a count nothing can predict.
-// Carrying one-copy readings would be sending scripts nobody is going
-// to ask for.
-func TestCopyModeIsNotWarmed(t *testing.T) {
-	probeReset(t)
-	t.Setenv("SLGO_CONFIG_DIR", t.TempDir())
-	flags.One, flags.Parts = false, 4
-	t.Cleanup(func() { flags.Parts = 4 })
-
-	b, f := newFakeRunner(t, 474, 368, leaseSize()-1)
-
-	var r Results
-	if got := basePadding(b, &r); got != 473 {
-		t.Fatalf("basePadding = %d, want 473", got)
-	}
-
-	clear(cache)
-	f.mu.Lock()
-	f.ran = 0
-	f.mu.Unlock()
-
-	if got := basePadding(b, &r); got != 473 {
-		t.Errorf("the remembered padding came back as %d", got)
-	}
-	f.mu.Lock()
-	spent := f.ran
-	f.mu.Unlock()
-	if spent != 2 {
-		t.Errorf("copy mode's confirmation cost %d runs, want the two either "+
-			"side of the padding", spent)
-	}
-}
-
 // TestSearchesAtOnePadShareTheirRounds is the whole of warmPaddings: two
 // counts anchored at the same pad narrow in lockstep, because a round
 // divides a range by parts exactly and lands in the same number of
@@ -514,7 +480,7 @@ func TestSearchesAtOnePadShareTheirRounds(t *testing.T) {
 		probeReset(t)
 		flags.Parts = 8
 		searchesAtOnce = len(cnts)
-		t.Cleanup(func() { flags.Parts, searchesAtOnce = 4, 1 })
+		t.Cleanup(func() { flags.Parts, searchesAtOnce = 8, 1 })
 
 		b, _ := newFakeRunner(t, 474, 368, leaseSize()-1)
 		wasRounds, wasRuns := spentRounds, spentRuns

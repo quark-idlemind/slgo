@@ -220,14 +220,13 @@ func filler(t *testing.T, src string) string {
 
 // TestTheScriptIsTheHarnessAroundTheCodeUnderTest: the copies are
 // numbered so that a shape with a name in it can be repeated, and the
-// preamble, postamble and title are the caller's to put around them.
+// preamble and postamble are the caller's to put around them.
 func TestTheScriptIsTheHarnessAroundTheCodeUnderTest(t *testing.T) {
 	resetFlags()
 	t.Cleanup(resetFlags)
 	flags.Code = "foo_CNT(){llDie();}"
 	flags.Preamble = "integer gBefore;"
 	flags.Postamble = "// after"
-	flags.Title = "a benchmark"
 
 	got := buildScript(3, minpad)
 	for _, want := range []string{
@@ -263,17 +262,6 @@ func TestTheScriptIsTheHarnessAroundTheCodeUnderTest(t *testing.T) {
 		t.Errorf("the script does not report its reading:\n%s", got)
 	}
 
-	// The title is not in the script at all, whether or not one was
-	// given.  A script could only ever have repeated the --title it was
-	// handed, so saying it bought no fact -- and it put the caller's own
-	// text in the bytecode, where a twenty-seven character title moved
-	// the measured padding from 377 to 349.
-	for _, title := range []string{"a benchmark", ""} {
-		flags.Title = title
-		if got := buildScript(0, minpad); contains(got, "TITLE") {
-			t.Errorf("the script says its title (%q):\n%s", title, got)
-		}
-	}
 }
 
 // ------------------------------------------------------- the block rule
@@ -391,14 +379,12 @@ func autobench(t *testing.T, args ...string) (stdout, stderr string) {
 	flags = flagDefaults
 	getopt.CommandLine = getopt.New()
 	clear(cache)
-	oneCopyVerdict = nil
 	spentRuns, spentRereads, spentCompiles = 0, 0, 0
 
 	t.Cleanup(func() {
 		os.Args, os.Stdout, os.Stderr = saveArgs, saveOut, saveErr
 		flags = flagDefaults
 		clear(cache)
-		oneCopyVerdict = nil
 	})
 
 	main()
@@ -464,39 +450,40 @@ func TestAskingWhatTheFlagsAreIsNotAnError(t *testing.T) {
 	}
 }
 
-// TestTheProgramPrintsWhatTheModeMeasured: the output is what everything
-// else reads autobench through -- the skill that drives it parses these
-// lines -- so the labels and the order they come in are part of what the
-// program is.
-func TestTheProgramPrintsWhatTheModeMeasured(t *testing.T) {
-	out, _ := autobench(t, "--test=474,368", "-1", "--code", "foo_CNT(){llDie();}")
+// TestTheProgramPrintsWhatABenchmarkMeasured: one mode, and every line
+// of it.
+//
+// The model here has no separate marginal cost, so each copy costs what
+// the first one does: Marginal is the same 368 and Shared is nought,
+// which is what "pays nothing once and shares nothing" looks like.
+func TestTheProgramPrintsWhatABenchmarkMeasured(t *testing.T) {
+	out, _ := autobench(t, "--test=474,368", "--code", "foo_CNT(){llDie();}")
 	for _, want := range []string{
 		"Base mem: 5412\n",
 		"Result mem: 5924\n",
 		"Result pad: 144\n",
 		"Size: 368\n",
+		"Marginal: 368\n",
+		"Shared: 0\n",
 		"Padding: 473\n",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("-1 mode did not print %q:\n%s", want, out)
+			t.Errorf("a benchmark did not print %q:\n%s", want, out)
 		}
 	}
 
-	// Copy mode prints the padding it paid for as well, because that is
-	// the number to feed back with --ipad on the next benchmark of the
-	// same shape.
-	out, _ = autobench(t, "--test=474,368", "--code", "foo_CNT(){llDie();}")
-	if !strings.Contains(out, "Padding: 473\n") {
-		t.Errorf("copy mode did not report the padding:\n%s", out)
-	}
-	// No error margin any more: the size is exact.  And the first copy
-	// is reported beside it, which for a construct that pays nothing
-	// once is the same number.
+	// And --extra=0 asks for the first copy alone, which is the whole of
+	// what this used to report before there was a second search.
+	out, _ = autobench(t, "--test=474,368", "--extra", "0",
+		"--code", "foo_CNT(){llDie();}")
 	if !strings.Contains(out, "Size: 368\n") {
-		t.Errorf("copy mode did not print an exact size:\n%s", out)
+		t.Errorf("--extra=0 did not measure the first copy:\n%s", out)
 	}
-	if !strings.Contains(out, "First copy: 368\n") {
-		t.Errorf("copy mode did not print what one copy costs:\n%s", out)
+	for _, gone := range []string{"Marginal:", "Shared:"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("--extra=0 reported %s without measuring a further copy:\n%s",
+				gone, out)
+		}
 	}
 }
 
@@ -524,7 +511,7 @@ func TestABackendAtAnAddressMeasuresTheSameThing(t *testing.T) {
 	}
 	t.Cleanup(s.Stop)
 
-	out, said := autobench(t, "--backend", addr.String(), "-1",
+	out, said := autobench(t, "--backend", addr.String(),
 		"--code", "foo_CNT(){llDie();}")
 	for _, want := range []string{"Size: 368\n", "Padding: 473\n"} {
 		if !strings.Contains(out, want) {
@@ -546,19 +533,6 @@ func TestABackendAtAnAddressMeasuresTheSameThing(t *testing.T) {
 	}
 }
 
-// TestFastSkipsThePaddingAndSaysSoByNotSayingIt: --fast is for when the
-// caller does not want to pay a dozen runs for a boundary, and a Padding:
-// line printed anyway would be a number nobody measured.
-func TestFastSkipsThePaddingAndSaysSoByNotSayingIt(t *testing.T) {
-	out, _ := autobench(t, "--test=474,368", "--fast", "--code", "foo_CNT(){llDie();}")
-	if strings.Contains(out, "Padding:") {
-		t.Errorf("--fast reported a padding it did not look for:\n%s", out)
-	}
-	if !strings.Contains(out, "Size:") {
-		t.Errorf("--fast measured nothing:\n%s", out)
-	}
-}
-
 // TestTheCodeUnderTestComesFromAFileOrAFlag: a benchmark shape is usually
 // a file, and the file has to reach the generated script exactly as
 // --code would -- the two are the same input by different routes.
@@ -568,8 +542,8 @@ func TestTheCodeUnderTestComesFromAFileOrAFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fromFile, _ := autobench(t, "--test=474,368", "-1", path)
-	fromFlag, _ := autobench(t, "--test=474,368", "-1", "--code", "foo_CNT(){llDie();}")
+	fromFile, _ := autobench(t, "--test=474,368", path)
+	fromFlag, _ := autobench(t, "--test=474,368", "--code", "foo_CNT(){llDie();}")
 	if fromFile != fromFlag {
 		t.Errorf("a file and --code measured differently:\n%s\nand\n%s", fromFile, fromFlag)
 	}
@@ -600,7 +574,7 @@ func TestAStatementIsWrappedInAFunctionAroundIt(t *testing.T) {
 // benchmark in the only unit that matters, and it is reported on stderr
 // so that a caller parsing stdout does not have to know about it.
 func TestDebugSaysWhatTheBenchmarkSpent(t *testing.T) {
-	out, said := autobench(t, "--test=474,368", "-1", "--debug", "--code", "foo_CNT(){llDie();}")
+	out, said := autobench(t, "--test=474,368", "--debug", "--code", "foo_CNT(){llDie();}")
 	if !strings.Contains(said, "Spent ") || !strings.Contains(said, "re-reads") {
 		t.Errorf("--debug did not report what was spent:\n%s", said)
 	}
@@ -612,12 +586,15 @@ func TestDebugSaysWhatTheBenchmarkSpent(t *testing.T) {
 	}
 }
 
-// TestAnIPadIsUsedAsGivenAndConfirmedOnRequest: --ipad is an assertion the
-// caller already measured, so it costs no search -- and --check-ipad is
-// the two runs that confirm it, spent because the caller asked for them
-// and not on their behalf.
-func TestAnIPadIsUsedAsGivenAndConfirmedOnRequest(t *testing.T) {
-	out, _ := autobench(t, "--test=474,368", "-1", "--ipad", "985", "--check-ipad",
+// TestAnIPadIsUsedAsGivenAndConfirmed: --ipad names the padding to
+// measure at, and is confirmed rather than taken -- the two readings ride
+// in a round that is being spent anyway, so there is nothing left for a
+// --check-ipad to decide.
+//
+// 985 is 473 and a block: a padding a block up is a perfectly good one
+// and has to measure the same.
+func TestAnIPadIsUsedAsGivenAndConfirmed(t *testing.T) {
+	out, _ := autobench(t, "--test=474,368", "--ipad", "985",
 		"--code", "foo_CNT(){llDie();}")
 	if !strings.Contains(out, "Padding: 985\n") {
 		t.Errorf("--ipad was not used as given:\n%s", out)
@@ -666,20 +643,8 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsMeasured(t *testing.T) {
 	// anything being asked of the network this machine is on.
 	opts := session.Options{Addr: "127.0.0.1:1", Channel: "autobench"}
 
-	flags.Object = "workbench"
-	if _, _, err := runIn(context.Background(), opts); err == nil {
-		t.Error("runIn found a named object through a daemon that is not there")
-	}
-
-	flags.Object, flags.Rez = "", true
-	if _, _, err := runIn(context.Background(), opts); err == nil {
-		t.Error("runIn rezzed a prim through a daemon that is not there")
-	}
-
-	// And the shared pool, which is the default and goes a different way
-	// about it: it asks the daemon who it is holding before it asks for
-	// objects.
-	flags.Rez = false
+	// The shared pool is the only way in now: it asks the daemon who it
+	// is holding before it asks for objects, and there is no daemon.
 	if _, _, err := runIn(context.Background(), opts); err == nil {
 		t.Error("runIn took objects from a daemon that is not there")
 	}

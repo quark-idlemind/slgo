@@ -364,6 +364,28 @@ happens if a lease comes back smaller than was asked for -- the search
 cuts its parts down to the objects it actually got, rather than sending
 several rounds and calling them one.
 
+## One mode
+
+A benchmark measures one shape and reports what a copy of the code costs
+in it. There used to be two modes -- `-1` measuring one copy outright and
+copy mode amortising over up to 512 -- and copy mode existed because
+dividing a difference by a large count was how it beat the 512-byte
+quantisation. Exact padding searches removed that reason, and `--extra`
+gives the same marginal cost from a handful of copies, so `-1` is the
+only mode and its flag is gone with the mode it distinguished.
+
+Gone with copy mode: `--max` (the copy-count ceiling), `--fast` (skip the
+padding search and report a quantised size), and the ladder that found
+how many copies would fit. Gone separately: `--title`, which the script
+said and this program read back out of what the script said; `--pad`, an
+arbitrary string prepended to the filler; `--object` and `--rez` and
+`--keep`, which ran in a named object or a throwaway prim from before
+there was a pool of them; and `--check-ipad`, because an `--ipad` is
+confirmed now whether or not anyone asks -- the two readings ride in a
+round that is being spent anyway.
+
+`--parts` defaults to 8 and `--extra` to 4, both measured below.
+
 ## What a copy after the first costs, without a big script
 
 A construct pays part of its cost once and shares it, so what C copies

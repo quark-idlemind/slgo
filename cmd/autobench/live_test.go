@@ -70,7 +70,7 @@ func liveBench(t *testing.T) *runner {
 func TestLiveCompileIsNotRunning(t *testing.T) {
 	b := liveBench(t)
 	flags.Code = "foo_CNT(){llDie();}"
-	flags.Preamble, flags.Postamble, flags.Title, flags.Pad = "", "", "", ""
+	flags.Preamble, flags.Postamble = "", ""
 
 	for _, cnt := range []int{1, 128, 256, 512} {
 		src := buildScript(cnt, 474)
@@ -122,7 +122,7 @@ func TestLiveCompileIsNotRunning(t *testing.T) {
 func TestLiveReadingIsStable(t *testing.T) {
 	b := liveBench(t)
 	flags.Code = "foo_CNT(){llDie();}"
-	flags.Preamble, flags.Postamble, flags.Title, flags.Pad = "", "", "", ""
+	flags.Preamble, flags.Postamble = "", ""
 
 	n := 10
 	if s := os.Getenv("SLGO_STABLE_N"); s != "" {
@@ -222,7 +222,7 @@ func TestLiveLadderOnOneItem(t *testing.T) {
 	b := liveBench(t)
 	b.Timeout = 10 * time.Minute
 	flags.Code = "foo_CNT(){llDie();}"
-	flags.Preamble, flags.Postamble, flags.Title, flags.Pad = "", "", "", ""
+	flags.Preamble, flags.Postamble = "", ""
 
 	// A trivial script first, so the item exists and every figure after it is
 	// an UPDATE.  Its own cost is the creation and is reported as such.

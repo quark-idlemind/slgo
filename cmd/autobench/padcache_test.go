@@ -11,8 +11,12 @@ import (
 // level and every test here renders a script from them.
 func resetFlags() {
 	flags.Code, flags.Statement = "integer gCNT;", ""
-	flags.Title, flags.Preamble, flags.Postamble, flags.Pad = "", "", "", ""
+	flags.Preamble, flags.Postamble = "", ""
 	flags.Params, flags.Locals, flags.Globals = nil, nil, nil
+	// Everything a benchmark's shape and cost is decided by, back to
+	// what the flag block starts with.  They are package level and a
+	// test that left one set would change what the next one leases.
+	flags.Extra, flags.Parts, searchesAtOnce = 4, 8, 1
 }
 
 // TestBaseKeyIgnoresTheCodeUnderTest is the whole reason this cache is
@@ -20,7 +24,6 @@ func resetFlags() {
 // every benchmark of a shape wants the same answer.
 func TestBaseKeyIgnoresTheCodeUnderTest(t *testing.T) {
 	resetFlags()
-	flags.Title = "global integer"
 
 	flags.Code = "integer gCNT;"
 	first := baseKey()
@@ -28,28 +31,6 @@ func TestBaseKeyIgnoresTheCodeUnderTest(t *testing.T) {
 	flags.Code = "list lCNT; string sCNT;"
 	if second := baseKey(); second != first {
 		t.Errorf("--code changed the base key: %s then %s", first, second)
-	}
-}
-
-// TestBaseKeyIgnoresTheTitle: what a benchmark is CALLED is not part of
-// its shape, so two runs of one shape under two names share a padding.
-//
-// This used to be the other way about, and had to be: the title was said
-// by the script, so it was a string literal in the bytecode and it moved
-// the measurement -- live, a twenty-seven character title moved the
-// padding from 377 to 349.  The key followed its LENGTH, which was the
-// least wrong thing available.  The script does not say it any more.
-func TestBaseKeyIgnoresTheTitle(t *testing.T) {
-	resetFlags()
-
-	flags.Title = "global integer"
-	same := baseKey()
-
-	for _, title := range []string{"global boolean", "a considerably longer title", ""} {
-		flags.Title = title
-		if got := baseKey(); got != same {
-			t.Errorf("--title %q changed the base key: %s then %s", title, same, got)
-		}
 	}
 }
 
@@ -65,7 +46,6 @@ func TestBaseKeyFollowsTheHarness(t *testing.T) {
 	}{
 		{"--preamble", func() { flags.Preamble = "integer gExtra;" }},
 		{"--postamble", func() { flags.Postamble = "// trailing" }},
-		{"--pad", func() { flags.Pad = "integer gPad;" }},
 	} {
 		resetFlags()
 		c.set()

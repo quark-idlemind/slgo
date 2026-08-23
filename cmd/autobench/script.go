@@ -104,9 +104,6 @@ func openBackend(addr string, targets int) (backend, error) {
 		return nil, fmt.Errorf("dialling the backend at %s: %w", addr, err)
 	}
 	who := "autobench"
-	if flags.Title != "" {
-		who += " " + flags.Title
-	}
 	// Announced, unlike the offline model: a real backend may hold
 	// several avatars' objects and chose one for us, and a reading is
 	// only comparable with another from the same avatar.

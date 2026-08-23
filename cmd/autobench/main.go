@@ -36,7 +36,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/bits"
 	"os"
 	"os/signal"
 	"strconv"
@@ -56,27 +55,18 @@ var flags = struct {
 	Postamble string        `getopt:"--postamble=POSTAMBLE Make STR the test's postamble"`
 	Code      string        `getopt:"--code=CODE code to test"`
 	Statement string        `getopt:"--statement=CODE statement(s) to test"`
-	Pad       string        `getopt:"--pad=PAD padding instructions"`
 	Addr      string        `getopt:"--addr=HOST:PORT the slgod to attach to; default sl-host, or this machine"`
 	Agent     string        `getopt:"--agent=NAME -a the profile to use; the only one, by default"`
 	Direct    bool          `getopt:"--direct -d log in to Second Life directly, without slgod"`
 	First     string        `getopt:"--first=NAME the avatar's first name, for --direct"`
 	Last      string        `getopt:"--last=NAME the avatar's last name, for --direct"`
 	Start     string        `getopt:"--start=WHERE where to arrive: last, home, or a region, for --direct"`
-	Object    string        `getopt:"--object=NAME run in this object, instead of the shared one"`
-	Rez       bool          `getopt:"--rez rez a throwaway prim instead of using the shared auto object"`
-	Keep      bool          `getopt:"--keep leave the rezzed object behind"`
 	Show      bool          `getopt:"-v show the source before each execution"`
-	Title     string        `getopt:"--title=NAME name of benchmark"`
 	Params    []string      `getopt:"--params=NAME,... parameters used with --statement"`
 	Locals    []string      `getopt:"--locals=NAME,... locals used with --statement"`
 	Globals   []string      `getopt:"--globals=NAME,... declare globals"`
-	One       bool          `getopt:"-1 Using padding and a single copy of CODE"`
-	Extra     int           `getopt:"--extra=N with -1, also measure N further copies, giving what each copy after the first costs; a multiple of 4"`
-	IPad      int           `getopt:"--ipad=N the base padding, as reported by an earlier Padding: line"`
-	ICheck    bool          `getopt:"--check-ipad spend two runs confirming --ipad before using it"`
-	Max       int           `getopt:"--max=N maximum number of copies"`
-	Fast      bool          `getopt:"--fast skip looking for pad"`
+	Extra     int           `getopt:"--extra=N also measure N further copies, giving what each copy after the first costs; a multiple of 4"`
+	IPad      int           `getopt:"--ipad=N measure at this base padding instead of searching for one; confirmed before it is used"`
 	Paranoid  bool          `getopt:"--paranoid read each crossing again before believing it"`
 	Debug     bool          `getopt:"--debug enable debugging"`
 	Probe     bool          `getopt:"--probe send a simple script to LSL as a probe"`
@@ -89,15 +79,18 @@ var flags = struct {
 }{
 	Start:   "last",
 	Timeout: time.Minute,
-	Max:     512,
-	// Four parts: one object to measure in and three to take the
-	// readings that cut the range into quarters, which is what turns
-	// the nine rounds of a bisection into five.
-	//
-	// It is the lease size too.  There is nothing else to decide: a
-	// round runs one script per division, so the objects a benchmark
-	// wants ARE its parts, and slgod is what keeps track of them.
-	Parts: 4,
+	// Eight parts, which is the measured knee: 8*8*8 is 512 exactly, so
+	// three rounds of seven scripts land on the byte with no round
+	// wasted.  Sixteen parts takes the same three rounds for ten more
+	// scripts, and thirty-two saves a round and measured slower.  See
+	// doc/memory.md.
+	Parts: 8,
+
+	// Four further copies, which is what the alignment wants: code is
+	// 4-aligned, so individual copies quantise around their real cost
+	// and only a multiple of four averages it out.  Four is the
+	// smallest that does.  See doc/memory.md.
+	Extra: 4,
 }
 
 // leaseSize is how many objects a benchmark holds.
@@ -122,25 +115,37 @@ func leaseSize() int { return searchesAtOnce*flags.Parts + 3 }
 // what it finds is where the others start from.
 var searchesAtOnce = 1
 
-// openLease asks for the places the speculation wants and settles for
-// the places the search needs.
+// openLease asks for the places a benchmark would like and settles for
+// what it can have.
 //
-// The three extra are an optimisation and nothing depends on having
-// them: warmTheSearch checks the room it has and does nothing when
-// there is not enough, so a pool that cannot spare them costs a
-// confirmation its overlap and not a benchmark its measurement.
-// Refusing to measure at all over an optimisation would be the wrong
-// way round -- and it is a real case, a backend that grants four
-// objects being enough to run the default benchmark and not enough to
-// warm it.
+// What it would like is one object to measure in, one per division of
+// each search, and three so that a remembered padding's confirmation and
+// the readings that follow it fit in one round.  None of that is
+// necessary: with fewer places the searches share rounds less, and with
+// one place there is no parallel search at all and the block is bisected
+// -- nine rounds instead of three, and the same answer.
+//
+// So it halves rather than refusing.  A benchmark that cannot have
+// nineteen objects should be slower, not impossible, and a backend that
+// grants four is a real case rather than a hypothetical one.
+//
+// It says so when it settles for less, because the difference is large
+// enough that somebody timing a benchmark should not have to guess.
 func openLease(open func(int) (backend, error)) (backend, error) {
-	b, err := open(leaseSize())
-	if err == nil || leaseSize() == flags.Parts {
-		return b, err
+	want := leaseSize()
+	var err error
+	for n := want; n >= 1; n = n / 2 {
+		var b backend
+		if b, err = open(n); err == nil {
+			if n < want {
+				noticef("holding %d objects rather than %d; the searches will "+
+					"share fewer rounds\n", n, want)
+			}
+			return b, nil
+		}
+		debugf("could not hold %d objects: %v\n", n, err)
 	}
-	debugf("could not hold %d objects (%v); asking for the %d the search needs\n",
-		leaseSize(), err, flags.Parts)
-	return open(flags.Parts)
+	return nil, err
 }
 
 // testModel reads --test=PAD,SIZE[,MARGINAL[,LIMIT]] into the model the
@@ -242,9 +247,6 @@ const minpad = 0
 // shrink ladder at a count nothing here can predict.  Warming would
 // send scripts nothing is going to ask for.
 func warmTheSearch(b backend, remembered int) {
-	if !flags.One {
-		return
-	}
 	parts := usableParts(b, flags.Parts)
 	if parts == 0 {
 		// Nowhere to run them in parallel, so there is no round to
@@ -858,14 +860,18 @@ func noticef(format string, v ...any) {
 // This is the padding autobench *names*.  The pad it *runs* at is one byte
 // more; both callers add that themselves.
 func basePadding(b backend, r *Results) int {
-	// --ipad is an assertion, not a hint: the caller has run this shape before
-	// and is telling us what it measured.  Take it.  Verification costs two
-	// live runs and is available on request (--check-ipad), but it is the
-	// caller's call to spend them, not ours to spend on their behalf.
+	// --ipad names the padding to measure at: the caller has run this shape
+	// before, or read one out of doc/memory.md, and is telling us what it is.
+	//
+	// It is confirmed rather than taken, exactly as a remembered one is, and
+	// for the same reason: a padding wrong by k reports every Size wrong by k
+	// with nothing in the output to show it.  It used to be checked only when
+	// asked (--check-ipad) because the check cost two live runs; those two
+	// readings ride in a round that is being spent anyway now, so there is
+	// nothing left to decide and no flag for it.
 	if flags.IPad != 0 {
-		if flags.ICheck {
-			checkIPad(b, flags.IPad)
-		}
+		warmTheSearch(b, flags.IPad)
+		checkIPad(b, flags.IPad)
 		return flags.IPad
 	}
 
@@ -1119,7 +1125,7 @@ func main() {
 
 	// Two searches share every round when --extra is asked for, so the
 	// lease has to carry both.  Set before anything is leased.
-	if flags.Extra > 0 && flags.One {
+	if flags.Extra > 0 {
 		searchesAtOnce = 2
 	}
 
@@ -1173,9 +1179,6 @@ func main() {
 		places, cleanup, err := runIn(ctx, opts)
 		if err != nil {
 			errf("%v\n", err)
-		}
-		if flags.Keep {
-			fmt.Printf("running in %s\n", places[0].obj)
 		}
 		b = &runner{
 			places: places, cleanup: cleanup,
@@ -1241,23 +1244,8 @@ func main() {
 		flags.Code = flags.Statement
 	}
 	switch {
-	case flags.IPad != 0 && flags.Fast:
-		// --fast asks for no padding at all; --ipad names the padding to
-		// use.  Honouring both is impossible, so say so rather than pick.
-		errf("Only one of --fast or --ipad may be specified\n")
-	case flags.Max < 1:
-		// The copy search starts AT the cap, so a cap below one has nowhere to
-		// start.  Refuse rather than quietly measuring something else: --max is
-		// how a caller bounds a benchmark, and silently ignoring it was A3.
-		errf("--max %d: a benchmark needs at least one copy of the code under test\n", flags.Max)
 	case flags.Extra < 0:
 		errf("--extra %d: a count of further copies cannot be negative\n", flags.Extra)
-	case flags.Extra > 0 && !flags.One:
-		// --extra measures what a copy after the first costs, against
-		// the one copy that -1 mode measures.  Copy mode answers the
-		// same question its own way and has no first copy to compare
-		// against.
-		errf("--extra is for -1 mode; copy mode measures the marginal cost already\n")
 	case flags.Parts < 2:
 		// One part is not a division, and nought is not a number of
 		// them.  Two is the bisection, which is allowed and is what
@@ -1307,306 +1295,50 @@ func main() {
 
 	var r Results
 
-	if flags.One {
-		size, basePad, pad, marginal, haveMarginal := oneMode(b, &r)
+	size, basePad, pad, marginal, haveMarginal := oneMode(b, &r)
 
-		if flags.Title != "" {
-			fmt.Printf("Title: %s\n", flags.Title)
-		}
-		// The two readings the size is the difference of: the base script
-		// at the padding, sitting exactly on a block boundary, and the
-		// one-copy script at the same padding.  Result pad is the filler
-		// that copy can still carry without spilling into the next block.
-		fmt.Printf("Base mem: %d\n", r.Base)
-		fmt.Printf("Result mem: %d\n", r.Test)
-		fmt.Printf("Result pad: %d\n", pad)
+	// The two readings the size is the difference of: the base script
+	// at the padding, sitting exactly on a block boundary, and the
+	// one-copy script at the same padding.  Result pad is the filler
+	// that copy can still carry without spilling into the next block.
+	fmt.Printf("Base mem: %d\n", r.Base)
+	fmt.Printf("Result mem: %d\n", r.Test)
+	fmt.Printf("Result pad: %d\n", pad)
 
-		fmt.Printf("Size: %d\n", size)
-		if haveMarginal {
-			// A whole number or it is not a constant cost per copy.
-			// Both readings are exact to the byte, so the only way this
-			// divides unevenly is that the copies do not cost the same
-			// as each other -- which is a fact about the code under
-			// test and not a rounding error, and saying it as a
-			// fraction is how it is visible at all.
-			if marginal == math.Trunc(marginal) {
-				fmt.Printf("Marginal: %d\n", int(marginal))
-				fmt.Printf("Shared: %d\n", size-int(marginal))
-			} else {
-				fmt.Printf("Marginal: %.4g\n", marginal)
-				noticef("%d further copies cost %.4g bytes each, which is not a whole "+
-					"number, so the copies do not all cost the same and there is no "+
-					"one marginal cost; Shared is not reported\n",
-					flags.Extra, marginal)
-				if flags.Extra%4 != 0 {
-					// Code is 4-aligned, so a copy whose true cost is
-					// not a multiple of 4 is charged a little more or
-					// less than its neighbours -- measured, copies of
-					// llSin(1.0); cost 48, 48, 48, 44 repeating, which
-					// is four copies of 47.  A multiple of four copies
-					// averages that out; anything else divides the
-					// alignment as well as the cost.
-					noticef("code is 4-aligned, so individual copies quantise around "+
-						"their real cost; --extra %d is not a multiple of 4, and one "+
-						"that is would average the alignment out\n", flags.Extra)
-				}
+	fmt.Printf("Size: %d\n", size)
+	if haveMarginal {
+		// A whole number or it is not a constant cost per copy.
+		// Both readings are exact to the byte, so the only way this
+		// divides unevenly is that the copies do not cost the same
+		// as each other -- which is a fact about the code under
+		// test and not a rounding error, and saying it as a
+		// fraction is how it is visible at all.
+		if marginal == math.Trunc(marginal) {
+			fmt.Printf("Marginal: %d\n", int(marginal))
+			fmt.Printf("Shared: %d\n", size-int(marginal))
+		} else {
+			fmt.Printf("Marginal: %.4g\n", marginal)
+			noticef("%d further copies cost %.4g bytes each, which is not a whole "+
+				"number, so the copies do not all cost the same and there is no "+
+				"one marginal cost; Shared is not reported\n",
+				flags.Extra, marginal)
+			if flags.Extra%4 != 0 {
+				// Code is 4-aligned, so a copy whose true cost is
+				// not a multiple of 4 is charged a little more or
+				// less than its neighbours -- measured, copies of
+				// llSin(1.0); cost 48, 48, 48, 44 repeating, which
+				// is four copies of 47.  A multiple of four copies
+				// averages that out; anything else divides the
+				// alignment as well as the cost.
+				noticef("code is 4-aligned, so individual copies quantise around "+
+					"their real cost; --extra %d is not a multiple of 4, and one "+
+					"that is would average the alignment out\n", flags.Extra)
 			}
 		}
-		fmt.Printf("Padding: %d\n", basePad)
-		return
 	}
+	fmt.Printf("Padding: %d\n", basePad)
+	return
 
-	padding, cnt, first := copyMode(b, &r)
-	if cnt == 0 {
-		// Nothing was measured, and copyMode has said why.  There is
-		// no size to report, and 511/cnt below is the second way this
-		// used to end in a crash rather than an explanation.
-		return
-	}
-	if flags.Title != "" {
-		fmt.Printf("Title: %s\n", flags.Title)
-	}
-	if padding != 0 {
-		// Report it here too, not just in -1 mode: this is the number to feed
-		// back with --ipad on the next benchmark of the same shape, and copy
-		// mode paid for it as surely as padding mode did.
-		fmt.Printf("Padding: %d\n", padding)
-	}
-	if flags.Fast {
-		// No boundary to measure against, so this is still the blend of
-		// the two costs, to the quantisation it earned.
-		fmt.Printf("Size: %d %s%d\n", int(r.Size), plusminus, 511/cnt)
-		return
-	}
-	// Size is what each copy after the first costs, which is what copy
-	// mode has always been for.
-	fmt.Printf("Size: %d\n", int(r.Size))
-	// And what one costs outright, when the two could be told apart.
-	// They differ by whatever the construct pays once and shares, which
-	// is nothing for most things -- and when it is small it is below what
-	// these readings can resolve, so copyMode withholds it rather than
-	// print a number that moves with the copy count.
-	if first > 0 {
-		fmt.Printf("First copy: %d\n", first)
-	}
-}
-
-// copyMode is the whole of copy mode: many copies of CODE at one pad, measured
-// as a difference of two memory readings divided by the copy count.  It returns
-// the padding to report and the copy count actually used, and leaves the
-// per-copy size in r.Size, where the benchmark script itself computed it.
-//
-// Like oneMode it is a function rather than a block inside main so that a test
-// can drive it against the offline model.  It was a block inside main until
-// 2026-08-03, and that is not incidental: -1 mode had offline tests and copy
-// mode had none, which is how copy mode carried a systematic +blockSize/count
-// on half of all shapes without anyone being able to see it.
-func copyMode(b backend, r *Results) (padding, cnt, first int) {
-	// We should really always pad the base.  The base padding is the same
-	// quantity here as in -1 mode -- the same base script, the same boundary --
-	// so a Padding: value read off either mode may be given to --ipad in either
-	// mode.
-	pad := 0
-	runpad := 0
-	if !flags.Fast {
-		// AT the padding, as -1 mode does, because that is where the base
-		// script sits exactly on a block boundary -- and everything below
-		// depends on it.  This used to run a byte past, on the argument
-		// that an incidental byte of harness difference between the base
-		// script and the test script would otherwise tip a whole block.
-		// Modelled, it does not: a difference of d shifts the answer by
-		// d/count and never by a block, either side of the boundary.
-		pad = basePadding(b, r)
-		runpad = pad
-	}
-	// Get the base result.  A cache hit is as good as a run: the base is
-	// a number in this process now rather than something left in the
-	// object's linkset data, so nothing here has to care whether the
-	// script that produced it actually executed.
-	//
-	// It did have to care, and the cost of getting it wrong is worth
-	// remembering.  The search meets the crossing partway through its
-	// bisection and then narrows BELOW it, so the last cnt=0 script it
-	// really sent was usually the one at the padding, a block down --
-	// and serving this run from that cache entry got the right reading
-	// while leaving the wrong base in world.  That is +512/count on
-	// every size reported, silently, for half of all shapes.
-	mustRun(b, 0, runpad, r)
-
-	// Probe upward for a copy count whose memory delta registers (Size != 0).
-	// runShrink backs off on a Stack-Heap Collision, so if the probe count
-	// overflows it returns a smaller count that fit -- that becomes the ceiling
-	// and we stop doubling.
-	// Start at 8 copies, but never exceed an explicit --max: the cap is also a
-	// loop-exit test below, which alone would let the first probe run 8 copies
-	// even when --max is smaller.
-	//
-	// A9 asked for this to be replaced by SL's compiler: install 512 copies
-	// without running them, halve on a refusal, and take the answer.  It was
-	// written, run live, and is not here.  What is wrong with it is NOT what it
-	// first looked like, and the difference is worth having straight.
-	//
-	// Measured on Agni 2026-08-03, one session throughout, so none of
-	// this is session overhead -- setup is 0.09-0.65s and teardown 0.00-0.01s:
-	//
-	//	create a script item (24 bytes)     8.10s
-	//	update it            (24 bytes)     1.08 - 1.20s
-	//
-	// The floor is ITEM CREATION, not compilation: sl.InstallScript creates
-	// the script, puts it in the object and Settles up to six seconds waiting
-	// for the object to admit it is there, and only then uploads.  An item that
-	// exists is one upload.  Both a compile and a run pay whichever of those
-	// applies, so it cancels out of every comparison here.
-	//
-	// What does not cancel is source size, and it is superlinear.  Installing
-	// into an item that is already there (TestLiveLadderOnOneItem):
-	//
-	//	  1 copy    1326 bytes   1.22s
-	//	  8 copies  1466 bytes   1.12s
-	//	 32 copies  1947 bytes   1.31s
-	//	 64 copies  2587 bytes   2.66s
-	//	128 copies  3868 bytes   5.07s
-	//	256 copies  6428 bytes  12.70s
-	//	512 copies 11548 bytes  30.96s   REFUSED
-	//
-	// Six times the bytes, twenty-four times the time.  So A9's cost claim --
-	// "~0.5-1.9s" for a compile -- is RIGHT, for a small script: 1.1s.  What
-	// does not follow is that the search is cheap, because the search does not
-	// ask about small scripts.  It starts at 512 and halves, so it asks 512,
-	// 256 and 128: 48.7s measured, against ONE run of the 8-copy script the
-	// probe below sends -- 1.1s to install it and 0.7s to run it, the 0.7s
-	// being the whole difference between compiling a script and running it
-	// (128 copies: compile 16.79s, run 17.46s, both creating their item).
-	//
-	// Live, end to end, the two versions of this function were 4m12 and 2m10,
-	// and the compiler-driven one then had to throw a run away: it was given
-	// 256 copies, which SL compiles and which collide stack with heap the
-	// moment they run.
-	//
-	// What the compiler does still settle is what to do when a script is
-	// refused, which is a question about the run that just failed rather than a
-	// reason to spend a run asking.  That is in runShrink.  See
-	// LOCAL/inworld-tasks/A9-results.md.
-	D := min(8, flags.Max)
-	capped := false
-	for {
-		used := runShrink(b, D, runpad, r)
-		if used < D {
-			capped = true
-			D = used
-		}
-		if r.Size != 0 || capped || D >= flags.Max {
-			break
-		}
-		D *= 2
-	}
-	switch {
-	case capped:
-		// D copies were the most that fit during probing; don't estimate higher.
-		cnt = D
-	case r.Size == 0:
-		cnt = blockSize
-	default:
-		maxMem := 62*1024 - r.Base
-		per := int(r.Size) + blockSize/(2*D)
-		// Whether one copy fits has to be settled BEFORE the shift.
-		// bits.Len(0)-1 is -1, and shifting by a negative amount
-		// panics -- one line above the check that exists to report
-		// this, so the message was unreachable and the user got
-		// "negative shift amount" instead.  A base larger than the
-		// memory a script has makes maxMem negative, which the same
-		// shift turns into an enormous count rather than a refusal.
-		if maxMem <= 0 || per <= 0 || maxMem < per {
-			fmt.Print("Unable to benchmark\n")
-			return pad, 0, 0
-		}
-		cnt = int(1 << (bits.Len(uint(maxMem/per)) - 1))
-	}
-	if cnt > flags.Max {
-		cnt = flags.Max
-	}
-
-	// --fast skipped the padding, so there is no boundary underneath any
-	// of this and the exact scheme below cannot be run: it needs the base
-	// script to sit ON one.  The old measurement is still available and
-	// still says what it always said, to the quantisation it prints.
-	//
-	// The searches would not work here anyway.  They read every pad from
-	// the run pad upwards, and the filler cannot emit 1 or 3 bytes -- at
-	// a run pad of nought two of the first four readings would be of a
-	// script other than the one asked for.
-	if flags.Fast {
-		return pad, runShrink(b, cnt, runpad, r), 0
-	}
-
-	// The 62KB estimate can still overshoot; runShrink halves the count on a
-	// Stack-Heap Collision until it fits, returning the count actually used.
-	//
-	// Shrunk against the TOP of the range the searches will read rather
-	// than against the run pad itself.  They walk a whole block above it,
-	// so a count that only just fits at the padding would be refused part
-	// way up -- and a refusal inside a search is a panic, not a retry.
-	cnt = runShrink(b, cnt, runpad+blockSize-1, r)
-
-	// What the copies actually cost, exactly, at two counts.
-	//
-	// One reading is not enough and never was.  A copy count of C answers
-	// with what C copies cost together, and that is not C times what one
-	// costs: a construct pays some of its cost once and shares it, so the
-	// total is an initial cost plus C marginal ones.  Dividing by C gives
-	// the marginal cost plus the initial one spread over C, which is the
-	// blend copy mode has always reported.
-	//
-	// Measured at C and at C/2 the two separate exactly.  See below.
-	mustRun(b, 0, runpad, r)
-	baseMem := r.Base
-
-	full, _ := copiesCost(b, cnt, runpad, baseMem, r)
-	half, ok := copiesCost(b, cnt/2, runpad, baseMem, r)
-	if !ok {
-		// One copy fitted and no more, so there is no second count to
-		// take a difference against and no marginal cost to be had:
-		// what a copy costs on its own and what another one costs after
-		// it are two questions and this can only answer the first.
-		noticef("only one copy of the code under test fits, so what an ADDITIONAL " +
-			"copy would cost cannot be measured; Size below is what one costs " +
-			"outright, which is what -1 mode reports\n")
-		r.Size = float64(full)
-		return pad, cnt, full
-	}
-
-	// full = F + C*m and half = F + C/2*m, so
-	//
-	//	2*half - full = F               the initial cost
-	//	(full - F)/C  = m               each copy after the first
-	//	F + m                           the first copy, outright
-	//
-	// F is what a construct pays once and shares.  It is zero for most
-	// things and large for anything with a literal in it: a 250-character
-	// string is 1044 bytes for one copy and 542 for each after.
-	initial := 2*half - full
-	size := (full - initial) / cnt
-	r.Size = float64(size)
-
-	// C*m has to divide by C.  That it does not means the copies are not
-	// an initial cost plus a constant marginal one, so the split is a fit
-	// to a shape the construct does not have.
-	//
-	// The marginal cost survives that -- it is a difference of two
-	// readings and the first-order term -- but the initial cost does not.
-	// It is the SECOND-order term, and measured live it moves with the
-	// copy count when it should not: for one construct 371, 367 and 344
-	// at three counts, and negative with a preamble.  So it is reported
-	// only when the arithmetic says the shape fits, and withheld
-	// otherwise.  A number nobody can rely on is worse than no number.
-	if (full-initial)%cnt != 0 {
-		noticef("%d copies cost %d bytes and %d cost %d, which does not resolve "+
-			"into an initial cost and a constant one per copy; Size is rounded and "+
-			"what one copy costs on its own is not reported -- -1 mode measures it "+
-			"directly\n", cnt, full, cnt/2, half)
-		return pad, cnt, 0
-	}
-	return pad, cnt, initial + size
 }
 
 // copiesCost is what cnt copies add to the base script, exactly.
@@ -1631,45 +1363,6 @@ func copiesCost(b backend, cnt, runpad, baseMem int, r *Results) (int, bool) {
 // reasons, not because they cost different amounts: measured, they cost nearly
 // the same, which is the finding A9 turned on.
 var spentCompiles int
-
-// oneCopyVerdict caches what SL said about a single copy.  The code under test
-// does not change during a benchmark, so neither can this.
-var oneCopyVerdict *compilation
-
-// oneCopyCompiles asks SL whether ONE copy of the code under test compiles.
-//
-// It is asked in exactly one situation: a run has just been refused by the
-// compiler, and the question is which of the two things that means.  A script
-// too large to compile and a script that is not valid LSL come back from SL as
-// the same event, and at 512 copies of a real benchmark shape SL's entire
-// message is "Internal server compile error" -- no line, no column, and nothing
-// in it to tell the two apart by.
-//
-// One copy is the smallest script a benchmark can be.  If that compiles, the
-// refusal was about size and a smaller count is worth trying; if it does not,
-// the code itself is being refused, and halving nine more times would spend
-// nine more uploads asking the same question.
-//
-// Not being able to ask is fatal.  The caller is already handling a failed run,
-// and a diagnosis that cannot be obtained is not one to guess at.
-//
-// Whatever is at the far end answers it.  The offline model has no compiler, so
-// what stands in for one there is the thing the compiler is being asked about --
-// the memory the model says the script would use, against the model's limit --
-// and it answers that through the same call, having installed nothing.
-func oneCopyCompiles(b backend, pad int) *compilation {
-	if oneCopyVerdict != nil {
-		return oneCopyVerdict
-	}
-	spentCompiles++
-	c, err := b.Compile(buildScript(1, pad))
-	if err != nil {
-		panic(err)
-	}
-	oneCopyVerdict = c
-	debugf("Compile[1] accepted=%v\n", oneCopyVerdict.OK)
-	return oneCopyVerdict
-}
 
 // resultPayload returns the text following "RESULT:" in a message, and whether
 // the message carried one at all. The generated script labels the numbers it
@@ -1751,63 +1444,6 @@ func mustRun(b backend, cnt, pad int, r *Results) {
 	}
 }
 
-// runShrink runs cnt copies, halving the count until the script fits or the
-// count reaches 1.  It returns the count actually measured, so the caller can
-// report the right error margin.  Anything else is fatal.
-//
-// There are two ways a script can be too big, and they are not the same limit.
-// A Stack-Heap Collision is the RUN-TIME one: SL compiled the script, started
-// it, and it ran out of the 64KB a Mono script has.  A compile refusal is the
-// COMPILER's, and it is looser -- measured on Agni 2026-08-03, 256
-// copies of the reference shape compiled and then collided stack with heap the
-// moment they ran, while 512 copies were refused outright.  Either way a
-// smaller count is the thing to try, so both halve.
-//
-// The difference is at the bottom.  A collision at one copy is still a size
-// limit and there is nothing smaller to fall back to.  A REFUSAL at one copy is
-// not a size limit at all -- one copy is the smallest script a benchmark can
-// be -- so it is the code under test that SL will not take, and saying so is
-// worth more than another nine uploads finding out.  oneCopyCompiles is what
-// tells the two apart, and it is asked at most once per benchmark.
-func runShrink(b backend, cnt, pad int, r *Results) int {
-	for {
-		err := runScript(b, cnt, pad, r)
-		if err == nil {
-			return cnt
-		}
-		var re *runtimeError
-		if cnt > 1 && errors.As(err, &re) && re.OutOfMemory() {
-			debugf("Stack-Heap Collision at %d copies; retrying at %d\n", cnt, cnt/2)
-			cnt /= 2
-			continue
-		}
-		var ce *compileError
-		if errors.As(err, &ce) {
-			if one := oneCopyCompiles(b, pad); !one.OK {
-				errf(`Second Life will not compile one copy of the code under test:
-
-%s
-
-One copy is the smallest script a benchmark can be, so this is not a size
-limit -- it is Second Life refusing the code itself.  Any line and column above
-are SL's, counted in the generated script: the preamble comes first, then the
-copies of CODE, then the harness, then the padding.
-`, one.Error())
-			}
-			if cnt > 1 {
-				// With the reason: "too big" and "not valid LSL"
-				// arrive as the same event, and halving blindly
-				// hides which one is happening.
-				debugf("compile refused at %d copies (%v); retrying at %d\n",
-					cnt, ce, cnt/2)
-				cnt /= 2
-				continue
-			}
-		}
-		panic(err)
-	}
-}
-
 // buildScript renders the benchmark: cnt copies of CODE between the preamble
 // and the postamble, then the harness, then pad bytes of filler.
 //
@@ -1840,7 +1476,6 @@ func buildScript(cnt, pad int) string {
 	// bytes, which is the only thing about this function that may not
 	// change.
 	var pb strings.Builder
-	pb.WriteString(flags.Pad)
 
 	// The filler emits exactly pad bytes more than pad 0 does, for every
 	// pad from 0 upward.  Two pieces, at 5 bytes and 2:
@@ -2064,19 +1699,6 @@ func mkVar(s string) (string, error) {
 // readings of one script that do not depend on each other, and N places
 // can take N of them at a time.
 func runIn(ctx context.Context, o session.Options) ([]place, func(), error) {
-	if flags.Object != "" || flags.Rez {
-		s, err := session.Connect(ctx, o)
-		if err != nil {
-			return nil, nil, err
-		}
-		obj, cleanup, err := session.RunIn(ctx, s, flags.Object, flags.Keep)
-		if err != nil {
-			s.Close()
-			return nil, nil, err
-		}
-		return []place{{s, obj}}, func() { cleanup(); s.Close() }, nil
-	}
-
 	// N places to run scripts in, and no opinion about whose they are.
 	// A benchmark that wants 32 of them is asking for more than any one
 	// avatar has, and there is no reason it should have to know that:
@@ -2091,16 +1713,21 @@ func runIn(ctx context.Context, o session.Options) ([]place, func(), error) {
 	// two avatars can be in regions with two LSL compilers.  Whether
 	// that moves a reading is unknown -- and the same doubt already
 	// applied between one run and the next.)
-	as, err := session.UseAutoSpread(ctx, o, leaseSize())
-	if err != nil && leaseSize() != flags.Parts {
-		// The three extra places are what lets a remembered padding be
-		// confirmed in the same round as the search it may need; see
-		// warmTheSearch.  Nothing depends on having them, so an avatar
-		// with room for the search and not for the warming still
-		// measures.
-		debugf("could not hold %d objects (%v); asking for the %d the search needs\n",
-			leaseSize(), err, flags.Parts)
-		as, err = session.UseAutoSpread(ctx, o, flags.Parts)
+	// As many places as the searches would like, halving until the pool
+	// can grant it; see openLease for why fewer is slower rather than
+	// fatal.  The last attempt asks for one, which every avatar has.
+	want := leaseSize()
+	var as []*session.Auto
+	var err error
+	for n := want; n >= 1; n = n / 2 {
+		if as, err = session.UseAutoSpread(ctx, o, n); err == nil {
+			if n < want {
+				noticef("holding %d objects rather than %d; the searches will "+
+					"share fewer rounds\n", n, want)
+			}
+			break
+		}
+		debugf("could not hold %d objects: %v\n", n, err)
 	}
 	if err != nil {
 		return nil, nil, err

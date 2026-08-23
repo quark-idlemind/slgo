@@ -119,13 +119,7 @@ func offlineWith(t *testing.T, o scripttest.Options) *modelled {
 	// which the next case changes.
 	reset := func() {
 		flags.IPad = 0
-		flags.ICheck = false
-		// The copy search starts AT --max, so a case that left it where
-		// the previous case put it would measure a different copy count.
-		// blockSize is the default the flag block sets.
-		flags.Max = blockSize
 		clear(cache)
-		oneCopyVerdict = nil
 		spentRuns, spentRereads, spentCompiles = 0, 0, 0
 	}
 	reset()
@@ -369,80 +363,6 @@ func TestOneModeIsPaddingIndependent(t *testing.T) {
 	}
 }
 
-// TestCopyModeReportsTheCodeSize is the copy-mode counterpart of
-// TestOneModeReportsTheCodeSize, and until 2026-08-03 there was none: copy mode
-// lived inside main and could not be driven offline.  Copy mode divides a
-// memory difference by a copy count, so unlike -1 mode it is only exact to the
-// quantisation it prints as ±N -- which is the bound this asserts, because that
-// is the promise the output makes.
-func TestCopyModeReportsTheCodeSize(t *testing.T) {
-	for _, tc := range modelCases {
-		t.Run(tc.name, func(t *testing.T) {
-			b := offline(t, tc.crossing, tc.codeSize)
-			var r Results
-			padding, cnt, _ := copyMode(b, &r)
-			if want := lowestCrossing(tc.crossing) - 1; padding != want {
-				t.Errorf("Padding: %d, want %d", padding, want)
-			}
-			tol := 511 / cnt
-			if got := int(r.Size); got < tc.codeSize-tol || got > tc.codeSize+tol {
-				t.Errorf("Size: %d ±%d over %d copies, want %d within the ±",
-					got, tol, cnt, tc.codeSize)
-			}
-		})
-	}
-}
-
-// TestCopyModeAnchorsOnTheRunPad is the regression for the bug this file could
-// not previously see.  Copy mode's base does not come from a Go variable; the
-// benchmark script divides by what it reads out of linkset data, which only a
-// cnt=0 script that ACTUALLY RAN writes.  The run cache serves readings without
-// sending a script, and the padding search meets the crossing partway through
-// its bisection and then narrows below it -- so the base run at runPad was a
-// cache hit and the world was left anchored one block down, putting exactly
-// +blockSize/count on the reported Size.
-//
-// It fired on every odd crossing and no even one, i.e. half of all shapes.  The
-// live reference (crossing 474) is in the unaffected half, which is why every
-// published figure survived it -- and why an exhaustive sweep, not a
-// hand-picked case, is what pins it.
-//
-// The invariant asserted is the one that matters to a caller: the answer must
-// not depend on HOW the padding was arrived at.  Searching for it and being
-// told it with --ipad must give the same Size.
-func TestCopyModeAnchorsOnTheRunPad(t *testing.T) {
-	const codeSize = 368
-	for crossing := minpad + 1; crossing < minpad+1+blockSize; crossing++ {
-		b := offline(t, crossing, codeSize)
-		var searched Results
-		padding, cnt, _ := copyMode(b, &searched)
-		b.stop()
-
-		// Same shape, same padding, but handed over instead of searched
-		// for -- and in a fresh object, since the one above is holding
-		// the base reading its own runs left in it.
-		b = offline(t, crossing, codeSize)
-		flags.IPad = padding
-		var told Results
-		toldPadding, toldCnt, _ := copyMode(b, &told)
-		b.stop()
-
-		if toldPadding != padding || toldCnt != cnt || told.Size != searched.Size {
-			t.Errorf("crossing %d: searched Padding: %d Size: %v over %d copies, "+
-				"--ipad %d gave Padding: %d Size: %v over %d copies",
-				crossing, padding, searched.Size, cnt,
-				padding, toldPadding, told.Size, toldCnt)
-		}
-		if want := crossing - 1; padding != want {
-			t.Errorf("crossing %d: Padding: %d, want %d", crossing, padding, want)
-		}
-		if tol := 511 / cnt; int(searched.Size) < codeSize-tol || int(searched.Size) > codeSize+tol {
-			t.Errorf("crossing %d: Size: %v ±%d over %d copies, want %d within the ±",
-				crossing, searched.Size, tol, cnt, codeSize)
-		}
-	}
-}
-
 // TestACopyRunDividesByTheBaseRunBeforeIt pins where SIZE comes from, which
 // had the same shape of fault as the code it is used to find it in: the
 // benchmark script computes (mem - old)/count, and old is the cnt=0 reading
@@ -513,46 +433,6 @@ func refusesOver(t *testing.T, crossing, codeSize, limit int) *modelled {
 	return offlineWith(t, scripttest.Options{
 		Memory: scripttest.Memory{Pad: crossing, CodeSize: codeSize, Limit: limit},
 	})
-}
-
-// TestRunShrinkBacksOffOnACompileRefusal is the case that used to end a
-// benchmark outright.  SL refuses a script that is too big to COMPILE, which is
-// a different and looser limit than the Stack-Heap Collision that ends one that
-// is too big to RUN -- measured live 2026-08-03, 256 copies of the reference
-// shape compiled and then collided, and 512 were refused.  Either way a smaller
-// count is the thing to try.
-func TestRunShrinkBacksOffOnACompileRefusal(t *testing.T) {
-	// One copy is well under this and 128 copies are well over it, so the
-	// refusal is unambiguously about size.
-	b := refusesOver(t, 474, 368, 30*1024)
-
-	var r Results
-	got := runShrink(b, 128, 474, &r)
-	if got != 64 {
-		t.Errorf("runShrink(128) = %d, want 64 (128 refused, 64 taken)", got)
-	}
-	if b.mem.Reading(got, 474) > b.mem.Limit {
-		t.Errorf("runShrink returned %d, which the model refuses", got)
-	}
-	// Exactly one compile: the diagnosis is about the code, which does not
-	// change, so asking twice is asking the same question twice.
-	if spentCompiles != 1 {
-		t.Errorf("spent %d compiles, want 1", spentCompiles)
-	}
-}
-
-// TestRunShrinkAsksOnceAboutOneCopy pins the caching across separate calls,
-// which is where a benchmark actually makes them: the probe loop calls
-// runShrink and then the measuring run calls it again.
-func TestRunShrinkAsksOnceAboutOneCopy(t *testing.T) {
-	b := refusesOver(t, 474, 368, 30*1024)
-
-	var r Results
-	runShrink(b, 128, 474, &r)
-	runShrink(b, 128, 480, &r)
-	if spentCompiles != 1 {
-		t.Errorf("spent %d compiles over two calls, want 1", spentCompiles)
-	}
 }
 
 // TestCompileRefusalIsNotAStackHeapCollision keeps the two apart, because
@@ -699,10 +579,12 @@ func TestOneModeSurvivesAMisreadBase(t *testing.T) {
 // an upload, a compile, an execution and a wait, so this is the only unit
 // that matters.
 //
-// -1 mode searches twice, and each search ends by re-reading three
-// things: the pad that crossed, the base, and the pad below.  Six runs,
-// on a benchmark that spends about two dozen -- and one ROUND per
-// search, because the three do not depend on each other.
+// A benchmark searches three times at the default --extra=4 -- the base
+// script, the one-copy script and the five-copy one -- and each search
+// ends by re-reading three things: the pad that crossed, the base, and
+// the pad below.  Nine runs, on a benchmark that spends about four
+// dozen, and one ROUND per search because the three do not depend on
+// each other.
 func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
 	flags.Paranoid = true
 	t.Cleanup(func() { flags.Paranoid = false })
@@ -713,35 +595,13 @@ func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
 	if size, _, _, _, _ := oneMode(b, &r); size != 368 {
 		t.Fatalf("Size: %d, want 368", size)
 	}
-	if spentRereads != 6 {
-		t.Errorf("%d re-reads, want 6: two searches confirming three readings each", spentRereads)
+	if spentRereads != 9 {
+		t.Errorf("%d re-reads, want 9: three searches confirming three readings each",
+			spentRereads)
 	}
-	if spentRuns > 40 {
+	if spentRuns > 80 {
 		t.Errorf("a clean -1 benchmark spent %d runs; confirmation is meant to add "+
 			"a handful, not a search", spentRuns)
-	}
-}
-
-// TestCopyModeMeasuresMoreThanABlock: copy mode takes a difference of
-// two readings and divides, so nothing about a block bounds what it can
-// report.  Neither mode is bounded that way any more -- see
-// TestOneModeReportsTheCodeSize, which is held to the same cases -- but
-// copy mode reaches them by different arithmetic and has to be shown to.
-func TestCopyModeMeasuresMoreThanABlock(t *testing.T) {
-	for _, tc := range bigModelCases {
-		t.Run(tc.name, func(t *testing.T) {
-			b := offline(t, tc.crossing, tc.codeSize)
-			var r Results
-			padding, cnt, _ := copyMode(b, &r)
-			if want := lowestCrossing(tc.crossing) - 1; padding != want {
-				t.Errorf("Padding: %d, want %d", padding, want)
-			}
-			tol := 511 / cnt
-			if got := int(r.Size); got < tc.codeSize-tol || got > tc.codeSize+tol {
-				t.Errorf("Size: %d ±%d over %d copies, want %d within the ±",
-					got, tol, cnt, tc.codeSize)
-			}
-		})
 	}
 }
 
@@ -871,102 +731,6 @@ func TestABaseThatMovedMakesEveryComparisonSuspect(t *testing.T) {
 
 // ------------------------------------------------ what copy mode cannot do
 
-// TestCopyModeSaysSoWhenItCannotBenchmark: a construct too large for
-// even one copy to fit is a thing to be told about, not a crash.
-//
-// It was a crash.  The count came out at nought and the line that
-// reports that was never reached: bits.Len(0)-1 is -1, and shifting by
-// a negative amount panics one line above the check.  What the user
-// saw was "negative shift amount", which says nothing about the
-// benchmark.
-func TestCopyModeSaysSoWhenItCannotBenchmark(t *testing.T) {
-	// A copy larger than the memory a script has, with the model's
-	// compiler limit lifted so that the size is what stops it rather than
-	// a refusal.
-	b := refusesOver(t, 474, 200*1024, noLimit)
-
-	var r Results
-	var cnt int
-	said := stdoutOf(t, func() { _, cnt, _ = copyMode(b, &r) })
-	if !strings.Contains(said, "Unable to benchmark") {
-		t.Errorf("copy mode measured something it cannot measure:\n%s", said)
-	}
-	// And it comes back saying so, because the caller divides by this:
-	// 511/cnt was the second way the same case ended in a crash.
-	if cnt != 0 {
-		t.Errorf("copy mode reported %d copies it cannot use", cnt)
-	}
-}
-
-// TestACopyThatRegistersNothingIsMeasuredOverAWholeBlock: a construct the
-// model says costs nothing never moves the memory, so the probe loop
-// doubles to the cap and the count falls back to a whole block of copies
-// -- which is the most a benchmark is allowed to ask for.
-func TestACopyThatRegistersNothingIsMeasuredOverAWholeBlock(t *testing.T) {
-	b := refusesOver(t, 474, 0, noLimit)
-	flags.Max = 64
-	t.Cleanup(func() { flags.Max = blockSize })
-
-	var r Results
-	_, cnt, _ := copyMode(b, &r)
-	if cnt != flags.Max {
-		t.Errorf("copy mode measured over %d copies, want the cap of %d", cnt, flags.Max)
-	}
-	if r.Size != 0 {
-		t.Errorf("a costless construct measured %v", r.Size)
-	}
-}
-
-// TestTheProbeStopsDoublingWhenTheScriptStopsFitting: the copy count is
-// found by doubling until the memory difference registers, and a count
-// that had to be halved to run at all is the ceiling -- doubling past it
-// would spend a run per attempt on scripts already known not to fit.
-//
-// The count that comes back has to fit at every pad the headroom
-// searches will read, which is a whole block above the padding, not just
-// at the padding itself.  A refusal part way up a search is a panic
-// rather than a retry, so the shrinking is done against the top of the
-// range -- and here that is what takes four copies down to two.
-func TestTheProbeStopsDoublingWhenTheScriptStopsFitting(t *testing.T) {
-	// Four copies fit at the padding and eight do not, so the first
-	// probe -- which starts at eight -- comes back having run four.
-	staircase := scripttest.Memory{Pad: 474, CodeSize: 368}
-	b := refusesOver(t, 474, 368, staircase.Reading(4, 474)+1)
-
-	var r Results
-	_, cnt, _ := copyMode(b, &r)
-	if b.mem.Reading(cnt, 473+blockSize-1) > b.mem.Limit {
-		t.Errorf("copy mode settled on %d copies, which the model refuses at the "+
-			"top of the range its searches read", cnt)
-	}
-	if cnt != 2 {
-		t.Errorf("copy mode measured over %d copies, want the 2 that fit with a "+
-			"block of headroom above them", cnt)
-	}
-}
-
-// TestOneCopyIsWhatTellsTheTwoRefusalsApart: a script too large to
-// compile and a script that is not valid LSL come back as the same event.
-// One copy is the smallest script a benchmark can be, so a refusal of
-// THAT is not a size limit -- and saying so is worth more than another
-// nine uploads finding out.
-func TestOneCopyIsWhatTellsTheTwoRefusalsApart(t *testing.T) {
-	// A limit below what one copy costs, which is a shape too big to
-	// benchmark at all rather than one to try smaller.
-	b := refusesOver(t, 474, 368, scripttest.DefaultAnchor)
-
-	v := oneCopyCompiles(b, 474)
-	if v.OK {
-		t.Fatal("one copy was accepted over a limit it does not fit in")
-	}
-	if !strings.Contains(v.Error(), "over the") {
-		t.Errorf("the refusal does not say what it was measured against: %v", v.Error())
-	}
-	if spentCompiles != 1 {
-		t.Errorf("spent %d compiles asking one question", spentCompiles)
-	}
-}
-
 // TestOneModeIsExactEverywhere sweeps the whole space the model can
 // express, rather than the dozen shapes named above.
 //
@@ -1034,32 +798,6 @@ var affineCases = []struct {
 	{"an extra copy dearer than the first", 300, 22, 44},
 }
 
-// TestCopyModeSeparatesWhatIsPaidOnce is the point of measuring at two
-// counts.  One count answers with the two costs blended -- the marginal
-// cost plus the initial one spread over however many copies were used --
-// and which blend you get depends on a copy count nobody chose for its
-// arithmetic.  Two counts separate them exactly.
-func TestCopyModeSeparatesWhatIsPaidOnce(t *testing.T) {
-	for _, tc := range affineCases {
-		t.Run(tc.name, func(t *testing.T) {
-			b := affine(t, tc.crossing, tc.abs, tc.marg, 0)
-
-			var r Results
-			padding, cnt, first := copyMode(b, &r)
-			if want := lowestCrossing(tc.crossing) - 1; padding != want {
-				t.Errorf("Padding: %d, want %d", padding, want)
-			}
-			if got := int(r.Size); got != tc.marg {
-				t.Errorf("Size: %d over %d copies, want the marginal cost %d",
-					got, cnt, tc.marg)
-			}
-			if first != tc.abs {
-				t.Errorf("First copy: %d, want %d", first, tc.abs)
-			}
-		})
-	}
-}
-
 // TestOneModeMeasuresTheFirstCopy is the other half of the same fact: -1
 // mode uses one copy, so what it reports is what one costs outright --
 // the absolute cost, not the marginal one.  The two modes answer
@@ -1076,83 +814,6 @@ func TestOneModeMeasuresTheFirstCopy(t *testing.T) {
 				t.Errorf("Size: %d, want the first copy's %d", size, tc.abs)
 			}
 		})
-	}
-}
-
-// TestCopyModeIsExactAtEveryCount: the separation must not depend on how
-// many copies the probe happened to land on.
-//
-// That is exactly what the blend could not promise.  Dividing one
-// reading by the count gives the marginal cost plus the initial one
-// spread over that count, so the answer moved with a number nobody chose
-// for its arithmetic -- for the 280/22 case it was 54 at eight copies and
-// 22 at five hundred and twelve.  --max is what varies the count here.
-func TestCopyModeIsExactAtEveryCount(t *testing.T) {
-	for _, tc := range affineCases {
-		t.Run(tc.name, func(t *testing.T) {
-			counts := map[int]bool{}
-			for _, max := range []int{2, 4, 8, 16, 64, 128} {
-				// Room for the count asked for, so the memory limit is
-				// not what decides which counts this covers.
-				b := affine(t, tc.crossing, tc.abs, tc.marg, noLimit)
-				flags.Max = max
-
-				var r Results
-				_, cnt, first := copyMode(b, &r)
-				counts[cnt] = true
-				if int(r.Size) != tc.marg || first != tc.abs {
-					t.Errorf("at %d copies: Size %d First copy %d, want %d and %d",
-						cnt, int(r.Size), first, tc.marg, tc.abs)
-				}
-			}
-			// If every --max produced the same count the loop above has
-			// asserted one case six times.
-			if len(counts) < 4 {
-				t.Errorf("only %d distinct copy counts were reached: %v", len(counts), counts)
-			}
-		})
-	}
-}
-
-// TestCopyModeWithholdsAFirstCopyItCannotResolve: the marginal cost is a
-// difference of two readings and survives a construct that does not fit
-// the shape; the initial cost is the second-order term and does not.
-//
-// Live, for one construct, it came back 371, 367 and 344 at three copy
-// counts and negative with a preamble.  So when the arithmetic says the
-// shape does not fit -- the per-copy total not dividing by the count --
-// the split is not reported at all.  A number that moves with a copy
-// count nobody chose is worse than no number.
-func TestCopyModeWithholdsAFirstCopyItCannotResolve(t *testing.T) {
-	// A construct whose per-copy cost is not perfectly constant, which
-	// is what live readings look like.
-	b := offlineWith(t, scripttest.Options{Memory: scripttest.Memory{
-		Pad: 474, CodeSize: 100, Marginal: 33, Drift: 4,
-	}})
-	flags.Max = 8
-
-	var r Results
-	said := stderrOf(t, func() {
-		_, _, first := copyMode(b, &r)
-		if first != 0 {
-			t.Errorf("First copy reported as %d for a shape that does not fit", first)
-		}
-	})
-	if !strings.Contains(said, "does not resolve") {
-		t.Errorf("nothing was said about the shape not fitting:\n%s", said)
-	}
-}
-
-// TestCopyModeReportsAFirstCopyItCanResolve is the other half: when the
-// construct really is an initial cost plus a constant one per copy, both
-// numbers are reported.
-func TestCopyModeReportsAFirstCopyItCanResolve(t *testing.T) {
-	b := affine(t, 474, 1044, 542, 0)
-
-	var r Results
-	_, _, first := copyMode(b, &r)
-	if int(r.Size) != 542 || first != 1044 {
-		t.Errorf("Size %d First copy %d, want 542 and 1044", int(r.Size), first)
 	}
 }
 
@@ -1212,8 +873,8 @@ func TestExtraMeasuresWhatEachCopyAfterTheFirstCosts(t *testing.T) {
 		{412, 1, 16},  // and a marginal cost of a single byte
 	} {
 		b := affine(t, 474, c.abs, c.marginal, 0)
-		flags.One, flags.Extra = true, c.extra
-		t.Cleanup(func() { flags.One, flags.Extra = false, 0 })
+		flags.Extra = c.extra
+		t.Cleanup(func() { flags.Extra = 4 })
 
 		var r Results
 		size, _, _, marginal, ok := oneMode(b, &r)
@@ -1252,9 +913,9 @@ func TestExtraCostsScriptsAndNotRounds(t *testing.T) {
 		if extra > 0 {
 			searchesAtOnce = 2
 		}
-		flags.One, flags.Extra, flags.Parts = true, extra, 8
+		flags.Extra, flags.Parts = extra, 8
 		t.Cleanup(func() {
-			flags.One, flags.Extra, flags.Parts, searchesAtOnce = false, 0, 4, 1
+			flags.Extra, flags.Parts, searchesAtOnce = 4, 8, 1
 		})
 		b := offlineWith(t, scripttest.Options{
 			Memory:    scripttest.Memory{Pad: 474, CodeSize: 600, Marginal: 44},
