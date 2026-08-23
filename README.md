@@ -1689,7 +1689,7 @@ The interface is in this package's own types rather than the protobuf
 ones. If it spoke protobuf, the direct backend would have to build
 protobuf for a wire it is not using and the server's conversions would
 be mirrored here; instead each side converts once, in its own
-direction. `pb` appears in exactly one file.
+direction. `pb` appears in exactly one file that is not a test.
 
 `sl/backend_test.go` runs one suite against both, because two
 implementations answering from different sources is exactly the shape

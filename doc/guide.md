@@ -597,7 +597,9 @@ compiled, ran and finished.
 | `--clear` | empty every script out of the objects before running |
 | `--agent NAME`, `-a` | which avatar; the daemon's default otherwise |
 | `--addr HOST:PORT` | the `slgod` to attach to; `sl-host`, or this machine |
-| `--direct`, `-d` | log in to Second Life directly, without `slgod`, with `--first`, `--last` and `--start` |
+| `--direct`, `-d` | log in to Second Life directly, without `slgod` |
+| `--first NAME`, `--last NAME` | the avatar's name, for `--direct` |
+| `--start WHERE` | where to arrive, for `--direct`: `last` (the default), `home`, or a region name |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there -- a simulator, or a viewer daemon -- instead of in Second Life |
 
 ---
@@ -821,7 +823,9 @@ Second Life, and it will not say so about a model.
 | `-v`, `-vv`, `-vvv` | the readings behind the answer; whose objects it ran in; every script it sends |
 | `--agent NAME`, `-a` | which avatar; the daemon's default otherwise |
 | `--addr HOST:PORT` | the `slgod` to attach to; `sl-host`, or this machine |
-| `--direct`, `-d` | log in to Second Life directly, without `slgod`, with `--first`, `--last` and `--start` |
+| `--direct`, `-d` | log in to Second Life directly, without `slgod` |
+| `--first NAME`, `--last NAME` | the avatar's name, for `--direct` |
+| `--start WHERE` | where to arrive, for `--direct`: `last` (the default), `home`, or a region name |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there, instead of in Second Life |
 
 ### Reading the numbers honestly
