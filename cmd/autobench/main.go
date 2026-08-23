@@ -61,7 +61,7 @@ var flags = struct {
 	First     string          `getopt:"--first=NAME the avatar's first name, for --direct"`
 	Last      string          `getopt:"--last=NAME the avatar's last name, for --direct"`
 	Start     string          `getopt:"--start=WHERE where to arrive: last, home, or a region, for --direct"`
-	V         options.Counter `getopt:"--verbose -v say more: once for the readings behind the answer, twice for whose objects it ran in, three times for the scripts themselves"`
+	V         options.Counter `getopt:"-v say more: once for the readings behind the answer, twice for whose objects it ran in, three times for the scripts themselves"`
 	Params    []string        `getopt:"--params=NAME,... parameters used with --statement"`
 	Locals    []string        `getopt:"--locals=NAME,... locals used with --statement"`
 	Globals   []string        `getopt:"--globals=NAME,... declare globals"`
