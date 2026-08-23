@@ -2167,13 +2167,14 @@ viewer_running = how to tell whether one is running already</span></pre>
             <tbody>
               <tr><td class="keys">Tab</td><td class="what">complete a command or a path</td><td class="what">next conversation</td></tr>
               <tr><td class="keys">↑ ↓</td><td class="what">walk through the commands you have typed</td><td class="what">walk through what you have said</td></tr>
-              <tr><td class="keys">← →</td><td class="what">move along the line</td><td class="what">the same</td></tr>
-              <tr><td class="keys">^A · ^E</td><td class="what">to the start of the line, to the end</td><td class="what">the same</td></tr>
+              <tr><td class="keys">← → · ^B · ^F</td><td class="what">move along the line, one character</td><td class="what">the same</td></tr>
+              <tr><td class="keys">^A · ^E · Home · End</td><td class="what">to the start of the line, to the end</td><td class="what">the same</td></tr>
               <tr><td class="keys">^U · ^W · ^K</td><td class="what">kill back to the start, the word before, to the end</td><td class="what">the same</td></tr>
               <tr><td class="keys">backspace · delete</td><td class="what">the character before, the character under</td><td class="what">the same</td></tr>
               <tr><td class="keys">&lt;ESC&gt;</td><td class="what">—</td><td class="what">back to command mode</td></tr>
               <tr><td class="keys">^C</td><td class="what">clear the line; leave slsh on an empty one</td><td class="what">clear the line; back to command mode on an empty one</td></tr>
-              <tr><td class="keys">^D</td><td class="what">leave slsh, on an empty line</td><td class="what">the same</td></tr>
+              <tr><td class="keys">^L</td><td class="what">redraw the screen, leaving the line alone</td><td class="what">the same</td></tr>
+              <tr><td class="keys">^D</td><td class="what">delete the character under the cursor; leave slsh when there is none</td><td class="what">delete the character under the cursor; back to command mode when there is none</td></tr>
             </tbody>
           </table>
         </div>

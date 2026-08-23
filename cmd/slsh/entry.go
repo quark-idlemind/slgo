@@ -21,13 +21,16 @@ package main
 // paying for a case that does not exist, and every line now means
 // itself.
 //
-// A line being typed is an ordinary line: backspace, delete, Ctrl-U,
-// Ctrl-W, Ctrl-K, Ctrl-A and the arrows all work, because this is the
-// same line editor the prompt uses.  What they cannot reach is a line
-// already entered, so Escape starts the whole answer again.
+// A line being typed is an ordinary line: every key the prompt's editor
+// owns works here, because it IS that editor -- see Term.Key for the
+// whole set.  What none of them can reach is a line already entered, so
+// Escape starts the whole answer again.
 //
-// Ctrl-D ends it too, and needs no escaping because it cannot appear in
-// text.  The full stop stays because Ctrl-D cannot be written into a
+// Ctrl-D ends it, and needs no escaping because it cannot appear in
+// text.  Ends it at the END of the line, that is: with anything in front
+// of the cursor it deletes forward, as it does at the prompt, so a
+// person who has moved left to fix a typo does not send the answer by
+// pressing it.  The full stop stays because Ctrl-D cannot be written into a
 // file of commands: slsh -f is driven a line at a time, and a rule that
 // only a keyboard can reach would leave that route with no terminator
 // at all.
@@ -86,7 +89,9 @@ func (sh *Shell) typed(ctx context.Context, line string) {
 	sh.prompt()
 }
 
-// finish ends the answer where it stands, which is what Ctrl-D means.
+// finish ends the answer where it stands, which is what Ctrl-D means at
+// the end of a line -- in front of anything it deletes forward instead,
+// and never reaches here.
 //
 // Whatever is half typed on the current line counts as a last line, the
 // way it does to mail(1): a person who has typed something and pressed

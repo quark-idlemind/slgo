@@ -1021,3 +1021,84 @@ func TestTheReadersGiveUpWhenTheTerminalCloses(t *testing.T) {
 	}
 	r.Close()
 }
+
+// TestEveryKeyTheEditorOwns is the whole of section 16 of the guide,
+// asserted rather than described.
+//
+// The guide listed seven keys and the editor has eleven, so the four it
+// left out were four a reader would have had to find by accident. It
+// also called Ctrl-D "end of input", which is what it does only at the
+// end of the line: with anything to the right of the cursor it deletes
+// forward, and a person who has just moved left and pressed it does not
+// want the shell to exit.
+func TestEveryKeyTheEditorOwns(t *testing.T) {
+	line := func(keys ...rune) string {
+		tm := &Term{plain: true}
+		for _, r := range "hello world" {
+			tm.Key(r)
+		}
+		for _, r := range keys {
+			tm.Key(r)
+		}
+		return tm.Line()
+	}
+
+	// Ctrl-B and the left arrow are the same key, and so are Ctrl-F and
+	// the right arrow: back one, forward one.
+	for _, c := range []struct {
+		what string
+		back rune
+		fwd  rune
+	}{
+		{"arrows", keyLeft, keyRight},
+		{"Ctrl-B and Ctrl-F", 2, 6},
+	} {
+		// Three back and one forward leaves the cursor on the l of
+		// "world", which delete then takes.
+		if got := line(c.back, c.back, c.back, c.fwd, keyDelete); got != "hello word" {
+			t.Errorf("%s: %q, want %q", c.what, got, "hello word")
+		}
+	}
+
+	// Home and End are Ctrl-A and Ctrl-E.
+	for _, c := range []struct {
+		what      string
+		home, end rune
+	}{
+		{"Home and End", keyHome, keyEnd},
+		{"Ctrl-A and Ctrl-E", 1, 5},
+	} {
+		if got := line(c.home, '>'); got != ">hello world" {
+			t.Errorf("%s: home gave %q", c.what, got)
+		}
+		if got := line(c.home, c.end, '!'); got != "hello world!" {
+			t.Errorf("%s: end gave %q", c.what, got)
+		}
+	}
+
+	// Ctrl-L redraws and changes nothing about the line.
+	if got := line(12); got != "hello world" {
+		t.Errorf("Ctrl-L changed the line: %q", got)
+	}
+
+	// Ctrl-D deletes forward while there is something in front of the
+	// cursor, and is refused -- meaning end of input -- only at the end.
+	if got := line(keyLeft, 4); got != "hello worl" {
+		t.Errorf("Ctrl-D before the last character: %q", got)
+	}
+	tm := &Term{plain: true}
+	for _, r := range "x" {
+		tm.Key(r)
+	}
+	if tm.Key(4) {
+		t.Error("Ctrl-D at the end of the line was swallowed by the editor")
+	}
+	if tm.Line() != "x" {
+		t.Errorf("Ctrl-D at the end changed the line: %q", tm.Line())
+	}
+	// And the delete key at the end is not end of input: it has nothing
+	// to delete and is simply eaten.
+	if !tm.Key(keyDelete) {
+		t.Error("the delete key at the end of the line was refused")
+	}
+}
