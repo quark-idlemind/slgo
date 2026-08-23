@@ -206,6 +206,23 @@ const plusminus = "±"
 const blockSize = int(512)
 const minpad = 0
 
+// searchCounts is what a benchmark searches for at the base padding: the
+// one-copy script, and the one with --extra further copies when there is
+// one.
+//
+// In one place because two things have to agree about it -- oneMode,
+// which runs the searches, and warmTheSearch, which carries their
+// openings in the confirmation's round.  They did not, for a while:
+// --extra added a second search and the warmer went on carrying one, so
+// the second opened a round of its own.
+func searchCounts() []int {
+	counts := []int{1}
+	if flags.Extra > 0 {
+		counts = append(counts, 1+flags.Extra)
+	}
+	return counts
+}
+
 // warmTheSearch sends, in ONE round, the two readings that confirm a
 // remembered padding and the readings the benchmark will want NEXT if it
 // holds.
@@ -258,11 +275,17 @@ func warmTheSearch(b backend, remembered int) {
 	}
 
 	// The question being asked, then the answers wanted if it comes back
-	// yes.  A reading already known costs nothing: probeReadings reads
-	// the cache first.
-	want := []reading{{0, remembered}, {0, remembered + 1}, {1, remembered}}
-	for _, p := range partPads(0, blockSize, parts) {
-		want = append(want, reading{1, remembered + p})
+	// yes: every search's anchor and every search's first round.  A
+	// reading already known costs nothing -- probeReadings reads the
+	// cache first -- and leaseSize holds exactly this many, which is
+	// what it is for.
+	want := []reading{{0, remembered}, {0, remembered + 1}}
+	first := partPads(0, blockSize, parts)
+	for _, c := range searchCounts() {
+		want = append(want, reading{c, remembered})
+		for _, p := range first {
+			want = append(want, reading{c, remembered + p})
+		}
 	}
 
 	if len(want) > b.Spares() {
@@ -1053,11 +1076,7 @@ func oneMode(b backend, r *Results) (size, padding, headroom int, marginal float
 	// the same padding, and the two searches share their rounds: they
 	// are anchored at the same pad and narrow in lockstep, so the second
 	// one costs scripts and no time.  See warmPaddings.
-	counts := []int{1}
-	if flags.Extra > 0 {
-		counts = append(counts, 1+flags.Extra)
-	}
-	warmPaddings(b, counts, padding)
+	warmPaddings(b, searchCounts(), padding)
 
 	headroom, testMem := findPadding(b, 1, padding, r)
 

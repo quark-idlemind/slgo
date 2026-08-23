@@ -723,8 +723,8 @@ script is. The code under test is not in the base script at all, so a
 benchmark of new code reuses the answer, and so does any other benchmark
 of the same shape whatever it measures.
 
-    cold                       14s
-    the padding remembered     10s
+    cold                       13s   6 rounds
+    the padding remembered      9s   3 rounds
 
 An entry is confirmed rather than trusted. Using one runs the base
 script at that padding and one byte past it and requires memory to grow

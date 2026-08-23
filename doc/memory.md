@@ -501,17 +501,17 @@ Re-measured on Agni on 2026-08-23, at the defaults -- eight parts, and
 
 | | rounds | runs | time |
 |---|---:|---:|---:|
-| no cache at all | 6 | 66 | 13, 14, 15s |
-| padding holds | 4 | 46 | 10, 10, 10s |
-| padding wrong | 7 | 75 | 16s |
-| `--paranoid`, no cache | 9 | 75 | 17s |
-| `--paranoid`, padding holds | 6 | 52 | 12s |
+| no cache at all | 6 | 66 | 13, 13, 14s |
+| padding holds | 3 | 46 | 9, 9, 10s |
+| padding wrong | 7 | 83 | 16s |
+| `--paranoid`, no cache | 9 | 75 | 18s |
+| `--paranoid`, padding holds | 5 | 52 | 12s |
 
-A remembered padding takes a benchmark from six rounds to four, and a
-failed confirmation costs **one round more than never having cached at
-all** -- seven against six. That is the whole of what confirming risks,
-and it buys against a padding wrong by k reporting every size wrong by
-k with nothing in the output to show it.
+A remembered padding takes a benchmark from six rounds to three -- half
+-- and a failed confirmation costs **one round more than never having
+cached at all**, seven against six. That is the whole of what confirming
+risks, and it buys against a padding wrong by k reporting every size
+wrong by k with nothing in the output to show it.
 
 **The confirmation's round carries what follows it.** It has room, and
 what a benchmark wants next is known before the confirmation answers:
@@ -524,7 +524,7 @@ for the same twenty-seven runs.
 
 When the padding turns out to be wrong they are wasted, and the waste is
 scripts rather than rounds: the seven-round row in the table above
-spends 75 runs where a cold search spends 66, in one more round.
+spends 83 runs where a cold search spends 66, in one more round.
 
 The first version of this bet the other way, carrying the opening of the
 search a failed confirmation would need. That saved 3s on the failure

@@ -405,16 +405,25 @@ func TestARememberedPaddingIsConfirmedInTheRoundThatUsesIt(t *testing.T) {
 		}
 
 		// A benchmark of the same shape in a fresh process: the run
-		// cache is gone and the file is not.
+		// cache is gone and the file is not.  Everything oneMode does
+		// after the padding, which is what the carrying is aimed at:
+		// carry the opening of one search where two are going to run
+		// and the second opens a round of its own.
 		clear(cache)
 		wasRounds, wasRuns := spentRounds, spentRuns
 		pad := basePadding(b, &r)
-		findPadding(b, 1, pad, &r)
+		for _, c := range searchCounts() {
+			var more Results
+			findPadding(b, c, pad, &more)
+		}
 		return spentRounds - wasRounds, spentRuns - wasRuns
 	}
 
-	warmRounds, warmRuns := measure(flags.Parts + 2)
-	bareRounds, bareRuns := measure(flags.Parts + 1)
+	// Room for every search's anchor and first round beside the two
+	// readings that confirm, which is what leaseSize holds, against one
+	// short of it.
+	warmRounds, warmRuns := measure(leaseSize() - 1)
+	bareRounds, bareRuns := measure(leaseSize() - 2)
 
 	if warmRounds >= bareRounds {
 		t.Errorf("carrying the next readings in the confirmation's round took "+
