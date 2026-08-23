@@ -312,50 +312,49 @@ slgod keeps track of them. There used to be an `--objects` beside it,
 which after this change could only ever have said something the search
 would then have had to work around.
 
-Measured on Agni on 2026-08-22, one avatar, `--no-cache` so every run
-paid for its own search, the statement `llSin(1.0);`:
+Re-measured on Agni on 2026-08-23, `--no-cache` so every run paid for
+its own search, `--extra 0` so it is one search rather than two, the
+statement `llSin(1.0);`, three runs at each width:
 
-| `--parts` | avatars | scripts/round | rounds | runs | time | s/round |
-|---:|---:|---:|---:|---:|---:|---:|
-| 2  | 1 | 1  | 26 | 26  | 34s | 1.31 |
-| 4  | 1 | 3  | 18 | 34  | 24s | 1.33 |
-| 8  | 1 | 7  | 14 | 50  | 21s | 1.50 |
-| 12 | 1 | 11 | 14 | 57  | 22s | 1.57 |
-| 16 | 2 | 15 | 14 | 70  | 22s | 1.57 |
-| 24 | 2 | 23 | 12 | 94  | 26s | 2.17 |
-| 32 | 3 | 31 | 12 | 100 | 25s | 2.08 |
+| `--parts` | avatars | scripts a round | rounds | runs | time |
+|---:|---:|---:|---:|---:|---:|
+| 2  | 1 | 1  | 20 | 20 | 25, 27, 29s |
+| 4  | 1 | 3  | 10 | 28 | 13, 14, 14s |
+| 8  | 1 | 7  | 6  | 44 | 11, 11, 11s |
+| 12 | 2 | 11 | 6  | 51 | 12, 12, 12s |
+| 16 | 2 | 15 | 6  | 64 | 13, 13, 14s |
+| 24 | 3 | 23 | 4  | 88 | 14, 14, 17s |
+| 32 | 3 | 31 | 4  | 94 | 15, 15, 16s |
 
-Copy mode, one avatar, the same statement: 29 rounds and 58s at four
-parts, 23 and 54s at eight, 23 and 54s at twelve.
+The knee is at **eight parts**, and it is a real minimum rather than a
+plateau: 11s at eight against 13s at sixteen and 15s at thirty-two. The
+round count does keep falling -- six to four between sixteen parts and
+twenty-four -- and the wider rounds cost more than the fall is worth.
+Four times the parts, twice the scripts, four seconds slower.
 
-Two separate things stop it, and they stop it at different places.
+Two things stop it, at different places.
 
-**The scripts stay cheap, up to a point.** Dividing the time by the
-rounds gives what a round cost: 1.31s for one script, 1.33s for three,
-1.50s for seven, 1.57s for eleven and for fifteen. Fifteen scripts at
-once cost 20% more than one, not fifteen times more, and parallelism
-being nearly free is what makes the flag worth having.
+**The rounds stop falling on a schedule.** A round of N parts divides
+what is left by N, so a search takes ceil(log_N 512) rounds: 9, 5, 3, 3,
+2, 2 for N of 2, 4, 8, 16, 32, 64. Eight parts and sixteen take the same
+number, and so do thirty-two and sixty-four. That is arithmetic, not a
+limit anywhere in the code, and it is why sixteen buys twenty more
+scripts for nothing.
 
-It stops being free somewhere past that: 23 scripts a round cost 2.17s
-and 31 cost 2.08s, about a third more than 15. Still cheap for the
-scripts -- 31 at once for 1.3 times what 7 cost -- but no longer free.
+**And the scripts stop being cheap.** They are nearly free at first --
+three a round and seven a round are within two seconds of one a round
+over a whole benchmark -- and by twenty-three and thirty-one a round the
+sim is visibly slower to answer. Dividing time by rounds overstates the
+per-round cost here, because a round is no longer only the search's
+probes: the anchor rides in the first one and the confirmations share
+the last, so an eight-part benchmark averages seven scripts a round
+rather than exactly seven.
 
-**The rounds stop falling.** ceil(log_N 512) is 9, 5, 3, 3, 2, 2 for N
-of 2, 4, 8, 16, 32, 64, so eight parts and sixteen cost the same rounds
-and so do thirty-two and sixty-four. The measured 14 rounds at both 8
-and 12 parts is that arithmetic and not a limit anywhere in the code.
-
-**And the search is not the whole benchmark.** In `-1` mode the rounds
-come to two searches plus a fixed eight -- the base runs, the walk, the
-confirmations and the re-reads -- which is why 26 rounds become 18, 14
-and then 12 offline at 32 parts rather than falling towards zero. Even
-an infinitely wide search would leave 10.
-
-So the knee is at **eight parts**, and the measurements past it say so
-plainly: 21s at eight, 22s at twelve and at sixteen, 26s at twenty-four,
-25s at thirty-two. The round count does fall -- 14 to 12 -- and the
-rounds cost more than the fall is worth. Four times the parts, four
-times the scripts, and three seconds SLOWER.
+**And the search is not the whole benchmark.** Six rounds at eight parts
+is three of narrowing and three of everything else -- the reading the
+crossing is confirmed against, the walk onto it, and the pair that
+confirms. Those do not fall with `--parts` at all, which is why the
+curve flattens well before the arithmetic says it should.
 
 `--parts=2` is not a special case any more, only the worst one: a
 two-part round is a bisection sent one script at a time, so the search
@@ -404,13 +403,14 @@ Three numbers come out where copy mode gives one:
 | `Additional Copies` | what each copy after the first costs |
 | `Shared` | the difference: what the construct pays once (under `-v`) |
 
-Measured on Agni on 2026-08-22, `llSin(1.0);` at eight parts,
-`--no-cache`:
+Measured on Agni, `llSin(1.0);` at eight parts, `--no-cache`; the first
+two re-measured on 2026-08-23 and the third on 2026-08-22, before copy
+mode was removed:
 
 | | rounds | runs | time | answer |
 |---|---:|---:|---:|---|
-| `-1` | 6 | 44 | 11s | Size 380 |
-| `-1 --extra=8` | 6 | 66 | 15s | Size 380, Marginal 47, Shared 333 |
+| `--extra 0` | 6 | 44 | 11s | First Copy 380 |
+| `--extra 8` | 6 | 66 | 14s | First Copy 380, Additional Copies 47, Shared 333 |
 | copy mode | 23 | 77 | 53s | Size 47 |
 
 **The two agree on 47**, which is the result that matters: the marginal
@@ -492,38 +492,39 @@ error.
 
 A padding is remembered in a file and confirmed rather than trusted: two
 readings, at the padding and one byte above it, which have to be a block
-apart. Confirming costs one round where searching costs seven, so the
+apart. Confirming costs one round where searching costs three, so the
 saving is large -- and the question is what a confirmation that FAILS
-costs, since it is a round spent before the seven.
+costs, since it is a round spent before the three.
 
-Measured live on 2026-08-22, `-1` mode at eight parts:
+Re-measured on Agni on 2026-08-23, at the defaults -- eight parts, and
+`--extra 8`, so two searches:
 
 | | rounds | runs | time |
 |---|---:|---:|---:|
-| no cache at all | 14 | 50 | 21s |
-| padding holds | 8 | 27 | 12s |
-| padding holds, readings carried | 6 | 27 | 10s |
-| padding wrong | 15 | 51 | 22s |
-| padding wrong, readings carried | 15 | 59 | 22s |
+| no cache at all | 6 | 66 | 13, 14, 15s |
+| padding holds | 4 | 46 | 10, 10, 10s |
+| padding wrong | 7 | 75 | 16s |
+| `--paranoid`, no cache | 9 | 75 | 17s |
+| `--paranoid`, padding holds | 6 | 52 | 12s |
 
-A failed confirmation costs 15 rounds against 14 for no cache at all --
-a fifteenth, not the third it appears to be when a search is counted as
-its three rounds of narrowing rather than the seven rounds it really is.
-The narrowing is the part that runs in parallel; the anchor reading, the
-walk onto the crossing and the two readings that confirm it are four
-more rounds that do not.
+A remembered padding takes a benchmark from six rounds to four, and a
+failed confirmation costs **one round more than never having cached at
+all** -- seven against six. That is the whole of what confirming risks,
+and it buys against a padding wrong by k reporting every size wrong by
+k with nothing in the output to show it.
 
-**The readings carried** are the last two rows. The confirmation's round
-has room in it, and what `-1` mode wants next is known before the
-confirmation answers: the one-copy reading at that same padding, and the
-first round of the search above it. Sending them in the confirmation's
-round costs no extra runs at all -- 27 either way -- because they are
-exactly the readings that were going to be asked for. Eight rounds
-become six.
+**The confirmation's round carries what follows it.** It has room, and
+what a benchmark wants next is known before the confirmation answers:
+the one-copy reading at that same padding, and the first round of the
+search above it. Sending them in the confirmation's round costs no extra
+runs at all, because they are exactly the readings that were going to be
+asked for. Measured when it was written, on 2026-08-22 and in rounds
+that were longer then, it took a warm benchmark from eight rounds to six
+for the same twenty-seven runs.
 
-When the padding turns out to be wrong they are wasted: 59 runs against
-51, and the same 15 rounds and 22s, because the waste is scripts and not
-rounds.
+When the padding turns out to be wrong they are wasted, and the waste is
+scripts rather than rounds: the seven-round row in the table above
+spends 75 runs where a cold search spends 66, in one more round.
 
 The first version of this bet the other way, carrying the opening of the
 search a failed confirmation would need. That saved 3s on the failure
