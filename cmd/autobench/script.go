@@ -113,7 +113,7 @@ func openBackend(addr string, targets int) (backend, error) {
 		return nil, err
 	}
 	r.Timeout = flags.Timeout
-	r.Info = flags.Show
+	r.Info = flags.V >= 3
 	r.alsoClose(func() { conn.Close() })
 	return r, nil
 }
@@ -134,6 +134,8 @@ func openBackend(addr string, targets int) (backend, error) {
 // request for an avatar the model has never heard of.
 //
 // announce says whether to report which avatar the objects turned out to
+// -- at -vv, like the live path's own line, and for the same reason: it
+// is a detail of how the answer was arrived at rather than the answer.
 // belong to.  Worth saying when a real backend chose for us -- a reading
 // is only comparable with another from the same avatar -- and noise when
 // the backend is the offline model, which has exactly one and made it up.
@@ -196,7 +198,7 @@ func openScript(ctx context.Context, c scriptv1.RunnerClient, targets int, agent
 		}
 		if g := ev.GetGranted(); g != nil {
 			r.targets = g.GetTargets()
-			if announce && g.GetAgent() != "" {
+			if announce && g.GetAgent() != "" && flags.V >= 2 {
 				fmt.Fprintf(os.Stderr, "running as %s, group %d, %d objects\n",
 					g.GetAgent(), g.GetGroup(), len(r.targets))
 			}

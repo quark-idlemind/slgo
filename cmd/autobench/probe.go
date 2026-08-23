@@ -38,6 +38,7 @@ package main
 // arithmetic.
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -151,6 +152,14 @@ func probeConcurrently(b backend, todo []probeJob, out []int) []probeJob {
 			go func(slot int) {
 				defer wg.Done()
 				src := buildScript(j.want.cnt, j.want.pad)
+				if flags.V >= 3 {
+					// Under the lock, so that a round of a dozen
+					// scripts is a dozen scripts rather than a dozen
+					// interleaved.
+					probeMu.Lock()
+					fmt.Println(src)
+					probeMu.Unlock()
+				}
 				results, _, err := b.SendSpare(spare, src)
 				if err != nil {
 					// Not reported here.  Running it again the ordinary

@@ -331,9 +331,9 @@ func TestShowPrintsTheScriptAndTheCommentary(t *testing.T) {
 	b, f := newFakeRunner(t, 474, 368, 0)
 	f.commentary = "COUNT=4"
 
-	flags.Show = true
+	flags.V = 3
 	b.Info = true
-	t.Cleanup(func() { flags.Show = false })
+	t.Cleanup(func() { flags.V = 0 })
 
 	clear(cache)
 	t.Cleanup(func() { clear(cache) })

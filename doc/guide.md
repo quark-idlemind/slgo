@@ -567,54 +567,70 @@ compiled, ran and finished.
 
 Measures how many bytes of script memory an LSL construct costs.
 
-    autobench --title "global integer" --code "integer gCNT;"
-    autobench -1 --title "global integer" --code "integer gCNT;"
+    autobench --code "integer gCNT;"
+    autobench --statement "llSin(1.0);"
 
 A script has a fixed memory budget, and Second Life allocates script
 code in 512-byte blocks -- so you cannot simply ask what one variable
-costs. `autobench` has two ways around that. What it is working around
-is written up in [doc/memory.md](memory.md).
+costs. What `autobench` does about that is written up in
+[doc/memory.md](memory.md).
 
-**Copy mode** (the default) puts many copies of the code in one script
-and measures them at two counts, which separates what the code pays
-once from what each copy costs:
+It puts one copy of the code in a script and finds how much filler that
+script can still carry before its memory steps into the next block,
+which locates the block boundary exactly. Then it does the same for a
+script with more copies in it. Everything reported is a difference
+between two of those exact positions.
 
-    $ autobench --code "integer gCNT;"
-    Padding: 473
-    Size: 22
-    First copy: 34
+    $ autobench --statement "llSin(1.0);"
+    First Copy: 380
+    Additional Copies: 47
 
-`Size` is what an **additional** copy costs; `First copy` is what one
-costs outright. They differ by whatever the construct pays once and then
-shares. `First copy` appears only when the two could be told apart --
-see "Reading the numbers honestly" below.
+Two numbers, because two numbers is what a benchmark is for: what a copy
+of the code costs, and what another one costs after it. They differ by
+whatever the construct pays once and then shares.
 
-**Padding mode** (`-1`) uses a single copy and finds how much filler it
-can still carry before memory steps to the next block, which locates the
-boundary exactly. It costs more runs, because that boundary has to be
-found twice -- once for the base script and once with the copy in it:
+`Additional Copies` comes from a second script with `--extra` further
+copies in it, eight by default. `--extra 0` measures the first copy
+alone and reports only that line.
 
-    $ autobench -1 --code "integer gCNT;"
-    Base mem: 5412
-    Result mem: 5932
-    Result pad: 488
-    Size: 32
-    Padding: 473
+Everything else is how the answer was arrived at rather than the answer,
+and `-v` asks for it:
 
-`Size` is the answer. `Padding` is described below. The other three are
-the readings behind it: the base script at that padding, sitting exactly
-on a block boundary; the same script with one copy of the code in it;
-and the filler that copy can still carry before it spills into the next
-block. The size is the difference of the two readings less that filler:
-5932 - 5412 is 520, of which 488 was filler the copy could still have
-carried, so the copy cost 32.
+    $ autobench --statement "llSin(1.0);" -v
+    First Copy: 380
+    Additional Copies: 47
+    Base mem: 3876
+    Result mem: 4388
+    Result pad: 132
+    Shared: 333
+    Padding: 480
 
-The 520 is worth a second look, because it is not a whole block. One
-512-byte block of code was allocated and 488 bytes of it went unused, so
-24 of the 32 is code; the other 8 is the heap the global integer
-occupies, and heap is not block-allocated at all. That is why the same
-construct comes back at 32 rather than at 24, and
-[doc/memory.md](memory.md) takes the two apart.
+`Base mem` and `Result mem` are the two readings `First Copy` is the
+difference of -- the base script at the padding, sitting exactly on a
+block boundary, and the same script with one copy in it. `Result pad` is
+the filler that copy can still carry before it spills into the next
+block: 4388 - 3876 is 512, of which 132 was filler the copy could still
+have carried, so the copy cost 380. `Shared` is what the construct pays
+once. `Padding` is described below.
+
+`-vv` adds which avatars' objects it ran in, and `-vvv` prints every
+script it sends.
+
+**`--extra` should be a multiple of 4.** Code is 4-aligned, so
+individual copies quantise around their real cost -- measured, copies of
+`llSin(1.0);` cost 48, 48, 48, 44 repeating, which is four copies of 47.
+Only a multiple of four averages that out. `--extra 1` is the cheapest
+measurement there is and it reported 48 for that construct and 348 for
+another whose real answer was 343. If `Additional Copies` comes out
+fractional the copies did not all cost the same, and `Shared` is
+withheld.
+
+There used to be a second mode, which put up to 512 copies in one script
+and fitted a line through two counts. It existed to beat the
+quantisation by dividing it down, and exact boundaries removed the
+reason: both approaches report 47 for `llSin(1.0);`, and this one does
+it in 14 seconds against 53. Installing 128 copies took 5.07s, 256 took
+12.70s, and 512 was refused outright.
 
 ### Describing the code to measure
 
@@ -664,65 +680,74 @@ So `--globals "iCount,sName,vPos"` declares an integer, a string and a
 vector. Any other first letter is refused, so a name has to be chosen to
 say what it is.
 
+
 ### Reusing the padding
 
-Both modes print a `Padding:` line. Finding that number costs about a
-dozen runs, and it is a property of the base script -- the harness with
-no copies of your code in it -- rather than of the code being measured.
+`Padding:` is a property of the base script -- the harness with no
+copies of your code in it -- rather than of the code being measured.
+Searching for it is most of what a cold benchmark costs.
 
 You do not have to do anything about that: it is remembered, in
 `~/.config/slgo/autobench-padding`, and looked up by what the base
 script is. The code under test is not in the base script at all, so a
-benchmark of new code reuses the answer, and so does a different
-benchmark whose title is the same length -- a title is a string
-literal, and what it costs is its length.
+benchmark of new code reuses the answer, and so does any other benchmark
+of the same shape whatever it measures.
 
-    cold, nothing remembered   33s
-    the same benchmark again   20s
-    a different benchmark      19s
+    cold                       14s
+    the padding remembered     10s
 
 An entry is confirmed rather than trusted. Using one runs the base
 script at that padding and one byte past it and requires memory to grow
-between them: two runs against the dozen a search costs, and an answer
-that has stopped holding -- because Second Life's compiler changed
-under it -- is thrown away and searched for again. So there is nothing
-to invalidate by hand.
+between them: two readings against the three rounds a search costs, and
+an answer that has stopped holding -- because Second Life's compiler
+changed under it -- is thrown away and searched for again. So there is
+nothing to invalidate by hand.
 
-Those two readings are taken at the same time, in two objects. Nothing
-a script says identifies the script that said it -- chat carries the
-object and no more -- so two scripts in one object cannot be told
-apart, but two objects can. `--objects N` sets how many to use, up to
-the four in a group; the extra ones are worn and kept like the first.
+Those two readings travel with the readings that come next if they hold,
+in one round: what a benchmark wants after a confirmed padding is fixed
+before the confirmation answers, so it is asked at the same time. The
+confirmation costs no round of its own.
 
-When a padding does have to be searched for, three pads are tried at
-once and the range is quartered rather than halved: four or five rounds
-where a bisection takes nine. Three readings taken together cost about
-what one costs, being three round trips in flight rather than three in
-a row.
+`--ipad N` names a padding outright -- one printed by an earlier run, or
+one out of [doc/memory.md](memory.md) -- and skips the search. It is
+confirmed exactly as a remembered one is; there is no flag for that,
+because the two readings ride in a round that is being spent anyway.
+`--no-cache` neither reads nor writes the file.
 
-Both searches work that way -- the base script's and, in `-1` mode, the
-one-copy script's. Median times, with one object against four:
+Only readings that came from Second Life are remembered at all: the
+backend is asked whether it is the grid, so neither `--test` nor a
+`--backend` simulator writes to the file or reads from it. The offline
+model has no compiler and its paddings are arithmetic rather than
+measurements, and one of those in the file would be read by every later
+benchmark on the account as though the grid had said it.
 
-    -1, padding remembered      19.3s -> 15.4s
-    -1, searched from scratch   32.0s -> 25.7s
-    copy mode, searched         34.2s -> 16.5s
-    copy mode, remembered                 5.7s
+### Rounds, and what --parts is for
 
-A script reports its own memory before it reads anything, so the number
-a search compares means the same in any object. What a script works out
-*afterwards* does not: it divides against a base held in its object's
-linkset data, which a spare object has none of. So only the memory
-reading travels, and the measured sequence still runs where the base
-is.
+A benchmark waits on **rounds**, not scripts. Scripts in one round go to
+different objects and run at the same time; the round is one wait
+however many are in it. Measured, seven scripts in a round cost 1.50s
+against 1.31s for one.
 
-`--ipad N` still asserts a padding outright and skips all of this,
-`--check-ipad` confirms it, and `--no-cache` neither reads nor writes
-the file. Only readings that came from Second Life are remembered at
-all: the backend is asked whether it is the grid, so neither `--test`
-nor a `--backend` simulator writes to the file or reads from it. The
-offline model has no compiler and its paddings are arithmetic rather
-than measurements, and one of those in the file would be read by every
-later benchmark on the account as though the grid had said it.
+`--parts N` cuts the search into N parts a round, spending the N-1
+readings that divide them. Nine rounds of a bisection become
+`ceil(log_N 512)`. Eight is the default and the measured knee: 8x8x8 is
+512 exactly, so three rounds of seven land on the byte with no round
+wasted. Sixteen parts takes the same three rounds for ten more scripts;
+thirty-two saves a round and measured slower.
+
+`--parts` also sizes the lease, and so does `--extra`: each search wants
+its anchor and its N-1 divisions in every round, and the two searches
+share rounds, so the default holds 19 objects. Those come from wherever
+the daemon has them, several avatars at a time. If the pool cannot grant
+that many it takes fewer and says so -- with fewer places the searches
+share fewer rounds, and with one there is no parallel search at all and
+the block is bisected. Same answer, slower.
+
+`--paranoid` re-reads each crossing before believing it: the step, the
+anchor it was measured against, and the pad below. One round, and off by
+default. What it guards against was seen once, live, on 2026-08-03, and
+never reproduced in 45 later asks at the pads involved. See
+[doc/memory.md](memory.md).
 
 ### Checking your connection
 
@@ -738,60 +763,42 @@ Second Life, and it will not say so about a model.
 
 | | |
 |---|---|
-| `-1` | padding mode: one copy, exact answer |
 | `--code CODE` | the code to measure, repeated |
 | `--statement CODE` | statements to measure, wrapped in a function |
 | `--globals`, `--params`, `--locals` | declare variables (see above) |
 | `--preamble`, `--postamble` | text around the copies |
-| `--title NAME` | name the benchmark, echoed in the output |
-| `--ipad N` | a padding from an earlier run |
-| `--check-ipad` | confirm `--ipad` before trusting it |
+| `--extra N` | further copies to measure, for `Additional Copies` (default 8; a multiple of 4, `0` for none) |
+| `--parts N` | how many parts to cut the search into each round (default 8) |
+| `--paranoid` | read each crossing again before believing it |
+| `--ipad N` | measure at this padding instead of searching for one |
 | `--no-cache` | do not remember or reuse the padding |
-| `--objects N` | how many objects to run in at once (default 4: one to measure in, three to probe with) |
-| `--fast` | skip the padding search; `Size` then comes with a `±` margin, because there is no boundary to measure against |
-| `--max N` | most copies to use (default 512) |
-| `--object NAME`, `--rez`, `--keep` | as for `automate` |
-| `--pad PAD` | extra filler in the base script |
-| `--debug` | say what the search is doing |
+| `--debug` | say what the search is doing, and what it spent |
 | `--timeout DUR` | how long one script may take (default `1m0s`); a bare number is refused -- the unit is required |
-| `-v` | print each script before running it |
+| `-v`, `-vv`, `-vvv` | the readings behind the answer; whose objects it ran in; every script it sends |
 | `--probe` | check the connection and exit |
 | `--test PAD,SIZE[,MARGINAL[,LIMIT]]` | measure against the offline model in this process, without a grid |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there, instead of in Second Life |
 
 ### Reading the numbers honestly
 
-`Size: 22` and `Size: 32` are not two answers to the same question. Copy
-mode's `Size` is what an **additional** copy costs; `-1` mode measures
-one copy outright, and reports 32 for the same construct.
+`First Copy` and `Additional Copies` are not two answers to the same
+question. One is what a copy costs outright; the other is what each copy
+after the first costs. They differ by whatever the construct pays once
+and shares, which `-v` reports as `Shared`.
 
 The gap can be large, and when it is, it is telling you something.
 Measured live: `string sCNT = "<250 identical characters>";` costs 1054
 bytes for one copy and 540 for each after it. Identical literals are
-shared, so an extra copy pays only for what it cannot share. That is a
-real property of the construct, and copy mode reports both halves of it
-from one benchmark.
+shared, so an extra copy pays only for what it cannot share.
 
-**Precision.** `-1` mode answers `4n + k`, where `k` is what the
-construct's heap leaves over a multiple of 4: 0 for anything that
-declares no globals, 0 again for one integer, whose 8 bytes of heap are
-themselves 4-aligned, and 2 for a construct declaring one string,
-whatever its literal. Code is 4-aligned, so two measurements of the same
+**Precision.** Code is 4-aligned, so two measurements of the same
 construct that differ by 4 differ by one quantum. Measured across a
 dozen live runs, the same construct came back 364 or 368 depending on
 what unrelated globals the script carried, so 4 bytes is the resolution
-to expect rather than the exact byte.
+to expect rather than the exact byte. It is also why `--extra` wants a
+multiple of 4.
 
-**`First copy` is withheld when it cannot be resolved.** It is the
-second-order term -- the difference of two differences -- and live it
-moves with the copy count in a way it should not: for one construct 371,
-367 and 344 at three counts. Copy mode checks whether the readings
-really do resolve into an initial cost plus a constant one per copy, and
-if they do not it says so and reports only `Size`. `-1` mode measures
-one copy outright and is the thing to use when that is the number you
-want.
-
-Both modes handle constructs of any size, including those larger than a
+Constructs of any size are handled, including those larger than a
 512-byte block.
 
 Second Life's own numbers move about a little from run to run. If an

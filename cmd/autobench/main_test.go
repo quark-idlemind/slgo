@@ -450,40 +450,45 @@ func TestAskingWhatTheFlagsAreIsNotAnError(t *testing.T) {
 	}
 }
 
-// TestTheProgramPrintsWhatABenchmarkMeasured: one mode, and every line
-// of it.
+// TestTheProgramPrintsWhatABenchmarkMeasured: two numbers, and the rest
+// only when asked.
+//
+// A benchmark is for what a copy of the code costs and what another one
+// costs after it.  Everything else is how that was arrived at, and -v is
+// how to ask for it.
 //
 // The model here has no separate marginal cost, so each copy costs what
-// the first one does: Marginal is the same 368 and Shared is nought,
-// which is what "pays nothing once and shares nothing" looks like.
+// the first one does: both lines are 368 and Shared is nought, which is
+// what "pays nothing once and shares nothing" looks like.
 func TestTheProgramPrintsWhatABenchmarkMeasured(t *testing.T) {
 	out, _ := autobench(t, "--test=474,368", "--code", "foo_CNT(){llDie();}")
+	if want := "First Copy: 368\nAdditional Copies: 368\n"; out != want {
+		t.Errorf("a benchmark printed\n%q\nwant exactly\n%q", out, want)
+	}
+
+	// -v adds the readings behind it, and the padding to feed back with
+	// --ipad.
+	out, _ = autobench(t, "--test=474,368", "-v", "--code", "foo_CNT(){llDie();}")
 	for _, want := range []string{
+		"First Copy: 368\n",
+		"Additional Copies: 368\n",
 		"Base mem: 5412\n",
 		"Result mem: 5924\n",
 		"Result pad: 144\n",
-		"Size: 368\n",
-		"Marginal: 368\n",
 		"Shared: 0\n",
 		"Padding: 473\n",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("a benchmark did not print %q:\n%s", want, out)
+			t.Errorf("-v did not print %q:\n%s", want, out)
 		}
 	}
 
 	// And --extra=0 asks for the first copy alone, which is the whole of
-	// what this used to report before there was a second search.
+	// what this reported before there was a second search.
 	out, _ = autobench(t, "--test=474,368", "--extra", "0",
 		"--code", "foo_CNT(){llDie();}")
-	if !strings.Contains(out, "Size: 368\n") {
-		t.Errorf("--extra=0 did not measure the first copy:\n%s", out)
-	}
-	for _, gone := range []string{"Marginal:", "Shared:"} {
-		if strings.Contains(out, gone) {
-			t.Errorf("--extra=0 reported %s without measuring a further copy:\n%s",
-				gone, out)
-		}
+	if want := "First Copy: 368\n"; out != want {
+		t.Errorf("--extra=0 printed\n%q\nwant exactly\n%q", out, want)
 	}
 }
 
@@ -511,17 +516,17 @@ func TestABackendAtAnAddressMeasuresTheSameThing(t *testing.T) {
 	}
 	t.Cleanup(s.Stop)
 
-	out, said := autobench(t, "--backend", addr.String(),
+	out, said := autobench(t, "--backend", addr.String(), "-vv",
 		"--code", "foo_CNT(){llDie();}")
-	for _, want := range []string{"Size: 368\n", "Padding: 473\n"} {
+	for _, want := range []string{"First Copy: 368\n", "Padding: 473\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("a benchmark through --backend did not print %q:\n%s\n%s",
 				want, out, said)
 		}
 	}
-	// Which avatar's objects these turned out to be, said out loud: a real
-	// backend chose, and a reading is only comparable with another from
-	// the same avatar.
+	// Which avatar's objects these turned out to be, said out loud at
+	// -vv: a real backend chose, and a benchmark attributed to the wrong
+	// avatar is not an error but a plausible number.
 	if !strings.Contains(said, "running as test") {
 		t.Errorf("nothing was said about whose objects the backend granted:\n%s", said)
 	}
@@ -594,12 +599,12 @@ func TestDebugSaysWhatTheBenchmarkSpent(t *testing.T) {
 // 985 is 473 and a block: a padding a block up is a perfectly good one
 // and has to measure the same.
 func TestAnIPadIsUsedAsGivenAndConfirmed(t *testing.T) {
-	out, _ := autobench(t, "--test=474,368", "--ipad", "985",
+	out, _ := autobench(t, "--test=474,368", "--ipad", "985", "-v",
 		"--code", "foo_CNT(){llDie();}")
 	if !strings.Contains(out, "Padding: 985\n") {
 		t.Errorf("--ipad was not used as given:\n%s", out)
 	}
-	if !strings.Contains(out, "Size: 368\n") {
+	if !strings.Contains(out, "First Copy: 368\n") {
 		t.Errorf("a padding a block up measured differently:\n%s", out)
 	}
 }

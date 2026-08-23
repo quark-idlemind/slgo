@@ -64,7 +64,7 @@ func openModel(m scripttest.Memory, targets int) (backend, error) {
 		return nil, err
 	}
 	r.Timeout = flags.Timeout
-	r.Info = flags.Show
+	r.Info = flags.V >= 3
 	r.alsoClose(s.Stop)
 	return r, nil
 }

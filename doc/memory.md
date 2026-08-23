@@ -400,9 +400,9 @@ Three numbers come out where copy mode gives one:
 
 | | |
 |---|---|
-| `Size` | what one copy costs outright -- the shared part plus one marginal |
-| `Marginal` | what each copy after the first costs |
-| `Shared` | the difference: what the construct pays once |
+| `First Copy` | what one copy costs outright -- the shared part plus one marginal |
+| `Additional Copies` | what each copy after the first costs |
+| `Shared` | the difference: what the construct pays once (under `-v`) |
 
 Measured on Agni on 2026-08-22, `llSin(1.0);` at eight parts,
 `--no-cache`:

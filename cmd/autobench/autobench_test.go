@@ -119,6 +119,10 @@ func offlineWith(t *testing.T, o scripttest.Options) *modelled {
 	// which the next case changes.
 	reset := func() {
 		flags.IPad = 0
+		// The second search is a thing a case asks for, not something
+		// every offline case should pay for: the sweeps below measure
+		// Size across hundreds of shapes and --extra would double them.
+		flags.Extra = 0
 		clear(cache)
 		spentRuns, spentRereads, spentCompiles = 0, 0, 0
 	}
@@ -587,8 +591,11 @@ func TestOneModeSurvivesAMisreadBase(t *testing.T) {
 // each other.
 func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
 	flags.Paranoid = true
-	t.Cleanup(func() { flags.Paranoid = false })
 	b := offline(t, 474, 368)
+	// After offlineWith, which puts --extra back to nought: this is
+	// about what a benchmark at the DEFAULTS spends.
+	flags.Extra = 4
+	t.Cleanup(func() { flags.Paranoid, flags.Extra = false, 4 })
 	spentRuns, spentRereads = 0, 0
 
 	var r Results
@@ -913,13 +920,15 @@ func TestExtraCostsScriptsAndNotRounds(t *testing.T) {
 		if extra > 0 {
 			searchesAtOnce = 2
 		}
-		flags.Extra, flags.Parts = extra, 8
-		t.Cleanup(func() {
-			flags.Extra, flags.Parts, searchesAtOnce = 4, 8, 1
-		})
+		flags.Parts = 8
 		b := offlineWith(t, scripttest.Options{
 			Memory:    scripttest.Memory{Pad: 474, CodeSize: 600, Marginal: 44},
 			GroupSize: leaseSize(),
+		})
+		// After offlineWith, which puts --extra back to nought.
+		flags.Extra = extra
+		t.Cleanup(func() {
+			flags.Extra, flags.Parts, searchesAtOnce = 4, 8, 1
 		})
 		spentRounds, spentRuns = 0, 0
 		var r Results

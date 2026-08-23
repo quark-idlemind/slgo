@@ -1069,12 +1069,13 @@ thing between them and the grid is a session.
 
     automate a.lsl b.lsl
     automate --object "Test HUD" a.lsl
-    autobench -1 --title "global integer" --code "integer g;"
+    autobench --code "integer gCNT;"
 
 A script needs an object to run in, so both take some: the shared `auto`
 objects the avatar wears, held for as long as the run lasts and taken
-all together or not at all. `--object` names one object already in the
-region instead, and `--rez` rezzes a prim beside the avatar and trashes
+all together or not at all, from whichever avatars the daemon holds.
+`automate` also takes `--object` to name one object already in the
+region instead, and `--rez` to rez a prim beside the avatar and trash
 it afterwards, which `--keep` leaves. `automate` runs four scripts at
 once by default -- 17.5 seconds of scripts in 5.2, measured -- `--jobs`
 asks for more, up to the twelve an avatar wears, and `--jobs 1` puts

@@ -51,31 +51,31 @@ import (
 )
 
 var flags = struct {
-	Preamble  string        `getopt:"--preamble=PREAMBLE Make STR the test's preamble"`
-	Postamble string        `getopt:"--postamble=POSTAMBLE Make STR the test's postamble"`
-	Code      string        `getopt:"--code=CODE code to test"`
-	Statement string        `getopt:"--statement=CODE statement(s) to test"`
-	Addr      string        `getopt:"--addr=HOST:PORT the slgod to attach to; default sl-host, or this machine"`
-	Agent     string        `getopt:"--agent=NAME -a the profile to use; the only one, by default"`
-	Direct    bool          `getopt:"--direct -d log in to Second Life directly, without slgod"`
-	First     string        `getopt:"--first=NAME the avatar's first name, for --direct"`
-	Last      string        `getopt:"--last=NAME the avatar's last name, for --direct"`
-	Start     string        `getopt:"--start=WHERE where to arrive: last, home, or a region, for --direct"`
-	Show      bool          `getopt:"-v show the source before each execution"`
-	Params    []string      `getopt:"--params=NAME,... parameters used with --statement"`
-	Locals    []string      `getopt:"--locals=NAME,... locals used with --statement"`
-	Globals   []string      `getopt:"--globals=NAME,... declare globals"`
-	Extra     int           `getopt:"--extra=N also measure N further copies, giving what each copy after the first costs; a multiple of 4"`
-	IPad      int           `getopt:"--ipad=N measure at this base padding instead of searching for one; confirmed before it is used"`
-	Paranoid  bool          `getopt:"--paranoid read each crossing again before believing it"`
-	Debug     bool          `getopt:"--debug enable debugging"`
-	Probe     bool          `getopt:"--probe send a simple script to LSL as a probe"`
-	NoCache   bool          `getopt:"--no-cache do not remember or reuse the padding for this base script"`
-	Parts     int           `getopt:"--parts=N cut the padding search into N parts a round, running N-1 scripts at once; a power of 2"`
-	Timeout   time.Duration `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
-	Test      string        `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model in this process, see the source code"`
-	Backend   string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life; --test is the same contract answered by a model here"`
-	Help      bool          `getopt:"--help -h show this message"`
+	Preamble  string          `getopt:"--preamble=PREAMBLE Make STR the test's preamble"`
+	Postamble string          `getopt:"--postamble=POSTAMBLE Make STR the test's postamble"`
+	Code      string          `getopt:"--code=CODE code to test"`
+	Statement string          `getopt:"--statement=CODE statement(s) to test"`
+	Addr      string          `getopt:"--addr=HOST:PORT the slgod to attach to; default sl-host, or this machine"`
+	Agent     string          `getopt:"--agent=NAME -a the profile to use; the only one, by default"`
+	Direct    bool            `getopt:"--direct -d log in to Second Life directly, without slgod"`
+	First     string          `getopt:"--first=NAME the avatar's first name, for --direct"`
+	Last      string          `getopt:"--last=NAME the avatar's last name, for --direct"`
+	Start     string          `getopt:"--start=WHERE where to arrive: last, home, or a region, for --direct"`
+	V         options.Counter `getopt:"--verbose -v say more: once for the readings behind the answer, twice for whose objects it ran in, three times for the scripts themselves"`
+	Params    []string        `getopt:"--params=NAME,... parameters used with --statement"`
+	Locals    []string        `getopt:"--locals=NAME,... locals used with --statement"`
+	Globals   []string        `getopt:"--globals=NAME,... declare globals"`
+	Extra     int             `getopt:"--extra=N also measure N further copies, giving what each copy after the first costs; a multiple of 4"`
+	IPad      int             `getopt:"--ipad=N measure at this base padding instead of searching for one; confirmed before it is used"`
+	Paranoid  bool            `getopt:"--paranoid read each crossing again before believing it"`
+	Debug     bool            `getopt:"--debug enable debugging"`
+	Probe     bool            `getopt:"--probe send a simple script to LSL as a probe"`
+	NoCache   bool            `getopt:"--no-cache do not remember or reuse the padding for this base script"`
+	Parts     int             `getopt:"--parts=N cut the padding search into N parts a round, running N-1 scripts at once; a power of 2"`
+	Timeout   time.Duration   `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
+	Test      string          `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model in this process, see the source code"`
+	Backend   string          `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life; --test is the same contract answered by a model here"`
+	Help      bool            `getopt:"--help -h show this message"`
 }{
 	Start:   "last",
 	Timeout: time.Minute,
@@ -86,11 +86,13 @@ var flags = struct {
 	// doc/memory.md.
 	Parts: 8,
 
-	// Four further copies, which is what the alignment wants: code is
-	// 4-aligned, so individual copies quantise around their real cost
-	// and only a multiple of four averages it out.  Four is the
-	// smallest that does.  See doc/memory.md.
-	Extra: 4,
+	// Eight further copies.  Code is 4-aligned, so individual copies
+	// quantise around their real cost and only a multiple of four
+	// averages it out; four is the smallest that does and eight is the
+	// smallest that is not obviously the smallest -- it halves whatever
+	// the offset is on top of that, and costs nothing in rounds.  See
+	// doc/memory.md.
+	Extra: 8,
 }
 
 // leaseSize is how many objects a benchmark holds.
@@ -1183,7 +1185,7 @@ func main() {
 		b = &runner{
 			places: places, cleanup: cleanup,
 			Timeout: flags.Timeout,
-			Info:    flags.Show, // -v: surface INFO: chat lines (COUNT/PADDING/*_MEM)
+			Info:    flags.V >= 3, // -vvv: surface INFO: chat lines
 		}
 		defer b.Close()
 	}
@@ -1297,15 +1299,14 @@ func main() {
 
 	size, basePad, pad, marginal, haveMarginal := oneMode(b, &r)
 
-	// The two readings the size is the difference of: the base script
-	// at the padding, sitting exactly on a block boundary, and the
-	// one-copy script at the same padding.  Result pad is the filler
-	// that copy can still carry without spilling into the next block.
-	fmt.Printf("Base mem: %d\n", r.Base)
-	fmt.Printf("Result mem: %d\n", r.Test)
-	fmt.Printf("Result pad: %d\n", pad)
-
-	fmt.Printf("Size: %d\n", size)
+	// The answer, and nothing else unless asked.
+	//
+	// Two numbers is what a benchmark is for: what a copy of the code
+	// costs, and what another one costs after it.  Everything else --
+	// the readings they are differences of, the padding they are
+	// anchored to, whose objects it all ran in -- is how the answer was
+	// arrived at rather than the answer, and -v is how to ask.
+	fmt.Printf("First Copy: %d\n", size)
 	if haveMarginal {
 		// A whole number or it is not a constant cost per copy.
 		// Both readings are exact to the byte, so the only way this
@@ -1314,14 +1315,12 @@ func main() {
 		// test and not a rounding error, and saying it as a
 		// fraction is how it is visible at all.
 		if marginal == math.Trunc(marginal) {
-			fmt.Printf("Marginal: %d\n", int(marginal))
-			fmt.Printf("Shared: %d\n", size-int(marginal))
+			fmt.Printf("Additional Copies: %d\n", int(marginal))
 		} else {
-			fmt.Printf("Marginal: %.4g\n", marginal)
+			fmt.Printf("Additional Copies: %.4g\n", marginal)
 			noticef("%d further copies cost %.4g bytes each, which is not a whole "+
 				"number, so the copies do not all cost the same and there is no "+
-				"one marginal cost; Shared is not reported\n",
-				flags.Extra, marginal)
+				"one cost for an additional one\n", flags.Extra, marginal)
 			if flags.Extra%4 != 0 {
 				// Code is 4-aligned, so a copy whose true cost is
 				// not a multiple of 4 is charged a little more or
@@ -1336,26 +1335,22 @@ func main() {
 			}
 		}
 	}
-	fmt.Printf("Padding: %d\n", basePad)
-	return
 
-}
-
-// copiesCost is what cnt copies add to the base script, exactly.
-//
-// The base script at runpad sits on a block boundary, so the reading
-// with the copies in it, less the boundary, is their cost rounded UP to
-// a whole block -- and the headroom above them is how much of that last
-// block they did not use.  The difference is the cost, to the byte.
-//
-// It answers false for a count below one, which is the caller having
-// nothing to halve.
-func copiesCost(b backend, cnt, runpad, baseMem int, r *Results) (int, bool) {
-	if cnt < 1 {
-		return 0, false
+	if flags.V >= 1 {
+		// How the answer was arrived at: the two readings it is the
+		// difference of -- the base script at the padding, sitting
+		// exactly on a block boundary, and the one-copy script at the
+		// same padding -- the filler that copy can still carry without
+		// spilling into the next block, and what the construct pays
+		// once rather than per copy.
+		fmt.Printf("Base mem: %d\n", r.Base)
+		fmt.Printf("Result mem: %d\n", r.Test)
+		fmt.Printf("Result pad: %d\n", pad)
+		if haveMarginal && marginal == math.Trunc(marginal) {
+			fmt.Printf("Shared: %d\n", size-int(marginal))
+		}
+		fmt.Printf("Padding: %d\n", basePad)
 	}
-	headroom, mem := findPadding(b, cnt, runpad, r)
-	return (mem - baseMem) - headroom, true
 }
 
 // spentCompiles counts the scripts sent to SL's compiler and never started.
@@ -1540,14 +1535,14 @@ func runScript(b backend, cnt, pad int, r *Results) error {
 		spentRuns++
 		spentRounds++
 		script := buildScript(cnt, pad)
-		if flags.Show {
+		if flags.V >= 3 {
 			fmt.Println(script)
 		}
 		results, info, err := b.Send(script)
 		if err != nil {
 			return err
 		}
-		if flags.Show {
+		if flags.V >= 3 {
 			for _, s := range info {
 				fmt.Println("INFO:", s)
 			}
@@ -1740,12 +1735,17 @@ func runIn(ctx context.Context, o session.Options) ([]place, func(), error) {
 		}
 	}
 
-	// Which avatar, when nobody said.  With several hosted this is the
-	// daemon's choice and the reader cannot work it out; and a benchmark
-	// attributed to the wrong avatar is not an error, it is a plausible
-	// number.  Several avatars is now an ordinary answer rather than an
-	// impossible one, so it is said the same way, one line each.
-	if o.Agent == "" {
+	// Which avatars, when nobody said, at -vv.
+	//
+	// It used to be unconditional, on the grounds that a benchmark
+	// attributed to the wrong avatar is not an error but a plausible
+	// number.  A grant now spans several avatars as a matter of course,
+	// so it is several lines of it -- and the readings turned out to
+	// agree across avatars: every row of the --parts sweep in
+	// doc/memory.md reported the same Size over one avatar, two and
+	// three.  Which is not a proof, but it is enough that whose objects
+	// these were is a detail rather than a caveat on the answer.
+	if o.Agent == "" && flags.V >= 2 {
 		for _, a := range as {
 			fmt.Fprintf(os.Stderr, "running as %s, objects %s\n", a.Agent, a.Where())
 		}
