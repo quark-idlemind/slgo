@@ -71,7 +71,7 @@ var flags = struct {
 	Debug     bool            `getopt:"--debug enable debugging"`
 	Probe     bool            `getopt:"--probe send a simple script to LSL as a probe"`
 	NoCache   bool            `getopt:"--no-cache do not remember or reuse the padding for this base script"`
-	Parts     int             `getopt:"--parts=N cut the padding search into N parts a round, running N-1 scripts at once; a power of 2"`
+	Parts     int             `getopt:"--parts=N cut the padding search into N parts a round, running N-1 scripts at once; a power of 2 divides the block evenly, but any N works"`
 	Timeout   time.Duration   `getopt:"--timeout=DUR timeout on waiting for an LSL script to complete"`
 	Test      string          `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model in this process, see the source code"`
 	Backend   string          `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life; --test is the same contract answered by a model here"`
@@ -849,8 +849,8 @@ func noticef(format string, v ...any) {
 // basePadding returns the base padding: the largest pad the copy-free base
 // script can carry and still fit inside its 512-byte memory block, so that one
 // more byte crosses into the next.  Everything slbench measures is anchored
-// to it, it is what the Padding: line reports, and it is what --ipad and
-// --check-ipad name.
+// to it, it is what the Padding: line reports, and it is what --ipad
+// names.
 //
 // It is a property of the benchmark's *shape* -- the harness plus --preamble,
 // --postamble and --globals -- and not of the code under test, so every
@@ -868,7 +868,7 @@ func basePadding(b backend, r *Results) int {
 	// It is confirmed rather than taken, exactly as a remembered one is, and
 	// for the same reason: a padding wrong by k reports every Size wrong by k
 	// with nothing in the output to show it.  It used to be checked only when
-	// asked (--check-ipad) because the check cost two live runs; those two
+	// asked, because the check cost two live runs of its own; those two
 	// readings ride in a round that is being spent anyway now, so there is
 	// nothing left to decide and no flag for it.
 	if flags.IPad != 0 {
@@ -932,8 +932,10 @@ func paddingHolds(b backend, pad int) (held bool, at, above int) {
 	return mem[1] > mem[0], mem[0], mem[1]
 }
 
-// checkIPad confirms that a supplied --ipad names a padding boundary, and is
-// run only when the caller asks for it with --check-ipad.
+// checkIPad confirms that a supplied --ipad names a padding boundary.
+//
+// Always, not on request: the two readings ride in a round that is being
+// spent anyway, so there is nothing left for a flag to decide.
 //
 // A padding is the largest pad that still fits inside a 512-byte block, so the
 // test is that one more byte crosses: run the base script -- no copies of the
@@ -942,7 +944,7 @@ func paddingHolds(b backend, pad int) (held bool, at, above int) {
 //
 // This is exactly the pair of runs the search itself ends on, so the value it
 // confirms is the value Padding: prints: hand a reported padding straight back
-// to --ipad --check-ipad and it passes.
+// to --ipad and it passes.
 func checkIPad(b backend, pad int) {
 	held, atMem, aboveMem := paddingHolds(b, pad)
 	debugf("IPad[%d] %d : %d, %d : %d\n", pad, pad, atMem, pad+1, aboveMem)
@@ -963,15 +965,15 @@ Every size slbench reports is measured from this constant, so a padding that
 is off by k reports every Size off by k, in the same direction, with nothing in
 the output to show it.
 
-Drop --check-ipad to use %d anyway.
-`, pad, pad, at.Base, pad+1, above.Base, pad)
+Measure somewhere else, or find the padding by leaving --ipad off.
+`, pad, pad, at.Base, pad+1, above.Base)
 }
 
 // expressiblePadding reports whether the filler can emit exactly pad bytes --
 // and exactly pad+1 as well, since that is where the runs are taken.
 //
 // It is not a judgement about whether pad names a boundary; that is the
-// caller's to assert, and --check-ipad is how they can have it verified.  This
+// caller's to assert, and checkIPad is what verifies it.  This
 // is the one thing slbench does know better than the caller: whether it can
 // carry out the instruction at all.
 //

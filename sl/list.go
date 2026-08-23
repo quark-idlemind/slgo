@@ -93,7 +93,7 @@ func (e Entry) String() string {
 // what lets a listing be written to a file, edited, and read back.
 //
 // What the grid accepts was measured rather than assumed: an item was
-// created for each character from space to tilde, all hundred listed
+// created for each character from space to tilde, all ninety-five listed
 // back, and every one came back byte for byte -- including / and \.
 // The two exceptions are at the edges, where the grid trims: a name
 // given a leading or a trailing space comes back without it.  So a name

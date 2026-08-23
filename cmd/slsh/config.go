@@ -471,8 +471,8 @@ func settingNumber(v string, low int) (int, error) {
 	return n, nil
 }
 
-// ConfigDir is where slchat keeps its settings.  SLSH_CONFIG_DIR
-// names it outright; otherwise it is slchat under XDG_CONFIG_HOME, or
+// ConfigDir is where slsh keeps its settings.  SLSH_CONFIG_DIR
+// names it outright; otherwise it is slsh under XDG_CONFIG_HOME, or
 // under ~/.config when that is unset -- the same rule the profiles
 // follow.
 func ConfigDir() (string, error) {
