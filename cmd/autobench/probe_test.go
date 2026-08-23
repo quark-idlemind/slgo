@@ -497,3 +497,51 @@ func TestCopyModeIsNotWarmed(t *testing.T) {
 			"side of the padding", spent)
 	}
 }
+
+// TestSearchesAtOnePadShareTheirRounds is the whole of warmPaddings: two
+// counts anchored at the same pad narrow in lockstep, because a round
+// divides a range by parts exactly and lands in the same number of
+// rounds whatever the answer is. So the second search is free in the
+// unit that costs time.
+//
+// The runs are asserted as well, and they are the two searches' runs
+// added together -- nothing is saved there and nothing should be wasted
+// there either. Scripts are what this spends; rounds are what it saves.
+func TestSearchesAtOnePadShareTheirRounds(t *testing.T) {
+	const pad = 473
+
+	measure := func(cnts []int, share bool) (rounds, runs int) {
+		probeReset(t)
+		flags.Parts = 8
+		searchesAtOnce = len(cnts)
+		t.Cleanup(func() { flags.Parts, searchesAtOnce = 4, 1 })
+
+		b, _ := newFakeRunner(t, 474, 368, leaseSize()-1)
+		wasRounds, wasRuns := spentRounds, spentRuns
+		if share {
+			warmPaddings(b, cnts, pad)
+		}
+		for _, c := range cnts {
+			var r Results
+			findPadding(b, c, pad, &r)
+		}
+		return spentRounds - wasRounds, spentRuns - wasRuns
+	}
+
+	oneRounds, _ := measure([]int{1}, true)
+	twoRounds, twoRuns := measure([]int{1, 5}, true)
+	apartRounds, apartRuns := measure([]int{1, 5}, false)
+
+	if twoRounds != oneRounds {
+		t.Errorf("two searches sharing rounds took %d rounds; one takes %d",
+			twoRounds, oneRounds)
+	}
+	if twoRounds >= apartRounds {
+		t.Errorf("sharing took %d rounds and searching separately %d, so sharing "+
+			"bought nothing", twoRounds, apartRounds)
+	}
+	if twoRuns != apartRuns {
+		t.Errorf("sharing spent %d runs against %d apart: the readings shared are "+
+			"meant to be the ones the searches would have asked for", twoRuns, apartRuns)
+	}
+}

@@ -109,7 +109,16 @@ var flags = struct {
 // Measured live, they are close to free -- fifteen scripts in a round
 // cost 1.57s against 1.50s for seven -- and they are only ever held, not
 // necessarily used.
-func leaseSize() int { return flags.Parts + 3 }
+func leaseSize() int { return searchesAtOnce*flags.Parts + 3 }
+
+// searchesAtOnce is how many padding searches will share rounds, which
+// the lease has to be big enough to carry: each wants its anchor and its
+// parts-1 divisions in every round.
+//
+// One, until something asks for more.  Searches share rounds only when
+// they are anchored at the SAME pad -- the base search cannot, because
+// what it finds is where the others start from.
+var searchesAtOnce = 1
 
 // openLease asks for the places the speculation wants and settles for
 // the places the search needs.
@@ -258,6 +267,95 @@ func warmTheSearch(b backend, remembered int) {
 		return
 	}
 	probeReadings(b, want)
+}
+
+// warmPaddings takes the readings that several padding searches at one
+// pad are going to ask for, sharing rounds between them.
+//
+// The searches are independent -- different scripts, different crossings
+// -- but they are anchored at the same pad and they narrow in lockstep,
+// because a round divides a range by parts EXACTLY: 512 to 64 to 8 to 1
+// at eight parts, whatever the answer turns out to be.  So round two of
+// one search and round two of another can travel together, and N
+// searches cost the rounds of one.
+//
+// It decides nothing.  What it works out about each search is thrown
+// away, and its only effect is that the readings are in the cache; the
+// searches then run exactly as they always did and find their answers
+// there.  That is deliberate -- the walk, the staircase check, the
+// re-reads under --paranoid and the retry when a base has moved are the
+// parts worth not having two copies of.
+//
+// The anchors go in the first round with the first divisions.  Their
+// readings are needed to DECIDE, not to ask: the pads a first round
+// wants are fixed at 0..512 for every search.
+func warmPaddings(b backend, cnts []int, pad int) {
+	parts := usableParts(b, flags.Parts)
+	if parts == 0 || len(cnts) == 0 {
+		return
+	}
+
+	lows := make([]int, len(cnts))
+	highs := make([]int, len(cnts))
+	for i := range cnts {
+		highs[i] = blockSize
+	}
+
+	for round := 0; ; round++ {
+		var want []reading
+		if round == 0 {
+			for _, c := range cnts {
+				want = append(want, reading{c, pad})
+			}
+		}
+		asks := make([][]int, len(cnts))
+		for i, c := range cnts {
+			if highs[i]-lows[i] <= 1 {
+				continue
+			}
+			asks[i] = partPads(lows[i], highs[i], parts)
+			for _, off := range asks[i] {
+				want = append(want, reading{c, pad + off})
+			}
+		}
+		if len(want) == 0 {
+			return
+		}
+		mem := probeReadings(b, want)
+
+		at := 0
+		if round == 0 {
+			at = len(cnts)
+		}
+		for i, c := range cnts {
+			if asks[i] == nil {
+				continue
+			}
+			base, ok := probed(c, pad)
+			if !ok {
+				// The anchor did not come back.  Nothing here is worth
+				// failing over: the searches will ask again.
+				return
+			}
+			got := mem[at : at+len(asks[i])]
+			at += len(asks[i])
+
+			grew := len(asks[i])
+			for j, m := range got {
+				if m > base {
+					grew = j
+					break
+				}
+			}
+			if grew > 0 {
+				lows[i] = asks[i][grew-1]
+			}
+			if grew < len(asks[i]) {
+				highs[i] = asks[i][grew]
+			}
+		}
+		debugf("Warm[%v] %v < ... < %v\n", cnts, lows, highs)
+	}
 }
 
 // findPadding returns an OFFSET FROM pad, not a pad: the largest offset at
