@@ -613,6 +613,7 @@ For one command:       COMMAND --help, or man COMMAND
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/Objects$</span> <span class="c">chat</span>
 <span class="p">Local&gt;</span> <span class="c">hello everyone</span>
+<span class="o">14:22:07 &gt; [Local] hello everyone</span>
 <span class="n">&lt;ESC&gt;</span>
 <span class="p">/Objects$</span></pre>
         </div>
@@ -1635,6 +1636,7 @@ HUD top right      badge</span>
 <span class="p">/$</span> <span class="c">move lantern 128 130 25</span>
 <span class="o">lantern is at 128.0, 130.0, 25.0</span>
 <span class="p">/$</span> <span class="c">touch lantern</span>
+<span class="o">touched lantern, face 0</span>
 <span class="p">/$</span> <span class="c">take lantern</span>
 <span class="o">"lantern" a8de7e57-… (local 83565482) is in inventory as lantern</span></pre>
         </div>
@@ -1690,7 +1692,8 @@ prints too</span></pre>
 <pre><span class="p">/$</span> <span class="c">perms --next cmt --everyone none lantern</span>
 <span class="o">everyone may now nothing
 the next owner may now copy, modify, transfer</span>
-<span class="p">/$</span> <span class="c">texture -f 2 --id d8467e57-… lantern</span></pre>
+<span class="p">/$</span> <span class="c">texture -f 2 --id d8467e57-… lantern</span>
+<span class="o">lantern: face 2</span></pre>
         </div>
       </section>
 
@@ -1700,7 +1703,11 @@ the next owner may now copy, modify, transfer</span>
 
         <p>
           <code>cat</code> prints a notecard or a script. <code>new</code>
-          makes one, empty or from a file. <code>save</code> writes a local
+          makes one, from a file or from nothing — a notecard made from
+          nothing is empty, and a script gets a
+          <code>default { state_entry() { } }</code> skeleton, because a
+          script with no source is a compile error waiting for whatever
+          runs it. <code>save</code> writes a local
           file into one that already exists — the two are different acts and
           have different names for that reason.
         </p>
@@ -1772,8 +1779,10 @@ the next owner may now copy, modify, transfer</span>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">say the lantern is lit</span>
+<span class="o">14:22:07 &gt; [Local] the lantern is lit</span>
 <span class="p">/$</span> <span class="c">chat</span>
 <span class="p">Local&gt;</span> <span class="c">and the door is open</span>
+<span class="o">14:22:19 &gt; [Local] and the door is open</span>
 <span class="n">&lt;ESC&gt;</span></pre>
         </div>
 
@@ -1789,7 +1798,7 @@ the next owner may now copy, modify, transfer</span>
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">im Example Resident are you about?</span>
 <span class="o">* new conversation with Example Resident
-&gt; [IM Example Resident] are you about?</span>
+14:23:04 &gt; [IM Example Resident] are you about?</span>
 <span class="p">/$</span> <span class="c">im Example Resident</span>              <span class="n">no text: go and talk</span>
 <span class="p">Example Resident&gt;</span> <span class="c">I am here</span>
 <span class="n">&lt;TAB&gt;</span>                              <span class="n">next conversation</span>
@@ -1997,7 +2006,7 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
   caps        21
   no handler for:
     AttachedSound                    21769
-    SimStats                          4917</span></pre>
+    SimStats                         4917</span></pre>
         </div>
 
         <p>
@@ -2107,12 +2116,19 @@ slsh: stopped; 43 lines were not run</span></pre>
         <h2><span class="num">15</span>The configuration file</h2>
 
         <p>
-          <code>~/.config/slsh/config</code>, as <code>key = value</code> lines
+          <code>~/.config/slsh/config</code> — or <code>$SLSH_CONFIG_DIR</code>
+          if that is set, or <code>slsh</code> under
+          <code>$XDG_CONFIG_HOME</code> — as <code>key = value</code> lines
           with <code>#</code> for comments. A command-line flag always beats
           the file, and a misspelled key is an error rather than a setting that
           silently does nothing. A <code>#</code> is a comment only where a line
-          begins with one: written after a value it becomes part of the value,
-          and the shell will not start with it there.
+          begins with one: written after a value it becomes part of the value.
+          Whether that stops the shell depends on the setting. The ones whose
+          value is checked — <code>escape</code> and the five
+          <code>map_*</code> — refuse it and say so. The ones that take their
+          value as text — <code>addr</code>, <code>agent</code> and the four
+          <code>viewer_*</code> — take the comment with it, silently, and go
+          looking for a profile or a daemon with a <code>#</code> in its name.
         </p>
 
         <div class="term">
@@ -2231,7 +2247,8 @@ viewer_running = how to tell whether one is running already</span></pre>
               <tr><td class="cmd">group</td><td class="what">who you act as, which is what land rights hang on</td></tr>
               <tr><td class="cmd">objects · dump · rez · reform</td><td class="what">what is here, described, built and changed</td></tr>
               <tr><td class="cmd">worn · wear · detach</td><td class="what">attachments</td></tr>
-              <tr><td class="cmd">take · place · move · drop</td><td class="what">between the world and inventory, and about the region</td></tr>
+              <tr><td class="cmd">take · place · move</td><td class="what">between the world and inventory, and moving what is rezzed</td></tr>
+              <tr><td class="cmd">drop</td><td class="what">put an inventory item inside a rezzed object, unstarted</td></tr>
               <tr><td class="cmd">link · unlink · perms · texture · touch</td><td class="what">building, permissions, faces, clicking</td></tr>
               <tr><td class="cmd">start · stop</td><td class="what">scripts inside an object</td></tr>
 

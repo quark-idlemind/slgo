@@ -76,8 +76,11 @@ points at the wrong problem entirely.
 ### Profiles
 
 Accounts live one file per account in `~/.config/slgo`, named however
-you like. The directory must be mode 700 and each file mode 600 --
-these programs refuse to read credentials anyone else can:
+you like -- or under `$SLGO_CONFIG_DIR` if that is set, or `slgo` under
+`$XDG_CONFIG_HOME`. Neither the directory nor the files may be readable
+or writable by group or other: the test is `perm & 0o077`, so 700 and
+600 pass and so do 500 and 400, and these programs refuse to read
+credentials anyone else can:
 
     first           = Example
     last            = Resident
@@ -543,10 +546,16 @@ is not allowed to build can still be set up, provided somebody who can
 gives it one object: everything after the first is a copy, and copying
 something already owned asks the land nothing.
 
-The lock is held by `slgod` for as long as the program holds its
-connection, so a run that crashes or is killed gives it back at once;
+The objects are held by `slgod` for as long as the program holds its
+connection, so a run that crashes or is killed gives them back at once;
 there is nothing to clean up and no stale lock to break. Use `--rez` to
 take a prim of your own and not queue at all.
+
+There is a timeout underneath that, for the case the connection does not
+cover: a client that wedged without dying. A grant is asked for thirty
+minutes and renewed by work that outlives it, which is long because what
+it guards against is a program that has stopped rather than one that is
+merely slow.
 
 ### What can go wrong
 
@@ -671,9 +680,11 @@ filename -- and never more than one.
 
     slbench --code "integer gCNT;"
 
-`CNT` in it is replaced with the copy number, so each copy can have a
-name of its own. That matters: without it, a hundred copies of
-`integer g;` is not a hundred variables.
+`CNT` in it is replaced with the copy number, zero-padded to three
+digits -- `g000`, `g001` -- so each copy can have a name of its own.
+That matters twice: without it a hundred copies of `integer g;` is not a
+hundred variables, and a name whose length changed with the count would
+put the count into what is being measured.
 
 `--statement` is for code that must live inside a function, and wraps it
 in one for you:
@@ -707,8 +718,9 @@ x = j + 1;
 | | | | `v` | vector |
 
 So `--globals "iCount,sName,vPos"` declares an integer, a string and a
-vector. Any other first letter is refused, so a name has to be chosen to
-say what it is.
+vector, and `ICount` or `SName` would do the same -- the letter is
+matched either case. Any other first letter is refused, so a name has to
+be chosen to say what it is.
 
 
 ### Reusing the padding
@@ -797,8 +809,8 @@ Second Life, and it will not say so about a model.
 | `--statement CODE` | statements to measure, wrapped in a function |
 | `--globals`, `--params`, `--locals` | declare variables (see above) |
 | `--preamble`, `--postamble` | text around the copies |
-| `--extra N` | further copies to measure, for `Additional Copies` (default 8; a multiple of 4, `0` for none) |
-| `--parts N` | how many parts to cut the search into each round (default 8) |
+| `--extra N` | further copies to measure, for `Additional Copies` (default 8; `0` for none). A multiple of 4 is advice and not enforced -- only a negative is refused |
+| `--parts N` | how many parts to cut the search into each round (default 8; at least 2, and a power of two only by advice) |
 | `--paranoid` | read each crossing again before believing it |
 | `--ipad N` | measure at this padding instead of searching for one |
 | `--no-cache` | do not remember or reuse the padding |

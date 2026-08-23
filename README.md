@@ -60,6 +60,7 @@ case.
     cmd/slrun/       runs LSL scripts, prints what they said
     cmd/slbench/      measures what LSL constructs cost in memory
     cmd/msggen/         fetches message_template.msg, writes Go
+    cmd/slgo-multiattach/  wearing several objects on one attachment point
 
     agent/              one avatar's connection: login, then the circuit
     agent/profile.go    credentials under ~/.config/slgo
@@ -91,6 +92,7 @@ case.
     internal/slhost/    where slgod is, asking sl-host when it is there
     internal/creds/     who to log in as, when a program logs in itself
     internal/xmlrpc/    the login wire format, read and written
+    internal/slots/     the pool of objects a run takes its places from
 
     msg/types.go        UUID, Vector3, Quaternion, IPAddr, Info, ...
     msg/buffer.go       little endian read/write primitives
@@ -441,9 +443,14 @@ that actually travel, because that is what the value means.
 
 Strings are quoted, so nothing is read back as an accidental number or
 boolean; numbers, booleans, UUIDs, vectors and quaternions go out bare,
-which is why `sequence: 1234` above has no quotes around it. There is no YAML dependency: the emitter is a hundred lines
-against a deliberately small subset, and `TestDumpParsesAsYAML` feeds
-all 483 messages through Ruby's Psych to check the subset is real.
+which is why `sequence: 1234` above has no quotes around it.
+
+There is no YAML dependency: the emitter is about three hundred and
+fifty lines against a deliberately small subset, and
+`TestDumpParsesAsYAML` feeds all 483 messages through a real parser to
+check the subset is real -- Ruby's Psych, or python3 with pyyaml,
+whichever is on the machine. With neither it skips, so a clean run does
+not by itself mean the subset was checked.
 
 ## Tests
 
@@ -469,12 +476,12 @@ Credentials live one file per account under a private directory:
     ~/.config/slgo/example      mode 600
 
     # slgo profile "example"
-    first      = Example
-    last       = Resident
-    password   = $1$<the md5 of the password>
-    start      = last
-    group      = Builders
-    neighbours = yes
+    first    = Example
+    last     = Resident
+    password = $1$<the md5 of the password>
+    start    = last
+    group    = Builders
+    neighbours= yes
 
 Not every key is part of the login request. `group` is which group the
 avatar acts as once it is up, `neighbours` is whether to hold the child
@@ -614,8 +621,9 @@ message used to put it.
 ## More than one account at a time
 
 Nothing in `msg` or `agent` keeps per-connection state at package level.
-The message registry and the codec's plan cache are read-only after
-init and shared safely; everything else -- sockets, sequence numbers,
+The message registry is read-only after init; the codec's plan cache is
+a `sync.Map` filled the first time a message type is encoded, which is
+shared safely without being read-only. Everything else -- sockets, sequence numbers,
 retransmission queues, duplicate windows, capabilities, inventories,
 every counter -- hangs off an `Agent`.
 
@@ -666,8 +674,8 @@ Two things that had to change with it:
     one that is right.
 
 Measured on the beta grid with two avatars in Dovet: both listed the
-same 1501 objects, and flushing through one emptied what the other saw
--- 1504 objects each before, 0 each after. One store.
+same objects and flushing through one emptied what the other saw --
+1504 each before, 0 each after. One store.
 
 ### Telling an attachment from a thing standing there
 
@@ -1088,8 +1096,10 @@ all together or not at all, from whichever avatars the daemon holds.
 region instead, and `--rez` to rez a prim beside the avatar and trash
 it afterwards, which `--keep` leaves. `slrun` runs four scripts at
 once by default -- 17.5 seconds of scripts in 5.2, measured -- `--jobs`
-asks for more, up to the twelve an avatar wears, and `--jobs 1` puts
-them back in the order they were named.
+asks for more, and `--jobs 1` puts them back in the order they were
+named. Twelve is the ceiling only when `--agent` names one avatar: the
+objects otherwise come from the daemon's whole pool, which is every
+avatar it holds.
 
 The contract with a script is one line: it says `DONE` when it has
 finished. Without a sentinel there is nothing to wait for but the
@@ -1111,6 +1121,13 @@ simulator), `-O` and `--std` (its compiler's flags), and the
 compile-and-compare machinery. The compiler here is the grid's -- the
 source goes up through `UpdateScriptTask` and comes back compiled or
 refused. slgo does not depend on elsl, and this is where that shows.
+
+What replaced `--sim` is `--backend=HOST:PORT`, which both take: it runs
+the scripts through anything speaking the `script.v1` contract -- a
+simulator, or a viewer daemon -- instead of Second Life. `slbench`
+additionally takes `--test`, which answers that contract from a model in
+its own process, so the measurement machinery can be exercised without a
+grid at all.
 
 Measured against the grid on 2026-08-06: creating a script item costs
 about 8.1s -- the create, the copy into the object, and the settle --
@@ -1215,13 +1232,14 @@ says which to pick -- keyed by **what you are uploading** rather than by
 what each filter is, since the person at the prompt has a picture in
 front of them and not a signal-processing question:
 
-    a photograph                           lanczos     the default
-    pixel art, or an icon with hard edges  nearest     invents no colours
-    a mask, or anything read as data       nearest     a blended value is a wrong value
-    a diagram, text, or a screenshot       catmullrom  sharp, quicker than lanczos
-    a picture lanczos leaves haloed        mitchell    much less ringing at edges
-    a big reduction, a quarter or less     box         plain averaging
-    ...
+    a photograph                           lanczos     the default; the best of the slow ones
+    pixel art, or an icon with hard edges  nearest     invents no colours, and any smoothing ruins these
+    a mask, or anything read as data       nearest     same reason: a blended value is a wrong value
+    a diagram, text, or a screenshot       catmullrom  sharp, and quicker than lanczos
+    a picture lanczos leaves haloed        mitchell    smooth, with much less ringing at edges
+    a big reduction, a quarter or less     box         plain averaging, which is what a reduction that size wants
+    something you want softer on purpose   gaussian    blurs as it resamples
+    a preview, where speed is the point    linear      fast and unremarkable
 
 The rest are listed after, grouped by family -- the cubics with the
 cubics and the windowed sincs with the sincs -- because "try another one
@@ -1253,6 +1271,7 @@ a flag that can disagree with the name:
 
     $ put -o lanczos.png --round up --filter lanczos odd.png
     odd.png: 500x333 -> 512x512, 10992 bytes, L$10
+    lanczos.png: 512x512, not uploaded
 
 -- where the 8781 against 10992 is the filter showing up in the
 compressed size as well as in the picture. A `.j2c` given to `-o` as a
@@ -1281,12 +1300,14 @@ decoded the other's output exactly. That interoperability is most of
 why this is believable, and the rest is that the grid itself accepts
 what it writes.
 
-Encoding is lossless below `LosslessArea` (128×128, the viewer's own
-cutoff) and lossy above it, aiming at `DefaultRatio` -- 8:1, which is
+Encoding is lossless at or below `LosslessArea` (128×128, the viewer's
+own cutoff) and lossy above it, aiming at `DefaultRatio` -- 8:1, which is
 about what Second Life's own textures are: the stock plywood is 98282
-bytes for 512×512. Five decomposition levels, as the viewer asks
+bytes for 512×512. Up to five decomposition levels, as the viewer asks
 OpenJPEG for, so the grid can serve a lower resolution from a prefix of
-the stream. A gradient is the case where lossy is *bigger* than
+the stream -- fewer for an image too small to halve five times, since
+asking for more levels than the size allows is an error rather than a
+smaller number. A gradient is the case where lossy is *bigger* than
 lossless, since the layers cost more than the rate control saves.
 
 `EncodeTexture` does not resize -- an image whose sides are not powers
@@ -1336,7 +1357,8 @@ v1.6.2, from November 2019, and there has been none since -- the
 repository is not archived and has 31 issues open, so read that as
 stalled rather than as finished. What makes it tolerable is how little
 of it is load bearing here: `imaging.Resize` and the filter constants,
-nothing else. Its own dependency is `golang.org/x/image`, which this
+plus `Open`, `Save` and `AutoOrientation` where `put` reads a file from
+disk and writes one back. Nothing else. Its own dependency is `golang.org/x/image`, which this
 module pins to a current version rather than the 2019 one imaging asks
 for, since the old one carries decoders with known problems that
 nothing here calls but a scanner would still find.
@@ -1345,8 +1367,9 @@ nothing here calls but a scanner would still find.
 
     it, res, err := s.UploadTexture(ctx, "a name", "why", folder, j2c)
 
-This is the one asset path that costs money -- L$10 a go, whatever the
-file -- and the only one where the grid makes the inventory item rather
+This is the one asset path that costs money -- L$10 a go up to a
+megapixel, more above it, and see the fee table below -- and the only
+one where the grid makes the inventory item rather
 than the client. `SaveScript` and `SaveNotecard` write to an item that
 already exists, and `CreateItem` makes an item with nothing behind it;
 neither shape works for a texture, because there is no capability that
@@ -1553,8 +1576,7 @@ faces once and send them with `SetFaces` when making several changes.
 
     a sign, 6 faces
       faces 0-1,3-5  texture none  colour 255,255,255  alpha 255  repeats 1,1
-      face 2         texture 89556747-…  colour 255,80,80  alpha 200  repeats 4,2
-                     offset 0.25,-0.5  fullbright  shiny high  glow 100
+      face 2         texture 89556747-…  colour 255,80,80  alpha 200  repeats 4,2  offset 0.25,-0.5  fullbright  shiny high  glow 100
 
 Given nothing to change, `texture` says what is there instead. Faces
 that look alike are printed once under all their numbers, because that
