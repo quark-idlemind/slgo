@@ -75,6 +75,7 @@ var flags = struct {
 	ICheck    bool          `getopt:"--check-ipad spend two runs confirming --ipad before using it"`
 	Max       int           `getopt:"--max=N maximum number of copies"`
 	Fast      bool          `getopt:"--fast skip looking for pad"`
+	Paranoid  bool          `getopt:"--paranoid read each crossing again before believing it"`
 	Debug     bool          `getopt:"--debug enable debugging"`
 	Probe     bool          `getopt:"--probe send a simple script to LSL as a probe"`
 	NoCache   bool          `getopt:"--no-cache do not remember or reuse the padding for this base script"`
@@ -499,6 +500,15 @@ func searchPadding(b backend, cnt, pad int, r *Results, getBase func() int) (off
 		mustRun(b, cnt, low+pad, r)
 		debugf("Got[%d] %d: %d\n", cnt, low, getBase())
 		if base != getBase() {
+			// The crossing against every reading this search took.  Free:
+			// they are in hand, and memory moving one block at a time
+			// means a crossing says what all of them must be.
+			if off, was, want, ok := brokenStair(cnt, pad, low-1, base); !ok {
+				return 0, recheck(b, cnt, pad, base, off, was, want, r, getBase), false
+			}
+			if !flags.Paranoid {
+				return low - 1, base, true
+			}
 			switch verdict, nb := confirmCrossing(b, cnt, pad, low, base, r, getBase); verdict {
 			case crossingHolds:
 				// Leave r holding the crossing reading, which is what the
@@ -634,6 +644,77 @@ func rereadTogether(b backend, cnt, pad, low int, r *Results) (step, anchor, bel
 		below = got[2]
 	}
 	return step, anchor, below
+}
+
+// brokenStair checks the crossing against EVERY reading this search
+// took, which costs nothing: they are already in hand.
+//
+// Memory moves one block at a time and there is exactly one step in the
+// 512 bytes above any pad, so a proposed crossing says what all of them
+// must be -- the base at or below it, one block up above it.  Anything
+// else means the readings this search reasoned from do not describe a
+// staircase, and no answer from them is worth reporting.
+//
+// What it does NOT catch is the reading a search converges ON.  One
+// answer a block high makes the search narrow below it and stop there,
+// and the result is entirely consistent: flat below, a block up at that
+// pad and above.  A manufactured crossing looks exactly like a real one
+// from the inside, which is what --paranoid is for and why this cannot
+// replace it.
+//
+// What it does catch is a reading that contradicts the answer -- which
+// is the shape a fault in the code DRIVING the scripts takes: a reading
+// attributed to the wrong pad, an answer from the wrong object, a cache
+// key that collided.  Those do not arrange themselves into a staircase.
+//
+// crossed is the last offset that should still read the base.
+func brokenStair(cnt, pad, crossed, base int) (off, was, want int, ok bool) {
+	for off := 0; off <= blockSize; off++ {
+		m, known := probed(cnt, pad+off)
+		if !known {
+			continue
+		}
+		want := base
+		if off > crossed {
+			want = base + blockSize
+		}
+		if m != want {
+			return off, m, want, false
+		}
+	}
+	return 0, 0, 0, true
+}
+
+// recheck asks again about a reading that does not fit the staircase and
+// about the anchor, in one round, and says what the search should be run
+// against next time.
+//
+// The anchor is asked whatever disagreed: every comparison the search
+// made was against it, so a base that has moved explains any amount of
+// disagreement further up, and asking only the pad that happened to be
+// noticed would correct a symptom.
+func recheck(b backend, cnt, pad, base, off, was, want int, r *Results, getBase func() int) int {
+	forget := []reading{{cnt, pad}}
+	if off != 0 {
+		forget = append(forget, reading{cnt, pad + off})
+	}
+	probeMu.Lock()
+	for _, f := range forget {
+		delete(cache, Cache{Count: f.cnt, Padding: f.pad})
+	}
+	spentRereads += len(forget)
+	probeMu.Unlock()
+
+	nb := probeReadings(b, forget)[0]
+
+	noticef("the %d-copy script at pad %d read %d during the search, against a "+
+		"crossing that says %d; these readings are not a staircase and the "+
+		"search is being run again\n", cnt, pad+off, was, want)
+	if nb != base {
+		noticef("the base they were compared against, at pad %d, read %d then "+
+			"and %d now\n", pad, base, nb)
+	}
+	return nb
 }
 
 // reread runs (cnt, pad) again and returns the reading, going around the cache

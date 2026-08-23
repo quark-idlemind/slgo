@@ -621,6 +621,8 @@ func TestRefusedRunIsNotCached(t *testing.T) {
 // So this fails without the confirmation, and it fails with the exact wrong
 // answer that was published, not merely with some wrong answer.
 func TestOneModeSurvivesAReadingOneBlockHigh(t *testing.T) {
+	flags.Paranoid = true
+	t.Cleanup(func() { flags.Paranoid = false })
 	noise, fired := noiseOnce(1, 601, blockSize)
 	b := noisy(t, 474, 368, noise)
 
@@ -646,6 +648,8 @@ func TestOneModeSurvivesAReadingOneBlockHigh(t *testing.T) {
 // catch that -- it really does read high -- which is why confirmCrossing also
 // re-reads the pad BELOW, the one the search accepted as inside.
 func TestOneModeSurvivesAReadingOneBlockLow(t *testing.T) {
+	flags.Paranoid = true
+	t.Cleanup(func() { flags.Paranoid = false })
 	// 729 is the bisection's first probe above the crossing at 618.
 	noise, fired := noiseOnce(1, 729, -blockSize)
 	b := noisy(t, 474, 368, noise)
@@ -691,14 +695,17 @@ func TestOneModeSurvivesAMisreadBase(t *testing.T) {
 	}
 }
 
-// TestConfirmationCostsAHandfulOfRuns is the other half of the bargain: the
-// confirmation has to be cheap enough that it is always on.  A run is an upload,
-// a compile, an execution and a wait, so this is the only unit that matters.
+// TestConfirmationCostsAHandfulOfRuns is what --paranoid costs: a run is
+// an upload, a compile, an execution and a wait, so this is the only unit
+// that matters.
 //
-// -1 mode searches twice, and each search ends by re-reading three things: the
-// pad that crossed, the base, and the pad below.  Six runs, on a benchmark that
-// spends about two dozen.
+// -1 mode searches twice, and each search ends by re-reading three
+// things: the pad that crossed, the base, and the pad below.  Six runs,
+// on a benchmark that spends about two dozen -- and one ROUND per
+// search, because the three do not depend on each other.
 func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
+	flags.Paranoid = true
+	t.Cleanup(func() { flags.Paranoid = false })
 	b := offline(t, 474, 368)
 	spentRuns, spentRereads = 0, 0
 
@@ -1146,5 +1153,43 @@ func TestCopyModeReportsAFirstCopyItCanResolve(t *testing.T) {
 	_, _, first := copyMode(b, &r)
 	if int(r.Size) != 542 || first != 1044 {
 		t.Errorf("Size %d First copy %d, want 542 and 1044", int(r.Size), first)
+	}
+}
+
+// TestWithoutParanoidAReadingABlockOutIsBelieved says what the flag buys,
+// with the number it buys it against.
+//
+// This is not a bug being pinned; it is a price. A search converges ON a
+// reading a block high, so the result it produces is entirely consistent
+// -- flat below, a block up at that pad and above -- and no amount of
+// data already in hand distinguishes it from a real crossing. Only
+// asking again does, and asking again is a round.
+//
+// The event has been seen once, live, on 2026-08-03, and never
+// reproduced: TestLiveReadingIsStable asked 45 times at the pads
+// involved and every answer agreed. The likelier account of that day is
+// the driver rather than the compiler -- scripts were arriving at the
+// asset store empty at the time, silently, in 3 runs out of 8. So the
+// default is off, and this records what off means.
+func TestWithoutParanoidAReadingABlockOutIsBelieved(t *testing.T) {
+	if flags.Paranoid {
+		t.Fatal("--paranoid defaults on; this test asserts what its absence costs")
+	}
+	noise, fired := noiseOnce(1, 601, blockSize)
+	b := noisy(t, 474, 368, noise)
+
+	var r Results
+	size, _, pad := oneMode(b, &r)
+	if *fired != 1 {
+		t.Fatalf("the bad reading was never taken (%d times)", *fired)
+	}
+	// The anomaly, to the byte, as published live on 2026-08-03.  The
+	// staircase check cannot see it: every reading agrees with it.
+	if size != 384+1 || pad != 128-1 {
+		t.Errorf("Size: %d Result pad: %d; want the 2026-08-03 anomaly, "+
+			"385/127 with the search starting a byte lower than it did then. "+
+			"If this now comes out 368/144 the crossing is being caught some "+
+			"other way and --paranoid may have stopped earning its round",
+			size, pad)
 	}
 }
