@@ -428,6 +428,28 @@ func addTo(pads []int, pad int) []int {
 // whole search has to be redone against it -- every comparison it made was
 // against the wrong number.
 func searchPadding(b backend, cnt, pad int, r *Results, getBase func() int) (offset, base int, ok bool) {
+	// The anchor and the first round's divisions in ONE round.
+	//
+	// Cutting a range into N parts takes N readings, not N-1: the N-1
+	// dividers and the reading at the anchor itself.  Without the anchor,
+	// dividers that all read the same leave the step ambiguous -- it
+	// could be below the first or above the last -- and with it, all the
+	// same means the step is in the last part.
+	//
+	// They were two rounds, the anchor read on its own before the search
+	// began, because partSearch needs the base to compare against.  It
+	// needs it to compare, not to ASK: the pads are fixed and the
+	// comparison happens once the answers are in hand.
+	if parts := usableParts(b, flags.Parts); parts > 0 {
+		want := []reading{{cnt, pad}}
+		for _, off := range partPads(0, blockSize, parts) {
+			want = append(want, reading{cnt, pad + off})
+		}
+		if len(want) <= b.Spares() {
+			probeReadings(b, want)
+		}
+	}
+
 	mustRun(b, cnt, pad, r)
 	base = getBase()
 	debugf("Base[%d] %d : %d\n", cnt, pad, base)
@@ -540,38 +562,78 @@ const (
 // that matters for a number nobody can check afterwards.
 func confirmCrossing(b backend, cnt, pad, low, base int, r *Results, getBase func() int) (crossing, int) {
 	first := getBase()
+
+	// All three at once.  They are independent readings of three pads and
+	// none of the answers depends on another, so they are ONE round --
+	// which is what they cost, and asking them one at a time cost three.
+	//
+	// Taking all three always, rather than stopping at the first that
+	// settles the question, is two scripts more in the case where the
+	// first one answers it.  Scripts inside a round already being spent
+	// are close to free; rounds are not.
+	step, anchor, below := rereadTogether(b, cnt, pad, low, r)
+
 	// The reading that looked like the crossing.
-	if again := reread(b, cnt, low+pad, r, getBase); again == base {
+	if step == base {
 		noticef("the %d-copy script at pad %d read %d, and %d when asked again; "+
 			"%d is what the pads around it read, so the first answer was noise "+
-			"and the search continues past it\n", cnt, low+pad, first, again, base)
+			"and the search continues past it\n", cnt, low+pad, first, step, base)
 		return crossingLater, base
-	} else if again != first {
+	} else if step != first {
 		noticef("the %d-copy script at pad %d read %d and then %d; both say memory "+
 			"grew from %d, so the crossing is here, but the readings themselves "+
-			"do not agree\n", cnt, low+pad, first, again, base)
+			"do not agree\n", cnt, low+pad, first, step, base)
 	}
 	// The base every one of those comparisons was made against.
-	if nb := reread(b, cnt, pad, r, getBase); nb != base {
+	if anchor != base {
 		noticef("the %d-copy script at pad %d read %d at the start of the search and "+
 			"%d now; that is the base every comparison was made against, so the "+
-			"search is being run again from %d\n", cnt, pad, base, nb, nb)
-		return crossingSuspect, nb
+			"search is being run again from %d\n", cnt, pad, base, anchor, anchor)
+		return crossingSuspect, anchor
 	}
 	// The pad below has to be INSIDE the block.  If it is not, the crossing is
 	// somewhere below and the walk was above it the whole time -- which is what
 	// a reading that is spuriously LOW does, and 512 low is as plausible as the
 	// 512 high that was actually seen.  low == 1 needs no run: pad+0 is the base
 	// script, just read.
-	if low > 1 {
-		if below := reread(b, cnt, low-1+pad, r, getBase); below != base {
-			noticef("the %d-copy script at pad %d was read as inside the block and "+
-				"now reads %d against a base of %d; the crossing is below this, so "+
-				"the search is being run again\n", cnt, low-1+pad, below, base)
-			return crossingSuspect, base
-		}
+	if low > 1 && below != base {
+		noticef("the %d-copy script at pad %d was read as inside the block and "+
+			"now reads %d against a base of %d; the crossing is below this, so "+
+			"the search is being run again\n", cnt, low-1+pad, below, base)
+		return crossingSuspect, base
 	}
 	return crossingHolds, base
+}
+
+// rereadTogether asks about the step, the anchor it was measured against
+// and the pad below the step, in one round, going around the cache and
+// leaving the new answers in it.
+//
+// r is left holding the reading at the step, which is what the caller
+// goes on to measure with: probeReadings writes the cache and not r, so
+// the run that reads it back out is a cache hit and costs nothing.
+func rereadTogether(b backend, cnt, pad, low int, r *Results) (step, anchor, below int) {
+	want := []reading{{cnt, low + pad}, {cnt, pad}}
+	if low > 1 {
+		want = append(want, reading{cnt, low - 1 + pad})
+	}
+
+	probeMu.Lock()
+	for _, w := range want {
+		delete(cache, Cache{Count: w.cnt, Padding: w.pad})
+	}
+	spentRereads += len(want)
+	probeMu.Unlock()
+
+	got := probeReadings(b, want)
+	debugf("Reread[%d] %v: %v\n", cnt, want, got)
+
+	step, anchor = got[0], got[1]
+	below = got[1]
+	if len(got) > 2 {
+		below = got[2]
+	}
+	return step, anchor, below
 }
 
 // reread runs (cnt, pad) again and returns the reading, going around the cache
