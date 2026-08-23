@@ -7,6 +7,7 @@
 /cmd/*/slrun
 /cmd/*/slbench
 /cmd/*/msggen
+/cmd/*/md
 /msggen
 
 # And in the root, which is where "go build ./cmd/slsh" leaves it.
@@ -22,6 +23,11 @@
 /slgo
 /slgo-multiattach
 /slchat
+# The binary from "go build ./cmd/md", not the md/ package.  A trailing
+# slash on the exception is what keeps the directory in the tree;
+# without it the command's name would hide the renderer.
+/md
+!/md/
 
 # slrun and slbench were automate and autobench until 2026-08-22.  A
 # checkout from before the rename has their binaries in it, and taking
