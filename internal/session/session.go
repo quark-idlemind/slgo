@@ -94,7 +94,7 @@ func Connect(ctx context.Context, o Options) (*sl.Session, error) {
 	return sl.LoginDirect(loginCtx, l)
 }
 
-// AutoObject is the object automate and autobench run their scripts in,
+// AutoObject is the object slrun and slbench run their scripts in,
 // and AutoLock is the lock that says whose turn it is.
 //
 // One object, kept and worn, because making one costs seconds every run
@@ -143,7 +143,7 @@ func AutoName(n int) string {
 // AutoGroupSize is how many objects a benchmark takes at once.
 //
 // Four because that is what the search uses: quarterSearch takes three
-// readings at once alongside the measured object.  It is autobench's
+// readings at once alongside the measured object.  It is slbench's
 // number and not the pool's -- the pool hands out any count up to
 // AutoPool, and a program running scripts asks for one object per script
 // it wants going at once.

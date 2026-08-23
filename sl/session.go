@@ -29,7 +29,7 @@ var ErrTimeout = errors.New("sl: timed out waiting for the simulator")
 // difference is what each costs.  The first arrives once, when this
 // avatar sits on something, and carries the seat offset; the second
 // arrives for every avatar in range, in full, about every three seconds,
-// which is a bill automate and autobench would pay for ever for
+// which is a bill slrun and slbench would pay for ever for
 // something only a sit reads.  So the sit borrows it for the length of
 // the command and gives it back; see sit.go.
 var Subscriptions = []string{

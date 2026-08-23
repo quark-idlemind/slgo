@@ -1,11 +1,11 @@
-// Command automate runs LSL scripts in Second Life and prints what they
+// Command slrun runs LSL scripts in Second Life and prints what they
 // say.
 //
-//	automate a.lsl b.lsl
-//	automate --object "Test HUD" --done DONE a.lsl
-//	automate --direct --first Quark --last Idlemind a.lsl
+//	slrun a.lsl b.lsl
+//	slrun --object "Test HUD" --done DONE a.lsl
+//	slrun --direct --first Quark --last Idlemind a.lsl
 //
-// A script needs an object to run in, so automate takes some: the shared
+// A script needs an object to run in, so slrun takes some: the shared
 // auto objects the avatar wears, a group of four held for as long as the
 // run lasts.  --object names one object of somebody's own instead, and
 // --rez rezzes a throwaway prim beside the avatar and deletes it
@@ -20,7 +20,7 @@
 // for one another needs.
 //
 // Second Life is not the only thing that runs LSL, and none of what
-// automate does is particular to it -- put a script somewhere, watch what
+// slrun does is particular to it -- put a script somewhere, watch what
 // it says, find out whether it compiled and whether it got to the end.
 // --backend says that to something else through the script.v1 contract:
 // the eLSL simulator with no grid under it, or a viewer driven from
@@ -80,7 +80,7 @@ var flags = struct {
 	Keep    bool          `getopt:"--keep            leave the rezzed object behind"`
 	Help    bool          `getopt:"--help -h         show this message"`
 }{
-	Script:  "automate",
+	Script:  "slrun",
 	Done:    "DONE",
 	Start:   "last",
 	Timeout: time.Minute,
@@ -98,7 +98,7 @@ var errScript = errors.New("a script failed")
 func main() {
 	err := run()
 	if err != nil && !errors.Is(err, errScript) {
-		fmt.Fprintf(os.Stderr, "automate: %v\n", err)
+		fmt.Fprintf(os.Stderr, "slrun: %v\n", err)
 	}
 	if err != nil {
 		os.Exit(1)
@@ -112,7 +112,7 @@ func run() error {
 		return nil
 	}
 	if len(args) == 0 {
-		return fmt.Errorf("nothing to run\nusage: automate [options] script.lsl...")
+		return fmt.Errorf("nothing to run\nusage: slrun [options] script.lsl...")
 	}
 
 	// Read every script before connecting.  A typo in a filename is
@@ -291,7 +291,7 @@ func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src s
 	opts := session.Options{
 		Addr: flags.Addr, Agent: flags.Agent, Direct: flags.Direct,
 		First: flags.First, Last: flags.Last, Start: flags.Start,
-		Channel: "automate",
+		Channel: "slrun",
 	}
 	ps, cleanup, err := runIn(ctx, opts, n)
 	if err != nil {
@@ -331,7 +331,7 @@ type place struct {
 // this run was given is a line this run would print as its own.  That is
 // real, and it is also narrower than it sounds: installing a script over
 // one of the same name destroys what was there, measured, so the
-// previous run's script -- which is nearly always another automate --
+// previous run's script -- which is nearly always another slrun --
 // stops the moment this one starts.  What is left is a script under a
 // DIFFERENT name that goes on saying things after it has finished, and
 // neither of the two programs that share these objects writes one: both
@@ -466,7 +466,7 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 // the end.
 //
 // It is apart from the transports because it is the whole of what
-// automate decides, and the two must not drift: a run reported as having
+// slrun decides, and the two must not drift: a run reported as having
 // succeeded when it did not is a probe that quietly measured nothing, and
 // that must not depend on which side of the seam the script ran on.
 func verdict(path string, compiled bool, errs []string, fault string, finished bool) bool {

@@ -85,7 +85,7 @@ func TestPadCacheRoundTrip(t *testing.T) {
 	}
 
 	// Whatever else is in that directory is not ours to disturb.
-	if _, err := os.Stat(filepath.Join(dir, "autobench-padding")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "slbench-padding")); err != nil {
 		t.Errorf("the cache file should be in the config directory: %v", err)
 	}
 }
@@ -103,7 +103,7 @@ func TestPadCacheSurvivesRubbish(t *testing.T) {
 		"badpad notanumber",
 		"good 377 5924",
 	}, "\n")
-	if err := os.WriteFile(filepath.Join(dir, "autobench-padding"), []byte(body), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "slbench-padding"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -171,7 +171,7 @@ func TestForgettingSomethingNeverRememberedWritesNothing(t *testing.T) {
 	t.Setenv("SLGO_CONFIG_DIR", dir)
 	rememberPadding("abc", 377, 5924)
 
-	path := filepath.Join(dir, "autobench-padding")
+	path := filepath.Join(dir, "slbench-padding")
 	before, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)

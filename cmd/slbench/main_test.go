@@ -14,7 +14,7 @@ import (
 	"github.com/quark-idlemind/slgo/sl"
 )
 
-// The one behavioural difference from the original: autobench/bench returned
+// The one behavioural difference from the original: slbench/bench returned
 // only RESULT: lines, with the marker already stripped. slrun/bench returns
 // EVERYTHING a script says, so this program strips the marker and skips
 // anything that is not a labelled measurement.
@@ -149,7 +149,7 @@ func TestOnlyLabelledMeasurementsAreAbsorbed(t *testing.T) {
 
 // --------------------------------------------------------- the filler
 
-// TestTheFillerEmitsExactlyThePadAsked: everything autobench reports is a
+// TestTheFillerEmitsExactlyThePadAsked: everything slbench reports is a
 // distance between two pads, so a filler that emitted a byte more than it
 // was asked for would move every Size by that byte with nothing in the
 // output to show it.  The shape of what it emits is asserted rather than
@@ -246,7 +246,7 @@ func TestTheScriptIsTheHarnessAroundTheCodeUnderTest(t *testing.T) {
 	// which costs nothing -- measured, 604 bytes of comment moved the
 	// reading not at all -- so the digits of a count cannot change what
 	// is being measured.
-	if !contains(got, "// autobench cnt=3 pad=0") {
+	if !contains(got, "// slbench cnt=3 pad=0") {
 		t.Errorf("the harness does not report the count and pad it was built with:\n%s", got)
 	}
 
@@ -349,7 +349,7 @@ func stderrOf(t *testing.T, fn func()) string {
 // back.
 var flagDefaults = flags
 
-// autobench runs the whole program in this process, under --test.
+// slbench runs the whole program in this process, under --test.
 //
 // In this process rather than as a subprocess because that is the only
 // way what is measured is this program rather than a copy of its argument
@@ -361,7 +361,7 @@ var flagDefaults = flags
 // os.Exit is the one thing a run cannot survive, so the paths that end in
 // errf are not driven from here.  They are argument checks, and what they
 // check is asserted against the flags directly.
-func autobench(t *testing.T, args ...string) (stdout, stderr string) {
+func slbench(t *testing.T, args ...string) (stdout, stderr string) {
 	t.Helper()
 
 	// Nothing under --test reads or writes the padding cache, but the
@@ -373,7 +373,7 @@ func autobench(t *testing.T, args ...string) (stdout, stderr string) {
 	out, errs := create(t, filepath.Join(dir, "stdout")), create(t, filepath.Join(dir, "stderr"))
 
 	saveArgs, saveOut, saveErr := os.Args, os.Stdout, os.Stderr
-	os.Args = append([]string{"autobench"}, args...)
+	os.Args = append([]string{"slbench"}, args...)
 	os.Stdout, os.Stderr = out, errs
 
 	flags = flagDefaults
@@ -424,8 +424,8 @@ func readBack(t *testing.T, path string) string {
 // survive: the os.Exit inside getopt's parse would have taken the test
 // binary with it.  That is the point of the test.
 func TestAskingWhatTheFlagsAreIsNotAnError(t *testing.T) {
-	out, said := autobench(t, "--help")
-	if !strings.Contains(out, "Usage: autobench") {
+	out, said := slbench(t, "--help")
+	if !strings.Contains(out, "Usage: slbench") {
 		t.Errorf("--help printed no usage:\n%s", out)
 	}
 	// Not just the summary line: the flags and what they take are what
@@ -445,7 +445,7 @@ func TestAskingWhatTheFlagsAreIsNotAnError(t *testing.T) {
 
 	// -h is the same question and gets the same answer; it was free,
 	// nothing else here uses that letter.
-	if short, _ := autobench(t, "-h"); short != out {
+	if short, _ := slbench(t, "-h"); short != out {
 		t.Errorf("-h and --help printed different things:\n%s\nand\n%s", short, out)
 	}
 }
@@ -461,14 +461,14 @@ func TestAskingWhatTheFlagsAreIsNotAnError(t *testing.T) {
 // the first one does: both lines are 368 and Shared is nought, which is
 // what "pays nothing once and shares nothing" looks like.
 func TestTheProgramPrintsWhatABenchmarkMeasured(t *testing.T) {
-	out, _ := autobench(t, "--test=474,368", "--code", "foo_CNT(){llDie();}")
+	out, _ := slbench(t, "--test=474,368", "--code", "foo_CNT(){llDie();}")
 	if want := "First Copy: 368\nAdditional Copies: 368\n"; out != want {
 		t.Errorf("a benchmark printed\n%q\nwant exactly\n%q", out, want)
 	}
 
 	// -v adds the readings behind it, and the padding to feed back with
 	// --ipad.
-	out, _ = autobench(t, "--test=474,368", "-v", "--code", "foo_CNT(){llDie();}")
+	out, _ = slbench(t, "--test=474,368", "-v", "--code", "foo_CNT(){llDie();}")
 	for _, want := range []string{
 		"First Copy: 368\n",
 		"Additional Copies: 368\n",
@@ -485,7 +485,7 @@ func TestTheProgramPrintsWhatABenchmarkMeasured(t *testing.T) {
 
 	// And --extra=0 asks for the first copy alone, which is the whole of
 	// what this reported before there was a second search.
-	out, _ = autobench(t, "--test=474,368", "--extra", "0",
+	out, _ = slbench(t, "--test=474,368", "--extra", "0",
 		"--code", "foo_CNT(){llDie();}")
 	if want := "First Copy: 368\n"; out != want {
 		t.Errorf("--extra=0 printed\n%q\nwant exactly\n%q", out, want)
@@ -516,7 +516,7 @@ func TestABackendAtAnAddressMeasuresTheSameThing(t *testing.T) {
 	}
 	t.Cleanup(s.Stop)
 
-	out, said := autobench(t, "--backend", addr.String(), "-vv",
+	out, said := slbench(t, "--backend", addr.String(), "-vv",
 		"--code", "foo_CNT(){llDie();}")
 	for _, want := range []string{"First Copy: 368\n", "Padding: 473\n"} {
 		if !strings.Contains(out, want) {
@@ -547,8 +547,8 @@ func TestTheCodeUnderTestComesFromAFileOrAFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fromFile, _ := autobench(t, "--test=474,368", path)
-	fromFlag, _ := autobench(t, "--test=474,368", "--code", "foo_CNT(){llDie();}")
+	fromFile, _ := slbench(t, "--test=474,368", path)
+	fromFlag, _ := slbench(t, "--test=474,368", "--code", "foo_CNT(){llDie();}")
 	if fromFile != fromFlag {
 		t.Errorf("a file and --code measured differently:\n%s\nand\n%s", fromFile, fromFlag)
 	}
@@ -559,7 +559,7 @@ func TestTheCodeUnderTestComesFromAFileOrAFlag(t *testing.T) {
 // to live -- and --params and --locals are how the names it mentions get
 // declared without the caller writing LSL types out.
 func TestAStatementIsWrappedInAFunctionAroundIt(t *testing.T) {
-	autobench(t, "--test=406,16",
+	slbench(t, "--test=406,16",
 		"--globals", "g", "--statement", "g = g;",
 		"--params", "s", "--locals", "i")
 
@@ -579,7 +579,7 @@ func TestAStatementIsWrappedInAFunctionAroundIt(t *testing.T) {
 // benchmark in the only unit that matters, and it is reported on stderr
 // so that a caller parsing stdout does not have to know about it.
 func TestDebugSaysWhatTheBenchmarkSpent(t *testing.T) {
-	out, said := autobench(t, "--test=474,368", "--debug", "--code", "foo_CNT(){llDie();}")
+	out, said := slbench(t, "--test=474,368", "--debug", "--code", "foo_CNT(){llDie();}")
 	if !strings.Contains(said, "Spent ") || !strings.Contains(said, "re-reads") {
 		t.Errorf("--debug did not report what was spent:\n%s", said)
 	}
@@ -599,7 +599,7 @@ func TestDebugSaysWhatTheBenchmarkSpent(t *testing.T) {
 // 985 is 473 and a block: a padding a block up is a perfectly good one
 // and has to measure the same.
 func TestAnIPadIsUsedAsGivenAndConfirmed(t *testing.T) {
-	out, _ := autobench(t, "--test=474,368", "--ipad", "985", "-v",
+	out, _ := slbench(t, "--test=474,368", "--ipad", "985", "-v",
 		"--code", "foo_CNT(){llDie();}")
 	if !strings.Contains(out, "Padding: 985\n") {
 		t.Errorf("--ipad was not used as given:\n%s", out)
@@ -646,7 +646,7 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsMeasured(t *testing.T) {
 
 	// Port 1 on loopback: nothing is listening, so the dial fails without
 	// anything being asked of the network this machine is on.
-	opts := session.Options{Addr: "127.0.0.1:1", Channel: "autobench"}
+	opts := session.Options{Addr: "127.0.0.1:1", Channel: "slbench"}
 
 	// The shared pool is the only way in now: it asks the daemon who it
 	// is holding before it asks for objects, and there is no daemon.

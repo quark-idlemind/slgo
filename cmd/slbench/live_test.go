@@ -13,7 +13,7 @@ import (
 
 // Live tests need a grid and a session to reach it with, so they are opt-in:
 //
-//	SLGO_LIVE=1 go test -count=1 ./cmd/autobench/ -run Live -v
+//	SLGO_LIVE=1 go test -count=1 ./cmd/slbench/ -run Live -v
 //
 // SLGO_ADDR overrides the slgod address, and SLGO_OBJECT names an object to run
 // in rather than rezzing one.
@@ -36,7 +36,7 @@ func liveBench(t *testing.T) *runner {
 	}
 
 	ctx := context.Background()
-	s, err := session.Connect(ctx, session.Options{Addr: addr, Channel: "autobench"})
+	s, err := session.Connect(ctx, session.Options{Addr: addr, Channel: "slbench"})
 	if err != nil {
 		t.Fatal(err)
 	}

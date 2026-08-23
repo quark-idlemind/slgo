@@ -2,17 +2,17 @@ package scripttest
 
 // What a benchmark script costs, and what it says when it runs.
 //
-// autobench measures LSL by asking Second Life how much memory a script
+// slbench measures LSL by asking Second Life how much memory a script
 // uses, and everything it does above that -- the padding search, the
 // block arithmetic, the copy count, the backing off when a script is
 // refused -- is arithmetic on those readings.  So a backend that can
 // answer the readings can drive the whole program, and that is what this
-// is: the same staircase autobench's --test model uses, in a form a
+// is: the same staircase slbench's --test model uses, in a form a
 // gRPC backend can serve.
 //
 // The model is deliberately a MODEL.  It says nothing about what Second
 // Life would report; what it buys is that a caller's control flow can be
-// exercised offline, which is the half of autobench that used to be
+// exercised offline, which is the half of slbench that used to be
 // reachable only with a grid at the other end.
 
 import (
@@ -25,7 +25,7 @@ import (
 // Memory is what cnt copies of the code under test cost, as a function
 // of the copy count and the padding.
 //
-// The fields are autobench's testInfo, which is where they were worked
+// The fields are slbench's testInfo, which is where they were worked
 // out and where the reasoning for each of them lives:
 //
 //   - Pad is the padding the zero-copy script needs to sit exactly on a
@@ -52,7 +52,7 @@ import (
 // will not take it at all.  Measured on Agni 2026-08-03, 256 copies of
 // the reference shape compiled and then collided stack with heap, and
 // 512 were refused outright.  A caller that backs off differently for
-// the two -- autobench's runShrink does -- cannot be tested against a
+// the two -- slbench's runShrink does -- cannot be tested against a
 // model that only has one.
 type Memory struct {
 	Pad      int
@@ -77,7 +77,7 @@ type Memory struct {
 	Block  int
 }
 
-// The model's defaults, which are autobench's constants.  5412 is a
+// The model's defaults, which are slbench's constants.  5412 is a
 // value that has been seen live, 512 is the block llGetUsedMemory
 // reports in, and 64KB is what a Mono script has -- so a caller that
 // names none of them gets a staircase whose refusal falls roughly where
@@ -139,7 +139,7 @@ func (m Memory) refuses(cnt, pad int) (string, bool) {
 		return "", false
 	}
 	if r := m.Reading(cnt, pad); r > f.Limit {
-		// Worded like autobench's own model message, so a person reading
+		// Worded like slbench's own model message, so a person reading
 		// a failing test sees the same sentence either side of the seam.
 		return fmt.Sprintf("model: %d copies at pad %d would use %d bytes, over the %d-byte limit",
 			cnt, pad, r, f.Limit), true
@@ -154,10 +154,10 @@ func (m Memory) collides(cnt, pad int) bool {
 // harnessCall reads the copy count and the pad back out of a rendered
 // benchmark script.
 //
-// autobench's buildScript writes both into a COMMENT, so a backend knows
+// slbench's buildScript writes both into a COMMENT, so a backend knows
 // what it is being asked to run without being told separately -- and a
 // script whose line went missing is a script the benchmark could not
-// read the answer from either.  cmd/autobench's protocol-level fake
+// read the answer from either.  cmd/slbench's protocol-level fake
 // matches on the same line for the same reason; the convention is the
 // script's, not either fake's.
 //
@@ -167,7 +167,7 @@ func (m Memory) collides(cnt, pad int) bool {
 // carried in the script without the digits of either changing what is
 // being measured.  They used to go into the harness call as integer
 // literals, where their SIZE varied with their value.
-var harnessCall = regexp.MustCompile(`(?m)^// autobench cnt=(\d+) pad=(-?\d+)$`)
+var harnessCall = regexp.MustCompile(`(?m)^// slbench cnt=(\d+) pad=(-?\d+)$`)
 
 // Harness is the copy count and padding a benchmark script announces in
 // its source, and whether it announced any.
@@ -182,7 +182,7 @@ func Harness(src string) (cnt, pad int, ok bool) {
 }
 
 // transcript is the benchmark script speaking: the same label in the
-// same place as the harness in cmd/autobench, because the caller parses
+// same place as the harness in cmd/slbench, because the caller parses
 // it and a transcript that differed would be testing the parser against
 // itself.
 //
@@ -200,7 +200,7 @@ func (m Memory) transcript(cnt, pad, mem int, done string) []string {
 }
 
 // says matches an LSL call that makes the object speak, so that a script
-// that is not a benchmark -- automate runs arbitrary ones -- still says
+// that is not a benchmark -- slrun runs arbitrary ones -- still says
 // what it was written to say.
 //
 // It is a regexp over the source and not a compiler: it finds a single

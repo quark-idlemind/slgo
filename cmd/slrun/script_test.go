@@ -1,10 +1,10 @@
 package main
 
-// automate against a backend that is not Second Life.
+// slrun against a backend that is not Second Life.
 //
 // scripttest answers the contract offline: a pool with leases, a compiler
 // with opinions, and a script that says what its source says it says.
-// What is checked through it is what automate does with what it is told --
+// What is checked through it is what slrun does with what it is told --
 // which lines it prints, what it makes of a refusal, whether it gives its
 // object back -- and never what Second Life would have said.
 //
@@ -78,7 +78,7 @@ func heldGroups(t *testing.T, c scriptv1.RunnerClient) int {
 }
 
 // TestABackendPrintsWhatTheScriptSaidAndNotTheSentinel: the contract
-// streams the lines as the object says them, which is what automate's
+// streams the lines as the object says them, which is what slrun's
 // output is -- one line per line, tagged with the script that said it.
 // The sentinel is the script talking to us rather than to the person
 // reading, so it is not among them.
@@ -172,7 +172,7 @@ func TestALineThroughABackendIsPrintedBeforeTheRunHasEnded(t *testing.T) {
 }
 
 // TestSeveralScriptsTakeOneObjectAndASingleScriptTakesNone: the contract
-// offers two ways of saying where, and automate picks between them by
+// offers two ways of saying where, and slrun picks between them by
 // whether it has more than one script.  Several run in the order they
 // were named and one that leaves something behind for the next has to
 // find it there, so those hold an object; a single script needs nothing
@@ -248,8 +248,8 @@ func TestAScriptABackendWillNotCompileIsAFailedRun(t *testing.T) {
 	if err := os.WriteFile(path, []byte(speaks), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	os.Args = []string{"automate", "--backend", addr.String(), path}
-	t.Cleanup(func() { os.Args = []string{"automate"} })
+	os.Args = []string{"slrun", "--backend", addr.String(), path}
+	t.Cleanup(func() { os.Args = []string{"slrun"} })
 
 	var runErr error
 	got := stdoutOf(t, func() { runErr = run() })

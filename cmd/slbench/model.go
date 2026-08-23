@@ -50,7 +50,7 @@ import (
 // is the whole point of being able to run this offline.
 func openModel(m scripttest.Memory, targets int) (backend, error) {
 	s := scripttest.New(scripttest.Options{
-		Backend: "autobench --test",
+		Backend: "slbench --test",
 		Memory:  m,
 		// One group of exactly what was asked for.  There is no queue to
 		// model: this backend serves one caller, which is us.
@@ -58,7 +58,7 @@ func openModel(m scripttest.Memory, targets int) (backend, error) {
 	})
 	// No agent: the model has one and made the name up, so asking for a
 	// particular avatar would be asking a question it cannot answer.
-	r, err := openScript(context.Background(), s.Direct(), targets, "", "autobench --test", false)
+	r, err := openScript(context.Background(), s.Direct(), targets, "", "slbench --test", false)
 	if err != nil {
 		s.Stop()
 		return nil, err

@@ -9,7 +9,7 @@ From then on slgod is a simulator to the viewer and a client to the
 simulator, and relays between them.
 
 The point is not a proxy. It is that the avatar never logs in twice, so
-the session `automate` is driving and the session the viewer is showing
+the session `slrun` is driving and the session the viewer is showing
 are the same session.
 
 ## Effort
@@ -275,7 +275,7 @@ these has to happen:
    user actually works in, so it tests the protocol and not the workflow.
 3. **Another OpenSim-capable viewer** -- Alchemy, Kokua, Singularity.
 
-Option 1 is the one to take: the end goal is watching `automate` from
+Option 1 is the one to take: the end goal is watching `slrun` from
 the viewer the user already lives in, and only the OpenSim build of that
 viewer can be pointed at slgod.
 
@@ -727,7 +727,7 @@ populated. Read the chat log for anything the viewer complained about.
 
 # Stage 6 -- the viewer sees what automation does
 
-**Goal.** Run an `automate` script and watch the result appear.
+**Goal.** Run an `slrun` script and watch the result appear.
 
 **Files.** None expected.
 
@@ -741,7 +741,7 @@ shows.
 
 **Verification.** With the viewer attached:
 
-    /Users/quark/bin/automate --agent holt-beta rez-and-say.lsl
+    /Users/quark/bin/slrun --agent holt-beta rez-and-say.lsl
 
 Expect the prim to appear in the viewer within a second or two and its
 `llSay` to appear in local chat. Screenshot both. Then the reverse: rez
@@ -783,7 +783,7 @@ there, exactly as it does for a gRPC client.
 
 **Verification.** `curl "http://localhost:<beta-port>/clicktext?grep=<object
 name>"` to touch a scripted prim; expect its reply in local chat in the
-viewer *and* in `automate`'s output from the same session -- one session,
+viewer *and* in `slrun`'s output from the same session -- one session,
 two witnesses. Then type in local chat via `/paste` and check the message
 arrives at a second avatar. Then move a prim with the build tools and
 confirm `slsh objects` reports the new position.
@@ -817,7 +817,7 @@ now live under `agent/`.
 
 **Verification.** Bring a viewer session up, use it, quit Firestorm
 normally, and confirm from `slsh status holt-beta` that the session
-is still up, the draw distance is back to slgod's, and `automate` still
+is still up, the draw distance is back to slgod's, and `slrun` still
 runs. Then repeat with the window force-quit rather than logged out.
 
 ---

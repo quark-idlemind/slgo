@@ -6,7 +6,7 @@ package session
 // function of an sl.Backend -- so a fake backend is the difference
 // between testing this package and testing its arithmetic.  Without one
 // a test can reach AutoName and the lock names and nothing else, which
-// is why the whole of it was only ever exercised by autobench against a
+// is why the whole of it was only ever exercised by slbench against a
 // live avatar.
 //
 // There are two fakes and they are not the same thing.  fakeGrid is an

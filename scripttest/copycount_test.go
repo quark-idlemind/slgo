@@ -1,8 +1,8 @@
 package scripttest_test
 
-// An autobench-shaped measurement, driven through the contract.
+// An slbench-shaped measurement, driven through the contract.
 //
-// This is the demonstration the backend exists for.  autobench's
+// This is the demonstration the backend exists for.  slbench's
 // measurement machinery -- find the pad at which the base script sits on
 // a block boundary, probe upward for a copy count whose memory delta
 // registers, estimate how many copies fit in the memory a script has,
@@ -10,7 +10,7 @@ package scripttest_test
 // until now the only way to exercise it offline was --test, which
 // answers ABOVE the transport and so tests none of it.
 //
-// The search below is a small reimplementation rather than autobench's
+// The search below is a small reimplementation rather than slbench's
 // own code, on purpose.  Sharing the code would prove only that it
 // agrees with itself; writing it again against nothing but the gRPC
 // contract is what shows the contract carries what a measurement needs:
@@ -36,7 +36,7 @@ import (
 	"github.com/quark-idlemind/slgo/scripttest"
 )
 
-// The constants the search works in, which are autobench's.
+// The constants the search works in, which are slbench's.
 const (
 	blockSize = 512
 	minpad    = 5
@@ -49,7 +49,7 @@ const (
 // results is one reading and what this search makes of it.
 //
 // The script says the reading and nothing else; size is worked out here,
-// as it is in cmd/autobench.  It used to come back from the script,
+// as it is in cmd/slbench.  It used to come back from the script,
 // which divided against a base its object held in linkset data -- so
 // this had to model that too, and did.
 type results struct {
@@ -88,7 +88,7 @@ func newBench(t *testing.T, o scripttest.Options) (*bench, func()) {
 	// One lease for the whole benchmark, because the base reading
 	// travels from the cnt=0 script to the cnt>0 ones inside the object.
 	// A second caller in there would be read as our own base.
-	g, done := lease(t, c, &scriptv1.LeaseRequest{Who: "autobench copy-count"})
+	g, done := lease(t, c, &scriptv1.LeaseRequest{Who: "slbench copy-count"})
 	return &bench{
 		t: t, c: c, target: g.GetTargets()[0].GetId(),
 		cache: map[[2]int]results{},
@@ -105,7 +105,7 @@ func (b *bench) run(cnt, pad int) (results, error) {
 	b.runs++
 
 	stream, err := b.c.Run(context.Background(), &scriptv1.RunRequest{
-		Target: b.target, Name: "autobench", Source: benchScript(cnt, pad),
+		Target: b.target, Name: "slbench", Source: benchScript(cnt, pad),
 		Done: "DONE", TimeoutSeconds: 5,
 	})
 	if err != nil {
@@ -202,7 +202,7 @@ func (b *bench) shrink(cnt, pad int, base int) (int, results) {
 // is where the step falls.
 //
 // A bisection, which is exact here because the reading only ever grows
-// with the pad.  autobench walks linearly from where its bisection left
+// with the pad.  slbench walks linearly from where its bisection left
 // off and then confirms the answer twice, because live an instrument can
 // answer differently to the same question; that is a property of
 // llGetUsedMemory rather than of the search, and this model does not

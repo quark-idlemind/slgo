@@ -8,7 +8,7 @@ package main
 // whether it faulted and whether it got to the end -- the eLSL simulator
 // with no grid at all, a viewer driven from outside, a daemon holding a
 // real session, or the offline model in scripttest.  This is the one
-// piece of autobench that knows the contract, and it is a backend like
+// piece of slbench that knows the contract, and it is a backend like
 // runner.go: everything above backend.go is unchanged by which of them
 // is in use.
 //
@@ -17,7 +17,7 @@ package main
 // The RESULT:/INFO: convention and absorbResults.  Nothing about running
 // a script requires a script to label its output; that is this program's
 // arrangement with the harness it generates, and putting it in the
-// contract would make every backend implement a convention only autobench
+// contract would make every backend implement a convention only slbench
 // has.  So the transport hands back lines and sift applies the rules.
 //
 // # What crosses it that used to be guessed
@@ -103,7 +103,7 @@ func openBackend(addr string, targets int) (backend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dialling the backend at %s: %w", addr, err)
 	}
-	who := "autobench"
+	who := "slbench"
 	// Announced, unlike the offline model: a real backend may hold
 	// several avatars' objects and chose one for us, and a reading is
 	// only comparable with another from the same avatar.

@@ -607,10 +607,10 @@ func TestAutoCountsWhatIsWornAndSaysWhatThatBuys(t *testing.T) {
 // than doing half the work and finding out.
 func TestAutoWillNotRearrangeObjectsUnderARunningBenchmark(t *testing.T) {
 	x := newTestShell(t)
-	x.grid.lockedBy = "autobench"
+	x.grid.lockedBy = "slbench"
 
 	got := x.do(t, "auto -n 4")
-	if !strings.Contains(got, "in use by autobench") {
+	if !strings.Contains(got, "in use by slbench") {
 		t.Errorf("auto -n should say who has the objects, got %q", got)
 	}
 	if !strings.Contains(got, "cannot be done under a running benchmark") {
@@ -800,10 +800,10 @@ func TestLogoutSaysItWillStayOut(t *testing.T) {
 // which is the one place they survive next to a refusal.
 func TestLogoutRefusalNamesWhoIsUsingIt(t *testing.T) {
 	x, d := newDaemonShell(t)
-	d.logout = &pb.LogoutResponse{Clients: []string{"autobench", "slsh"}}
-	d.fail = errors.New("first is in use by autobench, slsh; use force to log out anyway")
+	d.logout = &pb.LogoutResponse{Clients: []string{"slbench", "slsh"}}
+	d.fail = errors.New("first is in use by slbench, slsh; use force to log out anyway")
 
-	if got := x.do(t, "logout first"); !strings.Contains(got, "attached: autobench, slsh") {
+	if got := x.do(t, "logout first"); !strings.Contains(got, "attached: slbench, slsh") {
 		t.Errorf("the refusal should name who is using it, got %q", got)
 	}
 }

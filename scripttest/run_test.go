@@ -25,7 +25,7 @@ func TestARunSaysCompiledFirstAndFinishedExactlyOnceAtTheEnd(t *testing.T) {
 		_, c := serve(t, r, scripttest.Options{Memory: scripttest.Memory{Pad: 137, CodeSize: 340}})
 
 		tr, err := collect(t, c, &scriptv1.RunRequest{
-			Source: benchScript(4, 137), Done: "DONE", Name: "autobench",
+			Source: benchScript(4, 137), Done: "DONE", Name: "slbench",
 		})
 		if err != nil {
 			t.Fatalf("Run: %v", err)
@@ -134,7 +134,7 @@ func TestAFaultEndsTheRunUnlessTheCallerSaysToIgnoreIt(t *testing.T) {
 		s.SetBehaviour("", scripttest.Behaviour{Fault: "Math Error"})
 
 		tr, err := collect(t, c, &scriptv1.RunRequest{
-			Source: benchScript(1, 137), Done: "DONE", Name: "autobench",
+			Source: benchScript(1, 137), Done: "DONE", Name: "slbench",
 		})
 		if err != nil {
 			t.Fatalf("Run: %v", err)
@@ -142,7 +142,7 @@ func TestAFaultEndsTheRunUnlessTheCallerSaysToIgnoreIt(t *testing.T) {
 		if len(tr.faults) != 1 {
 			t.Fatalf("%d faults, want one", len(tr.faults))
 		}
-		if tr.faults[0].GetScript() != "autobench" {
+		if tr.faults[0].GetScript() != "slbench" {
 			t.Errorf("the fault blames %q, want the script that was sent", tr.faults[0].GetScript())
 		}
 		if len(tr.lines) != 0 {
@@ -325,7 +325,7 @@ func TestATargetFromAnEndedLeaseNamesNothing(t *testing.T) {
 // TestARunWithNoTargetTakesOneAndGivesItBack is the whole of what a
 // one-off script needs, and it saves a caller holding a lease stream to
 // run a single script.  Not giving the object back would empty the pool
-// one automate run at a time.
+// one slrun run at a time.
 func TestARunWithNoTargetTakesOneAndGivesItBack(t *testing.T) {
 	bothWays(t, func(t *testing.T, r reach) {
 		_, c := serve(t, r, scripttest.Options{})
@@ -350,7 +350,7 @@ func TestARunWithNoTargetTakesOneAndGivesItBack(t *testing.T) {
 }
 
 // TestCancellingTheCallStopsTheRun. A caller that has seen enough --
-// automate interrupted, a benchmark that gave up -- stops reading, and
+// slrun interrupted, a benchmark that gave up -- stops reading, and
 // the backend has to notice rather than go on delivering to nobody.
 //
 // On the wire only, and this one is worth being exact about.  What is
@@ -414,7 +414,7 @@ func said(t *testing.T, tr *transcript, label string) int {
 // reference script at pad 602 read 6436 where it reads 5924 every other
 // time.  A caller's padding search is a chain of comparisons between
 // readings, so one bad reading looks precisely like the memory having
-// grown; autobench confirms a crossing by re-reading it for exactly that
+// grown; slbench confirms a crossing by re-reading it for exactly that
 // reason.  Without a hook here the contract cannot present the event at
 // all -- it cannot be provoked live to order -- and the code written to
 // survive it is unreachable from the caller's side of the seam.

@@ -211,7 +211,7 @@ func (f *fakeGrid) mem(cnt, pad int) int {
 // knows what it is being asked to run without being told separately --
 // and a script whose harness call went missing would be a script the
 // benchmark could not read either.
-var harnessCall = regexp.MustCompile(`(?m)^// autobench cnt=(\d+) pad=(-?\d+)$`)
+var harnessCall = regexp.MustCompile(`(?m)^// slbench cnt=(\d+) pad=(-?\d+)$`)
 
 func (f *fakeGrid) readHarness(src string) (cnt, pad int, ok bool) {
 	m := harnessCall.FindStringSubmatch(src)

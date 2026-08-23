@@ -7,7 +7,7 @@ the reason it went is the useful part.
 
 ## What is being shared, and why it needs sharing
 
-`automate` and `autobench` run LSL by putting a script into an object and
+`slrun` and `slbench` run LSL by putting a script into an object and
 listening to what it says. The objects are worn and kept rather than
 rezzed per run, because installing a script into an object that has never
 held one costs about 8.1 seconds where replacing one already there costs
@@ -97,7 +97,7 @@ standing between two callers.
 
 Before this, the clients did the deciding themselves: a lock per group of
 four objects, taken whole. Four was never a fact about the pool — it is
-what `autobench`'s search uses, three readings alongside the object being
+what `slbench`'s search uses, three readings alongside the object being
 measured — and it became the unit of everything. A caller wanting six had
 to hold eight; one wanting twelve could not be served at all.
 
@@ -125,7 +125,7 @@ stops them: installing over a name destroys what was there, measured.
 
 It is `--clear` and off, because the cost is certain and the hazard is
 not. Installing under a name already destroys that name's script, so the
-previous run — nearly always another `automate` — stops the moment this
+previous run — nearly always another `slrun` — stops the moment this
 one starts. What is left is a script under a DIFFERENT name that goes on
 talking after it has finished, and neither program that shares these
 objects writes one: both say their piece from `state_entry` and fall
@@ -169,7 +169,7 @@ first and fills one avatar before touching the next, and that is fine.
 	--clear on, thirty at once        a failure every run, five runs
 
 Clearing the pool objects is two uploads apiece, because each holds both
-an `automate` and an `autobench` script from having been copied. Thirty
+an `slrun` and an `slbench` script from having been copied. Thirty
 scripts meant about ninety uploads rather than thirty. Peak concurrency
 was the same either way — clearing does an object's scripts one at a time
 — so what broke was the volume and how long it was sustained, not the
@@ -213,7 +213,7 @@ too. Neither is a way to make the compiler complain.
   caller that no longer holds it, which would turn an overrun from a
   silent collision into a loud refusal. Described above; not built.
 
-- **`autobench` takes its objects from one avatar**, and that is
+- **`slbench` takes its objects from one avatar**, and that is
   plumbing rather than measurement: `runner` holds a single session and
   sends every script through it. What the objects share is the base
   reading in the measured object's own linkset data, which the spares

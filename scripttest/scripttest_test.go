@@ -7,7 +7,7 @@ package scripttest_test
 // share, and that a run says Compiled once, Finished once, and nothing
 // after it.  These are the contract in practice.  A second backend --
 // the simulator, a viewer -- that disagrees with them disagrees with
-// autobench, and this file is the cheapest place to find that out.
+// slbench, and this file is the cheapest place to find that out.
 //
 // There are two ways to reach the backend and most of these tests are
 // run BOTH ways, by bothWays below.  Pipe is a real connection --
@@ -18,7 +18,7 @@ package scripttest_test
 // that run scripts by the hundred thousand use.  The two are meant to be
 // indistinguishable from the caller's side, and a test that passes one
 // way and fails the other is a divergence worth failing the build over
-// rather than discovering later in autobench.
+// rather than discovering later in slbench.
 //
 // The two exceptions are named where they are: a caller that DIES needs
 // a connection to lose, and a caller that cancels PART WAY THROUGH a run
@@ -152,13 +152,13 @@ func held(t *testing.T, c scriptv1.RunnerClient) int {
 	return n
 }
 
-// benchScript is a benchmark script as autobench renders one: the copy
+// benchScript is a benchmark script as slbench renders one: the copy
 // count and the pad are in a comment, which is where this backend reads
 // them from and where the real script carries them.  A comment because a
 // comment is free -- measured, 604 bytes of one moved llGetUsedMemory
 // not at all -- so the digits cannot change what is being measured.
 func benchScript(cnt, pad int) string {
-	return fmt.Sprintf("// autobench cnt=%d pad=%d\n"+
+	return fmt.Sprintf("// slbench cnt=%d pad=%d\n"+
 		"default {\n\tstate_entry() {\n"+
 		"\t\tinteger mem = llGetUsedMemory();\n"+
 		"\t\tllOwnerSay(\"RESULT:MEM=\" + (string)mem);\n"+

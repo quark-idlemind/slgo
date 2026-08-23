@@ -7,7 +7,7 @@
 // Package script.v1 is how a program that wants LSL run asks something
 // else to run it.
 //
-// The programs are automate and autobench: they write a script, put it
+// The programs are slrun and slbench: they write a script, put it
 // somewhere it can run, watch what it says, and want to know whether it
 // compiled, whether it faulted and whether it got to the end.  None of
 // that is particular to Second Life.  The same script can be run by the

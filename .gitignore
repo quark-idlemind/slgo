@@ -4,8 +4,8 @@
 /cmd/*/slgo-*
 /cmd/*/slgod
 /cmd/*/slsh
-/cmd/*/automate
-/cmd/*/autobench
+/cmd/*/slrun
+/cmd/*/slbench
 /cmd/*/msggen
 /msggen
 
@@ -16,12 +16,21 @@
 # months -- 36 MB of them -- because neither list had heard of them.
 /slsh
 /slgod
-/automate
-/autobench
+/slrun
+/slbench
 /msggen
 /slgo
 /slgo-multiattach
 /slchat
+
+# slrun and slbench were automate and autobench until 2026-08-22.  A
+# checkout from before the rename has their binaries in it, and taking
+# the old names off this list un-ignored them: the check refused the
+# rename itself because of two sitting here.  They stay.
+/automate
+/autobench
+/cmd/*/automate
+/cmd/*/autobench
 
 # Linden Lab's message template.  msggen fetches it; a copy pulled down
 # for offline work is theirs and does not belong in this repository.

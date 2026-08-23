@@ -241,7 +241,7 @@ func (sh *Shell) entriesAt(ctx context.Context, path string) ([]sl.Entry, error)
 //
 // That is for ls, which prints a whole path for each line and so needs
 // to know what to put in front of the names: a listing of four items
-// called "autobench" is four paths that differ only in the id and the
+// called "slbench" is four paths that differ only in the id and the
 // date beside them, and a path that is short by its folder would not be
 // one that could be typed back in.
 //
@@ -462,7 +462,7 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 //
 // A path that names items is the answer to a question the columns
 // otherwise refuse to answer.  Names are not unique, so /Scripts holding
-// four things called "autobench" lists as four lines that differ only in
+// four things called "slbench" lists as four lines that differ only in
 // the id and the date -- and there was no way to ask about just those
 // four without reading a whole folder and picking them out by eye.  It
 // is also how ls of a file reads in any shell, and it is what rm's

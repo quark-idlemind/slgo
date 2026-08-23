@@ -1,6 +1,6 @@
 package main
 
-// automate is one contract with a script -- it says DONE when it has
+// slrun is one contract with a script -- it says DONE when it has
 // finished -- and a handful of decisions about what to do when it does
 // not.  Every one of those decisions is invisible from the outside except
 // as an exit status and some lines on stdout, which is exactly why they
@@ -48,7 +48,7 @@ func reset(t *testing.T) {
 	})
 }
 
-// stdoutOf collects what a call printed.  automate's whole output is
+// stdoutOf collects what a call printed.  slrun's whole output is
 // stdout, one line per line the script said, so this is how what a person
 // would have seen is read back.
 func stdoutOf(t *testing.T, fn func()) string {
@@ -277,8 +277,8 @@ func (errCircuitGone) Error() string { return "the circuit is gone" }
 // scripts at all is the same rule taken to its end.
 func TestNothingToRunIsAUsageErrorAndNotASession(t *testing.T) {
 	reset(t)
-	os.Args = []string{"automate"}
-	t.Cleanup(func() { os.Args = []string{"automate"} })
+	os.Args = []string{"slrun"}
+	t.Cleanup(func() { os.Args = []string{"slrun"} })
 
 	err := run()
 	if err == nil {
@@ -304,8 +304,8 @@ func TestAFileThatIsNotThereIsFoundBeforeTheLogin(t *testing.T) {
 	if err := os.WriteFile(good, []byte("default {}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	os.Args = []string{"automate", good, filepath.Join(dir, "missing.lsl")}
-	t.Cleanup(func() { os.Args = []string{"automate"} })
+	os.Args = []string{"slrun", good, filepath.Join(dir, "missing.lsl")}
+	t.Cleanup(func() { os.Args = []string{"slrun"} })
 
 	err := run()
 	if err == nil {
@@ -321,8 +321,8 @@ func TestAFileThatIsNotThereIsFoundBeforeTheLogin(t *testing.T) {
 // that says something went wrong.
 func TestHelpIsAnAnswerAndNotAFailure(t *testing.T) {
 	reset(t)
-	os.Args = []string{"automate", "--help"}
-	t.Cleanup(func() { os.Args = []string{"automate"} })
+	os.Args = []string{"slrun", "--help"}
+	t.Cleanup(func() { os.Args = []string{"slrun"} })
 
 	var err error
 	got := stdoutOf(t, func() { err = run() })
@@ -348,7 +348,7 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsSent(t *testing.T) {
 
 	// Port 1 on loopback: nothing is listening, so the dial fails without
 	// anything being asked of the network this machine is on.
-	opts := session.Options{Addr: "127.0.0.1:1", Channel: "automate"}
+	opts := session.Options{Addr: "127.0.0.1:1", Channel: "slrun"}
 
 	flags.Object = "workbench"
 	if _, _, err := runIn(context.Background(), opts, 1); err == nil {
@@ -381,8 +381,8 @@ func TestARunThatCannotStartIsStillAFailedRun(t *testing.T) {
 	if err := os.WriteFile(path, []byte("default {}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	os.Args = []string{"automate", "--addr", "127.0.0.1:1", "--object", "workbench", path}
-	t.Cleanup(func() { os.Args = []string{"automate"} })
+	os.Args = []string{"slrun", "--addr", "127.0.0.1:1", "--object", "workbench", path}
+	t.Cleanup(func() { os.Args = []string{"slrun"} })
 
 	if err := run(); err == nil {
 		t.Error("run reported success without a session")
@@ -395,8 +395,8 @@ func TestARunThatCannotStartIsStillAFailedRun(t *testing.T) {
 // driving this no way to tell without scraping stdout.
 func TestTheProgramLeavesQuietlyWhenThereIsNothingWrong(t *testing.T) {
 	reset(t)
-	os.Args = []string{"automate", "--help"}
-	t.Cleanup(func() { os.Args = []string{"automate"} })
+	os.Args = []string{"slrun", "--help"}
+	t.Cleanup(func() { os.Args = []string{"slrun"} })
 
 	if got := stdoutOf(t, main); !strings.Contains(got, "--done") {
 		t.Errorf("--help did not print the usage:\n%s", got)
@@ -698,7 +698,7 @@ func TestOneObjectIsOnePlaceAndJobsCannotConjureMore(t *testing.T) {
 	reset(t)
 	// Nothing is dialled: the refusal is decided before anything
 	// connects, which is also why this can be tested at all.
-	opts := session.Options{Addr: "127.0.0.1:1", Channel: "automate"}
+	opts := session.Options{Addr: "127.0.0.1:1", Channel: "slrun"}
 	flags.Jobs = 4
 
 	flags.Object = "workbench"
@@ -724,7 +724,7 @@ func TestOneObjectIsOnePlaceAndJobsCannotConjureMore(t *testing.T) {
 // refusal comes from where that count is rather than from here.
 func TestMoreJobsThanTheNamedAvatarHasIsRefused(t *testing.T) {
 	reset(t)
-	opts := session.Options{Addr: "127.0.0.1:1", Channel: "automate"}
+	opts := session.Options{Addr: "127.0.0.1:1", Channel: "slrun"}
 	flags.Agent = "quark"
 	flags.Jobs = session.AutoPool() + 1
 

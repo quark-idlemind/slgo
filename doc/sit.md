@@ -202,7 +202,7 @@ The object sit still needs nothing new: `AgentRequestSit` goes through
 
 `AvatarAnimation` is needed and it is chatty: every avatar in range,
 every three seconds, in full. Adding it to `sl.Subscriptions` makes
-every client pay for it forever, including `automate` and `autobench`,
+every client pay for it forever, including `slrun` and `slbench`,
 which is the same objection that made neighbours an option.
 
 So it is subscribed for the duration of the command and dropped again,

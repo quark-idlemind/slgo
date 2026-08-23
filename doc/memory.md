@@ -1,7 +1,7 @@
 # How Second Life allocates script memory
 
 What `llGetUsedMemory` actually reports, measured against Agni on
-2026-08-08. This is what `autobench` is working around; the tool itself
+2026-08-08. This is what `slbench` is working around; the tool itself
 is described in [the guide](guide.md).
 
 Everything below is a measurement unless it says otherwise. Where a
@@ -534,11 +534,11 @@ measured slower overall.
 
 ### What is not measured here
 
-Twelve was where the measurements above stopped, because `autobench`
+Twelve was where the measurements above stopped, because `slbench`
 took its objects from a single avatar and an avatar has twelve. It does
 not any more: it asks the pool for N places and takes them wherever they
 are, several avatars at a time, holding a session per object the way
-`automate` does (see [slots.md](slots.md)). Naming an avatar still gets
+`slrun` does (see [slots.md](slots.md)). Naming an avatar still gets
 that avatar's, because that is then something a person asked for rather
 than something the program assumed.
 
@@ -607,7 +607,7 @@ expressible, and a padding is a number inside the block it describes.
 
 ## Method, and what it does not cover
 
-Every figure was taken with `autobench` against Agni on 2026-08-08,
+Every figure was taken with `slbench` against Agni on 2026-08-08,
 using three avatars in parallel and `--no-cache` so each measurement
 included its own padding search. Paddings were found independently and
 agreed: eight separate searches on the unmodified base script all
@@ -626,7 +626,7 @@ Not covered, and worth knowing:
   these figures were taken before the change either way.
 - **The compile ceiling.** A base script with 9000 bytes of preamble was
   refused with "Internal server compile error", as was a padding of
-  2009. The practical limit is lower than the 62KB `autobench` assumes
+  2009. The practical limit is lower than the 62KB `slbench` assumes
   when estimating a copy count.
 - **Why a returned value costs a library call 28 bytes more than a user
   call.** One matched pair, measured once.

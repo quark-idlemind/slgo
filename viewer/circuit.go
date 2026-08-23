@@ -31,7 +31,7 @@ const PresenceLease = 3 * time.Second
 // hand-off happens on the grid session's dispatch goroutine, so a viewer
 // that cannot keep up -- or a socket that has stopped draining -- would
 // otherwise stall the session itself: no more object updates, no more
-// chat, automate wedged, and all of it caused by a window somebody left
+// chat, slrun wedged, and all of it caused by a window somebody left
 // open.  A viewer missing a few updates is a viewer that redraws
 // something late.  A stalled session is the avatar gone.
 const Backlog = 2048
@@ -303,7 +303,7 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 	case "LogoutRequest":
 		// The one that matters most.  Forwarded, it would end the
 		// grid session the moment somebody closed the viewer --
-		// taking automate, every attached client and the avatar
+		// taking slrun, every attached client and the avatar
 		// with it.
 		c.record(FromViewer, p, Absorbed)
 		c.sendLogoutReply()

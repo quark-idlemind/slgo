@@ -17,7 +17,7 @@ package main
 // that made one object special, and one avatar enough.  The script
 // reports one number now and the arithmetic is done here, so a reading
 // is a reading wherever it was taken -- and what a benchmark asks for is
-// N places to run scripts, exactly as automate does.
+// N places to run scripts, exactly as slrun does.
 
 import (
 	"context"
@@ -32,7 +32,7 @@ import (
 // object with numbered copies -- and it is what a run-time error names,
 // which is how a fault is attributed to us and not to whatever else the
 // object may be running.
-const scriptName = "autobench"
+const scriptName = "slbench"
 
 var _ backend = (*runner)(nil)
 
@@ -56,7 +56,7 @@ type runner struct {
 	Timeout time.Duration
 
 	// Info surfaces lines containing "INFO:" separately from the rest,
-	// matching autobench's convention for out-of-band commentary.
+	// matching slbench's convention for out-of-band commentary.
 	Info bool
 
 	// cleanup undoes whatever getting the object took.

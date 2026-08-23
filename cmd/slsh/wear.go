@@ -7,7 +7,7 @@ package main
 //
 // These finish what "worn" started.  Listing the attachments has been
 // possible since there was a shell, and changing them has been possible
-// in the sl package for just as long -- autobench has been hanging HUDs
+// in the sl package for just as long -- slbench has been hanging HUDs
 // on an avatar with Wear and TakeOff all along -- so the only thing
 // missing was a way to ask for it from the prompt.
 //
@@ -88,7 +88,7 @@ package main
 // The other half of that is what it leaves alone.  sl.Wear's other
 // callers, EnsureAttached and Worn, pass a bare point and are untouched
 // by any of this; they take a HUD off and put it straight back on for
-// autobench, and a default that had quietly started adding would leave
+// slbench, and a default that had quietly started adding would leave
 // a second copy behind on every run.
 //
 // # The same item twice

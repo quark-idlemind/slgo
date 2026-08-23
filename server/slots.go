@@ -5,7 +5,7 @@ package server
 // # What is being shared
 //
 // Every hosted avatar wears a set of objects that programs run scripts
-// in -- automate one per script it runs at once, autobench four for its
+// in -- slrun one per script it runs at once, slbench four for its
 // search.  Two runs in one object overwrite each other's script and each
 // other's data, and both report success, so the objects have to be
 // handed out.

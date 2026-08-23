@@ -143,7 +143,7 @@ func (f *Fault) String() string {
 // The rule lives here because the words are Second Life's -- "Stack-Heap
 // Collision" is its phrase, not ours -- and this package is where the
 // grid's vocabulary is already read.  It was a string match inside
-// autobench before, which meant a program about measuring LSL had to
+// slbench before, which meant a program about measuring LSL had to
 // know how a simulator words a crash.
 func (f *Fault) OutOfMemory() bool {
 	return strings.Contains(f.Reason, "Stack-Heap")

@@ -540,7 +540,7 @@ const animationRelay = "AvatarAnimation"
 // AvatarAnimation is the only evidence a ground sit or a stand from one
 // ever produced, and it is expensive to keep: it arrives for every
 // avatar in range, in full, about every three seconds.  Putting it in
-// Subscriptions would charge that to automate and autobench for ever,
+// Subscriptions would charge that to slrun and slbench for ever,
 // for something neither of them will ever read -- the same objection
 // that made neighbouring circuits an option rather than a default.
 //

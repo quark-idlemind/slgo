@@ -20,7 +20,7 @@ This is the plan for holding them.
 
 Neighbours cost sockets, bandwidth and object memory, multiplied by
 however many regions surround this one -- four for Pelmar Reach, up to
-eight elsewhere. A daemon running `automate` in one region wants none of
+eight elsewhere. A daemon running `slrun` in one region wants none of
 that, and the whole design so far has been one region at a time on
 purpose.
 

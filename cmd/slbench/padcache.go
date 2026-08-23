@@ -74,7 +74,7 @@ func padCachePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "autobench-padding"), nil
+	return filepath.Join(dir, "slbench-padding"), nil
 }
 
 // loadPadCache reads what has been remembered.  A missing or unreadable
@@ -127,7 +127,7 @@ func savePadCache(m map[string]padEntry) {
 	}
 
 	var b strings.Builder
-	b.WriteString("# autobench: base script hash, padding, base memory\n")
+	b.WriteString("# slbench: base script hash, padding, base memory\n")
 	for k, e := range m {
 		fmt.Fprintf(&b, "%s %d %d\n", k, e.Padding, e.BaseMem)
 	}

@@ -2,9 +2,9 @@ package main
 
 // A whole run of the program, over a daemon that is not there.
 //
-// main_test.go can reach everything automate decides ABOUT a script,
+// main_test.go can reach everything slrun decides ABOUT a script,
 // because that is a function of a session and a session can be faked at
-// the backend.  What it cannot reach is how automate gets one: both ways
+// the backend.  What it cannot reach is how slrun gets one: both ways
 // of finding somewhere to run -- the shared auto object, and an object
 // named on the command line -- go through session.Connect, which DIALS
 // slgod.  There is no seam there and there should not be one: dialling
@@ -454,12 +454,12 @@ func (d *fakeDaemon) Cap(ctx context.Context, r *pb.CapRequest) (*pb.CapResponse
 // own behind would be the next test's command line.
 func commandLine(t *testing.T, args ...string) {
 	t.Helper()
-	os.Args = append([]string{"automate"}, args...)
-	t.Cleanup(func() { os.Args = []string{"automate"} })
+	os.Args = append([]string{"slrun"}, args...)
+	t.Cleanup(func() { os.Args = []string{"slrun"} })
 }
 
 // script writes one to a file of the test's own and answers with the
-// path, which is what automate takes on its command line.
+// path, which is what slrun takes on its command line.
 func script(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "a.lsl")
@@ -469,7 +469,7 @@ func script(t *testing.T, body string) string {
 	return path
 }
 
-// bothOf collects what a call printed on each stream.  automate's result
+// bothOf collects what a call printed on each stream.  slrun's result
 // is stdout, one line per line the script said; standard error is where
 // it says which avatar it chose, which is a remark and not a result, and
 // keeping them apart is what makes that distinction testable.
@@ -591,7 +591,7 @@ func TestAnObjectThatIsNotThereClosesTheSessionItOpened(t *testing.T) {
 	_, addr := newFakeDaemon(t)
 
 	flags.Object = "no such workbench"
-	_, _, err := runIn(context.Background(), session.Options{Addr: addr, Channel: "automate"}, 1)
+	_, _, err := runIn(context.Background(), session.Options{Addr: addr, Channel: "slrun"}, 1)
 	if err == nil {
 		t.Fatal("runIn found an object that is not in the region")
 	}

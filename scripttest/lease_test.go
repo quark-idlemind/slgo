@@ -23,7 +23,7 @@ func TestALeaseSaysWhichAvatarAndGroupItLandedOn(t *testing.T) {
 	bothWays(t, func(t *testing.T, r reach) {
 		_, c := serve(t, r, scripttest.Options{Agents: []string{"qi", "example"}, Groups: 2})
 
-		g, done := lease(t, c, &scriptv1.LeaseRequest{Targets: 3, Who: "autobench string-concat"})
+		g, done := lease(t, c, &scriptv1.LeaseRequest{Targets: 3, Who: "slbench string-concat"})
 		defer done()
 
 		if g.GetAgent() != "qi" {
@@ -53,7 +53,7 @@ func TestALeaseSaysWhichAvatarAndGroupItLandedOn(t *testing.T) {
 				}
 			}
 		}
-		if by != "autobench string-concat" {
+		if by != "slbench string-concat" {
 			t.Errorf("the pool says the group is held by %q, want the name the caller gave", by)
 		}
 	})

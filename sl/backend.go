@@ -212,7 +212,7 @@ type Backend interface {
 	// The name means nothing to the backend; it is whatever the
 	// programs sharing the thing agree to call it.  What it is FOR is
 	// a resource in the world that two programs cannot share -- the
-	// object automate and autobench run scripts in, whose linkset data
+	// object slrun and slbench run scripts in, whose linkset data
 	// belongs to the object and not to the script.
 	//
 	// A direct session holds it trivially: one avatar cannot be logged

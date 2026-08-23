@@ -21,7 +21,7 @@ package server
 //
 // # What it is for
 //
-// automate and autobench run their scripts in one attached object, and
+// slrun and slbench run their scripts in one attached object, and
 // a benchmark carries its base reading in that object's LINKSET DATA,
 // which belongs to the object and not to the script.  Two runs at once
 // would each divide by the other's numbers.  Labelling the output would

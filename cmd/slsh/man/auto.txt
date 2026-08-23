@@ -1,4 +1,4 @@
-auto is about the worn objects that automate and autobench run their
+auto is about the worn objects that slrun and slbench run their
 scripts in.  With no flags it reports what this avatar has: how many of
 the objects are worn, and therefore how much can run at once.  With -n
 it sets that many up, and prints which object went to which slot.

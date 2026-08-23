@@ -245,7 +245,7 @@ func (w *Session) upload(ctx context.Context, capName string, fields map[string]
 // the second half, where an answer that went missing may have been an
 // upload that landed.
 //
-// Measured on Agni in August 2026: automate running thirty scripts at
+// Measured on Agni in August 2026: slrun running thirty scripts at
 // once, with the objects cleared first, produced one or two of these per
 // run --
 //

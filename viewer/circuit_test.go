@@ -286,7 +286,7 @@ func TestMovementCompleteCarriesTheRealPosition(t *testing.T) {
 
 // TestLogoutFromTheViewerLeavesTheSessionUp is the one that would hurt
 // most to get wrong: closing a viewer must not log the avatar out from
-// under automate and every attached client.
+// under slrun and every attached client.
 func TestLogoutFromTheViewerLeavesTheSessionUp(t *testing.T) {
 	sim, _, _, v, _ := handedOver(t)
 	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)

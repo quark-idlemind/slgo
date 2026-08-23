@@ -2,7 +2,7 @@ package main
 
 // A grid that runs scripts and is not there.
 //
-// automate is a thin thing wrapped around one call -- put a script in an
+// slrun is a thin thing wrapped around one call -- put a script in an
 // object, watch what it says, report whether it got to the end -- and
 // everything it decides is about what came back from that call.  So the
 // only way to test it at all is to stand in for the three protocols a run
@@ -11,7 +11,7 @@ package main
 //
 // fakeGrid plays all three from httptest on loopback and a channel.  What
 // a script "says" is whatever the test set it to say, because what is
-// being checked here is what automate does with the lines rather than
+// being checked here is what slrun does with the lines rather than
 // what Second Life would have produced them from.
 
 import (
@@ -119,7 +119,7 @@ func newFakeGrid(t *testing.T, held string) *fakeGrid {
 // holding one object with one script already inside it.
 //
 // Already inside it because creating one costs six seconds of waiting for
-// the object to admit it is there, and none of what automate does is
+// the object to admit it is there, and none of what slrun does is
 // about that.
 func newFakeSession(t *testing.T, held string) (*sl.Session, *sl.Object, *fakeGrid) {
 	t.Helper()

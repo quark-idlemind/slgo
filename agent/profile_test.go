@@ -554,7 +554,7 @@ func TestListingProfilesWhereThereAreNone(t *testing.T) {
 }
 
 // TestNotEverythingInTheDirectoryIsAProfile: programs keep their own
-// things here -- autobench remembers paddings in one -- and listing
+// things here -- slbench remembers paddings in one -- and listing
 // those as accounts is worse than untidy.  With one real profile and one
 // cache file, "the only profile" stops being the only one, and a program
 // that would have chosen for you starts asking, or offers a login as a
@@ -562,7 +562,7 @@ func TestListingProfilesWhereThereAreNone(t *testing.T) {
 func TestNotEverythingInTheDirectoryIsAProfile(t *testing.T) {
 	dir := tempConfig(t)
 	writeProfile(t, dir, "example", "first = A\nlast = B\npassword = x\n", 0o600)
-	writeProfile(t, dir, "autobench-cache", "some padding = 4\n", 0o600)
+	writeProfile(t, dir, "slbench-cache", "some padding = 4\n", 0o600)
 	if err := os.MkdirAll(filepath.Join(dir, "a-directory"), 0o700); err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-# A guide to slgod, automate and autobench
+# A guide to slgod, slrun and slbench
 
 Three command-line programs for working with Second Life without a
 viewer.
@@ -6,8 +6,8 @@ viewer.
 | | |
 |---|---|
 | `slgod` | a daemon that holds grid sessions, so everything else starts instantly |
-| `automate` | runs LSL scripts and prints what they say |
-| `autobench` | measures how much script memory an LSL construct costs |
+| `slrun` | runs LSL scripts and prints what they say |
+| `slbench` | measures how much script memory an LSL construct costs |
 
 There is a fourth, `slsh`, an interactive shell for inventory, the
 region around you and chat. It has a guide of its own:
@@ -18,7 +18,7 @@ below applies to it as well.
 
 ## Connecting
 
-There are two ways to be connected, and `automate`, `autobench` and
+There are two ways to be connected, and `slrun`, `slbench` and
 `slsh` all support both. `slgod` has neither flag and needs neither: it
 is the thing the others connect to.
 
@@ -38,8 +38,8 @@ Every one of these programs stops reading options at the first thing
 that is not one, and anything after that is taken as an argument. There
 is no warning:
 
-    automate --rez script.lsl      rezzes a prim
-    automate script.lsl --rez      uses the shared object, and says nothing
+    slrun --rez script.lsl      rezzes a prim
+    slrun script.lsl --rez      uses the shared object, and says nothing
 
 `slgod` is Go's `flag` package rather than getopt and stops in the same
 place, which is at least louder about it, because its arguments are
@@ -52,7 +52,7 @@ before carrying on with the one it could read.
 
 ### Saying where slgod is
 
-    automate --addr HOST:PORT script.lsl
+    slrun --addr HOST:PORT script.lsl
 
 If you do not say, the address is worked out for you:
 
@@ -104,7 +104,7 @@ disk. Plain text works too, and is hashed on the way out.
 For `--direct`, anything missing is asked for at the terminal, and the
 password without echo -- so a profile is optional:
 
-    automate --direct --first Example --last Resident script.lsl
+    slrun --direct --first Example --last Resident script.lsl
 
 With exactly one profile on disk, `--direct` uses it without being
 named and says which -- "using the example profile". That rule is the
@@ -211,7 +211,7 @@ avatar today.
 
 Whenever a program does not name one, it says which it used:
 
-    $ autobench --statement "i += 1;" --locals i
+    $ slbench --statement "i += 1;" --locals i
     running as example, objects 0-3
 
 Worth reading. With several avatars hosted the choice is the daemon's,
@@ -329,19 +329,19 @@ half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
 
 ---
 
-## automate
+## slrun
 
 Runs LSL scripts in Second Life and prints what they say.
 
-    automate script.lsl
-    automate one.lsl two.lsl three.lsl
-    automate --object "bench box" script.lsl
+    slrun script.lsl
+    slrun one.lsl two.lsl three.lsl
+    slrun --object "bench box" script.lsl
 
 Each file is compiled by Second Life and run, and each line the script
 says is printed as it arrives, prefixed with the file it came from:
 
-    $ automate hello.lsl
-    hello.lsl: hello from automate
+    $ slrun hello.lsl
+    hello.lsl: hello from slrun
     hello.lsl: two plus two is 4
 
 ### Say DONE when you are finished
@@ -350,7 +350,7 @@ A script must say `DONE` when it has finished:
 
     default {
         state_entry() {
-            llSay(0, "hello from automate");
+            llSay(0, "hello from slrun");
             llSay(0, "DONE");
         }
     }
@@ -360,7 +360,7 @@ costs the whole timeout. Use `--done TEXT` for a different word, or
 `--done ""` to deliberately wait out the timeout.
 
 The `DONE` line itself is not printed -- it is the script talking to
-`automate`, not to you.
+`slrun`, not to you.
 
 The match is a **substring** one: the first line *containing* the word
 ends the run, and that line is not printed. So a script that says
@@ -396,7 +396,7 @@ down on your machine, and there is no cache to go stale.
 Scripts named on one command line run in different objects at the same
 time, four at once by default because four is a group:
 
-    $ automate a.lsl b.lsl c.lsl d.lsl
+    $ slrun a.lsl b.lsl c.lsl d.lsl
     c.lsl: c starting
     b.lsl: b starting
     d.lsl: d starting
@@ -427,7 +427,7 @@ output came from:
     running as qi (8) and example (4)
 
 Two avatars may be standing in different regions, so a script that cares
-where it is may not say the same thing on both. `autobench` deliberately
+where it is may not say the same thing on both. `slbench` deliberately
 does not spread for that reason: its objects are compared against each
 other. Naming an avatar with `--agent` turns it off and uses that one.
 
@@ -441,7 +441,7 @@ thing, and neither would ever finish.
 Asking for more than the daemon has between all its avatars is refused
 rather than waited for, and says how to make more (`slsh auto -n 12`).
 
-An object that has never run a script from `automate` is slower the
+An object that has never run a script from `slrun` is slower the
 first time: creating the script item costs about eight seconds where
 replacing one already there costs about one. Measured, the first
 `--jobs 8` run took 14.5 seconds because three of its objects were new
@@ -452,7 +452,7 @@ and is what a set of scripts that leave something in the object for one
 another needs: with four running there is no shared object to leave
 anything in.
 
-Each script is installed under the same name -- `--script`, `automate`
+Each script is installed under the same name -- `--script`, `slrun`
 by default -- because each is in an object of its own. That is why the
 fan-out is one script per object and not several: measured, a second
 script uploaded into one object under the same name destroys the first,
@@ -527,7 +527,7 @@ take a prim of your own and not queue at all.
 Each is reported and each makes the run fail:
 
     script.lsl: (3, 4) : ERROR : Syntax error          would not compile
-    script.lsl: automate: Math Error                   crashed while running
+    script.lsl: slrun: Math Error                   crashed while running
     script.lsl: it did not say DONE within 1m0s        never finished
 
 The compiler's line and column **count from zero** -- measured, a bad
@@ -544,7 +544,7 @@ anything on line 0, so `(0, 0)` can only be an upload that went missing
 -- and one that did is simply sent again. Measured on thirty scripts at
 once: three runs in eight failed that way before, none in eight after.
 
-`automate` exits non-zero if **any** script failed, so it can be used
+`slrun` exits non-zero if **any** script failed, so it can be used
 from a Makefile or a test script. It exits 0 only if every script
 compiled, ran and finished.
 
@@ -557,22 +557,22 @@ compiled, ran and finished.
 | `--keep` | leave a rezzed prim behind |
 | `--done TEXT` | the text that means "finished" (default `DONE`); matched as a substring |
 | `--timeout DUR` | how long to wait for it (default `1m0s`); a bare number is refused -- the unit is required |
-| `--script NAME` | what to call the script inside the object (default `automate`, which is the name a fault is reported under) |
+| `--script NAME` | what to call the script inside the object (default `slrun`, which is the name a fault is reported under) |
 | `--jobs N`, `-j N` | how many scripts to run at once, one per object; four (a group) by default, more takes more groups, `1` runs them in the order they were named |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there -- a simulator, or a viewer daemon -- instead of in Second Life |
 
 ---
 
-## autobench
+## slbench
 
 Measures how many bytes of script memory an LSL construct costs.
 
-    autobench --code "integer gCNT;"
-    autobench --statement "llSin(1.0);"
+    slbench --code "integer gCNT;"
+    slbench --statement "llSin(1.0);"
 
 A script has a fixed memory budget, and Second Life allocates script
 code in 512-byte blocks -- so you cannot simply ask what one variable
-costs. What `autobench` does about that is written up in
+costs. What `slbench` does about that is written up in
 [doc/memory.md](memory.md).
 
 It puts one copy of the code in a script and finds how much filler that
@@ -581,7 +581,7 @@ which locates the block boundary exactly. Then it does the same for a
 script with more copies in it. Everything reported is a difference
 between two of those exact positions.
 
-    $ autobench --statement "llSin(1.0);"
+    $ slbench --statement "llSin(1.0);"
     First Copy: 380
     Additional Copies: 47
 
@@ -596,7 +596,7 @@ alone and reports only that line.
 Everything else is how the answer was arrived at rather than the answer,
 and `-v` asks for it:
 
-    $ autobench --statement "llSin(1.0);" -v
+    $ slbench --statement "llSin(1.0);" -v
     First Copy: 380
     Additional Copies: 47
     Base mem: 3876
@@ -639,7 +639,7 @@ filename -- and never more than one.
 
 `--code` is repeated whole:
 
-    autobench --code "integer gCNT;"
+    slbench --code "integer gCNT;"
 
 `CNT` in it is replaced with the copy number, so each copy can have a
 name of its own. That matters: without it, a hundred copies of
@@ -648,7 +648,7 @@ name of its own. That matters: without it, a hundred copies of
 `--statement` is for code that must live inside a function, and wraps it
 in one for you:
 
-    autobench --statement "x = j + 1;" --params "x,j"
+    slbench --statement "x = j + 1;" --params "x,j"
 
 `--preamble` and `--postamble` add text before and after the copies, and
 `--globals` declares globals.
@@ -688,7 +688,7 @@ copies of your code in it -- rather than of the code being measured.
 Searching for it is most of what a cold benchmark costs.
 
 You do not have to do anything about that: it is remembered, in
-`~/.config/slgo/autobench-padding`, and looked up by what the base
+`~/.config/slgo/slbench-padding`, and looked up by what the base
 script is. The code under test is not in the base script at all, so a
 benchmark of new code reuses the answer, and so does any other benchmark
 of the same shape whatever it measures.
@@ -751,7 +751,7 @@ never reproduced in 45 later asks at the pads involved. See
 
 ### Checking your connection
 
-    $ autobench --probe
+    $ slbench --probe
     SL Live
 
 It sends a script and checks what comes back, through whichever backend

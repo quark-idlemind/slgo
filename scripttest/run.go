@@ -12,7 +12,7 @@ package scripttest
 // # Where the sentinel is enforced
 //
 // Here, not in the caller.  That is the change the contract makes: under
-// the old transport autobench held the DONE contract itself and every
+// the old transport slbench held the DONE contract itself and every
 // backend had to be trusted to stream forever.  A run ends when a line
 // contains Done, when the timeout is up, when a fault ends it, or when
 // the caller cancels -- and only the first of those sets

@@ -679,7 +679,7 @@ func (x *ReleaseSlots) GetClean() bool {
 //
 // The name is whatever the clients agree it is; slgod attaches no
 // meaning to it and only ever compares it. "auto" is the object
-// automate and autobench run their scripts in, which one client must
+// slrun and slbench run their scripts in, which one client must
 // have to itself: a benchmark carries its base reading in that object's
 // linkset data, which belongs to the object and not to the script, so
 // two runs at once would divide by each other's numbers.

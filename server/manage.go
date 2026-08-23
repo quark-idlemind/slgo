@@ -221,7 +221,7 @@ func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 // clientNames is who is attached, for an error a person can act on.
 //
 // The names are the ones clients authenticated under, so the answer is
-// "autobench and slsh" rather than a count -- which is the difference
+// "slbench and slsh" rather than a count -- which is the difference
 // between knowing what you are about to interrupt and not.
 func (h *Hosted) clientNames() []string {
 	h.mu.RLock()

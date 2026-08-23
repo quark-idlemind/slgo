@@ -57,8 +57,8 @@ case.
 
     cmd/slsh/           the shell: inventory, the world, and chat
     cmd/slgod/          holds grid connections, serves clients
-    cmd/automate/       runs LSL scripts, prints what they said
-    cmd/autobench/      measures what LSL constructs cost in memory
+    cmd/slrun/       runs LSL scripts, prints what they said
+    cmd/slbench/      measures what LSL constructs cost in memory
     cmd/msggen/         fetches message_template.msg, writes Go
 
     agent/              one avatar's connection: login, then the circuit
@@ -108,7 +108,7 @@ The design documents in `doc/` were written alongside the work and each
 one carries what it measured, which is usually the part that is not
 written down anywhere else:
 
-    doc/guide.md            slgod, automate and autobench, for a user
+    doc/guide.md            slgod, slrun and slbench, for a user
     doc/slsh-guide.html     slsh, for a user
     doc/teleport.md         cross-region teleport
     doc/neighbours.md       child circuits, and the border that was a wall
@@ -1061,22 +1061,22 @@ Falling back to localhost there would turn "sl-host is misconfigured"
 into a connection refused against this machine, which points the reader
 at the wrong problem entirely.
 
-## Running scripts: automate and autobench
+## Running scripts: slrun and slbench
 
 Two programs that came from the elsl project, where they reached Second
 Life through slrund and a viewer. They run on `sl` now, so the only
 thing between them and the grid is a session.
 
-    automate a.lsl b.lsl
-    automate --object "Test HUD" a.lsl
-    autobench --code "integer gCNT;"
+    slrun a.lsl b.lsl
+    slrun --object "Test HUD" a.lsl
+    slbench --code "integer gCNT;"
 
 A script needs an object to run in, so both take some: the shared `auto`
 objects the avatar wears, held for as long as the run lasts and taken
 all together or not at all, from whichever avatars the daemon holds.
-`automate` also takes `--object` to name one object already in the
+`slrun` also takes `--object` to name one object already in the
 region instead, and `--rez` to rez a prim beside the avatar and trash
-it afterwards, which `--keep` leaves. `automate` runs four scripts at
+it afterwards, which `--keep` leaves. `slrun` runs four scripts at
 once by default -- 17.5 seconds of scripts in 5.2, measured -- `--jobs`
 asks for more, up to the twelve an avatar wears, and `--jobs 1` puts
 them back in the order they were named.
@@ -1085,9 +1085,9 @@ The contract with a script is one line: it says `DONE` when it has
 finished. Without a sentinel there is nothing to wait for but the
 clock, and every run costs the whole timeout.
 
-`automate` prints what each script said, prefixed with the file it came
+`slrun` prints what each script said, prefixed with the file it came
 from, and exits non-zero if any of them would not compile, faulted, or
-never finished. `autobench` measures the memory a construct costs by
+never finished. `slbench` measures the memory a construct costs by
 finding the 512-byte block boundary it crosses; the measurement
 machinery is about LSL and not about how a script reaches the grid.
 

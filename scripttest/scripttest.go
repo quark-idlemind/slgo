@@ -1,7 +1,7 @@
 // Package scripttest is a Runner backend that runs no LSL.
 //
 // proto/script.proto is the seam between a program that wants LSL run --
-// automate, autobench -- and whatever runs it: the eLSL simulator, a
+// slrun, slbench -- and whatever runs it: the eLSL simulator, a
 // viewer driven from outside, or a client holding a real grid session.
 // Everything on the caller's side of that seam is about LSL and about
 // what a script said, and none of it needs a grid to be exercised.  This
@@ -10,7 +10,7 @@
 // It answers the contract in full and offline: a pool of objects with
 // leases and a queue, a compiler that has opinions, and a script that
 // says something.  What it says is worked out from the source, by the
-// same staircase autobench's --test model uses (see Memory), so a
+// same staircase slbench's --test model uses (see Memory), so a
 // benchmark run against this backend has to come out with the numbers
 // the model says -- and a search that reads the staircase wrongly fails
 // here rather than after twenty minutes of grid time.
@@ -41,7 +41,7 @@
 // Direct is that shorter thing, and the argument above is why it is an
 // addition rather than a replacement.  It is for the caller that runs
 // scripts by the hundred thousand and is measuring something else -- the
-// offline model behind autobench --test, and the sweeps in its tests,
+// offline model behind slbench --test, and the sweeps in its tests,
 // which cost 100 microseconds a run over the pipe and about 5 through
 // Direct, nearly all of the difference being goroutine hand-off for the
 // seven messages a run streams.  What it cannot do is what Pipe is for:
@@ -55,7 +55,7 @@
 //
 // Our own tests, and anybody writing a backend: the tests in this
 // package are what the contract means in practice, and a new backend
-// that disagrees with them disagrees with autobench.
+// that disagrees with them disagrees with slbench.
 package scripttest
 
 import (
@@ -90,7 +90,7 @@ type Options struct {
 
 	// Groups is how many groups each avatar has and GroupSize how many
 	// objects are in one.  The defaults are one group of four, four
-	// being what autobench takes at once: one object to measure in and
+	// being what slbench takes at once: one object to measure in and
 	// three to take readings in.
 	Groups    int
 	GroupSize int
@@ -145,7 +145,7 @@ type Options struct {
 	// high, once, and never again in the 45 asks since.  A padding search
 	// is a chain of comparisons between readings, and a reading one block
 	// high looks exactly like the memory having grown, which is the event
-	// the search exists to find.  autobench's crossing confirmation is
+	// the search exists to find.  slbench's crossing confirmation is
 	// there to survive that, and there is no other way to write a test
 	// for it: the fault cannot be provoked to order.
 	//

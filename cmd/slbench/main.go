@@ -1,4 +1,4 @@
-// Command autobench measures the memory cost of LSL constructs.
+// Command slbench measures the memory cost of LSL constructs.
 //
 // It is the slgo build of the slrun program of the same name: same
 // measurements, same output, but scripts go into Second Life through sl rather
@@ -368,7 +368,7 @@ func warmPaddings(b backend, cnts []int, pad int) {
 // which cnt copies of the code under test still fit inside the 512-byte block
 // they occupy at pad.  One more byte crosses, so pad+findPadding(...)+1 is where
 // memory first grows.  Both callers want that +1 and both add it themselves --
-// which is where the one byte between the padding autobench names and the pad it
+// which is where the one byte between the padding slbench names and the pad it
 // runs at comes from.
 //
 // It also returns the reading at pad, which is the bottom of the step it found.
@@ -404,7 +404,7 @@ func findPadding(b backend, cnt, pad int, r *Results) (offset, base int) {
 		if attempt == 2 {
 			errf("the %d-copy script at pad %d read %d bytes on the last of %d attempts "+
 				"and something else on the ones before; llGetUsedMemory is not answering "+
-				"the same thing twice, and every size autobench reports is a difference "+
+				"the same thing twice, and every size slbench reports is a difference "+
 				"of two of its answers\n", cnt, pad, base, attempt+1)
 		}
 		debugf("FindPadding restart %d: base is now %d\n", attempt+1, base)
@@ -843,12 +843,12 @@ func reread(b backend, cnt, pad int, r *Results, getBase func() int) int {
 // instrument should say so whether or not anybody asked for --debug.  stderr,
 // so that a caller parsing stdout is unaffected.
 func noticef(format string, v ...any) {
-	fmt.Fprintf(os.Stderr, "autobench: "+format, v...)
+	fmt.Fprintf(os.Stderr, "slbench: "+format, v...)
 }
 
 // basePadding returns the base padding: the largest pad the copy-free base
 // script can carry and still fit inside its 512-byte memory block, so that one
-// more byte crosses into the next.  Everything autobench measures is anchored
+// more byte crosses into the next.  Everything slbench measures is anchored
 // to it, it is what the Padding: line reports, and it is what --ipad and
 // --check-ipad name.
 //
@@ -859,7 +859,7 @@ func noticef(format string, v ...any) {
 // read it off the Padding: line, and hand it to every later run of that shape.
 // That is the flag's purpose and the reason it skips the search.
 //
-// This is the padding autobench *names*.  The pad it *runs* at is one byte
+// This is the padding slbench *names*.  The pad it *runs* at is one byte
 // more; both callers add that themselves.
 func basePadding(b backend, r *Results) int {
 	// --ipad names the padding to measure at: the caller has run this shape
@@ -959,7 +959,7 @@ A padding is the largest pad that still fits inside a 512-byte block, so one
 more byte has to cross into the next one and memory has to grow between those
 two.  It did not.
 
-Every size autobench reports is measured from this constant, so a padding that
+Every size slbench reports is measured from this constant, so a padding that
 is off by k reports every Size off by k, in the same direction, with nothing in
 the output to show it.
 
@@ -972,7 +972,7 @@ Drop --check-ipad to use %d anyway.
 //
 // It is not a judgement about whether pad names a boundary; that is the
 // caller's to assert, and --check-ipad is how they can have it verified.  This
-// is the one thing autobench does know better than the caller: whether it can
+// is the one thing slbench does know better than the caller: whether it can
 // carry out the instruction at all.
 //
 // The filler emits 5+pad bytes for every pad from nought up: an even one
@@ -1019,7 +1019,7 @@ func expressiblePadding(pad int) bool { return pad >= 0 }
 // this one is shorter and says why it works.
 //
 // It is a function rather than a block inside main so that a test can drive it
-// against the offline model and no Second Life at hand.  See autobench_test.go.
+// against the offline model and no Second Life at hand.  See slbench_test.go.
 func oneMode(b backend, r *Results) (size, padding, headroom int, marginal float64, marginalOK bool) {
 	// BASEPAD: the most filler the base script carries without spilling.
 	// This is the number Padding: reports and --ipad takes, and the runs
@@ -1118,7 +1118,7 @@ func main() {
 	// as an option it has never heard of, which prints this same usage
 	// with "unknown option: --help" on the front of it and exits 1 --
 	// an error report for somebody who asked the question correctly.
-	// To stdout, as automate does it, because here it is the answer and
+	// To stdout, as slrun does it, because here it is the answer and
 	// not a complaint.
 	if flags.Help {
 		getopt.PrintUsage(os.Stdout)
@@ -1176,7 +1176,7 @@ func main() {
 		opts := session.Options{
 			Addr: flags.Addr, Agent: flags.Agent, Direct: flags.Direct,
 			First: flags.First, Last: flags.Last, Start: flags.Start,
-			Channel: "autobench",
+			Channel: "slbench",
 		}
 		places, cleanup, err := runIn(ctx, opts)
 		if err != nil {
@@ -1595,7 +1595,7 @@ func absorbResults(results []string, r *Results) (mem int, ok bool) {
 	return mem, ok
 }
 
-// code is the boilerplate for autobench.  It is printed with 3 positional
+// code is the boilerplate for slbench.  It is printed with 3 positional
 // parameters:
 //  1. the number of times the CODE was repeated
 //  2. the amount of padding added
@@ -1648,7 +1648,7 @@ func absorbResults(results []string, r *Results) (mem int, ok bool) {
 //  3. statement to print title (if any)
 //  4. instructions to pad the code size
 var code = `
-// autobench cnt=%d pad=%d
+// slbench cnt=%d pad=%d
 default {
     state_entry() {
         integer mem = llGetUsedMemory();
@@ -1689,7 +1689,7 @@ func mkVar(s string) (string, error) {
 // runIn gets somewhere to run scripts: as many places as the search will
 // use at once, each with the session that reaches it.
 //
-// See automate's for why the objects are worn and kept.  Running several
+// See slrun's for why the objects are worn and kept.  Running several
 // at once is this program's own reason: a padding search is a dozen
 // readings of one script that do not depend on each other, and N places
 // can take N of them at a time.

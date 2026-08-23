@@ -10,7 +10,7 @@ package scripttest
 // the offline model costs about 100us over Pipe and about 5us here.
 // Almost all of the difference is goroutine hand-off -- a run streams
 // seven messages and each one is a wake-up on the other side -- and a
-// profile of autobench's tests before this change spent 73% of the run
+// profile of slbench's tests before this change spent 73% of the run
 // in pthread_cond_signal, pthread_cond_wait and findRunnable.  That is
 // worth paying where a run is the thing being tested and not worth
 // paying 440,000 times where the runs are how a sweep gets to its
@@ -58,7 +58,7 @@ import (
 // Direct returns a client that reaches this backend in process.
 //
 // It is for the caller that runs thousands of scripts and is measuring
-// something else -- autobench's offline model and the sweeps in its
+// something else -- slbench's offline model and the sweeps in its
 // tests.  A caller testing the CONTRACT wants Pipe; see above for the
 // two things this cannot be made to do.
 func (s *Server) Direct() scriptv1.RunnerClient { return direct{s} }
@@ -130,10 +130,10 @@ func (d direct) Lease(ctx context.Context, in *scriptv1.LeaseRequest, _ ...grpc.
 // The alternative -- a goroutine and a channel, as Lease has -- is most
 // of what the 100us a run over the pipe costs, and nothing in this
 // repository needs a run's events while the run is still going: the one
-// caller that prints lines as they arrive is automate, whose test for
+// caller that prints lines as they arrive is slrun, whose test for
 // that (TestALineThroughABackendIsPrintedBeforeTheRunHasEnded) drives it
 // through --backend over a real listener, which is the transport a
-// person typing --backend actually gets.  autobench reads a run's whole
+// person typing --backend actually gets.  slbench reads a run's whole
 // transcript and then does arithmetic on it.
 //
 // So the events are the same events in the same order, and only their

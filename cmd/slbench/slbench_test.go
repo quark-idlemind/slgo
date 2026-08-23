@@ -32,7 +32,7 @@ import (
 // that pad is one byte into a fresh block and pad-1 is the last pad still
 // inside the old one.
 //
-// So Memory.Pad is the CROSSING pad, and the padding autobench names -- what
+// So Memory.Pad is the CROSSING pad, and the padding slbench names -- what
 // Padding: prints, what --ipad takes and what --check-ipad confirms -- is one
 // less.  The tests below spell that out as `crossing` rather than `pad` to
 // keep the two apart, because getting them confused is precisely the bug A11

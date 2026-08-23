@@ -319,7 +319,7 @@ func ListProfiles() ([]string, error) {
 			continue
 		}
 		// Not everything in this directory is a profile.  Programs
-		// keep their own things here -- autobench remembers paddings
+		// keep their own things here -- slbench remembers paddings
 		// in one -- and listing those as accounts is worse than
 		// untidy: with one real profile and one cache file, "the only
 		// profile" stops being the only one and a program that would

@@ -6,7 +6,7 @@ package main
 // proto/script.proto is the seam: a backend is anything that can be
 // handed a script and made to say whether it compiled, what it said,
 // whether it faulted and whether it got to the end.  That is the whole of
-// what automate wants of Second Life, which is why automate can be
+// what slrun wants of Second Life, which is why slrun can be
 // pointed at the eLSL simulator or a viewer daemon instead and print the
 // same output.
 //
@@ -29,7 +29,7 @@ package main
 //     output, and it is the whole of what a single script needs.
 //
 // The first is taken when there is more than one script to run or when
-// --rez asks for a place of automate's own; otherwise the second.
+// --rez asks for a place of slrun's own; otherwise the second.
 //
 // One target is the default even with scripts enough for four, where the
 // grid path takes the whole group.  A group is four because this program
@@ -38,11 +38,11 @@ package main
 // three that are never coming.  --jobs is how somebody who knows what is
 // behind the contract asks for more.
 //
-// # Why this is not shared with autobench's copy
+// # Why this is not shared with slbench's copy
 //
 // The two ask different questions of the same contract.  A benchmark
 // needs several objects at once, needs the one it measures in to keep
-// what a script left there, and turns a fault into a size limit; automate
+// what a script left there, and turns a fault into a size limit; slrun
 // needs one object or none and prints what it hears.  The overlap is the
 // dial and a lease loop, and a package holding those two would be a
 // package whose callers each ignore half of it.
@@ -136,7 +136,7 @@ func (r *remote) lease(n int) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	stream, err := r.c.Lease(ctx, &scriptv1.LeaseRequest{
-		Targets: int32(n), Agent: flags.Agent, Who: "automate",
+		Targets: int32(n), Agent: flags.Agent, Who: "slrun",
 	})
 	if err != nil {
 		cancel()

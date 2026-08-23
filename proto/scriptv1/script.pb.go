@@ -7,7 +7,7 @@
 // Package script.v1 is how a program that wants LSL run asks something
 // else to run it.
 //
-// The programs are automate and autobench: they write a script, put it
+// The programs are slrun and slbench: they write a script, put it
 // somewhere it can run, watch what it says, and want to know whether it
 // compiled, whether it faulted and whether it got to the end.  None of
 // that is particular to Second Life.  The same script can be run by the
@@ -525,7 +525,7 @@ type LeaseRequest struct {
 	Agent string `protobuf:"bytes,2,opt,name=agent,proto3" json:"agent,omitempty"`
 	// Who is the caller, for the pool listing and the logs.  A person
 	// wondering what is holding the objects is better served by
-	// "autobench string-concat" than by a client address.
+	// "slbench string-concat" than by a client address.
 	Who string `protobuf:"bytes,3,opt,name=who,proto3" json:"who,omitempty"`
 	// Wait bounds how long to queue when everything is busy.  Zero waits
 	// as long as the stream lives; a caller that would rather fail fast

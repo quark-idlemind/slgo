@@ -14,7 +14,7 @@ at the end, under "What this still does not do".
 
 slgod has been able to hold several sessions since it was written --
 `slgod -listen :7807 example qi` works today, every RPC carries the agent
-name, and `--agent` is already on slsh, automate and autobench.  What is
+name, and `--agent` is already on slsh, slrun and slbench.  What is
 missing is not the capacity but the *management*: which avatar a client
 gets when it does not say, how one is brought up after the daemon
 started, and how one is put down and made to stay down.
@@ -33,7 +33,7 @@ Worth stating so that none of the work below quietly breaks it.
   `server/grpc.go:597` for the rest).
 - **Locks are per session.**  `Hosted.lockSet()` in `server/lock.go`
   means example's auto-object lock does not block qi's, so two avatars can
-  run autobench at the same time without queueing behind each other.
+  run slbench at the same time without queueing behind each other.
 - **The auto objects are per avatar.**  `UseAutoN` in
   `internal/session/session.go` finds them by `EnsureAttached` against
   that session's own inventory, so nothing is shared and nothing needs
@@ -46,7 +46,7 @@ Worth stating so that none of the work below quietly breaks it.
 Two smaller things that are fine as they stand.  All profiles present
 the same made-up MAC and ID0 (`cmd/slgod/main.go:78`), which is what a
 viewer running alts on one machine does anyway, and a profile can
-override it.  autobench's padding cache is keyed only by the base
+override it.  slbench's padding cache is keyed only by the base
 script's hash, which is correct across avatars: a script's memory does
 not depend on who owns it.
 
@@ -153,7 +153,7 @@ Today `sl.AttachConn` (`sl/hosted.go:46`) takes the only session and
 refuses to guess between several.  slgod should pick instead -- but the
 pick has to be deterministic, or the same unchanged script drives example
 today and qi tomorrow because of what happened to be up.  That failure
-is silent: an autobench run against the wrong avatar installs a script
+is silent: an slbench run against the wrong avatar installs a script
 in the wrong attachment and reports a plausible number.
 
 ### The rule: the agent that has been logged in the longest
@@ -373,7 +373,7 @@ tell them apart.
 ### What a bigger pool is and is not worth
 
 Not a faster search.  `quarterSearch` issues exactly three probes a round
-and gives up below three spare objects (`cmd/autobench/main.go`, the
+and gives up below three spare objects (`cmd/slbench/main.go`, the
 `len(b.spare) < 3` guard).  Seven probes would make it an eighth search:
 for a range of about 512 narrowing to 8, three rounds become two.  One
 round, about a second.  Every doubling of the pool buys a logarithmic
@@ -468,7 +468,7 @@ stable.
 
 **Every stage requires restarting slgod**, which ends every session it
 holds.  Check that nothing is mid-run first -- `ClientCount` per hosted
-agent is the honest answer, and an autobench run can legitimately take
+agent is the honest answer, and an slbench run can legitimately take
 minutes.
 
 The one thing that will surprise a user rather than a developer: the
