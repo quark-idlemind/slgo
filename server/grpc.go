@@ -414,8 +414,11 @@ func sendMessage(ctx context.Context, h *Hosted, m *pb.OutboundMessage) error {
 
 func (s *Server) ListAgents(ctx context.Context, _ *pb.ListAgentsRequest) (*pb.ListAgentsResponse, error) {
 	// Oldest first, not alphabetical: the order IS information.  The
-	// first is the default, and a client looking for an agent that can
-	// satisfy it should try them in this order.
+	// first is the default -- what a client that names no agent gets.
+	//
+	// It used to be advice as well, for a client looking for an avatar
+	// with objects free.  Nothing looks that way now: the pool answers
+	// a request out of every avatar at once.
 	out := &pb.ListAgentsResponse{}
 	held := map[string]bool{}
 	for _, h := range s.Ranked() {

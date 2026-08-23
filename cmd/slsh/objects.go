@@ -735,8 +735,11 @@ func cmdMove(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 //
 // In the daemon's order, which is not alphabetical: oldest first, and
 // the first session it still holds is what a command that names no
-// agent gets.  That order is the information -- it is also the order a
-// run looks for free objects in.
+// agent gets.  That is what the order says.
+//
+// It is NOT the order objects are found in.  A run asks the daemon's
+// pool for a number and the pool answers out of every avatar at once;
+// there is no walk from one to the next for it to be the order of.
 func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
 	_, done, err := subOptions("agents", &o, out, args)
