@@ -7,8 +7,8 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/goexvi-ctrl/goterm v1.0.0
 	github.com/mububoki/jpeg2000 v1.0.0
-	github.com/pborman/getopt/v2 v2.0.0-20200816005738-fd0d075bf4de
-	github.com/pborman/options v1.5.0
+	github.com/pborman/getopt/v2 v2.2.0
+	github.com/pborman/options v1.6.0
 	golang.org/x/term v0.45.0
 	google.golang.org/grpc v1.83.0
 	google.golang.org/protobuf v1.36.11
