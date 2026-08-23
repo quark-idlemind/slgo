@@ -6,14 +6,14 @@
 //	slrun --direct --first Quark --last Idlemind a.lsl
 //
 // A script needs an object to run in, so slrun takes some: the shared
-// auto objects the avatar wears, a group of four held for as long as the
+// auto objects the avatar wears, four of them held for as long as the
 // run lasts.  --object names one object of somebody's own instead, and
 // --rez rezzes a throwaway prim beside the avatar and deletes it
 // afterwards; both of those are one object, and so one script at a time.
 //
 // Several scripts run at once, one to an object: four of them by
-// default, which is a group, and --jobs asks for more -- eight or twelve
-// take two groups or three, as many as are free at the time.  They
+// default, and --jobs asks for more -- as many as are free at the time,
+// from as many avatars as it takes.  They
 // finish in whatever order they finish in, so every line printed says
 // which script said it.  --jobs 1 puts them back in the order they were
 // named, which is what a set of scripts that leave things in the object
@@ -73,7 +73,7 @@ var flags = struct {
 	Backend string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life"`
 	Rez     bool          `getopt:"--rez             rez a throwaway prim instead of using the shared auto object"`
 	Script  string        `getopt:"--script=NAME     what to call the script inside the object"`
-	Jobs    int           `getopt:"--jobs=N -j       how many scripts to run at once, one per object; 4 by default, more takes more groups, 1 runs them in order"`
+	Jobs    int           `getopt:"--jobs=N -j       how many scripts to run at once, one per object; 4 by default, 1 runs them in order"`
 	Clear   bool          `getopt:"--clear          empty every script out of the objects before running, for when something else is talking in them"`
 	Done    string        `getopt:"--done=TEXT       the text that means the script has finished"`
 	Timeout time.Duration `getopt:"--timeout=DUR     how long to wait for it"`
@@ -251,7 +251,7 @@ func tag(path string) string {
 // object taken from something else for nothing.
 //
 // How many places there are is answered here and not asked for, because
-// each way of getting one has a different number to give -- a group of
+// each way of getting one has a different number to give -- four of
 // four, a named object, a lease of whatever the backend granted -- and
 // the count comes back with the places so that the caller never has to
 // guess.
@@ -269,7 +269,7 @@ func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src s
 			return nil, 0, nil, fmt.Errorf("--keep leaves a rezzed prim behind, and a " +
 				"script.v1 backend rezzes nothing: the object it ran in is its own")
 		}
-		// One, unless somebody asked for more.  A group of auto objects is
+		// One, unless somebody asked for more.  A run of auto objects is
 		// four because this program put four there; what a backend has is
 		// its own business, and asking a one-object simulator for four
 		// would queue for three that are never coming.

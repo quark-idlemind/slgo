@@ -39,7 +39,12 @@ that is not one, and anything after that is taken as an argument. There
 is no warning:
 
     slrun --rez script.lsl      rezzes a prim
-    slrun script.lsl --rez      uses the shared object, and says nothing
+    slrun script.lsl --rez      takes "--rez" for a second filename
+
+The second is not silent, as it happens -- there is no file called
+`--rez`, so it fails before connecting to anything. It would be silent
+if the option took a value that looked like a filename, which is the
+case worth watching for.
 
 `slgod` is Go's `flag` package rather than getopt and stops in the same
 place, which is at least louder about it, because its arguments are
@@ -209,14 +214,16 @@ session itself goes away -- adding an avatar never moves it, and neither
 does a reconnect -- so a script that worked yesterday drives the same
 avatar today.
 
-Whenever a program does not name one, it says which it used:
+Whenever `slrun` does not name one, it says which it used:
 
-    $ slbench --statement "i += 1;" --locals i
-    running as example, objects 0-3
+    $ slrun a.lsl b.lsl
+    running as example, objects 0, 1, 2, 3
 
 Worth reading. With several avatars hosted the choice is the daemon's,
-and a benchmark attributed to the wrong avatar is not an error -- it is a
-plausible number.
+and output attributed to the wrong avatar is not an error -- it is a
+plausible one. `slbench` says the same thing at `-vv` rather than always,
+because its answer turned out not to depend on which avatar gave it the
+objects, and because its objects usually come from more than one.
 
 ### What state each avatar is in
 
@@ -427,19 +434,38 @@ output came from:
     running as qi (8) and example (4)
 
 Two avatars may be standing in different regions, so a script that cares
-where it is may not say the same thing on both. `slbench` deliberately
-does not spread for that reason: its objects are compared against each
-other. Naming an avatar with `--agent` turns it off and uses that one.
+where it is may not say the same thing on both. `slbench` spreads too,
+and by default has to: it asks for one object per division of each of
+its two searches, plus three, which is nineteen at the defaults where an
+avatar wears twelve. Its readings turned out to agree across avatars --
+every row of the `--parts` sweep in [memory.md](memory.md) reported the
+same size over one avatar, two and three -- so this is not something a
+benchmark has to avoid.
+
+Naming an avatar with `--agent` confines a run to that one. A benchmark
+then cannot have nineteen objects, so it takes what fits and says so:
+
+    slbench: holding 9 objects rather than 19; the searches will share fewer rounds
+
+which is slower and not wrong.
 
 The objects are taken all together or not at all. `--jobs 8` where six
-are free does not run six: it waits until eight are free, and says what
-it is waiting for. That is not fussiness -- a run that took the six and
+are free does not run six: it waits until eight are free. That is not
+fussiness -- a run that took the six and
 waited for the other two would be holding six objects nobody else can
 use while it waits for somebody who may be doing exactly the same
 thing, and neither would ever finish.
 
 Asking for more than the daemon has between all its avatars is refused
-rather than waited for, and says how to make more (`slsh auto -n 12`).
+rather than waited for:
+
+    64 objects were asked for and this daemon's avatars have 36
+
+Waiting, when it happens, is silent: the daemon holds nothing while it
+waits and the client has nothing to report but that it has not returned.
+Naming an avatar is the exception -- an avatar that has too few is known
+to be too few before anybody is asked, so `slrun` says so and names the
+remedy (`slsh auto -n 12`).
 
 An object that has never run a script from `slrun` is slower the
 first time: creating the script item costs about eight seconds where
@@ -469,15 +495,16 @@ is worse off than one who was told.
 ### Several runs at once
 
 A run takes as many objects as it asked for and holds them until it
-finishes. An avatar wears twelve, so three benchmarks fit on one avatar,
-or a benchmark and eight scripts, or any other way twelve divides up --
-and if `slgod` is holding several avatars a run that finds them all busy
-moves on to the next avatar rather than queueing.
+finishes. An avatar wears twelve and a default benchmark wants nineteen,
+so what fits beside what is a question about the whole pool rather than
+about one avatar: three avatars are thirty-six objects, which is one
+benchmark and seventeen scripts, or nine `slrun`s of four, or any other
+way thirty-six divides up.
 
-That order is the daemon's, not alphabetical: the default avatar first,
-then the rest. So nine runs started together against three avatars simply
-spread out, three apiece. Only when every group on every avatar is busy
-does anything wait.
+There is no walk from one avatar to the next. A run makes one request
+for the number it wants and the daemon answers it out of the whole pool,
+taking objects from as many avatars as it takes. Only when the pool
+cannot fill the request at all does anything wait.
 
 Naming an avatar turns that off, and `SLGO_AGENT` counts as naming one:
 an avatar asked for by the environment is still an avatar somebody asked
@@ -485,21 +512,17 @@ for, so a run waits for it rather than quietly using another. That is
 worth knowing before setting the variable in a shell you then start nine
 things from.
 
-Why a run gets its objects to itself: a benchmark carries its base
-reading in the object's linkset data, which belongs to the object rather
-than to the script, and the script is installed under a fixed name -- so
-two runs sharing an object would overwrite each other's reading and each
-other's script.
+Why a run gets its objects to itself: the script is installed under a
+fixed name, so two runs sharing an object would overwrite each other's
+script, and each would then report the survivor's output as its own.
 
-Objects are locked one at a time, and on its own that deadlocks: three
-runs each wanting four of twelve can end up holding three apiece and
-waiting for a fourth that nobody is going to give back. What prevents it
-is one more lock. A run takes an **allocation lock** first, and under it
-takes all the objects it wants or none of them -- trying each, never
-waiting for any. If it cannot be served it gives back everything it
-took, drops the allocation lock, and only then waits. Nothing is ever
-held while waiting for anything else, so there is no cycle to deadlock
-on.
+Taking objects one at a time would deadlock: three runs each wanting
+four of twelve can end up holding three apiece and waiting for a fourth
+that nobody is going to give back. What prevents it is that a request is
+answered whole or not at all. The daemon keeps one pool of every avatar's
+objects, and a request for N is served out of it in one step -- N of them
+or none. A request that cannot be served holds nothing while it waits,
+so there is no cycle to deadlock on.
 
 What that leaves is starvation: a run wanting twelve can in principle be
 stepped over by a stream of runs wanting one. Nothing prevents that,
@@ -507,10 +530,13 @@ deliberately -- these are programs run by hand or from a script rather
 than a service under load, so the queue drains.
 
 This used to be done by dividing the pool into fixed groups of four and
-locking a whole group, four being what a benchmark's search happens to
-use. That could not deadlock either, but it made four the unit of
-everything: a run wanting six had to hold eight, and one wanting twelve
-could not be served at all.
+locking a whole group, four being what a benchmark's search happened to
+use at the time. That could not deadlock either, but it made four the
+unit of everything: a run wanting six had to hold eight, and one wanting
+twelve could not be served at all. There was a per-avatar pool for a
+while after that, and a run walked from one avatar to the next looking
+for room; one pool across all of them replaced it, which is what lets a
+single request span avatars.
 
 Set an avatar up with `slsh auto -n 12`, once per account. An avatar that
 is not allowed to build can still be set up, provided somebody who can
@@ -558,7 +584,11 @@ compiled, ran and finished.
 | `--done TEXT` | the text that means "finished" (default `DONE`); matched as a substring |
 | `--timeout DUR` | how long to wait for it (default `1m0s`); a bare number is refused -- the unit is required |
 | `--script NAME` | what to call the script inside the object (default `slrun`, which is the name a fault is reported under) |
-| `--jobs N`, `-j N` | how many scripts to run at once, one per object; four (a group) by default, more takes more groups, `1` runs them in the order they were named |
+| `--jobs N`, `-j N` | how many scripts to run at once, one per object; four by default, `1` runs them in the order they were named |
+| `--clear` | empty every script out of the objects before running |
+| `--agent NAME`, `-a` | which avatar; the daemon's default otherwise |
+| `--addr HOST:PORT` | the `slgod` to attach to; `sl-host`, or this machine |
+| `--direct`, `-d` | log in to Second Life directly, without `slgod`, with `--first`, `--last` and `--start` |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there -- a simulator, or a viewer daemon -- instead of in Second Life |
 
 ---
@@ -774,9 +804,12 @@ Second Life, and it will not say so about a model.
 | `--no-cache` | do not remember or reuse the padding |
 | `--debug` | say what the search is doing, and what it spent |
 | `--timeout DUR` | how long one script may take (default `1m0s`); a bare number is refused -- the unit is required |
-| `-v`, `-vv`, `-vvv` | the readings behind the answer; whose objects it ran in; every script it sends |
 | `--probe` | check the connection and exit |
 | `--test PAD,SIZE[,MARGINAL[,LIMIT]]` | measure against the offline model in this process, without a grid |
+| `-v`, `-vv`, `-vvv` | the readings behind the answer; whose objects it ran in; every script it sends |
+| `--agent NAME`, `-a` | which avatar; the daemon's default otherwise |
+| `--addr HOST:PORT` | the `slgod` to attach to; `sl-host`, or this machine |
+| `--direct`, `-d` | log in to Second Life directly, without `slgod`, with `--first`, `--last` and `--start` |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there, instead of in Second Life |
 
 ### Reading the numbers honestly
