@@ -211,16 +211,16 @@ func (p *pager) promptSearch(ctx context.Context, t *Term, dir int) {
 
 func (p *pager) paint(t *Term) {
 	var b strings.Builder
-	b.WriteString("\x1b[H\x1b[2J")
+	b.WriteString(cursorHome + eraseScreen)
 	for i := 0; i < p.view; i++ {
 		if j := p.top + i; j < len(p.lines) {
 			b.WriteString(p.lines[j])
 		}
 		b.WriteString("\r\n")
 	}
-	b.WriteString("\x1b[7m")
+	b.WriteString(reverseOn)
 	b.WriteString(p.status())
-	b.WriteString("\x1b[0m\x1b[K")
+	b.WriteString(attrsOff + eraseLine)
 	t.Paint(b.String())
 }
 
@@ -258,7 +258,7 @@ func (p *pager) finish(t *Term) {
 	if row < 1 {
 		row = 1
 	}
-	t.Paint(fmt.Sprintf("\x1b[%d;1H\x1b[K", row))
+	t.Paint(fmt.Sprintf(cursorRow+eraseLine, row))
 }
 
 func stripANSI(s string) string {

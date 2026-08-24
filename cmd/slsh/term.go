@@ -44,6 +44,25 @@ const (
 	keyDelete
 )
 
+// The escape sequences the shell writes, one constant per sequence.
+// The block above is the ones that arrive; these are the ones that go
+// out, and every place that writes to a terminal writes one of these
+// rather than spelling it out again.
+//
+// A caller that wants two of them writes them added together, so that
+// each name still stands for a whole sequence and not for half of one:
+// the erase after a carriage return is "\r"+eraseLine.
+const (
+	eraseLine     = "\x1b[K"     // from the cursor to the end of the line
+	eraseScreen   = "\x1b[2J"    // the whole screen
+	cursorHome    = "\x1b[H"     // to the top left corner
+	cursorRow     = "\x1b[%d;1H" // to column 1 of the row given
+	cursorForward = "\x1b[%dC"   // right by the number of columns given
+	reverseOn     = "\x1b[7m"    // swap foreground and background
+	attrsOff      = "\x1b[0m"    // back to the terminal's own colours
+	askCellSize   = "\x1b[16t"   // how big is a character cell?  See CellSize
+)
+
 // escapeWait is how long a lone ESC waits for the rest of a sequence
 // before it is taken to be the ESC key itself.
 //
@@ -196,7 +215,7 @@ func (t *Term) Close() {
 	}
 	t.closed = true
 	if !t.plain {
-		fmt.Fprint(t.out, "\r\x1b[K")
+		fmt.Fprint(t.out, "\r"+eraseLine)
 	}
 	if t.restore != nil {
 		t.restore()
@@ -481,7 +500,7 @@ func (t *Term) CellSize(timeout time.Duration) (tall, wide int, err error) {
 	}
 	// Nothing is drawn by this and nothing needs drawing again: the
 	// question is not displayed, so the prompt under it is untouched.
-	_, err = fmt.Fprint(t.out, "\x1b[16t")
+	_, err = fmt.Fprint(t.out, askCellSize)
 	t.mu.Unlock()
 	if err != nil {
 		return 0, 0, err
@@ -560,7 +579,7 @@ func (t *Term) Print(s string) {
 		return
 	}
 	var b strings.Builder
-	b.WriteString("\r\x1b[K")
+	b.WriteString("\r" + eraseLine)
 	for _, line := range strings.Split(s, "\n") {
 		b.WriteString(line)
 		b.WriteString("\r\n")
@@ -596,7 +615,7 @@ func (t *Term) Status(s string) {
 	if t.plain || t.closed {
 		return
 	}
-	fmt.Fprint(t.out, "\r\x1b[K"+s)
+	fmt.Fprint(t.out, "\r"+eraseLine+s)
 }
 
 // SetBusy says whether a command is running, and so whether a prompt
@@ -722,7 +741,7 @@ func (t *Term) Echo() {
 	if t.plain || t.closed {
 		return
 	}
-	fmt.Fprint(t.out, "\r\x1b[K"+t.prompt+string(t.line)+"\r\n")
+	fmt.Fprint(t.out, "\r"+eraseLine+t.prompt+string(t.line)+"\r\n")
 }
 
 // redrawLocked paints the prompt and the line, scrolling sideways when
@@ -746,12 +765,12 @@ func (t *Term) redrawLocked() {
 		end = start + avail
 	}
 	shown := string(t.line[start:end])
-	fmt.Fprintf(t.out, "\r\x1b[K%s%s", t.prompt, shown)
+	fmt.Fprintf(t.out, "\r"+eraseLine+"%s%s", t.prompt, shown)
 	// Put the cursor where it belongs, counting from the left edge.
 	// Column zero is a bare carriage return: a cursor-forward of zero
 	// moves one column in terminals that read it as the default.
 	if col := len([]rune(t.prompt)) + (t.pos - start); col > 0 {
-		fmt.Fprintf(t.out, "\r\x1b[%dC", col)
+		fmt.Fprintf(t.out, "\r"+cursorForward, col)
 	} else {
 		fmt.Fprint(t.out, "\r")
 	}
