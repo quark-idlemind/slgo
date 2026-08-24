@@ -1,0 +1,74 @@
+group says which group this avatar is acting as, lists the ones it has
+joined, and with an argument makes one of them active.  It is not about
+joining or leaving: an invitation into a group arrives in "waiting" and
+is answered there.
+
+With nothing after it, the listing marks the active one in a column of
+its own and gives each group's key beside its name.  With a name, a key
+or the word "none", that becomes the active group and the command waits
+for the simulator to agree before saying so.
+
+## Why this matters more than it looks
+
+Land usually grants building to a GROUP rather than to individuals, so
+whether an avatar may rez something somewhere depends on which group it
+is acting as and not on who it is.  Measured with two avatars a couple
+of metres apart on the same parcel: the one acting as the land's group
+could rez a prim and the one acting as nobody could not, and what came
+back was "You cannot create objects here.  The owner of this land does
+not allow it.  Use the land tool to see land ownership." -- which is
+untrue as it stands and then sends you to the wrong place.  The land
+does allow it; the request simply arrived from nobody in particular,
+and the land tool has nothing to show.
+
+A viewer remembers the active group from one session to the next and a
+headless login does not: the login itself always comes up acting as
+nobody, and a refusal that blames the land is the first sign of it.
+
+The daemon does not leave it there.  When slgod brings a session up it
+settles the group as well: a profile under ~/.config/slgo may carry
+
+    group = Example Builders
+
+by name or by key, "-group NAME" or "-group PROFILE=GROUP" on the
+daemon's own command line overrules the profile, and an avatar that has
+joined exactly one group and said nothing about it gets that one.  So an
+avatar the daemon brought up may well be acting as something already,
+and this is the command that says which -- an avatar acting as nobody is
+what a profile that says nothing and a membership list with none or
+several in it leaves behind.
+
+## Acting as nobody is spelled "none"
+
+The way back out is the word, because the thing it stands for is a key
+of thirty-two zeros and nobody would guess that from a listing that
+says "acting as no group".  The word wins over a group that happens to
+be called it; such a group is still reachable by its key, which the
+listing prints beside every name.
+
+## An empty list is not the same as no groups
+
+Nothing asks for the list: it arrives on its own shortly after login,
+and again whenever the membership changes.  So an empty one means "not
+told yet" exactly as much as it means "belongs to none", and the
+listing says both rather than picking one.  Trying again in a moment is
+what settles it.
+
+A name is matched against that list and nothing else, since nothing
+here can turn a word into a group key by asking the grid.  A key is
+sent as typed, without being looked for first -- a key is unambiguous,
+and refusing one because a list that may not have arrived does not
+mention it would make this useless in the state it is most needed in.
+An avatar that is not a member is what a key that never becomes active
+usually means, and that is what the timeout says.
+
+## Examples
+
+    group
+    group Example Builders
+    group none
+
+See also: place and rez for the commands land refuses when this is
+wrong, waiting and answer for an invitation into a group, and profile
+for the groups somebody else has chosen to publish, which is a
+different list from this one.

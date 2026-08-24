@@ -1,0 +1,62 @@
+drop puts an inventory item inside a rezzed object.  "rm --in" is what
+takes one out again, and "ls --in" is what says which are in there.
+Nothing is offered and nobody is asked: this is the avatar's own
+object, so it happens at once, where give offers an item to a person
+and waits for them to accept it.
+
+The object comes first and the item takes the rest of the line, so an
+object whose name has a space in it has to be quoted and an item whose
+name has one need not be.  The object is named by the word the region
+calls it or by its uuid; where several objects answer to one word it
+is refused, with their uuids printed, since editing the wrong one is
+not something that can be taken back.  The item is a path relative to
+the folder the shell is in, or a uuid, and a folder is refused --
+drop takes one item.
+
+## It is a copy, and the object keeps every copy
+
+The item stays in inventory and a copy of it goes in.  An object
+renames a newcomer whose name it already has rather than replacing it,
+so dropping the same item in twice leaves two entries of nearly one
+name, and it is worth listing the object rather than assuming the
+second drop overwrote the first.
+
+Ask twice.  A listing run straight after a drop is often the listing
+from before it.  Three drops in a row were each followed at once by a
+listing without the new item in it, and then by a second listing that
+had it -- the first of the three showing an empty object a moment after
+a notecard had gone into it.
+
+Nothing here is holding that listing.  "ls --in" forgets what it was
+told last and asks the object again every time, so the answer without
+the item in it is the region's own answer, freshly given.  Why the
+region gives it has not been established.  Nothing has gone wrong when
+it does: the object has the item, and what is being said about it has
+not caught up.
+
+## A script dropped in does not run
+
+Copying a script into an object leaves it there uncompiled, and
+nothing about it will change that: "start" has nothing to start,
+because there is nothing compiled to start.  Putting a script into an
+object by hand looks like one action and is really two -- the copy,
+and the save that compiles it inside the object.  "new --in OBJECT"
+does both, and is the way in for anything that has to run.  Notecards,
+textures and everything else that only has to be there are what this
+command is for.
+
+## The whole item goes, permissions and all
+
+What crosses the wire is every field of the item rather than the few
+that matter, because a field left out is sent as zero -- and a
+permission mask of zero is not a default, it is the rights taken away.
+So the item is read in full first, and a drop of something whose
+permissions were set carefully keeps them set that way.
+
+## Examples
+
+    drop lantern Scripts/greeter
+    drop "brass lantern" Notecards/README
+
+See also: new, rm, ls, start, stop, and give for handing an item to
+somebody else instead.

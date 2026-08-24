@@ -1,0 +1,87 @@
+take picks a rezzed object up off the ground and puts it into
+inventory.  It is the other direction of place, and the two of them are
+how an object is moved from one region to another, backed up, or copied
+out of the world into a folder.
+
+The object is named by the word the region calls it, or by its uuid,
+and a name with a space in it has to be quoted.  Names are not unique:
+where several objects answer to one word, take refuses and prints their
+uuids rather than picking, since taking the wrong one is not something
+that can be put back.  "objects TEXT" is the listing those uuids come
+from.
+
+An avatar can only take what it may take, and a take it may not make
+is silence rather than a refusal.  Nothing answers a take at all: the
+item is waited for in the folder it was to land in, so somebody else's
+object produces no message from the region, and after forty seconds the
+command gives up saying only that the item never appeared.  --copy is
+the one that can do better, because it has something to look at
+afterwards -- the object still standing where it was -- and it turns
+that silence into a sentence about permissions.
+
+An object with several prims comes in as one item -- a linkset is one
+object, which is why "unlink" exists.
+
+## Options
+
+--copy asks for a copy and tries to leave the original standing.  It
+works where the object's permissions allow copying, and the report says
+which happened: a bare take says the object "is in inventory", and a
+--copy says it is there "and still where it was".
+
+--into names the folder it lands in, as a path or as the folder's uuid.
+Without it, a take lands in Objects, which is where the viewer puts one
+and therefore where a person will look for it.
+
+--wait is how long to let the region describe itself before giving up
+on finding the object, in seconds, and matters on a region with a lot
+in it or a slow link.
+
+## The flags come before the name
+
+Option parsing stops at the first argument that is not a flag, and on
+this command that argument is the object, so anything after it is not
+read as an option at all.  "take probe --into experiments" takes probe
+and puts it in Objects: the two words after the name are dropped, the
+folder is never looked at, and the report says the object is in
+inventory without saying where.  "take --into experiments probe" is the
+same line with the flag in front of the name, and does what it says.
+
+--copy goes the same way and costs more.  After the name it is ignored,
+so the object is taken rather than copied and the original is gone from
+the region -- and the line printed is the bare take's, which is the
+only sign that what happened was not what was asked for.
+
+The rule is getopt's rather than this command's, and every command in
+the shell shares it.  It is worth a section here because take is where
+it is quietest: the object leaves the region either way, so nothing
+looks wrong until somebody opens the folder they named and finds it
+empty.
+
+## Taking loses where it stood
+
+Second Life does not remember where an object was before it was taken,
+so nothing can put it back for you.  A round trip that has to end where
+it started has to write the position down first: "objects NAME" prints
+it, and move puts the object back afterwards.
+
+## Examples
+
+Take one thing, by name:
+
+    take probe
+
+Take a copy and leave the original where it is, into a folder of its
+own:
+
+    take --copy --into Objects/experiments probe
+
+The whole round trip, position and all:
+
+    objects probe
+    take probe
+    place Objects/probe
+    move probe 33 73 1000
+
+See also: place, move, objects, perms, and unlink for an object that
+should not have come in as one item.

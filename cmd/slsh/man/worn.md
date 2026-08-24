@@ -1,0 +1,67 @@
+worn lists what the avatar has on and where each thing is worn.  It is
+what "wear" adds to and what "detach" takes from, and the listing
+detach matches a name against -- so a thing that is not here is a thing
+detach will say is not worn.
+
+With no argument it is everything; with a word it is the lines whose
+name holds that word, without regard to case.  The name and nothing
+else -- so "worn hud" does not list the HUD attachments.  It lists
+whatever is called something with "hud" in it, which on the avatar this
+was tried on was nothing at all: the things hanging off those points
+are called "auto", "auto 2" and so on, and the word "hud" is in the
+point beside the name rather than in the name.  The lines are sorted by
+attachment point anyway, so the HUD ones fall together without being
+asked for.
+
+The word comes last.  Flags are read only until the first ordinary
+argument, so "worn -l auto" is the long listing of the auto objects and
+"worn auto -l" searches for the name "auto -l" and matches nothing.
+
+## The names come from inventory, not from the objects
+
+A worn object will not answer a request for its properties, so the name
+printed is the inventory item's.  That is the better name anyway: it is
+what the thing is called, and unlike the object's name it does not
+change.
+
+Inventory is read a few levels down rather than in full, because the
+whole tree is a hundred requests and this is a listing of eight things.
+Anything not found in that much of it is printed as its item key -- the
+item may sit deeper than the listing went, or have been deleted while
+still worn, which Second Life allows.  A key here means the name was
+not to hand, not that the thing is nameless.
+
+## The long form, and which id is the one to keep
+
+The long form prints two keys: the inventory item first, then the
+object.  The order is the point.  The item is the thing that does not
+change; the object is rezzed afresh, with a new key, every time it goes
+on and every time the avatar logs in, so a key written down from a
+previous session names nothing.
+
+The item id is also what tells two attachments apart when their names
+agree, which is the refusal detach gives for a word that is worn twice.
+
+Watched happening: one object put on, taken off and put on again three
+times in the same session kept its item id throughout -- 82977e57-...
+every time -- and came back under a different object key on each of the
+three attaches.  No logout came into it -- going on again is enough to
+mint a new one.  So a key copied out of one listing named nothing by
+the next, and it is the first of the two columns that is worth writing
+down.
+
+## What this can and cannot see
+
+The region describes an attachment when it goes on, and again at every
+login, and never otherwise.  Whatever held the session at login heard
+all of that and is what answers here, so a shell that attached later
+still sees the full list.  What no one heard, no one can list.
+
+## Examples
+
+    worn
+    worn -l auto
+    detach lantern
+
+See also: wear, detach, objects for the same things as the region sees
+them, and auto for the worn objects the benchmarks use.

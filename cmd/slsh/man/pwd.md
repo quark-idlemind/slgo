@@ -1,0 +1,39 @@
+pwd prints the inventory folder this shell is in, as a path from the
+root.  cd is what changes it, and every command that takes a path
+without a leading slash takes it relative to this.
+
+It takes no argument, and a word given anyway is ignored rather than
+refused.  The prompt carries the same path already, so this is chiefly
+for a script or for a line being redirected into a file, where there
+is no prompt to read it off.
+
+## The root is a slash and nothing else
+
+Inventory has one root and no home to go back to, so the path of the
+root is "/" and a shell that has not been told otherwise starts there.
+
+## The folder belongs to the shell
+
+Nothing on the grid records where a shell was looking: the folder is
+this shell's own idea, kept in this process, so a second shell on the
+same avatar starts at the root however deep the first one has gone,
+and quitting forgets it.
+
+## A path is meant to be read back
+
+An inventory name may hold very nearly any printable character, which
+was measured rather than assumed -- an item was made for each
+character from space to tilde and every one came back byte for byte,
+including the slash.  So a name containing a slash is printed with a
+backslash in front of it, and a backslash in a name is doubled: the
+path that comes out is the path that goes back in, which is what lets
+a listing be written to a file, edited, and run.  The one thing the
+grid will not keep is a leading or trailing space, which it trims.
+
+## Examples
+
+    pwd
+    /Objects/lanterns
+
+See also: cd, ls, and find for looking below here rather than at where
+here is.

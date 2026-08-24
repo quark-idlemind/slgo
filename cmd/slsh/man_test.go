@@ -38,17 +38,21 @@ func TestAMarkdownPageIsRenderedNotShouted(t *testing.T) {
 	}
 }
 
-// TestATextPageIsStillLaidOutAsText, which is every page that has not
-// been rewritten.  Markdown must not leak into that path: a heading
-// that stayed in ordinary case would be the first sign that it had.
+// TestATextPageIsStillLaidOutAsText.
+//
+// cmdMan prefers markdown now, so this talks to manText directly: that
+// is still the layout a .txt page gets, and it must not pick up SGR
+// from the markdown path.  A heading that stayed in ordinary case
+// would be the first sign that it had.
 func TestATextPageIsStillLaidOutAsText(t *testing.T) {
 	var b bytes.Buffer
-	if err := cmdMan(context.Background(), &Shell{}, &b, []string{"place"}); err != nil {
-		t.Fatal(err)
-	}
+	manText(&b, "# One object, and only one\nA paragraph.\n", 78)
 	got := b.String()
 	if strings.Contains(got, "\x1b[") {
-		t.Errorf("man place is a .txt page and should not carry SGR:\n%q", got)
+		t.Errorf("txt layout should not carry SGR:\n%q", got)
+	}
+	if !strings.Contains(got, "ONE OBJECT, AND ONLY ONE") {
+		t.Errorf("txt heading should be shouted:\n%q", got)
 	}
 }
 

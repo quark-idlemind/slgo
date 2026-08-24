@@ -1,0 +1,52 @@
+get saves a texture to disk as a PNG.  put is the other direction, and
+between them a texture can be fetched, edited and uploaded again --
+though the upload is a new item and costs L$, which this does not.
+
+The argument is an inventory path, relative to the folder the shell is
+in, or a uuid.  Anything that is not a texture is refused, a folder
+included: a folder's type is the kind of thing it prefers to hold, so
+without that check a folder of textures would report itself as a
+texture.
+
+## A uuid here is an asset id, and that is most of the point
+
+Not an item id.  The content delivery network serves textures by asset
+id alone, so a texture on somebody else's object -- named nowhere in
+this avatar's inventory, belonging to nobody here -- is fetchable the
+moment its id is known.  That was verified against the beta grid:
+textures belonging to two other avatars, fetched and decoded.  The id
+comes from wherever the object was inspected, and not from a listing
+here: no inventory command prints an asset id, and the third column of
+"ls -l" is the item id, which the network does not answer to.  A
+texture that is in inventory is named by its path instead, and get
+looks its asset up itself.
+
+## Why a PNG comes out
+
+The grid deals in JPEG 2000 codestreams and nothing on this machine
+opens one, so what somebody asking for a texture wants is a picture
+they can look at, and the decoding happens here.  The report says the
+size it decoded to and how many bytes of JPEG 2000 that came from.
+
+--raw writes the codestream exactly as the grid stores it, in a file
+ending .j2c.  That is the form to keep for putting the same texture
+back, since re-encoding a decoded picture would lose quality for
+nothing, and it is also what to fall back on when a texture will not
+decode -- the refusal says so.
+
+## The file it writes
+
+The item's name, with the separators in it replaced so that a name
+cannot escape the directory it was meant for, and .png or .j2c on the
+end.  A texture asked for by uuid has no name here, so the file is
+called after the uuid.  -o names a file instead, and is then used
+exactly as given.
+
+## Examples
+
+    get Textures/lantern
+    get -o /tmp/wall.png d8467e57-...
+    get --raw Textures/lantern
+
+See also: put, cat for a notecard or a script, and ls for what is
+there.

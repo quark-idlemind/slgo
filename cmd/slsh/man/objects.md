@@ -1,0 +1,59 @@
+objects lists what the region has described: one line per object, its
+key, its name and where it is, gathered under whoever owns it.  It is
+the listing every other command that names something in the world
+depends on -- take, move, touch, texture, dump, link -- and the place to
+look when one of them says it cannot find a thing.
+
+With no argument it is everything; with a word it is what matches, and
+the match is on any part of a name, without regard to case.
+
+## An object is a linkset, and the listing is its roots
+
+What a person means by an object is the root of a linkset, so the roots
+are the listing and -c opens them up.  Printing every prim would turn a
+hundred things into a thousand lines, most of them called "Object" and
+placed at an offset from something the listing did not name.
+
+A search is treated differently from browsing.  A root matches on its
+children's names as well as its own, because the name somebody
+remembers is often on a prim inside; and a prim whose own name was
+asked for is printed even without -c, since it is the answer to the
+question.  The foot of the listing says how many prims were held back.
+
+A prim whose root nothing has described is listed on its own, saying
+so, since leaving it out silently would be a listing that claims the
+region holds less than it does.
+
+## What has been described, and what has not
+
+The simulator describes what is near the camera and nothing else.  An
+object beyond the draw distance is not unnamed here, it is unknown, and
+a region with nothing of that name in it reads exactly the same as one
+where the thing is too far away.
+
+Names cost a round trip each: an object update carries no name, so the
+first run asks about everything heard of so far and takes as long as
+that suggests.  The answers are kept, so the next run is quick.
+
+## Whose things these are
+
+The owner heads each group rather than repeating down a column, and
+--owner narrows the listing to one: a key, or a pattern for the name.
+Somebody nobody has named cannot be matched by a pattern about names,
+so those are counted at the foot instead of being quietly dropped --
+which is the difference between "nobody here owns one" and "nobody has
+said".
+
+Attachments are in the listing too, since a region describes everyone's
+worn things.  Their last column says which point they are worn on, and
+names the wearer when it is not the owner.  Avatars themselves are not
+listed: an avatar is a person, and "who" is the listing for people.
+
+## Examples
+
+    objects lantern
+    objects -c "garden chair"
+    objects --owner "^Example"
+
+See also: who, look, worn for this avatar's attachments alone, and
+take, move, dump and unlink for the things done to what it finds.

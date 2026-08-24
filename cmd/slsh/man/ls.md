@@ -1,0 +1,107 @@
+ls lists a folder.  With no path it lists the folder the shell is in,
+which is the one cd sets and pwd prints; with one it lists that folder
+instead, relative to here unless it starts from the root.
+
+A path that is not a folder lists what it names, the way ls of a file
+does in any shell -- and here that is worth more than it sounds, since
+a name can mean several things.
+
+By default it prints one bare path per line and nothing else.  That is
+the useful shape rather than the plain one: a listing written to a
+file is a list of paths, which can be edited into a file of commands
+that take paths and run.  The detail goes behind -l, where it cannot
+get in the way of that.
+
+## The columns, and why the third is always the id
+
+With -l a line is kind, when it was acquired, id, path, in that order
+and padded to fixed widths.
+
+    notecard   2026-08-03T21:26:43 d8467e57-...  /Notecards/readme
+
+The date is the whole date, down to the second, and it is one field:
+the day and the time of day are joined by a T rather than a space, so
+a listing is four fields and anything reading the id out of the third
+one goes on working.  The seconds are there because they settle
+things.  Two items of one name, acquired a minute apart, are told
+apart by this column and by nothing else on the line except the id,
+and rm --newest and --oldest pick between them by exactly this number
+-- so a listing is how to see what one of those is about to take.
+
+A folder has no date and gets a dash, since an empty column would move
+every column after it.
+
+## Listing an item, and why
+
+    /$ ls -l /Scripts/greeter
+    script     2026-08-07T12:06:57 cb567e57-...  /Scripts/greeter
+    script     2026-08-07T11:26:01 e9d97e57-...  /Scripts/greeter
+    script     2026-08-07T11:25:53 7e277e57-...  /Scripts/greeter
+    script     2026-08-07T11:25:53 ade67e57-...  /Scripts/greeter
+
+Four things of one name, and until this worked the only way to see
+them was to list the whole folder and pick them out by eye.  This is
+where rm sends a person when it refuses a name that means several: the
+dates here are what --newest and --oldest choose by, and the ids are
+what names one of them exactly.  A uuid works as the path too, and
+prints the one line it names.
+
+Without -l the same listing is the same path four times over, which is
+honest -- there are four of them -- but says nothing about which is
+which.  The columns are behind -l for that.
+
+A folder wins where a folder and an item share a name, since that is
+what cd means by the name as well; the id names the item.  A path that
+is neither is reported as the name it is rather than as the folder it
+was tried as first.
+
+## Why an id is worth printing at all
+
+Inventory names are not unique.  A folder can hold a dozen items
+called the same thing, and a path names the first of them -- so a
+listing of duplicates would otherwise be a set of lines that all mean
+one item.  The id names exactly one, and cat, rm, mv, drop and the
+rest take an id anywhere they take a path.  It is the answer rm points
+at when a name means several things and the dates do not settle which.
+get is the one that looks like it belongs on that list and does not:
+the uuid it takes is a texture's asset id, which is not what this
+column prints.
+
+## How far down, and in what order
+
+-r descends, and it descends four levels rather than the whole tree.
+Deeper than that is not listed and is not reported as missing, which
+is worth knowing before concluding that something has gone.
+
+-t is newest first, and it is a flat order rather than a tree one: it
+is asked for to see what was made recently, and grouping by folder
+would bury a thing made a minute ago under whichever folder it lives
+in.  Things made in the same second sort by name.  A folder has no
+date and sorts as the oldest thing there is, which puts folders at the
+end where they are out of the way.
+
+## Options
+
+--in lists what a rezzed object holds instead of a folder, and takes
+no path with it: an object holds no folders, so there is nowhere
+inside one for a path to lead.  The columns are not the ones above
+either: a line is the kind and the name, and with -l the kind, the id
+and the name.  There is no date, since what an object holds carries
+none, and no path, since the name is the whole of where a thing is.
+
+The ids in that listing belong to the object's own copies and not to
+the inventory items they came from, and they are there to be read
+rather than typed back.  rm --in and mv --in take the name instead,
+matched exactly and in the case it has, and neither of them has any
+use for an id.
+
+## Examples
+
+    ls -l Objects
+    ls -l /Scripts/greeter
+    ls -lt d8467e57-...
+    ls -rt
+    ls --in lantern
+
+See also: cd, find, cat, get, rm, and drop for putting something into
+the object --in lists.

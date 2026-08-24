@@ -1,0 +1,57 @@
+new makes a notecard or a script that did not exist.  save is its
+counterpart and writes into one that does; between them, making an
+item and filling it are two commands rather than one guess about which
+was meant.
+
+The argument is where it lands: a path relative to the folder the
+shell is in, whose last name is the item and whose folders must
+already be there.  Without --kind it is a notecard, and --from gives
+it the contents of a file -- without that it is empty.  What is
+printed is the name and the new item's id.
+
+Both kinds cost nothing, and that is not a detail: uploading a texture
+costs L$ and this does not, because a notecard and a script go up
+through their own capability rather than through the asset upload that
+charges.
+
+A script made with no source is given a skeleton -- an empty default
+state -- because a script with none at all is a compile error waiting
+to happen the moment anything runs it.  A script that did not compile
+says so and is in inventory all the same.
+
+## Making one inside an object is a different act
+
+--in makes the script inside a rezzed object, where it is compiled and
+started, and the line it prints says it is running.  Dropping a script
+into an object does not do that.  Copying one in over the protocol
+leaves it sitting there uncompiled, and "start" cannot start what was
+never compiled, so putting a script in by hand is really two acts: the
+copy, and the save that compiles it into the object.  This is both of
+them.
+
+Reusing a name replaces that script rather than adding another, which
+is worth knowing before it happens: an object keeps every copy it is
+given and renames the newcomer, so a command that added would leave
+two scripts of nearly one name both running.
+
+--in takes a name and not a path, because an object holds no folders.
+A notecard cannot be made inside an object at all -- nothing here
+writes one into a prim -- so --in without --kind means a script, since
+a script is the only thing it could mean, and asking for a notecard
+with it is refused rather than quietly made in inventory instead.  Make
+the notecard with a plain "new" and put it in with "drop".
+
+## Examples
+
+An empty notecard, and one with a file in it:
+
+    new Notecards/README
+    new --from notes.txt Notecards/README
+
+A script in inventory, and the same source compiled and running inside
+a rezzed object:
+
+    new --kind script --from hello.lsl /Scripts/greeter
+    new --in lantern --from hello.lsl greeter
+
+See also: save, cat, drop, start, stop, and put for an image.
