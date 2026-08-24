@@ -328,7 +328,7 @@ func printNeighbours(out io.Writer, n *sl.Neighbours) {
 		// so the rare long one grows the line instead of losing an
 		// address.  The row is then 72 to 75 columns, which still has
 		// room for the four spaces man puts in front of the copy of it
-		// in neighbours.txt.
+		// in neighbours.md.
 		fmt.Fprintf(out, "%-32s %5d, %-5d %-18s %d heard\n", name, x, y, c.Addr, c.Heard)
 	}
 }

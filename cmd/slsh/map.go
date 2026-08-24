@@ -39,7 +39,7 @@ package main
 //
 // The price is that only the avatars this session has been told about
 // can be drawn, which is the draw distance and not the region.  Whoever
-// reads a region picture has to know that, so man/map.txt says it and
+// reads a region picture has to know that, so man/map.md says it and
 // the count under the grid says how many are in the picture.
 
 import (

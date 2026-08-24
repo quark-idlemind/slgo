@@ -755,7 +755,7 @@ func init() {
 		params: "FILE",
 		flags:  func() any { return new(helpOnly) },
 		brief:  "run the commands in a file",
-		// The page is source.txt: "." is not a filename anybody wants,
+		// The page is source.md: "." is not a filename anybody wants,
 		// and the field naming the page is what allows the difference.
 		man: "source",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

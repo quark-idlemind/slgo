@@ -6,23 +6,35 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/quark-idlemind/slgo/md"
 )
 
-// TestAMarkdownPageIsRenderedNotShouted.
+// plain is a rendered page with the terminal's styling taken back out,
+// so that a test can measure a line in the columns a reader sees rather
+// than in the bytes an escape sequence adds.
+var sgr = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+func plain(s string) string { return sgr.ReplaceAllString(s, "") }
+
+// TestAPageIsRenderedAsMarkdown.
 //
-// cd has both forms, and markdown wins.  The point of preferring it is
-// that a heading can stay in the case it was written -- the .txt layout
-// has to shout, because it has no other mark.  If man cd still came out
-// in capitals, we would be reading the .txt or laying the .md out as
-// one, and neither is the thing we just added markdown for.
-func TestAMarkdownPageIsRenderedNotShouted(t *testing.T) {
+// Every page is markdown now and there is no second form to fall back
+// to, so a page that came out as its own source -- the "## " still on
+// the front of a heading, or a heading in capitals as the old text
+// layout shouted them -- means the rendering was skipped rather than
+// that some other reader took over.
+func TestAPageIsRenderedAsMarkdown(t *testing.T) {
 	var b bytes.Buffer
 	if err := cmdMan(context.Background(), &Shell{}, &b, []string{"cd"}); err != nil {
 		t.Fatal(err)
 	}
-	got := b.String()
+	got := plain(b.String())
 	if strings.Contains(got, "ONLY A FOLDER") {
-		t.Errorf("man cd shouted a markdown heading:\n%s", got)
+		t.Errorf("man cd shouted a heading:\n%s", got)
+	}
+	if strings.Contains(got, "## ") {
+		t.Errorf("man cd printed its markdown rather than rendering it:\n%s", got)
 	}
 	if !strings.Contains(got, "Only a folder, and only by name") {
 		t.Errorf("man cd is missing the markdown heading:\n%s", got)
@@ -32,24 +44,6 @@ func TestAMarkdownPageIsRenderedNotShouted(t *testing.T) {
 	}
 	if !strings.Contains(got, "cd -- ") {
 		t.Errorf("man cd should still say the name and brief:\n%s", got)
-	}
-}
-
-// TestATextPageIsStillLaidOutAsText.
-//
-// cmdMan prefers markdown now, so this talks to manText directly: that
-// is still the layout a .txt page gets, and it must not pick up SGR
-// from the markdown path.  A heading that stayed in ordinary case
-// would be the first sign that it had.
-func TestATextPageIsStillLaidOutAsText(t *testing.T) {
-	var b bytes.Buffer
-	manText(&b, "# One object, and only one\nA paragraph.\n", 78)
-	got := b.String()
-	if strings.Contains(got, "\x1b[") {
-		t.Errorf("txt layout should not carry SGR:\n%q", got)
-	}
-	if !strings.Contains(got, "ONE OBJECT, AND ONLY ONE") {
-		t.Errorf("txt heading should be shouted:\n%q", got)
 	}
 }
 
@@ -184,105 +178,81 @@ func TestManForSomethingThatIsNotACommandIsAnError(t *testing.T) {
 // paragraph that is not wrapped runs off the screen, and an example
 // that IS wrapped becomes a command line that cannot be typed.
 func TestAPageWrapsItsProseAndLeavesItsExamplesAlone(t *testing.T) {
-	const page = `# A heading that is left exactly as it was written
+	const page = `## A heading in the case written
 one two three four five six seven eight nine ten eleven twelve
 thirteen fourteen fifteen sixteen seventeen eighteen
 
-	place --at 128,128,25 "Objects/a name with spaces in it and more"`
+    place --at 128,128,25 "Objects/a name with spaces in it and more"`
 
-	var b bytes.Buffer
-	manText(&b, page, 40)
-	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+	got := plain(md.RenderWidth(page, 40))
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
 
 	for _, l := range lines {
-		if strings.HasPrefix(l, "    ") || strings.HasPrefix(l, "A HEADING") {
+		// The examples are indented and the rule under a heading is
+		// drawn to the heading's own width; neither is prose.
+		if strings.HasPrefix(l, "    ") || strings.Trim(l, "\u2500") == "" {
 			continue
 		}
-		if len(l) > 40 {
-			t.Errorf("prose wrapped to more than 40 columns: %q", l)
+		if n := len([]rune(l)); n > 40 {
+			t.Errorf("prose wrapped to %d columns, more than 40: %q", n, l)
 		}
 	}
-	if lines[0] != "A HEADING THAT IS LEFT EXACTLY AS IT WAS WRITTEN" {
-		t.Errorf("the heading was wrapped or left in ordinary case: %q", lines[0])
+	if lines[0] != "A heading in the case written" {
+		t.Errorf("the heading was wrapped or had its case changed: %q", lines[0])
 	}
 	want := `    place --at 128,128,25 "Objects/a name with spaces in it and more"`
-	if last := lines[len(lines)-1]; last != want {
-		t.Errorf("the example came out as %q, want %q", last, want)
+	if !strings.Contains(got, want) {
+		t.Errorf("the example did not come out as written:\n%s", got)
 	}
-	if strings.Contains(b.String(), "# ") {
-		t.Errorf("the heading marker should not reach the screen:\n%s", b.String())
+	if strings.Contains(got, "## ") {
+		t.Errorf("the heading marker should not reach the screen:\n%s", got)
 	}
 }
 
 // TestAHeadingDoesNotComeOutLookingLikeAParagraph.
 //
-// This is what the "# " is for.  Printed as it was written, a heading
+// This is what the "## " is for.  Printed as it was written, a heading
 // is a short sentence with a blank line over it, which is also what the
 // first line of a paragraph is -- so a page rendered that way is one
 // undifferentiated column and cannot be skimmed for the trap it exists
-// to warn about.  Capitals are the only mark available: term.go has no
-// styling in it, and a page is redirected to a file as often as it is
-// read on a screen.
+// to warn about.
 func TestAHeadingDoesNotComeOutLookingLikeAParagraph(t *testing.T) {
 	const words = "One object, and only one"
 
-	var heading, paragraph bytes.Buffer
-	manText(&heading, "# "+words, 78)
-	manText(&paragraph, words, 78)
+	heading := md.RenderWidth("## "+words, 78)
+	paragraph := md.RenderWidth(words, 78)
 
-	if heading.String() == paragraph.String() {
-		t.Errorf("a heading and a paragraph of the same words render identically: %q", heading.String())
+	if heading == paragraph {
+		t.Errorf("a heading and a paragraph of the same words render identically: %q", heading)
 	}
-	if got := strings.TrimSpace(heading.String()); got != strings.ToUpper(words) {
-		t.Errorf("the heading rendered as %q, want %q", got, strings.ToUpper(words))
-	}
-}
-
-// TestNoManPageShoutsAFlagName.
-//
-// Headings are uppercased, so a flag or a path in one becomes something
-// nobody can type -- "--REPLACE".  The rule is to keep them in the
-// paragraph underneath, and this is what keeps the rule.
-func TestNoManPageShoutsAFlagName(t *testing.T) {
-	// Only .txt pages: those headings are uppercased.  Markdown keeps
-	// the case it was written in, so a flag in one is still the flag.
-	files, err := manFileNames()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range files {
-		if !strings.HasSuffix(f, ".txt") {
-			continue
-		}
-		body, err := manPages.ReadFile(manDir + "/" + f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, line := range strings.Split(string(body), "\n") {
-			if !strings.HasPrefix(line, "# ") {
-				continue
-			}
-			for _, w := range strings.Fields(line[2:]) {
-				if strings.HasPrefix(w, "-") {
-					t.Errorf("cmd/slsh/%s/%s: the heading %q names %q, which uppercasing would make untypeable",
-						manDir, f, line[2:], w)
-				}
-			}
-		}
+	// And the difference has to be something a reader sees, not just
+	// bytes: the words themselves are still the words.
+	if !strings.Contains(plain(heading), words) {
+		t.Errorf("the heading lost its words: %q", heading)
 	}
 }
 
 // TestWrappingKeepsTheSpaceAfterAFullStop, which is two everywhere else
 // in this shell and should not become one on its way to the screen.
+//
+// The join between two lines of one paragraph is the case that gets
+// lost: a soft line break is one space in CommonMark, so a sentence
+// that ends where the author happened to break the line came out with
+// one space where the same sentence ending mid-line kept two.
 func TestWrappingKeepsTheSpaceAfterAFullStop(t *testing.T) {
-	var b bytes.Buffer
-	manText(&b, "One sentence.  Another one, on the same line.\nAnd a third, on the next.", 200)
-	got := strings.TrimSpace(b.String())
+	got := plain(md.RenderWidth("One sentence.  Another one, on the same line.\nAnd a third, on the next.", 200))
 	if !strings.Contains(got, "sentence.  Another") {
 		t.Errorf("the two spaces inside a line were squashed: %q", got)
 	}
 	if !strings.Contains(got, "line.  And") {
 		t.Errorf("the join between two lines should be two spaces after a full stop: %q", got)
+	}
+	// A colon is not the end of a sentence and takes one space, which
+	// is the thing that stops this from being "two spaces after any
+	// punctuation".
+	colon := plain(md.RenderWidth("Ends with a colon:\nthe next line.", 200))
+	if !strings.Contains(colon, "colon: the") {
+		t.Errorf("a colon should take one space: %q", colon)
 	}
 }
 
@@ -291,10 +261,14 @@ func TestWrappingKeepsTheSpaceAfterAFullStop(t *testing.T) {
 // printed.
 func TestALongWordIsNotBroken(t *testing.T) {
 	const id = "91a97e57-7e57-c0de-76b6-411da672b021"
-	var b bytes.Buffer
-	manText(&b, "an id is "+id+" and that is that", 20)
-	if !strings.Contains(b.String(), id) {
-		t.Errorf("the id was broken across lines:\n%s", b.String())
+	got := plain(md.RenderWidth("an id is "+id+" and that is that", 20))
+	if !strings.Contains(got, id) {
+		t.Errorf("the id was broken across lines:\n%s", got)
+	}
+	// wrapText lays out the contents listing rather than a page, and
+	// has the same job to do there.
+	if w := wrapText("an id is "+id+" and that is that", 20); !strings.Contains(w, id) {
+		t.Errorf("wrapText broke the id across lines:\n%s", w)
 	}
 }
 
@@ -361,8 +335,8 @@ func TestEveryManFieldNamesAPageThatIsThere(t *testing.T) {
 			continue
 		}
 		if _, _, err := manOpen(page); err != nil {
-			t.Errorf("%s names the page %q, and neither cmd/slsh/%s.md nor cmd/slsh/%s.txt is there",
-				name, page, manDir+"/"+page, manDir+"/"+page)
+			t.Errorf("%s names the page %q, and cmd/slsh/%s.md is not there",
+				name, page, manDir+"/"+page)
 		}
 	}
 }
@@ -371,9 +345,7 @@ func TestEveryManFieldNamesAPageThatIsThere(t *testing.T) {
 // direction: a page nothing points at is prose nobody will ever be
 // shown, and it goes wrong silently -- most likely a command renamed
 // without its page, which is exactly the case this series created when
-// host became login.  Both .md and .txt of one stem count as named:
-// markdown wins at print time, and the text is the fallback, not a
-// page of its own.
+// host became login.
 func TestEveryPageInTheDirectoryIsNamedBySomeCommand(t *testing.T) {
 	files, err := manFileNames()
 	if err != nil {
@@ -391,7 +363,7 @@ func TestEveryPageInTheDirectoryIsNamedBySomeCommand(t *testing.T) {
 	for _, f := range files {
 		stem, ok := manStem(f)
 		if !ok {
-			t.Errorf("cmd/slsh/%s/%s is not a .md or .txt page; man reads nothing else", manDir, f)
+			t.Errorf("cmd/slsh/%s/%s is not a .md page; man reads nothing else", manDir, f)
 			continue
 		}
 		if !named[stem] {
@@ -402,11 +374,8 @@ func TestEveryPageInTheDirectoryIsNamedBySomeCommand(t *testing.T) {
 
 // manStem is the command a page file is named for.
 func manStem(filename string) (string, bool) {
-	switch {
-	case strings.HasSuffix(filename, ".md"):
+	if strings.HasSuffix(filename, ".md") {
 		return strings.TrimSuffix(filename, ".md"), true
-	case strings.HasSuffix(filename, ".txt"):
-		return strings.TrimSuffix(filename, ".txt"), true
 	}
 	return "", false
 }

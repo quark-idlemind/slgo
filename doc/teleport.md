@@ -4,7 +4,7 @@ Written 2026-08-16, against `09b3366` (v0.3.0). Nothing here is built.
 Stage 0 has been run, and what it measured is folded in below: where
 this says what happens, it was watched happening.
 
-`sl/teleport.go`, `cmd/slsh/man/tp.txt` and `doc/viewer-frontend.md`
+`sl/teleport.go`, `cmd/slsh/man/tp.md` and `doc/viewer-frontend.md`
 each stop at the same sentence -- another region is a different
 simulator, and following the avatar there is the daemon's work rather
 than a client's. This is the plan for doing it.
@@ -320,7 +320,7 @@ throughout, which is that field's contract working rather than failing.
 
 ### Stage 5 -- slsh (done)
 
-- `tp REGION [X Y Z]` -- the refusal in `man/tp.txt` becomes a
+- `tp REGION [X Y Z]` -- the refusal in `man/tp` becomes a
   paragraph about what it costs. Default arrival position is the middle
   of the region at ground level, which is where a viewer puts you.
 - `waiting`'s `accept` on a lure follows the teleport instead of firing
@@ -348,9 +348,9 @@ it does not promise is dry land, since a region's middle can be under
 its water, as Sandbox Goguen's is.
 
 Four man pages carried sentences that `a2fd50b` made false and now do
-not: `tp.txt` rewritten, `answer.txt` no longer says accepting a
-teleport ends the session, `regions.txt` no longer says nothing
-teleports between regions, `waiting.txt` says an offer is followed. The
+not: `tp` rewritten, `answer` no longer says accepting a
+teleport ends the session, `regions` no longer says nothing
+teleports between regions, `waiting` says an offer is followed. The
 same falsehood was in `waiting.go`'s `choices()`.
 
 ### Stage 6 -- a viewer attached while it happens (done)

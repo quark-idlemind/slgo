@@ -660,7 +660,7 @@ func (sh *Shell) sayPosition(ctx context.Context, out io.Writer) error {
 
 // positionLine is where the avatar is, in the one wording where, tp and
 // an accepted lure all say it in.  A region and a position to the metre:
-// see man/where.txt for why no more than that is honest.
+// see man/where.md for why no more than that is honest.
 func positionLine(p *sl.Presence) string {
 	return fmt.Sprintf("%s at %.0f, %.0f, %.0f",
 		p.Region, p.Position.X, p.Position.Y, p.Position.Z)

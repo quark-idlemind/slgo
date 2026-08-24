@@ -39,12 +39,14 @@ package main
 // construct, where a stray backtick is a compile error and no editor
 // wraps or spell-checks a paragraph.
 //
-// Two names for the same stem: NAME.md, and NAME.txt.  Markdown is
-// preferred when both are there, because it can be rendered with the
-// styling a .txt page has to shout for.  The .txt form stays until a
-// page is rewritten, and is still the layout described below.
+// NAME.md, and nothing else.  There was a second form, NAME.txt, laid
+// out by a reader in this file: it had no mark available but capitals,
+// so every heading was shouted and a flag name in one came out as
+// "--REPLACE".  Markdown can send bold, so a heading keeps the case it
+// was written in, and once every page had been rewritten the text form
+// was 75 files saying the same thing in a worse hand.
 //
-// The whole directory is embedded rather than a pattern like "man/*.txt",
+// The whole directory is embedded rather than a pattern like "man/*.md",
 // because a pattern is a thing a file can silently fall outside of and a
 // directory is not.  The page still ends up inside the binary either way,
 // which is the property worth keeping: a shell that is installed cannot
@@ -59,33 +61,23 @@ package main
 // The command's man field names the page rather than holding it.  Naming
 // is what lets two names share one command -- quit and exit are one
 // entry, and "." is not a filename anybody wants -- so the page for "."
-// is source.txt and the field says so.  An empty field is a command with
-// no page yet, which is most of them.
+// is source.md and the field says so.  An empty field is a command with
+// no page yet.
 //
 // # How a page is laid out
 //
-// As a Go doc comment is, because that is what everybody writing one
-// here has just been reading:
+// As markdown, rendered by package md.  Paragraphs are wrapped to the
+// terminal, a "## " line is a heading and comes out in the case it was
+// written, an indented block is an example and is printed exactly as it
+// stands, and a table is drawn.  A heading longer than the width wraps
+// like anything else, which the text form never did -- it had no way to
+// and left the line long.
 //
-//   - a blank line separates paragraphs, and a paragraph is wrapped to
-//     the terminal;
-//   - a line starting with "# " is a heading, and is not wrapped;
-//   - a line starting with a tab is an example, and is printed as it
-//     was written.
-//
-// A heading on a .txt page is printed in capitals, which is man(7)'s
-// own convention and the only one that form has: term.go emits
-// "\r\x1b[K" and nothing else, and a page goes to a file or a pipe as
-// often as to a screen.  Markdown is the other form, and package md
-// can send bold, so those headings keep the case they were written in.
-// A blank line above a sentence in ordinary case is not a heading; it
-// is a paragraph, and a .txt page written that way is one column
-// nobody can skim for the trap.
-//
-// The consequence for whoever writes a page: keep flag names, paths and
-// anything else case-sensitive out of a heading, because the heading is
-// going to be shouted and "--REPLACE" is not a thing anybody can type.
-// Say it in the paragraph underneath, where the case survives.
+// The house rule of two spaces after a full stop is held across the
+// join between two lines of one paragraph as well as inside a line;
+// CommonMark makes a soft line break one space, so md/parse.go puts the
+// second one back rather than have a sentence boundary come out
+// differently depending on where the author pressed return.
 //
 // Wrapping is to the terminal's own width less a margin, and no wider
 // than 78 whatever the terminal says: a paragraph 200 columns wide is
@@ -113,7 +105,7 @@ import (
 
 // manPages is cmd/slsh/man, as it was on the day this was built.
 //
-// The directory and not a pattern: "man/*.txt" would embed whatever
+// The directory and not a pattern: "man/*.md" would embed whatever
 // matched and say nothing about whatever did not, and a page missing
 // from the binary is exactly the failure this is meant not to have.
 // manFileNames and the tests beside it turn the remaining ways to get
@@ -127,32 +119,28 @@ var manPages embed.FS
 // manDir is where the pages are, in the embedded copy and on disk.
 const manDir = "man"
 
-// manFile is the page a command's man field names: the markdown if
-// it is there, otherwise the text.
+// manFile is the page a command's man field names.
 func manFile(page string) string {
 	file, _, err := manOpen(page)
 	if err != nil {
-		return manDir + "/" + page + ".txt"
+		return manDir + "/" + page + ".md"
 	}
 	return file
 }
 
 // manOpen is one page's path and text.
 //
-// Markdown first, then text.  An error here means the field names a
-// file that is not there, which TestEveryManFieldNamesAPageThatIsThere
-// makes impossible to ship; the message says which page all the same,
-// since a wrong answer about where the text went would send somebody
-// looking in the wrong place.
+// An error here means the field names a file that is not there, which
+// TestEveryManFieldNamesAPageThatIsThere makes impossible to ship; the
+// message says which page all the same, since a wrong answer about
+// where the text went would send somebody looking in the wrong place.
 func manOpen(page string) (file, text string, err error) {
-	for _, ext := range []string{"md", "txt"} {
-		file = manDir + "/" + page + "." + ext
-		b, err := manPages.ReadFile(file)
-		if err == nil {
-			return file, string(b), nil
-		}
+	file = manDir + "/" + page + ".md"
+	b, err := manPages.ReadFile(file)
+	if err != nil {
+		return "", "", fmt.Errorf("the page %s is not in this build; it should be cmd/slsh/%s", page, file)
 	}
-	return "", "", fmt.Errorf("the page %s is not in this build; it should be cmd/slsh/%s.md or cmd/slsh/%s.txt", page, manDir+"/"+page, manDir+"/"+page)
+	return file, string(b), nil
 }
 
 // manRead is one page's text.
@@ -226,16 +214,12 @@ func cmdMan(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	// The heading and the usage line are already out, so a page that
 	// cannot be read leaves a person with the two lines and a reason
 	// rather than with nothing at all.
-	file, text, err := manOpen(c.man)
+	_, text, err := manOpen(c.man)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(&body)
-	if strings.HasSuffix(file, ".md") {
-		body.WriteString(md.RenderWidth(text, width))
-	} else {
-		manText(&body, text, width)
-	}
+	body.WriteString(md.RenderWidth(text, width))
 	return manPrint(ctx, sh, out, body.String())
 }
 
@@ -296,7 +280,7 @@ func manContents(out io.Writer, width int) error {
 		blurb = "\"man NAME\" describes one command at length.  These have " +
 			"a page; the rest answer \"COMMAND --help\", and \"help\" lists them all."
 	}
-	manText(out, blurb, width)
+	fmt.Fprintln(out, wrapText(blurb, width))
 	fmt.Fprintln(out)
 	for _, line := range strings.Split(wrapText(strings.Join(have, " "), width-4), "\n") {
 		fmt.Fprintln(out, "    "+line)
@@ -325,71 +309,6 @@ func manWidth(sh *Shell) int {
 		w = 40
 	}
 	return w
-}
-
-// manText lays a page out: paragraphs wrapped, headings and examples
-// left as they were written.  See the head of this file for the three
-// kinds of line and why they are the ones a Go doc comment has.
-func manText(out io.Writer, text string, width int) {
-	var para string
-	add := func(line string) {
-		switch {
-		case para == "":
-			para = line
-		case endsASentence(para):
-			// Two spaces after a full stop, as everywhere else here.
-			// Whatever an author wrote inside a line is kept as it is by
-			// the wrapping; this is the join between two of them, where
-			// the newline was standing in for the space.
-			para += "  " + line
-		default:
-			para += " " + line
-		}
-	}
-	flush := func() {
-		if para == "" {
-			return
-		}
-		fmt.Fprintln(out, wrapText(para, width))
-		para = ""
-	}
-
-	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
-		switch {
-		case strings.TrimSpace(line) == "":
-			flush()
-			fmt.Fprintln(out)
-		case strings.HasPrefix(line, "# "):
-			flush()
-			// Capitals, because there is nothing else a heading can be
-			// made of that survives being written to a file.  See the
-			// head of this file.
-			fmt.Fprintln(out, strings.ToUpper(strings.TrimPrefix(line, "# ")))
-		case strings.HasPrefix(line, "\t"):
-			flush()
-			// Four spaces rather than the tab itself, because a tab is
-			// eight columns wide in some terminals and the example then
-			// wraps where the page did not mean it to.
-			fmt.Fprintln(out, "    "+strings.TrimPrefix(line, "\t"))
-		default:
-			add(strings.TrimSpace(line))
-		}
-	}
-	flush()
-}
-
-// endsASentence is the join between two lines of one paragraph: a full
-// stop at the end of one wants two spaces before the next, and anything
-// else -- a colon included, which takes one space -- wants one.
-func endsASentence(s string) bool {
-	if s == "" {
-		return false
-	}
-	switch s[len(s)-1] {
-	case '.', '!', '?':
-		return true
-	}
-	return false
 }
 
 // wrapText breaks one paragraph at spaces.
