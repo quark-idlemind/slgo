@@ -18,12 +18,20 @@ stand in front of it, as in "(2) Local>", and that half belongs to
 waiting for an answer, and it stands in front of the command prompt in
 the same way.
 
-# The two modes each keep their own half-typed line
+# A half-typed line is put aside, not lost
 
-Leaving one mode puts the line being typed aside and brings back the
-line that was put aside on the way in, so an interrupted command is
-still there afterwards and so is an interrupted sentence.  Neither is
-sent or run by the switch.
+Leaving a mode puts the line being typed aside and brings back the line
+that was put aside on the way in, so an interrupted sentence is still
+there afterwards.  Nothing is sent or run by the switch.  It is the
+chat line this keeps in practice: chat mode is entered by running a
+command, and the line a command was typed on is taken before it runs,
+so there is no half-typed command left to hold on to.
+
+There is one place to put a line rather than one for each mode, and the
+multi-line answer a text box takes is a third mode using it, so a
+sentence left half typed in chat can come back at the "1 text>" prompt.
+It comes back on the line to be edited, and nothing is sent until it is
+entered.
 
 # What the keys do here
 

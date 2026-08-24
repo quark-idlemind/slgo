@@ -38,6 +38,6 @@ One of several, by who sent it or what it is called:
 
 See also: accept, offers, and the pair of no and ignore in "waiting" --
 "no" is this same refusal reached by the number that listing prints,
-and it answers these two kinds along with teleports, dialogs,
-permissions and group invitations, while "ignore" is the other thing
-entirely: it leaves the offer waiting and says nothing to anybody.
+and it answers these two kinds along with teleports, permissions and
+group invitations, while "ignore" is the other thing entirely: it
+leaves the offer waiting and says nothing to anybody.

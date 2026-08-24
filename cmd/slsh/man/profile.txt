@@ -1,14 +1,18 @@
 profile prints what somebody's profile says about them: when the
 account was made, what it says about payment, who its partner is, the
-text they wrote, and the groups they chose to show.  It is a public
+web page and the text they wrote, what they say they are looking for,
+can do and speak, and the groups they chose to show.  It is a public
 question, answered by the grid to anybody who asks, and nothing about
 it reaches the person asked about.
 
 Who is named by a name, by a key, or by the number beside a name in the
-last listing.  Every field says what it does not know rather than
-printing an empty column, because a blank beside "born" reads as an
-answer that went missing on the way where "not said" reads as a profile
-that has none.
+last listing.  The fields that are always there say what they do not
+know rather than printing an empty column, because a blank beside
+"born" reads as an answer that went missing on the way where "not said"
+reads as a profile that has none.  Four are printed only where there is
+something in them -- the web page, and the "wants", "skills" and
+"speaks" that viewers stopped showing years ago -- since a line of "not
+said" for each of those on every profile would say nothing to anybody.
 
 The keys stay in the lines.  A key is what everything else here takes,
 including this command's own argument, so a partner or a group worth
@@ -55,9 +59,9 @@ profile that exists arrives in milliseconds.
 
 # Options
 
---wait is how many seconds to give the grid, and matters only for the
-case above, where the whole of it is spent before there is anything to
-say.
+--wait, or -w, is how many seconds to give the grid, fifteen when it is
+not said.  It matters only for the case above, where the whole of it is
+spent before there is anything to say.
 
 # Examples
 

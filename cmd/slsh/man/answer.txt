@@ -19,8 +19,9 @@ number is the answer:
 and with nothing after the number it opens the multi-line form, where
 lines are typed until ^D at the end of one ends them -- in front of
 anything, ^D deletes forward as it does at the prompt.  ESC starts the
-answer again and ^C sends nothing.  --file PATH takes the answer from a file instead,
-newlines and all, which is the way to send something written elsewhere.
+answer again and ^C sends nothing.  --file PATH takes the answer from
+a file instead, newlines and all, which is the way to send something
+written elsewhere.
 
 Whichever of the three is used, a text box carries 254 bytes and no
 more.  The reply travels in the field a button label travels in, and

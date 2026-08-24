@@ -18,8 +18,10 @@ key beside each duplicate for exactly this.
 
 Nothing moves until the other side accepts.  The report says "offered"
 rather than "gave" because that is all that has happened: the offer
-travels as a message to them, the answer is another message, and this
-side is told neither what they chose nor whether the item ever arrived.
+travels as a message to them, and their answer travels back as another,
+printed on this side as a notice saying the offer was accepted or
+declined.  Whether the item itself arrived is the part nobody is told:
+the simulator does the moving and says nothing about it either way.
 
 An offer nobody answers stays pending, and nothing is told to either
 side.  That is read from the messages rather than watched: watching it

@@ -16,14 +16,15 @@ opened while this listing was on the screen has moved the numbers under
 it, which is the other reason not to type one.
 
 The danger is that typing one is not refused.  A number given to "im",
-"offer", "give" or "profile" means the last listing "who", "friends" or
-"lookup" printed, and this is not one of those: it leaves that listing
-exactly as it was.  So "talk" and then "im 2" writes to the second
-person of whatever was listed before, who has every chance of being
-somebody else entirely, and the shell reports it as a success because
-nothing about it went wrong.  With no such listing at all it says there
-is no 2 in the last listing, which is the harmless half of the same
-thing.
+"offer", "give" or "profile" means the last listing of people -- what
+"who", "friends" or "lookup" printed, or the several people a "profile"
+listed rather than guess between -- and this is not one of those: it
+leaves that listing exactly as it was.  So "talk" and then "im 2"
+writes to the second person of whatever was listed before, who has
+every chance of being somebody else entirely, and the shell reports it
+as a success because nothing about it went wrong.  With no such listing
+at all it says there is no 2 in the last listing, which is the harmless
+half of the same thing.
 
 # A conversation opens by itself and does not close
 
@@ -46,7 +47,7 @@ the grid volunteers afterwards does not reach the row: with the name
 learned between one message and the next, the listing was measured
 still saying (d8467e57).  What relabels it is a later message from that
 person that does carry a name, or a command naming them by key -- "chat
-d8467e57-…" asks the grid and puts the answer in the row.
+d8467e57-..." asks the grid and puts the answer in the row.
 
 # Examples
 

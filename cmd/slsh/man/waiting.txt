@@ -12,10 +12,12 @@ with them.  A shell has no screen to leave them on, so they are
 gathered here, the prompt says how many there are, and nothing is
 answered by being looked at.
 
-Each line says who is asking and what for, and the line under it says
-what may be typed: the buttons a dialog offers, the two shapes a text
-box takes, the fee an invitation wants, or the plain "answer, no,
-ignore".
+Each line is the number, what kind of thing it is -- dialog, text box,
+teleport, inventory, friendship, permission, group -- then who is
+asking and what for.  The line under it says what may be typed: the
+buttons a dialog offers, the two shapes a text box takes, the fee an
+invitation wants, the note that taking a teleport waits for the
+arrival, or the plain "answer, no, ignore".
 
 Two of them do more than send a message and are marked as such.  A group
 invitation may cost money, so its fee has to be typed back.  A teleport
@@ -40,8 +42,9 @@ answered it, so the count at the prompt falls by one.
 
 # Options
 
--a includes the things ignore has set aside.  Without it they are not
-listed and not counted at the prompt, which is what ignore is for.
+-a, spelled out --all, includes the things ignore has set aside.
+Without it they are not listed and not counted at the prompt, which is
+what ignore is for.
 
 # Examples
 

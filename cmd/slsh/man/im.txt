@@ -3,7 +3,9 @@ loud reaches whoever is standing near, and this reaches the person
 named and nobody else, wherever they are.
 
 Who is named by a name, by a key, or by the number beside a name in the
-last listing "who", "friends" or "lookup" printed.  With words after
+last listing of people, which is what "who", "friends" and "lookup"
+print -- and "profile" too, where the name it was given answered to
+several people and it listed them to be picked from.  With words after
 the name they are the message, sent at once, and the shell stays in
 command mode.  With nothing after it the conversation is opened and the
 shell enters chat mode, which is what "chat" on somebody does.
