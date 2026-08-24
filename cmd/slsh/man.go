@@ -190,7 +190,11 @@ func cmdMan(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	width := manWidth(sh)
 
 	if len(args) == 0 {
-		return manContents(out, width)
+		var body strings.Builder
+		if err := manContents(&body, width); err != nil {
+			return err
+		}
+		return manPrint(ctx, sh, out, body.String())
 	}
 	// One name.  A page is prose about one command, so there is nothing
 	// sensible to do with two, and a name with a space in it is not a
@@ -204,11 +208,12 @@ func cmdMan(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return fmt.Errorf("no command called %q; \"help all\" lists them", name)
 	}
 
-	fmt.Fprintf(out, "%s -- %s\n", name, c.brief)
-	fmt.Fprintf(out, "usage: %s\n", c.usage(name))
+	var body strings.Builder
+	fmt.Fprintf(&body, "%s -- %s\n", name, c.brief)
+	fmt.Fprintf(&body, "usage: %s\n", c.usage(name))
 	if c.man == "" {
-		fmt.Fprintf(out, "\nThere is no man page for %s yet; %q lists what it takes.\n", name, name+" --help")
-		return nil
+		fmt.Fprintf(&body, "\nThere is no man page for %s yet; %q lists what it takes.\n", name, name+" --help")
+		return manPrint(ctx, sh, out, body.String())
 	}
 	// The heading and the usage line are already out, so a page that
 	// cannot be read leaves a person with the two lines and a reason
@@ -217,13 +222,32 @@ func cmdMan(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(out)
+	fmt.Fprintln(&body)
 	if strings.HasSuffix(file, ".md") {
-		fmt.Fprint(out, md.RenderWidth(text, width))
+		body.WriteString(md.RenderWidth(text, width))
 	} else {
-		manText(out, text, width)
+		manText(&body, text, width)
 	}
-	return nil
+	return manPrint(ctx, sh, out, body.String())
+}
+
+// manPrint writes a finished page.  On a real terminal it is shown a
+// screenful at a time; on a pipe or a redirect the whole thing goes
+// out, because there is nobody there to press space.
+func manPrint(ctx context.Context, sh *Shell, out io.Writer, text string) error {
+	if manPaged(sh, out) {
+		return page(ctx, sh.term, text)
+	}
+	_, err := io.WriteString(out, text)
+	return err
+}
+
+func manPaged(sh *Shell, out io.Writer) bool {
+	if sh == nil || sh.term == nil || sh.term.Plain() {
+		return false
+	}
+	_, ok := out.(*termWriter)
+	return ok
 }
 
 // manContents is what man says when it is asked nothing: which commands
