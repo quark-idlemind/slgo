@@ -11,7 +11,8 @@ its own -- but only four levels down, which is one request rather than
 one per folder and reaches everything anybody files by hand.  A landmark
 buried deeper than that is not listed and is not found by name, and what
 comes back is "no landmark called that" rather than anything about
-depth.  "find" and "ls" still see it.
+depth.  "find" counts the same four levels from wherever it is started,
+so it will not see it either; an "ls" of the folder it is in will.
 
 With a name it reads that one and prints where it goes, without moving.
 Going there is asked for separately, and so is going home:
@@ -53,7 +54,7 @@ command printed the position it had arrived at, and about one and a
 third seconds later the parcel's own object teleported it home.
 
 	going to Ravensdon Boutique Shop
-	Dell of Ashes at 113, 109, 1011      true for about 1.3 seconds
+	Dell of Ashes at 113, 109, 1011      <- true for about 1.3 seconds
 
 So a position printed here can be true when it is printed and false a
 moment afterwards, and nothing said so.  What the grid sent was two

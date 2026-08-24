@@ -14,6 +14,10 @@ are the position when all three are numbers:
 	tp Example Landing
 	tp Example Landing 33 73 1000.5
 
+A trailing comma on a number is ignored, so a position read off "where"
+or off the line above a map is pasted back in as it stands: "tp 128,
+128, 25" is the first of those three again.
+
 # A position outside this region is the region it really is in
 
 A region is 256 metres square and the grid is regions laid edge to
@@ -125,7 +129,9 @@ before anything treats a teleport as instant.
 
 The line saying where it is going is printed before the waiting starts,
 because a shell that has silently stopped answering is indistinguishable
-from one that has hung.
+from one that has hung.  A move inside this region prints no such line:
+there is nothing to name that the position typed did not already say, so
+the first thing it prints is the position read back after the arrival.
 
 The wait is thirty seconds, which is six times the slowest move ever
 measured here and leaves room for a grid having a bad day.  It can be
@@ -218,12 +224,20 @@ as a name.
 	tp Example Landing 128 128 2001
 	tp --wait 60 Example Shallows
 
-# Examples that need no options
+# A negative coordinate and where the end of options goes
 
 The negative forms are worth one note.  "tp -10 128 25" begins with
 something that looks like an option, so the shell puts an end-of-options
-mark in front of the position for you; nothing has to be typed
-differently.
+mark in front of the position for you, and a position on its own needs
+nothing typed differently.
+
+With a region name in front of it that mark lands after the name, where
+it is no longer the end of the options but a word, and it is joined onto
+the name: "tp Example Landing -10 128 25" is refused as a region called
+"Example Landing --".  Type the mark yourself, ahead of the name, and
+the position is read as one:
+
+	tp -- Example Landing -10 128 25
 
 See also: regions for finding out what a name matches and where it is,
 where for the position this is given in, look for what the region

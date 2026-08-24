@@ -75,6 +75,13 @@ cannot find themselves in it is a picture of nowhere.  The line under
 the grid says how many are under the star, since somebody hidden by a
 mark is exactly the person being looked for.
 
+A picture with no star in it says so rather than leaving that to be
+puzzled over: where the session believes this avatar is outside the
+region being drawn -- which can only happen in the region view -- the
+line under the grid says the avatar is outside the picture.  And where
+there is nobody else at all there is no count either, only "nobody else
+is in range", which is the wording "who" uses for the same state.
+
 # A friend is picked out in colour
 
 The question a picture is usually being read for is not "who is here"
