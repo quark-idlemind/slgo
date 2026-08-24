@@ -52,15 +52,17 @@ const (
 // A caller that wants two of them writes them added together, so that
 // each name still stands for a whole sequence and not for half of one:
 // the erase after a carriage return is "\r"+eraseLine.
+// Nothing here erases the screen or moves the cursor to a row of its
+// choosing.  This shell writes under what it has already written and
+// rewrites the line the cursor is on, which is what leaves the
+// terminal's scrollback intact; see the pager, which is the part that
+// would otherwise have wanted a clear screen.
 const (
-	eraseLine     = "\x1b[K"     // from the cursor to the end of the line
-	eraseScreen   = "\x1b[2J"    // the whole screen
-	cursorHome    = "\x1b[H"     // to the top left corner
-	cursorRow     = "\x1b[%d;1H" // to column 1 of the row given
-	cursorForward = "\x1b[%dC"   // right by the number of columns given
-	reverseOn     = "\x1b[7m"    // swap foreground and background
-	attrsOff      = "\x1b[0m"    // back to the terminal's own colours
-	askCellSize   = "\x1b[16t"   // how big is a character cell?  See CellSize
+	eraseLine     = "\x1b[K"   // from the cursor to the end of the line
+	cursorForward = "\x1b[%dC" // right by the number of columns given
+	reverseOn     = "\x1b[7m"  // swap foreground and background
+	attrsOff      = "\x1b[0m"  // back to the terminal's own colours
+	askCellSize   = "\x1b[16t" // how big is a character cell?  See CellSize
 )
 
 // escapeWait is how long a lone ESC waits for the rest of a sequence

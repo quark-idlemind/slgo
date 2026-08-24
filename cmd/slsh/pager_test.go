@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -164,6 +166,147 @@ func TestPagerSearchEmptyQueryWithNoPreviousFails(t *testing.T) {
 	p := newPager(twentyLines(), 6)
 	if p.search("", 1) {
 		t.Fatal("empty search with no previous query should fail")
+	}
+}
+
+// numberedLines is text whose every line says which line it is, so
+// that a line printed twice can be told from a line printed once.
+func numberedLines(n int) string {
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, "line %02d of the page\n", i)
+	}
+	return b.String()
+}
+
+// pageWithKeys runs the pager over text, pressing keys, and answers
+// with everything it wrote.
+func pageWithKeys(t *testing.T, text, keyed string) string {
+	t.Helper()
+	var out strings.Builder
+	keys := make(chan rune, 64)
+	tm := &Term{
+		out:    &out,
+		keys:   keys,
+		done:   make(chan struct{}),
+		width:  40,
+		height: 6, // view 5
+		busy:   true,
+	}
+	for _, r := range keyed {
+		keys <- r
+	}
+	close(keys)
+	if err := page(context.Background(), tm, text); err != nil {
+		t.Fatal(err)
+	}
+	return out.String()
+}
+
+// A pager that clears the screen takes the scrollback with it: what was
+// on the terminal before the page began is gone, and so is the page
+// itself once it has been read.  This one appends, so it has no use for
+// an erase or for a cursor moved to a row of its choosing, and the way
+// to keep it that way is to say so here.
+func TestPagerNeverErasesTheScreenOrMovesTheCursorUpIt(t *testing.T) {
+	// Enough keys to move every way it moves: forward, half forward,
+	// back, half back, home, a search, and out.
+	out := pageWithKeys(t, numberedLines(40), " db u p/line 07\r q")
+	for _, bad := range []struct {
+		what string
+		re   *regexp.Regexp
+	}{
+		{"an erase of the screen", regexp.MustCompile(`\x1b\[[0-9;]*J`)},
+		{"a cursor moved to a row", regexp.MustCompile(`\x1b\[[0-9;]*[Hf]`)},
+		{"a scroll region", regexp.MustCompile(`\x1b\[[0-9;]*r`)},
+		{"the alternate screen", regexp.MustCompile(`\x1b\[\?104[59][hl]`)},
+	} {
+		if loc := bad.re.FindStringIndex(out); loc != nil {
+			t.Errorf("the pager wrote %s: %q", bad.what,
+				strings.ReplaceAll(out[loc[0]:loc[1]], "\x1b", "ESC"))
+		}
+	}
+}
+
+// Appending means a line printed twice stays printed twice, where a
+// pager that repaints would have covered the first copy over.  Reading
+// straight through must therefore print each line exactly once.
+func TestPagingForwardPrintsEachLineOnce(t *testing.T) {
+	const n = 20
+	out := stripANSI(pageWithKeys(t, numberedLines(n), "    ")) // four screenfuls
+	for i := 0; i < n; i++ {
+		line := fmt.Sprintf("line %02d of the page", i)
+		if got := strings.Count(out, line); got != 1 {
+			t.Errorf("%q printed %d times, want 1:\n%s", line, got, out)
+		}
+	}
+}
+
+// A half-screen step prints half a screen.  more(1) does this, and the
+// alternative here is worse than untidy: the half still on the screen
+// would be printed under itself and stay there.
+func TestAHalfStepPrintsOnlyTheNewHalf(t *testing.T) {
+	out := stripANSI(pageWithKeys(t, numberedLines(20), "dq"))
+	for _, line := range []string{"line 05", "line 06"} {
+		if !strings.Contains(out, line) {
+			t.Errorf("%q was never printed:\n%s", line, out)
+		}
+	}
+	for i := 0; i < 5; i++ {
+		line := fmt.Sprintf("line %02d of the page", i)
+		if got := strings.Count(out, line); got != 1 {
+			t.Errorf("the first screenful reprinted %q %d times, want 1:\n%s", line, got, out)
+		}
+	}
+	if strings.Contains(out, "line 07") {
+		t.Errorf("a half step of 2 printed five lines:\n%s", out)
+	}
+}
+
+// Enter moves one line, which is the key for reading down through
+// something slowly rather than a screenful at a bound.
+func TestEnterMovesOneLine(t *testing.T) {
+	p := newPager(numberedLines(20), 6) // view 5
+	for _, r := range "\r\n\r" {
+		if p.handle(context.Background(), nil, r) {
+			t.Fatalf("Enter left the pager at top %d", p.top)
+		}
+	}
+	if p.top != 3 {
+		t.Errorf("three Enters: top = %d, want 3", p.top)
+	}
+	p.top = p.maxTop()
+	if !p.handle(context.Background(), nil, '\r') {
+		t.Error("Enter at the end of the page should leave, as space does")
+	}
+}
+
+// One line moved is one line printed: the four still on the screen are
+// not printed under themselves.
+func TestEnterPrintsOneLine(t *testing.T) {
+	out := stripANSI(pageWithKeys(t, numberedLines(20), "\r\rq"))
+	for i := 0; i < 7; i++ {
+		line := fmt.Sprintf("line %02d of the page", i)
+		if got := strings.Count(out, line); got != 1 {
+			t.Errorf("%q printed %d times, want 1:\n%s", line, got, out)
+		}
+	}
+	if strings.Contains(out, "line 07") {
+		t.Errorf("two Enters printed more than two lines:\n%s", out)
+	}
+}
+
+// A key that moves nothing prints nothing.  Every keystroke of a search
+// redraws the status line, and if that redraw were a repaint the page
+// would be typed out again a screenful per character.
+func TestAKeyThatMovesNothingPrintsNoLines(t *testing.T) {
+	out := stripANSI(pageWithKeys(t, numberedLines(20), "/line 03\rq"))
+	// "line 03" is on the first screenful, so the search moves nowhere.
+	for i := 0; i < 5; i++ {
+		line := fmt.Sprintf("line %02d of the page", i)
+		if got := strings.Count(out, line); got != 1 {
+			t.Errorf("%q printed %d times while a search was typed, want 1:\n%s", line, got, out)
+		}
 	}
 }
 

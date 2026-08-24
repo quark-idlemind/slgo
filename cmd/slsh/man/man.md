@@ -40,6 +40,7 @@ printed and nothing waits.
 | key | action |
 | --- | --- |
 | space, `f` | forward one screen |
+| Enter | forward one line |
 | `b` | back one screen |
 | `d` | forward half a screen |
 | `u` | back half a screen |
@@ -51,8 +52,15 @@ printed and nothing waits.
 | `n` | the next match in the same direction as `/` or `?` |
 | `q` | leave |
 
-At the end of the page, space leaves as well.  Type the search, then
-Enter.
+At the end of the page, space and Enter leave as well.  Type the
+search, then Enter.
+
+Nothing is erased and the screen is never cleared.  Each screenful is
+printed under the last, so whatever was on the terminal before the page
+began is still above it, and the page itself is still in the scrollback
+after the pager has gone.  A key that moves backwards therefore prints
+that part of the page again, underneath, rather than carrying the
+display back up to it.
 
 ## Examples
 
