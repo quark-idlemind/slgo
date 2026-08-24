@@ -2,8 +2,9 @@ package main
 
 // What is inside a rezzed object, over a grid that is not there.
 //
-// Listing, renaming and deleting inside an object are still not
-// exercised here.  What is, since AnswerInside taught the fake to speak
+// Listing inside an object is still not exercised here; renaming and
+// deleting are, at the end, for the nil the two of them used to
+// dereference.  The rest, since AnswerInside taught the fake to speak
 // an object's contents, is start and stop -- which need the contents and
 // two more messages besides, and which make a claim about the world that
 // nothing replies to.  That claim is the point of most of what follows:
@@ -420,4 +421,70 @@ func serveScriptUpload(t *testing.T, x *testShell, verdict string) {
 		fmt.Fprintf(w, `<llsd><map><key>state</key><string>upload</string>`+
 			`<key>uploader</key><string>%s/upload</string></map></llsd>`, dest.URL)
 	})
+}
+
+// TestRmAndMvInsideRefuseWhatIsNotThere.
+//
+// Both of these used to panic.  sl.FindInObject answers "it is not in
+// there" with a nil item and no error -- which is the answer sl.Run and
+// sl.InstallScript act on, since not finding the script is how they
+// decide to put one in -- and rm --in and mv --in read the item straight
+// back, one for its id and one for a copy of the whole of it.  A
+// mistyped name took the shell down with a nil dereference.
+//
+// So the refusal is the shell's rather than the sl package's, and it
+// says both halves of what went wrong: which object was looked in, and
+// which name was not in it.
+func TestRmAndMvInsideRefuseWhatIsNotThere(t *testing.T) {
+	x := aBoxHolding(t,
+		&heldItem{Name: "greeter", ID: aGreeter},
+		&heldItem{Name: "readme", ID: aReadme, Kind: "notecard"},
+	)
+
+	for _, line := range []string{"rm --in Box1 footstool", "mv --in Box1 footstool warden"} {
+		got := x.do(t, line)
+		if !strings.Contains(got, `Box1 holds nothing called "footstool"`) {
+			t.Errorf("%q printed %q", line, got)
+		}
+		if !strings.Contains(got, "ls --in") {
+			t.Errorf("%q should say how to see what is there, printed %q", line, got)
+		}
+	}
+
+	// Nothing went out for either of them.  A name that is not in the
+	// object is decided here, out of the contents already read, so a
+	// refusal that had sent a message would have deleted or renamed
+	// something on the strength of a zero id.
+	if got := sentOfShell[*msg.RemoveTaskInventory](x); len(got) != 0 {
+		t.Errorf("a refused rm --in sent %d removals", len(got))
+	}
+	if got := sentOfShell[*msg.UpdateTaskInventory](x); len(got) != 0 {
+		t.Errorf("a refused mv --in sent %d renames", len(got))
+	}
+
+	// And what the object does hold is still deleted and still renamed:
+	// the check is for the nil and not for every name.  A notecard, for
+	// rm, because these two verbs work on whatever is in there rather
+	// than on scripts alone.
+	if got := x.do(t, "rm --in Box1 readme"); !strings.Contains(got, `deleted "readme" from Box1`) {
+		t.Errorf("rm --in of something that is there printed %q", got)
+	}
+	sent := sentOfShell[*msg.RemoveTaskInventory](x)
+	if len(sent) != 1 || sent[0].InventoryData.ItemID != aReadme {
+		t.Errorf("rm --in sent %+v", sent)
+	}
+
+	if got := x.do(t, "mv --in Box1 greeter warden"); !strings.Contains(got, `"greeter" in Box1 is now "warden"`) {
+		t.Errorf("mv --in of something that is there printed %q", got)
+	}
+	renames := sentOfShell[*msg.UpdateTaskInventory](x)
+	if len(renames) != 1 {
+		t.Fatalf("mv --in sent %d renames, want one", len(renames))
+	}
+	if got := strings.TrimRight(string(renames[0].InventoryData.Name), "\x00"); got != "warden" {
+		t.Errorf("the rename carried the name %q", got)
+	}
+	if renames[0].InventoryData.ItemID != aGreeter {
+		t.Errorf("the rename named item %s", renames[0].InventoryData.ItemID)
+	}
 }

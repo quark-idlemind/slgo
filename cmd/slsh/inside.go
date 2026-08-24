@@ -148,6 +148,36 @@ func (sh *Shell) listInside(ctx context.Context, out io.Writer, what string, lon
 	return nil
 }
 
+// findInside is sl.FindInObject for the two commands that must find
+// something, and is the shell's sentence for not finding it.
+//
+// sl.FindInObject reports "it is not in there" as a nil item and no
+// error, and does it deliberately: sl.Run and sl.InstallScript ask
+// whether a script is in the object in order to decide whether to put
+// one there, so not being there is an answer they act on rather than a
+// failure -- sl/inventory_test.go pins that down by name.  Teaching it
+// to return an error would break both of those to save a nil check
+// here.  So the check belongs at the call sites that did mean to find
+// something, and rm --in and mv --in are both of them: each read the
+// item straight back and panicked on the nil.
+//
+// The refusal is scriptsIn's sentence with a wider noun.  An object
+// holds notecards and textures beside its scripts and these two verbs
+// work on all of them, so it says "nothing called" rather than "no
+// script called", and it names the object as well as the missing item:
+// with several boxes about, which one was asked is half the answer.
+func (sh *Shell) findInside(ctx context.Context, o *sl.Object, name string) (*sl.TaskItem, error) {
+	it, err := sh.s.FindInObject(ctx, o, name)
+	if err != nil {
+		return nil, err
+	}
+	if it == nil {
+		return nil, fmt.Errorf("%s holds nothing called %q; \"ls --in\" lists what it does hold",
+			o.Name, name)
+	}
+	return it, nil
+}
+
 // removeInside deletes items from inside an object.
 //
 // Deleting, not taking: the message says remove and the copy is gone.
@@ -159,7 +189,7 @@ func (sh *Shell) removeInside(ctx context.Context, out io.Writer, what string, n
 		return err
 	}
 	for _, name := range names {
-		it, err := sh.s.FindInObject(ctx, o, name)
+		it, err := sh.findInside(ctx, o, name)
 		if err != nil {
 			return err
 		}
@@ -177,7 +207,7 @@ func (sh *Shell) renameInside(ctx context.Context, out io.Writer, what string, f
 	if err != nil {
 		return err
 	}
-	it, err := sh.s.FindInObject(ctx, o, from)
+	it, err := sh.findInside(ctx, o, from)
 	if err != nil {
 		return err
 	}
