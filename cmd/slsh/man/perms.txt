@@ -34,7 +34,9 @@ something that could be copied has taken copying away.
 Underneath, that is two messages rather than one.  The protocol turns
 bits on and turns bits off; it has no way to say "be exactly this", so
 sending only the letters asked for would leave a bit the caller meant
-to clear still set.
+to clear still set.  A half with nothing in it is not sent, so "all"
+and "none" are one message each: there is nothing to turn off in the
+one and nothing to turn on in the other.
 
 # Which group matters when
 

@@ -43,7 +43,8 @@ seconds by default; the reply comes over the event queue, which is a
 long poll and may be between rounds.  The request went out and may yet
 have taken effect, and running the command again says what the object
 thinks now.  The count of those that did not agree is what the command
-fails with at the end, under the listing that explains it.
+fails with at the end, under the listing that explains it -- or the one
+script's name, where the object held only one of them.
 
 # Examples
 

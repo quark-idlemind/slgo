@@ -11,10 +11,22 @@ demolition.
 # It edits, and never builds or removes
 
 Prims are matched by position in the list: the first prim described is
-the root, the second is the first child, and so on.  A file with fewer
-prims than the object leaves the rest of them alone.  A file with more
-is refused, because the extra prims would have to be made and linked,
-and that is what "rez" is for.  Nothing here removes a prim either.
+the root, and the rest follow in the order dump writes them, which is
+the order of the region's own ids for them rather than the link numbers
+a script would count in.  The two orders need not agree, so a file that
+came out of dump lines up prim for prim, and one written by hand
+against link numbers may not.  A file with fewer prims than the object
+leaves the rest of them alone.  A file with more is refused, because
+the extra prims would have to be made and linked, and that is what
+"rez" is for.  Nothing here removes a prim either.
+
+Prims are the only thing it will not build.  Every prim the file
+describes has its inventory put in as rez puts it in, so a file
+carrying script source installs that script, compiles it and sets it
+running unless the file says the script is disabled -- and a script
+that will not compile fails the command.  A two-line file is a small
+edit; a file with a script in it does inside an existing prim
+everything rez would have done inside a new one.
 
 The name is not "edit", although that is the obvious word, because a
 shell with an "edit" that does not open an editor is a shell that will
@@ -36,9 +48,17 @@ moment.  A file that says nothing about the shape does not touch it.
 
 Positions in the file are region coordinates, as dump writes them, and
 a child is moved in its root's frame -- so the root's position and
-rotation are undone on the way in.  Moving the root therefore carries
-its children with it, and a file that moves the root and names a child
-absolutely means what it says.
+rotation are undone on the way in.  The linkset is read once, before
+anything is sent, and that reading is what the undoing uses: the root
+as it stood before the edit, not as the file is about to leave it.
+
+So a file that moves the root and names a child absolutely does not
+mean what it says.  Moving the root carries its children with it, and
+the child named absolutely is then placed against where the root used
+to be, which lands it displaced by exactly the root's movement.  An
+absolute position for a child is only what it looks like where the root
+stays where it is.  Where both have to change, move the root in one run
+and dump again before writing anything about the children.
 
 # Examples
 

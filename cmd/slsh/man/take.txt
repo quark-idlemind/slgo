@@ -10,10 +10,17 @@ uuids rather than picking, since taking the wrong one is not something
 that can be put back.  "objects TEXT" is the listing those uuids come
 from.
 
-An avatar can only take what it may take.  Somebody else's object comes
-back as a refusal from the region, and an object with several prims
-comes in as one item -- a linkset is one object, which is why "unlink"
-exists.
+An avatar can only take what it may take, and a take it may not make
+is silence rather than a refusal.  Nothing answers a take at all: the
+item is waited for in the folder it was to land in, so somebody else's
+object produces no message from the region, and after forty seconds the
+command gives up saying only that the item never appeared.  --copy is
+the one that can do better, because it has something to look at
+afterwards -- the object still standing where it was -- and it turns
+that silence into a sentence about permissions.
+
+An object with several prims comes in as one item -- a linkset is one
+object, which is why "unlink" exists.
 
 # Options
 
@@ -22,9 +29,9 @@ works where the object's permissions allow copying, and the report says
 which happened: a bare take says the object "is in inventory", and a
 --copy says it is there "and still where it was".
 
---into names the folder it lands in.  Without it, a take lands in
-Objects, which is where the viewer puts one and therefore where a
-person will look for it.
+--into names the folder it lands in, as a path or as the folder's uuid.
+Without it, a take lands in Objects, which is where the viewer puts one
+and therefore where a person will look for it.
 
 --wait is how long to let the region describe itself before giving up
 on finding the object, in seconds, and matters on a region with a lot

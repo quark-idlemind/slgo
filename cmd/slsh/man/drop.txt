@@ -21,14 +21,18 @@ so dropping the same item in twice leaves two entries of nearly one
 name, and it is worth listing the object rather than assuming the
 second drop overwrote the first.
 
-Ask twice.  A listing run straight after a drop is the listing from
-before it: "ls --in" is answered out of the contents the simulator last
-sent, and the copy that has just gone in is not among those yet.  Three
-drops in a row were each followed at once by a listing without the new
-item in it, and then by a second listing that had it -- the first of
-the three showing an empty object a moment after a notecard had gone
-into it.  Nothing has gone wrong when that happens: the object has the
-item and the listing has not caught up.
+Ask twice.  A listing run straight after a drop is often the listing
+from before it.  Three drops in a row were each followed at once by a
+listing without the new item in it, and then by a second listing that
+had it -- the first of the three showing an empty object a moment after
+a notecard had gone into it.
+
+Nothing here is holding that listing.  "ls --in" forgets what it was
+told last and asks the object again every time, so the answer without
+the item in it is the region's own answer, freshly given.  Why the
+region gives it has not been established.  Nothing has gone wrong when
+it does: the object has the item, and what is being said about it has
+not caught up.
 
 # A script dropped in does not run
 

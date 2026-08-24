@@ -13,8 +13,11 @@ something that is about to be looked at.  East and not in front --
 nothing here asks which way the avatar is facing, so a thing put down
 behind somebody goes down east of them all the same.  Measured: the
 position it reported back was the avatar's, X one larger and Y and Z
-unchanged.  --at is a position in this region -- three numbers with
-commas between them and no spaces.
+unchanged.  --at is a position in this region -- two or three numbers
+with commas between them and no spaces.  A pair is accepted rather than
+refused, and the Z that was not given is zero, which is the bottom of
+the region and not the height the avatar is standing at.  rez's --at is
+spelt the same and insists on three.
 
 The active group matters more than it looks.  A parcel usually grants
 "create objects" to a group rather than to a person, so an avatar with

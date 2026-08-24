@@ -43,7 +43,9 @@ A script that never agreed is not a script that failed.  The request
 went out and may yet have taken effect; running the same command again
 says what the object thinks now.  The count of those that did not
 agree is what the command finally fails with, once the listing that
-explains it is already on the screen.
+explains it is already on the screen -- or, where the object held one
+script, that script's name, since "1 of 1" is a sentence about
+arithmetic and the name is what somebody would go and look at.
 
 One kind of "no answer" never turns into anything else.  A script put
 into an object with "drop" has been copied in and not compiled, so

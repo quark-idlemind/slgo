@@ -25,11 +25,11 @@ putting it out again, which is a new object and gets described afresh.
 
 So the session forgets instead.  A change drops the appearance it holds
 for that object as the message goes out, and the next read of that
-object asks the region to describe it again: two tenths of a second,
-measured, and paid only when somebody looks.  Two runs in a row then
-compose -- every face red and then face 2 green leaves five red faces
-and a green one -- which was watched happening with a build that asked
-on every read, the asking being the same request either way.
+object asks the region to describe it again: a tenth to two tenths of a
+second, measured, and paid only when somebody looks.  Two runs in a row
+then compose -- every face red and then face 2 green leaves five red
+faces and a green one -- which was watched happening with a build that
+asked on every read, the asking being the same request either way.
 
 Several changes to one object still belong in one command line, where
 they are applied to one reading and sent once and nothing has to be
@@ -69,7 +69,7 @@ Ask what a thing looks like, then one face of it:
 
 Everything meant for one object in one line:
 
-	texture --id d8467e57-… --glow 40 sign
+	texture --id d8467e57-... --glow 40 sign
 
 See also: dump, which describes an object as JSON and leaves textures
 out of it deliberately, and reform for the rest of what a prim is.

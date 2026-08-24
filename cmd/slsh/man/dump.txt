@@ -39,9 +39,15 @@ described, with whatever arrived on its update.
 Textures are deliberately absent.  A prim's faces are a packed blob the
 simulator has no notion of, and inventing a representation for it here
 would be inventing it for both programs; "texture" with no flags reads
-them instead.  Anything else that cannot be known is left out rather
-than invented -- a prim nothing has described has no shape here, and a
-mesh has one this shell cannot name.
+them instead.
+
+The shape is not left out that way, and it is worth knowing which.
+Every prim is written with a type, and where the form is not known the
+word written is "box": a prim nothing has described comes out as a box,
+and so do meshes and sculpts, whose form this shell cannot name at all.
+Everything else about such a prim is recorded truthfully, but rez and
+reform build the type they are given, so a file holding a mesh rebuilds
+it as a box.
 
 # Examples
 
