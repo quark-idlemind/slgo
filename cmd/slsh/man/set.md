@@ -141,7 +141,13 @@ row.
     set map_ratio 2:1
     set map_ratio auto
     set map_friend_colour bright cyan
+
+The last of these cannot take until the next slsh, and says so:
+
     set addr lab.local:7807
+    addr = lab.local:7807
+    written to /home/somebody/.config/slsh/config
+    this shell keeps the old value; the new one is for the next slsh
 
 See also: `map` for what the map settings do to the picture,
 `viewer` for what the viewer settings start, and `chat` for the key

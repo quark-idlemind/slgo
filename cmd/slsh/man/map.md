@@ -25,6 +25,12 @@ cell size and writes down what came back, which is where to start
 rather than the answer: what a terminal reports is the box it hands the
 font and not the shape the letters look.  `man set` has the rest of it.
 
+A picture is sixteen rows unless something says otherwise, and at 7:3
+sixteen rows is 37 columns.  Those are the numbers that turn a mark on
+the picture back into metres: in the region view a row is 256/16 = 16
+metres and a column 256/37, a shade under 7; in the close view a row is
+4 metres and a column about 1.7.
+
 The line under the grid says how much ground the picture covers --
 `64m x 64m` -- because that is the number somebody reads a map for.
 More rows buy detail rather than reach, so drawing it taller does not
@@ -76,6 +82,9 @@ coloured.  When there is no colour there is no line explaining one
 either.
 
 ## North is up and east is right
+
+Which is what the region's own coordinates already mean: y grows
+northward and x eastward, and the line under the grid says so as well.
 
 Anybody the picture does not reach is counted and named underneath it,
 with how far away they are, rather than being drawn at the edge.  An
@@ -131,13 +140,13 @@ sixty-four metres across.
 **--rows** *N*
 
 How many rows to draw, for this picture only, from 2 to 64.  Without
-it, `map_rows`.
+it, `map_rows`, which is sixteen.
 
 **--span** *METRES*
 
 How much ground the close picture covers, in metres across.  Without
-it, `map_span`.  Less than 2 is narrower than the avatar in the middle
-of it.  `--region` has no span to change and says so rather than
+it, `map_span`.  Less than 2 is refused, being narrower than the avatar
+in the middle of it.  `--region` has no span to change and says so rather than
 ignoring one.
 
 ## Examples

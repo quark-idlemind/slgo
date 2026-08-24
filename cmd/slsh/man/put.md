@@ -13,10 +13,18 @@ says from what size to what.  A side above 2048 comes down to it
 whatever the rounding says.  Nothing is resized when both sides are
 already legal.
 
-The fee is ten lindens up to a megapixel, fifty above that.  The grid
-charges before it looks, so a refusal afterwards has still cost the
-fee.  Every check it would make is made here first; `-N` stops before
-anything is sent.
+The fee is ten lindens up to a megapixel of area, 1024x1024 included.
+Above that it is fifty -- but that larger figure belongs to the account
+rather than to the grid, and fifty is what a beta grid wanted on the
+day it was measured.  Nothing here reads the real price, so the figure
+is not sent hopefully: it travels with the upload, the simulator
+compares it against its own, and a request naming the wrong one is
+refused.  An account whose large-texture price is not fifty therefore
+gets a refusal naming the right number rather than a wrong bill.
+
+The grid charges before it looks, so a refusal afterwards has still
+cost the fee.  Every check it would make is made here first; `-N` stops
+before anything is sent.
 
 ## Options
 

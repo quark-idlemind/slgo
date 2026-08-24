@@ -47,6 +47,12 @@ with a sentence about the region -- and they are still the only thing
 said.  A key this region has never described is refused here first, in
 the same words `touch` and `take` use for it, before anything is sent.
 
+An alert is a general channel, so something else alerting while a sit
+is in flight can be read as the answer to it.  That is arranged to fail
+the safe way round: whether the avatar is seated is looked at first, so
+the mistake this can make is a refusal that was somebody else's news,
+and never a sit reported as having worked when it did not.
+
 Silence is a third thing, neither a yes nor a no: the request may have
 taken effect without this hearing about it.  The wait before it gives
 up is fifteen seconds.

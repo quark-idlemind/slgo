@@ -22,7 +22,10 @@ would be told their object was not valid JSON.
 ## Where it lands
 
 The file says where each prim goes, in region coordinates.  A file
-written for another region names coordinates that are not this one.
+written for another region names coordinates that land somewhere else
+here, so `--at` moves the whole thing without the file having to be
+edited: the root lands on the point given, and every other prim keeps
+the vector from the root that the file gave it.
 
 ## What is made, and what is not
 

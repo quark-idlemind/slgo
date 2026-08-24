@@ -1,6 +1,8 @@
 `auto` is about the worn objects that slrun and slbench run their
 scripts in.  With nothing asked it reports what this avatar has: how
 many of the objects are worn, and therefore how much can run at once.
+With `-n` it sets that many up, and prints which object went to which
+slot.
 
     auto
 
@@ -14,7 +16,7 @@ eight of them, so the first eight objects have one each and the rest
 double up.  That is what the listing after `-n` is for: past the
 eighth slot the only way to see the pool is arranged as intended is
 to read which point each one landed on.  Twelve is this avatar's
-whole share -- how many entries the list of points has.
+whole share.
 
 One object runs one script at a time, so what is worn is what can
 run.  A benchmark's width is slbench's own and moves with its flags;
@@ -23,7 +25,12 @@ there is nothing here to work a count of benchmarks out from.
 The pool they come out of is the daemon's rather than this avatar's.
 Twelve is what each hosted avatar contributes, and a request for
 more is answered out of as many avatars as it takes.  What this
-command reports is one avatar's share.
+command reports is one avatar's share, and naming an avatar confines
+a run to that share.
+
+A run asks for a number of objects and gets that many or none.  One
+that cannot be served waits for enough of them to come free rather
+than starting narrower than it asked for.
 
 ## Setting up while something is running
 

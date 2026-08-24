@@ -16,10 +16,13 @@ elsewhere, because this hands the thing to a person rather than
 printing it.  `ls -l` puts the key beside each duplicate for exactly
 this.
 
-A person is resolved the way `im` resolves one: the session's cache
-and whoever is standing in the region, not the grid's search.  A name
-guessed at wrong here offers an item to a stranger.  `lookup` makes
-that search, and the number it prints is what to give this.
+A person is resolved the way `im` resolves one: the session's cache is
+asked, and then whoever is standing in the region.  The grid's search
+is not: it reaches people who are nowhere near and whose names merely
+resemble what was typed, and a name guessed at wrong there offers an
+item to a stranger.  A name neither of the two knows is refused, not
+guessed at.  `lookup` makes that search, and the number it prints is
+what to give this.
 
 ## An offer, not a transfer
 

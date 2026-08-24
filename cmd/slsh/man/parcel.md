@@ -29,8 +29,17 @@ The region's parcels can be listed or drawn, and both need the parcel
 overlay, which arrives when the avatar does and cannot be asked for
 again.  A shell attached to a daemon that has been up for hours usually
 has it; a session that has just logged in and not moved may not, and
-the command says so rather than drawing an empty region.  Teleporting
-here again would fetch it.
+the command says so rather than drawing an empty region.  The only way
+to fetch it again is to arrive again.
+
+The overlay carries the shapes and no names at all, so `--region` and
+`--map` both ask about a point inside each piece, one after another,
+about a tenth of a second each: a dozen parcels is a second or two of
+nothing on the screen before either appears.  A piece nothing answers about is
+still listed, by its shape, with `(no answer)` where the name would be,
+and after three unanswered in a row the rest are not asked about
+either; how many went unnamed is said at the foot.  The listing itself
+stops at thirty parcels and says how many more there were.
 
 One parcel can be two pieces of ground -- land bought either side of a
 road is still one parcel -- and the listing says how many pieces the
@@ -42,6 +51,12 @@ the overlay that never arrived.  Each other parcel is a letter, in a
 colour: the colour is what tells two parcels apart at a glance, and the
 letter is what tells them apart at all when the picture is written to a
 file or `NO_COLOR` is set.
+
+## A local id is not a name
+
+Every report has a `local` line, which is the region's own numbering
+for that parcel.  It belongs to that region and nowhere else: the same
+number in the region next door is a different piece of land.
 
 ## Asking about a parcel selects it
 

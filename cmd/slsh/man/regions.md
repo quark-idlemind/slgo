@@ -35,8 +35,9 @@ grid than the real one.  The error says how many had come in by then.
 ## The handle is the number a teleport is addressed to
 
 A region's place on the grid can be said two ways.  The square -- 1200,
-980 -- is the readable one, and the handle is that square packed into a
-single number, which is how every message that names a region names it.
+980 -- is the readable one, and the handle is that square's south-west
+corner in metres packed into a single number, which is how every
+message that names a region names it.
 
 `tp` takes a name rather than a handle, and looks it up through this
 same search -- so the listing here is what `tp` will be choosing

@@ -32,6 +32,9 @@ region's own answer, freshly given.  Nothing has gone wrong when it
 does: the object has the item, and what is being said about it has not
 caught up.
 
+What goes in is the whole item, permissions and all, so something whose
+permissions were set carefully is inside the object set that way.
+
 ## A script dropped in does not run
 
 Copying a script into an object leaves it there uncompiled, and

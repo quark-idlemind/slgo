@@ -45,12 +45,17 @@ by a fall.
 
 ## Arriving somewhere is not the same as staying there
 
-This command reports the arrival and stops watching.  A landmark into a
-parcel with a security orb on it succeeds: the avatar arrives, the
-command prints the position, and a moment later the parcel's own object
-teleports it home.  A position printed here can be true when it is
-printed and false a moment afterwards.  If a landmark lands somewhere
-it should not be, run `where` again.
+This command reports the arrival and stops watching.  Measured twice on
+Agni: a landmark into a parcel with a security orb on it succeeded --
+the avatar arrived, the command printed the position, and about one and
+a third seconds later the parcel's own object teleported it home.  So a
+position printed here can be true when it is printed and false a moment
+afterwards.  If a landmark lands somewhere it should not be, run
+`where` again.
+
+The narrower case is unmeasured: what a parcel that refuses this avatar
+by its access settings does to a landmark arrival, as against one that
+admits everybody and then throws them out.
 
 The name is printed before the waiting starts, and what is printed
 after the arrival is where the avatar actually ended up, read back.
@@ -73,9 +78,11 @@ Every inventory item has an item id and an asset id.  `ls -l` prints
 the first, and the second is the one every landmark message takes.
 They are both uuids and nothing about either says which it is.
 
-Sent the wrong one, the grid says nothing -- no start, no progress, no
-refusal -- so a wait that never ends is a wrong id as easily as a grid
-that is thinking about it.
+Sent the wrong one, the grid says nothing at all -- no start, no
+progress, no refusal -- so the wait is the only way to find out.  It
+runs to the end of `--wait`, thirty seconds unless another number was
+given, and what is printed then says that the item id where the asset
+id was wanted is the usual reason for the silence.
 
 That is why a name here means something in inventory and never a bare
 uuid handed on to the grid: the asset id comes out of the listing,

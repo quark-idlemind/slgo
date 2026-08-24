@@ -19,19 +19,26 @@ a complaint that none of four flags was given, to somebody who has
 just typed one of them.  Read that message as saying the flag is in
 the wrong place.
 
+## The letters
+
+Every one of the four flags takes the same *LETTERS*: `c` copy, `m`
+modify, `t` transfer and `v` move, or `all` for the four of them, or
+`none` for a bare refusal of everything.  What is set is said back in
+words, so a line that was typed as letters can be read without knowing
+them.  Those four are all there are here: export and the damage bit are
+real permission bits and are deliberately not among them.
+
+## A set of letters replaces, and does not add
+
+Each flag says what that group may do afterwards, in full.  A letter
+left out is a letter turned off, so asking for modify alone on
+something that could be copied has taken copying away.
+
 ## Options
 
 **--owner** *LETTERS*
 
-What the owner may do now.  *LETTERS* is `c` copy, `m` modify, `t`
-transfer and `v` move, or `all` for the four of them, or `none` for a
-bare refusal of everything.  What is set is said back in words, so a
-line that was typed as letters can be read without knowing them.
-
-A set of letters replaces, and does not add.  Each flag says what that
-group may do afterwards, in full.  A letter left out is a letter
-turned off, so asking for modify alone on something that could be
-copied has taken copying away.
+What the owner may do now.
 
 **--group** *LETTERS*
 

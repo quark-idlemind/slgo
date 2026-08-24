@@ -10,7 +10,8 @@ it.
 
 ## Found by what it is, not by what it is called
 
-The trash is the folder marked as the trash.  Its name is not the
+The grid marks a folder with the kind of thing it prefers to hold, and
+the trash is the folder carrying the mark for it.  Its name is not the
 test, and cannot be: the folder can be renamed, and an inventory
 made through a viewer in another language never called it `Trash` in
 the first place.  An inventory with no such folder is an error

@@ -43,9 +43,10 @@ the shape has the rest of it taken from what the prim is at that
 moment.  A file that says nothing about the shape does not touch it.
 
 Positions in the file are region coordinates, as `dump` writes them,
-and a child is moved in its root's frame.  The linkset is read once,
-before anything is sent, and that reading is what the undoing uses: the
-root as it stood before the edit, not as the file is about to leave it.
+but a child is moved in its root's frame, so the root's position and
+rotation are undone on the way in.  The linkset is read once, before
+anything is sent, and that reading is what the undoing uses: the root
+as it stood before the edit, not as the file is about to leave it.
 
 So a file that moves the root and names a child absolutely does not
 mean what it says.  Moving the root carries its children with it, and

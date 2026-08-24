@@ -19,9 +19,11 @@ several objects answer to is the one the refusal itself names -- rename
 one of them -- and not the key every neighbouring command would have
 taken.
 
-It waits for the object to have arrived rather than reporting the
-request and stopping.  A position read back immediately is the one the
-object had before.  A move that has gone nowhere after twenty seconds
+Nothing answers a move: the region reports the new position when it
+gets round to it, so this asks again until the object is where it was
+sent rather than reporting the request and stopping.  A position read
+back by hand without that wait is the one the object had before,
+printed with total confidence.  A move that has gone nowhere after twenty seconds
 is reported as that, and the likeliest reason is the one the message
 names: a parcel that will not have objects moved refuses in silence.
 

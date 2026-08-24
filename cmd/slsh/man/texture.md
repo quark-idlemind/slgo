@@ -36,9 +36,10 @@ or a hollow has opened new surfaces.  Where the shape is not known the
 answer is the eight a prim can have at most.
 
 A prim nothing has described the appearance of is asked about first,
-and reads as plain white if the region does not answer.  White is the
-truth about such a prim rather than a guess: an object can be known to
-be there before anything has said what it looks like.
+and reads as plain white if the region does not answer within three
+seconds.  White is the truth about such a prim rather than a guess: an
+object can be known to be there before anything has said what it looks
+like.
 
 The report reads what a change reads, so an object whose appearance was
 dropped by a change is described again before it is printed.  What it

@@ -15,17 +15,26 @@ on a box seven metres away is left about six metres from where it had
 been standing.  This line is where the avatar is now, and not where it
 was before any of it began.
 
+## What counts as having stood up
+
+From an object sit it is the un-parenting: the avatar's own update
+comes back with no seat in it.  From a ground sit there is nothing to
+unsit from, so what says the avatar is up is the ground animation
+stopping -- and this shell hears animations only while one of these
+commands is running, having asked for them and given them back.
+
+There is a gap in that, and it is worth knowing rather than being
+surprised by.  A ground sit this shell's session performed is known
+about.  One performed by a viewer driving the same avatar, or by
+another client while this session was not listening, is not, and reads
+here as standing.  A `stand` then still sends the request -- the avatar
+does get up -- and returns at once, having had nothing to wait for.
+
 ## It may take a moment
 
 A stand asked for while the avatar is still settling into the last
 thing it was told to do can be swallowed.  The command keeps asking
 until the avatar is up, or until fifteen seconds have passed.
-
-A ground sit this shell's session performed is known about.  One
-performed by a viewer driving the same avatar, or by another client
-while this session was not listening, is not, and reads here as
-standing.  A `stand` then still sends the request -- the avatar does
-get up -- and returns at once, having had nothing to wait for.
 
 ## Options
 
