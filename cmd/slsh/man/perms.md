@@ -28,12 +28,6 @@ words, so a line that was typed as letters can be read without knowing
 them.  Those four are all there are here: export and the damage bit are
 real permission bits and are deliberately not among them.
 
-## A set of letters replaces, and does not add
-
-Each flag says what that group may do afterwards, in full.  A letter
-left out is a letter turned off, so asking for modify alone on
-something that could be copied has taken copying away.
-
 ## Options
 
 **--owner** *LETTERS*
@@ -58,6 +52,12 @@ means by full permissions on a thing they were given.
 
 How long to let the region describe itself before giving up on finding
 the object.  Without it, 30 seconds.
+
+## A set of letters replaces, and does not add
+
+Each flag says what that group may do afterwards, in full.  A letter
+left out is a letter turned off, so asking for modify alone on
+something that could be copied has taken copying away.
 
 ## Nothing here confirms it
 

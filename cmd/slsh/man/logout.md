@@ -26,6 +26,13 @@ Asking for one that is already down is not an error: it reports the
 logout as though it had just done it, because from the caller's side
 the wanted state has been reached either way.
 
+## Options
+
+**-f, --force**
+
+Log out a session that has clients attached.  Without it a session
+in use is left alone.  It overrules only that refusal.
+
 ## It refuses while somebody is using it
 
 A session with clients attached is left alone and the refusal names
@@ -40,13 +47,6 @@ against a named avatar.  The other way round, a shell that logged in
 for itself holds the session in this process, so there is no daemon
 to ask and quitting is what logs the avatar out.  The line printed
 at startup says which of the two is in force.
-
-## Options
-
-**-f, --force**
-
-Log out a session that has clients attached.  Without it a session
-in use is left alone.  It overrules only that refusal.
 
 ## Examples
 

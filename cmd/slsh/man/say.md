@@ -16,6 +16,14 @@ anything, so a line that went out is the whole of what can be reported,
 and a line the circuit refused is not printed as though it had been
 said.
 
+## Options
+
+**-c** *CHANNEL*
+
+The channel to say it on.  Without it, open chat -- channel zero.  A
+negative one reaches scripts and carries at most 254 bytes, refused
+rather than truncated.
+
 ## The channel is what a script listens on
 
 Open chat is channel zero and is where people talk.  A script listens
@@ -30,14 +38,6 @@ script off by accident.
 The reach is chat's reach either way.  A negative channel is a private
 word rather than a region-wide one: heard nearby, not heard a hundred
 metres up.
-
-## Options
-
-**-c** *CHANNEL*
-
-The channel to say it on.  Without it, open chat -- channel zero.  A
-negative one reaches scripts and carries at most 254 bytes, refused
-rather than truncated.
 
 ## Examples
 

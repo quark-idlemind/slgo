@@ -10,6 +10,12 @@ key -- and then the file.  What the file omits is left exactly as it
 was, which is what makes a two-line file a useful edit rather than a
 demolition.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to let the region describe itself.  Without it, thirty.
+
 ## It edits, and never builds or removes
 
 Prims are matched by position in the list: the first prim described is
@@ -55,12 +61,6 @@ to be, which lands it displaced by exactly the root's movement.  An
 absolute position for a child is only what it looks like where the root
 stays where it is.  Where both have to change, move the root in one run
 and `dump` again before writing anything about the children.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to let the region describe itself.  Without it, thirty.
 
 ## Examples
 

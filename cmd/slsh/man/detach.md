@@ -14,6 +14,13 @@ object says which folder its item came from.  A uuid is looked for as
 either the inventory item or the worn object, since the region's answer
 holds both.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to give the region to agree the thing is off.  Without it,
+fifteen.
+
 ## What `worn` can and cannot see
 
 The region describes an attachment when it goes on, and again at login,
@@ -34,13 +41,6 @@ worked is the object no longer being among what is worn -- which
 arrives some time later.  `detach` polls until the region agrees before
 it says the thing is off, and a wait that runs out is reported as not
 knowing rather than as failing.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to give the region to agree the thing is off.  Without it,
-fifteen.
 
 ## Examples
 

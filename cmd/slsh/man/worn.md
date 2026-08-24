@@ -14,6 +14,19 @@ The word comes last.  Flags are read only until the first ordinary
 argument, so `worn -l auto` is the long listing of the auto objects and
 `worn auto -l` searches for the name `auto -l` and matches nothing.
 
+## Options
+
+**-l**
+
+Print two keys: the inventory item first, then the object.  The item is
+the one that does not change.  The object is rezzed afresh, with a new
+key, every time it goes on and every time the avatar logs in, so a key
+written down from a previous session names nothing.
+
+The item id is also what tells two attachments apart when their names
+agree, which is the refusal `detach` gives for a word that is worn
+twice.
+
 ## The names come from inventory
 
 A worn object will not answer a request for its properties, so the name
@@ -32,19 +45,6 @@ The region describes an attachment when it goes on, and again at every
 login, and never otherwise.  Whatever held the session at login heard
 all of that and is what answers here, so a shell that attached later
 still sees the full list.  What no one heard, no one can list.
-
-## Options
-
-**-l**
-
-Print two keys: the inventory item first, then the object.  The item is
-the one that does not change.  The object is rezzed afresh, with a new
-key, every time it goes on and every time the avatar logs in, so a key
-written down from a previous session names nothing.
-
-The item id is also what tells two attachments apart when their names
-agree, which is the refusal `detach` gives for a word that is worn
-twice.
 
 ## Examples
 

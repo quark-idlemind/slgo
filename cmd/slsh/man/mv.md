@@ -6,6 +6,19 @@ The first argument is what to move -- a path relative to the folder
 the shell is in, or a uuid, an item or a folder alike.  The second
 is where it goes.
 
+## Options
+
+**--in** *OBJECT*
+
+Rename something inside a rezzed object rather than in inventory.
+Only a rename: an object holds no folders, so there is nowhere in
+one to move anything to.  The object is named by the word the region
+calls it or by its uuid, and a name several objects answer to is
+refused with their uuids rather than guessed at.  The thing inside
+is named by its name, matched exactly and in the case it has.  The
+id beside a line of `ls -l --in` belongs to the object's own copy,
+and is not something to give this.
+
 ## What decides between moving and renaming
 
 The destination.  If it names a folder, this is a move and the name
@@ -26,19 +39,6 @@ Moving and renaming at once is two commands, in either order.
 A folder can hold several things of one name, and a path means the
 first of them.  Where that is not the one wanted, `ls -l` prints the
 id beside each and an id may be given wherever a path is.
-
-## Options
-
-**--in** *OBJECT*
-
-Rename something inside a rezzed object rather than in inventory.
-Only a rename: an object holds no folders, so there is nowhere in
-one to move anything to.  The object is named by the word the region
-calls it or by its uuid, and a name several objects answer to is
-refused with their uuids rather than guessed at.  The thing inside
-is named by its name, matched exactly and in the case it has.  The
-id beside a line of `ls -l --in` belongs to the object's own copy,
-and is not something to give this.
 
 ## Examples
 

@@ -11,6 +11,33 @@ By default it prints one bare path per line.  A listing written to a
 file is then a list of paths, which can be edited into commands and
 run.
 
+## Options
+
+**-l**
+
+The columns: kind, when it was acquired, id and path.  Without it,
+one bare path per line.
+
+**-r**
+
+Descend four levels rather than listing only this folder.  Deeper
+than that is not listed and is not reported as missing.
+
+**-t**
+
+Newest first, in a flat order rather than a tree one.  Grouping by
+folder would bury a thing made a minute ago under whichever folder
+it lives in.  Things made in the same second sort by name.  A folder
+has no date and sorts as the oldest thing there is, which puts
+folders at the end.
+
+**--in** *OBJECT*
+
+List what a rezzed object holds instead of a folder.  Takes no path:
+an object holds no folders.  A line is the kind and the name, and
+with `-l` the kind, the id and the name.  There is no date, and no
+path.
+
 ## The columns
 
 With `-l` a line is kind, when it was acquired, id, path, in that
@@ -58,33 +85,6 @@ The ids in a `-l` listing `--in` an object belong to the object's
 own copies, not to the inventory items they came from, and they are
 there to be read rather than typed back.  `rm --in` and `mv --in`
 take the name instead, matched exactly and in the case it has.
-
-## Options
-
-**-l**
-
-The columns: kind, when it was acquired, id and path.  Without it,
-one bare path per line.
-
-**-r**
-
-Descend four levels rather than listing only this folder.  Deeper
-than that is not listed and is not reported as missing.
-
-**-t**
-
-Newest first, in a flat order rather than a tree one.  Grouping by
-folder would bury a thing made a minute ago under whichever folder
-it lives in.  Things made in the same second sort by name.  A folder
-has no date and sorts as the oldest thing there is, which puts
-folders at the end.
-
-**--in** *OBJECT*
-
-List what a rezzed object holds instead of a folder.  Takes no path:
-an object holds no folders.  A line is the kind and the name, and
-with `-l` the kind, the id and the name.  There is no date, and no
-path.
 
 ## Examples
 

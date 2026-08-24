@@ -31,6 +31,28 @@ rather than anything about depth.  `find` counts the same four levels
 from wherever it is started, so it will not see it either; an `ls` of
 the folder it is in will.
 
+## Options
+
+**--make**
+
+Make a landmark of where this avatar is standing, called *NAME*.
+Making one, going to one and going home are three different things;
+ask for one.
+
+**--go**
+
+Go to the landmark *NAME* names.
+
+**--home**
+
+Go to wherever this account's home is set.  It takes no name.
+
+**-w, --wait** *SECONDS*
+
+How long to wait for the avatar to arrive, on `--go` and `--home`.
+Without it, thirty seconds -- `tp`'s wait, for the same kind of trip.
+It is refused on the reading form, which does not move the avatar.
+
 ## A landmark is a point and not a place
 
 What the asset holds is a region id and three numbers.  It carries no
@@ -141,28 +163,6 @@ reads as home rather than as an error.  It costs no inventory lookup
 and needs no item.  Home is an account setting; nothing here can read
 it or change it, and going there is the only way to find out where it
 is.
-
-## Options
-
-**--make**
-
-Make a landmark of where this avatar is standing, called *NAME*.
-Making one, going to one and going home are three different things;
-ask for one.
-
-**--go**
-
-Go to the landmark *NAME* names.
-
-**--home**
-
-Go to wherever this account's home is set.  It takes no name.
-
-**-w, --wait** *SECONDS*
-
-How long to wait for the avatar to arrive, on `--go` and `--home`.
-Without it, thirty seconds -- `tp`'s wait, for the same kind of trip.
-It is refused on the reading form, which does not move the avatar.
 
 ## Examples
 

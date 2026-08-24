@@ -9,6 +9,20 @@ The argument is an inventory path, relative to the folder the shell
 is in, or a uuid.  Anything that is not a texture is refused, a
 folder included.  A folder of textures is still a folder.
 
+## Options
+
+**-o, --out** *FILE*
+
+Write here rather than to a file named after the texture.  Used
+exactly as given.
+
+**-r, --raw**
+
+Write the JPEG 2000 codestream exactly as the grid stores it, in a
+file ending `.j2c`.  That is the form to keep for putting the same
+texture back, and it is also what to fall back on when a texture
+will not decode -- the refusal says so.
+
 ## A uuid here is an asset id
 
 Not an item id.  Textures are served by asset id alone, so a texture
@@ -28,20 +42,6 @@ says the size it decoded to and how many bytes that came from.
 The file is the item's name, with separators replaced, and `.png` or
 `.j2c` on the end.  A texture asked for by uuid has no name here, so
 the file is called after the uuid.
-
-## Options
-
-**-o, --out** *FILE*
-
-Write here rather than to a file named after the texture.  Used
-exactly as given.
-
-**-r, --raw**
-
-Write the JPEG 2000 codestream exactly as the grid stores it, in a
-file ending `.j2c`.  That is the form to keep for putting the same
-texture back, and it is also what to fall back on when a texture
-will not decode -- the refusal says so.
 
 ## Examples
 

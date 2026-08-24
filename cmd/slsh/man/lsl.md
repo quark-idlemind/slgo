@@ -22,37 +22,6 @@ zero, and says where it is deprecated or needs god mode.
 The document the simulator sends also names the control keywords --
 if, else, for, jump and the rest -- and nothing prints them.
 
-## The form meant for a program
-
-One record a line, tab separated, no alignment and no totals.  The
-first field always says which kind of record it is, so one loop
-reads whichever kinds were asked for, and a reader meeting a kind it
-does not know can skip the line rather than misread it.
-
-    function  NAME  RETURN  ENERGY  SLEEP  FLAGS  ARGTYPE,...
-    constant  NAME  TYPE    VALUE
-    event     NAME  ARGTYPE,...
-    type      NAME
-
-A function that returns nothing says `void` rather than leaving the
-field empty.  The flags are a comma-separated set that may be empty,
-and so is a list of argument types, so a function of no arguments
-ends its line with an empty field.  Fields are never reordered and
-never removed: anything new goes on the end, so a reader that splits
-and takes the first few keeps working.  Nothing is quoted or escaped
-because nothing in the source contains a tab -- which is also why
-the tooltips are not in it, since a tooltip could contain anything.
-
-## What it costs to ask
-
-The whole language is about half a megabyte, so it is fetched once
-and kept.  Asking again costs one small request for the id that says
-whether it has changed, and, where it has not, nothing else.  Kept
-by the session, which means for as long as this shell is running and
-no longer: a fresh slsh pays for the document again.  A script that
-wants the language more than once is a script to run in one shell,
-which is what `.` is for.
-
 ## Options
 
 **-f, --functions**
@@ -83,6 +52,37 @@ the one-line summary.
 One record a line, tab separated, for a program.  Without it the
 listing is aligned for reading.  A bare `-m` with no kind flag is
 every kind, not the summary.
+
+## The form meant for a program
+
+One record a line, tab separated, no alignment and no totals.  The
+first field always says which kind of record it is, so one loop
+reads whichever kinds were asked for, and a reader meeting a kind it
+does not know can skip the line rather than misread it.
+
+    function  NAME  RETURN  ENERGY  SLEEP  FLAGS  ARGTYPE,...
+    constant  NAME  TYPE    VALUE
+    event     NAME  ARGTYPE,...
+    type      NAME
+
+A function that returns nothing says `void` rather than leaving the
+field empty.  The flags are a comma-separated set that may be empty,
+and so is a list of argument types, so a function of no arguments
+ends its line with an empty field.  Fields are never reordered and
+never removed: anything new goes on the end, so a reader that splits
+and takes the first few keeps working.  Nothing is quoted or escaped
+because nothing in the source contains a tab -- which is also why
+the tooltips are not in it, since a tooltip could contain anything.
+
+## What it costs to ask
+
+The whole language is about half a megabyte, so it is fetched once
+and kept.  Asking again costs one small request for the id that says
+whether it has changed, and, where it has not, nothing else.  Kept
+by the session, which means for as long as this shell is running and
+no longer: a fresh slsh pays for the document again.  A script that
+wants the language more than once is a script to run in one shell,
+which is what `.` is for.
 
 ## Examples
 

@@ -7,17 +7,6 @@ an item -- the same sort of argument `place` takes.
 The report names the point the region gave back rather than one guessed
 here, so nobody has to know where a HUD asked to land.
 
-## The same item twice is refused
-
-Adding makes it possible to wear one inventory item twice, and `wear`
-will not.  An attachment is known here by the item it came from, so two
-attachments from one item agree in every field a person could name one
-by: `detach` would find both and refuse as ambiguous.  The refusal
-names the point the item is already on, and `--replace` and `detach`
-are the two ways on from there.
-
-A folder is refused: `wear` takes one object.
-
 ## Options
 
 **--at** *POINT*
@@ -51,6 +40,17 @@ off` -- by looking afterwards rather than by predicting, because a
 replace displaces one attachment and not the whole point's worth of
 them.  Where the clause is missing, either nothing came off or the
 region has not caught up; the line is never a guess.
+
+## The same item twice is refused
+
+Adding makes it possible to wear one inventory item twice, and `wear`
+will not.  An attachment is known here by the item it came from, so two
+attachments from one item agree in every field a person could name one
+by: `detach` would find both and refuse as ambiguous.  The refusal
+names the point the item is already on, and `--replace` and `detach`
+are the two ways on from there.
+
+A folder is refused: `wear` takes one object.
 
 ## Examples
 

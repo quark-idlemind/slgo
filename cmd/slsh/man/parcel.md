@@ -13,6 +13,25 @@ each way:
     parcel
     parcel 60,60
 
+## Options
+
+**-r, --region**
+
+List every parcel the session has a map of.  It takes no point: the
+whole region is what is asked about.
+
+**-m, --map**
+
+Draw the region's parcels in the shape `map` draws a region: one
+character to a cell, a different letter for each parcel, and a key
+under it naming them.  It takes no point.  `--region` counts them and
+this draws them; ask for one.
+
+**--rows** *N*
+
+How many rows that picture is drawn in, from 2 to 64.  Without it,
+`map_rows`.  Refused without `--map`.
+
 ## What is true now
 
 The parcel is asked for, not remembered, so the answer is what is true
@@ -65,25 +84,6 @@ Land floater redraws to show the parcel that was asked about, which is
 not the one under its avatar.  That is the grid working as designed.
 Somebody watching the screen while somebody else types `parcel 200,200`
 will see the panel change under them.
-
-## Options
-
-**-r, --region**
-
-List every parcel the session has a map of.  It takes no point: the
-whole region is what is asked about.
-
-**-m, --map**
-
-Draw the region's parcels in the shape `map` draws a region: one
-character to a cell, a different letter for each parcel, and a key
-under it naming them.  It takes no point.  `--region` counts them and
-this draws them; ask for one.
-
-**--rows** *N*
-
-How many rows that picture is drawn in, from 2 to 64.  Without it,
-`map_rows`.  Refused without `--map`.
 
 ## Examples
 

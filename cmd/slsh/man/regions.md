@@ -10,6 +10,12 @@ rating, and its handle.
 
     regions Example Landing
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to give the map to answer.  Without it, fifteen seconds.
+
 ## Several matches is the ordinary case and not a mistake
 
 The search matches from the start of a name and ignores case.  A word
@@ -56,12 +62,6 @@ whole of the answer.
 A region listed here is a region that exists.  It is not a region that
 will have this avatar: an estate may refuse an arrival for reasons the
 map has no field for.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to give the map to answer.  Without it, fifteen seconds.
 
 ## Examples
 

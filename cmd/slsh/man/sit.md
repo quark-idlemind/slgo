@@ -32,6 +32,13 @@ seats an avatar on is its business.
 A ground sit moves nothing, so the position line after one says the
 avatar is where it was.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to wait for the simulator to answer.  Without it, fifteen
+seconds.
+
 ## When the grid says no
 
 A refusal arrives as an alert, and the grid's own words are quoted
@@ -68,13 +75,6 @@ moves the avatar.
 
 A name with a space in it is one argument, so quote it.  That is
 stricter than `tp` and `landmark`, which join the rest of the line.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to wait for the simulator to answer.  Without it, fifteen
-seconds.
 
 ## Examples
 

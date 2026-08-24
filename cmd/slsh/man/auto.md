@@ -32,6 +32,14 @@ A run asks for a number of objects and gets that many or none.  One
 that cannot be served waits for enough of them to come free rather
 than starting narrower than it asked for.
 
+## Options
+
+**-n** *COUNT*
+
+Set up this many of the objects, rather than only reporting.  Without
+it, how many are worn is printed.  The listing after it says which
+object went to which slot.
+
 ## Setting up while something is running
 
 Setting up takes this avatar's whole share before it does anything,
@@ -42,14 +50,6 @@ failed.
 
 Getting fewer objects than were asked for is not a failure.  Fewer
 objects means less at once, and the report says so in those words.
-
-## Options
-
-**-n** *COUNT*
-
-Set up this many of the objects, rather than only reporting.  Without
-it, how many are worn is printed.  The listing after it says which
-object went to which slot.
 
 ## Examples
 

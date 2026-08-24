@@ -23,28 +23,6 @@ command gives up saying only that the item never appeared.
 An object with several prims comes in as one item -- a linkset is one
 object, which is why `unlink` exists.
 
-## The flags come before the name
-
-Option parsing stops at the first argument that is not a flag, and on
-this command that argument is the object, so anything after it is not
-read as an option at all.  `take probe --into experiments` takes probe
-and puts it in Objects: the two words after the name are dropped, the
-folder is never looked at, and the report says the object is in
-inventory without saying where.  `take --into experiments probe` is the
-same line with the flag in front of the name, and does what it says.
-
-`--copy` goes the same way and costs more.  After the name it is
-ignored, so the object is taken rather than copied and the original is
-gone from the region -- and the line printed is the bare take's, which
-is the only sign that what happened was not what was asked for.
-
-## Taking loses where it stood
-
-Second Life does not remember where an object was before it was taken,
-so nothing can put it back.  A round trip that has to end where it
-started has to write the position down first: `objects NAME` prints it,
-and `move` puts the object back afterwards.
-
 ## Options
 
 **--copy**
@@ -66,6 +44,28 @@ therefore where a person will look for it.
 
 How long to let the region describe itself before giving up on finding
 the object.  Without it, thirty.
+
+## The flags come before the name
+
+Option parsing stops at the first argument that is not a flag, and on
+this command that argument is the object, so anything after it is not
+read as an option at all.  `take probe --into experiments` takes probe
+and puts it in Objects: the two words after the name are dropped, the
+folder is never looked at, and the report says the object is in
+inventory without saying where.  `take --into experiments probe` is the
+same line with the flag in front of the name, and does what it says.
+
+`--copy` goes the same way and costs more.  After the name it is
+ignored, so the object is taken rather than copied and the original is
+gone from the region -- and the line printed is the bare take's, which
+is the only sign that what happened was not what was asked for.
+
+## Taking loses where it stood
+
+Second Life does not remember where an object was before it was taken,
+so nothing can put it back.  A round trip that has to end where it
+started has to write the position down first: `objects NAME` prints it,
+and `move` puts the object back afterwards.
 
 ## Examples
 

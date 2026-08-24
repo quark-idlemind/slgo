@@ -13,6 +13,12 @@ word the region calls it or by its uuid.  With no script named, every
 script in the object is started -- scripts only, since starting a
 notecard is not a thing, and an object holding none says so.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to give the object to agree.  Without it, fifteen.
+
 ## One line for every script, and no stopping early
 
     started    greeter
@@ -45,12 +51,6 @@ there is no bytecode for the switch to turn on, and the object will not
 agree that it is running however long it is asked.  Nothing here can
 mend that, because the mending is to have put the script in with
 `new --in`, which compiles it.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to give the object to agree.  Without it, fifteen.
 
 ## Examples
 

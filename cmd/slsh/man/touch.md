@@ -10,34 +10,6 @@ and a name several objects answer to is refused rather than guessed
 at.  A bare click lands in the middle of face 0, pointing up, at the
 object's own position.
 
-## Where on the object a touch lands
-
-A viewer decides what was clicked by casting a ray from the camera
-through the mouse, and then sends the answer: the object, the face,
-the point of intersection, the surface normal, the texture
-coordinates.  The simulator does no geometry of its own -- it hands
-those numbers to the script as `llDetectedTouchFace`,
-`llDetectedTouchPos` and the rest.
-
-That makes this more precise than a viewer rather than less.  A test
-that has to touch the third face of a prim nine tenths of the way along
-one edge does not have to place a camera and aim -- it says face 3 and
-a point on it.  Nothing checks that these numbers describe a point
-really on the object; the simulator does not check either.
-
-## Points after the first are a drag
-
-Each further argument is another point, read on top of the one before
-it, so a drag across a single face names the face once.  Two numbers
-are a place on a face and three are a place in the region, which is
-what tells them apart without another flag; a leading number and a
-colon names the face, so a drag can cross from one to another.  Two
-points or more are refused without `--move`, since a path with no
-duration is a jump.
-
-Nothing acknowledges a touch either: what to wait for is the script's
-own output rather than the line printed here.
-
 ## Options
 
 **-f, --face** *N*
@@ -80,6 +52,34 @@ Rest at the last point before letting go.
 How finely a moving touch is sampled, not how many events a script
 sees: while a touch is held, the `touch` event fires 22.5 times a
 second however many updates go out.  Without it, 45.
+
+## Where on the object a touch lands
+
+A viewer decides what was clicked by casting a ray from the camera
+through the mouse, and then sends the answer: the object, the face,
+the point of intersection, the surface normal, the texture
+coordinates.  The simulator does no geometry of its own -- it hands
+those numbers to the script as `llDetectedTouchFace`,
+`llDetectedTouchPos` and the rest.
+
+That makes this more precise than a viewer rather than less.  A test
+that has to touch the third face of a prim nine tenths of the way along
+one edge does not have to place a camera and aim -- it says face 3 and
+a point on it.  Nothing checks that these numbers describe a point
+really on the object; the simulator does not check either.
+
+## Points after the first are a drag
+
+Each further argument is another point, read on top of the one before
+it, so a drag across a single face names the face once.  Two numbers
+are a place on a face and three are a place in the region, which is
+what tells them apart without another flag; a leading number and a
+colon names the face, so a drag can cross from one to another.  Two
+points or more are refused without `--move`, since a path with no
+duration is a jump.
+
+Nothing acknowledges a touch either: what to wait for is the script's
+own output rather than the line printed here.
 
 ## Examples
 

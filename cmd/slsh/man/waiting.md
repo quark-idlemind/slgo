@@ -23,6 +23,15 @@ accepting one moves the avatar and waits for it to arrive, and
 everything this shell knew about the region left behind is dropped on
 the way.
 
+## Options
+
+**-a, --all**
+
+Include the things `ignore` has set aside.  Without it they are not
+listed and not counted at the prompt, which is what `ignore` is for.
+If everything waiting has been ignored, the listing says so and points
+at `-a`.
+
 ## The number belongs to the thing
 
 A number is handed out when a thing is first seen and kept until it
@@ -36,15 +45,6 @@ waiting the numbers start again at one.
 
 Every kind leaves the listing as it is answered, whichever command
 answered it, so the count at the prompt falls by one.
-
-## Options
-
-**-a, --all**
-
-Include the things `ignore` has set aside.  Without it they are not
-listed and not counted at the prompt, which is what `ignore` is for.
-If everything waiting has been ignored, the listing says so and points
-at `-a`.
 
 ## Examples
 

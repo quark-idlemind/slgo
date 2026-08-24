@@ -15,13 +15,6 @@ the wrong group active is refused by the land even where it plainly has
 permission, and the refusal talks about the land rather than about the
 group.  `group` says which is active, and sets it.
 
-## One object, and only one
-
-`place` takes exactly one argument, and a name with a space in it has
-to be quoted.  Extra words are not a position: `place probe 10 20 30`
-is refused rather than treated as a move.  Moving something already in
-the world is `move`.
-
 ## Options
 
 **--at** *X,Y,Z*
@@ -36,6 +29,13 @@ Two or three numbers with commas between them and no spaces.  A pair
 is accepted rather than refused, and the Z that was not given is zero,
 which is the bottom of the region and not the height the avatar is
 standing at.  `rez`'s `--at` is spelt the same and insists on three.
+
+## One object, and only one
+
+`place` takes exactly one argument, and a name with a space in it has
+to be quoted.  Extra words are not a position: `place probe 10 20 30`
+is refused rather than treated as a move.  Moving something already in
+the world is `move`.
 
 ## Examples
 

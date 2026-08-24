@@ -16,6 +16,13 @@ A trailing comma on a number is ignored, so a position read off `where`
 or off the line above a map pastes back in as it stands: `tp 128, 128, 25`
 is the first of those three again.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to wait for the avatar to arrive.  Without it, thirty
+seconds.
+
 ## A position outside this region is the region it really is in
 
 A region is 256 metres square and the grid is regions laid edge to
@@ -165,13 +172,6 @@ position typed on its own and the position after a flag:
 read as a position.  A region's name ends the options where it stands,
 so `tp Example Landing -10 128 25` needs no mark and gets none; one put
 there would be joined onto the name.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to wait for the avatar to arrive.  Without it, thirty
-seconds.
 
 ## Examples
 

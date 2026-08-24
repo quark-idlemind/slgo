@@ -17,6 +17,13 @@ Whether a viewer is there is only half known: one that takes the
 session announces itself, one that quits says nothing, so that line
 is the last thing that happened rather than what is happening now.
 
+## Options
+
+**-l, --launch**
+
+Start a viewer and log it in as this avatar.  Without it, the address
+is printed and nothing is started.
+
 ## The password is minted, used once, and expires
 
 A profile keeps only a digest of a password, so nothing on this side
@@ -61,14 +68,6 @@ whether one is up already.  `set` is where they are changed.
 A viewer already running is refused rather than launched: raising an
 application that is up does not pass it the arguments again, so a
 second launch would log nobody in and report success all the same.
-
-## Options
-
-**-l, --launch**
-
-Start a viewer and log it in as this avatar.  Without it, where the
-daemon serves viewer logins is printed, and whether one has taken
-this session.
 
 ## Examples
 

@@ -18,6 +18,12 @@ The keys stay in the lines.  A key is what everything else here takes,
 including this command's own argument, so a partner or a group worth
 reading about is one more line to type rather than a search.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How many seconds to give the grid.  Fifteen when it is not said.
+
 ## This is the one command that searches the grid for a name
 
 Everywhere else, a name is matched against what the session has heard
@@ -50,12 +56,6 @@ answer for a made-up key is the wait running out, printed as the plain
 sentence it is -- nothing went wrong, and the question was answered.
 It is also the only case where the wait is spent, since a profile that
 exists arrives in milliseconds.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How many seconds to give the grid.  Fifteen when it is not said.
 
 ## Examples
 

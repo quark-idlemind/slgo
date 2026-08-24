@@ -11,6 +11,26 @@ since what should stand where would then be the file's business and not
 the command's.  What is built is left standing: an object being built
 is usually about to be looked at, so nothing takes it into inventory.
 
+## Options
+
+**--at** *X,Y,Z*
+
+Where the root lands; every other prim keeps the vector from the root
+that the file gave it.  Without it, the positions the file records.
+
+Three numbers with commas between them and no spaces.  Two are refused
+with a message naming all three.  `place`'s `--at` is the other way
+round: it takes two or three, and fills in a zero for the Z it was not
+given, so a pair of numbers that `place` accepts without a word is a
+usage error here.
+
+**-k, --keep**
+
+Leave what was built standing even if a script will not compile.
+Without it, a failure removes what it made and says it has: half a
+build is prims standing in the region that nobody asked for.  This is
+for the case where the wreckage is the interesting part.
+
 ## This is not what everyone means by rezzing
 
 `Rez` is the word everybody uses for putting an inventory object into
@@ -37,26 +57,6 @@ written in the same list as a script and reads as though it would be
 made too: a file describing a notecard with a body in it builds a prim
 whose contents are empty, and says nothing about the notecard it did
 not write.
-
-## Options
-
-**--at** *X,Y,Z*
-
-Where the root lands; every other prim keeps the vector from the root
-that the file gave it.  Without it, the positions the file records.
-
-Three numbers with commas between them and no spaces.  Two are refused
-with a message naming all three.  `place`'s `--at` is the other way
-round: it takes two or three, and fills in a zero for the Z it was not
-given, so a pair of numbers that `place` accepts without a word is a
-usage error here.
-
-**-k, --keep**
-
-Leave what was built standing even if a script will not compile.
-Without it, a failure removes what it made and says it has: half a
-build is prims standing in the region that nobody asked for.  This is
-for the case where the wreckage is the interesting part.
 
 ## Examples
 

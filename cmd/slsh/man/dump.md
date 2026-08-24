@@ -8,6 +8,18 @@ The object is named by the word the region calls it or by its key, and
 the whole linkset is described, root first -- so naming any prim of an
 object describes all of it.
 
+## Options
+
+**-o, --out** *FILE*
+
+Write here, rather than to the terminal.  Without it the JSON goes to
+the terminal, which is what makes this usable in a pipe; with it, the
+file is written and one line says how many prims went into it.
+
+**-w, --wait** *SECONDS*
+
+How long to let the region describe itself.  Without it, thirty.
+
 ## What is in the file, and what is not
 
 Positions are region coordinates.  A child prim's update describes it
@@ -28,18 +40,6 @@ box, and so do meshes and sculpts, whose form this shell cannot name
 at all.  Everything else about such a prim is recorded truthfully, but
 `rez` and `reform` build the type they are given, so a file holding a
 mesh rebuilds it as a box.
-
-## Options
-
-**-o, --out** *FILE*
-
-Write here, rather than to the terminal.  Without it the JSON goes to
-the terminal, which is what makes this usable in a pipe; with it, the
-file is written and one line says how many prims went into it.
-
-**-w, --wait** *SECONDS*
-
-How long to let the region describe itself.  Without it, thirty.
 
 ## Examples
 

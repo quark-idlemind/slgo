@@ -13,6 +13,14 @@ prints the whole online list, exactly as `friends` does, because there
 is nothing here to search.  The search is `lookup`, and it goes to the
 grid rather than to this list.
 
+## Options
+
+**-a**
+
+List everybody rather than the ones online.  Without it, only whoever
+is online.  The whole list is the one to use when the question is who
+somebody has ever befriended, or when a name is wanted for a key.
+
 ## What the list is, and what it is not
 
 The list is the session's, kept from login and updated as friends come
@@ -22,14 +30,6 @@ this command is typed.
 Online is what the other side granted this avatar the right to see, and
 no more than that.  It is not a promise that somebody is awake or
 willing to be written to.
-
-## Options
-
-**-a**
-
-List everybody rather than the ones online.  Without it, only whoever
-is online.  The whole list is the one to use when the question is who
-somebody has ever befriended, or when a name is wanted for a key.
 
 ## Examples
 

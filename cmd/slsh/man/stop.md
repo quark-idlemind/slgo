@@ -10,6 +10,12 @@ a script whose name has one need not be.  With no script named, every
 script in the object is stopped; an object holding none says so, and
 `ls --in` lists what it does hold.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to give the object to agree.  Without it, fifteen.
+
 ## Stopping is not removing
 
 A stopped script stays where it is, in the object's contents, and
@@ -37,12 +43,6 @@ again says what the object thinks now.  The count of those that did not
 agree is what the command fails with at the end, under the listing that
 explains it -- or the one script's name, where the object held only one
 of them.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to give the object to agree.  Without it, fifteen.
 
 ## Examples
 

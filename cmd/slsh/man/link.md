@@ -10,6 +10,12 @@ opposite of `unlink`'s rule, which joins its arguments into one name,
 and the two differ because the commands do: this one has a list to read
 and that one has a single thing to find.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to let the region describe itself.  Without it, thirty.
+
 ## Naming one object twice is refused
 
 A prim cannot be linked to itself, and the simulator would take such a
@@ -31,12 +37,6 @@ that is exactly the case worth telling somebody about.
 It waits for the linking to have happened rather than reporting the
 request and stopping.  What says it worked is the children naming the
 root as their parent, which arrives when it arrives.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to let the region describe itself.  Without it, thirty.
 
 ## Examples
 

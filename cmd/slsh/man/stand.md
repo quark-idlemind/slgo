@@ -7,6 +7,13 @@ here for anybody to name.
 world calls the button; `unsit` is what a script calls the function,
 and both spellings work so that neither has to be remembered.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to keep asking until the avatar is up.  Without it, fifteen
+seconds.
+
 ## It says where that left the avatar
 
 The second line is the position, in the words `where` and `tp` use.
@@ -35,13 +42,6 @@ does get up -- and returns at once, having had nothing to wait for.
 A stand asked for while the avatar is still settling into the last
 thing it was told to do can be swallowed.  The command keeps asking
 until the avatar is up, or until fifteen seconds have passed.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to keep asking until the avatar is up.  Without it, fifteen
-seconds.
 
 ## Examples
 

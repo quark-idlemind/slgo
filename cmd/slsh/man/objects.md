@@ -13,6 +13,19 @@ The name printed is the one `take` and `move` want typed back, in
 full.  A search for `lantern` will find `brass lantern`; `take
 lantern` will not.
 
+## Options
+
+**-c, --children**
+
+The prims of each object as well, indented under it.  Without it, the
+listing is the roots.
+
+**--owner** *WHO*
+
+Only one owner's things: a uuid, or a pattern for the name.  Somebody
+nobody has named cannot be matched by a pattern about names, so those
+are counted at the foot instead of being quietly dropped.
+
 ## Roots, and the prims inside them
 
 What a person means by an object is the root of a linkset, so the roots
@@ -45,19 +58,6 @@ The owner heads each group.  Attachments are in the listing too.  Their
 last column says which point they are worn on, and names the wearer
 when it is not the owner.  Avatars themselves are not listed: `who` is
 the listing for people.
-
-## Options
-
-**-c, --children**
-
-The prims of each object as well, indented under it.  Without it, the
-listing is the roots.
-
-**--owner** *WHO*
-
-Only one owner's things: a uuid, or a pattern for the name.  Somebody
-nobody has named cannot be matched by a pattern about names, so those
-are counted at the foot instead of being quietly dropped.
 
 ## Examples
 

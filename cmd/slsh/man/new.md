@@ -16,21 +16,6 @@ state -- because a script with none at all is a compile error the
 moment anything runs it.  A script that did not compile says so and
 is in inventory all the same.
 
-## Inside a rezzed object
-
-Dropping a script into an object does not compile it: the copy sits
-there uncompiled, and `start` cannot start what was never compiled.
-
-Reusing a name replaces that script rather than adding another.  An
-object otherwise keeps every copy it is given and renames the
-newcomer, so a command that added would leave two scripts of nearly
-one name both running.
-
-A notecard cannot be made inside an object at all.  Asking for one
-with `--in` is refused rather than quietly made in inventory
-instead.  A notecard is made with a plain `new` and put in with
-`drop`.
-
 ## Options
 
 **--kind** *KIND*
@@ -54,6 +39,21 @@ folders.
 
 How long to let the region describe the object `--in` names.
 Without it, thirty seconds.
+
+## Inside a rezzed object
+
+Dropping a script into an object does not compile it: the copy sits
+there uncompiled, and `start` cannot start what was never compiled.
+
+Reusing a name replaces that script rather than adding another.  An
+object otherwise keeps every copy it is given and renames the
+newcomer, so a command that added would leave two scripts of nearly
+one name both running.
+
+A notecard cannot be made inside an object at all.  Asking for one
+with `--in` is refused rather than quietly made in inventory
+instead.  A notecard is made with a plain `new` and put in with
+`drop`.
 
 ## Examples
 

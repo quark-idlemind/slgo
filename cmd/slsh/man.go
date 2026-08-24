@@ -79,6 +79,20 @@ package main
 // second one back rather than have a sentence boundary come out
 // differently depending on where the author pressed return.
 //
+// Options come near the top: under the opening description, above the
+// sections that reason about the command, and always above Examples,
+// which stay last.  A flag is the thing somebody most often opens a
+// page to look up, and pages had drifted to putting them wherever they
+// happened to be written -- tp listed its one flag at line 169 of 191,
+// behind eight sections of reasoning.
+//
+// Three pages keep a section in front of Options, because the flags
+// cannot be read without it.  perms defines its four letters first and
+// every flag takes them; answer explains what a text box is before
+// --file offers to answer one from a file; and sit keeps the section
+// that says a sit moves the avatar, which opens by calling itself the
+// part to know before anything else and is right.
+//
 // Wrapping is to the terminal's own width less a margin, and no wider
 // than 78 whatever the terminal says: a paragraph 200 columns wide is
 // technically fitted to the screen and unreadable, because the eye

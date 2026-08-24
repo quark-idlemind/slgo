@@ -9,6 +9,12 @@ It names one thing, and its arguments are joined back into one name, so
 `unlink a lamp` means what it looks like.  A key may be given instead,
 which is the way past a name several objects answer to.
 
+## Options
+
+**-w, --wait** *SECONDS*
+
+How long to let the region describe itself.  Without it, thirty.
+
 ## A root means all of it; a prim means that prim
 
 Naming the root takes the whole object apart.  Naming one prim of it
@@ -46,12 +52,6 @@ is one line rather than a listing: only one piece came out, and what
 is left is still one object under its root, so the line names the prim
 that left, the object it left, and how many prims that object has
 now.  The keys are in it all the same.
-
-## Options
-
-**-w, --wait** *SECONDS*
-
-How long to let the region describe itself.  Without it, thirty.
 
 ## Examples
 

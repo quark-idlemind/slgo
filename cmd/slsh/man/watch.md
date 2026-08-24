@@ -16,6 +16,15 @@ A shell that logged in for itself has no daemon to relay from, so
 this is one of the few things such a shell cannot do at all and it
 says so rather than showing an empty watch.
 
+## Options
+
+**-t, --for** *D*
+
+How long to watch.  Without it, half a minute.  *D* is a length of
+time and not a number of seconds, so it has to carry a unit:
+`-t 30s`, `-t 5m`.  A bare `-t 30` is refused with
+`time: missing unit in duration`.
+
 ## What will not appear
 
 Only what comes over the circuit.  A good deal now arrives on the
@@ -28,15 +37,6 @@ A message the template does not describe is still reported, as its
 number and a byte count, and one that will not decode is reported as
 undecodable.  Both are worth seeing: an unknown number is what a
 protocol change looks like from here, and silence would hide it.
-
-## Options
-
-**-t, --for** *D*
-
-How long to watch.  Without it, half a minute.  *D* is a length of
-time and not a number of seconds, so it has to carry a unit:
-`-t 30s`, `-t 5m`.  A bare `-t 30` is refused with
-`time: missing unit in duration`.
 
 ## Examples
 

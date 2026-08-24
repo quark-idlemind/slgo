@@ -13,6 +13,14 @@ up and nothing else happens: logging it in again would kick the
 session it has.  Two shells asking at the same moment produce one
 login between them for the same reason.
 
+## Options
+
+**-f, --force**
+
+Bring back a session that is down and staying down.  Without it that
+session is left alone.  It does not overrule a login the daemon has
+already refused; the wait printed with that refusal is still the wait.
+
 ## A session that is down and staying down
 
 A session that is down and staying down is left alone.  Something
@@ -39,14 +47,6 @@ demand.  One that was given no way to do it says so rather than
 failing obscurely, and a name it has never heard of is an error and
 not a silence.  A shell that logged in for itself has no daemon to
 ask at all.
-
-## Options
-
-**-f, --force**
-
-Bring back a session that is down and staying down.  Without it that
-session is left alone.  It does not overrule a login the daemon has
-already refused; the wait printed with that refusal is still the wait.
 
 ## Examples
 

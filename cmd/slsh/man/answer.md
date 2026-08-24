@@ -37,6 +37,18 @@ A text box carries 254 bytes and no more.  A longer answer is refused
 outright rather than cut short, and the refusal says how many bytes
 were offered against the 254 there was room for.
 
+## Options
+
+**--file** *PATH*
+
+Answer a text box from this file, newlines and all.  It is refused on
+anything that is not a text box.  Without it the answer is typed after
+the number, or as several lines at the prompt.  A file is the way to
+send newlines; it is not a way to send more than 254 bytes.
+
+The flag goes in front of the number.  `answer 4 --file notes.txt`
+takes `--file notes.txt` as the text of the answer.
+
 ## A group invitation with a fee has to name the fee
 
 This is the only kind that can spend money as part of saying yes.  The
@@ -75,18 +87,6 @@ looks like.  `where` says whether the avatar moved.
 
 Everything this shell knew about the region left behind is gone on
 arrival -- see `tp`, which says what goes and what survives.
-
-## Options
-
-**--file** *PATH*
-
-Answer a text box from this file, newlines and all.  It is refused on
-anything that is not a text box.  Without it the answer is typed after
-the number, or as several lines at the prompt.  A file is the way to
-send newlines; it is not a way to send more than 254 bytes.
-
-The flag goes in front of the number.  `answer 4 --file notes.txt`
-takes `--file notes.txt` as the text of the answer.
 
 ## Examples
 

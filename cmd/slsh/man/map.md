@@ -10,6 +10,24 @@ wherever in it the avatar really is.
 
     map
 
+## Options
+
+**-r, --region**
+
+Draw the second of those two pictures rather than the first.
+
+**--rows** *N*
+
+How many rows to draw, for this picture only, from 2 to 64.  Without
+it, `map_rows`, which is sixteen.
+
+**--span** *METRES*
+
+How much ground the close picture covers, in metres across.  Without
+it, `map_span`.  Less than 2 is refused, being narrower than the avatar
+in the middle of it.  `--region` has no span to change and says so rather than
+ignoring one.
+
 ## The picture is wider than it is tall, which is what makes it look square
 
 A character cell is taller than it is wide, so a grid drawn with as
@@ -128,26 +146,6 @@ region.  A picture of the whole region can only mark the people this
 session has been told about: an empty corner is a corner nobody has
 described, not a corner with nobody in it.  The count under the grid,
 and `where`, are what to believe; the blank cells are not.
-
-## Options
-
-**-r, --region**
-
-Draw the whole region -- 256 metres -- with the avatar wherever in it
-the avatar really is.  Without it, the ground around this avatar,
-sixty-four metres across.
-
-**--rows** *N*
-
-How many rows to draw, for this picture only, from 2 to 64.  Without
-it, `map_rows`, which is sixteen.
-
-**--span** *METRES*
-
-How much ground the close picture covers, in metres across.  Without
-it, `map_span`.  Less than 2 is refused, being narrower than the avatar
-in the middle of it.  `--region` has no span to change and says so rather than
-ignoring one.
 
 ## Examples
 
