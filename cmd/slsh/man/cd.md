@@ -28,12 +28,14 @@ beside the path for the commands that do take one.
 
 ## Case, and names that are not unique
 
-The comparison ignores case, as the rest of the shell does: the grid
-keeps whatever case a name was given but does not make two names
+The comparison ignores case, as every path through inventory does: the
+grid keeps whatever case a name was given but does not make two names
 differing only in case into two things worth telling apart at a
-prompt.  Where two folders in one place really do share a name, a path
-means the first of them and there is no way to say the other -- moving
-or renaming one is the way out.
+prompt.  Inside an object it is the other way about, and `rm --in` and
+`mv --in` want the name exactly as it is spelled there, so the habit
+this builds stops at the object's edge.  Where two folders in one
+place really do share a name, a path means the first of them and there
+is no way to say the other -- moving or renaming one is the way out.
 
 A name may contain a slash, since the grid allows nearly any printable
 character.  A backslash in front of it says so: `cd Notecards/2026\/07`
