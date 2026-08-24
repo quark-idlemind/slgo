@@ -125,6 +125,40 @@ func subOptions(name string, opts any, out io.Writer, args []string) (rest []str
 	return set.Args(), false, nil
 }
 
+// sawOperand is whether these words hold anything that is not an option
+// or an option's value -- the first word of a region's name, in the one
+// place this is asked.
+//
+// It asks getopt rather than working it out, because the question is
+// the one getopt already answers when it stops: parsing ends at the
+// first operand and everything from there on is left in Args.  Working
+// it out here would be a second copy of the rule that --wait takes the
+// word after it, and two copies of that rule are free to disagree the
+// day a flag is added.
+//
+// The struct is the caller's to throw away.  This parse sets whatever
+// it finds, and the parse that counts has not run yet.
+//
+// A refusal -- an option nobody has heard of, a --wait with nothing
+// after it -- is neither an operand nor an answer, and it says yes.
+// The line then goes on exactly as it was typed, and the real parse
+// refuses it in its own words rather than in words about a "--" this
+// put there.
+func sawOperand(name string, opts any, args []string) bool {
+	set := getopt.New()
+	set.SetProgram(name)
+	if err := options.RegisterSet(name, opts, set); err != nil {
+		return true
+	}
+	argv := make([]string, 0, len(args)+1)
+	argv = append(argv, name)
+	argv = append(argv, args...)
+	if err := set.Getopt(argv, nil); err != nil {
+		return true
+	}
+	return len(set.Args()) > 0
+}
+
 // usage is the one line that says how a command is typed: its name, its
 // flags, and what it takes after them.
 //

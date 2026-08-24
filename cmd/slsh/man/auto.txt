@@ -71,16 +71,18 @@ in those words.
 Ask what is there:
 
 	auto
-	8 auto objects worn, so 8 scripts at once or 2 benchmarks of 4
+	8 auto objects worn, so 8 scripts at once
 	auto -n 12 sets up the rest
 
 The first line of that is the answer to the question at the top of this
-page.  Its "benchmarks of 4" is a number slbench has outgrown -- four
-was what its search took when that line was written -- so read the
-count of scripts and not the count of benchmarks.  The second line is
-the report's own advice, printed only while there is room to grow, and
-the twelve in it is this avatar's whole share rather than a suggestion:
-it is how many entries the list of points has.  Taking it:
+page: one object per script, so what is worn is what can run.  It says
+nothing about how many benchmarks fit, and used to -- "or 2 benchmarks
+of 4", from a constant slbench had outgrown.  A benchmark's width is
+slbench's own and moves with its flags, as the section above says, so
+there is nothing here to work it out from.  The second line is the
+report's own advice, printed only while there is room to grow, and the
+twelve in it is this avatar's whole share rather than a suggestion: it
+is how many entries the list of points has.  Taking it:
 
 	auto -n 12
 

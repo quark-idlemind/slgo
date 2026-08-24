@@ -226,18 +226,19 @@ as a name.
 
 # A negative coordinate and where the end of options goes
 
-The negative forms are worth one note.  "tp -10 128 25" begins with
-something that looks like an option, so the shell puts an end-of-options
-mark in front of the position for you, and a position on its own needs
-nothing typed differently.
+The negative forms are worth one note, and nothing has to be typed
+differently for them.  "tp -10 128 25" begins with something that looks
+like an option -- to an option parser "-10" is the option -1 with the
+value 0 -- so the shell puts an end-of-options mark in front of the
+position for you.
 
-With a region name in front of it that mark lands after the name, where
-it is no longer the end of the options but a word, and it is joined onto
-the name: "tp Example Landing -10 128 25" is refused as a region called
-"Example Landing --".  Type the mark yourself, ahead of the name, and
-the position is read as one:
-
-	tp -- Example Landing -10 128 25
+It goes there only where the options have not ended already, which is
+the position typed on its own and the position after a flag:
+"tp --wait 60 -10 128 25" has its flag read as one and its position
+read as a position.  A region's name ends the options where it stands,
+so "tp Example Landing -10 128 25" needs no mark and gets none; one put
+there would not be a mark at all but a word, and would be joined onto
+the name.
 
 See also: regions for finding out what a name matches and where it is,
 where for the position this is given in, look for what the region

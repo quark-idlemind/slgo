@@ -292,7 +292,8 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 }
 
 // endOptionsAtANegativeNumber puts a "--" in front of the position,
-// when the position has a negative number in it.
+// when the position has a negative number in it and nothing before it
+// has ended the options already.
 //
 // Option parsing would otherwise eat one: "-10" is the option -1 with
 // the value 0 as far as getopt is concerned, so "tp -10 128 25" answered
@@ -302,12 +303,18 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 // remember to is what keeps the obvious line working.
 //
 // In front of the LAST THREE arguments rather than the first negative
-// one, because that is where a position is in every form tp takes and
-// because getopt stops reading options at the first operand -- so a "--"
-// inserted after one is not an end-of-options marker at all, it is a
-// word, and it ends up in the middle of a region's name.  Put ahead of
-// the whole position it also survives "tp --wait 60 -10 128 25", where
-// the flag and its value are parsed before it.
+// one, because that is where a position is in every form tp takes, and
+// because put ahead of the whole position it survives "tp --wait 60 -10
+// 128 25", where the flag and its value are parsed before it.
+//
+// Only when nothing in front of the position is an operand, which is to
+// say only when there is no region name -- the "tp X Y Z" form.  getopt
+// stops reading options at the first operand, so a negative coordinate
+// after a name was never at risk and needs no help; and a "--" put
+// there is not an end-of-options mark at all, it is a word, so it was
+// joined onto the name.  "tp Example Landing -10 128 25" was refused as
+// a region called "Example Landing --" for as long as this inserted one
+// whatever came before.
 //
 // Only when one of the three really begins with a minus, so that a
 // mistyped option is still reported as one rather than handed on as a
@@ -332,6 +339,9 @@ func endOptionsAtANegativeNumber(args []string) []string {
 		if s == "--" {
 			return args // already said, and said first
 		}
+	}
+	if sawOperand("tp", new(tpOptions), args[:n-3]) {
+		return args // a region's name, where getopt has already stopped
 	}
 
 	out := make([]string, 0, n+1)
@@ -937,9 +947,17 @@ func cmdAuto(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 			have++
 		}
 	}
-	fmt.Fprintf(out, "%d auto objects worn, so %d scripts at once "+
-		"or %d benchmarks of %d\n",
-		have, have, have/session.AutoGroupSize, session.AutoGroupSize)
+	// What is worn is what can run at once, one object per script, and
+	// that is the whole of what this avatar's share buys.  It used to
+	// offer a count of benchmarks alongside, worked out from
+	// session.AutoGroupSize, and that number was wrong: a benchmark
+	// leases one object per division of each of its searches and three
+	// besides, which is nineteen at slbench's defaults and moves with
+	// --parts and --extra, and it halves that again when the pool
+	// cannot grant it.  Only slbench can say it, and it says it when it
+	// settles for less.  A figure printed here could only go stale
+	// again, which is worse than not printing one.
+	fmt.Fprintf(out, "%d auto objects worn, so %d scripts at once\n", have, have)
 	if have < len(session.AutoPoints) {
 		fmt.Fprintf(out, "auto -n %d sets up the rest\n", len(session.AutoPoints))
 	}

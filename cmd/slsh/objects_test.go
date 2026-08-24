@@ -211,6 +211,96 @@ func TestCopyGoesIntoTheFolderTheShellIsIn(t *testing.T) {
 	}
 }
 
+// TestEndOfOptionsGoesInFrontOfAPositionAndNowhereElse.
+//
+// "-10" is the option -1 with the value 0 as far as getopt is
+// concerned, so a position west of this region's corner needs a "--"
+// in front of it or it cannot be typed at all.  The mark belongs in
+// front of the position and only where the options have not already
+// ended: getopt stops reading options at the first operand, so after a
+// region's name a "--" is not a mark but a word, and it was joined onto
+// the name -- "tp Example Landing -10 128 25" was refused as a region
+// called "Example Landing --".
+//
+// A flag's value is not an operand and must not be read as one, which
+// is why --wait is here in all three of its spellings.
+func TestEndOfOptionsGoesInFrontOfAPositionAndNowhereElse(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		why  string
+		args []string
+		want []string
+	}{
+		{"a position on its own is what the mark is for",
+			[]string{"-10", "128", "25"},
+			[]string{"--", "-10", "128", "25"}},
+		{"any of the three may be the negative one",
+			[]string{"128", "-1", "25"},
+			[]string{"--", "128", "-1", "25"}},
+		{"a relative position going backwards begins with ~ and needs nothing",
+			[]string{"~-10", "~", "~"},
+			[]string{"~-10", "~", "~"}},
+		{"nothing negative needs no mark",
+			[]string{"128", "128", "25"},
+			[]string{"128", "128", "25"}},
+
+		{"a region's name has ended the options already",
+			[]string{"Example", "Landing", "-10", "128", "25"},
+			[]string{"Example", "Landing", "-10", "128", "25"}},
+		{"one word of a name is a word of a name",
+			[]string{"Example", "-10", "128", "25"},
+			[]string{"Example", "-10", "128", "25"}},
+		{"a flag before the name is still a flag, and the name still ends it",
+			[]string{"--wait", "60", "Example", "-10", "128", "25"},
+			[]string{"--wait", "60", "Example", "-10", "128", "25"}},
+
+		{"a mark already typed is not typed twice",
+			[]string{"--", "Example", "Landing", "-10", "128", "25"},
+			[]string{"--", "Example", "Landing", "-10", "128", "25"}},
+		{"nor in front of a position that already has one",
+			[]string{"--", "-10", "128", "25"},
+			[]string{"--", "-10", "128", "25"}},
+
+		{"a long flag and its value are parsed before the mark",
+			[]string{"--wait", "60", "-10", "128", "25"},
+			[]string{"--wait", "60", "--", "-10", "128", "25"}},
+		{"a value joined with = as well",
+			[]string{"--wait=60", "-10", "128", "25"},
+			[]string{"--wait=60", "--", "-10", "128", "25"}},
+		{"and the short spellings, apart and joined",
+			[]string{"-w", "60", "-10", "128", "25"},
+			[]string{"-w", "60", "--", "-10", "128", "25"}},
+		{"a short flag with its value stuck to it",
+			[]string{"-w60", "-10", "128", "25"},
+			[]string{"-w60", "--", "-10", "128", "25"}},
+
+		{"fewer than three words is not a position",
+			[]string{"-10", "128"},
+			[]string{"-10", "128"}},
+		{"nor is nothing at all",
+			nil,
+			nil},
+		{"a name is not a position however it ends",
+			[]string{"Example", "Landing"},
+			[]string{"Example", "Landing"}},
+		{"a mistyped option is left to be reported as one",
+			[]string{"-wiat", "60", "Example"},
+			[]string{"-wiat", "60", "Example"}},
+	} {
+		got := endOptionsAtANegativeNumber(c.args)
+		if len(got) != len(c.want) {
+			t.Errorf("%v became %v, want %v (%s)", c.args, got, c.want, c.why)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%v became %v, want %v (%s)", c.args, got, c.want, c.why)
+				break
+			}
+		}
+	}
+}
+
 // TestTPSaysHowItIsTypedRatherThanGuessing.
 //
 // Three numbers is a position and anything else is a region's name, so
@@ -327,6 +417,36 @@ func TestTPByNameGoesToTheHandleTheMapGave(t *testing.T) {
 	}
 	if sent.Info.Position != (msg.Vector3{X: 33, Y: 73, Z: 2001}) {
 		t.Errorf("tp asked to arrive at %v", sent.Info.Position)
+	}
+}
+
+// TestTPTakesANegativePositionAfterARegionsName, which for a while it
+// could not: the end-of-options mark the shell puts in front of a
+// negative position was put there whatever came before it, and after a
+// name it is not a mark but a word.  "tp Sandbox Goguen -10 128 25"
+// asked the map about a region called "Sandbox Goguen --" and was told
+// there is none.
+//
+// getopt stops reading options at the first operand, so a name in front
+// of the position has already ended them and the mark was never needed
+// here.  What this checks is the name that reaches the map.
+func TestTPTakesANegativePositionAfterARegionsName(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t, mapBlock("Sandbox Goguen", 995, 997, 13))
+	x.grid.AnswerTeleport(t, "Sandbox Goguen", goguenHandle)
+
+	x.do(t, "tp Sandbox Goguen -10 128 25")
+	var asked string
+	for _, m := range x.grid.Sent() {
+		if q, ok := m.(*msg.MapNameRequest); ok {
+			asked = strings.TrimRight(string(q.NameData.Name), "\x00")
+		}
+	}
+	if asked != "Sandbox Goguen" {
+		t.Errorf("the map was asked about %q, want the name with no mark on the end of it", asked)
+	}
+	if got := lastTeleport(t, x).Info.Position; got != (msg.Vector3{X: -10, Y: 128, Z: 25}) {
+		t.Errorf("tp asked to arrive at %v, want the position as it was typed", got)
 	}
 }
 
@@ -579,12 +699,16 @@ func TestAutoCountsWhatIsWornAndSaysWhatThatBuys(t *testing.T) {
 	x.grid.mu.Unlock()
 
 	got := x.do(t, "auto")
-	// What is worn is what can run at once, one object apiece, and a
-	// benchmark is the one thing that wants several -- so both numbers
-	// are worth saying, and neither is the other.
-	if !strings.Contains(got, "so 12 scripts at once") ||
-		!strings.Contains(got, "3 benchmarks of 4") {
+	// What is worn is what can run at once, one object apiece, and that
+	// is the only number this can say.  It used to say a count of
+	// benchmarks beside it, from a constant slbench had outgrown; a
+	// benchmark's width is slbench's own and moves with its flags, so
+	// there is nothing here to print it from.
+	if !strings.Contains(got, "so 12 scripts at once") {
 		t.Errorf("auto should say what the objects buy:\n%s", got)
+	}
+	if strings.Contains(got, "benchmark") {
+		t.Errorf("auto cannot say how many benchmarks fit and should not try:\n%s", got)
 	}
 	if strings.Contains(got, "sets up the rest") {
 		t.Errorf("a full set has no rest to set up:\n%s", got)
