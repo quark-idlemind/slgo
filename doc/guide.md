@@ -301,8 +301,10 @@ user owns can read it. A profile with no `viewer_password` is refused
 there too -- the setting is what marks a profile as handable at all.
 
 The design, and what it costs, is written up in
-[doc/viewer-frontend.md](viewer-frontend.md); what happens with more than
-one viewer is in [doc/two-viewers.md](two-viewers.md).
+[doc/history/viewer-frontend.md](history/viewer-frontend.md); what
+happens with more than one viewer is in
+[doc/history/two-viewers.md](history/two-viewers.md).  Both are plans
+rather than descriptions -- see [doc/history/](history/).
 
 ### Watching the wire
 

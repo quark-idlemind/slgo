@@ -26,7 +26,7 @@ const myLocal = 42
 
 // onTheBox is where the avatar ends up once it has been seated, seven
 // metres from where the fake stands it to begin with.  A sit really
-// does travel that far: see doc/sit.md.
+// does travel that far: see doc/history/sit.md.
 var onTheBox = msg.Vector3{X: 135, Y: 72, Z: 2001}
 
 // sittingShell is a shell over a region with one thing in it to sit on,

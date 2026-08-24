@@ -3,12 +3,13 @@ package agent
 // Whether the session can tell what its avatar is doing.
 //
 // The three transitions below are the ones measured on Agni and written
-// up in doc/sit.md, and each one is reproduced here as the messages that
-// carried it: an ObjectUpdate for this avatar with a parent in it, an
-// AvatarAnimation and nothing else, and an ObjectUpdate with the parent
-// back to zero.  They go through the encoder and the decoder on the way
-// in, like everything else fed to a dispatcher here, so what the
-// handlers see is what a simulator would have sent.
+// up in doc/history/sit.md, and each one is reproduced here as the
+// messages that carried it: an ObjectUpdate for this avatar with a
+// parent in it, an AvatarAnimation and nothing else, and an
+// ObjectUpdate with the parent back to zero.  They go through the
+// encoder and the decoder on the way in, like everything else fed to a
+// dispatcher here, so what the handlers see is what a simulator would
+// have sent.
 
 import (
 	"testing"

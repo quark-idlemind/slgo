@@ -1,5 +1,11 @@
 # Landmarks: a place kept, and gone back to
 
+> **A plan, not a description of what slgo does.**  Written before the
+> work and kept for the measurements folded into it; the stage headings
+> below record what was found, including where the plan turned out to be
+> wrong.  For current behaviour see `man landmark` and `sl/landmark.go`.
+> [doc/history/README.md](README.md) says why this is here.
+
 Written 2026-08-18, against `2d204b8`, and all four stages run by
 2026-08-20. Where this says what happens, it was watched happening on
 Agni with qi. What stage 3 found that the plan had wrong is folded in

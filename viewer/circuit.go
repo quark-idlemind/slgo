@@ -320,27 +320,27 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 	// ---- absorbed: a teleport out of this region ----
 	//
 	// A viewer's teleport is refused rather than followed, and what
-	// forwarding one would now do is not what doc/viewer-frontend.md
-	// said until this stage.  That sentence -- the agent goes to a
-	// simulator slgod is not connected to and the session ends -- was
-	// written when nothing in the daemon read TeleportFinish, and the
-	// daemon follows a teleport now.  So the session does not end, and
-	// what happens instead is harder to see and worse to be in: the
-	// request is granted, slgod moves the circuit to the new simulator,
-	// and the viewer is told none of it, because TeleportFinish is
-	// withheld from its event queue.  It goes on drawing a region the
-	// avatar has left, pushing a camera around it that the new
-	// simulator is deciding what to stream from, and taking object
-	// updates whose local ids are the new region's numbering laid over
-	// the old region's.  Nothing anywhere reports an error.  A session
-	// that ends at least says so.
+	// forwarding one would now do is not what
+	// doc/history/viewer-frontend.md said until this stage.  That
+	// sentence -- the agent goes to a simulator slgod is not connected
+	// to and the session ends -- was written when nothing in the daemon
+	// read TeleportFinish, and the daemon follows a teleport now.  So
+	// the session does not end, and what happens instead is harder to
+	// see and worse to be in: the request is granted, slgod moves the
+	// circuit to the new simulator, and the viewer is told none of it,
+	// because TeleportFinish is withheld from its event queue.  It goes
+	// on drawing a region the avatar has left, pushing a camera around
+	// it that the new simulator is deciding what to stream from, and
+	// taking object updates whose local ids are the new region's
+	// numbering laid over the old region's.  Nothing anywhere reports
+	// an error.  A session that ends at least says so.
 	//
 	// Following properly is a second circuit on a second port and a
-	// rewritten TeleportFinish -- doc/teleport.md's other option, which
-	// is deliberately not built.  So these are absorbed the way
-	// UseCircuitCode and LogoutRequest are, and the person is told:
-	// a control that does nothing and says nothing is indistinguishable
-	// from a viewer that has stopped working.
+	// rewritten TeleportFinish -- doc/history/teleport.md's other
+	// option, which is deliberately not built.  So these are absorbed
+	// the way UseCircuitCode and LogoutRequest are, and the person is
+	// told: a control that does nothing and says nothing is
+	// indistinguishable from a viewer that has stopped working.
 	//
 	// StartLure is deliberately not among them and goes on being
 	// forwarded.  Offering somebody else a teleport to where this

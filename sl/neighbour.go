@@ -7,7 +7,7 @@ package sl
 // region is something a session either can do or cannot, and which it
 // is can be changed while the session is up.  It is asked for and set
 // here; everything it takes is in agent/neighbour.go and the reasoning
-// is in doc/neighbours.md.
+// is in doc/history/neighbours.md.
 //
 // This package holds none of it.  A circuit belongs to whoever owns the
 // socket -- slgod for a hosted session, this process for a direct one

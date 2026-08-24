@@ -95,7 +95,8 @@ package sl
 // business, and from an object sit it also un-parents: 126 milliseconds,
 // parent back to zero, absolute position again.
 //
-// See doc/sit.md, where all of this was written down as it was measured.
+// See doc/history/sit.md, where all of this was written down as it was
+// measured.
 
 import (
 	"context"

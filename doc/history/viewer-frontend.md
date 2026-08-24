@@ -1,5 +1,11 @@
 # slgod as a viewer frontend
 
+> **A plan, not a description of what slgo does.**  Written before the
+> work and kept for the measurements folded into it; the stage headings
+> below record what was found, including where the plan turned out to be
+> wrong.  For current behaviour see `man viewer`, `doc/guide.md` and
+> `viewer/`.  [doc/history/README.md](README.md) says why this is here.
+
 Written 2026-08-14, against commit `3ebe930`.
 
 slgod holds a live session. Firestorm is then pointed at slgod, speaks the
@@ -857,7 +863,7 @@ Places where the code could not answer the question and a spike has to.
   from a circuit that has never sent one.** Almost certainly fine;
   it is a change of regime for a live circuit and worth watching in stage 4.
 - ~~**Region crossings and teleports.**~~ Decided 2026-08-16 by
-  `doc/teleport.md`'s stage 6: **refuse**. What this said before -- that
+  `doc/history/teleport.md`'s stage 6: **refuse**. What this said before -- that
   a viewer which teleports takes the agent to a simulator slgod is not
   connected to and ends the session -- stopped being true when the
   daemon learned to follow a teleport. What happens instead is quieter

@@ -26,7 +26,7 @@ import (
 // constrained ground sit.  So the animations are kept here too, and
 // without them a seated avatar and a standing one are the same silence.
 //
-// See doc/sit.md, where those measurements are written down.
+// See doc/history/sit.md, where those measurements are written down.
 
 // The well known animations a sit and a stand play.
 //
@@ -99,12 +99,13 @@ func SittingAnimation(id msg.UUID) bool {
 // people this session has no business tracking.
 //
 // It is worth having one day all the same -- "who is sitting" is
-// answerable for everybody at no extra cost on the wire, and doc/sit.md
-// wants it before anything here throws it away -- which is why the
-// handler hands over the sender's id rather than filtering on it.  Whose
-// animations are kept is decided here, in the storage: keeping the crowd
-// means a map keyed by avatar and a bound on it, exactly the shape
-// Appearances already has, and not a line of the handler changes.
+// answerable for everybody at no extra cost on the wire, and
+// doc/history/sit.md wants it before anything here throws it away --
+// which is why the handler hands over the sender's id rather than
+// filtering on it.  Whose animations are kept is decided here, in the
+// storage: keeping the crowd means a map keyed by avatar and a bound on
+// it, exactly the shape Appearances already has, and not a line of the
+// handler changes.
 type animations struct {
 	// self is whose animations are kept.  It is written once, in
 	// trackPosture, before the dispatcher is running and before the

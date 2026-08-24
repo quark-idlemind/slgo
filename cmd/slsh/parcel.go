@@ -22,8 +22,8 @@ package main
 //     for again, so the session that heard them is the only source.
 //     --region and --map read it.
 //
-// See doc/parcel.md for the measurements, including the afternoon spent
-// believing the grid answered none of this.
+// See doc/history/parcel.md for the measurements, including the
+// afternoon spent believing the grid answered none of this.
 
 import (
 	"context"

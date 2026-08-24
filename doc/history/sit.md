@@ -1,5 +1,12 @@
 # Sitting, and standing up again
 
+> **A plan, not a description of what slgo does.**  Written before the
+> work and kept for the measurements folded into it; the stage headings
+> below record what was found, including where the plan turned out to be
+> wrong.  For current behaviour see `man sit`, `man stand` and
+> `sl/sit.go`.  [doc/history/README.md](README.md) says why this is
+> here.
+
 Written 2026-08-17, against `8389366`. **All of it is built**, and every
 stage was run against Agni: where this says what happens, it was watched
 happening. Two things it first said turned out to be wrong and are

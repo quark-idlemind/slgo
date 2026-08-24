@@ -306,8 +306,8 @@ type Options struct {
 	// Neighbours holds a circuit to each region around this one, so
 	// that the avatar can walk over a border: a simulator will not
 	// hand it over to a client that holds none.  See neighbour.go,
-	// which is where the whole of it lives, and doc/neighbours.md
-	// for what it measured.
+	// which is where the whole of it lives, and
+	// doc/history/neighbours.md for what it measured.
 	//
 	// This is what the session STARTS as and not the whole truth:
 	// SetNeighbours turns them over while the session is up, which is

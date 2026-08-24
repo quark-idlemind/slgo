@@ -1,5 +1,12 @@
 # Several avatars in one slgod
 
+> **A plan, not a description of what slgo does.**  Written before the
+> work and kept for the measurements folded into it; the stage headings
+> below record what was found, including where the plan turned out to be
+> wrong.  For current behaviour see `doc/guide.md` and
+> `internal/session/`.  [doc/history/README.md](README.md) says why this
+> is here.
+
 Written 2026-08-07, at commit `4be5a9d`.
 
 **Status.**  Stages 1, 2, 4 and 8 are built and running; the daemon

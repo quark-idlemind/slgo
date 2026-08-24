@@ -23,13 +23,13 @@ import (
 // choice (c1e9d11), and while it did the border was a wall: an avatar
 // walked at Pelmar Reach's west edge, stopped dead at x=0, and stayed
 // there for twelve seconds; from the other side he was pinned at x=255
-// for twenty-four.  No CrossedRegion, either time.  Take the offer up --
-// one UDP socket, UseCircuitCode with this session's own three ids, and
-// an answer to the handshake -- and the same walk crosses in two
+// for twenty-four.  No CrossedRegion, either time.  Take the offer up
+// -- one UDP socket, UseCircuitCode with this session's own three ids,
+// and an answer to the handshake -- and the same walk crosses in two
 // seconds, with the message arriving on the event queue exactly once.
-// See doc/neighbours.md, which is the plan for holding those circuits
-// properly; until it is built the handler below is reached only by a
-// client that opened one by hand.
+// See doc/history/neighbours.md, which is the plan for holding those
+// circuits properly; until it is built the handler below is reached
+// only by a client that opened one by hand.
 //
 // **The shapes were inferred and then confirmed.**  Stage 7 read this
 // message with the reader written for a measured TeleportFinish, on the
@@ -43,7 +43,7 @@ import (
 // viewer gives you: moveTo dials the new simulator afresh even when a
 // child circuit to it is already open, so the capabilities are fetched
 // again and the region describes itself from nothing.  Promoting the
-// child instead is stage 3 of doc/neighbours.md.
+// child instead is stage 3 of doc/history/neighbours.md.
 
 // noteCrossedRegion takes the session to the simulator a CrossedRegion
 // on the event queue names.

@@ -29,8 +29,8 @@ import (
 var theCouch = msg.MustParseUUID("43da7e57-7e57-c0de-1beb-09ee90247da5")
 
 // The local ids in play.  couchLocal is the one from the measurement on
-// Agni, kept because a number a person can look up in doc/sit.md is
-// worth more here than a round one.
+// Agni, kept because a number a person can look up in
+// doc/history/sit.md is worth more here than a round one.
 const (
 	meLocal    = 4001
 	couchLocal = 83600601

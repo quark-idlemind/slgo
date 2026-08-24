@@ -1,10 +1,17 @@
 # Child circuits to the neighbouring regions
 
+> **A plan, not a description of what slgo does.**  Written before the
+> work and kept for the measurements folded into it; the stage headings
+> below record what was found, including where the plan turned out to be
+> wrong.  For current behaviour see `man neighbours` and
+> `agent/neighbour.go`.  [doc/history/README.md](README.md) says why
+> this is here.
+
 Written 2026-08-16, against `d0584c2`. Stage 0 has been run and what it
 measured is folded in below: where this says what happens, it was
 watched happening. Nothing else here is built.
 
-`doc/teleport.md` ends with a measurement and a wall. Stage 7 built the
+`doc/history/teleport.md` ends with a measurement and a wall. Stage 7 built the
 handler for `CrossedRegion`, and then a live walk showed the message
 never arrives: an avatar walked twelve metres to Pelmar Reach's west edge,
 stopped dead at x=0, and stayed there. From the other side he walked to
@@ -154,7 +161,7 @@ open to Pelmar Mill, the avatar walked west and was in Pelmar Mill at
 x=251 **two seconds later** -- where the same walk with no child circuit
 had been pinned at x=0 for twelve seconds, and at x=255 for
 twenty-four from the other side. `CrossedRegion` arrived on the event
-queue exactly once, and stage 7 of `doc/teleport.md` followed it
+queue exactly once, and stage 7 of `doc/history/teleport.md` followed it
 correctly without a line of change. Reproduced in a second run.
 
 **A circuit is all it takes.** No `AgentThrottle`, no `AgentUpdate` to
@@ -265,7 +272,7 @@ already open, and then swapping which circuit is the root -- the region
 just left becomes a child in its turn. If it is not a child we hold,
 fall back to `moveTo` and take the pause.
 
-Stage 7 of `doc/teleport.md` becomes reachable here, and its handler
+Stage 7 of `doc/history/teleport.md` becomes reachable here, and its handler
 should need no change: what changes is what happens after it.
 
 ### Stage 4 -- the neighbour's own region state
@@ -294,7 +301,7 @@ The reason `EnableSimulator` is withheld today is that a viewer handed
 one opens its own circuit to a simulator slgod is not part of. Once
 slgod holds that circuit itself, the answer changes: the viewer can be
 offered slgod's own port for the neighbour, the way the root circuit
-already is. This is `doc/teleport.md`'s "follow" in another guise and is
+already is. This is `doc/history/teleport.md`'s "follow" in another guise and is
 the last thing to build, not the first.
 
 ## Testing: Pelmar Reach and Pelmar Mill

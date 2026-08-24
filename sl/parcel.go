@@ -17,9 +17,9 @@ package sl
 //   - The capability.  RemoteParcelRequest turns a point into the
 //     parcel's grid-wide uuid, which the properties never carry.
 //
-// The doc is doc/parcel.md, including the measurements behind the
-// sequence-id rule and the 404 that the capability answers to a request
-// carrying one field too many.
+// The doc is doc/history/parcel.md, including the measurements behind
+// the sequence-id rule and the 404 that the capability answers to a
+// request carrying one field too many.
 
 import (
 	"bytes"
@@ -121,7 +121,7 @@ func (w *Session) Parcel(ctx context.Context, timeout time.Duration) (*agent.Par
 // be near it, and asking does not move anything.  It does move the
 // simulator's idea of which parcel this agent has SELECTED, which a
 // viewer attached to the same session will notice: its About Land
-// redraws to show the parcel asked about.  See doc/parcel.md.
+// redraws to show the parcel asked about.  See doc/history/parcel.md.
 func (w *Session) ParcelAt(ctx context.Context, x, y float32, timeout time.Duration) (*agent.Parcel, error) {
 	seq := nextParcelSeq()
 
@@ -210,7 +210,7 @@ func (w *Session) askParcel(ctx context.Context, seq int32, m msg.Message,
 // else.  Adding region_handle turns the answer into a 404 -- the viewer
 // computes that handle from a global position and ours is the local
 // one, and the capability would rather refuse than reconcile them.
-// That cost half an hour to find once; see doc/parcel.md.
+// That cost half an hour to find once; see doc/history/parcel.md.
 func (w *Session) ParcelID(ctx context.Context, x, y, z float32) (msg.UUID, error) {
 	r, err := w.Region(ctx)
 	if err != nil {

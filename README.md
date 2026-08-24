@@ -106,23 +106,28 @@ case.
     doc/messages.txt    what each of those 483 is for, and which way it goes
     doc/capabilities.txt the http capabilities that can be asked for
 
-The design documents in `doc/` were written alongside the work and each
-one carries what it measured, which is usually the part that is not
-written down anywhere else:
+`doc/` describes what is here now:
 
     doc/guide.md            slgod, slrun and slbench, for a user
     doc/slsh-guide.html     slsh, for a user
-    doc/teleport.md         cross-region teleport
-    doc/neighbours.md       child circuits, and the border that was a wall
-    doc/sit.md              sitting, and standing up again
-    doc/parcel.md           parcels: the land under the avatar
-    doc/landmark.md         landmarks: a place kept, and gone back to
-    doc/slots.md            sharing the objects that scripts run in
-    doc/viewer-frontend.md  slgod as a viewer frontend
-    doc/two-viewers.md      two viewers on one slgod session
-    doc/many-avatars.md     several avatars in one slgod
-    doc/login-parameters.md what a viewer sends to log in
     doc/memory.md           how Second Life allocates script memory
+    doc/slots.md            sharing the objects that scripts run in
+    doc/login-parameters.md what a viewer sends to log in
+
+`doc/history/` is the implementation plans, written before the work and
+kept for the measurements folded into them.  A plan says what somebody
+meant to build on the day it was written, which is not the same as what
+the program does today, so the code and the man pages are the authority
+and these are not:
+
+    doc/history/teleport.md        cross-region teleport
+    doc/history/neighbours.md      child circuits, and the border that was a wall
+    doc/history/sit.md             sitting, and standing up again
+    doc/history/parcel.md          parcels: the land under the avatar
+    doc/history/landmark.md        landmarks: a place kept, and gone back to
+    doc/history/many-avatars.md    several avatars in one slgod
+    doc/history/viewer-frontend.md slgod as a viewer frontend
+    doc/history/two-viewers.md     two viewers on one slgod session -- never built
 
 ## How it works
 
@@ -633,7 +638,7 @@ every counter -- hangs off an `Agent`.
     ay, _ := agent.Connect(ctx, y, agent.Options{})
 
 That is what lets one slgod hold several avatars at once; see
-[doc/many-avatars.md](doc/many-avatars.md).
+[doc/history/many-avatars.md](doc/history/many-avatars.md).
 
 `TestManySessionsAtOnce` connects five sessions to five simulators
 simultaneously and checks each lands in its own region with its own
@@ -1795,7 +1800,7 @@ accepted lure is followed rather than fired and forgotten, and the
 daemon moves the circuit to the new simulator under everything holding
 it: forty moves on Agni at a median of 425ms, capabilities refetched
 from the new region's seed and every client told the region changed.
-[doc/teleport.md](doc/teleport.md) is the whole of it, stage by stage.
+[doc/history/teleport.md](doc/history/teleport.md) is the whole of it, stage by stage.
 
 Walking over a border works, but only with `neighbours` on. A simulator
 will not hand an avatar over to a client holding no child circuit to the
@@ -1812,7 +1817,7 @@ What that still does not do is cross *seamlessly*: `moveTo` dials the
 new simulator afresh even when a child circuit to it is already open, so
 the capabilities are fetched again and the new region describes itself
 from nothing. Promoting the child instead is stage 3 of
-[doc/neighbours.md](doc/neighbours.md), and objects in a neighbouring
+[doc/history/neighbours.md](doc/history/neighbours.md), and objects in a neighbouring
 region do not reach a client at all -- local ids are the region's own
 numbering and nothing above `agent` carries a region alongside one.
 

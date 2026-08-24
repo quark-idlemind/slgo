@@ -1,5 +1,11 @@
 # Parcels: the land under the avatar
 
+> **A plan, not a description of what slgo does.**  Written before the
+> work and kept for the measurements folded into it; the stage headings
+> below record what was found, including where the plan turned out to be
+> wrong.  For current behaviour see `man parcel` and `sl/parcel.go`.
+> [doc/history/README.md](README.md) says why this is here.
+
 Written 2026-08-18, against `ec9a8f0`, and rewritten the same day
 against `e686c99` after the first stage 0 turned out to have measured
 the probe rather than the grid. Where this says what happens, it was

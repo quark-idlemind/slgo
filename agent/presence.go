@@ -28,11 +28,11 @@ const DefaultDrawDistance = 128
 // The control flags that are a request rather than a state.
 //
 // Both were read out of indra/llcommon/indra_constants.h in a Firestorm
-// checkout, where the whole set is declared -- doc/sit.md expected them
-// in llagentconstants.h, which no longer exists in that tree.  The
-// values there are written as a shift of a named index with the result
-// in a comment beside it, and the comments say 0x00010000 and
-// 0x00020000, which are these.
+// checkout, where the whole set is declared -- doc/history/sit.md
+// expected them in llagentconstants.h, which no longer exists in that
+// tree.  The values there are written as a shift of a named index with
+// the result in a comment beside it, and the comments say 0x00010000
+// and 0x00020000, which are these.
 //
 // They are one-shot.  Measured on Agni: a single AgentUpdate carrying
 // the flag was enough, and the session's own presence update a second

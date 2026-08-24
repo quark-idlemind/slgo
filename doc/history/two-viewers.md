@@ -1,10 +1,16 @@
 # Two viewers on one slgod session
 
+> **A proposal, not a description of what slgo does.**  Written while
+> `slsh viewer --launch` was being made to work, to cost something that
+> was not built then and has not been since.  Nothing in it describes
+> behaviour anybody can use.  [doc/history/README.md](README.md) says
+> why this is here.
+
 Written 2026-08-15, against commit `abaa2af`. Nothing here is built. It is
 what was found while making `slsh viewer --launch` work, written down
 before it is lost.
 
-`doc/viewer-frontend.md` is the design this builds on: slgod holds the
+`doc/history/viewer-frontend.md` is the design this builds on: slgod holds the
 grid session and a viewer is handed *that* session rather than logging in
 again.
 

@@ -22,8 +22,8 @@ package main
 // wire, and there is nothing else to choose between them with.
 //
 // See sl/sit.go, which holds the measurements and the three outcomes a
-// sit has, and doc/sit.md, where they were written down as they were
-// made.
+// sit has, and doc/history/sit.md, where they were written down as they
+// were made.
 
 import (
 	"context"

@@ -1,10 +1,16 @@
 # Cross-region teleport
 
+> **A plan, not a description of what slgo does.**  Written before the
+> work and kept for the measurements folded into it; the stage headings
+> below record what was found, including where the plan turned out to be
+> wrong.  For current behaviour see `man tp` and `sl/teleport.go`.
+> [doc/history/README.md](README.md) says why this is here.
+
 Written 2026-08-16, against `09b3366` (v0.3.0). Nothing here is built.
 Stage 0 has been run, and what it measured is folded in below: where
 this says what happens, it was watched happening.
 
-`sl/teleport.go`, `cmd/slsh/man/tp.md` and `doc/viewer-frontend.md`
+`sl/teleport.go`, `cmd/slsh/man/tp.md` and `doc/history/viewer-frontend.md`
 each stop at the same sentence -- another region is a different
 simulator, and following the avatar there is the daemon's work rather
 than a client's. This is the plan for doing it.
@@ -355,7 +361,7 @@ same falsehood was in `waiting.go`'s `choices()`.
 
 ### Stage 6 -- a viewer attached while it happens (done)
 
-`doc/viewer-frontend.md` left this open deliberately and said to decide
+`doc/history/viewer-frontend.md` left this open deliberately and said to decide
 rather than discover. It is a real decision:
 
 - **Refuse.** The viewer's teleport messages are absorbed the way
@@ -660,7 +666,7 @@ stage 7's handler followed it correctly without a line of change. That
 retires two caveats at a stroke: the handler is not dead code, and what
 it reads is no longer inferred -- a real body was captured and agrees
 with every field stage 7 guessed. Holding those circuits properly,
-rather than by hand in a throwaway, is `doc/neighbours.md`.
+rather than by hand in a throwaway, is `doc/history/neighbours.md`.
 
 **A client can walk the avatar after all.** The plan said nothing in
 `sl` or `slsh` could, which is true of the commands -- but

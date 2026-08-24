@@ -18,8 +18,8 @@ package main
 // exactly one item, and printing what came back without pretending to
 // know more than the asset holds.
 //
-// The measurements behind all of it are in doc/landmark.md, taken on
-// Agni on 2026-08-18.
+// The measurements behind all of it are in doc/history/landmark.md,
+// taken on Agni on 2026-08-18.
 //
 // # Why going somewhere is a word and not a letter
 //

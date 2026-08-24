@@ -234,7 +234,7 @@ func TestDwellCarriesBothNamingsOfAParcel(t *testing.T) {
 
 // TestParcelIDSendsTheTwoFieldsTheCapabilityAnswers: adding
 // region_handle turns the answer into a 404, and the failure is silent
-// enough that it cost half an hour once.  See doc/parcel.md.
+// enough that it cost half an hour once.  See doc/history/parcel.md.
 func TestParcelIDSendsTheTwoFieldsTheCapabilityAnswers(t *testing.T) {
 	w, f := newFakeSession(t)
 

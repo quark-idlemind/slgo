@@ -23,13 +23,13 @@ import (
 //
 // **A simulator will not hand an avatar over the border to a client
 // that holds none of these**, and it was measured both ways.  With no
-// child circuit an avatar walked at Pelmar Reach's west edge, stopped dead
-// at x=0 and stayed there twelve seconds, and was pinned at x=255 for
-// twenty-four from the other side; with one open to Pelmar Mill the same
-// walk was over the border in two seconds, and CrossedRegion arrived on
-// the event queue exactly once, where crossing.go was already waiting
-// for it.  See doc/neighbours.md, which is the plan this is stages one
-// and two of.
+// child circuit an avatar walked at Pelmar Reach's west edge, stopped
+// dead at x=0 and stayed there twelve seconds, and was pinned at x=255
+// for twenty-four from the other side; with one open to Pelmar Mill the
+// same walk was over the border in two seconds, and CrossedRegion
+// arrived on the event queue exactly once, where crossing.go was
+// already waiting for it.  See doc/history/neighbours.md, which is the
+// plan this is stages one and two of.
 //
 // **Off unless asked for, and asked for per avatar.**  Neighbours cost
 // a socket, a share of the bandwidth and the simulator's attention,
@@ -80,7 +80,7 @@ const MaxNeighbours = 8
 //
 // Every field of it crosses to a client, which is what slsh's
 // neighbours prints; no viewer sees a neighbour, and what a viewer may
-// eventually be offered is a later stage of doc/neighbours.md.
+// eventually be offered is a later stage of doc/history/neighbours.md.
 type Neighbour struct {
 	// Handle identifies the region on the grid.  msg.GridCoords turns
 	// it into the square.
@@ -523,7 +523,7 @@ func (a *Agent) spawnChild(fn func()) bool {
 // Promoting a child to root instead of dropping it -- crossing on the
 // circuit that is already open, which is what would make a crossing
 // seamless rather than merely possible -- is stage 3 of
-// doc/neighbours.md and is deliberately not done here.
+// doc/history/neighbours.md and is deliberately not done here.
 func (a *Agent) dropNeighbours(why string) {
 	a.neighMu.Lock()
 	held := a.neighbours

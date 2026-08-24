@@ -19,8 +19,8 @@ package sl
 // getting one is a world map lookup by NAME, and a landmark carries no
 // name.
 //
-// The doc is doc/landmark.md, including the measurements behind every
-// claim above.
+// The doc is doc/history/landmark.md, including the measurements behind
+// every claim above.
 //
 // # The two uuids, and why one of them is dangerous
 //
