@@ -20,11 +20,13 @@ type Neighbours struct {
 	// On is whether the session takes up the offers a simulator makes
 	// of the regions beside it.
 	//
-	// On with nothing held is ordinary rather than broken.  A
-	// simulator offers a neighbour when the avatar is near one and
-	// offers none at all to an avatar in the middle of a region, so an
-	// empty list means "nothing near", and a list that fills in a
-	// second or two later means the offer arrived after the question.
+	// On with nothing held is ordinary rather than broken, and it
+	// usually means "not yet" rather than "nothing near".  A simulator
+	// offers of its own accord and repeats until the offer is taken:
+	// measured on 2026-08-23 the first circuit took between twenty and
+	// sixty seconds, and the set went on growing for a minute after
+	// that.  Being in the middle of a region does not empty it -- the
+	// middle of a 256-metre one is offered all four edges.
 	On bool
 
 	// Held is one entry per circuit, in grid handle order.

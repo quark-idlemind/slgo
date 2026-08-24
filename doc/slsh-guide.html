@@ -1424,7 +1424,7 @@ Dell of Ashes at 113, 109, 1011</span>
 <pre><span class="p">/$</span> <span class="c">neighbours</span>
 <span class="o">neighbours are off; this avatar cannot walk over a border</span>
 <span class="p">/$</span> <span class="c">neighbours on</span>
-<span class="o">neighbours are on; no circuit is open, which is what being away from a border looks like</span>
+<span class="o">neighbours are on; no circuit is open yet, and the first offer can take a minute to come round</span>
 <span class="p">/$</span> <span class="c">neighbours</span>                   <span class="n">a few seconds later</span>
 <span class="o">neighbours are on, 3 circuits held
 Kelva Sands                       43647, 43647   203.0.113.9:13021     44 heard
@@ -1436,10 +1436,12 @@ Orrick Gate                       43648, 43647   203.0.113.28:12035    100 heard
           The middle answer is the ordinary one and not a failure. Turning them
           on asks for nothing and opens nothing: the simulator offers a
           neighbour of its own accord and repeats the offer for as long as it
-          goes untaken, so a session that has just said <code>on</code> picks
-          the next repeat up within a second or two, and the way to see the
-          circuits is to run <code>neighbours</code> again — which is the third
-          line above, a few seconds later, with three of them held.
+          goes untaken, so the circuits arrive by themselves and the way to see
+          them is to run <code>neighbours</code> again — which is the third line
+          above, with three of them held. How long that takes varies a great
+          deal. On 2026-08-23 the first circuit opened between twenty and sixty
+          seconds after <code>on</code>, and more followed over the minute after
+          that, so an empty listing straight afterwards is worth waiting out.
         </p>
 
         <p>
@@ -1464,12 +1466,14 @@ Orrick Gate                       43648, 43647   203.0.113.28:12035    100 heard
         </p>
 
         <p>
-          An empty listing usually means the avatar is not near a border, which
-          is what the middle line above is saying: standing twelve metres
-          from the west edge, one neighbour was offered, and standing in the
-          middle of the same region at 2001 metres, none at all. The set changes
-          as the avatar moves, and a teleport or a crossing throws all of them
-          away and opens the new region's own.
+          An empty listing almost always means "not yet" rather than "not near
+          a border", which is what the middle line above is saying. Being in
+          the middle of a region does not empty it: measured on 2026-08-23,
+          standing 128 metres from all four edges of a 256-metre region held
+          four circuits, one across each edge and none across a corner. The set
+          changes as the avatar moves, and a teleport to another region or a
+          crossing throws all of them away and opens the new region's own; a
+          teleport within the region leaves them alone.
         </p>
 
         <p>

@@ -291,18 +291,22 @@ func cmdNeighbours(ctx context.Context, sh *Shell, out io.Writer, args []string)
 // it, because nothing is addressed by a neighbour's handle -- a border
 // is walked over rather than typed at.
 //
-// On with nothing held is a state worth spelling out.  A simulator
-// offers a neighbour when the avatar is near one and offers none at all
-// to an avatar in the middle of a region, so an empty listing usually
-// means "not near a border" rather than anything having gone wrong.
+// On with nothing held is a state worth spelling out, and it is not
+// what it was once documented as.  It was said to mean "not near a
+// border", on the belief that a simulator offers nothing to an avatar
+// in the middle of a region; measured on 2026-08-23, the middle of a
+// 256-metre region is offered all four edges.  What an empty listing
+// means is almost always "not yet": the first circuit took between
+// twenty and sixty seconds from turning them on, and the set went on
+// growing for a minute after that.  See man/neighbours.md.
 func printNeighbours(out io.Writer, n *sl.Neighbours) {
 	switch {
 	case !n.On:
 		fmt.Fprintln(out, "neighbours are off; this avatar cannot walk over a border")
 		return
 	case len(n.Held) == 0:
-		fmt.Fprintln(out, "neighbours are on; no circuit is open, "+
-			"which is what being away from a border looks like")
+		fmt.Fprintln(out, "neighbours are on; no circuit is open yet, "+
+			"and the first offer can take a minute to come round")
 		return
 	}
 	fmt.Fprintf(out, "neighbours are on, %d %s held\n",
@@ -313,9 +317,13 @@ func printNeighbours(out io.Writer, n *sl.Neighbours) {
 		switch {
 		case !c.Handshook:
 			// The name arrives in the handshake, so a circuit
-			// without one has none to print.  Measured at about a
-			// second on Agni, which is quick enough that seeing this
-			// twice running means the offer came to nothing.
+			// without one has none to print.  Seeing it twice
+			// running does NOT mean the offer came to nothing: on
+			// 2026-08-23 three of the five simulators around one
+			// region sent no handshake through four openings each
+			// while their packet counts climbed, and the same three
+			// had answered on an earlier day.  Heard is what says
+			// the circuit is alive.
 			name = "(no handshake yet)"
 		case name == "":
 			name = "(unnamed)"

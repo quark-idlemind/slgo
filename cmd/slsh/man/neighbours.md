@@ -27,18 +27,29 @@ is left as it was.
 ## On, with nothing held, is the ordinary state
 
 Turning them on asks for nothing and opens nothing.  The simulator
-offers a neighbour of its own accord, and repeats the offer for as long
-as it goes untaken.  A session that has just turned them on picks the
-next repeat up within a second or two, and the way to see the circuits
-is to run `neighbours` again.
+offers a neighbour of its own accord and repeats the offer for as long
+as it goes untaken, so the circuits arrive by themselves; the way to
+see them is to run `neighbours` again.
 
-An empty listing usually means the avatar is not near a border.  A
-simulator introduces what is near.  It is the distance to a border and
-not the height that decides it: a skybox is not out of reach of its
-neighbours; the middle of a region is.
+They take their time, and they do not arrive together.  Measured on
+Agni on 2026-08-23, timed from turning them on: the first circuit
+opened between twenty and sixty seconds later, and more followed over
+the minute after that -- at one position three opened together and two
+more forty seconds behind them.  An empty listing in the first few
+seconds is the offer not having come round yet.
 
-The set changes as the avatar moves.  The circuits belong to the region
-the avatar is in, and a teleport or a crossing throws them away.
+Being away from a border is not what empties it.  Standing in the
+exact middle of a 256-metre region, 128 metres from all four edges,
+four circuits were held: one across each edge, and none across a
+corner.  Twenty-eight metres in from the west edge and seventy-two
+from the south, the near three came first -- those two edges and the
+corner between them -- and the far two followed.  Height does not
+decide it: that second position was 2001 metres up, and the middle was
+measured both at 2001 and at ground level.
+
+The set changes as the avatar moves.  The circuits belong to the
+region the avatar is in, so a teleport to another region or a crossing
+throws them away; a teleport within the region leaves them alone.
 
 ## The listing
 
@@ -55,9 +66,14 @@ nothing is addressed by a neighbour's handle: a border is walked over
 rather than typed at.
 
 A name arrives in the region's handshake, so a line that says
-`(no handshake yet)` is a circuit that has just opened.  One that still
-says it a moment later is an offer that came to nothing, and the packet
-count beside it will be zero.
+`(no handshake yet)` is a circuit that has not been sent one.  It does
+not follow that the offer came to nothing.  On 2026-08-23, three of
+the five simulators around one region sent no handshake through four
+openings each, while the packet count beside them climbed into double
+figures -- and the same three had answered on an earlier day, so it is
+the simulator's mood rather than the circuit's health.  The count is
+what says a circuit is alive; the name only says the simulator
+introduced itself.
 
 The count is what the neighbour has said, counted and dropped.  Nothing
 this shell can ask about lives in another region: what is over the
