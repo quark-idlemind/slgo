@@ -13,11 +13,18 @@ than one guessed here:
 
 Nobody typed "HUD top" there, and nothing here could have worked it
 out: it is the point the object itself carries, sent back in the
-region's answer and read off that.  The names are mostly the viewer's
-own, so "chest" and "left hand" and "HUD top right" are points.  Not
-everywhere, though: the point the viewer calls "skull" is "head" here,
-and a word this table does not hold -- "skull" among them -- is refused
-rather than guessed at.
+region's answer and read off that.  The points are the viewer's, the
+names are for reading, and the two are not always the same word: the
+viewer's abbreviations are written out ("R Upper Arm" is "right upper
+arm"), the HUD points are said to be HUD ones rather than left as the
+viewer's bare "Top" and "Center", and three are different words -- the
+point the viewer calls "skull" is "head" here, "spine" is "back" and
+"stomach" is "belly".
+
+Only the printing differs.  --at understands the viewer's name for a
+point as well as the one printed here, so "skull" and "head" are the
+same point and either can be typed.  A word that is neither -- "elbow"
+-- is refused rather than guessed at.
 
 # Wearing adds rather than replaces
 
@@ -55,13 +62,16 @@ detach are the two ways on from there.
 
 # Options
 
---at names the point, either the way the viewer names it -- "left
-hand", "HUD top right" -- or by its number.  The numbers run from 1 to
-127; a bigger one is refused, because the byte a point travels in also
-carries the bit that says add rather than replace.  Zero is taken as
-well and asks for what leaving --at off asks for: wherever the object
-itself says.  The refusal for a bigger number says 1 to 127 and leaves
-that out.
+--at names the point, either the way worn prints it -- "left hand",
+"HUD top right" -- or the way the viewer names it on its own menu --
+"Skull", "R Upper Arm", "Top Right" -- or by its number, which is what
+the point is on the wire.  Case and surrounding space do not matter,
+and the American "center" is taken for "centre".  The numbers run from
+1 to 127; a bigger one is refused, because the byte a point travels
+in also carries the bit that says add rather than replace.  Zero is
+taken as well and asks for what leaving --at off asks for: wherever
+the object itself says.  The refusal for a bigger number names both:
+1 to 127, and 0 for wherever the object itself says.
 
 --replace takes off whatever is on that point instead of wearing
 alongside it.

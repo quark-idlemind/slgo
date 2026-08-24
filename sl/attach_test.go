@@ -79,10 +79,12 @@ func TestAttachPointsAreNamed(t *testing.T) {
 // one AttachPointNamed accepts, or the shell can print a point it will
 // not then take back.
 func TestAPointCanBeFoundByTheNameItIsPrintedUnder(t *testing.T) {
-	for point, name := range attachPointNames {
-		got, ok := AttachPointNamed(name)
-		if !ok || got != point {
-			t.Errorf("AttachPointNamed(%q) = %d, %v, want %d", name, got, ok, point)
+	for point, n := range attachPointNames {
+		for _, name := range []string{n.name, n.viewer} {
+			got, ok := AttachPointNamed(name)
+			if !ok || got != point {
+				t.Errorf("AttachPointNamed(%q) = %d, %v, want %d", name, got, ok, point)
+			}
 		}
 	}
 
@@ -105,6 +107,102 @@ func TestAPointCanBeFoundByTheNameItIsPrintedUnder(t *testing.T) {
 	}
 	if _, ok := AttachPointNamed(""); ok {
 		t.Error("the empty name found a point")
+	}
+}
+
+// TestTheViewersOwnNamesAreUnderstood: the names this package prints
+// are not the viewer's -- they spell out its abbreviations, they put
+// "HUD" in front of its bare "Top" and "Center", and three of them are
+// different words altogether -- and a person choosing a point is
+// reading it off the viewer's menu, not off this table.  So every name
+// the viewer has for a point is accepted for that point, and typing
+// "Skull" is not answered with there being no such thing.
+//
+// The names below were read out of the viewer's own table --
+// indra/newview/character/avatar_lad.xml, one
+// <attachment_point id="N" ... name="..."/> per point -- from a
+// Phoenix-Firestorm checkout on 2026-08-23.  They are copied here as
+// data on purpose: that file is not part of this repository, and a test
+// that went looking for it would pass by not running on any machine
+// without a viewer checked out beside this one.
+func TestTheViewersOwnNamesAreUnderstood(t *testing.T) {
+	viewer := map[int]string{
+		1:  "Chest",
+		2:  "Skull",
+		3:  "Left Shoulder",
+		4:  "Right Shoulder",
+		5:  "Left Hand",
+		6:  "Right Hand",
+		7:  "Left Foot",
+		8:  "Right Foot",
+		9:  "Spine",
+		10: "Pelvis",
+		11: "Mouth",
+		12: "Chin",
+		13: "Left Ear",
+		14: "Right Ear",
+		15: "Left Eyeball",
+		16: "Right Eyeball",
+		17: "Nose",
+		18: "R Upper Arm",
+		19: "R Forearm",
+		20: "L Upper Arm",
+		21: "L Forearm",
+		22: "Right Hip",
+		23: "R Upper Leg",
+		24: "R Lower Leg",
+		25: "Left Hip",
+		26: "L Upper Leg",
+		27: "L Lower Leg",
+		28: "Stomach",
+		29: "Left Pec",
+		30: "Right Pec",
+		31: "Center 2",
+		32: "Top Right",
+		33: "Top",
+		34: "Top Left",
+		35: "Center",
+		36: "Bottom Left",
+		37: "Bottom",
+		38: "Bottom Right",
+		39: "Neck",
+		40: "Avatar Center",
+		41: "Left Ring Finger",
+		42: "Right Ring Finger",
+		43: "Tail Base",
+		44: "Tail Tip",
+		45: "Left Wing",
+		46: "Right Wing",
+		47: "Jaw",
+		48: "Alt Left Ear",
+		49: "Alt Right Ear",
+		50: "Alt Left Eye",
+		51: "Alt Right Eye",
+		52: "Tongue",
+		53: "Groin",
+		54: "Left Hind Foot",
+		55: "Right Hind Foot",
+	}
+
+	for point, name := range viewer {
+		got, ok := AttachPointNamed(name)
+		if !ok {
+			t.Errorf("the viewer calls point %d %q and we do not know the name", point, name)
+			continue
+		}
+		if got != point {
+			t.Errorf("AttachPointNamed(%q) = %d, but the viewer means %d", name, got, point)
+		}
+	}
+
+	// The printed name and the name taken back are the same name, for
+	// every point the viewer has.  This is the property the shell leans
+	// on: what worn prints is what wear --at will take.
+	for point := range viewer {
+		name := AttachPointName(point)
+		if got, ok := AttachPointNamed(name); !ok || got != point {
+			t.Errorf("point %d prints as %q, which comes back as %d, %v", point, name, got, ok)
+		}
 	}
 }
 

@@ -22,29 +22,96 @@ const (
 	HUDBottomRight
 )
 
-// attachPointNames are what the points are called, as the viewer names
-// them.  Body points run to 30 and the HUD points carry on from there.
-var attachPointNames = map[int]string{
-	1: "chest", 2: "head", 3: "left shoulder", 4: "right shoulder",
-	5: "left hand", 6: "right hand", 7: "left foot", 8: "right foot",
-	9: "back", 10: "pelvis", 11: "mouth", 12: "chin",
-	13: "left ear", 14: "right ear", 15: "left eye", 16: "right eye",
-	17: "nose", 18: "right upper arm", 19: "right lower arm",
-	20: "left upper arm", 21: "left lower arm", 22: "right hip",
-	23: "right upper leg", 24: "right lower leg", 25: "left hip",
-	26: "left upper leg", 27: "left lower leg", 28: "belly",
-	29: "left pec", 30: "right pec",
+// attachPointName is what one point is called, twice over: the name
+// this package prints, and the viewer's own name for the same point.
+type attachPointName struct {
+	name   string // what this package prints, and accepts
+	viewer string // what the viewer calls it, which is accepted too
+}
 
-	HUDCenter2: "HUD centre 2", HUDTopRight: "HUD top right",
-	HUDTop: "HUD top", HUDTopLeft: "HUD top left",
-	HUDCenter1: "HUD centre 1", HUDBottomLeft: "HUD bottom left",
-	HUDBottom: "HUD bottom", HUDBottomRight: "HUD bottom right",
+// attachPointNames are the viewer's attachment points, named here for a
+// reader rather than copied from it.  Each entry carries both names: the
+// one this package prints, and the one the viewer's own table gives the
+// same point (avatar_lad.xml, <attachment_point ... name="...">).  Body
+// points run to 30 and the HUD points carry on from there.
+//
+// Twenty-one of the fifty-five names differ, in three ways, and none of
+// the three is a slip to be tidied back into the viewer's spelling:
+//
+//   - abbreviations written out.  "R Upper Arm" is "right upper arm"
+//     here, "L Forearm" is "left lower arm", "Left Eyeball" is "left
+//     eye".
+//   - the HUD points prefixed.  The viewer calls them "Top", "Center"
+//     and "Bottom Right", which say nothing in a single flat list that
+//     also holds the body points, so they are "HUD top" and the rest.
+//   - three different words.  "Skull" is "head", "Spine" is "back",
+//     "Stomach" is "belly" -- what those parts are called by somebody
+//     who is not reading a skeleton.
+//
+// The viewer's spelling is kept beside ours instead of being thrown
+// away because both are accepted on input: somebody reading a point off
+// the viewer's menu and typing "Skull" here is understood rather than
+// told there is no such point.  Keeping the two in one entry is what
+// stops a point being half-added later -- there is nowhere to add a
+// point that is not also the place to say what the viewer calls it.
+var attachPointNames = map[int]attachPointName{
+	1:  {"chest", "Chest"},
+	2:  {"head", "Skull"},
+	3:  {"left shoulder", "Left Shoulder"},
+	4:  {"right shoulder", "Right Shoulder"},
+	5:  {"left hand", "Left Hand"},
+	6:  {"right hand", "Right Hand"},
+	7:  {"left foot", "Left Foot"},
+	8:  {"right foot", "Right Foot"},
+	9:  {"back", "Spine"},
+	10: {"pelvis", "Pelvis"},
+	11: {"mouth", "Mouth"},
+	12: {"chin", "Chin"},
+	13: {"left ear", "Left Ear"},
+	14: {"right ear", "Right Ear"},
+	15: {"left eye", "Left Eyeball"},
+	16: {"right eye", "Right Eyeball"},
+	17: {"nose", "Nose"},
+	18: {"right upper arm", "R Upper Arm"},
+	19: {"right lower arm", "R Forearm"},
+	20: {"left upper arm", "L Upper Arm"},
+	21: {"left lower arm", "L Forearm"},
+	22: {"right hip", "Right Hip"},
+	23: {"right upper leg", "R Upper Leg"},
+	24: {"right lower leg", "R Lower Leg"},
+	25: {"left hip", "Left Hip"},
+	26: {"left upper leg", "L Upper Leg"},
+	27: {"left lower leg", "L Lower Leg"},
+	28: {"belly", "Stomach"},
+	29: {"left pec", "Left Pec"},
+	30: {"right pec", "Right Pec"},
 
-	39: "neck", 40: "avatar centre", 41: "left ring finger",
-	42: "right ring finger", 43: "tail base", 44: "tail tip",
-	45: "left wing", 46: "right wing", 47: "jaw", 48: "alt left ear",
-	49: "alt right ear", 50: "alt left eye", 51: "alt right eye",
-	52: "tongue", 53: "groin", 54: "left hind foot", 55: "right hind foot",
+	HUDCenter2:     {"HUD centre 2", "Center 2"},
+	HUDTopRight:    {"HUD top right", "Top Right"},
+	HUDTop:         {"HUD top", "Top"},
+	HUDTopLeft:     {"HUD top left", "Top Left"},
+	HUDCenter1:     {"HUD centre 1", "Center"},
+	HUDBottomLeft:  {"HUD bottom left", "Bottom Left"},
+	HUDBottom:      {"HUD bottom", "Bottom"},
+	HUDBottomRight: {"HUD bottom right", "Bottom Right"},
+
+	39: {"neck", "Neck"},
+	40: {"avatar centre", "Avatar Center"},
+	41: {"left ring finger", "Left Ring Finger"},
+	42: {"right ring finger", "Right Ring Finger"},
+	43: {"tail base", "Tail Base"},
+	44: {"tail tip", "Tail Tip"},
+	45: {"left wing", "Left Wing"},
+	46: {"right wing", "Right Wing"},
+	47: {"jaw", "Jaw"},
+	48: {"alt left ear", "Alt Left Ear"},
+	49: {"alt right ear", "Alt Right Ear"},
+	50: {"alt left eye", "Alt Left Eye"},
+	51: {"alt right eye", "Alt Right Eye"},
+	52: {"tongue", "Tongue"},
+	53: {"groin", "Groin"},
+	54: {"left hind foot", "Left Hind Foot"},
+	55: {"right hind foot", "Right Hind Foot"},
 }
 
 // AttachPointName is what an attachment point is called.  An unknown
@@ -52,27 +119,47 @@ var attachPointNames = map[int]string{
 // worse than the number.
 func AttachPointName(point int) string {
 	if n, ok := attachPointNames[point]; ok {
-		return n
+		return n.name
 	}
 	return fmt.Sprintf("point %d", point)
 }
 
 // attachPointsByName is attachPointNames the other way round, built from
 // it so that there is one table and not two: a name added to the map
-// above is understood here without anybody remembering to add it twice.
+// above is understood here without anybody remembering to add it twice,
+// and that goes for the viewer's name as much as for ours.
 //
 // The keys are folded to lower case, and "center" is accepted for
 // "centre" as well, because the viewer spells the HUD points the
 // American way and a person reading them off its menu should not be told
-// there is no such point.
+// there is no such point.  Accepting the viewer's whole name for a point
+// -- "Skull" for "head", "Top" for "HUD top" -- is the same courtesy
+// carried the rest of the way.
+//
+// Two names for two different points would be a bug in the table above
+// and not something to resolve quietly, since it would make one of the
+// two mean something a person did not ask for.  It is a mistake that
+// can only arrive by editing this file, so it is caught the moment the
+// package is loaded rather than left for a wear that goes to the wrong
+// place.  As the table stands, nothing collides.
 var attachPointsByName = func() map[string]int {
-	m := make(map[string]int, 2*len(attachPointNames))
-	for point, name := range attachPointNames {
+	m := make(map[string]int, 3*len(attachPointNames))
+	add := func(name string, point int) {
 		n := strings.ToLower(name)
+		if was, ok := m[n]; ok && was != point {
+			panic(fmt.Sprintf("sl: attachment point name %q is both %d and %d", n, was, point))
+		}
 		m[n] = point
 		if alt := strings.ReplaceAll(n, "centre", "center"); alt != n {
+			if was, ok := m[alt]; ok && was != point {
+				panic(fmt.Sprintf("sl: attachment point name %q is both %d and %d", alt, was, point))
+			}
 			m[alt] = point
 		}
+	}
+	for point, n := range attachPointNames {
+		add(n.name, point)
+		add(n.viewer, point)
 	}
 	return m
 }()
