@@ -14,12 +14,14 @@ through a viewer in another language never called it "Trash" in the
 first place.  An inventory with no such folder is an error rather than
 a silent success.
 
-# The count is taken first
+# The count is taken first, and counts one level
 
-What it prints is how many entries were in there, counted before the
-purge, because afterwards there is nothing left to count and that
-number is the only report there will be.  An empty trash says so and
-does nothing.
+What it prints is how many entries were directly in the trash, counted
+before the purge, because afterwards there is nothing left to count.
+It is not a count of what was destroyed: a folder in there counts as
+one entry and goes with everything inside it, so a trash of a few
+folders can report a small number for a great many things.  An empty
+trash says so and does nothing.
 
 # One request, not one per item
 

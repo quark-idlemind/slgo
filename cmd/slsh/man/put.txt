@@ -1,6 +1,8 @@
 put uploads a picture from this machine as a texture in inventory.  It
-is the one command here that spends money, and the other direction is
-get, which does not.
+costs L$ every time, which nothing else in inventory does, and the
+other direction is get, which does not.  The one other command in this
+shell that spends anything is answer, and only when a group invitation
+carries a joining fee.
 
 The argument is a file.  PNG, JPEG, GIF, BMP and TIFF are read, and
 the orientation a camera left in the file is applied, since a texture
@@ -38,7 +40,10 @@ other is a reasonable thing to want.  Which resampling filter suits
 which picture is not something a shell can decide, so --filter asks
 and --filters is a guide keyed by the sort of picture rather than by
 the name of the filter.  None of it matters when both sides are
-already powers of two, because then nothing is resized.
+already powers of two and neither is above 2048, because then nothing
+is resized.  The ceiling is the exception: a side above 2048 comes
+down to it whatever the rounding says, so 4096x256 is resized though
+both of its sides are powers of two.
 
 How much of the picture survives the encoding is the other question,
 and the fee does not turn on it at all: the price is settled by the
@@ -47,10 +52,12 @@ rather than lindens.  What goes up aims at about eight to one, which is
 where Second Life's own textures sit -- the stock plywood is 98282
 bytes for 512x512 -- and --ratio asks for something else.  --lossless
 keeps every pixel instead, at several times the size: measured on one
-1024x2048 picture, 145889 bytes against 35118.  Anything 128x128 or
-smaller is stored losslessly whether it was asked for or not, since
-that is what the viewer does with the small textures that are usually
-a bit of interface.
+1024x2048 picture, 145889 bytes against 35118.  Below a certain size
+nothing is compressed whether it was asked for or not, and that size
+is an area rather than a side: 128x128 of it, so a 512x32 banner is
+stored losslessly as surely as a 128x128 square is.  That is what the
+viewer does with the small textures that are usually a bit of
+interface.
 
 # Looking before paying
 

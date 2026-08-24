@@ -17,7 +17,7 @@ get in the way of that.
 With -l a line is kind, when it was acquired, id, path, in that order
 and padded to fixed widths.
 
-	notecard   2026-08-03T21:26:43  d8467e57-...  /Notecards/readme
+	notecard   2026-08-03T21:26:43 d8467e57-...  /Notecards/readme
 
 The date is the whole date, down to the second, and it is one field:
 the day and the time of day are joined by a T rather than a space, so
@@ -34,10 +34,10 @@ every column after it.
 # Listing an item, and why
 
 	/$ ls -l /Scripts/greeter
-	script     2026-08-07T12:06:57  cb567e57-...  /Scripts/greeter
-	script     2026-08-07T11:26:01  e9d97e57-...  /Scripts/greeter
-	script     2026-08-07T11:25:53  7e277e57-...  /Scripts/greeter
-	script     2026-08-07T11:25:53  ade67e57-...  /Scripts/greeter
+	script     2026-08-07T12:06:57 cb567e57-...  /Scripts/greeter
+	script     2026-08-07T11:26:01 e9d97e57-...  /Scripts/greeter
+	script     2026-08-07T11:25:53 7e277e57-...  /Scripts/greeter
+	script     2026-08-07T11:25:53 ade67e57-...  /Scripts/greeter
 
 Four things of one name, and until this worked the only way to see
 them was to list the whole folder and pick them out by eye.  This is
@@ -60,10 +60,12 @@ was tried as first.
 Inventory names are not unique.  A folder can hold a dozen items
 called the same thing, and a path names the first of them -- so a
 listing of duplicates would otherwise be a set of lines that all mean
-one item.  The id names exactly one, and cat, get, rm, mv, drop and
-the rest take an id anywhere they take a path.  It is the answer rm
-points at when a name means several things and the dates do not settle
-which.
+one item.  The id names exactly one, and cat, rm, mv, drop and the
+rest take an id anywhere they take a path.  It is the answer rm points
+at when a name means several things and the dates do not settle which.
+get is the one that looks like it belongs on that list and does not:
+the uuid it takes is a texture's asset id, which is not what this
+column prints.
 
 # How far down, and in what order
 
@@ -82,9 +84,16 @@ end where they are out of the way.
 
 --in lists what a rezzed object holds instead of a folder, and takes
 no path with it: an object holds no folders, so there is nowhere
-inside one for a path to lead.  The ids in that listing belong to the
-object's own copies and not to the inventory items they came from,
-which is what rm and mv want when they are given the same flag.
+inside one for a path to lead.  The columns are not the ones above
+either: a line is the kind and the name, and with -l the kind, the id
+and the name.  There is no date, since what an object holds carries
+none, and no path, since the name is the whole of where a thing is.
+
+The ids in that listing belong to the object's own copies and not to
+the inventory items they came from, and they are there to be read
+rather than typed back.  rm --in and mv --in take the name instead,
+matched exactly and in the case it has, and neither of them has any
+use for an id.
 
 # Examples
 

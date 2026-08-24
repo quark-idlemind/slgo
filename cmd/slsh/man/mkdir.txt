@@ -33,6 +33,6 @@ one however carefully it is quoted.
 	mkdir lanterns
 
 	mkdir /Objects/lanterns/brass
-	42d17e57-…
+	42d17e57-...
 
 See also: cd, ls, mv, and rm.

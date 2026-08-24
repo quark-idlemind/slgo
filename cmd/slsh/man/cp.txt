@@ -33,7 +33,7 @@ how that is found out.
 
 # Examples
 
-	cp probe "probe, the second"
+	cp probe probe, the second
 
 Into another folder, which is two steps:
 

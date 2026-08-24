@@ -2,9 +2,10 @@ pwd prints the inventory folder this shell is in, as a path from the
 root.  cd is what changes it, and every command that takes a path
 without a leading slash takes it relative to this.
 
-It takes no argument.  The prompt carries the same path already, so
-this is chiefly for a script or for a line being redirected into a
-file, where there is no prompt to read it off.
+It takes no argument, and a word given anyway is ignored rather than
+refused.  The prompt carries the same path already, so this is chiefly
+for a script or for a line being redirected into a file, where there
+is no prompt to read it off.
 
 # The root is a slash and nothing else
 

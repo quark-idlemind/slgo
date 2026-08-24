@@ -36,6 +36,11 @@ there is nowhere in one to move anything to.  The object is named by
 the word the region calls it or by its uuid, and a name several
 objects answer to is refused with their uuids rather than guessed at.
 
+The thing inside is named by its name, matched exactly and in the case
+it has.  The id form above is inventory's: the id beside a line of
+"ls -l --in" belongs to the object's own copy, and is not something to
+give this.
+
 # Examples
 
 	mv probe Objects/lanterns

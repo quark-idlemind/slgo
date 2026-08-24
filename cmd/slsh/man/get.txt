@@ -15,8 +15,11 @@ id alone, so a texture on somebody else's object -- named nowhere in
 this avatar's inventory, belonging to nobody here -- is fetchable the
 moment its id is known.  That was verified against the beta grid:
 textures belonging to two other avatars, fetched and decoded.  The id
-comes from wherever the object was inspected; "ls -l" prints the ids
-of textures that are in inventory.
+comes from wherever the object was inspected, and not from a listing
+here: no inventory command prints an asset id, and the third column of
+"ls -l" is the item id, which the network does not answer to.  A
+texture that is in inventory is named by its path instead, and get
+looks its asset up itself.
 
 # Why a PNG comes out
 
@@ -42,7 +45,7 @@ exactly as given.
 # Examples
 
 	get Textures/lantern
-	get -o /tmp/wall.png d8467e57-…
+	get -o /tmp/wall.png d8467e57-...
 	get --raw Textures/lantern
 
 See also: put, cat for a notecard or a script, and ls for what is
