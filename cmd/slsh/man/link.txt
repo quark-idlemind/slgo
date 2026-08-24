@@ -48,7 +48,7 @@ Three things into one, the chair first so the object is a chair:
 
 A thing whose name is shared, named by key instead:
 
-	link sign d8467e57-…
+	link sign d8467e57-...
 
 See also: unlink, objects for the names and keys to give it, dump for
 what the linkset then looks like written down, and take, which brings a

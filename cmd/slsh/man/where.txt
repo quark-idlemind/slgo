@@ -54,7 +54,7 @@ is the name that says whether this is the group the land wants.
 
 	where
 	Testville at 33, 73, 1000
-	acting as group Example Builders (d8467e57-…)
+	acting as group Example Builders (d8467e57-...)
 
 See also: parcel for which piece of the region this position is on,
 look, who, map for this position and everybody else's drawn as a
