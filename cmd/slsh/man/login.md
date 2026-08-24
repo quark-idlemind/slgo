@@ -1,53 +1,57 @@
-login asks the daemon to bring an avatar up.  logout is the other
-direction, and agents is the listing both of them name something out
-of: the argument is a profile name from its first column, not an
-avatar's name and not a uuid.
+`login` asks the daemon to bring an avatar up.  The argument is a
+profile name from the first column of `agents`, not an avatar's name
+and not a uuid.  Flags come before the name.
 
-It has to be named, and there is deliberately no default.  Logging an
-avatar in puts it in the world -- an arrival, a presence, a notice to
-whoever watches for that name -- so it follows from somebody asking
-rather than from a program attaching on a timer and finding a stale
-line in a config file.  Flags come before the name.
+    login builder
 
-Asking twice is safe.  An avatar already up is reported as already up
-and nothing else happens, because logging it in again would kick the
-session it has; two shells asking at the same moment produce one login
-between them for the same reason.
+It has to be named.  Logging an avatar in puts it in the world -- an
+arrival, a presence, a notice to whoever watches for that name -- so
+there is no default.
 
-## What it will not do without being told twice
+Asking twice is safe.  An avatar already up is reported as already
+up and nothing else happens: logging it in again would kick the
+session it has.  Two shells asking at the same moment produce one
+login between them for the same reason.
+
+## A session that is down and staying down
 
 A session that is down and staying down is left alone.  Something
 stopped it, and the likeliest something is a person now using that
-avatar in a viewer, so bringing it back takes -f as well as the name --
-which is the only thing that flag overrules.
+avatar in a viewer.
 
 The refusal says why it went down rather than when, and that is the
-part worth reading before overruling.  "logged out" is somebody having
-asked for it here.  Anything beginning "ended by the grid" is the
-avatar having been thrown off, and the grid's own words follow; the
-commonest cause of that is the avatar being logged in somewhere else,
-which means -f would take it back off whoever has it.  That is the
-fight this whole arrangement exists to avoid.
+part worth reading before overruling.  `logged out` is somebody
+having asked for it here.  Anything beginning `ended by the grid` is
+the avatar having been thrown off, and the grid's own words follow;
+the commonest cause of that is the avatar being logged in somewhere
+else, which means `-f` would take it back off whoever has it.
 
-A login that was refused is a different case and -f does not help it.
-The daemon remembers the refusal and will not try again for a while,
-and says how long.  That wait is not politeness.  A login server
-throttles whatever hammers it, and the throttling then arrives as a
-quite different failure, so the wait is the difference between one
-clear error and an afternoon of confusing ones.
+A login that was refused is a different case.  The daemon remembers
+the refusal and will not try again for a while, and says how long.
+A login server throttles whatever hammers it, and the throttling then
+arrives as a quite different failure, so the wait is the difference
+between one clear error and an afternoon of confusing ones.
 
 ## What the daemon has to have been told
 
-Only a daemon started with profiles to log in can start one on demand.
-One that was given no way to do it says so rather than failing
-obscurely, and a name it has never heard of is an error and not a
-silence.  A shell that logged in for itself has no daemon to ask at
-all.
+Only a daemon started with profiles to log in can start one on
+demand.  One that was given no way to do it says so rather than
+failing obscurely, and a name it has never heard of is an error and
+not a silence.  A shell that logged in for itself has no daemon to
+ask at all.
+
+## Options
+
+**-f, --force**
+
+Bring back a session that is down and staying down.  Without it that
+session is left alone.  It does not overrule a login the daemon has
+already refused; the wait printed with that refusal is still the wait.
 
 ## Examples
 
     login builder
     login -f helper
 
-See also: logout, agents, status, and viewer for putting a real viewer
-on the session once it is up.
+See also: `logout`, `agents`, `status`, and `viewer` for putting a
+real viewer on the session once it is up.

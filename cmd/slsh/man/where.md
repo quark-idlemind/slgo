@@ -1,63 +1,38 @@
-where says which region this avatar is in and whereabouts in it.  It is
-the narrowest of the three questions about the surroundings: "look"
-describes the region itself, "objects" lists what is standing in it, and
-this one answers only "here".
-
-It takes no argument.  The position is printed to the metre, in the
-region's own coordinates, which are what "tp" and "move" take and what
-place's --at takes.
-
-## The position is exact only some of the time
-
-It is exact on arriving in a region and after a teleport, because both
-of those are answered with a position.  While the avatar is walking
-about, what carries it is the message a viewer draws the dots on its
-map with, and that message is coarse in two different amounts: one byte
-of x and one of y, which is whole metres across the region, and one byte
-of the height in four metre steps.  So a walking avatar is right to the
-metre on the flat and to about four metres up and down.
-
-## Above 1020 metres the height stops moving altogether
-
-The height byte runs out at 255, and 255 is both 1020 metres and
-everything above it.  Believing it would put a skybox level with the
-roofs, and everything the region then described would be judged against
-a place the avatar is not, so the session does not: where the byte is at
-its ceiling it keeps the last height something stated in full, which is
-the arrival or the teleport.  The consequence is that above 1020 metres
-the height printed here is where the avatar was PUT and not where it has
-got to since.
-
-Measured: standing on a platform 2001 metres up, this said 28, 72, 2002
-while the simulator's own answer -- the position it wrote into a
-landmark made at that instant -- was 28.00, 71.95, 2001.20.  The avatar
-had arrived a metre above the height it was sent to, the way an arrival
-does, and had settled onto the platform since; nothing that follows a
-moving avatar could say so.  So "landmark --make" is the way to read a
-height up there that is not the one the arrival stated, and x and y are
-still good to the metre the whole time.
-
-## The group line, and why it is not decoration
-
-A second line says which group the avatar is acting as, and is missing
-when it is acting as none -- which is what a headless login starts as.
-
-That line is the answer to the commonest failure in the region
-commands.  A parcel usually grants "create objects" to a group rather
-than to a person, so an avatar with the wrong group active, or none, is
-refused by the land even where it plainly has permission, and the
-refusal talks about the land rather than about the group.  The name and
-the key are both printed: the key is what everything else takes, and it
-is the name that says whether this is the group the land wants.
-
-## Examples
+The region, the position in it, and which group this avatar is acting as.
 
     where
     Testville at 33, 73, 1000
     acting as group Example Builders (d8467e57-...)
 
-See also: parcel for which piece of the region this position is on,
-look, who, map for this position and everybody else's drawn as a
-picture, objects, tp for moving the avatar about or to another region,
-regions for where a region the avatar is not in stands, and group for
-setting the one this reports.
+The position is in the region's own metres, to the metre -- the same
+numbers `tp` and `move` take, and the same numbers `place --at` takes.
+
+## How exact it is
+
+Exact on arriving in a region and after a teleport.  While the avatar
+walks, x and y stay good to the metre and the height is in steps of
+about four metres.
+
+Above 1020 metres the height stops updating.  The printed Z is then
+where the avatar was put -- the arrival or the last teleport -- and not
+where it has settled or fallen since.  `landmark --make` is the way to
+read a height up there; x and y stay good the whole time.
+
+## The group line
+
+A second line names the active group and its key.  It is missing when
+the avatar is acting as none, which is how a headless login starts.
+
+That line is the usual answer when building is refused.  A parcel often
+grants "create objects" to a group rather than to a person, and the
+refusal talks about the land rather than the group.  The name says
+whether this is the group the land wants; the key is what `group` takes.
+
+## Examples
+
+    where
+
+See also: `parcel` for which piece of the region this position is on,
+`look`, `who`, `map` for this position and everybody else's drawn as a
+picture, `objects`, `tp` for moving the avatar, `regions` for a region
+the avatar is not in, and `group` for setting the one this reports.

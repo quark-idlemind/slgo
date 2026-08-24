@@ -1,52 +1,55 @@
-give offers an inventory item to somebody.  It is the other end of
-"accept": what this sends arrives on their side as a question, and what
-they send arrives here as one.
+`give` offers an inventory item to somebody.  It is the other end of
+`accept`: what this sends arrives on their side as a question, and
+what they send arrives here as one.
 
 Two things are named, the person and the item, in that order.  The
 person is a name, a key, or the number beside a name in the last
 listing; the item is an inventory path, relative to the folder the
 shell is in unless it begins with a slash, or the key of an item.
 
+    give Example Resident Objects/lantern
+
 The key is the form to reach for where a folder holds two items of one
 name.  A path takes the first of them, in listing order, and says
-nothing about the other -- which is the rule everywhere a path is read
-for something to look at, and is a worse bargain here, because this
-hands the thing to a person rather than printing it.  "ls -l" puts the
-key beside each duplicate for exactly this.
+nothing about the other -- which is a worse bargain here than
+elsewhere, because this hands the thing to a person rather than
+printing it.  `ls -l` puts the key beside each duplicate for exactly
+this.
+
+A person is resolved the way `im` resolves one: the session's cache
+and whoever is standing in the region, not the grid's search.  A name
+guessed at wrong here offers an item to a stranger.  `lookup` makes
+that search, and the number it prints is what to give this.
 
 ## An offer, not a transfer
 
 Nothing moves until the other side accepts.  The report says "offered"
 rather than "gave" because that is all that has happened: the offer
-travels as a message to them, and their answer travels back as another,
-printed on this side as a notice saying the offer was accepted or
-declined.  Whether the item itself arrived is the part nobody is told:
-the simulator does the moving and says nothing about it either way.
+travels as a message to them, and their answer travels back as
+another, printed on this side as a notice saying the offer was
+accepted or declined.  Whether the item itself arrived is the part
+nobody is told.
 
 An offer nobody answers stays pending, and nothing is told to either
-side.  That is read from the messages rather than watched: watching it
-would mean handing an item to somebody and waiting to see how long they
-left it, which is not a measurement worth taking on another person's
-afternoon.
+side.
 
 ## How much of the line is the person
 
 A name has two words in it, so the person is the longest run of one or
 two words at the front that answers to somebody, and the rest of the
-line is the path.  This matters more here than anywhere else: read as
-one word, a two-word name leaves its last word at the front of the
-path, and what follows is either an item that cannot be found or a
-different item, offered to the right person and reported as a success.
+line is the path.  Read as one word, a two-word name leaves its last
+word at the front of the path, and what follows is either an item that
+cannot be found or a different item, offered to the right person and
+reported as a success.
 
-Everything after the person is the path, spaces and all, so a name with
-a space in it needs no quoting -- though quoting does no harm and says
-plainly where the person ends and the item begins.
+Everything after the person is the path, spaces and all, so a name
+with a space in it needs no quoting -- though quoting does no harm and
+says plainly where the person ends and the item begins.
 
 ## A folder goes as a folder
 
 A folder may be given, and arrives as a folder rather than as its
-contents: the protocol has a way of saying so, and an offer marked as
-anything else would arrive as something the other side cannot open.
+contents.
 
 ## Examples
 
@@ -56,6 +59,7 @@ Quoting a path that has a space in it:
 
     give Another Resident "Notecards/build notes"
 
-See also: accept and decline for offers arriving, offers for the ones
-waiting, ls and cd for finding the path, and cp for making a copy to
-give away rather than the one being used.
+See also: `accept` and `decline` for offers arriving, `offers` for the
+ones waiting, `ls` and `cd` for finding the path, `lookup` or `who`
+for finding the person, and `cp` for making a copy to give away rather
+than the one being used.

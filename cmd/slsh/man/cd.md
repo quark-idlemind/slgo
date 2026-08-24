@@ -1,45 +1,42 @@
-cd changes which inventory folder the shell is in.  Every command that
-takes a path takes it relative to that folder unless the path begins
-with a slash, and `pwd` says which folder it is.
+`cd` changes which inventory folder the shell is in.  Every command
+that takes a path takes it relative to that folder unless the path
+begins with a slash, and `pwd` says which folder it is.
+
+    cd Objects/lanterns
 
 The argument is a folder path: a leading slash starts from the root,
-`..` goes up a level, `.` stays, and the names between the slashes are
-walked one at a time.  With no argument at all it goes to the root,
-the way a bare cd goes home in a shell -- and that has to be said
-outright, because the empty path resolves to wherever the shell
-already is, so a bare cd would otherwise do nothing whatever.
+`..` goes up a level, `.` stays, and the names between the slashes
+are walked one at a time.  With no argument it goes to the root.
+The empty path would otherwise mean wherever the shell already is,
+so a bare `cd` would do nothing.
 
 ## Only a folder, and only by name
 
-An item is not somewhere to be, so a path naming one is refused, and
-the refusal is "no folder" with the name in it -- word for word what a
-name that is nothing at all gets.  cd asks for a folder of that name
-and there is not one either way, so nothing here can tell the two cases
-apart.  The other answer, "nothing called that here", belongs to the
-commands that do take an item: `cat` and `ls` say it, and meeting one
-sentence rather than the other says which command was typed rather than
-which kind of thing the name turned out to be.
+An item is not somewhere to be.  A path naming one is refused as "no
+folder", word for word what a name that is nothing at all gets: `cd`
+asks for a folder of that name and there is not one either way.
+`cat` and `ls` say "nothing called that here" instead, so which
+sentence appears says which command was typed rather than which kind
+of thing the name turned out to be.
 
-A uuid names an item to `cat`, `rm` and the rest, and does not work here.
-This walks names rather than looking a path up whole, because a path
-is names and the grid answers about ids, so a uuid in a path is read
-as a folder called that, which nothing is.  `ls -l` prints the id
-beside the path for the commands that do take one.
+A uuid does not work here.  `cd` walks names; a uuid in a path is
+read as a folder called that, which nothing is.  `ls -l` prints the
+id beside the path for the commands that do take one.
 
 ## Case, and names that are not unique
 
-The comparison ignores case, as every path through inventory does: the
-grid keeps whatever case a name was given but does not make two names
-differing only in case into two things worth telling apart at a
-prompt.  Inside an object it is the other way about, and `rm --in` and
-`mv --in` want the name exactly as it is spelled there, so the habit
-this builds stops at the object's edge.  Where two folders in one
-place really do share a name, a path means the first of them and there
-is no way to say the other -- moving or renaming one is the way out.
+The comparison ignores case, as every path through inventory does.
+The grid keeps whatever case a name was given, but two names that
+differ only in case are the same name at this prompt.  Inside an
+object it is the other way about: `rm --in` and `mv --in` want the
+name exactly as it is spelled there.
 
-A name may contain a slash, since the grid allows nearly any printable
-character.  A backslash in front of it says so: `cd Notecards/2026\/07`
-enters a folder called `2026/07`.
+Where two folders in one place share a name, a path means the first
+of them and there is no way to say the other.  Moving or renaming
+one is the way out.
+
+A name may contain a slash.  A backslash in front of it says so:
+`cd Notecards/2026\/07` enters a folder called `2026/07`.
 
 ## Examples
 

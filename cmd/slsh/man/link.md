@@ -1,14 +1,14 @@
-link joins objects standing in the region into one.  The first named is
-the root, its name becomes the object's, and "unlink" is the way back.
+`link` joins objects standing in the region into one.  The first named
+is the root, its name becomes the object's, and `unlink` is the way
+back.
+
+    link chair "left leg" "right leg"
 
 Each argument is one object, named by the word the region calls it or
 by its key, so a name with a space in it has to be quoted.  That is the
-opposite of unlink's rule, which joins its arguments into one name, and
-the two differ because the commands do: this one has a list to read and
-that one has a single thing to find.  The alternative -- a root
-followed by a list, quote-free -- needs a separator between the two
-halves that is not a space, which is a new thing to remember for a
-command whose whole job is one sentence long.
+opposite of `unlink`'s rule, which joins its arguments into one name,
+and the two differ because the commands do: this one has a list to read
+and that one has a single thing to find.
 
 ## Naming one object twice is refused
 
@@ -24,21 +24,19 @@ itself.
 ## The report is read back, not counted
 
 What is printed afterwards is what the region says the object is now,
-rather than a count of the arguments given.
+rather than a count of the arguments given.  Linking brings a linkset's
+prims along, so joining two things can make an object of seven -- and
+that is exactly the case worth telling somebody about.
 
-The difference shows when something named was already a linkset.
-Linking brings its prims along, so joining two things can make an
-object of seven -- and that is exactly the case worth telling somebody
-about.  Counting arguments would print two and be wrong precisely where
-the answer mattered.
+It waits for the linking to have happened rather than reporting the
+request and stopping.  What says it worked is the children naming the
+root as their parent, which arrives when it arrives.
 
-## It waits for the linking to have happened
+## Options
 
-A link acts on what the simulator understands to be selected, so the
-selection has to reach it first, and nothing replies to the link
-itself.  What says it worked is the children naming the root as their
-parent, which arrives when it arrives.  So this waits for that rather
-than reporting the request and stopping.
+**-w, --wait** *SECONDS*
+
+How long to let the region describe itself.  Without it, thirty.
 
 ## Examples
 
@@ -50,6 +48,6 @@ A thing whose name is shared, named by key instead:
 
     link sign d8467e57-...
 
-See also: unlink, objects for the names and keys to give it, dump for
-what the linkset then looks like written down, and take, which brings a
-linkset in as one item.
+See also: `unlink`, `objects` for the names and keys to give it, `dump`
+for what the linkset then looks like written down, and `take`, which
+brings a linkset in as one item.

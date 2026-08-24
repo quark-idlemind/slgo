@@ -1,52 +1,57 @@
-logout puts one of the daemon's sessions down and keeps it down.  The
-argument is a profile name out of the agents listing, the same name
-login takes.
+`logout` puts one of the daemon's sessions down and keeps it down.
+The argument is a profile name out of the `agents` listing, the same
+name `login` takes.  Flags come before the name.
+
+    logout builder
 
 The keeping down is the part worth knowing.  The daemon brings a
-session back when it drops, which is what it is for, and it must not do
-that to an avatar somebody has taken away on purpose -- so a logout is
-remembered.  Nothing will bring that avatar back on its own: it stays
-listed as stopped until "login" asks for it by name and with -f, since
-a deliberate stop is exactly what login will not undo casually.
+session back when it drops, which is what it is for, and it must not
+do that to an avatar somebody has taken away on purpose -- so a
+logout is remembered.  Nothing will bring that avatar back on its
+own: it stays listed as stopped until `login` asks for it by name
+and with `-f`, since a deliberate stop is exactly what `login` will
+not undo casually.
 
-The session also gives up its place in the queue, so the avatar a bare
-command drives moves on to the next one up.  Logging it back in later
-puts it at the end of that queue rather than back at the head.
+The session also gives up its place in the queue, so the avatar a
+bare command drives moves on to the next one up.  Logging it back in
+later puts it at the end of that queue rather than back at the head.
 
-Not every name in that listing is one this will take, though.  Only a
-session the daemon is holding can be logged out, and a profile listed
-as configured is one it has never been asked to bring up, so naming it
-is answered with "no agent named ..." rather than with a shrug.  There
-is nothing there to put down; login is what that line is for.
+Only a session the daemon is holding can be logged out.  A profile
+listed as configured is one it has never been asked to bring up, so
+naming it is answered with `no agent named ...` rather than with a
+shrug.  There is nothing there to put down; `login` is what that
+line is for.
 
-Asking for one that is already down is not an error, and it is not a
-correction either: it reports the logout as though it had just done it,
-because from the caller's side the wanted state has been reached
-either way.
+Asking for one that is already down is not an error: it reports the
+logout as though it had just done it, because from the caller's side
+the wanted state has been reached either way.
 
 ## It refuses while somebody is using it
 
 A session with clients attached is left alone and the refusal names
 them: the programs that attached, under the names they authenticated
-with, rather than a count of them.  That is the difference between
-knowing what is about to be interrupted and guessing.  A benchmark half
-way through a run has a script installed and a reading half taken, and
-losing it should be a decision rather than a side effect.  That is what
--f overrules, and it is all it overrules.
+with, rather than a count of them.
 
 ## Nothing here is the way to end this shell
 
 A shell attached to the daemon leaves the avatar logged in when it
 quits; that is the arrangement, and logging out is a separate act
 against a named avatar.  The other way round, a shell that logged in
-for itself holds the session in this process, so there is no daemon to
-ask and quitting is what logs the avatar out.  The line printed at
-startup says which of the two is in force.
+for itself holds the session in this process, so there is no daemon
+to ask and quitting is what logs the avatar out.  The line printed
+at startup says which of the two is in force.
+
+## Options
+
+**-f, --force**
+
+Log out a session that has clients attached.  Without it a session
+in use is left alone.  It overrules only that refusal.
 
 ## Examples
 
     logout builder
     logout -f helper
 
-See also: login, agents, quit, and viewer for handing a session to a
-real viewer instead of taking it down.
+See also: `login`, `agents`, `quit`, and `viewer` for handing a
+session to a real viewer instead of taking it down.

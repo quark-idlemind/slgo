@@ -1,76 +1,82 @@
-put uploads a picture from this machine as a texture in inventory.  It
-costs L$ every time, which nothing else in inventory does, and the
-other direction is get, which does not.  The one other command in this
-shell that spends anything is answer, and only when a group invitation
-carries a joining fee.
+`put` uploads a picture from this machine as a texture in inventory.
+It costs L$ every time.  `get` is the other direction and does not.
+
+    put photo.jpg
 
 The argument is a file.  PNG, JPEG, GIF, BMP and TIFF are read, and
-the orientation a camera left in the file is applied, since a texture
-that arrives sideways stays sideways.  The item is called after the
-file unless --name says otherwise, carries whatever --desc says, and
-lands in Textures unless --folder does.  The line printed before
-anything is uploaded says what would go up, how many bytes it is, and
-the fee.
+the orientation a camera left in the file is applied.  A JPEG 2000
+codestream (`.j2c` and its relatives) goes up untouched.
 
-## What it costs, and why the figure is named
+Each side of the picture must be a power of two and at most 2048.
+Almost nothing already is, so the picture is resampled and the report
+says from what size to what.  A side above 2048 comes down to it
+whatever the rounding says.  Nothing is resized when both sides are
+already legal.
 
-Ten lindens for a texture up to a megapixel, and fifty above one --
-that larger price belongs to the account rather than to the grid, and
-the fifty is what a beta grid wanted on the day it was measured.  The
-figure is not a guess sent hopefully: the simulator compares it with
-its own price and refuses a request that names the wrong one, so a
-price that has changed arrives as a refusal naming the right one
-rather than as a wrong bill.
+The fee is ten lindens up to a megapixel, fifty above that.  The grid
+charges before it looks, so a refusal afterwards has still cost the
+fee.  Every check it would make is made here first; `-N` stops before
+anything is sent.
 
-## The size the grid takes
+## Options
 
-Each side a power of two, and at most 2048 -- measured, not assumed:
-2048x256 uploads and 4096x256 is refused.  Almost nothing anybody
-wants to upload already satisfies that, so the picture is resampled
-and the report says from what size to what.
+**-n, --name** *NAME*
 
-The rounding is the viewer's own, biased downwards: a side goes up
-only past 1.75 times the power of two below it, so 800 becomes 512 and
-900 becomes 1024.  Measured with -N, and nothing uploaded to measure
-it: an 800x900 picture goes up as 512x1024, one side down and the
-other up in the same picture, and 1000x1800 goes up as 1024x2048.
---round says otherwise, and --round-x and --round-y say it for one
-side, since a wide banner rounded up in one direction and down in the
-other is a reasonable thing to want.  Which resampling filter suits
-which picture is not something a shell can decide, so --filter asks
-and --filters is a guide keyed by the sort of picture rather than by
-the name of the filter.  None of it matters when both sides are
-already powers of two and neither is above 2048, because then nothing
-is resized.  The ceiling is the exception: a side above 2048 comes
-down to it whatever the rounding says, so 4096x256 is resized though
-both of its sides are powers of two.
+Call the item this instead of the file's name.
 
-How much of the picture survives the encoding is the other question,
-and the fee does not turn on it at all: the price is settled by the
-dimensions, so compressing harder buys somebody else's download time
-rather than lindens.  What goes up aims at about eight to one, which is
-where Second Life's own textures sit -- the stock plywood is 98282
-bytes for 512x512 -- and --ratio asks for something else.  --lossless
-keeps every pixel instead, at several times the size: measured on one
-1024x2048 picture, 145889 bytes against 35118.  Below a certain size
-nothing is compressed whether it was asked for or not, and that size
-is an area rather than a side: 128x128 of it, so a 512x32 banner is
-stored losslessly as surely as a 128x128 square is.  That is what the
-viewer does with the small textures that are usually a bit of
-interface.
+**-d, --desc** *TEXT*
 
-## Looking before paying
+The item's description.
 
-Every check the grid would make is made here first, because the
-capability takes the bytes and charges before it looks: a refusal
-afterwards has still cost the fee.  -N goes as far as saying what
-would be uploaded and stops.  -o writes the result to a file instead
-of uploading it, the extension picking the format, so what the
-rounding and the filter did can be looked at.
+**-f, --folder** *PATH*
 
-A file that is already a codestream -- .j2c and its relatives -- goes
-up untouched, since it is what the grid stores and re-encoding it
-would cost quality for nothing.
+The inventory folder it lands in.  Without it, `Textures`.
+
+**-N, --dry-run**
+
+Print what would go up, how many bytes it is, and the fee, then stop.
+
+**-o, --out** *FILE*
+
+Write the converted picture here instead of uploading.  The extension
+picks the format, so the rounding and the filter can be looked at
+without paying.
+
+**--round** *MODE*
+
+How both sides round to a power of two: `nearest`, `up` or `down`.
+Without it the rounding is the viewer's, biased downwards -- a side
+goes up only past 1.75 times the power of two below it, so 800 becomes
+512 and 900 becomes 1024.
+
+**--round-x** *MODE*
+
+Round the width only.
+
+**--round-y** *MODE*
+
+Round the height only.
+
+**--filter** *NAME*
+
+How the picture is resampled.  The default is `lanczos`.  Photographs
+want that; pixel art and masks want `nearest`; diagrams want
+`catmullrom`.  The filter only matters when the picture is resized.
+
+**--filters**
+
+List the filters and what each is good for, then stop.
+
+**-l, --lossless**
+
+Store every pixel, at several times the size.  Below an area of
+128x128 nothing is compressed whether it was asked for or not, so a
+512x32 banner is lossless as surely as a 128x128 square is.
+
+**--ratio** *N*
+
+Compress about *N*:1 rather than the default 8.  Compression does not
+change the fee; the price is settled by the dimensions.
 
 ## Examples
 
@@ -78,5 +84,5 @@ would cost quality for nothing.
     put --filter nearest --round up icons/heart.png
     put --name "wall panel" -f Textures/panels panel.png
 
-See also: get, new for a notecard or a script, which cost nothing, and
-ls for finding what has been uploaded afterwards.
+See also: `get`, `new` for a notecard or a script, which cost nothing,
+and `ls` for finding what has been uploaded afterwards.

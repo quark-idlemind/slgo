@@ -1,43 +1,23 @@
-cat prints a notecard or a script.  It reads what save writes: the two
-of them are the way an item's text comes out to a file and goes back
-in, with an editor in between.
+`cat` prints a notecard or a script.
 
-The argument is an inventory path, relative to the folder the shell is
-in, or the uuid of an item.  Redirection is the other half of it --
-"cat /Scripts/greeter > greeter.lsl" is how a script gets onto the
-disk.
+    cat /Scripts/greeter > greeter.lsl
 
-## Text is the whole of what it will print
+The argument is an inventory path, relative to the folder the shell
+is in, or the uuid of an item.  Redirection is the other half of it:
+that line is how a script gets onto the disk.  `save` writes the
+text back.
 
-A notecard and a script, and nothing else.  That is not a restriction
-invented here: assets travel by two routes and only one of them serves
-these.  Textures, sounds, animations and the rest come over http from
-the content delivery network, which answers a notecard or a script
-with a refusal however well formed the request; those two come over
-the older transfer protocol instead, which needs to know the item and
-not merely the asset.  So anything the fast route serves is not text,
-and get is the command for the commonest of them.
+A notecard and a script, and nothing else.  A texture, a sound, an
+animation and the rest are not text; `get` is the command for a
+texture.
 
-## An item with no asset id is still readable
-
-The grid leaves a script's asset id out of an inventory listing --
-zeroes, whatever the permissions say -- and an asset is asked for by
-item anyway, with the simulator resolving it.  So nothing here refuses
-an entry for having no asset behind it, and a listing that shows no
-asset for every script in it is the grid being terse rather than the
-scripts being empty.
-
-## The container round a notecard
-
-A notecard asset is not the text: it is a small header, a length, and
-the text inside braces.  What is printed is the text, which is what
-somebody asked for, and the size a save reports afterwards is
-therefore the file's own and not the asset's.
+What is printed is the text.  A notecard's wrapper is not shown.
 
 ## Examples
 
     cat Notecards/README
     cat /Scripts/greeter > greeter.lsl
 
-See also: save for writing one back, new for making one that does not
-exist yet, get for a texture, and ls for what is there to read.
+See also: `save` for writing one back, `new` for making one that
+does not exist yet, `get` for a texture, and `ls` for what is there
+to read.

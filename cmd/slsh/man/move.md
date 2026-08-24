@@ -1,6 +1,8 @@
-move shifts an object that is already standing in the region
-to a position.  It changes nothing else: the object keeps the rotation
-and the scale it had, because a move is a move.
+`move` shifts an object that is already standing in the region to a
+position.  It changes nothing else: the object keeps the rotation and
+the scale it had.
+
+    move probe 128 128 25
 
 The object is named by the word the region calls it, and a name with a
 space in it has to be quoted.  A name that several objects answer to is
@@ -8,31 +10,28 @@ refused rather than guessed at, since moving the wrong one is a thing
 somebody then has to find.  The position is three numbers -- X Y Z,
 separated by spaces, in this region's metres.
 
-A key will not do in place of the name, and this is the one command
-here of which that is true: take, perms, touch, dump, reform, texture,
-drop, link, unlink, start and stop all accept a uuid where a name would
-go, and move looks its argument up as a name and as nothing else.  A
-uuid typed there is refused with "no object named" and the uuid back
-again, which reads like the thing has gone rather than like the form is
-wrong.  So the way past a name several objects answer to is the one the
-refusal itself names -- rename one of them -- and not the key every
-neighbouring command would have taken.
+A key will not do in place of the name.  `take`, `touch`, `dump` and
+the rest accept a uuid where a name would go; `move` looks its argument
+up as a name and as nothing else.  A uuid typed there is refused with
+`no object named` and the uuid back again, which reads like the thing
+has gone rather than like the form is wrong.  The way past a name
+several objects answer to is the one the refusal itself names -- rename
+one of them -- and not the key every neighbouring command would have
+taken.
 
 It waits for the object to have arrived rather than reporting the
-request and stopping.  Nothing answers a move; the simulator sends an
-ObjectUpdate when it gets round to it, so a position read back
-immediately is the one the object had before, printed with total
-confidence.  A move that has gone nowhere after twenty seconds is
-reported as that, and the likeliest reason is the one the message names:
-a parcel that will not have objects moved refuses in silence.
+request and stopping.  A position read back immediately is the one the
+object had before.  A move that has gone nowhere after twenty seconds
+is reported as that, and the likeliest reason is the one the message
+names: a parcel that will not have objects moved refuses in silence.
 
-## Why this is not place
+## This is not `place`
 
-place puts a thing into the world out of inventory.  move shifts one
-that is already there.  They were the other way round until recently --
-"place" meant this command -- so a script written before the change may
-say "place NAME X Y Z", and that line is now refused rather than
-obeyed.  See "man place" for why the refusal is worth the re-run.
+`place` puts a thing into the world out of inventory.  `move` shifts
+one that is already there.  They were the other way round until
+recently -- `place` meant this command -- so a script written before
+the change may say `place NAME X Y Z`, and that line is now refused
+rather than obeyed.
 
 ## Putting something back where it was
 
@@ -51,5 +50,5 @@ moving it back afterwards is the whole of the fix:
     move probe 128 128 25
     move "big sign" 33.5 73 1000.2
 
-See also: place, take, objects for what is in the region and where, and
-tp for moving the avatar rather than an object.
+See also: `place`, `take`, `objects` for what is in the region and
+where, and `tp` for moving the avatar rather than an object.

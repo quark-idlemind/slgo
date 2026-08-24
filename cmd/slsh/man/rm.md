@@ -1,94 +1,89 @@
-rm deletes inventory, permanently and at once.  Nothing here moves
-anything to the trash: what emptytrash disposes of is what a viewer
-put there, and what rm names is simply gone.
+`rm` deletes inventory, permanently and at once.  Nothing here moves
+anything to the trash: what `emptytrash` disposes of is what a
+viewer put there, and what `rm` names is simply gone.
+
+    rm Notecards/README
 
 The arguments are paths, relative to the folder the shell is in, or
-uuids; several may be given on one line, and a folder goes with
+uuids.  Several may be given on one line, and a folder goes with
 everything inside it.
 
 ## One name can mean a dozen items
 
-Inventory names are not unique, so a path may name several things.  A
-plain rm refuses that and deletes nothing: deleting is permanent, and
-which of twelve identically named items went is not a thing to work
-out afterwards.
+Inventory names are not unique, so a path may name several things.
+A plain `rm` refuses that and deletes nothing.
 
     /Scripts$ rm greeter
     slsh: rm: "greeter" is 3 things here: say --newest or --oldest
     to delete one of them, --remove-all-copies for all 3, or name
     one by its id, which ls -l prints beside the date
 
-"ls -l greeter" is what to look at then: a path that names items lists
-those items, one line each, with the dates and the ids that tell them
-apart.
-
-Three flags answer that, and they are one choice rather than three
-options -- any two of them together is a line that means two things,
-and is refused.
-
---newest and --oldest take one end of the pile, by the date ls -l
-prints.  What went is named on the way out, with its date and its id,
-because the copies share a name and those are the only two things that
+`ls -l greeter` is what to look at then: a path that names items
+lists those items, one line each, with the dates and the ids that
 tell them apart.
 
---remove-all-copies takes every one of the name.  It is spelled out at
-that length on purpose, no abbreviation of it is accepted, and the
-count printed at the end is the only evidence it did what was wanted.
-The count is printed when the name meant more than one thing; where it
-turned out to mean a single item, that one is deleted and nothing is
-said.
+`--newest`, `--oldest` and `--remove-all-copies` are one choice
+rather than three options.  Any two of them together is a line that
+means two things, and is refused.
 
 ## When a date does not settle it
 
---newest and --oldest refuse rather than guess in two cases.
-
-Inventory dates are whole seconds, so a folder copied in one go can
-hold several items stamped alike; there is no sense in which one of
-those is the newer, and being told which end was asked for does not
-help.  The other case is something with no date at all -- a folder has
+`--newest` and `--oldest` refuse rather than guess in two cases.
+Inventory dates are whole seconds, so several items can be stamped
+alike, and there is no sense in which one of those is the newer.
+The other case is something with no date at all -- a folder has
 none -- and undated is not the same as old.
 
-Both refusals point at the id, which names exactly one thing.  The
-other end of the pile may still be unambiguous: two tied at the newest
-date does not stop --oldest from having an answer.
+Both refusals point at the id.  The other end of the pile may still
+be unambiguous: two tied at the newest date does not stop `--oldest`
+from having an answer.
 
 ## The star, which is not a glob
 
-A path of one star means every item in the folder the shell is in, and
-it is refused unless --remove-all-copies is given as well: taking it
-to mean one arbitrary item would be surprising, and taking it to mean
-all of them unasked is not a thing to find out after the fact.  There
-is no other pattern -- the shell has no matching in it, and this is
-the one pattern rm needs.  Folders are never included in it: emptying
-a folder of its items is a thing to want, and taking its subfolders
-with them is not.
+A path of one star means every item in the folder the shell is in,
+and it is refused unless `--remove-all-copies` is given as well.
+There is no other pattern.  Folders are never included in it:
+emptying a folder of its items is a thing to want, and taking its
+subfolders with them is not.
 
-An item may itself be named with a star, since the grid allows nearly
-any printable character in a name.  Such an item can no longer be
-named at a prompt; its id still names it, which is what "ls -l" prints
-ids for.
+An item may itself be named with a star.  Such an item can no longer
+be named at a prompt; its id still names it.
 
 ## Hundreds of removals take minutes
 
-Each one is a round trip to the grid, so six hundred deletions is six
-hundred round trips.  A count climbs in place while it works, so that
-a long silence is visibly progress rather than a hang, and it goes to
-the terminal rather than to the output: a line redirected to a file
-catches the result and not a flickering counter.
+Each one is a round trip to the grid.  A count climbs in place while
+it works, and it goes to the terminal rather than to the output: a
+line redirected to a file catches the result and not a flickering
+counter.
 
 ## Options
 
---in deletes from inside a rezzed object rather than from inventory.
-It is a delete and not a take: the copy is gone, and anything wanted
-back has to come from the original in inventory, which is why that
-form names what it deleted rather than counting.  --newest and --oldest
-do not apply with it: what an object holds carries a name, a kind and
-an id, and the date stayed with the item it was copied from.
+**--newest**
 
-What follows the object is a name and only a name, matched exactly and
-in the case it has.  The paths and the uuids above are inventory's;
-inside an object there is neither, and the id beside a line of
-"ls -l --in" is not something to hand back to this.
+Of several of a name, delete the one acquired last, by the date
+`ls -l` prints.  What went is named on the way out, with its date
+and its id.
+
+**--oldest**
+
+Of several of a name, delete the one acquired first.
+
+**--remove-all-copies**
+
+Delete every one of the name.  It is the whole words; no shorter
+spelling of it is accepted.  The count printed at the end is the
+only evidence it did what was wanted, and is printed only when the
+name meant more than one thing.
+
+**--in** *OBJECT*
+
+Delete from inside a rezzed object rather than from inventory.  It
+is a delete and not a take: the copy is gone, and anything wanted
+back has to come from the original in inventory.  `--newest` and
+`--oldest` do not apply with it: what an object holds has no dates
+on it.  What follows is a name, matched exactly and in the case it
+has.  The paths and the uuids above are inventory's.  The id beside
+a line of `ls -l --in` is not something to hand back to this.
 
 ## Examples
 
@@ -100,5 +95,5 @@ inside an object there is neither, and the id beside a line of
     rm d8467e57-...
     rm --in lantern hello.lsl
 
-See also: emptytrash, mv, ls, and drop for putting something into an
-object that rm can take out again.
+See also: `emptytrash`, `mv`, `ls`, and `drop` for putting something
+into an object that `rm` can take out again.
