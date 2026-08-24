@@ -404,7 +404,8 @@ func attachPointArg(text string) (int, error) {
 		// comes back from here, by the caller that knows whether it is
 		// adding.
 		if n < 0 || n >= sl.AttachAdd {
-			return 0, fmt.Errorf("--at: %d is not an attachment point; they run from 1 to %d", n, sl.AttachAdd-1)
+			return 0, fmt.Errorf("--at: %d is not an attachment point; they run from 1 to %d, "+
+				"and 0 asks for wherever the object itself says", n, sl.AttachAdd-1)
 		}
 		return n, nil
 	}

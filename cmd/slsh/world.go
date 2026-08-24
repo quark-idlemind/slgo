@@ -320,7 +320,16 @@ func printNeighbours(out io.Writer, n *sl.Neighbours) {
 		case name == "":
 			name = "(unnamed)"
 		}
-		fmt.Fprintf(out, "%-32s %5d, %-5d %-21s %d heard\n", name, x, y, c.Addr, c.Heard)
+		// The address column is eighteen because that is what a
+		// simulator's address measures: a dotted quad and a port, and
+		// the ordinary ones here are seventeen or eighteen
+		// ("203.0.113.11:13032" is eighteen).  A fifteen-character
+		// quad reaches twenty-one and pads out rather than being cut,
+		// so the rare long one grows the line instead of losing an
+		// address.  The row is then 72 to 75 columns, which still has
+		// room for the four spaces man puts in front of the copy of it
+		// in neighbours.txt.
+		fmt.Fprintf(out, "%-32s %5d, %-5d %-18s %d heard\n", name, x, y, c.Addr, c.Heard)
 	}
 }
 

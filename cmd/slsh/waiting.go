@@ -511,7 +511,7 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 			cost = fmt.Sprintf(", at L$%d", w.invite.Fee)
 		}
 		fmt.Fprintf(out, "accepted the group invitation from %s%s; "+
-			"nothing answers a join, so groups says whether it worked\n", w.who(), cost)
+			"nothing answers a join, so group says whether it worked\n", w.who(), cost)
 	}
 
 	sh.setIgnored(w.key(), false)

@@ -64,8 +64,8 @@ calls itself, the square it occupies on the grid, the address of the
 simulator, and how many packets have arrived on the circuit.
 
 	neighbours are on, 2 circuits held
-	Pelmar Mill                       43647, 43648   203.0.113.9:13009     412 heard
-	Orrick Gate                       43648, 43647   203.0.113.28:13006    87 heard
+	Pelmar Mill                       43647, 43648   203.0.113.9:13009  412 heard
+	Orrick Gate                       43648, 43647   203.0.113.28:13006 87 heard
 
 The addresses above are made up, and deliberately: a simulator's address
 says which machine a region is on as plainly as its name says which

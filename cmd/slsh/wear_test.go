@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -107,6 +108,55 @@ func TestWearingOnANamedPointSendsThatPoint(t *testing.T) {
 		}
 		if got := m.ObjectData.AttachmentPt &^ sl.AttachAdd; got != c.want {
 			t.Errorf("wear %s asked for point %d, want %d", c.at, got, c.want)
+		}
+	}
+}
+
+// TestZeroIsAPointAndTheRefusalSaysWhichNumbersAre: zero is a value and
+// not a missing one -- it is what asks for the point the object itself
+// carries, which is what wearing from the viewer's menu asks for -- and
+// attachPointArg takes it.  The refusal it prints for a number out of
+// range used to say the points "run from 1 to 127", which names a range
+// narrower than the one the function enforces and tells somebody who
+// typed 0 deliberately that what they typed is not a point at all.
+//
+// So both halves are checked here against the function rather than
+// against the sentence: every number it takes, and the numbers the
+// sentence names.
+func TestZeroIsAPointAndTheRefusalSaysWhichNumbersAre(t *testing.T) {
+	if got, err := attachPointArg("0"); err != nil || got != attachWhereItSays {
+		t.Errorf("--at 0 came out as (%d, %v), want %d and no error",
+			got, err, attachWhereItSays)
+	}
+	// An empty --at is the same request, since it is what leaving the
+	// flag off asks for.
+	if got, err := attachPointArg(""); err != nil || got != attachWhereItSays {
+		t.Errorf("--at with nothing in it came out as (%d, %v), want %d and no error",
+			got, err, attachWhereItSays)
+	}
+	// The range the refusal names, taken one number at a time: 0 for
+	// what the object says and 1 to 127 for a point.
+	for n := 0; n < sl.AttachAdd; n++ {
+		if got, err := attachPointArg(strconv.Itoa(n)); err != nil || got != n {
+			t.Fatalf("--at %d came out as (%d, %v), want %d and no error", n, got, err, n)
+		}
+	}
+
+	// The first number that is not a point, and a negative one, which is
+	// the other way to name a byte this field cannot carry.
+	for _, bad := range []string{"128", "-1"} {
+		_, err := attachPointArg(bad)
+		if err == nil {
+			t.Fatalf("--at %s was taken as a point", bad)
+		}
+		// The sentence has to name the whole of what is taken, zero
+		// included, and say what zero asks for: somebody who typed it
+		// on purpose is owed the answer that it worked, and somebody
+		// who has just been refused is owed the number to type instead.
+		for _, want := range []string{"1 to 127", "0 asks for wherever the object itself says"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("--at %s was refused with %q, which does not say %q", bad, err, want)
+			}
 		}
 	}
 }

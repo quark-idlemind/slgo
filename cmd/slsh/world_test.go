@@ -754,6 +754,46 @@ func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
 	}
 }
 
+// TestANeighbourRowFitsAnEightyColumnTerminal: the listing is copied
+// into "man neighbours", where every example line is indented by four
+// spaces, so a row that only just fits 80 on its own wraps on the page
+// and reads as two circuits instead of one.
+//
+// The row is checked at its widest ordinary size rather than at the
+// size of any particular neighbour: a name that fills its column, and
+// an address of a dotted quad and a five-digit simulator port.  Nothing
+// here is truncated -- a name or an address longer than its column pads
+// out rather than being cut, and the line grows -- so what this holds
+// to is that the ordinary line has room for the indent.
+func TestANeighbourRowFitsAnEightyColumnTerminal(t *testing.T) {
+	x := newTestShell(t)
+	const (
+		fullName = "Pelmar Reach Waterside Crossings" // 32, the name column
+		indent   = 4                                  // what man puts in front of an example
+	)
+	if len(fullName) != 32 {
+		t.Fatalf("the name column is 32 wide; this test's name is %d", len(fullName))
+	}
+	x.grid.neighbours = sl.Neighbours{
+		On: true,
+		Held: []sl.Neighbour{{
+			Handle: msg.RegionHandle(43646, 43648), Addr: "203.0.113.11:13032",
+			Name: fullName, Handshook: true, Heard: 412,
+		}},
+	}
+
+	got := x.do(t, "neighbours")
+	if !strings.Contains(got, fullName) {
+		t.Fatalf("neighbours printed %q", got)
+	}
+	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
+		if n := len(line) + indent; n > 78 {
+			t.Errorf("a line is %d columns once man has indented it, which wraps:\n%s",
+				n, line)
+		}
+	}
+}
+
 // TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot: the change costs the
 // daemon a socket per neighbouring region for as long as it is on, so it
 // is worth being sure the word reached the session and that the answer
