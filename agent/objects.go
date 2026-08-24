@@ -81,10 +81,17 @@ type Object struct {
 // It accumulates.  Objects are added as the simulator describes them
 // and removed when it says they have gone, so it tracks what is around
 // rather than growing without bound -- but it is a record of what has
-// been heard, not a query against the region.  Lowering the draw
-// distance does not retroactively forget what was already described:
-// raising it from 128 to 256 metres took the count from 195 to 217,
-// and dropping it to 32 left it at 193.
+// been heard, not a query against the region.
+//
+// It did not always forget what it had heard.  Measured before Trim
+// was written: raising the draw distance from 128 to 256 metres took
+// the count from 195 to 217, and dropping it to 32 left it at 193 --
+// the store kept everything the far view had brought in.  Those
+// numbers are what it did then, and are left here because they turn up
+// elsewhere and would otherwise read as current.  Trim now drops what
+// is out of range, and the agent calls it every TrimInterval, so a
+// store does shrink when the camera pulls in -- a little behind the
+// camera rather than with it.
 //
 // A store can be shared by several agents in the same region -- see
 // Cache -- which is what viewers is for: what to keep is decided by

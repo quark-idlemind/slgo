@@ -229,9 +229,13 @@ func cmdMan(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 // manContents is what man says when it is asked nothing: which commands
 // can be asked about.
 //
-// Not every command, because a listing of sixty names of which a
-// handful answer would send most people to a page that is not there.
-// help is the listing of everything, and says so here.
+// Every command has a page, so what is listed is currently all of
+// them, and the sentence above the listing is written for a remainder
+// that does not exist at the moment.  The filter stays anyway: a
+// command added tomorrow arrives before its page does, and a name
+// offered here that answers with nothing is worse than a name left
+// out until it has something to say.  help lists everything either
+// way, and says so here.
 func manContents(out io.Writer, width int) error {
 	// commandNames is already sorted, so the listing comes out
 	// alphabetical without asking.
@@ -245,8 +249,19 @@ func manContents(out io.Writer, width int) error {
 		fmt.Fprintln(out, "no command has a man page yet")
 		return nil
 	}
-	manText(out, "\"man NAME\" describes one command at length.  These have "+
-		"a page; the rest answer \"COMMAND --help\", and \"help\" lists them all.", width)
+	// "The rest" is empty as it stands, every command having a page, and
+	// a sentence pointing at an empty set reads as though something were
+	// missing.  Which of the two it says is worked out rather than
+	// fixed, because a command added tomorrow arrives before its page
+	// does and the sentence should be right on that day too.
+	blurb := "\"man NAME\" describes one command at length.  Every command has " +
+		"a page; \"COMMAND --help\" is the shorter version, and \"help\" lists " +
+		"them by group."
+	if len(have) < len(commandNames()) {
+		blurb = "\"man NAME\" describes one command at length.  These have " +
+			"a page; the rest answer \"COMMAND --help\", and \"help\" lists them all."
+	}
+	manText(out, blurb, width)
 	fmt.Fprintln(out)
 	for _, line := range strings.Split(wrapText(strings.Join(have, " "), width-4), "\n") {
 		fmt.Fprintln(out, "    "+line)

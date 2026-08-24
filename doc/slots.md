@@ -104,10 +104,20 @@ to hold eight; one wanting twelve could not be served at all.
 The deadlock that groups avoided is not caused by granularity. It is
 caused by callers taking objects incrementally while others do the same:
 three callers each wanting four of twelve can hold three apiece and wait
-for a fourth nobody will give back. One allocation lock fixes that at any
-granularity — try everything under it, wait for nothing, give it all back
-before waiting — which is what the client-side version did for a few
-hours before the daemon took the job over.
+for a fourth nobody will give back. What prevents it is deciding a
+request whole and never holding anything while waiting, which needs no
+granularity at all.
+
+The client-side version got there by a different route: a lock per object
+and one allocation lock over them, with an invariant every caller had to
+keep — nothing may block while holding the allocation lock. That is
+deadlock free for the same reason, and it lasted a few hours before the daemon took the job over. There is
+no allocation lock now. One goroutine in the daemon owns the whole pool,
+holds no locks, and settles a request in a single pass over what is free:
+all of them or none, and a request that cannot be served takes nothing
+and comes away with a channel to wait on. The invariant is gone with the
+lock, and with it the thing a caller could get wrong — see
+`internal/slots/slots.go`.
 
 ### A ceiling on uploads at once
 

@@ -420,3 +420,43 @@ func TestNoManPageQuotesAWholeKey(t *testing.T) {
 		}
 	}
 }
+
+// TestManContentsSaysWhetherAnythingIsMissing: the listing's opening
+// sentence used to say "the rest answer COMMAND --help" when there was
+// no rest, which reads as though a page were missing.
+//
+// It is worked out rather than fixed, so this checks both halves: as the
+// tree stands every command has a page, and the sentence says so; take a
+// page away and it goes back to naming a remainder.
+func TestManContentsSaysWhetherAnythingIsMissing(t *testing.T) {
+	// The blurb is wrapped to the width, so a phrase can arrive with a
+	// newline in the middle of it; compare against the words alone.
+	flat := func(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+	var full strings.Builder
+	if err := manContents(&full, 78); err != nil {
+		t.Fatalf("manContents: %v", err)
+	}
+	if !strings.Contains(flat(full.String()), "Every command has a page") {
+		t.Errorf("every command has a page, and the listing did not say so:\n%s", full.String())
+	}
+
+	// One command without a page, put back afterwards.
+	name := commandNames()[0]
+	c := commands[name]
+	was := c.man
+	c.man = ""
+	t.Cleanup(func() { c.man = was })
+
+	var short strings.Builder
+	if err := manContents(&short, 78); err != nil {
+		t.Fatalf("manContents: %v", err)
+	}
+	if !strings.Contains(flat(short.String()), "the rest answer") {
+		t.Errorf("with %q lacking a page, the listing did not name a remainder:\n%s",
+			name, short.String())
+	}
+	if strings.Contains(flat(short.String()), " "+name+" ") {
+		t.Errorf("%q has no page and was listed as though it had one", name)
+	}
+}

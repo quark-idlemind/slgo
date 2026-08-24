@@ -306,8 +306,14 @@ func describePrim(s *Seen, props *Properties) PrimJSON {
 		Rot:     floats4(s.Rotation),
 	}
 	if p.Type == "" {
-		// A mesh or a sculpt: nothing here can name its form, and
-		// calling it a box would be a lie that rebuilds wrongly.
+		// A mesh or a sculpt: its profile and path are a combination
+		// no name here covers.  The field is not optional -- the
+		// format always says what a prim is, and something rebuilding
+		// from the file has to be given a form to make -- so it says
+		// box, which is the same answer an undescribed prim gets from
+		// DefaultShape above.  The cost is that the file cannot be
+		// told apart from one describing a real box: a mesh written
+		// out here comes back as a box.
 		p.Type = "box"
 	}
 	if !s.Owner.IsZero() {

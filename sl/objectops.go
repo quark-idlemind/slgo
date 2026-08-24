@@ -35,9 +35,13 @@ var taskTypeNames = map[string]string{
 // Properties are asked for per prim, because description, creator and
 // the permission masks are on no update and arrive only when asked.
 //
-// What it cannot know it leaves out rather than inventing: a prim
-// nothing has described has no shape, and a mesh has one this package
-// cannot name.
+// Every prim comes out with a shape, because the format gives no way
+// to leave one unsaid.  Two kinds of prim have none to give: one that
+// nothing has described yet, and a mesh or a sculpt, whose profile and
+// path name no shape this package knows.  Both are written as a box.
+// That is what it costs a reader of the output -- a mesh described
+// here rebuilds as a box, and nothing in the file says it was ever
+// anything else.
 func (w *Session) Describe(ctx context.Context, o *Object, timeout time.Duration) (*ObjectJSON, error) {
 	all, err := w.AllObjects(ctx, timeout)
 	if err != nil {

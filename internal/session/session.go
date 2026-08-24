@@ -140,13 +140,18 @@ func AutoName(n int) string {
 	return fmt.Sprintf("%s %d", AutoObject, n+1)
 }
 
-// AutoGroupSize is how many objects a benchmark takes at once.
+// AutoGroupSize is a default width: how many objects to take at once
+// when the caller has not said how many it wants.
 //
-// Four because that is what the search uses: quarterSearch takes three
-// readings at once alongside the measured object.  It is slbench's
-// number and not the pool's -- the pool hands out any count up to
-// AutoPool, and a program running scripts asks for one object per script
-// it wants going at once.
+// It is not a fact about the pool and no longer one about a benchmark
+// either.  It began as what slbench's search took -- a group of four,
+// the object being measured and the readings alongside it -- but that
+// search now cuts its range into --parts and leases whatever that comes
+// to, so nothing computes from this number any more.  What is left is a
+// default chosen for being a useful width without being anybody's whole
+// pool: the pool hands out any count up to AutoPool, and a program that
+// knows its own width -- one object per script it wants going at once --
+// asks for that instead.
 const AutoGroupSize = 4
 
 // AutoPool is how many objects one avatar's pool holds -- the ceiling on
