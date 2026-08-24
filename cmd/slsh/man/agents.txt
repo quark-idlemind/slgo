@@ -33,11 +33,14 @@ circuit to, which its supervisor is already reconnecting; that one has
 the error as its reason, and it is not lost -- waiting is the right
 thing to do about either.
 
-"stopped" is two as well.  Either something asked for it -- logout --
-or the grid threw the avatar off, which is what happens when somebody
-logs that avatar into a viewer, and the daemon then stays down rather
-than fight them for it.  The reason tells them apart: "logged out"
-against the grid's own words after "ended by the grid".
+"stopped" is three.  Either something asked for it -- logout -- or the
+grid threw the avatar off, which is what happens when somebody logs that
+avatar into a viewer, and the daemon then stays down rather than fight
+them for it; or the session fell over with something the daemon will not
+retry, and stays down for that instead of reconnecting.  The reason
+tells them apart: "logged out", the grid's own words after "ended by
+the grid", and, for the third, the error itself with no phrase in front
+of it.
 
 Configured, stopped and failed are what the listing is for.  Told only
 whether a session is connected, a profile nobody has ever started and

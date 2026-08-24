@@ -38,5 +38,5 @@ Build a file of commands and run it:
 Note that ">" replaces a file and ">>" adds to it, which is what makes
 the first line above start afresh and the rest accumulate.
 
-See also: ".", which runs the file this builds, and help for the
-redirection itself.
+See also: ".", which runs the file this builds, and "help all", where
+the redirection itself is written down.

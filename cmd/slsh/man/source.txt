@@ -43,4 +43,5 @@ Write a listing out, edit it into commands, and run it:
 	. probes
 
 See also: echo for putting a line into such a file, quit for ending one
-that is meant to be the whole session, and help for the redirection.
+that is meant to be the whole session, and "help all", which is where
+the redirection is written down.

@@ -41,8 +41,10 @@ an empty watch.
 
 Only what comes over the circuit.  A good deal now arrives on the
 grid's event queue instead -- LLSD bodies rather than the binary
-message encoding -- and none of that is on this stream, so a name that
-has moved to the queue subscribes cleanly and shows nothing.
+message encoding -- and although the daemon relays those down the same
+stream, to whoever asked for them by name, watch reads only the message
+half of it.  So a name that has moved to the queue subscribes cleanly,
+is relayed, and still shows nothing.
 
 A message the template does not describe is still reported, as its
 number and a byte count, and one that will not decode is reported as

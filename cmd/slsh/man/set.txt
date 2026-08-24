@@ -16,12 +16,17 @@ whose value is a command line of its own:
 
 	set viewer_launch open -a {app} --args --grid {grid}
 
+The one exception is ">", which is a redirection wherever it is typed
+unquoted, with or without a space in front of it: "set viewer_grid a>b"
+sets the setting to "a" and puts set's own report into a new file called
+b.  Quote a value with one in it -- set viewer_grid "a>b".
+
 # It writes the file, and does nothing else to it
 
 A setting that lasted until the shell was closed would be a setting to
 type again after every reboot, which is the whole of what this exists
-not to be.  So every change is written to the settings file -- named
-outright by $SLSH_CONFIG_DIR, otherwise slsh/config under
+not to be.  So every change is written to the settings file -- config in
+the directory $SLSH_CONFIG_DIR names, otherwise slsh/config under
 $XDG_CONFIG_HOME, otherwise ~/.config/slsh/config -- and the file is
 created, with its directory, if it is not there yet.  The path is
 printed every time, since the file is the thing that will still be true

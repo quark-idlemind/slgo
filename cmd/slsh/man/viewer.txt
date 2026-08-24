@@ -24,6 +24,12 @@ straight to the viewer being started.  Nothing here prints, logs or
 keeps it; the command line is echoed with it struck out, since a
 launch that appears to do nothing is unreadable.
 
+A profile with no viewer_password line in it is refused rather than
+minted for, and that is the refusal to expect first, because the line
+is not one a profile has unless somebody put it there: it is what marks
+a profile as one that may be handed to a viewer at all.  The refusal
+names the line to add and says slgod has to be restarted after it.
+
 It does reach that viewer's arguments, where any process this user
 owns can read them, and that cost is not hidden.  Single use is the
 answer to it: an onlooker who copies the password out is racing a

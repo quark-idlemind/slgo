@@ -1,9 +1,10 @@
 lsl is the language this simulator implements, from the simulator
 itself: every function with its arguments, return type, energy and
 sleep, every constant with its type and value, every event with its
-arguments, and the type names.  It is what the built-in editor colours
-and completes from, and it comes from the machine that will run the
-script rather than from a page somebody edited.
+arguments, and the type names.  It is what a viewer's own script editor
+colours and completes from -- slsh has no editor -- and it comes from
+the machine that will run the script rather than from a page somebody
+edited.
 
 That makes it the authority rather than a reference.  A function this
 does not list does not exist here; a constant whose value differs from

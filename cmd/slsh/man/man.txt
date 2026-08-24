@@ -45,9 +45,16 @@ guessing which of them was meant.
 
 Paragraphs are wrapped to the terminal's width less a small margin, and
 never wider than 78 columns however wide the window is: past about
-eighty the eye loses the line on its way back to the left margin.  A
-page redirected to a file or a pipe gets that same 78, which is what
-makes "man wear > wear.txt" a file somebody can read afterwards.
+eighty the eye loses the line on its way back to the left margin.  Nor
+narrower than 40: a window under that gets 40 columns and lines that
+run off the edge of it.
+
+The width is the terminal's whether the page is being read or written
+out, since redirection is not looked at.  So "man wear > wear.txt" in
+an eighty-column window gives a file wrapped at 78, and the same
+command in a fifty-column window gives one wrapped at 48.  A shell with
+no terminal to measure -- "slsh -c", "slsh -f", input from a pipe -- is
+the case that always gets 78.
 
 The heading, the usage line and the indented examples are printed as
 they were written and are not wrapped, so a long one of those is the

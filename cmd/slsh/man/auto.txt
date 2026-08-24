@@ -4,7 +4,7 @@ the objects are worn, and therefore how much can run at once.  With -n
 it sets that many up, and prints which object went to which slot.
 
 Nothing else in this shell needs it.  It is here because the answer to
-"why will only two benchmarks run at a time" is a number nothing else
+"why will only eight scripts run at a time" is a number nothing else
 prints.
 
 # Why the objects are kept rather than made
@@ -24,22 +24,31 @@ is what the listing after -n is for: past the eighth slot the only way
 to see the pool is arranged as intended is to read which point each one
 landed on.
 
-# One object at a time, under an allocation lock
+# All of them or none, out of one pool
 
 A run asks for a NUMBER of objects and gets that many or none.  What it
-asks for is the width of what it is doing: a benchmark wants four,
-because its search takes three readings at once alongside the object
-being measured, and a program running scripts wants one per script it
-runs at once.
+asks for is the width of what it is doing: a program running scripts
+wants one per script it runs at once, and a benchmark wants one per
+division of each of its searches and three besides, which at slbench's
+defaults is nineteen -- more than the twelve one avatar wears, so a
+benchmark's objects usually come from several.
+
+The pool they come out of is the daemon's rather than this avatar's.
+Twelve is what each hosted avatar contributes to it, and a request for
+nineteen is answered out of as many avatars as it takes; what this
+command reports is one avatar's share.  Naming an avatar confines a run
+to that share.
 
 Handing objects out one at a time is on its own a deadlock -- three
 runs each wanting four of twelve can hold three apiece and wait for a
-fourth nobody will give back.  What prevents it is one more lock.  A
-run takes the allocation lock first, and under it tries for every
-object it wants without waiting for any of them; if it cannot have them
-all it gives back what it took, drops the allocation lock, and only
-then waits.  Nothing is ever held while waiting for anything else, so
-there is no cycle to deadlock on.
+fourth nobody will give back.  What prevents it is that a request is
+decided whole.  One goroutine in the daemon owns the pool, holds no
+locks, and settles a request in a single pass over what is free: all of
+them or none.  A request that cannot be served takes nothing, so there
+is nothing for it to give back, and it comes away with a channel to
+wait on instead, closed when something is given back or added.  Nothing
+is ever held while waiting for anything else, so there is no cycle to
+deadlock on.
 
 A run wanting many can in principle be stepped over by a stream of runs
 wanting one.  Nothing prevents that, deliberately: these are programs
@@ -48,9 +57,9 @@ queue drains.
 
 # Setting up while something is running
 
--n takes the whole pool before it does anything, and refuses if any of
-it is busy.  Wearing things is not something to do underneath a
-benchmark: an attach replaces what is on the point, and a run whose
+-n takes this avatar's whole share before it does anything, and refuses
+if any of it is busy.  Wearing things is not something to do underneath
+a benchmark: an attach replaces what is on the point, and a run whose
 object went away reports nothing useful about why it failed.
 
 Getting fewer objects than were asked for is not a failure and does not
@@ -66,9 +75,12 @@ Ask what is there:
 	auto -n 12 sets up the rest
 
 The first line of that is the answer to the question at the top of this
-page.  The second is the report's own advice, printed only while there
-is room to grow, and the twelve in it is the whole pool rather than a
-suggestion: it is how many entries the list of points has.  Taking it:
+page.  Its "benchmarks of 4" is a number slbench has outgrown -- four
+was what its search took when that line was written -- so read the
+count of scripts and not the count of benchmarks.  The second line is
+the report's own advice, printed only while there is room to grow, and
+the twelve in it is this avatar's whole share rather than a suggestion:
+it is how many entries the list of points has.  Taking it:
 
 	auto -n 12
 
