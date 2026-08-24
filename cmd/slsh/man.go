@@ -233,11 +233,14 @@ func cmdMan(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 
 // manPrint writes a finished page.  On a real terminal it is shown a
 // screenful at a time; on a pipe or a redirect the whole thing goes
-// out, because there is nobody there to press space.
+// out, because there is nobody there to press space.  A file does not
+// get the SGR sequences a terminal uses for bold: they are rubbish in
+// a listing, and Unicode already carries the bullets and rules.
 func manPrint(ctx context.Context, sh *Shell, out io.Writer, text string) error {
 	if manPaged(sh, out) {
 		return page(ctx, sh.term, text)
 	}
+	text = stripANSI(text)
 	_, err := io.WriteString(out, text)
 	return err
 }

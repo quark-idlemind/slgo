@@ -25,7 +25,9 @@ that is an error -- `help all` is the full set.
 ## Width
 
 The page wraps to this terminal.  Redirected to a file, it still wraps
-to the window you ran it in.
+to the window you ran it in, and the escape sequences a terminal uses
+for bold are left out -- they are not text.  Unicode (bullets, rules)
+stays.
 
 ## Paging
 

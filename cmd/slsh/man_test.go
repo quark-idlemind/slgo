@@ -27,9 +27,6 @@ func TestAMarkdownPageIsRenderedNotShouted(t *testing.T) {
 	if !strings.Contains(got, "Only a folder, and only by name") {
 		t.Errorf("man cd is missing the markdown heading:\n%s", got)
 	}
-	if !strings.Contains(got, "\x1b[1m") {
-		t.Errorf("man cd should be rendered, not printed raw:\n%s", got)
-	}
 	if !strings.Contains(got, "cd Objects/lanterns") {
 		t.Errorf("man cd lost its examples:\n%s", got)
 	}
@@ -53,6 +50,28 @@ func TestATextPageIsStillLaidOutAsText(t *testing.T) {
 	}
 	if !strings.Contains(got, "ONE OBJECT, AND ONLY ONE") {
 		t.Errorf("txt heading should be shouted:\n%q", got)
+	}
+}
+
+// TestManWrittenToAFileHasNoEscapeSequences.
+//
+// A redirect is a file, and a file that is later sourced or grepped
+// cannot use SGR.  Unicode for bullets and rules is still text; the
+// escapes are not.
+func TestManWrittenToAFileHasNoEscapeSequences(t *testing.T) {
+	var b bytes.Buffer
+	if err := cmdMan(context.Background(), &Shell{}, &b, []string{"put"}); err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	if strings.Contains(got, "\x1b") {
+		t.Errorf("man put to a file carried escape sequences:\n%q", got)
+	}
+	if !strings.Contains(got, "put photo.jpg") {
+		t.Errorf("the page itself is missing:\n%s", got)
+	}
+	if !strings.Contains(got, "\u2500") {
+		t.Errorf("heading rules should still be there as Unicode:\n%s", got)
 	}
 }
 
