@@ -538,7 +538,7 @@ acting as group Example Builders (87f07e57-…)</span>
             <tbody>
               <tr><td class="cmd">help</td><td class="what">what groups of commands exist; <code>help region</code> lists one group</td></tr>
               <tr><td class="cmd">place --help</td><td class="what">what that command takes: its flags, one line each</td></tr>
-              <tr><td class="cmd">man place</td><td class="what">what that command is <em>for</em>, at length, with examples</td></tr>
+              <tr><td class="cmd">man place</td><td class="what">what that command is <em>for</em>, at length, with examples — and the same flags a paragraph each</td></tr>
             </tbody>
           </table>
         </div>
@@ -567,10 +567,12 @@ For one command:       COMMAND --help, or man COMMAND
         </div>
 
         <p>
-          <code>man</code> is where the reasoning lives — why a command
-          behaves as it does, what it cannot know, and what to type instead
-          when it refuses. Where this guide is a walk through, a man page is
-          the whole of one command.
+          <code>man</code> is the long answer — what a command is for, why
+          it behaves as it does, what it cannot know, and what to type instead
+          when it refuses. Where a page has flags it takes them a paragraph at
+          a time, under <em>Options</em>, saying the part <code>--help</code>'s
+          column has no room for. Where this guide is a walk through, a man
+          page is the whole of one command.
         </p>
 
         <p>
@@ -2232,8 +2234,9 @@ viewer_running = how to tell whether one is running already</span></pre>
 
         <p>
           As <code>help</code> groups them. Every command answers
-          <code>--help</code> for what it takes, and <code>man COMMAND</code>
-          for what it is for.
+          <code>--help</code> for what it takes in a column, and
+          <code>man COMMAND</code> for what it is for — and, where there are
+          flags, for what each one does at length.
         </p>
 
         <div class="tablewrap">
