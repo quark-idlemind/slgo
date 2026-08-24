@@ -353,8 +353,23 @@ func cellsToSpans(cells []string, cols int) [][]span {
 	return out
 }
 
+// endsASentence is the join between two lines of one paragraph: a full
+// stop at the end of one wants two spaces before the next, and anything
+// else -- a colon included, which takes one space -- wants one.
+func endsASentence(s string) bool {
+	if s == "" {
+		return false
+	}
+	switch s[len(s)-1] {
+	case '.', '!', '?':
+		return true
+	}
+	return false
+}
+
 func joinPara(lines []string) string {
 	var b strings.Builder
+	prev := ""
 	prevHard := false
 	for i, line := range lines {
 		s := strings.TrimLeft(line, " \t")
@@ -382,14 +397,23 @@ func joinPara(lines []string) string {
 			}
 		}
 		if i > 0 {
-			if prevHard {
+			switch {
+			case prevHard:
 				b.WriteByte('\n')
-			} else {
+			case endsASentence(prev):
+				// Two spaces after a full stop, which is the house
+				// rule in the prose this renders and is what the
+				// author typed inside a line.  A soft line break is
+				// one space in CommonMark, so joining two lines here
+				// silently gave a sentence boundary one space where
+				// the same boundary mid-line kept two.
+				b.WriteString("  ")
+			default:
 				b.WriteByte(' ')
 			}
 		}
 		b.WriteString(s)
-		prevHard = hard
+		prev, prevHard = s, hard
 	}
 	return b.String()
 }
