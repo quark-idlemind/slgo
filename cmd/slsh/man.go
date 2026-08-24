@@ -86,10 +86,13 @@ package main
 //
 // # Why a missing page is not an error
 //
-// Most commands have no page yet and will not for a while.  "man where"
-// answering "no such thing" would read as man being broken rather than
-// as the page being unwritten, so it says which it is and prints what
-// it does have -- the usage line and the brief -- instead of nothing.
+// Every command has a page today, and this is kept for the day one
+// does not: a command added tomorrow arrives before its page does, and
+// the arrangement should not be that it cannot be committed until the
+// prose is written.  "man where" answering "no such thing" would read
+// as man being broken rather than as the page being unwritten, so it
+// says which it is and prints what it does have -- the usage line and
+// the brief -- instead of nothing.
 // A name that is no command at all is the other case, and that is an
 // error, because it is a typo.
 

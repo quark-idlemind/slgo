@@ -217,6 +217,10 @@ func (sh *Shell) folderAt(ctx context.Context, names []string) (msg.UUID, error)
 // nothing but a second look.  rm does not use this: deleting is
 // permanent, so it asks entriesAt what the name really means and refuses
 // a name that means several.
+// The index needs no length check, and the reason is one level down:
+// entriesIn returns an error for every path that matches nothing, so a
+// nil error here carries at least one entry.  Checked rather than
+// assumed, because the shape invites the assumption.
 func (sh *Shell) entryAt(ctx context.Context, path string) (sl.Entry, error) {
 	es, err := sh.entriesAt(ctx, path)
 	if err != nil {
