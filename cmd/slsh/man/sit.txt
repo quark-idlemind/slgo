@@ -6,7 +6,7 @@ and where that left it.
 
 	sit                     on the ground, where the avatar is
 	sit greeter             on the object called greeter
-	sit d8467e57-…          on the object with that key
+	sit d8467e57-...          on the object with that key
 
 # A sit moves the avatar
 
@@ -30,7 +30,7 @@ beforehand, and it is printed in the words where and tp use, so where
 run afterwards agrees with it instead of merely being close:
 
 	sit greeter
-	sat on "greeter" d8467e57-… (local 8360)
+	sat on "greeter" d8467e57-... (local 8360)
 	Pelmar Reach at 35, 72, 2001
 
 The local id in that line is the region's own numbering and is the
@@ -65,11 +65,15 @@ the command has one shape of answer whichever mechanism it used.
 
 # When the grid says no
 
-A refusal arrives as an alert, in about a tenth of a second, and is
-printed in the grid's own words:
+A refusal arrives as an alert, in about a tenth of a second, and the
+grid's own words are quoted whole, behind the command's name and sl's
+own sentence saying what happened -- for a seat eleven metres off:
 
-	sit on something eleven metres off
-	  No room to sit here, try another spot.
+	sit "the long bench"
+	slsh: sit: sl: the simulator refused the sit: "No room to sit
+	here, try another spot."
+
+That is one line on the screen; the break in it is this page's.
 
 Those words are printed as they arrived and nothing here rewords them,
 because they are the only part of a refusal anybody can act on -- and

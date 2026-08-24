@@ -16,8 +16,10 @@ is acting as and not on who it is.  Measured with two avatars a couple
 of metres apart on the same parcel: the one acting as the land's group
 could rez a prim and the one acting as nobody could not, and what came
 back was "You cannot create objects here.  The owner of this land does
-not allow it." -- which is untrue as it stands.  The land does allow
-it; the request simply arrived from nobody in particular.
+not allow it.  Use the land tool to see land ownership." -- which is
+untrue as it stands and then sends you to the wrong place.  The land
+does allow it; the request simply arrived from nobody in particular,
+and the land tool has nothing to show.
 
 A viewer remembers the active group from one session to the next and a
 headless login does not: the login itself always comes up acting as

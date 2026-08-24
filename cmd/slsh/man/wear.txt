@@ -13,10 +13,11 @@ than one guessed here:
 
 Nobody typed "HUD top" there, and nothing here could have worked it
 out: it is the point the object itself carries, sent back in the
-region's answer and read off that.  The names are the viewer's own, so
-"chest" and "left hand" and "HUD top right" are points and "skull"
-is not -- a word that is not one of them is refused rather than
-guessed at.
+region's answer and read off that.  The names are mostly the viewer's
+own, so "chest" and "left hand" and "HUD top right" are points.  Not
+everywhere, though: the point the viewer calls "skull" is "head" here,
+and a word this table does not hold -- "skull" among them -- is refused
+rather than guessed at.
 
 # Wearing adds rather than replaces
 
@@ -57,7 +58,10 @@ detach are the two ways on from there.
 --at names the point, either the way the viewer names it -- "left
 hand", "HUD top right" -- or by its number.  The numbers run from 1 to
 127; a bigger one is refused, because the byte a point travels in also
-carries the bit that says add rather than replace.
+carries the bit that says add rather than replace.  Zero is taken as
+well and asks for what leaving --at off asks for: wherever the object
+itself says.  The refusal for a bigger number says 1 to 127 and leaves
+that out.
 
 --replace takes off whatever is on that point instead of wearing
 alongside it.

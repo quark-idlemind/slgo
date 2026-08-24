@@ -27,12 +27,9 @@ So it can be turned over while the session is up.  A benchmark that has
 finished can be walked out of the region; an avatar that has finished
 walking can stop paying for the circuits.
 
-	neighbours on
-	neighbours off
-	neighbours
-
-Off drops what is held rather than merely refusing the next offer, so
-the listing after it is empty.
+Off drops what is held rather than merely refusing the next offer.
+Nothing is listed after it: one line says they are off, which is the
+whole of what there is to say once no circuit is held.
 
 # On, with nothing held, is the ordinary state
 

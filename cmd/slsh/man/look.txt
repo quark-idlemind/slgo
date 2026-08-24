@@ -5,9 +5,10 @@ question asked about the avatar rather than about the land, and
 "objects" is what is standing on it.
 
 It takes no argument.  The access rating is printed in the words a
-viewer shows -- general, moderate, adult -- and as its number where the
+viewer shows -- general, moderate, adult -- and as "access N" where the
 grid sends one nothing here has a word for, which is the same rendering
-"regions" gives it.
+"regions" gives it.  The label and that rendering double up, so an
+unknown rating reads "access   access 21".
 
 # It was said once, before anybody was listening
 
@@ -27,18 +28,19 @@ that is not how many are in the region.
 
 The simulator describes what is near the camera and nothing else, so an
 object beyond the draw distance is not merely unnamed here, it is
-unknown.  The count therefore grows as the avatar moves about and as
-the draw distance is raised -- and it does not shrink when the draw
-distance is lowered, because what has already been described has
-already been heard.  Read it as a floor on what "objects" can find
-rather than as a census.
+unknown.  How far that reaches is not something this shell can change:
+no command here sets a draw distance.  The count grows as the avatar
+moves about, and it falls again -- the region says when an object has
+gone, and whatever holds the session drops what has drifted out of
+range.  Read it as what the session is holding now rather than as a
+census.
 
 # Examples
 
 	look
 	Testville
-	  id       d8467e57-…
-	  owner    7e7c7e57-…
+	  id       d8467e57-...
+	  owner    7e7c7e57-...
 	  access   general
 	  water    20.0m
 	  product  Estate / Full Region

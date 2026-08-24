@@ -19,9 +19,12 @@ now, where anything remembered is only as new as the last arrival.  An
 avatar that has stood in one place while the land was sold, renamed or
 divided would otherwise be told what was true when it got there.
 
-If the ask goes unanswered, the command falls back to what the session
-was told when it arrived and says so in as many words, so that a stale
-answer can never be mistaken for a fresh one.
+If the ask goes unanswered, the bare command falls back to what the
+session was told when it arrived and says so in as many words, so that
+a stale answer can never be mistaken for a fresh one.  The fallback is
+only good for the parcel underfoot: the arrival described that one and
+no other, so "parcel 60,60" has nothing to fall back on and reports the
+failure instead.
 
 # The whole region's layout cannot be asked for at all
 
@@ -39,7 +42,7 @@ them, and the command says so rather than drawing an empty region.
 --region cuts the region along those property lines and then asks about
 a point inside each piece, so the listing has names on it: the shapes
 come from the overlay and the names from a question apiece, about a
-tenth of a second each, sequentially -- fourteen parcels take two
+tenth of a second each, sequentially -- fourteen parcels take about two
 seconds.  A region that stops answering is still listed by its shapes,
 with the missing names said plainly.
 
@@ -71,9 +74,11 @@ Each parcel is drawn as a letter, in a colour, and both matter.  The
 colour is what tells two parcels apart at a glance; the letter is what
 tells them apart at all, because a picture written to a file, down a
 pipe, or on a terminal with NO_COLOR set has no colour in it and would
-otherwise be a wash of one character.  The colours are the eight a
-terminal has always had and the bright half of each, as foreground and
-never as a block behind the letter, for the reasons "map" gives.
+otherwise be a wash of one character.  The colours are twelve: six of
+the eight a terminal has always had and the bright form of each, with
+black and white left out because one of them is invisible on each kind
+of paper.  They are the foreground of the letter and never a block
+behind it, for the reasons "map" gives.
 
 # A local id is not a name
 
