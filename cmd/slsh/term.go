@@ -569,6 +569,20 @@ func (t *Term) Print(s string) {
 	t.redrawLocked()
 }
 
+// Paint writes s to the terminal as-is, without the prompt.
+//
+// It is for a command that has taken the display over while busy --
+// the man pager -- and would leave the prompt in the wrong place if it
+// went through Print.  A pipe has no display to take over.
+func (t *Term) Paint(s string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.plain || t.closed {
+		return
+	}
+	fmt.Fprint(t.out, s)
+}
+
 // Status writes a line in place, over whatever Status wrote last.
 //
 // It is for progress: something worth watching while it happens and not
