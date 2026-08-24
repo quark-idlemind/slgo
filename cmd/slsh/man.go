@@ -18,10 +18,18 @@ package main
 //
 // A page never repeats the two things that are already derived.  man
 // prints the name and brief as its heading and the usage line under it,
-// both composed the same way help composes them (options.go), so a page
-// that listed its own flags would be a fourth copy of the thing this
-// series has just finished reducing to one.  What a page adds is the
-// reasoning, the traps and the worked examples.
+// both composed the same way help composes them (options.go),
+// so a page that wrote either one out again would be another copy of
+// the thing this series has just finished reducing to one.
+//
+// The flags are not one of those two.  They were left out at first, on
+// the grounds that --help already had them, and what that bought was a
+// reference somebody had to leave in order to find out what a flag did.
+// So a page with flags lists them under Options, a paragraph each,
+// saying the part getopt's column has no room for; the column stays the
+// quick answer and is still the only answer for a command whose one flag
+// is --help.  What a page adds beyond that is the reasoning, the traps
+// and the worked examples.
 //
 // # Where a page lives
 //

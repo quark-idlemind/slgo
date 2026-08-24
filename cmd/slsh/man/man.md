@@ -4,8 +4,10 @@
 
 It displays the name, a one-line brief and the usage line, then the page:
 what the command does, what the arguments mean, and the traps that
-`--help` has no room for.  The flags live with the command
-(`place --help`), so this page does not list them.
+`--help` has no room for.  A command with flags lists them on its page
+too, under Options, a paragraph each rather than the column
+`place --help` prints.  A command whose only flag is `--help` -- this
+one -- has no such section, and then the flags are only the column.
 
 The only argument is a command name.  One at a time.
 
@@ -33,4 +35,5 @@ to the window you ran it in.
     man
     man wear > wear.txt
 
-See also: `help`, and `COMMAND --help` for the flags.
+See also: `help`, and `COMMAND --help` for the same flags in a
+column, without the paragraphs.
