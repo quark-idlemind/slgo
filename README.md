@@ -6,6 +6,11 @@ everything else here is written on. It began as a Go rewrite of a C
 client that is not part of this repository, and most of what is written
 down below is still about the wire.
 
+This is a product of AI agentic coding with strong guidance from the human
+author of the C client, which was written in the early part of the second decade
+of the 21st century.  The slbench and slrun programs, described later in this
+document, are based on Go programs written by the same human author in 2026.
+
 **Start at `sl`.** It is the package a program uses, and the only one
 most programs need: objects, inventory, chat, teleport, sitting, land,
 textures, scripts -- said as calls that return when the thing has been
