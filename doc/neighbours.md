@@ -167,8 +167,10 @@ The rest of what it measured, in the order it happened:
 
 - **The offer follows the avatar to the edge.** Logging in at (12, 128),
   twelve metres from the west border, was offered **one** neighbour --
-  Pelmar Mill -- where standing in the middle at (28, 72, 2001) had been
-  offered four. The simulator introduces what is near.
+  Pelmar Mill -- where standing at (28, 72, 2001), twenty-eight metres in
+  from the west edge and seventy-two from the south, had been offered
+  **three**: the regions across those two edges and the one across the
+  corner between them. The simulator introduces what is near.
 - **Taking it up stops the repetition.** Offered **once**, against 57
   offers of four regions in a 200 second run where nothing ever
   answered. The repeat was a retry, not a heartbeat.
