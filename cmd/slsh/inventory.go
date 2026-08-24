@@ -584,7 +584,14 @@ func catReadable(e sl.Entry) error {
 	case sl.AssetNotecard, sl.AssetLSLText, sl.AssetScriptLegacy:
 		return nil
 	}
-	return fmt.Errorf("%s is not text; asset fetches it", kindOf(e))
+	// "get" is named only for a texture because get is only for
+	// textures -- it refuses a sound itself -- so naming it for the
+	// rest would forward the reader to a second refusal.
+	kind := kindOf(e)
+	if sl.AssetType(e.Type) == sl.AssetTexture {
+		return fmt.Errorf("%s is not text; \"get\" saves one as a PNG", kind)
+	}
+	return fmt.Errorf("%s is not text, and no command here fetches one", kind)
 }
 
 func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
