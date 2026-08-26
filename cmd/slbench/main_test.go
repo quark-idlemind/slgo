@@ -683,8 +683,9 @@ func TestNoStatesLeavesTheScriptExactlyAsItWas(t *testing.T) {
 	}
 }
 
-// TestAFlagTakingLSLTakesAPathToIt: there is one operand and three slots
-// that take LSL, so a slot that is not the operand's could otherwise only
+// TestAFlagTakingLSLTakesAPathToIt: there is one operand and five slots
+// that take LSL -- --code, --statement, --states, --preamble and
+// --postamble -- so a slot that is not the operand's could otherwise only
 // be filled from the command line.
 //
 // The rule is the prefix and nothing else -- "/", "./" or "../" -- because
@@ -716,6 +717,42 @@ func TestAFlagTakingLSLTakesAPathToIt(t *testing.T) {
 		if got := looksLikePath(c.s); got != c.path {
 			t.Errorf("looksLikePath(%q) = %v, want %v", c.s, got, c.path)
 		}
+	}
+}
+
+// TestEveryFlagTakingLSLGoesThroughTheRule: the point of the rule is that
+// a slot which is not the operand's can still be filled from a file, and
+// that is true of all five or of none of them.  --preamble and --postamble
+// were left out of the first round of this and had to be added, which is
+// the reason to check the list rather than the rule.
+func TestEveryFlagTakingLSLGoesThroughTheRule(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	// Each slot gets a mark of its own, so the script says which of them
+	// arrived and which was left holding a filename.
+	slbench(t, "--test=474,368",
+		"--code", write("code.lsl", "foo_CNT(){llDie();}"),
+		"--preamble", write("pre.lsl", "integer markPre;"),
+		"--postamble", write("post.lsl", "integer markPost;"))
+
+	for what, want := range map[string]string{
+		"--code":      "foo_000(){llDie();}",
+		"--preamble":  "integer markPre;",
+		"--postamble": "integer markPost;",
+	} {
+		if src := buildScript(1, 474); !strings.Contains(src, want) {
+			t.Errorf("%s did not reach the script; wanted %q in:\n%s", what, want, src)
+		}
+	}
+	// And nothing arrived as the path it was named by.
+	if src := buildScript(1, 474); strings.Contains(src, dir) {
+		t.Errorf("a filename reached the script instead of its contents:\n%s", src)
 	}
 }
 

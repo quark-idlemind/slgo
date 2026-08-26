@@ -48,10 +48,10 @@
 // hung.  A lone "-" says standard input in so many words, and works at a
 // terminal too.
 //
-// --code, --statement and --states each take the name of a file holding
-// the LSL instead of the LSL, spelt as a path: "/x.lsl", "./x.lsl" or
-// "../x.lsl".  See lslOrPath for why it is the prefix that decides and not
-// anything about what LSL looks like.
+// Every flag that takes LSL takes the name of a file holding it instead,
+// spelt as a path: "/x.lsl", "./x.lsl" or "../x.lsl".  That is --code,
+// --statement, --states, --preamble and --postamble.  See lslOrPath for why
+// it is the prefix that decides and not anything about what LSL looks like.
 //
 // The flags go in front of the file.  Option parsing stops at the first
 // argument that is not a flag, and here that argument is the file, so
@@ -87,11 +87,11 @@ import (
 )
 
 var flags = struct {
-	Preamble  string          `getopt:"--preamble=PREAMBLE Make STR the test's preamble"`
-	Postamble string          `getopt:"--postamble=POSTAMBLE Make STR the test's postamble"`
-	Code      string          `getopt:"--code=CODE code to test"`
-	Statement string          `getopt:"--statement=CODE statement(s) to test"`
-	States    string          `getopt:"--states=CODE states to place after the default state"`
+	Preamble  string          `getopt:"--preamble=PREAMBLE text placed before the copies, or ./FILE holding it"`
+	Postamble string          `getopt:"--postamble=POSTAMBLE text placed after the copies, or ./FILE holding it"`
+	Code      string          `getopt:"--code=CODE code to test, or ./FILE holding it"`
+	Statement string          `getopt:"--statement=CODE statement(s) to test, or ./FILE holding them"`
+	States    string          `getopt:"--states=CODE states after the default state, or ./FILE holding them"`
 	Addr      string          `getopt:"--addr=HOST:PORT the slgod to attach to; default sl-host, or this machine"`
 	Agent     string          `getopt:"--agent=NAME -a the profile to use; the only one, by default"`
 	Direct    bool            `getopt:"--direct -d log in to Second Life directly, without slgod"`
@@ -268,10 +268,11 @@ func inputComplaint(args []string, code, statement, states string, piped bool) s
 // lslOrPath answers with the LSL in s, or with the contents of the file
 // s names.
 //
-// --code, --statement and --states each take LSL on the command line,
-// and each of them is a thing somebody keeps in a file: there is one
-// operand and there are three slots, so without this the only slot that
-// could be read from a file is whichever one the operand fills.
+// --code, --statement, --states, --preamble and --postamble each take LSL
+// on the command line, and each of them is a thing somebody keeps in a
+// file: there is one operand and there are five slots, so without this the
+// only slot that could be read from a file is whichever one the operand
+// fills.
 //
 // A value beginning "/", "./" or "../" is a path, and nothing else is.
 // No LSL begins with any of those -- with the one exception that decides
@@ -288,7 +289,7 @@ func lslOrPath(what, s string) string {
 		errf("%s: %v\n", what, err)
 	}
 	if strings.TrimSpace(string(data)) == "" {
-		errf("%s: %s held nothing to measure\n", what, s)
+		errf("%s: %s is empty\n", what, s)
 	}
 	return string(data)
 }
@@ -1317,6 +1318,8 @@ func main() {
 		flags.Code = lslOrPath("--code", flags.Code)
 		flags.Statement = lslOrPath("--statement", flags.Statement)
 		flags.States = lslOrPath("--states", flags.States)
+		flags.Preamble = lslOrPath("--preamble", flags.Preamble)
+		flags.Postamble = lslOrPath("--postamble", flags.Postamble)
 		switch {
 		case flags.Statement != "":
 			flags.Code = flags.Statement

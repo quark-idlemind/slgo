@@ -650,9 +650,9 @@ between the two.  Measured on Second Life, 2026-08-25.
 possible to ask for a hundred of something that has to be named -- two
 states called `s` will not compile, `state s000` and `state s001` will.
 
-Each of `--code`, `--statement` and `--states` takes the name of a file
-holding the LSL instead of the LSL itself, written as a path: `/x.lsl`,
-`./x.lsl` or `../x.lsl`.  It is the prefix that decides and nothing
+Every flag that takes LSL takes the name of a file holding it instead,
+written as a path: `/x.lsl`, `./x.lsl` or `../x.lsl`.  That is `--code`,
+`--statement`, `--states`, `--preamble` and `--postamble`.  It is the prefix that decides and nothing
 else, because there is no reading of what LSL looks like that is safe:
 `state sCNT { state_entry() { } }` has no semicolon in it, and it is
 exactly the shape `--states` is for.  The one thing beginning with a
@@ -868,6 +868,7 @@ Second Life, and it will not say so about a model.
 | `--states CODE` | states to measure, placed after the default state |
 | `--globals`, `--params`, `--locals` | declare variables (see above) |
 | `--preamble`, `--postamble` | text around the copies |
+| | any of the five above takes `./FILE` in place of the LSL |
 | `--extra N` | further copies to measure, for `Additional Copies` (default 8; `0` for none). A multiple of 4 is advice and not enforced -- only a negative is refused |
 | `--parts N` | how many parts to cut the search into each round (default 8; at least 2, and a power of two only by advice) |
 | `--paranoid` | read each crossing again before believing it |
