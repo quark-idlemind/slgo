@@ -648,8 +648,9 @@ For one command:       COMMAND --help, or man COMMAND
           for names containing TEXT rather than taking a path and predicates.
           The tree is the one the viewer shows, and <code>/</code> is the root
           of it.
+        </p>
 
-          <p>
+        <p>
           Ids are shortened to their first eight characters throughout these
           transcripts — <code>40f17e57-…</code> — so the columns are narrower
           here than on a real terminal. Everything else is byte for byte what
@@ -2229,6 +2230,46 @@ viewer_running = how to tell whether one is running already</span></pre>
           <a href="#waiting">Things waiting</a>. Through slgod, leaving the
           shell leaves the avatar logged in; with <code>--direct</code> it does
           not.
+        </p>
+
+        <h3>A man page a screenful at a time</h3>
+        <p>
+          A page longer than the terminal is shown a screenful at a time, and
+          has keys of its own while it is up. A page that fits is printed
+          whole and does not wait; one redirected to a file or sent through a
+          pipe is not paged at all, because there is nobody there to press
+          space.
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="keys">space · f</td><td class="what">forward one screen</td></tr>
+              <tr><td class="keys">Return</td><td class="what">forward one line</td></tr>
+              <tr><td class="keys">b</td><td class="what">back one screen</td></tr>
+              <tr><td class="keys">d · u</td><td class="what">forward half a screen, back half a screen</td></tr>
+              <tr><td class="keys">p</td><td class="what">the top of the page</td></tr>
+              <tr><td class="keys">/text · ?text</td><td class="what">the next line containing text, the previous one</td></tr>
+              <tr><td class="keys">/ · ?</td><td class="what">the next match of the last search, the previous one</td></tr>
+              <tr><td class="keys">n</td><td class="what">the next match, whichever way the last search went</td></tr>
+              <tr><td class="keys">q · ^C</td><td class="what">leave</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          Type the search after the <code>/</code> or the <code>?</code> and
+          press Return; &lt;ESC&gt; or ^C abandons it and leaves the page where
+          it was. At the end of the page, space and Return leave as well.
+        </p>
+
+        <p>
+          Nothing is erased and the screen is never cleared. Each screenful is
+          printed under the last, so whatever was on the terminal before the
+          page began is still above it, and the page itself is still in the
+          scrollback after you have left it. <strong>b</strong> and
+          <strong>u</strong> therefore print that part of the page again
+          underneath, rather than carrying the display back up to it.
         </p>
       </section>
 
