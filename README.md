@@ -1098,6 +1098,8 @@ thing between them and the grid is a session.
     slrun a.lsl b.lsl
     slrun --object "Test HUD" a.lsl
     slbench --code "integer gCNT;"
+    slbench bench.lsl
+    generate-it | slbench
 
 A script needs an object to run in, so both take some: the shared `auto`
 objects the avatar wears, held for as long as the run lasts and taken

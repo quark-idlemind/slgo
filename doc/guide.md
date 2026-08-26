@@ -612,6 +612,28 @@ Measures how many bytes of script memory an LSL construct costs.
 
     slbench --code "integer gCNT;"
     slbench --statement "llSin(1.0);"
+    slbench bench.lsl
+    generate-it | slbench
+
+Four ways to say what to measure, and they are the same input by
+different routes: `--code` takes it on the command line, `--statement`
+takes one statement and wraps a function around it, a filename on its
+own is read for it, and with none of those the code is read from
+standard input.  A lone `-` says standard input in so many words.
+
+Standard input counts only when it is not a terminal.  A bare `slbench`
+at a prompt is somebody who has not said what to measure, and answering
+that by waiting silently for typing would look like a program that had
+hung.  What it does instead is say so, at once, without logging in.
+
+The flags go in front of the file -- option parsing stops at the first
+argument that is not a flag, and here that argument is the file, so
+`slbench bench.lsl -v` is a line with a file and no `-v`.
+
+Nothing to measure is refused whichever route it came by.  An empty
+file used to be measured as though it were a benchmark and printed the
+two numbers an empty one costs, which is a report of nothing that reads
+exactly like a report of something.
 
 A script has a fixed memory budget, and Second Life allocates script
 code in 512-byte blocks -- so you cannot simply ask what one variable

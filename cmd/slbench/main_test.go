@@ -554,6 +554,73 @@ func TestTheCodeUnderTestComesFromAFileOrAFlag(t *testing.T) {
 	}
 }
 
+// TestAFileIsOneOfTheThreeWaysIn: --code, --statement and a file are one
+// input by different routes, and the usage has to say so.  The file was
+// the route nothing named -- getopt's default operand is
+// "[parameters ...]", which names nothing this program takes and reads
+// as a plural of --params, so somebody who wanted to measure a file they
+// already had could read the whole of --help without learning they could.
+func TestAFileIsOneOfTheThreeWaysIn(t *testing.T) {
+	out, _ := slbench(t, "--help")
+	if !strings.Contains(out, "[FILE]") {
+		t.Errorf("the usage line does not offer a file:\n%s", strings.SplitN(out, "\n", 2)[0])
+	}
+	if strings.Contains(out, "[parameters ...]") {
+		t.Errorf("the usage line still calls the file \"parameters\":\n%s", strings.SplitN(out, "\n", 2)[0])
+	}
+}
+
+// TestNamingTheCodeUnderTestTwiceIsRefused walks every complaint
+// inputComplaint makes.  These are what somebody meets first and they end
+// in os.Exit, so they are read back here rather than through main.
+func TestNamingTheCodeUnderTestTwiceIsRefused(t *testing.T) {
+	for _, c := range []struct {
+		what      string
+		args      []string
+		code, stm string
+		piped     bool
+		want      string
+	}{
+		{"a file alone", []string{"b.lsl"}, "", "", false, ""},
+		{"--code alone", nil, "integer x;", "", false, ""},
+		{"--statement alone", nil, "", "x = 1;", false, ""},
+		{"two files", []string{"a.lsl", "b.lsl"}, "", "", false, "At most 1 test file"},
+		{"a file and --code", []string{"b.lsl"}, "integer x;", "", false, "Only one of --code or a file"},
+		{"a file and --statement", []string{"b.lsl"}, "", "x = 1;", false, "Only one of --statement or a file"},
+		{"--code and --statement", nil, "integer x;", "x = 1;", false, "Only one of --code or --statement"},
+
+		// Nothing named, at a terminal: there is nothing to measure
+		// and nothing to wait for.  Nothing named, with something
+		// piped in: that is the input.
+		{"nothing at all, at a terminal", nil, "", "", false, "must be specified"},
+		{"nothing at all, with a pipe", nil, "", "", true, ""},
+
+		// A pipe does not overrule anything that was named.
+		{"--code and a pipe", nil, "integer x;", "", true, ""},
+		{"two files and a pipe", []string{"a.lsl", "b.lsl"}, "", "", true, "At most 1 test file"},
+
+		// The trap this is really for: one file, one flag, and the
+		// flag came after it.  getopt stopped reading options at the
+		// file, so "--test" arrived as args[1] -- and the old message
+		// called it a second test file.
+		{"a flag after the file", []string{"b.lsl", "--test"}, "", "", false, "The flags go before the file"},
+		{"a short flag after the file", []string{"b.lsl", "-v"}, "", "", false, "The flags go before the file"},
+	} {
+		got := inputComplaint(c.args, c.code, c.stm, c.piped)
+		switch {
+		case c.want == "" && got != "":
+			t.Errorf("%s: refused with %q, want no complaint", c.what, got)
+		case c.want != "" && !strings.Contains(got, c.want):
+			t.Errorf("%s: complaint is %q, want one containing %q", c.what, got, c.want)
+		}
+	}
+
+	// The one that names the argument names the right one.
+	if got := inputComplaint([]string{"b.lsl", "--test", "1,2"}, "", "", false); !strings.Contains(got, `"--test"`) {
+		t.Errorf("the complaint does not quote the flag it found: %q", got)
+	}
+}
+
 // TestAStatementIsWrappedInAFunctionAroundIt: --statement is the shape
 // where the code under test is not a declaration, so it needs somewhere
 // to live -- and --params and --locals are how the names it mentions get

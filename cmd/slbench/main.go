@@ -23,6 +23,28 @@
 //     is what makes that true here; under slrund it was a promise the server
 //     made and the client had to check.
 //
+// # The code under test
+//
+// Three ways in, and they are the same input by different routes: --code
+// takes it on the command line, --statement takes one statement and wraps a
+// function around it, and a lone operand is a file to read it from.
+//
+//	slbench --code "integer gCNT;"
+//	slbench --statement "llSin(1.0);"
+//	slbench bench.lsl
+//	slbench < bench.lsl
+//	generate-it | slbench
+//
+// With none of the three, the code is read from standard input -- but only
+// when standard input is not a terminal.  A bare slbench at a prompt is
+// somebody who has not said what to measure, and a program that answered it
+// by waiting silently for typing would look like one that had hung.  A lone
+// "-" says standard input in so many words, and works at a terminal too.
+//
+// The flags go in front of the file.  Option parsing stops at the first
+// argument that is not a flag, and here that argument is the file, so
+// anything after it is read as a second file rather than as an option.
+//
 // Flags that are gone, and where they went:
 //
 //	--sim                the eLSL simulator, which lives in elsl
@@ -35,6 +57,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"os/signal"
@@ -45,6 +68,7 @@ import (
 
 	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
+	"golang.org/x/term"
 
 	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/scripttest"
@@ -189,6 +213,66 @@ func testModel(spec string) scripttest.Memory {
 		m.Limit = n[3]
 	}
 	return m
+}
+
+// inputComplaint says what is wrong with how the code under test was
+// named, or "" if nothing is.  The three ways in -- --code, --statement
+// and a file -- are one input by different routes, so naming two of them
+// is a line that means two things.
+//
+// It is a function rather than a switch inside main because every arm of
+// it ends in errf, and errf ends in os.Exit: a test that called main
+// could not survive being told it was wrong, so until this was lifted out
+// none of these sentences was ever read back by anything.
+// piped says whether standard input is something to read rather than a
+// terminal.  It is the fourth way in, and the only one nobody types: with
+// no --code, no --statement and no file, the code comes from there.  A
+// terminal is not one, because a bare slbench at a prompt has not said
+// what to measure, and answering that by waiting for typing is
+// indistinguishable from having hung.
+func inputComplaint(args []string, code, statement string, piped bool) string {
+	switch {
+	case len(args) > 1 && strings.HasPrefix(args[1], "-"):
+		// Option parsing stopped at the file, so what follows it was
+		// never read as a flag.  Telling somebody who gave one file and
+		// a flag that they gave two files describes a line they did not
+		// type.
+		return fmt.Sprintf("The flags go before the file: option parsing stops at the file, so %q was read as a second one", args[1])
+	case len(args) > 1:
+		return "At most 1 test file may be specified"
+	case len(args) < 1 && code == "" && statement == "" && !piped:
+		return "Either --code, --statement, a file or something on standard input must be specified"
+	case len(args) == 1 && code != "":
+		return "Only one of --code or a file may be specified"
+	case len(args) == 1 && statement != "":
+		return "Only one of --statement or a file may be specified"
+	case code != "" && statement != "":
+		return "Only one of --code or --statement may be specified"
+	}
+	return ""
+}
+
+// readCode reads the code under test: from the file named, or from
+// standard input when nothing names one or the name is "-".
+//
+// Empty is refused whichever route it came by.  An empty file measured
+// as though it were a benchmark, and printed the two numbers an empty
+// benchmark costs, which is a report of nothing that looks exactly like
+// a report of something; --code "" has always been refused, and these
+// are the same input by different routes.
+func readCode(args []string) string {
+	from, read := "standard input", func() ([]byte, error) { return io.ReadAll(os.Stdin) }
+	if len(args) == 1 && args[0] != "-" {
+		from, read = args[0], func() ([]byte, error) { return os.ReadFile(args[0]) }
+	}
+	data, err := read()
+	if err != nil {
+		errf("%v\n", err)
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		errf("%s held nothing to measure\n", from)
+	}
+	return string(data)
 }
 
 func errf(format string, v ...any) {
@@ -1132,6 +1216,12 @@ func main() {
 	}()
 	args := options.RegisterAndParse(&flags)
 
+	// The operand is the file to measure.  Without this the usage line
+	// offers "[parameters ...]", which names nothing this program takes
+	// and reads as a plural of --params, so the file -- one of the three
+	// ways to say what to measure -- appeared in no listing of them.
+	getopt.SetParameters("[FILE]")
+
 	// --help before anything is decided, so that asking what the flags
 	// are never rezzes a prim or dials anything.
 	//
@@ -1150,6 +1240,82 @@ func main() {
 	// lease has to carry both.  Set before anything is leased.
 	if flags.Extra > 0 {
 		searchesAtOnce = 2
+	}
+
+	// Everything that can refuse the line goes here, in front of the
+	// session and the lease.
+	//
+	// It used to come after them, so a line that could not run anyway
+	// dialled slgod, leased objects out of the avatar's pool and only
+	// then said what was wrong with it -- and a bare "slbench", which
+	// says nothing about what to measure, sat there doing all of that
+	// before complaining.  --help was moved up for this reason already;
+	// these are the same reason.  Nothing below this point is reached by
+	// a line that cannot be run.
+	// --probe asks whether scripts run at all, and measures nothing, so
+	// it is the one run with no code to be told about.
+	if !flags.Probe {
+		// Standard input is a source of code only when it is not a
+		// terminal.  See inputComplaint.
+		piped := !term.IsTerminal(int(os.Stdin.Fd()))
+		if c := inputComplaint(args, flags.Code, flags.Statement, piped); c != "" {
+			errf("%s\n", c)
+		}
+		switch {
+		case flags.Code == "" && flags.Statement == "":
+			flags.Code = readCode(args)
+		case flags.Statement != "":
+			flags.Code = flags.Statement
+		}
+	}
+	switch {
+	case flags.Extra < 0:
+		errf("--extra %d: a count of further copies cannot be negative\n", flags.Extra)
+	case flags.Parts < 2:
+		// One part is not a division, and nought is not a number of
+		// them.  Two is the bisection, which is allowed and is what
+		// partSearch declines to duplicate.  It is also the smallest
+		// lease there is: one object to measure in and one to probe in.
+		errf("--parts %d: a round divides the range into at least two\n", flags.Parts)
+	case flags.IPad != 0 && !expressiblePadding(flags.IPad):
+		errf("--ipad %d: not an expressible padding -- a negative pad emits nothing, so it would be measured at a padding other than the one named\n", flags.IPad)
+	}
+	var globals string
+	for _, g := range flags.Globals {
+		g, err := mkVar(g)
+		if err != nil {
+			errf("%v\n", err)
+		}
+		globals += g + ";\n"
+	}
+	flags.Code = strings.TrimSpace(flags.Code)
+	flags.Preamble = globals + strings.TrimSpace(flags.Preamble)
+	flags.Postamble = strings.TrimSpace(flags.Postamble)
+	if flags.Statement != "" {
+		flags.Preamble += "\n_("
+		for i, p := range flags.Params {
+			p, err := mkVar(p)
+			if err != nil {
+				errf("%v\n", err)
+			}
+			if strings.Contains(p, "=") {
+				errf("%s: parameters must not be initialized", p)
+			}
+			if i > 0 {
+				flags.Preamble += ", " + p
+			} else {
+				flags.Preamble += p
+			}
+		}
+		flags.Preamble += ") {\n"
+		for _, v := range flags.Locals {
+			v, err := mkVar(v)
+			if err != nil {
+				errf("%v\n", err)
+			}
+			flags.Preamble += v + ";\n"
+		}
+		flags.Postamble = "\n}\n" + flags.Postamble
 	}
 
 	// What this benchmark cost, in the unit the cost is paid in.  Deferred so
@@ -1246,76 +1412,6 @@ func main() {
 		}
 		return
 	}
-	switch {
-	case len(args) > 1:
-		errf("At most 1 test file may be specified\n")
-	case len(args) < 1 && flags.Code == "" && flags.Statement == "":
-		errf("Either --code, --statement or a file must be specified\n")
-	case len(args) == 1 && flags.Code != "":
-		errf("Only one of --code or a file may be specified\n")
-	case len(args) == 1 && flags.Statement != "":
-		errf("Only one of --statement or a file may be specified\n")
-	case flags.Code != "" && flags.Statement != "":
-		errf("Only one of --code or --statement may be specified\n")
-	case flags.Code == "" && flags.Statement == "":
-		data, err := os.ReadFile(args[0])
-		if err != nil {
-			errf("%v\n", err)
-		}
-		flags.Code = string(data)
-	case flags.Statement != "":
-		flags.Code = flags.Statement
-	}
-	switch {
-	case flags.Extra < 0:
-		errf("--extra %d: a count of further copies cannot be negative\n", flags.Extra)
-	case flags.Parts < 2:
-		// One part is not a division, and nought is not a number of
-		// them.  Two is the bisection, which is allowed and is what
-		// partSearch declines to duplicate.  It is also the smallest
-		// lease there is: one object to measure in and one to probe in.
-		errf("--parts %d: a round divides the range into at least two\n", flags.Parts)
-	case flags.IPad != 0 && !expressiblePadding(flags.IPad):
-		errf("--ipad %d: not an expressible padding -- a negative pad emits nothing, so it would be measured at a padding other than the one named\n", flags.IPad)
-	}
-	var globals string
-	for _, g := range flags.Globals {
-		g, err := mkVar(g)
-		if err != nil {
-			errf("%v\n", err)
-		}
-		globals += g + ";\n"
-	}
-	flags.Code = strings.TrimSpace(flags.Code)
-	flags.Preamble = globals + strings.TrimSpace(flags.Preamble)
-	flags.Postamble = strings.TrimSpace(flags.Postamble)
-	if flags.Statement != "" {
-		flags.Preamble += "\n_("
-		for i, p := range flags.Params {
-			p, err := mkVar(p)
-			if err != nil {
-				errf("%v\n", err)
-			}
-			if strings.Contains(p, "=") {
-				errf("%s: parameters must not be initialized", p)
-			}
-			if i > 0 {
-				flags.Preamble += ", " + p
-			} else {
-				flags.Preamble += p
-			}
-		}
-		flags.Preamble += ") {\n"
-		for _, v := range flags.Locals {
-			v, err := mkVar(v)
-			if err != nil {
-				errf("%v\n", err)
-			}
-			flags.Preamble += v + ";\n"
-		}
-		flags.Postamble = "\n}\n" + flags.Postamble
-	}
-
 	var r Results
 
 	size, basePad, pad, marginal, haveMarginal := oneMode(b, &r)
