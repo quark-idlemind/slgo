@@ -2150,9 +2150,9 @@ slsh: stopped; 43 lines were not run</span></pre>
           silently does nothing. A <code>#</code> is a comment only where a line
           begins with one: written after a value it becomes part of the value.
           Whether that stops the shell depends on the setting. The ones whose
-          value is checked — <code>escape</code> and the five
+          value is checked — <code>escape</code>, <code>log</code> and the five
           <code>map_*</code> — refuse it and say so. The ones that take their
-          value as text — <code>addr</code>, <code>agent</code> and the four
+          value as text — <code>addr</code>, <code>agent</code>, <code>log_dir</code> and the four
           <code>viewer_*</code> — take the comment with it, silently, and go
           looking for a profile or a daemon with a <code>#</code> in its name.
         </p>
@@ -2163,6 +2163,10 @@ slsh: stopped; 43 lines were not run</span></pre>
 addr    = HOST:PORT
 agent   = NAME
 escape  = ESC
+
+# the transcript: on by default, and where it goes
+log     = on
+log_dir = /a/directory   # empty is ~/.local/share/slgo
 
 # which viewer "viewer --launch" starts, and how
 viewer_app     = the application to run
@@ -2178,6 +2182,42 @@ viewer_running = how to tell whether one is running already</span></pre>
           setting rather than a constant because neither the viewer nor the way
           it is told where to go is guessable — a viewer that cannot be pointed
           at a private grid will silently use the main one instead.
+        </p>
+
+        <h3>The transcript</h3>
+        <p>
+          slsh keeps one, and it is on to begin with. What goes in it is what
+          you saw: every command you ran, everything each one printed,
+          everything you heard and everything you said. One file per avatar,
+          named after the avatar, in <code>$XDG_DATA_HOME/slgo</code> &mdash;
+          <code>~/.local/share/slgo</code> where that is not set.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="o">2026-08-26 15:56:29 $ where
+2026-08-26 15:56:29   Testville at 33, 70, 2001
+2026-08-26 15:56:33 * new conversation with Example Resident
+2026-08-26 15:56:33 &lt; [IM Example Resident] are you still at the build
+2026-08-26 15:56:41 &gt; [IM Example Resident] on my way</span></pre>
+        </div>
+
+        <p>
+          A command is written down before it runs, so one that hung is still
+          in the file that says what happened. Two things are deliberately
+          left out. Output you redirected &mdash; <code>ls &gt; listing</code>
+          &mdash; is output you did not see, so the command is recorded and
+          the listing is not; it is in the file you sent it to. A man page
+          read at a terminal goes through the pager rather than to the screen
+          a line at a time, and is not recorded either.
+        </p>
+
+        <p>
+          What no shell can record is what happened while none was running.
+          slgod stays logged in and goes on hearing whether or not you are
+          attached, but a transcript is what somebody saw, and with no shell
+          there is nobody to see it. <code>set log off</code> stops it
+          keeping one, and leaves the file where it is.
         </p>
       </section>
 

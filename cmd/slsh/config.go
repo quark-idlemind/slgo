@@ -70,6 +70,11 @@ type Config struct {
 	MapRatio        CellRatio
 	MapLevel        int
 	MapFriendColour string // a colour by name, never an escape sequence
+
+	// Log says whether to keep a transcript, and LogDir where.  Empty
+	// LogDir is the default place; see transcript.go.
+	Log    bool
+	LogDir string
 }
 
 // CellRatio is the shape of a character cell in whatever font somebody
@@ -124,6 +129,15 @@ func ParseCellRatio(s string) (CellRatio, error) {
 	return r, nil
 }
 
+// onOff is how a setting that is a yes or a no is printed, so that what
+// "set" shows is what "set" would take back.
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+
 // DefaultConfig is what an empty file leaves you with.
 //
 // Addr is deliberately empty rather than localhost: with nothing said
@@ -137,6 +151,7 @@ func DefaultConfig() Config {
 		MapRatio:        mapDefaultRatio,
 		MapLevel:        mapDefaultLevel,
 		MapFriendColour: mapDefaultFriendColour,
+		Log:             true,
 	}
 	c.ViewerApp, c.ViewerGrid, c.ViewerLaunch, c.ViewerRunning = viewerDefaults(runtime.GOOS)
 	return c
@@ -318,6 +333,26 @@ var settings = []setting{{
 		c.Prefix = r
 		return nil
 	},
+}, {
+	name:  "log",
+	about: "keep a transcript of what is heard, said and run: on or off",
+	show:  func(c *Config) string { return onOff(c.Log) },
+	parse: func(c *Config, v string) error {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "on", "yes", "true", "1":
+			c.Log = true
+		case "off", "no", "false", "0":
+			c.Log = false
+		default:
+			return fmt.Errorf("%q is not on or off", v)
+		}
+		return nil
+	},
+}, {
+	name:  "log_dir",
+	about: "where the transcript goes; empty is the default place",
+	show:  func(c *Config) string { return c.LogDir },
+	parse: func(c *Config, v string) error { c.LogDir = v; return nil },
 }, {
 	name:  "viewer_app",
 	about: "the viewer \"viewer --launch\" starts; the OpenSim build, not the other one",

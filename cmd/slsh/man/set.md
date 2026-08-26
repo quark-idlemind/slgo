@@ -88,6 +88,7 @@ nothing.
 down, so this page does not copy it.  They fall into three:
 
     addr, agent, escape             slsh itself
+    log, log_dir                    the transcript
     viewer_*                        what "viewer --launch" starts
     map_*                           how "map" draws its picture
 
@@ -96,6 +97,34 @@ is drawn to the shape of the font it is being read in: `map_ratio`
 is how tall a character cell is against how wide, height first, and
 `7:3` is a measurement of one font rather than a fact about all of
 them.  See `man map`, which says what each of the map's five does.
+
+## The transcript
+
+`log` is on to begin with, and what it keeps is what you saw: every
+command you ran, everything each one printed, everything heard and
+everything said.  One file per avatar, named after the avatar --
+`example-resident.log` -- in `$XDG_DATA_HOME/slgo`, or
+`~/.local/share/slgo` where that is not set.  `log_dir` puts it
+somewhere else; empty is the default place.
+
+    2026-08-26 15:56:29 $ where
+    2026-08-26 15:56:29   Testville at 33, 70, 2001
+    2026-08-26 15:56:33 < [IM Example Resident] are you still at the build
+    2026-08-26 15:56:41 > [IM Example Resident] on my way
+
+A command is written down before it runs, so a command that hung is
+in the file that says what happened.  `set log off` stops it, and
+leaves the file where it is.
+
+Two things are deliberately not in it.  Output that was redirected --
+`ls > listing` -- is a listing you did not see, so the command is
+recorded and the listing is not; it is in the file you sent it to. A
+man page read at a terminal goes through the pager rather than to the
+screen a line at a time, and is not recorded either.
+
+What no shell can record is what happened while none was running.
+slgod stays logged in and goes on hearing, but a transcript is what
+somebody saw, and there is nobody there to see it.
 
 ## Measuring the font
 

@@ -32,7 +32,26 @@ func TestMain(m *testing.M) {
 		harness()
 		return
 	}
-	os.Exit(m.Run())
+
+	// No test writes a transcript into whoever is running it.
+	//
+	// Logging is on by default, which means every shape of test shell
+	// built from DefaultConfig keeps one, and the default place for it
+	// is under the real home directory.  That is how this was found:
+	// one run of this package appended 274 lines of set_test's
+	// settings to the transcript of a live avatar.  A temporary
+	// XDG_DATA_HOME here covers every test in the package, including
+	// the ones nobody has written yet.
+	dir, err := os.MkdirTemp("", "slsh-test-data")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	os.Setenv("XDG_DATA_HOME", dir)
+
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 var (

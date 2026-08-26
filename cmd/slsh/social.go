@@ -213,7 +213,7 @@ func (sh *Shell) watch(ctx context.Context) {
 			if l.Source == sh.s.Me() {
 				continue // our own words, already shown when sent
 			}
-			sh.term.Printf("%s < [Local] %s: %s", stamp(), l.From, l.Text)
+			sh.printf("%s < [Local] %s: %s", stamp(), l.From, l.Text)
 		case m, ok := <-ims:
 			if !ok {
 				return
@@ -250,7 +250,7 @@ func (sh *Shell) heard(m *sl.IM) {
 		if made {
 			sh.noticef("new conversation with %s", name)
 		}
-		sh.term.Printf("%s < [IM %s] %s", stamp(), c.Label(), m.Text)
+		sh.printf("%s < [IM %s] %s", stamp(), c.Label(), m.Text)
 	case m.Dialog == sl.DialogFriendshipOffered:
 		sh.noticef("%s offers friendship -- accept %s, or decline %s",
 			name, firstWord(name), firstWord(name))
@@ -284,14 +284,14 @@ func (sh *Shell) send(ctx context.Context, text string) {
 			sh.errorf("%v", err)
 			return
 		}
-		sh.term.Printf("%s > [Local] %s", stamp(), text)
+		sh.printf("%s > [Local] %s", stamp(), text)
 		return
 	}
 	if err := sh.s.SendIM(ctx, c.Target, text); err != nil {
 		sh.errorf("%v", err)
 		return
 	}
-	sh.term.Printf("%s > [IM %s] %s", stamp(), c.Label(), text)
+	sh.printf("%s > [IM %s] %s", stamp(), c.Label(), text)
 }
 
 // ---------------------------------------------------------------- commands
@@ -338,7 +338,7 @@ func cmdSay(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if channel != 0 {
 		where = fmt.Sprintf("channel %d", channel)
 	}
-	sh.term.Printf("%s > [%s] %s", stamp(), where, text)
+	sh.printf("%s > [%s] %s", stamp(), where, text)
 	return nil
 }
 
@@ -368,7 +368,7 @@ func cmdIM(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	if made {
 		sh.noticef("new conversation with %s", name)
 	}
-	sh.term.Printf("%s > [IM %s] %s", stamp(), c.Label(), text)
+	sh.printf("%s > [IM %s] %s", stamp(), c.Label(), text)
 	return nil
 }
 

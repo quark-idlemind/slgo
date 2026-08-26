@@ -43,6 +43,13 @@ type Shell struct {
 	term *Term
 	s    *sl.Session
 
+	// log is the transcript, or nil when there is none: nothing is
+	// kept when "log" is off, and a transcript that could not be
+	// opened is a shell that carries on without one.  logErr is what
+	// stopped it, said once in the banner rather than at every line.
+	log    *transcript
+	logErr error
+
 	mu   sync.Mutex
 	mode int
 	held string // the command line put aside while chatting
@@ -104,7 +111,32 @@ func NewShell(cfg Config, t *Term, s *sl.Session) *Shell {
 	if cfg.Chat {
 		sh.mode = modeChat
 	}
+	if cfg.Log {
+		// The avatar's name is what the file is called, so this waits
+		// until there is a session to ask.  A failure here is not a
+		// reason to refuse to start a shell: the session is up and
+		// working, and losing the transcript is worth saying and
+		// carrying on from.
+		sh.log, sh.logErr = openTranscript(cfg.LogDir, s.Info().AvatarName, cfg.Agent)
+	}
 	return sh
+}
+
+// Close gives up whatever the shell holds that the process does not.
+// Safe more than once.
+func (sh *Shell) Close() error { return sh.log.Close() }
+
+// printf writes a line above the prompt and into the transcript.
+//
+// Everything a person sees that is not a command's own output comes
+// through here -- what was heard, what was said, every notice and every
+// error -- which is what makes one funnel enough to keep a transcript
+// with.  A command's output goes to its writer instead, because that
+// writer may be a file the command was redirected into.
+func (sh *Shell) printf(format string, args ...any) {
+	line := fmt.Sprintf(format, args...)
+	sh.term.Print(line)
+	sh.log.line(line)
 }
 
 // Run reads until the input runs out or something says to stop.
@@ -208,7 +240,9 @@ func (sh *Shell) enter(ctx context.Context) {
 		// was typed is the answer, and a person needs to see it to
 		// know whether to type a full stop yet.
 		sh.term.Echo()
-		sh.typed(ctx, sh.term.Take())
+		answer := sh.term.Take()
+		sh.log.line("| " + answer)
+		sh.typed(ctx, answer)
 		return
 	}
 	if sh.chatting() {
@@ -405,6 +439,13 @@ func (sh *Shell) Do(ctx context.Context, line string) error {
 		return nil
 	}
 
+	// Every command run goes through here -- one typed at the prompt,
+	// one given to -c, and every line of a file being sourced -- which
+	// is why the transcript takes it here and not at the keyboard.
+	// Written before it runs, so that a command that hung or took the
+	// shell down with it is still in the file that says what happened.
+	sh.log.line("$ " + line)
+
 	words, redirect, appending, err := parse(line)
 	if err != nil {
 		sh.errorf("%v", err)
@@ -525,8 +566,14 @@ func remaining(sc *bufio.Scanner) int {
 // ---------------------------------------------------------------- output
 
 // stdout is where a command prints when it is not redirected: above the
-// prompt, a line at a time.
-func (sh *Shell) stdout() io.Writer { return &termWriter{t: sh.term} }
+// prompt, a line at a time, and into the transcript.
+//
+// A redirection hands the command an *os.File instead, and that is the
+// whole of why nothing redirected is logged: the transcript is what
+// somebody saw, and "ls > listing" is a listing they did not see.  The
+// same rule keeps man pages out of it, since a page on a terminal goes
+// through the pager rather than through here.
+func (sh *Shell) stdout() io.Writer { return &termWriter{t: sh.term, log: sh.log} }
 
 // colour reports whether a command writing to out may put escape
 // sequences in what it writes.
@@ -561,6 +608,7 @@ func (sh *Shell) colour(out io.Writer) bool {
 // termWriter turns writes into whole lines above the prompt.
 type termWriter struct {
 	t   *Term
+	log *transcript
 	buf []byte
 }
 
@@ -571,24 +619,32 @@ func (w *termWriter) Write(p []byte) (int, error) {
 		if i < 0 {
 			break
 		}
-		w.t.Print(string(w.buf[:i]))
+		w.say(string(w.buf[:i]))
 		w.buf = w.buf[i+1:]
 	}
 	// A write with no newline is held until one arrives; anything
 	// left over is flushed when the command ends.
 	if len(w.buf) > 0 {
-		w.t.Print(string(w.buf))
+		w.say(string(w.buf))
 		w.buf = nil
 	}
 	return len(p), nil
 }
 
+// say puts one line on the screen and the same line in the transcript.
+// Indented there, so that a command's output can be told from the
+// command, from what was heard and from what was said.
+func (w *termWriter) say(line string) {
+	w.t.Print(line)
+	w.log.line("  " + stripANSI(line))
+}
+
 func (sh *Shell) errorf(format string, args ...any) {
-	sh.term.Printf("slsh: "+format, args...)
+	sh.printf("slsh: "+format, args...)
 }
 
 func (sh *Shell) noticef(format string, args ...any) {
-	sh.term.Printf("%s * %s", stamp(), fmt.Sprintf(format, args...))
+	sh.printf("%s * %s", stamp(), fmt.Sprintf(format, args...))
 }
 
 func stamp() string { return time.Now().Format("15:04:05") }
@@ -603,8 +659,11 @@ func (sh *Shell) banner() {
 	if sh.cfg.Direct {
 		how = "logged in directly -- quitting logs out"
 	}
-	sh.term.Printf("slsh: %s in %s, %s", info.AvatarName, where, how)
-	sh.term.Printf("      help for commands, chat to talk, %s to come back", KeyName(sh.cfg.Prefix))
+	sh.printf("slsh: %s in %s, %s", info.AvatarName, where, how)
+	sh.printf("      help for commands, chat to talk, %s to come back", KeyName(sh.cfg.Prefix))
+	if sh.logErr != nil {
+		sh.printf("slsh: no transcript: %v", sh.logErr)
+	}
 }
 
 // ---------------------------------------------------------------- parsing

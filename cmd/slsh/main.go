@@ -147,6 +147,7 @@ func run() error {
 	defer t.Close()
 
 	sh := NewShell(cfg, t, s)
+	defer sh.Close()
 
 	// One command, a file of them, or arguments left on the command
 	// line: run and leave, which is what makes slsh usable from a
