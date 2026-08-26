@@ -575,38 +575,46 @@ func TestAFileIsOneOfTheThreeWaysIn(t *testing.T) {
 // in os.Exit, so they are read back here rather than through main.
 func TestNamingTheCodeUnderTestTwiceIsRefused(t *testing.T) {
 	for _, c := range []struct {
-		what      string
-		args      []string
-		code, stm string
-		piped     bool
-		want      string
+		what           string
+		args           []string
+		code, stm, sts string
+		piped          bool
+		want           string
 	}{
-		{"a file alone", []string{"b.lsl"}, "", "", false, ""},
-		{"--code alone", nil, "integer x;", "", false, ""},
-		{"--statement alone", nil, "", "x = 1;", false, ""},
-		{"two files", []string{"a.lsl", "b.lsl"}, "", "", false, "At most 1 test file"},
-		{"a file and --code", []string{"b.lsl"}, "integer x;", "", false, "Only one of --code or a file"},
-		{"a file and --statement", []string{"b.lsl"}, "", "x = 1;", false, "Only one of --statement or a file"},
-		{"--code and --statement", nil, "integer x;", "x = 1;", false, "Only one of --code or --statement"},
+		{"a file alone", []string{"b.lsl"}, "", "", "", false, ""},
+		{"--code alone", nil, "integer x;", "", "", false, ""},
+		{"--statement alone", nil, "", "x = 1;", "", false, ""},
+		{"two files", []string{"a.lsl", "b.lsl"}, "", "", "", false, "At most 1 test file"},
+		{"a file and --code", []string{"b.lsl"}, "integer x;", "", "", false, "Only one of --code or a file"},
+		{"a file and --statement", []string{"b.lsl"}, "", "x = 1;", "", false, "Only one of --statement or a file"},
+		{"--code and --statement", nil, "integer x;", "x = 1;", "", false, "Only one of --code or --statement"},
 
 		// Nothing named, at a terminal: there is nothing to measure
 		// and nothing to wait for.  Nothing named, with something
 		// piped in: that is the input.
-		{"nothing at all, at a terminal", nil, "", "", false, "must be specified"},
-		{"nothing at all, with a pipe", nil, "", "", true, ""},
+		{"nothing at all, at a terminal", nil, "", "", "", false, "must be specified"},
+		{"nothing at all, with a pipe", nil, "", "", "", true, ""},
 
 		// A pipe does not overrule anything that was named.
-		{"--code and a pipe", nil, "integer x;", "", true, ""},
-		{"two files and a pipe", []string{"a.lsl", "b.lsl"}, "", "", true, "At most 1 test file"},
+		{"--code and a pipe", nil, "integer x;", "", "", true, ""},
+		{"two files and a pipe", []string{"a.lsl", "b.lsl"}, "", "", "", true, "At most 1 test file"},
 
 		// The trap this is really for: one file, one flag, and the
 		// flag came after it.  getopt stopped reading options at the
 		// file, so "--test" arrived as args[1] -- and the old message
 		// called it a second test file.
-		{"a flag after the file", []string{"b.lsl", "--test"}, "", "", false, "The flags go before the file"},
-		{"a short flag after the file", []string{"b.lsl", "-v"}, "", "", false, "The flags go before the file"},
+		// --states fills a slot of its own -- after the default state
+		// -- so it is something to measure on its own, and it does not
+		// clash with the slot the other three fill.
+		{"--states alone", nil, "", "", "state sCNT {}", false, ""},
+		{"--states and a file", []string{"b.lsl"}, "", "", "state sCNT {}", false, ""},
+		{"--states and --code", nil, "integer x;", "", "state sCNT {}", false, ""},
+		{"--states and --statement", nil, "", "x = 1;", "state sCNT {}", false, ""},
+
+		{"a flag after the file", []string{"b.lsl", "--test"}, "", "", "", false, "The flags go before the file"},
+		{"a short flag after the file", []string{"b.lsl", "-v"}, "", "", "", false, "The flags go before the file"},
 	} {
-		got := inputComplaint(c.args, c.code, c.stm, c.piped)
+		got := inputComplaint(c.args, c.code, c.stm, c.sts, c.piped)
 		switch {
 		case c.want == "" && got != "":
 			t.Errorf("%s: refused with %q, want no complaint", c.what, got)
@@ -616,8 +624,98 @@ func TestNamingTheCodeUnderTestTwiceIsRefused(t *testing.T) {
 	}
 
 	// The one that names the argument names the right one.
-	if got := inputComplaint([]string{"b.lsl", "--test", "1,2"}, "", "", false); !strings.Contains(got, `"--test"`) {
+	if got := inputComplaint([]string{"b.lsl", "--test", "1,2"}, "", "", "", false); !strings.Contains(got, `"--test"`) {
 		t.Errorf("the complaint does not quote the flag it found: %q", got)
+	}
+}
+
+// TestStatesGoAfterTheDefaultState: --states is the slot that makes an
+// event or a state measurable at all.  LSL wants the other states after
+// the one the script starts in, and two states of one name will not
+// compile, so each copy is stamped with CNT the way the code above the
+// harness is.
+func TestStatesGoAfterTheDefaultState(t *testing.T) {
+	defer func(was string) { flags.States = was }(flags.States)
+	flags.States = "state sCNT { state_entry() { } }"
+
+	// The base script carries none.  A benchmark is the difference
+	// between this script and the ones with copies in it, so anything
+	// that appeared in both would be measured as costing nothing and
+	// anything that appeared per copy in this one would be measured
+	// twice.
+	if base := buildScript(0, 474); strings.Contains(base, "state s") {
+		t.Errorf("the base script carries a state:\n%s", base)
+	}
+
+	src := buildScript(3, 474)
+	for _, want := range []string{"state s000 {", "state s001 {", "state s002 {"} {
+		if !strings.Contains(src, want) {
+			t.Errorf("the script is missing %q:\n%s", want, src)
+		}
+	}
+	if strings.Contains(src, "sCNT") {
+		t.Errorf("a copy kept the CNT rather than a number:\n%s", src)
+	}
+	// After the default state, not inside it and not before it.
+	def, first := strings.Index(src, "default {"), strings.Index(src, "state s000 {")
+	if def < 0 || first < 0 || first < def {
+		t.Errorf("the states are not after the default state (default at %d, first at %d):\n%s", def, first, src)
+	}
+	if closed := strings.LastIndex(src[:first], "}"); closed < 0 {
+		t.Errorf("the default state was not closed before the first state:\n%s", src)
+	}
+}
+
+// TestNoStatesLeavesTheScriptExactlyAsItWas: the empty case has to add
+// nothing at all, not even the blank line a loop would leave per copy.
+// A difference between the base script and the test scripts that is not
+// the code under test is the one fault this function cannot have.
+func TestNoStatesLeavesTheScriptExactlyAsItWas(t *testing.T) {
+	defer func(was string) { flags.States = was }(flags.States)
+	flags.States = ""
+	with := buildScript(4, 474)
+	flags.States = ""
+	if again := buildScript(4, 474); with != again {
+		t.Error("two builds with no states differed")
+	}
+	if strings.HasSuffix(with, "\n\n") {
+		t.Errorf("an empty --states left a blank line behind:\n%q", with[len(with)-40:])
+	}
+}
+
+// TestAFlagTakingLSLTakesAPathToIt: there is one operand and three slots
+// that take LSL, so a slot that is not the operand's could otherwise only
+// be filled from the command line.
+//
+// The rule is the prefix and nothing else -- "/", "./" or "../" -- because
+// the alternative offered was the absence of a semicolon, and
+// "state sCNT { state_entry() { } }" has none.  That is the shape
+// --states exists to measure, so the semicolon rule would have read the
+// flag's own reason for existing as a filename.
+func TestAFlagTakingLSLTakesAPathToIt(t *testing.T) {
+	for _, c := range []struct {
+		s    string
+		path bool
+	}{
+		{"/tmp/bench.lsl", true},
+		{"./bench.lsl", true},
+		{"../bench.lsl", true},
+
+		{"integer gCNT;", false},
+		{"state sCNT { state_entry() { } }", false},
+		{"llSin(1.0);", false},
+		{"bench.lsl", false}, // a bare name is not enough; it could be LSL
+		{"", false},
+
+		// "//" opens a comment.  It is the one thing that begins with
+		// a slash and is not a path, and it is why the rule is not
+		// simply "starts with a slash".
+		{"// what this measures\ninteger gCNT;", false},
+		{"//", false},
+	} {
+		if got := looksLikePath(c.s); got != c.path {
+			t.Errorf("looksLikePath(%q) = %v, want %v", c.s, got, c.path)
+		}
 	}
 }
 

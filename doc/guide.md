@@ -626,6 +626,38 @@ at a prompt is somebody who has not said what to measure, and answering
 that by waiting silently for typing would look like a program that had
 hung.  What it does instead is say so, at once, without logging in.
 
+`--states` is the other slot.  What it takes goes *after* the default
+state, which is where LSL puts every state but the one a script starts
+in, and it is how the cost of a state or of an event is measured:
+
+    slbench --states "state sCNT { state_entry() { } }"
+
+Two runs are what an event costs, since an event has to live in a
+state and cannot be asked about on its own:
+
+    $ slbench --states "state sCNT { state_entry() { } }"
+    First Copy: 52
+    Additional Copies: 47
+
+    $ slbench --states "state sCNT { state_entry() { } touch_start(integer n) { } }"
+    First Copy: 112
+    Additional Copies: 100
+
+So a `touch_start(integer n)` costs 53 bytes, which is the difference
+between the two.  Measured on Second Life, 2026-08-25.
+
+`CNT` in either slot becomes the copy number.  That is what makes it
+possible to ask for a hundred of something that has to be named -- two
+states called `s` will not compile, `state s000` and `state s001` will.
+
+Each of `--code`, `--statement` and `--states` takes the name of a file
+holding the LSL instead of the LSL itself, written as a path: `/x.lsl`,
+`./x.lsl` or `../x.lsl`.  It is the prefix that decides and nothing
+else, because there is no reading of what LSL looks like that is safe:
+`state sCNT { state_entry() { } }` has no semicolon in it, and it is
+exactly the shape `--states` is for.  The one thing beginning with a
+slash that is not a path is `//`, which opens a comment.
+
 The flags go in front of the file -- option parsing stops at the first
 argument that is not a flag, and here that argument is the file, so
 `slbench bench.lsl -v` is a line with a file and no `-v`.
@@ -833,6 +865,7 @@ Second Life, and it will not say so about a model.
 |---|---|
 | `--code CODE` | the code to measure, repeated |
 | `--statement CODE` | statements to measure, wrapped in a function |
+| `--states CODE` | states to measure, placed after the default state |
 | `--globals`, `--params`, `--locals` | declare variables (see above) |
 | `--preamble`, `--postamble` | text around the copies |
 | `--extra N` | further copies to measure, for `Additional Copies` (default 8; `0` for none). A multiple of 4 is advice and not enforced -- only a negative is refused |

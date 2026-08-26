@@ -25,21 +25,33 @@
 //
 // # The code under test
 //
-// Three ways in, and they are the same input by different routes: --code
-// takes it on the command line, --statement takes one statement and wraps a
-// function around it, and a lone operand is a file to read it from.
+// Two slots in the generated script.  Above the harness go the declarations
+// and functions -- --code takes them, --statement takes a single statement
+// and wraps a function around it, and a lone operand or standard input is a
+// file of them.  After the harness go states, which --states takes, because
+// that is where LSL puts every state but the one a script starts in.
 //
 //	slbench --code "integer gCNT;"
 //	slbench --statement "llSin(1.0);"
 //	slbench bench.lsl
 //	slbench < bench.lsl
 //	generate-it | slbench
+//	slbench --states "state sCNT { state_entry() { } }"
 //
-// With none of the three, the code is read from standard input -- but only
-// when standard input is not a terminal.  A bare slbench at a prompt is
-// somebody who has not said what to measure, and a program that answered it
-// by waiting silently for typing would look like one that had hung.  A lone
-// "-" says standard input in so many words, and works at a terminal too.
+// CNT in either slot becomes the copy number, which is what makes cnt copies
+// of a thing that has to be named: two states called s will not compile.
+//
+// With nothing naming the first slot the code is read from standard input --
+// but only when standard input is not a terminal.  A bare slbench at a
+// prompt is somebody who has not said what to measure, and a program that
+// answered it by waiting silently for typing would look like one that had
+// hung.  A lone "-" says standard input in so many words, and works at a
+// terminal too.
+//
+// --code, --statement and --states each take the name of a file holding
+// the LSL instead of the LSL, spelt as a path: "/x.lsl", "./x.lsl" or
+// "../x.lsl".  See lslOrPath for why it is the prefix that decides and not
+// anything about what LSL looks like.
 //
 // The flags go in front of the file.  Option parsing stops at the first
 // argument that is not a flag, and here that argument is the file, so
@@ -79,6 +91,7 @@ var flags = struct {
 	Postamble string          `getopt:"--postamble=POSTAMBLE Make STR the test's postamble"`
 	Code      string          `getopt:"--code=CODE code to test"`
 	Statement string          `getopt:"--statement=CODE statement(s) to test"`
+	States    string          `getopt:"--states=CODE states to place after the default state"`
 	Addr      string          `getopt:"--addr=HOST:PORT the slgod to attach to; default sl-host, or this machine"`
 	Agent     string          `getopt:"--agent=NAME -a the profile to use; the only one, by default"`
 	Direct    bool            `getopt:"--direct -d log in to Second Life directly, without slgod"`
@@ -230,7 +243,7 @@ func testModel(spec string) scripttest.Memory {
 // terminal is not one, because a bare slbench at a prompt has not said
 // what to measure, and answering that by waiting for typing is
 // indistinguishable from having hung.
-func inputComplaint(args []string, code, statement string, piped bool) string {
+func inputComplaint(args []string, code, statement, states string, piped bool) string {
 	switch {
 	case len(args) > 1 && strings.HasPrefix(args[1], "-"):
 		// Option parsing stopped at the file, so what follows it was
@@ -240,8 +253,8 @@ func inputComplaint(args []string, code, statement string, piped bool) string {
 		return fmt.Sprintf("The flags go before the file: option parsing stops at the file, so %q was read as a second one", args[1])
 	case len(args) > 1:
 		return "At most 1 test file may be specified"
-	case len(args) < 1 && code == "" && statement == "" && !piped:
-		return "Either --code, --statement, a file or something on standard input must be specified"
+	case len(args) < 1 && code == "" && statement == "" && states == "" && !piped:
+		return "Either --code, --statement, --states, a file or something on standard input must be specified"
 	case len(args) == 1 && code != "":
 		return "Only one of --code or a file may be specified"
 	case len(args) == 1 && statement != "":
@@ -250,6 +263,45 @@ func inputComplaint(args []string, code, statement string, piped bool) string {
 		return "Only one of --code or --statement may be specified"
 	}
 	return ""
+}
+
+// lslOrPath answers with the LSL in s, or with the contents of the file
+// s names.
+//
+// --code, --statement and --states each take LSL on the command line,
+// and each of them is a thing somebody keeps in a file: there is one
+// operand and there are three slots, so without this the only slot that
+// could be read from a file is whichever one the operand fills.
+//
+// A value beginning "/", "./" or "../" is a path, and nothing else is.
+// No LSL begins with any of those -- with the one exception that decides
+// the rule: "//" opens a comment, so "// what this measures" is code and
+// not a file at the root of the disk.  Testing for the absence of a
+// semicolon instead would have read "state sCNT { state_entry() { } }"
+// as a filename, and that is the shape --states exists to measure.
+func lslOrPath(what, s string) string {
+	if !looksLikePath(s) {
+		return s
+	}
+	data, err := os.ReadFile(s)
+	if err != nil {
+		errf("%s: %v\n", what, err)
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		errf("%s: %s held nothing to measure\n", what, s)
+	}
+	return string(data)
+}
+
+// looksLikePath is the whole of the rule.  See lslOrPath.
+func looksLikePath(s string) bool {
+	switch {
+	case strings.HasPrefix(s, "//"):
+		return false
+	case strings.HasPrefix(s, "/"), strings.HasPrefix(s, "./"), strings.HasPrefix(s, "../"):
+		return true
+	}
+	return false
 }
 
 // readCode reads the code under test: from the file named, or from
@@ -1258,14 +1310,23 @@ func main() {
 		// Standard input is a source of code only when it is not a
 		// terminal.  See inputComplaint.
 		piped := !term.IsTerminal(int(os.Stdin.Fd()))
-		if c := inputComplaint(args, flags.Code, flags.Statement, piped); c != "" {
+		if c := inputComplaint(args, flags.Code, flags.Statement, flags.States, piped); c != "" {
 			errf("%s\n", c)
 		}
+		// A flag that takes LSL takes the name of a file holding it.
+		flags.Code = lslOrPath("--code", flags.Code)
+		flags.Statement = lslOrPath("--statement", flags.Statement)
+		flags.States = lslOrPath("--states", flags.States)
 		switch {
-		case flags.Code == "" && flags.Statement == "":
-			flags.Code = readCode(args)
 		case flags.Statement != "":
 			flags.Code = flags.Statement
+		case len(args) == 1:
+			flags.Code = readCode(args)
+		case flags.Code == "" && flags.States == "" && piped:
+			// Standard input is read only when nothing else says what
+			// to measure.  A --states run with a pipe left open behind
+			// it has said what to measure already.
+			flags.Code = readCode(nil)
 		}
 	}
 	switch {
@@ -1633,6 +1694,21 @@ func buildScript(cnt, pad int) string {
 	}
 
 	fmt.Fprintf(&buf, code, cnt, pad, pb.String())
+
+	// The states go after the default state, which is where LSL wants
+	// them: default is the state a script starts in, and the rest
+	// follow it.  A copy each, CNT substituted as it is in the code
+	// above, because two states of one name will not compile -- so
+	// "state sCNT" is how a benchmark asks for cnt of them.
+	//
+	// Nothing at all when there are none.  A blank line per copy would
+	// be a difference between the base script and the test scripts,
+	// which is the one thing this function may not have.
+	if flags.States != "" {
+		for i := 0; i < cnt; i++ {
+			fmt.Fprintf(&buf, "\n%s\n", strings.Replace(flags.States, "CNT", fmt.Sprintf("%03d", i), -1))
+		}
+	}
 	return buf.String()
 }
 
@@ -1759,11 +1835,14 @@ func absorbResults(results []string, r *Results) (mem int, ok bool) {
 // them is anything standing in for Second Life -- see scripttest's
 // Harness -- and anybody looking at --show.
 //
-// Printed with four positional parameters:
+// Printed with three positional parameters:
 //  1. the copy count
 //  2. the padding
-//  3. statement to print title (if any)
-//  4. instructions to pad the code size
+//  3. the filler that pads the code size
+//
+// It said four until this was read against the call: there was a title
+// to print once, and the parameter for it went without the sentence
+// describing it going too.
 var code = `
 // slbench cnt=%d pad=%d
 default {
