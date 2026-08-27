@@ -518,7 +518,7 @@ func TestTheSharedObjectIsTakenAndSaidToHaveBeen(t *testing.T) {
 	reset(t)
 	f, addr := newFakeDaemon(t)
 	f.says = []string{"hello from the shared object"}
-	commandLine(t, "--addr", addr, script(t, "default {}"))
+	commandLine(t, "--addr", addr, "-v", script(t, "default {}"))
 
 	var err error
 	out, errOut := bothOf(t, func() { err = run() })
@@ -534,6 +534,29 @@ func TestTheSharedObjectIsTakenAndSaidToHaveBeen(t *testing.T) {
 	}
 	if f.ran != 1 {
 		t.Errorf("%d scripts ran", f.ran)
+	}
+}
+
+// TestWhichAvatarIsAnAsideAndWaitsToBeAsked: a plain run is a script and
+// what it printed.  Whose objects it borrowed changes nothing about
+// that, and said on every run it arrives in the middle of the output.
+func TestWhichAvatarIsAnAsideAndWaitsToBeAsked(t *testing.T) {
+	reset(t)
+	f, addr := newFakeDaemon(t)
+	f.says = []string{"hello from the shared object"}
+	commandLine(t, "--addr", addr, script(t, "default {}"))
+
+	var err error
+	out, errOut := bothOf(t, func() { err = run() })
+
+	if err != nil {
+		t.Fatalf("run = %v", err)
+	}
+	if !strings.Contains(out, "hello from the shared object") {
+		t.Errorf("what the script said was lost:\n%s", out)
+	}
+	if strings.Contains(errOut, "running as") {
+		t.Errorf("a run nobody asked to say more said which avatar anyway:\n%s", errOut)
 	}
 }
 

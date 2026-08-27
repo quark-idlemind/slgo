@@ -19,6 +19,11 @@
 // named, which is what a set of scripts that leave things in the object
 // for one another needs.
 //
+// What is printed is what the scripts said and nothing else.  Which
+// avatar's objects they ran in is an aside about how the run was
+// arranged rather than anything a script printed, so -v asks for it and
+// a plain run does not carry it; --agent naming one makes it moot.
+//
 // Second Life is not the only thing that runs LSL, and none of what
 // slrun does is particular to it -- put a script somewhere, watch what
 // it says, find out whether it compiled and whether it got to the end.
@@ -63,22 +68,23 @@ import (
 )
 
 var flags = struct {
-	Addr    string        `getopt:"--addr=HOST:PORT  the slgod to attach to; default sl-host, or this machine"`
-	Agent   string        `getopt:"--agent=NAME -a   the profile to use; the only one, by default"`
-	Direct  bool          `getopt:"--direct -d       log in to Second Life directly, without slgod"`
-	First   string        `getopt:"--first=NAME      the avatar's first name, for --direct"`
-	Last    string        `getopt:"--last=NAME       the avatar's last name, for --direct"`
-	Start   string        `getopt:"--start=WHERE     where to arrive: last, home, or a region, for --direct"`
-	Object  string        `getopt:"--object=NAME     run in an object of this name, instead of the shared one"`
-	Backend string        `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life"`
-	Rez     bool          `getopt:"--rez             rez a throwaway prim instead of using the shared auto object"`
-	Script  string        `getopt:"--script=NAME     what to call the script inside the object"`
-	Jobs    int           `getopt:"--jobs=N -j       how many scripts to run at once, one per object; 4 by default, 1 runs them in order"`
-	Clear   bool          `getopt:"--clear          empty every script out of the objects before running, for when something else is talking in them"`
-	Done    string        `getopt:"--done=TEXT       the text that means the script has finished"`
-	Timeout time.Duration `getopt:"--timeout=DUR     how long to wait for it"`
-	Keep    bool          `getopt:"--keep            leave the rezzed object behind"`
-	Help    bool          `getopt:"--help -h         show this message"`
+	Addr    string          `getopt:"--addr=HOST:PORT  the slgod to attach to; default sl-host, or this machine"`
+	Agent   string          `getopt:"--agent=NAME -a   the profile to use; the only one, by default"`
+	Direct  bool            `getopt:"--direct -d       log in to Second Life directly, without slgod"`
+	First   string          `getopt:"--first=NAME      the avatar's first name, for --direct"`
+	Last    string          `getopt:"--last=NAME       the avatar's last name, for --direct"`
+	Start   string          `getopt:"--start=WHERE     where to arrive: last, home, or a region, for --direct"`
+	Object  string          `getopt:"--object=NAME     run in an object of this name, instead of the shared one"`
+	Backend string          `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life"`
+	Rez     bool            `getopt:"--rez             rez a throwaway prim instead of using the shared auto object"`
+	Script  string          `getopt:"--script=NAME     what to call the script inside the object"`
+	Jobs    int             `getopt:"--jobs=N -j       how many scripts to run at once, one per object; 4 by default, 1 runs them in order"`
+	Clear   bool            `getopt:"--clear          empty every script out of the objects before running, for when something else is talking in them"`
+	Done    string          `getopt:"--done=TEXT       the text that means the script has finished"`
+	Timeout time.Duration   `getopt:"--timeout=DUR     how long to wait for it"`
+	Keep    bool            `getopt:"--keep            leave the rezzed object behind"`
+	V       options.Counter `getopt:"-v                say more: which avatars the objects came from"`
+	Help    bool            `getopt:"--help -h         show this message"`
 }{
 	Script:  "slrun",
 	Done:    "DONE",
@@ -572,7 +578,15 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 			places = append(places, place{a.Session, obj, a.Dirty[i]})
 		}
 	}
-	if o.Agent == "" {
+	// Which avatar, when nobody said and somebody asked.
+	//
+	// It was unconditional, and the ordinary run of slrun is a script
+	// and its output: a line about whose objects it borrowed arrives in
+	// the middle of that, on every run, saying something that changes
+	// nothing about what the script printed.  -v is where the asides
+	// live.  It stays off when --agent named one, because then the
+	// answer is on the command line already.
+	if o.Agent == "" && flags.V >= 1 {
 		fmt.Fprintf(os.Stderr, "running as %s\n", whose(as))
 	}
 

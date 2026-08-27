@@ -217,16 +217,19 @@ session itself goes away -- adding an avatar never moves it, and neither
 does a reconnect -- so a script that worked yesterday drives the same
 avatar today.
 
-Whenever `slrun` does not name one, it says which it used:
+When `slrun` does not name one, `-v` says which it used:
 
-    $ slrun a.lsl b.lsl
-    running as example, objects 0, 1, 2, 3
+    $ slrun -v a.lsl b.lsl
+    running as example
 
-Worth reading. With several avatars hosted the choice is the daemon's,
-and output attributed to the wrong avatar is not an error -- it is a
-plausible one. `slbench` says the same thing at `-vv` rather than always,
-because its answer turned out not to depend on which avatar gave it the
-objects, and because its objects usually come from more than one.
+Worth asking for. With several avatars hosted the choice is the
+daemon's, and output attributed to the wrong avatar is not an error --
+it is a plausible one. It waits to be asked because the ordinary run of
+`slrun` is a script and what it printed, and a line about whose objects
+were borrowed arrives in the middle of that saying nothing about what
+the script said. `slbench` says the same thing at `-vv`, because its
+answer turned out not to depend on which avatar gave it the objects,
+and because its objects usually come from more than one.
 
 ### What state each avatar is in
 
@@ -432,10 +435,11 @@ took **6.9 seconds** measured, against about 35 one at a time.
 
 The ceiling is not one avatar. If `slgod` is holding three, a run that
 wants more objects than any one of them has free takes them from
-whichever have them -- and says so, because "running as qi" and
+whichever have them -- and `-v` says so, because "running as qi" and
 "running as qi (8) and example (4)" are different facts about where the
 output came from:
 
+    $ slrun -v a.lsl b.lsl
     running as qi (8) and example (4)
 
 Two avatars may be standing in different regions, so a script that cares
@@ -597,6 +601,7 @@ compiled, ran and finished.
 | `--script NAME` | what to call the script inside the object (default `slrun`, which is the name a fault is reported under) |
 | `--jobs N`, `-j N` | how many scripts to run at once, one per object; four by default, `1` runs them in the order they were named |
 | `--clear` | empty every script out of the objects before running |
+| `-v` | say which avatars the objects came from, when `--agent` did not |
 | `--agent NAME`, `-a` | which avatar; the daemon's default otherwise |
 | `--addr HOST:PORT` | the `slgod` to attach to; `sl-host`, or this machine |
 | `--direct`, `-d` | log in to Second Life directly, without `slgod` |
