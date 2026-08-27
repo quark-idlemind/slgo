@@ -165,12 +165,12 @@ func (r *remote) lease(n int) error {
 		for _, t := range g.GetTargets() {
 			r.targets = append(r.targets, t.GetId())
 		}
-		// Which avatar, when nobody said and somebody asked.  The grid
-		// path says the same thing under the same two conditions: with
+		// Which avatar, when nobody said and somebody asked twice.  The
+		// grid path says the same thing under the same conditions: with
 		// several hosted the choice is the far side's and the reader
 		// cannot work it out, and it is still an aside about how the
 		// run was arranged rather than anything a script said.
-		if flags.Agent == "" && g.GetAgent() != "" && flags.V >= 1 {
+		if flags.Agent == "" && g.GetAgent() != "" && flags.V >= 2 {
 			fmt.Fprintf(os.Stderr, "running as %s\n", g.GetAgent())
 		}
 		r.shut = append(r.shut, cancel)

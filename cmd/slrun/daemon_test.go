@@ -518,7 +518,7 @@ func TestTheSharedObjectIsTakenAndSaidToHaveBeen(t *testing.T) {
 	reset(t)
 	f, addr := newFakeDaemon(t)
 	f.says = []string{"hello from the shared object"}
-	commandLine(t, "--addr", addr, "-v", script(t, "default {}"))
+	commandLine(t, "--addr", addr, "-vv", script(t, "default {}"))
 
 	var err error
 	out, errOut := bothOf(t, func() { err = run() })
@@ -537,14 +537,16 @@ func TestTheSharedObjectIsTakenAndSaidToHaveBeen(t *testing.T) {
 	}
 }
 
-// TestWhichAvatarIsAnAsideAndWaitsToBeAsked: a plain run is a script and
-// what it printed.  Whose objects it borrowed changes nothing about
-// that, and said on every run it arrives in the middle of the output.
-func TestWhichAvatarIsAnAsideAndWaitsToBeAsked(t *testing.T) {
+// TestOneScriptSaysWhatItSaidAndNothingElse: the plain run, which is
+// the one almost every run is.  No name in front of the line, because
+// there is nothing to tell it apart from, and nothing about which
+// avatar lent the object.
+func TestOneScriptSaysWhatItSaidAndNothingElse(t *testing.T) {
 	reset(t)
 	f, addr := newFakeDaemon(t)
 	f.says = []string{"hello from the shared object"}
-	commandLine(t, "--addr", addr, script(t, "default {}"))
+	path := script(t, "default {}")
+	commandLine(t, "--addr", addr, path)
 
 	var err error
 	out, errOut := bothOf(t, func() { err = run() })
@@ -552,11 +554,36 @@ func TestWhichAvatarIsAnAsideAndWaitsToBeAsked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run = %v", err)
 	}
-	if !strings.Contains(out, "hello from the shared object") {
-		t.Errorf("what the script said was lost:\n%s", out)
+	if got := strings.TrimRight(out, "\n"); got != "hello from the shared object" {
+		t.Errorf("a lone script printed %q, want the line and nothing else", got)
 	}
 	if strings.Contains(errOut, "running as") {
 		t.Errorf("a run nobody asked to say more said which avatar anyway:\n%s", errOut)
+	}
+}
+
+// TestTheFirstVAsksForTheNameAndNotForTheAvatar: the two levels are
+// about different things -- the name is for reading the output, and
+// which avatar is for how the run was arranged -- so one does not drag
+// the other in with it.
+func TestTheFirstVAsksForTheNameAndNotForTheAvatar(t *testing.T) {
+	reset(t)
+	f, addr := newFakeDaemon(t)
+	f.says = []string{"hello from the shared object"}
+	path := script(t, "default {}")
+	commandLine(t, "--addr", addr, "-v", path)
+
+	var err error
+	out, errOut := bothOf(t, func() { err = run() })
+
+	if err != nil {
+		t.Fatalf("run = %v", err)
+	}
+	if !strings.Contains(out, filepath.Base(path)+":") {
+		t.Errorf("-v did not put the script name in front of the line:\n%s", out)
+	}
+	if strings.Contains(errOut, "running as") {
+		t.Errorf("one -v brought the avatar in as well:\n%s", errOut)
 	}
 }
 

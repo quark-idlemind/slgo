@@ -19,10 +19,16 @@
 // named, which is what a set of scripts that leave things in the object
 // for one another needs.
 //
-// What is printed is what the scripts said and nothing else.  Which
-// avatar's objects they ran in is an aside about how the run was
-// arranged rather than anything a script printed, so -v asks for it and
-// a plain run does not carry it; --agent naming one makes it moot.
+// What is printed is what the scripts said and nothing else.
+//
+// With several running at once each line carries the name of the script
+// that said it, since they arrive interleaved.  One script needs no such
+// name and does not get one; -v asks for it anyway, which is worth
+// having when the output is being kept.
+//
+// Which avatar's objects they ran in is an aside about how the run was
+// arranged rather than anything a script printed, so it is the second
+// thing -v buys; --agent naming one makes it moot.
 //
 // Second Life is not the only thing that runs LSL, and none of what
 // slrun does is particular to it -- put a script somewhere, watch what
@@ -83,7 +89,7 @@ var flags = struct {
 	Done    string          `getopt:"--done=TEXT       the text that means the script has finished"`
 	Timeout time.Duration   `getopt:"--timeout=DUR     how long to wait for it"`
 	Keep    bool            `getopt:"--keep            leave the rezzed object behind"`
-	V       options.Counter `getopt:"-v                say more: which avatars the objects came from"`
+	V       options.Counter `getopt:"-v                say more: once for the script name in front of every line, twice for which avatars the objects came from"`
 	Help    bool            `getopt:"--help -h         show this message"`
 }{
 	Script:  "slrun",
@@ -139,6 +145,14 @@ func run() error {
 	// so the names are lined up: with several running at once the tags
 	// are a column the eye follows down the page rather than a word at
 	// the start of each line.
+	//
+	// One script is the exception, because there is nothing to tell it
+	// apart from.  The name is then the same word on the front of every
+	// line of the only output there is, which is the shape of thing a
+	// person reads past rather than reads.  -v asks for it anyway --
+	// worth having when the output is being kept, or pasted somewhere
+	// that will not say where it came from.
+	untagged = len(srcs) == 1 && flags.V < 1
 	tagWidth = 0
 	for _, src := range srcs {
 		if w := len(src.path) + 2; w > tagWidth {
@@ -229,6 +243,7 @@ func runAll(srcs []source, places int, run func(place int, path, src string) boo
 // it takes to write them.
 var (
 	tagWidth int
+	untagged bool
 	saying   sync.Mutex
 )
 
@@ -242,6 +257,9 @@ func say(format string, args ...any) {
 // It pads to whatever the widest name on the command line was, and to
 // its own width when nobody has said -- one script needs no column.
 func tag(path string) string {
+	if untagged {
+		return ""
+	}
 	w := tagWidth
 	if least := len(path) + 2; w < least {
 		w = least
@@ -578,15 +596,17 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 			places = append(places, place{a.Session, obj, a.Dirty[i]})
 		}
 	}
-	// Which avatar, when nobody said and somebody asked.
+	// Which avatar, when nobody said and somebody asked twice.
 	//
 	// It was unconditional, and the ordinary run of slrun is a script
 	// and its output: a line about whose objects it borrowed arrives in
 	// the middle of that, on every run, saying something that changes
-	// nothing about what the script printed.  -v is where the asides
-	// live.  It stays off when --agent named one, because then the
-	// answer is on the command line already.
-	if o.Agent == "" && flags.V >= 1 {
+	// nothing about what the script printed.  It is the second thing
+	// -v buys rather than the first, because the name in front of the
+	// lines is about reading the output and this is about how the run
+	// was arranged.  It stays off when --agent named one, because then
+	// the answer is on the command line already.
+	if o.Agent == "" && flags.V >= 2 {
 		fmt.Fprintf(os.Stderr, "running as %s\n", whose(as))
 	}
 

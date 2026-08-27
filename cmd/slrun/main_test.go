@@ -39,11 +39,11 @@ var flagDefaults = flags
 func reset(t *testing.T) {
 	t.Helper()
 	flags = flagDefaults
-	tagWidth = 0
+	tagWidth, untagged = 0, false
 	getopt.CommandLine = getopt.New()
 	t.Cleanup(func() {
 		flags = flagDefaults
-		tagWidth = 0
+		tagWidth, untagged = 0, false
 		getopt.CommandLine = getopt.New()
 	})
 }

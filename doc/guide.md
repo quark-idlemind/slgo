@@ -217,9 +217,9 @@ session itself goes away -- adding an avatar never moves it, and neither
 does a reconnect -- so a script that worked yesterday drives the same
 avatar today.
 
-When `slrun` does not name one, `-v` says which it used:
+When `slrun` does not name one, `-vv` says which it used:
 
-    $ slrun -v a.lsl b.lsl
+    $ slrun -vv a.lsl b.lsl
     running as example
 
 Worth asking for. With several avatars hosted the choice is the
@@ -353,11 +353,27 @@ Runs LSL scripts in Second Life and prints what they say.
     slrun --object "bench box" script.lsl
 
 Each file is compiled by Second Life and run, and each line the script
-says is printed as it arrives, prefixed with the file it came from:
+says is printed as it arrives:
 
     $ slrun hello.lsl
-    hello.lsl: hello from slrun
-    hello.lsl: two plus two is 4
+    hello from slrun
+    two plus two is 4
+
+With several scripts the lines are prefixed with the file each came
+from, because they arrive interleaved and there is otherwise no telling
+which said what:
+
+    $ slrun hello.lsl goodbye.lsl
+    hello.lsl:   hello from slrun
+    hello.lsl:   two plus two is 4
+    goodbye.lsl: goodbye from slrun
+
+They finish in whatever order they finish in, so that is one run rather
+than the order to expect.
+
+One script needs no such prefix and does not get one -- the same word in
+front of every line of the only output there is. `-v` asks for it
+anyway, which is worth having when the output is being kept.
 
 ### Say DONE when you are finished
 
@@ -435,11 +451,11 @@ took **6.9 seconds** measured, against about 35 one at a time.
 
 The ceiling is not one avatar. If `slgod` is holding three, a run that
 wants more objects than any one of them has free takes them from
-whichever have them -- and `-v` says so, because "running as qi" and
+whichever have them -- and `-vv` says so, because "running as qi" and
 "running as qi (8) and example (4)" are different facts about where the
 output came from:
 
-    $ slrun -v a.lsl b.lsl
+    $ slrun -vv a.lsl b.lsl
     running as qi (8) and example (4)
 
 Two avatars may be standing in different regions, so a script that cares
@@ -567,9 +583,9 @@ merely slow.
 
 Each is reported and each makes the run fail:
 
-    script.lsl: (3, 4) : ERROR : Syntax error          would not compile
-    script.lsl: slrun: Math Error                   crashed while running
-    script.lsl: it did not say DONE within 1m0s        never finished
+    (3, 4) : ERROR : Syntax error        would not compile
+    slrun: Math Error                    crashed while running
+    it did not say DONE within 1m0s      never finished
 
 The compiler's line and column **count from zero** -- measured, a bad
 token on the fifth line of a script reports line 4 -- but `sl` sends
@@ -601,7 +617,8 @@ compiled, ran and finished.
 | `--script NAME` | what to call the script inside the object (default `slrun`, which is the name a fault is reported under) |
 | `--jobs N`, `-j N` | how many scripts to run at once, one per object; four by default, `1` runs them in the order they were named |
 | `--clear` | empty every script out of the objects before running |
-| `-v` | say which avatars the objects came from, when `--agent` did not |
+| `-v` | put the script name in front of every line, even with one script |
+| `-vv` | and say which avatars the objects came from, when `--agent` did not |
 | `--agent NAME`, `-a` | which avatar; the daemon's default otherwise |
 | `--addr HOST:PORT` | the `slgod` to attach to; `sl-host`, or this machine |
 | `--direct`, `-d` | log in to Second Life directly, without `slgod` |
