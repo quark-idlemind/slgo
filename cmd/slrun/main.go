@@ -68,6 +68,8 @@ import (
 
 	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/sl"
@@ -107,6 +109,11 @@ type source struct{ path, text string }
 // line by line and needs no second telling.
 var errScript = errors.New("a script failed")
 
+// errInterrupted means somebody pressed ^C.  It is a failed run: what
+// the scripts had said by then is on the screen and what they would have
+// said is not, so a caller that reads the output has half of one.
+var errInterrupted = errors.New("interrupted")
+
 func main() {
 	err := run()
 	if err != nil && !errors.Is(err, errScript) {
@@ -138,8 +145,29 @@ func run() error {
 		srcs = append(srcs, source{path, string(data)})
 	}
 
+	// ^C stops the run.
+	//
+	// NotifyContext was already here and nothing ever looked at what it
+	// produced, which is worse than not having it: installing a handler
+	// takes away the default, so ^C went from killing slrun to doing
+	// nothing whatsoever.  Watched happening -- a script sleeping sixty
+	// seconds, an interrupt, and slrun carried on to the end of it.
+	//
+	// What it does now is stop handing out scripts and cancel the ones
+	// in flight, and then the deferred cleanup gives the objects back.
+	// The cleanup does not run on this context: session.RunIn builds a
+	// fresh one to delete a rezzed prim with, saying "the run's may well
+	// be why we are here", which is exactly this.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go func() {
+		<-ctx.Done()
+		// The default goes back the moment the first one arrives, so a
+		// second ^C kills outright.  Giving the objects back is a round
+		// trip to the grid and can hang, and somebody pressing ^C twice
+		// has said what they want to happen.
+		stop()
+	}()
 
 	// Every line is printed with the script it came from in front of it,
 	// so the names are lined up: with several running at once the tags
@@ -171,7 +199,14 @@ func run() error {
 	}
 	defer done()
 
-	failed := !runAll(srcs, places, run1)
+	failed := !runAll(ctx, srcs, places, run1)
+
+	// An interrupt is a failed run whatever the scripts managed first,
+	// and it is worth telling apart from a script that failed on its
+	// own: nothing is wrong with the scripts.
+	if ctx.Err() != nil {
+		return errInterrupted
+	}
 	// A failed script is a failed run.  The original always exited 0,
 	// which left a caller no way to tell without scraping stdout.
 	// Returning rather than exiting here is what lets the deferred
@@ -196,7 +231,7 @@ func run() error {
 //
 // The exit status does not depend on the order at all: it is whether
 // every script got to the end.
-func runAll(srcs []source, places int, run func(place int, path, src string) bool) bool {
+func runAll(ctx context.Context, srcs []source, places int, run func(place int, path, src string) bool) bool {
 	if places > len(srcs) {
 		places = len(srcs)
 	}
@@ -220,8 +255,17 @@ func runAll(srcs []source, places int, run func(place int, path, src string) boo
 			}
 		}(p)
 	}
+	// Handing out stops when the run does.  The scripts already in
+	// flight are cut short by the same context, since run closes over
+	// it; the ones that were never started say nothing at all, which is
+	// what somebody who pressed ^C asked for.
+feeding:
 	for i := range srcs {
-		next <- i
+		select {
+		case next <- i:
+		case <-ctx.Done():
+			break feeding
+		}
 	}
 	close(next)
 	wg.Wait()
@@ -451,7 +495,9 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 		},
 	})
 	if err != nil {
-		say("%s%v\n", tag(path), err)
+		if !quiet(err) {
+			say("%s%v\n", tag(path), err)
+		}
 		return false
 	}
 	var fault string
@@ -484,6 +530,28 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 		}
 	}
 	return verdict(path, res.Compiled, res.Errors, fault, res.Finished)
+}
+
+// quiet reports whether an error is the run being stopped rather than
+// anything about the script.
+//
+// ^C reaches every script at once, and each of them ends by saying
+// "context canceled" under its own name -- including the ones that had
+// not started, which say it having done nothing at all.  Six scripts
+// interrupted printed six lines of it and no line saying what had
+// happened.  main says "interrupted", once, and this is what keeps the
+// six quiet.
+// Cancellation only.  A deadline that ran out is somebody's timeout
+// expiring and is news; this is the run being stopped on purpose.
+//
+// Two shapes, because a run reaches the grid through gRPC and a
+// cancelled call comes back as a status rather than as the context's own
+// error: "rpc error: code = Canceled desc = context canceled" does not
+// satisfy errors.Is against context.Canceled.  Found by the test, which
+// is the reason it drives a real interrupt through a daemon rather than
+// cancelling a context and assuming the rest.
+func quiet(err error) bool {
+	return errors.Is(err, context.Canceled) || status.Code(err) == codes.Canceled
 }
 
 // verdict prints what a run came to and says whether the script got to

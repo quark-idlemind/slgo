@@ -207,7 +207,9 @@ func (r *remote) once(ctx context.Context, place int, path, src string) bool {
 		Done: flags.Done, TimeoutSeconds: seconds(flags.Timeout),
 	})
 	if err != nil {
-		say("%s%v\n", tag(path), err)
+		if !quiet(err) {
+			say("%s%v\n", tag(path), err)
+		}
 		return false
 	}
 
@@ -223,7 +225,9 @@ func (r *remote) once(ctx context.Context, place int, path, src string) bool {
 			break
 		}
 		if err != nil {
-			say("%s%v\n", tag(path), err)
+			if !quiet(err) {
+				say("%s%v\n", tag(path), err)
+			}
 			return false
 		}
 		switch {

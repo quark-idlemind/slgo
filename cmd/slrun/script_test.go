@@ -349,7 +349,7 @@ func TestScriptsThroughABackendRunAtOnceAndInDifferentObjects(t *testing.T) {
 
 	start := time.Now()
 	var ok bool
-	got := stdoutOf(t, func() { ok = runAll(srcs, places, run1) })
+	got := stdoutOf(t, func() { ok = runAll(context.Background(), srcs, places, run1) })
 	took := time.Since(start)
 
 	if !ok {

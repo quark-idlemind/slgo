@@ -17,10 +17,15 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -476,7 +481,7 @@ func TestEveryPlaceRunsAScriptAndEveryScriptRunsOnce(t *testing.T) {
 		}
 	}()
 
-	ok := runAll(srcs, 4, func(place int, path, src string) bool {
+	ok := runAll(context.Background(), srcs, 4, func(place int, path, src string) bool {
 		r.start(place, path)
 		defer r.end()
 		started <- struct{}{}
@@ -515,7 +520,7 @@ func TestAPlaceTakesTheNextScriptRatherThanItsShare(t *testing.T) {
 	var r runs
 	slow := make(chan struct{})
 
-	ok := runAll(srcs, 2, func(place int, path, src string) bool {
+	ok := runAll(context.Background(), srcs, 2, func(place int, path, src string) bool {
 		r.start(place, path)
 		defer r.end()
 		if path == "a.lsl" {
@@ -563,7 +568,7 @@ func TestOneAtATimeIsTheOrderTheyWereNamed(t *testing.T) {
 	srcs := sources(4)
 	var r runs
 
-	runAll(srcs, 1, func(place int, path, src string) bool {
+	runAll(context.Background(), srcs, 1, func(place int, path, src string) bool {
 		r.start(place, path)
 		defer r.end()
 		return true
@@ -586,7 +591,7 @@ func TestMorePlacesThanScriptsUsesOnlyThePlacesItNeeds(t *testing.T) {
 	srcs := sources(2)
 	var r runs
 
-	runAll(srcs, 4, func(place int, path, src string) bool {
+	runAll(context.Background(), srcs, 4, func(place int, path, src string) bool {
 		if place >= len(srcs) {
 			t.Errorf("a script ran in place %d, which was never granted", place)
 		}
@@ -609,7 +614,7 @@ func TestAFailedScriptFailsTheRunAndDoesNotStopTheOthers(t *testing.T) {
 	srcs := sources(6)
 	var r runs
 
-	ok := runAll(srcs, 3, func(place int, path, src string) bool {
+	ok := runAll(context.Background(), srcs, 3, func(place int, path, src string) bool {
 		r.start(place, path)
 		defer r.end()
 		return path != "c.lsl"
@@ -619,6 +624,54 @@ func TestAFailedScriptFailsTheRunAndDoesNotStopTheOthers(t *testing.T) {
 	}
 	if len(r.order) != len(srcs) {
 		t.Errorf("%d scripts ran; a failure stopped the rest", len(r.order))
+	}
+}
+
+// TestNothingIsStartedAfterTheRunIsStopped: ^C reaches the scripts in
+// flight through the context they were given.  The ones that had not
+// started must not be started at all -- before this they each ran, each
+// failed at once with the cancellation, and each said so under its own
+// name.
+func TestNothingIsStartedAfterTheRunIsStopped(t *testing.T) {
+	reset(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	srcs := []source{{"a.lsl", "a"}, {"b.lsl", "b"}, {"c.lsl", "c"}}
+	var started int32
+	ok := runAll(ctx, srcs, 2, func(place int, path, src string) bool {
+		atomic.AddInt32(&started, 1)
+		return true
+	})
+	if n := atomic.LoadInt32(&started); n != 0 {
+		t.Errorf("%d scripts were started after the run was stopped", n)
+	}
+	if ok {
+		t.Error("a run that was stopped reported that everything got to the end")
+	}
+}
+
+// TestOnlyCancellationIsKeptQuiet: the interrupt is reported once, by
+// main, so the per-script line saying the same thing is suppressed --
+// and nothing else is.  A timeout in particular is news.
+func TestOnlyCancellationIsKeptQuiet(t *testing.T) {
+	for _, c := range []struct {
+		what  string
+		err   error
+		quiet bool
+	}{
+		{"the context's own", context.Canceled, true},
+		{"wrapped in something", fmt.Errorf("running a.lsl: %w", context.Canceled), true},
+		{"a cancelled rpc", status.Error(codes.Canceled, "context canceled"), true},
+
+		{"a deadline", context.DeadlineExceeded, false},
+		{"an rpc that timed out", status.Error(codes.DeadlineExceeded, "too slow"), false},
+		{"anything else", errors.New("the object is gone"), false},
+		{"nothing at all", nil, false},
+	} {
+		if got := quiet(c.err); got != c.quiet {
+			t.Errorf("quiet(%s) = %v, want %v", c.what, got, c.quiet)
+		}
 	}
 }
 

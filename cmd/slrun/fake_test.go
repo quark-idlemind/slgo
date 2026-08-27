@@ -85,6 +85,11 @@ type fakeGrid struct {
 
 	sendErr error
 
+	// onRun is called as a script is uploaded, which is the moment a run
+	// is certainly in flight.  It is how a test raises a signal at a
+	// point where the program is listening for one.
+	onRun func()
+
 	// ran counts the scripts started, and sources keeps what was sent, so
 	// that a test can assert on the source as well as on the answer.
 	ran     int
@@ -172,6 +177,12 @@ func (f *fakeGrid) serveUpload(t *testing.T) {
 			b.WriteString(`</array></map></llsd>`)
 			io.WriteString(w, b.String())
 			return
+		}
+		f.mu.Lock()
+		hook := f.onRun
+		f.mu.Unlock()
+		if hook != nil {
+			hook()
 		}
 		// After the verdict, not before: a script says what it has to say
 		// the instant it is started, and the run is listening by now.
