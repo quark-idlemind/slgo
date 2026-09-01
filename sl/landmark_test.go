@@ -529,3 +529,222 @@ func TestGoToThatCouldNotBeSentIsNotATeleport(t *testing.T) {
 		t.Errorf("GoTo = %v, want the send's own failure", err)
 	}
 }
+
+// Home is set with a different message from the one that goes there,
+// and the two are checked apart.  The alerts below are Agni's own words
+// on 2026-09-01, kept as they arrived: they are the whole of what the
+// grid says about a home that moved or did not, so a test written
+// against anything else would be testing a sentence this package made
+// up.
+const (
+	agniHomeSet     = "Home position set."
+	agniHomeRefused = "You can only set your 'Home Location' on your land " +
+		"or at a mainland Infohub."
+)
+
+// TestSetHomeSendsWhereTheAvatarIsStanding: the region is not in the
+// message -- the simulator that receives it is the region -- so the
+// position had better be this session's own, and the location id had
+// better be home rather than the number beside it, which is "last".
+func TestSetHomeSendsWhereTheAvatarIsStanding(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.Position = msg.Vector3{X: 26, Y: 66, Z: 24}
+	f.presence.LookAt = msg.Vector3{X: 0, Y: 1}
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.SetStartLocationRequest); ok {
+			f.Relay(t, alert(agniHomeSet))
+		}
+	}
+	f.mu.Unlock()
+
+	at, said, err := w.SetHome(context.Background(), 5*time.Second)
+	if err != nil {
+		t.Fatalf("SetHome: %v", err)
+	}
+	if at == nil || at.Position != (msg.Vector3{X: 26, Y: 66, Z: 24}) {
+		t.Errorf("SetHome answered with %v, want the position it sent", at)
+	}
+	if said != agniHomeSet {
+		t.Errorf("SetHome said %q, and the grid said %q", said, agniHomeSet)
+	}
+
+	m := onlySent[*msg.SetStartLocationRequest](t, f)
+	if m.StartLocationData.LocationID != StartLocationHome {
+		t.Errorf("location id = %d, want %d; 0 is the LAST location and is not home",
+			m.StartLocationData.LocationID, StartLocationHome)
+	}
+	if want := (msg.Vector3{X: 26, Y: 66, Z: 24}); m.StartLocationData.LocationPos != want {
+		t.Errorf("position = %v, want where the avatar is standing, %v",
+			m.StartLocationData.LocationPos, want)
+	}
+	if want := (msg.Vector3{X: 0, Y: 1}); m.StartLocationData.LocationLookAt != want {
+		t.Errorf("look at = %v, want the way the avatar is already facing, %v",
+			m.StartLocationData.LocationLookAt, want)
+	}
+	if len(m.StartLocationData.SimName) != 0 {
+		t.Errorf("the region was named as %q; the field is the simulator's to fill in",
+			m.StartLocationData.SimName)
+	}
+	if m.AgentData.AgentID != testAgentID || m.AgentData.SessionID != testSessionID {
+		t.Error("the request did not carry this session's ids")
+	}
+}
+
+// TestSetHomeFacesSomewhereWhenTheSessionKnowsOfNoDirection: the field
+// is not optional and a zero vector is not a direction, which is the
+// rule the teleports keep.
+func TestSetHomeFacesSomewhereWhenTheSessionKnowsOfNoDirection(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.LookAt = msg.Vector3{}
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.SetStartLocationRequest); ok {
+			f.Relay(t, alert(agniHomeSet))
+		}
+	}
+	f.mu.Unlock()
+
+	if _, _, err := w.SetHome(context.Background(), 5*time.Second); err != nil {
+		t.Fatalf("SetHome: %v", err)
+	}
+	if got := onlySent[*msg.SetStartLocationRequest](t, f); got.StartLocationData.LocationLookAt ==
+		(msg.Vector3{}) {
+		t.Error("the request faces nowhere at all")
+	}
+}
+
+// TestSetHomeReportsARefusalAsOne: home may be set on land the account
+// controls and at a mainland infohub, and the grid's refusal is a
+// sentence rather than a code -- so the sentence has to survive.
+func TestSetHomeReportsARefusalAsOne(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.SetStartLocationRequest); ok {
+			f.Relay(t, alert(agniHomeRefused))
+		}
+	}
+	f.mu.Unlock()
+
+	at, said, err := w.SetHome(context.Background(), 5*time.Second)
+	if !errors.Is(err, ErrHomeRefused) {
+		t.Fatalf("SetHome = %v, want a refusal", err)
+	}
+	if !strings.Contains(err.Error(), "mainland Infohub") {
+		t.Errorf("the refusal %q does not carry what the grid said", err)
+	}
+	if said != agniHomeRefused {
+		t.Errorf("SetHome said %q beside its error, want the grid's own sentence", said)
+	}
+	// The place is answered with even when the grid said no: a refusal
+	// that named no position would leave a caller unable to say which
+	// parcel refused.
+	if at == nil {
+		t.Error("a refusal came back with no idea where it was refused")
+	}
+}
+
+// TestSetHomeIsNotAnsweredByAnAlertFromBeforeIt: an alert heard before
+// the request is an answer to something else, and reading one as this
+// request's answer would report a home that moved when nothing was
+// sent yet.
+func TestSetHomeIsNotAnsweredByAnAlertFromBeforeIt(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.Relay(t, alert(agniHomeSet))
+	f.mu.Lock()
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.SetStartLocationRequest); ok {
+			f.Relay(t, alert(agniHomeRefused))
+		}
+	}
+	f.mu.Unlock()
+
+	if _, _, err := w.SetHome(context.Background(), 5*time.Second); !errors.Is(err, ErrHomeRefused) {
+		t.Fatalf("SetHome = %v, want the refusal that came after it was asked", err)
+	}
+}
+
+// TestSetHomeCallsSilenceSilence: nothing else says whether home moved
+// -- there is no field for it and reading it back is a teleport -- so a
+// simulator that says nothing is neither of the two answers and must
+// not be reported as either.
+func TestSetHomeCallsSilenceSilence(t *testing.T) {
+	t.Parallel()
+	w, _ := newFakeSession(t)
+
+	_, said, err := w.SetHome(context.Background(), 300*time.Millisecond)
+	if !errors.Is(err, ErrTimeout) {
+		t.Fatalf("SetHome = %v, want a timeout", err)
+	}
+	if said != "" {
+		t.Errorf("SetHome said %q, and the grid said nothing", said)
+	}
+	if errors.Is(err, ErrHomeRefused) {
+		t.Error("silence was reported as a refusal")
+	}
+}
+
+// TestSetHomeThatCouldNotBeSentIsNotARefusal: a circuit that has gone
+// is not a grid that said no, and the error has to be the send's.
+func TestSetHomeThatCouldNotBeSentIsNotARefusal(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.FailSends(errors.New("the circuit is closed"))
+
+	_, _, err := w.SetHome(context.Background(), 5*time.Second)
+	if err == nil {
+		t.Fatal("SetHome reported a home that was never asked for")
+	}
+	if errors.Is(err, ErrHomeRefused) || errors.Is(err, ErrTimeout) {
+		t.Errorf("a send that failed was reported as the grid's answer: %v", err)
+	}
+}
+
+// TestGoHomeSaysWhatCouldNotGoCloserMeans: home is where an avatar is
+// left rather than somewhere it passes through, so going home while
+// standing at home is the commonest refusal this ever gets -- and the
+// grid's own words describe its arithmetic and not the reason.
+func TestGoHomeSaysWhatCouldNotGoCloserMeans(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.RegionHandle = 1099511628032
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.TeleportLandmarkRequest); ok {
+			f.RelayEvent(t, "TeleportFailed", agniCouldNotGoCloser)
+		}
+	}
+	f.mu.Unlock()
+
+	err := w.GoHome(context.Background(), 5*time.Second)
+	if !errors.Is(err, ErrTeleportRefused) {
+		t.Fatalf("GoHome = %v, want a refusal", err)
+	}
+	if !strings.Contains(err.Error(), "already standing there") {
+		t.Errorf("the refusal %q does not say what CouldntTPCloser usually means", err)
+	}
+}
+
+// TestSetHomeWillNotSetHomeToAPositionItWasNeverTold: a session that
+// has not been told where the avatar is reads as <0, 0, 0>, which is
+// the corner of the region and a real place to arrive at -- so a home
+// set there would look exactly like a home set on purpose.
+func TestSetHomeWillNotSetHomeToAPositionItWasNeverTold(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.Position = msg.Vector3{}
+	f.mu.Unlock()
+
+	if _, _, err := w.SetHome(context.Background(), 5*time.Second); err == nil {
+		t.Fatal("home was set to the corner of the region")
+	}
+	if got := sentOf[*msg.SetStartLocationRequest](f); len(got) != 0 {
+		t.Errorf("the request went out anyway: %s", f.describe())
+	}
+}

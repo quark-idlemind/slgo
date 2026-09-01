@@ -8,15 +8,19 @@ package main
 // to be written down outside the program and typed back in.  A landmark
 // is the grid's own answer to that -- an ordinary inventory item -- and
 // this is the command that lists them, reads them, makes them and goes
-// to them.
+// to them.  Home is here too, both halves of it: going there, and
+// choosing where it is.
 //
-// The three things it can do to the world are one message each, and
-// they are sl's: Session.Landmark fetches the asset and parses it,
-// Session.MakeLandmark is a create with two type numbers on it, and
-// Session.GoTo is TeleportLandmarkRequest.  What is here is the part
-// that has to happen in a shell: turning a name somebody typed into
-// exactly one item, and printing what came back without pretending to
-// know more than the asset holds.
+// The four things it can do to the world are one message each, and they
+// are sl's: Session.Landmark fetches the asset and parses it,
+// Session.MakeLandmark is a create with two type numbers on it,
+// Session.GoTo is TeleportLandmarkRequest, and Session.SetHome is
+// SetStartLocationRequest -- which is not a landmark at all and is here
+// because home is, and because splitting the two halves of home across
+// two commands is how somebody comes to look for one of them under the
+// other.  What is here is the part that has to happen in a shell:
+// turning a name somebody typed into exactly one item, and printing
+// what came back without pretending to know more than the asset holds.
 //
 // The measurements behind all of it are in doc/history/landmark.md,
 // taken on Agni on 2026-08-18.
@@ -26,10 +30,16 @@ package main
 // If going somewhere were the bare form, then reading a landmark and
 // being somewhere else afterwards would be one typo apart -- so it is
 // not the bare form: "landmark NAME" says where it goes and
-// "landmark --go NAME" goes there.  For the same reason none of the three verbs has a short
+// "landmark --go NAME" goes there.  For the same reason none of the four verbs has a short
 // letter.  -g beside -m is exactly the typo that the whole word is
 // there to prevent, and the only cost of spelling it out is four
 // characters on a line that moves an avatar across the grid.
+//
+// --set-home is the sharp end of the same argument.  It is the one verb
+// whose damage a teleport does not undo -- an avatar sent to the wrong
+// place walks back, and an account whose home was quietly rewritten
+// finds out weeks later, somewhere it did not mean to log in -- so it
+// carries the word "set", it has no letter, and it takes no name.
 //
 // # Why a name means something in inventory and nothing else
 //
@@ -65,17 +75,24 @@ import (
 
 // landmarkOptions is what landmark was asked for.
 //
-// The three verbs are exclusive and each is a whole word: see the file
+// The four verbs are exclusive and each is a whole word: see the file
 // comment for why none of them has a letter.  --wait is tp's flag with
 // tp's meaning, because it is the same waiting for the same kind of
 // arrival, and a teleport this shell asked for should not have two
 // different budgets depending on which command asked.
+//
+// --set-home is the one that changes something and does not move
+// anybody, and it is spelled with the word "set" in it for that reason:
+// --home beside a --home that meant "make this home" is one keystroke
+// between going somewhere and rewriting where this account starts, and
+// the second of those is not undone by teleporting back.
 type landmarkOptions struct {
-	Make bool `getopt:"--make    make a landmark of where this avatar is standing, called NAME"`
-	Go   bool `getopt:"--go      go to the landmark NAME names"`
-	Home bool `getopt:"--home    go to wherever this account's home is set"`
-	Wait int  `getopt:"--wait -w=SECONDS  how long to wait for the avatar to arrive [30]"`
-	Help bool `getopt:"--help -h  show what this command takes"`
+	Make    bool `getopt:"--make    make a landmark of where this avatar is standing, called NAME"`
+	Go      bool `getopt:"--go      go to the landmark NAME names"`
+	Home    bool `getopt:"--home    go to wherever this account's home is set"`
+	SetHome bool `getopt:"--set-home  make where this avatar is standing the place home is"`
+	Wait    int  `getopt:"--wait -w=SECONDS  how long to wait for the avatar to arrive [30]"`
+	Help    bool `getopt:"--help -h  show what this command takes"`
 }
 
 // landmarkDepth is how far down inventory the search for landmarks
@@ -102,7 +119,8 @@ const landmarkDepth = 4
 // the item is made either way.
 const landmarkAssetWait = 500 * time.Millisecond
 
-// cmdLandmark lists, reads, makes and goes to landmarks.
+// cmdLandmark lists, reads, makes and goes to landmarks, and sets and
+// goes to home.
 func cmdLandmark(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o landmarkOptions
 	args, done, err := subOptions("landmark", &o, out, args)
@@ -111,22 +129,25 @@ func cmdLandmark(ctx context.Context, sh *Shell, out io.Writer, args []string) e
 	}
 
 	asked := 0
-	for _, v := range []bool{o.Make, o.Go, o.Home} {
+	for _, v := range []bool{o.Make, o.Go, o.Home, o.SetHome} {
 		if v {
 			asked++
 		}
 	}
 	if asked > 1 {
 		return usageError("landmark",
-			"making a landmark, going to one and going home are three different things; ask for one")
+			"making a landmark, going to one, going home and setting home are four "+
+				"different things; ask for one")
 	}
 	if o.Wait != 0 && !o.Go && !o.Home {
 		return usageError("landmark",
-			"--wait is the waiting a teleport does, and reading a landmark does not move the avatar")
+			"--wait is the waiting a teleport does, and neither reading a landmark "+
+				"nor setting home moves the avatar")
 	}
-	if o.Home && len(args) > 0 {
+	if (o.Home || o.SetHome) && len(args) > 0 {
 		return usageError("landmark",
-			"home is the one landmark nobody has to name, so this form takes none")
+			"home is the one landmark nobody has to name, so this form takes none; "+
+				"home is set to where this avatar is standing and nowhere else")
 	}
 
 	// Joined with spaces, as tp joins a region name: an inventory name
@@ -148,6 +169,8 @@ func cmdLandmark(ctx context.Context, sh *Shell, out io.Writer, args []string) e
 	switch {
 	case o.Home:
 		return landmarkHome(ctx, sh, out, wait)
+	case o.SetHome:
+		return landmarkSetHome(ctx, sh, out)
 	case o.Make:
 		return landmarkMake(ctx, sh, out, name)
 	case o.Go:
@@ -396,6 +419,39 @@ func landmarkHome(ctx context.Context, sh *Shell, out io.Writer, wait time.Durat
 		return err
 	}
 	return sh.sayPosition(ctx, out)
+}
+
+// landmarkSetHome makes where the avatar is standing the place home is.
+//
+// It says where before it says what the grid said, because the place is
+// the half a person can check: the grid's sentence is about a position
+// it does not name, and either voice of it -- the yes as much as the no
+// -- means nothing without the line above it.
+//
+// The place printed is the one sl sent and not one read here.  A
+// position read for the printing would be a second read, and the two
+// are not always the same: an avatar that has just teleported is still
+// settling, and this shell printed a position eight metres above the
+// one that went out before that was the rule.  Both lines therefore
+// come after the answer, which costs nothing a person would notice --
+// measured, the grid answers at once.
+//
+// The grid's own words are printed and not paraphrased.  The answer to
+// this arrives as an alert rather than as a reply, so the sentence is
+// the whole of what came back, and a shell that reworded it would be
+// putting its own account of a refusal in front of the simulator's.
+func landmarkSetHome(ctx context.Context, sh *Shell, out io.Writer) error {
+	at, said, err := sh.s.SetHome(ctx, 0)
+	if at != nil {
+		// Said whether or not the grid agreed: a refusal that named no
+		// place would leave somebody guessing which parcel refused.
+		fmt.Fprintf(out, "setting home to %s\n", positionLine(at))
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, said)
+	return nil
 }
 
 // landmarksHeld lists inventory once and sorts it into three heaps.

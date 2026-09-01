@@ -2,7 +2,7 @@ A place said by name, where `tp` is a place said in numbers.  A
 landmark is an ordinary inventory item -- the grid's own way of writing
 a place down -- and this lists the ones this avatar holds, says where
 one of them goes, makes one of wherever the avatar is standing, and
-goes to one.
+goes to one.  Home is here too: going to it, and setting it.
 
 With no arguments it lists them, as paths, so that two landmarks of one
 name can be told apart.  With a name it reads that one and prints where
@@ -14,12 +14,17 @@ is going home:
     landmark --make Example Workshop
     landmark --go Example Workshop
     landmark --home
+    landmark --set-home
 
-The avatar moves only in the last two.  That is deliberate.  If going
-somewhere were the bare form, then reading a landmark and being
-somewhere else afterwards would be one typo apart.  None of the three
-verbs has a short letter, for the same reason: `-g` beside `-m` is
-exactly the typo a whole word prevents.
+The avatar moves in `--go` and `--home` and in nothing else.  That is
+deliberate.  If going somewhere were the bare form, then reading a
+landmark and being somewhere else afterwards would be one typo apart.
+None of the four verbs has a short letter, for the same reason: `-g`
+beside `-m` is exactly the typo a whole word prevents.  `--set-home`
+carries the word "set" for a sharper version of it: a `-h` that meant
+"make this home" beside a `-h` that meant "go home" is one keystroke
+between a journey and a rewritten account setting, and only one of
+those is undone by teleporting back.
 
 A name with spaces in it needs no quoting: the words after the flags
 are joined back together, as `tp` joins a region name.
@@ -36,8 +41,8 @@ the folder it is in will.
 **--make**
 
 Make a landmark of where this avatar is standing, called *NAME*.
-Making one, going to one and going home are three different things;
-ask for one.
+Making one, going to one, going home and setting home are four
+different things; ask for one.
 
 **--go**
 
@@ -47,11 +52,18 @@ Go to the landmark *NAME* names.
 
 Go to wherever this account's home is set.  It takes no name.
 
+**--set-home**
+
+Make where this avatar is standing the place home is.  It takes no
+name and no position: home is set where the avatar stands, and
+nowhere else.  Nothing moves.
+
 **-w, --wait** *SECONDS*
 
 How long to wait for the avatar to arrive, on `--go` and `--home`.
 Without it, thirty seconds -- `tp`'s wait, for the same kind of trip.
-It is refused on the reading form, which does not move the avatar.
+It is refused on the reading form and on `--set-home`, neither of
+which moves the avatar.
 
 ## A landmark is a point and not a place
 
@@ -160,9 +172,53 @@ already taken says so at the time.
 
 Going home is the same message with the null id in it, which the grid
 reads as home rather than as an error.  It costs no inventory lookup
-and needs no item.  Home is an account setting; nothing here can read
-it or change it, and going there is the only way to find out where it
-is.
+and needs no item.  `tp home` is the same trip said the short way.
+
+Going home while standing at home is refused, and the refusal is the
+one a landmark under your feet gets: `CouldntTPCloser`, the grid
+describing its own arithmetic.  The line says what it usually means.
+
+## Setting home
+
+`landmark --set-home` makes where this avatar is standing the place
+home is.  It is not a landmark and no landmark is involved: it is one
+message that carries a position and the direction the avatar is
+facing, and the region is not in it at all.  Whichever simulator
+receives it is the region, which is why home can be set where the
+avatar is and nowhere else.  To put home somewhere else, go there
+first and then set it.
+
+Home may be set on land this account controls and at a mainland
+infohub.  Anywhere else it is refused, and both answers arrive the
+same way -- as an alert, with no reply and no field that says home
+moved.  So the grid's own sentence is what is printed, unchanged.
+Measured on Agni on 2026-09-01, on two parcels a region apart:
+
+    setting home to Pelmar Reach at 26, 66, 24
+    Home position set.
+
+and, a region away and on land this account does not control:
+
+    setting home to Corvane at 44, 66, 24
+    slsh: landmark: sl: the grid would not set home here: You can only set your 'Home Location' on your land or at a mainland Infohub.
+
+The position printed is the one the message carried, and not a second
+reading taken to print it.  The difference is real: an avatar that has
+just teleported is still settling, and two readings a second apart were
+eight metres apart when this was written.  What the line says is where
+home was set, whether the grid then agreed or refused.
+
+That is also why setting home the moment after arriving somewhere can
+put it a metre or two above where the avatar comes to rest.  Home is
+set where the avatar is, and just after a teleport that is still
+falling.
+
+Where home is cannot be read.  Nothing in the protocol answers the
+question and nothing here keeps it, so the only way to find out is to
+go there: `landmark --home`, and then `where`.  A home just set is
+therefore worth checking by going to it if it matters, and that is
+also the only way to see that a home set a month ago is still where
+you think.
 
 ## Examples
 
@@ -173,10 +229,13 @@ is.
     landmark --go Example Workshop
     landmark --wait 60 --go Example Workshop
     landmark --home
+    landmark --set-home
 
-See also: `tp` for a place said in numbers and for what a teleport
-costs and how it is refused, `where` for the position a landmark is
-made from, `parcel` for what the land at the far end turns out to be,
+See also: `tp` for a place said in numbers, for `tp home`, and for what
+a teleport costs and how it is refused, `where` for the position a
+landmark is made from and the position home is set to, `parcel` for
+what the land at the far end turns out to be, and for whether it is
+land this account controls,
 `ls` for the items themselves and the two ids each of them has, `mv`
 for taking one back out of the trash, and `regions` for finding a place
 by name when there is no landmark to it.

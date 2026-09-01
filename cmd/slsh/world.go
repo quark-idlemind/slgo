@@ -47,7 +47,7 @@ var worldCommands = map[string]*command{
 	"landmark": {
 		params: "[NAME]",
 		flags:  func() any { return new(landmarkOptions) },
-		brief:  "the landmarks in inventory, where one goes, and going there",
+		brief:  "the landmarks in inventory, where one goes, going there, and going home or setting it",
 		man:    "landmark",
 		run:    cmdLandmark,
 	},

@@ -623,6 +623,12 @@ func TestLandmarkRefusesTwoVerbsAtOnce(t *testing.T) {
 		{"landmark --go", "which landmark"},
 		{"landmark --make", "which landmark"},
 		{"landmark --wait 5 Thrushmoor", "--wait is the waiting"},
+		// Setting home is the fourth verb and the one that changes
+		// something a teleport cannot put back, so it is refused
+		// beside the others rather than left to do half of two things.
+		{"landmark --set-home --home", "ask for one"},
+		{"landmark --set-home Thrushmoor", "nobody has to name"},
+		{"landmark --wait 5 --set-home", "--wait is the waiting"},
 	} {
 		if got := x.do(t, c.line); !strings.Contains(got, c.want) {
 			t.Errorf("%q should say %q, said %q", c.line, c.want, got)
@@ -630,6 +636,9 @@ func TestLandmarkRefusesTwoVerbsAtOnce(t *testing.T) {
 	}
 	if m := sentLandmark(x); m != nil {
 		t.Errorf("a refused line moved the avatar: %v", m.Info.LandmarkID)
+	}
+	if m := sentSetHome(x); m != nil {
+		t.Error("a refused line set this account's home")
 	}
 }
 
@@ -941,5 +950,161 @@ func TestParentPathIsTheFolderAnItemWasFoundIn(t *testing.T) {
 		if got := parentPath(c.path); got != c.want {
 			t.Errorf("parentPath(%q) = %q, want %q", c.path, got, c.want)
 		}
+	}
+}
+
+// Setting home, which is the one thing this command does that moves
+// nobody and cannot be undone by moving.
+//
+// The sentences below are Agni's own, measured on 2026-09-01: the
+// answer to this request is an AlertMessage and there is no reply and
+// no field anywhere that says home moved, so what the shell prints is
+// what the grid said and a test of anything else would be a test of a
+// sentence this program invented.
+const (
+	agniHomeSet     = "Home position set."
+	agniHomeRefused = "You can only set your 'Home Location' on your land " +
+		"or at a mainland Infohub."
+)
+
+// answerSetHome makes the fake say what a simulator says about a home
+// position, as an alert and not as a reply.
+func answerSetHome(t *testing.T, x *testShell, said string) {
+	t.Helper()
+	x.grid.mu.Lock()
+	defer x.grid.mu.Unlock()
+	before := x.grid.onSend
+	x.grid.onSend = func(m msg.Message) {
+		if before != nil {
+			before(m)
+		}
+		if _, ok := m.(*msg.SetStartLocationRequest); !ok {
+			return
+		}
+		r := &msg.AlertMessage{}
+		r.AlertData.Message = append([]byte(said), 0)
+		x.grid.Relay(t, r)
+	}
+}
+
+// sentSetHome is the home request that went out, or nothing.
+func sentSetHome(x *testShell) *msg.SetStartLocationRequest {
+	var found *msg.SetStartLocationRequest
+	for _, m := range x.grid.Sent() {
+		if r, ok := m.(*msg.SetStartLocationRequest); ok {
+			found = r
+		}
+	}
+	return found
+}
+
+// TestLandmarkSetHomeSaysWhereAndThenWhatTheGridSaid.
+//
+// Where first, because the place is the half a person can check: the
+// grid's sentence is about a position it does not name, so a line
+// carrying only that would say home moved without saying where to.
+func TestLandmarkSetHomeSaysWhereAndThenWhatTheGridSaid(t *testing.T) {
+	x := newTestShell(t)
+	answerSetHome(t, x, agniHomeSet)
+
+	got := x.do(t, "landmark --set-home")
+	if !strings.Contains(got, "setting home to Test Region at 128, 128, 25") {
+		t.Errorf("--set-home said %q, and did not say where", got)
+	}
+	if !strings.Contains(got, agniHomeSet) {
+		t.Errorf("--set-home said %q, and not what the grid said", got)
+	}
+
+	m := sentSetHome(x)
+	if m == nil {
+		t.Fatal("nothing was sent")
+	}
+	if m.StartLocationData.LocationID != sl.StartLocationHome {
+		t.Errorf("location id = %d, want home", m.StartLocationData.LocationID)
+	}
+	if m.StartLocationData.LocationPos != (msg.Vector3{X: 128, Y: 128, Z: 25}) {
+		t.Errorf("home was asked for at %v, and the avatar is at 128, 128, 25",
+			m.StartLocationData.LocationPos)
+	}
+	if m := sentLandmark(x); m != nil {
+		t.Error("setting home moved the avatar")
+	}
+}
+
+// TestLandmarkSetHomePrintsTheRefusalTheGridWrote.
+//
+// Home may be set on land the account controls and at a mainland
+// infohub, and nowhere else.  The refusal is a sentence rather than a
+// code, and it is the only thing that says which of the two happened,
+// so it is printed as it arrived.
+func TestLandmarkSetHomePrintsTheRefusalTheGridWrote(t *testing.T) {
+	x := newTestShell(t)
+	answerSetHome(t, x, agniHomeRefused)
+
+	got := x.do(t, "landmark --set-home")
+	if !strings.Contains(got, "mainland Infohub") {
+		t.Errorf("--set-home said %q, and not what the grid refused with", got)
+	}
+	if strings.Contains(got, agniHomeSet) {
+		t.Errorf("a refusal was reported as a home that moved: %q", got)
+	}
+}
+
+// TestLandmarkSetHomeHasNoWaitOfItsOwn: --wait is how long to believe
+// in an ARRIVAL, and nothing arrives here.  A flag that was accepted
+// and then ignored would be worse than one that is refused, so the
+// refusal says which waiting it is.  What silence from the grid comes
+// to is sl's to answer, and sl.TestSetHomeCallsSilenceSilence is where
+// it is checked -- the wait there is a fraction of a second and this
+// one would be ten of them.
+func TestLandmarkSetHomeHasNoWaitOfItsOwn(t *testing.T) {
+	x := newTestShell(t)
+
+	got := x.do(t, "landmark --set-home --wait 1")
+	if !strings.Contains(got, "--wait is the waiting") {
+		t.Errorf("--set-home --wait said %q", got)
+	}
+	if m := sentSetHome(x); m != nil {
+		t.Error("a refused line set home anyway")
+	}
+}
+
+// TestLandmarkSetHomePrintsThePositionThatWentOut.
+//
+// The line and the message have to agree.  A shell that read the
+// position a second time to print it would print whatever the avatar
+// had drifted to since, and an avatar that has just teleported is still
+// settling: eight metres separated two reads a second apart when this
+// was met on Agni.  So the fake moves the avatar the moment the request
+// goes out, and the line still says where home was set.
+func TestLandmarkSetHomePrintsThePositionThatWentOut(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.mu.Lock()
+	x.grid.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.SetStartLocationRequest); !ok {
+			return
+		}
+		x.grid.mu.Lock()
+		x.grid.presence.Position = msg.Vector3{X: 128, Y: 128, Z: 17}
+		x.grid.mu.Unlock()
+		r := &msg.AlertMessage{}
+		r.AlertData.Message = append([]byte(agniHomeSet), 0)
+		x.grid.Relay(t, r)
+	}
+	x.grid.mu.Unlock()
+
+	got := x.do(t, "landmark --set-home")
+	if !strings.Contains(got, "at 128, 128, 25") {
+		t.Errorf("--set-home said %q, and home was set at 128, 128, 25", got)
+	}
+	if strings.Contains(got, "at 128, 128, 17") {
+		t.Errorf("--set-home printed where the avatar had fallen to: %q", got)
+	}
+	m := sentSetHome(x)
+	if m == nil {
+		t.Fatal("nothing was sent")
+	}
+	if m.StartLocationData.LocationPos != (msg.Vector3{X: 128, Y: 128, Z: 25}) {
+		t.Errorf("the message carried %v", m.StartLocationData.LocationPos)
 	}
 }

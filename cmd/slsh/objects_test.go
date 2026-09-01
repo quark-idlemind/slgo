@@ -1092,3 +1092,72 @@ func TestAWordThatIsNotACoordinateIsStillARegionName(t *testing.T) {
 		}
 	}
 }
+
+// TestTPHomeIsTheOneDestinationThatIsNotTyped.
+//
+// Home is not a place said in numbers and not a name the map knows: the
+// account keeps it, the grid reads the null landmark id as it, and the
+// whole of what goes out is that.  So "tp home" asks the map nothing at
+// all and sends the message landmark --home sends.
+func TestTPHomeIsTheOneDestinationThatIsNotTyped(t *testing.T) {
+	x := newTestShell(t)
+	answerLandmarkTeleport(t, x)
+
+	got := x.do(t, "tp home")
+	if !strings.Contains(got, "going home") {
+		t.Errorf("tp home said %q", got)
+	}
+	m := sentLandmark(x)
+	if m == nil {
+		t.Fatal("tp home sent no teleport")
+	}
+	if !m.Info.LandmarkID.IsZero() {
+		t.Errorf("tp home sent landmark %v rather than the null id", m.Info.LandmarkID)
+	}
+	for _, m := range x.grid.Sent() {
+		if _, ok := m.(*msg.MapNameRequest); ok {
+			t.Error("home was looked up on the map")
+		}
+	}
+}
+
+// TestTPHomeIsTheWordHoweverItIsTyped: every other name this shell
+// matches ignores case, and a rule that sent "Home" to the map and
+// "home" to the account's home position would be a difference nobody
+// could see at a prompt.
+func TestTPHomeIsTheWordHoweverItIsTyped(t *testing.T) {
+	x := newTestShell(t)
+	answerLandmarkTeleport(t, x)
+
+	if got := x.do(t, "tp HOME"); !strings.Contains(got, "going home") {
+		t.Errorf("tp HOME said %q", got)
+	}
+	if m := sentLandmark(x); m == nil {
+		t.Fatal("tp HOME sent no teleport")
+	}
+}
+
+// TestARegionCalledHomeIsStillReachable.
+//
+// The bare word is home and nothing else is, so the forms that carry
+// more than one word still mean a region: a position after the name is
+// what a region called home is typed with.  Measured on Agni on
+// 2026-09-01, no region answers to that name exactly -- the map has
+// nine that begin with it -- but a name is not this shell's to take
+// away, and one could be made tomorrow.
+func TestARegionCalledHomeIsStillReachable(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.AnswerMap(t, mapBlock("home", 995, 997, 13))
+	x.grid.AnswerTeleport(t, "home", goguenHandle)
+
+	if got := x.do(t, "tp home 128 128 25"); !strings.Contains(got, "teleporting to home") {
+		t.Errorf("tp home 128 128 25 said %q", got)
+	}
+	if m := sentLandmark(x); m != nil {
+		t.Error("a region called home was gone to as the account's home position")
+	}
+	if sent := lastTeleport(t, x); sent.Info.RegionHandle != goguenHandle {
+		t.Errorf("the teleport named region %d, want the one the map found",
+			sent.Info.RegionHandle)
+	}
+}

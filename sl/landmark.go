@@ -372,10 +372,21 @@ const tooCloseToGo = "CouldntTPCloser"
 // It is a call of its own rather than something GoTo does with a zero
 // id, because a zero id is what a missing id looks like: see GoTo.  The
 // errors are Teleport's.
+//
+// Going home while standing at home is refused with CouldntTPCloser,
+// and the meaning is added here as GoTo adds it: measured on Agni
+// 2026-09-01, and it is a likelier way to meet that refusal than a
+// landmark is, since home is somewhere an avatar is left rather than
+// somewhere it passes through.
 func (w *Session) GoHome(ctx context.Context, timeout time.Duration) error {
 	// "going home" and not "the teleport home", for GoTo's reason: the
 	// errors that quote this already say the word teleport themselves.
-	return w.goToLandmark(ctx, msg.UUID{}, timeout, "going home")
+	err := w.goToLandmark(ctx, msg.UUID{}, timeout, "going home")
+	if errors.Is(err, ErrTeleportRefused) && strings.Contains(err.Error(), tooCloseToGo) {
+		return fmt.Errorf("%w; going home almost always means the avatar is "+
+			"already standing there", err)
+	}
+	return err
 }
 
 // goToLandmark sends the one message and waits for the answer the
@@ -414,4 +425,222 @@ func (w *Session) goToLandmark(ctx context.Context, asset msg.UUID,
 		return err
 	}
 	return watch.arrive(ctx, what, timeout)
+}
+
+// Home, which is a place chosen rather than a place kept.
+//
+// It is in this file because GoHome is: the two halves of home are
+// where it is and how it is set, and reading one without the other is
+// how a caller comes to believe a teleport home went wrong when what
+// went wrong was three days earlier.  They are not the same message and
+// not the same kind of act -- going home is a teleport, and setting it
+// changes something the account keeps until it is set again.
+//
+// # What the grid takes
+//
+// SetStartLocationRequest, carrying a LOCATION ID saying which of the
+// account's start locations is meant, the position, and the direction
+// the avatar is facing.  The region is not named: the field for it is
+// sent empty by Linden Lab's own viewer, with the comment "corrected by
+// sim", and the simulator that receives the message is the region --
+// which is the whole reason home can be set nowhere but where the
+// avatar is standing.
+//
+// There is also a HomeLocation capability, which is what a current
+// viewer uses where a region offers one; it carries the same three
+// fields as LLSD and answers with a success flag rather than with an
+// alert.  It is not used here, because it is not among the capabilities
+// this session asks the seed for -- see agent.DefaultCaps -- and adding
+// it would put a second way of doing one thing in the tree.  The UDP
+// message was answered by Agni on 2026-09-01, so there is nothing to
+// fix; if it is ever stopped, that capability is where to go.
+//
+// # What the grid says back
+//
+// An AlertMessage, and nothing else: there is no reply to this request
+// and no field anywhere that says home moved.  Both voices were
+// measured on Agni on 2026-09-01, one avatar, two parcels, minutes
+// apart:
+//
+//	Home position set.
+//	You can only set your 'Home Location' on your land or at a mainland Infohub.
+//
+// So the sentence is the whole of the answer, and the first of them is
+// the only thing that says it worked.
+//
+// # How anybody knows it worked
+//
+// By going there, which is the only check there is: nothing reads home
+// back, and the alert above is the simulator's word rather than a fact
+// anything can confirm at the time.  Done once, on Agni on 2026-09-01
+// and end to end -- home set in one region, the avatar teleported to
+// another, GoHome from there, and it arrived in the region home had
+// been set in.  That is what says the location id below is the right
+// one, and it is why nothing here reports a home that moved on the
+// strength of having sent a message.
+
+// StartLocationHome is the start location that is home.
+//
+// The number is Linden Lab's, out of the four its viewer names -- last,
+// home, telehub, and a url -- and this is the only one of them an
+// account keeps as a place.  What was measured is what it does: a
+// request carrying this moved home, checked by going there afterwards
+// from another region.  Nothing here has sent any of the other three
+// and nothing here should.
+//
+// It is written down because the field is a bare number on the wire and
+// the number next to it, zero, is LAST: a message built with a
+// forgotten field would set the wrong one quietly and look exactly like
+// a message that worked.
+const StartLocationHome = 1
+
+// ErrHomeRefused is the grid declining to make this spot home.
+//
+// Home may be set on land the avatar's account controls and at a
+// mainland infohub, and nowhere else.  Measured on Agni 2026-09-01, on
+// a stranger's parcel one region away from one where it worked:
+//
+//	You can only set your 'Home Location' on your land or at a mainland Infohub.
+//
+// It arrives as an alert rather than as a reply, which is why the error
+// carries a sentence and not a code: there is no code.
+var ErrHomeRefused = errors.New("sl: the grid would not set home here")
+
+// DefaultHomeSetTimeout is how long SetHome listens for the grid's
+// answer when the caller names no timeout.
+//
+// It is generous rather than tight, and never reached in the ordinary
+// way of things: every set measured on 2026-09-01 was answered at once,
+// success and refusal alike.  What it bounds is silence, and silence
+// here is not a slow answer -- see SetHome for what it means.
+const DefaultHomeSetTimeout = 10 * time.Second
+
+// SetHome makes where the avatar is standing the place it starts, and
+// the place GoHome goes.
+//
+// It sets home to HERE and takes no position, because that is the whole
+// of what the message can say: the region is not named in it -- the
+// simulator that receives it is the region -- so home can be set where
+// the avatar is and nowhere else.  A caller that wants home somewhere
+// else has to teleport there first, which is what the shell does.
+//
+// Where it read the avatar to be is returned, and it is returned
+// whether the grid agreed or not, because it is the position that went
+// out: a caller that read its own before calling would be printing a
+// place that is not the one asked for.  They differ oftener than they
+// look as though they would -- an avatar that has just teleported is
+// still settling, and eight metres of falling separated two reads a
+// second apart when this was measured.  It is nil only where the read
+// itself failed.
+//
+// The simulator's own sentence is returned beside it, and a refusal is
+// ErrHomeRefused with that sentence in it.  It is not paraphrased: the
+// answer arrives as an alert rather than as a reply, so those words are
+// the entirety of what came back, and a wording of this package's own
+// in front of them would be an account of a refusal it did not witness.
+//
+// Silence is an answer this cannot read, and it is reported as
+// ErrTimeout rather than as either outcome.  Nothing else says whether
+// home moved -- there is no field for it, and reading home back is a
+// teleport -- so a caller that meets this knows only that the request
+// went out.
+//
+// A zero timeout is DefaultHomeSetTimeout.
+func (w *Session) SetHome(ctx context.Context, timeout time.Duration) (*Presence, string, error) {
+	if timeout == 0 {
+		timeout = DefaultHomeSetTimeout
+	}
+
+	where, err := w.Where(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	// The region is not checked, because the region is not in the
+	// message: whichever simulator receives it is the one home is set
+	// in.  What has to be right is the POSITION, and a zero one is what
+	// a session that has not been told where the avatar is reads as --
+	// so it is refused, since <0, 0, 0> is a real place in a region and
+	// a home set at the corner of it would look like it worked.
+	if where.Position == (msg.Vector3{}) {
+		return nil, "", fmt.Errorf("sl: this session does not know where the avatar is " +
+			"standing yet, and home is set where it stands")
+	}
+
+	// Where the alert log stood before asking, for await's reason: the
+	// answer is an alert, and an alert heard before the question was
+	// asked is an answer to something else.
+	mark := len(w.Alerts())
+
+	m := &msg.SetStartLocationRequest{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	// Empty, as the viewer sends it and for the viewer's stated reason:
+	// the simulator corrects it.  A name put here by a client is the
+	// name the client believes rather than the one the region has.
+	m.StartLocationData.SimName = nil
+	m.StartLocationData.LocationID = StartLocationHome
+	m.StartLocationData.LocationPos = where.Position
+	// Facing the way the avatar already is, as the teleports do: the
+	// field is not optional and a zero vector is not a direction.
+	m.StartLocationData.LocationLookAt = where.LookAt
+	if m.StartLocationData.LocationLookAt == (msg.Vector3{}) {
+		m.StartLocationData.LocationLookAt = msg.Vector3{X: 1}
+	}
+	if err := w.Send(ctx, m); err != nil {
+		return where, "", err
+	}
+
+	said, err := w.saidNext(ctx, mark, timeout)
+	if err != nil {
+		return where, "", err
+	}
+	if !strings.Contains(said, homeSet) {
+		return where, said, fmt.Errorf("%w: %s", ErrHomeRefused, said)
+	}
+	return where, said, nil
+}
+
+// homeSet is the simulator's word for a home position that has moved,
+// as Agni said it on 2026-09-01.
+//
+// Matched rather than compared, because it is one alert among however
+// many arrived while this was waiting -- see saidNext -- and a compare
+// would turn a coincidence of timing into a refusal that never
+// happened.
+const homeSet = "Home position set."
+
+// saidNext waits for the simulator to say something it had not said
+// when the question was asked.
+//
+// The first thing said after the request is taken as the answer to it,
+// which is as close as this protocol allows: an alert carries nothing
+// saying what provoked it, so an unrelated one arriving in the same
+// moment would be read as the answer.  It is the same exposure await
+// has and teleport.go describes at length; what makes it tolerable here
+// is that the answer was immediate every time it was measured, so the
+// window an unrelated alert has to land in is milliseconds wide.
+//
+// Everything new is joined rather than only the first, so that a
+// refusal which arrives beside another complaint is quoted whole.
+//
+// Polled rather than subscribed, for await's reason and with await's
+// shape.  It is not await itself because what is wanted here is the
+// sentence and not merely the fact that one arrived.
+func (w *Session) saidNext(ctx context.Context, mark int, timeout time.Duration) (string, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		if said := w.Alerts(); len(said) > mark {
+			return strings.Join(said[mark:], "; "), nil
+		}
+		if time.Now().After(deadline) {
+			return "", fmt.Errorf("%w: the simulator said nothing at all about it "+
+				"(after %s), and an alert is the only answer there is", ErrTimeout, timeout)
+		}
+		t := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			t.Stop()
+			return "", ctx.Err()
+		}
+	}
 }

@@ -1083,8 +1083,9 @@ a digit is that many in one cell, and + is more than nine
             <tbody>
               <tr><td class="cmd">tp X Y Z</td><td class="what">a position — in this region, or in whichever region that position is really in</td></tr>
               <tr><td class="cmd">tp REGION [X Y Z]</td><td class="what">another region, by name, anywhere on the grid</td></tr>
+              <tr><td class="cmd">tp home</td><td class="what">wherever this account&rsquo;s home is set, which no map lookup is needed for</td></tr>
               <tr><td class="cmd">regions NAME</td><td class="what">what a name matches on the grid's map, and where each one is</td></tr>
-              <tr><td class="cmd">landmark</td><td class="what">the places kept in inventory; <code>--go</code> goes to one, <code>--home</code> goes home</td></tr>
+              <tr><td class="cmd">landmark</td><td class="what">the places kept in inventory; <code>--go</code> goes to one, <code>--home</code> goes home, <code>--set-home</code> makes here home</td></tr>
               <tr><td class="cmd">neighbours</td><td class="what">the circuits a border crossing needs; <code>on</code> and <code>off</code> change it</td></tr>
               <tr><td class="cmd">sit · stand</td><td class="what">onto a seat and off it again, which moves the avatar several metres</td></tr>
             </tbody>
@@ -1306,7 +1307,7 @@ Pelmar Bay                        43584, 43584   moderate  47921114796146688</sp
           The avatar moves in <code>--go</code> and <code>--home</code> and in
           nothing else. That is deliberate: if going somewhere were the bare
           form, reading a landmark and being somewhere else afterwards would be
-          one typo apart. For the same reason none of the three verbs has a
+          one typo apart. For the same reason none of the four verbs has a
           short letter, since <code>-g</code> beside <code>-m</code> is exactly
           the typo a whole word prevents.
         </p>
@@ -1315,8 +1316,44 @@ Pelmar Bay                        43584, 43584   moderate  47921114796146688</sp
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">landmark --make Pelmar Reach Workshop</span>   <span class="n">of where the avatar stands</span>
 <span class="p">/$</span> <span class="c">landmark --go Thrushmoor</span>
-<span class="p">/$</span> <span class="c">landmark --home</span></pre>
+<span class="p">/$</span> <span class="c">landmark --home</span>
+<span class="p">/$</span> <span class="c">tp home</span>                          <span class="n">the same trip, said shorter</span></pre>
         </div>
+
+        <h3>Home, and setting it</h3>
+        <p>
+          Home is the one landmark nobody has to own. Going there is the same
+          message with the null id in it, which the grid reads as home rather
+          than as an error, so it costs no inventory lookup and needs no item;
+          <code>tp home</code> is the same trip under a shorter name.
+          <code>landmark --set-home</code> is the other half: it makes where
+          the avatar is standing the place home is. There is no position to
+          give it, because the message carries no region &mdash; whichever
+          simulator receives it is the region &mdash; so the way to move home
+          somewhere else is to go there and then set it.
+        </p>
+        <p>
+          Home may be set on land this account controls and at a mainland
+          infohub, and nowhere else. Both answers arrive as an alert rather
+          than as a reply, with no field anywhere saying that home moved, so
+          what is printed is the grid&rsquo;s own sentence:
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">landmark --set-home</span>
+<span class="o">setting home to Pelmar Reach at 26, 66, 24
+Home position set.</span>
+<span class="p">/$</span> <span class="c">landmark --set-home</span>       <span class="n">a region away, on land this account does not control</span>
+<span class="o">setting home to Corvane at 44, 66, 24
+slsh: landmark: sl: the grid would not set home here: You can only set your &#39;Home Location&#39; on your land or at a mainland Infohub.</span></pre>
+        </div>
+
+        <p>
+          Where home is cannot be read. Nothing in the protocol answers the
+          question, so the only way to find out is to go there and look:
+          <code>landmark --home</code>, and then <code>where</code>.
+        </p>
 
         <p>
           What the asset holds is a region and three numbers, and that is the

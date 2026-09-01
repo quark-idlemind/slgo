@@ -37,9 +37,9 @@ var objectCommands = map[string]*command{
 		run:    cmdCopy,
 	},
 	"tp": {
-		params: "REGION [X Y Z] | X Y Z",
+		params: "REGION [X Y Z] | X Y Z | home",
 		flags:  func() any { return new(tpOptions) },
-		brief:  "move to another region by name, or to a position: X Y Z here, outside the region for the next one along, ~N to move by",
+		brief:  "move to another region by name, to a position: X Y Z here, outside the region for the next one along, ~N to move by, or home",
 		man:    "tp",
 		run:    cmdTP,
 	},
@@ -254,19 +254,27 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		return err
 	}
 	if len(rest) == 0 {
-		return usageError("tp", "a region to go to, or three numbers for a position in this one")
+		return usageError("tp", "a region to go to, three numbers for a position in "+
+			"this one, or home")
+	}
+
+	// One deadline for all of them, because it is one question -- how
+	// long to believe in an arrival -- and a flag that quietly did
+	// nothing to a move inside the region would be worse than no flag.
+	wait := time.Duration(o.Wait) * time.Second
+	if wait == 0 {
+		wait = shellTeleportTimeout
+	}
+
+	// Home before the map is asked anything: it is the one destination
+	// that is not a place typed out, and it costs no lookup at all.
+	if wantsHome(rest) {
+		return landmarkHome(ctx, sh, out, wait)
 	}
 
 	region, at, err := teleportTarget(rest)
 	if err != nil {
 		return err
-	}
-	// One deadline for both, because it is one question -- how long to
-	// believe in an arrival -- and a flag that quietly did nothing to a
-	// move inside the region would be worse than no flag.
-	wait := time.Duration(o.Wait) * time.Second
-	if wait == 0 {
-		wait = shellTeleportTimeout
 	}
 
 	if region == "" {
@@ -289,6 +297,31 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		return err
 	}
 	return sh.sayPosition(ctx, out)
+}
+
+// wantsHome is whether what was typed is the word home and nothing
+// else.
+//
+// The bare word only, and only when it is the whole of what was said,
+// so that the region name a word could also be is reachable in the
+// forms that carry one: "tp home 128 128 25" is a region called home,
+// as it was before this existed, and so is anything with more words in
+// it.  What is out of reach is a region whose whole name is "home" gone
+// to without a position -- and, measured on Agni on 2026-09-01, there
+// is no such region: the map answers the prefix "home" with nine longer
+// names and nothing that is exactly it.
+//
+// Without regard to case, as every other name this shell matches is:
+// "Home" at a prompt is the same word, and a rule that sent one of them
+// to the map and the other to the account's home position would be a
+// difference nobody could see.
+//
+// It is here rather than inside teleportTarget because home is not a
+// target of the kind that function reads: it names no region this shell
+// can look up and no position it can compute, and the whole of what the
+// grid is told is that home is where to go.  See sl.GoHome.
+func wantsHome(args []string) bool {
+	return len(args) == 1 && strings.EqualFold(args[0], "home")
 }
 
 // endOptionsAtANegativeNumber puts a "--" in front of the position,

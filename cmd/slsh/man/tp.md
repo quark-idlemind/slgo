@@ -1,14 +1,16 @@
-Moves the avatar: to a point in this region, or to another region by
-name.  It waits for the arrival rather than reporting the request.
-What is printed afterwards is where the avatar actually ended up, read
-back, and not the point that was asked for.
+Moves the avatar: to a point in this region, to another region by
+name, or home.  It waits for the arrival rather than reporting the
+request.  What is printed afterwards is where the avatar actually
+ended up, read back, and not the point that was asked for.
 
 Three numbers and nothing else -- X Y Z, in this region's metres -- is
-a move to that position.  Anything else is a region's name, joined with
-spaces so that a name with one in it needs no quoting, and the last
-three words are the position when all three are numbers:
+a move to that position.  The word `home` on its own is this account's
+home position.  Anything else is a region's name, joined with spaces so
+that a name with one in it needs no quoting, and the last three words
+are the position when all three are numbers:
 
     tp 128 128 25
+    tp home
     tp Example Landing
     tp Example Landing 33 73 1000.5
 
@@ -22,6 +24,34 @@ is the first of those three again.
 
 How long to wait for the avatar to arrive.  Without it, thirty
 seconds.
+
+## Home
+
+`tp home` goes to wherever this account's home is set.  It is the one
+destination that is not typed out: the map is asked nothing, no name is
+looked up and no position is computed, because the grid keeps home
+itself and the whole of what goes out is "home".  It is
+`landmark --home` under a shorter name and behaves identically,
+including the wait.
+
+The word is matched without regard to case, as every other name this
+shell matches is, so `tp HOME` is the same trip.
+
+Going home while standing at home is refused: the grid will not shorten
+a teleport that arrives where it started, and says `CouldntTPCloser`.
+The line says what it usually means.
+
+The bare word is home, and only the bare word.  A region really called
+"home" is still reached in the forms that carry more than one word --
+`tp home 128 128 25` is that region, as it always was.  On 2026-09-01
+the map had nine regions whose names begin with "home" and none called
+exactly that, so nothing is out of reach today; a region named tomorrow
+would be reached with a position after it.
+
+Where home is cannot be read from here, and going there is the only way
+to find out.  `landmark --set-home` is what puts it somewhere else: it
+sets home to where the avatar is standing, so the way to move home is
+to go there and then set it.
 
 ## A position outside this region is the region it really is in
 
@@ -181,11 +211,12 @@ there would be joined onto the name.
     tp Example Landing
     tp Example Landing 128 128 2001
     tp --wait 60 Example Shallows
+    tp home
 
 See also: `regions` for finding out what a name matches and where it is,
 `where` for the position this is given in, `look` for what the region
 underfoot says about itself, `neighbours` for walking over a border
 into the next region rather than teleporting across the grid, `move`
 for shifting an object rather than the avatar, `landmark` for a place
-said by name in inventory, and `answer` for accepting a teleport
-somebody else offered.
+said by name in inventory and for setting where home is, and `answer`
+for accepting a teleport somebody else offered.
