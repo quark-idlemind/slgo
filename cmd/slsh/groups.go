@@ -117,7 +117,12 @@ var groups = []group{
 		// "unsit" is stand under another name and is not listed, since
 		// a listing that showed one command twice would say nothing
 		// extra about either.
-		members: []string{"where", "parcel", "group", "invite", "tp", "landmark", "sit", "stand", "who", "look", "map", "regions", "neighbours",
+		// maturity is here because the question it answers is asked
+		// about a place: an avatar refused entry to a region is told
+		// its maturity rating is wrong, and this is where somebody
+		// goes next.  What it sets belongs to the account rather than
+		// to the region, which is why it is also under avatars.
+		members: []string{"where", "parcel", "group", "invite", "maturity", "tp", "landmark", "sit", "stand", "who", "look", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "move", "dump", "rez", "reform", "touch", "texture",
 			"take", "place", "perms", "drop", "start", "stop", "link", "unlink"},
@@ -139,7 +144,7 @@ var groups = []group{
 		// whether one of its sessions has been taken over -- and the
 		// question it answers, "how do I get eyes on this avatar", is
 		// asked next to status and watch.
-		members: []string{"agents", "login", "logout", "auto", "status", "watch", "viewer"},
+		members: []string{"agents", "login", "logout", "auto", "status", "watch", "viewer", "maturity"},
 	},
 	{
 		name:    "simulator",

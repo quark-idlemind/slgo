@@ -46,6 +46,12 @@ var DefaultCaps = []string{
 	"ParcelPropertiesUpdate",
 	"RemoteParcelRequest",
 	"ViewerStats",
+	// The account's own settings, of which this asks for one: the
+	// maturity preference.  It is a POST that answers with what was
+	// granted rather than with what was asked for -- see sl.SetMaturity
+	// -- and it is the only way a client has of touching that setting
+	// at all: there is no message for it in the template.
+	"UpdateAgentInformation",
 }
 
 // Caps maps a capability name to the URL that serves it.

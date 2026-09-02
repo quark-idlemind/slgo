@@ -1004,6 +1004,45 @@ nothing answers an invitation, so this says what was sent and not what became of
           from this side at all; their answer goes to the group.
         </p>
 
+        <h3>The land you are allowed to see</h3>
+        <p>
+          Land is rated general, moderate or adult, and an avatar refused entry
+          to a region is told its <em>maturity rating</em> is wrong. That
+          sentence names two quite different causes and picks neither: the
+          <em>preference</em>, which is the highest rating the account has asked
+          to be shown, and the <em>ceiling</em>, which is the highest it is
+          permitted to ask for. The first is a setting; the second comes from
+          age verification and no client can raise it.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">tp Nightmire Sea 128 128 25</span>
+<span class="o">teleporting to Nightmire Sea at 128, 128, 25
+slsh: tp: sl: the grid refused the teleport: … RegionTPAccessBlocked: "You aren't allowed in that Region due to your maturity Rating. …"</span>
+<span class="p">/$</span> <span class="c">maturity adult</span>
+<span class="o">this avatar is shown land rated adult and below</span>
+<span class="p">/$</span> <span class="c">tp Nightmire Sea 128 128 25</span>
+<span class="o">teleporting to Nightmire Sea at 128, 128, 25
+Nightmire Sea at 128, 128, 26</span></pre>
+        </div>
+
+        <p>
+          <code>maturity</code> asks, and prints what the grid <em>granted</em>,
+          which is the lower of what was asked for and what the account allows.
+          Granted what you asked for, the preference was the whole problem and
+          is now fixed — permanently, since it is an account setting that
+          outlives the session. Granted something lower, that is the ceiling,
+          and the rest of the job is on the account page rather than here.
+        </p>
+
+        <p>
+          There is no reading form. The preference arrives in the login response
+          and the capability behind this has only one question — set it to
+          this — so asking for the rating you believe is already in force is how
+          you read it: it changes nothing and the answer is the truth.
+        </p>
+
         <h3>Who is about, as a picture</h3>
         <p>
           <code>who</code> answers half the question and cannot answer the
@@ -2419,6 +2458,7 @@ viewer_running = how to tell whether one is running already</span></pre>
               <tr><td class="cmd">tp · regions · landmark</td><td class="what">going to a position, finding a region by name, going to a place kept</td></tr>
               <tr><td class="cmd">neighbours · sit · stand</td><td class="what">walking over a border; onto a seat and off it again</td></tr>
               <tr><td class="cmd">group · invite</td><td class="what">who you act as, which is what land rights hang on; and asking somebody into one</td></tr>
+              <tr><td class="cmd">maturity</td><td class="what">the rating of land this avatar is willing to be shown, which decides where it may go</td></tr>
               <tr><td class="cmd">objects · dump · rez · reform</td><td class="what">what is here, described, built and changed</td></tr>
               <tr><td class="cmd">worn · wear · detach</td><td class="what">attachments</td></tr>
               <tr><td class="cmd">take · place · move</td><td class="what">between the world and inventory, and moving what is rezzed</td></tr>
