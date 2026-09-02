@@ -130,7 +130,10 @@ type Hosted struct {
 	// and is nil when nothing is trying.  homeAnswers is where the grid's
 	// answer to its request is delivered, and is nil except while one
 	// attempt is waiting for one.  Both guarded by mu.  See home.go.
+	// homingID says which run of the loop homing belongs to, so that a
+	// loop finishing clears its own cancel and not a later one's.
 	homing      context.CancelFunc
+	homingID    uint64
 	homeAnswers chan homeAnswer
 
 	// rank is the order this session came up in, lowest first.  It is

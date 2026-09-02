@@ -32,9 +32,19 @@ package server
 //   - anything else, or silence: not home and not going, so wait a
 //     minute and ask again.
 //
-// The cost of that arrangement is one refused teleport per login for an
-// avatar that came up at home, which is the ordinary case.  Nothing
-// moves and nobody sees it; it buys not having to know where home is.
+// So the cost is one teleport request per login, and what the grid does
+// with it depends on how exactly the login placed the avatar.  Measured
+// on Agni on 2026-09-02, the first time this ran in service: three
+// sessions that had logged in at home were each answered with a
+// TeleportLocal -- a move inside the region -- and logged "home, after
+// one attempt", finishing within seconds and leaving all three at the
+// coordinates they had started at.  The CouldntTPCloser refusal is
+// real and was measured the same day from the shell, going home while
+// standing exactly on the home point; which of the two answers comes
+// back is the grid's arithmetic and not something to depend on.
+//
+// Either way the avatar ends up at home and the loop stops, which is
+// all this needs, and it buys not having to know where home is.
 //
 // # Why a client teleporting stops it
 //
@@ -138,6 +148,8 @@ func (h *Hosted) keepHome(ctx context.Context) {
 		h.homing()
 	}
 	h.homing = cancel
+	h.homingID++
+	id := h.homingID
 	h.mu.Unlock()
 
 	// The pace is read once, here, and carried into the loop.  A loop
@@ -145,7 +157,21 @@ func (h *Hosted) keepHome(ctx context.Context) {
 	// timings change under it while it was running, which is a thing
 	// nobody would ever intend and which the race detector is right to
 	// object to.
-	go h.homeward(ctx, homePace{settle: homeSettle, retry: HomeRetry, answer: homeAnswerWait})
+	go h.homeward(ctx, id, homePace{settle: homeSettle, retry: HomeRetry, answer: homeAnswerWait})
+}
+
+// finishedHoming forgets a loop that has ended of its own accord, so
+// that a client teleporting the avatar an hour later has nothing to
+// stop and says nothing about it.
+//
+// By id, because a session that reconnected has a NEWER loop running
+// and clearing the field blindly would leave that one unstoppable.
+func (h *Hosted) finishedHoming(id uint64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.homingID == id {
+		h.homing = nil
+	}
 }
 
 // homePace is how long one run of the loop waits at each of the three
@@ -177,7 +203,9 @@ func (h *Hosted) stopHoming(why string) {
 }
 
 // homeward asks to go home until it does, or until something stops it.
-func (h *Hosted) homeward(ctx context.Context, pace homePace) {
+func (h *Hosted) homeward(ctx context.Context, id uint64, pace homePace) {
+	defer h.finishedHoming(id)
+
 	if !sleepFor(ctx, pace.settle) {
 		return
 	}

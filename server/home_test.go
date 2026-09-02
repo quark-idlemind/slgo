@@ -235,3 +235,52 @@ func TestAClientSittingDoesNotStopIt(t *testing.T) {
 	was := asked(sim)
 	waitFor(t, 5*time.Second, "the loop to carry on", func() bool { return asked(sim) > was })
 }
+
+// homing says whether a loop is running for this session.
+func homing(h *Hosted) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.homing != nil
+}
+
+// TestALoopThatIsDoneForgetsItself.
+//
+// Otherwise a client teleporting the avatar an hour after it got home
+// stops something that is not running, and says so in the log -- which
+// reads as the daemon having been about to drag the avatar back.  It
+// was not; it finished at login.
+func TestALoopThatIsDoneForgetsItself(t *testing.T) {
+	quickHoming(t)
+	h, sim, _ := homeRig(t, "home")
+	refuse(t, sim, tooCloseToGo)
+
+	waitFor(t, 5*time.Second, "the loop to finish", func() bool {
+		return asked(sim) >= 1 && !homing(h)
+	})
+}
+
+// TestAReconnectStartsItAgain, because a reconnect is a fresh login
+// with the same "start = home" in it -- and the region that was down
+// when the first login happened may still be down now.
+func TestAReconnectStartsItAgain(t *testing.T) {
+	quickHoming(t)
+	h, sim, _ := homeRig(t, "home")
+	refuse(t, sim, tooCloseToGo)
+
+	waitFor(t, 5*time.Second, "the first loop to finish", func() bool {
+		return asked(sim) >= 1 && !homing(h)
+	})
+
+	saved := ReconnectDelays
+	ReconnectDelays = []time.Duration{20 * time.Millisecond}
+	defer func() { ReconnectDelays = saved }()
+
+	was := asked(sim)
+	first := h.Agent()
+	first.Close()
+	waitFor(t, 10*time.Second, "the session to come back", func() bool {
+		a := h.Agent()
+		return a != nil && a != first
+	})
+	waitFor(t, 5*time.Second, "it to ask again", func() bool { return asked(sim) > was })
+}

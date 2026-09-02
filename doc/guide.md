@@ -205,11 +205,15 @@ and the avatar walks in on the next attempt with nobody watching.
 
 It cannot tell whether it is home already: nothing in the protocol
 answers "where is home", and the daemon has never been told. What it
-does instead is ask to go there and read the answer, which is one
-refused teleport per login for an avatar that came up where it should
-be -- the grid refuses to shorten a teleport that arrives where it
-started, and that refusal is what says "you are already there".
-Nothing moves and nothing is logged.
+does instead is ask to go there once, a few seconds after the session
+comes up, and read the answer. An avatar that is already home is
+either moved a metre or two by the grid or told it cannot be teleported
+closer to where it already is; both mean home, and the log says
+
+    qi: home, after one attempt
+
+Where the avatar was NOT home, the same line appears once it gets
+there, with the number of attempts it took.
 
 **A client teleporting the avatar stops it, for the rest of that
 session.** Somebody who types `tp` has taken the wheel, and a daemon
