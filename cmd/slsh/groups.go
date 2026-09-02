@@ -77,10 +77,15 @@ var groups = []group{
 	{
 		name:  "people",
 		brief: "finding people, talking to them, friendship",
+		// invite is here as well as under region.  What it does is done
+		// to a person -- they get an instant message and decide -- and
+		// somebody looking for "how do I get somebody into my group"
+		// is asking about the person; what it is FOR is land rights,
+		// which is the question asked next to group.
 		members: []string{
 			"who", "lookup", "profile", "friends",
 			"offer", "offers", "accept", "decline",
-			"chat", "say", "im", "talk",
+			"invite", "chat", "say", "im", "talk",
 		},
 	},
 	{
@@ -112,7 +117,7 @@ var groups = []group{
 		// "unsit" is stand under another name and is not listed, since
 		// a listing that showed one command twice would say nothing
 		// extra about either.
-		members: []string{"where", "parcel", "group", "tp", "landmark", "sit", "stand", "who", "look", "map", "regions", "neighbours",
+		members: []string{"where", "parcel", "group", "invite", "tp", "landmark", "sit", "stand", "who", "look", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "move", "dump", "rez", "reform", "touch", "texture",
 			"take", "place", "perms", "drop", "start", "stop", "link", "unlink"},

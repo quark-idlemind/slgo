@@ -89,6 +89,7 @@ package sl
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 
@@ -276,4 +277,140 @@ func (w *Session) answerInvitation(ctx context.Context, i *Invitation, dialog ui
 	}
 	w.ForgetInvitation(i)
 	return nil
+}
+
+// Sending one, which is the other direction and a different message.
+//
+// InviteGroupRequest carries the group, and a list of invitee-and-role
+// pairs: the group is the one being invited into, and the role is which
+// role inside it the invitation is for.
+//
+// Nothing answers it.  InviteGroupResponse exists and is TRUSTED --
+// simulator to simulator -- so a client never sees one, and there is no
+// reply on the circuit and no field anywhere saying an invitation went.
+// What the sender can observe is an alert, if the simulator objects,
+// and nothing at all otherwise.  So this checks what it can before
+// sending and says plainly that it cannot check the rest.
+//
+// The invitation the far end gets is the instant message the top of
+// this file describes, which is why both directions live here: what is
+// sent is not the shape of what arrives, and reading one without the
+// other is how somebody comes to look for the reply that does not
+// exist.
+
+// RoleEveryone is the role every group has and the one an invitation
+// with no role chosen is into.
+//
+// It is the null id, which is the same value a missing field has -- so
+// it is written down rather than left as a zero somebody has to
+// recognise.  Linden Lab's viewer offers the group's roles in a menu
+// and starts on this one; a group that has never defined a role has
+// only this.
+var RoleEveryone = msg.UUID{}
+
+// GroupPowerInvite is the power to invite somebody into a group, out of
+// the mask AgentGroupDataUpdate carries for each membership
+// (Group.Powers).
+//
+// From Linden Lab's roles_constants.h, where it is GP_MEMBER_INVITE.
+// It is the second bit and not the first: bit zero is unassigned in
+// that file, so a mask read as "any power at all" would let a member
+// with none through.
+const GroupPowerInvite = 1 << 1
+
+// ErrCannotInvite is this avatar not being able to invite into that
+// group: not a member of it, or a member whose role does not carry the
+// power.
+//
+// It is refused here rather than sent, because a refusal by the grid is
+// not something a client can see -- see the head of this section -- so
+// an invitation nobody was allowed to make would look exactly like one
+// that went.
+var ErrCannotInvite = errors.New("sl: this avatar cannot invite into that group")
+
+// InviteToGroup asks the grid to invite people into a group.
+//
+// The role is which role they are invited into; RoleEveryone is the one
+// every group has and is what a caller with nothing else in mind wants.
+//
+// Nothing comes back.  There is no reply to this message, so what this
+// returns is that the request was sent and not that anybody was
+// invited -- the invitation itself is an instant message the far end
+// receives, and the only sure way to know one arrived is to be the
+// avatar it arrived at.  A caller reporting to a person should say
+// "invited" in the sense of "asked", which is all anybody here knows.
+//
+// What can be checked is checked first.  The membership list this
+// session already holds says whether this avatar is in the group at all
+// and whether its role carries the power to invite, and both of those
+// are refused here with ErrCannotInvite rather than sent to be ignored
+// in silence.  An empty list is not read as "belongs to none": nothing
+// asks for it and it arrives unasked, so an avatar that has not been
+// told yet is allowed to try -- see the Groups field for that argument.
+func (w *Session) InviteToGroup(ctx context.Context, group, role msg.UUID, who ...msg.UUID) error {
+	if group.IsZero() {
+		return fmt.Errorf("sl: no group to invite into")
+	}
+	if len(who) == 0 {
+		return fmt.Errorf("sl: nobody to invite into group %s", group)
+	}
+	for _, id := range who {
+		if id.IsZero() {
+			return fmt.Errorf("sl: the null id is not somebody to invite")
+		}
+	}
+	if err := w.mayInvite(ctx, group); err != nil {
+		return err
+	}
+
+	m := &msg.InviteGroupRequest{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.GroupData.GroupID = group
+	for _, id := range who {
+		m.InviteData = append(m.InviteData, msg.InviteGroupRequest_InviteData{
+			InviteeID: id, RoleID: role,
+		})
+	}
+	return w.Send(ctx, m)
+}
+
+// mayInvite is what this session can tell about whether the invitation
+// is allowed, which is the membership list and nothing else.
+//
+// The powers are the role's, as the simulator sent them, and they are
+// tested rather than displayed: a mask is not something to hand a
+// caller and ask them to interpret.
+func (w *Session) mayInvite(ctx context.Context, group msg.UUID) error {
+	p, err := w.Where(ctx)
+	if err != nil {
+		return err
+	}
+	// Not told yet is not the same as belongs to none, so it is allowed
+	// through rather than refused on a list that may be empty because
+	// nothing has arrived.
+	if len(p.Groups) == 0 {
+		return nil
+	}
+	for _, g := range p.Groups {
+		if g.ID != group {
+			continue
+		}
+		if g.Powers&GroupPowerInvite == 0 {
+			return fmt.Errorf("%w: this avatar is in %s and its role there does not "+
+				"carry the power to invite", ErrCannotInvite, groupCalled(g))
+		}
+		return nil
+	}
+	return fmt.Errorf("%w: this avatar is not a member of %s, and only a member "+
+		"invites", ErrCannotInvite, group)
+}
+
+// groupCalled names a group the way an error should: by its name where
+// there is one, and by its key either way, since the key is what a
+// caller can act on.
+func groupCalled(g Group) string {
+	if g.Name == "" {
+		return g.ID.String()
+	}
+	return fmt.Sprintf("%q (%s)", g.Name, g.ID)
 }

@@ -317,3 +317,148 @@ func TestAnInvitationDoesNotTeachTheGroupAPersonsName(t *testing.T) {
 		t.Errorf("the group is now called %q, which is whoever invited", got)
 	}
 }
+
+// Sending one, which nothing answers.
+//
+// The measurements behind these are from Agni on 2026-09-02, one
+// avatar inviting another into a group made for the purpose: the
+// invitation arrived at the far end as the instant message the rest of
+// this file parses, and nothing at all came back to the sender.  So
+// what is checked here is what went onto the wire and what was refused
+// before anything did.
+
+// testInvitee is somebody to invite, and is not a group.
+var testInvitee = msg.MustParseUUID("8f947e57-7e57-c0de-8cf0-54e10ee32eb6")
+
+// invitingSession is a session whose avatar belongs to one group with
+// the power to invite and one without, which is the arrangement every
+// refusal below is about.  Measured on Agni: an owner's membership
+// carries every bit and an ordinary member's carries 0x0000080018010000,
+// which does not include this one.
+func invitingSession(t *testing.T, powers uint64) (*Session, *fakeBackend) {
+	t.Helper()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.Groups = []Group{{ID: testGroupID, Name: "Example Builders", Powers: powers}}
+	f.mu.Unlock()
+	return w, f
+}
+
+// TestInviteToGroupSendsTheGroupTheRoleAndThePeople: the message is
+// what the far end's invitation is made out of, so every field of it is
+// somebody else's experience of this command.
+func TestInviteToGroupSendsTheGroupTheRoleAndThePeople(t *testing.T) {
+	t.Parallel()
+	w, f := invitingSession(t, GroupPowerInvite)
+
+	if err := w.InviteToGroup(context.Background(), testGroupID, RoleEveryone, testInvitee); err != nil {
+		t.Fatalf("InviteToGroup: %v", err)
+	}
+	m := onlySent[*msg.InviteGroupRequest](t, f)
+	if m.GroupData.GroupID != testGroupID {
+		t.Errorf("the invitation is into group %v", m.GroupData.GroupID)
+	}
+	if len(m.InviteData) != 1 {
+		t.Fatalf("%d people were invited, want 1", len(m.InviteData))
+	}
+	if m.InviteData[0].InviteeID != testInvitee {
+		t.Errorf("it invites %v", m.InviteData[0].InviteeID)
+	}
+	if !m.InviteData[0].RoleID.IsZero() {
+		t.Errorf("the everyone role went out as %v, and it is the null id",
+			m.InviteData[0].RoleID)
+	}
+	if m.AgentData.AgentID != testAgentID || m.AgentData.SessionID != testSessionID {
+		t.Error("the request did not carry this session's ids")
+	}
+}
+
+// TestInviteToGroupTakesSeveralInOneMessage: the block is a list on the
+// wire, and inviting three people is one message rather than three.
+func TestInviteToGroupTakesSeveralInOneMessage(t *testing.T) {
+	t.Parallel()
+	w, f := invitingSession(t, GroupPowerInvite)
+
+	who := []msg.UUID{testInvitee, msg.UUID{7}, msg.UUID{8}}
+	if err := w.InviteToGroup(context.Background(), testGroupID, RoleEveryone, who...); err != nil {
+		t.Fatalf("InviteToGroup: %v", err)
+	}
+	if m := onlySent[*msg.InviteGroupRequest](t, f); len(m.InviteData) != len(who) {
+		t.Errorf("%d of the three went out", len(m.InviteData))
+	}
+}
+
+// TestInviteToGroupRefusesWhatTheGridWouldAnswerWithSilence.
+//
+// Nothing replies to this message, so an invitation that was never
+// allowed looks exactly like one that went.  Both refusals are
+// therefore made here, out of the membership list the session already
+// holds, and neither of them puts anything on the wire.
+func TestInviteToGroupRefusesWhatTheGridWouldAnswerWithSilence(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		why    string
+		powers uint64
+		group  msg.UUID
+		says   string
+	}{
+		{"a member whose role cannot invite", 0x0000080018010000, testGroupID,
+			"does not carry the power"},
+		{"not a member of it at all", GroupPowerInvite, msg.UUID{4},
+			"not a member"},
+	} {
+		w, f := invitingSession(t, c.powers)
+		err := w.InviteToGroup(context.Background(), c.group, RoleEveryone, testInvitee)
+		if !errors.Is(err, ErrCannotInvite) {
+			t.Errorf("%s: InviteToGroup = %v, want a refusal", c.why, err)
+		}
+		if err != nil && !strings.Contains(err.Error(), c.says) {
+			t.Errorf("%s: the refusal %q does not say which of the two it is", c.why, err)
+		}
+		if got := sentOf[*msg.InviteGroupRequest](f); len(got) != 0 {
+			t.Errorf("%s: the invitation went out anyway: %s", c.why, f.describe())
+		}
+	}
+}
+
+// TestInviteToGroupTriesWhenTheListHasNotArrived.
+//
+// Nothing asks for the membership list: it arrives unasked shortly
+// after login, so an empty one is "not told yet" exactly as much as it
+// is "belongs to none".  Refusing on it would make this command
+// useless in the seconds after a session comes up, and the grid's own
+// answer to an invitation nobody was allowed to make is silence, which
+// is no worse than the refusal would have been.
+func TestInviteToGroupTriesWhenTheListHasNotArrived(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	if err := w.InviteToGroup(context.Background(), testGroupID, RoleEveryone, testInvitee); err != nil {
+		t.Fatalf("InviteToGroup: %v", err)
+	}
+	if got := sentOf[*msg.InviteGroupRequest](f); len(got) != 1 {
+		t.Errorf("%d invitations went out, want the one", len(got))
+	}
+}
+
+// TestInviteToGroupRefusesTheHalvesItCannotSupply: a null group and a
+// null invitee are both what a missing field looks like, and neither is
+// something the grid would report back.
+func TestInviteToGroupRefusesTheHalvesItCannotSupply(t *testing.T) {
+	t.Parallel()
+	w, f := invitingSession(t, GroupPowerInvite)
+	ctx := context.Background()
+
+	if err := w.InviteToGroup(ctx, msg.UUID{}, RoleEveryone, testInvitee); err == nil {
+		t.Error("an invitation into no group at all was sent")
+	}
+	if err := w.InviteToGroup(ctx, testGroupID, RoleEveryone); err == nil {
+		t.Error("an invitation naming nobody was sent")
+	}
+	if err := w.InviteToGroup(ctx, testGroupID, RoleEveryone, msg.UUID{}); err == nil {
+		t.Error("an invitation of the null id was sent")
+	}
+	if got := sentOf[*msg.InviteGroupRequest](f); len(got) != 0 {
+		t.Errorf("%d of the three went out: %s", len(got), f.describe())
+	}
+}

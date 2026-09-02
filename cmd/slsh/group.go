@@ -1,9 +1,18 @@
 package main
 
-// What the avatar is acting as, and what it could act as.
+// What the avatar is acting as, what it could act as, and asking
+// somebody else in.
 //
 //	group            the active group and the ones joined
 //	group NAME|UUID  act as that one
+//	invite WHO GROUP ask somebody into one of them
+//
+// invite is here rather than in a file of its own because it is the
+// same list twice over: the group it names is resolved against the
+// memberships this file already prints, and whether it is allowed at
+// all is a power out of the same list.  What it does is otherwise
+// nothing like activating one -- see cmdInvite -- and the two are kept
+// apart in the help and in the man pages.
 //
 // # Why this is worth a command
 //
@@ -103,6 +112,13 @@ var groupCommands = map[string]*command{
 		man:    "group",
 		run:    cmdGroup,
 	},
+	"invite": {
+		params: "WHO GROUP",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "ask somebody into one of this avatar's groups; nothing answers, so it is an asking",
+		man:    "invite",
+		run:    cmdInvite,
+	},
 }
 
 // cmdGroup lists the groups or activates one.
@@ -140,6 +156,87 @@ func cmdGroup(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		return err
 	}
 	fmt.Fprintf(out, "%s\n", actingAs(name, id))
+	return nil
+}
+
+// cmdInvite asks somebody into a group.
+//
+// # Why the group is said out loud every time
+//
+// It could have defaulted to the group this avatar is acting as, and
+// that would have been shorter to type and wrong the first time
+// somebody typed it after activating something else.  What this command
+// does reaches a person who is not at this prompt: they get an instant
+// message naming a group they did not ask about, and it cannot be taken
+// back -- there is no "never mind" message, and nothing here can
+// cancel an invitation that has gone.  So the group is on the line
+// that was typed, where it can be read before pressing return, rather
+// than in state that has to be remembered.
+//
+// # What it can promise, and what it cannot
+//
+// Nothing answers InviteGroupRequest.  So this reports what it did --
+// asked -- and never that anybody was invited, let alone joined.  What
+// it can check first it does: sl.InviteToGroup refuses a group this
+// avatar is not in, and one whose role does not carry the power to
+// invite, because both of those are answered by the grid with silence
+// and would otherwise read as an invitation that went.
+//
+// # Why the person is read off the front
+//
+// whoAndRest, exactly as give reads it: a name has a space in it far
+// more often than not, and so does a group's, so something has to
+// decide where one ends and the other begins.  The rule is the same
+// one give uses and it is the longest leading run that names somebody
+// -- which leaves the rest of the line for the group, spaces and all,
+// and needs no quoting anywhere.
+func cmdInvite(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o helpOnly
+	args, done, err := subOptions("invite", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) == 0 {
+		return usageError("invite", "somebody to invite, and which group to invite them into")
+	}
+
+	who, name, rest, err := sh.whoAndRest(ctx, args)
+	if err != nil {
+		return err
+	}
+	if len(rest) == 0 {
+		return usageError("invite", "which group to invite them into; "+
+			"\"group\" lists the ones this avatar has joined")
+	}
+
+	p, err := sh.s.Where(ctx)
+	if err != nil {
+		return err
+	}
+	id, group, err := chooseGroup(p, strings.Join(rest, " "))
+	if err != nil {
+		return err
+	}
+	if id.IsZero() {
+		// chooseGroup reads "none" as the null key, which is how the
+		// other command spells acting as nobody.  There is no such
+		// group to be invited into, and the grid would say nothing
+		// about it either way.
+		return usageError("invite", "\"none\" is how \"group\" spells acting as nobody, "+
+			"and nobody can be invited into it; name a group")
+	}
+
+	if err := sh.s.InviteToGroup(ctx, id, sl.RoleEveryone, who); err != nil {
+		return err
+	}
+	// "asked" and not "invited": what went out is a request nothing
+	// answers, and whether it reached them is theirs to see and not
+	// ours.  The role is said because it is part of what they were
+	// asked into and nothing else here mentions roles at all.
+	fmt.Fprintf(out, "asked %s into %s, in its everyone role\n",
+		name, describeGroup(group, id))
+	fmt.Fprintln(out, "nothing answers an invitation, so this says what was sent and not "+
+		"what became of it; they see it as an instant message and it waits for them")
 	return nil
 }
 

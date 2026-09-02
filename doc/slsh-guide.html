@@ -976,6 +976,34 @@ acting as group Lorn Family (488f7e57-…)</span>
           groups are known here" means either none joined or none told yet.
         </p>
 
+        <p>
+          <code>invite</code> asks somebody into one of those groups. The person
+          is read off the front of the line and the rest of it is the group, so
+          neither name needs quoting, and the group is named every time — it
+          never means "whichever one I am acting as", because what this does
+          reaches a person who is not at your prompt and no message cancels an
+          invitation.
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">invite Example Resident Example Builders</span>
+<span class="o">asked Example Resident into Example Builders (87f07e57-…), in its everyone role
+nothing answers an invitation, so this says what was sent and not what became of it; they see it as an instant message and it waits for them</span>
+<span class="p">/$</span> <span class="c">invite Example Resident Testville Gardeners</span>   <span class="n">a member, but not one who may invite</span>
+<span class="o">slsh: invite: sl: this avatar cannot invite into that group: this avatar is in "Testville Gardeners" (29af7e57-…) and its role there does not carry the power to invite</span></pre>
+        </div>
+
+        <p>
+          Nothing answers an invitation. The grid's reply to it is a trusted
+          message that travels between simulators, so the sender sees no
+          acknowledgement, no refusal and no answer — which is why the two
+          things that <em>can</em> be checked are checked before anything is
+          sent: that this avatar is in the group, and that its role there
+          carries the power to invite. Whether the person joined is not visible
+          from this side at all; their answer goes to the group.
+        </p>
+
         <h3>Who is about, as a picture</h3>
         <p>
           <code>who</code> answers half the question and cannot answer the
@@ -2384,13 +2412,13 @@ viewer_running = how to tell whether one is running already</span></pre>
               <tr><td class="group-title" colspan="2">People</td></tr>
               <tr><td class="cmd">who · lookup · profile · friends</td><td class="what">who is about, who they are</td></tr>
               <tr><td class="cmd">say · chat · im · talk</td><td class="what">talking, and the conversations you have open</td></tr>
-              <tr><td class="cmd">offer</td><td class="what">friendship</td></tr>
+              <tr><td class="cmd">offer · invite</td><td class="what">friendship; and asking somebody into a group</td></tr>
 
               <tr><td class="group-title" colspan="2">Region</td></tr>
               <tr><td class="cmd">where · parcel · look · map</td><td class="what">the region, the land under you, what it says of itself, and who is about</td></tr>
               <tr><td class="cmd">tp · regions · landmark</td><td class="what">going to a position, finding a region by name, going to a place kept</td></tr>
               <tr><td class="cmd">neighbours · sit · stand</td><td class="what">walking over a border; onto a seat and off it again</td></tr>
-              <tr><td class="cmd">group</td><td class="what">who you act as, which is what land rights hang on</td></tr>
+              <tr><td class="cmd">group · invite</td><td class="what">who you act as, which is what land rights hang on; and asking somebody into one</td></tr>
               <tr><td class="cmd">objects · dump · rez · reform</td><td class="what">what is here, described, built and changed</td></tr>
               <tr><td class="cmd">worn · wear · detach</td><td class="what">attachments</td></tr>
               <tr><td class="cmd">take · place · move</td><td class="what">between the world and inventory, and moving what is rezzed</td></tr>

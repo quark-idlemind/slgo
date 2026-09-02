@@ -312,3 +312,113 @@ func TestTheGroupListReachesAShellThroughTheDaemon(t *testing.T) {
 		t.Errorf("where printed %q", got)
 	}
 }
+
+// Inviting somebody in, which is the one thing here that reaches a
+// person who is not at this prompt.
+//
+// Measured on Agni on 2026-09-02, one of these avatars inviting
+// another into a group made for the purpose: what arrives at the far
+// end is an instant message the simulator composed, and what comes
+// back to the sender is nothing whatever.  So these tests are about
+// what went out and what was refused before anything did -- there is
+// no answer to assert on.
+
+// testInvitePowers is a membership that may invite, and testMemberOnly
+// is one that may not.  The second is the mask an ordinary member's
+// everyone role carries, as Agni sent it.
+const (
+	testInvitePowers = sl.GroupPowerInvite
+	testMemberOnly   = 0x0000080018010000
+)
+
+// sentInvite is the invitation that went out, or nothing.
+func sentInvite(x *testShell) *msg.InviteGroupRequest {
+	var found *msg.InviteGroupRequest
+	for _, m := range x.grid.Sent() {
+		if r, ok := m.(*msg.InviteGroupRequest); ok {
+			found = r
+		}
+	}
+	return found
+}
+
+// TestInviteSaysWhatItSentAndNotWhatBecameOfIt.
+//
+// Nothing answers an invitation, so a line saying somebody was invited
+// would be claiming the one thing this cannot know.  It says what was
+// asked, names the group it was asked into -- which the person on the
+// other end will see and this prompt otherwise would not -- and says
+// where the answer is not coming.
+func TestInviteSaysWhatItSentAndNotWhatBecameOfIt(t *testing.T) {
+	x := newTestShell(t)
+	joined(x, sl.Group{ID: testBuilders, Name: "Example Builders", Powers: testInvitePowers})
+	x.setListed([]person{{ID: testSomebody, Name: "Some Body"}})
+
+	got := x.do(t, "invite 1 Example Builders")
+	if !strings.Contains(got, "asked Some Body into Example Builders") {
+		t.Errorf("invite printed %q", got)
+	}
+	if !strings.Contains(got, "nothing answers an invitation") {
+		t.Errorf("invite printed %q, which claims more than it knows", got)
+	}
+
+	m := sentInvite(x)
+	if m == nil {
+		t.Fatal("nothing was sent")
+	}
+	if m.GroupData.GroupID != testBuilders {
+		t.Errorf("the invitation is into %v", m.GroupData.GroupID)
+	}
+	if len(m.InviteData) != 1 || m.InviteData[0].InviteeID != testSomebody {
+		t.Errorf("it invites %v", m.InviteData)
+	}
+	if !m.InviteData[0].RoleID.IsZero() {
+		t.Errorf("the role is %v, and the everyone role is the null id",
+			m.InviteData[0].RoleID)
+	}
+}
+
+// TestInviteWillNotGuessTheGroup.
+//
+// It could have meant the group this avatar is acting as, and that
+// would be wrong the first time somebody typed it after activating
+// something else -- and an invitation cannot be taken back.  So the
+// group is on the line or the line is refused, and "none", which is
+// how the group command spells acting as nobody, is not a group
+// anybody can be invited into.
+func TestInviteWillNotGuessTheGroup(t *testing.T) {
+	x := newTestShell(t)
+	joined(x, sl.Group{ID: testBuilders, Name: "Example Builders", Powers: testInvitePowers})
+	acting(x, testBuilders)
+	x.setListed([]person{{ID: testSomebody, Name: "Some Body"}})
+
+	for _, c := range []struct{ line, want string }{
+		{"invite", "somebody to invite"},
+		{"invite 1", "which group"},
+		{"invite 1 none", "acting as nobody"},
+		{"invite 1 Example Explorers", "joined no group"},
+	} {
+		if got := x.do(t, c.line); !strings.Contains(got, c.want) {
+			t.Errorf("%q should say %q, said %q", c.line, c.want, got)
+		}
+	}
+	if m := sentInvite(x); m != nil {
+		t.Errorf("a refused line invited somebody into %v", m.GroupData.GroupID)
+	}
+}
+
+// TestInviteRefusesWhatTheGridWouldIgnore: a member whose role cannot
+// invite is refused here, because the grid's answer to that invitation
+// is silence and silence reads as success.
+func TestInviteRefusesWhatTheGridWouldIgnore(t *testing.T) {
+	x := newTestShell(t)
+	joined(x, sl.Group{ID: testBuilders, Name: "Example Builders", Powers: testMemberOnly})
+	x.setListed([]person{{ID: testSomebody, Name: "Some Body"}})
+
+	if got := x.do(t, "invite 1 Example Builders"); !strings.Contains(got, "power to invite") {
+		t.Errorf("invite printed %q", got)
+	}
+	if m := sentInvite(x); m != nil {
+		t.Error("the invitation went out anyway")
+	}
+}
