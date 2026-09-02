@@ -126,6 +126,13 @@ type Hosted struct {
 	// See group.go.  Guarded by mu.
 	group msg.UUID
 
+	// homing cancels the loop that is trying to get this avatar home,
+	// and is nil when nothing is trying.  homeAnswers is where the grid's
+	// answer to its request is delivered, and is nil except while one
+	// attempt is waiting for one.  Both guarded by mu.  See home.go.
+	homing      context.CancelFunc
+	homeAnswers chan homeAnswer
+
 	// rank is the order this session came up in, lowest first.  It is
 	// what makes the default deterministic; see Server.Default.
 	rank uint64
@@ -286,6 +293,10 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	s.mu.Unlock()
 
 	go h.supervise(ctx)
+	// A profile that asked to start at home may not have got there: the
+	// login server puts the avatar somewhere else when the home region
+	// is down, and says nothing about it afterwards.  See home.go.
+	h.keepHome(ctx)
 	return h, nil
 }
 
@@ -433,6 +444,10 @@ func (h *Hosted) supervise(ctx context.Context) {
 			// settled at startup has to be settled again.  See
 			// group.go.
 			h.restoreGroup(ctx, next)
+			// And it is a fresh login with "start = home" in it, so
+			// it may have landed in the wrong place for the same
+			// reason the first one could have.  See home.go.
+			h.keepHome(ctx)
 			// The identity is the same avatar but a new
 			// session: a different session id, circuit code
 			// and set of capability URLs.  Clients holding

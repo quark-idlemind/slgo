@@ -94,7 +94,10 @@ The file name is the profile name: the one above as `~/.config/slgo/example`
 is the profile `example`, which is what `slgod example` and
 `--agent example` mean.
 
-`start` is where to arrive: `last`, `home`, or a region name. `group` is
+`start` is where to arrive: `last`, `home`, or a region name -- and
+`home` is also a standing instruction, since a home region that is down
+at login time leaves the avatar somewhere else entirely; see "When home
+is down" below. `group` is
 the group to act as, which decides more than it looks like -- see "The
 group an avatar acts as" below. `neighbours` is whether this avatar
 holds a circuit to the regions beside it, which is what walking over a
@@ -187,6 +190,41 @@ the first one is a daemon somebody has to go and restart. The second
 cannot be cleared by waiting, so that profile is left alone and the rest
 carry on. `slgod` stops only when **nothing** came up and nothing is
 still being retried -- "no session came up; nothing to serve".
+
+### When home is down
+
+`start = home` is a request, not a promise. If the home **region** is
+down at the moment the login happens, the grid puts the avatar
+somewhere else entirely and says nothing about it afterwards -- so the
+session comes up in the wrong place, on land that is not yours, and
+the first sign of it is usually a rez that will not work.
+
+A session whose profile said `home` therefore keeps asking to go home
+until it gets there, once a minute. A region that was down comes back
+and the avatar walks in on the next attempt with nobody watching.
+
+It cannot tell whether it is home already: nothing in the protocol
+answers "where is home", and the daemon has never been told. What it
+does instead is ask to go there and read the answer, which is one
+refused teleport per login for an avatar that came up where it should
+be -- the grid refuses to shorten a teleport that arrives where it
+started, and that refusal is what says "you are already there".
+Nothing moves and nothing is logged.
+
+**A client teleporting the avatar stops it, for the rest of that
+session.** Somebody who types `tp` has taken the wheel, and a daemon
+that dragged the avatar home a minute later would be a poltergeist: the
+shell reports an arrival and the avatar leaves again by itself with
+nothing on the screen to say why. It stops on the request rather than
+on an arrival, so a teleport that is refused stops it too.
+
+A reconnect starts it again, and so does a restart: both are fresh
+logins with `start = home` in them, so the same question is being asked
+again by the same means.
+
+Profiles that say anything else are left alone. `start = last` means
+where the avatar was, and dragging that avatar home would be the daemon
+overruling the profile rather than honouring it.
 
 ### The group an avatar acts as
 

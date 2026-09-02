@@ -179,6 +179,11 @@ func (h *Hosted) relay(p *msg.Packet) {
 		return // acknowledgements only
 	}
 
+	// Before the fan-out, and before the early return below: an
+	// answer to "take me home" is the session's business whether or
+	// not anybody is attached to hear it.  See home.go.
+	h.noteTeleportMessage(p)
+
 	h.mu.RLock()
 	if len(h.clients) == 0 {
 		h.mu.RUnlock()
@@ -226,6 +231,11 @@ func (h *Hosted) relay(p *msg.Packet) {
 // it by name.  As with a circuit message, the server does not look
 // inside: the body crosses as the LLSD bytes it arrived as.
 func (h *Hosted) relayEvent(name string, body []byte) {
+	// Before the fan-out, for relay's reason: this is where a teleport
+	// is really answered, and the answer belongs to the session rather
+	// than to whoever happens to be attached.  See home.go.
+	h.noteTeleportEvent(name, body)
+
 	h.mu.RLock()
 	var want []*Client
 	for c := range h.clients {
@@ -397,6 +407,14 @@ func sendMessage(ctx context.Context, h *Hosted, m *pb.OutboundMessage) error {
 		return status.Error(codes.InvalidArgument, "message needs an id or a name")
 	}
 
+	// A client moving the avatar takes the wheel: whatever the daemon
+	// was trying to do about where this avatar should be stops here,
+	// on the REQUEST rather than on an arrival, so that a teleport
+	// which is refused stops it too.  See home.go.
+	if teleportRequest(id) {
+		h.stopHoming("a client teleported this avatar")
+	}
+
 	raw := msg.NewRaw(id, m.Body)
 	var err error
 	if m.Reliable {
@@ -408,6 +426,25 @@ func sendMessage(ctx context.Context, h *Hosted, m *pb.OutboundMessage) error {
 		return status.Errorf(codes.Unavailable, "send: %v", err)
 	}
 	return nil
+}
+
+// teleportRequest is whether a message a client sent is it asking for
+// the avatar to be somewhere else.
+//
+// The three the shell can send: a position or a region, a landmark --
+// which is also how it goes home -- and accepting somebody's offer.
+// Sitting is not here.  A sit moves the avatar up to ten metres and is
+// not somebody saying where it should be; treating it as one would stop
+// the daemon getting an avatar home because it sat on a chair on the
+// way.
+func teleportRequest(id msg.ID) bool {
+	switch id {
+	case msg.IDOf(&msg.TeleportLocationRequest{}),
+		msg.IDOf(&msg.TeleportLandmarkRequest{}),
+		msg.IDOf(&msg.TeleportLureRequest{}):
+		return true
+	}
+	return false
 }
 
 // ------------------------------------------------------------- unary
