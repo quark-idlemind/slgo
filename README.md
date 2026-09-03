@@ -718,10 +718,10 @@ somebody wearing another's is the case worth the words.
 
 `--owner` narrows it to one person:
 
-    objects --owner kerra                    # a pattern, ignoring case
-    objects --owner '^Perrick.*Engineer$'     # it is a regular expression
-    objects --owner 372d7e57-…                # or exactly whom you mean
-    objects --owner perrick Box               # with the name filter as well
+    objects --owner kerra                 # a pattern, ignoring case
+    objects --owner '^Perrick.*Hobb$'     # it is a regular expression
+    objects --owner 345e7e57-…            # or exactly whom you mean
+    objects --owner perrick Box           # with the name filter as well
 
 A uuid is taken as one because nothing else looks like one, and it is
 the only way to tell two residents of the same name apart -- or to ask

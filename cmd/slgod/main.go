@@ -45,6 +45,10 @@ func main() {
 			"write each traced message out in full, rather than one line naming it")
 		viewerAt = flag.String("viewer", "",
 			"serve viewer logins on this address, so a real viewer can be handed a session")
+		viewerCert = flag.String("viewer-cert", "",
+			"PEM certificate to serve viewer logins over TLS; needs -viewer-key")
+		viewerKey = flag.String("viewer-key", "",
+			"PEM private key for -viewer-cert")
 		neighbours = flag.Bool("neighbours", false,
 			"hold a circuit to each neighbouring region, so the avatar can walk over a border;"+
 				" a profile's own neighbours setting wins over this")
@@ -125,6 +129,12 @@ func main() {
 	// afterwards -- and that is long before there is an endpoint to
 	// serve.
 	var viewers *viewerHost
+	if (*viewerCert == "") != (*viewerKey == "") {
+		log.Fatal("viewer: -viewer-cert and -viewer-key go together")
+	}
+	if *viewerCert != "" && *viewerAt == "" {
+		log.Fatal("viewer: -viewer-cert without -viewer, so there is nothing to serve over TLS")
+	}
 	if *viewerAt != "" {
 		host, _, err := viewer.HostPort(*viewerAt)
 		if err != nil {
@@ -475,7 +485,7 @@ func main() {
 
 	// Now that the sessions are up there is something to hand over.
 	if viewers != nil {
-		stopViewers, err := viewers.serve(*viewerAt)
+		stopViewers, err := viewers.serve(*viewerAt, *viewerCert, *viewerKey)
 		if err != nil {
 			log.Fatalf("viewer: %v", err)
 		}

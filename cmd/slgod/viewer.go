@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -187,8 +188,34 @@ func (v *viewerHost) relayFor(profile string) func(*msg.Packet) {
 }
 
 // serve starts the login endpoint and returns a function that stops it.
-func (vh *viewerHost) serve(addr string) (func(), error) {
+//
+// certFile and keyFile, when given, make it https rather than http.
+// That is not a detail of transport: the scheme reaches the viewer,
+// because the seed capability handed out at login is built from the
+// address bound here, so a TLS endpoint hands out TLS capabilities and
+// a plain one hands out plain ones.
+func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
 	logf := vh.logf
+
+	// Loaded before the listener is bound, so that an unreadable or
+	// mismatched pair is a startup error naming the file rather than a
+	// line in the log a minute later, when the viewer cannot connect
+	// and nothing says why.  http.Server.ServeTLS would read them on
+	// the serving goroutine, which is too late to return.
+	scheme := "http://"
+	var tlsCfg *tls.Config
+	if certFile != "" {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return nil, fmt.Errorf("viewer login: certificate: %w", err)
+		}
+		tlsCfg = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		}
+		scheme = "https://"
+	}
+
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("viewer login: %w", err)
@@ -196,16 +223,28 @@ func (vh *viewerHost) serve(addr string) (func(), error) {
 	mux := http.NewServeMux()
 	mux.Handle("/", viewer.LoginHandler(vh.find, logf))
 	mux.HandleFunc("/cap/", vh.serveCap)
-	hs := &http.Server{Handler: mux}
+	hs := &http.Server{Handler: mux, TLSConfig: tlsCfg}
 	go func() {
-		if err := hs.Serve(ln); err != nil && err != http.ErrServerClosed {
+		var err error
+		if tlsCfg != nil {
+			// The paths are empty because the pair is already in
+			// TLSConfig; ServeTLS only reads files when it is not.
+			err = hs.ServeTLS(ln, "", "")
+		} else {
+			err = hs.Serve(ln)
+		}
+		if err != nil && err != http.ErrServerClosed {
 			logf("viewer login: %v", err)
 		}
 	}()
 
-	vh.base = strings.TrimSuffix(viewer.LoginURI(ln.Addr().String()), "/")
-	logf("viewer logins at %s -- add a grid with that login URI and log in as the avatar",
-		viewer.LoginURI(ln.Addr().String()))
+	uri := viewer.LoginURI(scheme + ln.Addr().String())
+	vh.base = strings.TrimSuffix(uri, "/")
+	logf("viewer logins at %s -- add a grid with that login URI and log in as the avatar", uri)
+	if tlsCfg == nil {
+		logf("viewer: WARNING: plain http; the login password digest and " +
+			"the session's capabilities cross the wire in the clear")
+	}
 
 	return func() {
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

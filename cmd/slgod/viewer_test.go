@@ -11,10 +11,22 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha1"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -419,5 +431,151 @@ func TestASessionWithNoCapabilitiesSaysSoRatherThanProxyingNowhere(t *testing.T)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("status = %s, want a refusal that says why", resp.Status)
+	}
+}
+
+// Serving the viewer endpoint over TLS.
+//
+// The scheme is not a detail of transport here.  Everything a viewer is
+// told to come back to is built from the address bound in serve -- the
+// login URI a person types into a grid list, and the seed capability
+// the login response carries -- so an endpoint that speaks TLS has to
+// hand out https URLs or the viewer walks straight back to a port that
+// is no longer listening for plaintext.
+
+// selfSignedPair writes a certificate and key good for loopback, of the
+// shape a viewer's certificate store insists on: a Subject Key
+// Identifier, which Firestorm rejects a certificate for lacking, and a
+// subjectAltName, which is what libcurl matches the host against
+// (llsechandler_basic.cpp:905, _validateCert).
+func selfSignedPair(t *testing.T) (certFile, keyFile string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The Subject Key Identifier the viewer requires: the SHA-1 of the
+	// public key, which is what everything else generates too.
+	pub, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	skid := sha1.Sum(pub)
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "slgod viewer endpoint"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		SubjectKeyId:          skid[:],
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+		DNSNames:              []string{"localhost"},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	certFile = filepath.Join(dir, "cert.pem")
+	keyFile = filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(
+		&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	der, err = x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(
+		&pem.Block{Type: "EC PRIVATE KEY", Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return certFile, keyFile
+}
+
+// TestATLSEndpointNamesItselfWithHTTPS: the login URI and the seed both
+// come from the address serve bound, so both have to say https.  A
+// viewer given an http seed after a TLS login would ask this daemon for
+// its capabilities in the clear, and be refused.
+func TestATLSEndpointNamesItselfWithHTTPS(t *testing.T) {
+	certFile, keyFile := selfSignedPair(t)
+	v, _ := mintingHost(t, "$1$00157e577e57c0de028f000000000000")
+	stop, err := v.serve("127.0.0.1:0", certFile, keyFile)
+	if err != nil {
+		t.Fatalf("serve over TLS: %v", err)
+	}
+	defer stop()
+
+	uri := v.LoginURI()
+	if !strings.HasPrefix(uri, "https://") {
+		t.Errorf("LoginURI() = %q, want https:// so the viewer comes back over TLS", uri)
+	}
+	if !strings.HasPrefix(v.base+"/cap/example/seed", "https://") {
+		t.Errorf("the seed capability is %q, want https://", v.base+"/cap/example/seed")
+	}
+
+	// And it really is TLS: a plaintext request is not answered.
+	pemBytes, err := os.ReadFile(certFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pemBytes) {
+		t.Fatal("could not read the certificate back")
+	}
+	c := &http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{RootCAs: pool},
+	}}
+	resp, err := c.Get(uri)
+	if err != nil {
+		t.Fatalf("https to the endpoint: %v", err)
+	}
+	resp.Body.Close()
+	// A GET is refused by the login handler, which is all that is
+	// wanted here: the refusal came back over TLS.
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("GET returned %s, want the login handler's 405", resp.Status)
+	}
+	if resp.TLS == nil {
+		t.Error("the answer did not come over TLS")
+	}
+}
+
+// TestAPlainEndpointStillNamesItselfWithHTTP: the default is unchanged,
+// which every viewer already pointed at this daemon depends on.
+func TestAPlainEndpointStillNamesItselfWithHTTP(t *testing.T) {
+	v, said := mintingHost(t, "$1$00157e577e57c0de028f000000000000")
+	stop, err := v.serve("127.0.0.1:0", "", "")
+	if err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+	defer stop()
+	if uri := v.LoginURI(); !strings.HasPrefix(uri, "http://") {
+		t.Errorf("LoginURI() = %q, want the http:// it has always been", uri)
+	}
+	if !strings.Contains(said.String(), "clear") {
+		t.Error("a plaintext endpoint did not say that it is one")
+	}
+}
+
+// TestABadCertificateIsRefusedBeforeTheListenerOpens: a daemon that
+// took the flag, bound the port and only then found the certificate
+// unreadable would log a line nobody is watching and serve nothing,
+// which looks exactly like a viewer that cannot connect.
+func TestABadCertificateIsRefusedBeforeTheListenerOpens(t *testing.T) {
+	v, _ := mintingHost(t, "$1$00157e577e57c0de028f000000000000")
+	stop, err := v.serve("127.0.0.1:0", filepath.Join(t.TempDir(), "absent.pem"),
+		filepath.Join(t.TempDir(), "absent.key"))
+	if err == nil {
+		stop()
+		t.Fatal("a missing certificate was accepted")
+	}
+	if !strings.Contains(err.Error(), "certificate") {
+		t.Errorf("error is %q, and does not say it is about the certificate", err)
+	}
+	if v.base != "" {
+		t.Errorf("base = %q after a refused start, so something was bound", v.base)
 	}
 }
