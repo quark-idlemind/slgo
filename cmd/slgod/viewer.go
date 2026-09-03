@@ -205,11 +205,17 @@ func (v *viewerHost) relayFor(profile string) func(*msg.Packet) {
 
 // serve starts the login endpoint and returns a function that stops it.
 //
-// certFile and keyFile, when given, make it https rather than http.
-// That is not a detail of transport: the scheme reaches the viewer,
-// because the seed capability handed out at login is built from the
-// address bound here, so a TLS endpoint hands out TLS capabilities and
-// a plain one hands out plain ones.
+// It is TLS or it does not run.  There used to be a plain HTTP path
+// and it is gone: what crosses this endpoint is the viewer_password
+// digest inbound and, outbound, the whole login response --
+// secure_session_id, the session id, the circuit code -- followed by
+// every capability URL the session holds.  None of that is a thing to
+// hand to a listener because the flag defaulted that way.
+//
+// The scheme is not a detail of transport either.  It reaches the
+// viewer, because the login URI a person adds to a grid list and the
+// seed capability in the login response are both built from the
+// address bound here.
 func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
 	logf := vh.logf
 
@@ -218,18 +224,13 @@ func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
 	// line in the log a minute later, when the viewer cannot connect
 	// and nothing says why.  http.Server.ServeTLS would read them on
 	// the serving goroutine, which is too late to return.
-	scheme := "http://"
-	var tlsCfg *tls.Config
-	if certFile != "" {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return nil, fmt.Errorf("viewer login: certificate: %w", err)
-		}
-		tlsCfg = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
-		}
-		scheme = "https://"
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("viewer login: certificate: %w", err)
+	}
+	tlsCfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
 	}
 
 	ln, err := net.Listen("tcp", addr)
@@ -241,26 +242,16 @@ func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
 	mux.HandleFunc("/cap/", vh.serveCap)
 	hs := &http.Server{Handler: mux, TLSConfig: tlsCfg}
 	go func() {
-		var err error
-		if tlsCfg != nil {
-			// The paths are empty because the pair is already in
-			// TLSConfig; ServeTLS only reads files when it is not.
-			err = hs.ServeTLS(ln, "", "")
-		} else {
-			err = hs.Serve(ln)
-		}
-		if err != nil && err != http.ErrServerClosed {
+		// The paths are empty because the pair is already in
+		// TLSConfig; ServeTLS only reads files when it is not.
+		if err := hs.ServeTLS(ln, "", ""); err != nil && err != http.ErrServerClosed {
 			logf("viewer login: %v", err)
 		}
 	}()
 
-	uri := viewer.LoginURI(scheme + ln.Addr().String())
+	uri := viewer.LoginURI(ln.Addr().String())
 	vh.base = strings.TrimSuffix(uri, "/")
 	logf("viewer logins at %s -- add a grid with that login URI and log in as the avatar", uri)
-	if tlsCfg == nil {
-		logf("viewer: WARNING: plain http; the login password digest and " +
-			"the session's capabilities cross the wire in the clear")
-	}
 
 	return func() {
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

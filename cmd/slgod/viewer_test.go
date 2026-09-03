@@ -557,20 +557,24 @@ func TestATLSEndpointNamesItselfWithHTTPS(t *testing.T) {
 	}
 }
 
-// TestAPlainEndpointStillNamesItselfWithHTTP: the default is unchanged,
-// which every viewer already pointed at this daemon depends on.
-func TestAPlainEndpointStillNamesItselfWithHTTP(t *testing.T) {
-	v, said := mintingHost(t, "$1$00157e577e57c0de028f000000000000")
+// TestThereIsNoPlaintextEndpointLeft.
+//
+// What crosses this endpoint is the viewer_password digest inbound and
+// the whole login response outbound -- secure_session_id, the session
+// id, the circuit code -- followed by every capability URL the session
+// holds.  There is no arrangement in which serving that in the clear is
+// the right default, so serving it in the clear is not reachable: with
+// no certificate the endpoint refuses to start rather than falling
+// back.
+func TestThereIsNoPlaintextEndpointLeft(t *testing.T) {
+	v, _ := mintingHost(t, "$1$00157e577e57c0de028f000000000000")
 	stop, err := v.serve("127.0.0.1:0", "", "")
-	if err != nil {
-		t.Fatalf("serve: %v", err)
+	if err == nil {
+		stop()
+		t.Fatal("the endpoint served without a certificate")
 	}
-	defer stop()
-	if uri := v.LoginURI(); !strings.HasPrefix(uri, "http://") {
-		t.Errorf("LoginURI() = %q, want the http:// it has always been", uri)
-	}
-	if !strings.Contains(said.String(), "clear") {
-		t.Error("a plaintext endpoint did not say that it is one")
+	if v.base != "" {
+		t.Errorf("base = %q after a refused start, so something was bound", v.base)
 	}
 }
 

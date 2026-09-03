@@ -245,9 +245,16 @@ func (h *loginHandler) fault(w http.ResponseWriter, code int64, message string) 
 
 // LoginURI is the address to give a viewer, in the form its grid list
 // wants.
+//
+// https, because that is the only thing this endpoint speaks.  A bare
+// address used to become http, which was right while there was a plain
+// channel and is now a URL nothing answers on: Go's TLS server replies
+// to a plaintext request with 400 and a viewer reports it as an
+// unreachable grid.  An address that already carries a scheme is left
+// as it is, so a caller that has one keeps it.
 func LoginURI(addr string) string {
 	if !strings.Contains(addr, "//") {
-		addr = "http://" + addr
+		addr = "https://" + addr
 	}
 	if !strings.HasSuffix(addr, "/") {
 		addr += "/"

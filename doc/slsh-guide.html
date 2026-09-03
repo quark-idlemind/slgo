@@ -2161,12 +2161,12 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
         <div class="term">
           <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
 <pre><span class="p">/$</span> <span class="c">viewer</span>
-<span class="o">viewer logins at http://127.0.0.1:9000/
+<span class="o">viewer logins at https://127.0.0.1:9000/
   add a grid with that login URI and log in as Example Resident
   no viewer has taken this session
   "viewer --launch" starts one and logs it in, with a password good for that one login</span>
 <span class="p">/$</span> <span class="c">viewer --launch</span>
-<span class="o">starting a viewer at http://127.0.0.1:9000/, logged in as Example Resident
+<span class="o">starting a viewer at https://127.0.0.1:9000/, logged in as Example Resident
   open -a Firestorm-OpenSim --args --grid slgod --login Example Resident PASSWORD
   the password it was given works once and expires in 5 minutes</span></pre>
         </div>
@@ -2189,6 +2189,17 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
             Second Life–only build, which ignores the login URI and comes up on
             the main grid with no explanation. And the grid has to be added to
             that viewer once, by hand, using the login URI printed above.
+          </p>
+          <p>
+            The endpoint is TLS and has no plaintext form: it carries the
+            viewer password one way and the whole session — the session id,
+            the circuit code, every capability URL — the other. The daemon
+            keeps a self-signed certificate for it and says where, and the
+            viewer will refuse to connect until that certificate is trusted.
+            On Firestorm, accept its certificate dialog once, or append the
+            file to <code>user_settings/CA.pem</code> before adding the grid —
+            adding a grid probes the address first, and that probe has no
+            dialog behind it.
           </p>
           <p>
             Which viewer is launched, and how, are settings — see

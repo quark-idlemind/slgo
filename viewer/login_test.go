@@ -331,9 +331,12 @@ func TestARealFirestormRequestIsAccepted(t *testing.T) {
 
 func TestLoginURI(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
-		{"127.0.0.1:9000", "http://127.0.0.1:9000/"},
+		{"127.0.0.1:9000", "https://127.0.0.1:9000/"},
+		{"https://127.0.0.1:9000", "https://127.0.0.1:9000/"},
+		{"https://127.0.0.1:9000/", "https://127.0.0.1:9000/"},
+		// A scheme already there is kept, whatever it is: the caller
+		// knows something this does not.
 		{"http://127.0.0.1:9000", "http://127.0.0.1:9000/"},
-		{"http://127.0.0.1:9000/", "http://127.0.0.1:9000/"},
 	} {
 		if got := LoginURI(c.in); got != c.want {
 			t.Errorf("LoginURI(%q) = %q, want %q", c.in, got, c.want)

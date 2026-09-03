@@ -46,7 +46,8 @@ func main() {
 		viewerAt = flag.String("viewer", "",
 			"serve viewer logins on this address, so a real viewer can be handed a session")
 		viewerCert = flag.String("viewer-cert", "",
-			"PEM certificate to serve viewer logins over TLS; needs -viewer-key")
+			"PEM certificate the viewer endpoint serves; default is a self-signed one"+
+				" kept in slgod's config directory")
 		viewerKey = flag.String("viewer-key", "",
 			"PEM private key for -viewer-cert")
 		neighbours = flag.Bool("neighbours", false,
@@ -135,8 +136,17 @@ func main() {
 	if *viewerCert != "" && *viewerAt == "" {
 		log.Fatal("viewer: -viewer-cert without -viewer, so there is nothing to serve over TLS")
 	}
+	// Resolved here rather than in serve, because a certificate that
+	// has to be generated should be generated before the sessions are
+	// brought up: a daemon that logs three avatars in and then dies on
+	// an unwritable config directory has logged them in for nothing.
+	var viewerCertFile, viewerKeyFile string
 	if *viewerAt != "" {
 		host, _, err := viewer.HostPort(*viewerAt)
+		if err != nil {
+			log.Fatalf("viewer: %v", err)
+		}
+		viewerCertFile, viewerKeyFile, err = viewerCertFiles(*viewerCert, *viewerKey, host, log.Printf)
 		if err != nil {
 			log.Fatalf("viewer: %v", err)
 		}
@@ -485,7 +495,7 @@ func main() {
 
 	// Now that the sessions are up there is something to hand over.
 	if viewers != nil {
-		stopViewers, err := viewers.serve(*viewerAt, *viewerCert, *viewerKey)
+		stopViewers, err := viewers.serve(*viewerAt, viewerCertFile, viewerKeyFile)
 		if err != nil {
 			log.Fatalf("viewer: %v", err)
 		}

@@ -337,6 +337,35 @@ That password is the viewer's, not the account's -- what a viewer sends
 here never reaches Linden Lab, and a password kept for this cannot be
 used to log the account in anywhere.
 
+The endpoint is TLS, always. It carries that password inbound and the
+whole login response outbound -- the session id, the circuit code, and
+every capability URL the session holds -- so there is no arrangement in
+which serving it in the clear is right, and there is no flag for it.
+`slgod` writes a self-signed certificate into its own config directory
+the first time it needs one, keeps it, and says where:
+
+    viewer: wrote a self-signed certificate to ~/.config/slgod/viewer-cert.pem
+
+A viewer will refuse that until it is told about it. On Firestorm,
+either accept the certificate dialog once, or append the file to
+`user_settings/CA.pem` -- which is the way in if you are adding the grid
+by hand, because the grid manager's own probe of a new address has no
+dialog behind it. The certificate covers loopback and whatever address
+`-viewer` names; move the daemon to a different address and it is
+replaced, which is said in the log, and every viewer has to be told
+again. `-viewer-cert` and `-viewer-key` take your own pair instead, from
+a real authority or anywhere else.
+
+The capabilities are behind the login too. A viewer that logs in
+successfully is handed a URL with a token in it, and that token is what
+`/cap/...` checks -- the profile name on its own used to be enough, and
+the answer is every capability URL of the live session.
+
+None of that makes the endpoint safe to put on a network. A viewer on
+another machine wants a WireGuard or Tailscale tunnel with `-viewer`
+bound to the tunnel address; the UDP circuit is on an OS-assigned port,
+which no firewall rule can name and no TLS covers.
+
 `slsh viewer` is the other end of it: it says where the daemon serves
 viewer logins and whether one has taken this session, and `viewer -l`
 starts a viewer and logs it in. That does not use the profile's
@@ -377,7 +406,8 @@ half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
 | `-no-auth` | serve without authentication; loopback only, and it is not checked |
 | `-group G`, `-group PROFILE=G` | the group to act as, overriding the profile's own |
 | `-start WHERE` | override every profile's start location |
-| `-viewer ADDR` | serve viewer logins here, so a real viewer can be handed a session |
+| `-viewer ADDR` | serve viewer logins here, so a real viewer can be handed a session; always TLS |
+| `-viewer-cert FILE`, `-viewer-key FILE` | serve that endpoint with your own certificate rather than the kept self-signed one |
 | `-neighbours` | hold a circuit to each neighbouring region, so an avatar can walk over a border; a profile's own `neighbours` setting wins over it |
 | `-trace FILE` | write a packet trace |
 | `-trace-messages NAMES` | trace only these; empty traces every one |
