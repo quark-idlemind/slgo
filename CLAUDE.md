@@ -95,6 +95,20 @@ reach.
 says what to add to `.gitignore`. If you find one already committed, it
 goes in `.gitignore` and out of the tree in the same change.
 
+## The issue log
+
+If an `issues/` directory is present, it is the list of what is known
+to be wrong with this tree and has not been fixed: `issues/INDEX.md` is
+every issue on one line each with a severity, and there is a file per
+issue behind it.  Read the index when asked to review issues, or before
+starting work in an area, and add a file and a row when something new
+turns up -- `issues/README.md` says how.
+
+It is untracked, deliberately: an issue is worth having only if it says
+what was actually seen, and what was seen quotes the live grid.  So a
+checkout has no issues directory, and that means nobody has written one
+here rather than that nothing is wrong.
+
 ## Measurements
 
 Where a document here says what happens, it was watched happening. Do

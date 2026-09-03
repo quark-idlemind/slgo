@@ -59,3 +59,10 @@
 # Notes written while raising coverage: what is still uncovered and why.
 # They are working notes about the tests, not documentation of the code.
 /coverage-notes/
+
+# The issue log: what is known to be wrong with this tree and has not
+# been fixed yet, one file per fault and an index over them.  It quotes
+# the live grid for the same reason the review notes above do -- an
+# issue is only worth anything if it says what was actually seen -- so
+# it stays out of the repository.  See issues/README.md.
+/issues/
