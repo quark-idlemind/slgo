@@ -113,9 +113,18 @@ func (v *fakeViewer) sendSeq(m msg.Message, flags uint8, seq uint32) {
 
 // connect is what a viewer does on arrival: claim the circuit, then ask
 // to be put in the region.
+//
+// All three fields of the CircuitCode block are filled in, as a real
+// viewer fills them from its login response.  They used to be a code
+// and two zero uuids, which was enough while the circuit answered
+// whoever spoke and checkCircuit only grumbled at a mismatch; now the
+// session id is what admits the sender, so a fake viewer that sent
+// less than a real one would be testing a door it had walked around.
 func (v *fakeViewer) connect(code uint32) {
 	uc := &msg.UseCircuitCode{}
 	uc.CircuitCode.Code = code
+	uc.CircuitCode.SessionID = testSessionID
+	uc.CircuitCode.ID = testAgentID
 	v.send(uc, msg.FlagReliable)
 
 	cam := &msg.CompleteAgentMovement{}

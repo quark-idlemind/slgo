@@ -2,6 +2,7 @@ package viewer
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -465,5 +466,66 @@ func TestNoMintedPasswordMeansNothingExtraIsAccepted(t *testing.T) {
 		if got["login"] != "false" {
 			t.Errorf("passwd %q logged in against a handover with no minted password", passwd)
 		}
+	}
+}
+
+// TestNothingIsOpenedUntilThePasswordMatches.
+//
+// The circuit used to be opened while the handover was being looked
+// up, which is before the password has been compared: naming an avatar
+// the daemon holds was enough to open its UDP socket, and the socket
+// outlives the attempt by the life of the daemon.  A wrong password
+// should cost the asker a refusal and nothing else.
+func TestNothingIsOpenedUntilThePasswordMatches(t *testing.T) {
+	admitted := 0
+	h := testHandover()
+	// Admit fills in what the response needs, as the daemon's does.
+	h.SimIP, h.SimPort, h.Seed = "", 0, ""
+	h.Admit = func() error {
+		admitted++
+		h.SimIP, h.SimPort, h.Seed = "127.0.0.1", 9301, "http://127.0.0.1:9302/cap/t/seed"
+		return nil
+	}
+	s := serve(t, h)
+
+	for _, params := range []map[string]any{
+		{"first": "Taren", "last": "Holt", "passwd": agent.HashPassword("wrong")},
+		{"first": "Someone", "last": "Else", "passwd": agent.HashPassword("secret")},
+		{"first": "Taren", "last": "Holt", "passwd": ""},
+	} {
+		login(t, s.URL, params)
+	}
+	if admitted != 0 {
+		t.Errorf("a refused login opened the circuit %d time(s)", admitted)
+	}
+
+	got := login(t, s.URL, map[string]any{
+		"first": "Taren", "last": "Holt", "passwd": agent.HashPassword("secret")})
+	if got["login"] != "true" {
+		t.Fatalf("the right password was refused: %v", got["message"])
+	}
+	if admitted != 1 {
+		t.Errorf("the accepted login admitted %d times, want 1", admitted)
+	}
+	// And what Admit settled is what the viewer was told.
+	if got["sim_port"] != int64(9301) {
+		t.Errorf("sim_port = %v, want the one Admit set", got["sim_port"])
+	}
+	if got["seed_capability"] != "http://127.0.0.1:9302/cap/t/seed" {
+		t.Errorf("seed_capability = %v, want the one Admit set", got["seed_capability"])
+	}
+}
+
+// TestAHandoverThatCannotBeAdmittedIsRefused: if the circuit will not
+// open there is nothing to hand over, and a response naming a port
+// nothing is listening on is worse than a refusal.
+func TestAHandoverThatCannotBeAdmittedIsRefused(t *testing.T) {
+	h := testHandover()
+	h.Admit = func() error { return errors.New("no circuit") }
+	s := serve(t, h)
+	got := login(t, s.URL, map[string]any{
+		"first": "Taren", "last": "Holt", "passwd": agent.HashPassword("secret")})
+	if got["login"] == "true" {
+		t.Error("a handover that could not be admitted was answered with a session")
 	}
 }

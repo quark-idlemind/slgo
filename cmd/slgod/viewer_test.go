@@ -308,7 +308,7 @@ func seededLoginServer(t *testing.T, sim *fakeSim, seed string) *httptest.Server
 // servedSeed stands up a hosted session and the capability endpoints in
 // front of it, and hands back a way to ask for the seed a viewer would
 // be given.
-func servedSeed(t *testing.T, seed string) (*server.Server, *viewerHost, func() string) {
+func servedSeed(t *testing.T, seed string) (*server.Server, *viewerHost, string, func() string) {
 	t.Helper()
 	sim := newSim(t)
 	hs := seededLoginServer(t, sim, seed)
@@ -335,9 +335,17 @@ func servedSeed(t *testing.T, seed string) (*server.Server, *viewerHost, func() 
 	t.Cleanup(ts.Close)
 	vh.base = ts.URL
 
-	return srv, vh, func() string {
+	// The token a successful login would have minted.  Asking for a
+	// capability without one is what TestCapabilitiesAreRefusedWithoutTheLoginsToken
+	// covers; here the login is assumed to have happened.
+	token, err := vh.mintCapToken("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return srv, vh, token, func() string {
 		t.Helper()
-		resp, err := http.Post(ts.URL+"/cap/example/seed", "application/llsd+xml",
+		resp, err := http.Post(vh.capBase("example", token)+"/seed", "application/llsd+xml",
 			strings.NewReader("<llsd><array/></llsd>"))
 		if err != nil {
 			t.Fatalf("asking for the seed: %v", err)
@@ -368,7 +376,7 @@ func TestTheSeedAViewerIsServedIsTheRegionItIsInNow(t *testing.T) {
 	here := capsServer(t, "here")
 	left := capsServer(t, "left")
 
-	srv, _, ask := servedSeed(t, here.URL)
+	srv, vh, token, ask := servedSeed(t, here.URL)
 
 	if body := ask(); !strings.Contains(body, "here.invalid") {
 		t.Fatalf("the seed did not come from the region the avatar is in:\n%s", body)
@@ -389,8 +397,10 @@ func TestTheSeedAViewerIsServedIsTheRegionItIsInNow(t *testing.T) {
 	}
 	// And the one entry that has to be ours, or two things poll the
 	// simulator's queue and split the events between them.
-	if !strings.Contains(body, "/cap/example/event") {
-		t.Errorf("the event queue was not pointed at the daemon:\n%s", body)
+	// It carries the token too, or a viewer would be handed an event
+	// queue URL that the gate then refuses.
+	if want := vh.capBase("example", token) + "/event"; !strings.Contains(body, want) {
+		t.Errorf("the event queue was not pointed at %s:\n%s", want, body)
 	}
 }
 
@@ -424,7 +434,11 @@ func TestASessionWithNoCapabilitiesSaysSoRatherThanProxyingNowhere(t *testing.T)
 	defer ts.Close()
 	vh.base = ts.URL
 
-	resp, err := http.Post(ts.URL+"/cap/example/seed", "application/llsd+xml", nil)
+	token, err := vh.mintCapToken("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Post(vh.capBase("example", token)+"/seed", "application/llsd+xml", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -577,5 +591,94 @@ func TestABadCertificateIsRefusedBeforeTheListenerOpens(t *testing.T) {
 	}
 	if v.base != "" {
 		t.Errorf("base = %q after a refused start, so something was bound", v.base)
+	}
+}
+
+// Gating the capabilities on the login.
+//
+// The seed answers with every capability URL the session holds, each of
+// which is a bearer credential good against the grid itself with slgod
+// no longer in the way.  Before the token, the profile name was the
+// whole of what those two paths asked for, and the profile name is in
+// the public documentation.
+
+// TestCapabilitiesAreRefusedWithoutTheLoginsToken: the path that used
+// to work is the one that must not.
+func TestCapabilitiesAreRefusedWithoutTheLoginsToken(t *testing.T) {
+	_, vh, token, _ := servedSeed(t, capsServer(t, "here").URL)
+
+	for _, path := range []string{
+		"/cap/example/seed",             // the shape before the token
+		"/cap/example/event",            //
+		"/cap/example//seed",            // an empty token
+		"/cap/example/" + token,         // the token, but nothing asked for
+		"/cap/example/wrong/seed",       // a guess
+		"/cap/other/" + token + "/seed", // the right token, another profile
+	} {
+		resp, err := http.Post(vh.base+path, "application/llsd+xml", nil)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("POST %s = %s, want 404", path, resp.Status)
+		}
+	}
+}
+
+// TestALaterLoginRetiresTheTokenBeforeIt: a viewer that has been
+// displaced must not go on holding the session's capabilities.  One
+// circuit and one peer per profile is already the rule, so a second
+// live set of capability URLs would outlive what it belonged to.
+func TestALaterLoginRetiresTheTokenBeforeIt(t *testing.T) {
+	_, vh, first, _ := servedSeed(t, capsServer(t, "here").URL)
+
+	second, err := vh.mintCapToken("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second == first {
+		t.Fatal("minting twice gave the same token")
+	}
+	if vh.capTokenOK("example", first) {
+		t.Error("the token from the earlier login still works")
+	}
+	if !vh.capTokenOK("example", second) {
+		t.Error("the token from the later login does not work")
+	}
+}
+
+// TestATokenIsUnguessable: it stands in for a password, so it has to be
+// the size of one.  Sixteen bytes is what Second Life's own capability
+// URLs use for the same job.
+func TestATokenIsUnguessable(t *testing.T) {
+	v, _ := mintingHost(t, "$1$00157e577e57c0de028f000000000000")
+	seen := map[string]bool{}
+	for i := 0; i < 64; i++ {
+		tok, err := v.mintCapToken("example")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(tok) != capTokenBytes*2 {
+			t.Fatalf("token %q is %d characters, want %d", tok, len(tok), capTokenBytes*2)
+		}
+		if seen[tok] {
+			t.Fatalf("token %q was minted twice", tok)
+		}
+		seen[tok] = true
+	}
+}
+
+// TestNoTokenIsMintedWithoutALogin: a profile nothing has logged in to
+// has no token, so every capability path for it is refused.  That
+// covers the profile with no viewer_password too -- find() refuses to
+// hand those over, so Admit never runs and nothing is ever minted.
+func TestNoTokenIsMintedWithoutALogin(t *testing.T) {
+	v, _ := mintingHost(t, "$1$00157e577e57c0de028f000000000000")
+	if v.capTokenOK("example", "") {
+		t.Error("an empty token was accepted")
+	}
+	if v.capTokenOK("example", "0c3e7e577e57c0de1b49b982fc5bae19") {
+		t.Error("a made-up token was accepted for a profile that never logged in")
 	}
 }

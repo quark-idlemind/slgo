@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
@@ -58,7 +59,21 @@ type viewerHost struct {
 	// is a handful of times a day rather than a hot path.
 	credMu sync.Mutex
 	creds  map[string]*oneTime
+
+	// tokenMu guards capTokens, the capability token minted for each
+	// profile at its last successful viewer login.  Touched once per
+	// login and once per capability request, which for the event
+	// queue is a long poll rather than a hot path.
+	tokenMu   sync.Mutex
+	capTokens map[string]string
 }
+
+// capTokenBytes is the length of a capability token.
+//
+// Sixteen bytes, the same as a uuid, which is the size Second Life's
+// own capability URLs use for exactly this job: an unguessable path
+// element standing in for an authorisation.
+const capTokenBytes = 16
 
 // oneTime is a viewer password minted for a single login.
 //
@@ -113,6 +128,7 @@ func newViewerHost(ctx context.Context, host string, srv *server.Server,
 	return &viewerHost{
 		srv: srv, host: host, census: census, trace: trace, logf: logf,
 		digest: digest, ctx: ctx,
+		capTokens: map[string]string{},
 	}
 }
 
@@ -403,34 +419,93 @@ func (v *viewerHost) find(first, last string) *viewer.Handover {
 		return nil
 	}
 
-	c, err := v.circuitFor(profile, h.Agent)
-	if err != nil {
-		v.logf("viewer: no circuit for %s: %v", name, err)
-		return nil
-	}
-	addr := c.Addr()
-
 	// The password minted for a viewer being started right now, if
 	// there is one.  It is offered ALONGSIDE the profile's rather than
 	// instead of it, so a handover that works today goes on working.
 	once, spend := v.oneTimeFor(profile)
 
-	return &viewer.Handover{
+	hand := &viewer.Handover{
 		First:   a.Account.FirstName,
 		Last:    a.Account.LastName,
 		Digest:  agent.HashPassword(v.digest(profile)),
 		OneTime: once,
 		UseOnce: spend,
 		Raw:     a.Account.Raw,
-		SimIP:   addr.IP.String(),
-		SimPort: addr.Port,
+	}
+
+	// Everything that costs something happens in here, and here runs
+	// only after the password has matched: the UDP socket is opened,
+	// and the token the capabilities are gated on is minted.  Looking
+	// a session up is now free and tells the asker nothing.
+	hand.Admit = func() error {
+		c, err := v.circuitFor(profile, h.Agent)
+		if err != nil {
+			return fmt.Errorf("no circuit for %s: %w", name, err)
+		}
+		token, err := v.mintCapToken(profile)
+		if err != nil {
+			return fmt.Errorf("no capability token for %s: %w", name, err)
+		}
+		addr := c.Addr()
+		hand.SimIP = addr.IP.String()
+		hand.SimPort = addr.Port
 		// slgod's own seed, which is a proxy of the simulator's with
 		// one entry changed.  Everything a viewer fetches -- the
 		// textures, the meshes, the inventory -- still comes
 		// straight from the grid; only the event queue comes past
 		// here, because it has to have a single reader.
-		Seed: v.base + "/cap/" + profile + "/seed",
+		hand.Seed = v.capBase(profile, token) + "/seed"
+		return nil
 	}
+	return hand
+}
+
+// capBase is the prefix of the two capability URLs handed to a viewer.
+//
+// The token is a path element rather than a query parameter because a
+// viewer treats a capability URL as opaque -- it sends back exactly what
+// it was given -- and because the seed proxy passes the request body on
+// to the simulator without ever looking at the URL it arrived by.  There
+// is nothing on either side to teach.
+func (v *viewerHost) capBase(profile, token string) string {
+	return v.base + "/cap/" + profile + "/" + token
+}
+
+// mintCapToken issues this profile's capability token, replacing any
+// token issued before.
+//
+// Replacing rather than accumulating: a login is a viewer taking the
+// session, and the only viewer that could still be holding an older
+// token is one that has just been displaced.  One circuit and one
+// peer per profile is already the rule (a second viewer on the same
+// avatar takes the circuit from the first), so a second live set of
+// capability URLs would outlive the thing it belonged to.
+func (v *viewerHost) mintCapToken(profile string) (string, error) {
+	b := make([]byte, capTokenBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(b)
+	v.tokenMu.Lock()
+	v.capTokens[profile] = token
+	v.tokenMu.Unlock()
+	return token, nil
+}
+
+// capTokenOK reports whether this is the token currently issued for the
+// profile.
+//
+// Constant time, and length-safe: this is a bearer credential for every
+// capability the session holds, which is more than the login password
+// buys, since the login password only ever yields one of these.
+func (v *viewerHost) capTokenOK(profile, token string) bool {
+	v.tokenMu.Lock()
+	want := v.capTokens[profile]
+	v.tokenMu.Unlock()
+	if want == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(want)) == 1
 }
 
 // hostedNamed finds the profile whose avatar has this name.
@@ -503,8 +578,29 @@ func (v *viewerHost) closeAll() {
 // need to be, since the login endpoint decided who may attach.
 func (v *viewerHost) serveCap(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/cap/")
-	profile, what, ok := strings.Cut(rest, "/")
+	profile, rest, ok := strings.Cut(rest, "/")
 	if !ok || profile == "" {
+		http.NotFound(w, r)
+		return
+	}
+	token, what, ok := strings.Cut(rest, "/")
+	if !ok || token == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	// The login endpoint's decision, carried this far.  Without this
+	// the profile name was the whole of what these two paths asked
+	// for, and the answer to the seed is every capability URL the
+	// session holds -- inventory, uploads, script compilation -- each
+	// of which is a bearer credential good against the grid itself,
+	// with slgod no longer in the way.
+	//
+	// Not found rather than forbidden, and the same answer for a
+	// profile that is not hosted, one with no viewer_password, and a
+	// wrong token: a caller guessing at profile names learns nothing
+	// from the difference.
+	if !v.capTokenOK(profile, token) {
 		http.NotFound(w, r)
 		return
 	}
@@ -544,7 +640,7 @@ func (v *viewerHost) serveCap(w http.ResponseWriter, r *http.Request) {
 		}
 		(&viewer.Seed{
 			Real:       seed,
-			EventQueue: v.base + "/cap/" + profile + "/event",
+			EventQueue: v.capBase(profile, token) + "/event",
 			Logf:       v.logf,
 		}).ServeHTTP(w, r)
 	default:

@@ -152,6 +152,13 @@ func (s *simStub) never(t *testing.T, name string) {
 
 const testCircuitCode = 690139535
 
+// The ids a viewer proves itself with, which are the session's own and
+// reach a viewer in its login response.
+var (
+	testSessionID = msg.MustParseUUID("8d1b7e57-7e57-c0de-f4f4-19d29d124acf")
+	testAgentID   = msg.MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995")
+)
+
 var testTerrainTexture = msg.MustParseUUID("c4a67e57-7e57-c0de-f622-7fbb9d50e934")
 
 // describeObjects sends full object updates, as a region does once when
@@ -193,8 +200,8 @@ func handedOver(t *testing.T) (*simStub, *agent.Agent, *Circuit, *fakeViewer, *C
 	sim := newSimStub(t)
 
 	acct := &agent.Account{
-		AgentID:     msg.MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995"),
-		SessionID:   msg.MustParseUUID("8d1b7e57-7e57-c0de-f4f4-19d29d124acf"),
+		AgentID:     testAgentID,
+		SessionID:   testSessionID,
 		CircuitCode: testCircuitCode,
 		SimIP:       sim.addr().IP,
 		SimPort:     sim.addr().Port,
@@ -1081,5 +1088,166 @@ func TestANeighboursAddressOnTheCircuitDoesNotReachTheViewer(t *testing.T) {
 	}
 	if census.Total() == 0 {
 		t.Fatal("nothing was recorded at all")
+	}
+}
+
+// Who the circuit will talk to.
+//
+// The circuit answers on a UDP port standing in for the simulator, and
+// what it says there is the whole session: object updates, chat,
+// instant messages.  What it hears there it forwards to the simulator
+// as the avatar.  It used to decide who was on the other end by taking
+// the address of the most recent datagram, so one packet from anywhere
+// took the session both ways.
+
+// TestAStrangerDoesNotTakeTheCircuit: a datagram from an address that
+// never opened the circuit is dropped, and the viewer that did open it
+// goes on being the one the simulator's traffic reaches.
+func TestAStrangerDoesNotTakeTheCircuit(t *testing.T) {
+	sim, _, c, v, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	// Somebody else on the machine, sending the message a viewer sends
+	// most often and with no circuit behind it.
+	stranger := newFakeViewer(t, c.Addr())
+	defer stranger.close()
+	go stranger.run()
+	stranger.send(&msg.AgentUpdate{}, msg.FlagReliable)
+
+	waitRefused(t, c, 1, 5*time.Second)
+
+	// The circuit still belongs to the viewer that opened it: it is
+	// answered, and the stranger is not.
+	chat := &msg.ChatFromSimulator{}
+	chat.ChatData.Message = []byte("still yours\x00")
+	c.FromSim(packetOf(t, chat))
+	v.waitSeen(t, "ChatFromSimulator", 5*time.Second)
+	for _, name := range stranger.got() {
+		t.Errorf("the stranger was sent %s", name)
+	}
+}
+
+// TestAStrangersMessagesAreNotForwardedToTheGrid is the worse half.
+//
+// The default branch of fromViewer re-sends anything it does not
+// recognise to the simulator on the session's own circuit, as the
+// avatar.  A sender who never logged in could therefore chat, rez, pay
+// and give inventory by addressing the port.
+func TestAStrangersMessagesAreNotForwardedToTheGrid(t *testing.T) {
+	sim, _, c, v, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+	before := heardBySim(sim, "ChatFromViewer")
+
+	stranger := newFakeViewer(t, c.Addr())
+	defer stranger.close()
+	go stranger.run()
+	chat := &msg.ChatFromViewer{}
+	chat.ChatData.Message = []byte("said by nobody\x00")
+	stranger.send(chat, msg.FlagReliable)
+
+	waitRefused(t, c, 1, 5*time.Second)
+	// Well past the point at which a forwarded message would have
+	// arrived: the viewer's own reaches the simulator in milliseconds.
+	time.Sleep(500 * time.Millisecond)
+	if got := heardBySim(sim, "ChatFromViewer"); got != before {
+		t.Errorf("the simulator heard %d ChatFromViewer, was %d: a stranger spoke as the avatar", got, before)
+	}
+}
+
+// TestAStrangerCannotClaimTheCircuitWithTheWrongIds: knowing the port
+// and the shape of the message is not enough.  The circuit code and
+// session id are not secrets -- a viewer that was handed the session
+// has them -- but a sender who was never handed it does not.
+func TestAStrangerCannotClaimTheCircuitWithTheWrongIds(t *testing.T) {
+	sim, _, c, v, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	stranger := newFakeViewer(t, c.Addr())
+	defer stranger.close()
+	go stranger.run()
+
+	// The right shape, the right circuit code, the wrong session.
+	uc := &msg.UseCircuitCode{}
+	uc.CircuitCode.Code = testCircuitCode
+	uc.CircuitCode.SessionID = msg.MustParseUUID("138b7e57-7e57-c0de-4b09-d94d79c2ecd4")
+	uc.CircuitCode.ID = testAgentID
+	stranger.send(uc, msg.FlagReliable)
+
+	waitRefused(t, c, 1, 5*time.Second)
+
+	chat := &msg.ChatFromSimulator{}
+	chat.ChatData.Message = []byte("still yours\x00")
+	c.FromSim(packetOf(t, chat))
+	v.waitSeen(t, "ChatFromSimulator", 5*time.Second)
+	for _, name := range stranger.got() {
+		t.Errorf("the stranger was sent %s", name)
+	}
+}
+
+// TestARefusedDatagramIsNotAcknowledged: the gate runs ahead of the
+// acknowledgement bookkeeping on purpose.  A refusal that still
+// acknowledged the packet would be holding up its end of a conversation
+// with somebody it exists to refuse -- and the stranger's piggybacked
+// acks would confirm the circuit's own sends, telling it a viewer had
+// received what it never saw.
+func TestARefusedDatagramIsNotAcknowledged(t *testing.T) {
+	sim, _, c, v, _ := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	stranger := newFakeViewer(t, c.Addr())
+	defer stranger.close()
+	go stranger.run()
+	stranger.send(&msg.AgentUpdate{}, msg.FlagReliable)
+
+	waitRefused(t, c, 1, 5*time.Second)
+	time.Sleep(500 * time.Millisecond)
+	for _, name := range stranger.got() {
+		if name == "PacketAck" {
+			t.Error("the stranger's reliable packet was acknowledged")
+		}
+	}
+	if n := c.disp.Stats().Gated; n == 0 {
+		t.Error("the dispatcher counted no gated packets")
+	}
+}
+
+// packetOf wraps a message the way FromSim expects one.
+func packetOf(t *testing.T, m msg.Message) *msg.Packet {
+	t.Helper()
+	return &msg.Packet{ID: msg.IDOf(m), Message: m, At: time.Now()}
+}
+
+// heardBySim counts how many times the simulator stub decoded a
+// message of this name.
+func heardBySim(s *simStub, name string) int {
+	n := 0
+	for _, got := range s.got() {
+		if got == name {
+			n++
+		}
+	}
+	return n
+}
+
+// waitRefused waits for the circuit to have dropped n datagrams.
+func waitRefused(t *testing.T, c *Circuit, n uint64, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if c.Refused() >= n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the circuit refused %d datagrams, want %d", c.Refused(), n)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }

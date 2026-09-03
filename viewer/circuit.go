@@ -46,6 +46,10 @@ const Backlog = 2048
 // arrives here is therefore sorted rather than forwarded, and the
 // sorting is the work.
 type Circuit struct {
+	// refused counts datagrams dropped by admit, from an address
+	// that never opened this circuit.
+	refused atomic.Uint64
+
 	conn *net.UDPConn
 
 	// session is looked up rather than held, because a grid session
@@ -118,11 +122,13 @@ func Listen(host string, session func() *agent.Agent, census *Census, trace *Tra
 	c.recv = msg.NewReceiver(conn, msg.KeepBody())
 	c.disp = msg.NewDispatcher(
 		msg.WithSender(c.send),
-		// The peer is learned from the tap, not the relay, because it
-		// has to be known for every packet including the ones the
-		// relay never sees -- a bare acknowledgement is the first
-		// thing some viewers send.
-		msg.WithTap(func(p *msg.Packet) { c.notePeer(p.Addr) }),
+		// The peer is settled by the gate, not by the relay or a tap,
+		// because it has to be decided for every packet including the
+		// ones the relay never sees -- a bare acknowledgement is the
+		// first thing some viewers send -- and because a packet from
+		// an address this circuit has not admitted must not be
+		// acknowledged either.  See admit.
+		msg.WithGate(c.admit),
 		msg.WithRelay(c.fromViewer),
 	)
 	return c, nil
@@ -180,39 +186,106 @@ func (c *Circuit) Joined() bool {
 	return c.joined
 }
 
-// notePeer answers whoever is talking, which is what a simulator does.
+// admit decides whether a datagram is this circuit's viewer talking.
 //
-// It follows the address rather than pinning the first one, because a
-// viewer that is restarted comes back on a new port.  Pinning meant the
-// circuit went on sending to the socket of a viewer that had quit, and
-// the new one waited for a handshake that was being delivered to
-// nobody.  The login endpoint decides who may attach; by here the
-// question has been answered.
-func (c *Circuit) notePeer(addr net.Addr) {
-	ua, ok := addr.(*net.UDPAddr)
+// The circuit still follows the address rather than pinning the first
+// one, because a viewer that is restarted comes back on a new port:
+// pinning meant the circuit went on sending to the socket of a viewer
+// that had quit, and the new one waited for a handshake that was being
+// delivered to nobody.  What has changed is the price of being followed.
+//
+// A new address is adopted only by opening with a UseCircuitCode
+// carrying this session's own circuit code and session id -- which is
+// what a viewer sends first and what a simulator itself demands before
+// it will talk to anybody.  Anything else from an address that has not
+// done that is dropped unread and counted.  It used to be enough to
+// send one datagram from anywhere: from then on everything the
+// simulator said went to the new address, and anything the new address
+// said was forwarded to the simulator as the avatar.
+//
+// Note what is NOT the check.  The circuit code and session id are in
+// the login response, so a viewer that was handed the session knows
+// them; they are the proof that this is that viewer, not a secret in
+// their own right.  What keeps a stranger out is that they were never
+// given the response -- which is the login endpoint's decision, now
+// carried this far instead of stopping at the door.
+//
+// A packet that arrives before any of it can be read -- one that would
+// not decode -- cannot be from a peer we have admitted unless it came
+// from the admitted address, so it is judged by address alone and
+// dropped if that is unknown.
+func (c *Circuit) admit(p *msg.Packet) bool {
+	ua, ok := p.Addr.(*net.UDPAddr)
 	if !ok {
-		return
+		return false
 	}
 	c.mu.Lock()
-	changed := c.peer == nil || c.peer.String() != ua.String()
+	known := c.peer != nil && c.peer.String() == ua.String()
+	c.mu.Unlock()
+	if known {
+		return true
+	}
+
+	// A stranger.  Only the message that opens a circuit gets any
+	// further, and only with the right ids in it.
+	m, ok := p.Message.(*msg.UseCircuitCode)
+	if !ok || !c.ownCircuit(m) {
+		c.refuse(ua)
+		return false
+	}
+	c.notePeer(ua)
+	return true
+}
+
+// ownCircuit reports whether a UseCircuitCode names this session.
+func (c *Circuit) ownCircuit(m *msg.UseCircuitCode) bool {
+	a := c.session()
+	if a == nil || a.Account == nil {
+		return false
+	}
+	return m.CircuitCode.Code == a.Account.CircuitCode &&
+		m.CircuitCode.SessionID == a.Account.SessionID
+}
+
+// refuse counts a datagram from an address that has not opened a
+// circuit, and says so the first time and then rarely.
+//
+// Rarely because the whole point of the refusal is that the sender is
+// not co-operating: something that floods the port would otherwise
+// fill the log with one line per datagram, which is a second way to be
+// harmed by it.  Neither the address nor anything it sent is trusted
+// enough to print more than once in a while, and nothing about this
+// session's own ids is printed at all -- a refusal that quoted the
+// circuit code it wanted would be a good deal more useful to the
+// sender than to the operator.
+func (c *Circuit) refuse(ua *net.UDPAddr) {
+	n := c.refused.Add(1)
+	if n == 1 || n%1000 == 0 {
+		c.logf("viewer: refused %d datagram(s) from an address that has not opened this circuit, latest %s", n, ua)
+	}
+}
+
+// Refused is how many datagrams were dropped for coming from an
+// address that never opened the circuit.
+func (c *Circuit) Refused() uint64 { return c.refused.Load() }
+
+// notePeer adopts an address that has just proved itself.
+func (c *Circuit) notePeer(ua *net.UDPAddr) {
+	c.mu.Lock()
 	// A first viewer arriving is not a replacement.  There is no
 	// previous conversation behind it and so nothing to forget.
-	replaced := changed && c.peer != nil
-	if changed {
-		if replaced {
-			// A different viewer, so the last one's handshake
-			// means nothing to it.
-			c.joined = false
-		}
-		c.peer = ua
+	replaced := c.peer != nil
+	if replaced {
+		// A different viewer, so the last one's handshake
+		// means nothing to it.
+		c.joined = false
 	}
+	c.peer = ua
 	c.mu.Unlock()
 	if replaced {
 		c.forgetTheLastViewer()
 	}
-	if changed {
-		c.logf("viewer: a viewer appeared at %s", ua)
-	}
+	c.logf("viewer: a viewer appeared at %s", ua)
 }
 
 // forgetTheLastViewer drops what belonged to the viewer that has gone,

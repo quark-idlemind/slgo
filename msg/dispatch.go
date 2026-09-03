@@ -43,6 +43,7 @@ type Dispatcher struct {
 	onError     Handler
 	tap         Handler
 	relay       Handler
+	gate        func(*Packet) bool
 
 	dispatched atomic.Uint64
 	inline     atomic.Uint64
@@ -53,6 +54,7 @@ type Dispatcher struct {
 	ackOnly    atomic.Uint64
 	acksSeen   atomic.Uint64
 	relayed    atomic.Uint64
+	gated      atomic.Uint64
 
 	unmu          sync.Mutex
 	unhandledByID map[ID]uint64
@@ -74,6 +76,7 @@ type DispatchStats struct {
 	AckOnly    uint64
 	AcksSeen   uint64 // acknowledgements of ours the peer sent back
 	Relayed    uint64 // offered to the relay hook, duplicates already removed
+	Gated      uint64 // refused by the gate before anything looked at them
 }
 
 // DispatcherOption configures a Dispatcher.
@@ -127,6 +130,25 @@ func OnError(fn Handler) DispatcherOption {
 // quick, because it runs in the path of every packet.
 func WithTap(fn Handler) DispatcherOption {
 	return func(d *Dispatcher) { d.tap = fn }
+}
+
+// WithGate decides whether a packet is dispatched at all.  fn runs on
+// the dispatch goroutine for every packet, before the tap, before
+// acknowledgement bookkeeping and before routing; returning false drops
+// the packet as though it had never arrived.
+//
+// Before the bookkeeping is the point of it.  A gate that ran later
+// would still have acknowledged the packet and still have let its
+// piggybacked acks confirm our own sends, which is a conversation with
+// somebody the gate exists to refuse.  Dropping it here means the only
+// trace is the counter.
+//
+// Nil, the default, dispatches everything: a circuit whose peer is
+// settled by other means -- a session's own connection to a simulator,
+// which reaches one address and receives from one -- has nothing to
+// decide.
+func WithGate(fn func(*Packet) bool) DispatcherOption {
+	return func(d *Dispatcher) { d.gate = fn }
 }
 
 // WithRelay calls fn for every decoded message that is about to be
@@ -221,6 +243,7 @@ func (d *Dispatcher) Stats() DispatchStats {
 		AckOnly:    d.ackOnly.Load(),
 		AcksSeen:   d.acksSeen.Load(),
 		Relayed:    d.relayed.Load(),
+		Gated:      d.gated.Load(),
 	}
 }
 
@@ -262,6 +285,10 @@ func (d *Dispatcher) Run(ctx context.Context, in <-chan *Packet) error {
 }
 
 func (d *Dispatcher) one(ctx context.Context, p *Packet) {
+	if d.gate != nil && !d.gate(p) {
+		d.gated.Add(1)
+		return
+	}
 	if d.tap != nil {
 		d.tap(p)
 	}
