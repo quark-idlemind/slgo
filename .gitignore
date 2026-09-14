@@ -6,6 +6,7 @@
 /cmd/*/slsh
 /cmd/*/slrun
 /cmd/*/slbench
+/cmd/*/slbotd
 /cmd/*/msggen
 /cmd/*/md
 /msggen
@@ -19,6 +20,7 @@
 /slgod
 /slrun
 /slbench
+/slbotd
 /msggen
 /slgo
 /slgo-multiattach

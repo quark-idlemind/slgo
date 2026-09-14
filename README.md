@@ -64,6 +64,7 @@ case.
     cmd/slgod/          holds grid connections, serves clients
     cmd/slrun/       runs LSL scripts, prints what they said
     cmd/slbench/      measures what LSL constructs cost in memory
+    cmd/slbotd/         attends several avatars, driven by instant message
     cmd/msggen/         fetches message_template.msg, writes Go
     cmd/slgo-multiattach/  wearing several objects on one attachment point
 
@@ -1147,6 +1148,61 @@ and updating one that already exists costs about 0.9s. That is why both
 programs hold one object and one script name for their whole run, and
 why every figure that looks like "what compiling costs" has an item
 creation hiding in it the first time.
+
+## slbotd
+
+A second daemon, on the other side of slgod from everything else here.
+It holds several avatars at once and takes its orders from inside the
+world: a trusted avatar sends an instant message beginning with a
+colon, and the message is a command.
+
+    :where
+    :tp Example Bay 128 64 25
+    :as builder place Objects/a lamp
+    :slbench --statement "llSin(1.0);"
+
+It logs nobody in and holds no credentials. For each avatar in its
+configuration it calls slgod's `Host` and then attaches to the session
+slgod is holding, so an slbotd that is killed leaves every avatar
+exactly where it was. That division is the whole design: slgod owns the
+grid connection and supervises it, and slbotd owns what is done with
+it.
+
+The configuration is one file beside the profiles it names,
+`~/.config/slgo/slbotd.conf`, in the profiles' own `key = value` form.
+It names the avatars to hold, who may send commands, and which external
+programs a command may run; `slbotd --check` reads it, says what it
+means, and exits without connecting to anything.
+
+    avatar  = example
+    avatar  = builder
+    trusted = Quark Idlemind
+    program = slbench /usr/local/bin/slbench
+    alias   = autobench slbench
+
+The commands are a subset of slsh's -- looking, moving, talking,
+inventory and building -- plus the two benchmark programs, which stay
+separate processes and are handed an argv rather than a command line:
+nothing typed into a viewer reaches a shell. Which avatar a run is for
+travels in `SLGO_AGENT`, so `:as builder slbench ...` measures as
+builder.
+
+Two things happen unasked and only two. The avatars are kept attached
+-- though a session somebody logged out *on purpose* is left alone,
+because slgod refuses to restart one and the refusal is the point;
+`:host --force` is how a person says they have checked. And inventory
+offered by a trusted avatar is accepted, because an offer nobody
+answers stays pending for ever. An offer from anybody else is left
+waiting rather than declined, so a person can still answer it from a
+viewer.
+
+An answer goes back as instant messages, which hold about a kilobyte
+each and are throttled per agent, so it is composed in full, cut at a
+line ending, and sent as a few messages a quarter of a second apart
+with whatever did not fit reported rather than dropped in silence.
+
+See [doc/guide.md](doc/guide.md) for the configuration in full and the
+list of commands.
 
 ## Inventory names, and paths that survive them
 

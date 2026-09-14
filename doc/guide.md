@@ -1,6 +1,6 @@
-# A guide to slgod, slrun and slbench
+# A guide to slgod, slrun, slbench and slbotd
 
-Three command-line programs for working with Second Life without a
+Four command-line programs for working with Second Life without a
 viewer.
 
 | | |
@@ -8,8 +8,9 @@ viewer.
 | `slgod` | a daemon that holds grid sessions, so everything else starts instantly |
 | `slrun` | runs LSL scripts and prints what they say |
 | `slbench` | measures how much script memory an LSL construct costs |
+| `slbotd` | holds several avatars and takes commands from inside the world |
 
-There is a fourth, `slsh`, an interactive shell for inventory, the
+There is a fifth, `slsh`, an interactive shell for inventory, the
 region around you and chat. It has a guide of its own:
 [doc/slsh-guide.html](slsh-guide.html). Everything under "Connecting"
 below applies to it as well.
@@ -1004,3 +1005,202 @@ Constructs of any size are handled, including those larger than a
 
 Second Life's own numbers move about a little from run to run. If an
 answer matters, take it twice.
+
+---
+
+## slbotd
+
+A second daemon, on the other side of `slgod` from everything above. It
+holds several avatars at once and takes its orders from inside the
+world: a trusted avatar sends an instant message beginning with a
+colon, and the message is a command.
+
+    slbotd
+    slbotd --check
+
+It logs nobody in. For each avatar in its configuration it asks `slgod`
+to bring the session up and attaches to what it is given, so the
+credentials stay where they already were and an `slbotd` that is killed
+leaves every avatar exactly where it was.
+
+### What it is for
+
+Standing an avatar somewhere and being able to ask it things from a
+viewer, without a terminal anywhere near. Where is it, who is around
+it, what is on the parcel; go to that landmark, sit on that, take that
+item. And -- the reason it can run `slrun` and `slbench` -- starting a
+measurement from inside the world and reading the answer in the chat
+window it was asked from.
+
+### The configuration
+
+One file, beside the profiles it names:
+
+    ~/.config/slgo/slbotd.conf
+
+It is not a profile and is not mistaken for one: `slgod` and everything
+else decide what is a profile by loading it, and this file fails that
+test on its first line. `--config PATH` or `$SLBOTD_CONFIG` names
+another. Nothing secret is in it -- `slbotd` never handles a password --
+but the directory around it holds the profiles, so it still has to be
+mode 700, and `slbotd` says so rather than waiting for the first login
+to find out.
+
+    # Which avatars to hold.  Each names a profile in this directory.
+    avatar = example
+    avatar = builder
+
+    # Who may send commands, and whose inventory offers are taken.
+    # A name, or a uuid -- the uuid never changes and cannot be taken
+    # by anybody else, so it is the better one where you have it.
+    trusted = Quark Idlemind
+
+    # Where slgod is.  Nothing said asks sl-host, and failing that
+    # means this machine.
+    addr =
+
+    # What marks a command.  Anything else is somebody talking.
+    prefix = :
+
+    # How long one command may take, and how long a program run may.
+    timeout     = 2m
+    run-timeout = 30m
+
+    # How many commands one avatar runs at once, and how many instant
+    # messages one answer may be sent back as.
+    jobs        = 4
+    reply-limit = 8
+
+    # Whose inventory offers are accepted: trusted, anyone, nobody.
+    accept-inventory = trusted
+
+    # Whether somebody who is not trusted is told their command was
+    # refused, or simply not answered.
+    answer-strangers = no
+
+    # A program a command may run: a name, a path, and any arguments
+    # that are always passed.  Naming any REPLACES the built-in pair.
+    program = slbench /usr/local/bin/slbench
+    program = slrun   /usr/local/bin/slrun
+
+    # Another name for a command.
+    alias = autobench slbench
+    alias = automate  slrun
+
+Every one of those is optional but `avatar` and `trusted`: a
+configuration that holds nobody, or that trusts nobody, would start a
+daemon that can never do anything, and is refused rather than run.
+
+`slbotd --check` reads the file, says what it means, and exits without
+connecting to anything -- which is how to find a misspelt profile or a
+program that is not where it was said to be, before an avatar is logged
+in on the strength of it.
+
+### Sending a command
+
+Open an instant message to one of the avatars and begin the line with
+the prefix:
+
+    :where
+    :who
+    :tp Example Bay 128 64 25
+    :landmark --go the workshop
+    :ls Objects
+    :give Quark Idlemind Objects/a lamp
+    :slbench --statement "llSin(1.0);"
+
+`:help` lists the commands, grouped; `:help COMMAND` says what one
+takes, in the same usage line `COMMAND --help` prints. The groups are
+looking (`where`, `who`, `look`, `parcel`, `regions`, `objects`, `worn`,
+`lookup`, `profile`, `friends`), moving (`tp`, `landmark`, `sit`,
+`stand`, `touch`), talking (`say`, `im`, `offers`, `accept`, `decline`),
+inventory (`ls`, `cat`, `mkdir`, `rm`, `mv`, `cp`, `give`, `place`,
+`take`, `wear`, `detach`), and the daemon itself (`help`, `agents`,
+`status`, `as`, `host`, `trusted`).
+
+`:as OTHER COMMAND` runs a command as another of the avatars this
+daemon holds, so one conversation drives all of them:
+
+    :as builder where
+    :as builder place Objects/a lamp
+
+Nothing typed reaches a shell. A line is split into words -- quotes
+hold a word together, at the start of a word or after an equals sign,
+so an apostrophe in an inventory name is an apostrophe -- and the words
+are an argv. There is no expansion, no redirection and no second
+program.
+
+### What it does unasked
+
+Two things, and only two.
+
+**It keeps the avatars attached.** `slgod` supervises the grid session
+and reconnects one that drops; `slbotd` asks for the session, attaches,
+and attaches again when its own connection ends. What it does *not* do
+is overrule a deliberate logout: `slgod` refuses to restart a session
+somebody stopped on purpose -- the usual reason being that they are
+using that avatar in a viewer -- and `slbotd` stops asking when it is
+told that. `:host --force` is how a person says they have checked.
+
+**It accepts inventory from a trusted avatar.** An offer nobody answers
+stays pending for ever, and handing a script or a notecard to a daemon
+should not need anybody at a keyboard. An offer from anybody else is
+left exactly where it is rather than declined, so a person can still
+answer it from a viewer; `accept-inventory` changes who that is.
+
+Everything else waits to be asked. A teleport offer, a friendship
+offer and a group invitation are listed by `:offers` and answered by
+`:accept N` or `:decline N` -- by number, from a listing just read,
+because two offers can look identical and answering the wrong one of
+them cannot be taken back.
+
+### Running slbench and slrun
+
+They stay separate programs, run as separate processes, with the words
+after the command handed over as arguments:
+
+    :slbench --statement "llSin(1.0);"
+    :automate probe.lsl
+
+Which avatar the run is for is passed in the environment, as
+`SLGO_AGENT`, which is what every program here reads to decide which
+session to attach to -- so `:as builder slbench ...` measures as
+`builder`. A `--agent` typed on the command still wins, which is the
+right way round: the daemon says which avatar it is acting as, and
+somebody who names another one has named it on purpose.
+
+A run is bounded by `run-timeout` rather than by `timeout`: one is a
+bound on a benchmark and the other on a listing, and a benchmark killed
+after two minutes would be killed by a number nobody would think to
+look at.
+
+### Answers, and how much of one arrives
+
+An instant message holds about a kilobyte and what goes over that the
+simulator cuts off without a word. So an answer is composed in full,
+cut at a line ending where there is one, and sent as up to
+`reply-limit` messages a quarter of a second apart -- the gap is not
+politeness, it is the per-agent throttle, and a burst sent as fast as
+the circuit takes them arrives with the tail missing. What did not fit
+is said:
+
+    ...that is the first 8 messages of the answer and there was more;
+    ask for less of it.
+
+A command that did what it was asked and printed nothing answers `ok`.
+Silence from a daemon is indistinguishable from a daemon that never
+heard.
+
+### Two things to know before trusting it
+
+The trusted list is a list of people who can drive an avatar. Every
+command is theirs: `rm` deletes, `take` takes an object out of the
+world, `give` hands an item to somebody. There is no partial trust and
+there is deliberately no confirmation step -- a daemon that asked "are
+you sure" over an instant message would be a daemon whose answer
+somebody else could send.
+
+And an instant message says who it is from, which is a name and an id.
+A name can be matched, which is what makes a file written in names
+work, but a display name is not what arrives: the legacy name is. Where
+you have the uuid, write the uuid.

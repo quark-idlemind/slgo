@@ -1,0 +1,156 @@
+// Command slbotd attends a handful of avatars and takes commands from
+// them over instant messages.
+//
+//	slbotd
+//	slbotd -config ~/.config/slgo/slbotd.conf -v
+//
+// It is a client of slgod and holds no credentials of its own.  For
+// each avatar named in its configuration it asks slgod to bring the
+// session up, attaches to it, and then listens: an instant message
+// beginning with the prefix -- ":" unless the file says otherwise -- is
+// a command, and anything else is somebody talking and is logged and
+// left alone.  Commands are obeyed only from the avatars the
+// configuration trusts, and inventory offered by one of them is
+// accepted without anybody being at a keyboard.
+//
+// The commands are a subset of what slsh can do -- looking, moving,
+// talking, inventory and building -- and the programs slbench and slrun,
+// which are run as separate processes as the avatar that was written
+// to.  ":help" lists them; ":help COMMAND" says what one takes.
+//
+// The configuration is ~/.config/slgo/slbotd.conf, beside the profiles
+// it names.  See config.go for what goes in it, and the example at the
+// foot of this file's documentation in doc/slbotd.md.
+//
+// # What it does not do
+//
+// It does not log anybody in.  slgod owns the grid connection, the
+// credentials and the supervision of a session that drops; slbotd asks
+// for a session by profile name and attaches to what it is given.  An
+// slbotd that is killed leaves every avatar exactly where it was, which
+// is the whole reason for the division.
+//
+// It does not overrule a deliberate logout.  slgod refuses to restart a
+// session somebody stopped on purpose -- the usual reason being that
+// they are using that avatar in a viewer -- and slbotd stops asking
+// when it is told that, until ":host --force" says somebody has
+// checked.
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+
+	"github.com/quark-idlemind/slgo/internal/slhost"
+)
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "slbotd: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	var (
+		config = flag.String("config", "",
+			"the configuration to read; default is slbotd.conf under the profile directory")
+		addr = flag.String("addr", "",
+			"the slgod to attach to; overrides the configuration, which asks sl-host when it says nothing")
+		check = flag.Bool("check", false,
+			"read the configuration, say what it means, and exit without connecting")
+		quiet = flag.Bool("q", false, "log commands and offers only, not conversation")
+	)
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "usage: slbotd [-config PATH] [-addr HOST:PORT]\n")
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+	if flag.NArg() != 0 {
+		flag.Usage()
+		return fmt.Errorf("slbotd takes no arguments; the avatars are named in the configuration")
+	}
+
+	log.SetFlags(log.Ltime)
+
+	cfg, err := LoadConfig(*config)
+	if err != nil {
+		return err
+	}
+	if *addr != "" {
+		cfg.Addr = *addr
+	}
+
+	// Where slgod is.  An address given here or in the file is the
+	// operator saying where to go and is not second-guessed; only the
+	// empty string is worth asking sl-host about.
+	where, err := slhost.Resolve(cfg.Addr)
+	if err != nil {
+		return err
+	}
+
+	if *check {
+		return describe(os.Stdout, cfg, where)
+	}
+
+	log.Printf("slbotd, from %s", cfg.Path)
+	log.Printf("slgod at %s", where)
+	log.Printf("attending %s", strings.Join(cfg.Avatars, ", "))
+	log.Printf("commands from %s, beginning with %q",
+		strings.Join(cfg.Trusted(), ", "), cfg.Prefix)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	d := newDaemon(cfg, where, log.Printf)
+	d.quiet = *quiet
+	d.Run(ctx)
+	log.Printf("stopped; the avatars are still logged in")
+	return nil
+}
+
+// describe says what a configuration means, for somebody who has just
+// written one.
+//
+// It connects to nothing.  The point is to find a mistake in the file
+// before an avatar is logged in on the strength of it -- a misspelt
+// profile, a program that is not where it was said to be -- and a check
+// that needed a grid would not be usable for that.
+func describe(out *os.File, cfg Config, where string) error {
+	fmt.Fprintf(out, "configuration: %s\n", cfg.Path)
+	fmt.Fprintf(out, "slgod:         %s\n", where)
+	fmt.Fprintf(out, "avatars:       %s\n", strings.Join(cfg.Avatars, ", "))
+	fmt.Fprintf(out, "trusted:       %s\n", strings.Join(cfg.Trusted(), ", "))
+	fmt.Fprintf(out, "prefix:        %q\n", cfg.Prefix)
+	fmt.Fprintf(out, "timeouts:      %s a command, %s a program run\n", cfg.Timeout, cfg.RunTimeout)
+	fmt.Fprintf(out, "at once:       %d commands per avatar\n", cfg.Jobs)
+	fmt.Fprintf(out, "answers:       at most %d instant messages\n", cfg.ReplyLimit)
+	fmt.Fprintf(out, "offers:        accepted from %s\n", cfg.AcceptInventory)
+
+	// Every profile named has to exist, and the message when one does
+	// not should name the file rather than waiting for slgod to answer
+	// "no agent named qx" an hour later.
+	for _, name := range cfg.Avatars {
+		if _, err := profileExists(name); err != nil {
+			fmt.Fprintf(out, "  %-12s %v\n", name, err)
+		} else {
+			fmt.Fprintf(out, "  %-12s ok\n", name)
+		}
+	}
+	for _, name := range sortedProgramNames(cfg) {
+		p := cfg.Programs[name]
+		path, err := lookProgram(p.Argv[0])
+		if err != nil {
+			fmt.Fprintf(out, "  %-12s %v\n", name, err)
+		} else {
+			fmt.Fprintf(out, "  %-12s %s\n", name, path)
+		}
+	}
+	return nil
+}
