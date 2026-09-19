@@ -1289,6 +1289,85 @@ token than a smaller one with eight. `--cache-type-k q8_0
 Below a few hundred tokens, restoring moves more bytes than
 re-prefilling would have recomputed. It is long conversations that pay.
 
+### Remembering more than fits
+
+A context window holds a few thousand tokens; a conversation that goes
+on for weeks does not. Dropping the oldest exchanges keeps it inside
+the window and gives the avatar no memory at all — it forgets your name
+between Tuesday and Thursday, and it forgets it silently.
+
+So when `chat-context` is reached the old turns are **compacted**
+rather than dropped: handed to the model, which writes a short note,
+and replaced by that note. The last `chat-keep` turns stay word for
+word, because they carry the thread of what is being said now.
+Compacting again folds the note in with whatever has accumulated since,
+so one note always stands for the whole conversation before the last
+few exchanges.
+
+    chat-context = 1536      # the budget, in tokens
+    chat-keep    = 6         # turns kept verbatim
+    chat-summary = 200       # how long the note may be
+
+**The backstory is not part of any of this and cannot be lost to it.**
+It is read from its file on every turn and is always the first message;
+only turns are ever summarised, and the summariser is never given the
+character at all — there is no path through the code on which the two
+meet. That is structural rather than careful.
+
+Measured live, against Qwen2.5-3B-Instruct Q4_K_M, with the budget set
+low to force it. Sixteen turns of a conversation about a wharf became:
+
+    THEM: Quark, chandlery, upriver
+    TOPICS: ropes, tide, north berth, salt barge, weather, new hands
+    OWED: Three coils, Thursday
+
+The prompt went from 503 tokens to 279. The rope had been asked for
+sixteen turns earlier and was no longer in the conversation at all —
+and asked "remind me what I asked you to hold?", the avatar answered
+"Three coils, Quark." That answer came from the note and from nothing
+else, which is the whole of what this is for.
+
+### Why the note is three labelled lines
+
+Because asking in prose does not work, at any size worth running, and
+that was measured rather than guessed. The first version of the
+instruction said *"write a brief note, in the third person, of what has
+passed between them"*. Against a 0.5B it produced fragments of the
+transcript separated by rules; against a 3B it copied the exchange back
+**verbatim**. Neither summarised anything, and both lost the name the
+person had given — the single most useful fact in the conversation.
+
+Three labelled lines with a rule for the empty case worked on the 3B
+first time. They also survive being folded again, which is the property
+the whole thing rests on: given that note plus four more turns, the
+next fold kept the name, the trade and the promise, and added the new
+topics to the middle line. A prose note has nothing to hold on to and
+drifts; a labelled one has three places to put things and keeps them.
+
+The fields are what somebody means when they say an avatar remembers
+them: who they are, what has been talked about, and what was agreed.
+
+### What it costs, and what it is not
+
+Compacting is a second call to the model, on the turn that crosses the
+budget, and the person waiting for a reply waits for both. It happens
+once every several dozen exchanges. Doing it afterwards in the
+background was the alternative, and it would have a second goroutine
+writing to a conversation while the next remark is being answered out
+of it.
+
+If the model will not write a note, the turn does not fail: the oldest
+exchanges are dropped instead — which is what this replaced — the reply
+still goes out, and the log says which of the two happened.
+
+It is lossy and it drifts, and it is meant to. What it buys is not a
+transcript, it is the perception of having been talked to before. A
+conversation folded a dozen times will have lost detail; it should
+still know who you are and what it agreed to.
+
+`:chat` prints the note, so what an avatar believes it remembers is
+something you can read.
+
 ### How slots are handed out
 
 `llama-server` has a fixed number of slots and hands them out itself

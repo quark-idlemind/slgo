@@ -1240,6 +1240,28 @@ taken from somebody else is erased first, because two conversations
 with one avatar share the backstory as a prefix and the server would
 otherwise match it.
 
+A context window does not hold a conversation that goes on for weeks,
+and dropping the oldest exchanges gives an avatar no memory at all. So
+at the budget the old turns are compacted rather than dropped: the
+model writes a short note and the note replaces them, while the last
+few exchanges stay word for word. Folding again merges the note with
+whatever has accumulated since. The backstory is not part of this and
+cannot be lost to it -- it is read from its file every turn and the
+summariser is never given it.
+
+Measured live against a 3B: sixteen turns became `THEM: Quark,
+chandlery, upriver / TOPICS: ropes, tide, north berth, salt barge /
+OWED: Three coils, Thursday`, the prompt went from 503 tokens to 279,
+and the avatar -- asked what it had been given to hold, sixteen turns
+after being asked -- answered "Three coils, Quark" out of that note and
+nothing else.
+
+Asking for the note in prose does not work and that was measured too:
+at 0.5B it returned fragments of the transcript, at 3B it copied the
+exchange back verbatim, and both lost the name. Three labelled lines
+work, and survive being folded again, which is the property the whole
+thing rests on.
+
 Who an avatar will talk to is a list of its own and not a flag on
 `trusted` -- driving an avatar and being spoken to by one are different
 powers. It is decided by one function rather than a test at the call
