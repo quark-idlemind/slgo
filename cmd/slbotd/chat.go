@@ -29,6 +29,32 @@ package main
 // displaced conversation is picked up again from its state file.  That
 // is the "swap the context per conversation" this was built for, and
 // it costs the five milliseconds above.
+//
+// # Remembering more than fits
+//
+// A context window holds a few thousand tokens and a conversation that
+// goes on for weeks does not.  Dropping the oldest exchanges keeps it
+// inside the window and gives an avatar no memory at all: it forgets
+// your name between Tuesday and Thursday, and it forgets it silently.
+//
+// So at the budget the old turns are COMPACTED rather than dropped --
+// handed to the model, which writes a short note, and replaced by that
+// note.  The recent turns stay word for word, because they carry the
+// thread of what is being said now; everything older becomes three
+// lines that carry what it was about.  Compacting again folds the note
+// in with whatever has accumulated since, so one note always stands for
+// the whole of the conversation before the last few exchanges.
+//
+// It is lossy and it drifts, and it is meant to.  What it buys is not a
+// transcript, it is the perception of having been talked to before --
+// that the avatar knows who you are, what you told it and what it
+// agreed to, which is what somebody means when they say it remembers.
+//
+// The backstory is not part of any of this and cannot be lost to it.
+// It is read from its file on every single turn and is always the first
+// message; only Turns are ever summarised, and Summarise is never given
+// the character.  That is structural rather than careful: there is no
+// path through this file on which the two meet.
 
 import (
 	"context"
@@ -479,8 +505,15 @@ func (c *Chatter) Reply(ctx context.Context, conv *Conversation, said string) (s
 	}
 	defer c.slots.give(slot)
 
-	if !mine {
+	// Whether this turn is about to rewrite the conversation, which
+	// decides whether restoring the old context is worth anything: it
+	// would be thrown away by the compaction two lines later.
+	folding := c.shouldCompact(conv)
+	if !mine && !folding {
 		c.place(ctx, conv, slot, fingerprint)
+	}
+	if folding {
+		c.compact(ctx, conv, slot)
 	}
 
 	answer, err := c.llm.Chat(ctx, Ask{
@@ -518,10 +551,6 @@ func (c *Chatter) Reply(ctx context.Context, conv *Conversation, said string) (s
 		_ = n
 	}
 
-	if conv.Trim(c.cfg.ChatContext) {
-		c.logf("%s: trimmed the conversation with %s to about %d tokens",
-			conv.Avatar, conv.WithName, conv.Tokens)
-	}
 	if err := c.store.Save(conv); err != nil {
 		c.logf("%s: could not write the conversation with %s: %v",
 			conv.Avatar, conv.WithName, err)
@@ -666,6 +695,106 @@ const Summarise = "You keep notes on the people somebody talks to. From the exch
 	"OWED: anything asked for, promised or agreed, with when\n\n" +
 	"Write 'unknown' for a line nothing was said about. Keep every name, place, number " +
 	"and date. Do not copy the exchange back."
+
+// shouldCompact reports whether this conversation has outgrown its
+// budget and has enough in it to be worth folding.
+//
+// The count is the one the server took of the LAST prompt, so the
+// decision is made on a measurement rather than an estimate -- and it
+// is one turn behind, which is the right way to be wrong: a
+// conversation compacts just after it crosses the line rather than just
+// before, and never on a guess that it might.
+func (c *Chatter) shouldCompact(conv *Conversation) bool {
+	return conv.Tokens > c.cfg.ChatContext && len(conv.Turns) > c.cfg.ChatKeep
+}
+
+// compact folds the older turns into the summary.
+//
+// It costs a second call to the model, on the turn that crosses the
+// budget, and the person waiting for a reply waits for both.  That is
+// the price of the avatar remembering them, it is paid once every
+// several dozen exchanges, and the alternative -- doing it afterwards,
+// in the background -- would have a second goroutine writing to a
+// conversation while the next remark is being answered from it.
+//
+// A failure here is not a failure of the turn.  The conversation is
+// trimmed instead, which is what this replaced: the avatar forgets the
+// oldest exchanges rather than remembering them imperfectly, the reply
+// still happens, and the log says which it was.
+func (c *Chatter) compact(ctx context.Context, conv *Conversation, slot int) {
+	keep := c.cfg.ChatKeep
+	fold := conv.Turns[:len(conv.Turns)-keep]
+	if len(fold) == 0 {
+		return
+	}
+
+	said, err := c.llm.Chat(ctx, Ask{
+		Messages:  summaryPrompt(conv.Summary, fold),
+		Slot:      slot,
+		MaxTokens: c.cfg.ChatSummary,
+		// Low, because this is a note and not a performance.  The
+		// character's temperature belongs to the character.
+		Temperature: 0.2,
+	})
+	if err != nil || strings.TrimSpace(said.Text) == "" {
+		if conv.Trim(c.cfg.ChatContext) {
+			c.logf("%s: could not summarise the conversation with %s (%v); "+
+				"dropped the oldest exchanges instead", conv.Avatar, conv.WithName, err)
+		}
+		return
+	}
+
+	conv.Summary = strings.TrimSpace(said.Text)
+	conv.Compacted += len(fold)
+	conv.Turns = conv.Turns[len(fold):]
+
+	// The count described the conversation that has just been replaced,
+	// and nothing here knows what the new one comes to.  The next real
+	// call measures it; until then it must not be treated as known, or
+	// the turn after this one would compact again on a stale number.
+	conv.Tokens = 0
+
+	// The kept context describes the history that was just rewritten.
+	// llama-server would match what little the two still share and
+	// reprocess the rest, which is correct but is not what the file
+	// claims to be, so the claim goes.
+	conv.State, conv.By = "", ""
+
+	c.logf("%s: folded %d turns of the conversation with %s into %d characters of memory",
+		conv.Avatar, len(fold), conv.WithName, len(conv.Summary))
+}
+
+// summaryPrompt is the conversation as something to be summarised
+// rather than continued.
+//
+// The turns are rendered INTO one message with who said what spelt out,
+// rather than handed over as turns.  Given real turns the model answers
+// the last one -- it is a chat model and that is what a chat model does
+// -- and what comes back is the next remark in the conversation instead
+// of a note about it.
+func summaryPrompt(previous string, turns []Turn) []Message {
+	var b strings.Builder
+	if previous != "" {
+		b.WriteString("The note so far:\n")
+		b.WriteString(previous)
+		b.WriteString("\n\nWhat has been said since:\n")
+	} else {
+		b.WriteString("What has been said:\n")
+	}
+	for _, t := range turns {
+		who := "They"
+		if t.Role == "assistant" {
+			who = "You"
+		}
+		fmt.Fprintf(&b, "%s: %s\n", who, t.Text)
+	}
+	b.WriteString("\nWrite the note now, folding in everything above.")
+
+	return []Message{
+		{Role: "system", Content: Summarise},
+		{Role: "user", Content: b.String()},
+	}
+}
 
 // separateMemory reports whether a second system message survives this
 // model's chat template.
