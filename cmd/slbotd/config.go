@@ -151,6 +151,16 @@ type Config struct {
 	// ChatTemp is the sampling temperature.
 	ChatTemp float64
 
+	// ChatKeep is how many turns survive a compaction word for word.
+	// The recent ones carry the thread of what is being said; the
+	// older ones become the summary, which carries what it was about.
+	ChatKeep int
+
+	// ChatSummary bounds the summary, in tokens.  It has to be well
+	// under ChatContext or compacting would make no room, and short
+	// enough that what it leaves out is obvious rather than surprising.
+	ChatSummary int
+
 	// ChatDir is where conversations are kept, as text.  The text is
 	// the durable record: a kv cache is welded to one model and one
 	// server build, and this is what survives changing either.
@@ -309,6 +319,13 @@ func (c *Config) check() error {
 	}
 	if c.LLMURL != "" && len(c.Chat) == 0 {
 		return fmt.Errorf("llm-url names a model but no chat line says who may be answered")
+	}
+	// A summary that does not leave room for a conversation is a
+	// conversation that compacts on every single turn.
+	if c.ChatOn() && c.ChatSummary >= c.ChatContext/2 {
+		return fmt.Errorf("chat-summary is %d tokens and chat-context only %d; "+
+			"the summary has to be well under the budget or there is no room left to talk",
+			c.ChatSummary, c.ChatContext)
 	}
 	for who := range c.Backstory {
 		if !c.Holds(who) {
@@ -527,6 +544,18 @@ func parseConfig(r io.Reader) (Config, error) {
 				return c, fmt.Errorf("line %d: chat-temperature wants a number, got %q", n, value)
 			}
 			c.ChatTemp = v
+		case "chat-keep", "chat_keep":
+			v, err := strconv.Atoi(value)
+			if err != nil || v < 2 || v%2 != 0 {
+				return c, fmt.Errorf("line %d: chat-keep wants an even number of turns, at least 2, got %q", n, value)
+			}
+			c.ChatKeep = v
+		case "chat-summary", "chat_summary":
+			v, err := strconv.Atoi(value)
+			if err != nil || v < 32 {
+				return c, fmt.Errorf("line %d: chat-summary wants at least 32 tokens, got %q", n, value)
+			}
+			c.ChatSummary = v
 		case "chat-dir", "chat_dir":
 			c.ChatDir = expandHome(value)
 		case "slot-save-path", "slot_save_path":
