@@ -21,6 +21,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -284,3 +286,12 @@ func (s *strBuilder) Write(p []byte) (int, error) { s.b = append(s.b, p...); ret
 func (s *strBuilder) WriteString(t string)        { s.b = append(s.b, t...) }
 func (s *strBuilder) Len() int                    { return len(s.b) }
 func (s *strBuilder) String() string              { return string(s.b) }
+
+// writeFile is os.WriteFile with the directory made, for the tests that
+// need a file in a place that may not exist yet.
+func writeFile(path, text string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(text), 0o600)
+}
