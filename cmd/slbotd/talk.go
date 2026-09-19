@@ -50,6 +50,19 @@ var talkCommands = map[string]*command{
 		group:  groupTalking,
 		run:    cmdAccept,
 	},
+	"chat": {
+		flags: func() any { return new(helpOnly) },
+		brief: "the model, and who this avatar has been talking to",
+		group: groupTalking,
+		run:   cmdChat,
+	},
+	"forget": {
+		params: "NAME|UUID",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "drop a conversation, so the next thing said starts a new one",
+		group:  groupTalking,
+		run:    cmdForget,
+	},
 	"decline": {
 		params: "N",
 		flags:  func() any { return new(helpOnly) },
@@ -283,5 +296,92 @@ func answerOffer(ctx context.Context, r *req, out io.Writer, args []string, what
 		said = "declined"
 	}
 	fmt.Fprintf(out, "%s: %s\n", said, w.what)
+	return nil
+}
+
+// cmdChat says what the conversation machinery is doing.
+//
+// Both halves are worth one command: whether there is a model at all
+// and what it is, which is the question when nothing is being answered,
+// and who this avatar has been talking to, which is the question when
+// something is.
+func cmdChat(ctx context.Context, r *req, out io.Writer, args []string) error {
+	if _, done, err := subOptions("chat", new(helpOnly), out, args); err != nil || done {
+		return err
+	}
+	if r.d.chat == nil {
+		fmt.Fprintln(out, "no model is configured; this avatar answers commands only")
+		return nil
+	}
+	fmt.Fprintf(out, "model at %s\n", r.d.cfg.LLMURL)
+	if p, err := r.d.chat.Model(ctx); err != nil {
+		fmt.Fprintf(out, "which is not answering: %v\n", err)
+	} else {
+		fmt.Fprintf(out, "%s (%s), %d slots of %d tokens\n",
+			p.Alias, p.Ftype, p.Slots, p.Settings.Ctx)
+	}
+	if path := r.d.cfg.Backstory[r.bot.Name()]; path != "" {
+		fmt.Fprintf(out, "backstory %s\n", path)
+	} else {
+		fmt.Fprintln(out, "no backstory")
+	}
+	fmt.Fprintf(out, "will talk to %s\n", strings.Join(r.d.cfg.Chat, ", "))
+
+	convs := r.d.chat.Conversations(r.bot.Name())
+	if len(convs) == 0 {
+		fmt.Fprintln(out, "no conversations yet")
+		return nil
+	}
+	for _, c := range convs {
+		name := c.WithName
+		if name == "" {
+			name = c.With
+		}
+		kept := "not kept"
+		if c.State != "" {
+			kept = "context kept"
+		}
+		fmt.Fprintf(out, "%-24s %d turns, ~%d tokens, %s ago, %s\n",
+			name, len(c.Turns), c.Tokens,
+			time.Since(c.Spoke).Round(time.Minute), kept)
+	}
+	return nil
+}
+
+// cmdForget drops a conversation.
+//
+// By whoever it was with rather than by a number, because a
+// conversation is not a listing: the person is the name of it, and
+// somebody asking an avatar to forget a conversation knows who they
+// mean.  It cannot be undone -- the text IS the conversation -- so the
+// name has to resolve to one person the way every other command that
+// names one does.
+func cmdForget(ctx context.Context, r *req, out io.Writer, args []string) error {
+	rest, done, err := subOptions("forget", new(helpOnly), out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(rest) == 0 {
+		return usage("forget", "somebody to forget")
+	}
+	if r.d.chat == nil {
+		return fmt.Errorf("no model is configured, so there are no conversations")
+	}
+	s, err := r.bot.Need()
+	if err != nil {
+		return err
+	}
+	who, err := personNamed(ctx, s, strings.Join(rest, " "))
+	if err != nil {
+		return err
+	}
+	if err := r.d.chat.Forget(r.bot.Name(), who.String()); err != nil {
+		return fmt.Errorf("nothing to forget: %w", err)
+	}
+	name := s.NameOr(who)
+	if name == "" {
+		name = who.String()
+	}
+	fmt.Fprintf(out, "forgot the conversation with %s\n", name)
 	return nil
 }

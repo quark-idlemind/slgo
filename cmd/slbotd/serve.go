@@ -138,6 +138,7 @@ func (b *bot) arrived(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync.
 	prefix := b.d.cfg.Prefix
 	if !strings.HasPrefix(text, prefix) {
 		b.chatf("%s says: %s", b.whoSaid(s, im), text)
+		b.converse(ctx, s, im, jobs)
 		return
 	}
 
@@ -289,5 +290,83 @@ func (b *bot) say(ctx context.Context, s *sl.Session, to msg.UUID, text string) 
 	defer cancel()
 	if err := s.SendIM(send, to, text); err != nil {
 		b.logf("could not send to %s: %v", to, err)
+	}
+}
+
+// ------------------------------------------------------------ conversation
+
+// converse decides whether to answer a remark, and sets about it.
+//
+// The deciding is Audience's and happens here, on the message handler's
+// own goroutine, because it is cheap and because a decision not to
+// speak should not cost a worker.  The answering is slow -- a model
+// takes seconds where a command takes milliseconds -- so it goes to a
+// goroutine with a budget of its own.
+func (b *bot) converse(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync.WaitGroup) {
+	if b.d.chat == nil {
+		return
+	}
+	who := b.whoSaid(s, im)
+	conv := b.d.chat.Store().Load(b.name, im.From, im.FromName)
+
+	v := b.d.audience(ctx, &Approach{
+		Avatar:     b.name,
+		AvatarName: s.Info().AvatarName,
+		From:       im.From,
+		Name:       im.FromName,
+		Text:       im.Text,
+		Trusted:    b.d.cfg.Trusts(im.From, im.FromName),
+		Known:      len(conv.Turns) > 0,
+		Turns:      len(conv.Turns),
+	})
+	if !v.Talk {
+		b.chatf("not answering %s: %s", who, v.Why)
+		return
+	}
+
+	// A sender who has filled this avatar's conversation budget is
+	// answered by silence rather than by a queue.  An instant message
+	// is a conversation: an answer that arrives four minutes later,
+	// behind two others, is worse than none.
+	select {
+	case b.chatJobs <- struct{}{}:
+	default:
+		b.logf("too busy talking to answer %s", who)
+		return
+	}
+
+	jobs.Add(1)
+	go func() {
+		defer jobs.Done()
+		defer func() { <-b.chatJobs }()
+		b.answer(ctx, s, im, conv, who)
+	}()
+}
+
+// answer asks the model and says what it said.
+//
+// A failure is logged and nothing is sent.  There is no useful thing to
+// tell somebody whose remark could not be answered -- they did not ask
+// this daemon a question, they spoke to an avatar -- and "the model is
+// down" said to a stranger is worse than the silence it replaces.
+func (b *bot) answer(ctx context.Context, s *sl.Session, im *sl.IM, conv *Conversation, who string) {
+	// Room beyond the model's own timeout for restoring the context
+	// and writing it back, which are milliseconds, and for a server
+	// that is thinking about it.
+	run, cancel := context.WithTimeout(ctx, b.d.cfg.LLMTimeout+30*time.Second)
+	defer cancel()
+
+	started := time.Now()
+	text, err := b.d.chat.Reply(run, conv, im.Text)
+	if err != nil {
+		b.logf("could not answer %s: %v", who, err)
+		return
+	}
+	b.logf("answered %s in %s: %s", who, time.Since(started).Round(time.Millisecond), text)
+
+	send, cancel2 := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel2()
+	if err := sendReply(send, s, im.From, text, b.d.cfg.ChatReply); err != nil {
+		b.logf("could not send the answer to %s: %v", who, err)
 	}
 }

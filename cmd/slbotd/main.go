@@ -110,6 +110,22 @@ func run() error {
 
 	d := newDaemon(cfg, where, log.Printf)
 	d.quiet = *quiet
+
+	// The model, if there is one.  Nothing is asked of it here: it may
+	// well be started after this daemon, and one that refused to run
+	// until llama-server was up would be one that has to be started in
+	// an order.
+	if cfg.ChatOn() {
+		chat, err := NewChatter(cfg, log.Printf)
+		if err != nil {
+			return err
+		}
+		d.chat = chat
+		d.audience = listAudience(cfg)
+		store, _ := cfg.ChatStore()
+		log.Printf("chatting through %s, conversations in %s", cfg.LLMURL, store)
+		log.Printf("will talk to %s", strings.Join(cfg.Chat, ", "))
+	}
 	d.Run(ctx)
 	log.Printf("stopped; the avatars are still logged in")
 	return nil
@@ -132,6 +148,31 @@ func describe(out *os.File, cfg Config, where string) error {
 	fmt.Fprintf(out, "at once:       %d commands per avatar\n", cfg.Jobs)
 	fmt.Fprintf(out, "answers:       at most %d instant messages\n", cfg.ReplyLimit)
 	fmt.Fprintf(out, "offers:        accepted from %s\n", cfg.AcceptInventory)
+	if cfg.ChatOn() {
+		store, err := cfg.ChatStore()
+		if err != nil {
+			store = fmt.Sprint(err)
+		}
+		fmt.Fprintf(out, "model:         %s\n", cfg.LLMURL)
+		fmt.Fprintf(out, "will talk to:  %s\n", strings.Join(cfg.Chat, ", "))
+		fmt.Fprintf(out, "conversations: %s, %d tokens kept, %d at once per avatar\n",
+			store, cfg.ChatContext, cfg.ChatJobs)
+		for _, name := range cfg.Avatars {
+			path, ok := cfg.Backstory[name]
+			switch {
+			case !ok:
+				fmt.Fprintf(out, "  %-12s no backstory\n", name)
+			default:
+				if _, err := os.Stat(path); err != nil {
+					fmt.Fprintf(out, "  %-12s %v\n", name, err)
+				} else {
+					fmt.Fprintf(out, "  %-12s %s\n", name, path)
+				}
+			}
+		}
+	} else {
+		fmt.Fprintf(out, "chat:          off\n")
+	}
 
 	// Every profile named has to exist, and the message when one does
 	// not should name the file rather than waiting for slgod to answer

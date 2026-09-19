@@ -72,6 +72,13 @@ type daemon struct {
 	ctlMu sync.Mutex
 	ctl   *client.Conn
 
+	// chat is the conversation machinery, or nil when no model is
+	// configured, and audience decides who an avatar will talk to.
+	// Both live on the daemon rather than on an attendant because the
+	// model has one set of slots however many avatars are sharing it.
+	chat     *Chatter
+	audience Audience
+
 	// host and attach are how an attendant reaches slgod: ask for a
 	// profile to be brought up, and attach to the session it is
 	// holding.  Fields rather than plain calls because they are the
@@ -101,6 +108,7 @@ func newDaemon(cfg Config, addr string, logf func(string, ...any)) *daemon {
 	}
 	d.host = d.hostThroughSlgod
 	d.attach = d.attachThroughSlgod
+	d.audience = silentAudience()
 	for _, name := range cfg.Avatars {
 		d.bots[name] = newBot(d, name)
 		d.order = append(d.order, name)
@@ -265,6 +273,13 @@ type bot struct {
 	d    *daemon
 	name string
 
+	// chatJobs limits how many conversations this avatar answers at
+	// once.  Its own budget rather than a share of jobs, because a
+	// reply takes seconds and a command takes milliseconds: a busy
+	// region would otherwise fill the avatar with small talk and leave
+	// no room for anybody to drive it.
+	chatJobs chan struct{}
+
 	// jobs limits how many commands this avatar runs at once.  A
 	// buffered channel rather than a counter, so that a command which
 	// arrives when it is full is refused at once and told why, rather
@@ -289,13 +304,18 @@ func newBot(d *daemon, name string) *bot {
 	if jobs < 1 {
 		jobs = 1
 	}
+	chats := d.cfg.ChatJobs
+	if chats < 1 {
+		chats = 1
+	}
 	return &bot{
-		d:     d,
-		name:  name,
-		jobs:  make(chan struct{}, jobs),
-		st:    stateStarting,
-		since: time.Now(),
-		wake:  make(chan struct{}, 1),
+		d:        d,
+		name:     name,
+		jobs:     make(chan struct{}, jobs),
+		chatJobs: make(chan struct{}, chats),
+		st:       stateStarting,
+		since:    time.Now(),
+		wake:     make(chan struct{}, 1),
 	}
 }
 
