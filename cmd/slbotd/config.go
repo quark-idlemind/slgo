@@ -103,6 +103,65 @@ type Config struct {
 	// table is looked in.
 	Aliases map[string]string
 
+	// Chat is who an avatar will hold a conversation with, as the file
+	// wrote it: names, uuids, or the one word that means everybody.
+	// Kept as written rather than resolved here, because what it means
+	// is audience.go's business and this is only the reading of it.
+	//
+	// A list of its own rather than a flag on the trusted list: driving
+	// an avatar and being spoken to by one are different powers, and
+	// somebody may reasonably have either without the other.
+	Chat []string
+
+	// Backstory is the file each avatar's character is written in, by
+	// profile.  Read when it is used rather than held here, so that
+	// working on a character does not mean restarting the daemon --
+	// and safely, because its text is part of the fingerprint that
+	// decides whether a saved kv cache still describes this avatar.
+	Backstory map[string]string
+
+	// The model.  An empty LLMURL is a daemon with no model, which
+	// answers nobody and is the default: chat is something switched on
+	// rather than something that happens.
+	LLMURL     string
+	LLMModel   string
+	LLMTimeout time.Duration
+
+	// ChatJobs is how many conversations one avatar answers at once.
+	// Its own number rather than sharing Jobs, because a reply takes
+	// seconds and a command takes milliseconds: a busy region would
+	// otherwise fill the avatar with small talk and leave no room for
+	// anybody to drive it.
+	ChatJobs int
+
+	// ChatContext is how many tokens of conversation are sent.  It is
+	// a budget on the PROMPT, checked against what the server says it
+	// actually counted rather than against a guess, and the oldest
+	// turns go when it is exceeded.
+	ChatContext int
+
+	// ChatReply bounds a reply in instant messages, and ChatTokens
+	// bounds it at the model.  Both, because they fail differently: a
+	// model told to stop at 160 tokens writes a whole short answer,
+	// and one cut off at the message boundary has half a sentence
+	// taken off the end of it.
+	ChatReply  int
+	ChatTokens int
+
+	// ChatTemp is the sampling temperature.
+	ChatTemp float64
+
+	// ChatDir is where conversations are kept, as text.  The text is
+	// the durable record: a kv cache is welded to one model and one
+	// server build, and this is what survives changing either.
+	ChatDir string
+
+	// SlotDir is the server's --slot-save-path as THIS process sees
+	// it, which is not always the same path the server sees and may
+	// not be reachable at all.  Only tidying needs it; saving and
+	// restoring name a file and let the server find it.
+	SlotDir string
+
 	// trustedIDs and trustedNames are who may send commands.  Two maps
 	// because an avatar may be written either way.
 	//
@@ -155,6 +214,13 @@ func DefaultConfig() Config {
 			"autobench": "slbench",
 			"automate":  "slrun",
 		},
+		Backstory:    map[string]string{},
+		LLMTimeout:   2 * time.Minute,
+		ChatJobs:     2,
+		ChatContext:  1536,
+		ChatReply:    2,
+		ChatTokens:   160,
+		ChatTemp:     0.8,
 		trustedIDs:   map[msg.UUID]bool{},
 		trustedNames: map[string]string{},
 	}
@@ -234,6 +300,19 @@ func (c *Config) check() error {
 	for _, p := range c.Programs {
 		if len(p.Argv) == 0 {
 			return fmt.Errorf("program %q names nothing to run", p.Name)
+		}
+	}
+	// Half a chat configuration is almost certainly an unfinished one,
+	// and the half that is missing decides which mistake it is.
+	if len(c.Chat) > 0 && c.LLMURL == "" {
+		return fmt.Errorf("chat names somebody to talk to but llm-url says where no model is")
+	}
+	if c.LLMURL != "" && len(c.Chat) == 0 {
+		return fmt.Errorf("llm-url names a model but no chat line says who may be answered")
+	}
+	for who := range c.Backstory {
+		if !c.Holds(who) {
+			return fmt.Errorf("backstory names %q, which is not an avatar this daemon holds", who)
 		}
 	}
 	for from, to := range c.Aliases {
@@ -396,6 +475,62 @@ func parseConfig(r io.Reader) (Config, error) {
 				saidProgram = true
 			}
 			c.Programs[words[0]] = &Program{Name: words[0], Argv: words[1:]}
+		case "chat":
+			if value == "" {
+				return c, fmt.Errorf("line %d: chat names nobody", n)
+			}
+			c.Chat = append(c.Chat, value)
+		case "backstory":
+			who, path, ok := strings.Cut(value, " ")
+			who, path = strings.TrimSpace(who), strings.TrimSpace(path)
+			if !ok || who == "" || path == "" {
+				return c, fmt.Errorf("line %d: backstory wants an avatar and a file, got %q", n, value)
+			}
+			c.Backstory[who] = expandHome(path)
+		case "llm-url", "llm_url":
+			c.LLMURL = value
+		case "llm-model", "llm_model":
+			c.LLMModel = value
+		case "llm-timeout", "llm_timeout":
+			d, err := time.ParseDuration(value)
+			if err != nil {
+				return c, fmt.Errorf("line %d: llm-timeout: %w", n, err)
+			}
+			c.LLMTimeout = d
+		case "chat-jobs", "chat_jobs":
+			v, err := strconv.Atoi(value)
+			if err != nil || v < 1 {
+				return c, fmt.Errorf("line %d: chat-jobs wants a number above zero, got %q", n, value)
+			}
+			c.ChatJobs = v
+		case "chat-context", "chat_context":
+			v, err := strconv.Atoi(value)
+			if err != nil || v < 64 {
+				return c, fmt.Errorf("line %d: chat-context wants a number of tokens, at least 64, got %q", n, value)
+			}
+			c.ChatContext = v
+		case "chat-reply-limit", "chat_reply_limit":
+			v, err := strconv.Atoi(value)
+			if err != nil || v < 1 {
+				return c, fmt.Errorf("line %d: chat-reply-limit wants a number above zero, got %q", n, value)
+			}
+			c.ChatReply = v
+		case "chat-max-tokens", "chat_max_tokens":
+			v, err := strconv.Atoi(value)
+			if err != nil || v < 16 {
+				return c, fmt.Errorf("line %d: chat-max-tokens wants at least 16, got %q", n, value)
+			}
+			c.ChatTokens = v
+		case "chat-temperature", "chat_temperature":
+			v, err := strconv.ParseFloat(value, 64)
+			if err != nil || v < 0 {
+				return c, fmt.Errorf("line %d: chat-temperature wants a number, got %q", n, value)
+			}
+			c.ChatTemp = v
+		case "chat-dir", "chat_dir":
+			c.ChatDir = expandHome(value)
+		case "slot-save-path", "slot_save_path":
+			c.SlotDir = expandHome(value)
 		case "alias":
 			words := strings.Fields(value)
 			if len(words) != 2 {
@@ -464,4 +599,56 @@ func sortedProgramNames(c Config) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ChatOn reports whether this daemon answers conversation at all.
+//
+// Both halves are needed and neither implies the other: a chat list
+// with no model would be a daemon that has decided who to talk to and
+// has nothing to say, and a model with no chat list is one that could
+// talk and has been told to talk to nobody.  Either on its own is
+// almost certainly a half-finished configuration, which check() says
+// so about.
+func (c *Config) ChatOn() bool { return c.LLMURL != "" && len(c.Chat) > 0 }
+
+// ChatStore is where conversations are kept.
+//
+// Under the state directory rather than beside the profiles: these are
+// what the daemon has said and been told, they grow without bound, and
+// they are not configuration.  XDG_STATE_HOME names it, or
+// ~/.local/state, which is where the specification puts exactly this
+// -- state a program wants between runs that is not a cache and not a
+// setting.
+func (c *Config) ChatStore() (string, error) {
+	if c.ChatDir != "" {
+		return c.ChatDir, nil
+	}
+	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
+		return filepath.Join(d, "slbotd"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("no home directory: %w", err)
+	}
+	return filepath.Join(home, ".local", "state", "slbotd"), nil
+}
+
+// expandHome turns a leading ~ into the home directory.
+//
+// Only a leading one, and only when what follows is a separator or
+// nothing: a file really called "~snapshot" is a file really called
+// that, and a path this expanded in the middle would be a path nobody
+// could write.
+func expandHome(path string) string {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if path == "~" {
+		return home
+	}
+	return filepath.Join(home, path[2:])
 }
