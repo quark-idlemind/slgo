@@ -8,7 +8,7 @@ viewer.
 | `slgod` | a daemon that holds grid sessions, so everything else starts instantly |
 | `slrun` | runs LSL scripts and prints what they say |
 | `slbench` | measures how much script memory an LSL construct costs |
-| `slbotd` | holds several avatars and takes commands from inside the world |
+| `slbotd` | holds several avatars, takes commands from inside the world, and can answer conversation with a local model |
 
 There is a fifth, `slsh`, an interactive shell for inventory, the
 region around you and chat. It has a guide of its own:
@@ -1204,3 +1204,137 @@ And an instant message says who it is from, which is a name and an id.
 A name can be matched, which is what makes a file written in names
 work, but a display name is not what arrives: the legacy name is. Where
 you have the uuid, write the uuid.
+
+### Talking back
+
+An instant message that does **not** begin with the prefix is not a
+command, and by default nothing happens to it. Give `slbotd` a model
+and a list of who to answer, and it becomes a conversation:
+
+    llm-url = http://127.0.0.1:8080
+    chat    = Quark Idlemind
+    chat    = *                       # or: anybody who writes
+
+    backstory = example /home/you/characters/hobb.txt
+
+The model is `llama-server` from llama.cpp, reached over HTTP. It is
+not interchangeable with Ollama or anything else that speaks the same
+chat API, and the reason is the second half of what is used: generation
+goes through `/v1/chat/completions`, which everything speaks, but the
+**kv cache** goes through `/slots`, which is llama.cpp's own. That is
+what lets a conversation be put down and picked up again, and without
+it every remark pays for the whole conversation again.
+
+Start the server with somewhere to keep the caches, and with as many
+slots as you want conversations live at once:
+
+    llama-server -m model.gguf -c 8192 -np 4 --slot-save-path /var/lib/slbotd/slots
+
+Then tell `slbotd` where that directory is, if it can see it, so it can
+tidy up after a conversation it forgets:
+
+    slot-save-path = /var/lib/slbotd/slots
+
+### What the backstory is, and when it is read
+
+One file per avatar, plain text, used as the system prompt. It is what
+the avatar *is* — `slbotd` adds one sentence of its own about speaking
+through instant messages, because that is about the channel rather than
+the character and nobody writing a character should have to explain the
+plumbing to it.
+
+It is read **every time it is used**, not held in memory, so working on
+a character is an edit and not a restart. That is safe because the
+backstory's text is part of the fingerprint described below: change the
+words and every kept context for that avatar stops matching and is
+built again from the conversation.
+
+### Keeping a conversation, and what that costs
+
+The conversation is kept as **text**, under `chat-dir` (by default
+`~/.local/state/slbotd`), one file per avatar per person. That is the
+record. The kv cache is an accelerator and is treated as disposable,
+because it is welded to one model, one quantisation, one context size
+and one server build — and **the server does not check any of that
+before loading one.** A state saved under one model and restored under
+another loads cleanly and answers nonsense. So `slbotd` records a
+fingerprint of all four, plus the backstory, and refuses to restore a
+cache whose fingerprint has moved.
+
+Measured against `llama-server` b11056, Qwen2.5-0.5B-Instruct Q4_K_M,
+four slots of 2048 tokens, on an Intel i9 with no GPU offload:
+
+| | |
+|---|---|
+| a 1442-token prompt, cold | **5.0 s** (288 tokens/second) |
+| saving those 1457 tokens | **13.1 ms** (17,927,560 bytes) |
+| restoring them into another slot | **5.4 ms** |
+| the next turn, warm | **0.53 s** (1442 of 1461 cached) |
+
+So picking a conversation up costs about five milliseconds and saves
+about five seconds. The cost of carrying conversations is the disk they
+sit on, not the time to resume them.
+
+The size is what to budget for, and it is decided by the shape of the
+model rather than its size:
+
+    bytes per token = 2 × layers × kv_heads × head_dim × bytes_per_element
+
+That model came to 12,304 bytes a token, which is exactly
+`2 × 24 × 2 × 64 × 2` plus a header. Grouped-query attention dominates
+it: a three-billion-parameter model with two kv heads costs less per
+token than a smaller one with eight. `--cache-type-k q8_0
+--cache-type-v q8_0` roughly halves it.
+
+Below a few hundred tokens, restoring moves more bytes than
+re-prefilling would have recomputed. It is long conversations that pay.
+
+### How slots are handed out
+
+`llama-server` has a fixed number of slots and hands them out itself
+unless told which to use. Left to it, a conversation lands somewhere
+different every turn and its cache is always somewhere else — so
+`slbotd` pins them: a conversation keeps the slot it spoke in, and when
+there are more conversations than slots the one that spoke longest ago
+gives its slot up and is picked up again from disk next time it is
+spoken to. A slot taken from somebody else is **erased** before it is
+used, because two conversations with one avatar share a prefix — the
+same backstory — and the server would otherwise match it and carry the
+wrong person's words into the reply.
+
+### Who it answers
+
+`chat` is a list of its own and not a flag on `trusted`. Driving an
+avatar and being spoken to by one are different powers, and somebody
+may reasonably have either without the other. A name, a uuid, or `*`
+for anybody.
+
+The decision is one Go function — `Audience` in `audience.go` — and the
+list is the first answer to the question rather than the last. Whether
+to answer a stranger will eventually want to weigh who they are, what
+they said, how often they have said it and what the avatar is doing;
+all of that belongs in that one function, which is why the message
+handler asks it a question instead of testing a list.
+
+Every verdict carries a reason, and the reason is logged. An avatar
+that declines to speak does so silently — that is what declining to
+speak is — so the line in the log is the only evidence the decision
+happened at all.
+
+### Two practical notes
+
+`chat-jobs` (2 by default) is separate from `jobs` on purpose. A reply
+takes seconds where a command takes milliseconds, and a busy region
+would otherwise fill an avatar with small talk and leave no room for
+anybody to drive it. Beyond the budget a remark is answered by silence,
+which for conversation is the right answer: a reply that arrives four
+minutes later, behind two others, is worse than none.
+
+And a failure is silence too. There is nothing useful to tell somebody
+whose remark could not be answered — they did not ask this daemon a
+question, they spoke to an avatar — and "the model is down" said to a
+stranger is worse than the silence it replaces. It is in the log.
+
+`:chat` says what model is behind an avatar and who it has been talking
+to; `:forget SOMEBODY` drops a conversation, which cannot be undone,
+because the text is what the conversation is made of.

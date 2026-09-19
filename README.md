@@ -65,6 +65,7 @@ case.
     cmd/slrun/       runs LSL scripts, prints what they said
     cmd/slbench/      measures what LSL constructs cost in memory
     cmd/slbotd/         attends several avatars, driven by instant message
+    cmd/slbotd/chat.go  answering conversation with a local model, and keeping it
     cmd/msggen/         fetches message_template.msg, writes Go
     cmd/slgo-multiattach/  wearing several objects on one attachment point
 
@@ -1200,6 +1201,50 @@ An answer goes back as instant messages, which hold about a kilobyte
 each and are throttled per agent, so it is composed in full, cut at a
 line ending, and sent as a few messages a quarter of a second apart
 with whatever did not fit reported rather than dropped in silence.
+
+An instant message that does not begin with the prefix is not a
+command, and by default nothing happens to it. Given a model and a list
+of who to answer, it becomes a conversation instead:
+
+    llm-url   = http://127.0.0.1:8080
+    chat      = *
+    backstory = example /home/you/characters/hobb.txt
+
+The model is `llama-server` from llama.cpp and is not interchangeable
+with anything else that speaks the same chat API, because only half of
+what is used is that API. Generation goes through
+`/v1/chat/completions`; the kv cache goes through `/slots`, which is
+llama.cpp's own, and is what lets a conversation be put down and picked
+up again instead of being paid for from the beginning every time.
+
+The conversation is kept as text, which is the record. The kv cache is
+an accelerator and is treated as disposable: it is welded to one model,
+one quantisation, one context size and one server build, and the server
+checks none of that before loading one -- a state from another model
+loads cleanly and answers nonsense. So a fingerprint of all four, plus
+the backstory, travels with each conversation and a cache whose
+fingerprint has moved is not restored at all.
+
+Measured against llama-server b11056, Qwen2.5-0.5B Q4_K_M, on an Intel
+i9 with no GPU offload: a 1442 token prompt cost 5.0 s cold, saving the
+resulting 1457 tokens took 13.1 ms for 17.9 MB, restoring them into
+another slot took 5.4 ms, and the next turn came back in 0.53 s with
+1442 of 1461 tokens cached. Picking a conversation up costs about five
+milliseconds and saves about five seconds, so what a conversation costs
+to carry is the disk it sits on rather than the time to resume it.
+
+Slots are pinned rather than left to the server, since a conversation
+that lands somewhere different each turn has its cache somewhere else
+each turn; the one that spoke longest ago gives its slot up, and a slot
+taken from somebody else is erased first, because two conversations
+with one avatar share the backstory as a prefix and the server would
+otherwise match it.
+
+Who an avatar will talk to is a list of its own and not a flag on
+`trusted` -- driving an avatar and being spoken to by one are different
+powers. It is decided by one function rather than a test at the call
+site, because the list is the first answer to that question and not the
+last one.
 
 See [doc/guide.md](doc/guide.md) for the configuration in full and the
 list of commands.
