@@ -84,6 +84,17 @@ type Conversation struct {
 	State string `json:"state,omitempty"`
 	By    string `json:"by,omitempty"`
 
+	// Summary is what was said before the turns that are still kept
+	// word for word, as the model wrote it down.  This is the whole of
+	// an avatar's memory of a conversation beyond the last few
+	// exchanges.
+	Summary string `json:"summary,omitempty"`
+
+	// Compacted is how many turns have been folded into that summary,
+	// which is the only measure of how much of the conversation the
+	// avatar is no longer holding exactly.
+	Compacted int `json:"compacted,omitempty"`
+
 	// Tokens is what the server counted the last prompt at.  Measured
 	// rather than estimated, and it is what drives the trimming: a
 	// budget checked against a guess at the tokeniser is a budget that
@@ -98,18 +109,44 @@ func (c *Conversation) Key() string { return c.Avatar + "-" + c.With }
 // cache.  A flat name because the server's slot directory is flat.
 func (c *Conversation) stateName() string { return c.Key() + ".bin" }
 
-// Prompt is the conversation as the model is given it: the backstory,
-// then everything said, then the new remark.
-func (c *Conversation) Prompt(backstory, said string) []Message {
-	system := strings.TrimSpace(backstory)
-	if system == "" {
-		system = Medium
+// Remembered introduces the summary to the avatar as its own memory
+// rather than as a document.  An avatar told "here is a summary" talks
+// about the summary; one told it remembers something talks about the
+// thing.
+const Remembered = "What you remember of talking with this person before: "
+
+// Prompt is the conversation as the model is given it: what the avatar
+// is, what it remembers, what was said lately, and the new remark.
+//
+// The memory is a message of its own when the template will carry one,
+// and joined onto the backstory when it will not.  Two is better where
+// it works: the backstory is then byte for byte the same message on
+// every turn, so it stays a prefix the kv cache can match even across a
+// compaction, which is the one moment everything after it changes.
+func (c *Conversation) Prompt(backstory, said string, separate bool) []Message {
+	character := strings.TrimSpace(backstory)
+	if character == "" {
+		character = Medium
 	} else {
-		system += "\n\n" + Medium
+		character += "\n\n" + Medium
 	}
 
-	out := make([]Message, 0, len(c.Turns)+2)
-	out = append(out, Message{Role: "system", Content: system})
+	memory := ""
+	if c.Summary != "" {
+		memory = Remembered + c.Summary
+	}
+
+	out := make([]Message, 0, len(c.Turns)+3)
+	switch {
+	case memory == "":
+		out = append(out, Message{Role: "system", Content: character})
+	case separate:
+		out = append(out, Message{Role: "system", Content: character})
+		out = append(out, Message{Role: "system", Content: memory})
+	default:
+		out = append(out, Message{Role: "system", Content: character + "\n\n" + memory})
+	}
+
 	for _, t := range c.Turns {
 		out = append(out, Message{Role: t.Role, Content: t.Text})
 	}
@@ -349,8 +386,9 @@ type Chatter struct {
 	// It is asked lazily because the model may well be started after
 	// this daemon: a slbotd that refused to run until llama-server was
 	// up would be a slbotd that has to be started in an order.
-	mu    sync.Mutex
-	props *Props
+	mu       sync.Mutex
+	props    *Props
+	separate *bool // whether a second system message survives the template
 }
 
 // NewChatter prepares the machinery.  It talks to nothing yet.
@@ -446,7 +484,7 @@ func (c *Chatter) Reply(ctx context.Context, conv *Conversation, said string) (s
 	}
 
 	answer, err := c.llm.Chat(ctx, Ask{
-		Messages:    conv.Prompt(backstory, said),
+		Messages:    conv.Prompt(backstory, said, c.separateMemory(ctx)),
 		Slot:        slot,
 		MaxTokens:   c.cfg.ChatTokens,
 		Temperature: c.cfg.ChatTemp,
@@ -580,3 +618,99 @@ func (c *Chatter) Forget(avatar, with string) error {
 
 // Model is what the server said about itself, if it has been asked.
 func (c *Chatter) Model(ctx context.Context) (*Props, error) { return c.ready(ctx) }
+
+// ------------------------------------------------------------ remembering
+
+// Summarise is what the model is told when it is being asked to
+// remember rather than to talk.
+//
+// Deliberately not in character.  This is the one call that is not the
+// avatar speaking, and a dockhand asked to summarise a conversation
+// writes a dockhand's remark about it rather than a note anybody can
+// use.  So the backstory does not reach here at all -- which is also
+// why an avatar's character cannot be lost to compaction: there is no
+// path through this file on which the two meet.
+//
+// # Why it asks for three labelled lines
+//
+// Because asking in prose does not work, at any size worth running.
+// The first version of this said "write a brief note, in the third
+// person, of what has passed between them" and it was measured against
+// both models to hand: the 0.5B answered with fragments of the
+// transcript separated by rules, and the 3B answered by copying the
+// exchange back verbatim.  Neither summarised anything, and the name
+// the person had given -- the single most useful fact in the
+// conversation -- was lost by both.
+//
+// Three labelled lines with a rule for the empty case work on the 3B
+// first time and keep exactly what is worth keeping.  Measured on the
+// same exchange:
+//
+//	THEM: Quark, chandlery, upriver
+//	TOPICS: tide, berth, rope
+//	OWED: Hold three coils of rope until Thursday
+//
+// And they survive being folded again, which is the property the whole
+// thing rests on: fed that note plus four more turns, the next fold
+// kept the name, the trade and the promise, and added the new topics
+// to the middle line.  A prose note has nothing to hold on to and
+// drifts; a labelled one has three places to put things and keeps them.
+//
+// The fields are what somebody means when they say an avatar remembers
+// them: who they are, what has been talked about, and what was agreed.
+const Summarise = "You keep notes on the people somebody talks to. From the exchange " +
+	"below, write exactly these three lines and nothing else:\n\n" +
+	"THEM: the other person's name, and their trade, home or anything else they said " +
+	"about themselves\n" +
+	"TOPICS: what was talked about, a few words each\n" +
+	"OWED: anything asked for, promised or agreed, with when\n\n" +
+	"Write 'unknown' for a line nothing was said about. Keep every name, place, number " +
+	"and date. Do not copy the exchange back."
+
+// separateMemory reports whether a second system message survives this
+// model's chat template.
+//
+// Asked once, of the server, rather than assumed.  Templates differ and
+// some keep the first system message and drop the rest -- and a memory
+// dropped by a template is the worst of the failures available here:
+// the avatar goes on answering fluently, having forgotten everything,
+// and nothing anywhere says so.  So a marker is rendered through
+// /apply-template and looked for in what comes back.
+//
+// A server that will not answer the question is assumed to be the
+// stricter of the two.  Joining the memory onto the backstory works
+// everywhere; it only costs the stable prefix.
+func (c *Chatter) separateMemory(ctx context.Context) bool {
+	c.mu.Lock()
+	known := c.separate
+	c.mu.Unlock()
+	if known != nil {
+		return *known
+	}
+
+	const marker = "REMEMBERED-MARKER-8f31"
+	ok := false
+	got, err := c.llm.Template(ctx, []Message{
+		{Role: "system", Content: "CHARACTER"},
+		{Role: "system", Content: marker},
+		{Role: "user", Content: "hello"},
+	})
+	switch {
+	case err != nil:
+		c.logf("could not ask how the template handles a second system message (%v); "+
+			"keeping memory in the first one", err)
+	case strings.Contains(got, marker):
+		ok = true
+	default:
+		c.logf("this model's template drops a second system message; " +
+			"keeping memory in the first one")
+	}
+
+	c.mu.Lock()
+	if c.separate == nil {
+		c.separate = &ok
+	}
+	out := *c.separate
+	c.mu.Unlock()
+	return out
+}

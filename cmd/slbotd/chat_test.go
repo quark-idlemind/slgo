@@ -19,7 +19,7 @@ func TestThePromptIsBackstoryThenEverythingSaid(t *testing.T) {
 	c.Add("user", "hello", now)
 	c.Add("assistant", "evening", now)
 
-	got := c.Prompt("You are Hobb, a dockhand.", "what is the tide doing?")
+	got := c.Prompt("You are Hobb, a dockhand.", "what is the tide doing?", true)
 	if len(got) != 4 {
 		t.Fatalf("%d messages, want system, two turns and the new remark", len(got))
 	}
@@ -43,7 +43,7 @@ func TestThePromptIsBackstoryThenEverythingSaid(t *testing.T) {
 // An avatar with no backstory still gets told where it is talking,
 // rather than getting an empty system message.
 func TestNoBackstoryStillSaysWhereItIs(t *testing.T) {
-	got := (&Conversation{}).Prompt("", "hello")
+	got := (&Conversation{}).Prompt("", "hello", true)
 	if got[0].Role != "system" || !strings.Contains(got[0].Content, "instant messages") {
 		t.Errorf("got %+v", got[0])
 	}
@@ -281,4 +281,55 @@ func TestGivingASlotBackWakesAWaiter(t *testing.T) {
 		t.Error("a waiter was not woken when the slot was given back")
 	}
 	wg.Wait()
+}
+
+// ---------------------------------------------------------- the template
+
+// A memory dropped by a chat template is the worst failure available
+// here: the avatar answers fluently, having forgotten everything, and
+// nothing says so.  So it is asked rather than assumed.
+func TestTheTemplateIsAskedWhereMemoryCanGo(t *testing.T) {
+	d, _, _ := newTestDaemon(t)
+	f := newFakeLLM(t)
+	withChat(t, d, f, Anyone)
+
+	if !d.chat.separateMemory(context.Background()) {
+		t.Error("a template that keeps both system messages was not believed")
+	}
+}
+
+func TestATemplateThatDropsSystemMessagesIsNoticed(t *testing.T) {
+	d, _, _ := newTestDaemon(t)
+	f := newFakeLLM(t)
+	f.dropsSystem = true
+	withChat(t, d, f, Anyone)
+
+	if d.chat.separateMemory(context.Background()) {
+		t.Error("a template that drops the second system message was used anyway")
+	}
+
+	// And the memory still gets through, joined onto the backstory.
+	c := &Conversation{Summary: "They are called Quark."}
+	got := c.Prompt("You are Hobb.", "hello", false)
+	if len(got) != 2 {
+		t.Fatalf("%d messages, want one system message and the remark", len(got))
+	}
+	if !strings.Contains(got[0].Content, "Hobb") || !strings.Contains(got[0].Content, "Quark") {
+		t.Errorf("the character and the memory are not both there: %q", got[0].Content)
+	}
+}
+
+// With two messages the backstory is byte for byte the same one every
+// turn, which is what keeps it a prefix the cache can match across a
+// compaction.
+func TestTheBackstoryIsItsOwnMessageWhenItCanBe(t *testing.T) {
+	with := (&Conversation{Summary: "They are called Quark."}).Prompt("You are Hobb.", "hello", true)
+	without := (&Conversation{}).Prompt("You are Hobb.", "hello", true)
+	if with[0].Content != without[0].Content {
+		t.Errorf("the backstory message changed when a memory appeared:\n%q\n%q",
+			without[0].Content, with[0].Content)
+	}
+	if len(with) != 3 || with[1].Role != "system" {
+		t.Fatalf("got %d messages, want character, memory and the remark", len(with))
+	}
 }

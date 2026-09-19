@@ -295,3 +295,23 @@ func oneLine(b []byte) string {
 	}
 	return strings.ReplaceAll(s, "\n", " ")
 }
+
+// Template renders messages the way the model's own chat template will,
+// without generating anything.
+//
+// It exists for one question: whether a second system message survives
+// the template.  Some templates keep one and drop or merge the rest,
+// and a memory that is silently dropped is worse than one that is
+// obviously missing -- the avatar would go on answering, fluently,
+// having forgotten everything, and nothing anywhere would say so.  So
+// it is asked rather than assumed.  See Chatter.separateMemory.
+func (l *LLM) Template(ctx context.Context, msgs []Message) (string, error) {
+	var out struct {
+		Prompt string `json:"prompt"`
+	}
+	body := map[string]any{"messages": msgs}
+	if err := l.do(ctx, "POST", "/apply-template", body, &out); err != nil {
+		return "", err
+	}
+	return out.Prompt, nil
+}

@@ -344,6 +344,10 @@ func cmdChat(ctx context.Context, r *req, out io.Writer, args []string) error {
 		fmt.Fprintf(out, "%-24s %d turns, ~%d tokens, %s ago, %s\n",
 			name, len(c.Turns), c.Tokens,
 			time.Since(c.Spoke).Round(time.Minute), kept)
+		if c.Summary != "" {
+			fmt.Fprintf(out, "    remembers (%d turns folded in): %s\n",
+				c.Compacted, c.Summary)
+		}
 	}
 	return nil
 }

@@ -36,11 +36,25 @@ type fakeLLM struct {
 	restoreErr bool
 	prompt     int
 	cached     int
+
+	// summaries are the requests that asked for a note rather than for
+	// conversation, kept apart because what is IN them is the point:
+	// the backstory must never be one of them.
+	summaries  []map[string]any
+	summary    string
+	summaryErr bool
+
+	// dropsSystem makes the template keep only the first system
+	// message, the way some models' templates do.
+	dropsSystem bool
 }
 
 func newFakeLLM(t *testing.T) *fakeLLM {
 	t.Helper()
-	f := &fakeLLM{reply: "Evening.", prompt: 120, cached: 100}
+	f := &fakeLLM{
+		reply: "Evening.", prompt: 120, cached: 100,
+		summary: "They talked about the tide and the cargo. Their name is Quark.",
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/props", func(w http.ResponseWriter, r *http.Request) {
@@ -57,8 +71,21 @@ func newFakeLLM(t *testing.T) *fakeLLM {
 		var got map[string]any
 		json.Unmarshal(b, &got)
 		f.mu.Lock()
-		f.asks = append(f.asks, got)
+		asking := isSummaryAsk(got)
+		if asking {
+			f.summaries = append(f.summaries, got)
+		} else {
+			f.asks = append(f.asks, got)
+		}
 		reply, prompt, cached := f.reply, f.prompt, f.cached
+		if asking {
+			reply = f.summary
+			if f.summaryErr {
+				f.mu.Unlock()
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
 		f.mu.Unlock()
 
 		json.NewEncoder(w).Encode(map[string]any{
@@ -112,6 +139,31 @@ func newFakeLLM(t *testing.T) *fakeLLM {
 		}
 	})
 
+	mux.HandleFunc("/apply-template", func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var got struct {
+			Messages []Message `json:"messages"`
+		}
+		json.Unmarshal(b, &got)
+
+		f.mu.Lock()
+		drops := f.dropsSystem
+		f.mu.Unlock()
+
+		var out strings.Builder
+		seenSystem := false
+		for _, m := range got.Messages {
+			if m.Role == "system" {
+				if seenSystem && drops {
+					continue
+				}
+				seenSystem = true
+			}
+			out.WriteString("<|im_start|>" + m.Role + "\n" + m.Content + "<|im_end|>\n")
+		}
+		json.NewEncoder(w).Encode(map[string]any{"prompt": out.String()})
+	})
+
 	f.Server = httptest.NewServer(mux)
 	t.Cleanup(f.Close)
 	return f
@@ -129,6 +181,24 @@ func (f *fakeLLM) sawAsks() []map[string]any {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]map[string]any(nil), f.asks...)
+}
+
+// isSummaryAsk tells a request for a note from a request for
+// conversation, by the instruction at the head of it.
+func isSummaryAsk(req map[string]any) bool {
+	msgs, _ := req["messages"].([]any)
+	if len(msgs) == 0 {
+		return false
+	}
+	first, _ := msgs[0].(map[string]any)
+	content, _ := first["content"].(string)
+	return strings.HasPrefix(content, Summarise[:40])
+}
+
+func (f *fakeLLM) sawSummaries() []map[string]any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]map[string]any(nil), f.summaries...)
 }
 
 func (f *fakeLLM) sawSaved() []string {
