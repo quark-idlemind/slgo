@@ -29,6 +29,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -51,6 +52,7 @@ type fakeGrid struct {
 
 	info     *sl.Info
 	messages chan *sl.Message
+	notices  chan *pb.AgentEvent
 	done     chan struct{}
 	closed   bool
 
@@ -79,6 +81,7 @@ func newFakeGrid() *fakeGrid {
 			InventoryRoot: testRoot,
 		},
 		messages: make(chan *sl.Message, 16),
+		notices:  make(chan *pb.AgentEvent, 8),
 		done:     make(chan struct{}),
 		presence: &sl.Presence{
 			Region:   "Nowhere",

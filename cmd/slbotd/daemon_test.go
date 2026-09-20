@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -198,4 +200,71 @@ func waitState(t *testing.T, b *bot, want state) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// An avatar stopped on purpose and then started again by a person
+// should be picked up without anybody having to tell this daemon so.
+//
+// The logout half of that already worked -- the attendant stops asking
+// when slgod says the session was stopped deliberately.  The login half
+// did not: it waited to be told, and nothing ever told it.  Measured on
+// a live daemon: a forced logout and then a login left slgod holding the
+// avatar and slbotd detached from it indefinitely.
+func TestAnAvatarStartedAgainIsPickedUp(t *testing.T) {
+	_, b, f := withFakeSlgod(t)
+	f.deliber = true
+	f.hostErr = status.Error(codes.FailedPrecondition,
+		"example was stopped deliberately (logged out on request)")
+
+	// slgod says it is stopped, until it does not.
+	var stopped atomic.Bool
+	stopped.Store(true)
+	b.d.host = func(ctx context.Context, name string, force bool) (bool, error) {
+		f.mu.Lock()
+		f.hosted = append(f.hosted, name)
+		f.forced = append(f.forced, force)
+		f.mu.Unlock()
+		if stopped.Load() {
+			return true, status.Error(codes.FailedPrecondition, "stopped deliberately")
+		}
+		return false, nil
+	}
+	b.d.agents = func(ctx context.Context) ([]*pb.AgentInfo, error) {
+		st := pb.AgentInfo_HOSTED
+		if stopped.Load() {
+			st = pb.AgentInfo_STOPPED
+		}
+		return []*pb.AgentInfo{{Name: "example", State: st}}, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); b.run(ctx) }()
+
+	waitState(t, b, stateHeldBack)
+	asked, _ := f.asks()
+
+	// It is not arguing with whoever stopped it.
+	time.Sleep(3 * HeldRecheck / 2)
+	again, _ := f.asks()
+	if len(again) > len(asked) {
+		t.Errorf("asked to host %d more times while it was stopped on purpose",
+			len(again)-len(asked))
+	}
+
+	// And when a person starts it again, it notices on its own.
+	stopped.Store(false)
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		if n, _ := f.asks(); len(n) > len(again) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("it never noticed the avatar had been started again")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	cancel()
+	<-done
 }

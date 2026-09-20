@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -52,11 +53,30 @@ const IMDepth = 256
 func (b *bot) serve(ctx context.Context, s *sl.Session) {
 	ims := s.IMs(IMDepth)
 	defer s.StopIMs(ims)
-	b.read(ctx, s, ims)
+
+	// What slgod says about the connection itself, which only a hosted
+	// session has.  Taken here and passed in for the reason the
+	// subscription above is: read is then a function of what arrives
+	// rather than of what it can reach, and a test can hand it either.
+	var notices <-chan *pb.AgentEvent
+	if h, ok := s.Backend().(*sl.Hosted); ok {
+		notices = h.Conn().Notices()
+	}
+	b.read(ctx, s, ims, notices)
 }
 
 // read is the listening loop proper.
-func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM) {
+func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM,
+	notices <-chan *pb.AgentEvent) {
+	// Endable from inside as well as from outside.  slgod's stream
+	// deliberately OUTLIVES the session under it -- a session that
+	// drops is re-established and the client keeps its stream and its
+	// subscriptions across that -- so a session which is never coming
+	// back does not end this loop by itself.  drainNotices is what
+	// notices, and this is how it says so.
+	ctx, gone := context.WithCancel(ctx)
+	defer gone()
+
 	// Jobs get a context of their own so that the end of the session
 	// stops them: a benchmark still running against a session that has
 	// gone is a benchmark that will fail slowly rather than at once.
@@ -67,7 +87,7 @@ func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM) {
 		jobs.Wait()
 	}()
 
-	go b.drainNotices(jobCtx, s)
+	go b.drainNotices(jobCtx, notices, gone)
 
 	for {
 		select {
@@ -91,17 +111,13 @@ func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM) {
 // notices are worth having anyway: a kick, a region change and a
 // reconnect all arrive here and are the only warning a log gets that
 // the session under an attendant has been replaced.
-func (b *bot) drainNotices(ctx context.Context, s *sl.Session) {
-	h, ok := s.Backend().(*sl.Hosted)
-	if !ok {
+func (b *bot) drainNotices(ctx context.Context, notices <-chan *pb.AgentEvent, gone func()) {
+	if notices == nil {
 		return
 	}
-	notices := h.Conn().Notices()
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-s.Done():
 			return
 		case n, ok := <-notices:
 			if !ok {
@@ -112,6 +128,28 @@ func (b *bot) drainNotices(ctx context.Context, s *sl.Session) {
 				detail = n.GetRegion()
 			}
 			b.logf("slgod reports %s %s", strings.ToLower(n.GetKind().String()), detail)
+
+			// A session that ended may be coming back -- slgod
+			// re-establishes one that dropped, under this same stream
+			// -- or may not, if somebody logged the avatar out on
+			// purpose.  The two look identical from here and the
+			// stream ends for neither, so the attendant would sit
+			// holding a session that no longer exists, believing it
+			// was attached, until the daemon was restarted.  That is
+			// exactly what it did.
+			//
+			// Which it is comes from asking slgod rather than from
+			// reading the sentence it sent.  The words are for a
+			// person; matching on them would be one more thing to be
+			// wrong about when they change.
+			switch n.GetKind() {
+			case pb.AgentEvent_DISCONNECTED, pb.AgentEvent_KICKED:
+				if b.d.stoppedAt(ctx, b.name) {
+					b.logf("that session is not coming back; letting go of it")
+					gone()
+					return
+				}
+			}
 		}
 	}
 }

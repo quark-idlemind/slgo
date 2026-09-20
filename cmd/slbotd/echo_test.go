@@ -9,11 +9,13 @@ package main
 // does not stop.
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -296,4 +298,66 @@ func TestADetachedAvatarIsNotTreatedAsOurOwn(t *testing.T) {
 	if _, ok := d.AvatarFor(msg.UUID{}); ok {
 		t.Error("a zero id was taken for one of this daemon's avatars")
 	}
+}
+
+// slgod's stream OUTLIVES the session under it: a session that drops is
+// re-established and the client keeps its stream and its subscriptions
+// across that.  So a session which is never coming back -- because
+// somebody logged the avatar out on purpose -- does not end the
+// listening loop by itself, and the attendant sat holding a session
+// that no longer existed, believing it was attached, until the daemon
+// was restarted.
+//
+// Measured on a live daemon before this: a forced logout from the shell
+// left slbotd with no "detached" line, no retry, and slgod reporting one
+// client that was really only the shell asking.
+func TestASessionThatIsNotComingBackIsLetGo(t *testing.T) {
+	d, b, grid := newTestDaemon(t)
+	d.agents = func(ctx context.Context) ([]*pb.AgentInfo, error) {
+		return []*pb.AgentInfo{{Name: "example", State: pb.AgentInfo_STOPPED}}, nil
+	}
+
+	s := b.Session()
+	ims := s.IMs(IMDepth)
+	done := make(chan struct{})
+	go func() { defer close(done); b.read(context.Background(), s, ims, grid.notices) }()
+
+	// slgod says the session went away, and says the avatar is stopped.
+	grid.notices <- &pb.AgentEvent{
+		Kind:   pb.AgentEvent_DISCONNECTED,
+		Detail: "logged out on request; it will not come back until asked for by name",
+	}
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the attendant held on to a session that was never coming back")
+	}
+}
+
+// A session that merely dropped IS coming back, under the same stream,
+// so letting go of it would throw away a working attachment and make
+// the attendant reconnect for nothing.
+func TestASessionThatIsComingBackIsKept(t *testing.T) {
+	d, b, grid := newTestDaemon(t)
+	d.agents = func(ctx context.Context) ([]*pb.AgentInfo, error) {
+		return []*pb.AgentInfo{{Name: "example", State: pb.AgentInfo_CONNECTING}}, nil
+	}
+
+	s := b.Session()
+	ims := s.IMs(IMDepth)
+	done := make(chan struct{})
+	go func() { defer close(done); b.read(context.Background(), s, ims, grid.notices) }()
+
+	grid.notices <- &pb.AgentEvent{
+		Kind: pb.AgentEvent_DISCONNECTED, Detail: "the simulator went quiet",
+	}
+
+	select {
+	case <-done:
+		t.Fatal("let go of a session slgod is re-establishing")
+	case <-time.After(2 * time.Second):
+	}
+	grid.Close()
+	<-done
 }

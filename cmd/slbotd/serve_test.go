@@ -56,7 +56,7 @@ func serving(t *testing.T, b *bot) func() {
 	go func() {
 		defer close(done)
 		defer s.StopIMs(ims)
-		b.read(ctx, s, ims)
+		b.read(ctx, s, ims, nil)
 	}()
 	return func() {
 		cancel()

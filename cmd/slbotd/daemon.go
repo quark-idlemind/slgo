@@ -51,6 +51,16 @@ const (
 	// immediately would reset the backoff on every attempt, which is
 	// no backoff at all.
 	settled = 2 * time.Minute
+
+	// HeldRecheck is how often an attendant looks to see whether an
+	// avatar somebody stopped on purpose has been started again.
+	//
+	// Half a minute is short enough that "slsh login example" is
+	// followed by the daemon picking it up while you are still
+	// watching, and long enough that an avatar left stopped for a
+	// week costs one small call every thirty seconds and nothing
+	// else.
+	HeldRecheck = 30 * time.Second
 )
 
 // daemon is the whole of a running slbotd.
@@ -90,6 +100,7 @@ type daemon struct {
 	// try them against.
 	host   func(ctx context.Context, name string, force bool) (deliberate bool, err error)
 	attach func(ctx context.Context, name string) (*sl.Session, error)
+	agents func(ctx context.Context) ([]*pb.AgentInfo, error)
 
 	mu   sync.Mutex
 	bots map[string]*bot
@@ -109,6 +120,7 @@ func newDaemon(cfg Config, addr string, logf func(string, ...any)) *daemon {
 	}
 	d.host = d.hostThroughSlgod
 	d.attach = d.attachThroughSlgod
+	d.agents = d.agentsFromSlgod
 	d.audience = silentAudience()
 	for _, name := range cfg.Avatars {
 		d.bots[name] = newBot(d, name)
@@ -227,7 +239,11 @@ func (d *daemon) closeControl() {
 // attends to: a profile slbotd was never told about is still listed,
 // because "I have never heard of that avatar" and "that avatar is not
 // mine to drive" are different answers.
-func (d *daemon) Agents(ctx context.Context) ([]*pb.AgentInfo, error) {
+func (d *daemon) Agents(ctx context.Context) ([]*pb.AgentInfo, error) { return d.agents(ctx) }
+
+// agentsFromSlgod is Agents as it really is: one call over the control
+// connection.
+func (d *daemon) agentsFromSlgod(ctx context.Context) ([]*pb.AgentInfo, error) {
 	c, err := d.control(ctx)
 	if err != nil {
 		return nil, err
@@ -238,6 +254,32 @@ func (d *daemon) Agents(ctx context.Context) ([]*pb.AgentInfo, error) {
 		return nil, err
 	}
 	return as, nil
+}
+
+// stoppedAt slgod reports whether an avatar is still down on purpose.
+//
+// A read and not a request.  The difference is the whole point: asking
+// to host a stopped avatar over and over would be the attendant
+// arguing with the person who stopped it, where this only watches for
+// somebody bringing it back.
+//
+// A slgod that cannot be reached is not an answer either way, so it is
+// treated as still stopped: the attendant waits and asks again rather
+// than concluding from a network error that an avatar is free.
+func (d *daemon) stoppedAt(ctx context.Context, name string) bool {
+	as, err := d.Agents(ctx)
+	if err != nil {
+		return true
+	}
+	for _, a := range as {
+		if strings.EqualFold(a.GetName(), name) {
+			return a.GetState() == pb.AgentInfo_STOPPED
+		}
+	}
+	// Not listed at all.  slgod lists what it could start as well as
+	// what it holds, so this is a profile it has never heard of, and
+	// asking for it is the attendant's business rather than this one's.
+	return false
 }
 
 // hostThroughSlgod asks slgod to bring a profile up, and says whether
@@ -444,14 +486,19 @@ func (b *bot) run(ctx context.Context) {
 			backoff = backoffFirst
 		}
 
-		wait := backoff
 		if held {
-			// Somebody stopped this avatar on purpose.  Asking again
-			// in a minute would be asking again for ever, and would
-			// undo what the logout was for; so it waits to be told.
+			// Somebody stopped this avatar on purpose.  Asking to host
+			// it again would be arguing with them, so the attendant
+			// stops asking -- and WATCHES, because the person who
+			// stopped it is going to start it again and should not
+			// have to tell this daemon so as well.
 			b.setState(stateHeldBack, b.detailNow())
-			wait = time.Duration(1<<62 - 1)
-		} else {
+			b.awaitRelease(ctx)
+			continue
+		}
+
+		wait := backoff
+		{
 			b.setState(stateWaiting, b.detailNow())
 			if backoff < backoffMax {
 				backoff *= 2
@@ -592,4 +639,35 @@ func (d *daemon) agentLines(ctx context.Context) ([]agentLine, error) {
 		return false
 	})
 	return out, nil
+}
+
+// awaitRelease waits until an avatar stopped on purpose is started
+// again, or until the daemon is told to try anyway.
+//
+// It polls rather than being pushed to, and that is deliberate.  An
+// attendant with no session has no stream to be told anything on --
+// slgod's notices travel to the clients attached to an agent, and this
+// one is attached to nothing -- so being "informed" would mean a new
+// daemon-wide event channel.  A read every half minute achieves the
+// same thing, costs one small call, and is self-healing in the two
+// ways a stream is not: it works when this daemon started AFTER the
+// logout, with no event to have missed, and it needs no reconnecting
+// when slgod itself restarts.
+//
+// Waking early is still possible: ":host NAME" pokes it, so somebody
+// who does not want to wait need not.
+func (b *bot) awaitRelease(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-b.wake:
+			return
+		case <-time.After(HeldRecheck):
+		}
+		if !b.d.stoppedAt(ctx, b.name) {
+			b.logf("started again by somebody else; picking it up")
+			return
+		}
+	}
 }
