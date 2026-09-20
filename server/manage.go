@@ -181,7 +181,7 @@ func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 	// Somebody is using it.  A benchmark mid-run has a script installed
 	// and a reading half taken, and throwing that away should be a
 	// decision rather than a side effect.
-	if who := h.clientNames(); len(who) > 0 && !req.GetForce() {
+	if who := h.usingClients(); len(who) > 0 && !req.GetForce() {
 		st := status.Newf(codes.FailedPrecondition,
 			"%s is in use by %s; use force to log out anyway",
 			name, strings.Join(who, ", "))
@@ -223,11 +223,26 @@ func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 // The names are the ones clients authenticated under, so the answer is
 // "slbench and slsh" rather than a count -- which is the difference
 // between knowing what you are about to interrupt and not.
-func (h *Hosted) clientNames() []string {
+func (h *Hosted) clientNames() []string { return h.namesOf(false) }
+
+// usingClients is who would MIND the session being taken away: every
+// attached client but the ones that said they only attend it.
+//
+// The distinction is what keeps "logout" meaning something.  A daemon
+// attached to every avatar all day is always in the way, so without it
+// every logout needs --force, and a flag that is always needed is a
+// flag nobody reads -- including on the day it was protecting a
+// benchmark half way through a measurement.
+func (h *Hosted) usingClients() []string { return h.namesOf(true) }
+
+func (h *Hosted) namesOf(skipWeak bool) []string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	out := make([]string, 0, len(h.clients))
 	for c := range h.clients {
+		if skipWeak && c.weak {
+			continue
+		}
 		name := c.name
 		if name == "" {
 			name = "an unnamed client"

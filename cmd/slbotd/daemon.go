@@ -314,7 +314,11 @@ func (d *daemon) hostThroughSlgod(ctx context.Context, name string, force bool) 
 func (d *daemon) attachThroughSlgod(ctx context.Context, name string) (*sl.Session, error) {
 	dial, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	return sl.Dial(dial, d.addr, name)
+	// Weak: this daemon ATTENDS the avatars rather than uses them, so
+	// its being attached must not be the reason "slsh logout" needs
+	// --force.  It is attached to every avatar all day; if it counted,
+	// the flag would always be needed and would stop being read.
+	return sl.DialWeak(dial, d.addr, name)
 }
 
 // ------------------------------------------------------------- attendant

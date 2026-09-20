@@ -32,6 +32,11 @@ type Client struct {
 	// name is what this client authenticated as, so that a message
 	// about what is attached can say which program rather than a count.
 	name string
+
+	// weak says this client attends the avatar rather than uses it, so
+	// it is not consulted about whether anybody would mind the session
+	// being taken away.  See Attach.weak in slgo.proto.
+	weak bool
 	out  chan *pb.ServerPacket
 
 	mu    sync.RWMutex
@@ -371,6 +376,7 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	c := &Client{
 		host:  h,
 		name:  clientName(ctx),
+		weak:  att.GetWeak(),
 		out:   make(chan *pb.ServerPacket, streamDepth),
 		subs:  map[msg.ID]bool{},
 		names: map[string]bool{},

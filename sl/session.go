@@ -210,7 +210,22 @@ type Session struct {
 // this process holds instead, see LoginDirect; everything after that
 // call is the same either way.
 func Dial(ctx context.Context, addr, agentName string) (*Session, error) {
-	h, err := Attach(ctx, addr, agentName, Subscriptions...)
+	return dial(ctx, addr, agentName, false)
+}
+
+// DialWeak is Dial for a client that ATTENDS an avatar rather than uses
+// it: a daemon that sits attached all day and would not mind the
+// session being taken away.  See AttachWeak.
+func DialWeak(ctx context.Context, addr, agentName string) (*Session, error) {
+	return dial(ctx, addr, agentName, true)
+}
+
+func dial(ctx context.Context, addr, agentName string, weak bool) (*Session, error) {
+	at := Attach
+	if weak {
+		at = AttachWeak
+	}
+	h, err := at(ctx, addr, agentName, Subscriptions...)
 	if err != nil {
 		return nil, err
 	}

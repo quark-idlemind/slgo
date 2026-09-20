@@ -14,6 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -142,6 +145,72 @@ func trimNulTest(b []byte) string {
 	return string(b)
 }
 
+// A client that attends an avatar rather than uses it must not be the
+// reason "logout" needs --force.
+//
+// slbotd sits attached to every avatar all day.  Counting it would mean
+// every logout needed the flag, and a flag that is always needed is one
+// people type without reading -- including on the day it was protecting
+// a benchmark half way through a measurement.
+func TestAWeakClientIsNotConsultedAboutALogout(t *testing.T) {
+	r := newRig(t, nil)
+	attend, err := client.Dial(context.Background(), r.ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer attend.Close()
+	if _, err := attend.AttachWeak(context.Background(), "example"); err != nil {
+		t.Fatalf("weak attach: %v", err)
+	}
+	h, _ := r.srv.Agent("example")
+	waitFor(t, 5*time.Second, "the weak client to attach", func() bool {
+		return h.ClientCount() == 1
+	})
+
+	// It is attached and counted...
+	if n := len(h.clientNames()); n != 1 {
+		t.Errorf("clientNames has %d, want the weak client listed", n)
+	}
+	// ...and not consulted.
+	if who := h.usingClients(); len(who) != 0 {
+		t.Errorf("usingClients has %v, want nobody", who)
+	}
+
+	// So a logout goes through without force.
+	if _, err := attend.Logout(context.Background(), "example", false); err != nil {
+		t.Fatalf("logout was refused with only a weak client attached: %v", err)
+	}
+}
+
+// An ordinary client still stops one, which is the whole point of the
+// refusal: a benchmark mid-run should not be thrown away by a stray
+// command.
+func TestAnOrdinaryClientStillStopsALogout(t *testing.T) {
+	r := newRig(t, nil)
+	weak, err := client.Dial(context.Background(), r.ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer weak.Close()
+	if _, err := weak.AttachWeak(context.Background(), "example"); err != nil {
+		t.Fatal(err)
+	}
+	using := r.dial(t)
+	defer using.Close()
+
+	h, _ := r.srv.Agent("example")
+	waitFor(t, 5*time.Second, "both clients to attach", func() bool {
+		return h.ClientCount() == 2
+	})
+	if who := h.usingClients(); len(who) != 1 {
+		t.Fatalf("usingClients has %v, want just the ordinary one", who)
+	}
+	_, err = using.Logout(context.Background(), "example", false)
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("logout = %v, want it refused while a client is using the avatar", err)
+	}
+}
+
 // The refusal says which program, which copy of it, and where it is --
 // so somebody reading it knows where to go and look.
 func TestARefusalNamesTheClientThatIsInTheWay(t *testing.T) {
@@ -164,9 +233,9 @@ func TestARefusalNamesTheClientThatIsInTheWay(t *testing.T) {
 		return h.ClientCount() == 1
 	})
 
-	who := h.clientNames()
+	who := h.usingClients()
 	if len(who) != 1 {
-		t.Fatalf("clientNames = %v", who)
+		t.Fatalf("usingClients = %v", who)
 	}
 	name := who[0]
 	if !strings.Contains(name, "[") || !strings.Contains(name, "]@") {

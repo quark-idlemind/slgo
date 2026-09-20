@@ -412,12 +412,28 @@ func (c *Conn) RegionChanges() <-chan *RegionChange { return c.regions }
 // subscribes to the named messages.  "*" means everything; naming
 // nothing means nothing is relayed until Subscribe says otherwise.
 func (c *Conn) Attach(ctx context.Context, agentName string, subscribe ...string) (*pb.AgentInfo, error) {
+	return c.attach(ctx, agentName, false, subscribe)
+}
+
+// AttachWeak attaches without counting as somebody USING the avatar.
+//
+// For a client that attends rather than uses: it is relayed to and
+// counted like any other, but slgod does not consult it when deciding
+// whether anybody would mind the session being taken away.  See
+// Attach.weak in slgo.proto -- a daemon sitting attached to every
+// avatar all day would otherwise make "logout" mean "logout --force",
+// which is a flag people learn to type without reading.
+func (c *Conn) AttachWeak(ctx context.Context, agentName string, subscribe ...string) (*pb.AgentInfo, error) {
+	return c.attach(ctx, agentName, true, subscribe)
+}
+
+func (c *Conn) attach(ctx context.Context, agentName string, weak bool, subscribe []string) (*pb.AgentInfo, error) {
 	stream, err := c.grid.Stream(context.WithoutCancel(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if err := stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_Attach{
-		Attach: &pb.Attach{Agent: agentName, Subscribe: subscribe},
+		Attach: &pb.Attach{Agent: agentName, Subscribe: subscribe, Weak: weak},
 	}}); err != nil {
 		return nil, err
 	}

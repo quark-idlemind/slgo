@@ -366,6 +366,23 @@ message Attach {
   // because a busy region will otherwise flood the link.
   repeated string subscribe = 2;
 
+  // Weak says this client is attached but is not USING the avatar in
+  // the sense that should stop anybody else managing it.
+  //
+  // Logout refuses a session somebody is using, so that a benchmark
+  // mid-run is not thrown away by a stray command.  A daemon that sits
+  // attached to every avatar all day defeats that: it is always in the
+  // way, and "logout" comes to mean "logout --force", which is a flag
+  // people then type without reading.
+  //
+  // So a client that attends rather than uses says so, and is not
+  // counted when the question is whether anybody would mind.  It is
+  // still relayed to, still counted in the client total, and still
+  // told what happened -- this changes who is CONSULTED, nothing else.
+  //
+  // It is the client's own word about itself, which is right: only it
+  // knows whether losing the session would spoil something.
+  bool weak = 3;
 }
 
 message OutboundMessage {

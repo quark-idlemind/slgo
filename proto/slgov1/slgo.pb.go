@@ -955,7 +955,24 @@ type Attach struct {
 	// Messages to relay, by template name.  "*" means everything.  Empty
 	// means nothing until Subscribe says otherwise, which is the default
 	// because a busy region will otherwise flood the link.
-	Subscribe     []string `protobuf:"bytes,2,rep,name=subscribe,proto3" json:"subscribe,omitempty"`
+	Subscribe []string `protobuf:"bytes,2,rep,name=subscribe,proto3" json:"subscribe,omitempty"`
+	// Weak says this client is attached but is not USING the avatar in
+	// the sense that should stop anybody else managing it.
+	//
+	// Logout refuses a session somebody is using, so that a benchmark
+	// mid-run is not thrown away by a stray command.  A daemon that sits
+	// attached to every avatar all day defeats that: it is always in the
+	// way, and "logout" comes to mean "logout --force", which is a flag
+	// people then type without reading.
+	//
+	// So a client that attends rather than uses says so, and is not
+	// counted when the question is whether anybody would mind.  It is
+	// still relayed to, still counted in the client total, and still
+	// told what happened -- this changes who is CONSULTED, nothing else.
+	//
+	// It is the client's own word about itself, which is right: only it
+	// knows whether losing the session would spoil something.
+	Weak          bool `protobuf:"varint,3,opt,name=weak,proto3" json:"weak,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1002,6 +1019,13 @@ func (x *Attach) GetSubscribe() []string {
 		return x.Subscribe
 	}
 	return nil
+}
+
+func (x *Attach) GetWeak() bool {
+	if x != nil {
+		return x.Weak
+	}
+	return false
 }
 
 type OutboundMessage struct {
@@ -4636,10 +4660,11 @@ const file_slgo_proto_rawDesc = "" +
 	"\x03set\x18\x01 \x03(\tR\x03set\x12\x10\n" +
 	"\x03add\x18\x02 \x03(\tR\x03add\x12\x16\n" +
 	"\x06remove\x18\x03 \x03(\tR\x06remove\x12\x18\n" +
-	"\areplace\x18\x04 \x01(\bR\areplace\"<\n" +
+	"\areplace\x18\x04 \x01(\bR\areplace\"P\n" +
 	"\x06Attach\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x1c\n" +
-	"\tsubscribe\x18\x02 \x03(\tR\tsubscribe\"e\n" +
+	"\tsubscribe\x18\x02 \x03(\tR\tsubscribe\x12\x12\n" +
+	"\x04weak\x18\x03 \x01(\bR\x04weak\"e\n" +
 	"\x0fOutboundMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +

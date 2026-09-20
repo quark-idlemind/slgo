@@ -50,11 +50,27 @@ var (
 // the default depends on the daemon's history and nothing on disk
 // records it.
 func Attach(ctx context.Context, addr, name string, subscribe ...string) (*Hosted, error) {
+	return attach(ctx, addr, name, false, subscribe)
+}
+
+// AttachWeak is Attach for a client that ATTENDS an avatar rather than
+// uses it.
+//
+// It is relayed to and counted like any other, but slgod does not
+// consult it when deciding whether anybody would mind the session being
+// taken away -- so "slsh logout" goes on meaning something with a
+// daemon sitting attached to every avatar all day.  See Attach.weak in
+// slgo.proto for why that matters more than it sounds.
+func AttachWeak(ctx context.Context, addr, name string, subscribe ...string) (*Hosted, error) {
+	return attach(ctx, addr, name, true, subscribe)
+}
+
+func attach(ctx context.Context, addr, name string, weak bool, subscribe []string) (*Hosted, error) {
 	conn, err := client.Dial(ctx, addr)
 	if err != nil {
 		return nil, fmt.Errorf("sl: cannot reach slgod at %s: %w", addr, err)
 	}
-	h, err := AttachConn(ctx, conn, name, subscribe...)
+	h, err := attachConn(ctx, conn, name, weak, subscribe)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -91,6 +107,10 @@ func AgentName(named string) string {
 
 // AttachConn attaches on a connection the caller already has.
 func AttachConn(ctx context.Context, conn *client.Conn, name string, subscribe ...string) (*Hosted, error) {
+	return attachConn(ctx, conn, name, false, subscribe)
+}
+
+func attachConn(ctx context.Context, conn *client.Conn, name string, weak bool, subscribe []string) (*Hosted, error) {
 	name = AgentName(name)
 	// An empty name is passed THROUGH rather than resolved here.  The
 	// daemon picks -- the session it has held longest -- and the
@@ -100,7 +120,11 @@ func AttachConn(ctx context.Context, conn *client.Conn, name string, subscribe .
 	if len(subscribe) == 0 {
 		subscribe = Subscriptions
 	}
-	info, err := conn.Attach(ctx, name, subscribe...)
+	att := conn.Attach
+	if weak {
+		att = conn.AttachWeak
+	}
+	info, err := att(ctx, name, subscribe...)
 	if err != nil {
 		if name == "" {
 			return nil, fmt.Errorf("sl: cannot attach to that slgod's default session: %w", err)
