@@ -231,6 +231,8 @@ func DefaultConfig() Config {
 		ChatReply:    2,
 		ChatTokens:   160,
 		ChatTemp:     0.8,
+		ChatKeep:     6,
+		ChatSummary:  200,
 		trustedIDs:   map[msg.UUID]bool{},
 		trustedNames: map[string]string{},
 	}
@@ -311,21 +313,6 @@ func (c *Config) check() error {
 		if len(p.Argv) == 0 {
 			return fmt.Errorf("program %q names nothing to run", p.Name)
 		}
-	}
-	// Half a chat configuration is almost certainly an unfinished one,
-	// and the half that is missing decides which mistake it is.
-	if len(c.Chat) > 0 && c.LLMURL == "" {
-		return fmt.Errorf("chat names somebody to talk to but llm-url says where no model is")
-	}
-	if c.LLMURL != "" && len(c.Chat) == 0 {
-		return fmt.Errorf("llm-url names a model but no chat line says who may be answered")
-	}
-	// A summary that does not leave room for a conversation is a
-	// conversation that compacts on every single turn.
-	if c.ChatOn() && c.ChatSummary >= c.ChatContext/2 {
-		return fmt.Errorf("chat-summary is %d tokens and chat-context only %d; "+
-			"the summary has to be well under the budget or there is no room left to talk",
-			c.ChatSummary, c.ChatContext)
 	}
 	for who := range c.Backstory {
 		if !c.Holds(who) {
@@ -680,4 +667,36 @@ func expandHome(path string) string {
 		return home
 	}
 	return filepath.Join(home, path[2:])
+}
+
+// ChatProblem says why chat is not on, when the file plainly meant it
+// to be, and is empty when there is nothing wrong.
+//
+// Half a chat configuration is almost certainly an unfinished one, and
+// it used to be fatal.  That was wrong, and it was wrong in the way
+// that matters for a daemon meant to run for weeks: attending avatars
+// and taking commands is what slbotd is FOR, chat is something bolted
+// on beside it, and a missing line in the bolted-on part took the whole
+// thing down on the next restart.  slgod has had the right answer to
+// this all along -- a profile it cannot read is logged and the others
+// are served -- and this is the same rule.
+//
+// So it is said, loudly, every time the daemon starts and again
+// whenever anybody asks; and the avatars are attended.  Silence was
+// never the alternative: a setting that does nothing and says nothing
+// is the fault this used to be trying to prevent.
+func (c *Config) ChatProblem() string {
+	switch {
+	case len(c.Chat) > 0 && c.LLMURL == "":
+		return "chat names somebody to talk to but no llm-url says where a model is, " +
+			"so nothing will be answered"
+	case c.LLMURL != "" && len(c.Chat) == 0:
+		return "llm-url names a model but no chat line says who may be answered, " +
+			"so nothing will be answered"
+	case c.ChatOn() && c.ChatSummary >= c.ChatContext/2:
+		return fmt.Sprintf("chat-summary is %d tokens and chat-context only %d; "+
+			"the summary has to be well under the budget or there is no room left to talk",
+			c.ChatSummary, c.ChatContext)
+	}
+	return ""
 }

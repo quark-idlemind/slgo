@@ -115,7 +115,15 @@ func run() error {
 	// well be started after this daemon, and one that refused to run
 	// until llama-server was up would be one that has to be started in
 	// an order.
-	if cfg.ChatOn() {
+	if why := cfg.ChatProblem(); why != "" {
+		// Loudly, and not fatally.  Attending the avatars is what this
+		// daemon is for; chat is beside it, and a missing line there
+		// must not be the reason nobody can drive an avatar.
+		log.Printf("CHAT IS OFF: %s", why)
+		log.Printf("CHAT IS OFF: everything else works; %s --check says what the file means",
+			os.Args[0])
+	}
+	if cfg.ChatOn() && cfg.ChatProblem() == "" {
 		chat, err := NewChatter(cfg, log.Printf)
 		if err != nil {
 			return err
@@ -148,7 +156,7 @@ func describe(out *os.File, cfg Config, where string) error {
 	fmt.Fprintf(out, "at once:       %d commands per avatar\n", cfg.Jobs)
 	fmt.Fprintf(out, "answers:       at most %d instant messages\n", cfg.ReplyLimit)
 	fmt.Fprintf(out, "offers:        accepted from %s\n", cfg.AcceptInventory)
-	if cfg.ChatOn() {
+	if cfg.ChatOn() && cfg.ChatProblem() == "" {
 		store, err := cfg.ChatStore()
 		if err != nil {
 			store = fmt.Sprint(err)
@@ -172,6 +180,9 @@ func describe(out *os.File, cfg Config, where string) error {
 		}
 	} else {
 		fmt.Fprintf(out, "chat:          off\n")
+	}
+	if why := cfg.ChatProblem(); why != "" {
+		fmt.Fprintf(out, "PROBLEM:       %s\n", why)
 	}
 
 	// Every profile named has to exist, and the message when one does

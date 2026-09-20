@@ -263,3 +263,68 @@ func TestTheConfigPathFollowsTheEnvironment(t *testing.T) {
 		t.Errorf("ConfigPath() = %q, want %q", got, want)
 	}
 }
+
+// Every default the documentation promises, asserted.
+//
+// This exists because three of them were missing and nothing noticed.
+// chat-keep, chat-summary and chat-own were written up in the guide,
+// documented on their fields, and absent from DefaultConfig -- so they
+// were zero, and zero for chat-keep means a compaction folds the WHOLE
+// conversation including the exchange that has just happened.  Every
+// test that covered compaction set the value explicitly, so every test
+// passed; so did the live run, because the file it used set it too.
+//
+// A value here is not a strong claim about what the number should be.
+// The claim is that there IS one, because a documented setting that
+// silently defaults to zero is worse than one that does not exist.
+func TestEveryDefaultHasAValue(t *testing.T) {
+	c := DefaultConfig()
+	for _, tc := range []struct {
+		name string
+		zero bool
+	}{
+		{"prefix", c.Prefix == ""},
+		{"timeout", c.Timeout == 0},
+		{"run-timeout", c.RunTimeout == 0},
+		{"jobs", c.Jobs == 0},
+		{"reply-limit", c.ReplyLimit == 0},
+		{"accept-inventory", c.AcceptInventory == ""},
+		{"llm-timeout", c.LLMTimeout == 0},
+		{"chat-jobs", c.ChatJobs == 0},
+		{"chat-context", c.ChatContext == 0},
+		{"chat-reply-limit", c.ChatReply == 0},
+		{"chat-max-tokens", c.ChatTokens == 0},
+		{"chat-temperature", c.ChatTemp == 0},
+		{"chat-keep", c.ChatKeep == 0},
+		{"chat-summary", c.ChatSummary == 0},
+	} {
+		if tc.zero {
+			t.Errorf("%s has no default", tc.name)
+		}
+	}
+
+	// And the ones that have to hold together, which is the check that
+	// would have caught the missing chat-summary on its own.
+	if c.ChatSummary >= c.ChatContext/2 {
+		t.Errorf("chat-summary %d against chat-context %d leaves no room to talk",
+			c.ChatSummary, c.ChatContext)
+	}
+	if c.ChatKeep%2 != 0 {
+		t.Errorf("chat-keep is %d, which is half an exchange", c.ChatKeep)
+	}
+}
+
+// Half a chat configuration is said, loudly, and is not fatal: attending
+// avatars is what this daemon is for, and chat is beside it.
+func TestHalfAChatConfigurationIsSaidNotFatal(t *testing.T) {
+	c := parse(t, "avatar = example\ntrusted = A B\nchat = *\n")
+	if err := c.check(); err != nil {
+		t.Fatalf("a missing llm-url stopped the daemon: %v", err)
+	}
+	if why := c.ChatProblem(); why == "" || !strings.Contains(why, "llm-url") {
+		t.Errorf("ChatProblem() = %q, want it to name what is missing", why)
+	}
+	if c.ChatOn() {
+		t.Error("chat is on with no model")
+	}
+}
