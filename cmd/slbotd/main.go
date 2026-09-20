@@ -129,7 +129,7 @@ func run() error {
 			return err
 		}
 		d.chat = chat
-		d.audience = listAudience(cfg)
+		d.audience = ownAvatarsBounded(d, cfg.ChatOwn, listAudience(cfg))
 		store, _ := cfg.ChatStore()
 		log.Printf("chatting through %s, conversations in %s", cfg.LLMURL, store)
 		log.Printf("will talk to %s", strings.Join(cfg.Chat, ", "))

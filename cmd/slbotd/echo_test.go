@@ -197,3 +197,103 @@ func TestARemarkFromElsewhereIsNotLostToAReplyInFlight(t *testing.T) {
 		}
 	}
 }
+
+// Two avatars attended by ONE daemon, each with the other in its
+// audience, answer each other for ever.  Neither is answering itself,
+// so the rule that stops an echo does not touch this: from each side it
+// is an ordinary conversation with somebody who keeps replying.
+//
+// Measured before it was fixed: one message typed by hand from one of
+// them to another ran to 26 exchanges in ninety seconds on the live
+// grid, and was still going when it was stopped by hand.
+func TestOneDaemonsAvatarsStopTalkingToEachOther(t *testing.T) {
+	d, b, grid := newTestDaemon(t)
+	f := newFakeLLM(t)
+	withChat(t, d, f, Anyone) // the setting that makes it possible
+	d.cfg.ChatOwn = 4
+	d.chat.cfg = d.cfg
+	d.audience = ownAvatarsBounded(d, d.cfg.ChatOwn, listAudience(d.cfg))
+	defer serving(t, b)()
+
+	// A second avatar, attended by this same daemon, speaking to the
+	// first.  testMe is what the fake grid calls every session, so the
+	// other bot's id is this one's.
+	other := newBot(d, "builder")
+	other.setSession(b.Session())
+	other.setState(stateAttached, "Builder Resident")
+	d.mu.Lock()
+	d.bots["builder"] = other
+	d.order = append(d.order, "builder")
+	d.mu.Unlock()
+
+	// It answers while the conversation is short: two of them talking
+	// is not a malfunction.
+	grid.deliver(t, incoming(testMe, "Builder Resident", sl.DialogMessage, "evening"))
+	waitIMs(t, grid, 1)
+	grid.deliver(t, incoming(testMe, "Builder Resident", sl.DialogMessage, "and the wharf?"))
+	waitIMs(t, grid, 2)
+
+	// And then one of them stops, which is the only way it can end:
+	// the far side is as tireless as this one.
+	before := len(grid.IMsSent())
+	grid.deliver(t, incoming(testMe, "Builder Resident", sl.DialogMessage, "and the tide?"))
+	quiet(grid)
+	if got := len(grid.IMsSent()); got != before {
+		t.Fatalf("it answered %d more times past the bound of %d turns",
+			got-before, d.cfg.ChatOwn)
+	}
+}
+
+// Zero is never, for an operator who would rather they did not start.
+func TestZeroMeansOurAvatarsNeverTalk(t *testing.T) {
+	d, b, grid := newTestDaemon(t)
+	f := newFakeLLM(t)
+	withChat(t, d, f, Anyone)
+	d.cfg.ChatOwn = 0
+	d.audience = ownAvatarsBounded(d, 0, listAudience(d.cfg))
+	defer serving(t, b)()
+
+	grid.deliver(t, incoming(testMe, "Example Resident", sl.DialogMessage, "evening"))
+	quiet(grid)
+	if ims := grid.IMsSent(); len(ims) != 0 {
+		t.Fatalf("answered another of this daemon's avatars: %q",
+			string(ims[0].MessageBlock.Message))
+	}
+}
+
+// A person is still a person.  The rule is about avatars this daemon is
+// driving and must not quietly refuse everybody.
+func TestAPersonIsStillAnsweredWithTheRuleOn(t *testing.T) {
+	d, b, grid := newTestDaemon(t)
+	f := newFakeLLM(t)
+	withChat(t, d, f, Anyone)
+	d.audience = ownAvatarsBounded(d, d.cfg.ChatOwn, listAudience(d.cfg))
+	defer serving(t, b)()
+
+	grid.deliver(t, incoming(testSender, "Trusted Resident", sl.DialogMessage, "evening"))
+	ims := waitIMs(t, grid, 1)
+	if got := string(ims[0].MessageBlock.Message); !strings.Contains(got, "Evening") {
+		t.Errorf("answered %q", got)
+	}
+}
+
+// An attendant with no session is not driving that avatar just now, so
+// whoever is using it is a person and is answered like one.
+func TestADetachedAvatarIsNotTreatedAsOurOwn(t *testing.T) {
+	d, _, _ := newTestDaemon(t)
+	other := newBot(d, "builder")
+	d.mu.Lock()
+	d.bots["builder"] = other
+	d.order = append(d.order, "builder")
+	d.mu.Unlock()
+
+	if who, ok := d.AvatarFor(testMe); !ok || who != "example" {
+		t.Errorf("AvatarFor(attached) = %q, %v, want the attached one", who, ok)
+	}
+	if _, ok := d.AvatarFor(testStranger); ok {
+		t.Error("a stranger was taken for one of this daemon's avatars")
+	}
+	if _, ok := d.AvatarFor(msg.UUID{}); ok {
+		t.Error("a zero id was taken for one of this daemon's avatars")
+	}
+}

@@ -105,3 +105,34 @@ func TestNoModelMeansNoConversation(t *testing.T) {
 		t.Errorf("got %v (%s)", got.Talk, got.Why)
 	}
 }
+
+// A name written with "!" in front of it is the one thing in the list
+// somebody went out of their way to say, so it beats every permission
+// however the permission was granted.
+func TestARefusalBeatsAPermission(t *testing.T) {
+	quark := msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
+	for _, tc := range []struct {
+		name  string
+		lines []string
+		who   string
+		id    msg.UUID
+		want  bool
+	}{
+		{"everyone but one", []string{Anyone, "!Quark Idlemind"}, "Quark Idlemind", msg.UUID{}, false},
+		{"everyone but one, others still", []string{Anyone, "!Quark Idlemind"}, "Somebody Else", msg.UUID{}, true},
+		{"order does not matter", []string{"!Quark Idlemind", Anyone}, "Quark Idlemind", msg.UUID{}, false},
+		{"refused by id", []string{Anyone, "!" + quark.String()}, "", quark, false},
+		{"named and refused", []string{"Quark Idlemind", "!Quark Idlemind"}, "Quark Idlemind", msg.UUID{}, false},
+		{"refused by id, allowed by name", []string{"Quark Idlemind", "!" + quark.String()}, "Quark Idlemind", quark, false},
+		{"case does not matter", []string{Anyone, "!quark idlemind"}, "Quark Idlemind", msg.UUID{}, false},
+		{"a bare bang says nothing", []string{Anyone, "!"}, "Quark Idlemind", msg.UUID{}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := audienceFor(t, tc.lines...)
+			got := a(context.Background(), &Approach{From: tc.id, Name: tc.who})
+			if got.Talk != tc.want {
+				t.Errorf("Talk = %v (%s), want %v", got.Talk, got.Why, tc.want)
+			}
+		})
+	}
+}

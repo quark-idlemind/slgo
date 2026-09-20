@@ -19,6 +19,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/quark-idlemind/slgo/msg"
@@ -30,6 +31,17 @@ import (
 // that "this avatar talks to everybody" is something somebody WROTE
 // and not something that happened because a line was missing.
 const Anyone = "*"
+
+// Not marks an entry in the chat list as somebody NOT to talk to.
+//
+//	chat = *
+//	chat = !Quark Idlemind
+//
+// A refusal always beats a permission, whatever order they are written
+// in and however the permission was granted.  That is the only rule
+// that makes "everybody except" sayable at all, and it is the rule
+// somebody writing a "!" in front of a name plainly means.
+const Not = "!"
 
 // Approach is somebody saying something to an avatar that is not a
 // command: everything known at the moment the decision is made.
@@ -58,9 +70,14 @@ type Approach struct {
 	Trusted bool
 
 	// Known is whether there is already a conversation with this
-	// person, and Turns how many things have been said in it.  A rule
+	// person, and Turns how many things have been said in it -- ALL of
+	// them, including those long since folded into the summary.  A rule
 	// that lets a stranger open a conversation but not go on for ever
 	// needs both, and neither can be recovered from the message.
+	//
+	// Everything ever said and not what is still held word for word,
+	// because the second resets at every compaction: a bound written
+	// against it would bound nothing.
 	Known bool
 	Turns int
 }
@@ -89,29 +106,99 @@ type Audience func(ctx context.Context, a *Approach) Verdict
 func listAudience(cfg Config) Audience {
 	ids := map[msg.UUID]bool{}
 	names := map[string]bool{}
+	noIDs := map[msg.UUID]bool{}
+	noNames := map[string]bool{}
 	anyone := false
+
 	for _, who := range cfg.Chat {
-		if who == Anyone {
+		deny := strings.HasPrefix(who, Not)
+		who = strings.TrimSpace(strings.TrimPrefix(who, Not))
+		switch {
+		case who == Anyone && !deny:
 			anyone = true
-			continue
+		case who == "":
+			// A bare "!" says nothing about anybody.
+		default:
+			id, err := msg.ParseUUID(who)
+			switch {
+			case err == nil && deny:
+				noIDs[id] = true
+			case err == nil:
+				ids[id] = true
+			case deny:
+				noNames[strings.ToLower(who)] = true
+			default:
+				names[strings.ToLower(who)] = true
+			}
 		}
-		if id, err := msg.ParseUUID(who); err == nil {
-			ids[id] = true
-			continue
-		}
-		names[strings.ToLower(who)] = true
 	}
 
 	return func(ctx context.Context, a *Approach) Verdict {
+		name := strings.ToLower(strings.TrimSpace(a.Name))
+
+		// Refused first, because a refusal beats a permission.  An
+		// entry written with "!" is the one thing in the list somebody
+		// went out of their way to say.
 		switch {
-		case anyone:
-			return Verdict{true, "the list says anyone"}
+		case !a.From.IsZero() && noIDs[a.From]:
+			return Verdict{false, "refused in the list by id"}
+		case name != "" && noNames[name]:
+			return Verdict{false, "refused in the list by name"}
+		}
+
+		switch {
 		case !a.From.IsZero() && ids[a.From]:
 			return Verdict{true, "named in the list by id"}
-		case a.Name != "" && names[strings.ToLower(strings.TrimSpace(a.Name))]:
+		case name != "" && names[name]:
 			return Verdict{true, "named in the list"}
+		case anyone:
+			return Verdict{true, "the list says anyone"}
 		}
 		return Verdict{false, "not in the chat list"}
+	}
+}
+
+// ownAvatarsBounded lets two avatars this daemon drives talk to each
+// other, and makes the conversation end.
+//
+// A flat refusal was the first answer here and it was the wrong one.
+// Two of these talking is not a malfunction -- what actually happened
+// was a dull but perfectly ordinary conversation -- and an operator who
+// wants them not to has a way to say so now, by writing the name with a
+// "!" in front of it.  What is wrong with it is only that it does not
+// stop: a reply from one is an ordinary remark to the other, neither is
+// answering ITSELF, and neither will ever be the one to get bored.
+//
+// So it is bounded rather than banned.  They may say a few things to
+// each other and then one of them stops answering, which is what ends
+// it -- there is no other end available, since the far side is as
+// tireless as this one.
+//
+// Measured before there was any bound: with "chat = *" on three
+// avatars, ONE message typed by hand from one of them to another ran to
+// 26 exchanges in ninety seconds on the live grid, and was still going
+// when it was stopped by hand.  Starting it took a person; stopping it
+// was never going to happen on its own.
+//
+// The count is of everything ever said in that conversation, folded
+// turns included.  Counting what is still held word for word would
+// reset the bound at every compaction, which is to say it would bound
+// nothing at all.
+func ownAvatarsBounded(d *daemon, limit int, next Audience) Audience {
+	return func(ctx context.Context, a *Approach) Verdict {
+		who, ours := d.AvatarFor(a.From)
+		if !ours {
+			return next(ctx, a)
+		}
+		if limit <= 0 {
+			return Verdict{false, "that is " + who + ", which this daemon drives as well"}
+		}
+		if a.Turns >= limit {
+			return Verdict{false, fmt.Sprintf(
+				"that is %s, which this daemon drives as well, and they have "+
+					"said %d things to each other already", who, a.Turns)}
+		}
+		return next(ctx, a)
 	}
 }
 

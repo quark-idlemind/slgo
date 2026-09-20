@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -141,6 +142,26 @@ func (d *daemon) Bot(name string) (*bot, bool) {
 		}
 	}
 	return nil, false
+}
+
+// AvatarFor names the profile an agent id belongs to, when it is one
+// this daemon is attending.
+//
+// By id and not by name, because this is asked about the sender of a
+// message and a name is what somebody can call themselves.  An
+// attendant with no session answers for nobody, which is right: it is
+// not driving that avatar just now, so whoever is using it is a person.
+func (d *daemon) AvatarFor(id msg.UUID) (string, bool) {
+	if id.IsZero() {
+		return "", false
+	}
+	for _, b := range d.Bots() {
+		s := b.Session()
+		if s != nil && s.Me() == id {
+			return b.Name(), true
+		}
+	}
+	return "", false
 }
 
 // Bots is every attendant, in the order the configuration named them.

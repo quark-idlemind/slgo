@@ -327,10 +327,17 @@ func (b *bot) converse(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync
 		Text:       im.Text,
 		Trusted:    b.d.cfg.Trusts(im.From, im.FromName),
 		Known:      len(conv.Turns) > 0,
-		Turns:      len(conv.Turns),
+		Turns:      conv.Compacted + len(conv.Turns),
 	})
 	if !v.Talk {
-		b.chatf("not answering %s: %s", who, v.Why)
+		// logf and not chatf: -q drops what other people said, which is
+		// small talk, and this is a DECISION.  An avatar that stays
+		// silent looks exactly like one that is broken, and the line
+		// saying which is the only thing between the two -- so it is
+		// the last thing that should be droppable.  It was chatf, and
+		// the first time a bound refused a conversation the log said
+		// nothing at all.
+		b.logf("not answering %s: %s", who, v.Why)
 		return
 	}
 

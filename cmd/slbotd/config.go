@@ -151,6 +151,17 @@ type Config struct {
 	// ChatTemp is the sampling temperature.
 	ChatTemp float64
 
+	// ChatOwn is how many things two avatars THIS daemon drives may say
+	// to each other before one of them stops answering.
+	//
+	// They are not stopped outright, because two of them talking is not
+	// a malfunction and an operator who wants it not to happen can
+	// write the name with a "!" in front of it.  What is wrong with it
+	// is that neither side will ever be the one to get bored, so
+	// something has to be, and this is how many exchanges it waits.
+	// Zero is never.
+	ChatOwn int
+
 	// ChatKeep is how many turns survive a compaction word for word.
 	// The recent ones carry the thread of what is being said; the
 	// older ones become the summary, which carries what it was about.
@@ -233,6 +244,7 @@ func DefaultConfig() Config {
 		ChatTemp:     0.8,
 		ChatKeep:     6,
 		ChatSummary:  200,
+		ChatOwn:      8,
 		trustedIDs:   map[msg.UUID]bool{},
 		trustedNames: map[string]string{},
 	}
@@ -543,6 +555,12 @@ func parseConfig(r io.Reader) (Config, error) {
 				return c, fmt.Errorf("line %d: chat-summary wants at least 32 tokens, got %q", n, value)
 			}
 			c.ChatSummary = v
+		case "chat-own", "chat_own":
+			v, err := strconv.Atoi(value)
+			if err != nil || v < 0 {
+				return c, fmt.Errorf("line %d: chat-own wants a number, zero or more, got %q", n, value)
+			}
+			c.ChatOwn = v
 		case "chat-dir", "chat_dir":
 			c.ChatDir = expandHome(value)
 		case "slot-save-path", "slot_save_path":
