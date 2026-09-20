@@ -10,9 +10,11 @@ package server
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -138,4 +140,61 @@ func trimNulTest(b []byte) string {
 		}
 	}
 	return string(b)
+}
+
+// The refusal says which program, which copy of it, and where it is --
+// so somebody reading it knows where to go and look.
+func TestARefusalNamesTheClientThatIsInTheWay(t *testing.T) {
+	r := authRig(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// No dial options, so this is the real handshake -- which is what
+	// carries the name and the pid.
+	c, err := client.Dial(ctx, r.ln.Addr().String())
+	if err != nil {
+		t.Fatalf("dialling an authenticating daemon: %v", err)
+	}
+	defer c.Close()
+	if _, err := c.Attach(ctx, "example"); err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+	h, _ := r.srv.Agent("example")
+	waitFor(t, 5*time.Second, "the client to attach", func() bool {
+		return h.ClientCount() == 1
+	})
+
+	who := h.clientNames()
+	if len(who) != 1 {
+		t.Fatalf("clientNames = %v", who)
+	}
+	name := who[0]
+	if !strings.Contains(name, "[") || !strings.Contains(name, "]@") {
+		t.Errorf("client is named %q, want name[pid]@address", name)
+	}
+	if !strings.Contains(name, "127.0.0.1") {
+		t.Errorf("client is named %q, want the address it dialled from", name)
+	}
+}
+
+// Each piece is left out when it is not known, so an old client that
+// sends no pid still reads as a sentence rather than as a gap.
+func TestAClientIsDescribedByWhateverIsKnown(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		pid          int32
+		remote, want string
+	}{
+		{"slsh", 1234, "198.51.100.7", "slsh[1234]@198.51.100.7"},
+		{"slsh", 0, "198.51.100.7", "slsh@198.51.100.7"},
+		{"slsh", 1234, "", "slsh[1234]"},
+		{"slsh", 0, "", "slsh"},
+		{"", 0, "198.51.100.7", "an unnamed client at 198.51.100.7"},
+		{"", 0, "", "an unnamed client"},
+	} {
+		if got := describeClient(tc.name, tc.pid, tc.remote); got != tc.want {
+			t.Errorf("describeClient(%q, %d, %q) = %q, want %q",
+				tc.name, tc.pid, tc.remote, got, tc.want)
+		}
+	}
 }

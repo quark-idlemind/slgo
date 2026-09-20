@@ -169,10 +169,21 @@ func (AgentInfo_State) EnumDescriptor() ([]byte, []int) {
 // Success authenticates the CONNECTION. There is no token: TLS already
 // made a session and this proved who is on the far end of it.
 type LoginRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Client        string                 `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
-	Challenge     []byte                 `protobuf:"bytes,2,opt,name=challenge,proto3" json:"challenge,omitempty"`
-	Proof         []byte                 `protobuf:"bytes,3,opt,name=proof,proto3" json:"proof,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Client    string                 `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
+	Challenge []byte                 `protobuf:"bytes,2,opt,name=challenge,proto3" json:"challenge,omitempty"`
+	Proof     []byte                 `protobuf:"bytes,3,opt,name=proof,proto3" json:"proof,omitempty"`
+	// Pid is the client's process id.
+	//
+	// So that a message about what is holding a session can name which
+	// COPY of a program it is -- "slsh[1234]" rather than "slsh" -- when
+	// somebody has three shells open and only one of them is in the way.
+	//
+	// The address is deliberately NOT here.  The server takes that from
+	// the connection it is being spoken to on, because a client could
+	// say anything and the whole value of the line is that it tells you
+	// where to go and look.
+	Pid           int32 `protobuf:"varint,4,opt,name=pid,proto3" json:"pid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -226,6 +237,13 @@ func (x *LoginRequest) GetProof() []byte {
 		return x.Proof
 	}
 	return nil
+}
+
+func (x *LoginRequest) GetPid() int32 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
 }
 
 type LoginResponse struct {
@@ -4573,11 +4591,12 @@ var File_slgo_proto protoreflect.FileDescriptor
 const file_slgo_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"slgo.proto\x12\aslgo.v1\"Z\n" +
+	"slgo.proto\x12\aslgo.v1\"l\n" +
 	"\fLoginRequest\x12\x16\n" +
 	"\x06client\x18\x01 \x01(\tR\x06client\x12\x1c\n" +
 	"\tchallenge\x18\x02 \x01(\fR\tchallenge\x12\x14\n" +
-	"\x05proof\x18\x03 \x01(\fR\x05proof\"C\n" +
+	"\x05proof\x18\x03 \x01(\fR\x05proof\x12\x10\n" +
+	"\x03pid\x18\x04 \x01(\x05R\x03pid\"C\n" +
 	"\rLoginResponse\x12\x1c\n" +
 	"\tchallenge\x18\x01 \x01(\fR\tchallenge\x12\x14\n" +
 	"\x05proof\x18\x02 \x01(\fR\x05proof\"\x99\x03\n" +

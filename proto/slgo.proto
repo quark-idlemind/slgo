@@ -200,6 +200,18 @@ message LoginRequest {
   string client = 1;
   bytes challenge = 2;
   bytes proof = 3;
+
+  // Pid is the client's process id.
+  //
+  // So that a message about what is holding a session can name which
+  // COPY of a program it is -- "slsh[1234]" rather than "slsh" -- when
+  // somebody has three shells open and only one of them is in the way.
+  //
+  // The address is deliberately NOT here.  The server takes that from
+  // the connection it is being spoken to on, because a client could
+  // say anything and the whole value of the line is that it tells you
+  // where to go and look.
+  int32 pid = 4;
 }
 
 message LoginResponse {
@@ -353,6 +365,7 @@ message Attach {
   // means nothing until Subscribe says otherwise, which is the default
   // because a busy region will otherwise flood the link.
   repeated string subscribe = 2;
+
 }
 
 message OutboundMessage {

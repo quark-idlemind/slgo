@@ -718,10 +718,14 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 			grpc.Creds(creds),
 			grpc.UnaryInterceptor(unary),
 			grpc.StreamInterceptor(stream),
-			// Per-connection state, which is what authentication hangs on.
-			grpc.StatsHandler(ConnTracker{}),
 		)
 	}
+	// Per-connection state, which is what authentication hangs on and
+	// where a connection records the address it came from.  Installed
+	// whatever the authentication setting: a server running without it
+	// still has clients worth telling apart, and where one is speaking
+	// from is not a secret.
+	opts = append(opts, grpc.StatsHandler(ConnTracker{}))
 	g := grpc.NewServer(opts...)
 	pb.RegisterGridServer(g, s)
 

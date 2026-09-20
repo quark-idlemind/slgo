@@ -102,9 +102,14 @@ func TestAnAuthenticatedClientIsKnownByName(t *testing.T) {
 	waitFor(t, 5*time.Second, "the client to be attached", func() bool {
 		return h.ClientCount() == 1
 	})
-	if who := h.clientNames(); len(who) != 1 || who[0] != "slgo" {
-		t.Errorf("attached clients are %v, want the name the client authenticated under", who)
+	// The program, which copy of it, and where it is speaking from:
+	// "slsh[1234]@198.51.100.7".  Under test the program is the test
+	// binary, so the name is matched loosely and the shape exactly.
+	who := h.clientNames()
+	if len(who) != 1 || !strings.Contains(who[0], "[") || !strings.Contains(who[0], "@127.0.0.1") {
+		t.Errorf("attached clients are %v, want name[pid]@address", who)
 	}
+	mine := who[0]
 
 	// And that name is what a refusal to log the session out names, so
 	// that a person knows what they are about to interrupt.  It comes
@@ -116,11 +121,11 @@ func TestAnAuthenticatedClientIsKnownByName(t *testing.T) {
 	// unary call carries a message or a status -- so it travels in the
 	// status details, which is where the two can go together.
 	got, err := c.Logout(ctx, "example", false)
-	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(errText(err), "slgo") {
-		t.Errorf("logout refusal = %v; want a FailedPrecondition naming slgo", err)
+	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(errText(err), mine) {
+		t.Errorf("logout refusal = %v; want a FailedPrecondition naming %s", err, mine)
 	}
-	if who := got.GetClients(); len(who) != 1 || who[0] != "slgo" {
-		t.Errorf("the refusal came back naming %v, want the attached client", who)
+	if who := got.GetClients(); len(who) != 1 || who[0] != mine {
+		t.Errorf("the refusal came back naming %v, want %s", who, mine)
 	}
 }
 
@@ -137,7 +142,10 @@ func TestAnUnnamedClientIsStillReported(t *testing.T) {
 	waitFor(t, 5*time.Second, "the client to be attached", func() bool {
 		return h.ClientCount() == 1
 	})
-	if who := h.clientNames(); len(who) != 1 || who[0] != "an unnamed client" {
+	// No name to be had, but the address still is: the connection
+	// tracker runs whether or not authentication does, because where a
+	// client is speaking from is not a secret.
+	if who := h.clientNames(); len(who) != 1 || !strings.HasPrefix(who[0], "an unnamed client") {
 		t.Errorf("attached clients are %v on an unauthenticated server", who)
 	}
 }

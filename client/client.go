@@ -75,6 +75,8 @@ import (
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
+	"os"
+	"path/filepath"
 )
 
 // Conn is a connection to a server.
@@ -261,6 +263,28 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 	}, nil
 }
 
+// Name is what this program calls itself to slgod.
+//
+// The basename of the running binary, so slsh is "slsh" and slbotd is
+// "slbotd" with nothing to remember and no way for the two to disagree.
+// Every client used to say "slgo", which made the name useless for the
+// one thing it is for: slgod's own "in use by" message read "slgo,
+// slgo" when two different programs were attached.
+//
+// It is not a credential and proves nothing.  The handshake is over the
+// shared secret and is bound to the TLS session; this is a label on the
+// far end of an already-proved connection, for a person reading a
+// sentence about it.
+func Name() string {
+	if len(os.Args) == 0 {
+		return "slgo"
+	}
+	if n := filepath.Base(os.Args[0]); n != "" && n != "." && n != string(filepath.Separator) {
+		return n
+	}
+	return "slgo"
+}
+
 // login runs the two-call handshake on this connection.
 func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, error)) error {
 	secret, err := auth.LoadSecret("")
@@ -269,7 +293,7 @@ func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, err
 	}
 	g := pb.NewGridClient(cc)
 
-	begun, err := g.Login(ctx, &pb.LoginRequest{Client: "slgo"})
+	begun, err := g.Login(ctx, &pb.LoginRequest{Client: Name(), Pid: int32(os.Getpid())})
 	if err != nil {
 		return fmt.Errorf("login: %w", err)
 	}
@@ -287,7 +311,8 @@ func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, err
 		return err
 	}
 	done, err := g.Login(ctx, &pb.LoginRequest{
-		Client: "slgo", Challenge: cchal, Proof: auth.ClientProof(secret, schal, bind),
+		Client: Name(), Pid: int32(os.Getpid()),
+		Challenge: cchal, Proof: auth.ClientProof(secret, schal, bind),
 	})
 	if err != nil {
 		return fmt.Errorf("login refused: %w", err)

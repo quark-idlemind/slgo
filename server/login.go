@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -30,19 +32,68 @@ type connKey struct{}
 type connState struct {
 	mu     sync.Mutex
 	client string
+	pid    int32
 	authed bool
+
+	// remote is where this connection came from, as the SERVER sees
+	// it.  Never anything the client said: the whole value of printing
+	// an address in "who is holding this" is that it tells you where
+	// to go and look, and one the far end chose would tell you where
+	// it wanted you to look.
+	remote string
 }
 
-func (c *connState) mark(client string) {
+func (c *connState) mark(client string, pid int32) {
 	c.mu.Lock()
-	c.client, c.authed = client, true
+	c.client, c.pid, c.authed = client, pid, true
 	c.mu.Unlock()
 }
 
 func (c *connState) ok() (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.client, c.authed
+	return describeClient(c.client, c.pid, c.remote), c.authed
+}
+
+// describeClient is how a client is named in a message to a person:
+//
+//	slsh[1234]@198.51.100.7
+//
+// Each piece is left out when it is not known, so an old client that
+// sends no pid is "slsh@..." and one on a server with no connection
+// tracking is just "slsh".  A client with no name at all is described
+// rather than named, since "" in the middle of a sentence reads as a
+// bug in the sentence.
+func describeClient(name string, pid int32, remote string) string {
+	if name == "" {
+		// No name at all, which is a server running without
+		// authentication: nothing ever said what it was.  "@" reads as
+		// an address attached to a name, so with no name it is spelt
+		// out in words instead.
+		if remote == "" {
+			return "an unnamed client"
+		}
+		return "an unnamed client at " + remote
+	}
+	if pid > 0 {
+		name = fmt.Sprintf("%s[%d]", name, pid)
+	}
+	if remote != "" {
+		name += "@" + remote
+	}
+	return name
+}
+
+// hostOf is an address without its port.  The port a client dialled
+// FROM is ephemeral and tells nobody anything.
+func hostOf(a net.Addr) string {
+	if a == nil {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(a.String()); err == nil {
+		return host
+	}
+	return a.String()
 }
 
 func connFrom(ctx context.Context) (*connState, bool) {
@@ -55,8 +106,12 @@ func connFrom(ctx context.Context) (*connState, bool) {
 // RPC on a connection descends from.
 type ConnTracker struct{}
 
-func (ConnTracker) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context {
-	return context.WithValue(ctx, connKey{}, &connState{})
+func (ConnTracker) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context {
+	var remote string
+	if info != nil {
+		remote = hostOf(info.RemoteAddr)
+	}
+	return context.WithValue(ctx, connKey{}, &connState{remote: remote})
 }
 func (ConnTracker) HandleConn(context.Context, stats.ConnStats)                     {}
 func (ConnTracker) TagRPC(ctx context.Context, _ *stats.RPCTagInfo) context.Context { return ctx }
@@ -91,7 +146,7 @@ func (s *Server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 	if !ok {
 		return nil, status.Error(codes.Internal, "no connection state")
 	}
-	c.mark(who)
+	c.mark(who, req.GetPid())
 	return &pb.LoginResponse{Proof: proof}, nil
 }
 
