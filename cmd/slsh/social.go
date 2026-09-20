@@ -210,8 +210,22 @@ func (sh *Shell) watch(ctx context.Context) {
 			if !ok {
 				return
 			}
-			if l.Source == sh.s.Me() {
+			if l.Source == sh.s.Me() && !l.Mine {
 				continue // our own words, already shown when sent
+			}
+			if l.Mine {
+				// This avatar, speaking through another client of the
+				// same session -- a daemon, or a second shell.  Shown
+				// the way this shell shows its own words, because that
+				// is what it is: one avatar said one thing, and which
+				// keyboard it came from is not what a transcript is
+				// about.
+				if l.Channel != 0 {
+					sh.printf("%s > [Local %d] %s", stamp(), l.Channel, l.Text)
+				} else {
+					sh.printf("%s > [Local] %s", stamp(), l.Text)
+				}
+				continue
 			}
 			sh.printf("%s < [Local] %s: %s", stamp(), l.From, l.Text)
 		case m, ok := <-ims:
@@ -245,6 +259,27 @@ func (sh *Shell) heard(m *sl.IM) {
 		name = sh.s.NameOr(m.From)
 	}
 	switch {
+	case m.Mine:
+		// This avatar wrote it, through another client of the same
+		// session.  Without this the transcript here is every reply and
+		// none of the questions, which is how it read while a daemon
+		// answered for an avatar somebody was watching through slsh.
+		//
+		// Shown exactly as this shell shows what it sends itself: one
+		// avatar said one thing to one person, and which of its clients
+		// composed it is not what the conversation is about.
+		if !m.Spoken() {
+			return // an offer answered, a lure taken: not something said
+		}
+		to := sh.s.NameOr(m.To)
+		if to == "" {
+			to = m.To.String()
+		}
+		c, made := sh.talk.Open(m.To, to)
+		if made {
+			sh.noticef("new conversation with %s", to)
+		}
+		sh.printf("%s > [IM %s] %s", stamp(), c.Label(), m.Text)
 	case m.Conversation():
 		c, made := sh.talk.Open(m.From, name)
 		if made {
