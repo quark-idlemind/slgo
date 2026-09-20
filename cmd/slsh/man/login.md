@@ -17,15 +17,25 @@ login between them for the same reason.
 
 **-f, --force**
 
-Bring back a session that is down and staying down.  Without it that
-session is left alone.  It does not overrule a login the daemon has
-already refused; the wait printed with that refusal is still the wait.
+Accepted for symmetry with `logout`, and changes nothing here: naming
+an avatar IS asking for it back, so `login` always asks.  It does not
+overrule a login the daemon has already refused for a failed attempt;
+the wait printed with that refusal is still the wait.
 
 ## A session that is down and staying down
 
-A session that is down and staying down is left alone.  Something
-stopped it, and the likeliest something is a person now using that
-avatar in a viewer.
+Something stopped it, and the likeliest something is a person now
+using that avatar in a viewer.  `login` starts it anyway, because
+typing the name is the deliberate act of asking for it back -- what
+the daemon refuses unasked is a DAEMON retrying, which would undo the
+logout by itself.  slbotd asks without forcing for exactly that reason
+and is exactly what should be refused.
+
+So read the reason before typing it.  The check the refusal asks for
+was never one the daemon could make: a stopped session has no clients,
+so nobody here can be using it, and what it warns about is somebody
+logged in as that avatar in their own viewer -- which slgod cannot see
+and no flag here could have checked.
 
 The refusal says why it went down rather than when, and that is the
 part worth reading before overruling.  `logged out` is somebody

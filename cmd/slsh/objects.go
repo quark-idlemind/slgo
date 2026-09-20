@@ -877,10 +877,28 @@ func cmdLogin(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		return fmt.Errorf("this session was logged in directly; there is no daemon to ask")
 	}
 
-	r, err := conn.Host(ctx, rest[0], o.Force)
+	// Always force, and the flag is accepted for symmetry with logout
+	// rather than because it changes anything here.
+	//
+	// slgod refuses to restart a session somebody stopped on purpose
+	// unless it is forced, so that a DAEMON retrying cannot undo a
+	// deliberate logout -- slbotd asks without force for exactly that
+	// reason and is exactly what should be refused.  But a person
+	// typing an avatar's name is not a daemon retrying: it is the
+	// deliberate act, and slgod's own protocol says a stopped session
+	// "comes back only when asked for by name", which is what this is.
+	//
+	// The refusal warns to check nobody is using the avatar first, and
+	// that warning survives the change because it was never about
+	// anything slgod could see: a stopped agent has no session, so no
+	// client of this daemon can be using it.  What it means is somebody
+	// logged in as that avatar in their own viewer, which slgod cannot
+	// know about and a flag here could not have checked.
+	r, err := conn.Host(ctx, rest[0], true)
 	if err != nil {
 		return err
 	}
+	_ = o.Force
 	if r.GetAlready() {
 		fmt.Fprintf(out, "%s was already up: %s in %s\n",
 			rest[0], r.Agent.GetAvatarName(), r.Agent.GetRegion())
