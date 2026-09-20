@@ -1237,6 +1237,17 @@ of who to answer, it becomes a conversation instead:
     chat      = *
     backstory = example /home/you/characters/hobb.txt
 
+The backstory is the system prompt: what the avatar is, read from its
+file every turn so that working on a character is an edit and not a
+restart. It may name a **directory** instead, and then the avatar can
+be told about particular people -- a file named for somebody, lower
+case, is used while that person is the one speaking, and `default`
+when nothing more specific matches. A line in one of those files that
+is nothing but a relative path is the file it names, so a person's
+file keeps the character by including it and can put it wherever it
+wants. `slbotd --check` assembles them all and says what each came
+to. The guide has the rest.
+
 The model is `llama-server` from llama.cpp and is not interchangeable
 with anything else that speaks the same chat API, because only half of
 what is used is that API. Generation goes through
@@ -1265,7 +1276,9 @@ that lands somewhere different each turn has its cache somewhere else
 each turn; the one that spoke longest ago gives its slot up, and a slot
 taken from somebody else is erased first, because two conversations
 with one avatar share the backstory as a prefix and the server would
-otherwise match it.
+otherwise match it. With a directory of characters they share only the
+default, and each conversation's fingerprint carries the character that
+person was answered under.
 
 A context window does not hold a conversation that goes on for weeks,
 and dropping the oldest exchanges gives an avatar no memory at all. So

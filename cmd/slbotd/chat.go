@@ -491,29 +491,36 @@ func (c *Chatter) ready(ctx context.Context) (*Props, error) {
 	return c.props, nil
 }
 
-// Backstory is what an avatar was given to be.
+// Backstory is what an avatar was given to be, talking to this person.
+//
+// Who is being spoken to is part of the question because the
+// configuration may name a directory rather than a file, and a
+// directory can hold a character for one person as well as the one
+// everybody gets.  See character.go.
 //
 // Read every time rather than held in memory, so that working on a
 // character is an edit and not a restart.  It is safe to change under
 // a running daemon because its text is part of the fingerprint: change
-// the words and every saved kv cache for that avatar stops matching
-// and is prefilled again from the conversation's text.
+// the words and every saved kv cache that was built on them stops
+// matching and is prefilled again from the conversation's text.  With a
+// directory that is per conversation rather than per avatar, since what
+// a person is told is now part of what changed.
 //
 // A backstory that cannot be read is not a refusal to speak.  The
 // avatar answers with no character at all, which is visible in one line
 // of log and in the first thing it says, where a silent daemon would be
 // neither.
-func (c *Chatter) Backstory(avatar string) string {
+func (c *Chatter) Backstory(avatar string, who msg.UUID, name string) string {
 	path := c.cfg.Backstory[avatar]
 	if path == "" {
 		return ""
 	}
-	b, err := os.ReadFile(path)
+	text, err := readCharacter(path, who, name)
 	if err != nil {
 		c.logf("%s has no backstory: %v", avatar, err)
 		return ""
 	}
-	return strings.TrimSpace(string(b))
+	return text
 }
 
 // Reply is one turn: what this avatar says back.
@@ -531,7 +538,7 @@ func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, 
 	if err != nil {
 		return "", err
 	}
-	backstory := c.Backstory(conv.Avatar)
+	backstory := c.Backstory(conv.Avatar, who, name)
 	fingerprint := props.Fingerprint(backstory)
 
 	slot, mine, err := c.slots.take(ctx, conv.Key())

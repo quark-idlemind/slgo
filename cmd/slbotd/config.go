@@ -113,11 +113,14 @@ type Config struct {
 	// somebody may reasonably have either without the other.
 	Chat []string
 
-	// Backstory is the file each avatar's character is written in, by
-	// profile.  Read when it is used rather than held here, so that
-	// working on a character does not mean restarting the daemon --
-	// and safely, because its text is part of the fingerprint that
-	// decides whether a saved kv cache still describes this avatar.
+	// Backstory is where each avatar's character is written, by
+	// profile: a file, or a directory holding one character per person
+	// it talks to.  See character.go for what a directory may hold.
+	//
+	// Read when it is used rather than held here, so that working on a
+	// character does not mean restarting the daemon -- and safely,
+	// because its text is part of the fingerprint that decides whether
+	// a saved kv cache still describes this avatar.
 	Backstory map[string]string
 
 	// The model.  An empty LLMURL is a daemon with no model, which
@@ -524,7 +527,8 @@ func parseConfig(r io.Reader) (Config, error) {
 			who, path, ok := strings.Cut(value, " ")
 			who, path = strings.TrimSpace(who), strings.TrimSpace(path)
 			if !ok || who == "" || path == "" {
-				return c, fmt.Errorf("line %d: backstory wants an avatar and a file, got %q", n, value)
+				return c, fmt.Errorf("line %d: backstory wants an avatar and a file or "+
+					"directory, got %q", n, value)
 			}
 			c.Backstory[who] = expandHome(path)
 		case "llm-url", "llm_url":

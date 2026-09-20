@@ -1311,8 +1311,91 @@ plumbing to it.
 It is read **every time it is used**, not held in memory, so working on
 a character is an edit and not a restart. That is safe because the
 backstory's text is part of the fingerprint described below: change the
-words and every kept context for that avatar stops matching and is
-built again from the conversation.
+words and every kept context built on them stops matching and is built
+again from the conversation.
+
+### A character that knows who it is talking to
+
+A backstory line may name a **directory** instead of a file, and then
+the avatar can be told something about particular people:
+
+    backstory = example /home/you/characters/hobb/
+
+    hobb/default.txt              used when nothing more specific matches
+    hobb/example resident.txt     used when that person is speaking
+    hobb/another-person.txt       and that one
+
+**One file is chosen, not two**: the person's if there is one, the
+default otherwise.
+
+### Including one file in another
+
+A line in a character that is nothing but a relative path *is* the file
+it names:
+
+    ./default.txt
+
+    You have known this one for years. They helped build the dock.
+    They ask after your sister; she is well.
+
+That is how a person's file keeps the character rather than replacing
+it. Composition is the file's own business, because a fixed rule here
+could only say one thing and the useful arrangements are not all that
+shape. The shared part often wants to come **last**, nearest the
+conversation, which is where a model weighs hardest:
+
+    You have known this one for years.
+
+    ./default.txt
+
+Two people may share a third file that is neither of theirs; a
+paragraph several avatars have in common is written once and included
+everywhere; and a rule about long absences can live in
+`../long-absence.txt` and be included by every character that wants it.
+
+**The rules.** A line that is a path and nothing else — no prose
+begins `./`, so a sentence cannot become an include by accident, and a
+line with words after the path is left alone as prose. Relative only:
+`./` and `../`, resolved against the directory of the file doing the
+including, never the daemon's working directory. An absolute path is
+not an include and is left as the line it is, so that a directory of
+characters can be moved or copied and still be itself. Includes nest,
+and a file included from two places is included twice. A file that
+includes itself, directly or round a ring, is an error and is said
+rather than quietly truncated, as is an include of a file that is not
+there.
+
+**What this costs.** The old behaviour added the default to a person's
+file automatically. Nothing does that now, so a person's file that
+forgets `./default.txt` makes that avatar nobody in particular for that
+person, quietly. That is the price of the file deciding.
+`slbotd --check` is the answer to it: it assembles every character,
+includes and all, and reports what each came to, which is the thing
+you cannot see by reading one file.
+
+    example      /home/you/characters/hobb: a default, and 2 for particular people
+                   another-person.txt       412 characters
+                   default.txt              389 characters
+                   example resident.txt     BROKEN: .../hobb/defualt.txt: no such file or directory
+
+**Naming the files.** Lower case the person's name; a `.txt` on the end
+is optional, and spaces may be written as hyphens or underscores, so
+`example resident.txt`, `example-resident` and `EXAMPLE_RESIDENT.TXT`
+are one person. A file may be named by their uuid instead, the way the
+`trusted` and `chat` lists take either. The directory is listed and
+matched rather than guessed at, so there is no spelling that works only
+because somebody thought of it.
+
+Everything is read on the turn it is used, so a character appearing for
+somebody who has just started talking — or an edit to a file three
+includes deep — does not need a restart.
+
+One consequence in the kv cache. Two conversations with one avatar used
+to share the whole backstory as a prefix; they now share only whatever
+their characters have in common, and each person's kept context is
+fingerprinted with the character *they* were answered under. Editing one
+person's file costs that one conversation its cache rather than every
+conversation that avatar is holding.
 
 ### Keeping a conversation, and what that costs
 

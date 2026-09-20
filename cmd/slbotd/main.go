@@ -171,10 +171,14 @@ func describe(out *os.File, cfg Config, where string) error {
 			case !ok:
 				fmt.Fprintf(out, "  %-12s no backstory\n", name)
 			default:
-				if _, err := os.Stat(path); err != nil {
+				lines, err := describeCharacters(path)
+				if err != nil {
 					fmt.Fprintf(out, "  %-12s %v\n", name, err)
-				} else {
-					fmt.Fprintf(out, "  %-12s %s\n", name, path)
+					break
+				}
+				fmt.Fprintf(out, "  %-12s %s\n", name, lines[0])
+				for _, l := range lines[1:] {
+					fmt.Fprintf(out, "  %-12s   %s\n", "", l)
 				}
 			}
 		}
