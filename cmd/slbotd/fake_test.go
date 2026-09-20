@@ -96,8 +96,41 @@ func (f *fakeGrid) Sent() []msg.Message {
 	return append([]msg.Message(nil), f.sent...)
 }
 
-// IMsSent is the instant messages among them, in order.
+// IMsSent is the instant messages among them, in order, leaving out the
+// typing notifications.
+//
+// Those are not things said.  A test waiting for what an avatar
+// ANSWERED should not be satisfied by it announcing that it was about
+// to; see pace.go, where the pause before a reply is spent looking like
+// somebody typing.  typingSent has them for the one test that is about
+// them.
 func (f *fakeGrid) IMsSent() []*msg.ImprovedInstantMessage {
+	var out []*msg.ImprovedInstantMessage
+	for _, im := range f.allIMsSent() {
+		switch im.MessageBlock.Dialog {
+		case sl.DialogTypingStart, sl.DialogTypingStop:
+		default:
+			out = append(out, im)
+		}
+	}
+	return out
+}
+
+// typingSent is how many times the far end was told somebody was
+// writing, and had stopped.
+func (f *fakeGrid) typingSent() (starts, stops int) {
+	for _, im := range f.allIMsSent() {
+		switch im.MessageBlock.Dialog {
+		case sl.DialogTypingStart:
+			starts++
+		case sl.DialogTypingStop:
+			stops++
+		}
+	}
+	return starts, stops
+}
+
+func (f *fakeGrid) allIMsSent() []*msg.ImprovedInstantMessage {
 	var out []*msg.ImprovedInstantMessage
 	for _, m := range f.Sent() {
 		if im, ok := m.(*msg.ImprovedInstantMessage); ok {

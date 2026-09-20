@@ -19,6 +19,10 @@ func withChat(t *testing.T, d *daemon, f *fakeLLM, chat ...string) {
 	d.cfg.LLMURL = f.URL
 	d.cfg.Chat = chat
 	d.cfg.ChatDir = t.TempDir()
+	// No pacing unless a test asks for it.  Holding every reply back by
+	// the seconds a person would have taken is the point of pace.go and
+	// pure cost everywhere else; pace_test.go sets its own.
+	d.cfg.ReadCPS, d.cfg.TypeCPS = 0, 0
 	c, err := NewChatter(d.cfg, func(string, ...any) {})
 	if err != nil {
 		t.Fatalf("NewChatter: %v", err)

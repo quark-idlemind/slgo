@@ -298,6 +298,8 @@ func TestEveryDefaultHasAValue(t *testing.T) {
 		{"chat-keep", c.ChatKeep == 0},
 		{"chat-summary", c.ChatSummary == 0},
 		{"chat-own", c.ChatOwn == 0},
+		{"read-cps", c.ReadCPS == 0},
+		{"type-cps", c.TypeCPS == 0},
 	} {
 		if tc.zero {
 			t.Errorf("%s has no default", tc.name)

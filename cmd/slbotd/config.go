@@ -151,6 +151,26 @@ type Config struct {
 	// ChatTemp is the sampling temperature.
 	ChatTemp float64
 
+	// ReadCPS and TypeCPS are how fast an avatar reads what arrived and
+	// writes what it sends, in characters a second, and PaceMax bounds
+	// the whole wait.  Per avatar where one says so, and these where it
+	// does not: see SpeedsFor.
+	//
+	// Characters a second rather than words a minute because it is what
+	// somebody setting this is judging -- how fast this avatar should
+	// seem -- and a word is a fiction of five characters that exists to
+	// make typing tests comparable.  A zero turns that half off.
+	//
+	// PaceMax is off by default.  The arithmetic is the point, and a
+	// cap quietly contradicts it; it is here for an operator who would
+	// rather not have an avatar typing for four minutes because the
+	// model felt expansive.
+	ReadCPS    float64
+	TypeCPS    float64
+	AvatarRead map[string]float64
+	AvatarType map[string]float64
+	PaceMax    time.Duration
+
 	// ChatOwn is how many things two avatars THIS daemon drives may say
 	// to each other before one of them stops answering.
 	//
@@ -245,6 +265,10 @@ func DefaultConfig() Config {
 		ChatKeep:     6,
 		ChatSummary:  200,
 		ChatOwn:      8,
+		ReadCPS:      23.0,
+		TypeCPS:      3.2,
+		AvatarRead:   map[string]float64{},
+		AvatarType:   map[string]float64{},
 		trustedIDs:   map[msg.UUID]bool{},
 		trustedNames: map[string]string{},
 	}
@@ -561,6 +585,32 @@ func parseConfig(r io.Reader) (Config, error) {
 				return c, fmt.Errorf("line %d: chat-own wants a number, zero or more, got %q", n, value)
 			}
 			c.ChatOwn = v
+		case "read-cps", "read_cps":
+			who, cps, err := speedLine(value)
+			if err != nil {
+				return c, fmt.Errorf("line %d: read-cps: %w", n, err)
+			}
+			if who == "" {
+				c.ReadCPS = cps
+			} else {
+				c.AvatarRead[who] = cps
+			}
+		case "type-cps", "type_cps":
+			who, cps, err := speedLine(value)
+			if err != nil {
+				return c, fmt.Errorf("line %d: type-cps: %w", n, err)
+			}
+			if who == "" {
+				c.TypeCPS = cps
+			} else {
+				c.AvatarType[who] = cps
+			}
+		case "pace-max", "pace_max":
+			d, err := time.ParseDuration(value)
+			if err != nil || d < 0 {
+				return c, fmt.Errorf("line %d: pace-max wants a duration, got %q", n, value)
+			}
+			c.PaceMax = d
 		case "chat-dir", "chat_dir":
 			c.ChatDir = expandHome(value)
 		case "slot-save-path", "slot_save_path":
@@ -717,4 +767,41 @@ func (c *Config) ChatProblem() string {
 			c.ChatSummary, c.ChatContext)
 	}
 	return ""
+}
+
+// SpeedsFor is how fast this avatar reads and types.
+//
+// The avatar's own where it has one and the file's otherwise, which is
+// what makes a line naming no avatar the default rather than the only
+// answer.
+func (c *Config) SpeedsFor(avatar string) Speeds {
+	s := Speeds{Read: c.ReadCPS, Type: c.TypeCPS}
+	if cps, ok := c.AvatarRead[avatar]; ok {
+		s.Read = cps
+	}
+	if cps, ok := c.AvatarType[avatar]; ok {
+		s.Type = cps
+	}
+	return s
+}
+
+// speedLine reads "23.0" or "qi 30.0": a rate, or an avatar and a rate.
+//
+// Which it is comes from how many words there are and not from what
+// they look like, because a profile name is never a number and a
+// listing that guessed would be one more thing to be wrong about.
+func speedLine(value string) (avatar string, cps float64, err error) {
+	f := strings.Fields(value)
+	switch len(f) {
+	case 1:
+	case 2:
+		avatar, f = f[0], f[1:]
+	default:
+		return "", 0, fmt.Errorf("wants a rate, or an avatar and a rate, got %q", value)
+	}
+	cps, err = strconv.ParseFloat(f[0], 64)
+	if err != nil || cps < 0 {
+		return "", 0, fmt.Errorf("wants a number of characters a second, zero or more, got %q", f[0])
+	}
+	return avatar, cps, nil
 }

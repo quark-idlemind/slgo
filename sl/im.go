@@ -176,6 +176,28 @@ func (w *Session) SendIM(ctx context.Context, to msg.UUID, text string) error {
 	return w.Send(ctx, m)
 }
 
+// Typing tells somebody this avatar is writing to them, or has
+// stopped.
+//
+// It is the same message an ordinary remark travels on, with a dialog
+// that carries no text.  A viewer sends one when the first key is
+// pressed and the other when the message goes or the field is cleared,
+// and the far end shows "typing..." in between.
+//
+// Nothing is obliged to send these and nothing breaks if they are
+// missed: the far end times its own indicator out.  What they are for
+// is the pause before an answer reading as somebody writing rather than
+// as nobody there.
+func (w *Session) Typing(ctx context.Context, to msg.UUID, on bool) error {
+	dialog := uint8(DialogTypingStop)
+	if on {
+		dialog = DialogTypingStart
+	}
+	m := w.im(to, dialog, "typing")
+	m.MessageBlock.ID = imSessionID(w.me, to)
+	return w.Send(ctx, m)
+}
+
 // imSessionID is the id a message between two people carries.
 //
 // The viewer computes it rather than inventing one, so that both ends

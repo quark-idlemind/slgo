@@ -381,6 +381,14 @@ func (b *bot) answer(ctx context.Context, s *sl.Session, im *sl.IM, who string) 
 	}
 	b.logf("answered %s in %s: %s", who, time.Since(started).Round(time.Millisecond), text)
 
+	// Held back until a person could have read the remark and written
+	// that, counting the time the model already took.  See pace.go.
+	arrived := im.At
+	if arrived.IsZero() {
+		arrived = started
+	}
+	b.wait(ctx, s, im.From, arrived, b.d.chat.pace(b.name, im.Text, text))
+
 	send, cancel2 := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel2()
 	if err := sendReply(send, s, im.From, text, b.d.cfg.ChatReply); err != nil {
