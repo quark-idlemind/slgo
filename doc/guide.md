@@ -381,6 +381,65 @@ happens with more than one viewer is in
 [doc/history/two-viewers.md](history/two-viewers.md).  Both are plans
 rather than descriptions -- see [doc/history/](history/).
 
+### Two clients on one avatar, and the half of the conversation you could not see
+
+Several programs can attach to one session, and until now each of them
+saw everything the **grid** sent and nothing the others said.
+
+That is not an oversight in slgod, it is how the protocol works: the
+grid does not echo your own instant messages back to you. A viewer
+shows your own remarks because it composed them itself. So a person
+watching through `slsh` while `slbotd` answered for the same avatar saw
+every reply the other party made and none of the questions the daemon
+had asked — a transcript with one side missing, and no indication that
+anything was missing.
+
+slgod now relays what one client sends to the **other** clients of that
+session. Never back to the sender, which composed it and has already
+shown it. Filtered by exactly the subscriptions that filter the grid's
+own traffic and by nothing else: a client that asked for
+`ImprovedInstantMessage` gets the instant messages, whoever sent them.
+The server still decodes nothing — deciding here which messages were
+"worth" echoing would be slgod learning what an instant message is.
+
+In `slsh` these appear the way its own sends do, because that is what
+they are:
+
+    21:04:11 > [IM Somebody] three coils, Quark.
+    21:04:19 < [IM Somebody] until Thursday, then.
+
+One avatar said one thing to one person; which of its clients composed
+it is not what a transcript is about.
+
+### What this means if you are writing a client
+
+`sl.IM` gains `To`, `Mine` and `Via`, and `sl.Line` gains `Mine`,
+`Via` and `Channel`. `Mine` means *this avatar sent it, from another
+client*.
+
+**`IM.Conversation()` is false for these**, deliberately, and that is
+the load-bearing decision. It means "somebody is talking to this
+avatar", and a line this avatar sent is not that however much it looks
+like one — the whole point of the field is that `From` is us. So every
+program written before any of this existed goes on working unchanged,
+and, more to the point, nothing that *answers* conversation can answer
+itself.
+
+That is not a display nicety. `slbotd` with `chat = *` has the avatar
+in its own audience, so a reply would become a remark would become a
+reply, and it would not stop. `Spoken()` is the question for a program
+showing a conversation; `Conversation()` is the question for a program
+answering one. Two different names because the cost of confusing them
+falls entirely on the second.
+
+`slbotd` records what was said elsewhere into the conversation and
+never acts on it. One avatar should have one memory of what it said
+whoever was driving, or the daemon will later contradict a promise a
+person made through the same mouth — so a line you type into `slsh` as
+that avatar folds into the note like any other. It does not start a
+conversation that does not exist: one remark to somebody never spoken
+to before is one remark, not a memory.
+
 ### Watching the wire
 
     slgod -v example                                  log every message the grid sends
@@ -1091,6 +1150,12 @@ Every one of those is optional but `avatar` and `trusted`: a
 configuration that holds nobody, or that trusts nobody, would start a
 daemon that can never do anything, and is refused rather than run.
 
+A chat setting that is half finished -- `chat` with no `llm-url`, or
+the other way about -- turns chat **off** and says so loudly at every
+start. It is not fatal: attending avatars and taking commands is what
+slbotd is for, chat is bolted on beside it, and a missing line there
+must not be the reason nobody can drive an avatar.
+
 `slbotd --check` reads the file, says what it means, and exits without
 connecting to anything -- which is how to find a misspelt profile or a
 program that is not where it was said to be, before an avatar is logged
@@ -1346,6 +1411,90 @@ drifts; a labelled one has three places to put things and keeps them.
 
 The fields are what somebody means when they say an avatar remembers
 them: who they are, what has been talked about, and what was agreed.
+
+### Saying who NOT to talk to
+
+An entry with `!` in front of it is somebody the avatar will not answer,
+and a refusal beats a permission however the permission was granted:
+
+    chat = *
+    chat = !Quark Idlemind
+
+That is "everybody except", which is the only thing the two lines can
+sensibly mean together. Order does not matter, names match without
+regard to case, and a uuid may be refused as readily as a name.
+
+### Two of your own avatars talking to each other
+
+If one daemon attends several avatars and each is in the other's
+audience, they will talk to each other. That is not a malfunction —
+what it produces is a dull but perfectly ordinary conversation — and
+`!` is there for an operator who would rather it did not happen.
+
+What is wrong with it is that it does not **stop**. A reply from one is
+an ordinary remark to the other, neither is answering *itself*, and
+neither will ever be the one to get bored. Measured before there was a
+bound: one message typed by hand from one avatar to another ran to 26
+exchanges in ninety seconds and was still going when it was killed.
+
+So it is bounded rather than banned:
+
+    chat-own = 8      # things they may say to each other; 0 is never
+
+Past that, one of them stops answering and says why in the log. The
+count is of everything ever said in that conversation, folded turns
+included — counting only what is still held word for word would reset
+the bound at every compaction, which is to say it would bound nothing.
+
+### Answering at the speed of a person
+
+A model answers in a second or two whatever it was asked, and an avatar
+that replies before the question has finished arriving is not a person
+however well it writes. The tell is not the words, it is the clock.
+
+So a reply is held back:
+
+    read = len(what arrived) / read-cps
+    type = len(the answer)   / type-cps
+
+A 46-character remark read at 23 characters a second is two seconds,
+and a 32-character answer typed at 3.2 is ten more. The far end sees
+nothing for two seconds, then **"typing…"** for ten, then the reply.
+
+**Held, not delayed.** The model's own seconds count towards it,
+measured from when the remark *arrived* rather than from when the
+answer came back — so a reply the model laboured over goes out at once,
+and a slow machine does not cost you twice.
+
+    read-cps = 23.0          # the default for every avatar
+    type-cps = 3.2
+    read-cps = builder 12    # and what this one does instead
+    type-cps = builder 1.5
+    pace-max = 0             # a ceiling on the whole wait; 0 is none
+
+Avatars are not all the same person. One may type with two fingers and
+another answer the instant they have read it, and that difference is
+more of what makes them separate people than a backstory is. A line
+with one word is the default; a line with two names an avatar. Which it
+is comes from how many words there are and not from what they look
+like — a profile name is never a number.
+
+Characters a second rather than words a minute, deliberately: it is
+what you are actually judging when you set it, where a word is a
+fiction of five characters that exists to make typing tests comparable
+and has to be divided by five in your head before it means anything.
+
+`pace-max` is **off** by default, because the arithmetic above is the
+point and a cap quietly contradicts it. It is there for an operator who
+would rather not have an avatar typing for four minutes because the
+model felt expansive — which a `chat-max-tokens` of 160 at 3.2
+characters a second is. If replies feel too slow the thing to turn down
+is `chat-max-tokens`; short answers are more conversational anyway.
+
+The pause is spent **visibly**, and that is not decoration. Twenty
+seconds of silence reads as nobody there; twenty seconds of typing
+reads as somebody thinking what to say. Without the notice this would
+make an avatar seem *less* alive rather than more.
 
 ### What it costs, and what it is not
 

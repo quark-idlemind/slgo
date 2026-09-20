@@ -1066,6 +1066,33 @@ For how to use the commands rather than how they work, see
 [doc/slsh-guide.html](doc/slsh-guide.html); the daemon and the two
 benchmark programs are in [doc/guide.md](doc/guide.md).
 
+## Two clients on one avatar
+
+Several programs attach to one session, and each used to see everything
+the grid sent and nothing the others said. That is how the protocol
+works rather than an oversight: the grid does not echo your own instant
+messages back: a viewer shows your own remarks because it composed
+them. So somebody watching through slsh while slbotd answered for the
+same avatar saw every reply and none of the questions — a transcript
+with one side missing, and nothing to say so.
+
+slgod relays what one client sends to the other clients of that
+session, never back to the sender, filtered by the same subscriptions
+as the grid's own traffic and by nothing else. It still decodes
+nothing: choosing which messages were worth echoing would be the server
+learning what an instant message is.
+
+`sl.IM` grew `To`, `Mine` and `Via`, and `sl.Line` grew `Mine`, `Via`
+and `Channel`. `Mine` means this avatar sent it, from another client.
+**`Conversation()` is false for these**, which is the load-bearing
+part: it means "somebody is talking to this avatar", and a line this
+avatar sent is not that however much it looks like one. Every program
+written before this goes on working, and nothing that answers
+conversation can answer itself — which for slbotd with `chat = *` would
+not be a display fault but a loop that never ends. `Spoken()` is the
+question for showing a conversation; `Conversation()` is the question
+for answering one.
+
 ## Where slgod is
 
 slgod does not always run on the machine talking to it, and the machine
@@ -1261,6 +1288,23 @@ at 0.5B it returned fragments of the transcript, at 3B it copied the
 exchange back verbatim, and both lost the name. Three labelled lines
 work, and survive being folded again, which is the property the whole
 thing rests on.
+
+An entry with `!` in front of it is somebody the avatar will not
+answer, and a refusal beats a permission: `chat = *` with `chat =
+!Somebody` is everybody except them. Two avatars one daemon attends
+will otherwise talk to each other -- which is not a malfunction, but
+never stops, since neither is answering itself and neither gets bored.
+Measured before there was a bound: one message typed by hand ran to 26
+exchanges in ninety seconds. `chat-own` bounds it.
+
+A reply is held back until a person could have written it:
+`len(arrived)/read-cps` seconds of silence, then `len(reply)/type-cps`
+spent sending the same "typing..." notice a viewer sends. The model's
+own seconds count towards it, measured from when the remark arrived, so
+a reply it laboured over goes out at once. Characters a second rather
+than words a minute because that is what you are judging when you set
+it, and per avatar, since one may type with two fingers and another
+answer the instant they have read it.
 
 Who an avatar will talk to is a list of its own and not a flag on
 `trusted` -- driving an avatar and being spoken to by one are different
