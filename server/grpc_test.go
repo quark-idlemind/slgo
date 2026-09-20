@@ -313,7 +313,7 @@ func TestSendingNeedsSomethingToSend(t *testing.T) {
 		{"neither an id nor a name", &pb.OutboundMessage{}, "needs an id or a name"},
 		{"a name no template has", &pb.OutboundMessage{Name: "NoSuchMessage"}, "no message named"},
 	} {
-		err := sendMessage(ctx, h, tc.m)
+		err := sendMessage(ctx, h, nil, "test", tc.m)
 		if status.Code(err) != codes.InvalidArgument || !strings.Contains(errText(err), tc.says) {
 			t.Errorf("%s: %v; want InvalidArgument saying %q", tc.what, err, tc.says)
 		}
@@ -346,7 +346,7 @@ func TestSendingNeedsSomethingToSend(t *testing.T) {
 	// A circuit that has gone is reported as unavailable rather than
 	// pretended about: the message did not go anywhere.
 	h.Agent().Close()
-	err = sendMessage(ctx, h, &pb.OutboundMessage{Name: "ChatFromViewer", Body: body, Reliable: true})
+	err = sendMessage(ctx, h, nil, "test", &pb.OutboundMessage{Name: "ChatFromViewer", Body: body, Reliable: true})
 	if err != nil && status.Code(err) != codes.Unavailable {
 		t.Errorf("sending on a closed circuit: %v; want Unavailable if anything", err)
 	}

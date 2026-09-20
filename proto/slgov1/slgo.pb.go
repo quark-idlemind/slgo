@@ -1483,7 +1483,27 @@ type InboundMessage struct {
 	Sequence uint32 `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"`
 	Flags    uint32 `protobuf:"varint,5,opt,name=flags,proto3" json:"flags,omitempty"`
 	// Microseconds since the epoch, when the datagram was read.
-	ReceivedAt    int64 `protobuf:"varint,6,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`
+	ReceivedAt int64 `protobuf:"varint,6,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`
+	// FromClient names the client that SENT this message, when it did not
+	// come from the grid at all.
+	//
+	// The grid does not echo what an avatar says.  A viewer shows your own
+	// remarks because it composed them; two clients on one session
+	// therefore each see everything the grid sent and nothing the other
+	// said, so a person watching through slsh while a daemon answers for
+	// the same avatar sees half a conversation -- the half they did not
+	// write.  That was the fault this fixes.
+	//
+	// So a message a client puts on the circuit is relayed to the OTHER
+	// clients of that session, to whichever of them subscribed to its
+	// number, with this field naming who sent it.  Empty means the grid,
+	// which is every message that existed before this field did.
+	//
+	// The server still decodes nothing.  It relays the bytes it was
+	// handed, to the same subscriptions, with one more string attached;
+	// which messages are worth echoing is decided by what clients ask for
+	// and not by anything here knowing what an instant message is.
+	FromClient    string `protobuf:"bytes,7,opt,name=from_client,json=fromClient,proto3" json:"from_client,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1558,6 +1578,13 @@ func (x *InboundMessage) GetReceivedAt() int64 {
 		return x.ReceivedAt
 	}
 	return 0
+}
+
+func (x *InboundMessage) GetFromClient() string {
+	if x != nil {
+		return x.FromClient
+	}
+	return ""
 }
 
 // AgentEvent is something that happened to the grid connection itself.
@@ -4622,7 +4649,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\vreceived_at\x18\x03 \x01(\x03R\n" +
 	"receivedAt\"4\n" +
 	"\bAttached\x12(\n" +
-	"\x05agent\x18\x01 \x01(\v2\x12.slgo.v1.AgentInfoR\x05agent\"\x9b\x01\n" +
+	"\x05agent\x18\x01 \x01(\v2\x12.slgo.v1.AgentInfoR\x05agent\"\xbc\x01\n" +
 	"\x0eInboundMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -4630,7 +4657,9 @@ const file_slgo_proto_rawDesc = "" +
 	"\bsequence\x18\x04 \x01(\rR\bsequence\x12\x14\n" +
 	"\x05flags\x18\x05 \x01(\rR\x05flags\x12\x1f\n" +
 	"\vreceived_at\x18\x06 \x01(\x03R\n" +
-	"receivedAt\"\xd6\x01\n" +
+	"receivedAt\x12\x1f\n" +
+	"\vfrom_client\x18\a \x01(\tR\n" +
+	"fromClient\"\xd6\x01\n" +
 	"\n" +
 	"AgentEvent\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.slgo.v1.AgentEvent.KindR\x04kind\x12\x16\n" +

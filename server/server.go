@@ -148,6 +148,7 @@ type Hosted struct {
 	attempts atomic.Uint64
 	reconns  atomic.Uint64
 	relayed  atomic.Uint64
+	echoed   atomic.Uint64
 	dropped  atomic.Uint64
 }
 

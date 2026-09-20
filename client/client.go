@@ -149,6 +149,13 @@ type Message struct {
 	Flags    uint32
 	Body     []byte
 	At       time.Time
+	// FromClient names the client that sent this, when it came from
+	// another client of the same session rather than from the grid.
+	// Empty is the grid, which is everything that arrived over the
+	// circuit.  See slgo.proto: the grid does not echo what an avatar
+	// says, so this is the only way two clients on one session can see
+	// the whole of a conversation.
+	FromClient string
 }
 
 // Decode turns the relayed bytes into a typed message.  A nil result
@@ -443,11 +450,12 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 		case *pb.ServerPacket_Message:
 			m := b.Message
 			out := &Message{
-				ID:       msg.ID(m.Id),
-				Name:     m.Name,
-				Sequence: m.Sequence,
-				Flags:    m.Flags,
-				Body:     m.Body,
+				ID:         msg.ID(m.Id),
+				Name:       m.Name,
+				Sequence:   m.Sequence,
+				Flags:      m.Flags,
+				Body:       m.Body,
+				FromClient: m.FromClient,
 			}
 			if m.ReceivedAt != 0 {
 				out.At = time.UnixMicro(m.ReceivedAt)

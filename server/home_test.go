@@ -195,7 +195,7 @@ func TestAClientTeleportStopsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sendMessage(context.Background(), h, &pb.OutboundMessage{
+	if err := sendMessage(context.Background(), h, nil, "test", &pb.OutboundMessage{
 		Name: "TeleportLocationRequest", Body: body,
 	}); err != nil {
 		t.Fatal(err)
@@ -226,7 +226,7 @@ func TestAClientSittingDoesNotStopIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sendMessage(context.Background(), h, &pb.OutboundMessage{
+	if err := sendMessage(context.Background(), h, nil, "test", &pb.OutboundMessage{
 		Name: "AgentRequestSit", Body: body,
 	}); err != nil {
 		t.Fatal(err)

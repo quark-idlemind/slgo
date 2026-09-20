@@ -462,6 +462,27 @@ message InboundMessage {
 
   // Microseconds since the epoch, when the datagram was read.
   int64 received_at = 6;
+
+  // FromClient names the client that SENT this message, when it did not
+  // come from the grid at all.
+  //
+  // The grid does not echo what an avatar says.  A viewer shows your own
+  // remarks because it composed them; two clients on one session
+  // therefore each see everything the grid sent and nothing the other
+  // said, so a person watching through slsh while a daemon answers for
+  // the same avatar sees half a conversation -- the half they did not
+  // write.  That was the fault this fixes.
+  //
+  // So a message a client puts on the circuit is relayed to the OTHER
+  // clients of that session, to whichever of them subscribed to its
+  // number, with this field naming who sent it.  Empty means the grid,
+  // which is every message that existed before this field did.
+  //
+  // The server still decodes nothing.  It relays the bytes it was
+  // handed, to the same subscriptions, with one more string attached;
+  // which messages are worth echoing is decided by what clients ask for
+  // and not by anything here knowing what an instant message is.
+  string from_client = 7;
 }
 
 // AgentEvent is something that happened to the grid connection itself.

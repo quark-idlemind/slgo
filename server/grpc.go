@@ -227,6 +227,85 @@ func (h *Hosted) relay(p *msg.Packet) {
 	h.relayed.Add(1)
 }
 
+// ElsewhereClient stands in when the client that sent a message did not
+// say what it was called.  See echo: what matters is that the field is
+// not empty, because empty means the grid.
+const ElsewhereClient = "another client"
+
+// echo hands a message one client sent to the OTHER clients of the same
+// session.
+//
+// The grid does not echo what an avatar says, so without this two
+// clients on one session each see everything the grid sent and nothing
+// the other said.  A person watching a conversation through slsh while
+// a daemon answers for the same avatar sees only the half they did not
+// write, which is exactly as confusing as it sounds.
+//
+// Never back to the sender.  It composed the message and has already
+// shown it; sending it again would have every client that writes its
+// own remarks print each of them twice.  A sender with no stream --
+// the one-shot Send call -- is nobody to exclude and is named rather
+// than pointed at: it has no subscriptions, so there is nothing it
+// could be sent back to anyway.
+//
+// Filtered by the same subscriptions as the grid's own traffic, and by
+// nothing else.  This is the whole of the rule: a client that asked for
+// ImprovedInstantMessage gets the instant messages, whoever sent them,
+// and a client that asked for none gets none.  The server goes on
+// knowing nothing about what any of them mean, which is the property
+// worth keeping -- deciding here which messages are "worth" echoing
+// would be the server learning what an instant message is.
+func (h *Hosted) echo(from *Client, sentBy string, id msg.ID, body []byte) {
+	h.mu.RLock()
+	var want []*Client
+	for c := range h.clients {
+		if c != from && c.wants(id) {
+			want = append(want, c)
+		}
+	}
+	h.mu.RUnlock()
+	if len(want) == 0 {
+		return
+	}
+
+	// Never empty, whatever the sender is called.  Empty is what "came
+	// from the grid" means, and it is the ONE distinction a client
+	// reading this has to be able to make; a nameless sender must not
+	// be able to make an echo look like something the simulator said.
+	//
+	// It is often this rather than a name, because every client in this
+	// tree authenticates as "slgo" -- the name is carried through the
+	// handshake and nothing has ever had a reason to vary it.  Which
+	// client said something would be worth knowing (h.clientNames has
+	// the same problem, and reports "slgo, slgo" for two clients), but
+	// that is a change to how clients name themselves rather than to
+	// this.
+	if sentBy == "" {
+		sentBy = ElsewhereClient
+	}
+	in := &pb.InboundMessage{
+		Id:         uint32(id),
+		Body:       body,
+		ReceivedAt: time.Now().UnixMicro(),
+		FromClient: sentBy,
+	}
+	// Named where the template knows it, as the grid's own relay does,
+	// so that a client reading the name does not have to care which
+	// direction a message came from.
+	if info := msg.Lookup(id); info != nil {
+		in.Name = info.Name
+	}
+	// No sequence and no flags.  Both are circuit state describing a
+	// datagram that arrived, and this did not arrive: a made-up
+	// sequence number would be a client's only way of telling these
+	// apart quietly going wrong.
+	sp := &pb.ServerPacket{Body: &pb.ServerPacket_Message{Message: in}}
+	for _, c := range want {
+		c.send(sp)
+	}
+	h.echoed.Add(1)
+}
+
 // relayEvent hands an event queue event to every client that asked for
 // it by name.  As with a circuit message, the server does not look
 // inside: the body crosses as the LLSD bytes it arrived as.
@@ -355,7 +434,7 @@ func (s *Server) streamRecv(ctx context.Context, stream pb.Grid_StreamServer, c 
 		case *pb.ClientPacket_Subscribe:
 			c.setSubs(b.Subscribe)
 		case *pb.ClientPacket_Message:
-			if err := sendMessage(ctx, h, b.Message); err != nil {
+			if err := sendMessage(ctx, h, c, c.name, b.Message); err != nil {
 				return err
 			}
 		case *pb.ClientPacket_Lock:
@@ -391,7 +470,7 @@ func attachItemString(id msg.UUID) string {
 // sendMessage puts a client's message on the circuit.  The client
 // supplies the number and the body; the sequence number and
 // reliability are the server's, because they are circuit state.
-func sendMessage(ctx context.Context, h *Hosted, m *pb.OutboundMessage) error {
+func sendMessage(ctx context.Context, h *Hosted, c *Client, sentBy string, m *pb.OutboundMessage) error {
 	if m == nil {
 		return status.Error(codes.InvalidArgument, "empty message")
 	}
@@ -425,6 +504,12 @@ func sendMessage(ctx context.Context, h *Hosted, m *pb.OutboundMessage) error {
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "send: %v", err)
 	}
+
+	// The other clients of this session are told what was said, since
+	// the grid will not tell them: see InboundMessage.from_client.
+	// After the send and not before, so that nothing is echoed as
+	// having been said which the circuit then refused to carry.
+	h.echo(c, sentBy, id, m.Body)
 	return nil
 }
 
@@ -793,7 +878,9 @@ func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendRespons
 	if err != nil {
 		return nil, err
 	}
-	if err := sendMessage(ctx, h, req.Message); err != nil {
+	// No stream, so no client to leave out: a one-shot sender has no
+	// subscriptions and could not be sent anything back.
+	if err := sendMessage(ctx, h, nil, clientName(ctx), req.Message); err != nil {
 		return nil, err
 	}
 	return &pb.SendResponse{}, nil
