@@ -59,6 +59,19 @@ type Line struct {
 	Position msg.Vector3
 
 	Text string
+
+	// Channel is which channel it was said on.  Only an echo carries
+	// one: what the simulator sends inward has already been filtered to
+	// what this avatar can hear, and the number is not in the message.
+	Channel int32
+
+	// Mine says this avatar said it, from another client of the same
+	// session, and Via names that client.  See IM.Mine, which is the
+	// same arrangement for the same reason: the grid does not echo what
+	// an avatar says, so without this a second client watching sees
+	// every reply and none of the questions.
+	Mine bool
+	Via  string
 }
 
 // FromObject and FromAgent say what kind of thing spoke.
@@ -607,4 +620,45 @@ func (w *Session) sayNegative(ctx context.Context, text string, channel int32) e
 	m.Data.ButtonIndex = 0
 	m.Data.ButtonLabel = append([]byte(text), 0)
 	return w.Send(ctx, m)
+}
+
+// saidElsewhere is this avatar speaking through another client.
+//
+// ChatFromViewer is an OUTBOUND message -- it is how a client says
+// something -- so one arriving here never came from the grid.  It is
+// slgod relaying what another client of this session sent, and the
+// only reason the subscription exists.
+//
+// It is delivered as an ordinary line with Mine set, so that anything
+// showing chat shows the whole of it.  The fields a simulator would
+// have filled in are filled in from what is known -- the speaker is
+// this avatar, by name -- and the rest are left at zero rather than
+// invented.  Audible is not claimed because nothing here heard
+// anything, and Position is not asked for: this runs on the reader
+// goroutine, asking would be a round trip to the backend for every
+// line, and it would hold up every other message arriving while it
+// waited.  A caller that wants to know where the avatar is standing can
+// ask, from a goroutine where the answer costs only the caller.
+func (w *Session) saidElsewhere(raw *client.Message, m *msg.ChatFromViewer) {
+	if raw == nil || raw.FromClient == "" {
+		// Not an echo, which should not happen: the grid does not send
+		// this message inward.  Dropped rather than guessed at.
+		return
+	}
+	at := time.Now()
+	if !raw.At.IsZero() {
+		at = raw.At
+	}
+	l := Line{
+		At:         at,
+		Source:     w.me,
+		From:       w.info.AvatarName,
+		SourceType: SourceAgent,
+		Type:       m.ChatData.Type,
+		Channel:    m.ChatData.Channel,
+		Text:       trimNul(m.ChatData.Message),
+		Mine:       true,
+		Via:        raw.FromClient,
+	}
+	w.deliver(l)
 }

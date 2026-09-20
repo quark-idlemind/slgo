@@ -37,7 +37,7 @@ var Subscriptions = []string{
 	"ObjectPropertiesFamily", "KillObject",
 	"UpdateCreateInventoryItem", "ReplyTaskInventory",
 	"SendXferPacket", "AbortXfer", "TransferInfo", "TransferPacket",
-	"ChatFromSimulator", "AlertMessage",
+	"ChatFromSimulator", "ChatFromViewer", "AlertMessage",
 	"AvatarSitResponse",
 	"ImprovedInstantMessage", "UUIDNameReply", "AvatarPickerReply",
 	"AvatarPropertiesReply", "AvatarInterestsReply", "AvatarGroupsReply",
@@ -670,6 +670,13 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 	case *msg.ChatFromSimulator:
 		w.chat(raw, t)
 
+	// What this avatar said out loud, echoed back by slgod because
+	// another client of the same session said it.  The grid never
+	// sends this one inward, so it is always an echo; see
+	// Session.saidElsewhere.
+	case *msg.ChatFromViewer:
+		w.saidElsewhere(raw, t)
+
 	case *msg.ScriptDialog:
 		w.dialog(t)
 
@@ -677,7 +684,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.permission(t)
 
 	case *msg.ImprovedInstantMessage:
-		w.instantMessage(t)
+		w.instantMessage(raw, t)
 
 	case *msg.UUIDNameReply:
 		w.nameReply(t)

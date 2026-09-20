@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -50,6 +51,12 @@ type IM struct {
 	FromName string
 	Text     string
 
+	// To is who it was addressed to.  For a message that arrived it is
+	// this avatar; for one this avatar SENT -- see Mine -- it is the
+	// other person, and is the only thing saying which conversation the
+	// line belongs to.
+	To msg.UUID
+
 	// Dialog says what kind it is.  A caller that only wants
 	// conversation should check for DialogMessage; the rest range
 	// from group notices to teleport lures.
@@ -67,12 +74,46 @@ type IM struct {
 	// Bucket is the message's binary bucket, undecoded, which is
 	// where an inventory offer puts the asset type and id.
 	Bucket []byte
+
+	// Mine says this avatar sent it, from another client of the same
+	// session, and Via names that client.
+	//
+	// The grid does not echo what an avatar says: a viewer shows your
+	// own remarks because it composed them.  So two clients on one
+	// session each saw everything the grid sent and nothing the other
+	// said, and somebody watching a conversation through slsh while a
+	// daemon answered for the same avatar saw only the half they did
+	// not write.  slgod now relays what a client sends to the others,
+	// and this is how one arrives.
+	//
+	// Conversation is FALSE for these, deliberately.  It means
+	// "somebody is talking to this avatar", and a line this avatar
+	// sent is not that however much it looks like one -- the whole
+	// point of the field is that From is us.  Anything that answers
+	// conversation would otherwise answer itself, which for a daemon
+	// with a model behind it is not a display fault but a loop.  A
+	// caller that wants both directions asks for Spoken and looks at
+	// this.
+	Mine bool
+	Via  string
 }
 
 // Conversation reports whether this is somebody talking, as opposed to
 // the system or a script using the same message to carry something
 // else.
-func (m *IM) Conversation() bool {
+func (m *IM) Conversation() bool { return m.Spoken() && !m.Mine }
+
+// Spoken reports whether this is conversation in either direction:
+// somebody talking to this avatar, or this avatar talking to somebody
+// through another client.
+//
+// This is what a program showing a conversation wants -- a transcript
+// with one side missing is what this whole arrangement exists to fix --
+// and Conversation is what a program ANSWERING one wants.  The two are
+// deliberately different questions with different names, because the
+// cost of confusing them falls entirely on the second: something that
+// answers its own remarks talks to itself for ever.
+func (m *IM) Spoken() bool {
 	switch m.Dialog {
 	case DialogMessage, DialogMessageBox, DialogBusyAutoResponse:
 		return !m.Group && !m.From.IsZero()
@@ -503,17 +544,32 @@ func (w *Session) OnlineFriends(ctx context.Context) ([]Person, error) {
 }
 
 // instantMessage routes one arriving message.
-func (w *Session) instantMessage(m *msg.ImprovedInstantMessage) {
+func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMessage) {
 	b := m.MessageBlock
 	im := &IM{
 		At:       time.Now(),
 		From:     m.AgentData.AgentID,
 		FromName: trimNul(b.FromAgentName),
 		Text:     trimNul(b.Message),
+		To:       b.ToAgentID,
 		Dialog:   b.Dialog,
 		ID:       b.ID,
 		Group:    b.FromGroup,
 		Bucket:   b.BinaryBucket,
+	}
+	if raw != nil && raw.FromClient != "" {
+		im.Mine, im.Via = true, raw.FromClient
+	}
+
+	// Everything below this line is about a message that ARRIVED: a
+	// name to learn, an offer to keep, a friendship to record.  None of
+	// it applies to one this avatar sent.  Learning from an echo would
+	// file our own name under whoever we wrote to, and keeping an offer
+	// from one would have a session hold, and be able to accept, an
+	// offer it had itself made to somebody else.
+	if im.Mine {
+		w.deliverIM(im)
+		return
 	}
 	// A group invitation is the one kind whose sender is not a person:
 	// the id is the group and the agent-name field is whoever invited
@@ -576,6 +632,11 @@ func (w *Session) instantMessage(m *msg.ImprovedInstantMessage) {
 		w.b.NoteFriend(context.Background(), im.From, true)
 	}
 
+	w.deliverIM(im)
+}
+
+// deliverIM hands one to everybody subscribed.
+func (w *Session) deliverIM(im *IM) {
 	w.mu.Lock()
 	subs := make([]*imSub, 0, len(w.imSubs))
 	for _, s := range w.imSubs {

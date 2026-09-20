@@ -383,14 +383,14 @@ func TestTheFirstOfferBuildsTheMapItGoesIn(t *testing.T) {
 	// the worst case: both maps are nil.
 	w := &Session{}
 
-	w.instantMessage(arrivingIM(somebody, "Quark Idlemind", DialogFriendshipOffered, msg.UUID{1}, ""))
+	w.instantMessage(nil, arrivingIM(somebody, "Quark Idlemind", DialogFriendshipOffered, msg.UUID{1}, ""))
 	if len(w.Offers()) != 1 {
 		t.Errorf("kept %d friendship offers, want 1", len(w.Offers()))
 	}
 
 	inv := arrivingIM(somebody, "Quark Idlemind", DialogInventoryOffered, msg.UUID{2}, "a box")
 	inv.MessageBlock.BinaryBucket = offerBucket(AssetObject, msg.UUID{3})
-	w.instantMessage(inv)
+	w.instantMessage(nil, inv)
 	if len(w.InventoryOffers()) != 1 {
 		t.Errorf("kept %d inventory offers, want 1", len(w.InventoryOffers()))
 	}
