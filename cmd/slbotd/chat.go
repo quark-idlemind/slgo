@@ -415,6 +415,31 @@ type Chatter struct {
 	mu       sync.Mutex
 	props    *Props
 	separate *bool // whether a second system message survives the template
+
+	// held serialises everything that writes one conversation, by key.
+	//
+	// There are two writers now and there did not used to be: a reply
+	// being composed, and a line this avatar said through ANOTHER
+	// client of the same session, which arrives whenever it arrives.
+	// Both read the file, add to it and write it back, so without this
+	// the later write silently drops whatever the earlier one added --
+	// and what it drops is somebody's remark, which is the one thing a
+	// conversation is made of.
+	heldMu sync.Mutex
+	held   map[string]*sync.Mutex
+}
+
+// hold takes the lock for one conversation and hands back the release.
+func (c *Chatter) hold(key string) func() {
+	c.heldMu.Lock()
+	m := c.held[key]
+	if m == nil {
+		m = new(sync.Mutex)
+		c.held[key] = m
+	}
+	c.heldMu.Unlock()
+	m.Lock()
+	return m.Unlock
 }
 
 // NewChatter prepares the machinery.  It talks to nothing yet.
@@ -428,6 +453,7 @@ func NewChatter(cfg Config, logf func(string, ...any)) (*Chatter, error) {
 		return nil, err
 	}
 	return &Chatter{
+		held:  map[string]*sync.Mutex{},
 		cfg:   cfg,
 		llm:   NewLLM(cfg.LLMURL, cfg.LLMModel, cfg.LLMTimeout),
 		store: store,
@@ -491,7 +517,16 @@ func (c *Chatter) Backstory(avatar string) string {
 }
 
 // Reply is one turn: what this avatar says back.
-func (c *Chatter) Reply(ctx context.Context, conv *Conversation, said string) (string, error) {
+//
+// The conversation is loaded here rather than handed in, and held for
+// the whole turn.  Another client of this session may be writing to the
+// same one -- see hold -- and a turn that read it before that write and
+// saved after would take the remark back out again.
+func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, said string) (string, error) {
+	release := c.hold(avatar + "-" + who.String())
+	defer release()
+	conv := c.store.Load(avatar, who, name)
+
 	props, err := c.ready(ctx)
 	if err != nil {
 		return "", err
@@ -842,4 +877,41 @@ func (c *Chatter) separateMemory(ctx context.Context) bool {
 	out := *c.separate
 	c.mu.Unlock()
 	return out
+}
+
+// Remember records something this avatar said through another client of
+// the same session.
+//
+// A person answering through slsh, as an avatar slbotd is attending, is
+// that avatar speaking: there is one avatar and there should be one
+// memory of what it said, or the daemon will later contradict a promise
+// the person made through the same mouth.  So the line is kept exactly
+// as a reply of its own would be, and folds into the note when the
+// conversation is next compacted.
+//
+// Recorded and never acted on.  Nothing here answers, and nothing here
+// treats it as a remark that wants an answer -- an avatar that replied
+// to its own speech would be talking to itself, and with "chat = *" it
+// would do so for ever.  sl.IM.Conversation is false for these, which
+// is the same rule said once further down.
+//
+// A conversation that does not exist yet is not started by one.  An
+// avatar saying something to somebody it has never spoken to has said
+// one thing to them; the memory of a conversation begins when there is
+// a conversation, and a store full of one-line files nobody replied to
+// is not worth the disk.
+func (c *Chatter) Remember(avatar string, who msg.UUID, name, said string) bool {
+	release := c.hold(avatar + "-" + who.String())
+	defer release()
+
+	conv := c.store.Load(avatar, who, name)
+	if len(conv.Turns) == 0 {
+		return false
+	}
+	conv.Add("assistant", said, time.Now())
+	if err := c.store.Save(conv); err != nil {
+		c.logf("%s: could not record what was said to %s elsewhere: %v", avatar, name, err)
+		return false
+	}
+	return true
 }

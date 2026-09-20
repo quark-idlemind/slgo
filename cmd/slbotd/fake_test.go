@@ -295,3 +295,9 @@ func writeFile(path, text string) error {
 	}
 	return os.WriteFile(path, []byte(text), 0o600)
 }
+
+// waitGroup is a throwaway for the tests that call arrived directly.
+// arrived hands its work to a goroutine and the group is how a caller
+// waits; a test that waits on what was written instead needs one only
+// to pass in.
+func waitGroup() *sync.WaitGroup { return new(sync.WaitGroup) }

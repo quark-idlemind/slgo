@@ -118,6 +118,16 @@ func (b *bot) drainNotices(ctx context.Context, s *sl.Session) {
 
 // arrived decides what one message is and what happens to it.
 func (b *bot) arrived(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync.WaitGroup) {
+	// Something this avatar said through another client of the same
+	// session.  It is kept, so that one avatar has one memory of what
+	// it said whoever was driving, and it is never acted on: a daemon
+	// that answered its own speech would be talking to itself, and
+	// with "chat = *" it would not stop.
+	if im.Mine {
+		b.remember(s, im)
+		return
+	}
+
 	switch im.Dialog {
 	case sl.DialogTypingStart, sl.DialogTypingStop:
 		// Two of these arrive for every remark anybody types.  There is
@@ -339,7 +349,7 @@ func (b *bot) converse(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync
 	go func() {
 		defer jobs.Done()
 		defer func() { <-b.chatJobs }()
-		b.answer(ctx, s, im, conv, who)
+		b.answer(ctx, s, im, who)
 	}()
 }
 
@@ -349,7 +359,7 @@ func (b *bot) converse(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync
 // tell somebody whose remark could not be answered -- they did not ask
 // this daemon a question, they spoke to an avatar -- and "the model is
 // down" said to a stranger is worse than the silence it replaces.
-func (b *bot) answer(ctx context.Context, s *sl.Session, im *sl.IM, conv *Conversation, who string) {
+func (b *bot) answer(ctx context.Context, s *sl.Session, im *sl.IM, who string) {
 	// Room beyond the model's own timeout for restoring the context
 	// and writing it back, which are milliseconds, and for a server
 	// that is thinking about it.
@@ -357,7 +367,7 @@ func (b *bot) answer(ctx context.Context, s *sl.Session, im *sl.IM, conv *Conver
 	defer cancel()
 
 	started := time.Now()
-	text, err := b.d.chat.Reply(run, conv, im.Text)
+	text, err := b.d.chat.Reply(run, b.name, im.From, im.FromName, im.Text)
 	if err != nil {
 		b.logf("could not answer %s: %v", who, err)
 		return
@@ -368,5 +378,29 @@ func (b *bot) answer(ctx context.Context, s *sl.Session, im *sl.IM, conv *Conver
 	defer cancel2()
 	if err := sendReply(send, s, im.From, text, b.d.cfg.ChatReply); err != nil {
 		b.logf("could not send the answer to %s: %v", who, err)
+	}
+}
+
+// remember keeps a line this avatar said through another client.
+//
+// Only conversation: the rest of what a client sends as this avatar --
+// an inventory offer being accepted, a teleport answered, a typing
+// notice -- is not something anybody said, and a memory of it would be
+// noise in the note.  See Chatter.Remember for why it is kept at all
+// and why it is never answered.
+func (b *bot) remember(s *sl.Session, im *sl.IM) {
+	if b.d.chat == nil || !im.Spoken() {
+		return
+	}
+	name := s.NameOr(im.To)
+	if name == "" {
+		name = im.To.String()
+	}
+	via := im.Via
+	if via == "" {
+		via = "another client"
+	}
+	if b.d.chat.Remember(b.name, im.To, name, im.Text) {
+		b.chatf("%s said to %s through %s: %s", b.name, name, via, im.Text)
 	}
 }
