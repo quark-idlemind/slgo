@@ -95,16 +95,24 @@ func TestTwoAsksDoNotTakeEachOthersAnswers(t *testing.T) {
 
 	// Both requests are held until both have been sent, and then
 	// answered in the wrong order.
-	var seqs []int32
-	ready := make(chan struct{})
+	//
+	// The sequence ids come back on a channel rather than into a slice.
+	// The hook is called from the two goroutines below, at the same
+	// time, which is the whole point of the test -- so a slice appended
+	// to from inside it is written from two places at once, and read
+	// from a third.  It was, and "go test ./sl/ -race" failed on it
+	// every run.  A channel is the synchronisation as well as the
+	// carrier: sending happens before receiving, so the ids are safe to
+	// read by the time they are read.
+	//
+	// Buffered past the two expected, because the hook runs on the
+	// sender's own goroutine: a third request -- which would be a fault
+	// in the code under test -- must fail this test rather than wedge
+	// it.
+	seqs := make(chan int32, 8)
 	f.onSend = func(m msg.Message) {
-		r, ok := m.(*msg.ParcelPropertiesRequest)
-		if !ok {
-			return
-		}
-		seqs = append(seqs, r.ParcelData.SequenceID)
-		if len(seqs) == 2 {
-			close(ready)
+		if r, ok := m.(*msg.ParcelPropertiesRequest); ok {
+			seqs <- r.ParcelData.SequenceID
 		}
 	}
 
@@ -126,14 +134,19 @@ func TestTwoAsksDoNotTakeEachOthersAnswers(t *testing.T) {
 		second <- got{p, err}
 	}()
 
-	select {
-	case <-ready:
-	case <-time.After(5 * time.Second):
-		t.Fatal("both requests were not sent")
+	// In the order they were sent, which is the order they were asked
+	// in: the second ask waits 50ms so that it is second.
+	var asked [2]int32
+	for i := range asked {
+		select {
+		case asked[i] = <-seqs:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("only %d of the two requests were sent", i)
+		}
 	}
 
-	f.RelayEvent(t, "ParcelProperties", parcelBody("Quill Lodge", 9, int(seqs[1])))
-	f.RelayEvent(t, "ParcelProperties", parcelBody("Thrushmoor", 5, int(seqs[0])))
+	f.RelayEvent(t, "ParcelProperties", parcelBody("Quill Lodge", 9, int(asked[1])))
+	f.RelayEvent(t, "ParcelProperties", parcelBody("Thrushmoor", 5, int(asked[0])))
 
 	a, b := <-first, <-second
 	if a.err != nil || a.p.Name != "Thrushmoor" {
