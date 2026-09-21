@@ -1133,6 +1133,13 @@ to find out.
     # Whose inventory offers are accepted: trusted, anyone, nobody.
     accept-inventory = trusted
 
+    # How long a silence makes the next remark from a trusted person a
+    # fresh conversation -- the one told, in a line, that things have
+    # gone wrong since.  Long rather than short: what it guards against
+    # is an avatar that opens every other remark with the same
+    # complaint.
+    error-gap = 1h
+
     # Whether somebody who is not trusted is told their command was
     # refused, or simply not answered.
     answer-strangers = no
@@ -1195,9 +1202,47 @@ so an apostrophe in an inventory name is an apostrophe -- and the words
 are an argv. There is no expansion, no redirection and no second
 program.
 
+### Asking what has gone wrong
+
+`:errors` is what an avatar has to say about itself. It lists the
+failures it has kept — the last 50 — newest at the bottom, each with
+how long ago it was:
+
+    :errors
+    3 hours ago: could not send the answer to somebody: connection reset
+    12 minutes ago: could not keep the context for somebody: no such slot
+
+`:errors clear` forgets them.
+
+The log file is still the record and still has everything, in order and
+across restarts. What this is for is the one person who cannot read
+that file: whoever is standing in the virtual world talking to the
+avatar, wondering why it has been quiet. An avatar that has been
+failing for hours looks exactly like one with nothing to say, and there
+was no way from in-world to tell those apart.
+
 ### What it does unasked
 
-Two things, and only two.
+Three things, and only three.
+
+**It tells an admin, once, that something has gone wrong.** On the
+first remark of a fresh conversation from somebody trusted — after a
+silence longer than `error-gap`, an hour by default — the avatar sends
+one line before anything else:
+
+    (3 things have gone wrong since we last spoke -- say :errors)
+
+One line and not the failures themselves. An avatar is in character and
+a page of daemon diagnostics is not; when things are going badly the
+list is long, and a conversation that opens with twenty lines is one
+nobody reads; and the detail is one command away. It goes as its own
+message rather than on the front of the reply, because the reply is
+paced to the speed of somebody typing and this is not.
+
+Only somebody trusted is told, and only once: reading them with
+`:errors` counts as being told, and so does the notice itself. Silence
+of less than `error-gap` is the same conversation, and somebody working
+with an avatar all afternoon has heard it already.
 
 **It keeps the avatars attached.** `slgod` supervises the grid session
 and reconnects one that drops; `slbotd` asks for the session, attaches,

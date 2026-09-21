@@ -184,6 +184,14 @@ func (b *bot) arrived(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync.
 
 	text := strings.TrimSpace(im.Text)
 	prefix := b.d.cfg.Prefix
+
+	// Before anything else this remark leads to, and before the model
+	// is asked, since the whole value of it is being told without
+	// having asked.  It goes as its own message rather than on the
+	// front of the reply: the reply is in character and paced to the
+	// speed of somebody typing, and this is neither.
+	b.reportTrouble(ctx, s, im)
+
 	if !strings.HasPrefix(text, prefix) {
 		b.chatf("%s says: %s", b.whoSaid(s, im), text)
 		b.converse(ctx, s, im, jobs)
@@ -256,7 +264,7 @@ func (b *bot) obey(ctx context.Context, s *sl.Session, im *sl.IM, line string) {
 	send, cancel2 := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel2()
 	if err := sendReply(send, s, im.From, text, b.d.cfg.ReplyLimit); err != nil {
-		b.logf("could not answer %s: %v", b.whoSaid(s, im), err)
+		b.errf("could not answer %s: %v", b.whoSaid(s, im), err)
 	}
 }
 
@@ -314,7 +322,7 @@ func (b *bot) offered(ctx context.Context, s *sl.Session, im *sl.IM) {
 	accept, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if err := offer.Accept(accept, msg.UUID{}); err != nil {
-		b.logf("could not accept %q from %s: %v", what, who, err)
+		b.errf("could not accept %q from %s: %v", what, who, err)
 		return
 	}
 	b.logf("accepted %q from %s", what, who)
@@ -337,8 +345,41 @@ func (b *bot) say(ctx context.Context, s *sl.Session, to msg.UUID, text string) 
 	send, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := s.SendIM(send, to, text); err != nil {
-		b.logf("could not send to %s: %v", to, err)
+		b.errf("could not send to %s: %v", to, err)
 	}
+}
+
+// reportTrouble tells an admin, once, that things have gone wrong.
+//
+// Only somebody trusted, because it is a report about the daemon and
+// means nothing to anybody else -- and because an avatar reciting its
+// own faults to a stranger is both out of character and more than they
+// should be told about the machine it runs on.
+//
+// Only on a FRESH approach: after a silence longer than error-gap, or
+// the first thing this person has ever said to this avatar.  Somebody
+// working with an avatar all afternoon has been told already.
+//
+// Whether it is fresh is decided for every remark, command or not, so
+// that the reckoning of when somebody last spoke does not depend on
+// what they said.
+func (b *bot) reportTrouble(ctx context.Context, s *sl.Session, im *sl.IM) {
+	quiet, known := b.sinceSeen(im.From, time.Now())
+	if !b.d.cfg.Trusts(im.From, im.FromName) {
+		return
+	}
+	if known && quiet < b.d.cfg.ErrorGap {
+		return
+	}
+	if b.trouble.unreported() == 0 {
+		return
+	}
+	line := troubleNotice(b.trouble.noteReported(), b.d.cfg.Prefix)
+	if line == "" {
+		return
+	}
+	b.logf("told %s about what has gone wrong", b.whoSaid(s, im))
+	b.say(ctx, s, im.From, line)
 }
 
 // ------------------------------------------------------------ conversation
@@ -414,7 +455,7 @@ func (b *bot) answer(ctx context.Context, s *sl.Session, im *sl.IM, who string) 
 	started := time.Now()
 	text, err := b.d.chat.Reply(run, b.name, im.From, im.FromName, im.Text)
 	if err != nil {
-		b.logf("could not answer %s: %v", who, err)
+		b.errf("could not answer %s: %v", who, err)
 		return
 	}
 	b.logf("answered %s in %s: %s", who, time.Since(started).Round(time.Millisecond), text)
@@ -430,7 +471,7 @@ func (b *bot) answer(ctx context.Context, s *sl.Session, im *sl.IM, who string) 
 	send, cancel2 := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel2()
 	if err := sendReply(send, s, im.From, text, b.d.cfg.ChatReply); err != nil {
-		b.logf("could not send the answer to %s: %v", who, err)
+		b.errf("could not send the answer to %s: %v", who, err)
 	}
 }
 

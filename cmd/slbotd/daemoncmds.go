@@ -55,6 +55,13 @@ var daemonCommands = map[string]*command{
 		group: groupDaemon,
 		run:   cmdTrusted,
 	},
+	"errors": {
+		params: "[clear]",
+		flags:  func() any { return new(helpOnly) },
+		brief:  "what has gone wrong with this avatar lately",
+		group:  groupDaemon,
+		run:    cmdErrors,
+	},
 }
 
 // asDepth is how many "as" commands may nest.
@@ -272,4 +279,31 @@ func cmdTrusted(ctx context.Context, r *req, out io.Writer, args []string) error
 	}
 	fmt.Fprintf(out, "inventory offers: %s\n", r.d.cfg.AcceptInventory)
 	return nil
+}
+
+// cmdErrors says what has gone wrong, and forgets it when asked.
+//
+// The log file has all of this and has it across restarts.  What this
+// is for is the one person who cannot read that file: whoever is in
+// the virtual world, talking to the avatar, wondering why it has been
+// quiet.
+func cmdErrors(ctx context.Context, r *req, out io.Writer, args []string) error {
+	rest, done, err := subOptions("errors", new(helpOnly), out, args)
+	if err != nil || done {
+		return err
+	}
+	switch {
+	case len(rest) == 0:
+		list := r.bot.Troubles()
+		fmt.Fprintln(out, renderTroubles(list, r.bot.trouble.dropped, time.Now()))
+		// Asked for is told about: somebody who has just read them
+		// does not want them announced again next time.
+		r.bot.trouble.noteReported()
+		return nil
+	case len(rest) == 1 && rest[0] == "clear":
+		fmt.Fprintf(out, "forgot %d.\n", r.bot.trouble.clear())
+		return nil
+	default:
+		return fmt.Errorf("errors takes nothing, or the word \"clear\"")
+	}
 }

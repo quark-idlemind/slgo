@@ -364,6 +364,19 @@ type bot struct {
 	// may overrule a deliberate logout.
 	wake  chan struct{}
 	force bool
+
+	// trouble is what has gone wrong with this avatar lately, for
+	// somebody who can only reach it by talking to it.  See trouble.go.
+	trouble troubles
+
+	// seen is when each person last said something to this avatar,
+	// which is how a remark after a long silence is known to be one.
+	//
+	// Kept here rather than read from the conversation store because
+	// an avatar with no model has no store and still has failures
+	// worth reporting to whoever drives it.
+	seenMu sync.Mutex
+	seen   map[msg.UUID]time.Time
 }
 
 func newBot(d *daemon, name string) *bot {
@@ -383,7 +396,36 @@ func newBot(d *daemon, name string) *bot {
 		st:       stateStarting,
 		since:    time.Now(),
 		wake:     make(chan struct{}, 1),
+		seen:     map[msg.UUID]time.Time{},
 	}
+}
+
+// noteTrouble files a failure against the avatar it belongs to.
+//
+// An avatar this daemon does not hold is not an error here: the name
+// came from a conversation, the log line has already been written, and
+// there is simply nobody to tell.
+func (d *daemon) noteTrouble(avatar, text string) {
+	if b, ok := d.bots[avatar]; ok {
+		b.trouble.add(text)
+	}
+}
+
+// sinceSeen is how long it has been since this person last said
+// anything to this avatar, and whether they ever have.
+//
+// Recording the time is the caller's business, once it has decided the
+// remark is one worth counting: a typing notification is not somebody
+// speaking, and treating it as such would mean nobody was ever away.
+func (b *bot) sinceSeen(who msg.UUID, now time.Time) (time.Duration, bool) {
+	b.seenMu.Lock()
+	defer b.seenMu.Unlock()
+	last, ok := b.seen[who]
+	b.seen[who] = now
+	if !ok {
+		return 0, false
+	}
+	return now.Sub(last), true
 }
 
 // Name is the profile this attendant holds.

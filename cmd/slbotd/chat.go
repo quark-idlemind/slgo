@@ -408,6 +408,11 @@ type Chatter struct {
 	slots *slotPool
 	logf  func(string, ...any)
 
+	// troubled is told about a failure that belongs to one avatar, so
+	// that whoever drives that avatar can ask it what has gone wrong.
+	// Nil is a Chatter nobody is watching, which is what a test has.
+	troubled func(avatar, text string)
+
 	// props is what the server said about itself, asked once and kept.
 	// It is asked lazily because the model may well be started after
 	// this daemon: a slbotd that refused to run until llama-server was
@@ -491,6 +496,16 @@ func (c *Chatter) ready(ctx context.Context) (*Props, error) {
 	return c.props, nil
 }
 
+// errf logs a failure that belongs to one avatar and keeps it where
+// that avatar's admin can ask for it.  See trouble.go.
+func (c *Chatter) errf(avatar, format string, args ...any) {
+	text := fmt.Sprintf(format, args...)
+	c.logf("%s: %s", avatar, text)
+	if c.troubled != nil {
+		c.troubled(avatar, text)
+	}
+}
+
 // Backstory is what an avatar was given to be, talking to this person.
 //
 // Who is being spoken to is part of the question because the
@@ -517,7 +532,7 @@ func (c *Chatter) Backstory(avatar string, who msg.UUID, name string) string {
 	}
 	text, err := readCharacter(path, who, name)
 	if err != nil {
-		c.logf("%s has no backstory: %v", avatar, err)
+		c.errf(avatar, "no backstory: %v", err)
 		return ""
 	}
 	return text
@@ -585,8 +600,7 @@ func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, 
 		// Not fatal, and not even unusual: a server started without
 		// --slot-save-path refuses every one of these.  The
 		// conversation goes on; it is only slower to pick up.
-		c.logf("%s: could not keep the context for %s: %v",
-			conv.Avatar, conv.WithName, err)
+		c.errf(conv.Avatar, "could not keep the context for %s: %v", conv.WithName, err)
 		conv.State, conv.By = "", ""
 	} else {
 		conv.State, conv.By = conv.stateName(), fingerprint
@@ -594,8 +608,7 @@ func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, 
 	}
 
 	if err := c.store.Save(conv); err != nil {
-		c.logf("%s: could not write the conversation with %s: %v",
-			conv.Avatar, conv.WithName, err)
+		c.errf(conv.Avatar, "could not write the conversation with %s: %v", conv.WithName, err)
 	}
 	return answer.Text, nil
 }
@@ -624,7 +637,7 @@ func (c *Chatter) place(ctx context.Context, conv *Conversation, slot int, finge
 		}
 	}
 	if err := c.llm.EraseSlot(ctx, slot); err != nil {
-		c.logf("%s: could not clear slot %d: %v", conv.Avatar, slot, err)
+		c.errf(conv.Avatar, "could not clear slot %d: %v", slot, err)
 	}
 }
 
@@ -780,8 +793,8 @@ func (c *Chatter) compact(ctx context.Context, conv *Conversation, slot int) {
 	})
 	if err != nil || strings.TrimSpace(said.Text) == "" {
 		if conv.Trim(c.cfg.ChatContext) {
-			c.logf("%s: could not summarise the conversation with %s (%v); "+
-				"dropped the oldest exchanges instead", conv.Avatar, conv.WithName, err)
+			c.errf(conv.Avatar, "could not summarise the conversation with %s (%v); "+
+				"dropped the oldest exchanges instead", conv.WithName, err)
 		}
 		return
 	}
@@ -917,7 +930,7 @@ func (c *Chatter) Remember(avatar string, who msg.UUID, name, said string) bool 
 	}
 	conv.Add("assistant", said, time.Now())
 	if err := c.store.Save(conv); err != nil {
-		c.logf("%s: could not record what was said to %s elsewhere: %v", avatar, name, err)
+		c.errf(avatar, "could not record what was said to %s elsewhere: %v", name, err)
 		return false
 	}
 	return true

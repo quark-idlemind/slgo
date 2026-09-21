@@ -1215,14 +1215,24 @@ nothing typed into a viewer reaches a shell. Which avatar a run is for
 travels in `SLGO_AGENT`, so `:as builder slbench ...` measures as
 builder.
 
-Two things happen unasked and only two. The avatars are kept attached
--- though a session somebody logged out *on purpose* is left alone,
-because slgod refuses to restart one and the refusal is the point;
-`:host --force` is how a person says they have checked. And inventory
-offered by a trusted avatar is accepted, because an offer nobody
-answers stays pending for ever. An offer from anybody else is left
-waiting rather than declined, so a person can still answer it from a
-viewer.
+`:errors` is what an avatar has to say about itself -- the failures it
+has kept, newest last, each with how long ago it was, and `:errors
+clear` forgets them. The log file is still the record; this is for the
+one person who cannot read it, standing in the virtual world wondering
+why the avatar has been quiet. An avatar that has been failing for
+hours looks exactly like one with nothing to say.
+
+Three things happen unasked and only three. The avatars are kept
+attached -- though a session somebody logged out *on purpose* is left
+alone, because slgod refuses to restart one and the refusal is the
+point; `:host --force` is how a person says they have checked.
+Inventory offered by a trusted avatar is accepted, because an offer
+nobody answers stays pending for ever; an offer from anybody else is
+left waiting rather than declined, so a person can still answer it from
+a viewer. And the first remark of a fresh conversation from somebody
+trusted -- after `error-gap`, an hour by default -- is answered first
+with one line saying how many things have gone wrong since, so that
+finding out does not depend on thinking to ask.
 
 An answer goes back as instant messages, which hold about a kilobyte
 each and are throttled per agent, so it is composed in full, cut at a

@@ -113,6 +113,16 @@ type Config struct {
 	// somebody may reasonably have either without the other.
 	Chat []string
 
+	// ErrorGap is how long a silence makes the next remark from a
+	// trusted person a FRESH approach -- the one that is told, in a
+	// line, that things have gone wrong since.
+	//
+	// Long rather than short.  What it guards against is an avatar
+	// that opens every other remark with the same complaint; somebody
+	// working with an avatar all afternoon has already been told, and
+	// asks for the detail when they want it.
+	ErrorGap time.Duration
+
 	// Backstory is where each avatar's character is written, by
 	// profile: a file, or a directory holding one character per person
 	// it talks to.  See character.go for what a directory may hold.
@@ -268,6 +278,7 @@ func DefaultConfig() Config {
 		ChatKeep:     6,
 		ChatSummary:  200,
 		ChatOwn:      8,
+		ErrorGap:     time.Hour,
 		ReadCPS:      23.0,
 		TypeCPS:      3.2,
 		AvatarRead:   map[string]float64{},
@@ -523,6 +534,12 @@ func parseConfig(r io.Reader) (Config, error) {
 				return c, fmt.Errorf("line %d: chat names nobody", n)
 			}
 			c.Chat = append(c.Chat, value)
+		case "error-gap", "error_gap":
+			d, err := time.ParseDuration(value)
+			if err != nil || d < 0 {
+				return c, fmt.Errorf("line %d: error-gap wants a duration, got %q", n, value)
+			}
+			c.ErrorGap = d
 		case "backstory":
 			who, path, ok := strings.Cut(value, " ")
 			who, path = strings.TrimSpace(who), strings.TrimSpace(path)
