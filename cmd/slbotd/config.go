@@ -113,6 +113,15 @@ type Config struct {
 	// somebody may reasonably have either without the other.
 	Chat []string
 
+	// ChatGap is how long a silence has to be before an avatar is told
+	// about it.  Below it the pause is not worth remarking on and
+	// saying so would be an avatar that notices every coffee break.
+	//
+	// It does not touch what is remembered.  Nothing is dropped, no
+	// conversation is started again; the avatar is simply told that
+	// time passed, in the same conversation it was already having.
+	ChatGap time.Duration
+
 	// ErrorGap is how long a silence makes the next remark from a
 	// trusted person a FRESH approach -- the one that is told, in a
 	// line, that things have gone wrong since.
@@ -278,6 +287,7 @@ func DefaultConfig() Config {
 		ChatKeep:     6,
 		ChatSummary:  200,
 		ChatOwn:      8,
+		ChatGap:      time.Hour,
 		ErrorGap:     time.Hour,
 		ReadCPS:      23.0,
 		TypeCPS:      3.2,
@@ -534,6 +544,12 @@ func parseConfig(r io.Reader) (Config, error) {
 				return c, fmt.Errorf("line %d: chat names nobody", n)
 			}
 			c.Chat = append(c.Chat, value)
+		case "chat-gap", "chat_gap":
+			d, err := time.ParseDuration(value)
+			if err != nil || d < 0 {
+				return c, fmt.Errorf("line %d: chat-gap wants a duration, got %q", n, value)
+			}
+			c.ChatGap = d
 		case "error-gap", "error_gap":
 			d, err := time.ParseDuration(value)
 			if err != nil || d < 0 {

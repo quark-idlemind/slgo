@@ -1265,6 +1265,13 @@ what is used is that API. Generation goes through
 llama.cpp's own, and is what lets a conversation be put down and picked
 up again instead of being paid for from the beginning every time.
 
+An avatar with no sense of time invents one -- asked how long it had
+been, with nothing to go on, the model said "just a few days" four
+times out of four. So a conversation quiet for longer than `chat-gap`
+carries the elapsed time on the next remark, in parentheses, where it
+is sent but not stored: nothing is forgotten, the kv cache prefix is
+untouched, and the record still holds what the person actually wrote.
+
 The conversation is kept as text, which is the record. The kv cache is
 an accelerator and is treated as disposable: it is welded to one model,
 one quantisation, one context size and one server build, and the server

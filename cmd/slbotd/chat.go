@@ -81,8 +81,28 @@ import (
 // Short on purpose.  A long instruction here competes with the
 // backstory for the model's attention, and the backstory is the part
 // somebody wrote.
+//
+// The third sentence is the price of the gap hint working at all, and
+// it was measured rather than assumed.  Given the elapsed time and
+// nothing else, this model class mentioned it in NONE of thirty
+// replies -- three placements, ten each.  Asked outright how long it
+// had been it answered from the hint, so the number IS reaching it and
+// it simply will not volunteer it.
+//
+// With this sentence in front, about half of twenty-five replies
+// remarked on a three-day absence in their own words ("Three days,
+// that's a while"), and three different wordings of the instruction
+// did not differ enough to choose between.  Half, not all: this is an
+// improvement on inventing a duration, not a guarantee, and about one
+// reply in twenty-five contradicted the hint outright.  A better model
+// is the fix for that, not a longer sentence here.
+//
+// It is conditional by its own wording, so it costs nothing on the
+// turns where no gap is offered -- which is most of them, since
+// nothing is sent below ChatGap.
 const Medium = "You are speaking through instant messages in a virtual world. " +
-	"Reply in a few sentences at most, in character, as speech rather than prose."
+	"Reply in a few sentences at most, in character, as speech rather than prose. " +
+	"If you are told how long it has been since they last wrote, remark on it."
 
 // Turn is one thing said.
 type Turn struct {
@@ -178,6 +198,47 @@ func (c *Conversation) Prompt(backstory, said string, separate bool) []Message {
 	}
 	out = append(out, Message{Role: "user", Content: said})
 	return out
+}
+
+// Paused is how long this conversation has been quiet, when that is
+// long enough to be worth telling the avatar about.
+//
+// A conversation nobody has said anything in yet has not paused; it
+// has not started.  And the threshold is a floor and not a memory: the
+// turns, the summary and the kept context are all exactly as they
+// were, whatever this says.  The avatar is being told that time
+// passed, in the conversation it was already having.
+func (c *Conversation) Paused(floor time.Duration, now time.Time) (time.Duration, bool) {
+	if c.Spoke.IsZero() || len(c.Turns) == 0 || floor <= 0 {
+		return 0, false
+	}
+	d := now.Sub(c.Spoke)
+	if d < floor {
+		return 0, false
+	}
+	return d, true
+}
+
+// Gap is how the elapsed time is put to the model.
+//
+// On the new remark and nowhere else.  Everything before the last
+// message is the cached prefix -- the backstory, the memory, the turns
+// -- and a sentence up there that changes every turn would invalidate
+// the whole conversation's kv cache on every single reply, which is
+// the one expensive mistake available here.  On the tail it costs
+// nothing that was not already being processed, and lands where a
+// model weighs hardest.
+//
+// It is also sent and not STORED: Prompt is given this and Add is
+// given what the person actually wrote, so the hint never enters the
+// record, never reaches the summariser, and cannot come back later as
+// something they said.
+//
+// "It has been X" rather than "X have passed", because X is sometimes
+// "an hour" and sometimes "3 days" and only one of those phrasings
+// survives both.
+func Gap(d time.Duration) string {
+	return fmt.Sprintf("(It has been %s since they last wrote to you.)", ago(d))
 }
 
 // Add records something said.
@@ -573,8 +634,15 @@ func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, 
 		c.compact(ctx, conv, slot)
 	}
 
+	// What is SENT, which may carry the pause; what is stored is still
+	// what the person wrote.  See Gap.
+	asked := said
+	if d, ok := conv.Paused(c.cfg.ChatGap, time.Now()); ok {
+		asked = Gap(d) + "\n\n" + said
+	}
+
 	answer, err := c.llm.Chat(ctx, Ask{
-		Messages:    conv.Prompt(backstory, said, c.separateMemory(ctx)),
+		Messages:    conv.Prompt(backstory, asked, c.separateMemory(ctx)),
 		Slot:        slot,
 		MaxTokens:   c.cfg.ChatTokens,
 		Temperature: c.cfg.ChatTemp,

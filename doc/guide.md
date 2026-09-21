@@ -1133,6 +1133,11 @@ to find out.
     # Whose inventory offers are accepted: trusted, anyone, nobody.
     accept-inventory = trusted
 
+    # How long a conversation has to have been quiet before the avatar
+    # is told about it.  Nothing is forgotten at this threshold; it is
+    # only how long a pause has to be to be worth remarking on.
+    chat-gap = 1h
+
     # How long a silence makes the next remark from a trusted person a
     # fresh conversation -- the one told, in a line, that things have
     # gone wrong since.  Long rather than short: what it guards against
@@ -1441,6 +1446,46 @@ their characters have in common, and each person's kept context is
 fingerprinted with the character *they* were answered under. Editing one
 person's file costs that one conversation its cache rather than every
 conversation that avatar is holding.
+
+### Noticing that time has passed
+
+An avatar with no sense of time invents one. Asked how long it had
+been, with nothing to go on, the model said "just a few days" in four
+tries out of four — and on the live grid, after fourteen minutes of
+silence, one said "yes, just a few minutes late".
+
+So when a conversation has been quiet for longer than `chat-gap` — an
+hour by default — the next remark carries the elapsed time:
+
+    (It has been 3 days since they last wrote to you.)
+
+    Hello again.
+
+**Nothing is forgotten by this.** The turns, the summary and the kept
+context are exactly as they were; the avatar is told that time passed
+in the conversation it was already having, not given a new one.
+
+It rides on the **remark** and not in the system prompt, for two
+reasons. Everything before the last message is the cached prefix, and a
+sentence up there that changes every turn would throw away the whole
+conversation's kv cache on every single reply. And it is *sent* rather
+than *stored* — what goes into the record is what the person actually
+wrote, so the hint never reaches the summariser and cannot come back
+later as something they said.
+
+The hint alone does nothing at all: measured against a 3B, the elapsed
+time offered three different ways was mentioned in **none of thirty**
+replies, though asked outright the model could report it, so it was
+landing and simply would not volunteer it. What makes it work is one
+sentence in `Medium`, which every avatar gets:
+
+> If you are told how long it has been since they last wrote, remark on it.
+
+With that, about half of replies remark on a long absence in their own
+words — *"Three days, that's a while. How are you holding up?"* Half,
+not all, and about one in twenty-five contradicts the hint outright.
+It is an improvement on inventing a duration rather than a guarantee,
+and a better model is the fix for the rest of it.
 
 ### Keeping a conversation, and what that costs
 
