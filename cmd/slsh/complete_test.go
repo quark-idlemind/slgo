@@ -13,21 +13,60 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
-// TestSplitLastDividesTheLineAtTheLastWord.
-func TestSplitLastDividesTheLineAtTheLastWord(t *testing.T) {
+// TestLastWordDividesTheLineAtTheWordUnderTheCursor.
+//
+// The quoted rows are the ones that matter.  A space inside quotes
+// belongs to the word, and the word comes back unquoted, because what
+// is being completed is the NAME -- the quotes are only how a name with
+// a space in it gets past the parser.
+func TestLastWordDividesTheLineAtTheWordUnderTheCursor(t *testing.T) {
 	for _, c := range []struct{ line, head, word string }{
 		{"", "", ""},
 		{"fea", "", "fea"},
 		{"cd Obj", "cd ", "Obj"},
 		{"cd ", "cd ", ""},
 		{"ls -l\tObj", "ls -l\t", "Obj"},
+
+		// A quote opened and not closed: the head keeps it, so what
+		// goes back replaces it rather than nesting inside it.
+		{`cd "Current Ou`, "cd ", "Current Ou"},
+		{`cd 'Current Ou`, "cd ", "Current Ou"},
+		// And closed, which is what a previous tab will have left.
+		{`cd "Current Outfit/"`, "cd ", "Current Outfit/"},
+		// A quoted word is one word however many spaces are in it.
+		{`ls -l "My Outfits/A Sunday`, "ls -l ", "My Outfits/A Sunday"},
+		// Quoting part of a word is the parser's rule too.
+		{`cd "Current Outfit"/Sen`, "cd ", "Current Outfit/Sen"},
 	} {
-		head, word := splitLast(c.line)
+		head, word := lastWord(c.line)
 		if head != c.head || word != c.word {
-			t.Errorf("splitLast(%q) = %q, %q; want %q, %q", c.line, head, word, c.head, c.word)
+			t.Errorf("lastWord(%q) = %q, %q; want %q, %q", c.line, head, word, c.head, c.word)
+		}
+	}
+}
+
+// TestQuoteWordQuotesOnlyWhatHasTo.
+func TestQuoteWordQuotesOnlyWhatHasTo(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"Objects/", "Objects/"},
+		{"probe", "probe"},
+		{"Current Outfit/", `"Current Outfit/"`},
+		{"a\tb", "\"a\tb\""},
+		// A redirection character would end the word without quotes.
+		{"a>b", `"a>b"`},
+		// One kind of quote is written inside the other.
+		{`it"s`, `'it"s'`},
+		{"it's", `"it's"`},
+		// Both kinds cannot be written as one word at all, so it is
+		// handed back as it stands rather than mangled.
+		{`it's a "thing"`, `it's a "thing"`},
+	} {
+		if got := quoteWord(c.in); got != c.want {
+			t.Errorf("quoteWord(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -94,9 +133,7 @@ func TestCompletingAPathCarriesOnIntoAFolder(t *testing.T) {
 		t.Errorf("completing a folder gave %q, want %q", got, want)
 	}
 
-	// Inside it, the part already settled is kept in front.  A name
-	// with a space in it is beyond this: the word being completed ends
-	// at the last space, so "Objects/a la" is completed as "la".
+	// Inside it, the part already settled is kept in front.
 	x.term.SetLine("ls Scripts" + sep + "pro")
 	x.complete(ctx)
 	if got, want := x.term.Line(), "ls Scripts"+sep+"probe"; got != want {
@@ -160,5 +197,60 @@ func TestCommonPrefixOfNothingIsNothing(t *testing.T) {
 	}
 	if got := commonPrefix([]string{"give", "help"}); got != "" {
 		t.Errorf("words with nothing in common should share nothing, got %q", got)
+	}
+}
+
+// TestCompletingANameWithASpaceQuotesIt.
+//
+// The fault this is about: "Current Outfit" is a folder every avatar
+// has, and completing "Curr" used to put the whole name in unquoted,
+// where the parser read it as two arguments.  Tab took a line that was
+// being typed correctly and made it wrong, which is worse than tab
+// doing nothing at all.
+//
+// So the test is not only what the line says afterwards.  It is that
+// the line tab produced parses back to the one word tab meant, which
+// is the property that was broken.
+func TestCompletingANameWithASpaceQuotesIt(t *testing.T) {
+	ctx := context.Background()
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a8")
+	folder := msg.MustParseUUID("b14c7e57-7e57-c0de-2cfb-4466e4da0d79")
+	link := msg.MustParseUUID("e7cb7e57-7e57-c0de-df15-9ee8d2a3676d")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	addOutfitFolder(x, folder, link, "a hat", hat)
+
+	x.term.SetLine("cd An")
+	x.complete(ctx)
+	if got, want := x.term.Line(), `cd "An outfit/"`; got != want {
+		t.Fatalf("completing a folder with a space gave %q, want %q", got, want)
+	}
+	words, _, _, err := parse(x.term.Line())
+	if err != nil {
+		t.Fatalf("the line tab produced will not parse: %v", err)
+	}
+	if len(words) != 2 || words[1] != "An outfit/" {
+		t.Errorf("tab produced %q, which parses as %q", x.term.Line(), words)
+	}
+
+	// Tabbing again carries on inside it, from the quoted line the
+	// previous tab left behind.
+	x.complete(ctx)
+	if got, want := x.term.Line(), `cd "An outfit/a hat"`; got != want {
+		t.Fatalf("completing inside a quoted folder gave %q, want %q", got, want)
+	}
+	if words, _, _, err = parse(x.term.Line()); err != nil || len(words) != 2 {
+		t.Fatalf("the second line will not parse as one argument: %q %v", words, err)
+	}
+	if words[1] != "An outfit/a hat" {
+		t.Errorf("tab produced %q, which parses as %q", x.term.Line(), words[1])
+	}
+
+	// A quote the person opened is replaced rather than nested in.
+	x.term.SetLine(`cd "An ou`)
+	x.complete(ctx)
+	if got, want := x.term.Line(), `cd "An outfit/"`; got != want {
+		t.Errorf("completing inside a quote the person opened gave %q, want %q", got, want)
 	}
 }

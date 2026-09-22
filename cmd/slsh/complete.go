@@ -18,7 +18,7 @@ import (
 // first, an inventory path otherwise.
 func (sh *Shell) complete(ctx context.Context) {
 	line := sh.term.Line()
-	head, word := splitLast(line)
+	head, word := lastWord(line)
 
 	var options []string
 	if head == "" {
@@ -30,13 +30,15 @@ func (sh *Shell) complete(ctx context.Context) {
 	switch len(options) {
 	case 0:
 	case 1:
-		sh.term.SetLine(head + options[0])
+		sh.term.SetLine(head + quoteWord(options[0]))
 	default:
 		// A common prefix is progress even when the answer is not
 		// settled; showing the rest is what a shell does.
 		if p := commonPrefix(options); len(p) > len(word) {
-			sh.term.SetLine(head + p)
+			sh.term.SetLine(head + quoteWord(p))
 		}
+		// Shown unquoted.  These are for reading, and the quotes are
+		// machinery for getting the name past the parser.
 		sh.term.Print(strings.Join(options, "   "))
 	}
 }
@@ -77,14 +79,83 @@ func (sh *Shell) completePath(ctx context.Context, word string) []string {
 	return out
 }
 
-// splitLast divides a line into everything before the last word and the
-// last word itself.
-func splitLast(line string) (head, word string) {
-	i := strings.LastIndexAny(line, " \t")
-	if i < 0 {
-		return "", line
+// lastWord divides a line into everything before the word under the
+// cursor and that word, with its quoting taken off.
+//
+// Quote aware, because an inventory name may hold a space and a great
+// many do: "Current Outfit" is a folder every avatar has.  A split at
+// the last space finished that as "Outfit", and -- worse -- completing
+// "Curr" produced the whole name unquoted, which the parser then read
+// as two arguments.  Tab turned a correct line into a broken one, which
+// is the one thing a completion must never do.
+//
+// The head is returned verbatim, opening quote and all, so that what
+// goes back is head + a freshly quoted word: whatever the person had
+// started typing of the name is replaced rather than appended to.
+func lastWord(line string) (head, word string) {
+	start := 0
+	var quote rune
+	for i, r := range line {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '"' || r == '\'':
+			quote = r
+		case r == ' ' || r == '\t':
+			start = i + 1
+		}
 	}
-	return line[:i+1], line[i+1:]
+	return line[:start], unquoteWord(line[start:])
+}
+
+// unquoteWord takes the quoting off one word, the way the parser does.
+func unquoteWord(s string) string {
+	var b strings.Builder
+	var quote rune
+	for _, r := range s {
+		switch {
+		case quote != 0 && r == quote:
+			quote = 0
+		case quote != 0:
+			b.WriteRune(r)
+		case r == '"' || r == '\'':
+			quote = r
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// quoteWord puts a word back in a shape the parser reads as one word.
+//
+// Only when it has to.  Most names need nothing, and a line full of
+// quotes that earn nothing is harder to read and harder to edit.
+//
+// The quotes are closed even when the completion is a folder and there
+// is obviously more to type.  An unterminated quote is refused by the
+// parser outright -- "unclosed \" quote" -- so leaving one open would
+// mean tab produced a line that could not be run, and a person who
+// tabbed to a folder and pressed return is entitled to have that work.
+// Typing carries on after the closing quote perfectly well, since the
+// parser joins adjacent pieces: "Current Outfit/"Sen is one word.
+//
+// A name holding both kinds of quote cannot be written as one word in
+// this syntax at all.  It is offered unquoted rather than mangled; it
+// is also not typeable by hand, which is what ids are for.
+func quoteWord(s string) string {
+	if !strings.ContainsAny(s, " \t\"'><") {
+		return s
+	}
+	if !strings.Contains(s, `"`) {
+		return `"` + s + `"`
+	}
+	if !strings.Contains(s, "'") {
+		return "'" + s + "'"
+	}
+	return s
 }
 
 func matching(all []string, prefix string) []string {
