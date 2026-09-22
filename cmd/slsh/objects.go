@@ -106,7 +106,11 @@ func cmdGive(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return usageError("give", "which item to offer; a name with a space in it is one argument")
 	}
 
-	e, err := sh.entryAt(ctx, strings.Join(path, " "))
+	// thingAt and not entryAt: the id is going to the other person as
+	// the thing being offered, so a link is followed to what it points
+	// at.  Offering the link itself would hand over an id pointing into
+	// an inventory they cannot see.
+	e, err := sh.thingAt(ctx, strings.Join(path, " "))
 	if err != nil {
 		return err
 	}

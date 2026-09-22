@@ -73,7 +73,10 @@ func cmdGet(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if id, err := msg.ParseUUID(args[0]); err == nil {
 		asset, name = id, id.String()
 	} else {
-		e, err := sh.entryAt(ctx, args[0])
+		// thingAt: what is fetched is the texture at the other end of
+		// a link, whose own "asset" is an item id and not an asset at
+		// all.
+		e, err := sh.thingAt(ctx, args[0])
 		if err != nil {
 			return err
 		}

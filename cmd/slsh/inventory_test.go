@@ -1164,8 +1164,11 @@ func TestSaveTargetPinsWhatCanBeWrittenTo(t *testing.T) {
 			sl.Entry{Name: "home", Type: int(sl.AssetLandmark)}, 0, "nothing here uploads a landmark"},
 		{"a folder, whose type is what it likes to hold",
 			sl.Entry{Name: "Scripts", Folder: true, Type: int(sl.AssetLSLText)}, 0, "is a folder"},
-		{"a link, which is not the item it names",
-			sl.Entry{Name: "readme", Type: int(sl.AssetNotecard), IsLink: true}, 0, "is a link"},
+		// No link row: save follows one before it gets here, so what
+		// this sees is always the item at the far end.  It used to
+		// refuse a link with a sentence telling the reader to give
+		// the real path instead, which described the work rather than
+		// doing it.  TestSaveWritesThroughALink is the replacement.
 	} {
 		kind, err := saveTarget(c.e)
 		switch {

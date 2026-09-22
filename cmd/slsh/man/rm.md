@@ -95,5 +95,13 @@ counter.
     rm d8467e57-...
     rm --in lantern hello.lsl
 
+## A link is not followed
+
+A link is an inventory entry in its own right, and `rm` acts on the
+entry.  Deleting a link deletes the link, and leaves the item it
+pointed at alone.  An item may have links to it from several outfits,
+and following one here would reach past all of them to the item they
+share.
+
 See also: `emptytrash`, `mv`, `ls`, and `drop` for putting something
 into an object that `rm` can take out again.

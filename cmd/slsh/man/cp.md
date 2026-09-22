@@ -39,5 +39,12 @@ Into another folder, which is two steps:
     cp probe spare
     mv spare Objects/lanterns
 
+## A link is not followed
+
+A link is an inventory entry in its own right, and `cp` acts on the
+entry.  Copying a link makes another link.  An item may have links to
+it from several outfits, and following one here would reach past all
+of them to the item they share.
+
 See also: `mv`, `mkdir`, `rm`, `place` for putting a copy out into
 the world, and `give` for handing one to somebody else.

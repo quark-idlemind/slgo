@@ -232,7 +232,13 @@ func cmdDrop(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if err != nil {
 		return err
 	}
-	e, err := sh.entryAt(ctx, strings.Join(args[1:], " "))
+	// thingAt and not entryAt: the id is going into the object as the
+	// thing itself, so a link is followed to what it points at.  The
+	// viewer refuses this case outright instead -- "No giving away
+	// links", lltooldraganddrop.cpp:2147-2148 -- which is defensible,
+	// since a link inside an object points at nothing an object can
+	// reach.  Putting in what was meant is better than refusing.
+	e, err := sh.thingAt(ctx, strings.Join(args[1:], " "))
 	if err != nil {
 		return err
 	}
@@ -242,7 +248,7 @@ func cmdDrop(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	// The item itself, not the entry: what goes over the wire is every
 	// field of it, and anything left out is set to zero -- which for a
 	// permission mask means taking the rights away.
-	it, err := sh.s.FindItem(ctx, e.Parent, e.Name)
+	it, err := sh.itemAt(ctx, e)
 	if err != nil {
 		return err
 	}

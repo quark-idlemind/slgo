@@ -46,5 +46,12 @@ id beside each and an id may be given wherever a path is.
     mv probe "probe, the second"
     mv --in lantern hello.lsl greeter
 
+## A link is not followed
+
+A link is an inventory entry in its own right, and `mv` acts on the
+entry.  Renaming or moving a link renames or moves the link.  An item
+may have links to it from several outfits, and following one here
+would reach past all of them to the item they share.
+
 See also: `cp`, `mkdir`, `rm`, `ls`, and `drop` for putting an
 inventory item inside an object in the first place.

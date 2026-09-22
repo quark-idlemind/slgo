@@ -586,12 +586,18 @@ func addObjectItem(x *testShell, id msg.UUID, name string) {
 // in a listing of one distinguishes the two except the word "link" in
 // the type column.
 func addOutfitFolder(x *testShell, folder, link msg.UUID, name string, to msg.UUID) {
+	addLinkFolder(x, folder, link, name, to, sl.AssetObject)
+}
+
+// addLinkFolder is addOutfitFolder for a link to something other than
+// an object, since a link may point at any kind of item.
+func addLinkFolder(x *testShell, folder, link msg.UUID, name string, to msg.UUID, kind sl.AssetType) {
 	x.grid.mu.Lock()
 	defer x.grid.mu.Unlock()
 	x.grid.inv.Dirs = append(x.grid.inv.Dirs, &invDir{
 		ID: folder, Name: "An outfit", Items: []*invItem{{
 			ID: link, Name: name, Asset: to, IsLink: true,
-			Type: int(sl.AssetLink), InvType: int(sl.AssetObject),
+			Type: int(sl.AssetLink), InvType: int(kind),
 		}},
 	})
 }

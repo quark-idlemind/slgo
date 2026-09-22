@@ -49,5 +49,20 @@ the file is called after the uuid.
     get -o /tmp/wall.png d8467e57-...
     get --raw Textures/lantern
 
+## A link is followed
+
+An outfit folder holds links rather than items.  A link carries the
+same name as the thing it points at, and a listing tells the two apart
+only by the word `link` in the type column of `ls -l`, so a path taken
+from `My Outfits` names a link almost every time.
+
+`get` follows one to the item at the other end, which is what the id
+it sends has to be: the grid has no object for a link's id and answers
+an id it does not recognise with silence rather than with a refusal.
+
+A link this inventory cannot follow is refused, naming the id it
+looked for.  A link outlives what it pointed at, so an outfit put
+together years ago may name things that have since been deleted.
+
 See also: `put`, `cat` for a notecard or a script, and `ls` for what
 is there.

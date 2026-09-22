@@ -164,7 +164,9 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 			"to move something already rezzed, that is \"move NAME X Y Z\"")
 	}
 
-	e, err := sh.entryAt(ctx, args[0])
+	// thingAt and not entryAt: the id is going to the grid as the thing
+	// to rez, so a link is followed to what it points at.
+	e, err := sh.thingAt(ctx, args[0])
 	if err != nil {
 		return err
 	}
@@ -173,7 +175,7 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	}
 	// An Entry says where a thing sits; RezFromInventory wants the item
 	// itself, with its asset and permissions on it.
-	it, err := sh.s.FindItem(ctx, e.Parent, e.Name)
+	it, err := sh.itemAt(ctx, e)
 	if err != nil {
 		return err
 	}

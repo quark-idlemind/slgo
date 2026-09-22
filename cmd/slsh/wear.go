@@ -284,19 +284,14 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	}
 
 	path := strings.Join(args, " ")
-	e, err := sh.entryAt(ctx, path)
+	// thingAt and not entryAt: the id is going to the grid as the thing
+	// to put on, so a link is followed to what it points at.
+	e, err := sh.thingAt(ctx, path)
 	if err != nil {
 		return err
 	}
 	if e.Folder {
 		return fmt.Errorf("%s is a folder; wear takes one object", path)
-	}
-	// Followed to the item, because an outfit folder holds nothing but
-	// links and that is where a person reads the name of the thing they
-	// want to put on.
-	e, err = sh.linkTarget(ctx, e)
-	if err != nil {
-		return err
 	}
 	// The item rather than the entry: what goes over the wire is the
 	// name, the description and every permission mask, and an entry

@@ -338,6 +338,39 @@ func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, []string
 	return sl.Entry{}, nil, fmt.Errorf("nothing here has the id %s", id)
 }
 
+// thingAt is what a path names, followed through a link if it is one.
+//
+// This and entryAt are the two ways to resolve a path, and which one a
+// command wants turns on a single question: is the id about to be sent
+// to the grid as a reference to the THING, or is the inventory entry
+// itself what is being operated on?
+//
+// wear, place, drop and give are all the first.  The grid has no idea
+// what a link is -- an id it has no object for is answered with silence
+// -- so a link's own id sent to it can only fail, and fail in the worst
+// way, without a word.  Those commands want thingAt.
+//
+// rm, mv and cp are the second, and must NOT follow a link.  Deleting a
+// link is deleting the link; a link resolved on the way into rm would
+// delete the item at the other end of it and leave every other link to
+// that item pointing at nothing.  Renaming one renames the link.  Those
+// commands want entryAt, and the line between the two is the reason
+// this is not simply folded into entryAt for everybody.
+//
+// ls and find want entryAt for a third reason: a link is a thing a
+// listing should show, since the word "link" in the type column is the
+// only way anyone can tell one from what it points at.
+//
+// A folder comes back untouched, so a command that refuses folders can
+// go on refusing them afterwards.
+func (sh *Shell) thingAt(ctx context.Context, path string) (sl.Entry, error) {
+	e, err := sh.entryAt(ctx, path)
+	if err != nil {
+		return sl.Entry{}, err
+	}
+	return sh.linkTarget(ctx, e)
+}
+
 // linkTarget is the entry a link points at, and the entry itself when
 // it is not a link.
 //
@@ -672,7 +705,9 @@ func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if len(args) != 1 {
 		return usageError("cat")
 	}
-	e, err := sh.entryAt(ctx, args[0])
+	// thingAt: what is read is the asset at the other end of a link,
+	// the way double-clicking a notecard link opens the notecard.
+	e, err := sh.thingAt(ctx, args[0])
 	if err != nil {
 		return err
 	}
@@ -739,14 +774,6 @@ func saveTarget(e sl.Entry) (sl.AssetType, error) {
 	if e.Folder {
 		return 0, fmt.Errorf("%s is a folder, and save writes one notecard or script", e.Name)
 	}
-	// A link carries the type of what it points at, so it would
-	// otherwise look exactly like the notecard it names -- and the
-	// write would go to the link's own item id, which is not where the
-	// text lives.
-	if e.IsLink {
-		return 0, fmt.Errorf("%s is a link and not the item itself; save writes the notecard "+
-			"or script the link points at, so give it that path", e.Name)
-	}
 	switch t := sl.AssetType(e.Type); t {
 	case sl.AssetNotecard:
 		return t, nil
@@ -788,7 +815,11 @@ func cmdSave(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if err != nil {
 		return err
 	}
-	e, err := sh.entryAt(ctx, strings.Join(args[1:], " "))
+	// thingAt: what is written is the notecard or script at the other
+	// end of a link.  This used to be a refusal that said to give the
+	// real path instead, which was describing the work rather than
+	// doing it.
+	e, err := sh.thingAt(ctx, strings.Join(args[1:], " "))
 	if err != nil {
 		return err
 	}
