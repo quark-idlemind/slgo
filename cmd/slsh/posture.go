@@ -30,6 +30,9 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/quark-idlemind/slgo/msg"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 // stand is held in a variable so that two names can share it.  See the
@@ -130,7 +133,23 @@ func cmdSit(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	// --wait and is not worth a second flag.
 	target, err := sh.objectNamed(ctx, rest[0], 0)
 	if err != nil {
-		return err
+		// A uuid needs no listing.  AgentRequestSit carries the id and
+		// the SIMULATOR resolves it; what the listing is for here is
+		// the local id, which sl.Sit uses for one thing only -- seeing
+		// that the avatar is already on that very object -- and can do
+		// without.
+		//
+		// It matters because the listing is not reliable.  Measured:
+		// a chair plainly in world, sat on ten minutes earlier, absent
+		// from a listing of 976 objects because the packet describing
+		// it had been dropped as undecodable (issue 012).  Refusing to
+		// sit on an object whose id is right there, for want of a
+		// description of it, is refusing to do a thing that works.
+		id, bad := msg.ParseUUID(rest[0])
+		if bad != nil {
+			return err
+		}
+		target = &sl.Object{ID: id}
 	}
 
 	seat, err := sh.s.Sit(ctx, target, wait)

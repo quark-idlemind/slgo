@@ -572,6 +572,12 @@ func (o *Objects) anchorLocked(local uint32) (msg.Vector3, bool) {
 // because that is the only name an object keeps, and the messages that
 // refer to one by local id alone are rare enough that a second index
 // would cost more to maintain than it saved.
+// ByLocal is byLocal, exported for the one caller outside this package
+// that has a local id and nothing else: a seated avatar names its seat
+// by local id and by nothing else, so answering "what is it sitting on"
+// means turning one into an object.  See server/seat.go.
+func (o *Objects) ByLocal(local uint32) (*Object, bool) { return o.byLocal(local) }
+
 func (o *Objects) byLocal(local uint32) (*Object, bool) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()

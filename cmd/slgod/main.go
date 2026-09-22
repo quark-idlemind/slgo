@@ -116,6 +116,22 @@ func main() {
 	}
 	log.Printf("machine %s, id0 %s (from %s)", mach.MAC, mach.ID0, machPath)
 
+	// Where each avatar was last sitting, so that one that was in a
+	// chair when its session ended is put back in it.  Set before any
+	// session comes up, because a session takes its copy when it is
+	// made.  See seats.go and server/seat.go.
+	//
+	// A file that cannot be READ stops the daemon.  Carrying on would
+	// forget every seat in it and then write the forgetting over the
+	// top, which is worse than saying so and letting somebody look.
+	if path, err := seatsPath(); err != nil {
+		log.Printf("not remembering seats: %v", err)
+	} else if seats, err := openSeats(path, log.Printf); err != nil {
+		log.Fatalf("cannot start: %v", err)
+	} else {
+		srv.SetSeats(seats)
+	}
+
 	// The logins that came up, so that the group loop below knows which
 	// profile each hosted session was made from.
 	//

@@ -188,6 +188,10 @@ func (h *Hosted) relay(p *msg.Packet) {
 	// answer to "take me home" is the session's business whether or
 	// not anybody is attached to hear it.  See home.go.
 	h.noteTeleportMessage(p)
+	// And where the simulator has just put this avatar down, which is
+	// the same kind of fact and is wanted for the same reason.  See
+	// seat.go.
+	h.noteSeatMessage(p)
 
 	h.mu.RLock()
 	if len(h.clients) == 0 {

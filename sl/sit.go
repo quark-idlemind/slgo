@@ -165,6 +165,13 @@ func (s Seat) String() string {
 	if s.Ground {
 		return "the ground"
 	}
+	// A seat nothing has described is known by its local id and by
+	// nothing else.  Object.String would print the zero id as though
+	// it were an id, which reads as an object whose key is all
+	// noughts rather than as one nobody has named.
+	if s.ID.IsZero() {
+		return fmt.Sprintf("something not described here (local %d)", s.Local)
+	}
 	return s.Object.String()
 }
 

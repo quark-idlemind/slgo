@@ -30,6 +30,19 @@ type fakeSim struct {
 	seen []string
 	peer *net.UDPAddr
 	seq  uint32
+
+	// bodies keeps the decoded body of each message, by name, for the
+	// tests that care WHICH thing a request named and not only that
+	// one went out.  Copied rather than kept, since the read buffer
+	// is reused for the next packet.
+	bodies map[string][][]byte
+}
+
+// sawBody is every body this sim received of that message, in order.
+func (f *fakeSim) sawBody(name string) [][]byte {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([][]byte(nil), f.bodies[name]...)
 }
 
 // testvilleHandle is where this sim says it is.  Any handle would do;
@@ -110,12 +123,18 @@ func (f *fakeSim) run() {
 		name := id.String()
 		f.mu.Lock()
 		f.seen = append(f.seen, name)
+		if f.bodies == nil {
+			f.bodies = map[string][][]byte{}
+		}
+		// After the message id, which is what Decode expects: the id
+		// is how the name was worked out and is not part of the
+		// message's own fields.
+		f.bodies[name] = append(f.bodies[name], append([]byte(nil), body[k:]...))
 		f.mu.Unlock()
 
 		if h.Reliable() {
 			f.sendRaw(msg.IDOf(&msg.PacketAck{}), ackBody(h.Sequence), 0)
 		}
-		_ = k
 
 		switch name {
 		case "UseCircuitCode":

@@ -61,6 +61,10 @@ type Server struct {
 	profiles Profiles
 	loginFor LoginFor
 
+	// seats is where a session's seat is remembered across a login;
+	// see seat.go.  Nil remembers nothing, which is the old behaviour.
+	seats Seats
+
 	// failures and inflight cover starting agents on demand: what did
 	// not work, and what is already being tried.
 	starts agentState
@@ -135,6 +139,12 @@ type Hosted struct {
 	homing      context.CancelFunc
 	homingID    uint64
 	homeAnswers chan homeAnswer
+
+	// seats is where this avatar's seat is remembered, and seating
+	// cancels the loop that restores and watches it.  Both nil when
+	// nothing is remembering.  See seat.go.
+	seats   Seats
+	seating context.CancelFunc
 
 	// rank is the order this session came up in, lowest first.  It is
 	// what makes the default deterministic; see Server.Default.
@@ -238,7 +248,7 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 		return nil, err
 	}
 
-	h := &Hosted{Name: name, login: login, clients: map[*Client]bool{}}
+	h := &Hosted{Name: name, login: login, clients: map[*Client]bool{}, seats: s.Seats()}
 
 	// Keeping the undecoded body is what lets the relay pass on a
 	// message it does not understand.
@@ -301,6 +311,10 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	// login server puts the avatar somewhere else when the home region
 	// is down, and says nothing about it afterwards.  See home.go.
 	h.keepHome(ctx)
+	// And a profile that was sitting on something when its last session
+	// ended comes back standing, because nothing on the grid remembers
+	// a seat.  See seat.go.
+	h.keepSeat(ctx)
 	return h, nil
 }
 
@@ -452,6 +466,9 @@ func (h *Hosted) supervise(ctx context.Context) {
 			// it may have landed in the wrong place for the same
 			// reason the first one could have.  See home.go.
 			h.keepHome(ctx)
+			// A reconnect leaves the avatar standing exactly as a
+			// first login does, so the seat is restored again too.
+			h.keepSeat(ctx)
 			// The identity is the same avatar but a new
 			// session: a different session id, circuit code
 			// and set of capability URLs.  Clients holding
@@ -533,7 +550,7 @@ func (s *Server) Add(name string, a *agent.Agent) (*Hosted, error) {
 		return nil, fmt.Errorf("server: %q is already hosted", name)
 	}
 	s.ranked++
-	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}, rank: s.ranked}
+	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}, rank: s.ranked, seats: s.seats}
 	s.agents[name] = h
 	return h, nil
 }

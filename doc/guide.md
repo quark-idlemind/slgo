@@ -231,6 +231,45 @@ Profiles that say anything else are left alone. `start = last` means
 where the avatar was, and dragging that avatar home would be the daemon
 overruling the profile rather than honouring it.
 
+### Where an avatar was sitting
+
+An avatar that was sitting on something when its session ended comes
+back standing.  Nothing on the grid remembers a seat: a sit is a
+request the simulator acts on and does not record, and no message asks
+"what is this avatar on".  So slgod remembers, and sits the avatar down
+again at the next login.
+
+It is written down when the avatar sits, and forgotten when it stands,
+so there is nothing to configure and no list to keep up to date.  The
+file is `~/.config/slgod/seats`, one profile and one object id per
+line:
+
+    # What each avatar was last sitting on, written by slgod.
+    # One profile and one object id per line.
+    example 45557e57-...
+
+Comment a line out to leave that avatar standing at its next login.
+Deleting a line does the same and lasts until the next time it sits.
+
+The seat is learned two ways, because neither alone is enough.  The
+simulator tells an avatar that has just sat down where it has been put,
+and that message carries the object's id already resolved -- which is
+the good source, since it arrives however the sit was asked for and
+needs nothing looked up.  The other is a watch that notices the avatar
+standing up, for which there is no message at all.
+
+Putting it back takes a few tries.  A region does not hand over its
+contents at once, and a sit naming an object the simulator has not
+described yet is answered with nothing, so one request at the moment of
+login would miss by seconds and look like a chair that had gone.  What
+counts as having worked is the avatar being parented to something --
+not to a thing slgod can name, which is a slower and different
+question.
+
+If the seat is really gone, taken home by its owner, the attempts run
+out and a line says so rather than leaving somebody to wonder why an
+avatar is standing where it used to sit.
+
 ### The group an avatar acts as
 
     slgod -group "Example Builders" example
