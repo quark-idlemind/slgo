@@ -198,6 +198,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -293,8 +294,11 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if e.Folder {
 		return fmt.Errorf("%s is a folder; wear takes one object", path)
 	}
-	if err := attachable(e); err != nil {
-		return err
+	// What it is decides how it goes on.  An object is attached; a
+	// shirt or a skin is not an object and is not attached at all --
+	// see wearWearable, and sl/wearable.go for why.
+	if sl.IsWearable(sl.AssetType(e.Type)) {
+		return sh.wearWearable(ctx, out, e, o.Replace)
 	}
 	// The item rather than the entry: what goes over the wire is the
 	// name, the description and every permission mask, and an entry
@@ -446,30 +450,44 @@ func attachPointArg(text string) (int, error) {
 		"as in \"left hand\" or \"HUD top right\", or give its number", text)
 }
 
-// attachable refuses what cannot be put on by attaching it.
+// wearWearable puts on something that is not an object.
 //
-// A shirt, a skin, a shape or a pair of eyes is a system wearable,
-// which is not an object and does not go on an attachment point.  It
-// goes on with AgentIsNowWearing, which nothing here sends.
+// A wearable is worn by linking it into the Current Outfit folder and
+// asking for a rebake; there is no attaching and no attachment point,
+// so there is no point to report.  What is reported instead is the slot
+// -- "worn as shirt" -- because that is the thing a person is choosing
+// between when they have four shirts and can wear one of each layer.
 //
-// Refused up front because the alternative is the worst shape a failure
-// takes on this protocol.  Measured: a body part sent in
-// RezSingleAttachmentFromInv is ignored by the simulator without a word
-// of complaint, so the command waits out its whole forty seconds and
-// then reports that the region never agreed the thing was worn -- every
-// clause of which is true, and none of which is the reason.  The same
-// silence that a link's id gets, for the same reason: an id the
-// attachment code has no object for.
-func attachable(e sl.Entry) error {
-	switch sl.AssetType(e.Type) {
-	case sl.AssetClothing, sl.AssetBodypart:
-		return fmt.Errorf("%s is %s, and wear attaches objects; %s is a system wearable, "+
-			"which goes on by a message nothing here sends yet -- the simulator ignores a "+
-			"request to attach one and answers nothing at all, so this would wait out its "+
-			"whole timeout and then report that the region never agreed. "+
-			"\"ls -L \\\"/Current Outfit\\\"\" lists what is worn, clothing and attachments alike",
-			e.Name, aKind(kindOf(e)), aKind(kindOf(e)))
+// The slot is also why a body part replaces whether or not --replace
+// was given.  Two skins is not a state an avatar can be in, so a bare
+// wear of one is a replace however it is worded, and saying what came
+// off is the honest way to do that rather than the quiet way.
+func (sh *Shell) wearWearable(ctx context.Context, out io.Writer, e sl.Entry, replace bool) error {
+	it, err := sh.itemAt(ctx, e)
+	if err != nil {
+		return err
 	}
+	slot, ok := sl.SlotOf(sl.AssetType(it.Type), it.Flags)
+	if !ok {
+		return fmt.Errorf("%s is %s and has no wearable slot", it.Name, aKind(kindOf(e)))
+	}
+
+	off, err := sh.s.WearWearable(ctx, it, replace)
+	if errors.Is(err, sl.ErrAlreadyWorn) {
+		return fmt.Errorf("%s is already worn as %s; wearing it again would put a second "+
+			"link to one item in the Current Outfit folder, which nothing here could then "+
+			"tell apart -- \"detach %s\" takes it off",
+			it.Name, slot, it.Name)
+	}
+	if err != nil {
+		return err
+	}
+
+	line := fmt.Sprintf("%s is worn as %s", it.Name, slot)
+	if len(off) > 0 {
+		line += "; " + strings.Join(off, ", ") + " came off"
+	}
+	fmt.Fprintln(out, line)
 	return nil
 }
 
@@ -501,9 +519,18 @@ func cmdDetach(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	if err != nil {
 		return err
 	}
-	a, name, err := findWorn(ctx, sh, worn, want)
-	if err != nil {
-		return err
+	a, name, notAttached := findWorn(ctx, sh, worn, want)
+	if notAttached != nil {
+		// Not an attachment.  A system wearable is not worn on a point
+		// at all -- it is a link in the Current Outfit folder -- so it
+		// is looked for there before the refusal is printed.  Second
+		// rather than first, so that the ordinary case pays for no
+		// extra reads.
+		done, err := sh.detachWearable(ctx, out, want)
+		if done || err != nil {
+			return err
+		}
+		return notAttached
 	}
 	if err := sh.s.TakeOff(ctx, a.Item); err != nil {
 		return err
@@ -513,6 +540,56 @@ func cmdDetach(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	}
 	fmt.Fprintf(out, "%s is no longer worn on %s\n", name, sl.AttachPointName(a.Point))
 	return nil
+}
+
+// detachWearable takes off a system wearable, and says whether it found
+// one to take off.
+//
+// A body part is refused.  An avatar cannot be without a shape, a skin,
+// hair or eyes -- there is nothing to fall back to and no such thing as
+// an avatar that has none -- so the way out of one is another one.  The
+// viewer draws the same line and draws it silently: its menu offers
+// "Take Off" for clothing and lets a body part fall through without it
+// (llinventorybridge.cpp:8584-8588).
+//
+// A folder that cannot be read comes back as an error and not as "no
+// such wearable", because not knowing is not the same as knowing there
+// is none, and the caller is about to print a refusal that says the
+// thing is not worn.
+func (sh *Shell) detachWearable(ctx context.Context, out io.Writer, want string) (bool, error) {
+	outfit, err := sh.s.Outfit(ctx)
+	if err != nil {
+		return false, err
+	}
+	var found []sl.OutfitLink
+	for _, l := range outfit {
+		if l.Wearable && strings.EqualFold(l.Name, want) {
+			found = append(found, l)
+		}
+	}
+	if len(found) == 0 {
+		return false, nil
+	}
+	if len(found) > 1 {
+		return true, fmt.Errorf("%q is %d things in the Current Outfit folder, and this "+
+			"cannot tell them apart -- they agree in every field a person could name one "+
+			"by", want, len(found))
+	}
+
+	l := found[0]
+	if l.Kind == sl.AssetBodypart {
+		// "no eyes", "no hair": the slots a body part can occupy are
+		// all words that take no article, which is why the sentence
+		// is shaped to avoid needing one.
+		return true, fmt.Errorf("%s is a body part, and a body part does not come off: there "+
+			"is no such thing as an avatar with no %s.  Wearing another one puts it in place "+
+			"of this, which is the way out of it", l.Name, l.Slot)
+	}
+	if err := sh.s.TakeOffWearable(ctx, l.Link); err != nil {
+		return true, err
+	}
+	fmt.Fprintf(out, "%s is no longer worn as %s\n", l.Name, l.Slot)
+	return true, nil
 }
 
 // waitOff waits until the region stops listing an attachment.

@@ -52,55 +52,48 @@ are the two ways on from there.
 
 A folder is refused: `wear` takes one object.
 
-## Clothing and body parts are refused
+## Clothing and body parts
 
 A shirt, a skin, a shape, a pair of eyes or a hair base is a system
-wearable rather than an object.  It does not go on an attachment point
-and it does not go on with this command: it goes on with
-`AgentIsNowWearing`, which nothing here sends yet.
+wearable rather than an object.  `wear` takes one all the same and
+works out which it is from the item.
 
-It is refused rather than sent, because sending it is the worst kind
-of failure this protocol offers.  Measured: the simulator ignores a
-request to attach a body part and answers nothing whatever, so the
-command waits out its full forty seconds and then reports that the
-region never agreed the thing was worn -- true in every clause, and
-about nothing that went wrong.
+It does not attach.  A wearable is worn by putting a link to it in the
+Current Outfit folder -- which is the grid's own record of what an
+avatar has on, and what the baking service reads -- and then asking the
+region to rebuild the appearance.  The report says the slot rather than
+a point, because there is no point:
 
-To see what is worn, clothing and attachments alike, list the Current
-Outfit folder with the links followed:
+    wear Clothing/a blue shirt
+    a blue shirt is worn as shirt
 
-    ls -L "/Current Outfit"
+The slot is what a person is choosing between when they have four
+shirts and can wear one of each layer.  It is `shape`, `skin`, `hair`,
+`eyes`, `shirt`, `pants`, `shoes`, `socks`, `jacket`, `gloves`,
+`undershirt`, `underpants`, `skirt`, `alpha`, `tattoo`, `physics` or
+`universal`.
 
-That folder is the grid's own record of what an avatar has on.  Note
-that nothing here writes it: something worn from this shell is on the
-avatar now and is not in the folder, so it will not come back at the
-next login.
+**A body part always replaces.**  There is no such thing as an avatar
+wearing two skins, so a bare `wear` of one is a replace however it is
+worded, `--replace` or not, and the line says what came off.  Clothing
+layers, so it adds unless `--replace` is given -- the same default, and
+the same reason, as wearing an object.
 
-## Outfit folders hold links, and links are followed
+`detach` takes clothing off again.  It will not take off a body part:
+an avatar is never without a shape, a skin, hair or eyes, so the way
+out of one is to wear another.  The viewer draws the same line without
+saying so, by offering Take Off for clothing and not for a body part.
 
-An outfit folder holds no items at all.  Everything under `My Outfits`
-is a link, carrying the same name as the thing it points at, and a
-listing tells the two apart only by the word `link` in the type column
-of `ls -l`.
+## The Current Outfit folder
 
-    ls -l "My Outfits/Sunday"
-    link  2025-03-04T11:20:08  45557e57-...  /My Outfits/Sunday/a hat
+Everything this command does to a wearable happens in that folder, and
+`ls -L "/Current Outfit"` is how to read it: one line per worn thing,
+clothing and attachments alike, with the links followed.
 
-`wear` follows one, so a path or an id taken from an outfit folder
-wears the item at the other end of it.  This is what the viewer does
-with the same click.
-
-It matters because the id a link carries is not an id the simulator has
-an object for, and the simulator answers an id it does not recognise
-with silence rather than with an error.  Sending one meant waiting out
-the whole forty seconds and then being told the region had never agreed
-the thing was on -- every word of which was true, and none of which was
-the reason.
-
-A link this inventory cannot follow is refused, naming the id it looked
-for: a link outlives what it pointed at, so an outfit put together
-years ago may name things that have since been deleted.  A link to
-another link is refused too, which is what the viewer does with one.
+Attachments are the gap.  `wear` and `detach` maintain the folder for
+wearables and not for objects, so an object put on here is on the
+avatar now and is not recorded, and will not come back at the next
+login.  A viewer writes the folder for both.
 
 ## Examples
 

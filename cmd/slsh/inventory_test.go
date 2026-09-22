@@ -161,7 +161,7 @@ func TestLsPrintsOnePathPerLineSoAListingIsAScript(t *testing.T) {
 	x := newTestShell(t)
 
 	got := x.do(t, "ls")
-	if want := "/Objects\n/readme\n/Scripts\n/Trash\n"; got != want {
+	if want := "/Current Outfit\n/Objects\n/readme\n/Scripts\n/Trash\n"; got != want {
 		t.Errorf("ls printed %q, want %q", got, want)
 	}
 
@@ -180,11 +180,21 @@ func TestLsPrintsOnePathPerLineSoAListingIsAScript(t *testing.T) {
 	// day: two items of one name, acquired a minute apart, are told
 	// apart by that column and by nothing else on the line except the
 	// id.
+	//
+	// At least four, rather than exactly four.  The path is the last
+	// column and an inventory name may hold a space -- "Current
+	// Outfit" is one every avatar has -- so a line with five words in
+	// it is a path with a space in it and not a fifth column.  What
+	// the layout promises is that the first three fields are the kind,
+	// the date and the id, and that is what is checked.
 	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
 		f := strings.Fields(line)
-		if len(f) != 4 {
-			t.Errorf("a long listing line has %d fields, want 4: %q", len(f), line)
+		if len(f) < 4 {
+			t.Errorf("a long listing line has %d fields, want at least 4: %q", len(f), line)
 			continue
+		}
+		if _, err := msg.ParseUUID(f[2]); err != nil {
+			t.Errorf("the third field should be the id, got %q in %q", f[2], line)
 		}
 		if f[1] == "-" {
 			continue // a folder, which has no date

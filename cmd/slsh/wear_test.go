@@ -700,67 +700,49 @@ func TestWearRefusesALinkItCannotFollow(t *testing.T) {
 	}
 }
 
-// TestWearRefusesASystemWearable.
+// TestWearingAWearableThroughALinkWearsTheThing.
 //
-// Measured on Agni: a body part sent in RezSingleAttachmentFromInv is
-// ignored by the simulator without a word, so the command waited out
-// its whole forty seconds and then said the region had never agreed the
-// thing was worn.  True in every clause and about nothing that was
-// wrong -- the same failure a link's id got, and for the same reason.
+// Which is how it will actually be met: everything in an outfit folder
+// is a link, so the clothing in one is a link to clothing.  The link is
+// followed first, so what gets linked into the Current Outfit folder is
+// the item at the far end and not the link that was named -- a link to
+// a link would be a thing the folder could not resolve.
 //
-// So it is refused here, in a sentence that says what kind of thing it
-// is, that this is not how one goes on, and where to look at what is
-// actually being worn.
-func TestWearRefusesASystemWearable(t *testing.T) {
-	for _, c := range []struct {
-		what string
-		kind sl.AssetType
-	}{
-		{"a shape", sl.AssetBodypart},
-		{"a shirt", sl.AssetClothing},
-	} {
-		id := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000c1")
-		x := newTestShell(t)
-		addItemOfKind(x, id, c.what, c.kind)
-
-		err := x.Do(context.Background(), "wear Objects/"+c.what)
-		if err == nil {
-			t.Fatalf("%s was sent to the grid as an attachment", c.what)
-		}
-		for _, want := range []string{"system wearable", "Current Outfit"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("%s: the refusal was %q, which does not say %q", c.what, err, want)
-			}
-		}
-		if _, ok := lastAttach(x); ok {
-			t.Errorf("%s: an attach request went out anyway", c.what)
-		}
-	}
-}
-
-// TestWearRefusesAWearableReachedThroughALink.
-//
-// Which is how it will actually be met: everything under an outfit
-// folder is a link, so the clothing in one is a link to clothing.  The
-// link is followed first and the refusal comes from what was found, so
-// the sentence names the thing rather than the link.
-func TestWearRefusesAWearableReachedThroughALink(t *testing.T) {
+// This replaces a test that asserted a refusal.  Wearing a system
+// wearable used to be impossible here and was refused rather than left
+// to time out; it is now done, so the refusal is gone and what is
+// checked is that the right id went into the folder.
+func TestWearingAWearableThroughALinkWearsTheThing(t *testing.T) {
 	shape := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000c2")
 	folder := msg.MustParseUUID("b64f7e57-7e57-c0de-7b8c-0c3a6deb20ef")
 	link := msg.MustParseUUID("e8587e57-7e57-c0de-2c70-2196c4f04635")
 
 	x := newTestShell(t)
-	addItemOfKind(x, shape, "a shape", sl.AssetBodypart)
+	wearableAt(x, shape, "a shape", sl.AssetBodypart, sl.WearableShape)
 	addLinkFolder(x, folder, link, "a shape", shape, sl.AssetBodypart)
 
-	err := x.Do(context.Background(), "wear An outfit/a shape")
-	if err == nil {
-		t.Fatal("a link to a body part was sent to the grid as an attachment")
+	if got, want := x.do(t, "wear An outfit/a shape"), "a shape is worn as shape\n"; got != want {
+		t.Errorf("wearing a body part through a link printed %q, want %q", got, want)
 	}
-	if !strings.Contains(err.Error(), "bodypart") {
-		t.Errorf("the refusal should name what the link points at, got %q", err)
-	}
+	// Never as an attachment: the simulator answers a request to
+	// attach one of these with silence, so this would have waited out
+	// its whole timeout and blamed the region.
 	if _, ok := lastAttach(x); ok {
-		t.Error("an attach request went out anyway")
+		t.Fatal("a body part went out as an attach request")
+	}
+	// The link in the outfit points at the item, not at the link that
+	// was named.
+	x.grid.mu.Lock()
+	cof := findDirOfType(x.grid.inv, sl.FolderCurrentOutfit)
+	var pointsAt msg.UUID
+	if cof != nil && len(cof.Items) == 1 {
+		pointsAt = cof.Items[0].Asset
+	}
+	x.grid.mu.Unlock()
+	if pointsAt == link {
+		t.Fatal("the outfit holds a link to a link")
+	}
+	if pointsAt != shape {
+		t.Errorf("the outfit links to %v, want the item %v", pointsAt, shape)
 	}
 }

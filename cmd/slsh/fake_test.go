@@ -72,6 +72,7 @@ var (
 	testNote      = msg.MustParseUUID("c75d7e57-7e57-c0de-b372-000000000002")
 	testProbe     = msg.MustParseUUID("c75d7e57-7e57-c0de-b372-000000000003")
 	testSomebody  = msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000001")
+	testOutfit    = msg.MustParseUUID("abab7e57-7e57-c0de-bb52-1c1cafc8878a")
 )
 
 // testRegionHandle is where the fake says the avatar is standing: grid
@@ -157,6 +158,14 @@ type fakeGrid struct {
 	// that was not needed: resolving a name the session already knows
 	// must not cost a round trip.
 	objectsCalls int
+
+	// links counts the links created through AIS, and is what gives
+	// each one an id a test can name.
+	links int
+
+	// baked counts the rebake requests, which is the only evidence
+	// from this side that wearing a wearable finished.
+	baked int
 }
 
 // invDir is a folder in the fake inventory, and invItem a thing in one.
@@ -166,6 +175,11 @@ type invDir struct {
 	Type  int
 	Dirs  []*invDir
 	Items []*invItem
+
+	// Version is what AIS reports for the folder.  It matters for the
+	// Current Outfit folder and nowhere else: a rebake request carries
+	// the version, and a request carrying the wrong one is refused.
+	Version int
 }
 
 type invItem struct {
@@ -176,6 +190,12 @@ type invItem struct {
 	Asset   msg.UUID
 	Desc    string
 	Created int64
+
+	// Flags is the item's flag word.  Its low byte is the slot a
+	// system wearable occupies, which is the only place that is
+	// recorded: a skin and a shape are both body parts and are told
+	// apart by nothing else.
+	Flags uint32
 
 	// IsLink puts this under "links" rather than "items", where its
 	// Asset goes out as linked_id.  That is the shape AIS sends and
@@ -233,6 +253,7 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 					{ID: testProbe, Name: "probe", Type: int(sl.AssetLSLText), Created: 1754000100},
 				}},
 				{ID: testTrash, Name: "Trash", Type: sl.FolderTrash},
+				{ID: testOutfit, Name: "Current Outfit", Type: sl.FolderCurrentOutfit},
 			},
 			Items: []*invItem{
 				{ID: testNote, Name: "readme", Type: int(sl.AssetNotecard), Created: 1754000200},
@@ -241,17 +262,19 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 	}
 	t.Cleanup(func() { f.Close() })
 	f.serveInventory(t)
+	f.serveAppearance(t)
 	return f
 }
 
 // serveInventory puts the tree behind the AIS capability.
 //
-// Reading is a GET, and the two ways of changing something are a DELETE
-// and a PATCH: rm, emptytrash and renaming all go over AIS rather than
-// UDP, because the UDP messages for them are accepted and ignored.  So a
-// fake that only answered GET would leave every command that changes
-// inventory failing for want of a route, and each of them would pass its
-// test for the wrong reason.
+// Reading is a GET, and the ways of changing something are a DELETE, a
+// PATCH and a POST: rm, emptytrash, renaming and linking all go over
+// AIS rather than UDP, because the UDP messages for them are accepted
+// and ignored -- the one for linking is refused outright, with "Cannot
+// create requested inventory."  So a fake that only answered GET would
+// leave every command that changes inventory failing for want of a
+// route, and each of them would pass its test for the wrong reason.
 func (f *fakeGrid) serveInventory(t *testing.T) {
 	t.Helper()
 	f.ServeCap(t, agent.InventoryCap, func(w http.ResponseWriter, r *http.Request) {
@@ -265,6 +288,30 @@ func (f *fakeGrid) serveInventory(t *testing.T) {
 	})
 }
 
+// serveAppearance answers the rebake request.
+//
+// Wearing a system wearable is two steps -- a link into the Current
+// Outfit folder and then this -- and only the second says the wearing
+// finished.  A fake without it would leave every such test failing at
+// the last line for want of a capability.
+func (f *fakeGrid) serveAppearance(t *testing.T) {
+	t.Helper()
+	f.ServeCap(t, "UpdateAvatarAppearance", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.baked++
+		f.mu.Unlock()
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		io.WriteString(w, `<llsd><map><key>success</key><boolean>1</boolean></map></llsd>`)
+	})
+}
+
+// Baked is how many rebakes have been asked for.
+func (f *fakeGrid) Baked() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.baked
+}
+
 // inventoryRequest answers one AIS request against the tree, and is
 // where the tree is changed.
 func (f *fakeGrid) inventoryRequest(r *http.Request) (string, int) {
@@ -275,11 +322,48 @@ func (f *fakeGrid) inventoryRequest(r *http.Request) (string, int) {
 	defer f.mu.Unlock()
 
 	switch r.Method {
+	case "POST":
+		// Creating inventory in a folder.  Only links are made this
+		// way here, which is how a wearable is worn: the request names
+		// what to point at and the folder it goes in.
+		dir := findDir(f.inv, id)
+		if dir == nil {
+			return "no such folder", http.StatusNotFound
+		}
+		v, err := llsd.Decode(r.Body)
+		if err != nil {
+			return "unreadable body", http.StatusBadRequest
+		}
+		m := llsd.Map(v)
+		links, _ := m["links"].([]any)
+		if len(links) == 0 {
+			return "no links in the request", http.StatusBadRequest
+		}
+		for _, l := range links {
+			lm := llsd.Map(l)
+			to, err := msg.ParseUUID(llsd.String(lm, "linked_id"))
+			if err != nil {
+				return "no linked_id", http.StatusBadRequest
+			}
+			dir.Items = append(dir.Items, &invItem{
+				ID: f.nextLinkID(), Name: llsd.String(lm, "name"),
+				Desc: llsd.String(lm, "desc"), Asset: to, IsLink: true,
+				Type: int(sl.AssetLink), InvType: int(llsd.Int(lm, "inv_type")),
+			})
+		}
+		dir.Version++
+		return empty, http.StatusOK
+
 	case "DELETE":
 		switch {
 		case kind == "item":
 			if !removeItem(f.inv, id) {
 				return "no such item", http.StatusNotFound
+			}
+			// Taking something off is a change to the folder too, and
+			// the rebake that follows carries the new version.
+			if cof := findDirOfType(f.inv, sl.FolderCurrentOutfit); cof != nil {
+				cof.Version++
 			}
 		case children:
 			dir := findDir(f.inv, id)
@@ -428,6 +512,30 @@ func capFolderID(path string) msg.UUID {
 	return id
 }
 
+// nextLinkID gives each link the fake creates an id of its own, in
+// order, so that a test can say which one it means.
+func (f *fakeGrid) nextLinkID() msg.UUID {
+	f.links++
+	return msg.MustParseUUID(fmt.Sprintf("f3a47e57-7e57-c0de-be8b-%012d", f.links))
+}
+
+// findDirOfType is how the Current Outfit folder and the trash are
+// found: by what the grid says they are for, not by their names.
+func findDirOfType(d *invDir, kind int) *invDir {
+	if d == nil {
+		return nil
+	}
+	if d.Type == kind {
+		return d
+	}
+	for _, sub := range d.Dirs {
+		if got := findDirOfType(sub, kind); got != nil {
+			return got
+		}
+	}
+	return nil
+}
+
 func findDir(d *invDir, id msg.UUID) *invDir {
 	if d == nil {
 		return nil
@@ -457,7 +565,11 @@ func dirLLSD(d *invDir, parent msg.UUID, depth int) string {
 	fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string>`, parent)
 	fmt.Fprintf(&b, `<key>name</key><string>%s</string>`, xmlText(d.Name))
 	fmt.Fprintf(&b, `<key>type_default</key><integer>%d</integer>`, d.Type)
-	b.WriteString(`<key>version</key><integer>1</integer>`)
+	version := d.Version
+	if version == 0 {
+		version = 1
+	}
+	fmt.Fprintf(&b, `<key>version</key><integer>%d</integer>`, version)
 	b.WriteString(`<key>_embedded</key><map><key>categories</key><map>`)
 	for _, sub := range d.Dirs {
 		fmt.Fprintf(&b, `<key>%s</key>`, sub.ID)
@@ -499,6 +611,7 @@ func invItemsLLSD(b *strings.Builder, d *invDir, key string, links bool) {
 		fmt.Fprintf(b, `<key>type</key><integer>%d</integer>`, it.Type)
 		fmt.Fprintf(b, `<key>inv_type</key><integer>%d</integer>`, it.InvType)
 		fmt.Fprintf(b, `<key>created_at</key><integer>%d</integer>`, it.Created)
+		fmt.Fprintf(b, `<key>flags</key><integer>%d</integer>`, it.Flags)
 		b.WriteString(`<key>permissions</key><map>`)
 		b.WriteString(`<key>owner_mask</key><integer>581632</integer>`)
 		b.WriteString(`</map></map>`)

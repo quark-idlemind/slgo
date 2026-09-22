@@ -59,6 +59,12 @@ type Entry struct {
 	Created int64
 	IsLink  bool
 
+	// Flags is the item's flag word.  Its low byte is the slot a
+	// system wearable occupies -- which shirt layer, which body part
+	// -- and is the only place that is recorded: a skin and a shape
+	// are both "bodypart" and are told apart by nothing else.
+	Flags uint32
+
 	Creator msg.UUID
 	Owner   msg.UUID
 
@@ -282,7 +288,7 @@ func (w *Session) children(ctx context.Context, folder msg.UUID, depth uint) ([]
 		}
 		for _, it := range inv.Contents(id) {
 			out = append(out, Entry{
-				ID: it.ID, Parent: it.ParentID, Name: it.Name,
+				ID: it.ID, Parent: it.ParentID, Name: it.Name, Flags: it.Flags,
 				Path: join(prefix, it.Name), Depth: level,
 				Type: it.Type, InvType: it.InvType, Asset: it.AssetID,
 				Desc: it.Desc, Created: it.Created, IsLink: it.IsLink,

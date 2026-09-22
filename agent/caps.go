@@ -52,6 +52,11 @@ var DefaultCaps = []string{
 	// -- and it is the only way a client has of touching that setting
 	// at all: there is no message for it in the template.
 	"UpdateAgentInformation",
+	// Asking the region to rebuild this avatar's appearance from the
+	// Current Outfit folder, which is how anything that is not an
+	// object gets worn: the folder is the record, and this is what
+	// tells the baking service to read it again.  See sl.WearWearable.
+	"UpdateAvatarAppearance",
 }
 
 // Caps maps a capability name to the URL that serves it.
