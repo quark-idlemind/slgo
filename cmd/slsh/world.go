@@ -119,6 +119,29 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		return err
 	}
 	fmt.Fprintln(out, positionLine(p))
+
+	// What the avatar is sitting on, when it is sitting on anything.
+	//
+	// It belongs here because a seated avatar's position is not a
+	// place it walked to: a sit picks the avatar up and puts it on the
+	// seat from as much as ten metres away, so the coordinates above
+	// are the seat's doing and the line saying so is what explains
+	// them.  The same shape "sit" prints, since it is the same fact.
+	//
+	// Nothing when standing, and it costs nothing then either: the
+	// answer comes from what this session was already told and only
+	// reaches the region when there is a seat to name.
+	//
+	// A failure is printed rather than returned.  Where the avatar is
+	// standing is the answer to "where", and losing it because the
+	// seat could not be named would be the wrong way round.
+	switch seat, err := sh.s.Seat(ctx); {
+	case err != nil:
+		fmt.Fprintf(out, "(whether it is sitting on anything is not known: %v)\n", err)
+	case seat != nil:
+		fmt.Fprintf(out, "sitting on %s\n", seat)
+	}
+
 	if !p.ActiveGroup.IsZero() {
 		// Named where a name is to be had.  The key is what everything
 		// else takes and stays in the line for that reason, but it is

@@ -91,8 +91,16 @@ func TestSittingOnAnObjectSaysWhatItSatOnAndWhereThatLeftTheAvatar(t *testing.T)
 	if got := x.do(t, "sit box"); got != want {
 		t.Errorf("sit printed %q, want %q", got, want)
 	}
-	if got, want := x.do(t, "where"), "Test Region at 135, 72, 2001\n"; got != want {
-		t.Errorf("where after a sit printed %q, want the position sit printed, %q", got, want)
+	// And "where" afterwards agrees with both halves.  The position is
+	// the one sit printed, and the seat is named in the same shape,
+	// because a seated avatar's coordinates are the seat's doing and a
+	// line saying so is what explains them.
+	got := x.do(t, "where")
+	if !strings.HasPrefix(got, "Test Region at 135, 72, 2001\n") {
+		t.Errorf("where after a sit printed %q, want the position sit printed", got)
+	}
+	if want := "sitting on \"box\" " + testLamp.String() + " (local 1)\n"; !strings.Contains(got, want) {
+		t.Errorf("where after a sit printed %q, want a line %q", got, want)
 	}
 
 	// One message, and it is the request itself.  The pair a viewer
