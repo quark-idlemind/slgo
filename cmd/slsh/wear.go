@@ -355,6 +355,19 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 			line += fmt.Sprintf("; %s came off", off)
 		}
 	}
+	// And recorded, so that it comes back at the next login.  The
+	// simulator rezzes what it is told to rez and remembers none of
+	// it; the Current Outfit folder is the record, and writing it is
+	// the client's job.
+	//
+	// A failure here is not a failure to wear -- the thing is on the
+	// avatar -- so it is said on the same line rather than returned.
+	// Losing the whole report of a successful wear because the
+	// bookkeeping did not go through would be the wrong way round.
+	if err := sh.s.RememberWorn(ctx, it); err != nil {
+		line += fmt.Sprintf("; it is not in the Current Outfit folder, so it will not come "+
+			"back at the next login: %v", err)
+	}
 	fmt.Fprintln(out, line)
 	return nil
 }
@@ -526,7 +539,7 @@ func cmdDetach(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		// is looked for there before the refusal is printed.  Second
 		// rather than first, so that the ordinary case pays for no
 		// extra reads.
-		done, err := sh.detachWearable(ctx, out, want)
+		done, err := sh.detachFromOutfit(ctx, out, want)
 		if done || err != nil {
 			return err
 		}
@@ -535,35 +548,61 @@ func cmdDetach(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	if err := sh.s.TakeOff(ctx, a.Item); err != nil {
 		return err
 	}
-	if err := sh.waitOff(ctx, a.Item, name, o.Wait); err != nil {
-		return err
+	waited := sh.waitOff(ctx, a.Item, name, o.Wait)
+	// Out of the folder as well as off the avatar, whether or not the
+	// region has caught up: the request went, and a link left behind
+	// would put the thing back on at the next login.
+	line := fmt.Sprintf("%s is no longer worn on %s", name, sl.AttachPointName(a.Point))
+	if _, err := sh.s.ForgetWorn(ctx, a.Item); err != nil {
+		line += fmt.Sprintf("; its link is still in the Current Outfit folder, so it will "+
+			"come back at the next login: %v", err)
 	}
-	fmt.Fprintf(out, "%s is no longer worn on %s\n", name, sl.AttachPointName(a.Point))
+	if waited != nil {
+		return waited
+	}
+	fmt.Fprintln(out, line)
 	return nil
 }
 
-// detachWearable takes off a system wearable, and says whether it found
-// one to take off.
+// detachFromOutfit takes something off using the Current Outfit folder,
+// and says whether it found anything to take off.
 //
-// A body part is refused.  An avatar cannot be without a shape, a skin,
-// hair or eyes -- there is nothing to fall back to and no such thing as
-// an avatar that has none -- so the way out of one is another one.  The
-// viewer draws the same line and draws it silently: its menu offers
-// "Take Off" for clothing and lets a body part fall through without it
-// (llinventorybridge.cpp:8584-8588).
+// This is the answer to two different failures that look the same from
+// the prompt.  A system wearable is not worn on a point at all, so it
+// was never in the list detach was searching.  And an attachment the
+// region has not described to this session is not in that list either,
+// although it is plainly on the avatar -- which is the ordinary state
+// of affairs after a reconnect, and was the report that prompted this:
+// an object visible in world, named in the folder, and refused here as
+// not worn.
+//
+// The folder is enough to take either off.  A wearable comes off by
+// dropping its link; an attachment comes off by
+// DetachAttachmentIntoInv, which takes the INVENTORY item id and needs
+// to know nothing about the object -- so not being able to see the
+// object is no impediment at all.
+//
+// Matched on the name, the item id or the link id, because all three
+// are things a listing here prints and any of them may be what got
+// copied.
 //
 // A folder that cannot be read comes back as an error and not as "no
-// such wearable", because not knowing is not the same as knowing there
-// is none, and the caller is about to print a refusal that says the
-// thing is not worn.
-func (sh *Shell) detachWearable(ctx context.Context, out io.Writer, want string) (bool, error) {
+// such thing", because not knowing is not the same as knowing there is
+// none, and the caller is about to print a refusal saying the thing is
+// not worn.
+func (sh *Shell) detachFromOutfit(ctx context.Context, out io.Writer, want string) (bool, error) {
 	outfit, err := sh.s.Outfit(ctx)
 	if err != nil {
 		return false, err
 	}
+	id, notAnID := msg.ParseUUID(strings.TrimSpace(want))
+
 	var found []sl.OutfitLink
 	for _, l := range outfit {
-		if l.Wearable && strings.EqualFold(l.Name, want) {
+		if l.Folder {
+			continue
+		}
+		if strings.EqualFold(l.Name, want) || (notAnID == nil && (l.Item == id || l.Link == id)) {
 			found = append(found, l)
 		}
 	}
@@ -572,8 +611,8 @@ func (sh *Shell) detachWearable(ctx context.Context, out io.Writer, want string)
 	}
 	if len(found) > 1 {
 		return true, fmt.Errorf("%q is %d things in the Current Outfit folder, and this "+
-			"cannot tell them apart -- they agree in every field a person could name one "+
-			"by", want, len(found))
+			"cannot tell them apart -- name one by its item id, which \"worn -l\" prints",
+			want, len(found))
 	}
 
 	l := found[0]
@@ -585,10 +624,31 @@ func (sh *Shell) detachWearable(ctx context.Context, out io.Writer, want string)
 			"is no such thing as an avatar with no %s.  Wearing another one puts it in place "+
 			"of this, which is the way out of it", l.Name, l.Slot)
 	}
-	if err := sh.s.TakeOffWearable(ctx, l.Link); err != nil {
+	if l.Wearable {
+		if err := sh.s.TakeOffWearable(ctx, l.Link); err != nil {
+			return true, err
+		}
+		fmt.Fprintf(out, "%s is no longer worn as %s\n", l.Name, l.Slot)
+		return true, nil
+	}
+
+	// An object.  Both halves: the request that takes it off the
+	// avatar, and the link that says it should be on at the next
+	// login.  No rebake -- an attachment is not baked into the avatar,
+	// and the folder's new version rides along with whatever asks for
+	// the next one.
+	if err := sh.s.TakeOff(ctx, l.Item); err != nil {
 		return true, err
 	}
-	fmt.Fprintf(out, "%s is no longer worn as %s\n", l.Name, l.Slot)
+	if err := sh.s.DeleteItem(ctx, l.Link); err != nil {
+		return true, fmt.Errorf("%s was asked to come off, and its link is still in the "+
+			"Current Outfit folder: %w", l.Name, err)
+	}
+	// Not waited for.  waitOff watches the region stop listing the
+	// object, and this path is reached precisely because the region
+	// never listed it here in the first place, so the wait could only
+	// time out and report not knowing.
+	fmt.Fprintf(out, "%s was asked to come off, and is out of the outfit\n", l.Name)
 	return true, nil
 }
 

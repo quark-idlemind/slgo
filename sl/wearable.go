@@ -215,6 +215,16 @@ type OutfitLink struct {
 	Kind     AssetType
 	Slot     WearableType
 	Wearable bool
+
+	// Folder is a link to a folder rather than to an item.  The
+	// Current Outfit folder holds one of these naming the outfit that
+	// was put on, which is bookkeeping rather than a worn thing.
+	Folder bool
+
+	// Found is whether the thing at the far end was reached at all.
+	// A link outlives what it points at, and one that has been left
+	// behind says nothing about its kind.
+	Found bool
 }
 
 // Outfit reads the Current Outfit folder and follows every link in it.
@@ -255,6 +265,7 @@ func (w *Session) outfitIn(ctx context.Context, cof msg.UUID) ([]OutfitLink, err
 		}
 		l := OutfitLink{Link: e.ID, Item: e.Asset, Name: e.Name}
 		if to, ok := byID[e.Asset]; ok {
+			l.Found, l.Folder = true, to.Folder
 			l.Kind = AssetType(to.Type)
 			l.Slot, l.Wearable = SlotOf(l.Kind, to.Flags)
 		}
@@ -323,6 +334,58 @@ func (w *Session) WearWearable(ctx context.Context, it *Item, replace bool) ([]s
 			"region would not rebuild the appearance: %w", it.Name, err)
 	}
 	return off, nil
+}
+
+// RememberWorn puts a link to an item in the Current Outfit folder, if
+// there is not one there already.
+//
+// This is what makes an attachment survive a login.  The folder is the
+// record of what an avatar has on and it is the client's to write:
+// attaching an object tells the simulator to rez it now and tells the
+// folder nothing, so an object put on without this is on the avatar
+// until the session ends and then gone.
+//
+// Already-linked is not an error.  The caller has just put something
+// on and the folder agreeing with that is the whole point, so a second
+// link would be the only wrong answer.
+func (w *Session) RememberWorn(ctx context.Context, it *Item) error {
+	cof, err := w.CurrentOutfit(ctx)
+	if err != nil {
+		return err
+	}
+	worn, err := w.outfitIn(ctx, cof)
+	if err != nil {
+		return err
+	}
+	for _, l := range worn {
+		if l.Item == it.ID {
+			return nil
+		}
+	}
+	return w.LinkItem(ctx, cof, it)
+}
+
+// ForgetWorn takes every link to an item out of the Current Outfit
+// folder, and says how many it removed.
+//
+// Every, not the first: two links to one item is a state a viewer can
+// leave behind, and taking a thing off should not need doing twice.
+func (w *Session) ForgetWorn(ctx context.Context, item msg.UUID) (int, error) {
+	worn, err := w.Outfit(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, l := range worn {
+		if l.Item != item {
+			continue
+		}
+		if err := w.DeleteItem(ctx, l.Link); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }
 
 // TakeOffWearable removes a wearable's link from the Current Outfit

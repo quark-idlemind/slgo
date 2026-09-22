@@ -369,10 +369,20 @@ func TestWornTellsAnEmptyListFromAnEmptyMatch(t *testing.T) {
 		t.Errorf("worn printed %q, want %q", got, want)
 	}
 
+	// Attached, and nothing has put it in the Current Outfit folder --
+	// which is what an object attached from this shell before wear
+	// kept that folder looked like, and is still what an object
+	// attached by anything that does not write the folder looks like.
+	// The line says so, because the thing it means is that this will
+	// not be on at the next login.
 	wearThings(x, &sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
 		AttachItem: testLamp, AttachPoint: 1})
-	if got, want := x.do(t, "worn a lamp"), "chest              a lamp\n"; got != want {
-		t.Errorf("worn with a word printed %q, want %q", got, want)
+	got := x.do(t, "worn a lamp")
+	if !strings.HasPrefix(got, "chest              a lamp") {
+		t.Errorf("worn with a word printed %q", got)
+	}
+	if !strings.Contains(got, "not in the outfit") {
+		t.Errorf("worn should say an attachment is unrecorded: %q", got)
 	}
 	if got, want := x.do(t, "worn hat"), "nothing worn matched\n"; got != want {
 		t.Errorf("worn with a word that matches nothing printed %q, want %q", got, want)

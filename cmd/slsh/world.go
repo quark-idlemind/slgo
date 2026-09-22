@@ -400,16 +400,30 @@ type wornOptions struct {
 	Help bool `getopt:"--help -h   show what this command takes"`
 }
 
-// cmdWorn lists the attachments.
+// cmdWorn lists everything the avatar has on.
 //
-// slgod knows these because it was connected when they were described:
-// an attachment is announced when it goes on and again at every login,
-// so a program that started later never heard it and has to ask.
+// Two records, and they are not the same record.  The Current Outfit
+// folder is what SHOULD be on: a link per worn thing, clothing and
+// body parts and attachments alike, written by whatever put them on.
+// The region's description of the objects around us is what IS on, and
+// covers only attachments, since a shirt is not an object.
 //
-// The names come from inventory, not from the objects.  A worn object
-// will not answer a request for its properties, and the name worth
-// printing is the one in inventory anyway -- it is what the thing is
-// called, and unlike the object it does not change.
+// Both are listed, and where they disagree the line says so.  They
+// disagree in both directions and neither is a mistake in the reading:
+//
+//   - a thing in the folder the region has not described.  It may have
+//     failed to rez at login, which happens; or this session may simply
+//     never have been told, since an attachment is announced when it
+//     goes on and at login and never again.
+//   - a thing the region describes that the folder does not hold.
+//     Anything attached from this shell is one of those, because wear
+//     does not write the folder for objects -- so it is on the avatar
+//     now and will not come back at the next login.
+//
+// This used to list only the first of those sources and call the result
+// what was worn.  It was not: an avatar wearing a skin, a shape and
+// four clothing layers showed none of them, and the answer read as a
+// complete one.
 func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o wornOptions
 	rest, done, err := subOptions("worn", &o, out, args)
@@ -425,34 +439,76 @@ func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if err != nil {
 		return err
 	}
+	// The folder is read on a best effort.  An inventory that has no
+	// Current Outfit folder, or one that cannot be read just now, is a
+	// reason to list less rather than to refuse: the attachments are
+	// still worth having, and the note at the foot says what is
+	// missing.
+	outfit, outfitErr := sh.s.Outfit(ctx)
 	names := sh.itemNames(ctx)
 
-	type row struct {
-		point int
-		name  string
-		item  msg.UUID
-		obj   msg.UUID
-	}
-	rows := make([]row, 0, len(worn))
+	seen := make(map[msg.UUID]*sl.Attached, len(worn))
 	for _, a := range worn {
-		// Not everything worn can be named.  The item may sit deeper
-		// than the listing went, or have been deleted while still
-		// worn, which Second Life allows.  The item id is then the
-		// only handle there is, so print that rather than a word that
-		// claims to know more.
+		seen[a.Item] = a
+	}
+
+	var rows []wornRow
+	inOutfit := make(map[msg.UUID]bool, len(outfit))
+	for _, l := range outfit {
+		// A link to a folder names the outfit that was put on.  It is
+		// bookkeeping and not a thing anybody is wearing.
+		if l.Folder {
+			continue
+		}
+		inOutfit[l.Item] = true
+		r := wornRow{name: l.Name, item: l.Item}
+		switch {
+		case l.Wearable:
+			r.group, r.order, r.where = groupWearable, int(l.Slot), l.Slot.String()
+		case seen[l.Item] != nil:
+			a := seen[l.Item]
+			r.group, r.order = groupAttached, a.Point
+			r.where, r.obj = sl.AttachPointName(a.Point), a.Object.ID
+		default:
+			r.group, r.order, r.where = groupAttached, notWornOrder, "-"
+			r.note = "in the outfit, not described"
+			if !l.Found {
+				r.note = "in the outfit, and the item is gone"
+			}
+		}
+		rows = append(rows, r)
+	}
+	for _, a := range worn {
+		if inOutfit[a.Item] {
+			continue
+		}
 		name, ok := names[a.Item]
 		if !ok {
 			name = a.Item.String()
 		}
-		if want != "" && !strings.Contains(strings.ToLower(name), want) {
-			continue
-		}
-		rows = append(rows, row{a.Point, name, a.Item, a.Object.ID})
+		rows = append(rows, wornRow{
+			group: groupAttached, order: a.Point, where: sl.AttachPointName(a.Point),
+			name: name, item: a.Item, obj: a.Object.ID,
+			note: "not in the outfit, so it will not come back",
+		})
 	}
-	// By where they are worn, so the HUD ones group together.
+
+	kept := rows[:0]
+	for _, r := range rows {
+		if want == "" || strings.Contains(strings.ToLower(r.name), want) {
+			kept = append(kept, r)
+		}
+	}
+	rows = kept
+
+	// Wearables first, then attachments by where they are worn, so the
+	// HUD ones fall together without being asked for.
 	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].point != rows[j].point {
-			return rows[i].point < rows[j].point
+		if rows[i].group != rows[j].group {
+			return rows[i].group < rows[j].group
+		}
+		if rows[i].order != rows[j].order {
+			return rows[i].order < rows[j].order
 		}
 		return rows[i].name < rows[j].name
 	})
@@ -463,21 +519,61 @@ func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		} else {
 			fmt.Fprintln(out, "nothing worn")
 		}
-		return nil
 	}
 	for _, r := range rows {
+		line := fmt.Sprintf("%-18s %-30s", r.where, r.name)
 		if o.Long {
 			// The item first: it is the one that does not change.  A
 			// worn object is rezzed afresh, with a new key, every time
-			// it goes on and every time the avatar logs in.
-			fmt.Fprintf(out, "%-18s %-30s %-36s %s\n",
-				sl.AttachPointName(r.point), r.name, r.item, r.obj)
-			continue
+			// it goes on and every time the avatar logs in, and a
+			// wearable has no object at all.
+			obj := "-"
+			if !r.obj.IsZero() {
+				obj = r.obj.String()
+			}
+			line += fmt.Sprintf(" %-36s %-36s", r.item, obj)
 		}
-		fmt.Fprintf(out, "%-18s %s\n", sl.AttachPointName(r.point), r.name)
+		if r.note != "" {
+			line += "  (" + r.note + ")"
+		}
+		fmt.Fprintln(out, strings.TrimRight(line, " "))
+	}
+	if outfitErr != nil {
+		fmt.Fprintf(out, "(clothing and body parts are not listed: %v)\n", outfitErr)
 	}
 	return nil
 }
+
+// wornRow is one line of what is worn, from either record.
+type wornRow struct {
+	// group and order are the sort: wearables before attachments, and
+	// within each, the slot or the attachment point.
+	group int
+	order int
+
+	// where is the slot for a wearable and the attachment point for an
+	// object, or "-" where nothing has said.
+	where string
+	name  string
+	item  msg.UUID
+
+	// obj is the rezzed object, which a wearable does not have and a
+	// thing nobody has described is not known to have.
+	obj msg.UUID
+
+	// note says how the two records disagreed about this line, and is
+	// empty where they agreed.
+	note string
+}
+
+const (
+	groupWearable = iota
+	groupAttached
+
+	// notWornOrder sorts the things nothing has described to the end
+	// of the attachments, since they have no point to sort by.
+	notWornOrder = 1 << 20
+)
 
 // itemNames maps inventory item ids to their names, for naming things
 // that are known only by id.

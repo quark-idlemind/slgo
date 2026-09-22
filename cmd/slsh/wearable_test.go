@@ -256,3 +256,138 @@ func TestSlotOfReadsTheLowByteOfTheFlags(t *testing.T) {
 		t.Errorf("slot 15 is %q, want physics", got)
 	}
 }
+
+// TestWornListsBothRecordsAndSaysWhereTheyDisagree.
+//
+// The report this was written for: "worn no longer shows everything
+// that is worn".  It never had -- a skin, a shape and four clothing
+// layers showed as nothing at all, because what it listed was the
+// region's description of objects and a shirt is not an object.  And
+// an attachment the region has not described to this session is not in
+// that list either, although it is plainly on the avatar, which is the
+// ordinary state after a reconnect.
+//
+// So both records are listed.  The Current Outfit folder is what
+// SHOULD be on and the region is what IS, they disagree in both
+// directions, and a line that came from only one of them says so.
+func TestWornListsBothRecordsAndSaysWhereTheyDisagree(t *testing.T) {
+	shirt := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000e1")
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000e2")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000e2")
+
+	x := newTestShell(t)
+	wearableAt(x, shirt, "a shirt", sl.AssetClothing, sl.WearableShirt)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+
+	// A wearable, which has no object and never appears in the
+	// region's listing.
+	x.do(t, "wear Objects/a shirt")
+	// An object in the folder that the region has not described: what
+	// a thing that failed to rez at login looks like, and what
+	// everything looks like to a session that attached afterwards.
+	x.do(t, "wear Objects/a hat")
+	wearThings(x)
+	// And an object the region describes that the folder does not
+	// hold.
+	wearThings(x, &sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
+		AttachItem: testLamp, AttachPoint: 1})
+
+	got := x.do(t, "worn")
+	for _, want := range []string{
+		"shirt              a shirt",
+		"a hat",
+		"in the outfit, not described",
+		"a lamp",
+		"not in the outfit",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("worn should have said %q:\n%s", want, got)
+		}
+	}
+	// The wearable is not claimed to be on an attachment point, and
+	// the disagreements are not claimed to be agreement.
+	if strings.Contains(got, "a shirt") && strings.Contains(got, "chest              a shirt") {
+		t.Errorf("a wearable was given an attachment point:\n%s", got)
+	}
+	// Wearables first, so the clothing does not scatter through the
+	// attachment points.
+	if i, j := strings.Index(got, "a shirt"), strings.Index(got, "a lamp"); i > j {
+		t.Errorf("wearables should sort before attachments:\n%s", got)
+	}
+}
+
+// TestDetachFindsWhatTheRegionNeverDescribed.
+//
+// The other half of the same report: an object visible in world, named
+// in the Current Outfit folder, and refused by detach as not worn --
+// because detach searched only what the region had described, and the
+// region had described nothing since the reconnect.
+//
+// Taking one off needs no knowledge of the object at all.
+// DetachAttachmentIntoInv carries the INVENTORY item id, which the
+// folder has.
+func TestDetachFindsWhatTheRegionNeverDescribed(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000e3")
+
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000e3")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+	x.do(t, "wear Objects/a hat")
+	// The region forgets it, which is what a reconnect does.
+	wearThings(x)
+
+	if got := x.do(t, "worn"); !strings.Contains(got, "in the outfit, not described") {
+		t.Fatalf("the hat should be in the folder and unseen:\n%s", got)
+	}
+
+	// By the item id, which is what "worn -l" prints and what somebody
+	// would copy out of it.
+	got := x.do(t, "detach "+hat.String())
+	if !strings.Contains(got, "asked to come off") {
+		t.Errorf("detaching by item id printed %q", got)
+	}
+	d, ok := lastDetach(x)
+	if !ok {
+		t.Fatal("nothing was sent to take it off")
+	}
+	if d.ObjectData.ItemID != hat {
+		t.Errorf("the detach named %v, want the item %v", d.ObjectData.ItemID, hat)
+	}
+	// And out of the folder, or it would come back at the next login.
+	if names := outfitNames(t, x); len(names) != 0 {
+		t.Errorf("the outfit still holds %q", names)
+	}
+}
+
+// TestWearingAnObjectRecordsItInTheOutfit.
+//
+// An attachment put on without this is on the avatar until the session
+// ends and then gone: the simulator rezzes what it is told to rez and
+// remembers none of it.  The folder is the record, and writing it is
+// the client's job -- which is why an avatar dressed from this shell
+// used to come back undressed.
+func TestWearingAnObjectRecordsItInTheOutfit(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000e4")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000e4")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+
+	if got := x.do(t, "wear Objects/a hat"); !strings.Contains(got, "is worn on chest") {
+		t.Fatalf("wear printed %q", got)
+	}
+	if names := outfitNames(t, x); len(names) != 1 || names[0] != "a hat" {
+		t.Errorf("the outfit holds %q, want the one link", names)
+	}
+	// Taking it off takes the record out again, or it would be put
+	// back on at the next login.
+	x.grid.AnswerDetach(0)
+	x.do(t, "detach a hat")
+	if names := outfitNames(t, x); len(names) != 0 {
+		t.Errorf("after detach the outfit still holds %q", names)
+	}
+}
