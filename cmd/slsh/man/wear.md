@@ -52,6 +52,30 @@ are the two ways on from there.
 
 A folder is refused: `wear` takes one object.
 
+## Clothing and body parts are refused
+
+A shirt, a skin, a shape, a pair of eyes or a hair base is a system
+wearable rather than an object.  It does not go on an attachment point
+and it does not go on with this command: it goes on with
+`AgentIsNowWearing`, which nothing here sends yet.
+
+It is refused rather than sent, because sending it is the worst kind
+of failure this protocol offers.  Measured: the simulator ignores a
+request to attach a body part and answers nothing whatever, so the
+command waits out its full forty seconds and then reports that the
+region never agreed the thing was worn -- true in every clause, and
+about nothing that went wrong.
+
+To see what is worn, clothing and attachments alike, list the Current
+Outfit folder with the links followed:
+
+    ls -L "/Current Outfit"
+
+That folder is the grid's own record of what an avatar has on.  Note
+that nothing here writes it: something worn from this shell is on the
+avatar now and is not in the folder, so it will not come back at the
+next login.
+
 ## Outfit folders hold links, and links are followed
 
 An outfit folder holds no items at all.  Everything under `My Outfits`

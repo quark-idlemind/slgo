@@ -293,6 +293,9 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if e.Folder {
 		return fmt.Errorf("%s is a folder; wear takes one object", path)
 	}
+	if err := attachable(e); err != nil {
+		return err
+	}
 	// The item rather than the entry: what goes over the wire is the
 	// name, the description and every permission mask, and an entry
 	// carries none of them.
@@ -441,6 +444,33 @@ func attachPointArg(text string) (int, error) {
 	}
 	return 0, fmt.Errorf("--at: %q is not an attachment point; name one the way the viewer does, "+
 		"as in \"left hand\" or \"HUD top right\", or give its number", text)
+}
+
+// attachable refuses what cannot be put on by attaching it.
+//
+// A shirt, a skin, a shape or a pair of eyes is a system wearable,
+// which is not an object and does not go on an attachment point.  It
+// goes on with AgentIsNowWearing, which nothing here sends.
+//
+// Refused up front because the alternative is the worst shape a failure
+// takes on this protocol.  Measured: a body part sent in
+// RezSingleAttachmentFromInv is ignored by the simulator without a word
+// of complaint, so the command waits out its whole forty seconds and
+// then reports that the region never agreed the thing was worn -- every
+// clause of which is true, and none of which is the reason.  The same
+// silence that a link's id gets, for the same reason: an id the
+// attachment code has no object for.
+func attachable(e sl.Entry) error {
+	switch sl.AssetType(e.Type) {
+	case sl.AssetClothing, sl.AssetBodypart:
+		return fmt.Errorf("%s is %s, and wear attaches objects; %s is a system wearable, "+
+			"which goes on by a message nothing here sends yet -- the simulator ignores a "+
+			"request to attach one and answers nothing at all, so this would wait out its "+
+			"whole timeout and then report that the region never agreed. "+
+			"\"ls -L \\\"/Current Outfit\\\"\" lists what is worn, clothing and attachments alike",
+			e.Name, aKind(kindOf(e)), aKind(kindOf(e)))
+	}
+	return nil
 }
 
 type detachFlags struct {

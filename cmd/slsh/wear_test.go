@@ -572,10 +572,15 @@ func TestDetachingANameWornTwiceAsksWhichOne(t *testing.T) {
 // how both the displaced attachment and an ambiguous detach are named.
 // Both come from the same inventory, so putting it there covers both.
 func addObjectItem(x *testShell, id msg.UUID, name string) {
+	addItemOfKind(x, id, name, sl.AssetObject)
+}
+
+// addItemOfKind is addObjectItem for something that is not an object.
+func addItemOfKind(x *testShell, id msg.UUID, name string, kind sl.AssetType) {
 	x.grid.mu.Lock()
 	defer x.grid.mu.Unlock()
 	objs := x.grid.inv.Dirs[0]
-	objs.Items = append(objs.Items, &invItem{ID: id, Name: name, Type: int(sl.AssetObject)})
+	objs.Items = append(objs.Items, &invItem{ID: id, Name: name, Type: int(kind)})
 }
 
 // addOutfitFolder puts a folder beside the others holding one link, and
@@ -692,5 +697,70 @@ func TestWearRefusesALinkItCannotFollow(t *testing.T) {
 	}
 	if _, ok := lastAttach(x); ok {
 		t.Error("a link that could not be followed was sent to the grid anyway")
+	}
+}
+
+// TestWearRefusesASystemWearable.
+//
+// Measured on Agni: a body part sent in RezSingleAttachmentFromInv is
+// ignored by the simulator without a word, so the command waited out
+// its whole forty seconds and then said the region had never agreed the
+// thing was worn.  True in every clause and about nothing that was
+// wrong -- the same failure a link's id got, and for the same reason.
+//
+// So it is refused here, in a sentence that says what kind of thing it
+// is, that this is not how one goes on, and where to look at what is
+// actually being worn.
+func TestWearRefusesASystemWearable(t *testing.T) {
+	for _, c := range []struct {
+		what string
+		kind sl.AssetType
+	}{
+		{"a shape", sl.AssetBodypart},
+		{"a shirt", sl.AssetClothing},
+	} {
+		id := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000c1")
+		x := newTestShell(t)
+		addItemOfKind(x, id, c.what, c.kind)
+
+		err := x.Do(context.Background(), "wear Objects/"+c.what)
+		if err == nil {
+			t.Fatalf("%s was sent to the grid as an attachment", c.what)
+		}
+		for _, want := range []string{"system wearable", "Current Outfit"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("%s: the refusal was %q, which does not say %q", c.what, err, want)
+			}
+		}
+		if _, ok := lastAttach(x); ok {
+			t.Errorf("%s: an attach request went out anyway", c.what)
+		}
+	}
+}
+
+// TestWearRefusesAWearableReachedThroughALink.
+//
+// Which is how it will actually be met: everything under an outfit
+// folder is a link, so the clothing in one is a link to clothing.  The
+// link is followed first and the refusal comes from what was found, so
+// the sentence names the thing rather than the link.
+func TestWearRefusesAWearableReachedThroughALink(t *testing.T) {
+	shape := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000c2")
+	folder := msg.MustParseUUID("b64f7e57-7e57-c0de-7b8c-0c3a6deb20ef")
+	link := msg.MustParseUUID("e8587e57-7e57-c0de-2c70-2196c4f04635")
+
+	x := newTestShell(t)
+	addItemOfKind(x, shape, "a shape", sl.AssetBodypart)
+	addLinkFolder(x, folder, link, "a shape", shape, sl.AssetBodypart)
+
+	err := x.Do(context.Background(), "wear An outfit/a shape")
+	if err == nil {
+		t.Fatal("a link to a body part was sent to the grid as an attachment")
+	}
+	if !strings.Contains(err.Error(), "bodypart") {
+		t.Errorf("the refusal should name what the link points at, got %q", err)
+	}
+	if _, ok := lastAttach(x); ok {
+		t.Error("an attach request went out anyway")
 	}
 }
