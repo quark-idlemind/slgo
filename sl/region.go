@@ -152,13 +152,13 @@ func (w *Session) regionChanged(c *RegionChange) {
 //     region's.  Some of them were never asked for -- an instant
 //     message carries the sender's name -- so one dropped here may
 //     never be offered again.
-//   - offers, invOffers, lures, invites, asked, dialogs: what people
-//     and their scripts have said to this avatar and is still waiting
-//     for an answer.  A person who offered friendship, or a teleport,
-//     or a group, did not withdraw it because the avatar walked through
-//     a door -- and an offer thrown away here is one nobody can accept
-//     afterwards.  The friend list itself is not here to keep: it comes
-//     from login, and the backend answers for it.
+//   - offers, invOffers, lures, tpRequests, invites, asked, dialogs:
+//     what people and their scripts have said to this avatar and is
+//     still waiting for an answer.  A person who offered friendship, or
+//     a teleport, or a group, did not withdraw it because the avatar
+//     walked through a door -- and an offer thrown away here is one
+//     nobody can accept afterwards.  The friend list itself is not here
+//     to keep: it comes from login, and the backend answers for it.
 //   - created, and the inventory generally: an item is the avatar's and
 //     travels with it.  The inventory comes from login rather than from
 //     a region, which is a good part of why a teleport is cheaper than

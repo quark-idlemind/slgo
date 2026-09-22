@@ -71,6 +71,13 @@ var socialCommands = map[string]*command{
 		man:    "offer",
 		run:    cmdOffer,
 	},
+	"lure": {
+		params: "WHO [TEXT]",
+		flags:  func() any { return new(lureFlags) },
+		brief:  "offer somebody a teleport here, or --ask to be brought to them",
+		man:    "lure",
+		run:    cmdLure,
+	},
 	"offers": {
 		flags: func() any { return new(helpOnly) },
 		brief: "friendship and inventory offers waiting for an answer",
@@ -749,6 +756,52 @@ func cmdOffer(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		return err
 	}
 	fmt.Fprintf(out, "offered friendship to %s\n", name)
+	return nil
+}
+
+// lureFlags is which direction the teleport goes.
+type lureFlags struct {
+	Ask  bool `getopt:"--ask -a   ask to be brought to them, rather than offering"`
+	Help bool `getopt:"--help -h  show what this command takes"`
+}
+
+// cmdLure offers somebody a teleport.
+//
+// Named for the grid's own word, which is what the rest of this tree
+// and the shell's own listings already say -- a teleport offer arriving
+// is a "teleport lure" in `waiting`.  A viewer's menu calls it Offer
+// Teleport; `offer` here was already friendship, and two things called
+// offer that differ by a flag would be worse than one word of the
+// protocol's jargon with a page explaining it.
+func cmdLure(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o lureFlags
+	args, done, err := subOptions("lure", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) == 0 {
+		return usageError("lure")
+	}
+	id, name, rest, err := sh.whoAndRest(ctx, args)
+	if err != nil {
+		return err
+	}
+	if o.Ask {
+		if err := sh.s.RequestTeleport(ctx, id, strings.Join(rest, " ")); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "asked %s to teleport this avatar there\n", name)
+		return nil
+	}
+	if err := sh.s.OfferTeleport(ctx, id, strings.Join(rest, " ")); err != nil {
+		return err
+	}
+
+	// What was sent and not what will happen.  Whether they come is
+	// theirs to decide and there is no notice either way: an offer
+	// accepted arrives as dialog 23 if it arrives at all, and one
+	// ignored arrives as nothing.
+	fmt.Fprintf(out, "offered %s a teleport here\n", name)
 	return nil
 }
 

@@ -44,6 +44,10 @@ With a note, which is what the other side reads:
 
     offer Another Resident we met at the build last night
 
+`offer` is friendship and only friendship.  A teleport offered to
+somebody is `lure`, which is the grid's word for it and the one the
+shell's own listings use.
+
 See also: `offers`, `accept` and `decline` for the offers coming the
-other way, `friends` for the list an accepted one joins, and `lookup`
-for finding somebody who is not here.
+other way, `friends` for the list an accepted one joins, `lure` for
+offering a teleport, and `lookup` for finding somebody who is not here.

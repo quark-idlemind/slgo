@@ -213,6 +213,9 @@ there would be joined onto the name.
     tp --wait 60 Example Shallows
     tp home
 
+`tp` moves this avatar and nobody else.  Offering a teleport to
+somebody else is `lure`.
+
 See also: `regions` for finding out what a name matches and where it is,
 `where` for the position this is given in, `look` for what the region
 underfoot says about itself, `neighbours` for walking over a border

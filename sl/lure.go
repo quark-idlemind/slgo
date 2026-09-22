@@ -17,6 +17,9 @@ package sl
 import (
 	"context"
 	"fmt"
+	"math"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
@@ -177,4 +180,165 @@ func (w *Session) DeclineLure(ctx context.Context, l *Lure) error {
 	}
 	w.ForgetLure(l)
 	return nil
+}
+
+// Teleport requests: the other direction.
+//
+// Somebody sends an instant message of dialog 26 asking to be brought
+// to this avatar (llinstantmessage.h:129, IM_TELEPORT_REQUEST).  It
+// carries no id -- the id field is null when the viewer sends one
+// (llavataractions.cpp:679) -- so who asked is the whole of it, and
+// what answers it is an OFFER going the other way.
+//
+// That asymmetry is the grid's, not this package's: saying yes to a
+// request is teleport_request_callback calling send_lures, the same
+// function the menu item calls (llviewermessage.cpp), and saying no
+// sends nothing at all.  The person who asked is never told they were
+// refused; their dialog simply never resolves.
+
+// TeleportRequest is somebody asking this avatar to offer them a
+// teleport.
+type TeleportRequest struct {
+	At time.Time
+
+	// From is who asked and Name what they are called.
+	From msg.UUID
+	Name string
+
+	// Text is what they said with it.
+	Text string
+}
+
+func (r TeleportRequest) String() string {
+	who := r.Name
+	if who == "" {
+		who = r.From.String()
+	}
+	if r.Text == "" {
+		return who + " asks to be teleported here"
+	}
+	return fmt.Sprintf("%s asks to be teleported here: %q", who, r.Text)
+}
+
+// noteTeleportRequest keeps one, replacing any earlier one from the
+// same person: asking twice is asking, not asking for two teleports.
+func (w *Session) noteTeleportRequest(im *IM) {
+	name := im.FromName
+	if name == "" {
+		name = w.NameOr(im.From)
+	}
+	w.mu.Lock()
+	if w.tpRequests == nil {
+		w.tpRequests = map[msg.UUID]*TeleportRequest{}
+	}
+	w.tpRequests[im.From] = &TeleportRequest{
+		At: im.At, From: im.From, Name: name, Text: im.Text,
+	}
+	w.mu.Unlock()
+}
+
+// TeleportRequests returns the requests waiting for an answer, oldest
+// first.
+func (w *Session) TeleportRequests() []*TeleportRequest {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := make([]*TeleportRequest, 0, len(w.tpRequests))
+	for _, r := range w.tpRequests {
+		out = append(out, r)
+	}
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j].At.Before(out[j-1].At); j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	return out
+}
+
+// ForgetTeleportRequest drops one without answering it.
+//
+// Which is also what refusing one looks like on the wire, since the
+// grid has nothing to send for a refusal.  The difference is only
+// whether this shell goes on listing it.
+func (w *Session) ForgetTeleportRequest(r *TeleportRequest) {
+	if r == nil {
+		return
+	}
+	w.mu.Lock()
+	delete(w.tpRequests, r.From)
+	w.mu.Unlock()
+}
+
+// OfferTeleport offers somebody a teleport to where this avatar is.
+//
+// StartLure, with LureType zero -- the viewer sends zero with the
+// comment "sim will fill this in" (llviewermessage.cpp, send_lures),
+// so it is sent for the sake of matching rather than because it
+// decides anything.
+//
+// The destination is not a field of the message.  What the other side
+// sees is whatever is written into the note, which is why the viewer
+// appends its own location to it as a SLURL and why this does too: an
+// offer without one arrives with nothing to say where it goes.  A
+// position that cannot be read is not a reason to refuse to offer, so
+// the note goes on its own in that case.
+func (w *Session) OfferTeleport(ctx context.Context, to msg.UUID, note string) error {
+	if to.IsZero() {
+		return fmt.Errorf("offer a teleport to nobody")
+	}
+	text := strings.TrimSpace(note)
+	if where := w.slurl(ctx); where != "" {
+		if text == "" {
+			text = where
+		} else {
+			text += "\r\n" + where
+		}
+	}
+
+	m := &msg.StartLure{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.Info.LureType = 0
+	// Terminated, like every other string this tree puts on the wire.
+	// Without the NUL the simulator reads the last byte as the
+	// terminator and the note arrives one character short -- measured,
+	// with a position of 4004 metres arriving as 400.
+	m.Info.Message = append([]byte(text), 0)
+	m.TargetData = []msg.StartLure_TargetData{{TargetID: to}}
+	return w.Send(ctx, m)
+}
+
+// slurl is where this avatar is, in the form a viewer writes into a
+// teleport offer: the grid's map URL, the region escaped, and the
+// position rounded to whole metres (llslurl.cpp, getSLURLString).
+//
+// Empty when the position cannot be read.  It is decoration on an
+// offer that works without it.
+func (w *Session) slurl(ctx context.Context) string {
+	p, err := w.Where(ctx)
+	if err != nil || p.Region == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://maps.secondlife.com/secondlife/%s/%d/%d/%d",
+		url.PathEscape(p.Region),
+		int(math.Round(float64(p.Position.X))),
+		int(math.Round(float64(p.Position.Y))),
+		int(math.Round(float64(p.Position.Z))))
+}
+
+// RequestTeleport asks somebody to offer this avatar a teleport to
+// them, which is the other direction and is an instant message rather
+// than a message of its own (llavataractions.cpp:679, dialog 26 with a
+// null id).
+//
+// What answers it is an offer coming back.  There is nothing to wait
+// for here and no refusal to expect: a viewer's No button on one of
+// these sends nothing at all.
+func (w *Session) RequestTeleport(ctx context.Context, to msg.UUID, note string) error {
+	if to.IsZero() {
+		return fmt.Errorf("ask nobody for a teleport")
+	}
+	text := strings.TrimSpace(note)
+	if text == "" {
+		text = "Would you teleport me to you?"
+	}
+	return w.Send(ctx, w.im(to, DialogTeleportRequest, text))
 }

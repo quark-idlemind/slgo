@@ -174,6 +174,10 @@ type Session struct {
 	// offered.  See lure.go.
 	lures map[msg.UUID]*Lure
 
+	// tpRequests are the people asking to be teleported here, by
+	// whoever asked.  See lure.go.
+	tpRequests map[msg.UUID]*TeleportRequest
+
 	// invites are the group invitations waiting for an answer, by the
 	// group they are into -- which is also who they came from.  See
 	// invite.go.

@@ -36,6 +36,9 @@ const (
 	DialogSessionSend        = 17
 	DialogBusyAutoResponse   = 19
 	DialogTeleportLure       = 22
+	DialogLureAccepted       = 23
+	DialogGodlikeLure        = 25
+	DialogTeleportRequest    = 26
 	DialogFriendshipOffered  = 38
 	DialogFriendshipAccepted = 39
 	DialogFriendshipDeclined = 40
@@ -626,6 +629,14 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 		w.noteLure(im)
 	}
 
+	// Somebody asking to be sent one, which is the other direction and
+	// is answered by OFFERING rather than by accepting.  Kept because
+	// it is a question waiting on a person, like the rest of these; it
+	// carries no id of its own, so who asked is the whole of it.
+	if b.Dialog == DialogTeleportRequest {
+		w.noteTeleportRequest(im)
+	}
+
 	// A group invitation, kept for the same reason again: the transaction
 	// answers it and nothing else does, and a group with enrolment
 	// closed cannot be joined any other way.  See invite.go.
@@ -696,6 +707,14 @@ func DialogName(d uint8) string {
 		return "busy auto response"
 	case DialogTeleportLure:
 		return "teleport lure"
+	case DialogLureAccepted:
+		return "teleport offer accepted"
+	case DialogLureDeclined:
+		return "teleport offer declined"
+	case DialogGodlikeLure:
+		return "godlike teleport"
+	case DialogTeleportRequest:
+		return "teleport request"
 	case DialogFriendshipOffered:
 		return "friendship offer"
 	case DialogFriendshipAccepted:

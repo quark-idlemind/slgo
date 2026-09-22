@@ -85,7 +85,7 @@ var groups = []group{
 		members: []string{
 			"who", "lookup", "profile", "friends",
 			"offer", "offers", "accept", "decline",
-			"invite", "chat", "say", "im", "talk",
+			"invite", "chat", "say", "im", "talk", "lure",
 		},
 	},
 	{

@@ -87,6 +87,7 @@ type waiter struct {
 
 	dialog *sl.Dialog
 	lure   *sl.Lure
+	asked  *sl.TeleportRequest
 	item   *sl.InventoryOffer
 	friend *sl.Offer
 	perm   *sl.Permission
@@ -101,6 +102,8 @@ func (w waiter) key() string {
 		return fmt.Sprintf("dialog|%s|%d|%d", w.dialog.Object, w.dialog.Channel, w.dialog.At.UnixNano())
 	case w.lure != nil:
 		return "lure|" + w.lure.ID.String()
+	case w.asked != nil:
+		return "tprequest|" + w.asked.From.String()
 	case w.item != nil:
 		return "item|" + w.item.Transaction.String()
 	case w.friend != nil:
@@ -120,6 +123,8 @@ func (w waiter) who() string {
 		return w.dialog.ObjectName
 	case w.lure != nil:
 		return w.lure.Name
+	case w.asked != nil:
+		return w.asked.Name
 	case w.item != nil:
 		return w.item.FromName
 	case w.friend != nil:
@@ -150,6 +155,11 @@ func (w waiter) asks() string {
 			return fmt.Sprintf("teleport: %q", w.lure.Text)
 		}
 		return "a teleport"
+	case w.asked != nil:
+		if w.asked.Text != "" {
+			return fmt.Sprintf("asks to be teleported here: %q", w.asked.Text)
+		}
+		return "asks to be teleported here"
 	case w.item != nil:
 		return fmt.Sprintf("offers %q", w.item.Name)
 	case w.friend != nil:
@@ -196,6 +206,8 @@ func (w waiter) choices() string {
 		return strings.Join(b, ", ")
 	case w.lure != nil:
 		return "answer (takes it, and waits for the arrival), no, ignore"
+	case w.asked != nil:
+		return "answer (offers them one back), no (says nothing), ignore"
 	case w.invite != nil && !w.invite.Stated:
 		return "answer N L$AMOUNT (it did not say what joining costs), no, ignore"
 	case w.invite != nil && w.invite.Fee > 0:
@@ -229,6 +241,9 @@ func (sh *Shell) waiters() []waiter {
 	}
 	for _, l := range sh.s.Lures() {
 		all = append(all, waiter{at: l.At, kind: "teleport", lure: l})
+	}
+	for _, r := range sh.s.TeleportRequests() {
+		all = append(all, waiter{at: r.At, kind: "teleport request", asked: r})
 	}
 	for _, o := range sh.s.InventoryOffers() {
 		all = append(all, waiter{at: o.At, kind: "inventory", item: o})
@@ -430,6 +445,17 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 			return err
 		}
 		fmt.Fprintf(out, "pressed %q on %s\n", label, w.who())
+
+	case w.asked != nil:
+		// Yes to a request is an OFFER going the other way, which is
+		// what the viewer does with it too: its Yes button calls the
+		// same send_lures the menu item calls.  There is nothing else
+		// it could be -- the request carries no id to accept.
+		if err := sh.s.OfferTeleport(ctx, w.asked.From, ""); err != nil {
+			return err
+		}
+		sh.s.ForgetTeleportRequest(w.asked)
+		fmt.Fprintf(out, "offered %s a teleport here\n", w.who())
 
 	case w.lure != nil:
 		// Said before the request goes, because accepting now waits for
@@ -633,6 +659,14 @@ func cmdNo(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			return err
 		}
 		fmt.Fprintf(out, "declined the teleport from %s\n", w.who())
+	case w.asked != nil:
+		// The grid has nothing to send for this one.  The viewer's No
+		// button does nothing at all -- no message, no notice -- so the
+		// person who asked is never told, and saying otherwise here
+		// would be inventing a refusal they will never see.
+		sh.s.ForgetTeleportRequest(w.asked)
+		fmt.Fprintf(out, "left %s unanswered; a teleport request cannot be declined, "+
+			"only ignored\n", w.who())
 	case w.item != nil:
 		// The offer's own Decline: the session call underneath it sends
 		// the refusal without forgetting the offer, which left it here
