@@ -72,6 +72,11 @@ type fakeBackend struct {
 
 	info *Info
 
+	// refreshed counts the asks and refreshErr makes one fail, for
+	// the tests about a session that was rebuilt underneath.
+	refreshed  int
+	refreshErr error
+
 	// msgs is the relay, and is unbuffered on purpose; see Relay.
 	// events is the other relay, and is unbuffered for the same
 	// reason: what arrives on the grid's event queue rather than on
@@ -621,7 +626,41 @@ func onlySent[T msg.Message](t *testing.T, f *fakeBackend) T {
 
 // ------------------------------------------------------------- backend
 
-func (f *fakeBackend) Info() *Info { return f.info }
+func (f *fakeBackend) Info() *Info {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.info
+}
+
+// Refresh hands back whatever the test has set since, which is how a
+// re-established session is staged: Reidentify, then deliver a region
+// change.
+func (f *fakeBackend) Refresh(context.Context) (*Info, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.refreshed++
+	if f.refreshErr != nil {
+		return nil, f.refreshErr
+	}
+	return f.info, nil
+}
+
+// Reidentify is the daemon having rebuilt the session underneath: the
+// same avatar, a new session id.
+func (f *fakeBackend) Reidentify(sess msg.UUID) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	next := *f.info
+	next.SessionID = sess
+	f.info = &next
+}
+
+// Refreshes is how many times the session asked who it is.
+func (f *fakeBackend) Refreshes() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refreshed
+}
 
 func (f *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	f.mu.Lock()

@@ -388,7 +388,7 @@ func (w *Session) TaskInventory(ctx context.Context, o *Object) ([]TaskItem, err
 	if filename == "" {
 		return nil, nil
 	}
-	body, err := w.xfers.Fetch(ctx, w.me, w.sess, filename,
+	body, err := w.xfers.Fetch(ctx, w.me, w.Session(), filename,
 		client.FilePathTaskInventory, 30*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("sl: reading the inventory of %s: %w", o, err)
@@ -501,7 +501,7 @@ func (w *Session) ReadAsset(ctx context.Context, ref client.AssetRef, timeout ti
 	if ref.Owner.IsZero() {
 		ref.Owner = w.me
 	}
-	return w.transfers.Fetch(ctx, w.me, w.sess, ref, timeout)
+	return w.transfers.Fetch(ctx, w.me, w.Session(), ref, timeout)
 }
 
 // ReadTaskAsset fetches the bytes of something inside an object.

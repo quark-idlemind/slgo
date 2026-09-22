@@ -143,9 +143,9 @@ func TestAMessageFromTheGridIsNotAnEcho(t *testing.T) {
 func TestEchoedChatArrivesAsALine(t *testing.T) {
 	w := &Session{
 		me:       msg.UUID{9},
-		info:     &Info{AvatarName: "Example Resident"},
 		chatSubs: map[<-chan Line]*chatSub{},
 	}
+	w.ident.Store(&Info{AvatarName: "Example Resident"})
 	lines := make(chan Line, 4)
 	w.chatSubs[lines] = &chatSub{ch: lines}
 
@@ -176,9 +176,9 @@ func TestEchoedChatArrivesAsALine(t *testing.T) {
 func TestChatFromViewerWithNoSenderIsDropped(t *testing.T) {
 	w := &Session{
 		me:       msg.UUID{9},
-		info:     &Info{AvatarName: "Example Resident"},
 		chatSubs: map[<-chan Line]*chatSub{},
 	}
+	w.ident.Store(&Info{AvatarName: "Example Resident"})
 	lines := make(chan Line, 4)
 	w.chatSubs[lines] = &chatSub{ch: lines}
 

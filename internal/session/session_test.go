@@ -324,6 +324,10 @@ func xmlText(s string) string {
 
 func (f *fakeGrid) Info() *sl.Info { return f.info }
 
+// Refresh is Backend's; nothing here rebuilds a session underneath, so
+// the identity it hands back is the one it has.
+func (f *fakeGrid) Refresh(context.Context) (*sl.Info, error) { return f.Info(), nil }
+
 // Control is nothing here.  Nothing this fake stands in for sits
 // down or stands up; the method exists because sl.Backend has it,
 // so that the one place an AgentUpdate is built stays the one place

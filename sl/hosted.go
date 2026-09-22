@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
@@ -23,6 +24,12 @@ import (
 // Hosted is a session slgod is holding.
 type Hosted struct {
 	conn *client.Conn
+
+	// mu guards info, which is not what it was at attach time: the
+	// daemon may re-establish the session under this client, and
+	// Refresh is how the new identity gets here.  See issue 009 and
+	// the Backend interface.
+	mu   sync.RWMutex
 	info *Info
 
 	// standing is what this session asked to be relayed when it
@@ -156,7 +163,31 @@ func (h *Hosted) Sessions(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-func (h *Hosted) Info() *Info               { return h.info }
+func (h *Hosted) Info() *Info {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.info
+}
+
+// Refresh asks the daemon who this session is now.
+//
+// Status rather than a call of its own: it already answers with the
+// current AgentInfo, and the daemon rebuilds that from the live
+// session rather than from what it said at attach time.
+func (h *Hosted) Refresh(ctx context.Context) (*Info, error) {
+	st, err := h.conn.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if st.GetAgent() == nil {
+		return nil, fmt.Errorf("sl: the daemon said nothing about this agent")
+	}
+	info := infoFromPB(st.GetAgent())
+	h.mu.Lock()
+	h.info = info
+	h.mu.Unlock()
+	return info, nil
+}
 func (h *Hosted) Messages() <-chan *Message { return h.conn.Messages() }
 func (h *Hosted) Done() <-chan struct{}     { return h.conn.Done() }
 

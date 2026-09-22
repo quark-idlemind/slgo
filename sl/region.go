@@ -16,7 +16,16 @@ package sl
 // process, and Backend.RegionChanges is the same channel either way --
 // see backend.go, which is where the reason for that lives.
 
-import "sync/atomic"
+import (
+	"context"
+	"sync/atomic"
+	"time"
+)
+
+// refreshTimeout bounds the ask that follows a region change.  Long
+// enough for a daemon that is busy reconnecting, short enough that a
+// daemon which will never answer is not waited on for ever.
+const refreshTimeout = 30 * time.Second
 
 // DefaultRegionDepth is the buffer a region-change subscription gets
 // when none is asked for.
@@ -87,6 +96,20 @@ func (w *Session) RegionChangesDropped(ch <-chan *RegionChange) uint64 {
 // an ObjectUpdate half written into maps that were emptied under it
 // would leave exactly the mixture this is here to prevent.
 func (w *Session) regionChanged(c *RegionChange) {
+	// Who this session is may have changed with it: a daemon
+	// re-establishing a dropped session announces itself as a region
+	// change, and a re-established session has a new session id.
+	// Asked for off this goroutine, because this one is the relay --
+	// see refreshIdentity.
+	go func() {
+		// Bounded: a daemon that never answers must not leave a
+		// goroutine here for the life of the process, and the next
+		// region change asks again anyway.
+		ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+		defer cancel()
+		w.refreshIdentity(ctx)
+	}()
+
 	w.mu.Lock()
 	w.dropRegionState()
 	subs := make([]*regionSub, 0, len(w.regionSubs))

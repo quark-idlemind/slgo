@@ -63,15 +63,24 @@ type Info struct {
 
 	AvatarName string
 
-	// Region is where the avatar was when this session attached, and
-	// it is not revised afterwards.
+	// Region is where the avatar was when this was last read, which is
+	// at attach and again whenever the session is told the avatar has
+	// moved.
 	//
-	// That is the contract above working as written rather than a
-	// fault to fix: this whole struct is what was known at attach time,
-	// and a field that quietly changed under a caller would be worse
-	// than one that plainly does not.  An avatar that teleports is
-	// somewhere else and this still says where it started, so ask
-	// Session.Where, or subscribe to Session.RegionChanges to be told.
+	// It used to say here that it was the attach-time region and was
+	// never revised, and that a field which quietly changed under a
+	// caller would be worse than one that plainly does not.  The
+	// argument was sound and the conclusion was not: SessionID is in
+	// this struct too, and a SessionID that plainly does not change is
+	// a session that plainly cannot send (issue 009).  So the whole
+	// struct is replaced on a region change rather than edited, and
+	// Info hands back the current one.
+	//
+	// It is still a snapshot and not a subscription.  An avatar that
+	// teleported a moment ago may not have been asked about yet, so
+	// anything that has to act AT the moment it happens wants
+	// Session.RegionChanges, and anything that needs the position as
+	// well wants Session.Where.
 	Region string
 
 	InventoryRoot msg.UUID
@@ -114,8 +123,28 @@ type Friend struct {
 // them can do -- listing the sessions a daemon holds, logging the
 // avatar out -- is a method on that one and not part of this.
 type Backend interface {
-	// Info is what was known at attach time and does not change.
+	// Info is who this session is: the avatar, the session, the
+	// capability URLs.
+	//
+	// It DOES change.  It used to say here that it did not, and that
+	// was the whole of issue 009: a daemon may re-establish the grid
+	// session under an attached client -- same avatar, new session id,
+	// new circuit code, new capabilities -- and a client that goes on
+	// sending the old session id is sending into nothing.  The
+	// simulator discards it in silence; there is no error and no
+	// notice, and receiving carries on working, which is what made it
+	// take fourteen hours to notice.
 	Info() *Info
+
+	// Refresh asks again, for a backend that can, and hands back what
+	// is true now.  A backend whose identity cannot change answers
+	// with what it has.
+	//
+	// Called when the session is told the avatar has changed region,
+	// since that is also how a re-established session announces
+	// itself: the words say which it was and the codebase does not
+	// match on words, so both are treated as the one that matters.
+	Refresh(ctx context.Context) (*Info, error)
 
 	// Send puts a message on the circuit.
 	Send(ctx context.Context, m msg.Message, reliable bool) error

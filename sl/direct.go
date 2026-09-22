@@ -177,13 +177,20 @@ func (d *Direct) regionChanged(region string, handle uint64) {
 	}
 }
 
-func (d *Direct) Info() *Info                         { return d.info }
-func (d *Direct) Messages() <-chan *Message           { return d.messages }
-func (d *Direct) Events() <-chan *QueueEvent          { return d.events }
-func (d *Direct) RegionChanges() <-chan *RegionChange { return d.regions }
-func (d *Direct) Done() <-chan struct{}               { return d.a.Done() }
-func (d *Direct) Err() error                          { return d.a.Err() }
-func (d *Direct) HasCap(name string) bool             { return d.a.HasCap(name) }
+func (d *Direct) Info() *Info { return d.info }
+
+// Refresh has nothing to ask.  A session this process logged in itself
+// changes identity only by logging in again, which builds another
+// Session rather than changing this one -- the case Backend.Refresh
+// exists for is a DAEMON re-establishing a session under a client that
+// stayed attached, and there is no daemon here.
+func (d *Direct) Refresh(context.Context) (*Info, error) { return d.info, nil }
+func (d *Direct) Messages() <-chan *Message              { return d.messages }
+func (d *Direct) Events() <-chan *QueueEvent             { return d.events }
+func (d *Direct) RegionChanges() <-chan *RegionChange    { return d.regions }
+func (d *Direct) Done() <-chan struct{}                  { return d.a.Done() }
+func (d *Direct) Err() error                             { return d.a.Err() }
+func (d *Direct) HasCap(name string) bool                { return d.a.HasCap(name) }
 
 // Close ends the session.  Unlike a hosted one there is nobody else
 // holding it, so this logs out rather than merely hanging up.

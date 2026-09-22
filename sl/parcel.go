@@ -134,7 +134,7 @@ func (w *Session) ParcelAt(ctx context.Context, x, y float32, timeout time.Durat
 
 	m := &msg.ParcelPropertiesRequest{}
 	m.AgentData.AgentID = w.me
-	m.AgentData.SessionID = w.sess
+	m.AgentData.SessionID = w.Session()
 	m.ParcelData.SequenceID = seq
 	m.ParcelData.West, m.ParcelData.South = west, south
 	m.ParcelData.East, m.ParcelData.North = west+agent.OverlayStep, south+agent.OverlayStep
@@ -153,7 +153,7 @@ func (w *Session) ParcelByID(ctx context.Context, local int32, timeout time.Dura
 
 	m := &msg.ParcelPropertiesRequestByID{}
 	m.AgentData.AgentID = w.me
-	m.AgentData.SessionID = w.sess
+	m.AgentData.SessionID = w.Session()
 	m.ParcelData.SequenceID = seq
 	m.ParcelData.LocalID = local
 
@@ -284,7 +284,7 @@ func (w *Session) Dwell(ctx context.Context, local int32, timeout time.Duration)
 
 	m := &msg.ParcelDwellRequest{}
 	m.AgentData.AgentID = w.me
-	m.AgentData.SessionID = w.sess
+	m.AgentData.SessionID = w.Session()
 	m.Data.LocalID = local
 	if err := w.Send(ctx, m); err != nil {
 		return 0, msg.UUID{}, err

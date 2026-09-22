@@ -1237,6 +1237,10 @@ func taskInventoryFile(task msg.UUID, held []*heldItem) []byte {
 
 func (f *fakeGrid) Info() *sl.Info { return f.info }
 
+// Refresh is Backend's; nothing here rebuilds a session underneath, so
+// the identity it hands back is the one it has.
+func (f *fakeGrid) Refresh(context.Context) (*sl.Info, error) { return f.Info(), nil }
+
 // Control takes a control flag the way a daemon does: it is recorded,
 // and whatever the test has arranged to happen next happens outside the
 // lock, since answering usually means relaying something back.

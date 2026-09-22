@@ -226,7 +226,7 @@ func (w *Session) im(to msg.UUID, dialog uint8, text string) *msg.ImprovedInstan
 	m.MessageBlock.ToAgentID = to
 	m.MessageBlock.Dialog = dialog
 	m.MessageBlock.Offline = 0 // IM_ONLINE
-	m.MessageBlock.FromAgentName = append([]byte(w.info.AvatarName), 0)
+	m.MessageBlock.FromAgentName = append([]byte(w.Info().AvatarName), 0)
 	m.MessageBlock.Message = append([]byte(text), 0)
 	m.MessageBlock.ID = randomUUID()
 

@@ -111,6 +111,10 @@ func (b *fakeBackend) Info() *sl.Info {
 	}
 }
 
+// Refresh is Backend's; nothing here rebuilds a session underneath, so
+// the identity it hands back is the one it has.
+func (b *fakeBackend) Refresh(context.Context) (*sl.Info, error) { return b.Info(), nil }
+
 // Control is nothing here.  Nothing this fake stands in for sits
 // down or stands up; the method exists because sl.Backend has it,
 // so that the one place an AgentUpdate is built stays the one place

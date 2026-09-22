@@ -304,7 +304,7 @@ func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, timeout 
 		}
 		for _, id := range toAsk {
 			q := &msg.RequestObjectPropertiesFamily{}
-			q.AgentData.AgentID, q.AgentData.SessionID = w.me, w.sess
+			q.AgentData.AgentID, q.AgentData.SessionID = w.agentBlock()
 			q.ObjectData.ObjectID = id
 			_ = w.b.Send(ctx, q, true)
 		}

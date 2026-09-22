@@ -652,7 +652,7 @@ func (w *Session) saidElsewhere(raw *client.Message, m *msg.ChatFromViewer) {
 	l := Line{
 		At:         at,
 		Source:     w.me,
-		From:       w.info.AvatarName,
+		From:       w.Info().AvatarName,
 		SourceType: SourceAgent,
 		Type:       m.ChatData.Type,
 		Channel:    m.ChatData.Channel,

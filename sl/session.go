@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
@@ -54,11 +55,26 @@ var Subscriptions = []string{
 // It is safe for concurrent use.  It reads the relay in one goroutine
 // and everything else takes the lock.
 type Session struct {
-	b    Backend
-	info *Info
+	b Backend
 
+	// ident is who this session is NOW: the avatar, the session id,
+	// the capability URLs.  It is a pointer that gets replaced rather
+	// than a struct that gets edited, and it is atomic rather than
+	// under mu, because agentBlock reads it while building nearly
+	// every message this package sends -- some of them from code that
+	// already holds mu, which a lock here would deadlock.
+	//
+	// It changes because a daemon can re-establish the grid session
+	// under an attached client: same avatar, new session id.  Sending
+	// the old one is sending into silence.  See issue 009, Refresh,
+	// and refreshIdentity below.
+	ident atomic.Pointer[Info]
+
+	// me and invRoot do not change.  The avatar is the same avatar
+	// however often its session is rebuilt, and the inventory root
+	// belongs to the account rather than to the session, so both are
+	// read without going through ident.
 	me      msg.UUID
-	sess    msg.UUID
 	invRoot msg.UUID
 
 	xfers     *client.Xfers
@@ -285,7 +301,7 @@ func New(b Backend) (*Session, error) {
 	}
 
 	w := &Session{
-		b: b, info: info, me: info.AgentID, sess: info.SessionID, invRoot: info.InventoryRoot,
+		b: b, me: info.AgentID, invRoot: info.InventoryRoot,
 		locals:      map[msg.UUID]uint32{},
 		owners:      map[msg.UUID]msg.UUID{},
 		objectNames: map[msg.UUID]string{},
@@ -306,6 +322,8 @@ func New(b Backend) (*Session, error) {
 		chatCtl:     make(chan chatCmd),
 		readDone:    make(chan struct{}),
 	}
+	// Before anything can send: agentBlock reads this on every message.
+	w.ident.Store(info)
 	w.xfers = client.NewXfers(b)
 	w.transfers = client.NewTransfers(b)
 	go w.read(context.Background())
@@ -317,12 +335,30 @@ func New(b Backend) (*Session, error) {
 // through it still reaches the same reader.
 func (w *Session) Backend() Backend { return w.b }
 
-// Me is the avatar's id, Session the session id, and Info what the
-// server said when we attached.
+// Me is the avatar's id, Session the session id, and Info who this
+// session is now.
+//
+// Info is not what the server said at attach time.  A session that has
+// been re-established under this client says something different, and
+// a caller holding the old answer is holding a session id the
+// simulator will not accept.
 func (w *Session) Me() msg.UUID            { return w.me }
-func (w *Session) Session() msg.UUID       { return w.sess }
-func (w *Session) Info() *Info             { return w.info }
+func (w *Session) Session() msg.UUID       { return w.identity().SessionID }
+func (w *Session) Info() *Info             { return w.identity() }
 func (w *Session) InventoryRoot() msg.UUID { return w.invRoot }
+
+// identity is the current one, and never nil.
+//
+// New always stores one, so the empty answer is for a Session built by
+// hand -- which the tests do.  Answering with a zero Info rather than
+// panicking keeps a mistake in test scaffolding a wrong value instead
+// of a crash, which is what the field it replaced did.
+func (w *Session) identity() *Info {
+	if i := w.ident.Load(); i != nil {
+		return i
+	}
+	return &Info{}
+}
 
 // Close hangs up.
 func (w *Session) Close() error { return w.b.Close() }
@@ -343,7 +379,38 @@ func (w *Session) Send(ctx context.Context, m msg.Message) error {
 
 // agentBlock fills the AgentID and SessionID that nearly every message
 // starts with.
-func (w *Session) agentBlock() (msg.UUID, msg.UUID) { return w.me, w.sess }
+//
+// Read through ident every time rather than from a field settled at
+// attach: this is the one place the session id reaches the wire, so it
+// is the one place that has to be right about which session it is.
+func (w *Session) agentBlock() (msg.UUID, msg.UUID) {
+	return w.me, w.identity().SessionID
+}
+
+// refreshIdentity asks the backend who this session is now, and keeps
+// the answer.
+//
+// Called when the region changes, because a re-established session
+// arrives as a region change -- the daemon says so in the detail, and
+// this does not read the detail: matching on the words would be one
+// more thing to be wrong about when they change, which is issues/006.
+// An ordinary teleport refreshes an identity that has not moved, which
+// costs one call and changes nothing.
+//
+// It runs OFF the reader goroutine.  Anything that waits on the daemon
+// from there stops the relay this session is reading, and a session
+// that stops reading stops hearing about the very thing it is trying
+// to react to.
+func (w *Session) refreshIdentity(ctx context.Context) {
+	info, err := w.b.Refresh(ctx)
+	if err != nil || info == nil || info.SessionID.IsZero() {
+		// Nothing to be done and nobody here to tell.  The old
+		// identity is kept, which is what would have happened
+		// anyway, and the next region change tries again.
+		return
+	}
+	w.ident.Store(info)
+}
 
 // Settle waits, doing nothing, so the simulator's interest list can
 // fill.
