@@ -52,8 +52,8 @@ var socialCommands = map[string]*command{
 	},
 	"lookup": {
 		params: "TEXT",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "search the grid for people by part of a name",
+		flags:  func() any { return new(lookupOptions) },
+		brief:  "search the grid for people by part of a name; -l for the keys",
 		man:    "lookup",
 		run:    cmdLookup,
 	},
@@ -449,8 +449,21 @@ func cmdFriends(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 	return nil
 }
 
+// lookupOptions is what lookup was asked for.
+//
+// -l is the flag it is everywhere else here: the ids as well as the
+// names.  A resident's key is the one handle that does not change --
+// a name can be a display name today and another tomorrow, and several
+// people answer to part of one -- and every command that takes a
+// person takes a key instead, so a search that could not print one
+// sent people to "profile" for a line they had already asked for.
+type lookupOptions struct {
+	Long bool `getopt:"-l          the key as well as the name"`
+	Help bool `getopt:"--help -h   show what this command takes"`
+}
+
 func cmdLookup(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	var o helpOnly
+	var o lookupOptions
 	args, done, err := subOptions("lookup", &o, out, args)
 	if err != nil || done {
 		return err
@@ -466,7 +479,7 @@ func cmdLookup(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		fmt.Fprintln(out, "nobody found")
 		return nil
 	}
-	sh.printFound(out, found)
+	sh.printFound(out, found, o.Long)
 	return nil
 }
 
@@ -486,10 +499,18 @@ func cmdLookup(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 // grid -- and a person scrolling a hundred names for one that is not
 // there deserves to know the search stopped counting rather than that
 // their friend has left.
-func (sh *Shell) printFound(out io.Writer, found []sl.Found) {
+func (sh *Shell) printFound(out io.Writer, found []sl.Found, long bool) {
 	listed := make([]person, 0, len(found))
 	for i, f := range found {
 		line := fmt.Sprintf("%2d  %-32s", i+1, f.Name)
+		// The key after the name and before the display name, which is
+		// where worn -l puts its ids: the columns before it are fixed
+		// width, so the key lands in the same place on every row and
+		// can be cut out of a listing.  The display name is last
+		// because it is the one field with no width at all.
+		if long {
+			line += "  " + f.ID.String()
+		}
 		if f.Display != "" && !strings.EqualFold(f.Display, f.Name) {
 			line += "  " + f.Display
 		}
@@ -708,7 +729,10 @@ func (sh *Shell) whoOrSearch(ctx context.Context, out io.Writer, want string) (m
 			"try less of the name, or give the key", want)
 	}
 
-	sh.printFound(out, found)
+	// Not the long form: this is a refusal asking somebody to pick a
+	// number, and a column of keys in front of that is answering a
+	// question they did not ask.  "lookup -l" is where the keys are.
+	sh.printFound(out, found, false)
 	return msg.UUID{}, "", fmt.Errorf("%d people answer to %q; a number picks one",
 		len(found), want)
 }

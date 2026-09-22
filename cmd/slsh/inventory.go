@@ -470,6 +470,7 @@ func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 // would become a flag named after itself.
 type lsOptions struct {
 	Long   bool   `getopt:"-l          the columns: kind, when it was acquired, id and path"`
+	Follow bool   `getopt:"-L          the columns, with a link shown as the item it points at"`
 	Deep   bool   `getopt:"-r          descend into the folders below"`
 	ByTime bool   `getopt:"-t          newest first, rather than by name"`
 	In     string `getopt:"--in=OBJECT what a rezzed object holds, rather than inventory"`
@@ -509,17 +510,81 @@ func readLsOptions(out io.Writer, args []string) (lsOptions, error) {
 //
 // A folder has no date, and an empty column would move every column
 // after it, so it gets a dash.
-// lsLine is one row of a long listing: kind, when it was acquired, id,
-// and the whole path.
+// longFormat is how a long listing renders its rows: whether -L was
+// asked for, and the index to follow links with.
 //
-// Shared with find -l rather than written twice.  The columns are the
+// Shared by ls and find rather than written twice.  The columns are the
 // only way to tell a link from what it points at, or one of four items
 // of a name from the other three, so two commands printing them in two
 // shapes would be two things to learn for one answer -- and the id
 // column is there to be copied into another command, which only works
 // if it lands in the same place every time.
-func lsLine(out io.Writer, e sl.Entry, full string) {
-	fmt.Fprintf(out, "%-10s %-19s %-36s %s\n", kindOf(e), lsWhen(e.Created), e.ID, full)
+type longFormat struct {
+	// follow is -L: show what a link points at rather than the link.
+	follow bool
+
+	// byID is every entry inventory holds, for following those links.
+	// Nil when nothing in the listing is a link, and nil when the walk
+	// that would have built it failed.
+	byID map[msg.UUID]sl.Entry
+}
+
+// line writes one row: kind, when it was acquired, id, and the whole
+// path.
+//
+// Under -L the id column is the id of the THING, whether or not its
+// kind could be found out -- a link names what it points at already,
+// and that much needs no lookup at all.  Where the item itself could
+// not be reached the kind stays "link", which says exactly what
+// happened: this is a link, and following it got nowhere.  The path is
+// always where the entry was found, since that is what was listed.
+func (f longFormat) line(out io.Writer, e sl.Entry, full string) {
+	kind, when, id := kindOf(e), lsWhen(e.Created), e.ID
+	if f.follow && e.IsLink && !e.Asset.IsZero() {
+		id = e.Asset
+		if to, ok := f.byID[e.Asset]; ok {
+			kind, when = kindOf(to), lsWhen(to.Created)
+		}
+	}
+	fmt.Fprintf(out, "%-10s %-19s %-36s %s\n", kind, when, id, full)
+}
+
+// longFormatFor builds the format one listing wants.
+//
+// One whole-inventory walk for the lot, and only when the listing holds
+// a link at all.  A Current Outfit folder is a dozen or more links, and
+// a lookup apiece would be a dozen walks of the tree to answer one
+// listing.
+//
+// A walk that fails is not an error here.  What -L asks for is the kind
+// and the id; the id is on the link already, so a failed walk still
+// answers most of the question, and refusing a whole listing because
+// one extra read did not come back would be worse than a column that
+// says "link".
+func (sh *Shell) longFormatFor(ctx context.Context, follow bool, es []sl.Entry) longFormat {
+	f := longFormat{follow: follow}
+	if !follow {
+		return f
+	}
+	any := false
+	for _, e := range es {
+		if e.IsLink && !e.Asset.IsZero() {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return f
+	}
+	all, err := sh.s.ListInventory(ctx, "", 4)
+	if err != nil {
+		return f
+	}
+	f.byID = make(map[msg.UUID]sl.Entry, len(all))
+	for _, e := range all {
+		f.byID[e.ID] = e
+	}
+	return f
 }
 
 func lsWhen(created int64) string {
@@ -534,7 +599,10 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	if err != nil || o.done {
 		return err
 	}
-	long, deep, path := o.Long, o.Deep, o.path
+	// -L is a long listing whose links are followed, so it implies -l.
+	// Asking to see what the links point at and getting bare paths back
+	// would be the flag doing nothing at all.
+	long, deep, path := o.Long || o.Follow, o.Deep, o.path
 
 	// An object's contents are somewhere else entirely, with ids of
 	// their own; see inside.go.
@@ -554,6 +622,7 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		sortByTime(es)
 	}
 
+	format := sh.longFormatFor(ctx, o.Follow, es)
 	prefix := "/" + sl.JoinPath(names...)
 	if len(names) == 0 {
 		prefix = ""
@@ -566,7 +635,7 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			fmt.Fprintln(out, full)
 			continue
 		}
-		lsLine(out, e, full)
+		format.line(out, e, full)
 	}
 	return nil
 }
@@ -1230,8 +1299,9 @@ func cmdEmptyTrash(ctx context.Context, sh *Shell, out io.Writer, args []string)
 // paths and the columns are what settle it.  Naming it anything else
 // would be a second thing to remember for the same question.
 type findOptions struct {
-	Long bool `getopt:"-l          the columns: kind, when it was acquired, id and path"`
-	Help bool `getopt:"--help -h   show what this command takes"`
+	Long   bool `getopt:"-l          the columns: kind, when it was acquired, id and path"`
+	Follow bool `getopt:"-L          the columns, with a link shown as the item it points at"`
+	Help   bool `getopt:"--help -h   show what this command takes"`
 }
 
 func cmdFind(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
@@ -1261,13 +1331,20 @@ func cmdFind(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if len(names) == 0 {
 		prefix = ""
 	}
+	var hits []sl.Entry
 	for _, e := range es {
-		if !strings.Contains(strings.ToLower(e.Name), want) {
-			continue
+		if strings.Contains(strings.ToLower(e.Name), want) {
+			hits = append(hits, e)
 		}
+	}
+	// Built from what matched rather than from the whole folder: a
+	// search that turned up no links wants no walk, however many links
+	// it passed over on the way.
+	format := sh.longFormatFor(ctx, o.Follow, hits)
+	for _, e := range hits {
 		full := prefix + "/" + e.Path
-		if o.Long {
-			lsLine(out, e, full)
+		if o.Long || o.Follow {
+			format.line(out, e, full)
 			continue
 		}
 		fmt.Fprintln(out, full)

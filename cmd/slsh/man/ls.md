@@ -18,6 +18,33 @@ run.
 The columns: kind, when it was acquired, id and path.  Without it,
 one bare path per line.
 
+**-L**
+
+The same columns, with a link shown as the item it points at: its
+kind, its date and its id, under the path where the link was found.
+Implies `-l`.
+
+An outfit folder holds nothing but links, every one named after the
+item at the far end, so `-l` there gives a column of `link` and a
+column of ids that name nothing outside this inventory.  `-L` turns
+the same listing into what is actually worn:
+
+    ls -L "/Current Outfit"
+    object     2025-04-14T17:44:09 cfb57e57-...  /Current Outfit/a dress
+    bodypart   2025-04-14T18:01:16 28d37e57-...  /Current Outfit/a shape
+
+That is also the way to see clothing and body parts as against
+attachments, which `worn` cannot show: `worn` lists objects on
+attachment points, and a skin or a shape is not one.
+
+A link that cannot be followed keeps the word `link`, which says what
+happened -- this is a link and following it got nowhere.  The id
+column is the id it points at either way, since the link carries that
+already.
+
+Following costs one walk of inventory for the whole listing, and only
+where the listing holds a link at all.
+
 **-r**
 
 Descend four levels rather than listing only this folder.  Deeper

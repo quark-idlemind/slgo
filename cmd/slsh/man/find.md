@@ -32,6 +32,32 @@ of several things sharing a name.
 Without `-l`, one bare path per line, which is what makes a search
 editable into commands that take paths.
 
+**-L**
+
+The same columns, with a link shown as the item it points at: its
+kind, its date and its id, under the path where the link was found.
+Implies `-l`.
+
+An outfit folder holds nothing but links, every one named after the
+item at the far end, so `-l` there gives a column of `link` and a
+column of ids that name nothing outside this inventory.  `-L` turns
+the same listing into what is actually worn:
+
+    find -L hat "/Current Outfit"
+    object     2025-04-14T17:44:09 cfb57e57-...  /Current Outfit/a hat
+
+That is also the way to see clothing and body parts as against
+attachments, which `worn` cannot show: `worn` lists objects on
+attachment points, and a skin or a shape is not one.
+
+A link that cannot be followed keeps the word `link`, which says what
+happened -- this is a link and following it got nowhere.  The id
+column is the id it points at either way, since the link carries that
+already.
+
+Following costs one walk of inventory for the whole listing, and only
+where the listing holds a link at all.
+
 ## A substring, not a pattern
 
 The text matches anywhere in a name and case is ignored.  There is
@@ -58,5 +84,6 @@ Starting further down is the way to reach it.
     find lantern
     find greeter /Scripts
     find -l lantern
+    find -L hat "/Current Outfit"
 
 See also: `ls`, `cd`, and `cat` for reading what a search turned up.

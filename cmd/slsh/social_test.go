@@ -682,6 +682,26 @@ func TestLookupAsksTheGridAndShowsTheDisplayNameWhenItDiffers(t *testing.T) {
 	if got := x.do(t, "lookup --help"); !strings.Contains(got, "TEXT") {
 		t.Errorf("lookup --help printed %q", got)
 	}
+
+	// -l adds the key, which is the one handle that does not change,
+	// and leaves the display name where it was.  Without it the key is
+	// machinery: the listing hands it to whatever the number is typed
+	// at, and a page of them would bury the names.
+	plain := x.do(t, "lookup body")
+	long := x.do(t, "lookup -l body")
+	if strings.Contains(plain, testSomebody.String()) {
+		t.Errorf("a bare lookup printed a key:\n%s", plain)
+	}
+	if !strings.Contains(long, testSomebody.String()) {
+		t.Errorf("lookup -l did not print the key:\n%s", long)
+	}
+	if !strings.Contains(long, testSomebody.String()+"  Somebody Entirely") {
+		t.Errorf("the key should come between the name and the display name:\n%s", long)
+	}
+	// The listing still means what a number typed afterwards means.
+	if id, _, err := x.who(context.Background(), "2"); err != nil || id != testSomebody {
+		t.Errorf("after lookup -l, who(2) = %v %v, want the second line", id, err)
+	}
 }
 
 // TestLookupSaysSoWhenNobodyMatched rather than printing nothing, which

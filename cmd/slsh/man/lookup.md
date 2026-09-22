@@ -11,10 +11,29 @@ searched as a name.  What comes back is a numbered listing in name
 order, with the display name in a second column where it differs from
 the name.
 
-No key is printed.  The search knows the key of everybody it found and
-hands it to whatever the number is typed at; a hundred keys down the
-page would bury the names they belong to, and the one that is wanted
-comes back from `profile` a line later anyway.
+No key is printed unless `-l` asks for one.  The search knows the key
+of everybody it found and hands it to whatever the number is typed at,
+so most of the time the key is machinery rather than an answer -- and
+a hundred of them down the page would bury the names they belong to.
+
+## Options
+
+**-l**
+
+The key as well as the name, between the name and the display name.
+
+    lookup -l example
+     1  Example Resident                  a4c67e57-...  Exemplary
+
+It is the one handle that does not change.  A display name is today's,
+a name is shared in part by everybody the search turned up, and every
+command here that takes a person takes a key instead -- so a key is
+what to write down, paste into something else, or put in a script that
+cannot type a number at a listing.
+
+The columns before it are fixed width, so the key lands in the same
+place on every row and can be cut out of a listing.  The display name
+comes last because it is the one field with no width at all.
 
 The listing is what the next command means by a number.  `lookup` then
 `profile 3` is the ordinary way round, and the same number works for
@@ -53,6 +72,10 @@ their profile says:
 
     lookup example res
     profile 1
+
+Or take the key straight out of the listing:
+
+    lookup -l example res
 
 See also: `profile`, which makes this same search for itself when
 nothing nearer knows the name, `who` for the people in this region,

@@ -877,7 +877,7 @@ func TestFindLooksFromHereDown(t *testing.T) {
 	}
 
 	for _, line := range []string{"find", "find a b c"} {
-		if got := x.do(t, line); !strings.Contains(got, "usage: find [-l] TEXT") {
+		if got := x.do(t, line); !strings.Contains(got, "usage: find [-Ll] TEXT") {
 			t.Errorf("%q printed %q", line, got)
 		}
 	}

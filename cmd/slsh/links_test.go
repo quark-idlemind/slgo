@@ -218,3 +218,81 @@ func TestSaveWritesThroughALink(t *testing.T) {
 		t.Errorf("the notecard was written with %q, which does not contain %q", wrote, body)
 	}
 }
+
+// TestListingFollowsLinksWithDashL.
+//
+// The question -L answers is the one a Current Outfit folder asks: a
+// folder of links, every one of them named after the item it points
+// at, where the only thing distinguishing a worn shirt from a worn HUD
+// is the kind of the thing at the far end.  Without it the kind column
+// says "link" on every row and the id column is an id that names
+// nothing outside this inventory.
+func TestListingFollowsLinksWithDashL(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000b1")
+	folder := msg.MustParseUUID("b3d87e57-7e57-c0de-9a46-e136f491ad31")
+	link := msg.MustParseUUID("e8167e57-7e57-c0de-cccc-0eaff4aff638")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	addOutfitFolder(x, folder, link, "a hat", hat)
+
+	// -l describes the link, which is what is actually in the folder.
+	plain := x.do(t, `ls -l "An outfit"`)
+	if !strings.HasPrefix(plain, "link ") || !strings.Contains(plain, link.String()) {
+		t.Errorf("ls -l should describe the link itself:\n%s", plain)
+	}
+
+	// -L describes what it points at, in the same columns.
+	got := x.do(t, `ls -L "An outfit"`)
+	if !strings.HasPrefix(got, "object ") {
+		t.Errorf("ls -L should give the kind of the item, not %q", got)
+	}
+	if strings.Contains(got, link.String()) {
+		t.Errorf("ls -L printed the link's own id, which names nothing outside inventory:\n%s", got)
+	}
+	if !strings.Contains(got, hat.String()) {
+		t.Errorf("ls -L should print the id of the item it points at:\n%s", got)
+	}
+	// The path is where the entry was found, since that is what was
+	// listed: the item itself lives somewhere else entirely.
+	if !strings.Contains(got, "/An outfit/a hat") {
+		t.Errorf("ls -L moved the path:\n%s", got)
+	}
+
+	// -L is a long listing.  Bare paths from a flag asking what the
+	// links point at would be the flag doing nothing.
+	if strings.Count(got, " ") < 3 {
+		t.Errorf("ls -L should imply -l, got %q", got)
+	}
+
+	// find -L is the same row for the same reason.
+	if found := x.do(t, `find -L "a hat"`); !strings.Contains(found, hat.String()) {
+		t.Errorf("find -L should follow a link too:\n%s", found)
+	}
+}
+
+// TestFollowingALinkThatGoesNowhereSaysSo.
+//
+// A link outlives what it pointed at.  -L still prints the id it points
+// at, which the link carries and which needs no lookup, and leaves the
+// kind as "link" -- which is the truthful answer to what was asked:
+// this is a link, and following it got nowhere.
+func TestFollowingALinkThatGoesNowhereSaysSo(t *testing.T) {
+	gone := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000b2")
+	folder := msg.MustParseUUID("b3ed7e57-7e57-c0de-f722-a07eb8d21f29")
+	link := msg.MustParseUUID("e81e7e57-7e57-c0de-fa89-246b704bb675")
+
+	x := newTestShell(t)
+	addOutfitFolder(x, folder, link, "a hat", gone)
+
+	got := x.do(t, `ls -L "An outfit"`)
+	if !strings.HasPrefix(got, "link ") {
+		t.Errorf("a link that goes nowhere should still say it is a link:\n%s", got)
+	}
+	if !strings.Contains(got, gone.String()) {
+		t.Errorf("the id column should be the id it points at even unfollowed:\n%s", got)
+	}
+	if strings.Contains(got, link.String()) {
+		t.Errorf("the id column should not be the link's own id under -L:\n%s", got)
+	}
+}
