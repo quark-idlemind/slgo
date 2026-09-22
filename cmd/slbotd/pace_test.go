@@ -185,3 +185,26 @@ func TestShuttingDownCutsTheWaitShort(t *testing.T) {
 		t.Errorf("%d typing stops, want the far end told it had stopped anyway", stops)
 	}
 }
+
+// A long wait keeps saying it.  One notification is not enough: a
+// viewer clears somebody else's "is typing" nine seconds after the
+// last one, so a thirty second answer showed as typing for nine
+// seconds and then as nothing at all.
+func TestALongWaitKeepsSayingItIsTyping(t *testing.T) {
+	_, b, grid := newTestDaemon(t)
+	defer func(d time.Duration) { TypingRefresh = d }(TypingRefresh)
+	TypingRefresh = 50 * time.Millisecond
+
+	p := Pace{Type: 300 * time.Millisecond}
+	b.wait(context.Background(), b.Session(), testSender, time.Now(), p)
+
+	starts, stops := grid.typingSent()
+	if starts < 4 {
+		t.Errorf("%d typing starts over %s at a %s refresh, want one every refresh",
+			starts, p.Type, TypingRefresh)
+	}
+	// And still only one stop, at the end.
+	if stops != 1 {
+		t.Errorf("%d typing stops, want one", stops)
+	}
+}

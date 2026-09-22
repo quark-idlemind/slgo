@@ -1634,6 +1634,16 @@ A 46-character remark read at 23 characters a second is two seconds,
 and a 32-character answer typed at 3.2 is ten more. The far end sees
 nothing for two seconds, then **"typing…"** for ten, then the reply.
 
+**The notice is repeated, not sent once.** A viewer clears somebody
+else's "is typing" nine seconds after the last notification it saw
+(`OTHER_TYPING_TIMEOUT`, `llfloaterimsession.cpp:72`) and re-sends its
+own every four while the person is still at the keyboard
+(`ME_TYPING_TIMEOUT`, line 71). So a single notification at the top of
+a thirty-second wait shows for nine seconds and leaves the other side
+looking at nothing for the remaining twenty-one. `slbotd` sends one
+every four seconds for as long as the wait lasts, which is what a
+viewer does.
+
 **Held, not delayed.** The model's own seconds count towards it,
 measured from when the remark *arrived* rather than from when the
 answer came back — so a reply the model laboured over goes out at once,

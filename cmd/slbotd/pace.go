@@ -128,14 +128,44 @@ func (b *bot) wait(ctx context.Context, s *sl.Session, to msg.UUID, arrived time
 	if rest <= 0 {
 		return
 	}
+	// Told again every few seconds, because one notification does not
+	// last.  A viewer clears somebody else's "is typing" after nine
+	// seconds with nothing further (OTHER_TYPING_TIMEOUT,
+	// llfloaterimsession.cpp:72) and re-sends its own every four while
+	// the person is still at the keyboard (ME_TYPING_TIMEOUT, line 71,
+	// "Send an additional Start Typing packet").  So a single one at
+	// the top of a thirty-second wait shows for nine seconds and then
+	// the other side sits looking at nothing, which is what it did.
 	_ = s.Typing(ctx, to, true)
-	sleep(ctx, rest)
+	for left := rest; left > 0; {
+		nap := TypingRefresh
+		if left < nap {
+			nap = left
+		}
+		if !sleep(ctx, nap) {
+			break
+		}
+		if left -= nap; left > 0 {
+			_ = s.Typing(ctx, to, true)
+		}
+	}
 	// Stopped even when the wait was cut short, or the far end is left
 	// showing "typing..." until it times the indicator out itself.
 	stop, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	_ = s.Typing(stop, to, false)
 	cancel()
 }
+
+// TypingRefresh is how often the far side is told again.
+//
+// The viewer's own interval for the same thing, which is comfortably
+// inside the nine seconds after which a viewer gives up on an
+// indicator nobody has refreshed.
+//
+// A var rather than a const so that a test can shorten it.  A test of
+// the refreshing that ran at four seconds would have to wait tens of
+// seconds to see two of them, and a test nobody will run is not one.
+var TypingRefresh = 4 * time.Second
 
 // sleep waits, and says whether it got to the end.
 func sleep(ctx context.Context, d time.Duration) bool {
