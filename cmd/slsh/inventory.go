@@ -147,7 +147,7 @@ var inventoryCommands = map[string]*command{
 	},
 	"find": {
 		params: "TEXT [PATH]",
-		flags:  func() any { return new(helpOnly) },
+		flags:  func() any { return new(findOptions) },
 		brief:  "look for names containing TEXT, from here down",
 		man:    "find",
 		run:    cmdFind,
@@ -509,6 +509,19 @@ func readLsOptions(out io.Writer, args []string) (lsOptions, error) {
 //
 // A folder has no date, and an empty column would move every column
 // after it, so it gets a dash.
+// lsLine is one row of a long listing: kind, when it was acquired, id,
+// and the whole path.
+//
+// Shared with find -l rather than written twice.  The columns are the
+// only way to tell a link from what it points at, or one of four items
+// of a name from the other three, so two commands printing them in two
+// shapes would be two things to learn for one answer -- and the id
+// column is there to be copied into another command, which only works
+// if it lands in the same place every time.
+func lsLine(out io.Writer, e sl.Entry, full string) {
+	fmt.Fprintf(out, "%-10s %-19s %-36s %s\n", kindOf(e), lsWhen(e.Created), e.ID, full)
+}
+
 func lsWhen(created int64) string {
 	if created <= 0 {
 		return "-"
@@ -553,8 +566,7 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			fmt.Fprintln(out, full)
 			continue
 		}
-		fmt.Fprintf(out, "%-10s %-19s %-36s %s\n",
-			kindOf(e), lsWhen(e.Created), e.ID, full)
+		lsLine(out, e, full)
 	}
 	return nil
 }
@@ -1210,8 +1222,20 @@ func cmdEmptyTrash(ctx context.Context, sh *Shell, out io.Writer, args []string)
 	return nil
 }
 
+// findOptions is what find was asked for.
+//
+// -l is ls's flag and prints ls's columns, because the two answers are
+// the same answer: a search that turned up four things of one name, or
+// a link sitting beside the item it points at, is unreadable as bare
+// paths and the columns are what settle it.  Naming it anything else
+// would be a second thing to remember for the same question.
+type findOptions struct {
+	Long bool `getopt:"-l          the columns: kind, when it was acquired, id and path"`
+	Help bool `getopt:"--help -h   show what this command takes"`
+}
+
 func cmdFind(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	var o helpOnly
+	var o findOptions
 	args, done, err := subOptions("find", &o, out, args)
 	if err != nil || done {
 		return err
@@ -1238,9 +1262,15 @@ func cmdFind(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		prefix = ""
 	}
 	for _, e := range es {
-		if strings.Contains(strings.ToLower(e.Name), want) {
-			fmt.Fprintln(out, prefix+"/"+e.Path)
+		if !strings.Contains(strings.ToLower(e.Name), want) {
+			continue
 		}
+		full := prefix + "/" + e.Path
+		if o.Long {
+			lsLine(out, e, full)
+			continue
+		}
+		fmt.Fprintln(out, full)
 	}
 	return nil
 }

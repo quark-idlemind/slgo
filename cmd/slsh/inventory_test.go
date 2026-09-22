@@ -877,7 +877,7 @@ func TestFindLooksFromHereDown(t *testing.T) {
 	}
 
 	for _, line := range []string{"find", "find a b c"} {
-		if got := x.do(t, line); !strings.Contains(got, "usage: find TEXT") {
+		if got := x.do(t, line); !strings.Contains(got, "usage: find [-l] TEXT") {
 			t.Errorf("%q printed %q", line, got)
 		}
 	}
@@ -891,6 +891,51 @@ func TestFindLooksFromHereDown(t *testing.T) {
 	x.grid.capErr = errors.New("the capability went away")
 	if got := x.do(t, "find a"); !strings.Contains(got, "the capability went away") {
 		t.Errorf("find should report the failure, got %q", got)
+	}
+}
+
+// TestFindAndLsPrintTheSameColumns.
+//
+// find -l exists because bare paths cannot answer the question a search
+// usually is: which of these four things of one name, or is this the
+// item or a link to it.  The columns answer both, and the id column is
+// there to be copied into another command.
+//
+// So the two commands have to agree exactly.  They print the same row
+// through the same function, and this is what says so: a listing of the
+// folder and a search that finds the same entry, compared line for
+// line.  Two commands answering one question in two shapes would be two
+// things to learn.
+func TestFindAndLsPrintTheSameColumns(t *testing.T) {
+	x := newTestShell(t)
+
+	listed := x.do(t, "ls -l /Objects")
+	found := x.do(t, "find -l lamp")
+	if !strings.Contains(listed, "\n") && listed == "" {
+		t.Fatal("ls -l printed nothing to compare against")
+	}
+	var want string
+	for _, line := range strings.Split(strings.TrimRight(listed, "\n"), "\n") {
+		if strings.Contains(line, "a lamp") {
+			want = line
+		}
+	}
+	if want == "" {
+		t.Fatalf("ls -l did not list the lamp: %q", listed)
+	}
+	if got := strings.TrimRight(found, "\n"); got != want {
+		t.Errorf("find -l printed\n\t%q\nand ls -l printed\n\t%q", got, want)
+	}
+
+	// The id is the column the flag is really for, so it is named
+	// outright rather than left to the comparison above.
+	if !strings.Contains(found, testLamp.String()) {
+		t.Errorf("find -l printed %q, which does not carry the id", found)
+	}
+	// And a bare find still prints a bare path, which is what makes a
+	// listing editable into commands that take paths.
+	if got, want := x.do(t, "find lamp"), "/Objects/a lamp\n"; got != want {
+		t.Errorf("find without -l printed %q, want %q", got, want)
 	}
 }
 
