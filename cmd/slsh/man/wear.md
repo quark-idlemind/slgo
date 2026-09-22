@@ -52,6 +52,32 @@ are the two ways on from there.
 
 A folder is refused: `wear` takes one object.
 
+## Outfit folders hold links, and links are followed
+
+An outfit folder holds no items at all.  Everything under `My Outfits`
+is a link, carrying the same name as the thing it points at, and a
+listing tells the two apart only by the word `link` in the type column
+of `ls -l`.
+
+    ls -l "My Outfits/Sunday"
+    link  2025-03-04T11:20:08  45557e57-...  /My Outfits/Sunday/a hat
+
+`wear` follows one, so a path or an id taken from an outfit folder
+wears the item at the other end of it.  This is what the viewer does
+with the same click.
+
+It matters because the id a link carries is not an id the simulator has
+an object for, and the simulator answers an id it does not recognise
+with silence rather than with an error.  Sending one meant waiting out
+the whole forty seconds and then being told the region had never agreed
+the thing was on -- every word of which was true, and none of which was
+the reason.
+
+A link this inventory cannot follow is refused, naming the id it looked
+for: a link outlives what it pointed at, so an outfit put together
+years ago may name things that have since been deleted.  A link to
+another link is refused too, which is what the viewer does with one.
+
 ## Examples
 
 Put a HUD on wherever it asks to go:

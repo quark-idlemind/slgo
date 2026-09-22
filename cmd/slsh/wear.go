@@ -109,6 +109,31 @@ package main
 // request where a person cannot see it -- "ATT duplicate attachment
 // request, ignoring" (llinventorybridge.cpp:8144-8149).
 //
+// # An outfit folder holds links, and a link's id is not an item's
+//
+// Everything under My Outfits is a link.  It carries the same name as
+// the thing it points at, and a listing tells the two apart only by the
+// word "link" in the type column -- so the path a person reads the name
+// off, when they are looking at an outfit they want back, names a link
+// almost every time.
+//
+// The id on a link is its own, and its "asset" is not an asset: it is
+// the ITEM id of what it points at, delivered as linked_id where an
+// item carries asset_id.  Sending a link's own id in
+// RezSingleAttachmentFromInv sends the simulator an id it has no object
+// for, and the simulator answers an id it does not recognise with
+// silence rather than with a refusal.  So the whole of what the person
+// sees is the forty second wait running out and then "the simulator
+// never reported it as worn" -- true in every clause and about nothing
+// that was wrong.
+//
+// So wear follows one, which is what the viewer does with the same
+// click.  linkTarget does the following, and refuses the two cases
+// where there is nothing to follow to: a link whose item is no longer
+// in inventory, since a link outlives what it pointed at, and a link to
+// another link, which the viewer also declines rather than choosing how
+// far to go.
+//
 // # Naming what came off, and confirming it
 //
 // wear asks what is worn before it sends, which is the same question the
@@ -266,10 +291,17 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if e.Folder {
 		return fmt.Errorf("%s is a folder; wear takes one object", path)
 	}
+	// Followed to the item, because an outfit folder holds nothing but
+	// links and that is where a person reads the name of the thing they
+	// want to put on.
+	e, err = sh.linkTarget(ctx, e)
+	if err != nil {
+		return err
+	}
 	// The item rather than the entry: what goes over the wire is the
 	// name, the description and every permission mask, and an entry
 	// carries none of them.
-	it, err := sh.s.FindItem(ctx, e.Parent, e.Name)
+	it, err := sh.itemAt(ctx, e)
 	if err != nil {
 		return err
 	}

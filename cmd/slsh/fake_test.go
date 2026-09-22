@@ -176,6 +176,12 @@ type invItem struct {
 	Asset   msg.UUID
 	Desc    string
 	Created int64
+
+	// IsLink puts this under "links" rather than "items", where its
+	// Asset goes out as linked_id.  That is the shape AIS sends and
+	// the whole of what makes an outfit folder different from any
+	// other folder full of names.
+	IsLink bool
 }
 
 // newFakeGrid builds a backend that answers plausibly and reaches
@@ -462,23 +468,42 @@ func dirLLSD(d *invDir, parent msg.UUID, depth int) string {
 		// Named but not opened: the folder itself, with nothing in it.
 		b.WriteString(dirLLSD(&invDir{ID: sub.ID, Name: sub.Name, Type: sub.Type}, d.ID, 0))
 	}
-	b.WriteString(`</map><key>items</key><map>`)
+	b.WriteString(`</map>`)
+	invItemsLLSD(&b, d, "items", false)
+	invItemsLLSD(&b, d, "links", true)
+	b.WriteString(`</map></map>`)
+	return b.String()
+}
+
+// invItemsLLSD writes one of the two maps a folder's contents arrive
+// in.  A link goes in the second and names what it points at with
+// linked_id, where an item names its asset with asset_id; everything
+// else about the two is written the same way, which is the point --
+// only the key and that one field tell them apart.
+func invItemsLLSD(b *strings.Builder, d *invDir, key string, links bool) {
+	fmt.Fprintf(b, `<key>%s</key><map>`, key)
 	for _, it := range d.Items {
-		fmt.Fprintf(&b, `<key>%s</key><map>`, it.ID)
-		fmt.Fprintf(&b, `<key>item_id</key><string>%s</string>`, it.ID)
-		fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string>`, d.ID)
-		fmt.Fprintf(&b, `<key>asset_id</key><string>%s</string>`, it.Asset)
-		fmt.Fprintf(&b, `<key>name</key><string>%s</string>`, xmlText(it.Name))
-		fmt.Fprintf(&b, `<key>desc</key><string>%s</string>`, xmlText(it.Desc))
-		fmt.Fprintf(&b, `<key>type</key><integer>%d</integer>`, it.Type)
-		fmt.Fprintf(&b, `<key>inv_type</key><integer>%d</integer>`, it.InvType)
-		fmt.Fprintf(&b, `<key>created_at</key><integer>%d</integer>`, it.Created)
+		if it.IsLink != links {
+			continue
+		}
+		fmt.Fprintf(b, `<key>%s</key><map>`, it.ID)
+		fmt.Fprintf(b, `<key>item_id</key><string>%s</string>`, it.ID)
+		fmt.Fprintf(b, `<key>parent_id</key><string>%s</string>`, d.ID)
+		if links {
+			fmt.Fprintf(b, `<key>linked_id</key><string>%s</string>`, it.Asset)
+		} else {
+			fmt.Fprintf(b, `<key>asset_id</key><string>%s</string>`, it.Asset)
+		}
+		fmt.Fprintf(b, `<key>name</key><string>%s</string>`, xmlText(it.Name))
+		fmt.Fprintf(b, `<key>desc</key><string>%s</string>`, xmlText(it.Desc))
+		fmt.Fprintf(b, `<key>type</key><integer>%d</integer>`, it.Type)
+		fmt.Fprintf(b, `<key>inv_type</key><integer>%d</integer>`, it.InvType)
+		fmt.Fprintf(b, `<key>created_at</key><integer>%d</integer>`, it.Created)
 		b.WriteString(`<key>permissions</key><map>`)
 		b.WriteString(`<key>owner_mask</key><integer>581632</integer>`)
 		b.WriteString(`</map></map>`)
 	}
-	b.WriteString(`</map><key>links</key><map/></map></map>`)
-	return b.String()
+	b.WriteString(`</map>`)
 }
 
 func xmlText(s string) string {

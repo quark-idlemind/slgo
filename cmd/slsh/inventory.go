@@ -338,6 +338,71 @@ func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, []string
 	return sl.Entry{}, nil, fmt.Errorf("nothing here has the id %s", id)
 }
 
+// linkTarget is the entry a link points at, and the entry itself when
+// it is not a link.
+//
+// A link's id is not the id of the thing it names, and its "asset" is
+// not an asset: it is the ITEM id of what it points at.  That is how
+// the grid delivers one -- a link arrives carrying linked_id where an
+// item carries asset_id (agent/inventory.go) -- and how the viewer
+// reads one back, by looking the uuid up in inventory rather than
+// fetching it (LLViewerInventoryItem::getLinkedItem,
+// llviewerinventory.cpp:2674).
+//
+// Which matters because an outfit folder holds nothing else.  Every
+// path under /My Outfits names a link, and links are what a person has
+// in front of them when they are reading off the name of something to
+// put on.  A command that took the id it found there and sent it would
+// be sending an id the simulator has no object for, and the simulator
+// answers an id it does not know with silence rather than an error --
+// so the whole of what a person sees is their command sitting out its
+// timeout and then saying the region never agreed.  Nothing in that
+// sentence is true except the last clause, and the thing that went
+// wrong is not mentioned anywhere in it.
+func (sh *Shell) linkTarget(ctx context.Context, e sl.Entry) (sl.Entry, error) {
+	if !e.IsLink {
+		return e, nil
+	}
+	if e.Asset.IsZero() {
+		return sl.Entry{}, fmt.Errorf("%s is a link that does not say what it points at; "+
+			"name the item itself", e.Name)
+	}
+	to, _, err := sh.entryByID(ctx, e.Asset)
+	if err != nil {
+		return sl.Entry{}, fmt.Errorf("%s is a link to the item %s, and %w -- a link outlives "+
+			"what it pointed at, so a link whose item has been deleted reads exactly like "+
+			"this", e.Name, e.Asset, err)
+	}
+	// A link to a link is what the viewer warns about and declines to
+	// resolve (llviewerinventory.cpp:2678-2683), and following it would
+	// mean choosing how many times to follow.
+	if to.IsLink {
+		return sl.Entry{}, fmt.Errorf("%s is a link to another link; name the item itself", e.Name)
+	}
+	return to, nil
+}
+
+// itemAt is the whole inventory item an entry names, fetched from the
+// folder the entry was listed in.
+//
+// Matched on the id and not the name it was found by, because a folder
+// may hold a dozen items called one thing -- the case rm --newest and
+// --oldest exist for -- and a lookup by name would answer with
+// whichever of them came back first.  The entry already carries the id
+// that settles it.
+func (sh *Shell) itemAt(ctx context.Context, e sl.Entry) (*sl.Item, error) {
+	items, err := sh.s.FolderItems(ctx, e.Parent)
+	if err != nil {
+		return nil, err
+	}
+	for _, it := range items {
+		if it.ID == e.ID {
+			return it, nil
+		}
+	}
+	return nil, fmt.Errorf("%s is no longer in the folder it was listed in", e.Name)
+}
+
 func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
 	args, done, err := subOptions("cd", &o, out, args)

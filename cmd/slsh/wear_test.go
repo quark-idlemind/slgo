@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"strings"
@@ -577,6 +578,24 @@ func addObjectItem(x *testShell, id msg.UUID, name string) {
 	objs.Items = append(objs.Items, &invItem{ID: id, Name: name, Type: int(sl.AssetObject)})
 }
 
+// addOutfitFolder puts a folder beside the others holding one link, and
+// nothing else, to an item that lives elsewhere.
+//
+// Which is the whole shape of an outfit folder: it holds no items at
+// all.  A link carries the same name as what it points at, so nothing
+// in a listing of one distinguishes the two except the word "link" in
+// the type column.
+func addOutfitFolder(x *testShell, folder, link msg.UUID, name string, to msg.UUID) {
+	x.grid.mu.Lock()
+	defer x.grid.mu.Unlock()
+	x.grid.inv.Dirs = append(x.grid.inv.Dirs, &invDir{
+		ID: folder, Name: "An outfit", Items: []*invItem{{
+			ID: link, Name: name, Asset: to, IsLink: true,
+			Type: int(sl.AssetLink), InvType: int(sl.AssetObject),
+		}},
+	})
+}
+
 // lastAttach and lastDetach are the request a command sent, out of
 // everything on the wire: several calls go out on the way past -- the
 // region is asked what is worn, and inventory is read -- and only one of
@@ -599,4 +618,73 @@ func lastDetach(x *testShell) (*msg.DetachAttachmentIntoInv, bool) {
 		}
 	}
 	return got, got != nil
+}
+
+// TestWearFollowsALink.
+//
+// An outfit folder holds links, so the path a person reads the name off
+// is a link's path nearly every time -- and a link's id is not the id of
+// the thing it names.  Measured on Agni: wearing an outfit folder's
+// entry by its own id sent that id, the simulator said nothing whatever
+// about it, and the command waited out its full timeout before
+// reporting that the region had never agreed the thing was on.  Every
+// clause of that sentence was true and none of it was the reason.
+//
+// The assertion is on what went out on the wire and not on the line
+// printed, because the fake answers whatever id it is asked about and
+// would therefore agree to wear a link quite happily.  Only the grid
+// draws the distinction, so only the request can be checked here.
+func TestWearFollowsALink(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a3")
+	folder := msg.MustParseUUID("abf67e57-7e57-c0de-631e-0f50d36eee20")
+	link := msg.MustParseUUID("e36c7e57-7e57-c0de-fa5c-bb297cefdd98")
+	worn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000a3")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	addOutfitFolder(x, folder, link, "a hat", hat)
+	x.grid.AnswerAttach(t, worn, 12, 1)
+
+	if got, want := x.do(t, "wear An outfit/a hat"), "a hat is worn on chest\n"; got != want {
+		t.Errorf("wearing through a link printed %q, want %q", got, want)
+	}
+	m, ok := lastAttach(x)
+	if !ok {
+		t.Fatal("wearing through a link sent no attach request at all")
+	}
+	if m.ObjectData.ItemID == link {
+		t.Fatal("wear sent the link's own id, which the grid has no object for")
+	}
+	if m.ObjectData.ItemID != hat {
+		t.Errorf("wear sent %v, want the item the link points at, %v", m.ObjectData.ItemID, hat)
+	}
+}
+
+// TestWearRefusesALinkItCannotFollow.
+//
+// A link outlives what it pointed at, so an outfit assembled years ago
+// may name things that are no longer in inventory.  The refusal has to
+// say that it was a link and name the id it could not find: without
+// both, somebody is looking at a path that is plainly there in "ls"
+// being called missing.
+func TestWearRefusesALinkItCannotFollow(t *testing.T) {
+	gone := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a4")
+	folder := msg.MustParseUUID("aded7e57-7e57-c0de-0124-2e70a7757394")
+	link := msg.MustParseUUID("e4d07e57-7e57-c0de-3032-5424ad0dcf12")
+
+	x := newTestShell(t)
+	addOutfitFolder(x, folder, link, "a hat", gone)
+
+	err := x.Do(context.Background(), "wear An outfit/a hat")
+	if err == nil {
+		t.Fatal("a link to nothing was worn")
+	}
+	for _, want := range []string{"is a link", gone.String()} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal was %q, which does not say %q", err, want)
+		}
+	}
+	if _, ok := lastAttach(x); ok {
+		t.Error("a link that could not be followed was sent to the grid anyway")
+	}
 }
