@@ -34,6 +34,7 @@ import (
 	"github.com/quark-idlemind/slgo/internal/creds"
 	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/internal/slhost"
+	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -49,6 +50,7 @@ type opts struct {
 	Chat    bool   `getopt:"--chat            start in chat mode rather than at a prompt"`
 	Escape  string `getopt:"--escape=KEY      the key that leaves chat mode: ESC, ^G, or one character"`
 	Help    bool   `getopt:"--help -h         show this message"`
+	Version bool   `getopt:"--version         say which build this is, and exit"`
 }
 
 func main() {
@@ -80,6 +82,10 @@ func run() error {
 	args := options.RegisterAndParse(o)
 	if o.Help {
 		getopt.PrintUsage(os.Stdout)
+		return nil
+	}
+	if o.Version {
+		fmt.Println(version.String("slsh"))
 		return nil
 	}
 

@@ -981,6 +981,13 @@ A shell for Second Life, on the sl package, against either backend:
     slsh [--addr localhost:7807] [--agent example]
     slsh --direct [--first Quark] [--last Idlemind]
     slsh -c "ls -l Objects"
+    slsh --version
+
+`--version` says which build this is: the release it was tagged as, or
+that it is a development build after one, with the date and hash of
+the commit and whether the tree had edits in it.  It is read from what
+the Go toolchain records in a binary built inside a git checkout, so a
+plain `go install ./cmd/slsh` is all it takes.
 
 Commands are the outer mode, because that is what the keyboard is
 mostly for: chat arrives whatever mode is in force, and cd and ls are
