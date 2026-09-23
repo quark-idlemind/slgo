@@ -559,6 +559,21 @@ type OutfitReport struct {
 	Worn    []string
 	Missing []string
 
+	// Undescribed is how many attachments the simulator lists that the
+	// region has still not described when the restore finishes: on,
+	// by the simulator's account, and not matched to anything in the
+	// outfit.  HUDs are never in that list, so this counts body
+	// attachments only.  Unknown says the list has not been heard or
+	// describes an outfit that has since changed, so there was nothing
+	// to count against.
+	Undescribed int
+	Unknown     bool
+
+	// Unbaked is why the bake after putting things on failed, if it
+	// did.  What went on is on; the simulator's list will not show it
+	// until the next bake.
+	Unbaked error
+
 	// Doubled is what the region describes more than one attachment
 	// of.  Adding is what makes that possible -- see the head of this
 	// section -- and it is named here because it is a thing to go and
@@ -583,12 +598,33 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 	if err != nil {
 		return nil, err
 	}
-	on, err := w.wornCounts(ctx)
+
+	// The simulator puts most of an outfit back by itself at login, and
+	// the region describes each piece as it arrives.  While the
+	// simulator lists attachments nothing has described, something
+	// named in the outfit and not described may be one of them, so
+	// this waits for the descriptions before deciding anything is
+	// missing -- the wait a viewer spends drawing the avatar as a
+	// cloud.  Bounded: a description that was lost is not sent again,
+	// and the grid has been seen not to answer a restore at all.
+	on, acct, err := w.takeStock(ctx)
 	if err != nil {
 		return nil, err
 	}
+	deadline := time.Now().Add(timeout)
+	for acct.Waiting() && time.Now().Before(deadline) {
+		if !nap(ctx, restorePoll) {
+			break
+		}
+		if on, acct, err = w.takeStock(ctx); err != nil {
+			return nil, err
+		}
+	}
 
 	report := &OutfitReport{}
+	defer func() {
+		report.Undescribed, report.Unknown = len(acct.Undescribed), !acct.Known || !acct.Current
+	}()
 	var asked []OutfitLink
 	for _, l := range outfit {
 		if l.Folder || !l.Found || l.Kind != AssetObject {
@@ -617,11 +653,13 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 	// One wait for the lot.  Ended early when everything asked for has
 	// been described, which is the ordinary case and takes a second or
 	// two.
-	deadline := time.Now().Add(timeout)
+	deadline = time.Now().Add(timeout)
 	for {
-		if on, err = w.wornCounts(ctx); err != nil {
+		now, a, err := w.takeStock(ctx)
+		if err != nil {
 			break
 		}
+		on, acct = now, a
 		done := true
 		for _, l := range asked {
 			if on[l.Item] == 0 {
@@ -643,6 +681,11 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 			report.Missing = append(report.Missing, l.Name)
 		}
 	}
+	// Baked, as a viewer bakes once it has put an outfit back on, so
+	// that the simulator's list of what is worn includes what just went
+	// on.  After the waiting rather than before: a bake lists what is
+	// attached when it runs.
+	report.Unbaked = w.UpdateAppearance(ctx)
 	for _, l := range outfit {
 		if on[l.Item] > 1 {
 			report.Doubled = append(report.Doubled, l.Name)
@@ -658,23 +701,29 @@ const (
 	restorePoll        = time.Second
 )
 
-// wornCounts is how many attachments this avatar has from each
-// inventory item.
+// takeStock is how many attachments this avatar has from each
+// inventory item, as the region has described them, and the
+// simulator's account set against that -- read together so that the
+// two describe the same moment.
 //
 // Counted rather than merely noted, because more than one is a state
 // worth reporting: it is what adding can leave behind, and two
 // attachments from one item agree in every field a person could name
 // one by.
-func (w *Session) wornCounts(ctx context.Context) (map[msg.UUID]int, error) {
+func (w *Session) takeStock(ctx context.Context) (map[msg.UUID]int, *AttachmentAccount, error) {
 	worn, err := w.WornObjects(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	on := make(map[msg.UUID]int, len(worn))
 	for _, a := range worn {
 		on[a.Item]++
 	}
-	return on, nil
+	acct, err := w.AccountForAttachments(ctx, worn)
+	if err != nil {
+		return nil, nil, err
+	}
+	return on, acct, nil
 }
 
 // itemIn is one item out of a folder, by id.

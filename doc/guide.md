@@ -1312,19 +1312,26 @@ leave its avatars missing part of what they wore until somebody
 noticed.
 
 A few seconds after attaching, `slbotd` compares the folder against
-what is actually worn and asks for whatever is missing. It tries a
-few times, because a region hands over its contents gradually and a
-request that arrives too early is answered with nothing, and it stops
-as soon as a pass puts nothing on -- which is what an avatar whose
-attachments are all on but undescribed looks like, and asking again
-would achieve nothing.
+what is actually worn and asks for whatever is missing. Before asking
+it waits while the simulator's own list of attachments -- sent with
+each bake of the avatar's appearance -- names more than the region has
+described, since those are on and merely not described yet. That list
+never includes HUDs, so for a HUD the region's description is still
+the only evidence.
 
-It replaces rather than adds, so a request for something that was
-already on is harmless: the second copy lands on the same point as the
-first rather than beside it. That matters because what says an
-attachment is worn is the region's description of it, and that
-description is not always there. `dress` in `slsh` is the same thing
-by hand.
+It tries a few times, because a region hands over its contents
+gradually and a request that arrives too early is answered with
+nothing, and it stops as soon as a pass puts nothing on. A pass that
+fails outright -- which is what a session about to be replaced looks
+like -- does not count, and is tried again for up to five minutes
+rather than given up on.
+
+It adds rather than replaces, as a viewer does. A point holds more than
+one attachment and an ordinary outfit uses that -- a body, a dress and
+a pair of arms can all be on the chest -- so restoring with replace
+puts them on one after another and each knocks the last one off.
+Anything worn twice as a result is named in the log. `dress` in `slsh`
+is the same thing by hand.
 
 Everything else waits to be asked. A teleport offer, a friendship
 offer and a group invitation are listed by `:offers` and answered by

@@ -49,6 +49,37 @@ the record.  Wearing it again from here puts that right.
 
 The link outlived what it pointed at.
 
+## A third record, which settles the first line
+
+"In the outfit, not described" can mean off, or on and not yet
+described, and the two records above cannot tell those apart.  The
+simulator's own list of what is attached can.  It arrives with each
+bake of the avatar's appearance, and names every attachment on the body
+by its object -- the object, not the inventory item, so it cannot say
+which line is which, only how many are on.
+
+It is shown only when it settles something:
+
+    (the simulator lists 1 attachment that nothing here has described:)
+    head               ?
+
+Something is on that nothing has described; with `-l` its object is
+printed too.
+
+    (the simulator lists nothing that is not described here, so what is
+    marked not described is off -- unless it is a HUD, which it never lists)
+
+HUDs are never in the list, not even in the copy an avatar is sent
+about itself, so it can say nothing about one.
+
+    (the simulator's list of what is worn is from before the last change
+    to the outfit, so it cannot settle what is not described)
+
+The list is sent only when the avatar is baked.  `wear` and `detach`
+ask for a bake afterwards, as a viewer does, so this should be seen
+only after something else changed the outfit, or after a bake that
+failed.
+
 ## Options
 
 **-l**

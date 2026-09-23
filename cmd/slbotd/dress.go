@@ -37,10 +37,15 @@ import (
 // the region to rez things before the avatar was in it.
 //
 // Vars so that a test can shorten them.
+//
+// DressGiveUp bounds the retrying of a pass that failed outright, which
+// does not use up a pass: that is the session being unusable, not the
+// outfit being hard to put on.
 var (
 	DressSettle = 15 * time.Second
 	DressRetry  = 20 * time.Second
 	DressPasses = 3
+	DressGiveUp = 5 * time.Minute
 )
 
 // keepDressed puts back on whatever the Current Outfit folder names and
@@ -60,14 +65,29 @@ func (b *bot) keepDressed(ctx context.Context, s *sl.Session) {
 	if !sleep(ctx, DressSettle) {
 		return
 	}
+	giveUp := time.Now().Add(DressGiveUp)
 	for pass := 0; pass < DressPasses; pass++ {
 		report, err := s.RestoreOutfit(ctx, 0)
 		if err != nil {
+			// Tried again rather than given up on.  The session an
+			// attach lands on can be one about to be replaced --
+			// measured: a first session silent from the start, whose
+			// inventory capability answered 404, re-established 74
+			// seconds later -- and giving up on the first error left
+			// that avatar missing part of its outfit until the next
+			// restart.
 			b.errf("cannot put the outfit back on: %v", err)
-			return
+			if !time.Now().Before(giveUp) || !sleep(ctx, DressRetry) {
+				return
+			}
+			pass--
+			continue
 		}
 		if len(report.Worn) > 0 {
 			b.logf("put back on: %s", strings.Join(report.Worn, ", "))
+		}
+		if report.Unbaked != nil {
+			b.errf("not rebaked after putting things on: %v", report.Unbaked)
 		}
 		if len(report.Doubled) > 0 {
 			// Adding is what makes this possible, and it is the
@@ -83,9 +103,24 @@ func (b *bot) keepDressed(ctx context.Context, s *sl.Session) {
 		if len(report.Worn) == 0 {
 			// Nothing moved and things are still unaccounted for.
 			// Either they are on and the region has not said so, or
-			// they are gone; asking again distinguishes neither.
-			b.logf("still not described, so this cannot say whether they are on: %s",
-				strings.Join(report.Missing, ", "))
+			// they are gone; asking again distinguishes neither.  The
+			// simulator's list narrows it when it can: it says how
+			// many are on that nothing has described.
+			switch {
+			case report.Unknown:
+				b.logf("still not described, so this cannot say whether they are on: %s",
+					strings.Join(report.Missing, ", "))
+			case report.Undescribed > 0:
+				b.logf("not described, and the simulator lists %d attachments nothing has "+
+					"described, so some may be on: %s",
+					report.Undescribed, strings.Join(report.Missing, ", "))
+			default:
+				// HUDs are never in the simulator's list, so for a HUD
+				// this says nothing either way.
+				b.errf("not put back on, and the simulator lists nothing undescribed, so "+
+					"unless they are HUDs they are off: %s",
+					strings.Join(report.Missing, ", "))
+			}
 			return
 		}
 		if !sleep(ctx, DressRetry) {

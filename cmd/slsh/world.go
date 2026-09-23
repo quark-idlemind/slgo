@@ -564,7 +564,60 @@ func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if outfitErr != nil {
 		fmt.Fprintf(out, "(clothing and body parts are not listed: %v)\n", outfitErr)
 	}
+	// About the whole avatar, so only under the whole listing: a search
+	// that kept two lines has nothing to set a count against.
+	if want == "" {
+		unplaced := 0
+		for _, r := range rows {
+			if r.note == "in the outfit, not described" {
+				unplaced++
+			}
+		}
+		acct, err := sh.s.AccountForAttachments(ctx, worn)
+		simFootnote(out, acct, err, unplaced, o.Long)
+	}
 	return nil
+}
+
+// simFootnote says what the simulator's own list of attachments makes
+// of the listing: whether a line marked "not described" is on.
+//
+// Said only when it settles something or finds something.  Most of the
+// time every attachment is described and the list agrees, and a line
+// saying so under every listing is a line nobody reads.
+func simFootnote(out io.Writer, acct *sl.AttachmentAccount, err error, unplaced int, long bool) {
+	switch {
+	case err != nil:
+		fmt.Fprintf(out, "(the simulator's list of what is worn could not be read: %v)\n", err)
+	case !acct.Known:
+		if unplaced > 0 {
+			fmt.Fprintln(out, "(the simulator has not said what is attached, so nothing "+
+				"here can say whether what is not described is on)")
+		}
+	case !acct.Current:
+		if unplaced > 0 || len(acct.Undescribed) > 0 {
+			fmt.Fprintln(out, "(the simulator's list of what is worn is from before the "+
+				"last change to the outfit, so it cannot settle what is not described)")
+		}
+	case len(acct.Undescribed) > 0:
+		n := len(acct.Undescribed)
+		fmt.Fprintf(out, "(the simulator lists %d %s that nothing here has described:)\n",
+			n, plural(n, "attachment", "attachments"))
+		for _, u := range acct.Undescribed {
+			line := fmt.Sprintf("%-18s %-30s", sl.AttachPointName(u.Point), "?")
+			if long {
+				line += fmt.Sprintf(" %-36s %s", "-", u.Object)
+			}
+			fmt.Fprintln(out, line)
+		}
+	case unplaced > 0:
+		fmt.Fprintln(out, "(the simulator lists nothing that is not described here, so what "+
+			"is marked not described is off -- unless it is a HUD, which it never lists)")
+	}
+	if acct != nil && acct.Known && acct.Current && acct.Pending > 0 {
+		fmt.Fprintf(out, "(and %d %s it lists as pending, with no object yet)\n",
+			acct.Pending, plural(acct.Pending, "attachment", "attachments"))
+	}
 }
 
 // wornRow is one line of what is worn, from either record.

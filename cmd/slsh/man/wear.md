@@ -90,10 +90,17 @@ Everything this command does to a wearable happens in that folder, and
 `ls -L "/Current Outfit"` is how to read it: one line per worn thing,
 clothing and attachments alike, with the links followed.
 
-Attachments are the gap.  `wear` and `detach` maintain the folder for
-wearables and not for objects, so an object put on here is on the
-avatar now and is not recorded, and will not come back at the next
-login.  A viewer writes the folder for both.
+Attachments go in it too.  An object put on here is linked into the
+folder, and taken out of it by `detach`, so that what is worn now is
+what `dress` and `slbotd` put back after the next login.  A viewer
+writes the folder for both kinds in the same way.
+
+Every change to the folder is followed by a request to rebake the
+avatar, as a viewer makes one.  For clothing that is what makes the
+change visible.  For an attachment it is what brings the simulator's
+own list of what is attached up to date -- the list `worn` and `dress`
+check against.  A rebake that fails does not undo the wearing, and is
+reported on the same line.
 
 ## Examples
 

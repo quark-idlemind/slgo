@@ -362,17 +362,25 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		}
 	}
 	// And recorded, so that it comes back at the next login.  The
-	// simulator rezzes what it is told to rez and remembers none of
-	// it; the Current Outfit folder is the record, and writing it is
-	// the client's job.
+	// Current Outfit folder is the client's record of what is worn,
+	// writing it is the client's job, and it is what a viewer -- and
+	// dress, and slbotd -- read to put back whatever the simulator
+	// did not.
 	//
-	// A failure here is not a failure to wear -- the thing is on the
-	// avatar -- so it is said on the same line rather than returned.
-	// Losing the whole report of a successful wear because the
-	// bookkeeping did not go through would be the wrong way round.
+	// Then baked, as a viewer bakes after every change to the folder.
+	// That is what brings the simulator's own list of what is worn up
+	// to date, and worn and dress check against that list.
+	//
+	// A failure of either is not a failure to wear -- the thing is on
+	// the avatar -- so it is said on the same line rather than
+	// returned.  Losing the whole report of a successful wear because
+	// the bookkeeping did not go through would be the wrong way round.
 	if err := sh.s.RememberWorn(ctx, it); err != nil {
 		line += fmt.Sprintf("; it is not in the Current Outfit folder, so it will not come "+
 			"back at the next login: %v", err)
+	} else if err := sh.s.UpdateAppearance(ctx); err != nil {
+		line += fmt.Sprintf("; the appearance was not rebaked, so the simulator's list "+
+			"of what is worn does not show it yet: %v", err)
 	}
 	fmt.Fprintln(out, line)
 	return nil
@@ -562,6 +570,9 @@ func cmdDetach(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	if _, err := sh.s.ForgetWorn(ctx, a.Item); err != nil {
 		line += fmt.Sprintf("; its link is still in the Current Outfit folder, so it will "+
 			"come back at the next login: %v", err)
+	} else if err := sh.s.UpdateAppearance(ctx); err != nil {
+		line += fmt.Sprintf("; the appearance was not rebaked, so the simulator's list "+
+			"of what is worn still shows it: %v", err)
 	}
 	if waited != nil {
 		return waited
@@ -829,6 +840,7 @@ func cmdDress(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	// most of it was on the whole time.
 	if len(report.Worn) == 0 && len(report.Missing) == 0 && len(report.Doubled) == 0 {
 		fmt.Fprintf(out, "already wearing all %d of them\n", len(report.Already))
+		sayUndescribed(out, report)
 		return nil
 	}
 	if n := len(report.Already); n > 0 {
@@ -844,5 +856,23 @@ func cmdDress(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		fmt.Fprintf(out, "worn more than once, which detach undoes: %s\n",
 			strings.Join(report.Doubled, ", "))
 	}
+	sayUndescribed(out, report)
+	if report.Unbaked != nil {
+		fmt.Fprintf(out, "not rebaked afterwards, so the simulator's list of what is worn "+
+			"is behind: %v\n", report.Unbaked)
+	}
 	return nil
+}
+
+// sayUndescribed adds what the simulator's list says that the region's
+// descriptions do not: that something is on which nothing has
+// described.  That is the one case where "asked for and not described"
+// may mean "on" -- and it is said only when it is so, since a line
+// saying all is well on every run is a line nobody reads.
+func sayUndescribed(out io.Writer, r *sl.OutfitReport) {
+	if r.Unknown || r.Undescribed == 0 {
+		return
+	}
+	fmt.Fprintf(out, "the simulator lists %d %s that nothing here has described\n",
+		r.Undescribed, plural(r.Undescribed, "attachment", "attachments"))
 }

@@ -465,3 +465,148 @@ func TestDressOnADressedAvatarSaysSo(t *testing.T) {
 		t.Errorf("dress on a dressed avatar printed %q, want %q", got, want)
 	}
 }
+
+// TestWearingAndDetachingAnObjectRebakes: a viewer asks for a bake after
+// every change to the Current Outfit folder, attachments included, and
+// that bake is what brings the simulator's own list of what is worn up
+// to date.  Without it the list describes the outfit as it was before,
+// and worn and dress can no longer check against it.
+func TestWearingAndDetachingAnObjectRebakes(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000e5")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000e5")
+
+	x := newTestShell(t)
+	x.grid.simOnBake = true
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+
+	x.do(t, "wear Objects/a hat")
+	if n := x.grid.Baked(); n != 1 {
+		t.Fatalf("%d rebakes after wearing an object, want 1", n)
+	}
+	list, _ := x.grid.SimAttachments(context.Background(), msg.UUID{})
+	if list == nil || len(list.Objects) != 1 || list.Objects[0].Object != hatWorn {
+		t.Errorf("after the bake the simulator lists %+v, want the hat", list)
+	}
+
+	x.grid.AnswerDetach(0)
+	x.do(t, "detach a hat")
+	if n := x.grid.Baked(); n != 2 {
+		t.Errorf("%d rebakes after taking it off again, want 2", n)
+	}
+}
+
+// attachRequests counts the attach requests sent so far.
+func attachRequests(x *testShell) int {
+	n := 0
+	for _, m := range x.grid.Sent() {
+		if _, ok := m.(*msg.RezSingleAttachmentFromInv); ok {
+			n++
+		}
+	}
+	return n
+}
+
+// TestDressWaitsForWhatTheSimulatorSaysIsOn.
+//
+// The simulator puts most of an outfit back by itself at login, and the
+// region describes each piece as it arrives -- so for a while after a
+// login a thing can be on and not yet described.  Its own attachment
+// list says so: it names more objects than the region has described.  A
+// viewer keeps the avatar a cloud until the two agree; dress waits, and
+// does not ask for what is on already.
+func TestDressWaitsForWhatTheSimulatorSaysIsOn(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000e6")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000e6")
+	hatAgain := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000001e6")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+	x.do(t, "wear Objects/a hat")
+
+	// Logged in again.  The simulator has put the hat back, as a new
+	// object, and lists it; the region describes it a moment later.
+	x.grid.takeOff(hat)
+	x.grid.simLists(false, sl.SimAttachment{Object: hatAgain, Point: 1})
+	x.grid.describeLater(hat, hatAgain, 12, 1, 3)
+	asked := attachRequests(x)
+
+	if got, want := x.do(t, "dress"), "already wearing all 1 of them\n"; got != want {
+		t.Errorf("dress printed %q, want %q", got, want)
+	}
+	if n := attachRequests(x) - asked; n != 0 {
+		t.Errorf("dress asked for %d attachments the simulator had already put on", n)
+	}
+}
+
+// TestDressSaysWhenTheSimulatorListsWhatIsNeverDescribed: a description
+// that was lost is not sent again, so the waiting is bounded, and what
+// is still unaccounted for afterwards is put on -- which is what a
+// viewer does.  The report says the simulator listed something nothing
+// described, since that is the one case where "not described" may mean
+// "on".
+func TestDressSaysWhenTheSimulatorListsWhatIsNeverDescribed(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000e7")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000e7")
+	somethingElse := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000001e7")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+	x.do(t, "wear Objects/a hat")
+	x.grid.takeOff(hat)
+	x.grid.simLists(false, sl.SimAttachment{Object: somethingElse, Point: 2})
+
+	got := x.do(t, "dress --wait 1")
+	if !strings.Contains(got, "put on a hat") {
+		t.Errorf("dress printed %q; the hat should have gone on after the wait", got)
+	}
+	if !strings.Contains(got, "the simulator lists 1 attachment that nothing here has described") {
+		t.Errorf("dress printed %q; it should say what the simulator listed", got)
+	}
+}
+
+// TestWornSettlesWhatIsNotDescribedFromTheSimulatorsList: the line
+// "in the outfit, not described" is ambiguous -- off, or on and not
+// described -- and the simulator's list is what settles it, when it is
+// current.  Nothing is said when there is nothing to settle.
+func TestWornSettlesWhatIsNotDescribedFromTheSimulatorsList(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000e8")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000e8")
+	onSomewhere := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000001e8")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+	x.do(t, "wear Objects/a hat")
+
+	// Described, and the list agrees: nothing to say.
+	x.grid.simLists(false, sl.SimAttachment{Object: hatWorn, Point: 1})
+	if got := x.do(t, "worn"); strings.Contains(got, "simulator") {
+		t.Errorf("worn said something about the simulator when all was well:\n%s", got)
+	}
+
+	// Not described, and the simulator lists something nothing has
+	// described: named by point, and by object with -l.
+	x.grid.takeOff(hat)
+	x.grid.simLists(false, sl.SimAttachment{Object: onSomewhere, Point: 2})
+	got := x.do(t, "worn -l")
+	if !strings.Contains(got, "the simulator lists 1 attachment that nothing here has described") ||
+		!strings.Contains(got, onSomewhere.String()) || !strings.Contains(got, "head") {
+		t.Errorf("worn -l should name what the simulator lists undescribed:\n%s", got)
+	}
+
+	// Not described, and the simulator lists nothing undescribed: off,
+	// with the one exception it cannot speak to.
+	x.grid.simLists(false)
+	if got := x.do(t, "worn"); !strings.Contains(got, "is off -- unless it is a HUD") {
+		t.Errorf("worn should say the hat is off:\n%s", got)
+	}
+
+	// A list from before the last change to the outfit settles nothing.
+	x.grid.simLists(true)
+	if got := x.do(t, "worn"); !strings.Contains(got, "from before the last change to the outfit") {
+		t.Errorf("worn should say the list is out of date:\n%s", got)
+	}
+}
