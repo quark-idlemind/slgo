@@ -98,17 +98,8 @@ func subOptions(name string, opts any, out io.Writer, args []string) (rest []str
 		}
 	}
 
-	set := getopt.New()
-	set.SetProgram(name)
-	set.SetParameters(params)
-	if err := options.RegisterSet(name, opts, set); err != nil {
-		return nil, false, err
-	}
-
-	argv := make([]string, 0, len(args)+1)
-	argv = append(argv, name)
-	argv = append(argv, args...)
-	if err := set.Getopt(argv, nil); err != nil {
+	set, err := parseOptions(name, params, opts, args)
+	if err != nil {
 		return nil, false, err
 	}
 	if set.IsSet("help") {
@@ -145,18 +136,37 @@ func subOptions(name string, opts any, out io.Writer, args []string) (rest []str
 // refuses it in its own words rather than in words about a "--" this
 // put there.
 func sawOperand(name string, opts any, args []string) bool {
+	set, err := parseOptions(name, "", opts, args)
+	if err != nil {
+		return true
+	}
+	return len(set.Args()) > 0
+}
+
+// parseOptions is the parse itself and nothing else: a set of the
+// command's own, the option struct registered on it, and getopt run over
+// the words.  It prints nothing and acts on nothing, not even --help,
+// which is what lets it be asked about a line nobody is going to run --
+// sawOperand asks it where the operands begin, and ask's checker
+// (askcheck.go) asks it whether a suggested line would be refused.
+//
+// subOptions is this plus the help flag.  Keeping the two as one parse
+// and one thing done with its result, rather than a parse in each, is
+// what keeps a line the checker passes a line the command will take.
+func parseOptions(name, params string, opts any, args []string) (*getopt.Set, error) {
 	set := getopt.New()
 	set.SetProgram(name)
+	set.SetParameters(params)
 	if err := options.RegisterSet(name, opts, set); err != nil {
-		return true
+		return nil, err
 	}
 	argv := make([]string, 0, len(args)+1)
 	argv = append(argv, name)
 	argv = append(argv, args...)
 	if err := set.Getopt(argv, nil); err != nil {
-		return true
+		return nil, err
 	}
-	return len(set.Args()) > 0
+	return set, nil
 }
 
 // usage is the one line that says how a command is typed: its name, its
