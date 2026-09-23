@@ -351,7 +351,7 @@ func TestAnObjectThatIsNotWornIsNotAnAttachment(t *testing.T) {
 // time -- but after the avatar has moved it stops the far end of the old
 // view being taken back in by a stray update, and it forgets what is
 // already held rather than leaving it.
-func TestAnUpdateBeyondTheDrawDistanceIsRefused(t *testing.T) {
+func TestAnUpdateBeyondTheDrawDistanceIsPutOnNotice(t *testing.T) {
 	t.Parallel()
 
 	o := newObjects()
@@ -372,8 +372,22 @@ func TestAnUpdateBeyondTheDrawDistanceIsRefused(t *testing.T) {
 		ObjectData: placement(msg.Vector3{X: 900, Y: 128, Z: 25}, msg.Quaternion{}),
 	}
 	o.update(far, camera, 64)
-	if o.Count() != 0 {
-		t.Errorf("an object that moved out of range is still held: %d", o.Count())
+	if !onNotice(o, aPrim) {
+		t.Fatal("an object that moved out of range was not put on notice")
+	}
+	if o.Count() != 1 {
+		t.Error("an object out of range was dropped on the spot rather than put on notice")
+	}
+
+	// Seen in range again, it is off notice; out of range for the whole
+	// grace, it goes.
+	o.update(near, camera, 64)
+	if onNotice(o, aPrim) {
+		t.Error("an object back in range is still on notice")
+	}
+	o.update(far, camera, 64)
+	if n := trimAfterGrace(o, camera, 64); n != 1 || o.Count() != 0 {
+		t.Errorf("trimmed %d once the grace had run out, want the one", n)
 	}
 }
 
@@ -396,8 +410,8 @@ func TestAChildIsJudgedByWhereItsRootIs(t *testing.T) {
 			ID: 2, ParentID: 1, FullID: aChild,
 			ObjectData: placement(msg.Vector3{X: 0, Y: 0, Z: 1}, msg.Quaternion{}),
 		}, msg.Vector3{X: 900}, 64)
-		if _, ok := o.Get(aChild); ok {
-			t.Error("a child of an out of range root was taken in")
+		if !onNotice(o, aChild) {
+			t.Error("a child of an out of range root was not put on notice")
 		}
 	})
 
@@ -505,7 +519,7 @@ func decodeCompressed(t *testing.T, c compressedObject) *msg.Compressed {
 
 // TestACompressedUpdateBeyondTheDrawDistanceIsRefused: the same rule as
 // for a full update, and for the same reason.
-func TestACompressedUpdateBeyondTheDrawDistanceIsRefused(t *testing.T) {
+func TestACompressedUpdateBeyondTheDrawDistanceIsPutOnNotice(t *testing.T) {
 	t.Parallel()
 
 	camera := msg.Vector3{X: 128, Y: 128, Z: 25}
@@ -521,8 +535,8 @@ func TestACompressedUpdateBeyondTheDrawDistanceIsRefused(t *testing.T) {
 	o.compressed(decodeCompressed(t, compressedObject{
 		id: aPrim, local: 1, position: msg.Vector3{X: 900, Y: 128, Z: 25},
 	}), camera, 64)
-	if o.Count() != 0 {
-		t.Error("an object that moved out of range is still held")
+	if !onNotice(o, aPrim) {
+		t.Error("an object that moved out of range was not put on notice")
 	}
 
 	// A child is judged by its root, and one whose root is not known is
@@ -531,8 +545,8 @@ func TestACompressedUpdateBeyondTheDrawDistanceIsRefused(t *testing.T) {
 	o.compressed(decodeCompressed(t, compressedObject{
 		id: aChild, local: 2, parent: &root, position: msg.Vector3{X: 900},
 	}), camera, 64)
-	if _, ok := o.Get(aChild); !ok {
-		t.Error("an orphan was refused rather than waited for")
+	if _, ok := o.Get(aChild); !ok || onNotice(o, aChild) {
+		t.Error("an orphan was refused, or put on notice, rather than waited for")
 	}
 }
 
@@ -724,14 +738,20 @@ func TestAPersonIsNeverDroppedForDistance(t *testing.T) {
 	if _, ok := a.Objects().Get(aPrim); !ok {
 		t.Fatal("the person was refused for distance and can never be described again")
 	}
-	if _, ok := a.Objects().Get(aChild); ok {
-		t.Error("a prim that far away was kept; only people are exempt")
+	if onNotice(a.Objects(), aPrim) {
+		t.Error("the person was put on notice for distance")
+	}
+	if !onNotice(a.Objects(), aChild) {
+		t.Error("a prim that far away was not put on notice; only people are exempt")
 	}
 
-	// And a later trim leaves them alone too.
-	a.Objects().Trim(msg.Vector3{X: 30, Y: 70, Z: 24}, 128)
+	// And trimming leaves them alone too, while the prim goes.
+	trimAfterGrace(a.Objects(), msg.Vector3{X: 30, Y: 70, Z: 24}, 128)
 	if _, ok := a.Objects().Get(aPrim); !ok {
 		t.Error("the person was trimmed away")
+	}
+	if _, ok := a.Objects().Get(aChild); ok {
+		t.Error("a prim that far away outlasted its grace")
 	}
 }
 
@@ -850,8 +870,18 @@ func TestTrimForgetsWhatIsOutOfSight(t *testing.T) {
 	// deleted and re-created every minute for hours.
 	o.byID[oldOrphan].Last = time.Now().Add(-2 * orphanGrace)
 
-	if n := o.Trim(camera, 64); n != 3 {
-		t.Errorf("Trim removed %d, want 3", n)
+	// What is out of range is put on notice by the first trim and not
+	// dropped: the camera a trim reads can be the moment's wrong one.
+	// Only the old orphan goes, since an orphan has its own clock.
+	if n := o.Trim(camera, 64); n != 1 {
+		t.Errorf("the first Trim removed %d, want only the old orphan", n)
+	}
+	if !onNotice(o, far) || !onNotice(o, farKid) || onNotice(o, near) {
+		t.Error("the first Trim should put what is out of range on notice and nothing else")
+	}
+	graceRunsOut(o)
+	if n := o.Trim(camera, 64); n != 2 {
+		t.Errorf("Trim removed %d once the grace had run out, want the far root and its child", n)
 	}
 	for _, c := range []struct {
 		id   msg.UUID
@@ -1115,3 +1145,77 @@ func TestTheChangeIsNoticedOnTheWayOut(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 }
+
+// onNotice says whether an object is held but out of everybody's range,
+// waiting out OutOfRangeGrace.
+func onNotice(o *Objects, id msg.UUID) bool {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	v := o.byID[id]
+	return v != nil && !v.leaving.IsZero()
+}
+
+// graceRunsOut moves every notice back by OutOfRangeGrace, as though
+// that long had passed with nothing coming back into range.
+func graceRunsOut(o *Objects) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, v := range o.byID {
+		if !v.leaving.IsZero() {
+			v.leaving = v.leaving.Add(-OutOfRangeGrace)
+		}
+	}
+}
+
+// trimAfterGrace is two trims with the grace run out between them: the
+// first puts what is out of range on notice, the second drops what is
+// still out of range.  It returns how many went in all.
+func trimAfterGrace(o *Objects, camera msg.Vector3, far float32) int {
+	n := o.Trim(camera, far)
+	graceRunsOut(o)
+	return n + o.Trim(camera, far)
+}
+
+// TestWhatIsDescribedBeforeTheCameraIsRightIsKept.
+//
+// At login the camera is put on the avatar before anything has said
+// where the avatar is, so for a moment it looks out from the region's
+// corner -- and the region describes the most in the moments after
+// arriving.  Judged from there, the chair the avatar was about to sit on
+// was out of range: refused on the spot, and never described again.  The
+// avatar was "sitting on something not described here" for the rest of
+// the session.  Neither an update judged from the wrong camera nor a trim
+// read from it may drop anything; only being out of range for the whole
+// grace does.
+func TestWhatIsDescribedBeforeTheCameraIsRightIsKept(t *testing.T) {
+	t.Parallel()
+
+	corner, avatar := msg.Vector3{}, msg.Vector3{X: 90, Y: 169, Z: 42}
+	chair := msg.MustParseUUID("2ddb7e57-7e57-c0de-1fc2-4a8634a86f7a")
+	o := newObjects()
+
+	// Described while the camera is still in the corner.
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 7, FullID: chair, ObjectData: placement(msg.Vector3{X: 90, Y: 169, Z: 41}, msg.Quaternion{}),
+	}, corner, 128)
+	if _, ok := o.Get(chair); !ok {
+		t.Fatal("the chair was refused on the word of a camera that had not arrived yet")
+	}
+
+	// A trim that reads the camera before it has moved.
+	if n := o.Trim(corner, 128); n != 0 {
+		t.Fatalf("a trim from the corner dropped %d", n)
+	}
+
+	// The camera arrives, and from then on the chair is in range.
+	o.Trim(avatar, 128)
+	if onNotice(o, chair) {
+		t.Error("the chair is still on notice with the camera beside it")
+	}
+	graceRunsOut(o)
+	if o.Trim(avatar, 128); !has(o, chair) {
+		t.Error("the chair was dropped although the camera had come to it")
+	}
+}
+
+func has(o *Objects, id msg.UUID) bool { _, ok := o.Get(id); return ok }

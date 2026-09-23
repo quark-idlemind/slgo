@@ -58,6 +58,12 @@ func TestTheCacheIsSweptOnATimer(t *testing.T) {
 		ObjectData: placement(msg.Vector3{X: 900, Y: 128, Z: 25}, msg.Quaternion{})},
 		msg.Vector3{}, 0)
 
+	// Already on notice this long, so that the sweep is the only thing
+	// between it and the door.
+	a.Objects().mu.Lock()
+	a.Objects().byID[aChild].leaving = time.Now().Add(-OutOfRangeGrace)
+	a.Objects().mu.Unlock()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go a.trimObjects(ctx, 5*time.Millisecond)

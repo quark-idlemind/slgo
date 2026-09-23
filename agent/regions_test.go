@@ -106,7 +106,7 @@ func TestEveryViewpointGetsASayInWhatIsKept(t *testing.T) {
 
 	// Once that avatar goes, nothing is keeping it.
 	o.Unwatch("b")
-	if n := o.Trim(here, 64); n != 1 {
+	if n := trimAfterGrace(o, here, 64); n != 1 {
 		t.Errorf("trimmed %d after the only avatar who could see it left, want 1", n)
 	}
 }
@@ -229,7 +229,7 @@ func TestAWornPrimIsJudgedByItsWearer(t *testing.T) {
 	// one says nothing afterwards, so an avatar dropped for distance is
 	// dropped for good -- see pcodeAvatar.
 	far := msg.Vector3{X: 900, Y: 900}
-	if n := o.Trim(far, 128); n != 2 {
+	if n := trimAfterGrace(o, far, 128); n != 2 {
 		t.Errorf("trimmed %d when the wearer walked off, want the two prims", n)
 	}
 	if o.Count() != 1 {
@@ -374,7 +374,7 @@ func TestANewcomerHasASayFromTheMomentItArrives(t *testing.T) {
 
 	// And a camera that moves takes its say with it.
 	newcomer.setCenter(aloft)
-	if n := store.Trim(l.Center, l.Far); n != 1 {
+	if n := trimAfterGrace(store, l.Center, l.Far); n != 1 {
 		t.Errorf("trimmed %d once nobody was looking at it, want 1", n)
 	}
 }

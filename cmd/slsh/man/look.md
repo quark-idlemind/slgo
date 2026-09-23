@@ -33,7 +33,9 @@ that is not how many are in the region.
 The simulator describes what is near the camera and nothing else, so an
 object beyond the draw distance is not merely unnamed here, it is
 unknown.  The count grows as the avatar moves about, and it falls
-again as things drift out of range.  Read it as what the session is
+again as things drift out of range -- about half a minute after they
+go, since something out of range is kept that long in case the camera
+it was judged by was the moment's wrong one.  Read it as what the session is
 holding now rather than as a census.
 
 ## Examples

@@ -74,6 +74,12 @@ type Object struct {
 	// would work from, if one turns out to be needed.
 	First time.Time
 	Last  time.Time
+
+	// leaving is when this object was first found out of everybody's
+	// range, and zero while it is in somebody's.  Being out of range
+	// puts an object on notice rather than out of the store: see
+	// OutOfRangeGrace.
+	leaving time.Time
 }
 
 // Objects is what the session has been told about the region.
@@ -261,6 +267,27 @@ func (o *Objects) Flush() int {
 // again.  The margin costs a few entries and stops the flapping.
 const TrimMargin = 32
 
+// OutOfRangeGrace is how long an object found out of range is kept
+// before it is dropped for it.
+//
+// Out of range is judged against cameras, and a camera can be wrong for
+// a moment.  At login the camera is put on the avatar before anything
+// has said where the avatar is, so for a second or so it looks out from
+// the region's corner; everything described in that second -- and the
+// region describes the most in the seconds after arriving -- was judged
+// from there and thrown away, and the region describes each object
+// once.  Measured on Agni: an avatar sitting on a chair whose
+// description arrived in that window stayed "sitting on something not
+// described here" for as long as the session lasted.
+//
+// So an object out of range is noticed first and dropped only if it is
+// still out of range this long afterwards.  Coming back into anybody's
+// range in between takes it off notice.  Two trim ticks, so that the
+// decision is always made on a camera read at least one tick after the
+// one that put it on notice.  The cost is holding a little of the view
+// just left for half a minute longer.
+const OutOfRangeGrace = 2 * TrimInterval
+
 // orphanGrace is how long a child is kept after the last word about it,
 // when nothing here says where its root is.
 //
@@ -297,6 +324,7 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	now := time.Now()
 
 	// Where everything is, resolved once.  A child's position is an
 	// offset, so what decides its fate is where its root is standing --
@@ -364,12 +392,27 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 			}
 			continue
 		}
-		if !o.keepLocked(at, camera, drawDistance) {
+		if o.keepLocked(at, camera, drawDistance) {
+			v.leaving = time.Time{}
+			continue
+		}
+		if o.goneLocked(v, now) {
 			delete(o.byID, id)
 			n++
 		}
 	}
 	return n
+}
+
+// goneLocked puts an object that is out of range on notice, and says
+// whether it has been out of range long enough to drop.  See
+// OutOfRangeGrace.
+func (o *Objects) goneLocked(v *Object, now time.Time) bool {
+	if v.leaving.IsZero() {
+		v.leaving = now
+		return false
+	}
+	return now.Sub(v.leaving) >= OutOfRangeGrace
 }
 
 func dist2(a, b msg.Vector3) float32 {
@@ -400,14 +443,17 @@ func dist2(a, b msg.Vector3) float32 {
 // standing next to you.
 const pcodeAvatar = 47
 
-// update records what an ObjectUpdate said, unless it is about
-// something beyond the draw distance.
+// update records what an ObjectUpdate said, and whether it is about
+// something beyond everybody's draw distance.
 //
-// Refusing it here as well as trimming later is worth the check.  The
+// Judging it here as well as trimming later is worth the check.  The
 // simulator does not describe what is out of range, so most of the
-// time this rejects nothing -- but after the avatar has moved it stops
-// the far end of the old view being taken back in from a stray update
-// before the next trim comes round.
+// time this finds nothing -- but after the avatar has moved, a stray
+// update from the far end of the old view is put on notice at once
+// rather than taken back in as current.  It is recorded either way and
+// dropped only by Trim, once OutOfRangeGrace has passed: the camera it
+// was judged by may be the moment's wrong one, and an update refused
+// here is never sent again.
 //
 // A child is judged by its root, and a child whose root is not known
 // yet is taken in: object updates arrive in no particular order, and a
@@ -419,18 +465,17 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
+	far := false
 	if havePos && d.PCode != pcodeAvatar {
 		at, judge := pos, true
 		if d.ParentID != 0 {
 			at, judge = o.anchorLocked(d.ParentID)
 		}
-		if judge && !o.keepLocked(at, camera, drawDistance) {
-			delete(o.byID, d.FullID)
-			return
-		}
+		far = judge && !o.keepLocked(at, camera, drawDistance)
 	}
 
 	v := o.seen(d.FullID)
+	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode, v.Scale = d.ID, d.ParentID, d.PCode, d.Scale
 	v.Shape = msg.ShapeOfUpdate(d)
 	// A full update carries the appearance as well, and it is the only
@@ -502,18 +547,17 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
+	far := false
 	if c.PCode != pcodeAvatar {
 		at, judge := c.Position, true
 		if parent != 0 {
 			at, judge = o.anchorLocked(parent)
 		}
-		if judge && !o.keepLocked(at, camera, drawDistance) {
-			delete(o.byID, c.FullID)
-			return
-		}
+		far = judge && !o.keepLocked(at, camera, drawDistance)
 	}
 
 	v := o.seen(c.FullID)
+	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode = c.LocalID, parent, c.PCode
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
 	if !c.Shape.IsZero() {
@@ -527,6 +571,20 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	}
 	if c.Text != "" {
 		v.Text = c.Text
+	}
+}
+
+// judgedLocked records what an update's range check found: in range
+// takes the object off notice, out of range puts it on notice if it is
+// not already.  It is never dropped here, only by Trim once the notice
+// has run out -- the camera an update is judged by can be the moment's
+// wrong one, and see OutOfRangeGrace for what dropping on the spot cost.
+func (o *Objects) judgedLocked(v *Object, far bool) {
+	switch {
+	case !far:
+		v.leaving = time.Time{}
+	case v.leaving.IsZero():
+		v.leaving = time.Now()
 	}
 }
 
