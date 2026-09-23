@@ -3015,9 +3015,29 @@ type PresenceResponse struct {
 	//
 	// Empty means "not told yet" as much as "belongs to none", and
 	// nothing here can tell those apart.
-	Groups        []*GroupMembership `protobuf:"bytes,8,rep,name=groups,proto3" json:"groups,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Groups []*GroupMembership `protobuf:"bytes,8,rep,name=groups,proto3" json:"groups,omitempty"`
+	// The highest rating of land this avatar has asked to be shown, and
+	// the highest the account is permitted to ask for: the maturity
+	// PREFERENCE and CEILING, as the grid spells them -- "PG", "M" or
+	// "A".
+	//
+	// They travel for the reason active_group does.  Both arrive in the
+	// login response, which only the daemon ever saw, and no message
+	// repeats them; the capability that changes the preference answers
+	// only "set it to this".  So a client that attached later has no
+	// question it can ask to hear either one.
+	//
+	// The preference is the login's until a request through this
+	// daemon changes it, and then it is what that request was granted.
+	// A change made anywhere else -- the account's web page, or a viewer
+	// attached here, which talks to the capability directly -- is not
+	// seen.
+	//
+	// Empty means the login response did not say, and nothing more.
+	MaturityPreference string `protobuf:"bytes,9,opt,name=maturity_preference,json=maturityPreference,proto3" json:"maturity_preference,omitempty"`
+	MaturityCeiling    string `protobuf:"bytes,10,opt,name=maturity_ceiling,json=maturityCeiling,proto3" json:"maturity_ceiling,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *PresenceResponse) Reset() {
@@ -3104,6 +3124,20 @@ func (x *PresenceResponse) GetGroups() []*GroupMembership {
 		return x.Groups
 	}
 	return nil
+}
+
+func (x *PresenceResponse) GetMaturityPreference() string {
+	if x != nil {
+		return x.MaturityPreference
+	}
+	return ""
+}
+
+func (x *PresenceResponse) GetMaturityCeiling() string {
+	if x != nil {
+		return x.MaturityCeiling
+	}
+	return ""
 }
 
 // GroupMembership is one of the avatar's groups, as
@@ -5008,7 +5042,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x01z\x18\x03 \x01(\x02R\x01z\"L\n" +
 	"\x0fPresenceRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12#\n" +
-	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\xcc\x02\n" +
+	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\xa8\x03\n" +
 	"\x10PresenceResponse\x12,\n" +
 	"\bposition\x18\x01 \x01(\v2\x10.slgo.v1.Vector3R\bposition\x12)\n" +
 	"\alook_at\x18\x02 \x01(\v2\x10.slgo.v1.Vector3R\x06lookAt\x12(\n" +
@@ -5017,7 +5051,10 @@ const file_slgo_proto_rawDesc = "" +
 	"\rregion_handle\x18\x05 \x01(\x04R\fregionHandle\x12\x16\n" +
 	"\x06region\x18\x06 \x01(\tR\x06region\x12!\n" +
 	"\factive_group\x18\a \x01(\tR\vactiveGroup\x120\n" +
-	"\x06groups\x18\b \x03(\v2\x18.slgo.v1.GroupMembershipR\x06groups\"M\n" +
+	"\x06groups\x18\b \x03(\v2\x18.slgo.v1.GroupMembershipR\x06groups\x12/\n" +
+	"\x13maturity_preference\x18\t \x01(\tR\x12maturityPreference\x12)\n" +
+	"\x10maturity_ceiling\x18\n" +
+	" \x01(\tR\x0fmaturityCeiling\"M\n" +
 	"\x0fGroupMembership\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +

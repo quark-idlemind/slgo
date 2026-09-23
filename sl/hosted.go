@@ -324,6 +324,9 @@ func (h *Hosted) Presence(ctx context.Context, drawDistance float32) (*Presence,
 		Region:       r.Region,
 		ActiveGroup:  parseUUIDOrZero(r.ActiveGroup),
 		Groups:       groupsFromPB(r.Groups),
+
+		MaturityPreference: r.MaturityPreference,
+		MaturityCeiling:    r.MaturityCeiling,
 	}, nil
 }
 

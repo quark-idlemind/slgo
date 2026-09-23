@@ -124,6 +124,12 @@ func (a *Agent) DoCap(ctx context.Context, r CapRequest) (*CapResponse, error) {
 	// simulator offered rather than anywhere at all.
 	a.rememberURLs(b)
 
+	// The one capability whose answer is state the session keeps: see
+	// Maturity for why it is heard here or not at all.
+	if r.URL == "" && r.Cap == MaturityCap {
+		a.noteMaturity(resp.StatusCode, b)
+	}
+
 	return &CapResponse{Status: resp.StatusCode, Body: b}, nil
 }
 

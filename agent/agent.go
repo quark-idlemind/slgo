@@ -192,6 +192,10 @@ type Agent struct {
 	groups      []Group
 	regionFlags uint32
 
+	// maturity is the preference the grid granted the last time this
+	// session asked for one, and empty until it has.  See Maturity.
+	maturity string
+
 	// attached is the region whose store is held now, under mu.
 	attached msg.UUID
 

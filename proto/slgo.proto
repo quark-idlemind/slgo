@@ -826,6 +826,27 @@ message PresenceResponse {
   // Empty means "not told yet" as much as "belongs to none", and
   // nothing here can tell those apart.
   repeated GroupMembership groups = 8;
+
+  // The highest rating of land this avatar has asked to be shown, and
+  // the highest the account is permitted to ask for: the maturity
+  // PREFERENCE and CEILING, as the grid spells them -- "PG", "M" or
+  // "A".
+  //
+  // They travel for the reason active_group does.  Both arrive in the
+  // login response, which only the daemon ever saw, and no message
+  // repeats them; the capability that changes the preference answers
+  // only "set it to this".  So a client that attached later has no
+  // question it can ask to hear either one.
+  //
+  // The preference is the login's until a request through this
+  // daemon changes it, and then it is what that request was granted.
+  // A change made anywhere else -- the account's web page, or a viewer
+  // attached here, which talks to the capability directly -- is not
+  // seen.
+  //
+  // Empty means the login response did not say, and nothing more.
+  string maturity_preference = 9;
+  string maturity_ceiling = 10;
 }
 
 // GroupMembership is one of the avatar's groups, as

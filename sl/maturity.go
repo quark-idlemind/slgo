@@ -20,9 +20,16 @@ package sl
 //     people to the website for the rest.
 //
 // So SetMaturity asks, and the grid answers with what it granted, which
-// may be lower.  That answer is the only way anything here can learn
-// the ceiling: ask for Adult and be given Moderate, and Moderate is the
-// ceiling.
+// may be lower.
+//
+// Both numbers also arrive in the login response, and a Presence
+// carries them: MaturityPreference and MaturityCeiling, read out of
+// that response where the session was built and kept current by the
+// answers to SetMaturity.  That is how they are READ -- the capability
+// has no way to be asked without being told, and the only rating always
+// safe to tell it is General, which would lower a preference somebody
+// had set higher.  See agent.Maturity for which fields they are, and
+// for the one that looks right and is not.
 //
 // # What being refused looks like from outside
 //
@@ -67,7 +74,11 @@ import (
 // did not offer it cannot set maturity at all; agent.DefaultCaps asks
 // for it, so a session that lacks it is one whose daemon was built
 // before this existed.
-const MaturityCap = "UpdateAgentInformation"
+//
+// It is the agent package's name for it and not a second spelling:
+// the agent reads the same answer on its way past, which is how the
+// preference a Presence reports stays the one last granted.
+const MaturityCap = agent.MaturityCap
 
 // The ratings, in the two-letter form the grid takes and answers in.
 //

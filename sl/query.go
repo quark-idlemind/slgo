@@ -44,6 +44,23 @@ type Presence struct {
 	// is no way here to tell the two apart, and anything that says
 	// "this avatar is in no groups" is claiming more than it knows.
 	Groups []Group
+
+	// MaturityPreference is the highest rating of land this avatar has
+	// asked to be shown, and MaturityCeiling the highest the account is
+	// permitted to ask for -- in the grid's letters, MaturityGeneral,
+	// MaturityModerate or MaturityAdult.  See the head of maturity.go
+	// for why they are different numbers and only the first can be set.
+	//
+	// Both come from the login response, and the preference then
+	// follows what SetMaturity is granted.  A change made anywhere else
+	// is not heard of: agent.Maturity says where, and why.
+	//
+	// Empty is "not told": a login response that did not carry the
+	// field, or a daemon built before it passed them on.  It is never
+	// General, and reading it as General is how a caller comes to think
+	// an avatar will be refused land it would have been let onto.
+	MaturityPreference string
+	MaturityCeiling    string
 }
 
 // Group is one of the avatar's memberships, as AgentGroupDataUpdate

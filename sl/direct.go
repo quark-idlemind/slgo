@@ -239,6 +239,7 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 		d.a.SetLook(l)
 	}
 	l := d.a.Look()
+	preference, ceiling := d.a.Maturity()
 	return &Presence{
 		Position:     d.a.Position(),
 		LookAt:       l.At,
@@ -248,6 +249,9 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 		Region:       d.a.RegionName(),
 		ActiveGroup:  d.a.ActiveGroup(),
 		Groups:       groupsFromAgent(d.a.Groups()),
+
+		MaturityPreference: preference,
+		MaturityCeiling:    ceiling,
 	}, nil
 }
 

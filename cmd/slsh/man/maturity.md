@@ -1,7 +1,9 @@
-Asks for the highest rating of land this avatar should be shown --
-general, moderate or adult -- and prints what the grid granted, which
-is not always what was asked for.
+Says what rating of land this avatar is shown and how high the
+account may go.  Given a rating -- general, moderate or adult -- it
+asks for that one instead, and prints what the grid granted, which is
+not always what was asked for.
 
+    maturity
     maturity adult
     maturity moderate
     maturity general
@@ -24,9 +26,11 @@ set:
   and Linden Lab's own viewer offers only what the account already
   allows and sends you to the website for the rest.
 
-So this asks, and the grid answers with what it granted.  Where they
-agree there is nothing more to say, and this is what was measured on
-Agni on 2026-09-02:
+A bare `maturity` prints both; see "Reading it" below.
+
+`maturity RATING` asks, and the grid answers with what it granted.
+Where they agree there is nothing more to say, and this is what was
+measured on Agni on 2026-09-02:
 
     /$ maturity adult
     this avatar is shown land rated adult and below
@@ -56,8 +60,10 @@ An avatar refused entry to a region is told this, on the teleport:
 
 That sentence names both causes at once and picks neither, so there is
 no telling from it whether the preference is too low or the account is
-not verified.  This command tells them apart in one call: ask for
-adult, and what comes back says which of the two you are looking at.
+not verified.  This command tells them apart in one call, either
+way round: a bare `maturity` prints the two numbers without changing
+anything, and asking for adult makes the grid answer with which of the
+two you are looking at -- and fixes the preference, if it can be.
 
 Measured on Agni on 2026-09-02, in that order and on one avatar:
 
@@ -82,18 +88,49 @@ these avatars are usually set up through a viewer once and never again
 another is the ordinary reason two avatars behave differently on the
 same land.
 
-## It cannot be read without asking
+## Reading it
 
-There is no listing form.  The preference arrives in the login
-response, which the daemon holds and does not pass on, and the
-capability this uses has only one question -- "set it to this".  A bare
-`maturity` would therefore have to ask for something in order to report
-anything, and the only rating it could safely ask for would be general,
-which would quietly *lower* a preference somebody had set higher.  So a
-bare `maturity` is refused with this explanation instead.
+A bare `maturity` asks the grid nothing.  Both numbers arrive in the
+login response -- the preference as `agent_region_access`, the ceiling
+as `agent_access_max`, which is how Linden Lab's viewer reads them --
+and the daemon keeps that response and hands the two on with the
+avatar's presence, which is where this reads them.
+For an account shown moderate that may go to adult it prints
 
-Asking for the rating you believe is already in force is the way to
-read it: it changes nothing and the answer is the truth.
+    this avatar is shown land rated moderate and below, and this account may go as high as adult
+
+and for one already at its ceiling
+
+    this avatar is shown land rated adult and below, which is as high as this account may go
+
+Those are the lines the command prints and not a transcript: this
+form needs a daemon built with it, and had not been run against the
+grid when this was written.
+
+A number the login did not carry is said to be missing rather than
+guessed at, and so are both when the daemon is older than this form
+and passes neither on.  Missing is never printed as general.
+
+The field called `agent_access` is not the preference, though its name
+makes it look like the one.  It is older than the adult rating, and a
+login response from an account shown adult still carries M there.
+
+The capability `maturity RATING` uses could not have been the reading
+form.  Its only question is "set it to this", and the only rating
+always safe to ask for is general -- which would quietly *lower* a
+preference somebody had set higher.
+
+### What it does not see
+
+What a bare `maturity` prints is the login's, followed by whatever
+`maturity RATING` has been granted since through the same daemon.  A
+change made anywhere else is not seen until the next login: on the
+account's web page, or in a viewer attached to the session, whose
+request goes to the simulator directly rather than through the daemon.
+No message a simulator sends to a client carries the preference, and
+the viewer's own source learns it from its login and from the answer to
+its own request and nowhere else -- which is read from that source
+rather than watched, but it leaves nothing for the daemon to hear.
 
 ## The rating is per account, not per session
 

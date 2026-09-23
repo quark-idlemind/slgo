@@ -72,21 +72,73 @@ func TestMaturityGrantedLessSaysWhichHalfIsTheProblem(t *testing.T) {
 	}
 }
 
-// TestMaturityWillNotReadWithoutAsking.
+// TestABareMaturitySaysBothNumbersAndAsksNothing.
 //
-// The capability's only question is "set it to this", so a bare
-// "maturity" would have to ask for something to report anything, and
-// the one rating it could safely ask for is general -- which would
-// quietly lower a preference somebody had set higher.  It refuses and
-// explains instead.
-func TestMaturityWillNotReadWithoutAsking(t *testing.T) {
+// "This avatar is shown moderate and below, and this account may go as
+// high as adult" is the sentence somebody puzzling over a refused
+// teleport wants, and it used to be unsayable: the capability's only
+// question is "set it to this", and the one rating safe to ask for is
+// general, which would quietly lower a preference somebody had set
+// higher.  So the numbers come from the presence, and nothing is sent.
+func TestABareMaturitySaysBothNumbersAndAsksNothing(t *testing.T) {
+	x := newTestShell(t)
+	asked := answerMaturity(t, x, sl.MaturityGeneral)
+	x.grid.presence.MaturityPreference = sl.MaturityModerate
+	x.grid.presence.MaturityCeiling = sl.MaturityAdult
+
+	got := x.do(t, "maturity")
+	if !strings.Contains(got, "shown land rated moderate and below, and this account may go as high as adult") {
+		t.Errorf("a bare maturity printed %q", got)
+	}
+	if *asked != "" {
+		t.Errorf("a bare maturity set the preference to %q", *asked)
+	}
+}
+
+// TestABareMaturityAtTheCeilingSaysThereIsNoHigher: an avatar already
+// shown all it may be is the case where asking for more is pointless,
+// and the line says so rather than leaving somebody to try.
+func TestABareMaturityAtTheCeilingSaysThereIsNoHigher(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.presence.MaturityPreference = sl.MaturityModerate
+	x.grid.presence.MaturityCeiling = sl.MaturityModerate
+
+	got := x.do(t, "maturity")
+	if !strings.Contains(got, "shown land rated moderate and below, which is as high as this account may go") {
+		t.Errorf("a bare maturity printed %q", got)
+	}
+}
+
+// TestABareMaturityToldNothingDoesNotSayGeneral.
+//
+// A daemon built before these were passed on, or a login response
+// without them, leaves both empty.  Printed as general, empty would
+// tell somebody their avatar will be refused land it would be let onto;
+// printed as anything, an empty ceiling is an account's age
+// verification made up.  Each missing half is said to be missing, and
+// still nothing is asked for to fill it.
+func TestABareMaturityToldNothingDoesNotSayGeneral(t *testing.T) {
 	x := newTestShell(t)
 	asked := answerMaturity(t, x, sl.MaturityGeneral)
 
 	got := x.do(t, "maturity")
-	if !strings.Contains(got, "which rating to ask for") {
-		t.Errorf("a bare maturity printed %q", got)
+	if !strings.Contains(got, "did not say") || strings.Contains(got, "general") {
+		t.Errorf("a bare maturity told nothing printed %q", got)
 	}
+
+	x.grid.presence.MaturityPreference = sl.MaturityAdult
+	got = x.do(t, "maturity")
+	if !strings.Contains(got, "shown land rated adult and below; the login did not say how high") {
+		t.Errorf("a bare maturity told only the preference printed %q", got)
+	}
+
+	x.grid.presence.MaturityPreference = ""
+	x.grid.presence.MaturityCeiling = sl.MaturityAdult
+	got = x.do(t, "maturity")
+	if !strings.Contains(got, "may go as high as adult; the login did not say what this avatar is shown") {
+		t.Errorf("a bare maturity told only the ceiling printed %q", got)
+	}
+
 	if *asked != "" {
 		t.Errorf("a bare maturity set the preference to %q", *asked)
 	}

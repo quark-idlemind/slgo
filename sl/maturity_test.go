@@ -12,6 +12,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/quark-idlemind/slgo/agent"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // grantedAccess is the capability's answer, in the shape it comes in.
@@ -120,5 +123,48 @@ func TestParseMaturityTakesBothVocabularies(t *testing.T) {
 		if got, err := ParseMaturity(bad); err == nil {
 			t.Errorf("ParseMaturity(%q) = %q, want a refusal", bad, got)
 		}
+	}
+}
+
+// TestAHostedPresenceCarriesBothMaturities: they cross from the daemon
+// as two strings side by side, and a translation that crossed them over
+// would print the ceiling as the preference -- which reads as an avatar
+// shown adult when it has only asked for moderate, and is found out on a
+// refused teleport.
+func TestAHostedPresenceCarriesBothMaturities(t *testing.T) {
+	t.Parallel()
+	h, d := newFakeDaemon(t)
+	d.presence = &pb.PresenceResponse{
+		Region:             "Test Region",
+		MaturityPreference: MaturityModerate,
+		MaturityCeiling:    MaturityAdult,
+	}
+	p, err := h.Presence(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("Presence: %v", err)
+	}
+	if p.MaturityPreference != MaturityModerate || p.MaturityCeiling != MaturityAdult {
+		t.Errorf("the daemon said M and A, and the presence says %q and %q",
+			p.MaturityPreference, p.MaturityCeiling)
+	}
+}
+
+// TestADirectPresenceReadsTheMaturityOffItsOwnLogin: a direct session
+// holds the login response itself, and has to hand on the same two
+// numbers a daemon would, or everything above it would have to know
+// which kind of session it was given.
+func TestADirectPresenceReadsTheMaturityOffItsOwnLogin(t *testing.T) {
+	d := aDirectSession(t)
+	d.a = &agent.Agent{Account: &agent.Account{Raw: map[string]any{
+		"agent_region_access": MaturityModerate,
+		"agent_access_max":    MaturityAdult,
+	}}}
+	p, err := d.Presence(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("Presence: %v", err)
+	}
+	if p.MaturityPreference != MaturityModerate || p.MaturityCeiling != MaturityAdult {
+		t.Errorf("the login said M and A, and the presence says %q and %q",
+			p.MaturityPreference, p.MaturityCeiling)
 	}
 }

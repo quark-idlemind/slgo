@@ -621,15 +621,18 @@ func (s *Server) Presence(ctx context.Context, req *pb.PresenceRequest) (*pb.Pre
 	}
 
 	l := a.Look()
+	preference, ceiling := a.Maturity()
 	return &pb.PresenceResponse{
-		Position:     vec(a.Position()),
-		LookAt:       vec(l.At),
-		Camera:       vec(l.Center),
-		DrawDistance: l.Far,
-		RegionHandle: a.RegionHandle(),
-		Region:       a.RegionName(),
-		ActiveGroup:  a.ActiveGroup().String(),
-		Groups:       memberships(a.Groups()),
+		Position:           vec(a.Position()),
+		LookAt:             vec(l.At),
+		Camera:             vec(l.Center),
+		DrawDistance:       l.Far,
+		RegionHandle:       a.RegionHandle(),
+		Region:             a.RegionName(),
+		ActiveGroup:        a.ActiveGroup().String(),
+		Groups:             memberships(a.Groups()),
+		MaturityPreference: preference,
+		MaturityCeiling:    ceiling,
 	}, nil
 }
 
