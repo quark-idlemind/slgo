@@ -1,0 +1,343 @@
+package main
+
+// One question, from the index to what may be printed.
+//
+// askRun is the whole of ask apart from the printing: it finds the
+// commands the index thinks could answer, turns them into what the
+// model is shown (askprompt.go), asks, checks the answer (askcheck.go),
+// gives the model one chance to mend what was refused, and hands back
+// everything that happened -- what was shown, what came back, what was
+// kept and what was refused and why.  The printing is ask.go's; keeping
+// the two apart is what lets the eval measure exactly what a person
+// would have been shown without scraping it off a screen.
+//
+// # Without a model
+//
+// A nil client is not a failure.  The index alone is most of the
+// answer -- it names the commands, and their pages have the example
+// lines -- so ask with no model configured, or with the model's server
+// down, still answers, from the candidates alone.  When the model was
+// asked and failed, askRun returns the error AND the result with its
+// candidates filled in, so that the caller can fall back without
+// searching a second time.
+//
+// # The retry
+//
+// One, and only when the model's answer was refused outright: some
+// suggestion was rejected and none survived.  An answer with one good
+// suggestion and one invented one is an answer with one good
+// suggestion; asking again would cost a second wait on a small model
+// for the chance of an alternative, and the likelier outcome of
+// pressing a model that has already guessed once is a second guess.
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/quark-idlemind/slgo/internal/askindex"
+	"github.com/quark-idlemind/slgo/internal/llm"
+)
+
+// askConfig is where the model is.  An empty URL is no model at all.
+type askConfig struct {
+	URL, Model string
+	Slot       *int
+	Timeout    time.Duration
+}
+
+// askResult is everything one question came to.
+type askResult struct {
+	Question     string
+	Candidates   []askCandidate  // what was shown (or would be)
+	Answer       *askAnswer      // nil when no model was asked
+	Kept         []askSuggestion // survived the checks
+	Rejected     []askRejection
+	Retried      bool
+	PromptTokens int // from the server, 0 if none
+	Elapsed      time.Duration
+}
+
+const (
+	// askCandidateCount is how many commands the model is shown before
+	// askFit trims to the budget.  Eight is the plan's number: enough
+	// that the right command is usually among them (the retrieval tests
+	// ask for top 8), few enough that a small model can read them all.
+	askCandidateCount = 8
+
+	// askExcerptCommands is how many of those carry excerpts from their
+	// pages, and askExcerptsEach how many excerpts each.  Past the top
+	// few, a command's usage line and brief are enough to rule it out,
+	// and the budget is better spent on the ones likely to be right.
+	askExcerptCommands = 3
+	askExcerptsEach    = 3
+)
+
+// newAskClient is the client for c, or nil when no URL is set.
+//
+// extra is merged into every request, for what one model needs and
+// another would refuse: a Qwen3-style model that reasons aloud before
+// answering is told not to with
+// {"chat_template_kwargs": {"enable_thinking": false}} under
+// llama-server, and that is a fact about that model, so it lives in the
+// setting rather than here.
+func newAskClient(c askConfig, extra map[string]any) *llm.Client {
+	if strings.TrimSpace(c.URL) == "" {
+		return nil
+	}
+	return llm.New(llm.Options{
+		URL:         c.URL,
+		Model:       c.Model,
+		Slot:        c.Slot,
+		Timeout:     c.Timeout,
+		Temperature: 0,
+		Extra:       extra,
+	})
+}
+
+// askRun answers one question.  client nil means retrieval only.
+//
+// The error is the model's, or the index's.  A model error comes with
+// the result as far as it got -- the candidates at least -- so that the
+// caller can answer from those instead; an index error comes with nil,
+// since without the index there is nothing to answer from.
+func askRun(ctx context.Context, client *llm.Client, question string, hints []askindex.Hint) (*askResult, error) {
+	start := time.Now()
+	res := &askResult{Question: question}
+	defer func() { res.Elapsed = time.Since(start) }()
+
+	hits, err := askSearch(question, hints...)
+	if err != nil {
+		return nil, err
+	}
+	res.Candidates = askCandidatesFrom(hits)
+	if client == nil {
+		return res, nil
+	}
+	if len(res.Candidates) == 0 {
+		// Nothing to show the model, and a model shown nothing can
+		// only invent.  This is the answer it would have been told to
+		// give.
+		res.Answer = &askAnswer{Found: false, Answer: "no slsh command matches those words"}
+		return res, nil
+	}
+
+	msgs, shown := askMessages(question, res.Candidates)
+	res.Candidates = shown
+	schema := askSchema(shown)
+
+	reply, err := client.Chat(ctx, msgs, schema)
+	if err != nil {
+		return res, err
+	}
+	res.PromptTokens += reply.PromptTokens
+	ans, err := parseAskReply(reply.Text)
+	if err != nil {
+		return res, err
+	}
+	res.Answer = &ans
+	kept, rejected := filterAskAnswer(ans)
+	res.Kept, res.Rejected = kept, rejected
+	if len(rejected) == 0 || len(kept) > 0 {
+		return res, nil
+	}
+
+	res.Retried = true
+	reply2, err := client.Chat(ctx, askRetryMessages(msgs, reply.Text, rejected), schema)
+	if err != nil {
+		return res, fmt.Errorf("asking again: %w", err)
+	}
+	res.PromptTokens += reply2.PromptTokens
+	ans2, err := parseAskReply(reply2.Text)
+	if err != nil {
+		return res, fmt.Errorf("asking again: %w", err)
+	}
+	res.Answer = &ans2
+	kept, rejected = filterAskAnswer(ans2)
+	res.Kept = kept
+	res.Rejected = append(res.Rejected, rejected...)
+	return res, nil
+}
+
+// askCandidatesFrom turns the index's hits into what the model is
+// shown, best first.
+//
+// Excerpts are the page's markdown as written, since the model quotes
+// them and checkQuote looks the quote up in the page's source.  An
+// option's paragraph goes under "Options" with its flag in front, the
+// way the page has it; the example lines that matched are gathered
+// into one "Examples" excerpt; a section keeps its heading.
+func askCandidatesFrom(hits []askindex.CommandHit) []askCandidate {
+	var out []askCandidate
+	for _, h := range hits {
+		if len(out) == askCandidateCount {
+			break
+		}
+		c, ok := commands[h.Command]
+		if !ok || askSkip(h.Command) {
+			// The index is checked against the command table by a
+			// test, so an unknown name is a build whose index is
+			// stale; the command it names cannot be suggested either
+			// way.
+			continue
+		}
+		cand := askCandidate{Name: h.Command, Usage: c.usage(h.Command), Brief: c.brief}
+		if len(out) < askExcerptCommands {
+			cand.Excerpts = askExcerptsOf(h.Hits)
+		}
+		out = append(out, cand)
+	}
+	return out
+}
+
+// askSkip is a command that is never an answer: ask itself.  Its page
+// is full of questions and of other commands' lines, so it matches
+// nearly every question asked, and "ask" is never what somebody asking
+// wanted to be told.
+func askSkip(name string) bool { return name == "ask" }
+
+// askExcerptsOf is the excerpts for one command's matching documents.
+func askExcerptsOf(hits []askindex.Hit) []askExcerpt {
+	var out []askExcerpt
+	var examples []string
+	for _, h := range hits {
+		d := h.Doc
+		switch d.Kind {
+		case askindex.KindExample:
+			examples = append(examples, "    "+d.Text)
+		case askindex.KindOption:
+			if len(out) < askExcerptsEach {
+				out = append(out, askExcerpt{Heading: "Options", Text: "**" + d.Heading + "**\n\n" + d.Text})
+			}
+		case askindex.KindSection:
+			if len(out) < askExcerptsEach {
+				out = append(out, askExcerpt{Heading: d.Heading, Text: d.Text})
+			}
+		case askindex.KindIntro:
+			if len(out) < askExcerptsEach {
+				out = append(out, askExcerpt{Text: d.Text})
+			}
+		}
+	}
+	if len(examples) > 0 {
+		if len(examples) > 4 {
+			examples = examples[:4]
+		}
+		ex := askExcerpt{Heading: "Examples", Text: strings.Join(examples, "\n")}
+		if len(out) >= askExcerptsEach {
+			out[len(out)-1] = ex
+		} else {
+			out = append(out, ex)
+		}
+	}
+	return out
+}
+
+// askExampleLines is a command's example lines as its page writes
+// them: the ones the question matched first, then the page's own, up to
+// n.  For retrieval-only answers, where these are the nearest thing to
+// a command line there is and are safe to print because a person wrote
+// them.
+func askExampleLines(name string, matched []askindex.Hit, n int) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s != "" && !seen[s] && len(out) < n {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	for _, h := range matched {
+		if h.Doc.Kind == askindex.KindExample {
+			add(h.Doc.Text)
+		}
+	}
+	if ix, err := askIndex(); err == nil && len(out) < n {
+		for _, d := range ix.Docs() {
+			if d.Command == name && d.Kind == askindex.KindExample {
+				add(d.Text)
+			}
+		}
+	}
+	return out
+}
+
+// askHintsName is the hints file's name, in the settings directory.
+const askHintsName = "ask-hints.tsv"
+
+// askHintsPath is where the hints file is looked for: beside the
+// settings file, since it is the same kind of thing -- this person's
+// own words for how they use the shell.
+func askHintsPath() (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return dir + string(os.PathSeparator) + askHintsName, nil
+}
+
+// loadAskHints reads a hints file: one hint per line,
+//
+//	words<TAB>command [command...]
+//
+// meaning that a question with every one of those words in it raises
+// those commands.  Blank lines and lines starting with # are skipped.
+// A file that is not there is no hints and no error, since most people
+// will never write one.  A line without a tab, or with nothing either
+// side of it, is an error that names the line.
+//
+// A command name the shell does not have is left out of its hint
+// rather than refused: a hints file outlives commands being renamed,
+// and a shell that would not answer any question because of one stale
+// line is worse than one that ignores the line.  readAskHints says
+// which names were left out, for ask to warn about.
+func loadAskHints(path string) ([]askindex.Hint, error) {
+	hints, _, err := readAskHints(path)
+	return hints, err
+}
+
+// readAskHints is loadAskHints, and also the unknown command names
+// found, each as "line N: NAME".
+func readAskHints(path string) (hints []askindex.Hint, unknown []string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	defer f.Close()
+
+	sc := bufio.NewScanner(f)
+	for n := 1; sc.Scan(); n++ {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		words, names, ok := strings.Cut(line, "\t")
+		when, cmds := strings.Fields(words), strings.Fields(names)
+		if !ok || len(when) == 0 || len(cmds) == 0 {
+			return nil, nil, fmt.Errorf("%s line %d: want words, a tab, and command names, got %q", path, n, line)
+		}
+		var known []string
+		for _, c := range cmds {
+			if _, ok := commands[c]; ok {
+				known = append(known, c)
+			} else {
+				unknown = append(unknown, fmt.Sprintf("line %d: %s", n, c))
+			}
+		}
+		if len(known) > 0 {
+			hints = append(hints, askindex.Hint{When: when, Commands: known})
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return hints, unknown, nil
+}

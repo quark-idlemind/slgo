@@ -32,6 +32,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config is what slsh needs to know before it can start.
@@ -75,6 +76,18 @@ type Config struct {
 	// LogDir is the default place; see transcript.go.
 	Log    bool
 	LogDir string
+
+	// Where "ask" finds a model, and what it asks it for: the server's
+	// base URL (empty is no model, and ask answers from its index
+	// alone), the model's name, llama-server's slot or nil for none,
+	// how long to wait with zero for the client's default, and a JSON
+	// object merged into every request for what one model needs and
+	// another would refuse.  See ask.go.
+	AskURL     string
+	AskModel   string
+	AskSlot    *int
+	AskTimeout time.Duration
+	AskExtra   string
 }
 
 // CellRatio is the shape of a character cell in whatever font somebody
@@ -442,6 +455,74 @@ var settings = []setting{{
 			return err
 		}
 		c.MapFriendColour = name
+		return nil
+	},
+}, {
+	name:  "ask_url",
+	about: "the model server \"ask\" uses, like http://127.0.0.1:8080; empty is none",
+	show:  func(c *Config) string { return c.AskURL },
+	parse: func(c *Config, v string) error { c.AskURL = strings.TrimSpace(v); return nil },
+}, {
+	name:  "ask_model",
+	about: "the model name sent to that server; llama-server ignores it, Ollama needs it",
+	show:  func(c *Config) string { return c.AskModel },
+	parse: func(c *Config, v string) error { c.AskModel = strings.TrimSpace(v); return nil },
+}, {
+	name:  "ask_slot",
+	about: "the llama-server slot \"ask\" uses; empty is whichever is free",
+	show: func(c *Config) string {
+		if c.AskSlot == nil {
+			return ""
+		}
+		return strconv.Itoa(*c.AskSlot)
+	},
+	parse: func(c *Config, v string) error {
+		if strings.TrimSpace(v) == "" {
+			c.AskSlot = nil
+			return nil
+		}
+		n, err := settingNumber(v, 0)
+		if err != nil {
+			return err
+		}
+		c.AskSlot = &n
+		return nil
+	},
+}, {
+	name:  "ask_timeout",
+	about: "how long \"ask\" waits for the model, like 45s; empty is two minutes",
+	show: func(c *Config) string {
+		if c.AskTimeout == 0 {
+			return ""
+		}
+		return c.AskTimeout.String()
+	},
+	parse: func(c *Config, v string) error {
+		if strings.TrimSpace(v) == "" {
+			c.AskTimeout = 0
+			return nil
+		}
+		d, err := time.ParseDuration(strings.TrimSpace(v))
+		if err != nil || d <= 0 {
+			return fmt.Errorf("want a length of time, like 45s or 2m, got %q", v)
+		}
+		c.AskTimeout = d
+		return nil
+	},
+}, {
+	name: "ask_extra",
+	// A JSON object rather than a setting per option, because what goes
+	// here is a fact about one model -- a "thinking" model told not to
+	// think -- and there is no end to those.  Checked when it is set, so
+	// that a typo is found then and not at the next question.
+	about: "a JSON object added to every request \"ask\" makes; see \"man ask\"",
+	show:  func(c *Config) string { return c.AskExtra },
+	parse: func(c *Config, v string) error {
+		v = strings.TrimSpace(v)
+		if _, err := askParseExtra(v); err != nil {
+			return err
+		}
+		c.AskExtra = v
 		return nil
 	},
 }}
