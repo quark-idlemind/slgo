@@ -68,6 +68,7 @@ case.
     cmd/slbotd/chat.go  answering conversation with a local model, and keeping it
     cmd/msggen/         fetches message_template.msg, writes Go
     cmd/slgo-multiattach/  wearing several objects on one attachment point
+    cmd/sl-host/        says where slgod is, from the network this machine is on
 
     agent/              one avatar's connection: login, then the circuit
     agent/profile.go    credentials under ~/.config/slgo

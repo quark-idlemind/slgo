@@ -8,6 +8,7 @@
 /cmd/*/slbench
 /cmd/*/slbotd
 /cmd/*/slhash
+/cmd/*/sl-host
 /cmd/*/msggen
 /cmd/*/md
 /msggen
@@ -23,6 +24,7 @@
 /slbench
 /slbotd
 /slhash
+/sl-host
 /msggen
 /slgo
 /slgo-multiattach

@@ -74,6 +74,24 @@ reported, and does not fall back here. Falling back would turn "sl-host
 is misconfigured" into a connection refused against localhost, which
 points at the wrong problem entirely.
 
+`sl-host` is one of the commands here (`go install ./cmd/sl-host`),
+for a machine that reaches `slgod` over a network whose address
+changes with where it is.  It reads `~/.config/sl-host` (or
+`$SL_HOSTFILE`), one rule a line: a network, the address to use when
+this machine has an address on it, and a label that is only ever
+shown.
+
+    # at home, the LAN address; anywhere else, the router's forward
+    192.168.1.0/24   192.168.1.20   home
+    0/0              192.168.9.1    anywhere else
+
+The first rule that any of the machine's addresses falls in wins, so a
+catch-all goes last.  Every address is tried -- wired and wireless at
+once, a VPN -- each on its own.  `sl-host -v` says which rule matched
+and why, and `sl-host -l` lists every rule with whether it matches.
+When none does, it lists the machine's addresses and the rules and
+exits 1.  `SL_HOST=<address>` is an answer for a one-off.
+
 ### Profiles
 
 Accounts live one file per account in `~/.config/slgo`, named however
