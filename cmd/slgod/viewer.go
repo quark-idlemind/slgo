@@ -383,12 +383,13 @@ func newViewerPassword() (string, error) {
 // session when the viewer completes its movement -- seconds after this,
 // and long after the 400 milliseconds a move measured on Agni.  What
 // would be left to refuse is a window nothing has been seen to fall
-// into, and the only refusal this endpoint has is "There is no such
-// session here", which is what a wrong password gets and is
-// deliberately vague.  Telling a person their session has gone, fifty
-// seconds after they started a viewer, because it was busy for a
-// moment, needs a second kind of refusal carried through Lookup,
-// Handover and the login handler.  Left undone rather than done badly.
+// into, and the only refusal this could give is the one a wrong
+// password gets, which is deliberately the same sentence whatever went
+// wrong.  Telling a person their session has gone, fifty seconds after
+// they started a viewer, because it was busy for a moment, needs a
+// second kind of refusal carried through Lookup, Handover and the login
+// handler -- and one given only after the password has matched, or it
+// says which avatars are here.  Left undone rather than done badly.
 func (v *viewerHost) find(first, last string) *viewer.Handover {
 	name := first + " " + last
 	profile, h := v.hostedNamed(name)
@@ -493,11 +494,26 @@ func (v *viewerHost) capTokenOK(profile, token string) bool {
 	v.tokenMu.Lock()
 	want := v.capTokens[profile]
 	v.tokenMu.Unlock()
-	if want == "" {
-		return false
+	// A profile with no token is compared against a stand-in of a
+	// token's length rather than refused at once.  Refusing at once
+	// was quicker, and the difference said which profiles a viewer has
+	// logged in to -- the same fault the login endpoint had in its
+	// wording, here in its timing.
+	//
+	// The stand-in is not a secret, so matching it is not enough:
+	// "have" is what refuses a caller who presents the stand-in
+	// itself.
+	have := want != ""
+	if !have {
+		want = noCapToken
 	}
-	return subtle.ConstantTimeCompare([]byte(token), []byte(want)) == 1
+	return subtle.ConstantTimeCompare([]byte(token), []byte(want)) == 1 && have
 }
+
+// noCapToken is what a token is compared against when the profile has
+// none: the length of a real one, and made of a character a minted
+// token never contains.
+var noCapToken = strings.Repeat("-", capTokenBytes*2)
 
 // hostedNamed finds the profile whose avatar has this name.
 //

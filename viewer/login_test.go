@@ -3,6 +3,7 @@ package viewer
 import (
 	"bytes"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -64,7 +65,9 @@ func serve(t *testing.T, h *Handover) *httptest.Server {
 	return s
 }
 
-func login(t *testing.T, url string, params map[string]any) map[string]any {
+// loginCall is the body of a login_to_simulator call with these
+// parameters.
+func loginCall(t *testing.T, params map[string]any) string {
 	t.Helper()
 	var body strings.Builder
 	body.WriteString(`<?xml version="1.0"?><methodCall><methodName>login_to_simulator</methodName><params><param>`)
@@ -72,8 +75,12 @@ func login(t *testing.T, url string, params map[string]any) map[string]any {
 		t.Fatal(err)
 	}
 	body.WriteString(`</param></params></methodCall>`)
+	return body.String()
+}
 
-	resp, err := http.Post(url, "text/xml", strings.NewReader(body.String()))
+func login(t *testing.T, url string, params map[string]any) map[string]any {
+	t.Helper()
+	resp, err := http.Post(url, "text/xml", strings.NewReader(loginCall(t, params)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,21 +228,107 @@ func TestRefusalsLookLikeRefusals(t *testing.T) {
 	}
 }
 
+// answer is everything a refused login is told, as it crossed the wire:
+// the status, the content type and every byte of the body.
+type answer struct {
+	status int
+	ctype  string
+	body   string
+}
+
+func rawLogin(t *testing.T, url string, params map[string]any) answer {
+	t.Helper()
+	resp, err := http.Post(url, "text/xml", strings.NewReader(loginCall(t, params)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return answer{resp.StatusCode, resp.Header.Get("Content-Type"), string(b)}
+}
+
 // TestRefusalsDoNotSayWhichAvatarsAreHere: a wrong password and an
 // unknown avatar answer the same, so the endpoint cannot be used to
 // enumerate what slgod is holding.
+//
+// The same to the byte, and not just in the reason.  This test used to
+// compare the reason field, which was "key" both times, while the
+// message beside it said "There is no such session here" for one and
+// "That password does not match the session" for the other -- so one
+// POST with a wrong password confirmed that the avatar named was logged
+// in here and could be handed over, and the test that existed to catch
+// exactly that passed.  Comparing the whole answer leaves nowhere for a
+// difference to hide.
 func TestRefusalsDoNotSayWhichAvatarsAreHere(t *testing.T) {
-	h := testHandover()
+	h, _ := oneTimeHandover("one-time-pass")
 	s := serve(t, h)
 
-	wrong := login(t, s.URL, map[string]any{
-		"first": "Taren", "last": "Holt", "passwd": agent.HashPassword("wrong")})
-	absent := login(t, s.URL, map[string]any{
+	absent := rawLogin(t, s.URL, map[string]any{
 		"first": "Someone", "last": "Else", "passwd": agent.HashPassword("secret")})
+	for _, c := range []struct {
+		name   string
+		params map[string]any
+	}{
+		{"a wrong password", map[string]any{
+			"first": "Taren", "last": "Holt", "passwd": agent.HashPassword("wrong")}},
+		{"a plain text wrong password", map[string]any{
+			"first": "Taren", "last": "Holt", "passwd": "wrong"}},
+		{"no password at all", map[string]any{
+			"first": "Taren", "last": "Holt", "passwd": ""}},
+		{"an unknown avatar with no password", map[string]any{
+			"first": "Someone", "last": "Else", "passwd": ""}},
+	} {
+		got := rawLogin(t, s.URL, c.params)
+		if got != absent {
+			t.Errorf("%s is answered differently from an avatar that is not here:\n"+
+				"  %s: %d %s %s\n  not here: %d %s %s",
+				c.name, c.name, got.status, got.ctype, got.body,
+				absent.status, absent.ctype, absent.body)
+		}
+	}
+	// And it is a refusal a person can read, not an empty one that
+	// happens to be the same both times.
+	if !strings.Contains(absent.body, "<name>message</name>") || !strings.Contains(absent.body, "match") {
+		t.Errorf("the refusal has no message a person could act on: %s", absent.body)
+	}
+}
 
-	if wrong["reason"] != absent["reason"] {
-		t.Errorf("a wrong password says %q and an unknown avatar says %q",
-			wrong["reason"], absent["reason"])
+// TestAnAbsentDigestIsComparedAtFullLength: when there is no session,
+// or no minted password, the comparison still has to be made against
+// something the length of a digest.  ConstantTimeCompare returns at
+// once for inputs whose lengths differ, so comparing against the empty
+// string is quicker than comparing against a digest, and "quicker"
+// is the one thing left that could say an avatar is here once the
+// words are the same.  The time itself is not measured -- a test that
+// did would fail on a busy machine and pass on a leaky one -- but the
+// length is what decides it and the length is deterministic.
+func TestAnAbsentDigestIsComparedAtFullLength(t *testing.T) {
+	digest := agent.HashPassword("secret")
+	if got := digestOrNone(""); len(got) != len(digest) {
+		t.Errorf("an absent digest is compared as %d bytes, a real one as %d", len(got), len(digest))
+	}
+	if got := string(digestOrNone(digest)); got != digest {
+		t.Errorf("a present digest was replaced: %q", got)
+	}
+}
+
+// TestTheStandInForAnAbsentDigestIsNotAPassword: what an absent digest
+// is compared against is written in this file for anyone to read, so
+// presenting it -- as a digest, as a plaintext, as anything -- must not
+// log in to a session whose own digest or minted one is missing.
+func TestTheStandInForAnAbsentDigestIsNotAPassword(t *testing.T) {
+	h := testHandover()
+	h.Digest, h.OneTime = "", "" // neither credential present
+	s := serve(t, h)
+	for _, passwd := range []string{noDigest, noDigest[3:], strings.ToUpper(noDigest)} {
+		got := login(t, s.URL, map[string]any{
+			"first": "Taren", "last": "Holt", "passwd": passwd})
+		if got["login"] != "false" {
+			t.Errorf("passwd %q logged in against a session with no digest", passwd)
+		}
 	}
 }
 
@@ -463,7 +556,7 @@ func TestNoMintedPasswordMeansNothingExtraIsAccepted(t *testing.T) {
 	h := testHandover() // OneTime empty, UseOnce nil
 	s := serve(t, h)
 
-	for _, passwd := range []string{"", "$1$", agent.HashPassword("")} {
+	for _, passwd := range []string{"", "$1$", agent.HashPassword(""), noDigest} {
 		got := login(t, s.URL, map[string]any{
 			"first": "Taren", "last": "Holt", "passwd": passwd})
 		if got["login"] != "false" {

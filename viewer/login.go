@@ -92,7 +92,9 @@ type Handover struct {
 
 // Lookup finds the session a viewer is asking for, by the name it typed.
 // A nil Handover means there is no such session, which is answered the
-// same way as a wrong password.
+// same way as a wrong password, in the same words and after the same
+// work.  Lookup itself should do nothing that costs anything: it runs
+// before the password is known to be right.
 type Lookup func(first, last string) *Handover
 
 // LoginHandler answers a viewer's login_to_simulator by handing over a
@@ -141,15 +143,13 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	last := xmlrpc.String(params, "last")
 	passwd := xmlrpc.String(params, "passwd")
 
+	// Hashed before anything is looked up, so that the cost of the
+	// hash is paid by every attempt and not only by one that names an
+	// avatar this daemon holds.
+	got := []byte(agent.HashPassword(passwd))
+
 	hand := h.find(first, last)
-	if hand == nil {
-		// Deliberately the same answer as a wrong password, and
-		// deliberately vague: which avatars slgod is holding is not
-		// something to tell whoever asked.
-		h.logf("viewer login: no session for %s %s", first, last)
-		h.refuse(w, "key", "There is no such session here.")
-		return
-	}
+
 	// Constant time, because this is a credential comparison even
 	// though both sides are digests.
 	//
@@ -157,16 +157,41 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// afterwards: stopping at the first match would make the time
 	// taken say which of the two was presented, and skipping the
 	// second when the first matched is the same leak wearing a hat.
-	// An absent OneTime is compared against anyway -- an empty string
-	// can never match, since HashPassword returns 35 characters for
-	// every input including none, and ConstantTimeCompare answers 0
-	// for a length that differs.
-	got := []byte(agent.HashPassword(passwd))
-	byProfile := subtle.ConstantTimeCompare(got, []byte(hand.Digest))
-	byOneTime := subtle.ConstantTimeCompare(got, []byte(hand.OneTime))
-	if byProfile|byOneTime != 1 {
-		h.logf("viewer login: wrong password for %s %s", first, last)
-		h.refuse(w, "key", "That password does not match the session.")
+	//
+	// And both are compared when there is no session at all.  The
+	// refusal below is one sentence whoever was asked for, so the
+	// only thing left that could tell an avatar this daemon holds from
+	// one it does not is how long the answer took -- and an attempt
+	// that skipped the comparison for an unknown name would be the
+	// quicker of the two.  What stands in for a missing digest is one
+	// of the same length (see noDigest), because ConstantTimeCompare
+	// is constant only across inputs of equal length and returns at
+	// once for any other.
+	var profileDigest, oneTimeDigest string
+	if hand != nil {
+		profileDigest, oneTimeDigest = hand.Digest, hand.OneTime
+	}
+	byProfile := subtle.ConstantTimeCompare(got, digestOrNone(profileDigest))
+	byOneTime := subtle.ConstantTimeCompare(got, digestOrNone(oneTimeDigest))
+	if hand == nil || byProfile|byOneTime != 1 {
+		// One answer for all of it: no session by that name, a
+		// session with no viewer_password, and a wrong password for
+		// one that could be handed over.  They used to be two
+		// sentences, and the difference between them said, to anybody
+		// who could reach this port and cared to type a wrong
+		// password, that the avatar named was logged in through this
+		// daemon right now and could be taken.  The name is not a
+		// secret on the grid; that is.
+		//
+		// The log keeps the distinction, because the person reading
+		// it is the one running the daemon, and a mistyped password
+		// and a profile that was never set up want different fixes.
+		if hand == nil {
+			h.logf("viewer login: no session for %s %s", first, last)
+		} else {
+			h.logf("viewer login: wrong password for %s %s", first, last)
+		}
+		h.refuse(w, "key", refusedLogin)
 		return
 	}
 	if byOneTime == 1 && hand.UseOnce != nil {
@@ -204,6 +229,37 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.logf("viewer login: handed %s %s to a viewer at %s:%d",
 		first, last, hand.SimIP, hand.SimPort)
+}
+
+// refusedLogin is the whole of what a refused login is told, whatever
+// the reason it was refused before the password matched.
+//
+// Worded for the person at the viewer, who has usually just mistyped
+// something, and worded so that it is true in every case it covers:
+// it does not say whether the name or the password was the part that
+// failed, because saying so is the disclosure.
+const refusedLogin = "That name and password do not match a session here."
+
+// noDigest stands in for a digest that is not there, so that comparing
+// against it costs what comparing against a real one does.
+//
+// The same length as every digest HashPassword returns, and made of a
+// character that is not a hex digit, so no password can hash to it --
+// HashPassword gives back either "$1$" and 32 hex digits it computed
+// or a "$1$" and 32 hex digits it was handed, and this is neither.
+const noDigest = "$1$--------------------------------"
+
+// digestOrNone is d, or noDigest if d is empty.
+//
+// An empty digest can never match -- ConstantTimeCompare answers 0 for
+// lengths that differ -- but it answers 0 at once, where a real digest
+// is compared byte by byte.  The comparison has to take as long when
+// there is nothing to compare with as when there is.
+func digestOrNone(d string) []byte {
+	if d == "" {
+		return []byte(noDigest)
+	}
+	return []byte(d)
 }
 
 // handoverResponse is the stored login response with the three fields

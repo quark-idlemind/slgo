@@ -368,10 +368,23 @@ than logging in again. The avatar does not leave the grid, nothing is
 logged out, and the programs attached carry on.
 
 A profile is only handable if it has a `viewer_password`. A viewer
-offered one without it is refused, and told which line to add:
+that asks for one without it is refused, and `slsh viewer -l` says
+which line to add:
 
     example has no viewer_password, so it cannot be handed to a viewer;
     add a "viewer_password = ..." line to that profile and restart slgod
+
+The viewer itself is told less. Whether nobody by that name is here,
+the profile has no `viewer_password`, or the password is wrong, the
+login box says the same thing:
+
+    That name and password do not match a session here.
+
+That is deliberate: anything more would tell whoever can reach the
+endpoint which avatars this daemon is holding and would hand over. The
+daemon's log says which it was. Nothing is opened for a login that is
+refused -- the avatar's UDP circuit and its capability token are made
+only once the password has matched.
 
 That password is the viewer's, not the account's -- what a viewer sends
 here never reaches Linden Lab, and a password kept for this cannot be

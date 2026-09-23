@@ -34,6 +34,7 @@ import (
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/server"
+	"github.com/quark-idlemind/slgo/viewer"
 )
 
 // mintingHost is a viewer host with nothing behind it but a profile
@@ -684,5 +685,137 @@ func TestNoTokenIsMintedWithoutALogin(t *testing.T) {
 	}
 	if v.capTokenOK("example", "0c3e7e577e57c0de1b49b982fc5bae19") {
 		t.Error("a made-up token was accepted for a profile that never logged in")
+	}
+}
+
+// TestTheStandInForAMissingTokenIsNotAToken: a profile nobody has
+// logged in to is compared against a stand-in rather than refused at
+// once, so that the time taken does not say which profiles have a
+// viewer.  The stand-in is in the source for anyone to read, so
+// presenting it must be refused like any other guess.
+func TestTheStandInForAMissingTokenIsNotAToken(t *testing.T) {
+	v, _ := mintingHost(t, "$1$00157e577e57c0de028f000000000000")
+	if len(noCapToken) != capTokenBytes*2 {
+		t.Errorf("the stand-in is %d characters and a token %d; comparing against it costs less",
+			len(noCapToken), capTokenBytes*2)
+	}
+	if v.capTokenOK("example", noCapToken) {
+		t.Error("the stand-in for a missing token was accepted as a token")
+	}
+}
+
+// Refusing a viewer login, end to end through the daemon's own lookup.
+//
+// viewer/login_test.go drives the handler with handovers composed by
+// hand; this is the same question asked of find(), which is where a
+// hosted session, a profile with no viewer_password and a name nobody
+// holds are actually told apart.
+
+// viewerLoginTo is a login endpoint in front of srv whose profiles have
+// this viewer password, served in the clear because what is under test
+// is what it answers and not how.
+func viewerLoginTo(t *testing.T, ctx context.Context, srv *server.Server, viewerPassword string) (*viewerHost, string) {
+	t.Helper()
+	vh := newViewerHost(ctx, "127.0.0.1", srv,
+		func(string) string { return viewerPassword }, nil, nil, func(string, ...any) {})
+	mux := http.NewServeMux()
+	mux.Handle("/", viewer.LoginHandler(vh.find, func(string, ...any) {}))
+	mux.HandleFunc("/cap/", vh.serveCap)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	t.Cleanup(vh.closeAll)
+	vh.base = ts.URL
+	return vh, ts.URL
+}
+
+// viewerLogin posts a viewer's login and returns every byte of the
+// answer, with the status and content type in front of it.
+func viewerLogin(t *testing.T, url, first, last, passwd string) string {
+	t.Helper()
+	body := fmt.Sprintf(`<?xml version="1.0"?><methodCall><methodName>login_to_simulator</methodName>`+
+		`<params><param><value><struct>`+
+		`<member><name>first</name><value><string>%s</string></value></member>`+
+		`<member><name>last</name><value><string>%s</string></value></member>`+
+		`<member><name>passwd</name><value><string>%s</string></value></member>`+
+		`</struct></value></param></params></methodCall>`, first, last, passwd)
+	resp, err := http.Post(url, "text/xml", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fmt.Sprintf("%d %s\n%s", resp.StatusCode, resp.Header.Get("Content-Type"), b)
+}
+
+// TestARefusedViewerLoginSaysNothingAndOpensNothing: the three ways a
+// login is refused before its password has matched -- nobody by that
+// name, a hosted avatar whose profile has no viewer_password, and a
+// hosted avatar with a wrong password -- are one answer, to the byte.
+// The last used to differ from the other two in the sentence a viewer
+// shows, which told anybody who could reach the endpoint which avatars
+// this daemon was holding and would hand over.
+//
+// And none of them leaves anything behind: no UDP socket, no
+// capability token.  The socket used to be opened while the session
+// was being looked up, before the password was compared.
+//
+// The last login is the right password, so that the test can be seen
+// to notice a circuit when there is one.
+func TestARefusedViewerLoginSaysNothingAndOpensNothing(t *testing.T) {
+	sim := newSim(t)
+	hs := loginServer(t, sim)
+
+	srv := server.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		stop, done := context.WithTimeout(context.Background(), 10*time.Second)
+		defer done()
+		srv.Close(stop)
+		cancel()
+	})
+	login := agent.Login{First: "Example", Last: "Resident", Password: "secret", URL: hs.URL}
+	if _, err := srv.StartAgent(ctx, "example", login, agent.Options{Idle: -1}); err != nil {
+		t.Fatalf("hosting a session: %v", err)
+	}
+
+	handable, handableURL := viewerLoginTo(t, ctx, srv, "viewer-secret")
+	unset, unsetURL := viewerLoginTo(t, ctx, srv, "")
+
+	notHere := viewerLogin(t, handableURL, "Nobody", "Here", "viewer-secret")
+	for _, c := range []struct{ name, got string }{
+		{"a wrong password", viewerLogin(t, handableURL, "Example", "Resident", "wrong")},
+		{"no password", viewerLogin(t, handableURL, "Example", "Resident", "")},
+		{"a profile with no viewer_password", viewerLogin(t, unsetURL, "Example", "Resident", "viewer-secret")},
+	} {
+		if c.got != notHere {
+			t.Errorf("%s is answered differently from a name nobody holds:\n%s\n-- against --\n%s",
+				c.name, c.got, notHere)
+		}
+	}
+	if !strings.Contains(notHere, "<string>false</string>") {
+		t.Fatalf("the refusal is not a refusal:\n%s", notHere)
+	}
+
+	for _, vh := range []*viewerHost{handable, unset} {
+		if _, ok := vh.circuits.Load("example"); ok {
+			t.Error("a refused login opened the avatar's viewer circuit")
+		}
+		vh.tokenMu.Lock()
+		tokens := len(vh.capTokens)
+		vh.tokenMu.Unlock()
+		if tokens != 0 {
+			t.Errorf("a refused login minted %d capability token(s)", tokens)
+		}
+	}
+
+	accepted := viewerLogin(t, handableURL, "Example", "Resident", "viewer-secret")
+	if !strings.Contains(accepted, "<name>sim_port</name>") {
+		t.Fatalf("the right password was refused:\n%s", accepted)
+	}
+	if _, ok := handable.circuits.Load("example"); !ok {
+		t.Error("an accepted login opened no circuit, so the checks above prove nothing")
 	}
 }
