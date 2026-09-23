@@ -1,0 +1,24 @@
+# Real uuids this repository may use, and where each is published.
+#
+# Every other uuid in the tree is invented, and says so: groups two and
+# three are fa4e-fa4e (see CLAUDE.md), or it is a placeholder nobody could
+# mistake for an id -- a group of one repeated character, or sixteen bytes
+# in order.  tools/check-identities refuses anything else, so a real id
+# can only come in by being written down here, with its source beside it.
+#
+# Only Linden Lab's own published constants belong here: the ids every
+# viewer carries built in, which name nothing and nobody.  Never a
+# resident, a region, a parcel, an object or a group -- those are what
+# the whole of this is for keeping out.
+#
+# One per line: uuid, a tab, the viewer's name for it, a tab, where it is
+# published.
+
+1a5fe8ac-a804-8a5d-7cbd-56bd83184568	ANIM_AGENT_SIT	indra/llcharacter/llanimationstates.cpp
+b1709c8d-ecd3-54a1-4f28-d55ac0840782	ANIM_AGENT_SIT_FEMALE	indra/llcharacter/llanimationstates.cpp
+245f3c54-f1c0-bf2e-811f-46d8eeb386e7	ANIM_AGENT_SIT_GENERIC	indra/llcharacter/llanimationstates.cpp
+1c7600d6-661f-b87b-efe2-d7421eb93c86	ANIM_AGENT_SIT_GROUND	indra/llcharacter/llanimationstates.cpp
+1a2bd58e-87ff-0df8-0b4c-53e047b0bb6e	ANIM_AGENT_SIT_GROUND_CONSTRAINED	indra/llcharacter/llanimationstates.cpp
+a8dee56f-2eae-9e7a-05a2-6fb92b97e21e	ANIM_AGENT_SIT_TO_STAND	indra/llcharacter/llanimationstates.cpp
+2408fe9e-df1d-1d7d-f4ff-1384fa7b350f	ANIM_AGENT_STAND	indra/llcharacter/llanimationstates.cpp
+89556747-24cb-43ed-920b-47caed15465f	TEXTURE_PLYWOOD	indra/newview/app_settings/keywords_lsl_default.xml

@@ -25,7 +25,10 @@ credential being in somebody's config file to the account being theirs
 Linden Lab's own published constants stay as they are, because they are
 protocol rather than people: the built-in animation asset ids in
 `agent/posture.go`, the grid names, "Governor Linden", and the parcel
-name "Protected Land", which `cmd/slsh/parcel.go` matches on.
+name "Protected Land", which `cmd/slsh/parcel.go` matches on.  Every
+real uuid of that kind is listed in `tools/known-uuids`, with where
+Linden publishes it, and a real uuid that is not on that list does not
+belong here.
 
 ### What to do instead
 
@@ -38,6 +41,18 @@ When inventing a uuid, keep the first four characters of the real one
 and invent the remaining twenty-eight. Anything that sorts by id then
 sorts the way it did, which is what several tests depend on, and
 twenty-eight invented characters is no longer anybody's identifier.
+
+And mark it: groups two and three of an invented uuid are always
+`fa4e-fa4e`, as in `2ce77e57-7e57-c0de-a128-5caa99806c61`.  A real id and
+a convincing invention look exactly alike, and without the mark the only
+way to tell them apart is to go and search the live grid's logs for each
+one.  With it, an id is either marked, or a placeholder nobody could
+mistake for one (a group of one repeated character, like
+`c75d7e57-7e57-c0de-b372-000000000001`, or sixteen bytes in order), or
+in `tools/known-uuids` -- and `tools/check-identities` refuses any other.
+The mark sits in the middle so that the first eight characters, which
+the documentation elides ids to, and the tail, which orders a family of
+ids, are left alone.
 
 A uuid appears in this tree in more than one shape and they have to be
 kept in step: hyphenated text, hexdump groups of eight

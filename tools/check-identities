@@ -137,6 +137,73 @@ ADDR
 	exit 1
 fi
 
+# Every uuid has to show that it is not somebody's, and this needs no list.
+# An invented one carries the mark -- groups two and three are fa4e-fa4e,
+# so a hexdump's second group is fa4efa4e and a byte literal's bytes four
+# to seven are 0xfa 0x4e 0xfa 0x4e.  A placeholder is one nobody could take
+# for an id: a group of one repeated character, or sixteen bytes in order.
+# A real one is Linden Lab's own constant and is written down, with where it
+# is published, in tools/known-uuids.  Anything else might be a resident's,
+# and a checker cannot tell a real id from a convincing invention -- which is
+# exactly why the invention has to say so.
+known=$root/tools/known-uuids
+unmarked=$(perl -e '
+	my %known;
+	if (open my $k, "<", shift @ARGV) {
+		while (<$k>) { next if /^\s*(#|$)/; $known{lc((split /\s+/)[0])} = 1 }
+	}
+	sub ok {
+		my $h = lc shift;              # 32 hex digits
+		return 1 if substr($h, 8, 8) eq "fa4efa4e";
+		my $id = join "-", unpack "A8 A4 A4 A4 A12", $h;
+		return 1 if $known{$id};
+		for my $g (split /-/, $id) { return 1 if $g =~ /^(.)\1*$/ }
+		my @b = map { hex } $h =~ /(..)/g;
+		my ($up, $down) = (1, 1);
+		for my $i (1 .. 15) {
+			$up = 0 unless $b[$i] > $b[$i-1];
+			$down = 0 unless $b[$i] < $b[$i-1];
+		}
+		return $up || $down;
+	}
+	for my $f (@ARGV) {
+		next if $f =~ m{/tools/known-uuids$};
+		open my $in, "<", $f or next;
+		while (my $line = <$in>) {
+			my @ids;
+			while ($line =~ /(?<![0-9a-fA-F-])([0-9a-fA-F]{8})-([0-9a-fA-F]{4})-([0-9a-fA-F]{4})-([0-9a-fA-F]{4})-([0-9a-fA-F]{12})(?![0-9a-fA-F-])/g) {
+				push @ids, ["$1-$2-$3-$4-$5", "$1$2$3$4$5"];
+			}
+			while ($line =~ /(?<![0-9a-fA-F])([0-9a-fA-F]{8}) ([0-9a-fA-F]{8}) ([0-9a-fA-F]{8}) ([0-9a-fA-F]{8})(?![0-9a-fA-F])/g) {
+				push @ids, ["$1 $2 $3 $4", "$1$2$3$4"];
+			}
+			while ($line =~ /UUID\{((?:\s*0[xX][0-9a-fA-F]{1,2}\s*,){15}\s*0[xX][0-9a-fA-F]{1,2}\s*,?\s*)\}/g) {
+				my @b = map { sprintf "%02x", hex } $1 =~ /0[xX]([0-9a-fA-F]{1,2})/g;
+				push @ids, ["UUID{...}", join "", @b];
+			}
+			for (@ids) { print "$f:$.: $_->[0]\n" unless ok($_->[1]) }
+		}
+	}
+' "$known" $text)
+if [ -n "$unmarked" ]; then
+	echo "check-identities: these uuids are neither marked as invented nor known:"
+	echo
+	printf '%s\n' "$unmarked" | sed "s|^$root/||" | while IFS= read -r hit; do
+		printf '  %s\n' "$hit"
+	done
+	cat <<'UUID'
+
+An invented uuid says so: keep the first eight characters and make groups
+two and three fa4e-fa4e, as in 2ce77e57-7e57-c0de-a128-5caa99806c61.  When it
+replaces a real one, the first four characters are the real one's and the rest
+is invented.  A real uuid of Linden Lab's own -- a built-in animation, a
+standard texture -- goes in tools/known-uuids with where it is published.
+Nothing that names a resident, a region, an object or a group is ever real
+here.  CLAUDE.md has the whole of it.
+UUID
+	exit 1
+fi
+
 found=0
 # Read the list, skipping comments and blank lines.  A uuid is also looked for
 # by its first eight characters, because the documentation elides them that way
