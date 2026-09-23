@@ -32,6 +32,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -40,6 +41,13 @@ import (
 
 // ChallengeSize is how many random bytes each side offers.
 const ChallengeSize = 16
+
+// ProofSize is how long a proof is: one HMAC-SHA256.
+//
+// Named so that a proof of any other length can be refused on sight.
+// It arrives before the caller has proved anything, and the only
+// length that could ever verify is this one.
+const ProofSize = sha256.Size
 
 // Tags separate the two directions. They are part of the protocol; both
 // ends must use the same words.
@@ -136,7 +144,13 @@ func New(secret string) (*Server, error) {
 const maxPending = 256
 
 // Begin opens a handshake and returns the server's challenge.
+//
+// The client's name is kept with the challenge until it is answered,
+// and is cut to NameSize first.  The wire cannot carry more (see
+// PackName), so this is for any other caller: whatever is kept for
+// somebody who has proved nothing must have a size this end chose.
 func (s *Server) Begin(client string) ([]byte, error) {
+	client = clipName(client)
 	challenge := make([]byte, ChallengeSize)
 	if _, err := rand.Read(challenge); err != nil {
 		return nil, err
@@ -168,7 +182,7 @@ func (s *Server) Begin(client string) ([]byte, error) {
 // Whichever challenge matches is consumed. A challenge is one attempt,
 // so a wrong guess cannot be retried against the same one.
 func (s *Server) Answer(clientChallenge, clientProof, binding []byte) (serverProof []byte, client string, err error) {
-	if len(clientChallenge) != ChallengeSize || len(clientProof) == 0 {
+	if len(clientChallenge) != ChallengeSize || len(clientProof) != ProofSize {
 		return nil, "", ErrDenied
 	}
 
@@ -241,7 +255,53 @@ func LoadSecret(path string) (string, error) {
 	if secret == "" {
 		return "", fmt.Errorf("%s is empty", path)
 	}
+	warnIfShort(path, secret)
 	return secret, nil
+}
+
+// MinSecretLength is the shortest secret LoadSecret takes without
+// complaint.
+//
+// The handshake never shows the secret to anybody, but a wrong proof
+// costs a guesser nothing but a round trip and a secret short enough to
+// type is short enough to be found that way.  Made as the guide says,
+// with openssl rand -hex 32, it is 64 characters and 256 bits, and no
+// rate of guessing reaches it.
+const MinSecretLength = 16
+
+// Warnf is where a warning about the secret goes.  A variable so that a
+// test can hear it.
+var Warnf = log.Printf
+
+var (
+	warnedMu sync.Mutex
+	warned   = map[string]bool{}
+)
+
+// warnIfShort says, once per file per process, that a secret is short
+// enough to guess.
+//
+// A warning rather than a refusal on purpose.  Refusing would stop a
+// daemon that has run for months on the secret it has from starting at
+// all the next time it restarts, which is a worse thing to do to
+// somebody than to tell them.  Once per file, because a client that
+// reconnects reads the file again every time and would otherwise say
+// the same thing on every reconnection.
+func warnIfShort(path, secret string) {
+	if len(secret) >= MinSecretLength {
+		return
+	}
+	warnedMu.Lock()
+	seen := warned[path]
+	warned[path] = true
+	warnedMu.Unlock()
+	if seen {
+		return
+	}
+	Warnf("WARNING: the shared secret in %s is %d bytes, which is short enough to guess; "+
+		"at least %d is wanted.  Make a new one with:  "+
+		"(umask 077; openssl rand -hex 32 > %s)  and restart slgod and its clients",
+		path, len(secret), MinSecretLength, path)
 }
 
 func checkMode(path string, want os.FileMode) error {

@@ -272,7 +272,9 @@ func (d *fakeDaemon) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Login
 		if d.fail != nil {
 			return nil, d.fail
 		}
-		challenge, err := d.auth.Begin(req.GetClient())
+		challenge, err := d.auth.Begin(auth.UnpackName([4]uint64{
+			req.GetClient_0(), req.GetClient_1(), req.GetClient_2(), req.GetClient_3(),
+		}))
 		if err != nil {
 			return nil, err
 		}

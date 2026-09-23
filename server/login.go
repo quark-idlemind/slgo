@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/quark-idlemind/slgo/auth"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
@@ -124,6 +126,9 @@ func (s *Server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 	if s.auth == nil {
 		return nil, status.Error(codes.FailedPrecondition, "this server runs without authentication")
 	}
+	if sentOldName(req) {
+		return nil, status.Error(codes.FailedPrecondition, tooOld)
+	}
 	binding, err := auth.BindingFromContext(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition,
@@ -131,23 +136,92 @@ func (s *Server) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResp
 	}
 
 	if len(req.GetProof()) == 0 {
-		challenge, err := s.auth.Begin(req.GetClient())
+		challenge, err := s.auth.Begin(loginName(req))
 		if err != nil {
 			return nil, status.Error(codes.Internal, "cannot start a login")
 		}
 		return &pb.LoginResponse{Challenge: challenge}, nil
 	}
 
+	// Each has exactly one length that could ever verify, so anything
+	// else is refused before any work is done with it -- and before
+	// the throttle, since it is not a guess at anything.
+	if len(req.GetChallenge()) != auth.ChallengeSize || len(req.GetProof()) != auth.ProofSize {
+		return nil, status.Error(codes.Unauthenticated, auth.ErrDenied.Error())
+	}
+
+	// The address this connection came from, which is what failures
+	// are counted by.  A server without connection tracking counts
+	// every caller as one, which is stricter rather than looser; and it
+	// is refused below anyway, for having nowhere to record a success.
+	c, tracked := connFrom(ctx)
+	var remote string
+	if tracked {
+		remote = c.remote
+	}
+	done, err := s.throttle.Admit(ctx, remote)
+	if errors.Is(err, auth.ErrBusy) {
+		return nil, status.Error(codes.ResourceExhausted, err.Error())
+	}
+	if err != nil {
+		return nil, status.FromContextError(err).Err()
+	}
+
 	proof, who, err := s.auth.Answer(req.GetChallenge(), req.GetProof(), binding)
+	done(err == nil)
 	if err != nil {
 		return nil, status.Error(codes.Unauthenticated, auth.ErrDenied.Error())
 	}
-	c, ok := connFrom(ctx)
-	if !ok {
+	if !tracked {
 		return nil, status.Error(codes.Internal, "no connection state")
 	}
 	c.mark(who, req.GetPid())
 	return &pb.LoginResponse{Proof: proof}, nil
+}
+
+// loginName is the name a client gave, from the four words it is
+// carried in.  See auth.PackName.
+func loginName(req *pb.LoginRequest) string {
+	return auth.UnpackName([4]uint64{
+		req.GetClient_0(), req.GetClient_1(), req.GetClient_2(), req.GetClient_3(),
+	})
+}
+
+// tooOld is what a client built before the name moved is told.
+const tooOld = "this client is older than slgod: it sends its name in a form slgod no longer reads. " +
+	"Rebuild and reinstall it with the same tree as the daemon"
+
+// sentOldName reports a request from a client built when the name was
+// a string, field 1.
+//
+// That field is reserved now rather than deleted, and a field this end
+// does not know is not thrown away by the decoder but kept, as it came,
+// among the message's unknown fields.  So an old client is recognised
+// by what it sent rather than guessed at from what it did not: an empty
+// name would be the other way to tell, and would say the same thing
+// about a new client that had merely sent none.  Every old client sent
+// one, since every one of them set Client.
+//
+// Telling it so is the point.  Refused with the same words as a wrong
+// secret, somebody would go and check the secret, which is not what is wrong.
+func sentOldName(req *pb.LoginRequest) bool {
+	b := req.ProtoReflect().GetUnknown()
+	for len(b) > 0 {
+		num, typ, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return false
+		}
+		if num == 1 {
+			return true
+		}
+		b = b[n:]
+		n = protowire.ConsumeFieldValue(num, typ, b)
+		if n < 0 {
+			return false
+		}
+		b = b[n:]
+	}
+	return false
 }
 
 // AuthInterceptors refuse every method but Login on a connection that

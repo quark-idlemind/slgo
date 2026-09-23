@@ -21,12 +21,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/auth"
@@ -55,7 +58,8 @@ func secretInATestHome(t *testing.T) {
 
 // authRig is newRig with authentication turned on, served the way the
 // daemon serves it: TLS, the interceptors, and per-connection state.
-func authRig(t *testing.T) *rig {
+// Anything in setup is done to the server before it starts serving.
+func authRig(t *testing.T, setup ...func(*Server)) *rig {
 	t.Helper()
 	secretInATestHome(t)
 
@@ -69,6 +73,9 @@ func authRig(t *testing.T) *rig {
 	// server told afterwards would have been serving without them.
 	r := newSession(t, agent.Caps{})
 	r.srv.SetAuth(a)
+	for _, f := range setup {
+		f(r.srv)
+	}
 	r.serve(t)
 	return r
 }
@@ -187,7 +194,7 @@ func TestNothingButLoginRunsBeforeTheHandshake(t *testing.T) {
 	// A proof that is not one is refused with the same error as every
 	// other failure, on purpose: which half went wrong is a fact an
 	// attacker would like and a legitimate client does not need.
-	begun, err := grid.Login(ctx, &pb.LoginRequest{Client: "impostor"})
+	begun, err := grid.Login(ctx, &pb.LoginRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +202,6 @@ func TestNothingButLoginRunsBeforeTheHandshake(t *testing.T) {
 		t.Fatalf("the server offered a %d byte challenge", len(begun.GetChallenge()))
 	}
 	_, err = grid.Login(ctx, &pb.LoginRequest{
-		Client:    "impostor",
 		Challenge: make([]byte, auth.ChallengeSize),
 		Proof:     []byte("this is not the secret"),
 	})
@@ -220,7 +226,7 @@ func TestLoginRefusesWhatItCannotBindTo(t *testing.T) {
 
 	// A context with no peer at all, which is what any caller reaching
 	// this method other than over TLS would have.
-	_, err = s.Login(context.Background(), &pb.LoginRequest{Client: "nobody"})
+	_, err = s.Login(context.Background(), &pb.LoginRequest{})
 	if status.Code(err) != codes.FailedPrecondition ||
 		!strings.Contains(errText(err), "cannot bind") {
 		t.Errorf("login without TLS = %v; want FailedPrecondition saying it cannot bind", err)
@@ -275,7 +281,7 @@ func TestAProvedConnectionMustHaveSomewhereToRecordIt(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	begun, err := grid.Login(ctx, &pb.LoginRequest{Client: "slgo"})
+	begun, err := grid.Login(ctx, &pb.LoginRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,11 +290,166 @@ func TestAProvedConnectionMustHaveSomewhereToRecordIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = grid.Login(ctx, &pb.LoginRequest{
-		Client:    "slgo",
 		Challenge: make([]byte, auth.ChallengeSize),
 		Proof:     auth.ClientProof(testSecret, begun.GetChallenge(), bind),
 	})
 	if status.Code(err) != codes.Internal {
 		t.Errorf("a proved handshake with nowhere to record it = %v; want Internal", err)
+	}
+}
+
+// sleeps replaces the throttle's sleep with one that records how long
+// it would have been and returns at once, so that a test of a delay
+// neither takes the delay nor has to guess at it from a stopwatch.
+type sleeps struct {
+	mu sync.Mutex
+	d  []time.Duration
+}
+
+func (sl *sleeps) install(s *Server) {
+	s.throttle.Sleep = func(_ context.Context, d time.Duration) error {
+		sl.mu.Lock()
+		sl.d = append(sl.d, d)
+		sl.mu.Unlock()
+		return nil
+	}
+}
+
+func (sl *sleeps) take() []time.Duration {
+	sl.mu.Lock()
+	defer sl.mu.Unlock()
+	out := sl.d
+	sl.d = nil
+	return out
+}
+
+// guess is one attempt at the handshake without the secret, on a
+// connection of its own, answered with this proof.  It returns the
+// error the second call came back with.
+func guess(t *testing.T, addr string, proof []byte) error {
+	t.Helper()
+	creds, _ := auth.ClientTLS()
+	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cc.Close()
+	grid := pb.NewGridClient(cc)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if _, err := grid.Login(ctx, &pb.LoginRequest{}); err != nil {
+		t.Fatalf("beginning a login: %v", err)
+	}
+	_, err = grid.Login(ctx, &pb.LoginRequest{
+		Challenge: make([]byte, auth.ChallengeSize),
+		Proof:     proof,
+	})
+	return err
+}
+
+// TestWrongProofsFromOneAddressAreSlowedAfterThree: a wrong answer cost
+// a guesser one round trip and nothing else.  Now the fourth from one
+// address waits, and each one after it longer -- counted by address, so
+// that hanging up and connecting again, which every guess here does,
+// does not start the count again.  The right answer from that address
+// waits too, or the speed of the answer would give it away, and then
+// the address is forgiven.
+func TestWrongProofsFromOneAddressAreSlowedAfterThree(t *testing.T) {
+	var slept sleeps
+	r := authRig(t, slept.install)
+	addr := r.ln.Addr().String()
+
+	wrong := make([]byte, auth.ProofSize)
+	for i := 0; i < auth.FreeFailures+2; i++ {
+		if err := guess(t, addr, wrong); status.Code(err) != codes.Unauthenticated {
+			t.Fatalf("guess %d = %v, want Unauthenticated", i+1, err)
+		}
+	}
+	if got := slept.take(); len(got) != 2 || got[0] >= got[1] {
+		t.Errorf("five wrong guesses, each on a new connection, waited %v; want the last two, the second longer", got)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	c, err := client.Dial(ctx, addr)
+	if err != nil {
+		t.Fatalf("a client with the secret, after the guessing: %v", err)
+	}
+	c.Close()
+	if got := slept.take(); len(got) != 1 {
+		t.Errorf("the right answer after the guessing waited %v; want it slowed like a wrong one", got)
+	}
+
+	c, err = client.Dial(ctx, addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+	if got := slept.take(); len(got) != 0 {
+		t.Errorf("an address that has proved itself still waits: %v", got)
+	}
+}
+
+// TestAProofOfTheWrongLengthIsNotAGuess: a proof has one length that
+// could ever verify, so anything else is refused before any work is
+// done with it -- including counting it, since it was never a guess at
+// anything.
+func TestAProofOfTheWrongLengthIsNotAGuess(t *testing.T) {
+	var slept sleeps
+	r := authRig(t, slept.install)
+	addr := r.ln.Addr().String()
+
+	for _, proof := range [][]byte{
+		make([]byte, auth.ProofSize+1), make([]byte, auth.ProofSize-1),
+		make([]byte, 4<<10), []byte("this is not the secret"),
+	} {
+		if err := guess(t, addr, proof); status.Code(err) != codes.Unauthenticated {
+			t.Errorf("a %d byte proof = %v, want Unauthenticated", len(proof), err)
+		}
+	}
+	if err := guess(t, addr, make([]byte, auth.ProofSize)); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("a wrong proof = %v, want Unauthenticated", err)
+	}
+	if got := slept.take(); len(got) != 0 {
+		t.Errorf("after four malformed proofs and one wrong one, waited %v; the malformed were counted", got)
+	}
+}
+
+// TestAClientFromBeforeTheNameMovedIsToldItIsTooOld: the name was a
+// string, field 1, and is four fixed words now.  A client built before
+// that is refused whatever it does, and being refused in the words of
+// a wrong secret would send somebody to check a secret that is fine.
+func TestAClientFromBeforeTheNameMovedIsToldItIsTooOld(t *testing.T) {
+	a, err := auth.New(testSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	s.SetAuth(a)
+
+	// What an old client put on the wire: its name as field 1, and
+	// its pid, which has not moved.
+	var wire []byte
+	wire = protowire.AppendTag(wire, 1, protowire.BytesType)
+	wire = protowire.AppendString(wire, "slsh")
+	wire = protowire.AppendTag(wire, 4, protowire.VarintType)
+	wire = protowire.AppendVarint(wire, 1234)
+	var req pb.LoginRequest
+	if err := proto.Unmarshal(wire, &req); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = s.Login(context.Background(), &req)
+	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(errText(err), "older than slgod") {
+		t.Errorf("an old client's login = %v; want FailedPrecondition saying it is too old", err)
+	}
+
+	// And a new client that happens to send no name is not mistaken
+	// for one: it gets as far as the binding, which this call has none
+	// of.
+	_, err = s.Login(context.Background(), &pb.LoginRequest{Pid: 1234})
+	if strings.Contains(errText(err), "older") {
+		t.Errorf("a new client with no name was told it is too old: %v", err)
 	}
 }

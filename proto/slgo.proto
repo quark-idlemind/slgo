@@ -235,7 +235,18 @@ service Grid {
 // Success authenticates the CONNECTION. There is no token: TLS already
 // made a session and this proved who is on the far end of it.
 message LoginRequest {
-  string client = 1;
+  // The client's name was a string here, field 1, and is not any more;
+  // see client_0.  Reserved rather than reused, so that a client built
+  // before the change is still recognisable when it sends one: the
+  // server finds field 1 among the fields it does not know, and tells
+  // it it is too old rather than merely refusing it.
+  reserved 1;
+  reserved "client";
+
+  // Challenge is the client's own challenge, 16 bytes, and proof its
+  // answer to the server's, one HMAC-SHA256 of 32.  Each has exactly
+  // one right length, and the server refuses any other before doing any
+  // work with it.
   bytes challenge = 2;
   bytes proof = 3;
 
@@ -250,6 +261,29 @@ message LoginRequest {
   // say anything and the whole value of the line is that it tells you
   // where to go and look.
   int32 pid = 4;
+
+  // Client_0 to client_3 are the client's name -- the program's, "slsh"
+  // or "slbotd" -- as up to 32 bytes of UTF-8 packed eight to a field,
+  // first byte most significant, and padded with zero bytes.
+  //
+  // Ugly, but proto has no formal way of limiting the length of a
+  // field.  A string is whatever length the sender says, up to the
+  // whole 4 MB message, and this one arrives before the caller has
+  // proved anything and is kept, in every pending challenge, until it
+  // answers.  So the name is carried in fields that cannot be
+  // longer: fixed64 rather than uint64 because a varint is itself of
+  // variable length, where a fixed64 is eight bytes on the wire, always.
+  // A repeated field would not do either, since it repeats as often as
+  // the sender likes.  (A sender can repeat any field on the wire, but
+  // for one that is not repeated only the last is kept.)
+  //
+  // A longer name is cut short by the client, at a character boundary.
+  // It is a label for a person reading a sentence, not an identifier,
+  // and a program's name never needs more.  See auth.PackName.
+  fixed64 client_0 = 5;
+  fixed64 client_1 = 6;
+  fixed64 client_2 = 7;
+  fixed64 client_3 = 8;
 }
 
 message LoginResponse {

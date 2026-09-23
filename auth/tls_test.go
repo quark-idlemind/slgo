@@ -95,7 +95,7 @@ func TestBothEndsExportTheSameChannelBinding(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	resp, err := pb.NewGridClient(cc).Login(ctx, &pb.LoginRequest{Client: "test"})
+	resp, err := pb.NewGridClient(cc).Login(ctx, &pb.LoginRequest{})
 	if err != nil {
 		t.Fatalf("the call did not complete: %v", err)
 	}

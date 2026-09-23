@@ -254,6 +254,35 @@ func TestNoEndpointMeansNoLoginURI(t *testing.T) {
 	}
 }
 
+// TestTheViewerEndpointDoesNotWaitOnASender: the login is reached by
+// anybody who can reach the port, and a server with no limits waited
+// for a request for as long as the sender took over it -- a header a
+// byte a minute, a body that never ended -- holding a goroutine for
+// each.  The limits must still leave room for what is slow on purpose:
+// Go cancels a running handler's request when the read deadline passes,
+// which would cut an event queue poll off before it was answered.
+func TestTheViewerEndpointDoesNotWaitOnASender(t *testing.T) {
+	hs := viewerHTTPServer(http.NotFoundHandler(), nil)
+	if hs.ReadHeaderTimeout <= 0 || hs.ReadTimeout <= 0 || hs.WriteTimeout <= 0 ||
+		hs.IdleTimeout <= 0 || hs.MaxHeaderBytes <= 0 {
+		t.Fatalf("the viewer endpoint leaves a limit unset: header %v, read %v, write %v, idle %v, header bytes %d",
+			hs.ReadHeaderTimeout, hs.ReadTimeout, hs.WriteTimeout, hs.IdleTimeout, hs.MaxHeaderBytes)
+	}
+	if hs.ReadHeaderTimeout >= hs.ReadTimeout {
+		t.Errorf("a header may take %v, as long as the whole request (%v)", hs.ReadHeaderTimeout, hs.ReadTimeout)
+	}
+
+	// A poll is held for PollHold; a seed request waits up to half a
+	// minute on the simulator.  Both have to finish, answer and all,
+	// inside either deadline, with room to spare.
+	slowest := max(viewer.PollHold, 30*time.Second)
+	for name, d := range map[string]time.Duration{"read": hs.ReadTimeout, "write": hs.WriteTimeout} {
+		if d < slowest+15*time.Second {
+			t.Errorf("the %s deadline is %v, too close to the %v a request is held on purpose", name, d, slowest)
+		}
+	}
+}
+
 // The seed a viewer is served.
 //
 // A viewer fetches its capabilities from slgod's seed, which is a proxy

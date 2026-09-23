@@ -240,7 +240,7 @@ func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
 	mux := http.NewServeMux()
 	mux.Handle("/", viewer.LoginHandler(vh.find, logf))
 	mux.HandleFunc("/cap/", vh.serveCap)
-	hs := &http.Server{Handler: mux, TLSConfig: tlsCfg}
+	hs := viewerHTTPServer(mux, tlsCfg)
 	go func() {
 		// The paths are empty because the pair is already in
 		// TLSConfig; ServeTLS only reads files when it is not.
@@ -259,6 +259,46 @@ func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
 		_ = hs.Shutdown(shutdown)
 		vh.closeAll()
 	}, nil
+}
+
+// Limits on the viewer endpoint's connections.
+//
+// Its login is reached by anybody who can reach the port, before they
+// have shown anything, and an http.Server with none of these set waits
+// for a request for as long as the sender cares to take over it: a
+// header sent a byte a minute, a body that never ends.  Each such
+// connection is a goroutine and its buffers, held on the sender's say.
+//
+// The read and write limits have to leave room for what is slow on
+// purpose.  An event queue poll is held for viewer.PollHold before it
+// is answered, and a seed request waits up to half a minute on the
+// simulator; and Go cancels a request's context when the connection's
+// read deadline passes under a running handler, which would cut a poll
+// off without an answer.  So both are a minute, well clear of either,
+// and the header limit -- which is what a slow sender meets first --
+// is short.  How many polls may be held at once is the queue's own
+// business; see viewer.MaxHeldPolls.  How large a body may be is the
+// handlers'; see viewer.MaxRequestBody.
+const (
+	viewerHeaderTimeout = 10 * time.Second
+	viewerReadTimeout   = time.Minute
+	viewerWriteTimeout  = time.Minute
+	viewerIdleTimeout   = 2 * time.Minute
+	viewerHeaderBytes   = 64 << 10
+)
+
+// viewerHTTPServer is the server the viewer endpoint runs on, with its
+// limits.
+func viewerHTTPServer(h http.Handler, tlsCfg *tls.Config) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		TLSConfig:         tlsCfg,
+		ReadHeaderTimeout: viewerHeaderTimeout,
+		ReadTimeout:       viewerReadTimeout,
+		WriteTimeout:      viewerWriteTimeout,
+		IdleTimeout:       viewerIdleTimeout,
+		MaxHeaderBytes:    viewerHeaderBytes,
+	}
 }
 
 // The three answers the server gives a client about all this, which is

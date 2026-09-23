@@ -169,10 +169,13 @@ func (AgentInfo_State) EnumDescriptor() ([]byte, []int) {
 // Success authenticates the CONNECTION. There is no token: TLS already
 // made a session and this proved who is on the far end of it.
 type LoginRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Client    string                 `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
-	Challenge []byte                 `protobuf:"bytes,2,opt,name=challenge,proto3" json:"challenge,omitempty"`
-	Proof     []byte                 `protobuf:"bytes,3,opt,name=proof,proto3" json:"proof,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Challenge is the client's own challenge, 16 bytes, and proof its
+	// answer to the server's, one HMAC-SHA256 of 32.  Each has exactly
+	// one right length, and the server refuses any other before doing any
+	// work with it.
+	Challenge []byte `protobuf:"bytes,2,opt,name=challenge,proto3" json:"challenge,omitempty"`
+	Proof     []byte `protobuf:"bytes,3,opt,name=proof,proto3" json:"proof,omitempty"`
 	// Pid is the client's process id.
 	//
 	// So that a message about what is holding a session can name which
@@ -183,7 +186,29 @@ type LoginRequest struct {
 	// the connection it is being spoken to on, because a client could
 	// say anything and the whole value of the line is that it tells you
 	// where to go and look.
-	Pid           int32 `protobuf:"varint,4,opt,name=pid,proto3" json:"pid,omitempty"`
+	Pid int32 `protobuf:"varint,4,opt,name=pid,proto3" json:"pid,omitempty"`
+	// Client_0 to client_3 are the client's name -- the program's, "slsh"
+	// or "slbotd" -- as up to 32 bytes of UTF-8 packed eight to a field,
+	// first byte most significant, and padded with zero bytes.
+	//
+	// Ugly, but proto has no formal way of limiting the length of a
+	// field.  A string is whatever length the sender says, up to the
+	// whole 4 MB message, and this one arrives before the caller has
+	// proved anything and is kept, in every pending challenge, until it
+	// answers.  So the name is carried in fields that cannot be
+	// longer: fixed64 rather than uint64 because a varint is itself of
+	// variable length, where a fixed64 is eight bytes on the wire, always.
+	// A repeated field would not do either, since it repeats as often as
+	// the sender likes.  (A sender can repeat any field on the wire, but
+	// for one that is not repeated only the last is kept.)
+	//
+	// A longer name is cut short by the client, at a character boundary.
+	// It is a label for a person reading a sentence, not an identifier,
+	// and a program's name never needs more.  See auth.PackName.
+	Client_0      uint64 `protobuf:"fixed64,5,opt,name=client_0,json=client0,proto3" json:"client_0,omitempty"`
+	Client_1      uint64 `protobuf:"fixed64,6,opt,name=client_1,json=client1,proto3" json:"client_1,omitempty"`
+	Client_2      uint64 `protobuf:"fixed64,7,opt,name=client_2,json=client2,proto3" json:"client_2,omitempty"`
+	Client_3      uint64 `protobuf:"fixed64,8,opt,name=client_3,json=client3,proto3" json:"client_3,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -218,13 +243,6 @@ func (*LoginRequest) Descriptor() ([]byte, []int) {
 	return file_slgo_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *LoginRequest) GetClient() string {
-	if x != nil {
-		return x.Client
-	}
-	return ""
-}
-
 func (x *LoginRequest) GetChallenge() []byte {
 	if x != nil {
 		return x.Challenge
@@ -242,6 +260,34 @@ func (x *LoginRequest) GetProof() []byte {
 func (x *LoginRequest) GetPid() int32 {
 	if x != nil {
 		return x.Pid
+	}
+	return 0
+}
+
+func (x *LoginRequest) GetClient_0() uint64 {
+	if x != nil {
+		return x.Client_0
+	}
+	return 0
+}
+
+func (x *LoginRequest) GetClient_1() uint64 {
+	if x != nil {
+		return x.Client_1
+	}
+	return 0
+}
+
+func (x *LoginRequest) GetClient_2() uint64 {
+	if x != nil {
+		return x.Client_2
+	}
+	return 0
+}
+
+func (x *LoginRequest) GetClient_3() uint64 {
+	if x != nil {
+		return x.Client_3
 	}
 	return 0
 }
@@ -5202,12 +5248,15 @@ var File_slgo_proto protoreflect.FileDescriptor
 const file_slgo_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"slgo.proto\x12\aslgo.v1\"l\n" +
-	"\fLoginRequest\x12\x16\n" +
-	"\x06client\x18\x01 \x01(\tR\x06client\x12\x1c\n" +
+	"slgo.proto\x12\aslgo.v1\"\xce\x01\n" +
+	"\fLoginRequest\x12\x1c\n" +
 	"\tchallenge\x18\x02 \x01(\fR\tchallenge\x12\x14\n" +
 	"\x05proof\x18\x03 \x01(\fR\x05proof\x12\x10\n" +
-	"\x03pid\x18\x04 \x01(\x05R\x03pid\"C\n" +
+	"\x03pid\x18\x04 \x01(\x05R\x03pid\x12\x19\n" +
+	"\bclient_0\x18\x05 \x01(\x06R\aclient0\x12\x19\n" +
+	"\bclient_1\x18\x06 \x01(\x06R\aclient1\x12\x19\n" +
+	"\bclient_2\x18\a \x01(\x06R\aclient2\x12\x19\n" +
+	"\bclient_3\x18\b \x01(\x06R\aclient3J\x04\b\x01\x10\x02R\x06client\"C\n" +
 	"\rLoginResponse\x12\x1c\n" +
 	"\tchallenge\x18\x01 \x01(\fR\tchallenge\x12\x14\n" +
 	"\x05proof\x18\x02 \x01(\fR\x05proof\"\x99\x03\n" +

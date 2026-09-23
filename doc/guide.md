@@ -141,6 +141,28 @@ which is what `slgod` prints if it cannot find one. The secret never
 crosses the wire in either direction: each side answers a random,
 single-use challenge, so a captured proof is worth nothing afterwards.
 
+That makes 64 hex characters, and nothing short of that is needed. A
+secret typed by hand is still accepted, but one under 16 bytes is
+guessable over the network, and every program that reads it says so,
+once, with a line beginning `WARNING: the shared secret in` and naming
+the file and how short it is.
+
+Guessing is slowed as well. After three wrong answers from one address,
+every answer from it -- the right one too, or the speed of the answer
+would give it away -- waits half a second, then one, two and four; an
+address that gets it right starts again from nothing, and one that goes
+quiet is forgotten after a quarter of an hour. Failures from everywhere
+count too, at a tenth of the weight, so thirty from thirty addresses slow
+everybody down the same way. Only so many answers are kept waiting at
+once, and past that a login is refused on the spot, with "too many failed
+logins lately; try again in a few minutes". None of this touches a client
+with the secret on an address nobody is guessing from.
+
+The handshake changed shape once, and a client built before the change
+is told "this client is older than slgod" rather than refused as if its
+secret were wrong. The cure is to rebuild and reinstall every program
+here from the same tree as the daemon.
+
 The connection is TLS, and the certificate is self-signed and **not**
 checked -- it is there for confidentiality only, and the proof of who is
 at each end is bound to that TLS session, so nothing is gained by
@@ -439,6 +461,12 @@ The capabilities are behind the login too. A viewer that logs in
 successfully is handed a URL with a token in it, and that token is what
 `/cap/...` checks -- the profile name on its own used to be enough, and
 the answer is every capability URL of the live session.
+
+The endpoint does not wait on a slow sender: a request's headers must
+arrive within ten seconds and the whole of it within a minute, and a
+body over 256 KB -- eighty times a viewer's login -- is refused. The
+event queue still holds a poll for up to twenty seconds when there is
+nothing to say, but only four at a time for each avatar.
 
 None of that makes the endpoint safe to put on a network. A viewer on
 another machine wants a WireGuard or Tailscale tunnel with `-viewer`

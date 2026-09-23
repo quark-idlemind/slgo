@@ -309,6 +309,21 @@ func Name() string {
 	return "slgo"
 }
 
+// loginRequest is one half of the handshake, saying who is asking.
+//
+// The name travels as four fixed-width words rather than a string, so
+// that nothing sent before the caller has proved itself can be longer
+// than the server chose; auth.PackName cuts a longer one short.
+func loginRequest(challenge, proof []byte) *pb.LoginRequest {
+	name := auth.PackName(Name())
+	return &pb.LoginRequest{
+		Client_0: name[0], Client_1: name[1], Client_2: name[2], Client_3: name[3],
+		Pid:       int32(os.Getpid()),
+		Challenge: challenge,
+		Proof:     proof,
+	}
+}
+
 // login runs the two-call handshake on this connection.
 func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, error)) error {
 	secret, err := auth.LoadSecret("")
@@ -317,7 +332,7 @@ func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, err
 	}
 	g := pb.NewGridClient(cc)
 
-	begun, err := g.Login(ctx, &pb.LoginRequest{Client: Name(), Pid: int32(os.Getpid())})
+	begun, err := g.Login(ctx, loginRequest(nil, nil))
 	if err != nil {
 		return fmt.Errorf("login: %w", err)
 	}
@@ -334,10 +349,7 @@ func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, err
 	if _, err := rand.Read(cchal); err != nil {
 		return err
 	}
-	done, err := g.Login(ctx, &pb.LoginRequest{
-		Client: Name(), Pid: int32(os.Getpid()),
-		Challenge: cchal, Proof: auth.ClientProof(secret, schal, bind),
-	})
+	done, err := g.Login(ctx, loginRequest(cchal, auth.ClientProof(secret, schal, bind)))
 	if err != nil {
 		return fmt.Errorf("login refused: %w", err)
 	}

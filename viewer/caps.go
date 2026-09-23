@@ -3,6 +3,7 @@ package viewer
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,6 +39,29 @@ import (
 // something looks slow.
 const PollHold = 20 * time.Second
 
+// MaxHeldPolls is how many polls one queue holds open at once.
+//
+// A viewer polls again when a poll is answered, so it has one waiting
+// here at a time, and two for a moment when a new viewer takes over
+// from one that has not yet noticed it was displaced; a few more is
+// margin.  Each held poll is a request and a goroutine for up to
+// PollHold, so without a number here a caller with the capability could
+// hold as many as it liked.  One past the limit is answered at once, as
+// unavailable, rather than held with the rest.
+const MaxHeldPolls = 4
+
+// MaxRequestBody is the most any request to this package's handlers
+// may carry.
+//
+// A viewer's login is about three kilobytes of XML-RPC (the Firestorm
+// capture in agent/testdata is 3164 bytes).  Its seed request is a
+// list of capability names and its poll an acknowledgement; neither
+// has been measured, but both are lists of short strings, and this is
+// eighty times the login.  Without it a body was read to its end however
+// long the sender kept sending -- the seed with io.ReadAll, the login
+// through an XML decoder -- and held in memory while it was.
+const MaxRequestBody = 256 << 10
+
 // EventQueue holds what the session's queue produced, for one viewer to
 // collect.
 //
@@ -48,6 +72,7 @@ type EventQueue struct {
 	waiting []event
 	id      int64
 	woken   chan struct{}
+	held    int // polls waiting for something to say
 
 	delivered uint64
 	dropped   uint64
@@ -242,11 +267,20 @@ func (q *EventQueue) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// between the session and the simulator; this queue hands
 		// over what it holds and forgets it, so there is nothing
 		// for a viewer to acknowledge and nothing to resend.
-		_, _ = io.Copy(io.Discard, r.Body)
+		_, err := io.Copy(io.Discard, http.MaxBytesReader(w, r.Body, MaxRequestBody))
+		if tooLarge(err) {
+			http.Error(w, "the request is larger than any poll", http.StatusRequestEntityTooLarge)
+			return
+		}
 	}
 
 	events, id := q.take()
 	if len(events) == 0 {
+		if !q.hold() {
+			http.Error(w, "too many polls are already waiting on this queue", http.StatusServiceUnavailable)
+			return
+		}
+		defer q.unhold()
 		select {
 		case <-q.woken:
 			events, id = q.take()
@@ -272,6 +306,31 @@ func (q *EventQueue) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/llsd+xml")
 	_, _ = w.Write(body)
+}
+
+// tooLarge reports a body cut off at MaxRequestBody, as distinct from
+// one that merely ended badly, which was ignored before there was a
+// limit and still is.
+func tooLarge(err error) bool {
+	var mbe *http.MaxBytesError
+	return errors.As(err, &mbe)
+}
+
+// hold takes one of the MaxHeldPolls places, if there is one.
+func (q *EventQueue) hold() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.held >= MaxHeldPolls {
+		return false
+	}
+	q.held++
+	return true
+}
+
+func (q *EventQueue) unhold() {
+	q.mu.Lock()
+	q.held--
+	q.mu.Unlock()
 }
 
 // Seed answers a viewer's seed capability request.
@@ -303,7 +362,15 @@ func (s *Seed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var asked []byte
 	if r.Body != nil {
 		defer r.Body.Close()
-		asked, _ = io.ReadAll(r.Body)
+		var err error
+		asked, err = io.ReadAll(http.MaxBytesReader(w, r.Body, MaxRequestBody))
+		if tooLarge(err) {
+			// Refused rather than passed on cut short: a list of
+			// names with its end missing is not a question worth
+			// putting to the simulator.
+			http.Error(w, "the request is larger than any seed request", http.StatusRequestEntityTooLarge)
+			return
+		}
 	}
 
 	client := s.client()

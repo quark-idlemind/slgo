@@ -125,7 +125,10 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	method, params, err := xmlrpc.DecodeCall(r.Body)
+	// Bounded before a byte is decoded.  This is the one handler a
+	// stranger reaches with nothing, and the decoder would otherwise
+	// read for as long as the sender kept sending.
+	method, params, err := xmlrpc.DecodeCall(http.MaxBytesReader(w, r.Body, MaxRequestBody))
 	if err != nil {
 		// Malformed is a fault: nothing was asked, so there is no
 		// login to refuse.

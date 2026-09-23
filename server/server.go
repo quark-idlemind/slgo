@@ -98,6 +98,10 @@ type Server struct {
 	// only reasonable bound to loopback.
 	auth *auth.Server
 
+	// throttle slows the answers to an address that keeps getting the
+	// proof wrong.  Made with auth, and nil exactly when auth is.
+	throttle *auth.Throttle
+
 	// viewer is slgod's login endpoint for real viewers, which the
 	// daemon owns and this package only reports on.  Nil -- the
 	// ordinary case -- means none is served; see viewer.go.
@@ -106,7 +110,13 @@ type Server struct {
 
 // SetAuth turns authentication on. Every method but Login is then
 // refused on a connection that has not proved it knows the secret.
-func (s *Server) SetAuth(a *auth.Server) { s.auth = a }
+func (s *Server) SetAuth(a *auth.Server) {
+	s.auth = a
+	s.throttle = nil
+	if a != nil {
+		s.throttle = auth.NewThrottle()
+	}
+}
 
 // Hosted is one grid connection and the clients watching it.
 //
@@ -767,6 +777,14 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 			PermitWithoutStream: true,
 		}),
 	}
+	// The receive limit is left at gRPC's own 4 MB, although a caller
+	// that has proved nothing could be held to far less.  gRPC reads a
+	// whole message before any interceptor or handler sees it, and the
+	// limit is one number for the server, not for a method or for a
+	// connection that has not authenticated -- and a Cap request
+	// carrying an upload needs the room.  What an unauthenticated
+	// caller sends is bounded instead by what is kept of it: nothing of
+	// a Login but a challenge and a name of fixed size.
 	if s.auth != nil {
 		creds, err := auth.ServerTLS()
 		if err != nil {
