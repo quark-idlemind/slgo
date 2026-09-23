@@ -3,10 +3,10 @@ package main
 // Putting an avatar's outfit back on after it has been logged in again.
 //
 // The simulator puts most of an avatar's attachments back by itself at
-// login, but not reliably all of them: measured after one restart, one
-// avatar had eight of ten on before anything here had asked, and the
-// same two missing as after the restart before.  Why those two was not
-// established.  A viewer covers the gap by putting on, once the Current
+// login, but not all of them: it appears to put back one attachment per
+// attachment point, and an outfit that has several on one point comes
+// back without the rest.  See the note in sl/wearable.go for what was
+// measured.  A viewer covers the gap by putting on, once the Current
 // Outfit folder has loaded, whatever it names that is not on.
 //
 // Nothing here did, so every time slgod restarted the avatars it holds

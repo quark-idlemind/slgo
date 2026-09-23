@@ -6,10 +6,13 @@ avatar is not wearing.
 ## What it is for
 
 The simulator puts most of an avatar's attachments back by itself when
-it logs in, but not reliably all of them.  Measured on Agni: an avatar
-logged in again had eight of its ten attachments on before anything
-had asked for them, and was missing the same two after two logins in
-a row.  Why those two was not found out.
+it logs in, but not all of them.  Measured on Agni over eight logins of
+two avatars: wherever a point held several attachments, exactly one of
+them came back -- one of three on a chest, which one varying from login
+to login, and one HUD on each of eight points where twelve were worn.
+Every point with a single attachment was restored every time.  It looks
+as though the simulator restores one attachment per point, as it did
+when a point could hold only one; that is inferred from the pattern.
 
 A viewer covers the gap.  Once the Current Outfit folder has loaded,
 it puts on whatever the folder names and is not on, and nobody sees it

@@ -497,12 +497,16 @@ func (w *Session) folderVersion(ctx context.Context, folder msg.UUID) (int, erro
 // Putting an outfit back on.
 //
 // The simulator puts most of an avatar's attachments back by itself at
-// login, but not reliably all of them.  Measured on Agni, after a
-// restart of the daemon holding the sessions: fifteen seconds after
-// login one avatar had eight of its ten attachments on without any
-// client having asked for them, and the same two missing both times;
-// another had its body, head and clothes and not four HUD-like things.
-// Why those were left off was not established.
+// login, but not all of them.  Measured on Agni over eight logins of two
+// avatars: wherever a point held several attachments, exactly one of
+// them came back.  One avatar had three on its chest and got one of
+// them back each time -- a different one on different logins, as the
+// simulator's own attachment list confirmed before anything else was
+// put on.  The other wore twelve HUDs on the eight HUD points and got
+// eight back, one on each, the same four missing every time.  Every point with a single attachment was
+// restored every time.  So it looks as though the simulator restores
+// one attachment per point, as it did when a point could hold only
+// one; that is inferred from the pattern, not something the grid says.
 //
 // A viewer covers the gap.  Once the Current Outfit folder has loaded
 // it puts on whatever the folder names and is not on

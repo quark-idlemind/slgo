@@ -1304,8 +1304,9 @@ answer it from a viewer; `accept-inventory` changes who that is.
 
 **It puts an avatar's outfit back on after a login.** The simulator
 puts most of an avatar's attachments back by itself at login, but not
-reliably all of them: measured on Agni, one avatar came back with
-eight of its ten, missing the same two after two logins in a row. A
+all of them: measured on Agni, wherever a point held several
+attachments exactly one came back, as though it restores one per
+point. A
 viewer covers the gap by putting on whatever the Current Outfit folder
 names and is not on. Nothing here did, so a restart of `slgod` could
 leave its avatars missing part of what they wore until somebody
