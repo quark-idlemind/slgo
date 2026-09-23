@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -255,6 +256,40 @@ func TestATeleportTheGridRefusedSaysBothOfTheThingsItSaid(t *testing.T) {
 	// handle has nothing else to recognise it by.
 	if !strings.Contains(err.Error(), "(995, 997)") {
 		t.Errorf("the refusal %q does not say where it was about", err)
+	}
+}
+
+// TestARefusalHandsAProgramTheGridsKey: the key is the half of a
+// refusal a program acts on, so it has to reach the caller as a value
+// and not only inside the sentence.  Folded into the sentence, the only
+// way to ask which refusal it was is to search the words for the key,
+// which every caller has to know to do and which matches a sentence
+// that merely mentions it.
+func TestARefusalHandsAProgramTheGridsKey(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.RegionHandle = 1099511628032
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.TeleportLocationRequest); ok {
+			f.RelayEvent(t, "TeleportFailed", agniRefused)
+		}
+	}
+	f.mu.Unlock()
+
+	err := w.Teleport(context.Background(), goguen, msg.Vector3{X: 128}, 5*time.Second)
+	var r *TeleportRefusal
+	if !errors.As(err, &r) {
+		t.Fatalf("Teleport = %v, want a *TeleportRefusal", err)
+	}
+	if r.Key != agent.KeyMustHaveVIPStatus {
+		t.Errorf("key = %q, want %q", r.Key, agent.KeyMustHaveVIPStatus)
+	}
+	if want := "You must be a premium or vip subscriber to enter this region."; r.Reason != want {
+		t.Errorf("reason = %q, want %q", r.Reason, want)
+	}
+	if !strings.Contains(r.What, "(995, 997)") {
+		t.Errorf("what = %q, want the grid square asked about", r.What)
 	}
 }
 

@@ -72,6 +72,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -104,27 +105,26 @@ var homeSettle = 5 * time.Second
 // for it again on top of itself.
 var homeAnswerWait = 45 * time.Second
 
-// tooCloseToGo is the grid's key for a teleport it will not shorten,
-// which is what going home while standing at home is answered with.
-//
-// Measured on Agni; sl/landmark.go carries the same string for the same
-// reason and says more about it.  It is written out again here rather
-// than imported because the daemon does not depend on the client
-// library and should not start now.
-const tooCloseToGo = "CouldntTPCloser"
-
 // homeAnswer is what the grid said about the request to go home.
 type homeAnswer struct {
 	// arrived is a teleport that happened: the avatar is home.
 	arrived bool
 
-	// already is the refusal that means the avatar is home and the grid
-	// will not move it a shorter distance to prove it.
-	already bool
+	// refusal is a TeleportFailed, both voices of it, read by the agent
+	// package's reader so that the key here is the same field sl reads
+	// its key from.  Zero for an arrival, and for silence.
+	//
+	// The key is what the loop decides on and the words are only for
+	// the log.  Deciding on the words is what this used to do, by
+	// searching them for a copy of the key kept in this file; the key
+	// is the grid's, and it is written down once, in agent.
+	refusal agent.Refusal
+}
 
-	// said is the grid's own words, for the log line when neither of
-	// the above is true.
-	said string
+// already is the refusal that means the avatar is home and the grid
+// will not move it a shorter distance to prove it.
+func (a homeAnswer) already() bool {
+	return a.refusal.Key == agent.KeyCouldntTPCloser
 }
 
 // keepHome starts the loop that asks to go home until it gets there,
@@ -221,7 +221,7 @@ func (h *Hosted) homeward(ctx context.Context, id uint64, pace homePace) {
 			// loop that kept asking would fill the log with the same
 			// sentence once a minute.
 			return
-		case answer.already:
+		case answer.already():
 			// The ordinary case, and it says nothing: an avatar that
 			// came up at home is not news.
 			return
@@ -342,13 +342,7 @@ func (h *Hosted) noteTeleportMessage(p *msg.Packet) {
 		if err := m.Decode(body); err != nil {
 			return
 		}
-		said := trimNul(m.Info.Reason)
-		if len(m.AlertInfo) > 0 {
-			if key := trimNul(m.AlertInfo[0].Message); key != "" {
-				said = key
-			}
-		}
-		h.noteTeleportAnswer(refusedHome(said))
+		h.noteTeleportAnswer(homeAnswer{refusal: agent.ReadTeleportFailed(&m)})
 	}
 }
 
@@ -368,46 +362,33 @@ func (h *Hosted) noteTeleportEvent(name string, body []byte) {
 	case "TeleportFinish":
 		h.noteTeleportAnswer(homeAnswer{arrived: true})
 	case "TeleportFailed":
-		said := ""
+		// A body that will not decode is still a refusal, and one with
+		// nothing to say: it is answered as one rather than dropped, so
+		// the attempt waiting for it is not left waiting for an answer
+		// that has already come.
+		var refusal agent.Refusal
 		if v, err := llsd.Decode(bytes.NewReader(body)); err == nil {
-			m := llsd.Map(v)
-			if alert := llsdFirst(m, "AlertInfo"); alert != nil {
-				said = llsd.String(alert, "Message")
-			}
-			if info := llsdFirst(m, "Info"); said == "" && info != nil {
-				said = llsd.String(info, "Reason")
-			}
+			refusal = agent.ReadTeleportFailedEvent(v)
 		}
-		h.noteTeleportAnswer(refusedHome(said))
+		h.noteTeleportAnswer(homeAnswer{refusal: refusal})
 	}
-}
-
-// refusedHome turns the grid's refusal into the answer this loop reads.
-func refusedHome(said string) homeAnswer {
-	if strings.Contains(said, tooCloseToGo) {
-		return homeAnswer{already: true, said: said}
-	}
-	return homeAnswer{said: said}
-}
-
-// llsdFirst is the first block of a named array in an event body, which
-// is the shape every event carries its fields in.
-func llsdFirst(m map[string]any, key string) map[string]any {
-	rows, _ := m[key].([]any)
-	if len(rows) == 0 {
-		return nil
-	}
-	return llsd.Map(rows[0])
 }
 
 // saidOrSilence is the grid's words for a log line, or a description of
 // there having been none -- which is an answer of its own and a common
 // one.
+//
+// The key when there is one and the reason when there is not, which is
+// what this line has always said: the key is short and is the name
+// somebody would search for.
 func (a homeAnswer) saidOrSilence() string {
-	if a.said == "" {
-		return "the grid said nothing"
+	switch {
+	case a.refusal.Key != "":
+		return string(a.refusal.Key)
+	case a.refusal.Reason != "":
+		return a.refusal.Reason
 	}
-	return a.said
+	return "the grid said nothing"
 }
 
 // attempts is "3 attempts" or "one attempt", for a line a person reads.

@@ -735,11 +735,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.teleportAnswered(&teleportAnswer{handle: t.Info.RegionHandle})
 
 	case *msg.TeleportFailed:
-		a := &teleportAnswer{failed: true, reason: trimNul(t.Info.Reason)}
-		if len(t.AlertInfo) > 0 {
-			a.key = trimNul(t.AlertInfo[0].Message)
-		}
-		w.teleportAnswered(a)
+		w.teleportAnswered(&teleportAnswer{failed: true, refusal: agent.ReadTeleportFailed(t)})
 
 	case *msg.UpdateCreateInventoryItem:
 		w.mu.Lock()

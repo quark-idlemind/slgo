@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,7 +71,7 @@ func homeRig(t *testing.T, start string) (*Hosted, *fakeSim, context.CancelFunc)
 
 // refuse makes the fake sim answer every request to go home with the
 // grid's own refusal, by key.
-func refuse(t *testing.T, sim *fakeSim, key string) {
+func refuse(t *testing.T, sim *fakeSim, key agent.RefusalKey) {
 	t.Helper()
 	go func() {
 		for range time.Tick(5 * time.Millisecond) {
@@ -126,7 +127,7 @@ func TestAnythingButHomeIsLeftAlone(t *testing.T) {
 func TestAlreadyHomeAsksOnceAndStops(t *testing.T) {
 	quickHoming(t)
 	_, sim, _ := homeRig(t, "home")
-	refuse(t, sim, tooCloseToGo)
+	refuse(t, sim, agent.KeyCouldntTPCloser)
 
 	waitFor(t, 5*time.Second, "the one request", func() bool { return asked(sim) >= 1 })
 	time.Sleep(10 * HomeRetry)
@@ -141,7 +142,7 @@ func TestAlreadyHomeAsksOnceAndStops(t *testing.T) {
 func TestNotHomeKeepsAsking(t *testing.T) {
 	quickHoming(t)
 	_, sim, _ := homeRig(t, "home")
-	refuse(t, sim, "no_host")
+	refuse(t, sim, agent.KeyNoHost)
 
 	waitFor(t, 5*time.Second, "a second attempt", func() bool { return asked(sim) >= 2 })
 }
@@ -187,7 +188,7 @@ func TestArrivingStopsIt(t *testing.T) {
 func TestAClientTeleportStopsIt(t *testing.T) {
 	quickHoming(t)
 	h, sim, _ := homeRig(t, "home")
-	refuse(t, sim, "no_host")
+	refuse(t, sim, agent.KeyNoHost)
 
 	waitFor(t, 5*time.Second, "the loop to be running", func() bool { return asked(sim) >= 2 })
 
@@ -219,7 +220,7 @@ func TestAClientTeleportStopsIt(t *testing.T) {
 func TestAClientSittingDoesNotStopIt(t *testing.T) {
 	quickHoming(t)
 	h, sim, _ := homeRig(t, "home")
-	refuse(t, sim, "no_host")
+	refuse(t, sim, agent.KeyNoHost)
 
 	waitFor(t, 5*time.Second, "the loop to be running", func() bool { return asked(sim) >= 1 })
 	body, err := (&msg.AgentRequestSit{}).Encode()
@@ -252,7 +253,7 @@ func homing(h *Hosted) bool {
 func TestALoopThatIsDoneForgetsItself(t *testing.T) {
 	quickHoming(t)
 	h, sim, _ := homeRig(t, "home")
-	refuse(t, sim, tooCloseToGo)
+	refuse(t, sim, agent.KeyCouldntTPCloser)
 
 	waitFor(t, 5*time.Second, "the loop to finish", func() bool {
 		return asked(sim) >= 1 && !homing(h)
@@ -265,7 +266,7 @@ func TestALoopThatIsDoneForgetsItself(t *testing.T) {
 func TestAReconnectStartsItAgain(t *testing.T) {
 	quickHoming(t)
 	h, sim, _ := homeRig(t, "home")
-	refuse(t, sim, tooCloseToGo)
+	refuse(t, sim, agent.KeyCouldntTPCloser)
 
 	waitFor(t, 5*time.Second, "the first loop to finish", func() bool {
 		return asked(sim) >= 1 && !homing(h)
@@ -283,4 +284,50 @@ func TestAReconnectStartsItAgain(t *testing.T) {
 		return a != nil && a != first
 	})
 	waitFor(t, 5*time.Second, "it to ask again", func() bool { return asked(sim) > was })
+}
+
+// accessBlockedEvent is a maturity refusal in the shape the event queue
+// carries a TeleportFailed.  It is written for this test and was not
+// captured: the key and the sentence are the ones sl/maturity.go quotes
+// from Agni, and the blocks are the two every measured TeleportFailed
+// has had, with only the fields read here.
+const accessBlockedEvent = `<llsd><map>` +
+	`<key>AlertInfo</key><array><map>` +
+	`<key>Message</key><string>RegionTPAccessBlocked</string></map></array>` +
+	`<key>Info</key><array><map>` +
+	`<key>Reason</key><string>You aren't allowed in that Region due to ` +
+	`your maturity Rating. You may need to validate your age and/or ` +
+	`install the latest Viewer. Please go to the Knowledge Base for ` +
+	`details on accessing areas with this maturity Rating.</string>` +
+	`</map></array></map></llsd>`
+
+// TestTheHomingLoopIsHandedTheGridsKeyAndNotItsWords: what the loop
+// decides on has to be the key, as a value it can compare with one of
+// the agent package's names for it.  The loop once had only the words
+// -- the key when there was one, the sentence when there was not, in
+// one string -- and found the key by searching them for a copy of it
+// kept in this package.
+func TestTheHomingLoopIsHandedTheGridsKeyAndNotItsWords(t *testing.T) {
+	h := &Hosted{}
+	answers := make(chan homeAnswer, 1)
+	h.homeAnswers = answers
+	h.noteTeleportEvent("TeleportFailed", []byte(accessBlockedEvent))
+
+	select {
+	case got := <-answers:
+		if got.refusal.Key != agent.KeyRegionTPAccessBlocked {
+			t.Errorf("key = %q, want %q", got.refusal.Key, agent.KeyRegionTPAccessBlocked)
+		}
+		if !strings.HasPrefix(got.refusal.Reason, "You aren't allowed") {
+			t.Errorf("reason = %q, want the grid's sentence", got.refusal.Reason)
+		}
+		if got.already() || got.arrived {
+			t.Errorf("a region that will not have the avatar was read as home: %+v", got)
+		}
+		if said := got.saidOrSilence(); said != "RegionTPAccessBlocked" {
+			t.Errorf("the log line says %q, want the key", said)
+		}
+	default:
+		t.Fatal("a refusal off the event queue was not handed to the waiting attempt")
+	}
 }

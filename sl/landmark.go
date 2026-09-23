@@ -47,6 +47,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -338,7 +339,7 @@ func (w *Session) GoTo(ctx context.Context, asset msg.UUID, called string, timeo
 			"find, and the usual reason is the ITEM id where the ASSET id was "+
 			"wanted -- Entry.Asset and Item.AssetID are the one it takes", err)
 	}
-	if errors.Is(err, ErrTeleportRefused) && strings.Contains(err.Error(), tooCloseToGo) {
+	if refusedWith(err, agent.KeyCouldntTPCloser) {
 		// Measured on Agni 2026-08-19, and it is the commonest refusal
 		// a landmark gets: going to one the avatar is already standing
 		// on.  "Could not teleport closer to destination" is the grid
@@ -350,17 +351,6 @@ func (w *Session) GoTo(ctx context.Context, asset msg.UUID, called string, timeo
 	}
 	return err
 }
-
-// tooCloseToGo is the grid's key for a teleport it will not shorten.
-//
-// Matched in the message rather than against a field, because the key
-// is not kept anywhere else: teleportAnswer holds it and is private,
-// and refusal() folds it into a sentence.  Giving the refusal a type
-// with the key on it is the right answer and a wider change than this
-// -- every caller and every test of a refused teleport reads the string
-// today -- so it is written down here as the thing to do rather than
-// done in passing.
-const tooCloseToGo = "CouldntTPCloser"
 
 // GoHome takes the avatar to wherever this account's home is set.
 //
@@ -382,7 +372,7 @@ func (w *Session) GoHome(ctx context.Context, timeout time.Duration) error {
 	// "going home" and not "the teleport home", for GoTo's reason: the
 	// errors that quote this already say the word teleport themselves.
 	err := w.goToLandmark(ctx, msg.UUID{}, timeout, "going home")
-	if errors.Is(err, ErrTeleportRefused) && strings.Contains(err.Error(), tooCloseToGo) {
+	if refusedWith(err, agent.KeyCouldntTPCloser) {
 		return fmt.Errorf("%w; going home almost always means the avatar is "+
 			"already standing there", err)
 	}

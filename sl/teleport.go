@@ -60,14 +60,75 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
 // ErrTeleportRefused is the grid saying no: the region does not exist,
-// or will not have this avatar.  The error carries both halves of what
-// it said.
+// or will not have this avatar.  The error is a *TeleportRefusal, which
+// carries both halves of what it said; errors.Is finds this inside it
+// and errors.As finds the refusal.
 var ErrTeleportRefused = errors.New("sl: the grid refused the teleport")
+
+// TeleportRefusal is a teleport the grid refused, with what it said.
+//
+// It is a type so that the grid's key can be read as a key.  Before it
+// was one, the key was folded into the error's sentence and the only
+// way to ask "was that CouldntTPCloser" was to search the sentence for
+// the word -- which every caller had to know to do, and which would
+// have matched a sentence that merely mentioned it.  Now a caller asks
+//
+//	var r *sl.TeleportRefusal
+//	if errors.As(err, &r) && r.Key == agent.KeyCouldntTPCloser { ... }
+//
+// and the words are left for a person to read.
+type TeleportRefusal struct {
+	// What names the teleport, as the caller would call it: "the
+	// teleport to grid square (995, 997)", "going home".
+	What string
+
+	// Key is the grid's name for the refusal, and the one of the two a
+	// program should act on.  Empty when the grid sent none.  The keys
+	// this tree has met are named in the agent package, which is where
+	// the daemon reads them too.
+	Key agent.RefusalKey
+
+	// Reason is what the grid said for a person to read.  Sometimes it
+	// is a sentence and sometimes it is the key again; see
+	// agent.Refusal.
+	Reason string
+}
+
+// Error renders the two voices without pretending either is the other,
+// and says the same string once when they agree.
+func (e *TeleportRefusal) Error() string {
+	var said string
+	key := string(e.Key)
+	switch {
+	case key == "" && e.Reason == "":
+		said = "and would not say why"
+	case key == "":
+		said = strconv.Quote(e.Reason)
+	case e.Reason == "" || e.Reason == key:
+		said = key
+	default:
+		said = key + ": " + strconv.Quote(e.Reason)
+	}
+	return ErrTeleportRefused.Error() + ": " + e.What + ": " + said
+}
+
+// Unwrap is what makes errors.Is(err, ErrTeleportRefused) true of a
+// refusal, which is how every caller written before this type existed
+// still recognises one.
+func (e *TeleportRefusal) Unwrap() error { return ErrTeleportRefused }
+
+// refusedWith says whether err is the grid refusing a teleport with
+// this key, wherever in a chain of wrapping the refusal is.
+func refusedWith(err error, key agent.RefusalKey) bool {
+	var r *TeleportRefusal
+	return errors.As(err, &r) && r.Key == key
+}
 
 // ErrTeleportLost is the grid handing this avatar to another simulator
 // and the session never turning up there.
@@ -226,29 +287,14 @@ type teleportAnswer struct {
 	// avatar went nowhere the session has to follow.
 	local bool
 
-	// failed says a TeleportFailed arrived, and key and reason are its
-	// two voices.  Measured on Agni, a handle that is no region gives
+	// failed says a TeleportFailed arrived, and refusal is its two
+	// voices.  Measured on Agni, a handle that is no region gives
 	// "no_host" for both, while a region that refuses gives
 	// "MustHaveVIPStatus" as the key and "You must be a premium or vip
 	// subscriber to enter this region." as the reason.  So neither is
 	// the other, and both are carried.
-	failed bool
-	key    string
-	reason string
-}
-
-// refusal renders the two voices without pretending either is the
-// other, and says the same string once when they agree.
-func (a *teleportAnswer) refusal() string {
-	switch {
-	case a.key == "" && a.reason == "":
-		return "and would not say why"
-	case a.key == "":
-		return strconv.Quote(a.reason)
-	case a.reason == "" || a.reason == a.key:
-		return a.key
-	}
-	return a.key + ": " + strconv.Quote(a.reason)
+	failed  bool
+	refusal agent.Refusal
 }
 
 // teleportWatch is a teleport being waited for.
@@ -327,7 +373,7 @@ func (t *teleportWatch) arrive(ctx context.Context, what string, timeout time.Du
 
 	switch {
 	case a.failed:
-		return fmt.Errorf("%w: %s: %s", ErrTeleportRefused, what, a.refusal())
+		return &TeleportRefusal{What: what, Key: a.refusal.Key, Reason: a.refusal.Reason}
 	case a.local:
 		// The destination turned out to be in the region already
 		// occupied, so there is nothing to follow and nothing to wait
@@ -432,16 +478,11 @@ func (w *Session) teleportFinishEvent(m map[string]any) {
 //	  subscriber to enter this region."}]}
 //
 // so Message is a key a program could switch on and Reason is sometimes
-// that same key and sometimes a sentence for a person.
+// that same key and sometimes a sentence for a person.  The reading is
+// agent.ReadTeleportFailedEvent, which the daemon uses as well, so that
+// the two agree on which field is the key.
 func (w *Session) teleportFailedEvent(m map[string]any) {
-	a := &teleportAnswer{failed: true}
-	if alert := llsdBlocks(m, "AlertInfo"); len(alert) > 0 {
-		a.key = llsd.String(alert[0], "Message")
-	}
-	if info := llsdBlocks(m, "Info"); len(info) > 0 {
-		a.reason = llsd.String(info[0], "Reason")
-	}
-	w.teleportAnswered(a)
+	w.teleportAnswered(&teleportAnswer{failed: true, refusal: agent.ReadTeleportFailedEvent(m)})
 }
 
 // dist2 is the SQUARED distance: comparing squares avoids a square

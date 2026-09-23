@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -727,6 +728,67 @@ func TestGoHomeSaysWhatCouldNotGoCloserMeans(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "already standing there") {
 		t.Errorf("the refusal %q does not say what CouldntTPCloser usually means", err)
+	}
+}
+
+// TestGoHomeKeepsTheKeyUnderWhatItAdds: GoHome adds a sentence to a
+// refusal it can explain, and the refusal under the sentence is still
+// the grid's, key and all.  A caller asking which refusal it was must
+// get the same answer whether or not this package had something to say
+// about it.
+func TestGoHomeKeepsTheKeyUnderWhatItAdds(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.RegionHandle = 1099511628032
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.TeleportLandmarkRequest); ok {
+			f.RelayEvent(t, "TeleportFailed", agniCouldNotGoCloser)
+		}
+	}
+	f.mu.Unlock()
+
+	err := w.GoHome(context.Background(), 5*time.Second)
+	var r *TeleportRefusal
+	if !errors.As(err, &r) || r.Key != agent.KeyCouldntTPCloser {
+		t.Errorf("GoHome = %v, want a refusal keyed %s", err, agent.KeyCouldntTPCloser)
+	}
+}
+
+// sentenceNamingAKey is a refusal whose key is one thing and whose
+// sentence mentions another.  It was not captured -- no grid has been
+// seen to send one -- and is written to be exactly what a search of the
+// words gets wrong.
+const sentenceNamingAKey = `<llsd><map>` +
+	`<key>AlertInfo</key><array><map>` +
+	`<key>Message</key><string>no_host</string></map></array>` +
+	`<key>Info</key><array><map>` +
+	`<key>Reason</key><string>no_host, and not CouldntTPCloser</string>` +
+	`</map></array></map></llsd>`
+
+// TestGoHomeReadsTheKeyAndNotTheWords: the meaning GoHome adds belongs
+// to one key.  Deciding it by searching the rendered error for that
+// key's spelling would add it to any refusal whose words happened to
+// contain the spelling, and tell somebody whose home region is gone
+// that they are standing in it.
+func TestGoHomeReadsTheKeyAndNotTheWords(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.RegionHandle = 1099511628032
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.TeleportLandmarkRequest); ok {
+			f.RelayEvent(t, "TeleportFailed", sentenceNamingAKey)
+		}
+	}
+	f.mu.Unlock()
+
+	err := w.GoHome(context.Background(), 5*time.Second)
+	if !errors.Is(err, ErrTeleportRefused) {
+		t.Fatalf("GoHome = %v, want a refusal", err)
+	}
+	if strings.Contains(err.Error(), "already standing there") {
+		t.Errorf("a refusal keyed no_host was read as being home already: %v", err)
 	}
 }
 
