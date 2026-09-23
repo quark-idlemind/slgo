@@ -635,13 +635,16 @@ func (s *Server) Presence(ctx context.Context, req *pb.PresenceRequest) (*pb.Pre
 
 	l := a.Look()
 	preference, ceiling := a.Maturity()
+	// The place and the region in one read, so that an arrival landing
+	// in the middle of this answer cannot make it out of two regions.
+	at, handle, region := a.Here()
 	return &pb.PresenceResponse{
-		Position:           vec(a.Position()),
+		Position:           vec(at),
 		LookAt:             vec(l.At),
 		Camera:             vec(l.Center),
 		DrawDistance:       l.Far,
-		RegionHandle:       a.RegionHandle(),
-		Region:             a.RegionName(),
+		RegionHandle:       handle,
+		Region:             region,
 		ActiveGroup:        a.ActiveGroup().String(),
 		Groups:             memberships(a.Groups()),
 		MaturityPreference: preference,

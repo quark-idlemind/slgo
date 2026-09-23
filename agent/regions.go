@@ -177,17 +177,17 @@ type RegionChangeHandler func(name string, handle uint64)
 // regionChanged says that the avatar is in a different region from the
 // one it was in.
 //
-// It is called from the AgentMovementComplete handler and not from the
-// RegionHandshake one, which is where the name, the object store and
-// the terrain change and so is the obvious place for it.  The obvious
-// place is the wrong one, because the handshake does not carry the
-// handle: it arrives afterwards, in AgentMovementComplete, and a notice
-// fired from the handshake would pair the new region's name with the
-// handle of the region the avatar has left -- an answer that is half
-// right, which is worse than none, since the two halves would be
-// checked against each other and disagree.  Both handlers are Inline
-// and the simulator sends the handshake first, so by the time this runs
-// the name is already the new region's.
+// It is called from arrive and not from the RegionHandshake handler,
+// which is where the name, the object store and the terrain change and
+// so is the obvious place for it.  The obvious place is the wrong one,
+// because the handshake does not carry the handle: that comes in
+// AgentMovementComplete, and a notice fired from the handshake would
+// pair the new region's name with the handle of the region the avatar
+// has left -- an answer that is half right, which is worse than none,
+// since the two halves would be checked against each other and
+// disagree.  Nor is the movement enough on its own, since it can be
+// delivered before the handshake; arrive waits for both, so the name
+// this is given is the new region's whichever order they came in.
 //
 // The first arrival of a session is not a change and says nothing.
 // That is what a zero handle behind us means: nothing was held that

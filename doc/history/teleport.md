@@ -604,6 +604,17 @@ harmless end of it.
 `moveTo` waits for the movement message alone. Waiting for both is the
 obvious fix and needs a decision about what to do when only one comes.
 
+Fixed since, by waiting for both. During a move the agent holds
+whichever of the two comes first, and takes the name, the handle and
+the position together when the other arrives (`arrival` in
+`agent/agent.go`); a coarse location from the new simulator is not
+taken before then either, and the daemon's `Presence` reads the three
+in one go. The decision is that a move with only one of them has not
+arrived: it ends the session, as one with no movement already did. The
+reorder is reproduced in `agent/move_test.go` by a fake simulator that
+delivers its handshake behind the movement; it was not seen again on the
+grid to check the fix against.
+
 **A dropped region change is worse than a dropped anything else.** Every
 hop from the daemon to a subscriber drops rather than blocks, because
 blocking any of them stops a stream or the dispatch goroutine; a session

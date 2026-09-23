@@ -120,8 +120,10 @@ type Agent struct {
 	handshook signal
 	loggedOut signal
 
-	// arrived, when a move has installed one, is fired by the next
-	// AgentMovementComplete to arrive.
+	// arrived, when a move has installed one, is fired when the
+	// avatar has arrived in the new region: when both its
+	// RegionHandshake and its AgentMovementComplete have come, in
+	// whichever order they were delivered.  See arrival.
 	//
 	// The four signals above are closed once and stay closed, which is
 	// what Connect and WaitForRegionHandshake want: they ask whether
@@ -131,12 +133,6 @@ type Agent struct {
 	// first answer away from everyone already holding it.  A signal
 	// the move installs and removes is smaller and leaves Connect's
 	// handshake exactly as it was.
-	//
-	// One is enough.  A simulator introduces the region before it
-	// answers the movement request and both handlers are Inline, so a
-	// move that has seen AgentMovementComplete has been through
-	// RegionHandshake already: a second handshook would have nothing
-	// left to wait for.
 	arrived atomic.Pointer[signal]
 
 	// moveMu serializes moves; see moveTo.
@@ -208,6 +204,40 @@ type Agent struct {
 	handle   uint64
 	channel  string
 	kicked   string
+
+	// entering is the region a move is arriving in, from the moment
+	// its circuit is opened until the avatar is there, under mu; nil
+	// at every other time.  See arrival.
+	entering *arrival
+}
+
+// arrival is a region being arrived in, put together out of the two
+// messages that say so.
+//
+// The region's name comes in RegionHandshake and its handle and the
+// avatar's place in it in AgentMovementComplete, and the session is not
+// in the new region until it has both.  The simulator sends them in
+// that order, and UDP does not deliver them in it: a trace on Agni
+// caught the handshake, seq=1, arriving 985ms behind the movement,
+// seq=2.  A session that took each as it came spent that second at the
+// new position, with the new handle, under the old region's name -- so
+// a teleport's read-back named the region it had left, and so did the
+// notice that the region had changed.  In the ordinary order it was the
+// other way about, the new name around the old position, for as long as
+// the movement took to follow.
+//
+// So during a move neither is taken on its own.  Each is held here
+// until the other comes, and then the name, the handle and the position
+// become the session's together, under the one lock anything reading
+// them takes.
+type arrival struct {
+	// named says the handshake has come, and name is what it called
+	// the region.
+	named bool
+	name  string
+
+	// moved is the movement, when it came first.
+	moved *msg.AgentMovementComplete
 }
 
 // signal is a channel closed at most once.
@@ -694,8 +724,17 @@ func (a *Agent) register() {
 
 	a.Disp.MustHandle("RegionHandshake", func(p *msg.Packet) {
 		m := p.Message.(*msg.RegionHandshake)
+		name := trimNul(m.RegionInfo.SimName)
+		var moved *msg.AgentMovementComplete
 		a.mu.Lock()
-		a.regionName = trimNul(m.RegionInfo.SimName)
+		if e := a.entering; e != nil {
+			// A move's: the name waits for the movement, or the
+			// movement that was waiting for it is taken below.
+			e.named, e.name = true, name
+			moved, e.moved = e.moved, nil
+		} else {
+			a.regionName = name
+		}
 		a.regionFlags = m.RegionInfo.RegionFlags
 		a.mu.Unlock()
 
@@ -714,30 +753,18 @@ func (a *Agent) register() {
 		reply.AgentData.SessionID = a.Account.SessionID
 		_ = a.Send.SendReliable(context.Background(), reply)
 		a.handshook.fire()
+
+		// The movement came first and has been waiting for this.  It is
+		// taken after the store has been entered, so that what the
+		// arrival tells anything above is about the region whose
+		// objects are now the ones held.
+		if moved != nil {
+			a.arrive(moved)
+		}
 	}, msg.Inline())
 
 	a.Disp.MustHandle("AgentMovementComplete", func(p *msg.Packet) {
-		m := p.Message.(*msg.AgentMovementComplete)
-		a.mu.Lock()
-		// The handle this session held until now, which is what
-		// says whether the avatar has arrived somewhere it was not,
-		// and the name the handshake just recorded, which is the
-		// new region's; both are read under the one lock so that
-		// the pair cannot be half of each region.
-		was, name := a.handle, a.regionName
-		a.position = m.Data.Position
-		a.lookAt = m.Data.LookAt
-		a.handle = m.Data.RegionHandle
-		a.channel = trimNul(m.SimData.ChannelVersion)
-		a.mu.Unlock()
-		a.setCenter(m.Data.Position)
-		a.inRegion.fire()
-		// A move is waiting for this one rather than for the first
-		// one ever, which inRegion has already answered.
-		if s := a.arrived.Load(); s != nil {
-			s.fire()
-		}
-		a.regionChanged(was, m.Data.RegionHandle, name)
+		a.arrive(p.Message.(*msg.AgentMovementComplete))
 	}, msg.Inline())
 
 	// Keep the camera on the avatar.  AgentUpdate is what puts a
@@ -793,6 +820,15 @@ func (a *Agent) register() {
 		// a teleport -- is kept instead, which is where the avatar was
 		// when something last said properly.
 		a.mu.Lock()
+		if a.entering != nil {
+			// The new region's, and the avatar is not yet there as
+			// far as this session says: the handle and the name are
+			// still the region left's, and a position from here would
+			// be the other region's place under their name.  The
+			// arrival carries a position of its own, and an exact one.
+			a.mu.Unlock()
+			return
+		}
 		at := msg.Vector3{X: float32(l.X), Y: float32(l.Y), Z: float32(l.Z) * 4}
 		if l.Z == coarseTooHigh {
 			at.Z = a.position.Z
@@ -835,6 +871,47 @@ func (a *Agent) register() {
 		a.mu.Unlock()
 		a.fail(&Kicked{Reason: reason})
 	}, msg.Inline())
+}
+
+// arrive takes an AgentMovementComplete: the avatar is in a region, at
+// a position, and the session says so from now on.
+//
+// During a move it is taken only once the new region's handshake has
+// come too, and until then it is held; see arrival for why, and the
+// RegionHandshake handler for the other half, which calls this again
+// with the movement it held.  Outside a move -- the first arrival of a
+// session, or a second one in the region the avatar is already in --
+// the name is whatever the handshake last recorded, which is this
+// circuit's region's or, at login, nothing yet: never another region's.
+func (a *Agent) arrive(m *msg.AgentMovementComplete) {
+	a.mu.Lock()
+	if e := a.entering; e != nil {
+		if !e.named {
+			e.moved = m
+			a.mu.Unlock()
+			return
+		}
+		a.regionName = e.name
+		a.entering = nil
+	}
+	// The handle this session held until now, which is what says
+	// whether the avatar has arrived somewhere it was not, and the name
+	// of the region it has arrived in; both are read under the lock
+	// that writes the place, so that the three cannot be of two regions.
+	was, name := a.handle, a.regionName
+	a.position = m.Data.Position
+	a.lookAt = m.Data.LookAt
+	a.handle = m.Data.RegionHandle
+	a.channel = trimNul(m.SimData.ChannelVersion)
+	a.mu.Unlock()
+	a.setCenter(m.Data.Position)
+	a.inRegion.fire()
+	// A move is waiting for this one rather than for the first one
+	// ever, which inRegion has already answered.
+	if s := a.arrived.Load(); s != nil {
+		s.fire()
+	}
+	a.regionChanged(was, m.Data.RegionHandle, name)
 }
 
 func (a *Agent) handshake(ctx context.Context, timeout time.Duration) error {
@@ -1013,7 +1090,27 @@ func (a *Agent) Position() msg.Vector3 {
 	a.mu.RLock()
 	at := a.position
 	a.mu.RUnlock()
+	return a.seated(at)
+}
 
+// Here is where the avatar is and which region that is, read together.
+//
+// Three calls to Position, RegionHandle and RegionName are three
+// moments, and an arrival that lands between them makes an answer out
+// of two regions: the position of one under the name of the other.
+// Anything that reports where the avatar is as one line should ask
+// here, where the three are read under the one lock the arrival writes
+// them under.
+func (a *Agent) Here() (at msg.Vector3, handle uint64, region string) {
+	a.mu.RLock()
+	at, handle, region = a.position, a.handle, a.regionName
+	a.mu.RUnlock()
+	return a.seated(at), handle, region
+}
+
+// seated is Position's special case for an avatar sitting on something:
+// the place composed out of the seat's, or at when that cannot be done.
+func (a *Agent) seated(at msg.Vector3) msg.Vector3 {
 	// An agent with no account is one nothing has logged in, which
 	// happens in tests and in the moments before a login answers.  It
 	// has no avatar in the store to be seated, and asking for one by a

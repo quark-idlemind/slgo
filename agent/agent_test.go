@@ -33,7 +33,22 @@ type fakeSim struct {
 	// Set to skip a step, to test the timeouts.
 	silent      bool
 	noMovement  bool
+	noHandshake bool
 	kickInstead bool
+
+	// lateHandshake delivers the region handshake BEHIND the arrival,
+	// under the lower sequence number it was sent with, which is the
+	// order a trace on Agni once caught them in: AgentMovementComplete
+	// seq=2, and RegionHandshake seq=1 nearly a second after it.
+	// heldHandshake is the packet waiting, already numbered.
+	lateHandshake bool
+	heldHandshake []byte
+
+	// lateMovement delivers the arrival a while after it is asked for
+	// rather than at once, which holds open the moment between the
+	// handshake and the arrival that a real simulator leaves too short
+	// to look into.
+	lateMovement bool
 }
 
 // waitSeen blocks until the simulator has received a message, or the
@@ -165,10 +180,23 @@ func (f *fakeSim) react(name string) {
 	switch name {
 	case "UseCircuitCode":
 		// The real simulator opens with the region handshake.
+		f.mu.Lock()
+		none, late := f.noHandshake, f.lateHandshake
+		f.mu.Unlock()
+		if none {
+			return
+		}
 		rh := &msg.RegionHandshake{}
 		rh.RegionInfo.SimName = []byte(f.regionNm + "\x00")
 		rh.RegionInfo.RegionFlags = 0x1234
 		rh.RegionInfo2.RegionID = f.regionID
+		if late {
+			held := f.packet(rh, msg.FlagReliable)
+			f.mu.Lock()
+			f.heldHandshake = held
+			f.mu.Unlock()
+			return
+		}
 		f.send(rh, msg.FlagReliable)
 
 	case "CompleteAgentMovement":
@@ -182,7 +210,7 @@ func (f *fakeSim) react(name string) {
 			return
 		}
 		f.mu.Lock()
-		at, handle := f.position, f.handle
+		at, handle, slow := f.position, f.handle, f.lateMovement
 		f.mu.Unlock()
 
 		amc := &msg.AgentMovementComplete{}
@@ -190,29 +218,61 @@ func (f *fakeSim) react(name string) {
 		amc.Data.LookAt = msg.Vector3{X: 1}
 		amc.Data.RegionHandle = handle
 		amc.SimData.ChannelVersion = []byte("Second Life Server 2026-07-10\x00")
+		if slow {
+			time.AfterFunc(lateBy, func() { f.send(amc, msg.FlagReliable) })
+			return
+		}
 		f.send(amc, msg.FlagReliable)
+
+		f.mu.Lock()
+		held := f.heldHandshake
+		f.heldHandshake = nil
+		f.mu.Unlock()
+		if held != nil {
+			// Long enough behind that anything reading the session
+			// between the two is certain to be reading it then, and
+			// on a timer so that the simulator goes on answering
+			// meanwhile, as the real one did.
+			time.AfterFunc(lateBy, func() { f.write(held) })
+		}
 
 	case "LogoutRequest":
 		f.send(&msg.LogoutReply{}, msg.FlagReliable)
 	}
 }
 
+// lateBy is how far behind a late message is delivered.
+const lateBy = 300 * time.Millisecond
+
 func (f *fakeSim) send(m msg.Message, flags uint8) {
+	if out := f.packet(m, flags); out != nil {
+		f.write(out)
+	}
+}
+
+// packet numbers and encodes a message without sending it, so that one
+// can be held back and delivered behind a later one.
+func (f *fakeSim) packet(m msg.Message, flags uint8) []byte {
 	f.mu.Lock()
-	peer := f.peer
 	f.seq++
 	seq := f.seq
+	f.mu.Unlock()
+	body, err := m.Encode()
+	if err != nil {
+		return nil
+	}
+	out := msg.AppendHeader(nil, &msg.Header{Flags: flags, Sequence: seq})
+	out = msg.AppendID(out, msg.IDOf(m))
+	return append(out, body...)
+}
+
+func (f *fakeSim) write(out []byte) {
+	f.mu.Lock()
+	peer := f.peer
 	f.mu.Unlock()
 	if peer == nil {
 		return
 	}
-	body, err := m.Encode()
-	if err != nil {
-		return
-	}
-	out := msg.AppendHeader(nil, &msg.Header{Flags: flags, Sequence: seq})
-	out = msg.AppendID(out, msg.IDOf(m))
-	out = append(out, body...)
 	f.conn.WriteToUDP(out, peer)
 }
 

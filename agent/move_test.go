@@ -551,6 +551,166 @@ func TestAMoveSaysWhichRegionTheAvatarIsInNow(t *testing.T) {
 	}
 }
 
+// TestAHandshakeArrivingBehindTheMovementStillNamesTheNewRegion: the
+// two messages that say the avatar has arrived are sent in order and
+// need not be delivered in it.  A trace on Agni caught the handshake a
+// second behind the movement, and a session that took the movement as
+// the arrival spent that second in the new region, at the new position,
+// calling itself by the name of the region it had left -- which is what
+// a teleport's read-back printed, and what the notice of the change
+// said.  The name and the place have to change together.
+func TestAHandshakeArrivingBehindTheMovementStillNamesTheNewRegion(t *testing.T) {
+	type where struct {
+		name   string
+		handle uint64
+	}
+	told := make(chan where, 4)
+	a, from, to := twoRegions(t, Options{SkipCaps: true,
+		OnRegionChange: func(name string, handle uint64) { told <- where{name, handle} }})
+	to.sim.mu.Lock()
+	to.sim.lateHandshake = true
+	to.sim.mu.Unlock()
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+
+	// Read at once: the move has returned, which is the moment a
+	// teleport's caller reads where it has got to.
+	at, handle, name := a.Here()
+	wantAt, wantHandle := to.sim.arrival()
+	if name != to.sim.regionNm || handle != wantHandle || at != wantAt {
+		t.Errorf("after the move the session says %q handle %d at %v, want %q handle %d at %v; "+
+			"the region left is %q", name, handle, at, to.sim.regionNm, wantHandle, wantAt,
+			from.sim.regionNm)
+	}
+
+	select {
+	case got := <-told:
+		if got.name != to.sim.regionNm || got.handle != wantHandle {
+			t.Errorf("the change was told as %q handle %d, want %q handle %d",
+				got.name, got.handle, to.sim.regionNm, wantHandle)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a move said nothing about the region changing")
+	}
+}
+
+// TestTheNewRegionsNameIsNotTakenBeforeTheAvatarIsThere: the other half
+// of keeping the name and the place together.  In the ordinary order the
+// handshake comes first, and a session that took the new name from it
+// at once would answer, until the movement arrived, with the name of a
+// region it had not reached around a position in the one it had not yet
+// left.
+func TestTheNewRegionsNameIsNotTakenBeforeTheAvatarIsThere(t *testing.T) {
+	a, from, to := twoRegions(t, Options{SkipCaps: true})
+	to.sim.mu.Lock()
+	to.sim.lateMovement = true
+	to.sim.mu.Unlock()
+
+	moved := make(chan error, 1)
+	go func() { moved <- a.moveTo(context.Background(), to.sim.addr(), to.seed()) }()
+
+	// The reply is sent once the handshake has been handled, and the
+	// movement is a timer's length behind it.
+	to.sim.waitSeen(t, "RegionHandshakeReply", 5*time.Second)
+	at, handle, name := a.Here()
+	wasAt, wasHandle := from.sim.arrival()
+	if name != from.sim.regionNm || handle != wasHandle || at != wasAt {
+		t.Errorf("between the handshake and the movement the session says %q handle %d at %v, "+
+			"want the region it has not yet left: %q handle %d at %v",
+			name, handle, at, from.sim.regionNm, wasHandle, wasAt)
+	}
+
+	if err := <-moved; err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if got := a.RegionName(); got != to.sim.regionNm {
+		t.Errorf("region = %q after the move, want %q", got, to.sim.regionNm)
+	}
+}
+
+// TestTheNewRegionsCoarseLocationWaitsForTheArrival: the new simulator
+// starts saying where the avatar is as soon as the circuit is open, and
+// it may say so before the arrival has been put together.  Taken then,
+// the new region's coarse position would sit under the old region's
+// handle and name, which is the fault the arrival exists to prevent
+// arriving by another door.
+func TestTheNewRegionsCoarseLocationWaitsForTheArrival(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	handshake := func(name string) *msg.RegionHandshake {
+		m := &msg.RegionHandshake{}
+		m.RegionInfo.SimName = []byte(name + "\x00")
+		return m
+	}
+	movement := func(at msg.Vector3, handle uint64) *msg.AgentMovementComplete {
+		m := &msg.AgentMovementComplete{}
+		m.Data.Position = at
+		m.Data.LookAt = msg.Vector3{X: 1}
+		m.Data.RegionHandle = handle
+		return m
+	}
+	leftAt, left := msg.Vector3{X: 188, Y: 202, Z: 26}, msg.RegionHandle(43648, 43648)
+	feed(t, a, handshake("the region left"), movement(leftAt, left))
+
+	// What moveTo marks before the socket changes.
+	a.mu.Lock()
+	a.entering = &arrival{}
+	a.mu.Unlock()
+
+	coarse := &msg.CoarseLocationUpdate{}
+	coarse.Location = []msg.CoarseLocationUpdate_Location{{X: 12, Y: 240, Z: 7}}
+	feed(t, a, coarse)
+	if at, handle, name := a.Here(); at != leftAt || handle != left || name != "the region left" {
+		t.Errorf("before the arrival the session says %q handle %d at %v, want %q handle %d at %v",
+			name, handle, at, "the region left", left, leftAt)
+	}
+
+	arrivedAt, arrived := msg.Vector3{X: 12.5, Y: 240.25, Z: 30.5}, msg.RegionHandle(43649, 43648)
+	feed(t, a, movement(arrivedAt, arrived), handshake("the region arrived at"))
+	if at, handle, name := a.Here(); at != arrivedAt || handle != arrived || name != "the region arrived at" {
+		t.Errorf("after the arrival the session says %q handle %d at %v, want %q handle %d at %v",
+			name, handle, at, "the region arrived at", arrived, arrivedAt)
+	}
+
+	// And once it has arrived, the coarse updates are its own again.
+	feed(t, a, coarse)
+	if want := (msg.Vector3{X: 12, Y: 240, Z: 28}); a.Position() != want {
+		t.Errorf("after the arrival a coarse update left the avatar at %v, want %v",
+			a.Position(), want)
+	}
+}
+
+// TestAMoveWhoseRegionNeverIntroducesItselfEndsTheSession: an arrival
+// with no handshake is a session in a region it has no name for, holding
+// the objects of the one it left, and never having answered the
+// handshake that would have the new one describe anything.  That is not
+// a session to keep, and it is ended as one whose movement never came is
+// ended.
+func TestAMoveWhoseRegionNeverIntroducesItselfEndsTheSession(t *testing.T) {
+	t.Parallel()
+
+	a, _, to := twoRegions(t, Options{SkipCaps: true, Timeout: 500 * time.Millisecond})
+	to.sim.mu.Lock()
+	to.sim.noHandshake = true
+	to.sim.mu.Unlock()
+
+	err := a.moveTo(context.Background(), to.sim.addr(), to.seed())
+	if err == nil {
+		t.Fatal("a region that never sent its handshake was taken for a successful move")
+	}
+	if !strings.Contains(err.Error(), "RegionHandshake") {
+		t.Errorf("error %q does not say what never came", err)
+	}
+	select {
+	case <-a.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the session outlived the move that failed")
+	}
+}
+
 // TestArrivingAgainInTheRegionWeAreInIsNotAChange: an
 // AgentMovementComplete naming the handle this session already has says
 // the avatar is where it was.  There is nothing stale to drop, and the

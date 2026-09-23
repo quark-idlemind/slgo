@@ -124,7 +124,9 @@ func (s *socket) Close() error {
 //     unacknowledged packets go because they were composed for a
 //     simulator that will never acknowledge them, and retransmitting
 //     them into the new region is worse than losing them.
-//  4. Handshake, which is what says the avatar is really there.
+//  4. Handshake, which is what says the avatar is really there -- and
+//     that is the region's handshake AND the movement's answer, in
+//     whichever order they are delivered; see arrival.
 //  5. Stop the event queue BEFORE the capabilities are replaced.  The
 //     poll holds one region's URL for its whole life, and its last act
 //     is to close that queue; letting the set change under it first is
@@ -143,10 +145,12 @@ func (s *socket) Close() error {
 // than after the watchdog's minute, and a reconnect is a fresh login,
 // which lands the avatar wherever the grid thinks it is.
 //
-// The region's own facts need nothing here.  The new simulator sends a
-// RegionHandshake like any other, and the handler for it already swaps
-// the object store, drops the terrain and the appearances and records
-// the new name and flags.
+// The region's own facts need nothing here but the one mark that a move
+// is arriving.  The new simulator sends a RegionHandshake like any
+// other, and the handler for it already swaps the object store, drops
+// the terrain and the appearances and records the flags; the name it
+// holds with the movement until both have come, which is what the mark
+// is for.
 func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) error {
 	if addr == nil {
 		return fmt.Errorf("agent: moveTo needs an address")
@@ -203,6 +207,9 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 	arrived := newSignal()
 	a.arrived.Store(&arrived)
 	defer a.arrived.Store(nil)
+	a.mu.Lock()
+	a.entering = &arrival{}
+	a.mu.Unlock()
 
 	old := a.sock.swap(conn)
 	// Last, whichever way this ends.  While the handshake is out the
@@ -228,8 +235,10 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 	if err := a.sendCompleteAgentMovement(ctx); err != nil {
 		return a.moveFailed(addr, err)
 	}
-	if err := a.await(ctx, arrived.wait(), timeout, "AgentMovementComplete"); err != nil {
-		return a.moveFailed(addr, err)
+	// Both, and not the movement alone: see arrival.
+	if err := a.await(ctx, arrived.wait(), timeout,
+		"the new region's RegionHandshake and AgentMovementComplete"); err != nil {
+		return a.moveFailed(addr, fmt.Errorf("%w; %s", err, a.heardOfArrival()))
 	}
 
 	a.stopEventQueue()
@@ -290,6 +299,26 @@ func (a *Agent) moveFailed(addr *net.UDPAddr, err error) error {
 	e := fmt.Errorf("agent: move to %s: %w", addr, err)
 	a.fail(e)
 	return e
+}
+
+// heardOfArrival says which half of an arrival came, for the error a
+// move that never arrived ends the session with: a region that answered
+// the movement and never introduced itself is a different fault from
+// one that said nothing at all, and the timeout alone cannot tell them
+// apart.
+func (a *Agent) heardOfArrival() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	e := a.entering
+	switch {
+	case e == nil:
+		return "the arrival came as the wait gave up"
+	case e.named:
+		return "the handshake came and the movement did not"
+	case e.moved != nil:
+		return "the movement came and the handshake did not"
+	}
+	return "neither came"
 }
 
 // forgetURLs drops the addresses a capability reply offered, which are

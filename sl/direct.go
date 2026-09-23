@@ -240,13 +240,15 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 	}
 	l := d.a.Look()
 	preference, ceiling := d.a.Maturity()
+	// The place and the region in one read; see agent.Agent.Here.
+	at, handle, region := d.a.Here()
 	return &Presence{
-		Position:     d.a.Position(),
+		Position:     at,
 		LookAt:       l.At,
 		Camera:       l.Center,
 		DrawDistance: l.Far,
-		RegionHandle: d.a.RegionHandle(),
-		Region:       d.a.RegionName(),
+		RegionHandle: handle,
+		Region:       region,
 		ActiveGroup:  d.a.ActiveGroup(),
 		Groups:       groupsFromAgent(d.a.Groups()),
 
