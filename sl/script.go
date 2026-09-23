@@ -48,6 +48,15 @@ type Script struct {
 	// starts it, which is what running a script means.
 	NotRunning bool
 
+	// KeepRunning leaves the script running after the run.
+	//
+	// By default it is stopped when the run ends, however it ends --
+	// finished, timed out, faulted or interrupted -- because a script
+	// left running goes on doing whatever it does, chatting included,
+	// long after anybody is listening.  It stays in the object, stopped,
+	// so that the next run with its name updates it in place.
+	KeepRunning bool
+
 	// IgnoreFault stops a run-time fault ending the run.
 	//
 	// By default a fault the simulator blames on this script ends the
@@ -122,6 +131,12 @@ type Result struct {
 	Fault *Fault
 
 	Elapsed time.Duration
+
+	// Warnings are what went wrong around the run without spoiling it:
+	// a copy that could not be tidied away, an earlier run's script that
+	// could not be confirmed stopped.  Worth saying; not worth failing
+	// the run over.
+	Warnings []string
 }
 
 // Failed reports whether the script did not get to the end: it either
@@ -171,7 +186,7 @@ func (r *Result) Contains(s string) bool {
 // capability wants.  And the compile result is checked before waiting,
 // because waiting a minute for output from something that did not
 // compile is a slow way to learn nothing.
-func (w *Session) Run(ctx context.Context, s Script) (*Result, error) {
+func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	if s.In == nil {
 		return nil, fmt.Errorf("sl: Run needs an object to run in")
 	}
@@ -181,6 +196,8 @@ func (w *Session) Run(ctx context.Context, s Script) (*Result, error) {
 	if s.Timeout == 0 {
 		s.Timeout = 60 * time.Second
 	}
+
+	var warnings []string
 
 	// Find or create the copy inside the object.
 	task, err := w.FindInObject(ctx, s.In, s.Name)
@@ -205,6 +222,16 @@ func (w *Session) Run(ctx context.Context, s Script) (*Result, error) {
 		if task == nil {
 			return nil, fmt.Errorf("sl: %q never turned up inside %s", s.Name, s.In)
 		}
+		// The copy in the avatar's inventory was only the way in.  The
+		// object has its own now, which is the one every later run
+		// updates, and one of these was being left behind in inventory
+		// for every object a script was ever put into.
+		if err := w.DeleteItem(ctx, it.ID); err != nil {
+			warnings = append(warnings, fmt.Sprintf(
+				"the copy of %q in inventory could not be deleted: %v", s.Name, err))
+		}
+	} else if note := w.stopEarlier(ctx, s.In, task.ID, s.Name); note != "" {
+		warnings = append(warnings, note)
 	}
 
 	// Listen before compiling.
@@ -217,13 +244,30 @@ func (w *Session) Run(ctx context.Context, s Script) (*Result, error) {
 	w.startCollector(col)
 	defer w.stopCollector(col)
 
+	// Stopped when the run ends, however it ends.  Registered before the
+	// install rather than after it succeeds, because an install that
+	// failed on the way back may still have started the script.  On a
+	// context of its own: an interrupted run is the one that most needs
+	// this, and its context is already cancelled.
+	if !s.KeepRunning && !s.NotRunning {
+		defer func() {
+			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			if serr := w.SetScriptRunning(sctx, s.In, task.ID, false); serr != nil && res != nil {
+				res.Warnings = append(res.Warnings, fmt.Sprintf(
+					"%q could not be stopped and may still be running: %v", s.Name, serr))
+			}
+		}()
+	}
+
 	start := time.Now()
 	up, err := w.install(ctx, task.ID, s.In.ID, s.Source, !s.NotRunning)
 	if err != nil {
 		return nil, err
 	}
 
-	res := &Result{
+	res = &Result{
+		Warnings: warnings,
 		Compiled: up.Compiled,
 		Errors:   up.Errors,
 		State:    up.State,
@@ -282,6 +326,54 @@ func (w *Session) Run(ctx context.Context, s Script) (*Result, error) {
 	res.Lines = col.collected()
 	res.Elapsed = time.Since(start)
 	return res, nil
+}
+
+// earlierAnswer bounds the wait for an object to say whether an earlier
+// run's script is still running, and earlierDrain is how long to let
+// chat already sent by one that has just been stopped arrive before
+// listening -- chat and the answer come by different routes, so the
+// answer arriving says nothing about the chat.
+var (
+	earlierAnswer = 5 * time.Second
+	earlierDrain  = time.Second
+)
+
+// stopEarlier makes sure the script an earlier run left under this name
+// is not running before this run starts listening, and says what it
+// could not make sure of.
+//
+// A run's output is the chat that comes from its object, and chat names
+// the object and not the script -- so a copy left running by an earlier
+// run that was killed before it could stop it would be heard as this
+// one, its "done" included, which can end this run before its own
+// script has said a word.  Only this name is touched: the object may
+// hold scripts that are nothing to do with running this one, and those
+// are not this call's to stop.
+//
+// A run that ended normally has already stopped its copy, so the usual
+// cost is one question.
+func (w *Session) stopEarlier(ctx context.Context, o *Object, item msg.UUID, name string) string {
+	running, err := w.ScriptRunning(ctx, o, item, earlierAnswer)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ""
+		}
+		return fmt.Sprintf("could not learn whether an earlier %q is still running, "+
+			"so its chat may be heard as this run's: %v", name, err)
+	}
+	if !running {
+		return ""
+	}
+	if err := w.SetScriptRunning(ctx, o, item, false); err != nil {
+		return fmt.Sprintf("an earlier %q is running and could not be stopped, "+
+			"so its chat may be heard as this run's: %v", name, err)
+	}
+	if still, err := w.ScriptRunning(ctx, o, item, earlierAnswer); err != nil || still {
+		return fmt.Sprintf("an earlier %q was running and was not confirmed stopped, "+
+			"so its chat may be heard as this run's", name)
+	}
+	_ = w.Settle(ctx, earlierDrain)
+	return ""
 }
 
 // RemoveScripts deletes scripts from an object whose names match, which

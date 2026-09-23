@@ -110,6 +110,15 @@ type fakeBackend struct {
 	// reader waiting for itself.
 	onSend func(msg.Message)
 
+	// scripts is whether each script is running, as a simulator would
+	// know it: SetScriptRunning sets it, and GetScriptRunning is answered
+	// from it -- not running, for a script never set -- unless onSend is
+	// answering instead or quietScripts says the region says nothing.
+	// t is what the answer is relayed with.
+	scripts      map[msg.UUID]bool
+	quietScripts bool
+	t            *testing.T
+
 	presence    *Presence
 	presenceErr error
 
@@ -181,6 +190,8 @@ func newFake(t *testing.T) *fakeBackend {
 			InventoryRoot: testInvRoot,
 			Channel:       "slgo test 1.0",
 		},
+		t:        t,
+		scripts:  map[msg.UUID]bool{},
 		msgs:     make(chan *Message),
 		events:   make(chan *QueueEvent),
 		regions:  make(chan *RegionChange),
@@ -664,9 +675,18 @@ func (f *fakeBackend) Refreshes() int {
 
 func (f *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	f.mu.Lock()
-	err, onSend := f.sendErr, f.onSend
+	err, onSend, quiet := f.sendErr, f.onSend, f.quietScripts
+	var answer *msg.ScriptRunningReply
 	if err == nil {
 		f.sent = append(f.sent, sentMessage{Msg: m, Reliable: reliable})
+		switch q := m.(type) {
+		case *msg.SetScriptRunning:
+			f.scripts[q.Script.ItemID] = q.Script.Running
+		case *msg.GetScriptRunning:
+			if onSend == nil && !quiet {
+				answer = scriptRunningReply(q.Script.ObjectID, q.Script.ItemID, f.scripts[q.Script.ItemID])
+			}
+		}
 	}
 	f.mu.Unlock()
 	if err != nil {
@@ -674,6 +694,9 @@ func (f *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) er
 	}
 	if onSend != nil {
 		onSend(m)
+	}
+	if answer != nil {
+		f.Relay(f.t, answer)
 	}
 	return nil
 }

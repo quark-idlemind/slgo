@@ -23,6 +23,7 @@ package sl
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -1006,6 +1007,7 @@ func askRunning(w *Session, ctx context.Context, o *Object, item msg.UUID, timeo
 func TestScriptRunningAnswersOnlyForTheScriptItWasAskedAbout(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
+	f.quietScripts = true // the answers here are relayed by hand
 	o := &Object{ID: thePrim, Local: 77}
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
@@ -1047,6 +1049,7 @@ func TestScriptRunningAnswersOnlyForTheScriptItWasAskedAbout(t *testing.T) {
 func TestScriptRunningBelievesAStoppedScriptToo(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
+	f.quietScripts = true // the answers here are relayed by hand
 	o := &Object{ID: thePrim, Local: 77}
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
@@ -1080,6 +1083,7 @@ func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
 	t.Run("nothing answered", func(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
+		f.quietScripts = true // the answers here are relayed by hand
 		is, err := w.ScriptRunning(context.Background(), o, theChild, 200*time.Millisecond)
 		if !errors.Is(err, ErrTimeout) {
 			t.Errorf("ScriptRunning = %v, %v; want a timeout", is, err)
@@ -1097,6 +1101,7 @@ func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
 	t.Run("the question never went", func(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
+		f.quietScripts = true // the answers here are relayed by hand
 		f.FailSends(errors.New("the circuit is gone"))
 		if is, err := w.ScriptRunning(context.Background(), o, theChild, 30*time.Second); err == nil {
 			t.Errorf("ScriptRunning = %v with the circuit gone", is)
@@ -1109,6 +1114,7 @@ func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
 	t.Run("the caller gave up waiting", func(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
+		f.quietScripts = true // the answers here are relayed by hand
 		ctx, cancel := context.WithCancel(context.Background())
 		got := askRunning(w, ctx, o, theChild, 30*time.Second)
 		waitSent[*msg.GetScriptRunning](t, f)
@@ -1126,6 +1132,7 @@ func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
 	t.Run("no object to ask about", func(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
+		f.quietScripts = true // the answers here are relayed by hand
 		if _, err := w.ScriptRunning(context.Background(), nil, theChild, time.Second); err == nil {
 			t.Error("ScriptRunning asked about no object at all")
 		}
@@ -1199,6 +1206,7 @@ func agniScriptRunning(object, item msg.UUID, running string) string {
 func TestTheAnswerAboutAScriptComesOffTheEventQueue(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
+	f.quietScripts = true // the answers here are relayed by hand
 	o := &Object{ID: thePrim, Local: 77}
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
@@ -1245,6 +1253,7 @@ func TestTheAnswerAboutAScriptComesOffTheEventQueue(t *testing.T) {
 func TestAnEventQueueAnswerIsSiftedTheWayAMessageIs(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
+	f.quietScripts = true // the answers here are relayed by hand
 	o := &Object{ID: thePrim, Local: 77}
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
@@ -1294,6 +1303,7 @@ func TestAnEventQueueAnswerIsSiftedTheWayAMessageIs(t *testing.T) {
 func TestABlockThatIsNotAnArrayIsStillABlock(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
+	f.quietScripts = true // the answers here are relayed by hand
 	o := &Object{ID: thePrim, Local: 77}
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
@@ -1322,6 +1332,7 @@ func TestABlockThatIsNotAnArrayIsStillABlock(t *testing.T) {
 func TestTheEventQueueEndingIsNotTheSessionEnding(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
+	f.quietScripts = true // the answers here are relayed by hand
 	o := &Object{ID: thePrim, Local: 77}
 
 	f.EndEvents()
@@ -1436,5 +1447,170 @@ func TestTheScriptGoesOutWithANewlineInFrontOfIt(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("nothing was uploaded")
+	}
+}
+
+// stopsSent is every SetScriptRunning sent for this script that stops it.
+func stopsSent(f *fakeBackend, item msg.UUID) int {
+	n := 0
+	for _, m := range sentOf[*msg.SetScriptRunning](f) {
+		if m.Script.ItemID == item && !m.Script.Running {
+			n++
+		}
+	}
+	return n
+}
+
+// TestARunStopsItsScriptHoweverItEnds.
+//
+// A script left running goes on doing what it does -- chatting,
+// listening, holding memory -- long after anybody is listening, and an
+// object that has one would have it heard as the next run's output.  So
+// the run stops it at the end: finished, timed out or interrupted, the
+// last on a context of its own, since the run's own is cancelled by then.
+func TestARunStopsItsScriptHoweverItEnds(t *testing.T) {
+	o := &Object{ID: thePrim, Local: 77}
+	for _, c := range []struct {
+		name string
+		end  func(t *testing.T, f *fakeBackend, cancel func())
+		keep bool
+		want int
+	}{
+		{"it finished", func(t *testing.T, f *fakeBackend, _ func()) {
+			f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+		}, false, 1},
+		{"it timed out", func(*testing.T, *fakeBackend, func()) {}, false, 1},
+		{"it was interrupted", func(_ *testing.T, _ *fakeBackend, cancel func()) { cancel() }, false, 1},
+		{"it was asked to keep running", func(t *testing.T, f *fakeBackend, _ func()) {
+			f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+		}, true, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			up := serveUpload(t, f, "UpdateScriptTask", compiles)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			wait := aside(t, func() (*Result, error) {
+				return w.Run(ctx, Script{
+					In: o, Name: "a script", Source: "default {}", Done: "FINISHED",
+					Timeout: 300 * time.Millisecond, KeepRunning: c.keep,
+				})
+			})
+			answerContents(t, f, thePrim, theContentsFile)
+			<-up.body
+			c.end(t, f, cancel)
+			wait()
+
+			if got := stopsSent(f, theChild); got != c.want {
+				t.Errorf("%d stops sent for the script, want %d", got, c.want)
+			}
+		})
+	}
+}
+
+// TestAnEarlierCopyStillRunningIsStoppedBeforeTheRunListens.
+//
+// A run's output is the chat from its object, and chat names the object
+// and not the script.  A copy left running by a run that was killed
+// before it could stop it would be heard as this one -- its "done"
+// included -- so it is stopped, and confirmed stopped, before this run
+// starts listening and long before the new script goes in.
+func TestAnEarlierCopyStillRunningIsStoppedBeforeTheRunListens(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.scripts[theChild] = true // left running by a run that was killed
+	f.mu.Unlock()
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+
+	<-up.asked // the install has begun
+	if got := stopsSent(f, theChild); got != 1 {
+		t.Errorf("%d stops sent before the install, want the earlier copy stopped", got)
+	}
+	if got := len(sentOf[*msg.GetScriptRunning](f)); got != 2 {
+		t.Errorf("asked %d times whether it was running, want before and after the stop", got)
+	}
+
+	<-up.body
+	f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+	res, err := wait()
+	if err != nil || !res.Finished || len(res.Warnings) != 0 {
+		t.Errorf("Run = %+v, %v", res, err)
+	}
+}
+
+// TestAnEarlierCopyThatStoppedCostsOneQuestion: a run that ended
+// normally stopped its own copy, so the next one only has to ask.
+func TestAnEarlierCopyThatStoppedCostsOneQuestion(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+	<-up.asked
+	if got := stopsSent(f, theChild); got != 0 {
+		t.Errorf("%d stops sent for a copy that was not running", got)
+	}
+	<-up.body
+	f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+	wait()
+}
+
+// TestTheCopyInInventoryIsDeletedOnceTheObjectHasItsOwn: the script goes
+// into an object by way of the avatar's inventory, and the copy there has
+// done its job once the object holds one.  It used to be left behind, one
+// for every object a script was ever put into.
+func TestTheCopyInInventoryIsDeletedOnceTheObjectHasItsOwn(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	serveUpload(t, f, "UpdateScriptAgent", compiles)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+	deleted := make(chan string, 4)
+	f.ServeCap(t, "InventoryAPIv3", func(rw http.ResponseWriter, r *http.Request) {
+		deleted <- r.Method + " " + r.URL.Path
+		rw.WriteHeader(http.StatusOK)
+	})
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+	held := objectHolding(f, thePrim)
+	held.answer(t, "")
+	m := waitSent[*msg.CreateInventoryItem](t, f)
+	relayCreated(t, f, m.InventoryBlock.CallbackID)
+	waitSent[*msg.UpdateTaskInventory](t, f)
+	held.answer(t, theContentsFile)
+
+	select {
+	case got := <-deleted:
+		if want := "DELETE /item/" + theChild.String(); got != want {
+			t.Errorf("asked %q, want %q", got, want)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the copy in inventory was never deleted")
+	}
+	<-up.body
+	f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
+	if res, err := wait(); err != nil || len(res.Warnings) != 0 {
+		t.Errorf("Run = %+v, %v", res, err)
 	}
 }

@@ -500,6 +500,14 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 			say("%s%s\n", tag(path), l.Text)
 		},
 	})
+	// What went wrong around the run without spoiling it -- a script
+	// that could not be stopped, a copy that could not be tidied away --
+	// is said whatever became of the run, an interrupted one included.
+	if res != nil {
+		for _, w := range res.Warnings {
+			fmt.Fprintf(os.Stderr, "slrun: %s%s\n", tag(path), w)
+		}
+	}
 	if err != nil {
 		if !quiet(err) {
 			say("%s%v\n", tag(path), err)

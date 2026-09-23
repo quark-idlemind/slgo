@@ -991,6 +991,34 @@ once: three runs in eight failed that way before, none in eight after.
 from a Makefile or a test script. It exits 0 only if every script
 compiled, ran and finished.
 
+### What is left behind
+
+The script stays in the object, **stopped**, under its name -- `slrun`
+unless `--script` says otherwise -- so the next run with that name
+updates it in place instead of putting a new one in.  It is stopped
+however the run ends: finished, crashed, timed out, or interrupted with
+^C.  A script left running would go on doing whatever it does, and its
+chat would be heard as the next run's output.
+
+A `slrun` killed outright, or interrupted twice, has no chance to stop
+it.  The next run in that object with the same name does, before it
+starts listening, so a leftover cannot say `DONE` for the new script.
+In the shared pool "that object" is one particular prim, and the next
+run may be given a different one: the leftover goes on running until a
+run lands on its prim.  `-j` with as many scripts as the avatar has
+objects lands on every one.
+Nothing else in the object is touched -- scripts under other names may
+be there for reasons of their own -- so a run with a different
+`--script` name leaves an earlier one running until you stop it.
+
+Putting a script into an object for the first time goes by way of your
+inventory, and that copy is deleted once the object has its own.  A
+`--rez` prim goes to your Trash when the run ends, unless `--keep`
+says to leave it; a `slrun` killed outright leaves it in the world.
+
+Anything that could not be tidied away is said on standard error, and
+does not fail the run.
+
 ### Options
 
 | | |

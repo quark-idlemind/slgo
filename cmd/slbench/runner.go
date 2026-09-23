@@ -22,6 +22,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/quark-idlemind/slgo/sl"
@@ -98,6 +99,11 @@ func (r *runner) sendIn(p place, src string) (results, info []string, err error)
 		Done:    "DONE",
 		Timeout: r.Timeout,
 	})
+	if res != nil {
+		for _, w := range res.Warnings {
+			fmt.Fprintf(os.Stderr, "slbench: %s\n", w)
+		}
+	}
 	if err != nil {
 		return nil, nil, err
 	}

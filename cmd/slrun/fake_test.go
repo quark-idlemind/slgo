@@ -49,6 +49,10 @@ var (
 type fakeGrid struct {
 	mu sync.Mutex
 
+	// scripts is whether each script is running, as SetScriptRunning
+	// last left it.
+	scripts map[msg.UUID]bool
+
 	info *sl.Info
 	msgs chan *sl.Message
 	done chan struct{}
@@ -282,6 +286,26 @@ func (f *fakeGrid) ServeCap(t *testing.T, name string, h http.HandlerFunc) *http
 // the reader that is waiting for it.
 func (f *fakeGrid) answer(m msg.Message) {
 	switch v := m.(type) {
+	case *msg.SetScriptRunning:
+		// Remembered, so that the question below is answered as a
+		// simulator would answer it.
+		f.mu.Lock()
+		if f.scripts == nil {
+			f.scripts = map[msg.UUID]bool{}
+		}
+		f.scripts[v.Script.ItemID] = v.Script.Running
+		f.mu.Unlock()
+
+	case *msg.GetScriptRunning:
+		// Every run asks whether the script an earlier run left is still
+		// running before it starts listening, and a region answers.
+		f.mu.Lock()
+		running := f.scripts[v.Script.ItemID]
+		f.mu.Unlock()
+		r := &msg.ScriptRunningReply{}
+		r.Script.ObjectID, r.Script.ItemID, r.Script.Running = v.Script.ObjectID, v.Script.ItemID, running
+		f.relay(r)
+
 	case *msg.RequestTaskInventory:
 		r := &msg.ReplyTaskInventory{}
 		r.InventoryData.TaskID = f.obj.ID
