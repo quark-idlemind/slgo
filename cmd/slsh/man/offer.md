@@ -30,11 +30,12 @@ second one does not cancel the first.
 
 ## Who a name may be
 
-The session's cache is asked, and then whoever is standing in the
-region.  The grid's search is not: this reaches out to somebody, and a
-name guessed at wrong offers friendship to a stranger.  `lookup` makes
-that search when it is wanted, and the number it prints is what to give
-this.
+The session's cache is asked, then whoever is standing in the region,
+and last the grid's own search, the way `im` does it.  This reaches out
+to somebody, and a name guessed at wrong offers friendship to a
+stranger, so what the search finds is taken only when it is the whole
+name -- `Example Resident`, or `example.resident` -- and anything less
+is listed, numbered and refused.  The number is what to give this.
 
 ## Examples
 
@@ -50,4 +51,4 @@ shell's own listings use.
 
 See also: `offers`, `accept` and `decline` for the offers coming the
 other way, `friends` for the list an accepted one joins, `lure` for
-offering a teleport, and `lookup` for finding somebody who is not here.
+offering a teleport, and `lookup` for somebody known by part of a name.

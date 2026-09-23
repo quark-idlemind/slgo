@@ -345,7 +345,7 @@ func cmdChat(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return err
 	}
 	if len(args) > 0 {
-		id, name, err := sh.who(ctx, strings.Join(args, " "))
+		id, name, err := sh.who(ctx, out, strings.Join(args, " "))
 		if err != nil {
 			return err
 		}
@@ -393,7 +393,7 @@ func cmdIM(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	if len(args) == 0 {
 		return usageError("im")
 	}
-	id, name, rest, err := sh.whoAndRest(ctx, args)
+	id, name, rest, err := sh.whoAndRest(ctx, out, args)
 	if err != nil {
 		return err
 	}
@@ -651,8 +651,8 @@ func cmdProfile(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 //
 // # Why the fallback exists
 //
-// sh.who reaches whoever has been mentioned and whoever is standing in
-// the region, which is everybody a shell usually talks about and not
+// sh.whoNear reaches whoever has been mentioned and whoever is standing
+// in the region, which is everybody a shell usually talks about and not
 // everybody there is.  Somebody on the other side of the grid has been
 // mentioned to nobody and is standing nowhere near, so
 //
@@ -662,17 +662,19 @@ func cmdProfile(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 // the question one asks about somebody who is not here, so the command
 // that answers it should not be the one command that cannot find them.
 //
-// # Why it is not in sh.who
+// # Why it is not the search sh.who makes
 //
-// Because of what the other callers do with the answer.  Reading a
-// profile is a public question about somebody, answered by the grid to
-// anybody who asks: nothing reaches the person, nothing is spent, and
-// guessing wrong costs a wasted listing on the screen.  im, offer and
-// give reach OUT -- a message arrives, a friendship is offered, an item
-// changes hands -- and a name guessed at there delivers it to a
-// stranger, which is a different kind of mistake and not one to make on
-// somebody's behalf because a search was convenient.  The region is a
-// different matter and is in sh.who for everybody: see there.
+// sh.who searches too, and takes less from it, because of what its
+// callers do with the answer.  Reading a profile is a public question
+// about somebody, answered by the grid to anybody who asks: nothing
+// reaches the person, nothing is spent, and guessing wrong costs a
+// wasted listing on the screen.  im, offer and give reach OUT -- a
+// message arrives, a friendship is offered, an item changes hands --
+// and a name guessed at there delivers it to a stranger, which is a
+// different kind of mistake and not one to make on somebody's behalf
+// because a search was convenient.  So they take a whole name from the
+// grid and nothing less (see onTheGrid), where this takes the one row a
+// search returned and a username typed alone as well.
 //
 // # What it does with what it finds
 //
@@ -693,7 +695,7 @@ func cmdProfile(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 // a number that was not in the last listing means the listing, not
 // somebody called "3".
 func (sh *Shell) whoOrSearch(ctx context.Context, out io.Writer, want string) (msg.UUID, string, error) {
-	id, name, err := sh.who(ctx, want)
+	id, name, err := sh.whoNear(ctx, want)
 	if err == nil {
 		return id, name, nil
 	}
@@ -772,7 +774,7 @@ func cmdOffer(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	if len(args) == 0 {
 		return usageError("offer")
 	}
-	id, name, rest, err := sh.whoAndRest(ctx, args)
+	id, name, rest, err := sh.whoAndRest(ctx, out, args)
 	if err != nil {
 		return err
 	}
@@ -806,7 +808,7 @@ func cmdLure(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if len(args) == 0 {
 		return usageError("lure")
 	}
-	id, name, rest, err := sh.whoAndRest(ctx, args)
+	id, name, rest, err := sh.whoAndRest(ctx, out, args)
 	if err != nil {
 		return err
 	}
@@ -1031,9 +1033,24 @@ func (sh *Shell) offer(args []string) (*sl.Offer, error) {
 // "there is no 9 in the last listing" into a report about somebody
 // called nine.  whoAndRest treats it as the signal to try a shorter run
 // of words -- see there.
-type unknownName struct{ want string }
+//
+// unsearched is why the grid's search, which is the last place a name
+// is looked for, could not be asked.  It is carried rather than
+// returned in place of the refusal because a search that failed has
+// found nobody, and nobody found is the refusal this always was; but a
+// person reading it is owed the difference between "the grid has
+// nobody by that name" and "the grid was not asked", since only the
+// second is worth trying again.
+type unknownName struct {
+	want       string
+	unsearched error
+}
 
 func (e *unknownName) Error() string {
+	if e.unsearched != nil {
+		return fmt.Sprintf("nobody called %q is known here, and the grid's search "+
+			"could not be made (%v); try who, friends or lookup", e.want, e.unsearched)
+	}
 	return fmt.Sprintf("nobody called %q is known; try who, friends or lookup", e.want)
 }
 
@@ -1094,8 +1111,10 @@ const maxNameWords = 2
 // The region is asked once, after every run has failed against what is
 // already known, for the reason sh.who asks it at all -- and once
 // rather than per run, since one answer fills the cache for all of
-// them.
-func (sh *Shell) whoAndRest(ctx context.Context, args []string) (msg.UUID, string, []string, error) {
+// them.  The grid is asked last, run by run in the same order, and only
+// once the region has had its turn: see onTheGrid for why a search
+// answers these commands at all, and what it is allowed to answer.
+func (sh *Shell) whoAndRest(ctx context.Context, out io.Writer, args []string) (msg.UUID, string, []string, error) {
 	if len(args) == 0 {
 		return msg.UUID{}, "", nil, fmt.Errorf("nobody was named")
 	}
@@ -1122,14 +1141,38 @@ func (sh *Shell) whoAndRest(ctx context.Context, args []string) (msg.UUID, strin
 			}
 		}
 	}
-	return msg.UUID{}, "", nil, last
+
+	runs := make([]string, 0, n)
+	for k := n; k >= 1; k-- {
+		runs = append(runs, strings.Join(args[:k], " "))
+	}
+	i, id, name, err := sh.onTheGrid(ctx, out, runs, last)
+	if err != nil {
+		return msg.UUID{}, "", nil, err
+	}
+	return id, name, args[n-i:], nil
 }
 
 // who turns what was typed into somebody: a uuid, the number from the
-// last listing, a name the session has heard, or somebody standing in
-// the region.
+// last listing, a name the session has heard, somebody standing in the
+// region, or -- by the whole of their name and nothing less -- somebody
+// the grid's search knows.  It is whoNear and then onTheGrid, which say
+// why each of those is asked.
+func (sh *Shell) who(ctx context.Context, out io.Writer, want string) (msg.UUID, string, error) {
+	id, name, err := sh.whoNear(ctx, want)
+	var unknown *unknownName
+	if !errors.As(err, &unknown) {
+		return id, name, err
+	}
+	_, id, name, err = sh.onTheGrid(ctx, out, []string{want}, err)
+	return id, name, err
+}
+
+// whoNear is who without the grid: a uuid, the number from the last
+// listing, a name the session has heard, or somebody standing in the
+// region.
 //
-// # Why the region is looked at, and why the grid is not
+// # Why the region is looked at
 //
 // The session's name cache holds whoever has been mentioned to it: a
 // listing printed, somebody who has spoken, a conversation opened.
@@ -1146,17 +1189,18 @@ func (sh *Shell) whoAndRest(ctx context.Context, args []string) (msg.UUID, strin
 // by, and a shell that lists a person under a name has to accept that
 // name back from the next command typed.
 //
-// Searching the GRID is a third step and is not here.  It reaches people
-// who are nowhere near, whom nothing has mentioned, and whose names may
-// merely resemble what was typed -- which is fine for reading a public
-// profile and is not fine for im, offer or give, where a name guessed at
-// wrong delivers something to a stranger.  See whoOrSearch, which is the
-// commands that only look.
-//
 // The cost is the reason the region is asked second and not first: it is
 // a round trip to the daemon and a name resolution, so the case that
 // already works must not pay for it.
-func (sh *Shell) who(ctx context.Context, want string) (msg.UUID, string, error) {
+//
+// # Why the grid is not
+//
+// Searching the grid is the third step, and it is kept out of here
+// because the two kinds of caller take different answers from it.
+// whoOrSearch, for profile, which only looks, takes a name that merely
+// resembles what was typed when it is the only one; onTheGrid, for the
+// commands that reach somebody, takes only the name itself.
+func (sh *Shell) whoNear(ctx context.Context, want string) (msg.UUID, string, error) {
 	id, name, err := sh.whoKnown(ctx, want)
 	var unknown *unknownName
 	if !errors.As(err, &unknown) {
@@ -1176,6 +1220,124 @@ func (sh *Shell) who(ctx context.Context, want string) (msg.UUID, string, error)
 		return msg.UUID{}, "", err
 	}
 	return sh.whoKnown(ctx, want)
+}
+
+// onTheGrid is the last place a name is looked for by the commands that
+// reach somebody -- im, chat, offer, lure, give, invite.  It searches
+// for each of runs in turn, longest first, and says which of them named
+// somebody.  refusal is what the nearer places said, and what comes
+// back, with the reason added, when the grid cannot be asked.
+//
+// # Why these commands search at all
+//
+// Because the person they are for is so often not here.  Somebody
+// invited into a group is quite often being invited because they are
+// somewhere else, and a name nothing here had heard of used to be
+// refused with advice to run lookup and type the number it printed --
+// which is a thing that has to be learnt, for a line that plainly said
+// who was meant.  The search costs one round trip a run, made only on a
+// line that was about to fail.
+//
+// # Why it answers only to a whole name
+//
+// The search matches part of a name, and display names as well, so what
+// comes back is everybody the words resemble.  For profile that is fine
+// -- guessing wrong there costs a listing -- but these commands deliver
+// something to whoever the name resolves to, and a name guessed at wrong
+// hands a message, a friendship or an item to a stranger.  So a row is
+// taken only when its name IS what was typed: "First Last" in any case,
+// or the same with a dot for the space, which is how a username is
+// written.  Anything short of that is listed, numbered, and refused,
+// which is the rule the rest of the shell keeps for an ambiguous answer.
+// One row that is not the name is refused as well: it is the grid's
+// best guess, and a guess is what is being kept out.
+//
+// A bare word is never a whole name here, even where it is somebody's
+// username exactly.  The last run searched is the first word of the
+// line, whatever was meant by it, so for "im Lorn Harbour hello" with
+// nobody called Lorn Harbour, taking a username of "lorn" would send
+// "Harbour hello" to whoever holds it -- and a first name on its own is
+// the kind of word that somebody has probably registered.  The listing
+// shows that person's whole name, which is what to type.
+//
+// # What a failure is
+//
+// A search that could not be made has found nobody, never somebody: the
+// refusal the nearer places gave comes back as it was, saying why the
+// grid could not add to it.  That includes a session that was not given
+// the capability.  lookup falls back from it to the older whole-name
+// message, and this does not, because the older message has nothing but
+// a fifteen-second deadline to say that nobody answered it, and a line
+// that was going to fail should not be made to wait that long to do so.
+func (sh *Shell) onTheGrid(ctx context.Context, out io.Writer, runs []string, refusal error) (int, msg.UUID, string, error) {
+	var unknown *unknownName
+	if !errors.As(refusal, &unknown) {
+		return 0, msg.UUID{}, "", refusal
+	}
+	unsearched := func(why error) error {
+		return &unknownName{want: unknown.want, unsearched: why}
+	}
+	if !sh.s.Backend().HasCap(sl.PickerCap) {
+		return 0, msg.UUID{}, "", unsearched(
+			fmt.Errorf("this session was not given %s", sl.PickerCap))
+	}
+
+	// The first run that turned anybody up is the one listed: it is the
+	// most of what was typed that resembles somebody, and people whose
+	// names are like "Lorn Harbour" are more use than every Lorn there is.
+	var near []sl.Found
+	var nearFor string
+	for i, run := range runs {
+		found, err := sh.s.Lookup(ctx, run)
+		if err != nil {
+			return 0, msg.UUID{}, "", unsearched(err)
+		}
+		exact := namedExactly(found, run)
+		switch {
+		case len(exact) == 1:
+			return i, exact[0].ID, exact[0].Name, nil
+		case len(exact) > 1:
+			sh.printFound(out, exact, false)
+			return 0, msg.UUID{}, "", fmt.Errorf("%d people on the grid are called %q; "+
+				"a number picks one", len(exact), run)
+		case near == nil && len(found) > 0:
+			near, nearFor = found, run
+		}
+	}
+	if near == nil {
+		return 0, msg.UUID{}, "", fmt.Errorf("nobody here or on the grid is called %q; "+
+			"try less of the name to see who comes close, or give the key", unknown.want)
+	}
+	sh.printFound(out, near, false)
+	return 0, msg.UUID{}, "", fmt.Errorf("nobody on the grid is called %q, and %s; "+
+		"a number picks one", nearFor, resembling(len(near)))
+}
+
+// resembling is how many people a search turned up that are not the one
+// asked for, as the half of a sentence the refusal under them needs.
+func resembling(n int) string {
+	if n == 1 {
+		return "the one listed has a name like it"
+	}
+	return fmt.Sprintf("the %d listed have names like it", n)
+}
+
+// namedExactly is the rows of a search whose name is what was typed,
+// with a dot read as the space it stands for in a username: "Example
+// Resident", "example resident" and "example.resident" are all one
+// person's whole name, where "example" alone is not.  See onTheGrid.
+func namedExactly(found []sl.Found, want string) []sl.Found {
+	whole := strings.Join(strings.Fields(strings.ReplaceAll(want, ".", " ")), " ")
+	if !strings.Contains(whole, " ") {
+		return nil
+	}
+	var out []sl.Found
+	for _, f := range found {
+		if strings.EqualFold(f.Name, whole) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // whoKnown is who a name means among what this shell already has: a

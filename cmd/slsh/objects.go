@@ -98,7 +98,7 @@ func cmdGive(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return usageError("give")
 	}
 
-	who, name, path, err := sh.whoAndRest(ctx, rest)
+	who, name, path, err := sh.whoAndRest(ctx, out, rest)
 	if err != nil {
 		return err
 	}

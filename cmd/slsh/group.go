@@ -200,7 +200,7 @@ func cmdInvite(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		return usageError("invite", "somebody to invite, and which group to invite them into")
 	}
 
-	who, name, rest, err := sh.whoAndRest(ctx, args)
+	who, name, rest, err := sh.whoAndRest(ctx, out, args)
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,12 @@ group, so neither name needs quoting:
     invite Example Resident Example Builders
     invite Example Resident 488f7e57-...
 
+The person need not be anywhere near, which is often why they are being
+invited.  A name nothing here has heard of is looked for with the
+grid's own search, as `im` does it, and taken only when it is the whole
+name; anything less is listed, numbered and refused, and the number is
+what to give this.
+
 The group is named every time and has no default.  It could have meant
 whichever group this avatar is acting as, which would be shorter and
 wrong the first time somebody typed it after activating something

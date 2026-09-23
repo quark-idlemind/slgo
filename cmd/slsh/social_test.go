@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -652,7 +653,7 @@ func TestFriendsAreTheOnesOnlineUnlessAllAreAsked(t *testing.T) {
 		t.Errorf("friends should list whoever is online:\n%s", got)
 	}
 	// The number is what the other commands take.
-	id, name, err := x.who(context.Background(), "1")
+	id, name, err := x.who(context.Background(), io.Discard, "1")
 	if err != nil || id != testSomebody || name != "Some Body" {
 		t.Errorf("who(1) = %v %q %v, want the first line", id, name, err)
 	}
@@ -713,7 +714,7 @@ func TestLookupAsksTheGridAndShowsTheDisplayNameWhenItDiffers(t *testing.T) {
 		}
 	}
 	// And the listing is what a number afterwards means.
-	if id, _, err := x.who(context.Background(), "2"); err != nil || id != testSomebody {
+	if id, _, err := x.who(context.Background(), io.Discard, "2"); err != nil || id != testSomebody {
 		t.Errorf("who(2) = %v %v, want the second line", id, err)
 	}
 
@@ -740,7 +741,7 @@ func TestLookupAsksTheGridAndShowsTheDisplayNameWhenItDiffers(t *testing.T) {
 		t.Errorf("the key should come between the name and the display name:\n%s", long)
 	}
 	// The listing still means what a number typed afterwards means.
-	if id, _, err := x.who(context.Background(), "2"); err != nil || id != testSomebody {
+	if id, _, err := x.who(context.Background(), io.Discard, "2"); err != nil || id != testSomebody {
 		t.Errorf("after lookup -l, who(2) = %v %v, want the second line", id, err)
 	}
 }
@@ -1409,25 +1410,25 @@ func TestWhoTurnsWhatWasTypedIntoSomebody(t *testing.T) {
 	ctx := context.Background()
 	x.grid.AnswerNames(t, map[msg.UUID]string{testSomebody: "Some Body"})
 
-	id, name, err := x.who(ctx, testSomebody.String())
+	id, name, err := x.who(ctx, io.Discard, testSomebody.String())
 	if err != nil || id != testSomebody || name != "Some Body" {
 		t.Errorf("who(uuid) = %v %q %v", id, name, err)
 	}
 	// A name the session has heard, in whole or in part.
-	if id, _, err := x.who(ctx, "some body"); err != nil || id != testSomebody {
+	if id, _, err := x.who(ctx, io.Discard, "some body"); err != nil || id != testSomebody {
 		t.Errorf("who(name) = %v %v", id, err)
 	}
-	if id, _, err := x.who(ctx, "some"); err != nil || id != testSomebody {
+	if id, _, err := x.who(ctx, io.Discard, "some"); err != nil || id != testSomebody {
 		t.Errorf("who(part of a name) = %v %v", id, err)
 	}
-	if _, _, err := x.who(ctx, "nobody of that name"); err == nil {
+	if _, _, err := x.who(ctx, io.Discard, "nobody of that name"); err == nil {
 		t.Error("a name nobody has should not resolve to anybody")
 	}
 
 	// Two people whose names begin alike cannot be told apart, and are
 	// not guessed between.
 	knows(t, x, map[msg.UUID]string{testFriend: "Some Other"})
-	_, _, err = x.who(ctx, "some")
+	_, _, err = x.who(ctx, io.Discard, "some")
 	if err == nil || !strings.Contains(err.Error(), "could be any of") {
 		t.Errorf("an ambiguous name should list them, got %v", err)
 	}
@@ -1455,7 +1456,7 @@ func TestWhoFindsSomebodyStandingInTheRegion(t *testing.T) {
 
 	// Nothing has been listed, nobody has spoken, and no command has been
 	// typed: the cache is empty and the name resolves anyway.
-	id, name, err := x.who(ctx, "Perrick Hobb")
+	id, name, err := x.who(ctx, io.Discard, "Perrick Hobb")
 	if err != nil || id != near || name != "Perrick Hobb" {
 		t.Fatalf("who(a name only the region knows) = %v %q %v", id, name, err)
 	}
@@ -1466,7 +1467,7 @@ func TestWhoFindsSomebodyStandingInTheRegion(t *testing.T) {
 	if asked == 0 {
 		t.Fatal("the name resolved without the region being asked at all")
 	}
-	if id, _, err := x.who(ctx, "perrick"); err != nil || id != near {
+	if id, _, err := x.who(ctx, io.Discard, "perrick"); err != nil || id != near {
 		t.Errorf("who(part of a name already learnt) = %v %v", id, err)
 	}
 	if again := x.grid.AskedTheRegion(); again != asked {
@@ -1495,7 +1496,7 @@ func TestTheRegionIsNotGuessedBetweenEither(t *testing.T) {
 		testSomebody: "Some Body", other: "Some Other",
 	})
 
-	_, _, err := x.who(ctx, "some")
+	_, _, err := x.who(ctx, io.Discard, "some")
 	if err == nil || !strings.Contains(err.Error(), "could be any of") {
 		t.Fatalf("two people in the region answering to a name gave %v", err)
 	}
@@ -1514,12 +1515,321 @@ func TestARegionThatWillNotAnswerIsARegionWithNobodyInIt(t *testing.T) {
 	x := newTestShell(t)
 	x.grid.objectsErr = errors.New("the circuit is down")
 
-	_, _, err := x.who(context.Background(), "nobody of that name")
+	_, _, err := x.who(context.Background(), io.Discard, "nobody of that name")
 	if err == nil || !strings.Contains(err.Error(), "is known") {
 		t.Errorf("who with the region unreachable = %v, want the ordinary refusal", err)
 	}
 	if strings.Contains(err.Error(), "circuit is down") {
 		t.Errorf("a mistyped name was reported as a daemon failure: %v", err)
+	}
+}
+
+// gridOf answers the name search the way the grid does: with everybody
+// whose name has a word beginning with each word asked for, so that part
+// of a name comes back as every person it could be part of and a word
+// of a message stuck to a name comes back as nobody.  searching answers
+// every question with the same rows, which is right for a command that
+// asks once and wrong for one that asks run by run.
+//
+// What was asked is kept, in order, so that a test can say how many
+// round trips a line cost.
+func gridOf(t *testing.T, x *testShell, people ...sl.Found) *searches {
+	t.Helper()
+	s := &searches{}
+	x.grid.ServeCap(t, sl.PickerCap, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("names")
+		s.mu.Lock()
+		s.asked = append(s.asked, q)
+		s.mu.Unlock()
+
+		var b strings.Builder
+		b.WriteString(`<?xml version="1.0" ?><llsd><map><key>agents</key><array>`)
+		for _, p := range people {
+			if !namesLike(p.Name, q) {
+				continue
+			}
+			// The username is the grid's: the first name alone for
+			// somebody whose last name is Resident, and first.last for
+			// anybody older, both in lower case.
+			first, last, _ := strings.Cut(p.Name, " ")
+			user := strings.ToLower(first + "." + last)
+			if last == "Resident" {
+				user = strings.ToLower(first)
+			}
+			fmt.Fprintf(&b, `<map><key>id</key><uuid>%s</uuid>`+
+				`<key>username</key><string>%s</string>`+
+				`<key>legacy_first_name</key><string>%s</string>`+
+				`<key>legacy_last_name</key><string>%s</string></map>`, p.ID, user, first, last)
+		}
+		b.WriteString(`</array></map></llsd>`)
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		io.WriteString(w, b.String())
+	})
+	return s
+}
+
+// searches is what gridOf was asked, which the http server's goroutine
+// writes and the test reads.
+type searches struct {
+	mu    sync.Mutex
+	asked []string
+}
+
+func (s *searches) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return fmt.Sprintf("%q", s.asked)
+}
+
+// namesLike is gridOf's matching: every word of the question begins some
+// word of the name, ignoring case.
+func namesLike(name, q string) bool {
+	words := strings.Fields(strings.ToLower(name))
+	for _, want := range strings.Fields(strings.ToLower(q)) {
+		hit := false
+		for _, w := range words {
+			hit = hit || strings.HasPrefix(w, want)
+		}
+		if !hit {
+			return false
+		}
+	}
+	return true
+}
+
+// addressee is who a message that reaches a person went to, for the
+// three shapes those messages come in.
+func addressee(m msg.Message) (msg.UUID, bool) {
+	switch m := m.(type) {
+	case *msg.ImprovedInstantMessage:
+		return m.MessageBlock.ToAgentID, true
+	case *msg.StartLure:
+		if len(m.TargetData) == 1 {
+			return m.TargetData[0].TargetID, true
+		}
+	case *msg.InviteGroupRequest:
+		if len(m.InviteData) == 1 {
+			return m.InviteData[0].InviteeID, true
+		}
+	}
+	return msg.UUID{}, false
+}
+
+// reached is everybody the messages sent so far went to, in order.
+func reached(x *testShell) []msg.UUID {
+	var out []msg.UUID
+	for _, m := range x.grid.Sent() {
+		if id, ok := addressee(m); ok {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// TestANameTypedInFullReachesSomebodyNobodyHereHasHeardOf.
+//
+// A name that was neither in the region, on the friend list nor in the
+// last listing was refused with advice to run lookup and type the
+// number it printed -- for invite most of all, where the person being
+// invited is quite often not nearby, which is why they are being
+// invited.  Seen on Agni between two avatars in different regions.
+//
+// The whole name is not a guess, so each command that reaches somebody
+// takes it from the grid's search and delivers to that person, with the
+// rest of the line left as what was said.  The search also turns up a
+// second person whose name begins the same way, which is the everyday
+// shape of a search result, and a full name has to win over that rather
+// than be called ambiguous.
+func TestANameTypedInFullReachesSomebodyNobodyHereHasHeardOf(t *testing.T) {
+	for _, line := range []string{
+		"im Perrick Hobb the dock is finished",
+		"offer Perrick Hobb the dock is finished",
+		"lure Perrick Hobb the dock is finished",
+		"invite Perrick Hobb Example Builders",
+		"im perrick hobb the dock is finished",
+		"im perrick.hobb the dock is finished",
+		"chat Perrick Hobb",
+	} {
+		x := newTestShell(t)
+		joined(x, sl.Group{ID: testBuilders, Name: "Example Builders", Powers: testInvitePowers})
+		gridOf(t, x,
+			sl.Found{ID: testSomebody, Name: "Perrick Hobb"},
+			sl.Found{ID: testOther, Name: "Perrick Hobbinson"})
+
+		got := x.do(t, line)
+		if strings.Contains(got, "slsh:") {
+			t.Errorf("%q was refused: %q", line, got)
+			continue
+		}
+		if strings.HasPrefix(line, "chat ") {
+			if c := x.talk.Current(); c.Target != testSomebody {
+				t.Errorf("%q switched to %q", line, c.Label())
+			}
+			continue
+		}
+		to := reached(x)
+		if len(to) != 1 || to[0] != testSomebody {
+			t.Errorf("%q reached %v, want only %s", line, to, testSomebody)
+			continue
+		}
+		if strings.HasPrefix(line, "im ") {
+			sent := x.grid.Sent()
+			if got := said(t, sent[len(sent)-1]); got != "the dock is finished" {
+				t.Errorf("%q said %q, want the message without the name", line, got)
+			}
+		}
+	}
+}
+
+// TestPartOfANameOnTheGridIsListedNotGuessed.
+//
+// The search matches part of a name, so what comes back for a first
+// name is everybody who has it.  Taking the only row, or the first,
+// would hand a message to whoever the grid happened to put there, and
+// nothing here would look amiss -- so the rows are listed, numbered,
+// and the line refused, which is the rule the shell already keeps for a
+// name that answers to two people nearby.  The number it offers has to
+// work, since otherwise the listing is only a longer refusal.
+//
+// A first name on its own is refused even when it is, letter for
+// letter, the whole of somebody's username: the last run a line is
+// searched by is its first word, whatever that word was meant as.
+//
+// Each case has a shell of its own because a search teaches the session
+// every name it turned up, and a name the session has heard is matched
+// by the start of it like any other.
+func TestPartOfANameOnTheGridIsListedNotGuessed(t *testing.T) {
+	people := []sl.Found{
+		{ID: testSomebody, Name: "Perrick Hobb"},
+		{ID: testOther, Name: "Perrick Hobbinson"},
+		{ID: testFriend, Name: "Lorn Resident"},
+	}
+
+	x := newTestShell(t)
+	gridOf(t, x, people...)
+	got := x.do(t, "im Perrick the dock is finished")
+	if n := len(reached(x)); n != 0 {
+		t.Fatalf("part of a name sent %d messages: %q", n, got)
+	}
+	if !strings.Contains(got, " 1  Perrick Hobb\n") || !strings.Contains(got, " 2  Perrick Hobbinson\n") {
+		t.Errorf("the people it could be were not listed: %q", got)
+	}
+	if !strings.Contains(got, `nobody on the grid is called "Perrick"`) ||
+		!strings.Contains(got, "a number picks one") {
+		t.Errorf("the refusal under the listing is %q", got)
+	}
+	x.do(t, "im 2 the dock is finished")
+	if to := reached(x); len(to) != 1 || to[0] != testOther {
+		t.Errorf("the number offered reached %v, want %s", to, testOther)
+	}
+
+	// One row is the grid's best guess and no less a guess for being
+	// alone.
+	x = newTestShell(t)
+	gridOf(t, x, people...)
+	got = x.do(t, "offer Hobbin the dock is finished")
+	if n := len(reached(x)); n != 0 {
+		t.Fatalf("a single partial match was taken: %q", got)
+	}
+	if !strings.Contains(got, " 1  Perrick Hobbinson\n") ||
+		!strings.Contains(got, "the one listed has a name like it") {
+		t.Errorf("a single partial match printed %q", got)
+	}
+
+	// Letter for letter a Resident's username, and still only a word.
+	x = newTestShell(t)
+	gridOf(t, x, people...)
+	got = x.do(t, "im lorn hello")
+	if n := len(reached(x)); n != 0 {
+		t.Fatalf("a first name alone was taken from the grid: %q", got)
+	}
+	if !strings.Contains(got, " 1  Lorn Resident\n") {
+		t.Errorf("a first name alone printed %q", got)
+	}
+	if got := x.do(t, "im Lorn Resident hello"); strings.Contains(got, "slsh:") {
+		t.Errorf("the whole name the listing showed was refused: %q", got)
+	}
+
+	// And a name like nobody's says the grid was asked, rather than
+	// sending somebody to lookup to make the same search again.
+	x = newTestShell(t)
+	gridOf(t, x, people...)
+	got = x.do(t, "im Ruvo hello")
+	if !strings.Contains(got, `nobody here or on the grid is called "Ruvo"`) ||
+		strings.Contains(got, "try who, friends or lookup") {
+		t.Errorf("a name like nobody's printed %q", got)
+	}
+}
+
+// TestASearchThatCouldNotBeMadeFindsNobody.
+//
+// The grid's search is the last place looked, and a failure there is
+// nobody found -- the refusal the shell always gave, since that is what
+// a line nothing here recognises was always going to get.  What changes
+// is that it says the grid was not asked, which is the one part worth
+// trying again; a refusal reading exactly as it did before would say the
+// grid had been searched and had nobody.
+//
+// A session that was never given the capability is the same case, and
+// is refused at once rather than sent the older whole-name message
+// lookup falls back on, which has only a deadline to say nobody answered.
+func TestASearchThatCouldNotBeMadeFindsNobody(t *testing.T) {
+	x := newTestShell(t)
+	gridOf(t, x, sl.Found{ID: testSomebody, Name: "Perrick Hobb"})
+	x.grid.mu.Lock()
+	x.grid.capErr = errors.New("the search timed out")
+	x.grid.mu.Unlock()
+
+	got := x.do(t, "im Perrick Hobb the dock is finished")
+	if n := len(reached(x)); n != 0 {
+		t.Fatalf("a failed search sent %d messages: %q", n, got)
+	}
+	if !strings.Contains(got, `nobody called "Perrick" is known here`) ||
+		!strings.Contains(got, "search could not be made") ||
+		!strings.Contains(got, "the search timed out") ||
+		!strings.Contains(got, "try who, friends or lookup") {
+		t.Errorf("a failed search printed %q", got)
+	}
+
+	bare := newTestShell(t)
+	start := time.Now()
+	got = bare.do(t, "chat Perrick Hobb")
+	if !strings.Contains(got, "search could not be made") ||
+		!strings.Contains(got, "not given "+sl.PickerCap) {
+		t.Errorf("a session without the search printed %q", got)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("a session without the search took %v to refuse", d)
+	}
+}
+
+// TestTheGridIsAskedOnlyForALineThatWouldHaveFailed.
+//
+// The search is a round trip, and a name the session or the last
+// listing already answers must not pay for it -- nor may a number,
+// which means the listing and never somebody called "3".  A line that
+// does reach the grid asks it once for each run of words, longest
+// first, and stops at the first that is somebody's whole name.
+func TestTheGridIsAskedOnlyForALineThatWouldHaveFailed(t *testing.T) {
+	x := newTestShell(t)
+	asked := gridOf(t, x, sl.Found{ID: testSomebody, Name: "Perrick Hobb"})
+	knows(t, x, map[msg.UUID]string{testOther: "Example Resident"})
+
+	x.do(t, "im Example Resident hello")
+	x.do(t, "im 3 hello")
+	if got := asked.String(); got != `[]` {
+		t.Errorf("a line the shell could answer searched the grid for %s", got)
+	}
+	x.do(t, "im Perrick Hobb hello")
+	if got, want := asked.String(), `["Perrick Hobb"]`; got != want {
+		t.Errorf("a full name searched for %s, want %s", got, want)
+	}
+
+	x = newTestShell(t)
+	asked = gridOf(t, x, sl.Found{ID: testSomebody, Name: "Perrick Hobb"})
+	x.do(t, "im Perrick hello")
+	if got, want := asked.String(), `["Perrick hello" "Perrick"]`; got != want {
+		t.Errorf("a first name searched for %s, want %s", got, want)
 	}
 }
 
@@ -1670,7 +1980,7 @@ func TestSomebodyWithNoNameIsTheirId(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	id, name, err := x.who(ctx, testOther.String())
+	id, name, err := x.who(ctx, io.Discard, testOther.String())
 	if err != nil || id != testOther {
 		t.Fatalf("who(uuid) = %v %q %v", id, name, err)
 	}

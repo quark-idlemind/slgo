@@ -35,11 +35,34 @@ many.  Typing more of the name is the answer.
 
 ## Who a name may be
 
-The session's own cache is asked first, and then whoever is standing in
-the region.  The grid's search is not: it reaches people who are
-nowhere near and whose names merely resemble what was typed, and a name
-guessed at wrong here delivers a private message to a stranger.
-`lookup` is that search, and the number it prints is what to give this.
+The session's own cache is asked first, then whoever is standing in the
+region, and last the grid's own search -- the one `lookup` makes -- so
+somebody on the other side of the grid can be named as plainly as
+somebody standing here.  The search is made only when nothing nearer
+knew the name, which is a line that was about to be refused anyway.
+
+What the search finds is taken only when it is the name itself:
+`Example Resident` in any case, or `example.resident` with the dot a
+username has.  The search matches part of a name, and display names
+too, so what it turns up is everybody the words resemble; taking one of
+them would deliver a private message to a stranger.  So anything short
+of the whole name is listed, numbered, and refused, and the number is
+what to give this:
+
+    im Example the lantern is rezzed
+     1  Example Resident
+     2  Example Wanderer
+    slsh: im: nobody on the grid is called "Example", and the 2 listed
+    have names like it; a number picks one
+    im 1 the lantern is rezzed
+
+A first name alone is not a whole name here, even for somebody whose
+username it is, and neither is one row that is merely the closest the
+search came.
+
+A search that could not be made -- the grid not answering, or a session
+never given the search -- finds nobody, and the refusal says so, since
+that is the one part worth trying again.
 
 Nothing comes back to say a message was read, or that it was delivered
 at all.

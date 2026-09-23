@@ -77,7 +77,8 @@ Or take the key straight out of the listing:
 
     lookup -l example res
 
-See also: `profile`, which makes this same search for itself when
-nothing nearer knows the name, `who` for the people in this region,
-`friends` for the friend list, and `im` for saying something to
-whoever was found.
+See also: `profile`, `im`, `offer`, `give` and the other commands that
+take a person, which make this same search for themselves when nothing
+nearer knows the name -- `profile` taking what it resembles, the rest
+only the whole name -- `who` for the people in this region, and
+`friends` for the friend list.

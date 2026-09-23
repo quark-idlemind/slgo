@@ -17,12 +17,13 @@ printing it.  `ls -l` puts the key beside each duplicate for exactly
 this.
 
 A person is resolved the way `im` resolves one: the session's cache is
-asked, and then whoever is standing in the region.  The grid's search
-is not: it reaches people who are nowhere near and whose names merely
-resemble what was typed, and a name guessed at wrong there offers an
-item to a stranger.  A name neither of the two knows is refused, not
-guessed at.  `lookup` makes that search, and the number it prints is
-what to give this.
+asked, then whoever is standing in the region, and last the grid's own
+search, which reaches somebody who is nowhere near.  What the search
+finds is taken only when it is the whole name -- `Example Resident`, or
+`example.resident` -- because it matches part of a name too, and a name
+guessed at wrong offers an item to a stranger.  Anything less is listed,
+numbered and refused rather than guessed at, and the number is what to
+give this.
 
 ## An offer, not a transfer
 

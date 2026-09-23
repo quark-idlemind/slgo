@@ -24,17 +24,20 @@ reading about is one more line to type rather than a search.
 
 How many seconds to give the grid.  Fifteen when it is not said.
 
-## This is the one command that searches the grid for a name
+## It takes more from the grid's search than anything else does
 
-Everywhere else, a name is matched against what the session has heard
-and then against whoever is standing in the region, and no further.
-This one goes on to the grid's own search, because a profile is exactly
-the question one asks about somebody who is not here -- and because
-guessing wrong costs nothing but a wasted listing, where guessing wrong
-for `im`, `offer` or `give` delivers something to a stranger.  Several
-people answering to the name are listed, numbered, and a number picks
-one.  A name typed in full that matches one row exactly is that row
-even when the search returned others.
+A name is matched against what the session has heard, then against
+whoever is standing in the region, and then the grid's own search is
+made, as it is for `im`, `offer`, `give` and the other commands that
+name somebody.  What differs is what this one takes from it.  Those
+take only a name typed whole, since guessing wrong for them delivers
+something to a stranger; this one takes the only person the search
+turned up even when the name was only part of theirs, and a username
+typed on its own, because a profile is exactly the question one asks
+about somebody who is not here and guessing wrong costs nothing but a
+wasted listing.  Several people answering to the name are listed,
+numbered, and a number picks one.  A name typed in full that matches
+one row exactly is that row even when the search returned others.
 
 ## Two fields that are easy to misread
 

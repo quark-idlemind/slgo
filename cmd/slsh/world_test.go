@@ -100,7 +100,7 @@ func TestWhoNumbersThePeopleItFound(t *testing.T) {
 	}
 
 	// And the listing is what a number afterwards means.
-	id, name, err := x.who(context.Background(), "1")
+	id, name, err := x.who(context.Background(), io.Discard, "1")
 	if err != nil || id != near || name != "Near Resident" {
 		t.Errorf(`who(1) = %v %q %v, want the first line`, id, name, err)
 	}
