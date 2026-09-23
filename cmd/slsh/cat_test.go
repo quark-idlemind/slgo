@@ -25,7 +25,7 @@ func TestCatReadable(t *testing.T) {
 			sl.Entry{Name: "tabprobe", Type: int(sl.AssetLSLText)}, ""},
 		{"a script that did come with one",
 			sl.Entry{Name: "tabprobe", Type: int(sl.AssetLSLText),
-				Asset: msg.MustParseUUID("a69d7e57-7e57-c0de-795d-0af059b13583")}, ""},
+				Asset: msg.MustParseUUID("a69d7e57-7e57-c0de-f6b7-65a57afaeb9a")}, ""},
 		{"a notecard",
 			sl.Entry{Name: "readme", Type: int(sl.AssetNotecard)}, ""},
 		{"a script of the long dead kind",

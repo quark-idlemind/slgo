@@ -225,8 +225,8 @@ func newSessionWith(t *testing.T, caps agent.Caps, idle time.Duration) *rig {
 	sim := newSim(t)
 
 	acct := &agent.Account{
-		AgentID:       msg.MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995"),
-		SessionID:     msg.MustParseUUID("8d1b7e57-7e57-c0de-f4f4-19d29d124acf"),
+		AgentID:       msg.MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f"),
+		SessionID:     msg.MustParseUUID("8d1b7e57-7e57-c0de-3bf6-2277c65663be"),
 		CircuitCode:   4242,
 		SimIP:         sim.addr().IP,
 		SimPort:       sim.addr().Port,
@@ -711,9 +711,9 @@ func TestReconnect(t *testing.T) {
 		logins.Add(1)
 		fmt.Fprintf(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
 		  <member><name>login</name><value><string>true</string></value></member>
-		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</string></value></member>
-		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-f4f4-19d29d124acf</string></value></member>
-		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-d169-d9847afe641e</string></value></member>
+		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-8597-66b760a8cb5f</string></value></member>
+		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-3bf6-2277c65663be</string></value></member>
+		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-2a9a-c37f17e64c61</string></value></member>
 		  <member><name>circuit_code</name><value><int>%d</int></value></member>
 		  <member><name>sim_ip</name><value><string>%s</string></value></member>
 		  <member><name>sim_port</name><value><int>%d</int></value></member>
@@ -822,9 +822,9 @@ func TestNoReconnectAfterLogout(t *testing.T) {
 		logins.Add(1)
 		fmt.Fprintf(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
 		  <member><name>login</name><value><string>true</string></value></member>
-		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</string></value></member>
-		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-f4f4-19d29d124acf</string></value></member>
-		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-d169-d9847afe641e</string></value></member>
+		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-8597-66b760a8cb5f</string></value></member>
+		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-3bf6-2277c65663be</string></value></member>
+		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-2a9a-c37f17e64c61</string></value></member>
 		  <member><name>circuit_code</name><value><int>77</int></value></member>
 		  <member><name>sim_ip</name><value><string>%s</string></value></member>
 		  <member><name>sim_port</name><value><int>%d</int></value></member>
@@ -904,9 +904,9 @@ func TestALoginThatCannotReachTheCircuitIsNotHosted(t *testing.T) {
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
 		  <member><name>login</name><value><string>true</string></value></member>
-		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</string></value></member>
-		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-f4f4-19d29d124acf</string></value></member>
-		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-d169-d9847afe641e</string></value></member>
+		  <member><name>agent_id</name><value><string>876e7e57-7e57-c0de-8597-66b760a8cb5f</string></value></member>
+		  <member><name>session_id</name><value><string>8d1b7e57-7e57-c0de-3bf6-2277c65663be</string></value></member>
+		  <member><name>secure_session_id</name><value><string>95507e57-7e57-c0de-2a9a-c37f17e64c61</string></value></member>
 		  <member><name>circuit_code</name><value><int>4242</int></value></member>
 		  <member><name>sim_ip</name><value><string>127.0.0.1</string></value></member>
 		  <member><name>sim_port</name><value><int>1</int></value></member>

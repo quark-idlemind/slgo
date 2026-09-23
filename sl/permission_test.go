@@ -12,8 +12,8 @@ import (
 
 func testScriptQuestion(wants Perms) *msg.ScriptQuestion {
 	m := &msg.ScriptQuestion{}
-	m.Data.TaskID = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
-	m.Data.ItemID = msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")
+	m.Data.TaskID = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	m.Data.ItemID = msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")
 	m.Data.ObjectName = []byte("Grabby Box\x00")
 	m.Data.ObjectOwner = []byte("Quark Idlemind\x00")
 	m.Data.Questions = int32(wants)

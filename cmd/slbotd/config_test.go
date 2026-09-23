@@ -32,7 +32,7 @@ func TestAConfigurationSaysWhoAndWhat(t *testing.T) {
 avatar = example
 avatar  =  builder
 trusted = Quark Idlemind
-trusted = a5707e57-7e57-c0de-65b6-5a7ceceb4b01
+trusted = 3ac37e57-7e57-c0de-5607-527da8fa08de
 addr = grid.example:7807
 prefix = !
 timeout = 45s
@@ -72,10 +72,10 @@ func TestTrustIsByNameOrByID(t *testing.T) {
 	c := parse(t, `
 avatar = example
 trusted = Quark Idlemind
-trusted = a5707e57-7e57-c0de-65b6-5a7ceceb4b01
+trusted = 3ac37e57-7e57-c0de-5607-527da8fa08de
 `)
-	known := msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
-	other := msg.MustParseUUID("19d17e57-7e57-c0de-b3a6-3f42edc56d31")
+	known := msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	other := msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
 
 	for _, tc := range []struct {
 		id   msg.UUID

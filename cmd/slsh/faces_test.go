@@ -109,11 +109,11 @@ func TestChangesNothingIsEveryFlag(t *testing.T) {
 // rather than to the avatar, so every prim of a linked hud but the root
 // would otherwise be listed as if it stood in the region.
 func TestWhoWearsFollowsTheLinkUpToTheAvatar(t *testing.T) {
-	me := msg.MustParseUUID("345e7e57-7e57-c0de-facd-866ae36a55db")
-	stranger := msg.MustParseUUID("36d97e57-7e57-c0de-7134-ab99a0aedcbd")
-	root := msg.MustParseUUID("c0837e57-7e57-c0de-7d2a-0e9925a20a3f")
-	child := msg.MustParseUUID("ec247e57-7e57-c0de-c550-cbea2d96d52f")
-	loose := msg.MustParseUUID("c9cb7e57-7e57-c0de-23e9-75ff2f62eb69")
+	me := msg.MustParseUUID("345e7e57-7e57-c0de-1b2c-09d1f9537682")
+	stranger := msg.MustParseUUID("36d97e57-7e57-c0de-513d-7625ec032f53")
+	root := msg.MustParseUUID("c0837e57-7e57-c0de-3c21-d6ad5be18862")
+	child := msg.MustParseUUID("ec247e57-7e57-c0de-30e3-98adfbbcb416")
+	loose := msg.MustParseUUID("c9cb7e57-7e57-c0de-6093-146c4c6c404a")
 
 	worn := whoWears([]*sl.Seen{
 		{Object: sl.Object{ID: me, Local: 10}, PCode: 47},

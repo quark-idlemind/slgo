@@ -23,7 +23,7 @@ func TestAttachPoint(t *testing.T) {
 // TestAttachItem: the inventory item is the only stable name a worn
 // object has, and it comes out of the NameValue block.
 func TestAttachItem(t *testing.T) {
-	const id = "97da7e57-7e57-c0de-b787-9e0b48a226f1"
+	const id = "97da7e57-7e57-c0de-1387-f63ad28b7794"
 
 	nv := []byte("AttachItemID STRING RW DS " + id + "\n")
 	got, ok := attachItem(nv)

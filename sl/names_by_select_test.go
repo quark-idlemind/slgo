@@ -43,7 +43,7 @@ func TestNamesComeFromASelectWhenTheFamilyRequestIsNotAnswered(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 
-	child := msg.MustParseUUID("d7987e57-7e57-c0de-dab1-160750dc77f2")
+	child := msg.MustParseUUID("d7987e57-7e57-c0de-07cd-7b1f6da667d0")
 	f.mu.Lock()
 	f.objects = []*Seen{{Object: Object{ID: child, Local: 288331}, Parent: 288335}}
 	f.mu.Unlock()
@@ -76,7 +76,7 @@ func TestSelectingForNamesLeavesAvatarsAlone(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 
-	somebody := msg.MustParseUUID("36d97e57-7e57-c0de-7134-ab99a0aedcbd")
+	somebody := msg.MustParseUUID("36d97e57-7e57-c0de-513d-7625ec032f53")
 	f.mu.Lock()
 	f.objects = []*Seen{{Object: Object{ID: somebody, Local: 42}, PCode: pcodeAvatar}}
 	f.mu.Unlock()

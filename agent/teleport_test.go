@@ -27,12 +27,12 @@ import (
 // host and capability id are invented.  Everything that is read here is
 // the measured value.
 const agniTeleportFinish = `<llsd><map><key>Info</key><array><map>` +
-	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-05ab-3469e908f363</uuid>` +
+	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-d221-6ffd8a188ce4</uuid>` +
 	`<key>LocationID</key><binary>AAAAAw==</binary>` +
 	`<key>RegionHandle</key><binary>AAPjAAAD5QA=</binary>` +
 	`<key>SeedCapability</key>` +
 	`<string>https://simhost-0aaaaaaaaaaaaaaa2.agni.secondlife.io:12043/cap/` +
-	`fd277e57-7e57-c0de-69d1-a1764bce3849</string>` +
+	`fd277e57-7e57-c0de-d6ee-dd800a9b6922</string>` +
 	`<key>SimAccess</key><integer>13</integer>` +
 	`<key>SimIP</key><binary>ywBxCw==</binary>` +
 	`<key>SimPort</key><integer>13032</integer>` +
@@ -65,7 +65,7 @@ func TestTheDestinationIsReadFromTheBytesTheGridSent(t *testing.T) {
 	if x, y := msg.GridCoords(handle); x != 995 || y != 997 {
 		t.Errorf("the handle is grid square (%d, %d), want (995, 997)", x, y)
 	}
-	if !strings.HasSuffix(seed, "fd277e57-7e57-c0de-69d1-a1764bce3849") {
+	if !strings.HasSuffix(seed, "fd277e57-7e57-c0de-d6ee-dd800a9b6922") {
 		t.Errorf("seed = %q", seed)
 	}
 }

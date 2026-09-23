@@ -55,9 +55,9 @@ func TestGroupFlag(t *testing.T) {
 		},
 		{
 			name:  "a uuid is a value, not a name=value",
-			set:   []string{"33a57e57-7e57-c0de-e7ea-9cad48757549"},
+			set:   []string{"33a57e57-7e57-c0de-da54-ed9b5d7d8f09"},
 			agent: "example",
-			want:  "33a57e57-7e57-c0de-e7ea-9cad48757549",
+			want:  "33a57e57-7e57-c0de-da54-ed9b5d7d8f09",
 		},
 	}
 

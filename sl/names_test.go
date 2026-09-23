@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	nemo    = msg.MustParseUUID("0e497e57-7e57-c0de-3a9f-ac1c32e2e746")
+	nemo    = msg.MustParseUUID("0e497e57-7e57-c0de-3a8f-15261ac38cc0")
 	unnamed = msg.MustParseUUID("051b7e57-7e57-c0de-f8f9-771b98f00baa")
 )
 
@@ -544,7 +544,7 @@ func TestTheFirstSearchBuildsTheMapTheAnswerComesBackThrough(t *testing.T) {
 // asked has given up, or for a query this session never made, and
 // neither is a reason to block the reader goroutine or to panic.
 func TestAnAnswerNobodyIsWaitingFor(t *testing.T) {
-	query := msg.MustParseUUID("51547e57-7e57-c0de-e62e-4f09d89d3041")
+	query := msg.MustParseUUID("51547e57-7e57-c0de-7ccb-e3c323b4c96b")
 	// A channel nobody will ever read from, which is what a caller
 	// that has given up leaves behind.
 	w := &Session{pickers: map[msg.UUID]chan []Found{query: make(chan []Found)}}

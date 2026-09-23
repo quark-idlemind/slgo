@@ -155,8 +155,8 @@ func TestOffersListsWhatIsWaiting(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 
-	first := msg.MustParseUUID("9c847e57-7e57-c0de-c7e0-05861eb380d6")
-	second := msg.MustParseUUID("9c847e57-7e57-c0de-212b-1148ffd19d80")
+	first := msg.MustParseUUID("9c847e57-7e57-c0de-8f99-11049d4de96d")
+	second := msg.MustParseUUID("9ddb7e57-7e57-c0de-5ed1-76ac971c1969")
 	offerTo(t, f, s, "a notecard", first)
 	offerTo(t, f, s, "a script", second)
 
@@ -175,8 +175,8 @@ func TestOffersListsWhatIsWaiting(t *testing.T) {
 func TestAcceptAnswersTheOfferByNumber(t *testing.T) {
 	d, b, f := newTestDaemon(t)
 	s := b.Session()
-	first := msg.MustParseUUID("9c847e57-7e57-c0de-c7e0-05861eb380d6")
-	second := msg.MustParseUUID("9c847e57-7e57-c0de-212b-1148ffd19d80")
+	first := msg.MustParseUUID("9c847e57-7e57-c0de-8f99-11049d4de96d")
+	second := msg.MustParseUUID("9ddb7e57-7e57-c0de-5ed1-76ac971c1969")
 	offerTo(t, f, s, "a notecard", first)
 	offerTo(t, f, s, "a script", second)
 
@@ -203,7 +203,7 @@ func TestAcceptAnswersTheOfferByNumber(t *testing.T) {
 func TestDeclineRefusesOne(t *testing.T) {
 	d, b, f := newTestDaemon(t)
 	s := b.Session()
-	transaction := msg.MustParseUUID("9c847e57-7e57-c0de-979e-d55bd851806a")
+	transaction := msg.MustParseUUID("9e5b7e57-7e57-c0de-59ce-577f7cc1e0ed")
 	offerTo(t, f, s, "a notecard", transaction)
 
 	before := len(f.IMsSent())
@@ -218,7 +218,7 @@ func TestDeclineRefusesOne(t *testing.T) {
 
 func TestANumberThatIsNotThereIsRefused(t *testing.T) {
 	d, b, f := newTestDaemon(t)
-	transaction := msg.MustParseUUID("9c847e57-7e57-c0de-62b2-7cf9140ec6fc")
+	transaction := msg.MustParseUUID("9e6b7e57-7e57-c0de-d391-d8690171ccdc")
 	offerTo(t, f, b.Session(), "a notecard", transaction)
 
 	if got := send(t, d, b, "accept 7"); !strings.Contains(got, "there are 1 waiting") {

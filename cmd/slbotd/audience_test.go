@@ -20,8 +20,8 @@ func audienceFor(t *testing.T, lines ...string) Audience {
 }
 
 func TestTheChatListNamesPeople(t *testing.T) {
-	known := msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
-	other := msg.MustParseUUID("19d17e57-7e57-c0de-b3a6-3f42edc56d31")
+	known := msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	other := msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
 	a := audienceFor(t, "Quark Idlemind", known.String())
 
 	for _, tc := range []struct {
@@ -49,7 +49,7 @@ func TestTheChatListNamesPeople(t *testing.T) {
 func TestTheStarMeansAnyone(t *testing.T) {
 	a := audienceFor(t, Anyone)
 	got := a(context.Background(), &Approach{
-		From: msg.MustParseUUID("19d17e57-7e57-c0de-b3a6-3f42edc56d31"),
+		From: msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2"),
 		Name: "Somebody Nobody Listed",
 	})
 	if !got.Talk {
@@ -110,7 +110,7 @@ func TestNoModelMeansNoConversation(t *testing.T) {
 // somebody went out of their way to say, so it beats every permission
 // however the permission was granted.
 func TestARefusalBeatsAPermission(t *testing.T) {
-	quark := msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
+	quark := msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
 	for _, tc := range []struct {
 		name  string
 		lines []string

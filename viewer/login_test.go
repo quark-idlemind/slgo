@@ -19,8 +19,8 @@ import (
 func storedResponse() map[string]any {
 	return map[string]any{
 		"login":            "true",
-		"agent_id":         "876e7e57-7e57-c0de-9eeb-1bd0e1ec6995",
-		"session_id":       "8d1b7e57-7e57-c0de-f4f4-19d29d124acf",
+		"agent_id":         "876e7e57-7e57-c0de-8597-66b760a8cb5f",
+		"session_id":       "8d1b7e57-7e57-c0de-3bf6-2277c65663be",
 		"circuit_code":     int64(690139535),
 		"sim_ip":           "203.0.113.14",
 		"sim_port":         int64(13003),

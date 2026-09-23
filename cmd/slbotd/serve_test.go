@@ -25,7 +25,7 @@ func incoming(from msg.UUID, name string, dialog uint8, text string) *msg.Improv
 	m.MessageBlock.Dialog = dialog
 	m.MessageBlock.FromAgentName = append([]byte(name), 0)
 	m.MessageBlock.Message = append([]byte(text), 0)
-	m.MessageBlock.ID = msg.MustParseUUID("43de7e57-7e57-c0de-97d9-90d1b3af8b11")
+	m.MessageBlock.ID = msg.MustParseUUID("43de7e57-7e57-c0de-69ba-51c767497346")
 	return m
 }
 
@@ -181,7 +181,7 @@ func TestAnOfferFromATrustedAvatarIsAccepted(t *testing.T) {
 	_, b, f := newTestDaemon(t)
 	defer serving(t, b)()
 
-	transaction := msg.MustParseUUID("9c847e57-7e57-c0de-6b2b-5cb10aa05c2d")
+	transaction := msg.MustParseUUID("9fdc7e57-7e57-c0de-37aa-b7364eeb890d")
 	f.deliver(t, offering(testSender, "Trusted Resident", "a notecard", transaction))
 
 	ims := waitIMs(t, f, 1)
@@ -204,7 +204,7 @@ func TestAnOfferFromAStrangerIsLeftWaiting(t *testing.T) {
 	_, b, f := newTestDaemon(t)
 	defer serving(t, b)()
 
-	transaction := msg.MustParseUUID("9c847e57-7e57-c0de-d00f-500916cfd428")
+	transaction := msg.MustParseUUID("a0c97e57-7e57-c0de-9306-44ca640a431b")
 	f.deliver(t, offering(testStranger, "Some Body", "a notecard", transaction))
 	quiet(f)
 
@@ -221,7 +221,7 @@ func TestAnyoneCanOfferWhenTheFileSaysSo(t *testing.T) {
 	d.cfg.AcceptInventory = AcceptAnyone
 	defer serving(t, b)()
 
-	transaction := msg.MustParseUUID("9c847e57-7e57-c0de-24e0-ea2997eb466f")
+	transaction := msg.MustParseUUID("a14d7e57-7e57-c0de-24b0-36f087ef8a3b")
 	f.deliver(t, offering(testStranger, "Some Body", "a notecard", transaction))
 	ims := waitIMs(t, f, 1)
 	if ims[0].MessageBlock.Dialog != sl.DialogInventoryAccepted {
@@ -234,7 +234,7 @@ func TestNobodyCanOfferWhenTheFileSaysSo(t *testing.T) {
 	d.cfg.AcceptInventory = AcceptNobody
 	defer serving(t, b)()
 
-	transaction := msg.MustParseUUID("9c847e57-7e57-c0de-c2b4-b0283647eeef")
+	transaction := msg.MustParseUUID("a1577e57-7e57-c0de-f80d-6766245e67a0")
 	f.deliver(t, offering(testSender, "Trusted Resident", "a notecard", transaction))
 	quiet(f)
 	if ims := f.IMsSent(); len(ims) != 0 {

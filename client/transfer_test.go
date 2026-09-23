@@ -203,9 +203,9 @@ func TestFetchingAnAssetAsksWithEveryIdentityTheSimulatorChecks(t *testing.T) {
 	x := NewTransfers(s)
 
 	ref := AssetRef{
-		Owner: msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01"),
-		Item:  msg.MustParseUUID("97c27e57-7e57-c0de-0572-44b27a1c1090"),
-		Asset: msg.MustParseUUID("88fa7e57-7e57-c0de-af42-813fbc8c4b63"),
+		Owner: msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de"),
+		Item:  msg.MustParseUUID("97c27e57-7e57-c0de-c041-be2c2f8cb586"),
+		Asset: msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85"),
 		Type:  AssetLSLText,
 	}
 	s.on = func(m msg.Message) {
@@ -258,7 +258,7 @@ func TestAnAssetThatNeverArrivesIsGivenUpOnAndCancelled(t *testing.T) {
 	s := &recordingSender{}
 	x := NewTransfers(s)
 
-	ref := AssetRef{Asset: msg.MustParseUUID("88fa7e57-7e57-c0de-af42-813fbc8c4b63")}
+	ref := AssetRef{Asset: msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")}
 	_, err := x.Fetch(context.Background(), testAgentID, testSessionID, ref, 20*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), ref.Asset.String()) {
 		t.Errorf("Fetch = %v, want the asset named", err)

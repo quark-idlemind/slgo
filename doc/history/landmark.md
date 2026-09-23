@@ -35,7 +35,7 @@ all four in about a second each.
 `sl.Asset` fetches it with `AssetLandmark`, and this is the whole of it:
 
 	Landmark version 2
-	region_id a8377e57-7e57-c0de-49f1-463af55b7a68
+	region_id a8377e57-7e57-c0de-9d9c-088e2efc057b
 	local_pos 32.00 70.00 1000.09
 
 A region **id** and a position within it. Not a handle, not a region

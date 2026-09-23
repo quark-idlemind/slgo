@@ -37,10 +37,10 @@ var _ sl.Backend = (*fakeGrid)(nil)
 // Who the fake says we are.  sl.New refuses a backend with no agent or
 // session id, so these are load bearing rather than decoration.
 var (
-	testMe        = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
-	testSessionID = msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")
-	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-622e-77274d813d21")
-	thePrim       = msg.MustParseUUID("88fa7e57-7e57-c0de-af42-813fbc8c4b63")
+	testMe        = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	testSessionID = msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")
+	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-245c-d6b83f1a8b6d")
+	thePrim       = msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")
 	theItem       = msg.MustParseUUID("c75d7e57-7e57-c0de-b372-000000000001")
 )
 

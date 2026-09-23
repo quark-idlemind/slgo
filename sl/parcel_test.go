@@ -224,7 +224,7 @@ func TestParcelByIDAsksByLocalID(t *testing.T) {
 func TestDwellCarriesBothNamingsOfAParcel(t *testing.T) {
 	w, f := newFakeSession(t)
 
-	id := msg.MustParseUUID("3c8f7e57-7e57-c0de-3878-6be276684850")
+	id := msg.MustParseUUID("3c8f7e57-7e57-c0de-5937-2df1a39c07cc")
 	f.onSend = func(m msg.Message) {
 		if _, ok := m.(*msg.ParcelDwellRequest); !ok {
 			return
@@ -261,7 +261,7 @@ func TestParcelIDSendsTheTwoFieldsTheCapabilityAnswers(t *testing.T) {
 			return
 		}
 		fmt.Fprint(rw, `<llsd><map><key>parcel_id</key>`+
-			`<uuid>3c8f7e57-7e57-c0de-3878-6be276684850</uuid></map></llsd>`)
+			`<uuid>3c8f7e57-7e57-c0de-5937-2df1a39c07cc</uuid></map></llsd>`)
 	}))
 	defer srv.Close()
 	f.caps["RemoteParcelRequest"] = srv.URL
@@ -270,7 +270,7 @@ func TestParcelIDSendsTheTwoFieldsTheCapabilityAnswers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParcelID: %v", err)
 	}
-	if want := msg.MustParseUUID("3c8f7e57-7e57-c0de-3878-6be276684850"); id != want {
+	if want := msg.MustParseUUID("3c8f7e57-7e57-c0de-5937-2df1a39c07cc"); id != want {
 		t.Errorf("parcel id = %v", id)
 	}
 	if !strings.Contains(body, "region_id") || !strings.Contains(body, "location") {

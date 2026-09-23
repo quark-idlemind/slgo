@@ -180,7 +180,7 @@ func TestAssetTypeNames(t *testing.T) {
 // notecards and scripts, and saying so beats a 403 with no explanation.
 func TestAssetRefusesWhatTheNetworkWillNot(t *testing.T) {
 	w := &Session{b: capless{}}
-	id := mustUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
+	id := mustUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
 
 	for _, t2 := range []AssetType{AssetNotecard, AssetLSLText, AssetObject} {
 		_, err := w.Asset(nil, id, t2)
@@ -261,7 +261,7 @@ func TestListingPathsSplitBack(t *testing.T) {
 // one request per level.
 func TestListingAFolderByPathWalksTheNamesDown(t *testing.T) {
 	w, f := newFakeSession(t)
-	inner := mustUUID("61f67e57-7e57-c0de-96da-77d676865c11")
+	inner := mustUUID("61f67e57-7e57-c0de-56cf-6e25f6190210")
 
 	f.ServeInventoryTree(t, func(id msg.UUID) ([]*Folder, []*Item) {
 		switch id {

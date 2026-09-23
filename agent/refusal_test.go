@@ -16,7 +16,7 @@ const agniVIPRefusal = `<llsd><map>` +
 	`<key>ExtraParams</key><string></string>` +
 	`<key>Message</key><string>MustHaveVIPStatus</string></map></array>` +
 	`<key>Info</key><array><map>` +
-	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-05ab-3469e908f363</uuid>` +
+	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-d221-6ffd8a188ce4</uuid>` +
 	`<key>Reason</key><string>You must be a premium or vip subscriber ` +
 	`to enter this region.</string></map></array></map></llsd>`
 

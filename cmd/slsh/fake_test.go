@@ -62,9 +62,9 @@ var _ sl.Backend = (*fakeGrid)(nil)
 // Who the fake says we are.  sl.New refuses a backend with no agent or
 // session id, so these are load bearing rather than decoration.
 var (
-	testMe        = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
-	testSessionID = msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")
-	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-622e-77274d813d21")
+	testMe        = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	testSessionID = msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")
+	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-245c-d6b83f1a8b6d")
 	testObjects   = msg.MustParseUUID("a9a87e57-7e57-c0de-b748-062ee08c11ee")
 	testScripts   = msg.MustParseUUID("aa8f7e57-7e57-c0de-e8da-278417da2fea")
 	testTrash     = msg.MustParseUUID("ab6c7e57-7e57-c0de-e0ce-9f8b1da5cee8")
@@ -249,7 +249,7 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 			RegionHandle: 1099511628032,
 		},
 		region: &sl.Region{
-			ID:          msg.MustParseUUID("a4fd7e57-7e57-c0de-80da-1b63ae00812a"),
+			ID:          msg.MustParseUUID("a4fd7e57-7e57-c0de-559f-7a9b7da6044a"),
 			Name:        "Test Region",
 			Handle:      1099511628032,
 			Access:      13,

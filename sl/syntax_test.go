@@ -196,7 +196,7 @@ func TestFeatures(t *testing.T) {
 		"MaxAgentGroups":       int64(50),
 		"MaxTextureResolution": float64(2048),
 		"HostName":             "simhost-0f5.agni.secondlife.io",
-		"LSLSyntaxId":          "c9767e57-7e57-c0de-6bd6-02d6d9429743",
+		"LSLSyntaxId":          "c9767e57-7e57-c0de-fac0-31777978747a",
 		"PhysicsShapeTypes":    map[string]any{"convex": true, "none": true, "prim": true},
 	}}
 
@@ -236,7 +236,7 @@ func TestFeatures(t *testing.T) {
 // and, when it has not moved, nothing else.
 func TestLSLSyntaxIsFetchedOnceAndKeptByItsId(t *testing.T) {
 	w, f := newFakeSession(t)
-	const id = "c9767e57-7e57-c0de-6bd6-02d6d9429743"
+	const id = "c9767e57-7e57-c0de-fac0-31777978747a"
 
 	var fetches atomic.Int32
 	f.ServeCap(t, "SimulatorFeatures", func(rw http.ResponseWriter, r *http.Request) {
@@ -280,8 +280,8 @@ func TestLSLSyntaxIsFetchedAgainWhenTheLanguageMoves(t *testing.T) {
 	var which atomic.Int32
 	f.ServeCap(t, "SimulatorFeatures", func(rw http.ResponseWriter, r *http.Request) {
 		ids := []string{
-			"c9767e57-7e57-c0de-6bd6-02d6d9429743",
-			"85da7e57-7e57-c0de-356c-34f772e38626",
+			"c9767e57-7e57-c0de-fac0-31777978747a",
+			"85da7e57-7e57-c0de-a72e-26db6d317066",
 		}
 		fmt.Fprintf(rw, `<llsd><map><key>LSLSyntaxId</key><string>%s</string></map></llsd>`,
 			ids[which.Load()])
@@ -300,7 +300,7 @@ func TestLSLSyntaxIsFetchedAgainWhenTheLanguageMoves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LSLSyntax: %v", err)
 	}
-	if s.ID.String() != "85da7e57-7e57-c0de-356c-34f772e38626" {
+	if s.ID.String() != "85da7e57-7e57-c0de-a72e-26db6d317066" {
 		t.Errorf("the cached copy was kept under the new id: %s", s.ID)
 	}
 	if n := fetches.Load(); n != 2 {

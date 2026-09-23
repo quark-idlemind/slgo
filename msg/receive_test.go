@@ -151,7 +151,7 @@ func TestReceivePlain(t *testing.T) {
 func TestReceiveZerocoded(t *testing.T) {
 	m := &UseCircuitCode{}
 	m.CircuitCode.Code = 0x12345678
-	m.CircuitCode.SessionID = MustParseUUID("8d1b7e57-7e57-c0de-f4f4-19d29d124acf")
+	m.CircuitCode.SessionID = MustParseUUID("8d1b7e57-7e57-c0de-3bf6-2277c65663be")
 	// ID left zero, so the body has a long run for the coder to eat.
 
 	raw := packet(t, FlagZerocoded, 1, m)

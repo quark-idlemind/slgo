@@ -12,7 +12,7 @@ import (
 
 func testScriptDialog() *msg.ScriptDialog {
 	m := &msg.ScriptDialog{}
-	m.Data.ObjectID = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
+	m.Data.ObjectID = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
 	m.Data.ObjectName = []byte("Test Object\x00")
 	m.Data.FirstName = []byte("Quark\x00")
 	m.Data.LastName = []byte("Idlemind\x00")
@@ -24,7 +24,7 @@ func testScriptDialog() *msg.ScriptDialog {
 		{ButtonLabel: []byte("Maybe\x00")},
 	}
 	m.OwnerData = []msg.ScriptDialog_OwnerData{
-		{OwnerID: msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")},
+		{OwnerID: msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")},
 	}
 	return m
 }

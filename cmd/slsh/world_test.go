@@ -42,7 +42,7 @@ func TestWhereIsTheRegionAndThePosition(t *testing.T) {
 	// A group is worth saying, because building fails without one and
 	// the land blames itself rather than the avatar.  Until the
 	// membership list arrives there is nothing to call it but its key.
-	group := msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
+	group := msg.MustParseUUID("e2a17e57-7e57-c0de-b864-09116b98f7c6")
 	x.grid.presence.ActiveGroup = group
 	if got := x.do(t, "where"); !strings.Contains(got, "acting as group "+group.String()) {
 		t.Errorf("where should name the active group, got %q", got)
@@ -515,7 +515,7 @@ func TestWorldCommandsAllAnswerForHelp(t *testing.T) {
 // them up.
 func TestObjectsListsTheObjectsAndThenTheirPrims(t *testing.T) {
 	x := newTestShell(t)
-	child := msg.MustParseUUID("f3a97e57-7e57-c0de-02ff-92b46275fd1b")
+	child := msg.MustParseUUID("f3a97e57-7e57-c0de-7a4e-4489268eda7a")
 	x.grid.objects = []*sl.Seen{
 		{Object: sl.Object{ID: testLamp, Local: 1, Name: "TrioBox"}, PCode: 9,
 			Position: msg.Vector3{X: 30, Y: 76, Z: 1000}},
@@ -554,8 +554,8 @@ func TestObjectsListsTheObjectsAndThenTheirPrims(t *testing.T) {
 // is standing in front of them -- would be a lie by omission.
 func TestObjectsSearchesTheNamesInsideToo(t *testing.T) {
 	x := newTestShell(t)
-	child := msg.MustParseUUID("f3a97e57-7e57-c0de-02ff-92b46275fd1b")
-	other := msg.MustParseUUID("95647e57-7e57-c0de-4d18-16ea29724ad6")
+	child := msg.MustParseUUID("f3a97e57-7e57-c0de-7a4e-4489268eda7a")
+	other := msg.MustParseUUID("95647e57-7e57-c0de-6f38-c33b7242cf23")
 	x.grid.objects = []*sl.Seen{
 		{Object: sl.Object{ID: testLamp, Local: 1, Name: "TrioBox"}, PCode: 9},
 		{Object: sl.Object{ID: child, Local: 2, Name: "HearthEmbers"}, PCode: 9, Parent: 1},
@@ -579,7 +579,7 @@ func TestObjectsSearchesTheNamesInsideToo(t *testing.T) {
 // hold it.
 func TestObjectsShowsAPrimWhoseRootIsNotThere(t *testing.T) {
 	x := newTestShell(t)
-	orphan := msg.MustParseUUID("d7987e57-7e57-c0de-3e1f-bedbf023d953")
+	orphan := msg.MustParseUUID("d7a97e57-7e57-c0de-6e78-35d45dd1cdb0")
 	x.grid.objects = []*sl.Seen{
 		{Object: sl.Object{ID: orphan, Local: 9, Name: "HearthEmbers"}, PCode: 9,
 			Parent: 4242, Position: msg.Vector3{X: -29.2}},
@@ -603,8 +603,8 @@ func TestObjectsNamesTheOwner(t *testing.T) {
 	x := newTestShell(t)
 	owner := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000a")
 	stranger := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000b")
-	child := msg.MustParseUUID("f3a97e57-7e57-c0de-02ff-92b46275fd1b")
-	unowned := msg.MustParseUUID("95647e57-7e57-c0de-4d18-16ea29724ad6")
+	child := msg.MustParseUUID("f3a97e57-7e57-c0de-7a4e-4489268eda7a")
+	unowned := msg.MustParseUUID("95647e57-7e57-c0de-6f38-c33b7242cf23")
 	x.grid.objects = []*sl.Seen{
 		{Object: sl.Object{ID: testSomebody, Local: 1, Name: "Wearer"}, PCode: pcodeAvatar, Owner: owner},
 		{Object: sl.Object{ID: testLamp, Local: 2, Name: "a lamp"}, PCode: 9, Owner: owner},
@@ -653,7 +653,7 @@ func TestObjectsSaysWhoIsWearingSomethingOnlyWhenItIsNotTheirs(t *testing.T) {
 	x := newTestShell(t)
 	wearer := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000c")
 	other := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000d")
-	borrowed := msg.MustParseUUID("95647e57-7e57-c0de-4d18-16ea29724ad6")
+	borrowed := msg.MustParseUUID("95647e57-7e57-c0de-6f38-c33b7242cf23")
 	x.grid.objects = []*sl.Seen{
 		{Object: sl.Object{ID: wearer, Local: 1}, PCode: pcodeAvatar},
 		{Object: sl.Object{ID: testLamp, Local: 2, Name: "own hat"}, PCode: 9,
@@ -682,8 +682,8 @@ func TestObjectsFiltersByOwner(t *testing.T) {
 	x := newTestShell(t)
 	kerra := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000a")
 	somebody := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000b")
-	theirs := msg.MustParseUUID("95647e57-7e57-c0de-4d18-16ea29724ad6")
-	nameless := msg.MustParseUUID("f3a97e57-7e57-c0de-02ff-92b46275fd1b")
+	theirs := msg.MustParseUUID("95647e57-7e57-c0de-6f38-c33b7242cf23")
+	nameless := msg.MustParseUUID("f3a97e57-7e57-c0de-7a4e-4489268eda7a")
 	unknown := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-00000000000e")
 	x.grid.objects = []*sl.Seen{
 		{Object: sl.Object{ID: testLamp, Local: 1, Name: "a lamp"}, PCode: 9, Owner: kerra},

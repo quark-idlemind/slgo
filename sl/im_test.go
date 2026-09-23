@@ -27,8 +27,8 @@ import (
 )
 
 var (
-	somebody     = msg.MustParseUUID("a72c7e57-7e57-c0de-2074-fe770519f801")
-	somebodyElse = msg.MustParseUUID("bca27e57-7e57-c0de-0b3e-4b818b47f770")
+	somebody     = msg.MustParseUUID("a72c7e57-7e57-c0de-c01f-3c2f792e3dc6")
+	somebodyElse = msg.MustParseUUID("bca27e57-7e57-c0de-96d3-7101f4e3c87a")
 )
 
 // arrivingIM is one instant message as the simulator sends it.
@@ -235,7 +235,7 @@ func TestIMsDropRatherThanBlock(t *testing.T) {
 func TestAFriendshipOfferIsKeptUntilItIsAnswered(t *testing.T) {
 	w, f := newFakeSession(t)
 
-	txn := msg.MustParseUUID("cff37e57-7e57-c0de-1b1a-1bd6b87b0dbd")
+	txn := msg.MustParseUUID("cff37e57-7e57-c0de-8e11-705cd0510fca")
 	f.Relay(t, arrivingIM(somebody, "Quark Idlemind", DialogFriendshipOffered, txn, "be my friend?"))
 
 	offers := w.Offers()
@@ -290,7 +290,7 @@ func TestAFriendshipOfferIsKeptUntilItIsAnswered(t *testing.T) {
 func TestDecliningAFriendshipOffer(t *testing.T) {
 	w, f := newFakeSession(t)
 
-	txn := msg.MustParseUUID("cff37e57-7e57-c0de-1b1a-1bd6b87b0dbd")
+	txn := msg.MustParseUUID("cff37e57-7e57-c0de-8e11-705cd0510fca")
 	f.Relay(t, arrivingIM(somebody, "Quark Idlemind", DialogFriendshipOffered, txn, ""))
 
 	o, ok := w.OfferFrom(somebody)
@@ -401,7 +401,7 @@ func TestTheFirstOfferBuildsTheMapItGoesIn(t *testing.T) {
 // sixteen of id -- so a bucket that is too short has to be refused
 // rather than read past the end of.
 func TestInventoryOfferFrom(t *testing.T) {
-	item := msg.MustParseUUID("106f7e57-7e57-c0de-710c-6117a0020345")
+	item := msg.MustParseUUID("106f7e57-7e57-c0de-3904-0bf24c089c63")
 
 	cases := []struct {
 		name   string
@@ -497,7 +497,7 @@ func relayInventoryOffer(t *testing.T, w *Session, f *fakeBackend,
 func TestAnInventoryOfferIsKeptUntilItIsAnswered(t *testing.T) {
 	w, f := newFakeSession(t)
 
-	txn := msg.MustParseUUID("19cc7e57-7e57-c0de-060c-a7a0fb3a8153")
+	txn := msg.MustParseUUID("19cc7e57-7e57-c0de-4169-ae942a366a74")
 	o := relayInventoryOffer(t, w, f, somebody, "Quark Idlemind", "a box of parts", txn)
 	if o.Asset != AssetObject || o.Item != (msg.UUID{0xaa}) {
 		t.Errorf("offer = %+v", o)

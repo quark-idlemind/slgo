@@ -52,12 +52,12 @@ var _ sl.Backend = (*fakeGrid)(nil)
 // Who the fake says we are.  sl.New refuses a backend with no agent or
 // session id, so these are load bearing rather than decoration.
 var (
-	testMe        = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
-	testSessionID = msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")
-	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-622e-77274d813d21")
+	testMe        = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	testSessionID = msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")
+	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-245c-d6b83f1a8b6d")
 	testObjects   = msg.MustParseUUID("a9a87e57-7e57-c0de-b748-062ee08c11ee")
 	testTrash     = msg.MustParseUUID("aa8f7e57-7e57-c0de-e8da-278417da2fea")
-	thePrim       = msg.MustParseUUID("88fa7e57-7e57-c0de-af42-813fbc8c4b63")
+	thePrim       = msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")
 )
 
 // autoItemID is the inventory id of the nth auto object, made up rather

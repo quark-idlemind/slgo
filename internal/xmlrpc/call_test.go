@@ -109,7 +109,7 @@ func TestCallWithNoParamsIsNotAnError(t *testing.T) {
 func TestResponseRoundTrips(t *testing.T) {
 	in := map[string]any{
 		"login":               "true",
-		"agent_id":            "876e7e57-7e57-c0de-9eeb-1bd0e1ec6995",
+		"agent_id":            "876e7e57-7e57-c0de-8597-66b760a8cb5f",
 		"sim_port":            int64(13003),
 		"seconds_since_epoch": int64(1_755_000_000),
 		"region_x":            int64(256000),

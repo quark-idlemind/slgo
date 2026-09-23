@@ -26,7 +26,7 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-var theCouch = msg.MustParseUUID("43da7e57-7e57-c0de-1beb-09ee90247da5")
+var theCouch = msg.MustParseUUID("43da7e57-7e57-c0de-f318-709f67e20973")
 
 // The local ids in play.  couchLocal is the one from the measurement on
 // Agni, kept because a number a person can look up in

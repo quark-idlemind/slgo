@@ -24,8 +24,8 @@ const goguenName = "Sandbox Goguen"
 // wornObject is the attachment this avatar is wearing, and wornItem the
 // inventory item it was worn from.
 var (
-	wornObject = msg.MustParseUUID("53b27e57-7e57-c0de-b946-959fa3f4b335")
-	wornItem   = msg.MustParseUUID("cf8e7e57-7e57-c0de-1cf7-c6fcd1e07e1e")
+	wornObject = msg.MustParseUUID("53b27e57-7e57-c0de-7597-63e685c3ae59")
+	wornItem   = msg.MustParseUUID("cf8e7e57-7e57-c0de-8e83-67be4fd56482")
 )
 
 // TestARegionChangeDropsWhatTheRegionSaidAndKeepsWhatItDidNot is the

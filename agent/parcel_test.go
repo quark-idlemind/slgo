@@ -19,8 +19,8 @@ func aParcel(name string, local, seq int, over ...func(map[string]any)) map[stri
 		"SequenceID": int64(seq),
 		"Area":       int64(2048),
 
-		"OwnerID":      "f5d57e57-7e57-c0de-a382-9ae02a25038c",
-		"GroupID":      "488f7e57-7e57-c0de-052a-a870a19787f5",
+		"OwnerID":      "fcf97e57-7e57-c0de-31c3-89b609d7e31a",
+		"GroupID":      "4e037e57-7e57-c0de-a18a-339d29bb11c3",
 		"IsGroupOwned": false,
 
 		"AABBMin": []any{12.0, 48.0, 0.0},
@@ -120,7 +120,7 @@ func TestTheParcelIsDecodedAsTheGridSendsIt(t *testing.T) {
 	a.deliver(parcelEvent(t, aParcel("Thrushmoor", 5, 3)), nil)
 	p := a.Parcel()
 
-	if want := msg.MustParseUUID("f5d57e57-7e57-c0de-a382-9ae02a25038c"); p.Owner != want {
+	if want := msg.MustParseUUID("fcf97e57-7e57-c0de-31c3-89b609d7e31a"); p.Owner != want {
 		t.Errorf("owner = %v, want %v", p.Owner, want)
 	}
 	if p.Group.IsZero() {

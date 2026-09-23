@@ -30,7 +30,7 @@ import (
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
-var aFriend = msg.MustParseUUID("54867e57-7e57-c0de-82e8-1205bb18071c")
+var aFriend = msg.MustParseUUID("54867e57-7e57-c0de-a176-4adcefbc98bb")
 
 // TestTheUnaryCallsAnswerFromWhatTheSessionWasTold walks the calls that
 // exist only to hand over state the server was given once and a client

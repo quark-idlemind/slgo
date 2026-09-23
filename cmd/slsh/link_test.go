@@ -20,7 +20,7 @@ import (
 // standing on their own, depending on what each one sets up.
 var (
 	aChair = msg.MustParseUUID("f0367e57-7e57-c0de-e242-539cb34f0bd2")
-	aLeg   = msg.MustParseUUID("f0367e57-7e57-c0de-9664-e4c990815167")
+	aLeg   = msg.MustParseUUID("f3597e57-7e57-c0de-5e4f-feef856d5803")
 	aSeat  = msg.MustParseUUID("f16c7e57-7e57-c0de-f489-4d4aee88fd0b")
 )
 

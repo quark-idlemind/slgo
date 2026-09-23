@@ -1421,7 +1421,7 @@ tell which happened, is worse than being told.
 A texture is a JPEG 2000 codestream, which nothing on a desktop opens,
 so `slsh` deals in PNGs at both ends:
 
-    get 46f67e57-7e57-c0de-6781-d23a564357eb     # by asset id
+    get 46f67e57-7e57-c0de-cb58-aff33c6b2282     # by asset id
     get -o wall.png /Textures/brick              # by inventory path
     get --raw /Textures/brick                    # the codestream, undecoded
 

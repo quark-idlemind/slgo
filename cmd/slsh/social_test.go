@@ -769,7 +769,7 @@ func TestLookupSaysSoWhenNobodyMatched(t *testing.T) {
 
 // testGroupID is a group somebody lists in their profile, which is not
 // one this avatar has joined: a profile's groups are somebody else's.
-var testGroupID = msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
+var testGroupID = msg.MustParseUUID("e2a17e57-7e57-c0de-b864-09116b98f7c6")
 
 // TestProfileShowsWhatAProfileSays.
 //

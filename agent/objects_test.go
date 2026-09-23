@@ -171,8 +171,8 @@ var (
 	aPrim    = msg.MustParseUUID("14ff7e57-7e57-c0de-3d5f-1eb0c71e7610")
 	aChild   = msg.MustParseUUID("68887e57-7e57-c0de-1dc8-91c8603a504d")
 	anOwner  = msg.MustParseUUID("c8f07e57-7e57-c0de-9629-da597abcbade")
-	someone  = msg.MustParseUUID("10007e57-7e57-c0de-f13f-8c5ee4b6668a")
-	anItem   = msg.MustParseUUID("97da7e57-7e57-c0de-b787-9e0b48a226f1")
+	someone  = msg.MustParseUUID("10007e57-7e57-c0de-4fa3-21148d35992f")
+	anItem   = msg.MustParseUUID("97da7e57-7e57-c0de-1387-f63ad28b7794")
 	someText = "hello from the prim"
 )
 

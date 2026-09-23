@@ -98,7 +98,7 @@ func TestAConversationSurvivesBeingWrittenDown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	who := msg.MustParseUUID("19d17e57-7e57-c0de-b3a6-3f42edc56d31")
+	who := msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
 
 	c := store.Load("example", who, "Somebody Else")
 	if len(c.Turns) != 0 {
@@ -133,7 +133,7 @@ func TestAnUnreadableConversationIsSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	good := msg.MustParseUUID("19d17e57-7e57-c0de-b3a6-3f42edc56d31")
+	good := msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
 	c := store.Load("example", good, "Somebody Else")
 	c.Add("user", "hello", time.Now())
 	if err := store.Save(c); err != nil {
@@ -152,7 +152,7 @@ func TestAnUnreadableConversationIsSkipped(t *testing.T) {
 func TestForgettingRemovesTheConversation(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
-	who := msg.MustParseUUID("19d17e57-7e57-c0de-b3a6-3f42edc56d31")
+	who := msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
 	c := store.Load("example", who, "Somebody Else")
 	c.Add("user", "hello", time.Now())
 	if err := store.Save(c); err != nil {

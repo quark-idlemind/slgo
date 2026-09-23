@@ -55,8 +55,8 @@ func TestMain(m *testing.M) {
 }
 
 var (
-	harnessMe    = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
-	harnessOther = msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")
+	harnessMe    = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	harnessOther = msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")
 	harnessRoot  = msg.MustParseUUID("12b57e57-7e57-c0de-efe3-b327af5dfe62")
 
 	// harnessSlow is a folder the fake takes its time over, so that a

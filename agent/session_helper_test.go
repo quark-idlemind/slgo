@@ -106,8 +106,8 @@ func offlineSession(t *testing.T) (*Agent, *sentPackets) {
 	a := &Agent{
 		sock: newSocket(conn),
 		Account: &Account{
-			AgentID:   msg.MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995"),
-			SessionID: msg.MustParseUUID("8d1b7e57-7e57-c0de-f4f4-19d29d124acf"),
+			AgentID:   msg.MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f"),
+			SessionID: msg.MustParseUUID("8d1b7e57-7e57-c0de-3bf6-2277c65663be"),
 			FirstName: "Example",
 			LastName:  "Resident",
 		},

@@ -13,7 +13,7 @@ import (
 
 func TestDumpSingleBlock(t *testing.T) {
 	m := &ChatFromViewer{}
-	m.AgentData.AgentID = MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995")
+	m.AgentData.AgentID = MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f")
 	m.ChatData.Message = []byte("hello world\x00")
 	m.ChatData.Type = 1
 	m.ChatData.Channel = -3
@@ -24,7 +24,7 @@ func TestDumpSingleBlock(t *testing.T) {
 		"id: {freq: Low, number: 80}",
 		"blocks:",
 		"  AgentData:",
-		"    AgentID: 876e7e57-7e57-c0de-9eeb-1bd0e1ec6995",
+		"    AgentID: 876e7e57-7e57-c0de-8597-66b760a8cb5f",
 		"  ChatData:",
 		`    Message: "hello world"`, // the NUL terminator is dropped
 		"    Type: 1",

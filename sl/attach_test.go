@@ -238,7 +238,7 @@ func TestTheAttachPointArrivesWithItsNibblesSwapped(t *testing.T) {
 // a fresh id every time it goes on, so anything that misreads it loses
 // the attachment for good.
 func TestTheItemAnAttachmentCameFromIsInItsNameValues(t *testing.T) {
-	item := msg.MustParseUUID("75f27e57-7e57-c0de-b61a-dcef76421b96")
+	item := msg.MustParseUUID("75f27e57-7e57-c0de-3e6e-cebd8a8d72d0")
 
 	cases := []struct {
 		name string
@@ -277,7 +277,7 @@ func TestTheItemAnAttachmentCameFromIsInItsNameValues(t *testing.T) {
 // it, so what is not taken from that update is not had at all.
 func TestAnAttachmentIsRememberedWhenItIsDescribed(t *testing.T) {
 	w, f := newFakeSession(t)
-	item := msg.MustParseUUID("75f27e57-7e57-c0de-b61a-dcef76421b96")
+	item := msg.MustParseUUID("75f27e57-7e57-c0de-3e6e-cebd8a8d72d0")
 
 	if len(w.Attachments()) != 0 {
 		t.Error("a fresh session already knew what was worn")
@@ -379,7 +379,7 @@ func TestWearSaysWhenNothingWentOn(t *testing.T) {
 // off hands out a local id that no longer names anything.
 func TestTakeOffForgetsWhatWasWorn(t *testing.T) {
 	w, f := newFakeSession(t)
-	item := msg.MustParseUUID("75f27e57-7e57-c0de-b61a-dcef76421b96")
+	item := msg.MustParseUUID("75f27e57-7e57-c0de-3e6e-cebd8a8d72d0")
 	f.Relay(t, wornUpdate(thePrim, 4, item, HUDTop))
 
 	if err := w.TakeOff(context.Background(), item); err != nil {
@@ -412,8 +412,8 @@ func TestTakeOffForgetsWhatWasWorn(t *testing.T) {
 // listening at the time.
 func TestWornObjectsAsksWhoeverWasConnected(t *testing.T) {
 	w, f := newFakeSession(t)
-	item := msg.MustParseUUID("75f27e57-7e57-c0de-b61a-dcef76421b96")
-	elsewhere := msg.MustParseUUID("87e97e57-7e57-c0de-f56c-a8837e56f4d8")
+	item := msg.MustParseUUID("75f27e57-7e57-c0de-3e6e-cebd8a8d72d0")
+	elsewhere := msg.MustParseUUID("87e97e57-7e57-c0de-0cfe-880b205c342b")
 	f.objects = []*Seen{
 		// This avatar, which is what says whose the attachment is: it
 		// hangs off the wearer.
@@ -426,8 +426,8 @@ func TestWornObjectsAsksWhoeverWasConnected(t *testing.T) {
 		// may be shared with the avatars in it, so being worn is not
 		// enough to be worn by us.
 		{Object: Object{ID: elsewhere, Local: 8}, PCode: pcodeAvatar},
-		{Object: Object{ID: msg.MustParseUUID("93907e57-7e57-c0de-f462-557f179447a9"), Local: 9},
-			Parent: 8, AttachItem: msg.MustParseUUID("94c37e57-7e57-c0de-392b-0489550b815e")},
+		{Object: Object{ID: msg.MustParseUUID("93907e57-7e57-c0de-de98-7237d586ade7"), Local: 9},
+			Parent: 8, AttachItem: msg.MustParseUUID("94c37e57-7e57-c0de-f905-ec5fc2ffeaf7")},
 	}
 
 	worn, err := w.WornObjects(context.Background())
@@ -458,7 +458,7 @@ func TestWornObjectsAsksWhoeverWasConnected(t *testing.T) {
 // the only handle that survives between sessions.
 func TestWornFromItemIsTheOnlyWayToFindTheSameAttachmentTwice(t *testing.T) {
 	w, f := newFakeSession(t)
-	item := msg.MustParseUUID("75f27e57-7e57-c0de-b61a-dcef76421b96")
+	item := msg.MustParseUUID("75f27e57-7e57-c0de-3e6e-cebd8a8d72d0")
 	f.objects = []*Seen{
 		{Object: Object{ID: theOther, Local: 6}},
 		{Object: Object{ID: thePrim, Local: 5}, AttachItem: item, AttachPoint: HUDCenter1},

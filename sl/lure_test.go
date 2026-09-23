@@ -14,11 +14,11 @@ import (
 func offered(w *Session) *Lure {
 	w.noteLure(&IM{
 		At:       time.Now(),
-		From:     msg.MustParseUUID("74347e57-7e57-c0de-66d4-4c6b2d882438"),
+		From:     msg.MustParseUUID("74347e57-7e57-c0de-bf5b-1e340fba40be"),
 		FromName: "Jorr Starlit",
 		Text:     "Join me in Sandbox Goguen!",
 		Dialog:   22,
-		ID:       msg.MustParseUUID("0d817e57-7e57-c0de-7df5-71b55084a53f"),
+		ID:       msg.MustParseUUID("0d817e57-7e57-c0de-3eb0-2dd03720cbb5"),
 	}, "", false)
 	return w.Lures()[0]
 }

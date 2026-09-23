@@ -39,7 +39,7 @@ func thrushmoor(seq int32) string {
 	  <key>LocalID</key><integer>5</integer>
 	  <key>SequenceID</key><integer>%d</integer>
 	  <key>Area</key><integer>2048</integer>
-	  <key>OwnerID</key><string>f5d57e57-7e57-c0de-a382-9ae02a25038c</string>
+	  <key>OwnerID</key><string>fcf97e57-7e57-c0de-31c3-89b609d7e31a</string>
 	  <key>MaxPrims</key><integer>937</integer>
 	  <key>TotalPrims</key><integer>486</integer>
 	  <key>OwnerPrims</key><integer>485</integer>
@@ -61,7 +61,7 @@ func TestParcelAsksAndSaysWhatItGot(t *testing.T) {
 	for _, want := range []string{
 		"Thrushmoor",
 		"local    5",
-		"f5d57e57-7e57-c0de-a382-9ae02a25038c",
+		"fcf97e57-7e57-c0de-31c3-89b609d7e31a",
 		"area     2048 m²",
 		"prims    486 of 937",
 		// The flags word decoded.  Read the other way round this

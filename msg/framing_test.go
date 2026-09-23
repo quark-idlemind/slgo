@@ -202,8 +202,8 @@ func TestZeroExpandTruncated(t *testing.T) {
 func TestWholePacket(t *testing.T) {
 	m := &UseCircuitCode{}
 	m.CircuitCode.Code = 690139535
-	m.CircuitCode.SessionID = MustParseUUID("8d1b7e57-7e57-c0de-f4f4-19d29d124acf")
-	m.CircuitCode.ID = MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995")
+	m.CircuitCode.SessionID = MustParseUUID("8d1b7e57-7e57-c0de-3bf6-2277c65663be")
+	m.CircuitCode.ID = MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f")
 
 	body, err := m.Encode()
 	if err != nil {
@@ -253,7 +253,7 @@ func TestWholePacket(t *testing.T) {
 }
 
 func TestUUIDStringRoundTrip(t *testing.T) {
-	const s = "876e7e57-7e57-c0de-9eeb-1bd0e1ec6995"
+	const s = "876e7e57-7e57-c0de-8597-66b760a8cb5f"
 	u, err := ParseUUID(s)
 	if err != nil {
 		t.Fatal(err)

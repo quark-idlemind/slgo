@@ -31,7 +31,7 @@ func dialogFrom(name, message string, channel int32, buttons ...string) *msg.Scr
 // into.  Neither is an avatar: the sender of a group invitation is the
 // group itself, which is the fact the shell's handling turns on.
 var (
-	testGroup = msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
+	testGroup = msg.MustParseUUID("e2a17e57-7e57-c0de-b864-09116b98f7c6")
 	testRole  = msg.MustParseUUID("dc047e57-7e57-c0de-1117-911169260e8b")
 )
 
@@ -309,7 +309,7 @@ func TestABareAnswerWillNotSpendMoney(t *testing.T) {
 	x := newTestShell(t)
 	watching(t, x)
 
-	txn := msg.MustParseUUID("f0367e57-7e57-c0de-9664-e4c990815167")
+	txn := msg.MustParseUUID("f3597e57-7e57-c0de-5e4f-feef856d5803")
 	x.grid.Relay(t, inviting("quark.idlemind", "Quark invites you to Lorn Family", 50, txn))
 	waits(t, x, "invites you into a group")
 

@@ -27,9 +27,9 @@ import (
 )
 
 var (
-	thePrim  = msg.MustParseUUID("88fa7e57-7e57-c0de-af42-813fbc8c4b63")
-	theChild = msg.MustParseUUID("909e7e57-7e57-c0de-bb3f-fa0c110c8d02")
-	theOther = msg.MustParseUUID("97c27e57-7e57-c0de-0572-44b27a1c1090")
+	thePrim  = msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")
+	theChild = msg.MustParseUUID("909e7e57-7e57-c0de-177e-107fc4869811")
+	theOther = msg.MustParseUUID("97c27e57-7e57-c0de-c041-be2c2f8cb586")
 )
 
 // anUpdate is one ObjectUpdate, which is how the region says an object
@@ -574,7 +574,7 @@ func TestUnlinkRefusesWhatItCannotDo(t *testing.T) {
 }
 
 // aFolder is where things are taken to.
-var aFolder = msg.MustParseUUID("41857e57-7e57-c0de-7351-f953176288ed")
+var aFolder = msg.MustParseUUID("41857e57-7e57-c0de-7570-3c776df7b8ca")
 
 // anItem is one thing in it, as AIS describes it.
 func anItem(id msg.UUID, name string) *Item {
@@ -753,7 +753,7 @@ func TestDeleteSendsItToTheTrash(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 
-	trash := msg.MustParseUUID("1ad37e57-7e57-c0de-1c7b-0ac2453d65b3")
+	trash := msg.MustParseUUID("1ad37e57-7e57-c0de-4b44-9217348fe328")
 	o := &Object{ID: thePrim, Local: 77}
 	if err := w.Delete(context.Background(), o, trash); err != nil {
 		t.Fatalf("Delete: %v", err)

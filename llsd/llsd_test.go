@@ -12,7 +12,7 @@ func TestDecodeTypes(t *testing.T) {
 	  <key>i</key><integer>-7</integer>
 	  <key>r</key><real>1.5</real>
 	  <key>b</key><boolean>1</boolean>
-	  <key>u</key><uuid>876e7e57-7e57-c0de-9eeb-1bd0e1ec6995</uuid>
+	  <key>u</key><uuid>876e7e57-7e57-c0de-8597-66b760a8cb5f</uuid>
 	  <key>n</key><undef/>
 	  <key>empty</key><map/>
 	  <key>list</key><array><integer>1</integer><integer>2</integer></array>

@@ -101,7 +101,7 @@ type Landmark struct {
 // The whole of one, as measured on Agni 2026-08-18 -- 96 bytes:
 //
 //	Landmark version 2
-//	region_id a8377e57-7e57-c0de-49f1-463af55b7a68
+//	region_id a8377e57-7e57-c0de-9d9c-088e2efc057b
 //	local_pos 32.00 70.00 1000.09
 //
 // Strictness here is not fussiness.  The null region id is what the

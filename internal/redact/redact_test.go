@@ -14,7 +14,7 @@ import (
 const (
 	capPath = "/cap/5b747e57-7e57-c0de-bd47-c17eb0d6747f"
 	capURL  = "https://sim.example.net:12043" + capPath
-	session = "8d1b7e57-7e57-c0de-f4f4-19d29d124acf"
+	session = "8d1b7e57-7e57-c0de-3bf6-2277c65663be"
 )
 
 // unredacted turns redaction off for one test and back on after it, so that a

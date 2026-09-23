@@ -22,8 +22,8 @@ import (
 )
 
 var (
-	testGroupID = msg.MustParseUUID("cc4b7e57-7e57-c0de-0d0f-49dc46c716e1")
-	testRoleID  = msg.MustParseUUID("d45a7e57-7e57-c0de-029f-bc28b0fb6f92")
+	testGroupID = msg.MustParseUUID("cc4b7e57-7e57-c0de-7388-c4a224e02539")
+	testRoleID  = msg.MustParseUUID("d45a7e57-7e57-c0de-59c2-32b534207de8")
 )
 
 // invitingIM is an invitation as the simulator sends one: from the
@@ -54,7 +54,7 @@ func inviteBucketBytes(fee int32, role msg.UUID) []byte {
 func TestAnInvitationIsFiledUnderTheGroupThatSentIt(t *testing.T) {
 	w, f := newFakeSession(t)
 
-	txn := msg.MustParseUUID("cff37e57-7e57-c0de-1b1a-1bd6b87b0dbd")
+	txn := msg.MustParseUUID("cff37e57-7e57-c0de-8e11-705cd0510fca")
 	f.Relay(t, invitingIM(testGroupID, "quark.idlemind", txn, "join us", 0, testRoleID))
 
 	is := w.Invitations()
@@ -102,7 +102,7 @@ func TestAnInvitationIsFiledUnderTheGroupThatSentIt(t *testing.T) {
 func TestDecliningAnInvitationTellsTheGroup(t *testing.T) {
 	w, f := newFakeSession(t)
 
-	txn := msg.MustParseUUID("cff37e57-7e57-c0de-1b1a-1bd6b87b0dbd")
+	txn := msg.MustParseUUID("cff37e57-7e57-c0de-8e11-705cd0510fca")
 	f.Relay(t, invitingIM(testGroupID, "quark.idlemind", txn, "", 0, testRoleID))
 
 	is := w.Invitations()
@@ -133,7 +133,7 @@ func TestDecliningAnInvitationTellsTheGroup(t *testing.T) {
 func TestTheFeeAndTheRoleComeOutOfTheBucket(t *testing.T) {
 	w, f := newFakeSession(t)
 
-	txn := msg.MustParseUUID("cff37e57-7e57-c0de-1b1a-1bd6b87b0dbd")
+	txn := msg.MustParseUUID("cff37e57-7e57-c0de-8e11-705cd0510fca")
 	f.Relay(t, invitingIM(testGroupID, "quark.idlemind", txn, "join us", 50, testRoleID))
 
 	is := w.Invitations()
@@ -221,7 +221,7 @@ func TestASecondInvitationFromTheSameGroupReplacesTheFirst(t *testing.T) {
 	}
 
 	// A different group is a different invitation, and both wait.
-	other := msg.MustParseUUID("eb847e57-7e57-c0de-dabb-98143de2e974")
+	other := msg.MustParseUUID("eb847e57-7e57-c0de-cab6-96ad5a91764c")
 	f.Relay(t, invitingIM(other, "quark.idlemind", msg.UUID{3}, "and us", 0, testRoleID))
 	if is := w.Invitations(); len(is) != 2 {
 		t.Fatalf("two groups gave %d invitations, want 2", len(is))
@@ -328,7 +328,7 @@ func TestAnInvitationDoesNotTeachTheGroupAPersonsName(t *testing.T) {
 // before anything did.
 
 // testInvitee is somebody to invite, and is not a group.
-var testInvitee = msg.MustParseUUID("8f947e57-7e57-c0de-8cf0-54e10ee32eb6")
+var testInvitee = msg.MustParseUUID("8f947e57-7e57-c0de-0928-5cf3d9817de5")
 
 // invitingSession is a session whose avatar belongs to one group with
 // the power to invite and one without, which is the arrangement every

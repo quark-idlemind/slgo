@@ -202,7 +202,7 @@ func TestChatClosesWhenReaderStops(t *testing.T) {
 func TestSayRoutesNegativeChannels(t *testing.T) {
 	w, stop := newTestSession(t)
 	defer stop()
-	w.me = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
+	w.me = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
 
 	sent := make(chan msg.Message, 4)
 	w.sendFn = func(m msg.Message) error { sent <- m; return nil }

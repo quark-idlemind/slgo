@@ -24,25 +24,25 @@ import (
 // deliberately unmistakable: half the assertions here are about which
 // of the two ended up in a message.
 var (
-	testLandmarksDir    = msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
-	testThrushmoor      = msg.MustParseUUID("e3097e57-7e57-c0de-57ef-49ccef800593")
-	testThrushmoorAsset = msg.MustParseUUID("f0367e57-7e57-c0de-9664-e4c990815167")
-	testWorkshop        = msg.MustParseUUID("e85b7e57-7e57-c0de-1289-41a87927a423")
-	testWorkshopAsset   = msg.MustParseUUID("ee9b7e57-7e57-c0de-0447-c20f90110020")
-	testStray           = msg.MustParseUUID("d9e17e57-7e57-c0de-bf11-593aab90391d")
-	testStrayAsset      = msg.MustParseUUID("ed6a7e57-7e57-c0de-d481-13c635d5488e")
-	testDeleted         = msg.MustParseUUID("dbf67e57-7e57-c0de-bb0c-07a7d6f84fc5")
-	testDeletedAsset    = msg.MustParseUUID("ec737e57-7e57-c0de-b60c-ebb396229373")
+	testLandmarksDir    = msg.MustParseUUID("e2a17e57-7e57-c0de-b864-09116b98f7c6")
+	testThrushmoor      = msg.MustParseUUID("e3097e57-7e57-c0de-4f84-d4083f0603ed")
+	testThrushmoorAsset = msg.MustParseUUID("f3597e57-7e57-c0de-5e4f-feef856d5803")
+	testWorkshop        = msg.MustParseUUID("e85b7e57-7e57-c0de-b2dc-2d09f8c3e809")
+	testWorkshopAsset   = msg.MustParseUUID("ee9b7e57-7e57-c0de-141e-585a61c8fbbf")
+	testStray           = msg.MustParseUUID("d9e17e57-7e57-c0de-f694-e55564e9af71")
+	testStrayAsset      = msg.MustParseUUID("ed6a7e57-7e57-c0de-8ef8-5e9b0b475b19")
+	testDeleted         = msg.MustParseUUID("dbf67e57-7e57-c0de-42de-c917df1521a6")
+	testDeletedAsset    = msg.MustParseUUID("ec737e57-7e57-c0de-8b1c-9ee8f88cf80b")
 )
 
 // thrushmoorAsset is a landmark asset with the bytes Agni really served:
 // a version line, a region id and three numbers, and nothing else.
 const thrushmoorAsset = "Landmark version 2\n" +
-	"region_id a8377e57-7e57-c0de-49f1-463af55b7a68\n" +
+	"region_id a8377e57-7e57-c0de-9d9c-088e2efc057b\n" +
 	"local_pos 32.00 70.00 1000.09\n"
 
 const workshopAsset = "Landmark version 2\n" +
-	"region_id b8eb7e57-7e57-c0de-96e0-5c57c027acb3\n" +
+	"region_id b8eb7e57-7e57-c0de-dd61-4991f332c5d1\n" +
 	"local_pos 28.00 71.95 2001.20\n"
 
 // withLandmarks puts landmarks in the fake inventory: two where the
@@ -225,7 +225,7 @@ func TestLandmarkSaysWhereOneGoesWithoutGoing(t *testing.T) {
 	for _, want := range []string{
 		"Thrushmoor",
 		"in       /Landmarks",
-		"region   a8377e57-7e57-c0de-49f1-463af55b7a68",
+		"region   a8377e57-7e57-c0de-9d9c-088e2efc057b",
 		"at       32.00, 70.00, 1000.09",
 		"item     " + testThrushmoor.String(),
 		"asset    " + testThrushmoorAsset.String(),
@@ -287,7 +287,7 @@ func TestLandmarkRefusesAUuidItDoesNotHold(t *testing.T) {
 	x := newTestShell(t)
 	withLandmarks(x)
 
-	got := x.do(t, "landmark --go 8ac37e57-7e57-c0de-5e59-f53ae6dd2fe7")
+	got := x.do(t, "landmark --go 8ac37e57-7e57-c0de-5f0e-1118be2e7a2c")
 	if !strings.Contains(got, "no landmark in inventory has the id") {
 		t.Errorf("a uuid nobody holds should be refused, got %q", got)
 	}
@@ -311,9 +311,9 @@ func TestLandmarkRefusesANameThatMeansSeveral(t *testing.T) {
 	x.grid.mu.Lock()
 	x.grid.inv.Dirs[len(x.grid.inv.Dirs)-1].Items = append(
 		x.grid.inv.Dirs[len(x.grid.inv.Dirs)-1].Items,
-		&invItem{ID: msg.MustParseUUID("e85d7e57-7e57-c0de-588c-536826492cc4"),
+		&invItem{ID: msg.MustParseUUID("e85d7e57-7e57-c0de-dfe1-663fa7f1bf24"),
 			Name: "Thrushmoor", Type: int(sl.AssetLandmark), InvType: 3,
-			Asset:   msg.MustParseUUID("ecc57e57-7e57-c0de-6269-d4a71dda1ca8"),
+			Asset:   msg.MustParseUUID("ecc57e57-7e57-c0de-3520-6ebad7ae73fc"),
 			Created: 1754000600})
 	x.grid.mu.Unlock()
 
@@ -518,7 +518,7 @@ func TestLandmarkMakeReadsBackWhatTheSimulatorWrote(t *testing.T) {
 	got := x.do(t, "landmark --make Pelmar Reach Workshop")
 	for _, want := range []string{
 		"made Pelmar Reach Workshop",
-		"region   b8eb7e57-7e57-c0de-96e0-5c57c027acb3",
+		"region   b8eb7e57-7e57-c0de-dd61-4991f332c5d1",
 		// Read back out of the asset, not out of where the shell
 		// thought the avatar was: the fake stands at 128, 128, 25.
 		"at       28.00, 71.95, 2001.20",

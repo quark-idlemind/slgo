@@ -207,7 +207,7 @@ func TestStandingFromTheGroundClearsTheAnimation(t *testing.T) {
 func TestTheParentWinsOverTheAnimation(t *testing.T) {
 	t.Parallel()
 
-	somethingScripted := msg.MustParseUUID("55e27e57-7e57-c0de-c8c8-d1c85f983b8e")
+	somethingScripted := msg.MustParseUUID("55e27e57-7e57-c0de-8ae1-105737ad6aaa")
 
 	a := standingSession(t)
 	feed(t, a, seatUpdate(t), ownUpdate(t, a, theSeat),

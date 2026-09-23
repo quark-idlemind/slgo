@@ -25,9 +25,9 @@ import (
 )
 
 var (
-	theStranger  = msg.MustParseUUID("1b627e57-7e57-c0de-3614-68104e5fa9d8")
-	theirPartner = msg.MustParseUUID("2bc17e57-7e57-c0de-6fcd-0fd10f67b8a1")
-	theirGroup   = msg.MustParseUUID("3b357e57-7e57-c0de-bd0f-62d50ece68da")
+	theStranger  = msg.MustParseUUID("1b627e57-7e57-c0de-f4eb-9a217c5eaddd")
+	theirPartner = msg.MustParseUUID("2bc17e57-7e57-c0de-d972-422b379744a0")
+	theirGroup   = msg.MustParseUUID("3b357e57-7e57-c0de-f589-10b28cfeae5a")
 )
 
 // onWire is a string field as the wire carries one: NUL terminated.

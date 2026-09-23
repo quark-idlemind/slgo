@@ -502,8 +502,8 @@ const theContentsFile = `	inv_object	0
 	}
 	inv_item	0
 	{
-		item_id	909e7e57-7e57-c0de-bb3f-fa0c110c8d02
-		parent_id	88fa7e57-7e57-c0de-af42-813fbc8c4b63
+		item_id	909e7e57-7e57-c0de-177e-107fc4869811
+		parent_id	89ad7e57-7e57-c0de-08a1-04b25f97cc85
 		permissions 0
 		{
 			base_mask	7fffffff
@@ -511,11 +511,11 @@ const theContentsFile = `	inv_object	0
 			group_mask	00000000
 			everyone_mask	00008000
 			next_owner_mask	00082000
-			creator_id	a5707e57-7e57-c0de-65b6-5a7ceceb4b01
-			owner_id	a5707e57-7e57-c0de-65b6-5a7ceceb4b01
+			creator_id	3ac37e57-7e57-c0de-5607-527da8fa08de
+			owner_id	3ac37e57-7e57-c0de-5607-527da8fa08de
 			group_id	00000000-0000-0000-0000-000000000000
 		}
-		asset_id	97c27e57-7e57-c0de-0572-44b27a1c1090
+		asset_id	97c27e57-7e57-c0de-c041-be2c2f8cb586
 		type	lsltext
 		inv_type	lsltext
 		flags	00000001
@@ -575,9 +575,9 @@ func TestTheContentsFileSurvivesWhatItMayHold(t *testing.T) {
 	inv_item	0
 	{
 		nothing
-		shadow_id	97c27e57-7e57-c0de-0572-44b27a1c1090
+		shadow_id	97c27e57-7e57-c0de-c041-be2c2f8cb586
 		asset_id	00157e57-7e57-c0de-028f-000000000001
-		item_id	909e7e57-7e57-c0de-bb3f-fa0c110c8d02
+		item_id	909e7e57-7e57-c0de-177e-107fc4869811
 		name	a name with spaces|
 		wibble	3
 	}

@@ -156,12 +156,12 @@ func TestDistancesAreComparedSquared(t *testing.T) {
 // is the one field of it this package reads at all: the address and the
 // seed are for whoever moves the circuit, and that is the daemon.
 const agniFinish = `<llsd><map><key>Info</key><array><map>` +
-	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-05ab-3469e908f363</uuid>` +
+	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-d221-6ffd8a188ce4</uuid>` +
 	`<key>LocationID</key><binary>AAAAAw==</binary>` +
 	`<key>RegionHandle</key><binary>AAPjAAAD5QA=</binary>` +
 	`<key>SeedCapability</key>` +
 	`<string>https://simhost-0aaaaaaaaaaaaaaa2.agni.secondlife.io:12043/cap/` +
-	`fd277e57-7e57-c0de-69d1-a1764bce3849</string>` +
+	`fd277e57-7e57-c0de-d6ee-dd800a9b6922</string>` +
 	`<key>SimAccess</key><integer>13</integer>` +
 	`<key>SimIP</key><binary>ywBxCw==</binary>` +
 	`<key>SimPort</key><integer>13032</integer>` +
@@ -178,7 +178,7 @@ const agniRefused = `<llsd><map>` +
 	`<key>ExtraParams</key><string></string>` +
 	`<key>Message</key><string>MustHaveVIPStatus</string></map></array>` +
 	`<key>Info</key><array><map>` +
-	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-05ab-3469e908f363</uuid>` +
+	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-d221-6ffd8a188ce4</uuid>` +
 	`<key>Reason</key><string>You must be a premium or vip subscriber ` +
 	`to enter this region.</string></map></array></map></llsd>`
 
@@ -189,7 +189,7 @@ const agniNoSuchRegion = `<llsd><map>` +
 	`<key>ExtraParams</key><string></string>` +
 	`<key>Message</key><string>no_host</string></map></array>` +
 	`<key>Info</key><array><map>` +
-	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-05ab-3469e908f363</uuid>` +
+	`<key>AgentID</key><uuid>45d57e57-7e57-c0de-d221-6ffd8a188ce4</uuid>` +
 	`<key>Reason</key><string>no_host</string></map></array></map></llsd>`
 
 // TestATeleportWaitsForTheSessionToBeInTheNewRegion: the finish says the

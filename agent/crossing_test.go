@@ -161,8 +161,8 @@ func TestACrossedRegionNobodyCanReadIsNotActedOn(t *testing.T) {
 // value.
 const agniCrossedRegion = `<llsd><map>` +
 	`<key>AgentData</key><array><map>` +
-	`<key>AgentID</key><string>45d57e57-7e57-c0de-05ab-3469e908f363</string>` +
-	`<key>SessionID</key><string>c2ea7e57-7e57-c0de-4a06-e2d912d3d395</string>` +
+	`<key>AgentID</key><string>45d57e57-7e57-c0de-d221-6ffd8a188ce4</string>` +
+	`<key>SessionID</key><string>c2ea7e57-7e57-c0de-aef9-4e04641652b3</string>` +
 	`</map></array>` +
 	`<key>Info</key><array><map>` +
 	`<key>LookAt</key><array><real>-1</real><real>0</real><real>0</real></array>` +
@@ -174,7 +174,7 @@ const agniCrossedRegion = `<llsd><map>` +
 	`<key>RegionHandle</key><binary>AKp/AACqgAA=</binary>` +
 	`<key>SeedCapability</key>` +
 	`<string>https://simhost-0aaaaaaaaaaaaaaa2.agni.secondlife.io:12043/cap/` +
-	`d8ad7e57-7e57-c0de-696c-d11016b60d1c</string>` +
+	`d8ad7e57-7e57-c0de-c3e4-64514ffb79e0</string>` +
 	`<key>SimIP</key><binary>ywBxCg==</binary>` +
 	`</map></array></map></llsd>`
 
@@ -202,7 +202,7 @@ func TestTheCrossingIsReadFromTheBytesTheGridSent(t *testing.T) {
 	if x, y := msg.GridCoords(handle); x != 1053 || y != 992 {
 		t.Errorf("the handle is grid square (%d, %d), want (43647, 43648)", x, y)
 	}
-	if !strings.HasSuffix(seed, "d8ad7e57-7e57-c0de-696c-d11016b60d1c") {
+	if !strings.HasSuffix(seed, "d8ad7e57-7e57-c0de-c3e4-64514ffb79e0") {
 		t.Errorf("seed = %q", seed)
 	}
 }
@@ -252,8 +252,8 @@ func crossedRegionTo(r *fakeRegion) map[string]any {
 	at, handle := r.sim.arrival()
 	return map[string]any{
 		"AgentData": []any{map[string]any{
-			"AgentID":   "45d57e57-7e57-c0de-05ab-3469e908f363",
-			"SessionID": "6d2b7e57-7e57-c0de-88a6-12d509e5ef7b",
+			"AgentID":   "45d57e57-7e57-c0de-d221-6ffd8a188ce4",
+			"SessionID": "6d2b7e57-7e57-c0de-ba4e-212a750ee6e7",
 		}},
 		"RegionData": []any{map[string]any{
 			"RegionHandle":   handleBytes(handle),

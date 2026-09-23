@@ -37,9 +37,9 @@ import (
 )
 
 var (
-	testAgentID   = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
-	testSessionID = msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")
-	theOther      = msg.MustParseUUID("97c27e57-7e57-c0de-0572-44b27a1c1090")
+	testAgentID   = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	testSessionID = msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")
+	theOther      = msg.MustParseUUID("97c27e57-7e57-c0de-c041-be2c2f8cb586")
 )
 
 // fakeDaemon is a slgod with nothing behind it.

@@ -23,7 +23,7 @@ var (
 	aLurer   = msg.MustParseUUID("41497e57-7e57-c0de-8e40-535e4340746b")
 	aGiver   = msg.MustParseUUID("9bf57e57-7e57-c0de-acac-5c71d05f9c65")
 	aGroup   = msg.MustParseUUID("e86b7e57-7e57-c0de-7369-7fbb4c3ea183")
-	aLure    = msg.MustParseUUID("0d817e57-7e57-c0de-7df5-71b55084a53f")
+	aLure    = msg.MustParseUUID("0d817e57-7e57-c0de-3eb0-2dd03720cbb5")
 	aTxn     = msg.MustParseUUID("77c67e57-7e57-c0de-0877-a368e2c13bb1")
 	aGroupTx = msg.MustParseUUID("366d7e57-7e57-c0de-65d1-3e37922ac4d3")
 )

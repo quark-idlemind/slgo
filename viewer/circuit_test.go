@@ -157,11 +157,11 @@ const testCircuitCode = 690139535
 // The ids a viewer proves itself with, which are the session's own and
 // reach a viewer in its login response.
 var (
-	testSessionID = msg.MustParseUUID("8d1b7e57-7e57-c0de-f4f4-19d29d124acf")
-	testAgentID   = msg.MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995")
+	testSessionID = msg.MustParseUUID("8d1b7e57-7e57-c0de-3bf6-2277c65663be")
+	testAgentID   = msg.MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f")
 )
 
-var testTerrainTexture = msg.MustParseUUID("c4a67e57-7e57-c0de-f622-7fbb9d50e934")
+var testTerrainTexture = msg.MustParseUUID("c4a67e57-7e57-c0de-070b-9e6e8176f9e9")
 
 // describeObjects sends full object updates, as a region does once when
 // an avatar arrives and never again.
@@ -288,7 +288,7 @@ func TestMovementCompleteCarriesTheRealPosition(t *testing.T) {
 	if m.Data.RegionHandle != 0x0003_f000_0003_e800 {
 		t.Errorf("region handle = %#x", m.Data.RegionHandle)
 	}
-	if m.AgentData.AgentID != msg.MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995") {
+	if m.AgentData.AgentID != msg.MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f") {
 		t.Errorf("agent id = %v, want the session's own", m.AgentData.AgentID)
 	}
 }
@@ -507,8 +507,8 @@ func TestTheCircuitFollowsAReconnect(t *testing.T) {
 	sim := newSimStub(t)
 
 	acct := &agent.Account{
-		AgentID:     msg.MustParseUUID("876e7e57-7e57-c0de-9eeb-1bd0e1ec6995"),
-		SessionID:   msg.MustParseUUID("8d1b7e57-7e57-c0de-f4f4-19d29d124acf"),
+		AgentID:     msg.MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f"),
+		SessionID:   msg.MustParseUUID("8d1b7e57-7e57-c0de-3bf6-2277c65663be"),
 		CircuitCode: testCircuitCode,
 		SimIP:       sim.addr().IP,
 		SimPort:     sim.addr().Port,
@@ -831,7 +831,7 @@ func TestAJoiningViewerIsToldHowAvatarsLook(t *testing.T) {
 	sim, a, c, v, _ := handedOver(t)
 	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
 
-	who := msg.MustParseUUID("6c457e57-7e57-c0de-8676-7ee670495387")
+	who := msg.MustParseUUID("6c457e57-7e57-c0de-60f9-323c64cdc3b1")
 	sim.describeAppearance(who, "how she looks")
 	deadline := time.Now().Add(5 * time.Second)
 	for a.Appearances().Get(who) == nil {
@@ -919,11 +919,11 @@ func TestAViewerTeleportToAnotherRegionIsRefusedOutLoud(t *testing.T) {
 	v.send(tp, msg.FlagReliable)
 
 	lm := &msg.TeleportLandmarkRequest{}
-	lm.Info.LandmarkID = msg.MustParseUUID("3b277e57-7e57-c0de-6c1a-995a5d4a9b60")
+	lm.Info.LandmarkID = msg.MustParseUUID("3b277e57-7e57-c0de-257b-a814c6d1f544")
 	v.send(lm, msg.FlagReliable)
 
 	lure := &msg.TeleportLureRequest{}
-	lure.Info.LureID = msg.MustParseUUID("96d97e57-7e57-c0de-6273-3461e4f8d11b")
+	lure.Info.LureID = msg.MustParseUUID("96d97e57-7e57-c0de-afb2-2ebda5f1ffe5")
 	v.send(lure, msg.FlagReliable)
 
 	// The person is told, because a control that does nothing and says

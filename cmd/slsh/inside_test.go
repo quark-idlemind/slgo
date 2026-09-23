@@ -24,7 +24,7 @@ import (
 
 // The prims and the scripts these tests work with.
 var (
-	aBox      = msg.MustParseUUID("dc047e57-7e57-c0de-bda0-2f6b77b6fdac")
+	aBox      = msg.MustParseUUID("e2a17e57-7e57-c0de-b864-09116b98f7c6")
 	aGreeter  = msg.MustParseUUID("df8f7e57-7e57-c0de-8a30-80d6e78abfcb")
 	aListener = msg.MustParseUUID("e0b57e57-7e57-c0de-398e-bee79e38dd6f")
 	aWatcher  = msg.MustParseUUID("e1307e57-7e57-c0de-7684-a7b26150cdf3")

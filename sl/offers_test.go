@@ -100,7 +100,7 @@ var (
 	someGiver  = msg.MustParseUUID("9bf57e57-7e57-c0de-acac-5c71d05f9c65")
 	someGroup  = msg.MustParseUUID("e86b7e57-7e57-c0de-7369-7fbb4c3ea183")
 	someFriend = msg.MustParseUUID("d45c7e57-7e57-c0de-8063-28db797b6d18")
-	someLure   = msg.MustParseUUID("0d817e57-7e57-c0de-7df5-71b55084a53f")
+	someLure   = msg.MustParseUUID("0d817e57-7e57-c0de-3eb0-2dd03720cbb5")
 	someTxn    = msg.MustParseUUID("77c67e57-7e57-c0de-0877-a368e2c13bb1")
 )
 

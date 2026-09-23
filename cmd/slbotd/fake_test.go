@@ -36,11 +36,11 @@ import (
 // Who the fake says everybody is.  Invented, like every identifier in
 // this repository: nothing here is anybody's.
 var (
-	testMe        = msg.MustParseUUID("a5707e57-7e57-c0de-65b6-5a7ceceb4b01")
-	testSessionID = msg.MustParseUUID("e6887e57-7e57-c0de-2a6a-c862daab753b")
-	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-622e-77274d813d21")
-	testSender    = msg.MustParseUUID("88987e57-7e57-c0de-1877-3b69b9febf7a")
-	testStranger  = msg.MustParseUUID("19d17e57-7e57-c0de-b3a6-3f42edc56d31")
+	testMe        = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	testSessionID = msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")
+	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-245c-d6b83f1a8b6d")
+	testSender    = msg.MustParseUUID("88987e57-7e57-c0de-6aa2-1d9b0f5a04db")
+	testStranger  = msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
 	testLamp      = msg.MustParseUUID("c75d7e57-7e57-c0de-b372-000000000001")
 )
 

@@ -46,7 +46,7 @@ func TestGetWritesAPng(t *testing.T) {
 
 	dir := t.TempDir()
 	out := filepath.Join(dir, "wall.png")
-	const id = "46f67e57-7e57-c0de-6781-d23a564357eb"
+	const id = "46f67e57-7e57-c0de-cb58-aff33c6b2282"
 
 	got := x.do(t, "get -o "+out+" "+id)
 	if !strings.Contains(got, "32x32") {
@@ -78,7 +78,7 @@ func TestGetRawWritesTheCodestream(t *testing.T) {
 	})
 
 	out := filepath.Join(t.TempDir(), "raw.j2c")
-	x.do(t, "get --raw -o "+out+" 46f67e57-7e57-c0de-6781-d23a564357eb")
+	x.do(t, "get --raw -o "+out+" 46f67e57-7e57-c0de-cb58-aff33c6b2282")
 
 	got, err := os.ReadFile(out)
 	if err != nil {
