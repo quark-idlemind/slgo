@@ -160,7 +160,7 @@ func (a *Agent) enterRegion(region msg.UUID) {
 		return
 	}
 
-	old := a.objects.Load()
+	old := a.Objects()
 	store := a.regions.Attach(region)
 	if first {
 		store.absorb(old)
@@ -168,6 +168,8 @@ func (a *Agent) enterRegion(region msg.UUID) {
 	a.objects.Store(store)
 	old.Unwatch(a.viewKey())
 	a.regions.Detach(was)
+	// Looking from here from the moment it is here: see lookFrom.
+	a.lookFrom()
 }
 
 // A RegionChangeHandler is told the name and handle of the region the

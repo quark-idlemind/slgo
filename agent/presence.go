@@ -88,6 +88,29 @@ func (a *Agent) setCenter(at msg.Vector3) {
 		a.look.Far = DefaultDrawDistance
 	}
 	a.mu.Unlock()
+	a.lookFrom()
+}
+
+// lookFrom tells the object store where this agent is looking from.
+//
+// At once, whenever the camera moves, and not only on the trim tick.
+// A store shared by several agents keeps what ANY of them can see, and
+// an agent that has not said where it is looking has no say -- so an
+// agent joining a store the others were already trimming was invisible
+// to them until its own first tick, up to TrimInterval later.  One of
+// them trimming in that window, from a camera somewhere else, threw
+// away everything around the newcomer, its own attachments included,
+// and the region describes each object once.  Measured on Agni: an
+// avatar logged in last of four, the other three thousands of metres
+// above it, came up with every attachment the simulator had restored
+// missing from the store for good -- and only what was put on after
+// its first tick was ever described.
+func (a *Agent) lookFrom() {
+	if a.Account == nil {
+		return
+	}
+	l := a.Look()
+	a.Objects().Watch(a.viewKey(), l.Center, l.Far)
 }
 
 // SetLook changes it.  The next update carries it.
@@ -98,6 +121,7 @@ func (a *Agent) SetLook(l Look) {
 	a.mu.Lock()
 	a.look = l
 	a.mu.Unlock()
+	a.lookFrom()
 }
 
 // sendPresence keeps AgentUpdate flowing.

@@ -334,3 +334,47 @@ func TestWhatASeatedPersonWearsOutlastsAnUndescribedSeat(t *testing.T) {
 		t.Errorf("trimmed %d, want the one orphan that is on nobody", n)
 	}
 }
+
+// TestANewcomerHasASayFromTheMomentItArrives.
+//
+// An agent used to register where it was looking only on its own trim
+// tick.  Joining a store the others were already trimming, it had no
+// say until then, and one of them trimming first -- from a camera far
+// away -- threw out everything around the newcomer for good.  Measured
+// on a live region: the last of four avatars to log in, the other three
+// high above it, lost every attachment the simulator had put back on.
+func TestANewcomerHasASayFromTheMomentItArrives(t *testing.T) {
+	cache := NewCache()
+	region := msg.UUID{15: 0x42}
+	aloft, ground := msg.Vector3{X: 88, Y: 172, Z: 4004}, msg.Vector3{X: 90, Y: 169, Z: 42}
+
+	above := &Agent{regions: cache, Account: &Account{SessionID: msg.UUID{15: 1}}}
+	above.enterRegion(region)
+	above.SetLook(defaultLook(aloft))
+
+	// The newcomer arrives on the ground and looks from where it is --
+	// and has not yet reached its first trim tick.
+	newcomer := &Agent{regions: cache, Account: &Account{SessionID: msg.UUID{15: 2}}}
+	newcomer.enterRegion(region)
+	newcomer.SetLook(defaultLook(ground))
+
+	store := newcomer.Objects()
+	if store != above.Objects() {
+		t.Fatal("the two agents are not sharing one store")
+	}
+	store.update(&msg.ObjectUpdate_ObjectData{
+		ID: 7, FullID: msg.UUID{15: 7}, ObjectData: placement(ground, msg.Quaternion{}),
+	}, ground, 128)
+
+	// The one above trims first.
+	l := above.Look()
+	if n := store.Trim(l.Center, l.Far); n != 0 {
+		t.Errorf("trimmed %d objects in front of an agent that had just arrived", n)
+	}
+
+	// And a camera that moves takes its say with it.
+	newcomer.setCenter(aloft)
+	if n := store.Trim(l.Center, l.Far); n != 1 {
+		t.Errorf("trimmed %d once nobody was looking at it, want 1", n)
+	}
+}
