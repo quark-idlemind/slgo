@@ -12,6 +12,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -443,6 +444,39 @@ func TestObjectsSkipsAvatars(t *testing.T) {
 	x.grid.objectsErr = errors.New("nobody is holding this session")
 	if got := x.do(t, "objects"); !strings.Contains(got, "nobody is holding this session") {
 		t.Errorf("objects should report the failure, got %q", got)
+	}
+}
+
+// TestACommandsOutputIsShownRatherThanObeyed.
+//
+// An object is called whatever its owner typed, and a command's output
+// is where names like that are printed: to the command's writer, not
+// through the funnel chat takes.  That writer is the other way to the
+// screen and has to make the same text visible, on a terminal that is
+// a terminal, round the escapes the shell draws with.
+func TestACommandsOutputIsShownRatherThanObeyed(t *testing.T) {
+	x := newTestShell(t)
+	x.term.plain = false
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: testLamp, Local: 1, Name: "a\x1b[2J\x1b]0;owned\x07lamp"}, PCode: 9,
+			Position: msg.Vector3{X: 10, Y: 20, Z: 30}},
+	}
+
+	got := x.do(t, "objects")
+	if rest := shellFraming.ReplaceAllString(got, ""); strings.ContainsAny(rest, "\x1b\x07") {
+		t.Errorf("a control character in a name reached the terminal:\n%q", got)
+	}
+	if !strings.Contains(got, "a^[[2J^[]0;owned^Glamp") {
+		t.Errorf("the name should be shown as text:\n%q", got)
+	}
+
+	// A CRLF arriving through the writer is a line break, even though
+	// the writer cuts its lines at the newline before Print sees them.
+	x.out.Reset()
+	fmt.Fprint(x.stdout(), "one\r\ntwo\n")
+	if got := x.out.String(); strings.Contains(got, "^M") ||
+		!strings.Contains(got, "\x1b[Kone\r\n") || !strings.Contains(got, "\x1b[Ktwo\r\n") {
+		t.Errorf("a CRLF should be one line break:\n%q", got)
 	}
 }
 

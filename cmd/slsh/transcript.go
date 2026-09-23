@@ -113,10 +113,16 @@ func openTranscript(dir, avatar, profile string) (*transcript, error) {
 var alreadyStamped = regexp.MustCompile(`^\d\d:\d\d:\d\d `)
 
 // line writes one line of the transcript.
+//
+// Made visible first, the way the screen shows it.  The file is read
+// later with cat or tail, which put what is in it on a terminal as it
+// stands, so a stranger's escape sequence kept here would do on that
+// terminal exactly what Print stopped it doing on this one.
 func (t *transcript) line(s string) {
 	if t == nil {
 		return
 	}
+	s = visible(s)
 	s = alreadyStamped.ReplaceAllString(s, "")
 	s = strings.TrimRight(s, "\n")
 	if s == "" {

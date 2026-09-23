@@ -397,6 +397,53 @@ func TestTheMapPaintsOnlyWhereThereIsColour(t *testing.T) {
 	}
 }
 
+// TestAParcelsNameIsShownRatherThanObeyedBesideItsColour.
+//
+// The key under the picture puts a parcel's name, which is whatever its
+// owner typed, on one line with the colour of its mark.  That line goes
+// to the terminal round Print so that the colour stays a colour, so the
+// name has to have been made visible on the way into it.
+//
+// The name here carries U+009B, the one-character spelling of ESC [ on
+// terminals that take C1 controls.  An ESC itself cannot be sent this
+// way: the answer is LLSD XML, and XML has no way to carry one.
+func TestAParcelsNameIsShownRatherThanObeyedBesideItsColour(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.land = &sl.Land{Overlay: overlayOf()}
+	x.grid.onSend = func(m msg.Message) {
+		r, ok := m.(*msg.ParcelPropertiesRequest)
+		if !ok {
+			return
+		}
+		name, local := "The East Half", 2
+		if r.ParcelData.West < 128 {
+			name, local = "The West\u009b2J Half", 1
+		}
+		x.grid.RelayEvent(t, "ParcelProperties", fmt.Sprintf(
+			`<llsd><map><key>ParcelData</key><array><map>`+
+				`<key>Name</key><string>%s</string>`+
+				`<key>LocalID</key><integer>%d</integer>`+
+				`<key>SequenceID</key><integer>%d</integer>`+
+				`</map></array></map></llsd>`, name, local, r.ParcelData.SequenceID))
+	}
+
+	var painted strings.Builder
+	if err := parcelMap(context.Background(), x.Shell, &painted, 6, true); err != nil {
+		t.Fatalf("parcelMap: %v", err)
+	}
+	got := painted.String()
+	if strings.Contains(got, "\u009b") {
+		t.Errorf("a control character in a parcel's name reached the picture:\n%q", got)
+	}
+	if !strings.Contains(got, "The WestM-^[2J Half") {
+		t.Errorf("the parcel should be named as text:\n%q", got)
+	}
+	// And the colour is still there beside it.
+	if !strings.Contains(got, mapColourOff) {
+		t.Errorf("the key lost its colour:\n%q", got)
+	}
+}
+
 // TestParcelSaysWhenTheOverlayNeverArrived: it cannot be asked for, so
 // a session that missed it has missed it for good -- and an empty
 // picture would look like a region with nothing in it.

@@ -53,7 +53,11 @@ type opts struct {
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "slsh: %v\n", err)
+		// Made visible, since the error that ends a session can carry
+		// the grid's own words -- a kick's reason is the simulator's
+		// text, passed on as it came -- and this is written to the
+		// terminal after the shell has let go of it.  See Term.Print.
+		fmt.Fprintf(os.Stderr, "slsh: %s\n", visible(err.Error()))
 		os.Exit(1)
 	}
 }

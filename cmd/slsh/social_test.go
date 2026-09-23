@@ -219,6 +219,47 @@ func TestWhatIsHeardIsPrintedWhateverModeIsInForce(t *testing.T) {
 	}
 }
 
+// TestWhatIsHeardIsShownRatherThanObeyed.
+//
+// Chat and instant messages are a stranger's bytes, name and all, and
+// the terminal obeys an escape sequence wherever it comes from: this
+// one would clear the screen, set the window title and write to the
+// clipboard.  What reaches the screen has to be the text of them, and
+// the lines of a message of several lines still have to be lines.
+func TestWhatIsHeardIsShownRatherThanObeyed(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	m := &msg.ChatFromSimulator{}
+	m.ChatData.SourceID = testSomebody
+	m.ChatData.FromName = append([]byte("Some\x1b]0;a title\x07Body"), 0)
+	m.ChatData.Message = append([]byte("hello\x1b[2J\x1b[H\x1b]52;c;aGk=\x07\r\nsecond line\rover it"), 0)
+	x.grid.Relay(t, m)
+
+	got := waits(t, x, "second line")
+	if strings.ContainsAny(got, "\x1b\x07\r") {
+		t.Errorf("a control character reached the terminal:\n%q", got)
+	}
+	for _, want := range []string{
+		"< [Local] Some^[]0;a title^GBody: hello^[[2J^[[H^[]52;c;aGk=^G\n",
+		"\nsecond line^Mover it\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the screen should say %q:\n%q", want, got)
+		}
+	}
+
+	x.out.Reset()
+	x.grid.Relay(t, imFrom(testSomebody, "Some\x1b[8mBody", sl.DialogMessage, "psst\x1b[6n\u009b6n"))
+	got = waits(t, x, "psst")
+	if strings.ContainsAny(got, "\x1b\u009b") {
+		t.Errorf("a control character in an IM reached the terminal:\n%q", got)
+	}
+	if !strings.Contains(got, "< [IM Some^[[8mBody] psst^[[6nM-^[6n") {
+		t.Errorf("the IM should be shown as text:\n%q", got)
+	}
+}
+
 // TestAnInstantMessageOpensAConversationAndSaysSo.
 //
 // The notice is the point: an IM from somebody the shell has never

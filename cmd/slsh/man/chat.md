@@ -69,6 +69,29 @@ said, and `*` for a notice.  The first two are the pair that has to be
 told apart, since a remark and a reply read the same in a column; the
 third is the shell speaking rather than anybody in the world.
 
+## Control characters are shown, not obeyed
+
+What is heard is somebody else's text, and a terminal acts on the
+escape sequences in whatever it is sent: they can clear the screen,
+write over the line that says who spoke, set the window title, or put
+something on the clipboard.  So slsh shows every control character in
+caret notation instead of sending it -- ESC is `^[`, BEL `^G`, DEL
+`^?` -- with `M-` in front for the eight-bit ones, `M-^[` for U+009B.
+The same goes for everything else the grid names and slsh prints:
+avatars, objects, parcels, groups, inventory, the prompt when it names
+somebody, and the transcript.
+
+A newline is still a line break and a tab still a tab.  A carriage
+return on its own would put the cursor back over the start of the
+line, so it is shown as `^M`; one immediately before a newline is
+taken with it as the one line break it was meant as.
+
+Output redirected to a file is the one thing left as it arrived, since
+a file is what a name is copied out of to be typed back in, and `^[`
+typed back is not the name.  Such a file is data rather than a screen:
+read it with `less`, which shows control characters rather than
+sending them, and not with `cat`, which sends them.
+
 ## Examples
 
 Enter chat mode and talk to the room:

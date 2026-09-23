@@ -24,13 +24,18 @@ import (
 
 // page shows text a screenful at a time.  A page that fits is printed
 // in full and does not wait.  q, Ctrl-C, or space at the end leave.
+//
+// The text is written as it is, escape sequences and all, whichever
+// way it goes out: a man page is this program's own words with bold in
+// them, and the bold is escape sequences.  So nothing from the grid is
+// to be paged; see Paint and printOwn, which are the two ways out.
 func page(ctx context.Context, t *Term, text string) error {
 	if t == nil || t.Plain() {
 		return nil
 	}
 	p := newPager(text, t.Rows())
 	if p.fits() {
-		t.Print(strings.TrimRight(text, "\n"))
+		t.printOwn(strings.TrimRight(text, "\n"))
 		return nil
 	}
 	defer p.finish(t)

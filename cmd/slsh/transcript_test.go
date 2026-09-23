@@ -105,6 +105,42 @@ func TestWhatWasHeardIsInTheTranscript(t *testing.T) {
 	}
 }
 
+// TestTheTranscriptHoldsTheTextOfAnEscapeRatherThanTheEscape.
+//
+// The file is read later with cat or tail, which put it on a terminal
+// as it stands, so an escape sequence kept in it would do there what
+// Print stopped it doing here.  It says what the screen said: the
+// same caret notation, from what was heard and from a command's
+// output alike.
+func TestTheTranscriptHoldsTheTextOfAnEscapeRatherThanTheEscape(t *testing.T) {
+	x, dir := logShell(t)
+	x.heard(&sl.IM{
+		From:     msg.UUID{0x7a, 0x4f, 0x2b, 0x90},
+		FromName: "Example\x1b]0;a title\x07Resident",
+		Text:     "hello\x1b[2J\x1b]52;c;aGk=\x07",
+		Dialog:   sl.DialogMessage,
+	})
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: testLamp, Local: 1, Name: "a\x1b[2Jlamp"}, PCode: 9},
+	}
+	if err := x.Do(context.Background(), "objects"); err != nil {
+		t.Fatal(err)
+	}
+
+	got := written(t, dir)
+	if strings.ContainsAny(got, "\x1b\x07") {
+		t.Errorf("the transcript kept a control character:\n%q", got)
+	}
+	for _, want := range []string{
+		"< [IM Example^[]0;a title^GResident] hello^[[2J^[]52;c;aGk=^G",
+		" a^[[2Jlamp ",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the transcript is missing %q:\n%s", want, got)
+		}
+	}
+}
+
 // TestNoticesAndRefusalsAreInTheTranscript: everything a person sees
 // that is not a command's own output goes through printf, which is what
 // makes one funnel enough.

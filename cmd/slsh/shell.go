@@ -619,7 +619,10 @@ func (w *termWriter) Write(p []byte) (int, error) {
 		if i < 0 {
 			break
 		}
-		w.say(string(w.buf[:i]))
+		// Without the CR of a CRLF, which would otherwise arrive in
+		// Print cut off from its newline and be shown as ^M; see
+		// visible, which takes the pair as one newline.
+		w.say(strings.TrimSuffix(string(w.buf[:i]), "\r"))
 		w.buf = w.buf[i+1:]
 	}
 	// A write with no newline is held until one arrives; anything
@@ -634,9 +637,41 @@ func (w *termWriter) Write(p []byte) (int, error) {
 // say puts one line on the screen and the same line in the transcript.
 // Indented there, so that a command's output can be told from the
 // command, from what was heard and from what was said.
+//
+// Through Print, which makes it visible: a command's output is where
+// the names of things are -- objects, avatars, parcels, groups, an
+// inventory -- and every one of those was chosen by somebody on the
+// grid.  The transcript makes the same line visible the same way, so
+// the file says what the screen said.
 func (w *termWriter) say(line string) {
 	w.t.Print(line)
-	w.log.line("  " + stripANSI(line))
+	w.log.line("  " + line)
+}
+
+// writeOwn is the way a command writes a line with the shell's own
+// escape sequences in it -- a colour -- without Print showing them as
+// ^[[32m.
+//
+// s is taken to be safe as it stands.  Whatever in it came from the
+// grid has to have been through visible already, where s was composed,
+// because nothing here can tell that part from the colour round it.
+// That is why this is a function of its own, to be called by name,
+// rather than a Write that knows better: every call is a place that
+// has to be read to be trusted, and there are few of them.
+//
+// A writer that is not the terminal -- a file, a test's buffer -- is
+// written to as it would have been anyway.  Colour only reaches one
+// when somebody asked for it, which is Shell.colour's business.
+func writeOwn(out io.Writer, s string) {
+	w, ok := out.(*termWriter)
+	if !ok {
+		io.WriteString(out, s)
+		return
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(s, "\n"), "\n") {
+		w.t.printOwn(line)
+		w.log.line("  " + stripANSI(line))
+	}
 }
 
 func (sh *Shell) errorf(format string, args ...any) {

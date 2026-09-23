@@ -571,7 +571,9 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 			}
 		}
 		line.WriteByte('|')
-		fmt.Fprintln(out, line.String())
+		// The shell's own writing, colour and all: nothing in a row of
+		// the picture is anybody's name.  See writeOwn.
+		writeOwn(out, line.String()+"\n")
 	}
 	fmt.Fprintln(out, frame)
 
@@ -589,7 +591,7 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 		// it show the marks they are about rather than describing
 		// them: what a person has to recognise in the grid is the
 		// colour, and what they have to type to change it is the name.
-		fmt.Fprintf(out, "%s is somebody on your friend list\n", hl.paint(hl.colour))
+		writeOwn(out, fmt.Sprintf("%s is somebody on your friend list\n", hl.paint(hl.colour)))
 	}
 
 	if !meIn {
@@ -611,7 +613,16 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 			under, plural(under, "is", "are"))
 	}
 	if len(outside) > 0 {
-		fmt.Fprintf(out, "%d outside it: %s\n", len(outside), outsideLine)
+		line := fmt.Sprintf("%d outside it: %s\n", len(outside), outsideLine)
+		if hl.colour != "" {
+			// A picture in colour is on its way to the terminal, and
+			// the names in this line were made visible where it was
+			// built, which is what lets the colour round them through.
+			// See namesOutside.
+			writeOwn(out, line)
+		} else {
+			fmt.Fprint(out, line)
+		}
 	}
 }
 
@@ -670,6 +681,12 @@ func (g mapGrid) markFor(me, them msg.Vector3) byte {
 // mean the same fact was worth a colour three lines higher up and not
 // here.  The name is what is coloured and not the distance, since the
 // distance is not what makes them a friend.
+//
+// In a picture in colour every name is made visible here, a friend's
+// or not, because that line goes to the terminal by writeOwn and Print
+// never sees it: a name is what somebody chose to be called, and it is
+// the only part of the line a stranger wrote.  Without colour the line
+// goes the way any other output does, and is left as it arrived.
 func namesOutside(people []sl.Person, hl mapHighlight) (line string, coloured bool) {
 	const most = 8
 	parts := make([]string, 0, most+1)
@@ -679,6 +696,9 @@ func namesOutside(people []sl.Person, hl mapHighlight) (line string, coloured bo
 			break
 		}
 		name := p.Name
+		if hl.colour != "" {
+			name = visible(name)
+		}
 		if hl.colour != "" && hl.friends[p.ID] {
 			name = hl.paint(name)
 			coloured = true

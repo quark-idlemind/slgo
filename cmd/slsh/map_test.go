@@ -457,6 +457,32 @@ func TestAFriendIsDrawnInTheColourThatWasNamed(t *testing.T) {
 	}
 }
 
+// TestAFriendsNameIsColouredAndShownRatherThanObeyed.
+//
+// The line under the picture is the one place a name from the grid
+// and the shell's own colour share a line, so it cannot go through
+// Print, which would show the colour as text along with the name.  The
+// name is made visible where the line is built instead, and the colour
+// round it is left to be a colour.
+func TestAFriendsNameIsColouredAndShownRatherThanObeyed(t *testing.T) {
+	out := drewIn(befriending(mapFriendID), aroundGrid(DefaultConfig(), 4, 16, mapMe),
+		atID(mapFriendID, "Ozu\x1b[2J\x1b]0;owned\x07Brantwick", 128, 200, 25),
+		at("Odile\u009b8mMarne", 128, 20, 25))
+
+	if want := mapGreen + "Ozu^[[2J^[]0;owned^GBrantwick" + mapColourOff; !strings.Contains(out, want) {
+		t.Errorf("the friend outside the picture should be named, in green, as text:\n%q", out)
+	}
+	if !strings.Contains(out, "OdileM-^[8mMarne") {
+		t.Errorf("a stranger outside the picture should be named as text:\n%q", out)
+	}
+	for _, esc := range []string{mapGreen, mapColourOff} {
+		out = strings.ReplaceAll(out, esc, "")
+	}
+	if strings.ContainsAny(out, "\x1b\x07\u009b") {
+		t.Errorf("a control character in a name reached the picture:\n%q", out)
+	}
+}
+
 // TestThePictureSaysWhatItIsShowing.  A grid of characters with no
 // scale under it is a drawing rather than a map, and the marks mean
 // nothing to somebody who has not read the manual.

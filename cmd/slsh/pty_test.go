@@ -121,8 +121,50 @@ func (b *fakeBackend) Refresh(context.Context) (*sl.Info, error) { return b.Info
 // that owns the camera.
 func (b *fakeBackend) Control(ctx context.Context, flags uint32) error { return nil }
 
-func (b *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) error { return nil }
-func (b *fakeBackend) Messages() <-chan *sl.Message                                 { return b.messages }
+// harnessProvoke, said in open chat, has the fake grid answer with a
+// line and an instant message full of escape sequences, from a
+// stranger whose name has some in it as well: what somebody on the
+// grid would send to do something to this terminal.
+//
+// Said rather than arranged at startup because the answer has to
+// arrive after the shell is listening, and a line the shell has sent
+// is proof that it is.
+const harnessProvoke = "say something hostile"
+
+// Send answers harnessProvoke and nothing else.
+func (b *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) error {
+	c, ok := m.(*msg.ChatFromViewer)
+	if !ok || strings.TrimRight(string(c.ChatData.Message), "\x00") != harnessProvoke {
+		return nil
+	}
+	chat := &msg.ChatFromSimulator{}
+	chat.ChatData.SourceID = harnessOther
+	chat.ChatData.ChatType = 1
+	chat.ChatData.FromName = append([]byte("A\x1b]0;x\x07Body"), 0)
+	chat.ChatData.Message = append([]byte("gone\x1b[2J\x1b[Hthe screen\rover it\nsecond line"), 0)
+
+	im := &msg.ImprovedInstantMessage{}
+	im.AgentData.AgentID = harnessOther
+	im.MessageBlock.Dialog = sl.DialogMessage
+	im.MessageBlock.ID = harnessOther
+	im.MessageBlock.FromAgentName = append([]byte("An\x1b[2JOther"), 0)
+	im.MessageBlock.Message = append([]byte("psst"), 0)
+
+	// From a goroutine of its own: this is the shell's goroutine, and
+	// the session reading the far end of the channel may be waiting
+	// for it.
+	go func() {
+		for _, r := range []msg.Message{chat, im} {
+			body, err := r.Encode()
+			if err != nil {
+				panic(err)
+			}
+			b.messages <- &sl.Message{ID: msg.IDOf(r), Name: r.MsgInfo().Name, Body: body, At: time.Now()}
+		}
+	}()
+	return nil
+}
+func (b *fakeBackend) Messages() <-chan *sl.Message { return b.messages }
 
 // Events is nothing: this fake exists so a real terminal can be driven
 // over a real pty, and nothing it drives reads the event queue.
@@ -528,4 +570,49 @@ func TestPTYUnknownCommandSaysSo(t *testing.T) {
 	s.send("nosuchthing\r")
 	s.waitText("no such command")
 	s.waitPrompt("/$")
+}
+
+// TestPTYAStrangersEscapesAreShownAndNotObeyed.
+//
+// The whole of it on a real terminal: a line heard in open chat that
+// would clear the screen and write over itself, from somebody whose
+// name would set the window title, and then an instant message from
+// somebody whose name is an erase of the screen and becomes the prompt.
+// A terminal that obeyed any of it would have lost the banner at the
+// top, and the second line of what was said would not be a line of its
+// own.
+func TestPTYAStrangersEscapesAreShownAndNotObeyed(t *testing.T) {
+	s := start(t, 24, 80)
+
+	s.send("chat\r")
+	s.waitPrompt("Local>")
+	s.send(harnessProvoke + "\r")
+	s.waitText("psst")
+
+	txt := s.text()
+	if !strings.Contains(txt, "slsh: Harness Resident in Nowhere") {
+		t.Errorf("the screen was cleared under the banner:\n%s", txt)
+	}
+	if !strings.Contains(txt, "< [Local] A^[]0;x^GBody: gone^[[2J^[[Hthe screen^Mover it\n") {
+		t.Errorf("what was heard should be on the screen as text:\n%s", txt)
+	}
+	// A newline is still a newline: the second line of the remark is a
+	// line of its own, from the left margin.
+	found := false
+	for _, l := range s.lines() {
+		if strings.TrimRight(l, " ") == "second line" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the second line of the remark is not a line of its own:\n%s", txt)
+	}
+
+	// The IM opened a conversation, and moving to it puts the name in
+	// the prompt, where it is drawn as text too.
+	s.send("\t")
+	s.waitPrompt("An^[[2JOther>")
+	if !strings.Contains(s.text(), "slsh: Harness Resident in Nowhere") {
+		t.Errorf("the prompt cleared the screen:\n%s", s.text())
+	}
 }

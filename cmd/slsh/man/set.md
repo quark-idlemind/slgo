@@ -116,6 +116,11 @@ A command is written down before it runs, so a command that hung is
 in the file that says what happened.  `set log off` stops it, and
 leaves the file where it is.
 
+Control characters are written the way the screen showed them, `^[`
+for ESC and so on -- see `man chat` -- so that reading the file with
+`cat` or `tail` later does not hand a stranger's escape sequences to
+that terminal instead.
+
 Two things are deliberately not in it.  Output that was redirected --
 `ls > listing` -- is a listing you did not see, so the command is
 recorded and the listing is not; it is in the file you sent it to. A

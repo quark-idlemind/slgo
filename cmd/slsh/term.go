@@ -7,7 +7,8 @@ package main
 // writes the line, and draws the prompt again underneath.  Anything
 // that writes to the terminal without doing that leaves the display
 // wrong until the next keystroke, which is why nothing else here writes
-// to stdout.
+// to stdout.  It is also where text from the grid has its control
+// characters made visible, which is the other reason: see Print.
 //
 // Keys are decoded in one place and handed over as runes: a printable
 // character is itself, a control character is the rune it is (ESC is
@@ -569,8 +570,50 @@ func (t *Term) Printf(format string, a ...any) {
 	t.Print(fmt.Sprintf(format, a...))
 }
 
-// Print writes text above the prompt, one terminal line per line of it.
+// Print writes text above the prompt, one terminal line per line of it,
+// with every control character in it made visible.
+//
+// This is the one place that decides what reaches the screen, and so
+// the one place that has to assume the worst of it.  What is printed
+// here is mostly somebody else's words -- chat, instant messages,
+// object and avatar and parcel names, group notices, a notecard -- and
+// a terminal obeys what it is sent: a stranger's ESC [ 2 J clears the
+// screen, an OSC sets the window title or writes to the clipboard, and
+// on some terminals a sequence that asks a question has the answer
+// typed at the prompt as though the person at the keyboard had typed
+// it.  Filtering the text where each of those is composed would take a
+// dozen places each remembering to; filtering it here takes one, and
+// nothing that reaches the screen can miss it.  See visible for what
+// is shown in place of what.
+//
+// A newline is a line break and a tab is a tab, since both are what
+// people and scripts mean by them and neither can do anything to the
+// terminal but move along the line or down to the next one.
+//
+// The shell's own escape sequences are the cost.  Anything composed
+// with colour in it -- a picture with a friend picked out, a man page
+// with bold in it -- goes through printOwn instead, and whatever from
+// the grid is in it has to have been through visible already.
 func (t *Term) Print(s string) {
+	t.printOwn(visible(s))
+}
+
+// printOwn is Print for text the shell composed itself, escape
+// sequences and all.
+//
+// Nothing is filtered here, which is the whole of the difference: the
+// colour in a picture and the bold in a man page are escape sequences
+// too, and Print would show them as ^[[32m.  Whatever in s came from
+// the grid must already have been through visible, and every caller
+// says so where it calls this.
+//
+// Every line is erased before it is written, not only the first.  The
+// first is the one the prompt was on; the rest are normally blank
+// lines scrolled up from below, but a terminal that has been resized,
+// or one with something left on the screen under the prompt, has
+// characters there, and a line written over them without an erase
+// would carry their tail.
+func (t *Term) printOwn(s string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.closed {
@@ -581,8 +624,8 @@ func (t *Term) Print(s string) {
 		return
 	}
 	var b strings.Builder
-	b.WriteString("\r" + eraseLine)
 	for _, line := range strings.Split(s, "\n") {
+		b.WriteString("\r" + eraseLine)
 		b.WriteString(line)
 		b.WriteString("\r\n")
 	}
@@ -590,11 +633,101 @@ func (t *Term) Print(s string) {
 	t.redrawLocked()
 }
 
+// visible is s with every control character in it made into something
+// a person can see and a terminal will not act on.
+//
+// Caret notation, the way cat -v and less show them and the way this
+// shell already spells a key -- ESC is ^[, BEL ^G, DEL ^? -- and M-
+// in front of it for the C1 controls, U+0080 to U+009F, which some
+// terminals take as the single-character spellings of ESC [ and ESC ]:
+// U+009B is shown M-^[.  Two characters or more for one, so that a
+// control character can never be mistaken for having been left out.
+// A byte that is not UTF-8 at all is shown as U+FFFD, which is what a
+// terminal that received it would draw anyway.
+//
+// Tab and newline pass through: they are text, and a notecard, a group
+// notice or a script's llSay of several lines means them.  A carriage
+// return does not, because on its own it puts the cursor back to the
+// start of the line and whatever follows is written over what came
+// before it -- over the name of whoever said it, among other things --
+// so it is shown as ^M.  Immediately before a newline it is dropped
+// instead, and the pair is the newline it was meant as: there is
+// nothing written after the CR for it to overwrite, and text with the
+// line endings of a Windows editor would otherwise end every line with
+// a ^M that says nothing about the text.
+//
+// Text with nothing to change is handed back as it is, which is nearly
+// all of it.
+func visible(s string) string {
+	return showControls(s, false)
+}
+
+// visibleOnOneLine is visible for a place that is one line of the
+// terminal and cannot become two: the prompt, the line being typed,
+// a status line.
+//
+// A newline and a tab are shown there as ^J and ^I.  The line editor
+// counts one column for every rune it draws in order to put the cursor
+// back where it belongs, and a newline would move the rest of the line
+// to a row it does not know about, a tab by a width it cannot know.
+func visibleOnOneLine(s string) string {
+	return showControls(s, true)
+}
+
+func showControls(s string, oneLine bool) string {
+	clean := true
+	for _, r := range s {
+		if r == utf8.RuneError || isControl(r) && (oneLine || r != '\t' && r != '\n') {
+			clean = false
+			break
+		}
+	}
+	if clean {
+		return s
+	}
+
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		switch {
+		case r == '\r' && !oneLine && strings.HasPrefix(s[i:], "\n"):
+			// The CR of a CRLF.  The newline that follows is written as
+			// it is on the next time round.
+		case r == '\t' && !oneLine, r == '\n' && !oneLine:
+			b.WriteRune(r)
+		case r == utf8.RuneError && size == 1:
+			b.WriteRune(utf8.RuneError)
+		case r < 0x20:
+			b.WriteByte('^')
+			b.WriteRune(r + 0x40)
+		case r == 0x7f:
+			b.WriteString("^?")
+		case r >= 0x80 && r < 0xa0:
+			b.WriteString("M-^")
+			b.WriteRune(r - 0x80 + 0x40)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// isControl is a C0 control, DEL, or a C1 control: everything a
+// terminal might act on rather than draw.
+func isControl(r rune) bool {
+	return r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0
+}
+
 // Paint writes s to the terminal as-is, without the prompt.
 //
 // It is for a command that has taken the display over while busy --
 // the man pager -- and would leave the prompt in the wrong place if it
 // went through Print.  A pipe has no display to take over.
+//
+// Nothing is made visible here, so nothing from the grid may come this
+// way: what the pager shows is a man page, which is this program's own
+// text, bold and all.
 func (t *Term) Paint(s string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -611,13 +744,16 @@ func (t *Term) Paint(s string) {
 // and it never reaches a file.  A command's real output goes to its
 // writer, which may be a redirect; this goes to the terminal or
 // nowhere.  Status("") clears the line.
+//
+// Made visible on one line, for the reasons Print is: a status that
+// names the thing being worked on is naming something from the grid.
 func (t *Term) Status(s string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.plain || t.closed {
 		return
 	}
-	fmt.Fprint(t.out, "\r"+eraseLine+s)
+	fmt.Fprint(t.out, "\r"+eraseLine+visibleOnOneLine(s))
 }
 
 // SetBusy says whether a command is running, and so whether a prompt
@@ -743,35 +879,57 @@ func (t *Term) Echo() {
 	if t.plain || t.closed {
 		return
 	}
-	fmt.Fprint(t.out, "\r"+eraseLine+t.prompt+string(t.line)+"\r\n")
+	fmt.Fprint(t.out, "\r"+eraseLine+visibleOnOneLine(t.prompt+string(t.line))+"\r\n")
 }
 
 // redrawLocked paints the prompt and the line, scrolling sideways when
 // the two are wider than the terminal so that the cursor is always on
 // screen.  A wrapped line would leave the display a mess after the next
 // message arrives above it.
+//
+// Both are drawn visible, for the reasons Print gives.  The prompt
+// names the conversation, which is somebody's name, or the folder,
+// which may be one somebody else named and gave away; and the line
+// holds whatever completion or history put there, which is inventory
+// names as often as it is typing.  The line itself keeps the control
+// character -- it is the name of the thing, and a command has to be
+// able to reach it -- and only the drawing of it changes.  That makes
+// a character of the line one column or several, so where the window
+// starts and where the cursor goes are counted in what is drawn rather
+// than in runes.
 func (t *Term) redrawLocked() {
 	if t.plain || t.closed || t.busy {
 		return
 	}
-	avail := t.width - len([]rune(t.prompt)) - 1
+	prompt := visibleOnOneLine(t.prompt)
+	promptCols := utf8.RuneCountInString(prompt)
+	avail := t.width - promptCols - 1
 	if avail < 8 {
 		avail = 8
 	}
+
+	// drawn[i] is how the i'th rune of the line is drawn, and cols[i]
+	// is how many columns everything before it takes.
+	drawn := make([]string, len(t.line))
+	cols := make([]int, len(t.line)+1)
+	for i, r := range t.line {
+		drawn[i] = visibleOnOneLine(string(r))
+		cols[i+1] = cols[i] + utf8.RuneCountInString(drawn[i])
+	}
 	start := 0
-	if t.pos > avail {
-		start = t.pos - avail
+	for cols[t.pos]-cols[start] > avail {
+		start++
 	}
-	end := len(t.line)
-	if end > start+avail {
-		end = start + avail
+	end := start
+	for end < len(t.line) && cols[end+1]-cols[start] <= avail {
+		end++
 	}
-	shown := string(t.line[start:end])
-	fmt.Fprintf(t.out, "\r"+eraseLine+"%s%s", t.prompt, shown)
+	shown := strings.Join(drawn[start:end], "")
+	fmt.Fprintf(t.out, "\r"+eraseLine+"%s%s", prompt, shown)
 	// Put the cursor where it belongs, counting from the left edge.
 	// Column zero is a bare carriage return: a cursor-forward of zero
 	// moves one column in terminals that read it as the default.
-	if col := len([]rune(t.prompt)) + (t.pos - start); col > 0 {
+	if col := promptCols + cols[t.pos] - cols[start]; col > 0 {
 		fmt.Fprintf(t.out, "\r"+cursorForward, col)
 	} else {
 		fmt.Fprint(t.out, "\r")

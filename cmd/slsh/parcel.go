@@ -627,7 +627,9 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 				line.WriteByte(d.mark)
 			}
 		}
-		fmt.Fprintf(out, "  %s\n", line.String())
+		// Marks and their colours and nothing else, so the shell's own
+		// writing.  See writeOwn.
+		writeOwn(out, "  "+line.String()+"\n")
 	}
 
 	fmt.Fprintf(out, "\n%.0f metres across, %d parcels%s\n",
@@ -648,9 +650,21 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 		if name == "" {
 			name = "(no answer)"
 		}
+		if colour {
+			// A parcel's name is whatever its owner typed, and here it
+			// shares a line with the colour of its mark, so it is made
+			// visible now and the line goes out by writeOwn rather than
+			// through Print.
+			name = visible(name)
+		}
 		_, class := parcelClass(n.bits)
-		fmt.Fprintf(out, "  %s  %-*s  %6d m²  %s\n", shown, parcelWidth(named), name,
+		line := fmt.Sprintf("  %s  %-*s  %6d m²  %s\n", shown, parcelWidth(named), name,
 			n.squares*agent.OverlayStep*agent.OverlayStep, class)
+		if colour {
+			writeOwn(out, line)
+		} else {
+			fmt.Fprint(out, line)
+		}
 	}
 	if small := len(named) - len(drawn); small > 0 {
 		fmt.Fprintf(out, "  and %d too small to draw at %d rows\n", small, g.rows)

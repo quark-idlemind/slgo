@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -1100,5 +1102,202 @@ func TestEveryKeyTheEditorOwns(t *testing.T) {
 	// to delete and is simply eaten.
 	if !tm.Key(keyDelete) {
 		t.Error("the delete key at the end of the line was refused")
+	}
+}
+
+// ------------------------------------------------ text from the grid
+
+// shellFraming is every escape sequence the line editor itself writes
+// around what it prints, so that a test can take them away and look at
+// what is left: whatever escape is still there after that came from
+// the text being printed.
+var shellFraming = regexp.MustCompile(`\x1b\[K|\x1b\[[0-9]+C`)
+
+// TestVisibleShowsEveryControlCharacterAndNothingElse.
+//
+// The table is the rule: every C0 control but tab and newline, DEL,
+// and the C1 range are shown in caret notation, a CR is shown unless
+// it is half of a CRLF, and ordinary text -- including text that is
+// not ASCII -- is left exactly as it was.
+func TestVisibleShowsEveryControlCharacterAndNothingElse(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"hello there", "hello there"},
+		{"café, 東京, 🙂", "café, 東京, 🙂"},
+		{"a\x1b[2Jb", "a^[[2Jb"},
+		{"\x1b]0;a title\x07", "^[]0;a title^G"},
+		{"\x1b]52;c;aGVsbG8=\x07", "^[]52;c;aGVsbG8=^G"},
+		{"ring\x05", "ring^E"},
+		{"nul\x00", "nul^@"},
+		{"del\x7f", "del^?"},
+		{"csi\u009b2J", "csiM-^[2J"},
+		{"osc\u009d0;x\u009c", "oscM-^]0;xM-^\\"},
+		{"not utf-8 \x9b2J", "not utf-8 �2J"},
+		{"tab\tstays", "tab\tstays"},
+		{"two\nlines", "two\nlines"},
+		{"a name\roverwritten", "a name^Moverwritten"},
+		{"windows\r\nendings\r\n", "windows\nendings\n"},
+		{"trailing\r", "trailing^M"},
+	} {
+		if got := visible(c.in); got != c.want {
+			t.Errorf("visible(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+
+	// On one line of the terminal a tab and a newline are shown too,
+	// and a CRLF is two characters rather than a line break.
+	if got := visibleOnOneLine("a\tb\nc\r\nd"); got != "a^Ib^Jc^M^Jd" {
+		t.Errorf("visibleOnOneLine gave %q", got)
+	}
+}
+
+// TestPrintShowsAStrangersEscapeSequencesRatherThanObeyingThem.
+//
+// What Print is handed is mostly somebody else's words, and a terminal
+// obeys what it is sent: an erase of the screen, a new window title, a
+// write to the clipboard, a question whose answer it types at the
+// prompt.  None of it may reach the terminal as an escape; all of it
+// has to reach the person as text.
+func TestPrintShowsAStrangersEscapeSequencesRatherThanObeyingThem(t *testing.T) {
+	var out bytes.Buffer
+	tm := &Term{out: &out, width: 80, done: make(chan struct{})}
+	tm.SetPrompt("Local> ")
+	out.Reset()
+
+	tm.Print("12:00:00 < [Local] Some\x1b]0;owned\x07body: hi\x1b[2J\x1b[H\x1b]52;c;aGk=\x07\u009b6n")
+
+	got := out.String()
+	if rest := shellFraming.ReplaceAllString(got, ""); strings.ContainsAny(rest, "\x1b\x07\u009b") {
+		t.Errorf("a control character from the text reached the terminal: %q", got)
+	}
+	for _, want := range []string{"Some^[]0;owned^Gbody", "hi^[[2J^[[H^[]52;c;aGk=^GM-^[6n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%q should have been shown as text: %q", want, got)
+		}
+	}
+	// The shell's own framing is still there round it.
+	if !strings.HasPrefix(got, "\r\x1b[K") || !strings.Contains(got, "Local> ") {
+		t.Errorf("the line lost its own erase and prompt: %q", got)
+	}
+
+	// And a pipe, which is where -c writes, and which is very often a
+	// terminal all the same.
+	out.Reset()
+	plain := &Term{out: &out, plain: true, done: make(chan struct{})}
+	plain.Print("hi\x1b[2J")
+	if got := out.String(); got != "hi^[[2J\n" {
+		t.Errorf("a pipe was given %q", got)
+	}
+}
+
+// TestEveryLineOfAMessageIsErasedBeforeItIsWritten.
+//
+// A message of several lines is several terminal lines, and the prompt
+// was only on the first of them.  The others are blank as a rule, but
+// not always -- a resized terminal, anything left under the prompt --
+// and a line written over old characters without an erase keeps their
+// tail.  Only the first line used to be erased.
+func TestEveryLineOfAMessageIsErasedBeforeItIsWritten(t *testing.T) {
+	var out bytes.Buffer
+	tm := &Term{out: &out, width: 80, done: make(chan struct{})}
+	tm.SetPrompt("Local> ")
+	out.Reset()
+
+	tm.Print("12:00:00 < [Local] A Notice: first line\nsecond line\n\tand an indented third")
+	want := "\r\x1b[K12:00:00 < [Local] A Notice: first line\r\n" +
+		"\r\x1b[Ksecond line\r\n" +
+		"\r\x1b[K\tand an indented third\r\n" +
+		"\r\x1b[KLocal> "
+	if got := out.String(); !strings.HasPrefix(got, want) {
+		t.Errorf("printed\n%q\nwant it to begin\n%q", got, want)
+	}
+}
+
+// TestACarriageReturnCannotWriteOverTheLineItIsOn.
+//
+// On its own a CR puts the cursor back to the start of the line, and
+// what follows it is written over the timestamp and the name of whoever
+// said it.  Half of a CRLF it is harmless, and is the newline it was
+// meant as.
+func TestACarriageReturnCannotWriteOverTheLineItIsOn(t *testing.T) {
+	var out bytes.Buffer
+	tm := &Term{out: &out, width: 80, done: make(chan struct{})}
+
+	tm.Print("12:00:00 < [Local] Somebody: hello\rSomebody Else: I said that")
+	if got := out.String(); !strings.Contains(got, "hello^MSomebody Else") {
+		t.Errorf("a lone CR was not shown: %q", got)
+	}
+
+	out.Reset()
+	tm.Print("one\r\ntwo")
+	if got := out.String(); strings.Contains(got, "^M") || !strings.Contains(got, "one\r\n\r\x1b[Ktwo\r\n") {
+		t.Errorf("a CRLF should be one line break: %q", got)
+	}
+}
+
+// TestThePromptAndTheLineAreDrawnVisible.
+//
+// The prompt names a conversation or a folder, and the line holds what
+// completion and history put there: both can be somebody else's
+// words.  The line keeps the character itself, since that is the name
+// of the thing, and only the drawing shows it; the cursor is put back
+// by what was drawn, which is two columns for an ESC rather than one.
+func TestThePromptAndTheLineAreDrawnVisible(t *testing.T) {
+	var out bytes.Buffer
+	tm := &Term{out: &out, width: 80, done: make(chan struct{})}
+	tm.SetPrompt("Evil\x1b[2J> ")
+	tm.SetLine("cd x\x1by")
+	got := out.String()
+	if i := strings.LastIndex(got, "\r\x1b[K"); i >= 0 {
+		got = got[i:]
+	}
+
+	// "Evil^[[2J> " is 11 columns and "cd x^[y" is 7.
+	if want := "\r\x1b[KEvil^[[2J> cd x^[y\r\x1b[18C"; got != want {
+		t.Errorf("drew %q, want %q", got, want)
+	}
+	if tm.Line() != "cd x\x1by" {
+		t.Errorf("the line itself was changed: %q", tm.Line())
+	}
+
+	// Echo writes the same, since it is what is left on the screen.
+	out.Reset()
+	tm.Echo()
+	if got := out.String(); got != "\r\x1b[KEvil^[[2J> cd x^[y\r\n" {
+		t.Errorf("echoed %q", got)
+	}
+
+	// And Status, which is one line in place.
+	out.Reset()
+	tm.Status("removing a\x1b[2Jthing")
+	if got := out.String(); got != "\r\x1b[Kremoving a^[[2Jthing" {
+		t.Errorf("status wrote %q", got)
+	}
+}
+
+// TestTheWindowOnTheLineIsCountedInWhatIsDrawn.
+//
+// A line wider than the terminal scrolls sideways.  With every
+// character one column that was a count of runes; with an ESC drawn as
+// two, a count of runes would draw past the right margin and wrap.
+func TestTheWindowOnTheLineIsCountedInWhatIsDrawn(t *testing.T) {
+	var out bytes.Buffer
+	tm := &Term{out: &out, width: 20, done: make(chan struct{})}
+	tm.SetPrompt("> ")
+	tm.SetLine(strings.Repeat("\x1b", 15))
+
+	last := out.String()
+	if i := strings.LastIndex(last, "\r\x1b[K"); i >= 0 {
+		last = last[i+len("\r\x1b[K"):]
+	}
+	drawn, cursor, _ := strings.Cut(last, "\r")
+	if n := len([]rune(drawn)); n > 20 {
+		t.Errorf("drew %d columns into a 20 column terminal: %q", n, drawn)
+	}
+	if !strings.HasPrefix(drawn, "> ^[") {
+		t.Errorf("drew %q", drawn)
+	}
+	// The cursor is at the end of what was drawn.
+	if want := fmt.Sprintf("\x1b[%dC", len([]rune(drawn))); cursor != want {
+		t.Errorf("the cursor went to %q, want %q after %q", cursor, want, drawn)
 	}
 }
