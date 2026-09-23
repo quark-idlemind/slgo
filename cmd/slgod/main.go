@@ -27,6 +27,8 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/auth"
+	"github.com/quark-idlemind/slgo/internal/logfile"
+	"github.com/quark-idlemind/slgo/internal/redact"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/server"
 	"github.com/quark-idlemind/slgo/viewer"
@@ -38,11 +40,21 @@ func main() {
 		noAuth    = flag.Bool("no-auth", false, "serve without authentication; loopback only, and it is not checked")
 		verbose   = flag.Bool("v", false, "log every message the grid sends")
 		start     = flag.String("start", "", "override the profile's start location")
-		trace     = flag.String("trace", "", "write a packet trace to this file")
+		trace     = flag.String("trace", "", "write a packet trace to this file, created mode 600")
 		traceMsgs = flag.String("trace-messages", "",
 			"comma separated message names to trace; empty traces every one")
 		traceBodies = flag.Bool("trace-bodies", false,
-			"write each traced message out in full, rather than one line naming it")
+			"write each traced message out in full, rather than one line naming it;"+
+				" the trace then holds the session ids and every word of chat and"+
+				" instant messages, other people's included")
+		logTo = flag.String("log", "",
+			"append the log to this file, mode 600, rather than writing it to stderr;"+
+				" its directory is made 700 if missing and refused if group or others can open it."+
+				" ~/.local/log/slgod.log is the suggested place")
+		logSecrets = flag.Bool("log-secrets", false,
+			"for debugging: log session ids, circuit codes and capability URLs in full rather than"+
+				" cut short; the log then holds the credentials of every session, and anyone who"+
+				" can read it can take them over")
 		viewerAt = flag.String("viewer", "",
 			"serve viewer logins on this address, so a real viewer can be handed a session")
 		viewerCert = flag.String("viewer-cert", "",
@@ -58,7 +70,7 @@ func main() {
 	flag.Var(&group, "group",
 		"group to act as, by name or uuid, or PROFILE=GROUP; overrides the profile's own")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: slgod [-listen addr] [-v] profile [profile...]\n")
+		fmt.Fprintf(os.Stderr, "usage: slgod [-listen addr] [-log file] [-v] profile [profile...]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -68,6 +80,24 @@ func main() {
 	}
 
 	log.SetFlags(log.Ltime)
+	if *logTo != "" {
+		f, err := logfile.Append(*logTo)
+		if err != nil {
+			log.Fatalf("cannot start: log: %v", err)
+		}
+		defer f.Close()
+		log.SetOutput(f)
+	}
+	// Before anything else is logged, so that no line is written under
+	// the one setting and read under the other.  Said once, loudly, at
+	// the top of every run that has it, because a log written this way
+	// is a copy of the credentials and whoever finds it later needs to
+	// know that before they paste a line of it anywhere.
+	if *logSecrets {
+		redact.SetFull(true)
+		log.Print("WARNING: -log-secrets is on: session ids, circuit codes and capability URLs " +
+			"are logged in full, and anyone who can read this log can use them")
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -84,7 +114,12 @@ func main() {
 	census := viewer.NewCensus()
 	var tracer *viewer.Trace
 	if *trace != "" {
-		f, err := os.Create(*trace)
+		// Mode 600 whatever the umask, and a file already there is
+		// narrowed before it is emptied: even without -trace-bodies a
+		// trace is a record of what the avatar did and when, and with
+		// it every session id and every instant message.  See package
+		// logfile.
+		f, err := logfile.Create(*trace)
 		if err != nil {
 			log.Fatalf("trace: %v", err)
 		}

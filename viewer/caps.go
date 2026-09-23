@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/redact"
 	"github.com/quark-idlemind/slgo/llsd"
 )
 
@@ -309,14 +310,18 @@ func (s *Seed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
+	// Both errors can carry the simulator's seed URL, which is the
+	// session's credential for every capability; neither the log nor
+	// the viewer is given it.  See package redact.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.Real, bytes.NewReader(asked))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		http.Error(w, redact.Error(err).Error(), http.StatusBadGateway)
 		return
 	}
 	req.Header.Set("Content-Type", "application/llsd+xml")
 	resp, err := client.Do(req)
 	if err != nil {
+		err = redact.Error(err)
 		logf("viewer: asking the simulator for capabilities: %v", err)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return

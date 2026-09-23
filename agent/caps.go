@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/quark-idlemind/slgo/llsd"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/quark-idlemind/slgo/internal/redact"
+	"github.com/quark-idlemind/slgo/llsd"
 )
 
 // DefaultCaps is what a session asks the seed capability for.  Naming
@@ -156,20 +158,26 @@ func RequestCaps(ctx context.Context, seed string, names []string, hc *http.Clie
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, seed, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, redact.Error(err)
 	}
 	req.Header.Set("Content-Type", "application/llsd+xml")
 	req.Header.Set("Accept", "application/llsd+xml")
 
+	// The seed is the credential every other capability is got with,
+	// and the HTTP client writes the whole of it into any error it
+	// returns.  This error is a login that has to be retried, so it is
+	// logged, and the URL is cut to its host first; see package redact.
+	// The body of a refusal is cut the same way, in case the simulator
+	// says which URL it refused.
 	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("agent: seed capability: %w", err)
+		return nil, fmt.Errorf("agent: seed capability: %w", redact.Error(err))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
 		return nil, fmt.Errorf("agent: seed capability returned %s: %s",
-			resp.Status, strings.TrimSpace(string(snippet)))
+			resp.Status, redact.Text(strings.TrimSpace(string(snippet))))
 	}
 
 	v, err := llsd.Decode(resp.Body)

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/internal/redact"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -518,6 +519,17 @@ func (c *Circuit) forward(p *msg.Packet) {
 // checkCircuit says so when a viewer claims a circuit that is not this
 // session's.  It is a loud log rather than a refusal: the login endpoint
 // is what decides who may attach, and by here the answer is already yes.
+//
+// What it says is which of the two did not match, and not what either
+// should have been.  The session's own circuit code and session id are,
+// with the agent id the log names everywhere, the whole of what
+// UseCircuitCode needs to open a circuit to the real simulator as this
+// avatar -- and a mismatch is something any sender can provoke, so a
+// line that wrote them out would be a way to have the daemon copy the
+// credentials into a file for whoever can read it.  The claimed session
+// id is cut to its first characters, which is enough to see whether two
+// claims came from the same place; see package redact, whose switch
+// puts every value back for a debugging run.
 func (c *Circuit) checkCircuit(p *msg.Packet) {
 	m, ok := p.Message.(*msg.UseCircuitCode)
 	if !ok {
@@ -528,10 +540,27 @@ func (c *Circuit) checkCircuit(p *msg.Packet) {
 		return
 	}
 	acct := a.Account
-	if m.CircuitCode.Code != acct.CircuitCode || m.CircuitCode.SessionID != acct.SessionID {
+	codeWrong := m.CircuitCode.Code != acct.CircuitCode
+	sessionWrong := m.CircuitCode.SessionID != acct.SessionID
+	if !codeWrong && !sessionWrong {
+		return
+	}
+	if redact.Full() {
 		c.logf("viewer: a viewer claimed circuit %d session %s, but this session is %d/%s",
 			m.CircuitCode.Code, m.CircuitCode.SessionID, acct.CircuitCode, acct.SessionID)
+		return
 	}
+	var wrong string
+	switch {
+	case codeWrong && sessionWrong:
+		wrong = "the circuit code and the session id"
+	case codeWrong:
+		wrong = "the circuit code"
+	default:
+		wrong = "the session id"
+	}
+	c.logf("viewer: a viewer claimed session %s, and %s did not match this session's",
+		redact.ID(m.CircuitCode.SessionID), wrong)
 }
 
 // withinThisRegion reports whether a teleport request names the region

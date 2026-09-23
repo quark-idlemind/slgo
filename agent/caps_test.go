@@ -109,8 +109,10 @@ func TestASeedCapabilityThatWillNotAnswer(t *testing.T) {
 		},
 		{name: "a server that is not there", seed: deadURL, says: "seed capability"},
 		// The seed URL comes out of the login response, so one that
-		// will not even parse is the login server's doing.
-		{name: "a seed that is not a URL", seed: "://nonsense", says: "://nonsense"},
+		// will not even parse is the login server's doing.  It is not
+		// repeated in the error: a seed that fails to parse for one
+		// stray character is still the credential in every other.
+		{name: "a seed that is not a URL", seed: "://nonsense", says: "missing protocol scheme"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()

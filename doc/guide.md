@@ -599,6 +599,63 @@ A trace is worth taking before there is anything to debug: a baseline of
 what an ordinary session receives is what an unusual one has to be
 compared against, and it cannot be collected afterwards.
 
+The trace file is created mode 600, and one already there is narrowed to
+600 before it is emptied. That matters most with `-trace-bodies`, which
+writes every message whole: the session id is in nearly every message a
+client sends, and the chat and instant messages of everybody near the
+avatar are in what comes back. Delete such a trace when you are done
+with it.
+
+### Where the log goes
+
+Both daemons log to standard error unless told otherwise, and under
+launchd that is whatever file the plist names. `-log FILE` has the
+daemon open the file itself instead:
+
+    slgod -log ~/.local/log/slgod.log example
+    slbotd -log ~/.local/log/slbotd.log
+
+The file is appended to, created mode 600 if it is missing, and narrowed
+to 600 if it is wider. Its directory is created mode 700 if it is
+missing, and **refused** if it exists and group or others can get into
+it -- the daemon will not start, and says `chmod 700` on what. A
+warning would have gone into the very file that was exposed. The
+directory is also what protects the files the daemon does not open
+itself, such as launchd's own capture of standard error, which it
+creates with the ordinary umask.
+
+The place recommended is `~/.local/log`, mode 700:
+
+    mkdir -p ~/.local/log && chmod 700 ~/.local/log
+
+and in each LaunchAgent plist, both `-log` in `ProgramArguments` and
+`StandardOutPath` and `StandardErrorPath` pointed into that directory --
+the second catches what the daemon cannot log itself, such as a panic.
+launchd does not expand `~`, so a plist spells the path out in full.
+
+What is in the log is meant to be safe to read, but not to publish: the
+avatars' names and ids, and in `slbotd`'s case who spoke to them and
+what they said (`-q` leaves the conversation out). What it does not hold
+is a credential. The session id and circuit code -- which with the agent
+id are all it takes to open a circuit as the avatar -- are never written
+whole, and a capability URL is cut to its host, since whoever has the
+URL can use the capability. A viewer that claims the wrong circuit is
+logged as
+
+    viewer: a viewer claimed session 127d7e57..., and the session id did not match this session's
+
+and a seed capability that would not answer, in the retry line under
+"When a login fails", is named by the simulator's host followed by
+`/...`.
+
+`slgod -log-secrets` turns that off and writes every value whole, for a
+debugging session that needs them. It says so on the first line it
+logs. A log written with it on holds the credentials of every session
+the daemon had, and anyone who can read it can take them over: keep it
+short, and delete it afterwards. `slbotd` has no such flag, because it
+holds no session credentials to write -- it attaches to sessions
+`slgod` owns, and what `slgod` tells it has already been cut.
+
 `slsh watch` is the lighter way to see the same thing from outside:
 message names as the protocol spells them, and naming none means every
 one. It opens a connection of its own, so it never steals messages from
@@ -617,9 +674,11 @@ half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
 | `-viewer ADDR` | serve viewer logins here, so a real viewer can be handed a session; always TLS |
 | `-viewer-cert FILE`, `-viewer-key FILE` | serve that endpoint with your own certificate rather than the kept self-signed one |
 | `-neighbours` | hold a circuit to each neighbouring region, so an avatar can walk over a border; a profile's own `neighbours` setting wins over it |
-| `-trace FILE` | write a packet trace |
+| `-log FILE` | append the log to this file, mode 600, rather than standard error; its directory is made 700, and refused if others can open it |
+| `-log-secrets` | for debugging: log session ids, circuit codes and capability URLs whole. The log then holds every session's credentials |
+| `-trace FILE` | write a packet trace, mode 600 |
 | `-trace-messages NAMES` | trace only these; empty traces every one |
-| `-trace-bodies` | write each traced message out in full |
+| `-trace-bodies` | write each traced message out in full -- session ids, and everybody's chat and instant messages, included |
 | `-v` | log every message the grid sends |
 
 ---
@@ -1229,6 +1288,10 @@ It logs nobody in. For each avatar in its configuration it asks `slgod`
 to bring the session up and attaches to what it is given, so the
 credentials stay where they already were and an `slbotd` that is killed
 leaves every avatar exactly where it was.
+
+Its log names everybody who spoke to the avatars and what they said, so
+give it `-log ~/.local/log/slbotd.log`, or point launchd there; see
+"Where the log goes" under `slgod`. `-q` leaves the conversation out.
 
 ### What it is for
 

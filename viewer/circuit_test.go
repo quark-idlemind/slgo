@@ -3,6 +3,7 @@ package viewer
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"net"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/internal/redact"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -1187,6 +1189,90 @@ func TestAStrangerCannotClaimTheCircuitWithTheWrongIds(t *testing.T) {
 	v.waitSeen(t, "ChatFromSimulator", 5*time.Second)
 	for _, name := range stranger.got() {
 		t.Errorf("the stranger was sent %s", name)
+	}
+}
+
+// TestAWrongClaimIsLoggedWithoutTheSessionsIds: checkCircuit used to
+// write this session's real circuit code and session id into the log
+// when a claim did not match them -- and with the agent id, which the
+// log names freely, those are everything UseCircuitCode needs to open a
+// circuit as the avatar.  A mismatch is something a sender can provoke,
+// so the line was a way to have the daemon copy the credentials to disk.
+//
+// By default the line says which of the two did not match and gives
+// the claimed session id cut short.  With redaction off, for debugging,
+// it gives every value, which is what that switch is for.
+func TestAWrongClaimIsLoggedWithoutTheSessionsIds(t *testing.T) {
+	a := &agent.Agent{Account: &agent.Account{
+		AgentID: testAgentID, SessionID: testSessionID, CircuitCode: testCircuitCode,
+	}}
+	var logged []string
+	c := &Circuit{
+		session: func() *agent.Agent { return a },
+		logf: func(format string, v ...any) {
+			logged = append(logged, fmt.Sprintf(format, v...))
+		},
+	}
+	claimed := msg.MustParseUUID("138b7e57-7e57-c0de-4b09-d94d79c2ecd4")
+	claim := func(code uint32, session msg.UUID) string {
+		t.Helper()
+		logged = nil
+		uc := &msg.UseCircuitCode{}
+		uc.CircuitCode.Code = code
+		uc.CircuitCode.SessionID = session
+		uc.CircuitCode.ID = testAgentID
+		c.checkCircuit(packetOf(t, uc))
+		if len(logged) != 1 {
+			t.Fatalf("a wrong claim logged %d lines, want 1: %q", len(logged), logged)
+		}
+		return logged[0]
+	}
+	realCode := fmt.Sprint(testCircuitCode)
+
+	for _, tc := range []struct {
+		code    uint32
+		session msg.UUID
+		says    string
+	}{
+		{testCircuitCode + 1, claimed, "the circuit code and the session id"},
+		{testCircuitCode, claimed, "the session id"},
+		{testCircuitCode + 1, testSessionID, "the circuit code"},
+	} {
+		line := claim(tc.code, tc.session)
+		if strings.Contains(line, testSessionID.String()) {
+			t.Errorf("the log has this session's id: %s", line)
+		}
+		if strings.Contains(line, realCode) {
+			t.Errorf("the log has this session's circuit code: %s", line)
+		}
+		if strings.Contains(line, tc.session.String()) {
+			t.Errorf("the log has the claimed session id whole: %s", line)
+		}
+		if !strings.Contains(line, tc.session.String()[:8]+"...") {
+			t.Errorf("the log does not say which session was claimed: %s", line)
+		}
+		if !strings.Contains(line, tc.says+" did not match") {
+			t.Errorf("the log does not say that %s did not match: %s", tc.says, line)
+		}
+	}
+
+	// A claim that matches is not a thing to log.
+	logged = nil
+	right := &msg.UseCircuitCode{}
+	right.CircuitCode.Code = testCircuitCode
+	right.CircuitCode.SessionID = testSessionID
+	c.checkCircuit(packetOf(t, right))
+	if len(logged) != 0 {
+		t.Errorf("a claim that matched was logged: %q", logged)
+	}
+
+	redact.SetFull(true)
+	defer redact.SetFull(false)
+	line := claim(testCircuitCode+1, claimed)
+	for _, want := range []string{testSessionID.String(), realCode, claimed.String()} {
+		if !strings.Contains(line, want) {
+			t.Errorf("with redaction off the log should have %s: %s", want, line)
+		}
 	}
 }
 

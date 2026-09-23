@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/redact"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -277,14 +278,17 @@ func (a *Agent) deliver(body []byte, fn EventHandler) (any, int) {
 func (a *Agent) postEventQueue(ctx context.Context, url string, body []byte) (int, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, redact.Error(err)
 	}
 	req.Header.Set("Content-Type", "application/llsd+xml")
 	req.Header.Set("Accept", "application/llsd+xml")
 
+	// The queue's URL is a credential like any capability's, and a
+	// failed poll can end the session with this error as its reason,
+	// which the daemon logs; see package redact.
 	resp, err := a.http().Do(req)
 	if err != nil {
-		return 0, nil, fmt.Errorf("agent: %s: %w", EventQueueCap, err)
+		return 0, nil, fmt.Errorf("agent: %s: %w", EventQueueCap, redact.Error(err))
 	}
 	defer resp.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))

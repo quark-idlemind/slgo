@@ -47,6 +47,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/quark-idlemind/slgo/internal/logfile"
 	"github.com/quark-idlemind/slgo/internal/slhost"
 )
 
@@ -66,9 +67,13 @@ func run() error {
 		check = flag.Bool("check", false,
 			"read the configuration, say what it means, and exit without connecting")
 		quiet = flag.Bool("q", false, "log commands and offers only, not conversation")
+		logTo = flag.String("log", "",
+			"append the log to this file, mode 600, rather than writing it to stderr;"+
+				" its directory is made 700 if missing and refused if group or others can open it."+
+				" ~/.local/log/slbotd.log is the suggested place")
 	)
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: slbotd [-config PATH] [-addr HOST:PORT]\n")
+		fmt.Fprintf(os.Stderr, "usage: slbotd [-config PATH] [-addr HOST:PORT] [-log PATH]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -78,6 +83,23 @@ func run() error {
 	}
 
 	log.SetFlags(log.Ltime)
+	// The log names everybody who spoke to an avatar and, without -q,
+	// what they said, so it is kept where only this user can read it;
+	// see package logfile.  --check writes to standard output and
+	// never here.
+	//
+	// There is no -log-secrets beside it, as there is on slgod.  This
+	// daemon holds no session credentials to redact: it attaches to
+	// sessions slgod owns, and what slgod tells it has already been
+	// through slgod's redaction.
+	if *logTo != "" && !*check {
+		f, err := logfile.Append(*logTo)
+		if err != nil {
+			return fmt.Errorf("log: %w", err)
+		}
+		defer f.Close()
+		log.SetOutput(f)
+	}
 
 	cfg, err := LoadConfig(*config)
 	if err != nil {

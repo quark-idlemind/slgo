@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/quark-idlemind/slgo/internal/redact"
 )
 
 // CapRequest is one HTTP request against a named capability.  The
@@ -164,7 +166,7 @@ func (a *Agent) DoCap(ctx context.Context, r CapRequest) (*CapResponse, error) {
 	}
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return nil, err
+		return nil, redact.Error(err)
 	}
 	req.Header.Set("Accept", "application/llsd+xml")
 	if r.Type != "" {
@@ -173,9 +175,13 @@ func (a *Agent) DoCap(ctx context.Context, r CapRequest) (*CapResponse, error) {
 		req.Header.Set("Content-Type", "application/llsd+xml")
 	}
 
+	// Named by the capability, and with the URL the HTTP client puts
+	// in its error cut to the host: that URL is the credential, and
+	// this error goes wherever the caller sends it, a log included.
+	// See package redact.
 	resp, err := a.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("agent: %s%s: %w", r.Cap, r.Path, err)
+		return nil, fmt.Errorf("agent: %s%s: %w", r.Cap, r.Path, redact.Error(err))
 	}
 	defer resp.Body.Close()
 
