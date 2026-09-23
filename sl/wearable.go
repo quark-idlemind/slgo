@@ -221,6 +221,10 @@ type OutfitLink struct {
 	// was put on, which is bookkeeping rather than a worn thing.
 	Folder bool
 
+	// Parent is the folder the thing at the far end lives in, which is
+	// where to fetch the whole item from when one is needed.
+	Parent msg.UUID
+
 	// Found is whether the thing at the far end was reached at all.
 	// A link outlives what it points at, and one that has been left
 	// behind says nothing about its kind.
@@ -265,7 +269,7 @@ func (w *Session) outfitIn(ctx context.Context, cof msg.UUID) ([]OutfitLink, err
 		}
 		l := OutfitLink{Link: e.ID, Item: e.Asset, Name: e.Name}
 		if to, ok := byID[e.Asset]; ok {
-			l.Found, l.Folder = true, to.Folder
+			l.Found, l.Folder, l.Parent = true, to.Folder, to.Parent
 			l.Kind = AssetType(to.Type)
 			l.Slot, l.Wearable = SlotOf(l.Kind, to.Flags)
 		}
@@ -488,4 +492,168 @@ func (w *Session) folderVersion(ctx context.Context, folder msg.UUID) (int, erro
 		return 0, fmt.Errorf("sl: folder %s was not in its own listing", folder)
 	}
 	return f.Version, nil
+}
+
+// Putting an outfit back on.
+//
+// An avatar logs in wearing its body parts and nothing else.  The
+// simulator rezzes no attachments of its own accord: they are in the
+// Current Outfit folder, the folder is the client's record, and putting
+// on what it names is the client's job.  A viewer does it within a
+// second or two of arriving and nobody notices it happening; nothing
+// here did it at all, so an avatar dressed by this library came back
+// undressed at every login and stayed that way.
+//
+// # Why it replaces rather than adds
+//
+// Because it cannot be sure what is already on.  What says an
+// attachment is worn is the region's description of it, and that
+// description can be missing -- so a restore that added would put a
+// second copy of everything on an avatar whose attachments it simply
+// could not see, and two attachments from one item is the state
+// wear refuses to create because nothing can then tell them apart.
+//
+// Sent with the point the object itself carries and without the add
+// bit, the same request twice is self-limiting: the second replaces the
+// first on that point rather than joining it.  It is also what the
+// viewer sends down this path.
+//
+// # Why it asks for everything at once
+//
+// Waiting for each in turn is forty seconds apiece, and a dozen
+// attachments is eight minutes of waiting for confirmations that were
+// all going to arrive together.  So the requests go out in a batch and
+// the waiting happens once, which is the shape a viewer uses too.
+
+// OutfitReport is what a restore did, by name, so that a caller can say
+// what happened rather than that something did.
+type OutfitReport struct {
+	// Already were on before this started, Worn went on because of it,
+	// and Missing were asked for and never confirmed.
+	//
+	// Missing is not the same as failed.  The confirmation is the
+	// region describing the new object, and that description is the
+	// thing most likely to be lost -- so a name here means "asked for,
+	// and nothing came back about it", which is a weaker statement
+	// than "not worn".
+	Already []string
+	Worn    []string
+	Missing []string
+}
+
+// RestoreOutfit puts on everything in the Current Outfit folder that is
+// not on already.
+//
+// Only the attachments.  Clothing and body parts are not attached and
+// do not go missing at a login: the folder is what the baking service
+// reads, and it has been read by the time the avatar is standing up.
+//
+// A zero timeout is DefaultRestoreWait.
+func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*OutfitReport, error) {
+	if timeout == 0 {
+		timeout = DefaultRestoreWait
+	}
+	outfit, err := w.Outfit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	on, err := w.wornItems(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	report := &OutfitReport{}
+	var asked []OutfitLink
+	for _, l := range outfit {
+		if l.Folder || !l.Found || l.Kind != AssetObject {
+			continue
+		}
+		if on[l.Item] {
+			report.Already = append(report.Already, l.Name)
+			continue
+		}
+		it, err := w.itemIn(ctx, l.Parent, l.Item)
+		if err != nil {
+			report.Missing = append(report.Missing, l.Name)
+			continue
+		}
+		// The point the object carries, and no add bit: see the head
+		// of this section for why replacing is the safe one here.
+		if err := w.AskToWear(ctx, it, 0); err != nil {
+			return report, err
+		}
+		asked = append(asked, l)
+	}
+	if len(asked) == 0 {
+		return report, nil
+	}
+
+	// One wait for the lot.  Ended early when everything asked for has
+	// been described, which is the ordinary case and takes a second or
+	// two.
+	deadline := time.Now().Add(timeout)
+	for {
+		if on, err = w.wornItems(ctx); err != nil {
+			break
+		}
+		done := true
+		for _, l := range asked {
+			if !on[l.Item] {
+				done = false
+				break
+			}
+		}
+		if done || !time.Now().Before(deadline) {
+			break
+		}
+		if !nap(ctx, restorePoll) {
+			break
+		}
+	}
+	for _, l := range asked {
+		if on[l.Item] {
+			report.Worn = append(report.Worn, l.Name)
+		} else {
+			report.Missing = append(report.Missing, l.Name)
+		}
+	}
+	return report, nil
+}
+
+// DefaultRestoreWait is how long a restore gives the region to describe
+// what it was asked to rez, and restorePoll how often it looks.
+const (
+	DefaultRestoreWait = 20 * time.Second
+	restorePoll        = time.Second
+)
+
+// wornItems is the set of inventory items this avatar has attachments
+// from.
+func (w *Session) wornItems(ctx context.Context) (map[msg.UUID]bool, error) {
+	worn, err := w.WornObjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	on := make(map[msg.UUID]bool, len(worn))
+	for _, a := range worn {
+		on[a.Item] = true
+	}
+	return on, nil
+}
+
+// itemIn is one item out of a folder, by id.
+//
+// By id and not by name: a folder may hold several things of one name,
+// and what is wanted here is the one the outfit points at.
+func (w *Session) itemIn(ctx context.Context, folder, item msg.UUID) (*Item, error) {
+	items, err := w.FolderItems(ctx, folder)
+	if err != nil {
+		return nil, err
+	}
+	for _, it := range items {
+		if it.ID == item {
+			return it, nil
+		}
+	}
+	return nil, fmt.Errorf("sl: item %s is not in folder %s", item, folder)
 }

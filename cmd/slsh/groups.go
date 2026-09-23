@@ -124,7 +124,7 @@ var groups = []group{
 		// to the region, which is why it is also under avatars.
 		members: []string{"where", "parcel", "group", "invite", "maturity", "tp", "landmark", "sit", "stand", "who", "look", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
-			"detach", "move", "dump", "rez", "reform", "touch", "texture",
+			"detach", "dress", "move", "dump", "rez", "reform", "touch", "texture",
 			"take", "place", "perms", "drop", "start", "stop", "link", "unlink"},
 	},
 	{

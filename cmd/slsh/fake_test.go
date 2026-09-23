@@ -971,6 +971,13 @@ func (f *fakeGrid) AnswerAttach(t *testing.T, id msg.UUID, local uint32, point i
 			return
 		}
 		f.takeOff(off...)
+		// The region gains the object, which is where everything that
+		// asks "what is worn" looks: the session's own relay knows it
+		// from the update below, and the daemon's object store knows
+		// it from being in the region.  A fake that only relayed left
+		// the second empty, so anything reading the region saw an
+		// avatar wearing nothing however much it had just put on.
+		f.attached(r.ObjectData.ItemID, id, local, point)
 		f.Relay(t, &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{
 			FullID: id,
 			ID:     local,
@@ -1006,6 +1013,32 @@ func (f *fakeGrid) AnswerDetach(after time.Duration) {
 // takeOff stops the fake listing the attachments worn from some items,
 // which is all that coming off looks like from outside: the object goes
 // away and the inventory item it was worn from does not.
+// attached puts a worn object into the region, parented to this
+// avatar, the way a simulator does when it rezzes one.
+func (f *fakeGrid) attached(item, object msg.UUID, local uint32, point int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	const avatar = uint32(1)
+	described := false
+	for _, o := range f.objects {
+		described = described || o.ID == testMe
+	}
+	if !described {
+		f.objects = append(f.objects,
+			&sl.Seen{Object: sl.Object{ID: testMe, Local: avatar}, PCode: 47})
+	}
+	for _, o := range f.objects {
+		if o.AttachItem == item {
+			return // already on; a replace puts it back where it was
+		}
+	}
+	f.objects = append(f.objects, &sl.Seen{
+		Object: sl.Object{ID: object, Local: local}, PCode: 9,
+		Parent: avatar, AttachItem: item, AttachPoint: point,
+	})
+}
+
 func (f *fakeGrid) takeOff(items ...msg.UUID) {
 	if len(items) == 0 {
 		return

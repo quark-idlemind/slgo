@@ -1267,7 +1267,7 @@ was no way from in-world to tell those apart.
 
 ### What it does unasked
 
-Three things, and only three.
+Four things, and only four.
 
 **It tells an admin, once, that something has gone wrong.** On the
 first remark of a fresh conversation from somebody trusted — after a
@@ -1301,6 +1301,29 @@ stays pending for ever, and handing a script or a notecard to a daemon
 should not need anybody at a keyboard. An offer from anybody else is
 left exactly where it is rather than declined, so a person can still
 answer it from a viewer; `accept-inventory` changes who that is.
+
+**It puts an avatar's outfit back on after a login.** An avatar comes
+back from a login wearing its body parts and nothing else: the
+simulator rezzes no attachments of its own accord, because they are
+named in the Current Outfit folder and putting on what that folder
+names is a client's job. A viewer does it a second or two after
+arriving. Nothing here did, so every restart of `slgod` left its
+avatars in their skins until somebody noticed.
+
+A few seconds after attaching, `slbotd` compares the folder against
+what is actually worn and asks for whatever is missing. It tries a
+few times, because a region hands over its contents gradually and a
+request that arrives too early is answered with nothing, and it stops
+as soon as a pass puts nothing on -- which is what an avatar whose
+attachments are all on but undescribed looks like, and asking again
+would achieve nothing.
+
+It replaces rather than adds, so a request for something that was
+already on is harmless: the second copy lands on the same point as the
+first rather than beside it. That matters because what says an
+attachment is worn is the region's description of it, and that
+description is not always there. `dress` in `slsh` is the same thing
+by hand.
 
 Everything else waits to be asked. A teleport offer, a friendship
 offer and a group invitation are listed by `:offers` and answered by

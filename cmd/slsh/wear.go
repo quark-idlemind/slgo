@@ -224,6 +224,12 @@ var wearCommands = map[string]*command{
 		man:    "detach",
 		run:    cmdDetach,
 	},
+	"dress": {
+		flags: func() any { return new(dressFlags) },
+		brief: "put on everything the Current Outfit folder names that is not on",
+		man:   "dress",
+		run:   cmdDress,
+	},
 }
 
 // attachWhereItSays is the point that means "the one the object itself
@@ -778,4 +784,62 @@ func notWorn(want string) error {
 	return fmt.Errorf("nothing worn is called %q; \"worn\" lists what can be seen, and the region "+
 		"describes an attachment only when it goes on, so something put on before this session "+
 		"started may be missing from it", want)
+}
+
+type dressFlags struct {
+	Wait int  `getopt:"--wait -w=SECONDS  how long to give the region to describe what it rezzed [20]"`
+	Help bool `getopt:"--help -h          show what this command takes"`
+}
+
+// cmdDress puts back on whatever the Current Outfit folder names and
+// the avatar is not wearing.
+//
+// The fault it is for: an avatar logs in wearing its body parts and
+// nothing else.  The simulator rezzes no attachments of its own
+// accord -- they are in the folder, the folder is the client's record,
+// and putting on what it names is the client's job.  A viewer does it
+// a second or two after arriving and nobody sees it happen.  Nothing
+// here did it at all, so an avatar dressed from this shell came back
+// undressed at the next login and stayed that way.
+//
+// The report is by name and in three parts, because "dressed" is not
+// one outcome.  What was already on is worth saying so that a person
+// who runs this twice is not told the second run did nothing; what
+// went on is the answer; and what was asked for and never confirmed is
+// neither a success nor a failure -- the confirmation is the region
+// describing the new object, which is the thing most likely to be
+// lost.
+func cmdDress(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o dressFlags
+	rest, done, err := subOptions("dress", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(rest) > 0 {
+		return usageError("dress", "nothing; it puts on what the outfit names")
+	}
+
+	report, err := sh.s.RestoreOutfit(ctx, time.Duration(o.Wait)*time.Second)
+	if err != nil {
+		return err
+	}
+	// A line per thing that happened, and nothing for the things that
+	// did not.  The count of what was already on is said whenever
+	// anything else is: without it, a run that asked for six and
+	// confirmed none reads as an outfit that has gone, when in fact
+	// most of it was on the whole time.
+	if len(report.Worn) == 0 && len(report.Missing) == 0 {
+		fmt.Fprintf(out, "already wearing all %d of them\n", len(report.Already))
+		return nil
+	}
+	if n := len(report.Already); n > 0 {
+		fmt.Fprintf(out, "%d already on\n", n)
+	}
+	if len(report.Worn) > 0 {
+		fmt.Fprintf(out, "put on %s\n", strings.Join(report.Worn, ", "))
+	}
+	if len(report.Missing) > 0 {
+		fmt.Fprintf(out, "asked for and not described: %s\n", strings.Join(report.Missing, ", "))
+	}
+	return nil
 }

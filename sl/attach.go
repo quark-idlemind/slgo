@@ -259,6 +259,40 @@ func (w *Session) Wear(ctx context.Context, it *Item, point int, timeout time.Du
 	if timeout == 0 {
 		timeout = 40 * time.Second
 	}
+	if err := w.AskToWear(ctx, it, point); err != nil {
+		return nil, err
+	}
+
+	var got *Attached
+	err := w.await(ctx, timeout, "the simulator to report "+it.Name+" as worn", func() bool {
+		got = w.attach[it.ID]
+		return got != nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return got, nil
+}
+
+// AskToWear sends the request and does not wait for it.
+//
+// Wear is this plus the waiting, and is what a caller putting on one
+// thing wants: it comes back with the attachment, or says the region
+// never agreed.
+//
+// This is for a caller putting on SEVERAL things, where waiting for
+// each in turn is the wrong shape -- forty seconds apiece for a dozen
+// attachments is eight minutes, and most of that would be spent
+// waiting on confirmations that are all going to arrive at once
+// anyway.  Send them all, wait once, then see what went on.  It is
+// also what a viewer does, which packs its attachments a batch at a
+// time.
+//
+// Forgetting what was known about this item first is the part worth
+// naming: the confirmation is recognised by the item it came from, so
+// a stale entry from a previous wearing would otherwise be mistaken
+// for the answer to this one.
+func (w *Session) AskToWear(ctx context.Context, it *Item, point int) error {
 	w.mu.Lock()
 	delete(w.attach, it.ID)
 	w.mu.Unlock()
@@ -273,19 +307,7 @@ func (w *Session) Wear(ctx context.Context, it *Item, point int, timeout time.Du
 	d.NextOwnerMask = it.NextOwnerMask
 	d.Name = append([]byte(it.Name), 0)
 	d.Description = append([]byte(it.Desc), 0)
-	if err := w.Send(ctx, m); err != nil {
-		return nil, err
-	}
-
-	var got *Attached
-	err := w.await(ctx, timeout, "the simulator to report "+it.Name+" as worn", func() bool {
-		got = w.attach[it.ID]
-		return got != nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return got, nil
+	return w.Send(ctx, m)
 }
 
 // WornObjects asks what is being worn, of whoever was connected when

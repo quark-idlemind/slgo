@@ -287,7 +287,7 @@ func TestWornListsBothRecordsAndSaysWhereTheyDisagree(t *testing.T) {
 	// a thing that failed to rez at login looks like, and what
 	// everything looks like to a session that attached afterwards.
 	x.do(t, "wear Objects/a hat")
-	wearThings(x)
+	x.grid.takeOff(hat)
 	// And an object the region describes that the folder does not
 	// hold.
 	wearThings(x, &sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
@@ -337,7 +337,7 @@ func TestDetachFindsWhatTheRegionNeverDescribed(t *testing.T) {
 	x.grid.AnswerAttach(t, hatWorn, 11, 1)
 	x.do(t, "wear Objects/a hat")
 	// The region forgets it, which is what a reconnect does.
-	wearThings(x)
+	x.grid.takeOff(hat)
 
 	if got := x.do(t, "worn"); !strings.Contains(got, "in the outfit, not described") {
 		t.Fatalf("the hat should be in the folder and unseen:\n%s", got)
@@ -389,5 +389,77 @@ func TestWearingAnObjectRecordsItInTheOutfit(t *testing.T) {
 	x.do(t, "detach a hat")
 	if names := outfitNames(t, x); len(names) != 0 {
 		t.Errorf("after detach the outfit still holds %q", names)
+	}
+}
+
+// TestDressPutsBackOnWhatTheOutfitNamesAndIsNotOn.
+//
+// The fault: an avatar logs in wearing its body parts and nothing
+// else, because the simulator rezzes no attachments of its own accord.
+// They are named in the Current Outfit folder, the folder is the
+// client's own record, and nothing here was putting them back -- so an
+// avatar dressed from this shell came back undressed at the next login
+// and stayed that way.
+func TestDressPutsBackOnWhatTheOutfitNamesAndIsNotOn(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000f1")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000f1")
+	shirt := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000f2")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	wearableAt(x, shirt, "a shirt", sl.AssetClothing, sl.WearableShirt)
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+
+	// Dressed, and then logged in again: the folder still names them
+	// and the region describes none of them.
+	x.do(t, "wear Objects/a hat")
+	x.do(t, "wear Objects/a shirt")
+	// And logged in again: the folder still names them and the region
+	// describes none of them.
+	x.grid.takeOff(hat)
+
+	if got := x.do(t, "worn"); !strings.Contains(got, "in the outfit, not described") {
+		t.Fatalf("the hat should be in the folder and unseen:\n%s", got)
+	}
+
+	if got := x.do(t, "dress"); !strings.Contains(got, "put on a hat") {
+		t.Errorf("dress printed %q", got)
+	}
+	m, ok := lastAttach(x)
+	if !ok {
+		t.Fatal("dress sent no attach request")
+	}
+	if m.ObjectData.ItemID != hat {
+		t.Errorf("dress asked for %v, want the hat %v", m.ObjectData.ItemID, hat)
+	}
+	// The point the object carries, and no add bit: the same request
+	// twice then replaces rather than doubling, which is what makes
+	// this safe on an avatar whose attachments cannot be seen.
+	if got := m.ObjectData.AttachmentPt; got != 0 {
+		t.Errorf("dress asked for point %d, want 0 with no add bit", got)
+	}
+
+	// The shirt is not an attachment and is not asked for: clothing is
+	// not rezzed and does not go missing at a login.
+	for _, sent := range x.grid.Sent() {
+		if r, ok := sent.(*msg.RezSingleAttachmentFromInv); ok && r.ObjectData.ItemID == shirt {
+			t.Error("dress tried to attach a system wearable")
+		}
+	}
+}
+
+// TestDressOnADressedAvatarSaysSo, rather than printing nothing, which
+// is what a command that did nothing looks like.
+func TestDressOnADressedAvatarSaysSo(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000f3")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000f3")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+	x.do(t, "wear Objects/a hat")
+
+	if got, want := x.do(t, "dress"), "already wearing all 1 of them\n"; got != want {
+		t.Errorf("dress on a dressed avatar printed %q, want %q", got, want)
 	}
 }
