@@ -411,11 +411,3 @@ func sleepFor(ctx context.Context, d time.Duration) bool {
 		return false
 	}
 }
-
-// trimNul drops the terminator the protocol puts on a variable string.
-func trimNul(b []byte) string {
-	if n := len(b); n > 0 && b[n-1] == 0 {
-		b = b[:n-1]
-	}
-	return string(b)
-}
