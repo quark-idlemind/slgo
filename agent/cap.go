@@ -27,8 +27,13 @@ type CapRequest struct {
 	// capability and the simulator answers with a one-shot uploader
 	// URL to post the bytes to.
 	//
-	// Only a URL the simulator has handed us is accepted; see
-	// Agent.RememberURL.
+	// Only a URL on a host the simulator gave us a capability on is
+	// accepted, and a redirect is followed only as far as another
+	// such host; see Agent.RememberURL and Agent.checkRedirect.  It is
+	// the host that is checked and not the whole URL, because the
+	// host is what decides who is asked.  Any path on it is allowed,
+	// and that is a guess against the random ids the simulator serves
+	// capabilities under rather than a way anywhere else.
 	URL string
 }
 
@@ -57,11 +62,63 @@ type CapDoer interface {
 
 var _ CapDoer = (*Agent)(nil)
 
+// http is the client every request this session makes over http goes
+// through: capabilities, the seed they come from, and the event queue.
+//
+// It is the caller's client when there is one, copied rather than used
+// as it stands, because the copy is given a redirect check the caller's
+// may not have.  A capability is on a host the simulator named, and
+// DoCap checks that before the request goes; but Go follows a redirect
+// by default, wherever it points, and a check made on the way out says
+// nothing about where the answer sends the request next.  Without this
+// a 3xx from a capability host would be followed to any address at all,
+// with the daemon as the one asking -- which is the thing the check on
+// the way out exists to stop.
+//
+// A check the caller set is kept, and asked after this one.
 func (a *Agent) http() *http.Client {
+	c := http.Client{Timeout: 60 * time.Second}
 	if a.HTTP != nil {
-		return a.HTTP
+		c = *a.HTTP
 	}
-	return &http.Client{Timeout: 60 * time.Second}
+	theirs := c.CheckRedirect
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := a.checkRedirect(req, via); err != nil {
+			return err
+		}
+		if theirs != nil {
+			return theirs(req, via)
+		}
+		return nil
+	}
+	return &c
+}
+
+// maxRedirects is Go's own limit, which a client with a CheckRedirect
+// of its own no longer gets unless it says so.
+const maxRedirects = 10
+
+// checkRedirect lets a redirect through only to where the request was
+// already allowed to go.
+//
+// That is a host the simulator gave a capability on, or the host the
+// request started on.  The second is not a loophole: DoCap sends
+// nothing that has not passed the first, and what else goes through
+// here was addressed by the simulator -- the seed capability of a
+// region just arrived in, whose host is in no set this session holds
+// yet, and the event queue of a region just left, whose host is in no
+// set it holds any more.
+func (a *Agent) checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return fmt.Errorf("agent: stopped after %d redirects", maxRedirects)
+	}
+	if len(via) > 0 && req.URL.Host == via[0].URL.Host {
+		return nil
+	}
+	if a.sameHostAsACap(req.URL.String()) {
+		return nil
+	}
+	return fmt.Errorf("agent: refused a redirect to %s, which is not a host this simulator gave us a capability on", req.URL.Host)
 }
 
 // HasCap reports whether the simulator offered this capability.
@@ -85,6 +142,16 @@ func (a *Agent) DoCap(ctx context.Context, r CapRequest) (*CapResponse, error) {
 			return nil, fmt.Errorf("agent: no %s capability", r.Cap)
 		}
 		url = strings.TrimRight(base, "/") + r.Path
+		// Path is the caller's and is pasted on as text, so what it
+		// makes has to be read back.  A capability served from the
+		// root of its host leaves nothing after the host to stop a
+		// Path of "@elsewhere/" turning the host into a user name and
+		// naming a new one, ".example.net/" making a longer host name,
+		// or ":22/" another port -- each an address the simulator
+		// never gave, reached by naming a capability it did.
+		if !sameHost(url, base) {
+			return nil, fmt.Errorf("agent: %s with path %q is not on the host of that capability", r.Cap, r.Path)
+		}
 	}
 	method := r.Method
 	if method == "" {
@@ -203,4 +270,15 @@ func (a *Agent) sameHostAsACap(u string) bool {
 		}
 	}
 	return false
+}
+
+// sameHost reports whether u is on the host of base.  As above, a
+// capability that will not parse is nobody's host.
+func sameHost(u, base string) bool {
+	pb, err := neturl.Parse(base)
+	if err != nil || pb.Host == "" {
+		return false
+	}
+	pu, err := neturl.Parse(u)
+	return err == nil && pu.Host == pb.Host
 }

@@ -3,6 +3,7 @@ package viewer
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -304,10 +305,7 @@ func (s *Seed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		asked, _ = io.ReadAll(r.Body)
 	}
 
-	client := s.HTTP
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
+	client := s.client()
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
@@ -334,6 +332,36 @@ func (s *Seed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logf("viewer: handed on %d capabilities, with %s pointed here", n, "EventQueueGet")
 	w.Header().Set("Content-Type", "application/llsd+xml")
 	_, _ = w.Write(out)
+}
+
+// client is the one the seed is asked through, copied so that it can
+// be given a redirect check whatever it was configured with.
+//
+// The request is the daemon's, made because a viewer asked, and Go
+// follows a redirect by default to wherever it points.  The simulator
+// has no reason to send its seed anywhere else, and an answer that did
+// would have the daemon post to some other address on a viewer's
+// behalf -- so a redirect is followed on the seed's own host and no
+// further.  A check the caller set is kept, and asked after this one.
+func (s *Seed) client() *http.Client {
+	c := http.Client{Timeout: 30 * time.Second}
+	if s.HTTP != nil {
+		c = *s.HTTP
+	}
+	theirs := c.CheckRedirect
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("viewer: seed capability: stopped after %d redirects", len(via))
+		}
+		if req.URL.Host != via[0].URL.Host {
+			return fmt.Errorf("viewer: seed capability: refused a redirect to %s, off the simulator's host", req.URL.Host)
+		}
+		if theirs != nil {
+			return theirs(req, via)
+		}
+		return nil
+	}
+	return &c
 }
 
 // rewrite replaces the event queue's URL and leaves everything else

@@ -438,6 +438,13 @@ func (l Login) Do(ctx context.Context) (*Account, error) {
 	if url == "" {
 		url = DefaultLoginURL
 	}
+	// Unlike a capability request (see Agent.http), this one follows a
+	// redirect wherever it goes, deliberately.  The login URL is the
+	// operator's, out of a profile, and nothing a client of the daemon
+	// sends can name or change it; and the server it names is already
+	// the one trusted with the password, which it holds before any
+	// redirect it could answer with.  A check here would guard nobody
+	// and could refuse a grid that moves its login service.
 	hc := l.HTTP
 	if hc == nil {
 		hc = &http.Client{Timeout: 60 * time.Second}

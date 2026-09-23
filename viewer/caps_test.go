@@ -92,6 +92,52 @@ func TestSeedPassesOnWhatItCannotRead(t *testing.T) {
 	}
 }
 
+// TestSeedFollowsNoRedirectOffTheSimulatorsHost: the seed is asked by
+// the daemon because a viewer asked, and Go follows a redirect by
+// default to wherever it points.  An answer that sent it somewhere else
+// would have the daemon post there on the viewer's behalf.  On the
+// seed's own host a redirect is still followed.
+func TestSeedFollowsNoRedirectOffTheSimulatorsHost(t *testing.T) {
+	var away int
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		away++
+		w.Write(encode(t, map[string]any{"Somewhere": "else"}))
+	}))
+	defer other.Close()
+	real := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/seed/moved":
+			http.Redirect(w, r, "/seed/here", http.StatusTemporaryRedirect)
+		case "/seed/here":
+			w.Write(encode(t, map[string]any{"GetTexture": "https://sim.invalid/cap/texture"}))
+		case "/seed/away":
+			http.Redirect(w, r, other.URL+"/private", http.StatusTemporaryRedirect)
+		}
+	}))
+	defer real.Close()
+
+	ask := func(path string) int {
+		s := httptest.NewServer(&Seed{Real: real.URL + path, EventQueue: "x", Logf: func(string, ...any) {}})
+		defer s.Close()
+		resp, err := http.Post(s.URL, "application/llsd+xml", strings.NewReader("<llsd><array/></llsd>"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if code := ask("/seed/away"); code != http.StatusBadGateway {
+		t.Errorf("a seed redirected off its host answered %d, want %d", code, http.StatusBadGateway)
+	}
+	if away != 0 {
+		t.Errorf("the other host was asked %d times", away)
+	}
+	if code := ask("/seed/moved"); code != http.StatusOK {
+		t.Errorf("a seed redirected on its own host answered %d", code)
+	}
+}
+
 // TestEventsReachAViewerWaitingForThem: the poll is held open until
 // there is something to say, which is how the simulator's own works.
 //

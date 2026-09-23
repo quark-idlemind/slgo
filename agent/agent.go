@@ -54,7 +54,9 @@ type Agent struct {
 	seed atomic.Pointer[string]
 
 	// HTTP is used for capability and inventory requests.  A nil
-	// client gets a default with a sixty second timeout.
+	// client gets a default with a sixty second timeout.  Either way
+	// it is used through a copy that will not follow a redirect off
+	// the simulator's hosts: see Agent.http.
 	HTTP *http.Client
 
 	// opts is how this session was asked for.  A move re-reads
