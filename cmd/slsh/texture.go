@@ -35,18 +35,20 @@ import (
 
 var textureCommands = map[string]*command{
 	"get": {
-		params: "PATH|UUID",
-		flags:  func() any { return new(getFlags) },
-		brief:  "save a texture as a PNG, by inventory path or by asset id",
-		man:    "get",
-		run:    cmdGet,
+		params:   "PATH|UUID",
+		flags:    func() any { return new(getFlags) },
+		brief:    "save a texture as a PNG, by inventory path or by asset id",
+		keywords: "download save texture image picture png export disk file",
+		man:      "get",
+		run:      cmdGet,
 	},
 	"put": {
-		params: "FILE",
-		flags:  func() any { return new(putFlags) },
-		brief:  "upload an image as a texture; costs L$, so -N says what it would do",
-		man:    "put",
-		run:    cmdPut,
+		params:   "FILE",
+		flags:    func() any { return new(putFlags) },
+		brief:    "upload an image as a texture; costs L$, so -N says what it would do",
+		keywords: "upload image picture photo texture png jpeg import costs",
+		man:      "put",
+		run:      cmdPut,
 	},
 }
 

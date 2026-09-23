@@ -38,19 +38,21 @@ import (
 // stand is held in a variable so that two names can share it.  See the
 // table below for why the second name is there.
 var stand = &command{
-	flags: func() any { return new(postureFlags) },
-	brief: "get up, from either kind of sit",
-	man:   "stand",
-	run:   cmdStand,
+	flags:    func() any { return new(postureFlags) },
+	brief:    "get up, from either kind of sit",
+	keywords: "stand up get up unsit leave seat",
+	man:      "stand",
+	run:      cmdStand,
 }
 
 var postureCommands = map[string]*command{
 	"sit": {
-		params: "[NAME|UUID]",
-		flags:  func() any { return new(postureFlags) },
-		brief:  "sit on an object; with nothing named, sit on the ground",
-		man:    "sit",
-		run:    cmdSit,
+		params:   "[NAME|UUID]",
+		flags:    func() any { return new(postureFlags) },
+		brief:    "sit on an object; with nothing named, sit on the ground",
+		keywords: "sit down seat chair ground pose furniture",
+		man:      "sit",
+		run:      cmdSit,
 	},
 	// "stand" is the word the world uses -- it is what the button says
 	// and what somebody types without thinking -- and "unsit" is what a

@@ -52,25 +52,28 @@ import (
 
 var carryCommands = map[string]*command{
 	"take": {
-		params: "NAME|UUID",
-		flags:  func() any { return new(takeFlags) },
-		brief:  "take a rezzed object into inventory; --copy tries to leave the original",
-		man:    "take",
-		run:    cmdTake,
+		params:   "NAME|UUID",
+		flags:    func() any { return new(takeFlags) },
+		brief:    "take a rezzed object into inventory; --copy tries to leave the original",
+		keywords: "pick up take into inventory object ground world copy back up",
+		man:      "take",
+		run:      cmdTake,
 	},
 	"place": {
-		params: "PATH|UUID",
-		flags:  func() any { return new(placeFlags) },
-		brief:  "put an inventory object into the world, which is what take undoes",
-		man:    "place",
-		run:    cmdPlace,
+		params:   "PATH|UUID",
+		flags:    func() any { return new(placeFlags) },
+		brief:    "put an inventory object into the world, which is what take undoes",
+		keywords: "rez put out down object from inventory world ground put back set down",
+		man:      "place",
+		run:      cmdPlace,
 	},
 	"perms": {
-		params: "NAME|UUID",
-		flags:  func() any { return new(permsFlags) },
-		brief:  "set what others may do with a rezzed object: c copy, m modify, t transfer, v move",
-		man:    "perms",
-		run:    cmdPerms,
+		params:   "NAME|UUID",
+		flags:    func() any { return new(permsFlags) },
+		brief:    "set what others may do with a rezzed object: c copy, m modify, t transfer, v move",
+		keywords: "permissions next owner copy modify transfer move owner group everyone allow others rights",
+		man:      "perms",
+		run:      cmdPerms,
 	},
 }
 

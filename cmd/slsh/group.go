@@ -106,18 +106,20 @@ import (
 
 var groupCommands = map[string]*command{
 	"group": {
-		params: "[NAME|UUID|none]",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "what this avatar is acting as, and what it could act as; land rights hang on it",
-		man:    "group",
-		run:    cmdGroup,
+		params:   "[NAME|UUID|none]",
+		flags:    func() any { return new(helpOnly) },
+		brief:    "what this avatar is acting as, and what it could act as; land rights hang on it",
+		keywords: "active group title tag land rights acting as switch groups joined list which",
+		man:      "group",
+		run:      cmdGroup,
 	},
 	"invite": {
-		params: "WHO GROUP",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "ask somebody into one of this avatar's groups; nothing answers, so it is an asking",
-		man:    "invite",
-		run:    cmdInvite,
+		params:   "WHO GROUP",
+		flags:    func() any { return new(helpOnly) },
+		brief:    "ask somebody into one of this avatar's groups; nothing answers, so it is an asking",
+		keywords: "invite ask join group member add somebody role",
+		man:      "invite",
+		run:      cmdInvite,
 	},
 }
 

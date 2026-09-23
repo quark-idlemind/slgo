@@ -62,11 +62,12 @@ import (
 
 var maturityCommands = map[string]*command{
 	"maturity": {
-		params: "[RATING]",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "what land this avatar is shown and may be; with a RATING, ask for that one and print what was granted",
-		man:    "maturity",
-		run:    cmdMaturity,
+		params:   "[RATING]",
+		flags:    func() any { return new(helpOnly) },
+		brief:    "what land this avatar is shown and may be; with a RATING, ask for that one and print what was granted",
+		keywords: "rating adult moderate general mature pg content access preference region refused",
+		man:      "maturity",
+		run:      cmdMaturity,
 	},
 }
 

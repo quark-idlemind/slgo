@@ -114,10 +114,11 @@ import (
 
 var viewerCommands = map[string]*command{
 	"viewer": {
-		flags: func() any { return new(viewerOptions) },
-		brief: "where a real viewer can take this session over, and start one",
-		man:   "viewer",
-		run:   cmdViewer,
+		flags:    func() any { return new(viewerOptions) },
+		brief:    "where a real viewer can take this session over, and start one",
+		keywords: "viewer client graphics eyes see avatar login password take over",
+		man:      "viewer",
+		run:      cmdViewer,
 	},
 }
 

@@ -71,18 +71,20 @@ import (
 
 var linkCommands = map[string]*command{
 	"link": {
-		params: "ROOT CHILD...",
-		flags:  func() any { return new(linkFlags) },
-		brief:  "join objects into one; the first is the root and its name is the object's",
-		man:    "link",
-		run:    cmdLink,
+		params:   "ROOT CHILD...",
+		flags:    func() any { return new(linkFlags) },
+		brief:    "join objects into one; the first is the root and its name is the object's",
+		keywords: "join combine merge prims objects linkset connect",
+		man:      "link",
+		run:      cmdLink,
 	},
 	"unlink": {
-		params: "NAME|UUID",
-		flags:  func() any { return new(linkFlags) },
-		brief:  "take a linked object apart; naming one prim of it frees only that prim",
-		man:    "unlink",
-		run:    cmdUnlink,
+		params:   "NAME|UUID",
+		flags:    func() any { return new(linkFlags) },
+		brief:    "take a linked object apart; naming one prim of it frees only that prim",
+		keywords: "separate split break apart linkset unjoin prim",
+		man:      "unlink",
+		run:      cmdUnlink,
 	},
 }
 

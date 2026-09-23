@@ -35,11 +35,12 @@ import (
 
 var setCommands = map[string]*command{
 	"set": {
-		params: "[NAME [VALUE]]",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "the settings and their values; \"set NAME VALUE\" changes one and remembers it",
-		man:    "set",
-		run:    cmdSet,
+		params:   "[NAME [VALUE]]",
+		flags:    func() any { return new(helpOnly) },
+		brief:    "the settings and their values; \"set NAME VALUE\" changes one and remembers it",
+		keywords: "settings preferences configuration option config change setting value",
+		man:      "set",
+		run:      cmdSet,
 	},
 }
 

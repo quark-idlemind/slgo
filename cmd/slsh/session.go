@@ -23,17 +23,19 @@ import (
 
 var sessionCommands = map[string]*command{
 	"status": {
-		flags: func() any { return new(helpOnly) },
-		brief: "how this session and its circuit are doing",
-		man:   "status",
-		run:   cmdStatus,
+		flags:    func() any { return new(helpOnly) },
+		brief:    "how this session and its circuit are doing",
+		keywords: "connection circuit health network packets session statistics",
+		man:      "status",
+		run:      cmdStatus,
 	},
 	"watch": {
-		params: "[NAME...]",
-		flags:  func() any { return new(watchOptions) },
-		brief:  "print grid messages as they arrive; no NAME means everything",
-		man:    "watch",
-		run:    cmdWatch,
+		params:   "[NAME...]",
+		flags:    func() any { return new(watchOptions) },
+		brief:    "print grid messages as they arrive; no NAME means everything",
+		keywords: "messages packets protocol debug monitor traffic log",
+		man:      "watch",
+		run:      cmdWatch,
 	},
 }
 

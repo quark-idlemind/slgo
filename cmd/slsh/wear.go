@@ -211,24 +211,27 @@ import (
 
 var wearCommands = map[string]*command{
 	"wear": {
-		params: "PATH|UUID",
-		flags:  func() any { return new(wearFlags) },
-		brief:  "put an inventory object on, alongside whatever is already on that point",
-		man:    "wear",
-		run:    cmdWear,
+		params:   "PATH|UUID",
+		flags:    func() any { return new(wearFlags) },
+		brief:    "put an inventory object on, alongside whatever is already on that point",
+		keywords: "wear put on attach clothing outfit accessory hud dress item",
+		man:      "wear",
+		run:      cmdWear,
 	},
 	"detach": {
-		params: "NAME|PATH|UUID",
-		flags:  func() any { return new(detachFlags) },
-		brief:  "take a worn object off, by the name of the item it was worn from",
-		man:    "detach",
-		run:    cmdDetach,
+		params:   "NAME|PATH|UUID",
+		flags:    func() any { return new(detachFlags) },
+		brief:    "take a worn object off, by the name of the item it was worn from",
+		keywords: "remove take off unwear attachment clothing hat hair worn object",
+		man:      "detach",
+		run:      cmdDetach,
 	},
 	"dress": {
-		flags: func() any { return new(dressFlags) },
-		brief: "put on everything the Current Outfit folder names that is not on",
-		man:   "dress",
-		run:   cmdDress,
+		flags:    func() any { return new(dressFlags) },
+		brief:    "put on everything the Current Outfit folder names that is not on",
+		keywords: "outfit current outfit wear everything put on clothes restore appearance",
+		man:      "dress",
+		run:      cmdDress,
 	},
 }
 

@@ -185,11 +185,12 @@ func manFileNames() ([]string, error) {
 
 var manCommands = map[string]*command{
 	"man": {
-		params: "[NAME]",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "the long description of one command; no name lists the ones that have one",
-		man:    "man",
-		run:    cmdMan,
+		params:   "[NAME]",
+		flags:    func() any { return new(helpOnly) },
+		brief:    "the long description of one command; no name lists the ones that have one",
+		keywords: "manual documentation page long description explain command details",
+		man:      "man",
+		run:      cmdMan,
 	},
 }
 

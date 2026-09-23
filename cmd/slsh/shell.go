@@ -808,6 +808,17 @@ type command struct {
 	// are the same edit.  See man.go for how it is laid out.
 	man string
 
+	// keywords are the words somebody would use for this command who
+	// does not know its name: "home" for landmark, "nearby" for who,
+	// "attachment" for worn.  ask searches them (askcorpus.go) beside
+	// the brief and the page, which are written by somebody who does
+	// know the name and so say "landmark --set-home" where a question
+	// says "make this my home".  Space-separated, lower case, and
+	// honest: a word here that the command does not answer to sends
+	// somebody to the wrong command with the index's authority behind
+	// it.  Every command has some; a test says so.
+	keywords string
+
 	run func(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 }
 
@@ -832,16 +843,18 @@ func init() {
 	}
 
 	commands["help"] = &command{
-		params: "[GROUP|all]",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "the command groups; \"help GROUP\" for one, \"help all\" for everything",
-		man:    "help",
-		run:    cmdHelp,
+		params:   "[GROUP|all]",
+		flags:    func() any { return new(helpOnly) },
+		brief:    "the command groups; \"help GROUP\" for one, \"help all\" for everything",
+		keywords: "commands list groups overview what can do index usage",
+		man:      "help",
+		run:      cmdHelp,
 	}
 	commands["quit"] = &command{
-		flags: func() any { return new(helpOnly) },
-		brief: "leave slsh",
-		man:   "quit",
+		flags:    func() any { return new(helpOnly) },
+		brief:    "leave slsh",
+		keywords: "exit leave close end shell",
+		man:      "quit",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
 			if _, done, err := subOptions("quit", &flags, out, args); err != nil || done {
@@ -853,9 +866,10 @@ func init() {
 	}
 	commands["exit"] = commands["quit"]
 	commands["."] = &command{
-		params: "FILE",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "run the commands in a file",
+		params:   "FILE",
+		flags:    func() any { return new(helpOnly) },
+		brief:    "run the commands in a file",
+		keywords: "run execute batch file of commands commands from file",
 		// The page is source.md: "." is not a filename anybody wants,
 		// and the field naming the page is what allows the difference.
 		man: "source",
@@ -873,9 +887,10 @@ func init() {
 	}
 	commands["source"] = commands["."]
 	commands["echo"] = &command{
-		params: "[text ...]",
-		brief:  "print the arguments, which is how to write a note into a file",
-		man:    "echo",
+		params:   "[text ...]",
+		brief:    "print the arguments, which is how to write a note into a file",
+		keywords: "print write text line note into file comment",
+		man:      "echo",
 		// No flags at all, deliberately, which is why this is the one
 		// command with no option struct.  echo exists to put a line into
 		// a file, so it has to be able to print the word "--help" like
