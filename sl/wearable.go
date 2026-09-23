@@ -611,6 +611,20 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 	if err != nil {
 		return nil, err
 	}
+	// Without a list baked from the outfit as it is now there is
+	// nothing to wait on, and at a login there is none: measured on
+	// Agni, an avatar arriving was sent the others' appearances at
+	// once and its own not at all in the twenty seconds before
+	// anything asked.  A viewer asks for a bake as soon as the outfit
+	// folder has loaded, and the appearance that answers it lists
+	// what is attached at that moment -- so this asks too.
+	if !acct.Known || !acct.Current {
+		if w.bakeAndHear(ctx, min(timeout, bakeHearWait)) {
+			if on, acct, err = w.takeStock(ctx); err != nil {
+				return nil, err
+			}
+		}
+	}
 	deadline := time.Now().Add(timeout)
 	for acct.Waiting() && time.Now().Before(deadline) {
 		if !nap(ctx, restorePoll) {
@@ -700,6 +714,35 @@ const (
 	DefaultRestoreWait = 20 * time.Second
 	restorePoll        = time.Second
 )
+
+// bakeHearWait bounds the wait for the appearance a bake produces.
+// Measured on Agni it arrives within a second of the request.
+const bakeHearWait = 5 * time.Second
+
+// bakeAndHear asks for a bake and waits for the appearance that answers
+// it, saying whether one arrived.  A failure of either is not an error
+// to the caller: the list is a help to a restore, not a condition of it.
+func (w *Session) bakeAndHear(ctx context.Context, wait time.Duration) bool {
+	before := time.Time{}
+	if list, err := w.SimAttachments(ctx, msg.UUID{}); err == nil && list != nil {
+		before = list.Heard
+	}
+	if w.UpdateAppearance(ctx) != nil {
+		return false
+	}
+	deadline := time.Now().Add(wait)
+	for {
+		if list, err := w.SimAttachments(ctx, msg.UUID{}); err == nil && list != nil &&
+			list.Heard.After(before) {
+			return true
+		}
+		if !time.Now().Before(deadline) || !nap(ctx, bakeHearPoll) {
+			return false
+		}
+	}
+}
+
+const bakeHearPoll = 250 * time.Millisecond
 
 // takeStock is how many attachments this avatar has from each
 // inventory item, as the region has described them, and the

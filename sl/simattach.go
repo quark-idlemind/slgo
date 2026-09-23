@@ -23,12 +23,17 @@ package sl
 // about itself.  So the list can confirm a body attachment and count
 // what is missing a description, and it can say nothing about HUDs.
 //
-// It is sent when the avatar arrives and whenever it is baked, and never
-// on request.  A viewer asks for a bake after every change to the
-// Current Outfit folder, attachments included, so the list keeps up
-// with a viewer; the folder version it was baked from travels with it,
-// and a list whose version is not the folder's version now describes an
-// outfit that has since changed.
+// When it is sent was measured on Agni, and differs by who is being
+// told.  The avatars around one that arrives hear its list at once.
+// The avatar itself does not: one logging in was sent its own list not
+// at all in the twenty seconds before anything asked for a bake, and
+// was sent it within a second of asking.  One that teleported was sent
+// it about twelve seconds after arriving, unasked.  So the way to have
+// a list is to ask for a bake, which is what a viewer does as soon as
+// the outfit folder has loaded, and again after every change to it,
+// attachments included.  The folder version it was baked from travels
+// with it, and a list whose version is not the folder's version now
+// describes an outfit that has since changed.
 
 import (
 	"context"

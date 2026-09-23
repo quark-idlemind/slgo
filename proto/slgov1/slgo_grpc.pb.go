@@ -108,8 +108,8 @@ type GridClient interface {
 	// the attachment list at the end of AvatarAppearance.
 	//
 	// Held by the server for the reason Objects is.  The simulator sends
-	// it when an avatar arrives and each time its appearance is baked,
-	// and never on request, so a client that attached afterwards has no
+	// it unasked -- about other avatars when they arrive, about this one
+	// when it is baked -- so a client that attached afterwards has no
 	// other way to hear it.
 	//
 	// It is the simulator's own account, which the region's object
@@ -470,8 +470,8 @@ type GridServer interface {
 	// the attachment list at the end of AvatarAppearance.
 	//
 	// Held by the server for the reason Objects is.  The simulator sends
-	// it when an avatar arrives and each time its appearance is baked,
-	// and never on request, so a client that attached afterwards has no
+	// it unasked -- about other avatars when they arrive, about this one
+	// when it is baked -- so a client that attached afterwards has no
 	// other way to hear it.
 	//
 	// It is the simulator's own account, which the region's object

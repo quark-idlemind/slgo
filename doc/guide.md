@@ -1315,9 +1315,10 @@ A few seconds after attaching, `slbotd` compares the folder against
 what is actually worn and asks for whatever is missing. Before asking
 it waits while the simulator's own list of attachments -- sent with
 each bake of the avatar's appearance -- names more than the region has
-described, since those are on and merely not described yet. That list
-never includes HUDs, so for a HUD the region's description is still
-the only evidence.
+described, since those are on and merely not described yet. An avatar
+is not sent its own list at login, so it asks for a bake first, as a
+viewer does. The list never includes HUDs, so for a HUD the region's
+description is still the only evidence.
 
 It tries a few times, because a region hands over its contents
 gradually and a request that arrives too early is answered with

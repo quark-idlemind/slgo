@@ -313,8 +313,10 @@ func (f *fakeGrid) serveAppearance(t *testing.T) {
 		f.mu.Lock()
 		f.baked++
 		if f.simOnBake {
+			// What is attached, described or not: the simulator knows
+			// what it rezzed whether or not the region has said so.
 			var on []sl.SimAttachment
-			for _, o := range f.objects {
+			for _, o := range append(append([]*sl.Seen(nil), f.objects...), f.later...) {
 				if !o.AttachItem.IsZero() && !sl.IsHUDPoint(o.AttachPoint) {
 					on = append(on, sl.SimAttachment{Object: o.ID, Point: o.AttachPoint})
 				}

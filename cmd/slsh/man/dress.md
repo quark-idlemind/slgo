@@ -61,10 +61,13 @@ While the list names more than the region has described, this waits,
 for up to `--wait` seconds, before deciding anything is missing.
 
 The list has two limits.  It never includes HUDs, not even in the copy
-an avatar is sent about itself.  And it is sent only when the avatar is
-baked, so it is used only when it was baked from the outfit as it is
-now.  `wear` and `detach` ask for a bake afterwards, as a viewer does
-after any change to the outfit, which is what keeps it current.
+an avatar is sent about itself.  And an avatar is sent its own list
+when it is baked, not when it logs in -- measured, none arrived in the
+twenty seconds after a login until a bake was asked for.  So when there
+is no list baked from the outfit as it is now, this asks for a bake
+first, as a viewer does once the outfit folder has loaded, and gives
+the answer a few seconds to arrive.  `wear` and `detach` ask for a bake
+afterwards too, which is what keeps it current.
 
 ## The report has three parts
 

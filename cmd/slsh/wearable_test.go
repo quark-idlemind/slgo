@@ -610,3 +610,39 @@ func TestWornSettlesWhatIsNotDescribedFromTheSimulatorsList(t *testing.T) {
 		t.Errorf("worn should say the list is out of date:\n%s", got)
 	}
 }
+
+// TestDressAsksForABakeWhenItHasNoListAndWaitsForWhatItNames.
+//
+// At a login there is no list to go by: the simulator sends an avatar
+// its own appearance when a bake is asked for, and nothing has asked.
+// A viewer asks as soon as the outfit folder has loaded, and so does
+// dress -- and the list that comes back names what is attached, the
+// undescribed included, which is what there was to wait for.
+func TestDressAsksForABakeWhenItHasNoListAndWaitsForWhatItNames(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000e9")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000e9")
+	hatAgain := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000001e9")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+	x.do(t, "wear Objects/a hat")
+
+	// Logged in again: no list, and the hat on but not yet described.
+	x.grid.mu.Lock()
+	x.grid.sim, x.grid.simOnBake = nil, true
+	x.grid.mu.Unlock()
+	x.grid.takeOff(hat)
+	x.grid.describeLater(hat, hatAgain, 12, 1, 3)
+	asked, baked := attachRequests(x), x.grid.Baked()
+
+	if got, want := x.do(t, "dress"), "already wearing all 1 of them\n"; got != want {
+		t.Errorf("dress printed %q, want %q", got, want)
+	}
+	if n := x.grid.Baked() - baked; n != 1 {
+		t.Errorf("%d bakes asked for, want the one that gets a list", n)
+	}
+	if n := attachRequests(x) - asked; n != 0 {
+		t.Errorf("dress asked for %d attachments that were on already", n)
+	}
+}
