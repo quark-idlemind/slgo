@@ -139,6 +139,11 @@ func (b *fakeBackend) HasCap(name string) bool { return name == "InventoryAPIv3"
 // leaves the region.
 func (b *fakeBackend) RegionChanges() <-chan *sl.RegionChange { return nil }
 
+// SimAttachments: this fake has never heard an appearance.
+func (b *fakeBackend) SimAttachments(ctx context.Context, avatar msg.UUID) (*sl.SimAttachments, error) {
+	return nil, nil
+}
+
 func (b *fakeBackend) Presence(ctx context.Context, d float32) (*sl.Presence, error) {
 	return &sl.Presence{Region: "Nowhere"}, nil
 }

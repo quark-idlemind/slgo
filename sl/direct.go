@@ -224,6 +224,14 @@ func (d *Direct) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapRespo
 	return d.a.DoCap(ctx, r)
 }
 
+func (d *Direct) SimAttachments(ctx context.Context, avatar msg.UUID) (*SimAttachments, error) {
+	if avatar.IsZero() {
+		avatar = d.a.Account.AgentID
+	}
+	m, at := d.a.Appearances().Heard(avatar)
+	return simAttachmentsFrom(m, at), nil
+}
+
 func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence, error) {
 	if drawDistance > 0 {
 		l := d.a.Look()

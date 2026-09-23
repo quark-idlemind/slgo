@@ -40,6 +40,7 @@ const (
 	Grid_Logout_FullMethodName           = "/slgo.v1.Grid/Logout"
 	Grid_Presence_FullMethodName         = "/slgo.v1.Grid/Presence"
 	Grid_Objects_FullMethodName          = "/slgo.v1.Grid/Objects"
+	Grid_Attachments_FullMethodName      = "/slgo.v1.Grid/Attachments"
 	Grid_Region_FullMethodName           = "/slgo.v1.Grid/Region"
 	Grid_Land_FullMethodName             = "/slgo.v1.Grid/Land"
 	Grid_Neighbours_FullMethodName       = "/slgo.v1.Grid/Neighbours"
@@ -103,6 +104,19 @@ type GridClient interface {
 	// server was there to hear it, so the server remembers.  It still
 	// has no idea what any of the objects are for.
 	Objects(ctx context.Context, in *ObjectsRequest, opts ...grpc.CallOption) (*ObjectsResponse, error)
+	// Attachments is what the simulator last said an avatar is wearing:
+	// the attachment list at the end of AvatarAppearance.
+	//
+	// Held by the server for the reason Objects is.  The simulator sends
+	// it when an avatar arrives and each time its appearance is baked,
+	// and never on request, so a client that attached afterwards has no
+	// other way to hear it.
+	//
+	// It is the simulator's own account, which the region's object
+	// descriptions are not: a viewer keeps an avatar a cloud until what
+	// it has been shown matches this list, and a client can tell "on,
+	// and not described yet" from "not on" the same way.
+	Attachments(ctx context.Context, in *AttachmentsRequest, opts ...grpc.CallOption) (*AttachmentsResponse, error)
 	// Region is what the simulator said about itself in the handshake,
 	// which happens once, before any client is listening.
 	Region(ctx context.Context, in *RegionRequest, opts ...grpc.CallOption) (*RegionInfo, error)
@@ -291,6 +305,16 @@ func (c *gridClient) Objects(ctx context.Context, in *ObjectsRequest, opts ...gr
 	return out, nil
 }
 
+func (c *gridClient) Attachments(ctx context.Context, in *AttachmentsRequest, opts ...grpc.CallOption) (*AttachmentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AttachmentsResponse)
+	err := c.cc.Invoke(ctx, Grid_Attachments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Region(ctx context.Context, in *RegionRequest, opts ...grpc.CallOption) (*RegionInfo, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegionInfo)
@@ -442,6 +466,19 @@ type GridServer interface {
 	// server was there to hear it, so the server remembers.  It still
 	// has no idea what any of the objects are for.
 	Objects(context.Context, *ObjectsRequest) (*ObjectsResponse, error)
+	// Attachments is what the simulator last said an avatar is wearing:
+	// the attachment list at the end of AvatarAppearance.
+	//
+	// Held by the server for the reason Objects is.  The simulator sends
+	// it when an avatar arrives and each time its appearance is baked,
+	// and never on request, so a client that attached afterwards has no
+	// other way to hear it.
+	//
+	// It is the simulator's own account, which the region's object
+	// descriptions are not: a viewer keeps an avatar a cloud until what
+	// it has been shown matches this list, and a client can tell "on,
+	// and not described yet" from "not on" the same way.
+	Attachments(context.Context, *AttachmentsRequest) (*AttachmentsResponse, error)
 	// Region is what the simulator said about itself in the handshake,
 	// which happens once, before any client is listening.
 	Region(context.Context, *RegionRequest) (*RegionInfo, error)
@@ -570,6 +607,9 @@ func (UnimplementedGridServer) Presence(context.Context, *PresenceRequest) (*Pre
 }
 func (UnimplementedGridServer) Objects(context.Context, *ObjectsRequest) (*ObjectsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Objects not implemented")
+}
+func (UnimplementedGridServer) Attachments(context.Context, *AttachmentsRequest) (*AttachmentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Attachments not implemented")
 }
 func (UnimplementedGridServer) Region(context.Context, *RegionRequest) (*RegionInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method Region not implemented")
@@ -751,6 +791,24 @@ func _Grid_Objects_Handler(srv interface{}, ctx context.Context, dec func(interf
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridServer).Objects(ctx, req.(*ObjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_Attachments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AttachmentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Attachments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Attachments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Attachments(ctx, req.(*AttachmentsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -969,6 +1027,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Objects",
 			Handler:    _Grid_Objects_Handler,
+		},
+		{
+			MethodName: "Attachments",
+			Handler:    _Grid_Attachments_Handler,
 		},
 		{
 			MethodName: "Region",

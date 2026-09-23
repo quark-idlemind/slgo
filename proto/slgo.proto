@@ -73,6 +73,20 @@ service Grid {
   // has no idea what any of the objects are for.
   rpc Objects(ObjectsRequest) returns (ObjectsResponse);
 
+  // Attachments is what the simulator last said an avatar is wearing:
+  // the attachment list at the end of AvatarAppearance.
+  //
+  // Held by the server for the reason Objects is.  The simulator sends
+  // it when an avatar arrives and each time its appearance is baked,
+  // and never on request, so a client that attached afterwards has no
+  // other way to hear it.
+  //
+  // It is the simulator's own account, which the region's object
+  // descriptions are not: a viewer keeps an avatar a cloud until what
+  // it has been shown matches this list, and a client can tell "on,
+  // and not described yet" from "not on" the same way.
+  rpc Attachments(AttachmentsRequest) returns (AttachmentsResponse);
+
   // Region is what the simulator said about itself in the handshake,
   // which happens once, before any client is listening.
   rpc Region(RegionRequest) returns (RegionInfo);
@@ -824,6 +838,49 @@ message GroupMembership {
   // simulator sends.  Nothing here interprets it; it crosses so that a
   // client which wants to can.
   uint64 powers = 3;
+}
+
+// --------------------------------------------------------- attachments
+
+message AttachmentsRequest {
+  string agent = 1;
+
+  // Whose.  Empty is the agent's own avatar; any other avatar the
+  // session has seen can be asked about too.
+  string avatar = 2;
+}
+
+message AttachmentsResponse {
+  // Whether an appearance has been heard for this avatar at all since
+  // the session arrived in the region.  False is "not told", not
+  // "wearing nothing".
+  bool known = 1;
+
+  // The Current Outfit folder version the appearance was baked from.
+  // When it matches the folder's version now, the list is current; a
+  // change to the outfit that has not been baked since leaves them
+  // apart.
+  int32 cof_version = 2;
+
+  // When the appearance arrived, in Unix microseconds.
+  int64 received_at = 3;
+
+  // Everything attached, as the simulator listed it.  HUDs are not in
+  // it: measured on Agni, not even in the copy an avatar is sent about
+  // itself.
+  repeated SimAttachment attachments = 4;
+}
+
+// SimAttachment is one entry in an avatar's attachment list.
+message SimAttachment {
+  // The attached object: the object, not the inventory item it came
+  // from, so it is new every time the thing is worn.  Empty is an
+  // attachment the simulator lists as pending on this point without
+  // an object yet.
+  string object_id = 1;
+
+  // The attachment point, as the simulator numbers them.
+  uint32 point = 2;
 }
 
 // ------------------------------------------------------------- objects

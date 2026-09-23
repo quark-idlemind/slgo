@@ -687,6 +687,45 @@ func shape(p msg.PrimShape) *pb.PrimShape {
 	}
 }
 
+// Attachments answers what the simulator last said an avatar is
+// wearing.
+//
+// Passed on as it was said, pending entries included: what an empty
+// object id means is for the client to decide, and a viewer does
+// decide it -- it discards them.
+func (s *Server) Attachments(ctx context.Context, req *pb.AttachmentsRequest) (*pb.AttachmentsResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	a := h.Agent()
+	who := a.Account.AgentID
+	if req.Avatar != "" {
+		if who, err = msg.ParseUUID(req.Avatar); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "avatar: %v", err)
+		}
+	}
+
+	m, at := a.Appearances().Heard(who)
+	if m == nil {
+		return &pb.AttachmentsResponse{}, nil
+	}
+	out := &pb.AttachmentsResponse{Known: true, ReceivedAt: at.UnixMicro()}
+	if len(m.AppearanceData) > 0 {
+		out.CofVersion = m.AppearanceData[0].CofVersion
+	}
+	for _, b := range m.AttachmentBlock {
+		id := ""
+		if !b.ID.IsZero() {
+			id = b.ID.String()
+		}
+		out.Attachments = append(out.Attachments, &pb.SimAttachment{
+			ObjectId: id, Point: uint32(b.AttachmentPoint),
+		})
+	}
+	return out, nil
+}
+
 // Objects returns what the region has told this session about itself.
 func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.ObjectsResponse, error) {
 	h, err := s.lookup(req.Agent)

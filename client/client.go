@@ -686,6 +686,12 @@ func (c *Conn) Presence(ctx context.Context, drawDistance float32) (*pb.Presence
 	})
 }
 
+// Attachments asks the server what the simulator last said an avatar
+// is wearing.  An empty avatar is this one.
+func (c *Conn) Attachments(ctx context.Context, avatar string) (*pb.AttachmentsResponse, error) {
+	return c.grid.Attachments(ctx, &pb.AttachmentsRequest{Agent: c.agent, Avatar: avatar})
+}
+
 // Objects asks the server what the region has said about itself.
 //
 // The server holds this because a region describes itself once, when

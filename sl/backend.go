@@ -210,6 +210,11 @@ type Backend interface {
 	// ask whoever did.
 	Objects(ctx context.Context, named, id string) ([]*Seen, error)
 
+	// SimAttachments is what the simulator last said an avatar is
+	// wearing; the zero id is this one.  Nil means nothing has been
+	// heard, which is a different answer from an empty list.
+	SimAttachments(ctx context.Context, avatar msg.UUID) (*SimAttachments, error)
+
 	// Region is what the simulator said in the handshake, and
 	// whether it has arrived at all.
 	Region(ctx context.Context) (*Region, bool, error)

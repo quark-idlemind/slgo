@@ -224,6 +224,72 @@ func TestAnItemIsNamedOnlyWhenSomethingIsWorn(t *testing.T) {
 // hosted and naming none on a server holding nothing are different
 // faults, and a client that cannot tell them apart cannot say whether
 // the daemon is up or the name is a typo.
+// TestAttachmentsAreWhatTheSimulatorLastSaid: the list at the end of
+// AvatarAppearance crosses as it came, for this avatar by default and
+// for any other on request, with a pending entry kept as an empty id
+// rather than turned into the zero uuid.
+func TestAttachmentsAreWhatTheSimulatorLastSaid(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+	h, _ := r.srv.Agent("example")
+	me := h.Agent().Account.AgentID
+	someoneElse := msg.MustParseUUID("644a7e57-7e57-c0de-8347-80c1bf3eeddb")
+	body := msg.MustParseUUID("0c8c7e57-7e57-c0de-78ff-aad5be0fe09a")
+
+	// Nothing heard is "not known", not "wearing nothing".
+	got, err := r.srv.Attachments(ctx, &pb.AttachmentsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetKnown() {
+		t.Errorf("attachments known before any appearance arrived: %v", got)
+	}
+
+	before := time.Now()
+	m := &msg.AvatarAppearance{}
+	m.Sender.ID = me
+	m.AppearanceData = []msg.AvatarAppearance_AppearanceData{{AppearanceVersion: 1, CofVersion: 117}}
+	m.AttachmentBlock = []msg.AvatarAppearance_AttachmentBlock{
+		{ID: body, AttachmentPoint: 40},
+		{AttachmentPoint: 2}, // pending
+	}
+	r.sim.send(m, 0)
+	other := &msg.AvatarAppearance{}
+	other.Sender.ID = someoneElse
+	r.sim.send(other, 0)
+	waitFor(t, 5*time.Second, "both appearances to be kept", func() bool {
+		held, _ := h.Agent().Appearances().Stats()
+		return held == 2
+	})
+
+	got, err = r.srv.Attachments(ctx, &pb.AttachmentsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.GetKnown() || got.GetCofVersion() != 117 {
+		t.Errorf("known=%v cof=%d, want the version it was baked from", got.GetKnown(), got.GetCofVersion())
+	}
+	if at := time.UnixMicro(got.GetReceivedAt()); at.Before(before.Add(-time.Second)) || at.After(time.Now()) {
+		t.Errorf("received at %v, want about now", at)
+	}
+	a := got.GetAttachments()
+	if len(a) != 2 || a[0].GetObjectId() != body.String() || a[0].GetPoint() != 40 ||
+		a[1].GetObjectId() != "" || a[1].GetPoint() != 2 {
+		t.Errorf("attachments = %v", a)
+	}
+
+	theirs, err := r.srv.Attachments(ctx, &pb.AttachmentsRequest{Avatar: someoneElse.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !theirs.GetKnown() || len(theirs.GetAttachments()) != 0 {
+		t.Errorf("someone else's = %v, want known and wearing nothing", theirs)
+	}
+	if _, err := r.srv.Attachments(ctx, &pb.AttachmentsRequest{Avatar: "nobody"}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("an avatar that is not an id: %v, want InvalidArgument", err)
+	}
+}
+
 func TestEveryCallSaysWhichAgentItCouldNotFind(t *testing.T) {
 	t.Parallel()
 
@@ -245,6 +311,10 @@ func TestEveryCallSaysWhichAgentItCouldNotFind(t *testing.T) {
 		},
 		"Region": func(n string) error {
 			_, err := empty.Region(ctx, &pb.RegionRequest{Agent: n})
+			return err
+		},
+		"Attachments": func(n string) error {
+			_, err := empty.Attachments(ctx, &pb.AttachmentsRequest{Agent: n})
 			return err
 		},
 		"Neighbours": func(n string) error {

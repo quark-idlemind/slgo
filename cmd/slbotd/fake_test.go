@@ -168,6 +168,11 @@ func (f *fakeGrid) Done() <-chan struct{}                  { return f.done }
 
 func (f *fakeGrid) Err() error { return nil }
 
+// SimAttachments: this fake has never heard an appearance.
+func (f *fakeGrid) SimAttachments(ctx context.Context, avatar msg.UUID) (*sl.SimAttachments, error) {
+	return nil, nil
+}
+
 func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Presence, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

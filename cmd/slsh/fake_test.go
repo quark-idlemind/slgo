@@ -166,6 +166,19 @@ type fakeGrid struct {
 	// baked counts the rebake requests, which is the only evidence
 	// from this side that wearing a wearable finished.
 	baked int
+
+	// sim is the simulator's attachment list, as SimAttachments
+	// answers it; nil is one never heard.  simOnBake makes each rebake
+	// list what the region has described, as the simulator does, from
+	// the Current Outfit folder as it is then.
+	sim       *sl.SimAttachments
+	simOnBake bool
+
+	// later is what the region describes late: attachments that are
+	// on and have not been described yet, which appear in the listing
+	// once it has been asked for laterAt times.
+	later   []*sl.Seen
+	laterAt int
 }
 
 // invDir is a folder in the fake inventory, and invItem a thing in one.
@@ -299,10 +312,73 @@ func (f *fakeGrid) serveAppearance(t *testing.T) {
 	f.ServeCap(t, "UpdateAvatarAppearance", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.baked++
+		if f.simOnBake {
+			var on []sl.SimAttachment
+			for _, o := range f.objects {
+				if !o.AttachItem.IsZero() && !sl.IsHUDPoint(o.AttachPoint) {
+					on = append(on, sl.SimAttachment{Object: o.ID, Point: o.AttachPoint})
+				}
+			}
+			f.sim = &sl.SimAttachments{CofVersion: f.cofVersionLocked(), Heard: time.Now(), Objects: on}
+		}
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/llsd+xml")
 		io.WriteString(w, `<llsd><map><key>success</key><boolean>1</boolean></map></llsd>`)
 	})
+}
+
+// simLists sets the simulator's attachment list, baked from the Current
+// Outfit folder as it is now unless stale.
+func (f *fakeGrid) simLists(stale bool, on ...sl.SimAttachment) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	v := f.cofVersionLocked()
+	if stale {
+		v--
+	}
+	f.sim = &sl.SimAttachments{CofVersion: v, Heard: time.Now(), Objects: on}
+}
+
+// describeLater has the region describe an attachment only once it has
+// been asked what is in it this many more times.
+func (f *fakeGrid) describeLater(item, object msg.UUID, local uint32, point, calls int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.later = append(f.later, &sl.Seen{
+		Object: sl.Object{ID: object, Local: local}, PCode: 9,
+		Parent: 1, AttachItem: item, AttachPoint: point,
+	})
+	f.laterAt = f.objectsCalls + calls
+}
+
+func (f *fakeGrid) cofVersionLocked() int {
+	var walk func(d *invDir) int
+	walk = func(d *invDir) int {
+		if d == nil {
+			return 0
+		}
+		if d.Type == sl.FolderCurrentOutfit {
+			return d.Version
+		}
+		for _, c := range d.Dirs {
+			if v := walk(c); v != 0 {
+				return v
+			}
+		}
+		return 0
+	}
+	return walk(f.inv)
+}
+
+func (f *fakeGrid) SimAttachments(ctx context.Context, avatar msg.UUID) (*sl.SimAttachments, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sim == nil || (!avatar.IsZero() && avatar != testMe) {
+		return nil, nil
+	}
+	c := *f.sim
+	c.Objects = append([]sl.SimAttachment(nil), f.sim.Objects...)
+	return &c, nil
 }
 
 // Baked is how many rebakes have been asked for.
@@ -1474,6 +1550,10 @@ func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, e
 	f.objectsCalls++
 	if f.objectsErr != nil {
 		return nil, f.objectsErr
+	}
+	if len(f.later) > 0 && f.objectsCalls >= f.laterAt {
+		f.objects = append(f.objects, f.later...)
+		f.later = nil
 	}
 	out := make([]*sl.Seen, 0, len(f.objects))
 	for _, o := range f.objects {

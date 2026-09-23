@@ -2,6 +2,7 @@ package agent
 
 import (
 	"sync"
+	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -38,6 +39,7 @@ const AppearanceLimit = 256
 type Appearances struct {
 	mu       sync.Mutex
 	byAvatar map[msg.UUID]*msg.AvatarAppearance
+	heard    map[msg.UUID]time.Time
 	order    []msg.UUID
 	dropped  int
 }
@@ -50,6 +52,10 @@ type Appearances struct {
 // that changes stays where it was rather than becoming the newest thing
 // here.
 func (s *Appearances) note(m *msg.AvatarAppearance) {
+	s.noteAt(m, time.Now())
+}
+
+func (s *Appearances) noteAt(m *msg.AvatarAppearance, at time.Time) {
 	id := m.Sender.ID
 	if id.IsZero() {
 		return
@@ -60,16 +66,19 @@ func (s *Appearances) note(m *msg.AvatarAppearance) {
 	defer s.mu.Unlock()
 	if s.byAvatar == nil {
 		s.byAvatar = make(map[msg.UUID]*msg.AvatarAppearance)
+		s.heard = make(map[msg.UUID]time.Time)
 	}
 	if _, seen := s.byAvatar[id]; !seen {
 		s.order = append(s.order, id)
 	}
 	s.byAvatar[id] = kept
+	s.heard[id] = at
 
 	for len(s.order) > AppearanceLimit {
 		oldest := s.order[0]
 		s.order = s.order[1:]
 		delete(s.byAvatar, oldest)
+		delete(s.heard, oldest)
 		s.dropped++
 	}
 }
@@ -108,6 +117,17 @@ func (s *Appearances) Get(id msg.UUID) *msg.AvatarAppearance {
 	return s.byAvatar[id]
 }
 
+// Heard is one avatar's appearance and when it arrived, or nil.
+//
+// The time matters to a reader of the attachment list: it is the
+// simulator's account as of then, and it is sent again only when the
+// avatar is baked.
+func (s *Appearances) Heard(id msg.UUID) (*msg.AvatarAppearance, time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.byAvatar[id], s.heard[id]
+}
+
 // Stats is how many avatars are held and how many were forgotten for the
 // limit.
 func (s *Appearances) Stats() (held, dropped int) {
@@ -121,7 +141,7 @@ func (s *Appearances) Stats() (held, dropped int) {
 // describe themselves again on arrival.
 func (s *Appearances) forget() {
 	s.mu.Lock()
-	s.byAvatar, s.order, s.dropped = nil, nil, 0
+	s.byAvatar, s.heard, s.order, s.dropped = nil, nil, nil, 0
 	s.mu.Unlock()
 }
 

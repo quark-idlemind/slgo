@@ -752,6 +752,11 @@ func (f *fakeBackend) Err() error {
 	return f.err
 }
 
+// SimAttachments: this fake has never heard an appearance.
+func (f *fakeBackend) SimAttachments(ctx context.Context, avatar msg.UUID) (*SimAttachments, error) {
+	return nil, nil
+}
+
 func (f *fakeBackend) Presence(ctx context.Context, drawDistance float32) (*Presence, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -281,6 +281,35 @@ func (h *Hosted) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapRespo
 	return h.conn.DoCap(ctx, r)
 }
 
+func (h *Hosted) SimAttachments(ctx context.Context, avatar msg.UUID) (*SimAttachments, error) {
+	who := ""
+	if !avatar.IsZero() {
+		who = avatar.String()
+	}
+	r, err := h.conn.Attachments(ctx, who)
+	if err != nil {
+		return nil, err
+	}
+	if !r.GetKnown() {
+		return nil, nil
+	}
+	out := &SimAttachments{
+		CofVersion: int(r.GetCofVersion()),
+		Heard:      time.UnixMicro(r.GetReceivedAt()),
+	}
+	for _, a := range r.GetAttachments() {
+		// Empty is pending; anything else that will not parse is not
+		// something to act on, and is left out as pending is.
+		id, err := msg.ParseUUID(a.GetObjectId())
+		if err != nil || id.IsZero() {
+			out.Pending++
+			continue
+		}
+		out.Objects = append(out.Objects, SimAttachment{Object: id, Point: int(a.GetPoint())})
+	}
+	return out, nil
+}
+
 func (h *Hosted) Presence(ctx context.Context, drawDistance float32) (*Presence, error) {
 	r, err := h.conn.Presence(ctx, drawDistance)
 	if err != nil {

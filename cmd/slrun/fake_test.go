@@ -341,6 +341,11 @@ func (f *fakeGrid) Events() <-chan *sl.QueueEvent { return nil }
 func (f *fakeGrid) Done() <-chan struct{}         { return f.done }
 func (f *fakeGrid) Err() error                    { return nil }
 
+// SimAttachments: this fake has never heard an appearance.
+func (f *fakeGrid) SimAttachments(ctx context.Context, avatar msg.UUID) (*sl.SimAttachments, error) {
+	return nil, nil
+}
+
 func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Presence, error) {
 	return &sl.Presence{Position: msg.Vector3{X: 128, Y: 128, Z: 25}, Region: "Test Region"}, nil
 }
