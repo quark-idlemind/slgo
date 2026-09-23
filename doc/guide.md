@@ -1302,13 +1302,14 @@ should not need anybody at a keyboard. An offer from anybody else is
 left exactly where it is rather than declined, so a person can still
 answer it from a viewer; `accept-inventory` changes who that is.
 
-**It puts an avatar's outfit back on after a login.** An avatar comes
-back from a login wearing its body parts and nothing else: the
-simulator rezzes no attachments of its own accord, because they are
-named in the Current Outfit folder and putting on what that folder
-names is a client's job. A viewer does it a second or two after
-arriving. Nothing here did, so every restart of `slgod` left its
-avatars in their skins until somebody noticed.
+**It puts an avatar's outfit back on after a login.** The simulator
+puts most of an avatar's attachments back by itself at login, but not
+reliably all of them: measured on Agni, one avatar came back with
+eight of its ten, missing the same two after two logins in a row. A
+viewer covers the gap by putting on whatever the Current Outfit folder
+names and is not on. Nothing here did, so a restart of `slgod` could
+leave its avatars missing part of what they wore until somebody
+noticed.
 
 A few seconds after attaching, `slbotd` compares the folder against
 what is actually worn and asks for whatever is missing. It tries a

@@ -88,9 +88,9 @@ func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM,
 	}()
 
 	go b.drainNotices(jobCtx, notices, gone)
-	// An avatar that has just been logged in is wearing its body parts
-	// and nothing else: the simulator rezzes no attachments of its own
-	// accord.  See dress.go.
+	// An avatar that has just been logged in may be missing part of
+	// its outfit: the simulator puts most attachments back, not all.
+	// See dress.go.
 	go b.keepDressed(jobCtx, s)
 
 	for {

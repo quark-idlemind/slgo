@@ -5,16 +5,17 @@ avatar is not wearing.
 
 ## What it is for
 
-An avatar logs in wearing its body parts and nothing else.  The
-simulator rezzes no attachments of its own accord: they are named in
-the Current Outfit folder, that folder is the client's own record, and
-putting on what it names is the client's job.  A viewer does it a
-second or two after arriving and nobody sees it happen.
+The simulator puts most of an avatar's attachments back by itself when
+it logs in, but not reliably all of them.  Measured on Agni: an avatar
+logged in again had eight of its ten attachments on before anything
+had asked for them, and was missing the same two after two logins in
+a row.  Why those two was not found out.
 
-Nothing here did it at all, so an avatar dressed from this shell came
-back undressed at the next login and stayed that way.  `worn` showed
-the difference -- a column of `(in the outfit, not described)` -- and
-this is what closes it.
+A viewer covers the gap.  Once the Current Outfit folder has loaded,
+it puts on whatever the folder names and is not on, and nobody sees it
+happen.  Nothing here did, so an avatar could come back from a login
+missing a head of hair or a dress and stay that way.  `worn` shows the
+difference, and this is what closes it.
 
 Only attachments.  Clothing and body parts are not attached and do not
 go missing at a login: the folder is what the baking service reads, and

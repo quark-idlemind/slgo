@@ -394,12 +394,11 @@ func TestWearingAnObjectRecordsItInTheOutfit(t *testing.T) {
 
 // TestDressPutsBackOnWhatTheOutfitNamesAndIsNotOn.
 //
-// The fault: an avatar logs in wearing its body parts and nothing
-// else, because the simulator rezzes no attachments of its own accord.
-// They are named in the Current Outfit folder, the folder is the
-// client's own record, and nothing here was putting them back -- so an
-// avatar dressed from this shell came back undressed at the next login
-// and stayed that way.
+// The fault: the simulator puts most of an avatar's attachments back at
+// login but not reliably all of them, and a viewer puts on whatever the
+// Current Outfit folder names that is still missing.  Nothing here did,
+// so an avatar dressed from this shell could come back from a login
+// missing part of its outfit and stay that way.
 func TestDressPutsBackOnWhatTheOutfitNamesAndIsNotOn(t *testing.T) {
 	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000f1")
 	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000f1")

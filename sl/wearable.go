@@ -496,13 +496,20 @@ func (w *Session) folderVersion(ctx context.Context, folder msg.UUID) (int, erro
 
 // Putting an outfit back on.
 //
-// An avatar logs in wearing its body parts and nothing else.  The
-// simulator rezzes no attachments of its own accord: they are in the
-// Current Outfit folder, the folder is the client's record, and putting
-// on what it names is the client's job.  A viewer does it within a
-// second or two of arriving and nobody notices it happening; nothing
-// here did it at all, so an avatar dressed by this library came back
-// undressed at every login and stayed that way.
+// The simulator puts most of an avatar's attachments back by itself at
+// login, but not reliably all of them.  Measured on Agni, after a
+// restart of the daemon holding the sessions: fifteen seconds after
+// login one avatar had eight of its ten attachments on without any
+// client having asked for them, and the same two missing both times;
+// another had its body, head and clothes and not four HUD-like things.
+// Why those were left off was not established.
+//
+// A viewer covers the gap.  Once the Current Outfit folder has loaded
+// it puts on whatever the folder names and is not on
+// (LLAppearanceMgr::updateAppearanceFromCOF), and nobody sees that
+// happen.  Nothing here did, so an avatar came back from a login
+// missing part of its outfit and stayed that way.  This is the same
+// catching up.
 //
 // # Why it adds rather than replaces
 //

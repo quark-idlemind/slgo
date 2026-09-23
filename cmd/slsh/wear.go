@@ -794,13 +794,12 @@ type dressFlags struct {
 // cmdDress puts back on whatever the Current Outfit folder names and
 // the avatar is not wearing.
 //
-// The fault it is for: an avatar logs in wearing its body parts and
-// nothing else.  The simulator rezzes no attachments of its own
-// accord -- they are in the folder, the folder is the client's record,
-// and putting on what it names is the client's job.  A viewer does it
-// a second or two after arriving and nobody sees it happen.  Nothing
-// here did it at all, so an avatar dressed from this shell came back
-// undressed at the next login and stayed that way.
+// The fault it is for: the simulator puts most of an avatar's
+// attachments back at login, but not reliably all of them.  A viewer
+// puts on whatever the folder names and is still missing, a second or
+// two after arriving, and nobody sees it happen.  Nothing here did, so
+// an avatar dressed from this shell could come back from a login
+// missing part of its outfit and stay that way.
 //
 // The report is by name and in three parts, because "dressed" is not
 // one outcome.  What was already on is worth saying so that a person

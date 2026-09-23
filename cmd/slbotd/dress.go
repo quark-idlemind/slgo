@@ -2,18 +2,16 @@ package main
 
 // Putting an avatar's outfit back on after it has been logged in again.
 //
-// An avatar logs in wearing its body parts and nothing else.  The
-// simulator rezzes no attachments of its own accord: they are named in
-// the Current Outfit folder, that folder is the client's own record,
-// and putting on what it names is a client's job.  A viewer does it a
-// second or two after arriving.
+// The simulator puts most of an avatar's attachments back by itself at
+// login, but not reliably all of them: measured after one restart, one
+// avatar had eight of ten on before anything here had asked, and the
+// same two missing as after the restart before.  Why those two was not
+// established.  A viewer covers the gap by putting on, once the Current
+// Outfit folder has loaded, whatever it names that is not on.
 //
-// Nothing here did it, so every time slgod restarted -- or
-// re-established a session that had dropped -- the avatars it holds
-// came back in their skins and stayed that way until somebody noticed
-// and dressed them by hand.  Which is how this was found: an avatar
-// that had been dressed twice in an afternoon and was undressed again
-// within the hour, each time by a restart nobody connected with it.
+// Nothing here did, so every time slgod restarted the avatars it holds
+// came back missing part of their outfits -- a head of hair, a dress --
+// and stayed that way until somebody noticed and dressed them by hand.
 //
 // This is the attendant's job rather than slgod's because the work is
 // inventory work, and this side is where inventory is understood: the
