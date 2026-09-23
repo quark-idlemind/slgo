@@ -347,19 +347,47 @@ func encodeField(w *buf, v reflect.Value, f *fieldPlan) error {
 // deliberate: Linden Lab extends messages by appending blocks, and a
 // client that treats "there is more here than I know about" or "the
 // block I was told about is absent" as fatal stops working the next
-// time the protocol grows.  Any other short read is an error.
+// time the protocol grows.
+//
+// A zerocoded message that runs off its end is read as though the rest
+// were zeros, because on the grid that is what the rest is.  The
+// simulator's zero coder leaves off the tail of a trailing run of
+// zeros now and then, and the viewer has always read past the end of a
+// packet as zeros (LLTemplateMessageReader::decodeData, "default to
+// 0s").  Measured on Agni: every failure over two and a half minutes
+// on three avatars was a zerocoded ObjectUpdate short by exactly 5 or
+// exactly 37 bytes, all of them decoding once given that many zeros.
+// Refusing them threw away whole packets of object descriptions -- one
+// was a seat, which the rest of the store then could not place.
+//
+// Any other short read is an error.  A message that is not zerocoded
+// has no zeros to have lost, so running off its end is a real fault,
+// and one worth seeing: it is what a wrong template looks like.
 func Unmarshal(b []byte, m Message) error {
+	_, err := unmarshal(b, m)
+	return err
+}
+
+// unmarshal is Unmarshal, also saying whether the tail had to be
+// supplied, so that the receiver can count how often.
+func unmarshal(b []byte, m Message) (padded bool, err error) {
 	v := reflect.ValueOf(m)
 	if v.Kind() != reflect.Pointer || v.IsNil() {
-		return fmt.Errorf("msg: Unmarshal needs a non-nil pointer, got %T", m)
+		return false, fmt.Errorf("msg: Unmarshal needs a non-nil pointer, got %T", m)
 	}
 	v = v.Elem()
-	p, err := planFor(v.Type(), m.MsgInfo().Name)
+	info := m.MsgInfo()
+	p, err := planFor(v.Type(), info.Name)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	r := &cur{b: b}
+	r := &cur{b: b, lenient: info.Zerocoded}
+	err = decodeBlocks(r, v, p)
+	return r.padded, err
+}
+
+func decodeBlocks(r *cur, v reflect.Value, p *plan) error {
 	for bi := range p.blocks {
 		blk := &p.blocks[bi]
 		bv := v.Field(blk.index)

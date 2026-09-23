@@ -52,6 +52,7 @@ type Stats struct {
 	Runts   uint64 // too short to hold a header
 	Unknown uint64 // message number not in the template
 	Failed  uint64 // header, ack, zero coding or body decode failures
+	Padded  uint64 // decoded, with a tail the simulator left off read as zeros
 	Dropped uint64 // discarded because the channel was full
 
 	// Peak is the most packets ever waiting for the consumer at once,
@@ -90,6 +91,7 @@ type Receiver struct {
 	runts   atomic.Uint64
 	unknown atomic.Uint64
 	failed  atomic.Uint64
+	padded  atomic.Uint64
 	dropped atomic.Uint64
 }
 
@@ -211,6 +213,7 @@ func (r *Receiver) Stats() Stats {
 		Runts:   r.runts.Load(),
 		Unknown: r.unknown.Load(),
 		Failed:  r.failed.Load(),
+		Padded:  r.padded.Load(),
 		Dropped: r.dropped.Load(),
 		Peak:    r.peak.Load(),
 		Buffer:  uint64(cap(r.ch)),
@@ -377,7 +380,11 @@ func (r *Receiver) parse(b []byte, addr net.Addr, at time.Time) *Packet {
 		}
 		return p
 	}
-	if err := m.Decode(body); err != nil {
+	padded, err := unmarshal(body, m)
+	if padded {
+		r.padded.Add(1)
+	}
+	if err != nil {
 		r.failed.Add(1)
 		p.Err = err
 		if p.Body == nil {

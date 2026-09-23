@@ -773,3 +773,51 @@ func TestFixedFieldWidthIsCheckedOnTheWayIn(t *testing.T) {
 		t.Error("read eight bytes into a [4]byte field")
 	}
 }
+
+// TestAZerocodedMessageReadsPastItsEndAsZeros: wherever in its final
+// run of zeros an ObjectUpdate is cut short, it decodes to the same
+// thing.  See Unmarshal for why that is the grid's behaviour and not a
+// guess.
+func TestAZerocodedMessageReadsPastItsEndAsZeros(t *testing.T) {
+	m := objectWithAQuietTail()
+	b, err := m.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := 0
+	for run < len(b) && b[len(b)-1-run] == 0 {
+		run++
+	}
+	if run < 60 {
+		t.Fatalf("the body should end in a long run of zeros, has %d", run)
+	}
+	for cut := 1; cut <= run; cut++ {
+		var back ObjectUpdate
+		if err := back.Decode(b[:len(b)-cut]); err != nil {
+			t.Fatalf("cut by %d: %v", cut, err)
+		}
+		if !sameMessage(t, &back, m) {
+			t.Fatalf("cut by %d: decoded differently", cut)
+		}
+	}
+}
+
+// TestAZerocodedMessageCutIntoItsDataIsNotTheSame: the zeros are
+// supplied, not invented data; a cut that removes something that was
+// not zero decodes, and decodes to something else.  This is what the
+// tolerance costs, and it is the cost the viewer pays.
+func TestAZerocodedMessageCutIntoItsDataIsNotTheSame(t *testing.T) {
+	m := objectWithAQuietTail()
+	m.ObjectData[0].JointAxisOrAnchor = Vector3{X: 1, Y: 2, Z: 3}
+	b, err := m.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back ObjectUpdate
+	if err := back.Decode(b[:len(b)-4]); err != nil {
+		t.Fatal(err)
+	}
+	if back.ObjectData[0].JointAxisOrAnchor.Z != 0 {
+		t.Errorf("Z = %v; the missing four bytes should read as zero", back.ObjectData[0].JointAxisOrAnchor.Z)
+	}
+}

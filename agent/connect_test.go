@@ -116,9 +116,11 @@ func TestConnectReportsWhatNobodyHandled(t *testing.T) {
 	sim.send(chat, 0)
 
 	// And something that names a message but carries none of it, which
-	// is what a truncated datagram looks like from here.
+	// is what a truncated datagram looks like from here.  One that is
+	// not zerocoded: those are read past their end as zeros, as the
+	// viewer reads them (see msg.Unmarshal).
 	truncated := msg.AppendHeader(nil, &msg.Header{Sequence: 9999})
-	truncated = msg.AppendID(truncated, msg.IDOf(&msg.ObjectUpdate{}))
+	truncated = msg.AppendID(truncated, msg.IDOf(&msg.ChatFromSimulator{}))
 	rawSend(sim, truncated)
 
 	deadline := time.Now().Add(5 * time.Second)

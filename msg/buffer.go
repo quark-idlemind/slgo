@@ -23,17 +23,33 @@ func (w *buf) f64(v float64) { w.u64(math.Float64bits(v)) }
 func (w *buf) bytes(v []byte) { w.b = append(w.b, v...) }
 
 // cur is a reading cursor over a message body.
+//
+// A lenient cursor reads past the end as zeros rather than failing,
+// and says that it did in padded.  See unmarshal for when that is
+// right.
 type cur struct {
-	b []byte
-	i int
+	b       []byte
+	i       int
+	lenient bool
+	padded  bool
 }
 
 func (r *cur) remaining() int { return len(r.b) - r.i }
 func (r *cur) atEnd() bool    { return r.i >= len(r.b) }
 
 func (r *cur) take(n int) ([]byte, error) {
-	if n < 0 || r.remaining() < n {
+	if n < 0 {
 		return nil, ErrShort
+	}
+	if r.remaining() < n {
+		if !r.lenient {
+			return nil, ErrShort
+		}
+		s := make([]byte, n)
+		copy(s, r.b[min(r.i, len(r.b)):])
+		r.i = len(r.b)
+		r.padded = true
+		return s, nil
 	}
 	s := r.b[r.i : r.i+n]
 	r.i += n

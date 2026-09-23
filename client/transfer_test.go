@@ -165,11 +165,9 @@ func TestTransferHandleLeavesAloneWhatIsNotItsOwn(t *testing.T) {
 	if x.Handle(&Message{Name: "ChatFromSimulator"}) {
 		t.Error("a message that is not a transfer was claimed")
 	}
-	if x.Handle(&Message{
-		ID: msg.IDOf(&msg.TransferInfo{}), Name: "TransferInfo", Body: []byte{1},
-	}) {
-		t.Error("a TransferInfo whose bytes will not decode was claimed")
-	}
+	// Only TransferPacket can be made undecodable by cutting it short.
+	// TransferInfo is zerocoded, and a zerocoded message reads past its
+	// end as zeros, as the viewer reads it (see msg.Unmarshal).
 	if x.Handle(&Message{
 		ID: msg.IDOf(&msg.TransferPacket{}), Name: "TransferPacket", Body: []byte{1},
 	}) {

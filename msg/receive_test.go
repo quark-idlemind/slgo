@@ -1,6 +1,7 @@
 package msg
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net"
@@ -643,4 +644,88 @@ func TestReceiveMalformedPackets(t *testing.T) {
 	if st.Failed != 3 {
 		t.Errorf("stats = %+v, want three failures", st)
 	}
+}
+
+// objectWithAQuietTail is an ObjectUpdate whose last object ends, as
+// most do, in some seventy bytes of zeros: no sound, so no owner for
+// muting it, no gain, no radius and no joint.  Invented throughout.
+func objectWithAQuietTail() *ObjectUpdate {
+	m := &ObjectUpdate{}
+	m.RegionData.RegionHandle = 0x00aa000000aa0000
+	m.ObjectData = []ObjectUpdate_ObjectData{{
+		ID:           41,
+		FullID:       MustParseUUID("63aa7e57-7e57-c0de-aff5-17d0a11ee0b9"),
+		PCode:        9,
+		Scale:        Vector3{X: 0.5, Y: 0.5, Z: 0.5},
+		ObjectData:   bytes.Repeat([]byte{0x3f}, 60),
+		ParentID:     40,
+		PathCurve:    16,
+		ProfileCurve: 1,
+		PathScaleX:   100,
+		PathScaleY:   100,
+		TextureEntry: []byte{0x89, 0x55, 0x6e, 0x1f, 0xa3, 0x07},
+		ExtraParams:  []byte{0x01},
+	}}
+	return m
+}
+
+// TestReceiveReadsWhatTheSimulatorLeftOffAsZeros is the grid's zero
+// coder, and what the viewer does about it.
+//
+// The simulator now and then encodes a packet's final run of zeros
+// short, so the packet ends a few bytes before the message does.  On
+// Agni every one of these was a zerocoded ObjectUpdate short by exactly
+// 5 or exactly 37 bytes, and every one decoded once given that many
+// zeros back -- which is what the viewer does with any read past the
+// end.  Refusing them threw away every object described in the packet.
+//
+// The shortening is made here the way it arrives: the count on the
+// last run is simply smaller.
+func TestReceiveReadsWhatTheSimulatorLeftOffAsZeros(t *testing.T) {
+	m := objectWithAQuietTail()
+	for _, short := range []int{5, 37} {
+		raw := packet(t, FlagZerocoded, 7, m)
+		if raw[len(raw)-2] != 0 || int(raw[len(raw)-1]) <= short {
+			t.Fatalf("the packet should end in a run of more than %d zeros: % x", short, raw[len(raw)-8:])
+		}
+		raw[len(raw)-1] -= byte(short)
+
+		got, st := collect(t, newFakeConn(raw))
+		p := got[0]
+		u, ok := p.Message.(*ObjectUpdate)
+		if !ok {
+			t.Fatalf("short by %d: not decoded: %v", short, p.Err)
+		}
+		if !sameMessage(t, u, m) {
+			t.Errorf("short by %d: decoded as\n%+v\nwant\n%+v", short, u, m)
+		}
+		if st.Padded != 1 || st.Failed != 0 {
+			t.Errorf("short by %d: stats %+v; want one padded and none failed", short, st)
+		}
+	}
+}
+
+// TestReceivePadsNothingThatWasWhole: the count is of packets that
+// needed it, so an ordinary one is not in it.
+func TestReceivePadsNothingThatWasWhole(t *testing.T) {
+	got, st := collect(t, newFakeConn(packet(t, FlagZerocoded, 7, objectWithAQuietTail())))
+	if got[0].Err != nil || st.Padded != 0 {
+		t.Errorf("err %v, stats %+v; want a clean decode and nothing padded", got[0].Err, st)
+	}
+}
+
+// sameMessage compares by what goes on the wire, which is the equality
+// that matters and the one that does not care whether an empty field
+// decoded as nil or as zero length.
+func sameMessage(t *testing.T, a, b Message) bool {
+	t.Helper()
+	x, err := a.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	y, err := b.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bytes.Equal(x, y)
 }
