@@ -726,6 +726,7 @@ half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
 | `-trace-messages NAMES` | trace only these; empty traces every one |
 | `-trace-bodies` | write each traced message out in full -- session ids, and everybody's chat and instant messages, included |
 | `-v` | log every message the grid sends |
+| `-version` | say which build this is, and exit |
 
 ---
 
@@ -1010,6 +1011,7 @@ compiled, ran and finished.
 | `--first NAME`, `--last NAME` | the avatar's name, for `--direct` |
 | `--start WHERE` | where to arrive, for `--direct`: `last` (the default), `home`, or a region name |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there -- a simulator, or a viewer daemon -- instead of in Second Life |
+| `--version` | say which build this is, and exit |
 
 ---
 
@@ -1292,6 +1294,7 @@ Second Life, and it will not say so about a model.
 | `--first NAME`, `--last NAME` | the avatar's name, for `--direct` |
 | `--start WHERE` | where to arrive, for `--direct`: `last` (the default), `home`, or a region name |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there, instead of in Second Life |
+| `--version` | say which build this is, and exit |
 
 ### Reading the numbers honestly
 

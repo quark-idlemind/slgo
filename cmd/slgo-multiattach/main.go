@@ -17,6 +17,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -27,7 +28,12 @@ func main() {
 	point := flag.Int("point", sl.HUDBottomLeft, "the attachment point to pile onto")
 	first := flag.String("first", "auto", "item already worn there")
 	second := flag.String("second", "auto probe", "item to add alongside it")
+	ver := flag.Bool("version", false, "say which build this is, and exit")
 	flag.Parse()
+	if *ver {
+		fmt.Println(version.String("slgo-multiattach"))
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()

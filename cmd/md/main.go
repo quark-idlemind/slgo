@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/md"
 )
 
@@ -25,12 +26,17 @@ func run(args []string, in io.Reader, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("md", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	width := fs.Int("width", 0, "column count; the terminal's, or 80, if 0")
+	ver := fs.Bool("version", false, "say which build this is, and exit")
 	fs.Usage = func() {
 		fmt.Fprintf(errw, "usage: md [-width N] FILE.md\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if *ver {
+		fmt.Fprintln(out, version.String("md"))
+		return 0
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()

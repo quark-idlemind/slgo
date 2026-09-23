@@ -72,6 +72,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/internal/session"
+	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -93,6 +94,7 @@ var flags = struct {
 	Keep    bool            `getopt:"--keep            leave the rezzed object behind"`
 	V       options.Counter `getopt:"-v                say more: once for the script name in front of every line, twice for which avatars the objects came from"`
 	Help    bool            `getopt:"--help -h         show this message"`
+	Version bool            `getopt:"--version         say which build this is, and exit"`
 }{
 	Script:  "slrun",
 	Done:    "DONE",
@@ -128,6 +130,10 @@ func run() error {
 	args := options.RegisterAndParse(&flags)
 	if flags.Help {
 		getopt.PrintUsage(os.Stdout)
+		return nil
+	}
+	if flags.Version {
+		fmt.Println(version.String("slrun"))
 		return nil
 	}
 	if len(args) == 0 {

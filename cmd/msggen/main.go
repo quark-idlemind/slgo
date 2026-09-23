@@ -74,6 +74,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/quark-idlemind/slgo/internal/version"
 )
 
 // ---------------------------------------------------------------- model
@@ -631,8 +633,13 @@ func main() {
 		out  = flag.String("out", "msg/messages_gen.go", "file to write, or - for stdout")
 		pkg  = flag.String("package", "msg", "package name for the generated file")
 		stat = flag.Bool("stats", false, "print a summary of what was parsed")
+		ver  = flag.Bool("version", false, "say which build this is, and exit")
 	)
 	flag.Parse()
+	if *ver {
+		fmt.Println(version.String("msggen"))
+		return
+	}
 
 	data, err := read(*src)
 	if err != nil {

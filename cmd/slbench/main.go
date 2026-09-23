@@ -83,6 +83,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/quark-idlemind/slgo/internal/session"
+	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/scripttest"
 )
 
@@ -113,6 +114,7 @@ var flags = struct {
 	Test      string          `getopt:"--test=PAD,SIZE[,MARGINAL[,LIMIT]] measure against the offline model in this process, see the source code"`
 	Backend   string          `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life; --test is the same contract answered by a model here"`
 	Help      bool            `getopt:"--help -h show this message"`
+	Version   bool            `getopt:"--version say which build this is, and exit"`
 }{
 	Start:   "last",
 	Timeout: time.Minute,
@@ -1286,6 +1288,10 @@ func main() {
 	// not a complaint.
 	if flags.Help {
 		getopt.PrintUsage(os.Stdout)
+		return
+	}
+	if flags.Version {
+		fmt.Println(version.String("slbench"))
 		return
 	}
 

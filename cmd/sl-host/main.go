@@ -64,13 +64,20 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/quark-idlemind/slgo/internal/version"
 )
 
 func main() {
 	verbose := flag.Bool("v", false, "explain on standard error which rule matched and why")
 	list := flag.Bool("l", false, "list every rule with its match state, and exit")
+	ver := flag.Bool("version", false, "say which build this is, and exit")
 	flag.Usage = func() { fmt.Fprintln(os.Stderr, "usage: sl-host [-v] [-l]") }
 	flag.Parse()
+	if *ver {
+		fmt.Println(version.String("sl-host"))
+		return
+	}
 	if flag.NArg() > 0 {
 		flag.Usage()
 		os.Exit(2)

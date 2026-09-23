@@ -29,6 +29,7 @@ import (
 	"github.com/quark-idlemind/slgo/auth"
 	"github.com/quark-idlemind/slgo/internal/logfile"
 	"github.com/quark-idlemind/slgo/internal/redact"
+	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/server"
 	"github.com/quark-idlemind/slgo/viewer"
@@ -66,6 +67,7 @@ func main() {
 			"hold a circuit to each neighbouring region, so the avatar can walk over a border;"+
 				" a profile's own neighbours setting wins over this")
 		group groupFlag
+		ver   = flag.Bool("version", false, "say which build this is, and exit")
 	)
 	flag.Var(&group, "group",
 		"group to act as, by name or uuid, or PROFILE=GROUP; overrides the profile's own")
@@ -74,6 +76,10 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if *ver {
+		fmt.Println(version.String("slgod"))
+		return
+	}
 	if flag.NArg() == 0 {
 		flag.Usage()
 		os.Exit(2)

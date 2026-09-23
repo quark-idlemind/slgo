@@ -985,9 +985,11 @@ A shell for Second Life, on the sl package, against either backend:
 
 `--version` says which build this is: the release it was tagged as, or
 that it is a development build after one, with the date and hash of
-the commit and whether the tree had edits in it.  It is read from what
-the Go toolchain records in a binary built inside a git checkout, so a
-plain `go install ./cmd/slsh` is all it takes.
+the commit and whether the tree had edits in it.  Every command here
+takes it -- `slgod -version` and the rest, which read their flags the
+Go way, take either spelling.  It is read from what the Go toolchain
+records in a binary built inside a git checkout, so a plain
+`go install ./cmd/...` is all it takes.
 
 Commands are the outer mode, because that is what the keyboard is
 mostly for: chat arrives whatever mode is in force, and cd and ls are

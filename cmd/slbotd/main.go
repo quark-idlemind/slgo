@@ -49,6 +49,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/internal/logfile"
 	"github.com/quark-idlemind/slgo/internal/slhost"
+	"github.com/quark-idlemind/slgo/internal/version"
 )
 
 func main() {
@@ -67,6 +68,7 @@ func run() error {
 		check = flag.Bool("check", false,
 			"read the configuration, say what it means, and exit without connecting")
 		quiet = flag.Bool("q", false, "log commands and offers only, not conversation")
+		ver   = flag.Bool("version", false, "say which build this is, and exit")
 		logTo = flag.String("log", "",
 			"append the log to this file, mode 600, rather than writing it to stderr;"+
 				" its directory is made 700 if missing and refused if group or others can open it."+
@@ -77,6 +79,10 @@ func run() error {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if *ver {
+		fmt.Println(version.String("slbotd"))
+		return nil
+	}
 	if flag.NArg() != 0 {
 		flag.Usage()
 		return fmt.Errorf("slbotd takes no arguments; the avatars are named in the configuration")
