@@ -1348,6 +1348,31 @@ type heldItem struct {
 	// every question and never changes state, which is a script the
 	// simulator will not start.
 	Deaf, Stuck bool
+
+	// Text is what reading it hands back, for cat --in.
+	Text string
+
+	// Owner and the two masks are the item's permissions, for fetch:
+	// a zero Owner is the avatar the shell is, and a zero OwnerMask
+	// is every right, so an item left alone is one that is copied.
+	Owner                   msg.UUID
+	OwnerMask, EveryoneMask uint32
+}
+
+// owner is who the contents file says owns it.
+func (h *heldItem) owner() msg.UUID {
+	if h.Owner.IsZero() {
+		return testMe
+	}
+	return h.Owner
+}
+
+// ownerMask is the rights the contents file gives its owner.
+func (h *heldItem) ownerMask() uint32 {
+	if h.OwnerMask == 0 {
+		return sl.PermAll
+	}
+	return h.OwnerMask
 }
 
 // AnswerInside makes the fake serve what an object holds, and answer for
@@ -1379,6 +1404,70 @@ func (f *fakeGrid) AnswerInside(t *testing.T, task msg.UUID, held ...*heldItem) 
 			file := taskInventoryFile(task, held)
 			mu.Unlock()
 			f.Relay(t, xferPacket(r.XferID.ID, 0, true, file))
+
+		case *msg.TransferRequest:
+			// A read of something inside.  The parameters are the
+			// agent, the session, the owner, the object and then the
+			// item; see client/transfer.go.
+			item := msg.UUID(r.TransferInfo.Params[64:80])
+			mu.Lock()
+			var text *string
+			for _, h := range held {
+				if h.ID == item {
+					text = &h.Text
+				}
+			}
+			mu.Unlock()
+			info := &msg.TransferInfo{}
+			info.TransferInfo.TransferID = r.TransferInfo.TransferID
+			info.TransferInfo.ChannelType = 2
+			if text == nil {
+				info.TransferInfo.Status = -2 // unknown source
+				f.Relay(t, info)
+				return
+			}
+			info.TransferInfo.Size = int32(len(*text))
+			f.Relay(t, info)
+			p := &msg.TransferPacket{}
+			p.TransferData.TransferID = r.TransferInfo.TransferID
+			p.TransferData.ChannelType = 2
+			p.TransferData.Status = 1
+			p.TransferData.Data = []byte(*text)
+			f.Relay(t, p)
+
+		case *msg.MoveTaskInventory:
+			// Into the folder it names, as a new item: copied when the
+			// owner may copy it, and gone from the object when not.
+			mu.Lock()
+			var moved *heldItem
+			kept := held[:0]
+			for _, h := range held {
+				if h.ID == r.InventoryData.ItemID {
+					moved = h
+					if h.ownerMask()&sl.PermCopy == 0 {
+						continue
+					}
+				}
+				kept = append(kept, h)
+			}
+			held = kept
+			mu.Unlock()
+			if moved == nil {
+				return
+			}
+			kind := sl.AssetLSLText
+			if moved.Kind == "notecard" {
+				kind = sl.AssetNotecard
+			}
+			f.mu.Lock()
+			if dir := findDir(f.inv, r.AgentData.FolderID); dir != nil {
+				dir.Items = append(dir.Items, &invItem{
+					ID: f.nextLinkID(), Name: moved.Name,
+					Type: int(kind), InvType: int(kind),
+				})
+				dir.Version++
+			}
+			f.mu.Unlock()
 
 		case *msg.SetScriptRunning:
 			mu.Lock()
@@ -1477,6 +1566,11 @@ func taskInventoryFile(task msg.UUID, held []*heldItem) []byte {
 		fmt.Fprintf(&b, "\t\ttype\t%s\n", kind)
 		fmt.Fprintf(&b, "\t\tinv_type\t%s\n", kind)
 		fmt.Fprintf(&b, "\t\tname\t%s|\n", h.Name)
+		fmt.Fprintf(&b, "\t\towner_id\t%s\n", h.owner())
+		fmt.Fprintf(&b, "\t\tpermissions 0\n\t\t{\n")
+		fmt.Fprintf(&b, "\t\t\towner_mask\t%08x\n", h.ownerMask())
+		fmt.Fprintf(&b, "\t\t\teveryone_mask\t%08x\n", h.EveryoneMask)
+		fmt.Fprintf(&b, "\t\t}\n")
 		fmt.Fprintf(&b, "\t}\n")
 	}
 	return []byte(b.String())

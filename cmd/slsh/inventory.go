@@ -106,8 +106,8 @@ var inventoryCommands = map[string]*command{
 	},
 	"cat": {
 		params: "PATH",
-		flags:  func() any { return new(helpOnly) },
-		brief:  "print a notecard or a script",
+		flags:  func() any { return new(catOptions) },
+		brief:  "print a notecard or a script; --in reads one inside a rezzed object",
 		man:    "cat",
 		run:    cmdCat,
 	},
@@ -777,14 +777,22 @@ func catReadable(e sl.Entry) error {
 	return fmt.Errorf("%s is not text, and no command here fetches one", kind)
 }
 
+type catOptions struct {
+	In   string `getopt:"--in=OBJECT  read it from inside a rezzed object, not from inventory"`
+	Help bool   `getopt:"--help -h    show what this command takes"`
+}
+
 func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	var o helpOnly
+	var o catOptions
 	args, done, err := subOptions("cat", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) != 1 {
 		return usageError("cat")
+	}
+	if o.In != "" {
+		return sh.catInside(ctx, out, o.In, args[0])
 	}
 	// thingAt: what is read is the asset at the other end of a link,
 	// the way double-clicking a notecard link opens the notecard.
@@ -802,14 +810,56 @@ func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if err != nil {
 		return err
 	}
-	if sl.AssetType(e.Type) == sl.AssetNotecard {
+	printText(out, sl.AssetType(e.Type), b)
+	return nil
+}
+
+// catInside prints a notecard or a script from inside an object.
+//
+// The object's copy is read, not the item it was copied from: they part
+// company the moment a script in the object is edited or a notecard in
+// it is saved, and the copy is the one the object is running or
+// reading.  It is asked for through the object, which is how the
+// simulator decides whether this avatar may see it -- a script without
+// modify rights for us is refused there, not here.
+func (sh *Shell) catInside(ctx context.Context, out io.Writer, what, name string) error {
+	obj, err := sh.insideObject(ctx, what, 0)
+	if err != nil {
+		return err
+	}
+	it, err := sh.findInside(ctx, obj, name)
+	if err != nil {
+		return err
+	}
+	var t sl.AssetType
+	switch it.Type {
+	case "notecard":
+		t = sl.AssetNotecard
+	case "lsltext", "lsl":
+		t = sl.AssetLSLText
+	case "script":
+		t = sl.AssetScriptLegacy
+	default:
+		return fmt.Errorf("%q in %s is %s, not text", it.Name, obj.Name, aKind(it.Type))
+	}
+	b, err := sh.s.ReadTaskAsset(ctx, obj, it, int32(t), 45*time.Second)
+	if err != nil {
+		return err
+	}
+	printText(out, t, b)
+	return nil
+}
+
+// printText prints what cat read: a notecard without its wrapper, and a
+// script as it is.
+func printText(out io.Writer, t sl.AssetType, b []byte) {
+	if t == sl.AssetNotecard {
 		if text, ok := notecardText(b); ok {
 			fmt.Fprintln(out, text)
-			return nil
+			return
 		}
 	}
 	fmt.Fprintln(out, strings.TrimRight(string(b), "\n"))
-	return nil
 }
 
 // notecardText pulls the text out of the notecard container.

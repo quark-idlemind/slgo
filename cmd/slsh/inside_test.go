@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/quark-idlemind/slgo/msg"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 // The prims and the scripts these tests work with.
@@ -486,5 +487,119 @@ func TestRmAndMvInsideRefuseWhatIsNotThere(t *testing.T) {
 	}
 	if renames[0].InventoryData.ItemID != aGreeter {
 		t.Errorf("the rename named item %s", renames[0].InventoryData.ItemID)
+	}
+}
+
+// TestCatInReadsTheObjectsCopy: the object's own copy is read, through
+// the object, and printed the way cat prints one from inventory.
+func TestCatInReadsTheObjectsCopy(t *testing.T) {
+	x := aBoxHolding(t,
+		&heldItem{Name: "greeter", ID: aGreeter, Text: "default { state_entry() { } }\n"},
+		&heldItem{Name: "read me", ID: aReadme, Kind: "notecard",
+			Text: "Linden text version 2\n{\nLLEmbeddedItems version 1\n{\ncount 0\n}\n" +
+				"Text length 9\nthe words\n}\n"},
+		&heldItem{Name: "a picture", ID: aWatcher, Kind: "texture"},
+	)
+
+	if got, want := x.do(t, "cat --in Box1 greeter"), "default { state_entry() { } }\n"; got != want {
+		t.Errorf("cat --in of a script printed %q, want %q", got, want)
+	}
+	if got, want := x.do(t, `cat --in Box1 "read me"`), "the words\n"; got != want {
+		t.Errorf("cat --in of a notecard printed %q, want %q", got, want)
+	}
+	// By the id the object gives its copy, which is how one of two of a
+	// name is chosen.
+	if got, want := x.do(t, "cat --in "+aBox.String()+" "+aGreeter.String()), "default { state_entry() { } }\n"; got != want {
+		t.Errorf("cat --in by uuids printed %q, want %q", got, want)
+	}
+	if got := x.do(t, "cat --in Box1 a picture"); !strings.Contains(got, "usage: cat") {
+		t.Errorf("cat --in with an unquoted name printed %q", got)
+	}
+	if got := x.do(t, `cat --in Box1 "a picture"`); !strings.Contains(got, "not text") {
+		t.Errorf("cat --in of a texture printed %q", got)
+	}
+	if got := x.do(t, "cat --in Box1 nothing"); !strings.Contains(got, `nothing called "nothing"`) {
+		t.Errorf("cat --in of something not there printed %q", got)
+	}
+}
+
+// TestFetchCopiesIntoTheWorkingFolder: drop the other way round, and
+// the object keeps what it had.
+func TestFetchCopiesIntoTheWorkingFolder(t *testing.T) {
+	x := aBoxHolding(t, &heldItem{Name: "read me", ID: aReadme, Kind: "notecard"})
+
+	x.do(t, "cd Scripts")
+	got := x.do(t, "fetch Box1 read me")
+	if !strings.Contains(got, `copied "read me" from Box1 into /Scripts`) {
+		t.Fatalf("fetch printed %q", got)
+	}
+	if got := x.do(t, "ls"); !strings.Contains(got, "read me") {
+		t.Errorf("/Scripts after the fetch lists %q", got)
+	}
+	if got := x.do(t, "ls --in Box1"); !strings.Contains(got, "read me") {
+		t.Errorf("the box lost what was copied out of it: %q", got)
+	}
+	m := sentOfShell[*msg.MoveTaskInventory](x)
+	if len(m) != 1 || m[0].AgentData.FolderID != testScripts || m[0].InventoryData.ItemID != aReadme {
+		t.Errorf("sent %+v", m)
+	}
+}
+
+func TestFetchIntoAnotherFolder(t *testing.T) {
+	x := aBoxHolding(t, &heldItem{Name: "greeter", ID: aGreeter})
+	if got := x.do(t, "fetch --into /Scripts Box1 greeter"); !strings.Contains(got, "into /Scripts") {
+		t.Errorf("fetch --into printed %q", got)
+	}
+	if got := x.do(t, "ls /Scripts"); !strings.Contains(got, "greeter") {
+		t.Errorf("/Scripts lists %q", got)
+	}
+}
+
+// TestFetchWillNotEmptyAnObjectUnasked: an item that may not be copied
+// is moved out rather than copied, and only --move asks for that.
+func TestFetchWillNotEmptyAnObjectUnasked(t *testing.T) {
+	x := aBoxHolding(t, &heldItem{Name: "only one", ID: aReadme, Kind: "notecard",
+		OwnerMask: sl.PermAll &^ sl.PermCopy})
+
+	got := x.do(t, "fetch Box1 only one")
+	if !strings.Contains(got, "may not be copied") || !strings.Contains(got, "--move") {
+		t.Errorf("fetch of a no-copy item printed %q", got)
+	}
+	if n := len(sentOfShell[*msg.MoveTaskInventory](x)); n != 0 {
+		t.Fatalf("asked for it anyway, %d times", n)
+	}
+
+	got = x.do(t, "fetch --move Box1 only one")
+	if !strings.Contains(got, `moved "only one" out of Box1`) {
+		t.Errorf("fetch --move printed %q", got)
+	}
+	if got := x.do(t, "ls --in Box1"); strings.Contains(got, "only one") {
+		t.Errorf("the box still lists what was moved out: %q", got)
+	}
+}
+
+// TestFetchRefusesWhatIsNotOursToTake: somebody else's item that may not
+// be copied cannot be moved to us either, and that is the object's
+// owner's business rather than a flag's.
+func TestFetchRefusesWhatIsNotOursToTake(t *testing.T) {
+	x := aBoxHolding(t,
+		&heldItem{Name: "theirs", ID: aReadme, Kind: "notecard", Owner: aListener},
+		&heldItem{Name: "free", ID: aWatcher, Kind: "notecard", Owner: aListener,
+			EveryoneMask: sl.PermCopy},
+	)
+	if got := x.do(t, "fetch --move Box1 theirs"); !strings.Contains(got, "not yours") {
+		t.Errorf("fetch of somebody else's no-copy item printed %q", got)
+	}
+	if got := x.do(t, "fetch Box1 free"); !strings.Contains(got, `copied "free"`) {
+		t.Errorf("fetch of an item everyone may copy printed %q", got)
+	}
+}
+
+func TestFetchWantsBoth(t *testing.T) {
+	x := newTestShell(t)
+	for _, line := range []string{"fetch", "fetch Box1"} {
+		if got := x.do(t, line); !strings.Contains(got, "usage: fetch") {
+			t.Errorf("%q printed %q", line, got)
+		}
 	}
 }

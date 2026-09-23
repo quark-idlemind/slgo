@@ -26,12 +26,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
-	"sync/atomic"
 )
 
 // theObjectsFolder is a folder as AIS describes it, which is what a
@@ -1161,5 +1162,109 @@ func TestGivingUpWhileWaitingToAskAgain(t *testing.T) {
 		}
 	case <-time.After(uploadRetryWait + 2*time.Second):
 		t.Error("giving up did not interrupt the wait before asking again")
+	}
+}
+
+// theTaskItem is the id an object gives its own copy of an item.
+var theTaskItem = msg.MustParseUUID("a7877e57-7e57-c0de-9b5a-4cabdaeab941")
+
+// TestFetchFromObjectWaitsForTheItemItBecame: MoveTaskInventory is
+// answered by nothing, so the item is looked for in the folder it was
+// sent to -- and an item of the same name that was there already is not
+// it.
+func TestFetchFromObjectWaitsForTheItemItBecame(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	old := anItem(theOther, "a notecard")
+	fetched := anItem(theChild, "a notecard")
+	var mu sync.Mutex
+	arrived := false
+	f.ServeInventory(t, func(msg.UUID) []*Item {
+		mu.Lock()
+		defer mu.Unlock()
+		if !arrived {
+			return []*Item{old}
+		}
+		return []*Item{old, fetched}
+	})
+
+	o := &Object{ID: thePrim, Local: 77, Name: "lantern"}
+	inside := TaskItem{ID: theTaskItem, Name: "a notecard"}
+	wait := aside(t, func() (*Item, error) {
+		return w.FetchFromObject(context.Background(), o, inside, aFolder, 0)
+	})
+
+	m := waitSent[*msg.MoveTaskInventory](t, f)
+	if m.AgentData.FolderID != aFolder {
+		t.Errorf("sent it to folder %s", m.AgentData.FolderID)
+	}
+	// The object's own id for its copy, and the object by local id.
+	if m.InventoryData.LocalID != 77 || m.InventoryData.ItemID != theTaskItem {
+		t.Errorf("asked for %s from local id %d", m.InventoryData.ItemID, m.InventoryData.LocalID)
+	}
+
+	mu.Lock()
+	arrived = true
+	mu.Unlock()
+
+	it, err := wait()
+	if err != nil {
+		t.Fatalf("FetchFromObject: %v", err)
+	}
+	if it.ID != theChild {
+		t.Errorf("fetched %s, want the item that was not there before", it.ID)
+	}
+}
+
+func TestFetchFromObjectSaysWhenNothingArrives(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
+
+	o := &Object{ID: thePrim, Local: 77, Name: "lantern"}
+	_, err := w.FetchFromObject(context.Background(), o,
+		TaskItem{ID: theTaskItem, Name: "a notecard"}, aFolder, 3*time.Second)
+	if !errors.Is(err, ErrTimeout) {
+		t.Errorf("FetchFromObject = %v, want a timeout", err)
+	}
+}
+
+// TestFetchFromObjectWantsAFolder: a zero folder lets the simulator
+// choose, and then nothing knows where to look for the item.
+func TestFetchFromObjectWantsAFolder(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := &Object{ID: thePrim, Local: 77}
+	if _, err := w.FetchFromObject(context.Background(), o, TaskItem{ID: theTaskItem}, msg.UUID{}, time.Second); err == nil {
+		t.Error("fetched into no folder")
+	}
+	if len(f.Sent()) != 0 {
+		t.Errorf("sent %d messages anyway", len(f.Sent()))
+	}
+}
+
+// TestMayCopyOutIsTheViewersTest: copy for whoever is asking, and
+// transfer when the item is not already theirs.
+func TestMayCopyOutIsTheViewersTest(t *testing.T) {
+	t.Parallel()
+	me, them, group := testAgentID, theOther, aFolder
+	for _, c := range []struct {
+		name  string
+		it    TaskItem
+		group msg.UUID
+		want  bool
+	}{
+		{"mine and copyable", TaskItem{OwnerID: me, OwnerMask: PermCopy}, msg.UUID{}, true},
+		{"mine, no copy", TaskItem{OwnerID: me, OwnerMask: PermAll &^ PermCopy, EveryoneMask: PermCopy}, msg.UUID{}, false},
+		{"theirs, everyone may copy and it transfers", TaskItem{OwnerID: them, OwnerMask: PermAll, EveryoneMask: PermCopy}, msg.UUID{}, true},
+		{"theirs, everyone may copy but no transfer", TaskItem{OwnerID: them, OwnerMask: PermAll &^ PermTransfer, EveryoneMask: PermCopy}, msg.UUID{}, false},
+		{"theirs, only the owner may copy", TaskItem{OwnerID: them, OwnerMask: PermAll}, msg.UUID{}, false},
+		{"theirs, the group may copy", TaskItem{OwnerID: them, GroupID: group, OwnerMask: PermAll, GroupMask: PermCopy}, group, true},
+		{"theirs, another group may copy", TaskItem{OwnerID: them, GroupID: group, OwnerMask: PermAll, GroupMask: PermCopy}, theChild, false},
+	} {
+		if got := MayCopyOut(c.it, me, c.group); got != c.want {
+			t.Errorf("%s: MayCopyOut = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

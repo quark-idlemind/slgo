@@ -125,7 +125,7 @@ var groups = []group{
 		members: []string{"where", "parcel", "group", "invite", "maturity", "tp", "landmark", "sit", "stand", "who", "look", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "dress", "move", "dump", "rez", "reform", "touch", "texture",
-			"take", "place", "perms", "drop", "start", "stop", "link", "unlink"},
+			"take", "place", "perms", "drop", "fetch", "start", "stop", "link", "unlink"},
 	},
 	{
 		name:  "giving",

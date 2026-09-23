@@ -109,9 +109,10 @@ id, which is not what this column prints.
 ## Inside a rezzed object
 
 The ids in a `-l` listing `--in` an object belong to the object's
-own copies, not to the inventory items they came from, and they are
-there to be read rather than typed back.  `rm --in` and `mv --in`
-take the name instead, matched exactly and in the case it has.
+own copies, not to the inventory items they came from.  `rm --in`,
+`mv --in`, `cat --in` and `fetch` take either: the name, matched
+exactly and in the case it has, or one of these ids, which is how one
+of two items of the same name is chosen.
 
 ## Examples
 
@@ -121,5 +122,6 @@ take the name instead, matched exactly and in the case it has.
     ls -rt
     ls --in lantern
 
-See also: `cd`, `find`, `cat`, `get`, `rm`, and `drop` for putting
-something into the object `--in` lists.
+See also: `cd`, `find`, `cat`, `get`, `rm`, `drop` for putting
+something into the object `--in` lists, and `fetch` for bringing
+something out of it.

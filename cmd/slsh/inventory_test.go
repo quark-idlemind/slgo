@@ -410,7 +410,7 @@ func TestCatSaysWhoRefusedIt(t *testing.T) {
 		t.Errorf("cat under a folder that is not there printed %q", got)
 	}
 	for _, line := range []string{"cat", "cat one two"} {
-		if got := x.do(t, line); !strings.Contains(got, "usage: cat PATH") {
+		if got := x.do(t, line); !strings.Contains(got, "usage: cat [--in OBJECT] PATH") {
 			t.Errorf("%q printed %q", line, got)
 		}
 	}

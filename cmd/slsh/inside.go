@@ -84,6 +84,13 @@ var insideCommands = map[string]*command{
 		man:    "drop",
 		run:    cmdDrop,
 	},
+	"fetch": {
+		params: "OBJECT NAME",
+		flags:  func() any { return new(fetchFlags) },
+		brief:  "copy an item out of a rezzed object into inventory, which is what drop undoes",
+		man:    "fetch",
+		run:    cmdFetch,
+	},
 	"new": {
 		params: "PATH",
 		flags:  func() any { return new(newFlags) },
@@ -166,7 +173,23 @@ func (sh *Shell) listInside(ctx context.Context, out io.Writer, what string, lon
 // work on all of them, so it says "nothing called" rather than "no
 // script called", and it names the object as well as the missing item:
 // with several boxes about, which one was asked is half the answer.
+//
+// A uuid is the id the object gives its copy, the one "ls -l --in"
+// prints, and it is how one of two items with a name is chosen.
 func (sh *Shell) findInside(ctx context.Context, o *sl.Object, name string) (*sl.TaskItem, error) {
+	if id, err := msg.ParseUUID(strings.TrimSpace(name)); err == nil {
+		items, err := sh.s.TaskInventory(ctx, o)
+		if err != nil {
+			return nil, err
+		}
+		for i := range items {
+			if items[i].ID == id {
+				return &items[i], nil
+			}
+		}
+		return nil, fmt.Errorf("%s holds nothing with the id %s; \"ls -l --in\" lists what it does hold",
+			o.Name, id)
+	}
 	it, err := sh.s.FindInObject(ctx, o, name)
 	if err != nil {
 		return nil, err
@@ -257,6 +280,94 @@ func cmdDrop(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	}
 	fmt.Fprintf(out, "put %q in %s\n", it.Name, obj.Name)
 	return nil
+}
+
+type fetchFlags struct {
+	Into string `getopt:"--into=FOLDER  the folder it lands in [the one the shell is in]"`
+	Move bool   `getopt:"--move        bring out an item that may not be copied, leaving the object without it"`
+	Wait int    `getopt:"--wait -w=SECONDS  how long to let the region describe itself [30]"`
+	Help bool   `getopt:"--help -h     show what this command takes"`
+}
+
+// cmdFetch brings an item out of an object and into inventory: drop the
+// other way round.
+//
+// The simulator decides between a copy and a move by the item's
+// permissions, and nothing in the request can overrule it -- an item the
+// avatar may not copy is taken out of the object, and the object is
+// short of it from then on.  So that is refused unless --move says it is
+// meant, the one way to find out which it will be being to ask first.
+func cmdFetch(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+	var o fetchFlags
+	args, done, err := subOptions("fetch", &o, out, args)
+	if err != nil || done {
+		return err
+	}
+	if len(args) < 2 {
+		return usageError("fetch")
+	}
+
+	obj, err := sh.insideObject(ctx, args[0], o.Wait)
+	if err != nil {
+		return err
+	}
+	it, err := sh.findInside(ctx, obj, strings.Join(args[1:], " "))
+	if err != nil {
+		return err
+	}
+
+	copied := sl.MayCopyOut(*it, sh.s.Me(), msg.UUID{})
+	if !copied && it.OwnerID != sh.s.Me() {
+		// Only an item that is not ours can be copied as a member of
+		// its group, so only then is the group worth asking about.
+		if group, err := sh.s.ActiveGroup(ctx); err == nil {
+			copied = sl.MayCopyOut(*it, sh.s.Me(), group)
+		}
+	}
+	if !copied {
+		// What an object holds belongs to whoever owns the object, so
+		// an item that is not ours is in an object that is not ours.
+		if it.OwnerID != sh.s.Me() {
+			return fmt.Errorf("%q in %s may not be copied, and %s is not yours to take it from",
+				it.Name, obj.Name, obj.Name)
+		}
+		if !o.Move {
+			return fmt.Errorf("%q in %s may not be copied, so fetching it would take it out of %s; "+
+				"--move does that", it.Name, obj.Name, obj.Name)
+		}
+	}
+
+	folder, where, err := sh.fetchFolder(ctx, o.Into)
+	if err != nil {
+		return err
+	}
+	got, err := sh.s.FetchFromObject(ctx, obj, *it, folder, 0)
+	if err != nil {
+		return err
+	}
+	if copied {
+		fmt.Fprintf(out, "copied %q from %s into %s\n", got.Name, obj.Name, where)
+	} else {
+		fmt.Fprintf(out, "moved %q out of %s into %s\n", got.Name, obj.Name, where)
+	}
+	return nil
+}
+
+// fetchFolder is where a fetch lands: what --into named, as a path or a
+// uuid, or the folder the shell is in.  Not the folder the viewer would
+// choose, which is the one for the item's kind: this is a shell, and a
+// shell brings things to where it is, the way new and mkdir make them
+// there.
+func (sh *Shell) fetchFolder(ctx context.Context, into string) (msg.UUID, string, error) {
+	into = strings.TrimSpace(into)
+	if id, err := msg.ParseUUID(into); err == nil {
+		return id, id.String(), nil
+	}
+	names, id, err := sh.resolveDir(ctx, into)
+	if err != nil {
+		return msg.UUID{}, "", err
+	}
+	return id, "/" + sl.JoinPath(names...), nil
 }
 
 type newFlags struct {

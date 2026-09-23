@@ -1,7 +1,8 @@
 `drop` puts an inventory item inside a rezzed object.  It is not
 putting something down in the world -- that is `place` -- and it is
-not picking something up -- that is `take`.  `rm --in` is what takes
-one out again, and `ls --in` is what says which are in there.  Nothing
+not picking something up -- that is `take`.  `fetch` is what brings
+one back out into inventory, `rm --in` deletes one where it is, and
+`ls --in` is what says which are in there.  Nothing
 is offered and nobody is asked: this is the avatar's own object, so it
 happens at once, where `give` offers an item to a person and waits for
 them to accept it.
@@ -66,6 +67,7 @@ A link this inventory cannot follow is refused, naming the id it
 looked for.  A link outlives what it pointed at, so an outfit put
 together years ago may name things that have since been deleted.
 
-See also: `new`, `rm`, `ls`, `start`, `stop`, `place` for putting an
+See also: `fetch` for the other direction, `new`, `rm`, `ls`, `start`,
+`stop`, `place` for putting an
 object into the world, `take` for bringing one in, and `give` for
 handing an item to somebody else instead.

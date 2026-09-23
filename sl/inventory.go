@@ -353,6 +353,84 @@ func (w *Session) RemoveFromObject(ctx context.Context, o *Object, item msg.UUID
 	return w.Send(ctx, m)
 }
 
+// FetchFromObject brings an item out of an object and into a folder of
+// inventory, and returns the inventory item it became.  It is what
+// dragging one out of an object's Contents tab does, and the viewer's
+// Copy to Inventory (llviewerobject.cpp, moveInventory).
+//
+// The simulator copies an item the avatar may copy, and MOVES one it may
+// not: the object no longer holds it afterwards.  Nothing in the message
+// says which is wanted, so the only way to keep an object whole is not to
+// ask for an item that would be moved; MayCopyOut says which that is.
+//
+// Nothing answers the message either.  The item is waited for in the
+// folder it was sent to, the way a take is, and one that never appears
+// is reported as a timeout.
+func (w *Session) FetchFromObject(ctx context.Context, o *Object, it TaskItem, folder msg.UUID, timeout time.Duration) (*Item, error) {
+	if folder.IsZero() {
+		// Zero asks the simulator to choose, and then there is no
+		// telling where to look for what it chose.
+		return nil, fmt.Errorf("sl: a folder to fetch %q into is needed", it.Name)
+	}
+	if timeout == 0 {
+		timeout = 40 * time.Second
+	}
+	before, err := w.FolderItems(ctx, folder)
+	if err != nil {
+		return nil, err
+	}
+	had := map[msg.UUID]bool{}
+	for _, b := range before {
+		had[b.ID] = true
+	}
+
+	m := &msg.MoveTaskInventory{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.AgentData.FolderID = folder
+	m.InventoryData.LocalID = o.Local
+	m.InventoryData.ItemID = it.ID
+	if err := w.Send(ctx, m); err != nil {
+		return nil, err
+	}
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := w.Settle(ctx, 2*time.Second); err != nil {
+			return nil, err
+		}
+		now, err := w.FolderItems(ctx, folder)
+		if err != nil {
+			continue
+		}
+		for _, n := range now {
+			if !had[n.ID] && n.Name == it.Name {
+				return n, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("%w: %q from %s to appear in inventory", ErrTimeout, it.Name, o)
+}
+
+// MayCopyOut says whether fetching an item out of an object would copy
+// it, leaving the object as it was.  It is the viewer's test, the same
+// two questions in the same order (llinventorybridge.cpp,
+// move_inv_category_world_to_agent): may this avatar copy it, and may it
+// be passed to this avatar at all.  An item that fails either is moved
+// out instead, when it is moved at all.
+func MayCopyOut(it TaskItem, me, group msg.UUID) bool {
+	var mayCopy bool
+	switch {
+	case it.OwnerID == me:
+		mayCopy = it.OwnerMask&PermCopy != 0
+	case !group.IsZero() && it.GroupID == group && it.GroupMask&PermCopy != 0:
+		mayCopy = true
+	default:
+		mayCopy = it.EveryoneMask&PermCopy != 0
+	}
+	mayPass := it.OwnerID == me || it.OwnerMask&PermTransfer != 0
+	return mayCopy && mayPass
+}
+
 // TaskInventory reads what an object holds.
 //
 // RequestTaskInventory answers with the name of a file rather than the
