@@ -21,6 +21,11 @@ item it was dropped in from, and the copy is the one the object runs
 or reads.  The region decides whether it may be read, and a script
 this avatar may not modify is refused there.
 
+A notecard that may not be copied cannot be read at all, in inventory
+or in an object: the region refuses it, and a viewer does not even
+ask, saying "You do not have permission to view this notecard".
+`cat` says which permission it is.
+
 A notecard and a script, and nothing else.  A texture, a sound, an
 animation and the rest are not text; `get` is the command for a
 texture.

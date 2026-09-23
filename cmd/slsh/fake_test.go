@@ -1412,15 +1412,24 @@ func (f *fakeGrid) AnswerInside(t *testing.T, task msg.UUID, held ...*heldItem) 
 			item := msg.UUID(r.TransferInfo.Params[64:80])
 			mu.Lock()
 			var text *string
+			refused := false
 			for _, h := range held {
 				if h.ID == item {
 					text = &h.Text
+					// A notecard that may not be copied may not be
+					// read, which is what Agni says about one.
+					refused = h.Kind == "notecard" && h.ownerMask()&sl.PermCopy == 0
 				}
 			}
 			mu.Unlock()
 			info := &msg.TransferInfo{}
 			info.TransferInfo.TransferID = r.TransferInfo.TransferID
 			info.TransferInfo.ChannelType = 2
+			if refused {
+				info.TransferInfo.Status = -3 // insufficient permissions
+				f.Relay(t, info)
+				return
+			}
 			if text == nil {
 				info.TransferInfo.Status = -2 // unknown source
 				f.Relay(t, info)

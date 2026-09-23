@@ -64,6 +64,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -818,7 +819,9 @@ func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		Owner: sh.s.Me(), Item: e.ID, Asset: e.Asset, Type: int32(e.Type),
 	}, 45*time.Second)
 	if err != nil {
-		return err
+		mayCopy := e.EveryoneMask&sl.PermCopy != 0 ||
+			(e.Owner == sh.s.Me() && e.OwnerMask&sl.PermCopy != 0)
+		return whyNotRead(err, e.Name, sl.AssetType(e.Type), mayCopy)
 	}
 	printText(out, sl.AssetType(e.Type), b)
 	return nil
@@ -854,10 +857,32 @@ func (sh *Shell) catInside(ctx context.Context, out io.Writer, what, name string
 	}
 	b, err := sh.s.ReadTaskAsset(ctx, obj, it, int32(t), 45*time.Second)
 	if err != nil {
-		return err
+		mayCopy := it.EveryoneMask&sl.PermCopy != 0 ||
+			(it.OwnerID == sh.s.Me() && it.OwnerMask&sl.PermCopy != 0)
+		return whyNotRead(err, it.Name, t, mayCopy)
 	}
 	printText(out, t, b)
 	return nil
+}
+
+// whyNotRead says why the region would not hand over a notecard, when
+// the reason is one a person can do nothing about by asking again.
+//
+// A notecard this avatar may not copy may not be read at all: the
+// region refuses the transfer, and the viewer does not even ask, saying
+// "You do not have permission to view this notecard" instead
+// (llpreviewnotecard.cpp, loadAsset).  "insufficient permissions" on
+// its own leaves somebody who has full rights over the notecard in
+// every other respect wondering which permission is missing.  Only the
+// region's refusal is explained, and only for that case: the region
+// has the last word, and anything else it refuses for is passed on as
+// it said it.
+func whyNotRead(err error, name string, t sl.AssetType, mayCopy bool) error {
+	if t != sl.AssetNotecard || mayCopy || !errors.Is(err, client.ErrTransferDenied) {
+		return err
+	}
+	return fmt.Errorf("%q may not be copied, and a notecard that may not be copied may not be read either: %w",
+		name, err)
 }
 
 // printText prints what cat read: a notecard without its wrapper, and a

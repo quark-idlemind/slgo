@@ -523,6 +523,18 @@ func TestCatInReadsTheObjectsCopy(t *testing.T) {
 	}
 }
 
+// TestCatInSaysWhyANoCopyNotecardCannotBeRead: the region refuses one
+// with "insufficient permissions", and the permission missing is copy,
+// which a person holding every other right to it would not guess.
+func TestCatInSaysWhyANoCopyNotecardCannotBeRead(t *testing.T) {
+	x := aBoxHolding(t, &heldItem{Name: "only one", ID: aReadme, Kind: "notecard",
+		OwnerMask: sl.PermAll &^ sl.PermCopy, Text: "unseen"})
+	got := x.do(t, `cat --in Box1 "only one"`)
+	if !strings.Contains(got, "may not be copied") || !strings.Contains(got, "insufficient permissions") {
+		t.Errorf("cat --in of a no-copy notecard printed %q", got)
+	}
+}
+
 // TestFetchCopiesIntoTheWorkingFolder: drop the other way round, and
 // the object keeps what it had.
 func TestFetchCopiesIntoTheWorkingFolder(t *testing.T) {
