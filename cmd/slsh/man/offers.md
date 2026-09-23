@@ -18,22 +18,28 @@ inventory.
 Nothing is answered by being looked at.  An offer nobody answers
 simply stays pending, and the other side is told nothing either way.
 
-## It can only list what arrived while this shell was here
+## What arrived before this shell
 
-Offers reach the client that is attached at the moment they
-arrive.  Anything offered before this shell started is not in this
-list -- and it is still open on the other side: they are waiting, and
-nothing here shows it.
+slgod keeps every friendship and item offer made to the avatar until
+it is answered, whether or not any client is attached, and a shell is
+handed what is still waiting when it starts.  Those are listed with the
+rest, marked `(from before this shell)`.
 
-The same follows for two shells on one avatar.  Both hold the offer,
-and each holds its own copy: answering in one takes it out of that
-one's list and leaves the other's alone for as long as that shell
-lives.  Looking again does not help -- the list is what this process
-caught, not something the grid can be asked for a second time.
+An empty list says what it is an account of: since when slgod has been
+keeping them, or, against a slgod too old to keep a record, that
+anything offered before this shell started is not known here -- and it
+is still open on the other side, waiting, with nothing here to show it.
 
-A friendship offer can only ever be answered by the client that
-received it.  An offer printed and forgotten is an offer that can
-never be accepted.
+The grid cannot be asked for an offer a second time.  The id that
+answers it arrives once, so what is listed is what slgod or this shell
+caught.
+
+## Two shells on one avatar
+
+Both are handed the offer, and the first to answer it is the only one
+that does.  The other drops it from its list the moment slgod says so,
+with a line saying who answered and how, and an `accept` or `decline`
+typed there a moment too late is refused rather than sent twice.
 
 ## Examples
 

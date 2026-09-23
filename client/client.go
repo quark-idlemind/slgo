@@ -119,6 +119,17 @@ type Conn struct {
 	// left behind.  Sifting would make the second steal from the first.
 	regions chan *RegionChange
 
+	// handled is the offers that somebody -- this client or another --
+	// has dealt with, on a channel of their own for the reason regions
+	// is: the notice stream has one reader already.
+	handled chan *pb.OfferHandled
+
+	// offers is what the server said was still waiting when this
+	// client attached, and nil when it said nothing -- a server too old
+	// to keep a record, or an attach that did not ask for instant
+	// messages.
+	offers *pb.OfferRecord
+
 	// relaying says recvLoop is running, and closed says Close has
 	// been. Both are under mu, and the pair is what decides who closes
 	// the four channels above; see closeRelay.
@@ -158,6 +169,18 @@ type Message struct {
 	// says, so this is the only way two clients on one session can see
 	// the whole of a conversation.
 	FromClient string
+
+	// Offer is the server's name for an offer it is keeping, when this
+	// message is one, and empty for everything else.  It is what
+	// Conn.Handled takes.
+	Offer string
+
+	// Recorded says this did not just arrive: it came out of the
+	// server's record of offers still waiting, put back after a client
+	// said it would answer and then could not.  At is still when it
+	// arrived at the server.  What was waiting at attach is not relayed
+	// this way at all; see Conn.Offers.
+	Recorded bool
 }
 
 // Decode turns the relayed bytes into a typed message.  A nil result
@@ -258,6 +281,7 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 		events:    make(chan *Event, 256),
 		notices:   make(chan *pb.AgentEvent, 32),
 		regions:   make(chan *RegionChange, 32),
+		handled:   make(chan *pb.OfferHandled, 64),
 		done:      make(chan struct{}),
 		relayDone: make(chan struct{}),
 	}, nil
@@ -373,6 +397,7 @@ func (c *Conn) closeRelay() {
 		close(c.events)
 		close(c.notices)
 		close(c.regions)
+		close(c.handled)
 		close(c.relayDone)
 	})
 }
@@ -407,6 +432,41 @@ func (c *Conn) Notices() <-chan *pb.AgentEvent { return c.notices }
 //
 // Every one of these is also a notice, and Notices still carries it.
 func (c *Conn) RegionChanges() <-chan *RegionChange { return c.regions }
+
+// HandledOffers yields the offers the server was keeping that have since
+// been dealt with, by this client or another, and is closed with the
+// rest when the stream ends.  A client holding one should drop it: it is
+// no longer waiting, and answering it again would answer it twice.
+func (c *Conn) HandledOffers() <-chan *pb.OfferHandled { return c.handled }
+
+// Offers is what the server said was waiting for an answer when this
+// client attached, the offers that arrived while nobody was attached
+// among them, and nil when it said nothing.
+//
+// Nil is an answer worth passing on.  It is a server too old to keep a
+// record, or an attach that did not subscribe to ImprovedInstantMessage,
+// and either way a client knows only what it sees arrive from here on.
+//
+// The messages are here and not in Messages.  They are history rather
+// than arrivals, and a client that wants them wants all of them before it
+// reads anything live -- which a value it can take whole gives it, and a
+// channel shared with the live relay does not.
+func (c *Conn) Offers() *pb.OfferRecord {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.offers
+}
+
+// Handled tells the server this client is dealing with an offer it is
+// keeping, BEFORE the answer is sent.  See the rpc in slgo.proto: the
+// answer says whether to send, and undo puts an offer back when the
+// answer could not be sent after all.
+func (c *Conn) Handled(ctx context.Context, offer, how string, undo bool) (*pb.HandledResponse, error) {
+	c.mu.RLock()
+	name := c.agent
+	c.mu.RUnlock()
+	return c.grid.Handled(ctx, &pb.HandledRequest{Agent: name, Offer: offer, How: how, Undo: undo})
+}
 
 // Attach opens the packet stream against one of the server's agents and
 // subscribes to the named messages.  "*" means everything; naming
@@ -470,6 +530,7 @@ func (c *Conn) attach(ctx context.Context, agentName string, weak bool, subscrib
 	for _, n := range att.Agent.GetCaps() {
 		c.caps[n] = true
 	}
+	c.offers = att.GetOffers()
 	c.relaying = true
 	c.mu.Unlock()
 
@@ -489,30 +550,13 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 		}
 		switch b := p.Body.(type) {
 		case *pb.ServerPacket_Message:
-			m := b.Message
-			out := &Message{
-				ID:         msg.ID(m.Id),
-				Name:       m.Name,
-				Sequence:   m.Sequence,
-				Flags:      m.Flags,
-				Body:       m.Body,
-				FromClient: m.FromClient,
-			}
-			if m.ReceivedAt != 0 {
-				out.At = time.UnixMicro(m.ReceivedAt)
-			}
-			if n := uint64(len(c.messages)); n > c.peak.Load() {
-				c.peak.Store(n)
-			}
+			c.deliver(b.Message)
+		case *pb.ServerPacket_Handled:
 			select {
-			case c.messages <- out:
+			case c.handled <- b.Handled:
 			default:
-				// A client that stops reading loses messages.
-				// Counted, because the alternative is what it
-				// was: a chat line that never arrives and no
-				// way for anybody to know one went missing.
 				c.dropped.Add(1)
-				c.noteDrop("message " + m.Name)
+				c.noteDrop("offer handled")
 			}
 		case *pb.ServerPacket_Event:
 			e := &Event{Name: b.Event.Message, Body: b.Event.Body}
@@ -561,6 +605,39 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 			// given.
 			c.locks.deliver(b.Locked)
 		}
+	}
+}
+
+// deliver hands one relayed message to whoever reads Messages.
+//
+// Only recvLoop calls it; see closeRelay for why nothing else may send
+// on the channel.
+func (c *Conn) deliver(m *pb.InboundMessage) {
+	out := &Message{
+		ID:         msg.ID(m.Id),
+		Name:       m.Name,
+		Sequence:   m.Sequence,
+		Flags:      m.Flags,
+		Body:       m.Body,
+		FromClient: m.FromClient,
+		Offer:      m.Offer,
+		Recorded:   m.Recorded,
+	}
+	if m.ReceivedAt != 0 {
+		out.At = time.UnixMicro(m.ReceivedAt)
+	}
+	if n := uint64(len(c.messages)); n > c.peak.Load() {
+		c.peak.Store(n)
+	}
+	select {
+	case c.messages <- out:
+	default:
+		// A client that stops reading loses messages.  Counted,
+		// because the alternative is what it was: a chat line that
+		// never arrives and no way for anybody to know one went
+		// missing.
+		c.dropped.Add(1)
+		c.noteDrop("message " + m.Name)
 	}
 }
 

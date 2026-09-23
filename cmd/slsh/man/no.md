@@ -13,6 +13,12 @@ no way to refuse a blue menu -- it can be answered or left -- so `no`
 on a dialog or a text box drops it here and lets it expire where it
 was raised.
 
+A teleport request is the other exception.  Nothing can be sent to
+refuse one -- a viewer's No button sends nothing either, and the person
+who asked is never told -- so `no` tells slgod instead, and the request
+leaves the listing of every other client on the avatar as well as this
+one.
+
 Declining something that was being ignored also stops it being
 ignored, since it is dealt with now either way.
 

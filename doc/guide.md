@@ -492,6 +492,76 @@ that avatar folds into the note like any other. It does not start a
 conversation that does not exist: one remark to somebody never spoken
 to before is one remark, not a memory.
 
+### Offers that arrive while nobody is attached
+
+A teleport offered, a request to be offered one, an item handed over,
+an offer of friendship and an invitation into a group each arrive once,
+as an instant message carrying the id that answers it. Before this, a
+session with no client attached acknowledged one and dropped it, so the
+shell somebody starts *because* they have been away was the one program
+that could never be told -- and said "nothing waiting" about an avatar
+with two group invitations sitting on it.
+
+slgod now keeps those five kinds, per avatar, whether or not anybody is
+attached, and hands what is still waiting to a client in the frame its
+attach is answered with. They go through the client's ordinary reading
+of an instant message, marked as coming from the record: `sl` lists
+them with `Recorded` set, and does not hand them to an `IMs`
+subscriber, because they are history rather than news. They are
+carried at attach rather than asked for, because only the attach can
+promise that an offer is either in the record or relayed afterwards,
+and never neither.
+
+An offer leaves the record when it is answered, when a newer one of the
+same kind from the same person replaces it -- as the client already
+keeps them -- or when a hundred newer ones have pushed it out, which
+the record then says. Nothing is dropped on a timer, when the avatar
+changes region, or when slgod re-establishes the session: the viewer
+puts no expiry on any of the five, carries a group invitation across a
+logout, and answers each by quoting the id it came with rather than
+anything of the session's. That the grid still honours such an answer
+from a re-established session is inferred, from its delivering these
+kinds at login out of offline storage, rather than watched. The record
+is in memory, so an offer made while slgod itself was down is not in
+it, and it says when it starts.
+
+Script dialogs and permission requests are not kept. Both come from an
+object in the region and are nearly always the result of something an
+attached client just did, and whether an answer to one still reaches
+the object from another region has not been watched.
+
+**Dealing with one.** A client about to answer a kept offer tells slgod
+first, with `Handled`, and the answer says whether to go on. The first
+client to ask takes the offer out of the record and every other client
+is told, which drops it from their lists. `slsh` says so at once, since
+a number somebody was about to type has just stopped meaning anything:
+
+    12:03:04 * the teleport Example Resident offered was accepted by slbotd -- it is no longer waiting
+
+A client that asks second is told who got there first and sends
+nothing, so two clients on one avatar cannot both answer one offer
+without knowing -- a group joined twice would be a fee paid twice. A
+client whose answer then fails to go out says so, and the offer is put
+back for everybody.
+
+`sl` does all of this inside the calls that answer an offer --
+`InventoryOffer.Accept`, `Offer.Decline`, `AcceptLure`,
+`AcceptInvitation` and the rest -- so a program using them gets it
+without asking, and a refusal comes back as an `*sl.AnsweredError`.
+Refusing a teleport request sends nothing to the grid, so it is
+`RefuseTeleportRequest` that tells the others; `ForgetTeleportRequest`
+still only forgets.
+
+An answer that reaches the circuit without being announced -- a client
+built before `Handled`, a program using the `client` package directly,
+a viewer on the login endpoint -- is noticed on its way out and takes
+the offer out of the record just the same. The notice then names no
+program, because the circuit does not say which one sent it.
+
+A direct session (`slsh --direct`) has none of this. It holds the grid
+session itself, so everything since its login went through its own
+reader, and there is nobody else attached to tell.
+
 ### Watching the wire
 
     slgod -v example                                  log every message the grid sends
@@ -1315,6 +1385,12 @@ should not need anybody at a keyboard. An offer from anybody else is
 left exactly where it is rather than declined, so a person can still
 answer it from a viewer; `accept-inventory` changes who that is.
 
+The same rule is applied, when it attaches, to the offers `slgod` kept
+while `slbotd` was not attached -- a gift made while the daemon was
+restarting is no less wanted for it. And a gift somebody has already
+answered from `slsh` is left alone: `slgod` says who took it, nothing
+is sent, and the log says so.
+
 **It puts an avatar's outfit back on after a login.** The simulator
 puts most of an avatar's attachments back by itself at login, but not
 all of them: measured on Agni, wherever a point held several
@@ -1352,7 +1428,10 @@ Everything else waits to be asked. A teleport offer, a friendship
 offer and a group invitation are listed by `:offers` and answered by
 `:accept N` or `:decline N` -- by number, from a listing just read,
 because two offers can look identical and answering the wrong one of
-them cannot be taken back.
+them cannot be taken back. The listing includes what `slgod` kept from
+before the daemon attached. One answered meanwhile from another client
+drops out of it, and answering one that another client has just
+answered is refused with who did it and how, and sends nothing.
 
 ### Running slbench and slrun
 

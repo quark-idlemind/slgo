@@ -42,6 +42,13 @@ Where only items are waiting, the bare command means them: the only
 one is taken, and two or more are refused with a count.  Naming one of
 the two is what to do next.
 
+## When another client got there first
+
+slbotd, or another shell on the same avatar, may have answered the
+offer already.  slgod is asked before anything is sent, and if it
+says so the answer is refused with who answered and how, and nothing
+goes -- the offer has left the list by then either way.
+
 ## What the report does not say
 
 Whether the item actually arrived.  The grid does the moving and says

@@ -42,6 +42,11 @@ type Hosted struct {
 	// sit that borrowed the same name for a second must not hand back
 	// something it was never lent.
 	standing map[string]bool
+
+	// handled is the daemon's notices about offers, in this package's
+	// own type; see HandledOffers.
+	handledOnce sync.Once
+	handled     chan *Handled
 }
 
 var (
@@ -543,3 +548,91 @@ func (h *Hosted) Dropped() uint64 { return h.conn.Dropped() }
 
 // OnDrop says what to call when one is thrown away.
 func (h *Hosted) OnDrop(fn func(what string)) { h.conn.OnDrop(fn) }
+
+// A Hosted is an OfferKeeper: slgod keeps the offers made to the avatar
+// whether or not anybody is attached.  See offers.go.
+var _ OfferKeeper = (*Hosted)(nil)
+
+// KeptOffers is what the daemon handed over at attach.  False is a
+// daemon too old to keep a record, or an attach that did not ask for
+// instant messages, and either way a session knows only what it sees.
+func (h *Hosted) KeptOffers() (*OfferRecord, []*Message, bool) {
+	r := h.conn.Offers()
+	if r == nil {
+		return nil, nil, false
+	}
+	rec := &OfferRecord{
+		Kept:    len(r.GetMessages()),
+		Evicted: int(r.GetEvicted()),
+		Limit:   int(r.GetLimit()),
+	}
+	if r.GetSince() != 0 {
+		rec.Since = time.UnixMicro(r.GetSince())
+	}
+	msgs := make([]*Message, 0, len(r.GetMessages()))
+	for _, m := range r.GetMessages() {
+		out := &Message{
+			ID:       msg.ID(m.GetId()),
+			Name:     m.GetName(),
+			Sequence: m.GetSequence(),
+			Flags:    m.GetFlags(),
+			Body:     m.GetBody(),
+			Offer:    m.GetOffer(),
+			Recorded: true,
+		}
+		if m.GetReceivedAt() != 0 {
+			out.At = time.UnixMicro(m.GetReceivedAt())
+		}
+		msgs = append(msgs, out)
+	}
+	return rec, msgs, true
+}
+
+// Handled asks the daemon whether this session may deal with an offer.
+func (h *Hosted) Handled(ctx context.Context, key, how string) (bool, *Handled, error) {
+	r, err := h.conn.Handled(ctx, key, how, false)
+	if err != nil {
+		return false, nil, err
+	}
+	var earlier *Handled
+	if e := r.GetEarlier(); e != nil {
+		earlier = handledFromPB(e)
+	}
+	return r.GetClaimed(), earlier, nil
+}
+
+// Unhandled puts one back.
+func (h *Hosted) Unhandled(ctx context.Context, key string) error {
+	_, err := h.conn.Handled(ctx, key, "", true)
+	return err
+}
+
+// HandledOffers is the daemon's word that offers have been dealt with,
+// translated as it arrives.  One goroutine does the translating, started
+// on first use and ended by the stream ending.
+func (h *Hosted) HandledOffers() <-chan *Handled {
+	h.handledOnce.Do(func() {
+		h.handled = make(chan *Handled, 64)
+		go func() {
+			defer close(h.handled)
+			for n := range h.conn.HandledOffers() {
+				// Not for ever: a reader that has stopped must not
+				// keep this goroutine after the stream has gone.
+				select {
+				case h.handled <- handledFromPB(n):
+				case <-h.conn.Done():
+					return
+				}
+			}
+		}()
+	})
+	return h.handled
+}
+
+func handledFromPB(n *pb.OfferHandled) *Handled {
+	out := &Handled{Key: n.GetOffer(), How: n.GetHow(), By: n.GetBy()}
+	if n.GetAt() != 0 {
+		out.At = time.UnixMicro(n.GetAt())
+	}
+	return out
+}

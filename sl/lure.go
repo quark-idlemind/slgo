@@ -51,6 +51,13 @@ type Lure struct {
 
 	// ID is the lure, and the only thing that can accept it.
 	ID msg.UUID
+
+	// Recorded says it arrived before this session attached, and is
+	// known only because slgod kept it.  See offers.go.
+	Recorded bool
+
+	// key is slgod's name for it; see Offer.
+	key string
 }
 
 func (l Lure) String() string {
@@ -67,7 +74,7 @@ func (l Lure) String() string {
 // noteLure keeps an offer, replacing any earlier one from the same
 // person: a second offer supersedes the first, and answering the stale
 // id sends the person somewhere they have stopped waiting.
-func (w *Session) noteLure(im *IM) {
+func (w *Session) noteLure(im *IM, key string, recorded bool) {
 	name := im.FromName
 	if name == "" {
 		name = w.NameOr(im.From)
@@ -78,6 +85,7 @@ func (w *Session) noteLure(im *IM) {
 	}
 	w.lures[im.From] = &Lure{
 		At: im.At, From: im.From, Name: name, Text: im.Text, ID: im.ID,
+		Recorded: recorded, key: key,
 	}
 	w.mu.Unlock()
 }
@@ -142,6 +150,14 @@ func (w *Session) AcceptLure(ctx context.Context, l *Lure) error {
 		return err
 	}
 
+	// Asked before anything else, so that an offer another client has
+	// already taken is refused before a teleport is waited for.  See
+	// offers.go.
+	undo, err := w.answering(ctx, l.key, "accepted")
+	if err != nil {
+		return err
+	}
+
 	m := &msg.TeleportLureRequest{}
 	m.Info.AgentID, m.Info.SessionID = w.agentBlock()
 	m.Info.LureID = l.ID
@@ -155,6 +171,7 @@ func (w *Session) AcceptLure(ctx context.Context, l *Lure) error {
 	defer watch.stop()
 
 	if err := w.Send(ctx, m); err != nil {
+		undo()
 		return err
 	}
 	w.ForgetLure(l)
@@ -171,11 +188,16 @@ func (w *Session) DeclineLure(ctx context.Context, l *Lure) error {
 	if l == nil {
 		return fmt.Errorf("sl: no teleport offer to decline")
 	}
+	undo, err := w.answering(ctx, l.key, "declined")
+	if err != nil {
+		return err
+	}
 	m := w.im(l.From, DialogLureDeclined, "")
 	// The lure rather than a fresh conversation: this answers the
 	// offer, and the other side matches it by that id.
 	m.MessageBlock.ID = l.ID
 	if err := w.Send(ctx, m); err != nil {
+		undo()
 		return err
 	}
 	w.ForgetLure(l)
@@ -207,6 +229,13 @@ type TeleportRequest struct {
 
 	// Text is what they said with it.
 	Text string
+
+	// Recorded says it arrived before this session attached, and is
+	// known only because slgod kept it.  See offers.go.
+	Recorded bool
+
+	// key is slgod's name for it; see Offer.
+	key string
 }
 
 func (r TeleportRequest) String() string {
@@ -222,7 +251,7 @@ func (r TeleportRequest) String() string {
 
 // noteTeleportRequest keeps one, replacing any earlier one from the
 // same person: asking twice is asking, not asking for two teleports.
-func (w *Session) noteTeleportRequest(im *IM) {
+func (w *Session) noteTeleportRequest(im *IM, key string, recorded bool) {
 	name := im.FromName
 	if name == "" {
 		name = w.NameOr(im.From)
@@ -233,6 +262,7 @@ func (w *Session) noteTeleportRequest(im *IM) {
 	}
 	w.tpRequests[im.From] = &TeleportRequest{
 		At: im.At, From: im.From, Name: name, Text: im.Text,
+		Recorded: recorded, key: key,
 	}
 	w.mu.Unlock()
 }
@@ -254,11 +284,55 @@ func (w *Session) TeleportRequests() []*TeleportRequest {
 	return out
 }
 
+// AnswerTeleportRequest says yes to one, which is offering them a
+// teleport here: the request carries no id to accept, and the viewer's
+// Yes button does exactly this (see OfferTeleport).  The note goes with
+// the offer.
+//
+// Another client of the same avatar may have answered it already, and
+// then nothing is sent and the error is an *AnsweredError; see
+// offers.go.
+func (w *Session) AnswerTeleportRequest(ctx context.Context, r *TeleportRequest, note string) error {
+	if r == nil {
+		return fmt.Errorf("sl: no teleport request to answer")
+	}
+	undo, err := w.answering(ctx, r.key, "answered with a teleport offer")
+	if err != nil {
+		return err
+	}
+	if err := w.OfferTeleport(ctx, r.From, note); err != nil {
+		undo()
+		return err
+	}
+	w.ForgetTeleportRequest(r)
+	return nil
+}
+
+// RefuseTeleportRequest says no to one.
+//
+// Nothing goes to the grid, because there is nothing to send: the
+// viewer's No button sends nothing at all, and the person who asked is
+// never told.  What it does is settle the question for every client of
+// this avatar -- slgod stops keeping it and the others stop listing it --
+// which is the difference between refusing one and merely forgetting it.
+func (w *Session) RefuseTeleportRequest(ctx context.Context, r *TeleportRequest) error {
+	if r == nil {
+		return fmt.Errorf("sl: no teleport request to refuse")
+	}
+	if _, err := w.answering(ctx, r.key, "refused"); err != nil {
+		return err
+	}
+	w.ForgetTeleportRequest(r)
+	return nil
+}
+
 // ForgetTeleportRequest drops one without answering it.
 //
 // Which is also what refusing one looks like on the wire, since the
 // grid has nothing to send for a refusal.  The difference is only
-// whether this shell goes on listing it.
+// whether this session goes on listing it -- and, since slgod began
+// keeping them, whether the other clients do: this tells nobody, and
+// RefuseTeleportRequest is the one that settles it for all of them.
 func (w *Session) ForgetTeleportRequest(r *TeleportRequest) {
 	if r == nil {
 		return

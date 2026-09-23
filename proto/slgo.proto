@@ -180,6 +180,30 @@ service Grid {
   // still decodes nothing.
   rpc NoteFriend(NoteFriendRequest) returns (NoteFriendResponse);
 
+  // Handled tells the server an offer it is keeping has been dealt
+  // with -- accepted, declined, or put aside for good -- so that it
+  // drops out of the record and out of every other client's list.
+  //
+  // The server keeps the offers that arrive for an avatar whether or
+  // not anybody is attached: a teleport offered, a request to be
+  // offered one, an item handed over, an offer of friendship, an
+  // invitation into a group.  Each is answered by quoting an id that
+  // arrives once and cannot be asked for again, and the daemon is the
+  // one thing that is always there to hear it; a client that attaches
+  // later is handed what is still waiting in Attached.offers.  That
+  // makes this the second place the server reads a message body, after
+  // the teleport and seat answers it reads for itself, and for the same
+  // reason: it is the session's business whether or not anybody is
+  // listening.
+  //
+  // A client calls it BEFORE sending its answer, and the answer says
+  // whether to go on.  Two clients attached to one avatar see the same
+  // offers, and the first to say it is dealing with one is the one
+  // that does; the second is told who got there first and how, and
+  // sends nothing.  A client whose answer then fails to go out calls
+  // again with undo, and the offer is put back for everybody.
+  rpc Handled(HandledRequest) returns (HandledResponse);
+
   // ViewerCredential mints a password a real viewer may log in with
   // ONCE, so that a session can be handed to a person without any
   // password being typed or stored anywhere.
@@ -433,7 +457,87 @@ message ServerPacket {
 
     // The answer to Slots or RenewSlots.
     SlotsGranted granted = 6;
+
+    // An offer the server was keeping has been dealt with, by this
+    // client or another, and is no longer waiting.  Sent to every
+    // client that subscribed to ImprovedInstantMessage, which is what
+    // every offer arrives in.  See Handled.
+    OfferHandled handled = 7;
   }
+}
+
+// OfferHandled says one offer is no longer waiting, and why.
+message OfferHandled {
+  // Offer is the server's name for it, as InboundMessage.offer gave it.
+  string offer = 1;
+
+  // How is what was done, in words for a person: "accepted",
+  // "declined", "refused".  The client that dealt with it chose them.
+  string how = 2;
+
+  // By is the client that dealt with it, as it named itself when it
+  // connected.  Empty means the server saw the answer go out without
+  // being told first -- a client too old to call Handled, or a viewer
+  // -- and cannot say which program sent it.
+  string by = 3;
+
+  // At is when, in microseconds since the epoch.
+  int64 at = 4;
+}
+
+// OfferRecord is the offers the server is keeping for an avatar, as they
+// stood when a client attached.
+message OfferRecord {
+  // Messages are the offers, each as the ImprovedInstantMessage it
+  // arrived in, oldest first, with offer and recorded set and
+  // received_at saying when it arrived.  A client reads them exactly as
+  // it reads the ones relayed live, so that nothing about what an offer
+  // is has to be understood on this side of the link.
+  repeated InboundMessage messages = 1;
+
+  // Since is when the server began keeping them for this avatar, in
+  // microseconds since the epoch.  An offer made before then -- while
+  // the daemon was down, or before it logged this avatar in -- is not
+  // in the record and cannot be.
+  int64 since = 2;
+
+  // Evicted is how many unanswered offers have been dropped to make
+  // room, oldest first, and limit is how many are kept.  An empty
+  // record with evicted above zero is not the same answer as an empty
+  // one with evicted at zero.
+  uint32 evicted = 3;
+  uint32 limit = 4;
+}
+
+message HandledRequest {
+  string agent = 1;
+
+  // Offer is the server's name for it, from InboundMessage.offer.
+  string offer = 2;
+
+  // How is what the client is doing about it, for other clients to
+  // read in OfferHandled.  Empty is taken as "dealt with".
+  string how = 3;
+
+  // Undo puts back an offer this client said it was handling and then
+  // could not: its answer never went out.  The offer is relayed again,
+  // marked recorded, to every client that subscribed to it.
+  bool undo = 4;
+}
+
+message HandledResponse {
+  // Claimed says this call is the one that took the offer out of the
+  // record.  A client goes on and sends its answer when it is true, and
+  // when it is false with no earlier -- the server was not keeping that
+  // offer, or no longer remembers it, which says nothing either way.
+  bool claimed = 1;
+
+  // Earlier is who dealt with it before this call did.  A client that
+  // gets one back sends nothing: the offer has been answered already.
+  OfferHandled earlier = 2;
+
+  // Restored says an undo found the offer and put it back.
+  bool restored = 3;
 }
 
 // SlotsGranted answers Slots and RenewSlots.
@@ -491,6 +595,18 @@ message InboundEvent {
 
 message Attached {
   AgentInfo agent = 1;
+
+  // Offers is what is still waiting for an answer, including whatever
+  // arrived while no client was attached.  Carried here rather than
+  // asked for, because only the attach itself can promise that nothing
+  // falls between the record and the live relay: an offer is either in
+  // this or relayed after it, and a client reading the record with a
+  // separate call could miss one arriving in between.
+  //
+  // Present only when the attach subscribed to ImprovedInstantMessage,
+  // and absent from a server too old to keep a record -- which a client
+  // should say, since without one it knows only what it saw arrive.
+  OfferRecord offers = 2;
 }
 
 message InboundMessage {
@@ -527,6 +643,17 @@ message InboundMessage {
   // which messages are worth echoing is decided by what clients ask for
   // and not by anything here knowing what an instant message is.
   string from_client = 7;
+
+  // Offer is the server's name for an offer it is keeping, when this
+  // message is one; empty for everything else.  A client quotes it to
+  // Handled.  It is opaque: a client that wants to know what the offer
+  // is reads the message.
+  string offer = 8;
+
+  // Recorded says this did not just arrive.  It is out of the server's
+  // record -- handed over at attach, or put back by an undo -- and a
+  // client should keep it as waiting without announcing it as news.
+  bool recorded = 9;
 }
 
 // AgentEvent is something that happened to the grid connection itself.

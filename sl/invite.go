@@ -144,6 +144,13 @@ type Invitation struct {
 	// on somebody's behalf has to tell them apart.
 	Fee    int32
 	Stated bool
+
+	// Recorded says it arrived before this session attached, and is
+	// known only because slgod kept it.  See offers.go.
+	Recorded bool
+
+	// key is slgod's name for it; see Offer.
+	key string
 }
 
 func (i *Invitation) String() string {
@@ -183,7 +190,7 @@ func inviteFee(b []byte) (fee int32, role msg.UUID, ok bool) {
 // An invitation with no sender is dropped rather than kept, because the
 // sender is the group: there is nowhere to send the answer, so there is
 // nothing a person could do with it but be puzzled.
-func (w *Session) noteInvitation(im *IM) {
+func (w *Session) noteInvitation(im *IM, key string, recorded bool) {
 	if im.From.IsZero() {
 		return
 	}
@@ -195,6 +202,7 @@ func (w *Session) noteInvitation(im *IM) {
 	w.invites[im.From] = &Invitation{
 		At: im.At, Group: im.From, By: im.FromName, Text: im.Text,
 		Transaction: im.ID, Role: role, Fee: fee, Stated: stated,
+		Recorded: recorded, key: key,
 	}
 	w.mu.Unlock()
 }
@@ -265,6 +273,17 @@ func (w *Session) DeclineInvitation(ctx context.Context, i *Invitation) error {
 // way every other instant message from here does, and nothing for the
 // text.
 func (w *Session) answerInvitation(ctx context.Context, i *Invitation, dialog uint8) error {
+	// Asked first, before anything a join costs: another client of the
+	// same avatar that has already answered this one means nothing
+	// goes, and no fee is paid twice.  See offers.go.
+	how := "accepted"
+	if dialog == DialogGroupInvitationDecline {
+		how = "declined"
+	}
+	undo, err := w.answering(ctx, i.key, how)
+	if err != nil {
+		return err
+	}
 	// To the group rather than to whoever invited: the group id is the
 	// only address in the invitation, and it is where the viewer sends
 	// its answer (llviewermessage.cpp:745).
@@ -273,6 +292,7 @@ func (w *Session) answerInvitation(ctx context.Context, i *Invitation, dialog ui
 	// the only thing tying the answer to the invitation.
 	m.MessageBlock.ID = i.Transaction
 	if err := w.Send(ctx, m); err != nil {
+		undo()
 		return err
 	}
 	w.ForgetInvitation(i)

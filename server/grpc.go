@@ -192,6 +192,13 @@ func (h *Hosted) relay(p *msg.Packet) {
 	// the same kind of fact and is wanted for the same reason.  See
 	// seat.go.
 	h.noteSeatMessage(p)
+	// And an offer, which is the whole reason for keeping them: one
+	// that arrives with nobody attached is exactly the one somebody
+	// starting a client later needs to hear about.  Before the fan-out
+	// as well as before the early return, because attach reads the
+	// record and adds a client under the lock the fan-out takes; see
+	// Hosted.attach.
+	offer := h.noteOffer(p)
 
 	h.mu.RLock()
 	if len(h.clients) == 0 {
@@ -224,6 +231,7 @@ func (h *Hosted) relay(p *msg.Packet) {
 		Sequence:   p.Header.Sequence,
 		Flags:      uint32(p.Header.Flags),
 		ReceivedAt: p.At.UnixMicro(),
+		Offer:      offer,
 	}
 	if info := msg.Lookup(p.ID); info != nil {
 		in.Name = info.Name
@@ -389,7 +397,7 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 		c.setSubs(&pb.Subscribe{Set: att.Subscribe})
 	}
 
-	h.attach(c)
+	offers := h.attach(c)
 	s.clients.Add(1)
 	defer func() {
 		c.closed.Store(true)
@@ -403,7 +411,7 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	}()
 
 	if err := stream.Send(&pb.ServerPacket{
-		Body: &pb.ServerPacket_Attached{Attached: &pb.Attached{Agent: h.info()}},
+		Body: &pb.ServerPacket_Attached{Attached: &pb.Attached{Agent: h.info(), Offers: offers}},
 	}); err != nil {
 		return err
 	}
@@ -892,6 +900,46 @@ func (s *Server) NoteFriend(ctx context.Context, req *pb.NoteFriendRequest) (*pb
 	}
 	h.Agent().NoteFriend(id, req.Online)
 	return &pb.NoteFriendResponse{}, nil
+}
+
+// Handled takes an offer out of the record on a client's word that it is
+// dealing with it, and tells every other client; or, with undo, puts
+// one back.  See offers.go, and the rpc in slgo.proto for the order a
+// client calls it in.
+func (s *Server) Handled(ctx context.Context, req *pb.HandledRequest) (*pb.HandledResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	if req.Offer == "" {
+		return nil, status.Error(codes.InvalidArgument, "which offer: Handled needs the name the relay gave it")
+	}
+	log := h.offerLog()
+	if req.Undo {
+		o, ok := log.restore(req.Offer)
+		if ok {
+			h.relayRestored(o)
+		}
+		return &pb.HandledResponse{Restored: ok}, nil
+	}
+	how := req.How
+	if how == "" {
+		how = "dealt with"
+	}
+	now := time.Now()
+	by := clientName(ctx)
+	claimed, earlier := log.claim(req.Offer, how, by, now)
+	if claimed {
+		// Every client, the caller among them.  It is told too because
+		// it is the same notice either way, and a client can tell its
+		// own claims from the answer it is holding.
+		h.tellHandled(&pb.OfferHandled{Offer: req.Offer, How: how, By: by, At: now.UnixMicro()})
+	}
+	out := &pb.HandledResponse{Claimed: claimed}
+	if earlier != nil {
+		out.Earlier = earlier.pb()
+	}
+	return out, nil
 }
 
 // Flush empties the object cache.

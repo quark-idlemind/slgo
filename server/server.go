@@ -18,7 +18,9 @@
 // without touching the grid session.
 //
 // With no client attached, inbound messages are acknowledged and
-// dropped.
+// dropped -- all but the offers that wait on a person, which are kept
+// until somebody deals with them, because a client attaching later is
+// otherwise never told they came.  See offers.go.
 package server
 
 import (
@@ -150,6 +152,12 @@ type Hosted struct {
 	// what makes the default deterministic; see Server.Default.
 	rank uint64
 
+	// offers is what has been offered to this avatar and not yet dealt
+	// with, kept whether or not anybody is attached.  It belongs to the
+	// Hosted rather than to the agent under it, so a session that is
+	// re-established keeps it.  See offers.go.
+	offers *offerLog
+
 	// Log is where anything worth a person's attention goes.  Nil is
 	// silence, which is what a test wants; cmd/slgod sets it.
 	Log func(format string, v ...any)
@@ -248,7 +256,8 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 		return nil, err
 	}
 
-	h := &Hosted{Name: name, login: login, clients: map[*Client]bool{}, seats: s.Seats()}
+	h := &Hosted{Name: name, login: login, clients: map[*Client]bool{}, seats: s.Seats(),
+		offers: newOfferLog(time.Now())}
 
 	// Keeping the undecoded body is what lets the relay pass on a
 	// message it does not understand.
@@ -290,6 +299,17 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 		}
 	} else {
 		opts.OnRegionChange = func(region string, handle uint64) { h.noteRegion(region, handle) }
+	}
+	// What this avatar sends, for the answers to offers the daemon is
+	// keeping that nobody announced first.  Chained for the reason the
+	// others are: slgod's trace wants it too.  See offers.go.
+	if caller := opts.SendTap; caller != nil {
+		opts.SendTap = func(p *msg.Packet) {
+			caller(p)
+			h.noteSent(p)
+		}
+	} else {
+		opts.SendTap = func(p *msg.Packet) { h.noteSent(p) }
 	}
 	h.opts = opts
 
@@ -550,7 +570,8 @@ func (s *Server) Add(name string, a *agent.Agent) (*Hosted, error) {
 		return nil, fmt.Errorf("server: %q is already hosted", name)
 	}
 	s.ranked++
-	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}, rank: s.ranked, seats: s.seats}
+	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}, rank: s.ranked, seats: s.seats,
+		offers: newOfferLog(time.Now())}
 	s.agents[name] = h
 	return h, nil
 }
@@ -677,10 +698,27 @@ func (s *Server) Stats() Stats {
 	return out
 }
 
-func (h *Hosted) attach(c *Client) {
+// attach adds a client, and hands back the offers still waiting when it
+// wants them.
+//
+// The two happen under one lock, and that is the point of doing them
+// together.  The relay records an offer before it takes this lock to
+// choose who to send it to, so an offer recorded after the record is
+// read here waits for the client to be added and is relayed to it, and
+// one recorded before is in the record.  Nothing can fall between.  A
+// client that read the record with a call of its own could not be
+// promised that, whichever side of the attach it asked on.
+func (h *Hosted) attach(c *Client) *pb.OfferRecord {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.clients[c] = true
-	h.mu.Unlock()
+	if !c.wants(imID) {
+		return nil
+	}
+	if h.offers == nil {
+		h.offers = newOfferLog(time.Now())
+	}
+	return h.offers.snapshot()
 }
 
 func (h *Hosted) detach(c *Client) {

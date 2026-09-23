@@ -46,6 +46,47 @@ waiting the numbers start again at one.
 Every kind leaves the listing as it is answered, whichever command
 answered it, so the count at the prompt falls by one.
 
+## What the listing is a record of
+
+Everything this shell has seen arrive, and -- through slgod -- the
+offers that arrived before it attached.
+
+slgod keeps five of the seven kinds whether or not any client is
+attached: teleports, requests for a teleport, items, friendship and
+group invitations.  A shell is handed whatever of those is still
+waiting when it attaches, and they are listed with the rest, marked
+`(from before this shell)` because nobody saw them arrive.  Starting a
+shell says how many there are.
+
+Dialogs and permission requests are not kept.  One raised before this
+shell attached is not known here; it is waiting in the world, and a
+viewer would show it.
+
+So an empty listing says what it is an account of, rather than
+`nothing waiting` alone, which reads as an answer:
+
+    nothing waiting -- slgod has kept every offer, teleport and invitation
+    made to this avatar since 09:14 and holds none unanswered; a script's
+    dialog or permission request from before this shell attached is not kept
+
+slgod's record starts when it logged the avatar in, and keeps the
+hundred most recent; when it has had to drop older ones, the line says
+how many.  Against a slgod too old to keep a record it says anything
+offered before the shell attached is not known here, and a shell that
+logged in with `--direct` has seen everything since its own login.
+
+## Another shell, or slbotd, on the same avatar
+
+Every client attached to the avatar is handed the same offers, and the
+first to answer one is the only one that does.  When another client
+answers something this shell is listing, it leaves the listing at once
+and a line says so:
+
+    12:03:04 * the teleport Example Resident offered was accepted by slbotd -- it is no longer waiting
+
+Answering one that another client answered a moment before is refused
+rather than sent twice, and says who answered it and how.
+
 ## Examples
 
     waiting

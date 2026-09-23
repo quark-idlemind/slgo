@@ -1120,8 +1120,10 @@ func TestOfferSaysWhoItOffered(t *testing.T) {
 func TestOffersListsBothKindsTogether(t *testing.T) {
 	x := newTestShell(t)
 
-	if got, want := x.do(t, "offers"), "no offers waiting\n"; got != want {
-		t.Errorf("offers printed %q, want %q", got, want)
+	// Said with what it is an account of, which here -- a backend with
+	// no daemon keeping a record -- is only what this shell saw.
+	if got := x.do(t, "offers"); !strings.HasPrefix(got, "no offers waiting -- ") {
+		t.Errorf("offers printed %q, want no offers waiting and what that means", got)
 	}
 	if got := x.do(t, "offers --help"); !strings.Contains(got, "offers") {
 		t.Errorf("offers --help printed %q", got)

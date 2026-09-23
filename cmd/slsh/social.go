@@ -197,6 +197,13 @@ func (sh *Shell) watch(ctx context.Context) {
 	// own and prints its own line as well -- see cmdTP for why both are
 	// wanted.
 	regions := sh.s.RegionChanges(0)
+	// An offer another client of this avatar has dealt with, which is
+	// gone from waiting as of now.  Said, because a number a person was
+	// about to type has just stopped meaning anything, and "there is no
+	// 3" a moment later would be the first they heard of it.
+	sh.s.OnHandled = func(h sl.Handled) {
+		sh.noticef("%s -- it is no longer waiting", h)
+	}
 	sh.s.OnDialog = func(d sl.Dialog) {
 		// A text box carries a sentinel where its buttons would be, and
 		// printing that at somebody is showing them the plumbing.
@@ -846,19 +853,28 @@ func cmdOffers(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	friends := sh.s.Offers()
 	items := sh.s.InventoryOffers()
 	if len(friends) == 0 && len(items) == 0 {
-		fmt.Fprintln(out, "no offers waiting")
+		fmt.Fprintf(out, "no offers waiting -- %s\n", sh.heardFrom(false))
 		return nil
 	}
 	for _, o := range friends {
-		fmt.Fprintf(out, "friendship  %-28s %s ago\n",
-			o.Name, time.Since(o.At).Round(time.Second))
+		fmt.Fprintf(out, "friendship  %-28s %s ago%s\n",
+			o.Name, time.Since(o.At).Round(time.Second), beforeShell(o.Recorded))
 	}
 	for _, o := range items {
-		fmt.Fprintf(out, "%-11s %-28s %s ago   from %s\n",
+		fmt.Fprintf(out, "%-11s %-28s %s ago   from %s%s\n",
 			o.Asset.String(), o.Name,
-			time.Since(o.At).Round(time.Second), o.FromName)
+			time.Since(o.At).Round(time.Second), o.FromName, beforeShell(o.Recorded))
 	}
 	return nil
+}
+
+// beforeShell marks an offer that arrived before this shell attached,
+// and is listed only because slgod kept it.
+func beforeShell(recorded bool) string {
+	if recorded {
+		return "   (from before this shell)"
+	}
+	return ""
 }
 
 func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

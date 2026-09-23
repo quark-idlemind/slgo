@@ -17,7 +17,7 @@ func TestATeleportRequestIsKeptAndReplaced(t *testing.T) {
 	w.noteTeleportRequest(&IM{
 		At: time.Now(), From: asker, FromName: "Example Resident",
 		Text: "may I come over", Dialog: DialogTeleportRequest,
-	})
+	}, "", false)
 	got := w.TeleportRequests()
 	if len(got) != 1 {
 		t.Fatalf("kept %d requests", len(got))
@@ -28,7 +28,7 @@ func TestATeleportRequestIsKeptAndReplaced(t *testing.T) {
 
 	w.noteTeleportRequest(&IM{
 		At: time.Now(), From: asker, FromName: "Example Resident", Text: "still there?",
-	})
+	}, "", false)
 	if got := w.TeleportRequests(); len(got) != 1 || got[0].Text != "still there?" {
 		t.Errorf("a second ask did not replace the first: %+v", got)
 	}

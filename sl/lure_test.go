@@ -19,7 +19,7 @@ func offered(w *Session) *Lure {
 		Text:     "Join me in Sandbox Goguen!",
 		Dialog:   22,
 		ID:       msg.MustParseUUID("0d817e57-7e57-c0de-7df5-71b55084a53f"),
-	})
+	}, "", false)
 	return w.Lures()[0]
 }
 

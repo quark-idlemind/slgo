@@ -696,6 +696,13 @@ func (sh *Shell) banner() {
 	}
 	sh.printf("slsh: %s in %s, %s", info.AvatarName, where, how)
 	sh.printf("      help for commands, chat to talk, %s to come back", KeyName(sh.cfg.Prefix))
+	// What slgod kept from before this shell attached, which is the
+	// thing somebody starting a shell after a while away most wants to
+	// hear and the one thing the prompt's count cannot tell them apart.
+	if n := sh.fromBefore(); n > 0 {
+		sh.printf("      %d %s from before this shell attached; waiting lists %s",
+			n, plural(n, "thing is waiting", "things are waiting"), plural(n, "it", "them"))
+	}
 	if sh.logErr != nil {
 		sh.printf("slsh: no transcript: %v", sh.logErr)
 	}

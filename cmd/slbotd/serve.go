@@ -22,6 +22,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -62,7 +63,23 @@ func (b *bot) serve(ctx context.Context, s *sl.Session) {
 	if h, ok := s.Backend().(*sl.Hosted); ok {
 		notices = h.Conn().Notices()
 	}
+	// What was handed over while this daemon was not attached, which
+	// slgod kept and the subscription above will never deliver: it is
+	// history, not news.  The same rule as for one that arrives now,
+	// because a trusted avatar's gift is no less wanted for having been
+	// made while this process was restarting.
+	b.takeKept(ctx, s)
 	b.read(ctx, s, ims, notices)
+}
+
+// takeKept answers the item offers slgod kept from before this daemon
+// attached, by the rule offered applies to one that arrives live.
+func (b *bot) takeKept(ctx context.Context, s *sl.Session) {
+	for _, o := range s.InventoryOffers() {
+		if o.Recorded {
+			b.take(ctx, o)
+		}
+	}
 }
 
 // read is the listening loop proper.
@@ -286,25 +303,6 @@ func (b *bot) obey(ctx context.Context, s *sl.Session, im *sl.IM, line string) {
 // tied to the session that can answer it, and the transaction id in it
 // is the only thing the simulator will match an acceptance against.
 func (b *bot) offered(ctx context.Context, s *sl.Session, im *sl.IM) {
-	who := b.whoSaid(s, im)
-	what := im.Text
-	if what == "" {
-		what = "something"
-	}
-
-	take := false
-	switch b.d.cfg.AcceptInventory {
-	case AcceptAnyone:
-		take = true
-	case AcceptTrusted:
-		take = b.d.cfg.Trusts(im.From, im.FromName)
-	case AcceptNobody:
-	}
-	if !take {
-		b.logf("%s offered %q; left waiting", who, what)
-		return
-	}
-
 	var offer *sl.InventoryOffer
 	for _, o := range s.InventoryOffers() {
 		if o.Transaction == im.ID {
@@ -314,9 +312,47 @@ func (b *bot) offered(ctx context.Context, s *sl.Session, im *sl.IM) {
 	}
 	if offer == nil {
 		// The session keeps every offer it has been sent, so this is
-		// not something that should happen; saying so is better than a
-		// gift that quietly went nowhere.
-		b.logf("%s offered %q but the session is not holding the offer", who, what)
+		// not something that should happen -- unless another client
+		// of this avatar answered it in the moment since it arrived,
+		// which slgod says and the session acts on.  Saying so is
+		// better than a gift that quietly went nowhere either way.
+		what := im.Text
+		if what == "" {
+			what = "something"
+		}
+		b.logf("%s offered %q but the session is not holding the offer", b.whoSaid(s, im), what)
+		return
+	}
+	b.take(ctx, offer)
+}
+
+// take is the rule itself: accept an offer from whoever the setting
+// says, and leave the rest.
+//
+// Another client of the same avatar -- a person in slsh -- may have
+// answered it first.  slgod says so, nothing is sent, and it is logged
+// as that rather than as a failure: the offer was dealt with, just not
+// here.
+func (b *bot) take(ctx context.Context, offer *sl.InventoryOffer) {
+	who := offer.FromName
+	if who == "" {
+		who = offer.From.String()
+	}
+	what := offer.Name
+	if what == "" {
+		what = "something"
+	}
+
+	take := false
+	switch b.d.cfg.AcceptInventory {
+	case AcceptAnyone:
+		take = true
+	case AcceptTrusted:
+		take = b.d.cfg.Trusts(offer.From, offer.FromName)
+	case AcceptNobody:
+	}
+	if !take {
+		b.logf("%s offered %q; left waiting", who, what)
 		return
 	}
 
@@ -326,6 +362,11 @@ func (b *bot) offered(ctx context.Context, s *sl.Session, im *sl.IM) {
 	accept, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if err := offer.Accept(accept, msg.UUID{}); err != nil {
+		var already *sl.AnsweredError
+		if errors.As(err, &already) {
+			b.logf("%s", already)
+			return
+		}
 		b.errf("could not accept %q from %s: %v", what, who, err)
 		return
 	}

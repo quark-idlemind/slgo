@@ -22,6 +22,10 @@ The refusal is a message, and it has to be sent or the offer stays
 pending on the other side with nobody told anything.  That is the
 difference between this and simply leaving an offer alone.
 
+If another client on the same avatar -- slbotd, another shell -- has
+already answered the offer, nothing is sent: slgod says who answered
+and how, and that is what is reported.
+
 The person is told which way it went.  An item declined does not
 arrive, and a friendship declined is not formed; neither can be undone
 from here, and the other side is free to offer again.

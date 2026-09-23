@@ -50,6 +50,7 @@ const (
 	Grid_Control_FullMethodName          = "/slgo.v1.Grid/Control"
 	Grid_Friends_FullMethodName          = "/slgo.v1.Grid/Friends"
 	Grid_NoteFriend_FullMethodName       = "/slgo.v1.Grid/NoteFriend"
+	Grid_Handled_FullMethodName          = "/slgo.v1.Grid/Handled"
 	Grid_ViewerCredential_FullMethodName = "/slgo.v1.Grid/ViewerCredential"
 )
 
@@ -201,6 +202,29 @@ type GridClient interface {
 	// server, which holds what a client restart would lose. The server
 	// still decodes nothing.
 	NoteFriend(ctx context.Context, in *NoteFriendRequest, opts ...grpc.CallOption) (*NoteFriendResponse, error)
+	// Handled tells the server an offer it is keeping has been dealt
+	// with -- accepted, declined, or put aside for good -- so that it
+	// drops out of the record and out of every other client's list.
+	//
+	// The server keeps the offers that arrive for an avatar whether or
+	// not anybody is attached: a teleport offered, a request to be
+	// offered one, an item handed over, an offer of friendship, an
+	// invitation into a group.  Each is answered by quoting an id that
+	// arrives once and cannot be asked for again, and the daemon is the
+	// one thing that is always there to hear it; a client that attaches
+	// later is handed what is still waiting in Attached.offers.  That
+	// makes this the second place the server reads a message body, after
+	// the teleport and seat answers it reads for itself, and for the same
+	// reason: it is the session's business whether or not anybody is
+	// listening.
+	//
+	// A client calls it BEFORE sending its answer, and the answer says
+	// whether to go on.  Two clients attached to one avatar see the same
+	// offers, and the first to say it is dealing with one is the one
+	// that does; the second is told who got there first and how, and
+	// sends nothing.  A client whose answer then fails to go out calls
+	// again with undo, and the offer is put back for everybody.
+	Handled(ctx context.Context, in *HandledRequest, opts ...grpc.CallOption) (*HandledResponse, error)
 	// ViewerCredential mints a password a real viewer may log in with
 	// ONCE, so that a session can be handed to a person without any
 	// password being typed or stored anywhere.
@@ -405,6 +429,16 @@ func (c *gridClient) NoteFriend(ctx context.Context, in *NoteFriendRequest, opts
 	return out, nil
 }
 
+func (c *gridClient) Handled(ctx context.Context, in *HandledRequest, opts ...grpc.CallOption) (*HandledResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HandledResponse)
+	err := c.cc.Invoke(ctx, Grid_Handled_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) ViewerCredential(ctx context.Context, in *ViewerCredentialRequest, opts ...grpc.CallOption) (*ViewerCredentialResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ViewerCredentialResponse)
@@ -563,6 +597,29 @@ type GridServer interface {
 	// server, which holds what a client restart would lose. The server
 	// still decodes nothing.
 	NoteFriend(context.Context, *NoteFriendRequest) (*NoteFriendResponse, error)
+	// Handled tells the server an offer it is keeping has been dealt
+	// with -- accepted, declined, or put aside for good -- so that it
+	// drops out of the record and out of every other client's list.
+	//
+	// The server keeps the offers that arrive for an avatar whether or
+	// not anybody is attached: a teleport offered, a request to be
+	// offered one, an item handed over, an offer of friendship, an
+	// invitation into a group.  Each is answered by quoting an id that
+	// arrives once and cannot be asked for again, and the daemon is the
+	// one thing that is always there to hear it; a client that attaches
+	// later is handed what is still waiting in Attached.offers.  That
+	// makes this the second place the server reads a message body, after
+	// the teleport and seat answers it reads for itself, and for the same
+	// reason: it is the session's business whether or not anybody is
+	// listening.
+	//
+	// A client calls it BEFORE sending its answer, and the answer says
+	// whether to go on.  Two clients attached to one avatar see the same
+	// offers, and the first to say it is dealing with one is the one
+	// that does; the second is told who got there first and how, and
+	// sends nothing.  A client whose answer then fails to go out calls
+	// again with undo, and the offer is put back for everybody.
+	Handled(context.Context, *HandledRequest) (*HandledResponse, error)
 	// ViewerCredential mints a password a real viewer may log in with
 	// ONCE, so that a session can be handed to a person without any
 	// password being typed or stored anywhere.
@@ -637,6 +694,9 @@ func (UnimplementedGridServer) Friends(context.Context, *FriendsRequest) (*Frien
 }
 func (UnimplementedGridServer) NoteFriend(context.Context, *NoteFriendRequest) (*NoteFriendResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method NoteFriend not implemented")
+}
+func (UnimplementedGridServer) Handled(context.Context, *HandledRequest) (*HandledResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Handled not implemented")
 }
 func (UnimplementedGridServer) ViewerCredential(context.Context, *ViewerCredentialRequest) (*ViewerCredentialResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ViewerCredential not implemented")
@@ -975,6 +1035,24 @@ func _Grid_NoteFriend_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Handled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HandledRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Handled(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Handled_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Handled(ctx, req.(*HandledRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_ViewerCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ViewerCredentialRequest)
 	if err := dec(in); err != nil {
@@ -1067,6 +1145,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "NoteFriend",
 			Handler:    _Grid_NoteFriend_Handler,
+		},
+		{
+			MethodName: "Handled",
+			Handler:    _Grid_Handled_Handler,
 		},
 		{
 			MethodName: "ViewerCredential",

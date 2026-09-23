@@ -218,6 +218,20 @@ type Session struct {
 	// WaitDialog for the other way to catch one.
 	OnDialog func(Dialog)
 
+	// OnHandled, if set, is called when an offer this session was
+	// holding is dealt with somewhere else -- by another client of
+	// the same avatar, which the daemon says -- and has been dropped.
+	// Not for the ones this session deals with itself.  See offers.go.
+	OnHandled func(Handled)
+
+	// record is what slgod said about the offers it keeps, and nil
+	// when it said nothing.  claims are the offers this session has
+	// told it it is answering, and gone the ones it has said somebody
+	// else answered; see offers.go for why each is needed.
+	record *OfferRecord
+	claims map[string]bool
+	gone   map[string]bool
+
 	// sendFn stands in for the connection, so that what a call puts
 	// on the wire can be read back without a grid to put it on.  Set
 	// by tests and by nothing else.
@@ -326,6 +340,9 @@ func New(b Backend) (*Session, error) {
 	w.ident.Store(info)
 	w.xfers = client.NewXfers(b)
 	w.transfers = client.NewTransfers(b)
+	// Before the reader, so that whatever the daemon kept is here by
+	// the time anybody can ask.  See offers.go.
+	w.loadKept()
 	go w.read(context.Background())
 	return w, nil
 }
@@ -468,6 +485,12 @@ func (w *Session) read(ctx context.Context) {
 	msgs := w.b.Messages()
 	events := w.b.Events()
 	regions := w.b.RegionChanges()
+	// The fourth relay, which only a daemon has: offers somebody has
+	// dealt with.  Nil blocks, as for the other two that may be absent.
+	var handled <-chan *Handled
+	if k, ok := w.b.(OfferKeeper); ok {
+		handled = k.HandledOffers()
+	}
 	defer func() {
 		close(w.readDone)
 		w.closeChat()
@@ -518,6 +541,13 @@ func (w *Session) read(ctx context.Context) {
 				continue
 			}
 			w.regionChanged(c)
+
+		case h, ok := <-handled:
+			if !ok {
+				handled = nil
+				continue
+			}
+			w.offerHandled(h)
 		}
 	}
 }

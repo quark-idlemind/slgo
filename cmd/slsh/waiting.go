@@ -116,6 +116,25 @@ func (w waiter) key() string {
 	return ""
 }
 
+// recorded is whether it arrived before this shell attached, and is
+// known only because slgod kept it.  Dialogs and permissions never are:
+// the daemon does not keep them.
+func (w waiter) recorded() bool {
+	switch {
+	case w.lure != nil:
+		return w.lure.Recorded
+	case w.asked != nil:
+		return w.asked.Recorded
+	case w.item != nil:
+		return w.item.Recorded
+	case w.friend != nil:
+		return w.friend.Recorded
+	case w.invite != nil:
+		return w.invite.Recorded
+	}
+	return false
+}
+
 // what a person sees: who is asking, and what for.
 func (w waiter) who() string {
 	switch {
@@ -316,6 +335,18 @@ func (sh *Shell) isIgnored(key string) bool {
 	return sh.ignoring[key]
 }
 
+// fromBefore is how many of them arrived before this shell attached,
+// and are known only because slgod kept them.
+func (sh *Shell) fromBefore() int {
+	n := 0
+	for _, w := range sh.waiters() {
+		if w.recorded() {
+			n++
+		}
+	}
+	return n
+}
+
 // waitingCount is what the prompt shows: the things not set aside.
 func (sh *Shell) waitingCount() int {
 	n := 0
@@ -365,8 +396,14 @@ func cmdWaiting(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 			continue
 		}
 		mark := ""
+		if w.recorded() {
+			// Worth a word: it was not seen arriving, and a person
+			// reading the list should not take it for something that
+			// has just come in.
+			mark = " (from before this shell)"
+		}
 		if ignored {
-			mark = " (ignored)"
+			mark += " (ignored)"
 		}
 		fmt.Fprintf(out, "%d  %-11s %s %s%s\n", w.n, w.kind, w.who(), w.asks(), mark)
 		fmt.Fprintf(out, "                %s\n", w.choices())
@@ -377,9 +414,53 @@ func cmdWaiting(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 			fmt.Fprintf(out, "nothing waiting; %d ignored, -a shows them\n", len(all))
 			return nil
 		}
-		fmt.Fprintln(out, "nothing waiting")
+		fmt.Fprintf(out, "nothing waiting -- %s\n", sh.heardFrom(true))
 	}
 	return nil
+}
+
+// heardFrom says what an empty listing is an account of.
+//
+// "nothing waiting" on its own reads as an answer, and it is only ever
+// as good as what there was to hear.  It used to be said about an avatar
+// with two group invitations sitting on it, because both had arrived
+// while no client was attached, and a person has no way to tell that
+// blind spot from an empty list unless the listing says which it is.
+//
+// scripts is whether the listing is one that would hold a dialog or a
+// permission request, which slgod does not keep; see server/offers.go.
+func (sh *Shell) heardFrom(scripts bool) string {
+	rec, ok := sh.s.OfferRecord()
+	switch {
+	case ok:
+		s := "slgod has kept every offer, teleport and invitation made to this avatar since " +
+			whenSaid(rec.Since) + " and holds none unanswered"
+		if rec.Evicted > 0 {
+			s += fmt.Sprintf(", though it dropped %d older %s to make room",
+				rec.Evicted, plural(rec.Evicted, "one", "ones"))
+		}
+		if scripts {
+			s += "; a script's dialog or permission request from before this shell attached is not kept"
+		}
+		return s
+	case sh.cfg.Direct:
+		return "this shell has held the session since it logged in, and has seen everything since"
+	}
+	return "this slgod keeps no record of offers, so anything offered before this shell " +
+		"attached is not known here"
+}
+
+// whenSaid is a moment for a sentence: the time alone if it was today,
+// the day as well if it was not.
+func whenSaid(t time.Time) string {
+	if t.IsZero() {
+		return "it started"
+	}
+	t = t.Local()
+	if y, m, d := t.Date(); y == time.Now().Year() && m == time.Now().Month() && d == time.Now().Day() {
+		return t.Format("15:04")
+	}
+	return t.Format("Mon 2 Jan 15:04")
 }
 
 type answerFlags struct {
@@ -451,10 +532,9 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		// what the viewer does with it too: its Yes button calls the
 		// same send_lures the menu item calls.  There is nothing else
 		// it could be -- the request carries no id to accept.
-		if err := sh.s.OfferTeleport(ctx, w.asked.From, ""); err != nil {
+		if err := sh.s.AnswerTeleportRequest(ctx, w.asked, ""); err != nil {
 			return err
 		}
-		sh.s.ForgetTeleportRequest(w.asked)
 		fmt.Fprintf(out, "offered %s a teleport here\n", w.who())
 
 	case w.lure != nil:
@@ -663,8 +743,12 @@ func cmdNo(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		// The grid has nothing to send for this one.  The viewer's No
 		// button does nothing at all -- no message, no notice -- so the
 		// person who asked is never told, and saying otherwise here
-		// would be inventing a refusal they will never see.
-		sh.s.ForgetTeleportRequest(w.asked)
+		// would be inventing a refusal they will never see.  What it
+		// does settle is slgod's record, so that no other client of
+		// this avatar goes on listing a question already answered.
+		if err := sh.s.RefuseTeleportRequest(ctx, w.asked); err != nil {
+			return err
+		}
 		fmt.Fprintf(out, "left %s unanswered; a teleport request cannot be declined, "+
 			"only ignored\n", w.who())
 	case w.item != nil:

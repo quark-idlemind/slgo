@@ -253,6 +253,14 @@ type Offer struct {
 	Name        string
 	Transaction msg.UUID
 
+	// Recorded says it arrived before this session attached, and is
+	// known only because slgod kept it.  See offers.go.
+	Recorded bool
+
+	// key is slgod's name for it, which is empty for an offer that
+	// did not come through a daemon keeping a record.
+	key string
+
 	w *Session
 }
 
@@ -272,11 +280,16 @@ func (o *Offer) String() string { return o.Name + " offers friendship" }
 // the friendship forms either way and the calling card is the part that
 // does not happen.
 func (o *Offer) Accept(ctx context.Context) error {
+	undo, err := o.w.answering(ctx, o.key, "accepted")
+	if err != nil {
+		return err
+	}
 	m := &msg.AcceptFriendship{}
 	m.AgentData.AgentID, m.AgentData.SessionID = o.w.agentBlock()
 	m.TransactionBlock.TransactionID = o.Transaction
 	m.FolderData = []msg.AcceptFriendship_FolderData{{}}
 	if err := o.w.Send(ctx, m); err != nil {
+		undo()
 		return err
 	}
 	o.w.forget(o.From)
@@ -286,10 +299,15 @@ func (o *Offer) Accept(ctx context.Context) error {
 // Decline refuses it.  The simulator has to be told, or the offer stays
 // pending on the other side.
 func (o *Offer) Decline(ctx context.Context) error {
+	undo, err := o.w.answering(ctx, o.key, "declined")
+	if err != nil {
+		return err
+	}
 	m := &msg.DeclineFriendship{}
 	m.AgentData.AgentID, m.AgentData.SessionID = o.w.agentBlock()
 	m.TransactionBlock.TransactionID = o.Transaction
 	if err := o.w.Send(ctx, m); err != nil {
+		undo()
 		return err
 	}
 	o.w.forget(o.From)
@@ -320,6 +338,13 @@ type InventoryOffer struct {
 	// Transaction is the offer's id, which the answer has to quote or
 	// the simulator will not match it to anything.
 	Transaction msg.UUID
+
+	// Recorded says it arrived before this session attached, and is
+	// known only because slgod kept it.  See offers.go.
+	Recorded bool
+
+	// key is slgod's name for it; see Offer.
+	key string
 
 	w *Session
 }
@@ -411,17 +436,32 @@ func (w *Session) forgetOffer(t msg.UUID) {
 // choosing.  A zero folder means the default one for that kind of
 // thing, which is what a viewer does when the person clicks Accept
 // rather than dragging it somewhere.
+//
+// Another client of the same avatar may have answered it already, and
+// then nothing is sent and the error is an *AnsweredError saying who;
+// see offers.go.
 func (o *InventoryOffer) Accept(ctx context.Context, into msg.UUID) error {
+	undo, err := o.w.answering(ctx, o.key, "accepted")
+	if err != nil {
+		return err
+	}
 	if err := o.w.AcceptInventoryOffer(ctx, o, into); err != nil {
+		undo()
 		return err
 	}
 	o.w.forgetOffer(o.Transaction)
 	return nil
 }
 
-// Decline refuses it.
+// Decline refuses it, unless another client got there first, as for
+// Accept.
 func (o *InventoryOffer) Decline(ctx context.Context) error {
+	undo, err := o.w.answering(ctx, o.key, "declined")
+	if err != nil {
+		return err
+	}
 	if err := o.w.DeclineInventoryOffer(ctx, o); err != nil {
+		undo()
 		return err
 	}
 	o.w.forgetOffer(o.Transaction)
@@ -571,8 +611,15 @@ func (w *Session) OnlineFriends(ctx context.Context) ([]Person, error) {
 // instantMessage routes one arriving message.
 func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMessage) {
 	b := m.MessageBlock
+	// When it arrived, which for one out of slgod's record was some
+	// while ago and is worth saying: the listing is in arrival order,
+	// and an offer kept overnight is not the newest thing waiting.
+	at := time.Now()
+	if raw != nil && raw.Recorded && !raw.At.IsZero() {
+		at = raw.At
+	}
 	im := &IM{
-		At:       time.Now(),
+		At:       at,
 		From:     m.AgentData.AgentID,
 		FromName: trimNul(b.FromAgentName),
 		Text:     trimNul(b.Message),
@@ -585,6 +632,16 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 	if raw != nil && raw.FromClient != "" {
 		im.Mine, im.Via = true, raw.FromClient
 	}
+	// slgod's name for it when it is an offer the daemon is keeping,
+	// and whether it came out of the record rather than off the wire.
+	var key string
+	var recorded bool
+	if raw != nil {
+		key, recorded = raw.Offer, raw.Recorded
+	}
+	w.mu.Lock()
+	keep := w.keepableLocked(key, recorded)
+	w.mu.Unlock()
 
 	// Everything below this line is about a message that ARRIVED: a
 	// name to learn, an offer to keep, a friendship to record.  None of
@@ -608,7 +665,7 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 	// A friendship offer is worth keeping rather than only
 	// delivering: whoever is listening may not be ready to answer,
 	// and the transaction id cannot be recovered afterwards.
-	if b.Dialog == DialogFriendshipOffered {
+	if keep && b.Dialog == DialogFriendshipOffered {
 		name := im.FromName
 		if name == "" {
 			name = w.NameOr(im.From)
@@ -618,36 +675,38 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 			w.offers = map[msg.UUID]*Offer{}
 		}
 		w.offers[im.From] = &Offer{
-			At: im.At, From: im.From, Name: name, Transaction: b.ID, w: w,
+			At: im.At, From: im.From, Name: name, Transaction: b.ID,
+			Recorded: recorded, key: key, w: w,
 		}
 		w.mu.Unlock()
 	}
 
 	// A teleport offer, kept for the same reason again: the lure id
 	// answers it and nothing else does.  See lure.go.
-	if b.Dialog == DialogTeleportLure {
-		w.noteLure(im)
+	if keep && b.Dialog == DialogTeleportLure {
+		w.noteLure(im, key, recorded)
 	}
 
 	// Somebody asking to be sent one, which is the other direction and
 	// is answered by OFFERING rather than by accepting.  Kept because
 	// it is a question waiting on a person, like the rest of these; it
 	// carries no id of its own, so who asked is the whole of it.
-	if b.Dialog == DialogTeleportRequest {
-		w.noteTeleportRequest(im)
+	if keep && b.Dialog == DialogTeleportRequest {
+		w.noteTeleportRequest(im, key, recorded)
 	}
 
 	// A group invitation, kept for the same reason again: the transaction
 	// answers it and nothing else does, and a group with enrolment
 	// closed cannot be joined any other way.  See invite.go.
-	if b.Dialog == DialogGroupInvitation {
-		w.noteInvitation(im)
+	if keep && b.Dialog == DialogGroupInvitation {
+		w.noteInvitation(im, key, recorded)
 	}
 
 	// An inventory offer is kept for the same reason: the transaction
 	// id is the only thing that can answer it, and it is not derivable.
-	if o, ok := InventoryOfferFrom(im); ok {
+	if o, ok := InventoryOfferFrom(im); keep && ok {
 		o.w = w
+		o.Recorded, o.key = recorded, key
 		if o.FromName == "" {
 			o.FromName = w.NameOr(o.From)
 		}
@@ -657,6 +716,16 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 		}
 		w.invOffers[o.Transaction] = o
 		w.mu.Unlock()
+	}
+
+	// Out of the record, it is not news: it is kept above and goes no
+	// further.  A subscriber that was handed it would announce as
+	// arriving now an offer made while nobody was listening, and one
+	// that acts on offers would act on it as though it had.  A program
+	// that wants to know what was waiting when it attached asks for the
+	// lists, where these are marked Recorded.
+	if recorded {
+		return
 	}
 
 	// Being told an offer of ours was taken up is the only notice

@@ -74,6 +74,13 @@ type fakeDaemon struct {
 	// attachFail refuses the attach, which is a daemon that is not
 	// holding the session that was asked for.
 	attachFail error
+
+	// offers is the record the Attached frame carries, nil for a
+	// daemon that keeps none; handled is every Handled asked of it,
+	// and handle what it answers with.
+	offers  *pb.OfferRecord
+	handled chan *pb.HandledRequest
+	handle  func(*pb.HandledRequest) *pb.HandledResponse
 }
 
 // newFakeDaemon starts one on loopback and attaches to it.
@@ -103,6 +110,7 @@ func dialFakeDaemon(t *testing.T) (*fakeDaemon, *client.Conn) {
 		relay:    make(chan *pb.ServerPacket, 8),
 		sent:     make(chan *pb.ClientPacket, 32),
 		noted:    make(chan *pb.NoteFriendRequest, 4),
+		handled:  make(chan *pb.HandledRequest, 8),
 	}
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -139,7 +147,7 @@ func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Serve
 	}
 	d.attached <- att.Agent
 	if err := s.Send(&pb.ServerPacket{Body: &pb.ServerPacket_Attached{
-		Attached: &pb.Attached{Agent: d.info},
+		Attached: &pb.Attached{Agent: d.info, Offers: d.offers},
 	}}); err != nil {
 		return err
 	}
@@ -250,6 +258,20 @@ func (d *fakeDaemon) NoteFriend(_ context.Context, r *pb.NoteFriendRequest) (*pb
 	}
 	d.noted <- r
 	return &pb.NoteFriendResponse{}, nil
+}
+
+func (d *fakeDaemon) Handled(_ context.Context, r *pb.HandledRequest) (*pb.HandledResponse, error) {
+	if d.fail != nil {
+		return nil, d.fail
+	}
+	select {
+	case d.handled <- r:
+	default:
+	}
+	if d.handle == nil {
+		return &pb.HandledResponse{Claimed: true}, nil
+	}
+	return d.handle(r), nil
 }
 
 func (d *fakeDaemon) Cap(context.Context, *pb.CapRequest) (*pb.CapResponse, error) {
