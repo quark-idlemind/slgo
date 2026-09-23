@@ -1,0 +1,121 @@
+# Questions for evaluating ask, phrased the way somebody who does not
+# know slsh's command names would type them.  Every question is
+# invented, and so is every name in one.  askcorpus_test.go has its own
+# shorter list, which pins individual rankings; this one is measured as
+# a whole, by askeval_test.go (retrieval, always) and
+# askeval_model_test.go (a model, when one is named).
+#
+# One question per line, tab-separated:
+#
+#   question <TAB> commands [<TAB> flags]
+#
+# commands  the command or commands that answer it, space-separated;
+#           any one of them counts as right.  "-" means slsh cannot do
+#           it, and the right answer is "not found".  Most of those are
+#           near misses: something beside a real command (paying beside
+#           give, banning beside parcel, resetting a script beside
+#           start) that the pages were read to confirm is not there.
+# flags     optional, space-separated: flags of which a right answer
+#           uses at least one.  Only the model eval looks at them.
+#
+# Blank lines and lines starting with # are ignored.  A question that
+# stops being right when a command changes is corrected here, in the
+# same change.
+
+# Inventory
+what is in this folder	ls
+show my inventory with the dates and ids of things	ls find	-l
+which items did I get most recently	ls	-t
+list everything in my inventory including what is in subfolders	ls	-r
+what is inside that box sitting on the floor	ls	--in
+open a notecard and read it	cat
+read the notecard that is inside a vendor	cat	--in
+copy an item so I have two of it	cp
+move an item into a different folder	mv
+I have three copies of something, delete only the newest one	rm	--newest
+which folder am I in right now	pwd
+go into my objects folder	cd
+search my whole inventory for anything called lamp	find
+make a new script in my inventory	new	--kind
+save a texture to my disk under a name I choose	get	-o
+
+# People
+show all my friends, not only the ones online	friends	-a
+what is the uuid of an avatar whose name I know	lookup	-l
+ask a friend to teleport me to them	lure	-a
+tell my friend where I am so they can come over	lure
+decline an item somebody tried to give me	decline no
+make a pending request stop being counted in my prompt without answering it	ignore
+friend requests and item offers I have not answered yet	offers waiting
+list the conversations I have open	talk
+switch into a mode where everything I type is chat	chat
+send a message on channel 7	say	-c
+
+# Places
+go to my home location	tp landmark	--home
+remember this spot as a landmark	landmark	--make
+travel to a place I saved a landmark for	landmark tp	--go
+show every parcel in this region	parcel	-r
+draw a map of the land parcels around me	parcel map	--map
+which regions border the one I am in	neighbours
+where on the grid is a region I have never been to	regions
+what are my exact coordinates	where
+what is the maturity rating and water height of this region	look
+does this region allow mesh uploads	features
+how many attachments can an avatar wear here	features
+
+# Objects and building
+list the objects that belong to one particular person	objects	--owner
+show the individual prims inside linked objects	objects	-c
+copy an object that is out in the world without removing it	take	--copy
+rez an item from inventory at a specific position	place	--at
+make one face of my object fullbright	texture	--fullbright
+give an object a glow	texture	--glow
+make a face half transparent	texture	--alpha
+click a particular face of a prim	touch	-f
+hold the mouse button down on an object for a few seconds	touch	-H --dwell
+make it so the next owner cannot modify what I sell them	perms	--next
+break a linked object apart into separate prims	unlink
+change a standing object so it matches a json file I edited	reform
+stop the scripts running in an object	stop
+
+# Wearing
+wear a hat on my left hand instead of my head	wear	--at
+swap out whatever is on that attachment point for something else	wear	--replace
+show the inventory keys of the things I have on	worn	-l
+put my whole outfit back on	dress
+
+# LSL
+list all the LSL events	lsl	-e
+print only the LSL constants	lsl	-c
+
+# The shell and the session
+what commands are there	help
+show me the manual page for a command	man help
+print a line of text	echo
+how is my connection to the simulator doing	status
+show the raw protocol messages as they come in	watch
+which capabilities did the simulator give this session	caps
+which avatars can this shell log in as	agents
+sign this avatar out	logout quit
+leave the shell	quit
+upload a picture but only show what would happen	put	-N --dry-run
+set up the worn objects that scripts get run in	auto	-n
+launch a graphical viewer logged in as this avatar	viewer	-l
+
+# Things slsh cannot do.  Each was looked for in the pages.
+pay another avatar a hundred linden dollars	-
+buy the parcel I am standing on	-
+ban an annoying avatar from my land	-
+send back all the objects other people left on my parcel	-
+reset a script so it starts over from the beginning	-
+create a brand new group	-
+change my display name	-
+take a screenshot of what my avatar sees	-
+make my avatar dance	-
+upload a sound clip	-
+list only the folders in my inventory, not the items	-
+set the music stream for my parcel	-
+change the time of day so it is sunset	-
+play a gesture	-
+edit what my own profile says about me	-
