@@ -658,6 +658,51 @@ func TestSomethingThatMovesIntoRangeIsAskedAbout(t *testing.T) {
 	}
 }
 
+// TestAParentNothingDescribedIsAskedFor: a child names its parent by
+// local id alone, and the region describes each object once.  A parent
+// whose description was lost is never sent again unasked, and nothing
+// under it can be placed -- a seat, and the avatar on it, and what the
+// avatar wears.
+func TestAParentNothingDescribedIsAskedFor(t *testing.T) {
+	t.Parallel()
+
+	a, sent := offlineSession(t)
+	a.SetLook(Look{Center: msg.Vector3{X: 128, Y: 128, Z: 30}, Far: 128})
+
+	m := &msg.ObjectUpdate{}
+	m.ObjectData = []msg.ObjectUpdate_ObjectData{
+		// Sitting on 900, which nobody has described.
+		{ID: 1, FullID: msg.UUID{15: 1}, PCode: 47, ParentID: 900,
+			ObjectData: placement(msg.Vector3{Z: 0.6}, msg.Quaternion{})},
+		// Its attachment: the parent is right here, so not asked for.
+		{ID: 2, FullID: msg.UUID{15: 2}, PCode: 9, ParentID: 1,
+			ObjectData: placement(msg.Vector3{X: 0.2}, msg.Quaternion{})},
+	}
+	feed(t, a, m)
+	sent.waitFor(t, 1)
+
+	asked := func() []uint32 {
+		var out []uint32
+		for _, sm := range sent.messages(t) {
+			if r, ok := sm.(*msg.RequestMultipleObjects); ok {
+				for _, d := range r.ObjectData {
+					out = append(out, d.ID)
+				}
+			}
+		}
+		return out
+	}
+	if got := asked(); len(got) != 1 || got[0] != 900 {
+		t.Fatalf("asked about %v, want just the seat", got)
+	}
+
+	// Not again while the answer is on its way.
+	feed(t, a, m)
+	if got := asked(); len(got) != 1 {
+		t.Errorf("asked %d times, want the one: %v", len(got), got)
+	}
+}
+
 // TestAPersonIsNeverDroppedForDistance: a region names each avatar once
 // and a standing one says nothing afterwards, so an avatar refused for
 // range is refused permanently -- three metres away and invisible.

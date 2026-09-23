@@ -87,9 +87,15 @@ shell that attached later is not at a disadvantage.
 What no one heard, no one can place.  That is what the folder is for:
 a thing nobody described is still listed, still named, and still comes
 off, with the first column left as `-` rather than a point invented for
-it.  Measured on Agni, an avatar whose daemon had lately reconnected
-had one attachment of ten described and the other nine only in the
-folder -- so this is the ordinary case and not an unusual one.
+it.
+
+Measured on Agni, an avatar sitting on a chair had one attachment of
+ten described and the other nine only in the folder.  That was not the
+region being quiet.  It had described all ten; the daemon had then
+thrown them away, because the chair itself had never been described
+and so nothing hanging off the avatar on it could be placed.  That is
+mended, and an avatar that has been logged in for a while should show
+nothing here.  A line that does is worth a look rather than a shrug.
 
 Clothing and body parts are not described by the region at all, in any
 circumstances.  They come from the folder alone.

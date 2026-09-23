@@ -281,3 +281,56 @@ func TestAnOrphanTheRegionKeepsMentioningIsKept(t *testing.T) {
 		t.Errorf("trimmed %d after the region went quiet about it, want 1", n)
 	}
 }
+
+// TestWhatASeatedPersonWearsOutlastsAnUndescribedSeat.
+//
+// A seated avatar's parent is its seat.  When nothing here had
+// described the seat, every attachment the avatar wore walked up
+// through the avatar into nothing, counted as an orphan, and went once
+// the region had been quiet about it for a minute -- which for
+// something worn is a minute after it went on.  The avatar itself is
+// never dropped, so neither is what it is wearing.
+func TestWhatASeatedPersonWearsOutlastsAnUndescribedSeat(t *testing.T) {
+	o := newObjects()
+	here := msg.Vector3{X: 128, Y: 128, Z: 30}
+
+	// Sitting on local 900, which nothing has described.
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 1, FullID: msg.UUID{15: 1}, PCode: 47, ParentID: 900,
+		ObjectData: placement(msg.Vector3{Z: 0.6}, msg.Quaternion{}),
+	}, here, 128)
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 2, FullID: msg.UUID{15: 2}, PCode: 9, ParentID: 1,
+		ObjectData: placement(msg.Vector3{X: 0.2}, msg.Quaternion{}),
+	}, here, 128)
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 3, FullID: msg.UUID{15: 3}, PCode: 9, ParentID: 2,
+		ObjectData: placement(msg.Vector3{X: 0.1}, msg.Quaternion{}),
+	}, here, 128)
+
+	// Long quiet, as anything worn is.
+	o.mu.Lock()
+	for _, v := range o.byID {
+		v.Last = time.Now().Add(-10 * orphanGrace)
+	}
+	o.mu.Unlock()
+
+	if n := o.Trim(here, 128); n != 0 {
+		t.Errorf("trimmed %d from a person sitting on something undescribed", n)
+	}
+	if o.Count() != 3 {
+		t.Errorf("%d kept, want the avatar and both prims", o.Count())
+	}
+
+	// A prim with no person above it is still an orphan, and still goes.
+	o.update(&msg.ObjectUpdate_ObjectData{
+		ID: 4, FullID: msg.UUID{15: 4}, PCode: 9, ParentID: 901,
+		ObjectData: placement(msg.Vector3{X: 1}, msg.Quaternion{}),
+	}, here, 128)
+	o.mu.Lock()
+	o.byID[msg.UUID{15: 4}].Last = time.Now().Add(-2 * orphanGrace)
+	o.mu.Unlock()
+	if n := o.Trim(here, 128); n != 1 {
+		t.Errorf("trimmed %d, want the one orphan that is on nobody", n)
+	}
+}

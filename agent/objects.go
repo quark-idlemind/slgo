@@ -307,18 +307,32 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 	for _, v := range o.byID {
 		byLocal[v.Local] = v
 	}
-	anchor := func(v *Object) (msg.Vector3, bool) {
+	//
+	// A walk that breaks off above a person is not an orphan.  A seated
+	// avatar's parent is its seat, and a seat is a prim like any other,
+	// so the walk carries on up into it -- and when the seat had not
+	// been described, every attachment the avatar wore used to count as
+	// an orphan and go a minute later.  The person is kept whatever
+	// happens (see pcodeAvatar), so what it wears is kept with it until
+	// the seat turns up and there is somewhere to judge them from.
+	// Measured on Agni: an avatar sitting on a chair nothing had
+	// described, all ten attachments described at 19:39 and none of
+	// them by 20:00, with the avatar never having moved.
+	anchor := func(v *Object) (at msg.Vector3, known, onPerson bool) {
 		for up := 0; up < 8; up++ {
+			if up > 0 && v.PCode == pcodeAvatar {
+				onPerson = true
+			}
 			if v.Parent == 0 {
-				return v.Position, true
+				return v.Position, true, onPerson
 			}
 			p := byLocal[v.Parent]
 			if p == nil {
-				return msg.Vector3{}, false
+				return msg.Vector3{}, false, onPerson
 			}
 			v = p
 		}
-		return msg.Vector3{}, false
+		return msg.Vector3{}, false, onPerson
 	}
 
 	n := 0
@@ -327,7 +341,10 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 			// See update: people are kept whatever the distance.
 			continue
 		}
-		at, known := anchor(v)
+		at, known, onPerson := anchor(v)
+		if !known && onPerson {
+			continue
+		}
 		if !known {
 			// An orphan: nothing here says where it is.  It goes once
 			// the region has stopped mentioning it, which is the only
@@ -589,6 +606,13 @@ func (o *Objects) byLocal(local uint32) (*Object, bool) {
 	return &c, true
 }
 
+// lacks says whether nothing here has this local id.
+func (o *Objects) lacks(local uint32) bool {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.byLocalLocked(local) == nil
+}
+
 func (o *Objects) byLocalLocked(local uint32) *Object {
 	for _, v := range o.byID {
 		if v.Local == local {
@@ -724,9 +748,13 @@ func (a *Agent) trackObjects() {
 	a.Disp.MustHandle("ObjectUpdate", func(p *msg.Packet) {
 		m := p.Message.(*msg.ObjectUpdate)
 		l := a.Look()
+		var parents []uint32
 		for i := range m.ObjectData {
-			a.Objects().update(&m.ObjectData[i], l.Center, l.Far)
+			d := &m.ObjectData[i]
+			a.Objects().update(d, l.Center, l.Far)
+			parents = a.orphaned(parents, d.ParentID)
 		}
+		a.askAfter(parents)
 	}, msg.Inline())
 
 	// ObjectUpdateCompressed is how most updates arrive after an
@@ -735,6 +763,7 @@ func (a *Agent) trackObjects() {
 	a.Disp.MustHandle("ObjectUpdateCompressed", func(p *msg.Packet) {
 		m := p.Message.(*msg.ObjectUpdateCompressed)
 		l := a.Look()
+		var parents []uint32
 		for i := range m.ObjectData {
 			c, err := msg.DecodeCompressed(m.ObjectData[i].Data)
 			if c == nil {
@@ -745,7 +774,11 @@ func (a *Agent) trackObjects() {
 			// worth nothing here beyond not trusting the tail.
 			_ = err
 			a.Objects().compressed(c, l.Center, l.Far)
+			if c.ParentID != nil {
+				parents = a.orphaned(parents, *c.ParentID)
+			}
 		}
+		a.askAfter(parents)
 	}, msg.Inline())
 
 	// ImprovedTerseObjectUpdate is the message the simulator sends
@@ -839,6 +872,36 @@ func (a *Agent) trackObjects() {
 			a.Objects().named(d.ObjectID, trimNul(d.Name), d.OwnerID)
 		}
 	}, msg.Inline())
+}
+
+// orphaned adds a parent to the list to ask after, if it is one this
+// store has never been told about and has not asked after lately.
+//
+// A child names its parent by local id and nothing more, and the region
+// describes each object once.  A parent whose description never arrived
+// -- lost in a packet this session could not read, or simply not sent
+// -- is never described again of its own accord, and everything under
+// it cannot be placed: a linkset's prims, or the avatar sitting on it
+// and everything that avatar wears.  Measured on Agni: a seat went
+// undescribed for as long as the session lasted, and one request by its
+// local id brought it back at once.
+//
+// The viewer keeps its orphans waiting for the parent rather than
+// asking; asking is cheaper than waiting for something that will not
+// come.
+func (a *Agent) orphaned(parents []uint32, parent uint32) []uint32 {
+	if parent == 0 || !a.Objects().lacks(parent) || !a.askAgain(parent) {
+		return parents
+	}
+	return append(parents, parent)
+}
+
+// askAfter asks for what orphaned collected, off the dispatch
+// goroutine as all asking is.
+func (a *Agent) askAfter(parents []uint32) {
+	if len(parents) > 0 {
+		go a.requestCachedObjects(parents)
+	}
 }
 
 // AskAgainAfter is how long to leave a local id alone once it has been

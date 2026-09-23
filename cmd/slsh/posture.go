@@ -139,11 +139,14 @@ func cmdSit(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		// that the avatar is already on that very object -- and can do
 		// without.
 		//
-		// It matters because the listing is not reliable.  Measured:
+		// It matters because the listing is not complete.  Measured:
 		// a chair plainly in world, sat on ten minutes earlier, absent
-		// from a listing of 976 objects because the packet describing
-		// it had been dropped as undecodable (issue 012).  Refusing to
-		// sit on an object whose id is right there, for want of a
+		// from a listing of 976 objects.  Nothing had described it
+		// since login and nothing would unasked -- a region describes
+		// each object once.  Why its description never arrived was not
+		// established; a packet thrown away as undecodable, which the
+		// decoder did at the time, is the likeliest reason.  Refusing
+		// to sit on an object whose id is right there, for want of a
 		// description of it, is refusing to do a thing that works.
 		id, bad := msg.ParseUUID(rest[0])
 		if bad != nil {

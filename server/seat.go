@@ -36,9 +36,12 @@ package server
 // parent is a LOCAL id, and turning one into an object means finding
 // that object in the region listing -- which is exactly what may be
 // missing.  Measured: an avatar seated on a chair, with the chair
-// absent from a listing of 976 objects because the packet describing it
-// had been thrown away as undecodable (issue 012).  The parent was
-// known, the seat was not, and there was nothing to write down.
+// absent from a listing of 976 objects.  The parent was known, the seat
+// was not, and there was nothing to write down.  Why the chair was
+// never described was not established -- a packet thrown away as
+// undecodable is the likeliest reason -- and the object store now asks
+// for a parent it has not heard of, but a watch that depends on a
+// description arriving is still at the mercy of one that does not.
 //
 // # Not knowing is not standing
 //
