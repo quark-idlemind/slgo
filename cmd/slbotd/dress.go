@@ -71,6 +71,14 @@ func (b *bot) keepDressed(ctx context.Context, s *sl.Session) {
 		if len(report.Worn) > 0 {
 			b.logf("put back on: %s", strings.Join(report.Worn, ", "))
 		}
+		if len(report.Doubled) > 0 {
+			// Adding is what makes this possible, and it is the
+			// trade for not knocking a garment off a shared point.
+			// Say so: nothing else will, since two attachments from
+			// one item are alike in every field.
+			b.errf("worn more than once, which detach undoes: %s",
+				strings.Join(report.Doubled, ", "))
+		}
 		if len(report.Missing) == 0 {
 			return
 		}

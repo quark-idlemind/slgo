@@ -828,7 +828,7 @@ func cmdDress(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	// anything else is: without it, a run that asked for six and
 	// confirmed none reads as an outfit that has gone, when in fact
 	// most of it was on the whole time.
-	if len(report.Worn) == 0 && len(report.Missing) == 0 {
+	if len(report.Worn) == 0 && len(report.Missing) == 0 && len(report.Doubled) == 0 {
 		fmt.Fprintf(out, "already wearing all %d of them\n", len(report.Already))
 		return nil
 	}
@@ -840,6 +840,10 @@ func cmdDress(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	}
 	if len(report.Missing) > 0 {
 		fmt.Fprintf(out, "asked for and not described: %s\n", strings.Join(report.Missing, ", "))
+	}
+	if len(report.Doubled) > 0 {
+		fmt.Fprintf(out, "worn more than once, which detach undoes: %s\n",
+			strings.Join(report.Doubled, ", "))
 	}
 	return nil
 }

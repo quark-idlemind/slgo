@@ -432,11 +432,14 @@ func TestDressPutsBackOnWhatTheOutfitNamesAndIsNotOn(t *testing.T) {
 	if m.ObjectData.ItemID != hat {
 		t.Errorf("dress asked for %v, want the hat %v", m.ObjectData.ItemID, hat)
 	}
-	// The point the object carries, and no add bit: the same request
-	// twice then replaces rather than doubling, which is what makes
-	// this safe on an avatar whose attachments cannot be seen.
-	if got := m.ObjectData.AttachmentPt; got != 0 {
-		t.Errorf("dress asked for point %d, want 0 with no add bit", got)
+	// The point the object carries, WITH the add bit.  A point holds
+	// more than one attachment and an ordinary outfit uses that -- a
+	// body, a dress and a pair of arms all sit on the chest -- so
+	// restoring with replace puts them on one after another and each
+	// knocks the last one off.  Seen on an avatar restored that way:
+	// she came back in her boots and her hair and nothing else.
+	if got, want := m.ObjectData.AttachmentPt, uint8(sl.AttachAdd); got != want {
+		t.Errorf("dress asked for point byte %d, want %d: the object's own point, added", got, want)
 	}
 
 	// The shirt is not an attachment and is not asked for: clothing is

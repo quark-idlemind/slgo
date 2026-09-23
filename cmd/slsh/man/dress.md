@@ -20,18 +20,31 @@ Only attachments.  Clothing and body parts are not attached and do not
 go missing at a login: the folder is what the baking service reads, and
 it has been read by the time the avatar is standing up.
 
-## It replaces rather than adds
+## It adds rather than replaces
 
-Because it cannot be sure what is on already.  What says an attachment
-is worn is the region's description of it, and that description can be
-missing -- so a version of this that added would put a second copy of
-everything on an avatar whose attachments it simply could not see, and
-two attachments from one item is the state `wear` refuses to create
-because nothing can then tell them apart.
+A point holds more than one attachment and an ordinary outfit uses
+that: a mesh body, a dress and a pair of arms all sit on the chest.
+So this adds, which is what a viewer does down the same path.
 
-Sending the point the object itself carries, without the add bit, makes
-the same request twice harmless: the second replaces the first on that
-point rather than joining it.
+It was written the other way round first, because replacing is
+self-limiting -- this cannot be sure what is on already, since what
+says an attachment is worn is the region's description of it and that
+description can be missing.  That is right about the risk and wrong
+about the cost: restoring with replace puts the chest items on one
+after another and each knocks the last one off.  Seen, on an avatar
+restored that way: she came back in her boots and her hair and nothing
+else.
+
+A duplicate is visible and costs a `detach`.  A garment silently lost
+is neither.
+
+So the duplicate is reported rather than prevented.  Anything the
+region describes twice is named at the end:
+
+    worn more than once, which detach undoes: a hat
+
+Two attachments from one item agree in every field a person could name
+one by, so nothing else is going to mention it.
 
 ## The report has three parts
 

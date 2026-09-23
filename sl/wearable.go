@@ -504,19 +504,30 @@ func (w *Session) folderVersion(ctx context.Context, folder msg.UUID) (int, erro
 // here did it at all, so an avatar dressed by this library came back
 // undressed at every login and stayed that way.
 //
-// # Why it replaces rather than adds
+// # Why it adds rather than replaces
 //
-// Because it cannot be sure what is already on.  What says an
-// attachment is worn is the region's description of it, and that
-// description can be missing -- so a restore that added would put a
-// second copy of everything on an avatar whose attachments it simply
-// could not see, and two attachments from one item is the state
-// wear refuses to create because nothing can then tell them apart.
+// It was written the other way round first, on the reasoning that
+// replacing is self-limiting: this cannot be sure what is already on,
+// since what says an attachment is worn is the region's description of
+// it and that description can be missing, so a restore that ADDED
+// might put a second copy of something it could not see.
 //
-// Sent with the point the object itself carries and without the add
-// bit, the same request twice is self-limiting: the second replaces the
-// first on that point rather than joining it.  It is also what the
-// viewer sends down this path.
+// That reasoning is right about the risk and wrong about the cost.  A
+// point holds more than one attachment and an ordinary outfit uses
+// that -- a mesh body, a dress and a pair of arms all sit on the chest
+// -- so restoring with replace puts them on one after another and each
+// knocks the last one off.  Measured, and seen: an avatar restored
+// that way came back in her boots and her hair and nothing else,
+// because the dress and the arms had fought over one point.
+//
+// A duplicate is visible and costs a detach.  A garment silently lost
+// is neither.  So this adds, which is also what the viewer does down
+// the same path -- addAttachmentRequest(item, 0, add=true) from
+// userAttachMultipleAttachments, llagentwearables.cpp:1610.
+//
+// The duplicate is reported rather than prevented: after the wait,
+// anything the region describes twice is named, because that is a
+// thing to go and undo and nothing else here will mention it.
 //
 // # Why it asks for everything at once
 //
@@ -529,7 +540,8 @@ func (w *Session) folderVersion(ctx context.Context, folder msg.UUID) (int, erro
 // what happened rather than that something did.
 type OutfitReport struct {
 	// Already were on before this started, Worn went on because of it,
-	// and Missing were asked for and never confirmed.
+	// Missing were asked for and never confirmed, and Doubled are worn
+	// more than once.
 	//
 	// Missing is not the same as failed.  The confirmation is the
 	// region describing the new object, and that description is the
@@ -539,6 +551,13 @@ type OutfitReport struct {
 	Already []string
 	Worn    []string
 	Missing []string
+
+	// Doubled is what the region describes more than one attachment
+	// of.  Adding is what makes that possible -- see the head of this
+	// section -- and it is named here because it is a thing to go and
+	// undo, and nothing else will mention it: two attachments from one
+	// item agree in every field a person could name one by.
+	Doubled []string
 }
 
 // RestoreOutfit puts on everything in the Current Outfit folder that is
@@ -557,7 +576,7 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 	if err != nil {
 		return nil, err
 	}
-	on, err := w.wornItems(ctx)
+	on, err := w.wornCounts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +587,7 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 		if l.Folder || !l.Found || l.Kind != AssetObject {
 			continue
 		}
-		if on[l.Item] {
+		if on[l.Item] > 0 {
 			report.Already = append(report.Already, l.Name)
 			continue
 		}
@@ -577,9 +596,9 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 			report.Missing = append(report.Missing, l.Name)
 			continue
 		}
-		// The point the object carries, and no add bit: see the head
-		// of this section for why replacing is the safe one here.
-		if err := w.AskToWear(ctx, it, 0); err != nil {
+		// The point the object carries, with the add bit: see the head
+		// of this section for why adding is the one to have.
+		if err := w.AskToWear(ctx, it, AttachAdd); err != nil {
 			return report, err
 		}
 		asked = append(asked, l)
@@ -593,12 +612,12 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 	// two.
 	deadline := time.Now().Add(timeout)
 	for {
-		if on, err = w.wornItems(ctx); err != nil {
+		if on, err = w.wornCounts(ctx); err != nil {
 			break
 		}
 		done := true
 		for _, l := range asked {
-			if !on[l.Item] {
+			if on[l.Item] == 0 {
 				done = false
 				break
 			}
@@ -611,10 +630,15 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 		}
 	}
 	for _, l := range asked {
-		if on[l.Item] {
+		if on[l.Item] > 0 {
 			report.Worn = append(report.Worn, l.Name)
 		} else {
 			report.Missing = append(report.Missing, l.Name)
+		}
+	}
+	for _, l := range outfit {
+		if on[l.Item] > 1 {
+			report.Doubled = append(report.Doubled, l.Name)
 		}
 	}
 	return report, nil
@@ -627,16 +651,21 @@ const (
 	restorePoll        = time.Second
 )
 
-// wornItems is the set of inventory items this avatar has attachments
-// from.
-func (w *Session) wornItems(ctx context.Context) (map[msg.UUID]bool, error) {
+// wornCounts is how many attachments this avatar has from each
+// inventory item.
+//
+// Counted rather than merely noted, because more than one is a state
+// worth reporting: it is what adding can leave behind, and two
+// attachments from one item agree in every field a person could name
+// one by.
+func (w *Session) wornCounts(ctx context.Context) (map[msg.UUID]int, error) {
 	worn, err := w.WornObjects(ctx)
 	if err != nil {
 		return nil, err
 	}
-	on := make(map[msg.UUID]bool, len(worn))
+	on := make(map[msg.UUID]int, len(worn))
 	for _, a := range worn {
-		on[a.Item] = true
+		on[a.Item]++
 	}
 	return on, nil
 }
