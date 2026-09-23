@@ -142,6 +142,10 @@ type Hosted struct {
 	homingID    uint64
 	homeAnswers chan homeAnswer
 
+	// homeTried is what the grid has said about getting this avatar
+	// home, kept across reconnects.  Guarded by mu.  See home.go.
+	homeTried homeTried
+
 	// seats is where this avatar's seat is remembered, and seating
 	// cancels the loop that restores and watches it.  Both nil when
 	// nothing is remembering.  See seat.go.

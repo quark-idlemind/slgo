@@ -12,23 +12,27 @@ package server
 // why nothing can rez.
 //
 // So a session that asked to start at home keeps asking to GO home
-// until it gets there, once a minute.  A region that was down comes
-// back and the avatar walks in on the next attempt with nobody
-// watching.
+// until it gets there, once a minute, for up to an hour.  A region that
+// was down comes back and the avatar walks in on the next attempt with
+// nobody watching.
 //
 // # How anything here knows whether it is home already
 //
 // It does not, and cannot: nothing in the protocol answers "where is
 // home", and the daemon has never been told.  What it can do is ask to
 // go there and read what the grid says, which is exactly what the first
-// attempt is for.  Three answers and they are all measured, in sl,
-// against Agni:
+// attempt is for.  Four answers, all of them measured in sl against
+// Agni -- the access refusal on a teleport to somewhere other than
+// home, and read here as meaning the same on the way home, which has
+// not been seen:
 //
 //   - a TeleportFinish, or a TeleportLocal: the avatar moved, so it is
 //     home now and there is nothing more to do.
 //   - a TeleportFailed carrying CouldntTPCloser: the grid will not
 //     shorten a teleport that arrives where it started, which is the
 //     grid's way of saying the avatar is already there.  Done.
+//   - a TeleportFailed carrying RegionTPAccessBlocked: not home, and
+//     never going to be by asking.  See below.
 //   - anything else, or silence: not home and not going, so wait a
 //     minute and ask again.
 //
@@ -45,6 +49,47 @@ package server
 //
 // Either way the avatar ends up at home and the loop stops, which is
 // all this needs, and it buys not having to know where home is.
+//
+// # When it stops without getting there
+//
+// Asking again is worth doing only for an obstacle that goes away, and
+// the one this loop was built for does: a region that is down comes
+// back, in minutes.  Not every refusal is that.
+//
+// RegionTPAccessBlocked is the grid's key for a region this avatar may
+// not enter.  It was measured for a maturity rating above what the
+// avatar may be shown, and the name says access in general; either way
+// it is the same answer every time it is asked, because nothing about
+// the avatar or the region changes by asking.  So that refusal stops
+// the loop at once, with one line naming the key and the grid's
+// sentence, and it is remembered: a reconnect does not ask again.  What
+// clears it is a client setting a new home, since the refusal was about
+// the old one, or the daemon restarting.
+//
+// Anything else -- no_host, which is a region that is down, or silence,
+// or a key nobody here has seen -- is asked about once a minute for an
+// hour, and then given up on with one line saying so and naming the
+// last answer.  An hour is well past how long a region takes to come
+// back; a refusal that has not changed in that time is not a region on
+// its way back up.
+//
+// The hour is an hour of ASKING, counted across reconnects until the
+// avatar gets home.  A session that reconnects every half hour would
+// otherwise start a fresh hour each time and never give up -- the same
+// loop for ever, by the back door.  Time between loops, while there is
+// no session to ask with, is not counted, so a session that was down
+// for a day does not come back having spent its hour.  Once the hour
+// is spent, each reconnect asks once more -- a fresh login is a fresh
+// question, and one request per login is what this has always cost --
+// and gives up again at once if that is refused.  Getting home resets
+// it all.
+//
+// What it says while it tries is the first answer, then any answer
+// that differs from the one before, then the line that gives up.  A
+// refusal that never changes is two lines in all: one saying it is not
+// home and why, and one an hour later saying it has stopped asking.
+// Saying it every tenth attempt, as this once did, was too often to be
+// quiet and too rare to notice.
 //
 // # Why a client teleporting stops it
 //
@@ -64,6 +109,9 @@ package server
 // a fresh login with "start = home" in it, so the same question is
 // being asked again by the same means, and whatever a client did with
 // the previous session was about a session that no longer exists.
+// What the GRID said is another matter, and is kept: the hour of asking
+// and an access refusal both outlive a reconnect, for the reasons in
+// the section above.
 
 import (
 	"bytes"
@@ -105,6 +153,33 @@ var homeSettle = 5 * time.Second
 // for it again on top of itself.
 var homeAnswerWait = 45 * time.Second
 
+// HomeLimit is how long to go on asking to go home, in all, before
+// giving up on it.
+//
+// An hour, because a region that is down is back well inside one, and
+// a refusal that has lasted longer than that is not one that the next
+// minute will change.  Counted across reconnects; see the head of this
+// file.
+var HomeLimit = time.Hour
+
+// homeClock is what the loop reads the time from.  A variable only so
+// that a test can spend an hour without waiting for one.
+var homeClock = time.Now
+
+// homeTried is what the grid has said about getting this avatar home,
+// kept on the Hosted rather than in one run of the loop because a
+// reconnect starts a new run and what the grid said still stands.  See
+// the head of this file.
+type homeTried struct {
+	// spent is how long has gone on asking without getting there,
+	// across every run of the loop since the avatar was last home.
+	spent time.Duration
+
+	// blocked is a refusal of access to the home region, which asking
+	// again will not change.  Zero when there has been none.
+	blocked agent.Refusal
+}
+
 // homeAnswer is what the grid said about the request to go home.
 type homeAnswer struct {
 	// arrived is a teleport that happened: the avatar is home.
@@ -125,6 +200,12 @@ type homeAnswer struct {
 // will not move it a shorter distance to prove it.
 func (a homeAnswer) already() bool {
 	return a.refusal.Key == agent.KeyCouldntTPCloser
+}
+
+// blocked is the refusal that means the avatar may not go into its home
+// region at all, and will be told so however many times it asks.
+func (a homeAnswer) blocked() bool {
+	return a.refusal.Key == agent.KeyRegionTPAccessBlocked
 }
 
 // keepHome starts the loop that asks to go home until it gets there,
@@ -153,11 +234,11 @@ func (h *Hosted) keepHome(ctx context.Context) {
 	h.mu.Unlock()
 
 	// The pace is read once, here, and carried into the loop.  A loop
-	// that read the three of them each time round would have its own
-	// timings change under it while it was running, which is a thing
-	// nobody would ever intend and which the race detector is right to
-	// object to.
-	go h.homeward(ctx, id, homePace{settle: homeSettle, retry: HomeRetry, answer: homeAnswerWait})
+	// that read them each time round would have its own timings change
+	// under it while it was running, which is a thing nobody would ever
+	// intend and which the race detector is right to object to.
+	go h.homeward(ctx, id, homePace{settle: homeSettle, retry: HomeRetry, answer: homeAnswerWait,
+		limit: HomeLimit, now: homeClock})
 }
 
 // finishedHoming forgets a loop that has ended of its own accord, so
@@ -175,12 +256,61 @@ func (h *Hosted) finishedHoming(id uint64) {
 }
 
 // homePace is how long one run of the loop waits at each of the three
-// points it waits at.  See keepHome for why it is a value and not three
+// points it waits at, how long it may go on asking in all, and the clock
+// it measures that by.  See keepHome for why it is a value and not
 // globals read as it goes.
 type homePace struct {
 	settle time.Duration
 	retry  time.Duration
 	answer time.Duration
+	limit  time.Duration
+	now    func() time.Time
+}
+
+// triedFor adds to the time spent asking, and says how much that is now
+// in all.
+//
+// Only for the run of the loop that is current: one a reconnect has
+// replaced is on its way out, and a count it added to would be counted
+// twice.
+func (h *Hosted) triedFor(id uint64, d time.Duration) time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.homingID == id {
+		h.homeTried.spent += d
+	}
+	return h.homeTried.spent
+}
+
+// cameHome forgets what the grid said on the way, because the avatar is
+// there: whatever kept it out has gone, and a later outage is a new one
+// with its own hour.
+func (h *Hosted) cameHome(id uint64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.homingID == id {
+		h.homeTried = homeTried{}
+	}
+}
+
+// refusedHome remembers a refusal of access, so that no later run of the
+// loop asks again to be told the same thing.
+func (h *Hosted) refusedHome(id uint64, r agent.Refusal) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.homingID == id {
+		h.homeTried.blocked = r
+	}
+}
+
+// forgetHome forgets everything the grid has said about getting home,
+// because home is somewhere else now: a client has set it.  A refusal
+// of the old home says nothing about the new one, and the next login
+// asks the question afresh.
+func (h *Hosted) forgetHome() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.homeTried = homeTried{}
 }
 
 // stopHoming ends the loop for the rest of this session, because
@@ -202,14 +332,32 @@ func (h *Hosted) stopHoming(why string) {
 	h.logf("no longer trying to get home: %s", why)
 }
 
-// homeward asks to go home until it does, or until something stops it.
+// homeward asks to go home until it does, until something stops it, or
+// until the grid has said no for long enough, or in a way, that asking
+// again is pointless.  See the head of this file for which.
 func (h *Hosted) homeward(ctx context.Context, id uint64, pace homePace) {
 	defer h.finishedHoming(id)
+
+	h.mu.RLock()
+	blocked := h.homeTried.blocked
+	h.mu.RUnlock()
+	if blocked.Key != "" {
+		// Said on every reconnect, because the reconnect is said and a
+		// session that comes up and does not go home would otherwise
+		// look like this loop having gone missing.
+		h.logf("not asking to go home: refused earlier for access (%s); not asking again until a client "+
+			"sets a new home or slgod restarts", blocked.Key)
+		return
+	}
 
 	if !sleepFor(ctx, pace.settle) {
 		return
 	}
 
+	// said is the answer last logged, so that the log carries the first
+	// answer and each change of answer rather than every one.
+	var said string
+	since := pace.now()
 	for attempt := 0; ; attempt++ {
 		answer, err := h.askForHome(ctx, pace.answer)
 		switch {
@@ -224,18 +372,35 @@ func (h *Hosted) homeward(ctx context.Context, id uint64, pace homePace) {
 		case answer.already():
 			// The ordinary case, and it says nothing: an avatar that
 			// came up at home is not news.
+			h.cameHome(id)
 			return
 		case answer.arrived:
+			h.cameHome(id)
 			h.logf("home, after %s", attempts(attempt+1))
+			return
+		case answer.blocked():
+			h.refusedHome(id, answer.refusal)
+			h.logf("giving up on getting home: the grid will not let this avatar into its home region (%s), "+
+				"a refusal of access that asking again will not change; not asking again until a client "+
+				"sets a new home or slgod restarts", answer.inFull())
 			return
 		}
 
-		// Said the first time and then rarely.  The first line is the
-		// one that explains a session standing in the wrong place; a
-		// line a minute after that would be the same sentence 1440
-		// times a day.
-		if attempt == 0 || attempt%10 == 0 {
-			h.logf("not home (%s); trying again every %s", answer.saidOrSilence(), pace.retry)
+		// The time is counted from before the request went out, so the
+		// wait for an answer is counted too: it is part of the asking.
+		now := pace.now()
+		spent := h.triedFor(id, now.Sub(since))
+		since = now
+		if spent >= pace.limit {
+			h.logf("giving up on getting home: refused for %s of asking, most recently %s; "+
+				"a reconnect will ask once more", spent.Round(time.Second), answer.saidOrSilence())
+			return
+		}
+
+		if this := answer.saidOrSilence(); this != said {
+			h.logf("not home (%s); asking again every %s, for up to %s more",
+				this, pace.retry, (pace.limit - spent).Round(time.Second))
+			said = this
 		}
 		if !sleepFor(ctx, pace.retry) {
 			return
@@ -389,6 +554,21 @@ func (a homeAnswer) saidOrSilence() string {
 		return a.refusal.Reason
 	}
 	return "the grid said nothing"
+}
+
+// inFull is the grid's key and its sentence both, for the line that
+// says the loop has stopped for good: that line is read once, by
+// somebody deciding what to do about it, and the sentence is what says
+// which of the causes behind one key it was.
+func (a homeAnswer) inFull() string {
+	r := a.refusal
+	switch {
+	case r.Key == "":
+		return a.saidOrSilence()
+	case r.Reason == "" || r.Reason == string(r.Key):
+		return string(r.Key)
+	}
+	return fmt.Sprintf("%s: %q", r.Key, r.Reason)
 }
 
 // attempts is "3 attempts" or "one attempt", for a line a person reads.

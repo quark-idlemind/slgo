@@ -511,6 +511,11 @@ func sendMessage(ctx context.Context, h *Hosted, c *Client, sentBy string, m *pb
 	if teleportRequest(id) {
 		h.stopHoming("a client teleported this avatar")
 	}
+	// And a client setting a new home makes whatever the grid said about
+	// getting to the old one beside the point.  See home.go.
+	if id == msg.IDOf(&msg.SetStartLocationRequest{}) {
+		h.forgetHome()
+	}
 
 	raw := msg.NewRaw(id, m.Body)
 	var err error

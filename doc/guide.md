@@ -201,8 +201,9 @@ session comes up in the wrong place, on land that is not yours, and
 the first sign of it is usually a rez that will not work.
 
 A session whose profile said `home` therefore keeps asking to go home
-until it gets there, once a minute. A region that was down comes back
-and the avatar walks in on the next attempt with nobody watching.
+until it gets there, once a minute, for up to an hour. A region that
+was down comes back and the avatar walks in on the next attempt with
+nobody watching.
 
 It cannot tell whether it is home already: nothing in the protocol
 answers "where is home", and the daemon has never been told. What it
@@ -216,6 +217,30 @@ closer to where it already is; both mean home, and the log says
 Where the avatar was NOT home, the same line appears once it gets
 there, with the number of attempts it took.
 
+**It stops asking when asking cannot help.** Every refusal names a key,
+the grid's word for why, and the log names it too: the first time the
+avatar is refused, the line begins `not home (` with the key in the
+brackets -- `no_host` is a region that is down -- and it is said again
+only if the answer changes. Then:
+
+- `RegionTPAccessBlocked` is a region this avatar may not enter, for
+  its maturity rating or its access, and it is the same answer however
+  often it is asked. The loop stops at once with a line beginning
+  `giving up on getting home:` that gives the key and the grid's own
+  sentence, and it does not ask again -- not after a reconnect either
+  -- until a client sets a new home or `slgod` restarts.
+- Anything else, including no answer at all, is asked about once a
+  minute for an hour, and then given up on with a line beginning
+  `giving up on getting home:` that names the last answer. A region
+  that is down is back well inside an hour.
+
+The hour is an hour of asking, and it is carried across reconnects
+until the avatar gets home: a session that reconnected every half hour
+would otherwise start a fresh hour each time and never stop. Once the
+hour is spent, each reconnect asks once more, since the region may be
+back, and gives up again at once if it is not. Getting home, or a
+client setting a new home, starts the count again.
+
 **A client teleporting the avatar stops it, for the rest of that
 session.** Somebody who types `tp` has taken the wheel, and a daemon
 that dragged the avatar home a minute later would be a poltergeist: the
@@ -225,7 +250,8 @@ on an arrival, so a teleport that is refused stops it too.
 
 A reconnect starts it again, and so does a restart: both are fresh
 logins with `start = home` in them, so the same question is being asked
-again by the same means.
+again by the same means. What the grid has said is kept across a
+reconnect, as above, and forgotten on a restart.
 
 Profiles that say anything else are left alone. `start = last` means
 where the avatar was, and dragging that avatar home would be the daemon
