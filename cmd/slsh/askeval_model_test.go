@@ -124,8 +124,8 @@ func askEvalModel(t *testing.T, client *llm.Client, model string, qs []askEvalQu
 			s.Unanswerable++
 		}
 
-		// The question's own deadline covers a retry too; the client's
-		// timeout is per request.
+		// askRun holds the whole question, retry and all, to the
+		// client's timeout, as it does in slsh; this is only a backstop.
 		ctx, cancel := context.WithTimeout(context.Background(), 2*timeout+10*time.Second)
 		// Asked the way the command asks it: "how" and the rest of the
 		// line (howQuestion), so that what is measured is what somebody

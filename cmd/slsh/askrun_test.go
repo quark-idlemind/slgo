@@ -141,8 +141,8 @@ func TestAskRunTimeoutCoversTheRetry(t *testing.T) {
 	t.Cleanup(slow.Close)
 
 	client := newAskClient(askConfig{URL: slow.URL, Timeout: each + each/2}, nil)
-	if askBudget(client) != each+each/2 {
-		t.Fatalf("budget %v", askBudget(client))
+	if client.Timeout() != each+each/2 {
+		t.Fatalf("timeout %v", client.Timeout())
 	}
 	start := time.Now()
 	res, err := askRun(context.Background(), client, askHomeQuestion, nil)
@@ -154,10 +154,5 @@ func TestAskRunTimeoutCoversTheRetry(t *testing.T) {
 	}
 	if d := time.Since(start); d > 2*each {
 		t.Errorf("took %v; the timeout was %v", d, each+each/2)
-	}
-
-	// A client made elsewhere is held to its requests' own timeouts.
-	if askBudget(llm.New(llm.Options{URL: slow.URL})) != 0 {
-		t.Error("a client newAskClient did not make has a budget")
 	}
 }

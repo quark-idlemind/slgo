@@ -50,12 +50,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"runtime"
 	"slices"
 	"strings"
-	"sync"
 	"time"
-	"weak"
 
 	"github.com/quark-idlemind/slgo/internal/askindex"
 	"github.com/quark-idlemind/slgo/internal/llm"
@@ -104,45 +101,22 @@ const (
 // llama-server, and that is a fact about that model, so it lives in the
 // setting rather than here.
 //
-// c.Timeout is for the whole question, however many requests it takes
-// (askRun and askBudget), and not for each request.
+// c.Timeout is for the whole question, however many requests it takes,
+// and not for each request: askRun holds the question to the client's
+// Timeout, and a question can be two requests -- the answer and the
+// retry -- so without that how_timeout=45s could mean ninety.
 func newAskClient(c askConfig, extra map[string]any) *llm.Client {
 	if strings.TrimSpace(c.URL) == "" {
 		return nil
 	}
-	d := c.Timeout
-	if d <= 0 {
-		d = llm.DefaultTimeout
-	}
-	client := llm.New(llm.Options{
+	return llm.New(llm.Options{
 		URL:         c.URL,
 		Model:       c.Model,
 		Slot:        c.Slot,
-		Timeout:     d,
+		Timeout:     c.Timeout, // zero is llm.DefaultTimeout
 		Temperature: 0,
 		Extra:       extra,
 	})
-	key := weak.Make(client)
-	askBudgets.Store(key, d)
-	runtime.AddCleanup(client, func(k weak.Pointer[llm.Client]) { askBudgets.Delete(k) }, key)
-	return client
-}
-
-// askBudgets is the time each client made by newAskClient allows one
-// question, all of it.  The client applies its timeout to each request,
-// and a question can be two -- the answer and the retry -- so without
-// this how_timeout=45s could mean ninety.  It is kept here, beside the
-// client rather than in it, because askRun is handed only the client;
-// the keys are weak, and go when the client does.
-var askBudgets sync.Map // weak.Pointer[llm.Client] -> time.Duration
-
-// askBudget is the time client allows one question, or 0 for a client
-// newAskClient did not make, which is held only to each request's own.
-func askBudget(client *llm.Client) time.Duration {
-	if v, ok := askBudgets.Load(weak.Make(client)); ok {
-		return v.(time.Duration)
-	}
-	return 0
 }
 
 // askRun answers one question.  client nil means retrieval only.
@@ -164,11 +138,10 @@ func askRun(ctx context.Context, client *llm.Client, question string, hints []as
 	if client == nil {
 		return res, nil
 	}
-	if d := askBudget(client); d > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, d)
-		defer cancel()
-	}
+	// The client's timeout is for the whole question, retry and all;
+	// see newAskClient.
+	ctx, cancel := context.WithTimeout(ctx, client.Timeout())
+	defer cancel()
 	if len(res.Candidates) == 0 {
 		// Nothing to show the model, and a model shown nothing can
 		// only invent.  This is the answer it would have been told to

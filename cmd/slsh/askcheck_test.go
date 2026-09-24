@@ -220,6 +220,71 @@ func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
 	}
 }
 
+// A line with the usage line's syntax copied into it is refused: the
+// shell would take "[-lN]" or "NAME|UUID" as an operand like any other.
+// Brackets and bars that are not the usage line's, and anything in
+// quotes, are values and pass.  The names in the passing lines are
+// invented.
+func TestCheckCommandLineRefusesUsageSyntax(t *testing.T) {
+	const tail = "write one real value, not the usage line's [..] or A|B"
+	for _, c := range []struct {
+		line string
+		want string // "" is taken
+	}{
+		// Copied whole from the usage line, as models were seen to.
+		{"put [-lN] [-d TEXT] FILE", `put: "[-lN]" is the usage line's [...]`},
+		{"unlink [-w SECONDS] NAME|UUID", `unlink: "[-w" is the usage line's [...]`},
+		{"unlink -w 5 NAME|UUID", `unlink: "NAME|UUID" is the usage line's A|B, which means one of them; ` + tail},
+		{"offer WHO [TEXT]", `offer: "[TEXT]" is the usage line's [...], which marks what may be left out; ` + tail},
+
+		// Half a group, a flag in brackets, a group with a bar in it.
+		{"put -d TEXT] FILE", `put: "TEXT]" is the usage line's [...]`},
+		{"put [-d photo] FILE", `"[-d" is the usage line's [...], which marks what may be left out; ` + tail + ", and a flag without the brackets"},
+		{"landmark [--go] Example Workshop", `"[--go]" is the usage line's [...]`},
+		{"man [NAME]", `man: "[NAME]" is the usage line's [...]`},
+		{"help [GROUP|all]", `help: "[GROUP|all]" is the usage line's [...]`},
+		{"tp Example [X Y Z]", `tp: "[X" is the usage line's [...]`},
+		{"say [-c CHANNEL] hello", `say: "[-c" is the usage line's [...]`},
+		{"say TEXT ...]", `say: "...]" is the usage line's [...]`},
+
+		// Alternatives: the usage line's own, or with its placeholder in.
+		{"neighbours on|off", `neighbours: "on|off" is the usage line's A|B`},
+		{"wear PATH|UUID", `wear: "PATH|UUID" is the usage line's A|B`},
+		{"take --into Objects Example|UUID", `take: "Example|UUID" is the usage line's A|B`},
+
+		// The placeholders alone are still what a person fills in.
+		{"unlink NAME", ""},
+		{"unlink UUID", ""},
+		{"put -d TEXT FILE", ""},
+		{"offer WHO TEXT", ""},
+		{"man NAME", ""},
+		{"cat --in OBJECT PATH", ""},
+
+		// Brackets and bars that are not the usage line's are text.
+		{"say [OOC] back soon", ""},
+		{"say this|that", ""},
+		{"say | on its own", ""},
+		{"say [-5] is a number", ""},
+		{"wear [Example]Hat", ""},
+
+		// And anything in quotes is a value written on purpose.
+		{`say "[TEXT]"`, ""},
+		{`unlink "NAME|UUID"`, ""},
+		{`wear "[Example] Hat|Blue"`, ""},
+		{`set how_extra '{"stop": ["[NAME]", "|"]}'`, ""},
+	} {
+		err := checkCommandLine(c.line)
+		switch {
+		case c.want == "" && err != nil:
+			t.Errorf("%q: refused: %v", c.line, err)
+		case c.want != "" && err == nil:
+			t.Errorf("%q: taken, want %q", c.line, c.want)
+		case c.want != "" && !strings.Contains(err.Error(), c.want):
+			t.Errorf("%q: %q, want it to say %q", c.line, err, c.want)
+		}
+	}
+}
+
 // The placeholders are the usage line's own capitalised words, and
 // nothing else.
 func TestAskPlaceholdersAreTheUsageLines(t *testing.T) {
@@ -321,6 +386,12 @@ func TestCheckQuoteFindsTheCommandsOwnWords(t *testing.T) {
 		// A name that shares a command quotes that command.
 		{"exit", "leave slsh"},
 		{"unsit", "unsit [-w SECONDS]"},
+		// A heading run into the paragraph under it, with the mark the
+		// prompt's "manual, HEADING:" puts between them, or another.
+		{"landmark", "A landmark is a point and not a place: What the asset holds is a region id"},
+		{"landmark", "A landmark is a point and not a place. What the asset holds"},
+		{"landmark", "--set-home: Make where this avatar is standing the place home is"},
+		{"landmark", "--set-home -- Make where this avatar is standing"},
 	} {
 		if err := checkQuote(c.command, c.quote); err != nil {
 			t.Errorf("%s %q: %v", c.command, c.quote, err)
@@ -341,6 +412,9 @@ func TestCheckQuoteRefusesWhatIsNotThere(t *testing.T) {
 		{"landmark", "--set-home", "too short"},
 		{"landmark", "the landmark", "too short"},
 		{"landmark", "Make where ... home", "too short"},
+		// A heading joined to a paragraph that is not the one under it.
+		{"landmark", "A landmark is a point and not a place: Make where this avatar is standing", "not in landmark's"},
+		{"landmark", "--home: Make where this avatar is standing", "not in landmark's"},
 		// Pieces that are there, in the wrong order.
 		{"landmark", "the place home is ... Make where this avatar is standing", "not in landmark's"},
 		// Nothing, and a command that is not one.

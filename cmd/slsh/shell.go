@@ -717,6 +717,15 @@ func (sh *Shell) banner() {
 // a separator and a shell that ate it would make those paths
 // untypeable.
 func parse(line string) (words []string, redirect string, appending bool, err error) {
+	words, _, redirect, appending, err = parseQuoted(line)
+	return words, redirect, appending, err
+}
+
+// parseQuoted is parse, and also, for each word, whether any of it was
+// in quotes.  Nothing a command runs needs to know; the checks on a
+// line a model wrote do (askcheck.go), because a quoted word is a value
+// somebody chose to write exactly as it stands.
+func parseQuoted(line string) (words []string, quotedWords []bool, redirect string, appending bool, err error) {
 	var cur []rune
 	var quoted, started bool
 	var quote rune
@@ -733,6 +742,7 @@ func parse(line string) (words []string, redirect string, appending bool, err er
 			wantFile = false
 		default:
 			words = append(words, word)
+			quotedWords = append(quotedWords, quoted)
 		}
 		cur, started, quoted = nil, false, false
 	}
@@ -760,7 +770,7 @@ func parse(line string) (words []string, redirect string, appending bool, err er
 				i++
 			}
 			if redirect != "" || wantFile {
-				return nil, "", false, fmt.Errorf("only one redirection per line")
+				return nil, nil, "", false, fmt.Errorf("only one redirection per line")
 			}
 			wantFile, want2 = true, appendMode
 		default:
@@ -769,13 +779,13 @@ func parse(line string) (words []string, redirect string, appending bool, err er
 		}
 	}
 	if quote != 0 {
-		return nil, "", false, fmt.Errorf("unclosed %c quote", quote)
+		return nil, nil, "", false, fmt.Errorf("unclosed %c quote", quote)
 	}
 	flush()
 	if wantFile && redirect == "" {
-		return nil, "", false, fmt.Errorf("no file after >")
+		return nil, nil, "", false, fmt.Errorf("no file after >")
 	}
-	return words, redirect, appending, nil
+	return words, quotedWords, redirect, appending, nil
 }
 
 // ---------------------------------------------------------------- commands

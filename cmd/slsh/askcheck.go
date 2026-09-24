@@ -29,12 +29,15 @@ package main
 // the flags are parsed -- "tp" alone takes a region, a position, or the
 // word home -- and the usage line's parameters are prose written for a
 // person rather than a grammar.  A check on them would refuse lines the
-// command takes.  What IS checked of every command is one thing about
-// them: that nothing after the first operand looks like a flag.  getopt
-// stops at the first operand, so "landmark Example Workshop --go" is a
-// request to read a landmark called "Example Workshop --go"; the shell
-// would take it without complaint and do something other than what the
-// model said it would.  That is exactly the case a checker is for.
+// command takes.  What IS checked of every command is two things about
+// them.  One is that nothing after the first operand looks like a flag:
+// getopt stops at the first operand, so "landmark Example Workshop --go"
+// is a request to read a landmark called "Example Workshop --go"; the
+// shell would take it without complaint and do something other than
+// what the model said it would.  That is exactly the case a checker is
+// for.  The other is that no operand is the usage line's own syntax copied
+// out as it stands -- "unlink NAME|UUID", "put [-lN] FILE" -- which the
+// shell would take as names in just the same way (checkNoUsageSyntax).
 //
 // # Operands from a list the shell holds
 //
@@ -73,6 +76,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -106,7 +110,7 @@ func checkCommandLine(line string) error {
 		// line is printed as it is once it passes.
 		return fmt.Errorf("the line has %U in it, which is not a character anybody types", r)
 	}
-	words, _, _, err := parse(line)
+	words, quoted, _, _, err := parseQuoted(line)
 	if err != nil {
 		return err
 	}
@@ -123,6 +127,9 @@ func checkCommandLine(line string) error {
 		// echo, which takes every word as it comes: there are no flags
 		// to get wrong, and "--help" is text.
 		return nil
+	}
+	if err := checkNoUsageSyntax(name, c, args, quoted[1:]); err != nil {
+		return err
 	}
 	if fix := askBeforeParse(c); fix != nil {
 		args = fix(args)
@@ -396,6 +403,78 @@ func checkNoFlagAfterOperands(name string, c *command, args, rest []string) erro
 	return nil
 }
 
+// checkNoUsageSyntax refuses a word copied out of the command's usage
+// line as syntax rather than filled in: a bracketed group, or half of
+// one, like "[-lN]", "[-d", "TEXT]" or "[NAME]", and an alternative
+// like "NAME|UUID" or "on|off".  The shell takes every one of them as
+// an operand -- "unlink NAME|UUID" goes looking for an object called
+// that -- so a line with one in it does something other than it seems
+// to say, while every other check passes it.
+//
+// Only what the usage line itself has counts, so that this refuses the
+// copying and not the characters: a bracketed flag, whatever it is,
+// since no flag is written with brackets; and otherwise a word whose
+// inside, brackets and a trailing "..." taken off, is a word of that
+// usage line or, for an alternative, has one of its placeholders in it.
+// "say [OOC] back soon" passes, and so does "say this|that", because
+// neither is in say's usage line.  A word with quotes anywhere in it is
+// not looked at at all: it is a value written as it stands on purpose,
+// such as a JSON value for set.  No example line in any man page has
+// brackets or a bar in it (TestEveryManPageExampleIsTakenByTheChecker).
+//
+// The shell's own capitalised placeholders, NAME and PATH alone, pass
+// here as they do everywhere else.
+func checkNoUsageSyntax(name string, c *command, args []string, quoted []bool) error {
+	usage := c.usage(name)
+	fields := askUsageFields(usage)
+	ph := askPlaceholders(usage)
+	for i, w := range args {
+		if quoted[i] {
+			continue
+		}
+		var what string
+		isFlag := false
+		inner := strings.TrimSuffix(strings.TrimRight(strings.TrimLeft(w, "["), "]"), "...")
+		alternatives := strings.Split(inner, "|")
+		switch {
+		case (strings.HasPrefix(w, "[") || strings.HasSuffix(w, "]")) &&
+			(askLooksLikeFlag(inner) || inner == "" && strings.Contains(w, "...") || fields[inner]):
+			what, isFlag = "[...], which marks what may be left out", askLooksLikeFlag(inner)
+		case len(alternatives) > 1 && !slices.Contains(alternatives, "") &&
+			(fields[inner] || slices.ContainsFunc(alternatives, func(a string) bool { return ph[a] })):
+			what = "A|B, which means one of them"
+		default:
+			continue
+		}
+		msg := fmt.Sprintf("%s: %q is the usage line's %s; write one real value, not the usage line's [..] or A|B", name, w, what)
+		if isFlag {
+			msg += ", and a flag without the brackets or not at all"
+		}
+		return errors.New(msg)
+	}
+	return nil
+}
+
+// askUsageFields is every word of a usage line with its brackets and a
+// trailing "..." taken off, whole and, where it has a bar in it, as each
+// of its alternatives: "[NAME|UUID]" is NAME|UUID, NAME and UUID.
+func askUsageFields(usage string) map[string]bool {
+	out := map[string]bool{}
+	for _, f := range strings.Fields(usage) {
+		f = strings.TrimSuffix(strings.TrimRight(strings.TrimLeft(f, "["), "]"), "...")
+		if f == "" {
+			continue
+		}
+		out[f] = true
+		for _, a := range strings.Split(f, "|") {
+			if a != "" {
+				out[a] = true
+			}
+		}
+	}
+	return out
+}
+
 // askLooksLikeFlag is a word getopt would have read as a flag had it
 // come first: a dash and something after it that is not a number.
 func askLooksLikeFlag(w string) bool {
@@ -456,6 +535,9 @@ func checkQuote(command, quote string) error {
 			return nil
 		}
 	}
+	if joined, ok := askJoinHeadings(page, pieces); ok && askInOrder(quoteNormal(page), joined) {
+		return nil
+	}
 	return fmt.Errorf("the quote %q is not in %s's man page, usage line or brief",
 		strings.TrimSpace(quote), command)
 }
@@ -475,6 +557,50 @@ func askQuoteSources(c *command) (page string, whole []string) {
 		}
 	}
 	return page, whole
+}
+
+// askJoinHeadings is pieces with the mark taken out that a model puts
+// between one of the page's headings and the paragraph under it, and
+// whether there was one to take out.
+//
+// The prompt shows a section's heading outside its text, as "manual,
+// Setting home:" (askUser), and a model quoting both writes "Setting
+// home: Make where ...", or puts a full stop or a dash there instead.
+// The page has the heading on a line of its own, which quoteNormal makes
+// "setting home make where ...", and no colon.  So where a piece starts
+// with a heading of the page -- a "#" line, or an option's "**--go**"
+// line -- followed by one of those marks, the mark goes.  The piece must
+// still be found whole, so this accepts a heading run into the paragraph
+// directly under it and never one joined to a paragraph from somewhere
+// else in the page.
+func askJoinHeadings(page string, pieces []string) ([]string, bool) {
+	var headings []string
+	for _, line := range strings.Split(page, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "**") {
+			if h := quoteNormal(line); h != "" {
+				headings = append(headings, h)
+			}
+		}
+	}
+	out := make([]string, len(pieces))
+	changed := false
+	for i, p := range pieces {
+		out[i] = p
+		for _, h := range headings {
+			rest, ok := strings.CutPrefix(p, h)
+			if !ok {
+				continue
+			}
+			body := strings.TrimLeft(rest, ":.- ")
+			if body == rest || body == "" || !strings.HasPrefix(rest, ":") && !strings.HasPrefix(rest, ".") && !strings.HasPrefix(rest, " -") {
+				continue
+			}
+			out[i], changed = h+" "+body, true
+			break
+		}
+	}
+	return out, changed
 }
 
 // askInOrder is whether every piece is in src, each after the last.

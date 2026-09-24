@@ -136,8 +136,22 @@ func TestDefaultsFillTheZeroValues(t *testing.T) {
 	if s.sent()["max_tokens"] != float64(DefaultMaxTokens) {
 		t.Errorf("max_tokens %v", s.sent()["max_tokens"])
 	}
-	if c.http.Timeout != DefaultTimeout {
-		t.Errorf("timeout %v", c.http.Timeout)
+	if c.http.Timeout != DefaultTimeout || c.Timeout() != DefaultTimeout {
+		t.Errorf("timeout %v, Timeout() %v", c.http.Timeout, c.Timeout())
+	}
+}
+
+// Timeout is the one the requests are held to.
+func TestTimeoutIsTheRequestsOwn(t *testing.T) {
+	for _, tc := range []struct{ set, want time.Duration }{
+		{0, DefaultTimeout},
+		{-time.Second, DefaultTimeout},
+		{45 * time.Second, 45 * time.Second},
+	} {
+		c := New(Options{URL: "http://127.0.0.1:1", Timeout: tc.set})
+		if c.Timeout() != tc.want || c.http.Timeout != tc.want {
+			t.Errorf("set %v: Timeout() %v, requests %v, want %v", tc.set, c.Timeout(), c.http.Timeout, tc.want)
+		}
 	}
 }
 

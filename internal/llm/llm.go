@@ -150,6 +150,11 @@ func New(o Options) *Client {
 // URL is the base the client asks, as it was cleaned up.
 func (c *Client) URL() string { return c.base }
 
+// Timeout is how long each request is allowed, DefaultTimeout where
+// Options left it zero.  A caller that makes more than one request for
+// one purpose can hold the whole of it to the same time with this.
+func (c *Client) Timeout() time.Duration { return c.o.Timeout }
+
 // Message is one turn of the conversation sent.
 type Message struct {
 	Role    string `json:"role"`
