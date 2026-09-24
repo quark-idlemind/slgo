@@ -226,3 +226,40 @@ func TestDecodeTerseAvatarTruncated(t *testing.T) {
 		t.Errorf("decoded to %+v", d)
 	}
 }
+
+// TestATerseRotationSentNegatedIsTheSameRotation: q and -q are one
+// rotation, the simulator sends either, and only the fourth component
+// says which it sent.  Measured on Agni, 2026-09-24: an avatar walking
+// north read as facing south on some walks, because W was thrown away
+// and recovered as positive, which for a -q is the mirror image.
+func TestATerseRotationSentNegatedIsTheSameRotation(t *testing.T) {
+	// A quarter turn anticlockwise about the vertical, facing north:
+	// (0, 0, sin 45, cos 45), sent as its negative.
+	s := float32(0.70710677)
+	w := &blobWriter{}
+	w.u32(7)
+	w.u8(0)
+	w.u8(0)
+	w.f32(10)
+	w.f32(20)
+	w.f32(30)
+	for range 6 {
+		w.u16(32767)
+	}
+	w.u16(quant16(0, -1, 1))
+	w.u16(quant16(0, -1, 1))
+	w.u16(quant16(-s, -1, 1))
+	w.u16(quant16(-s, -1, 1))
+	for range 3 {
+		w.u16(32767)
+	}
+
+	d, err := DecodeTerse(w.b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	near := func(got, want float32) bool { return got > want-0.001 && got < want+0.001 }
+	if !near(d.Rotation.Z, s) || !near(d.Rotation.W(), s) || !near(d.Rotation.X, 0) || !near(d.Rotation.Y, 0) {
+		t.Errorf("rotation = %+v with W %v, want Z and W both about %v", d.Rotation, d.Rotation.W(), s)
+	}
+}

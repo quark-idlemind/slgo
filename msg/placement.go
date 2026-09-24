@@ -175,12 +175,22 @@ func DecodeTerse(b []byte) (*Terse, error) {
 	const velMax = 128.0
 	t.Velocity = rd3(-velMax, velMax)
 	t.Acceleration = rd3(-velMax, velMax)
-	t.Rotation = Quaternion{
-		X: u16f(b[i:], -1, 1),
-		Y: u16f(b[i+2:], -1, 1),
-		Z: u16f(b[i+4:], -1, 1),
-	}
-	i += 8 // four components on the wire; W is recovered by normalising
+	// All four components are on the wire here, and the fourth is not
+	// only there to be thrown away.  The simulator does not keep W
+	// positive, and q and -q are the same rotation, so keeping X, Y and
+	// Z as they came and recovering W as positive -- which is what
+	// Quaternion does -- turns a -q into the mirror image of q: a yaw
+	// of plus a quarter turn read as minus one.  Measured on Agni,
+	// 2026-09-24, an avatar walking north read as facing south on some
+	// walks and not on others.  PackQuaternion normalises and puts the
+	// sign where Quaternion expects it.
+	t.Rotation = PackQuaternion(
+		u16f(b[i:], -1, 1),
+		u16f(b[i+2:], -1, 1),
+		u16f(b[i+4:], -1, 1),
+		u16f(b[i+6:], -1, 1),
+	)
+	i += 8
 	t.AngularVel = rd3(-velMax, velMax)
 	return t, nil
 }

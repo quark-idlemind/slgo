@@ -613,8 +613,12 @@ func TestATerseUpdateMovesSomethingAlreadyKnown(t *testing.T) {
 		t.Errorf("position = %+v, want %+v", got.Position, want)
 	}
 	// The rotation is sixteen bit fractions of minus one to one, so the
-	// ends of the range are exact.
-	if want := (msg.Quaternion{X: 1, Y: -1, Z: 1}); got.Rotation != want {
+	// ends of the range are exact: 1, -1, 1 and a W of -1.  That is not
+	// a unit quaternion but twice one, and its W is negative, so what is
+	// kept is it halved and turned round -- the same rotation, with the
+	// sign where a three-component Quaternion expects it.  Keeping the
+	// first three as they came would be a different rotation.
+	if want := (msg.Quaternion{X: -0.5, Y: 0.5, Z: -0.5}); got.Rotation != want {
 		t.Errorf("rotation = %+v, want %+v", got.Rotation, want)
 	}
 }
