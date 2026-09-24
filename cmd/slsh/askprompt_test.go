@@ -39,8 +39,8 @@ func TestThePromptShowsTheCommandsAndEndsWithTheQuestion(t *testing.T) {
 	for _, want := range []string{
 		"COMMAND landmark\n",
 		"usage: " + commands["landmark"].usage("landmark") + "\n",
-		"description: " + commands["landmark"].brief + "\n",
-		"from its manual, Options:\n\"\"\"\n**--set-home**",
+		"description:\n\"\"\"\n" + commands["landmark"].brief + "\n\"\"\"\n",
+		"manual, Options:\n\"\"\"\n**--set-home**",
 		"COMMAND tp\n",
 	} {
 		if !strings.Contains(u, want) {
@@ -65,6 +65,8 @@ func TestTheInstructionsSayWhatTheChecksEnforce(t *testing.T) {
 		"Never make up a command, a flag",
 		"word for word",
 		"flags come before everything else",
+		"where a flag takes a number, write a number", // getopt refuses "N"
+		"all from the same text",                      // checkQuote looks in one place
 		`"command_line"`, `"quote"`, `"found"`, `"suggestions"`,
 	} {
 		if !strings.Contains(askSystem, want) {
@@ -192,7 +194,7 @@ func TestTheSchemaNamesOnlyTheCommandsShown(t *testing.T) {
 	if err := json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprint(got.Required) != "[found answer suggestions]" {
+	if fmt.Sprint(got.Required) != "[found suggestions]" {
 		t.Errorf("required %v", got.Required)
 	}
 	sg := got.Properties.Suggestions
@@ -202,8 +204,28 @@ func TestTheSchemaNamesOnlyTheCommandsShown(t *testing.T) {
 	if fmt.Sprint(sg.Items.Properties.Command.Enum) != "[landmark tp]" {
 		t.Errorf("enum %v", sg.Items.Properties.Command.Enum)
 	}
-	if fmt.Sprint(sg.Items.Required) != "[command command_line why quote]" {
+	if fmt.Sprint(sg.Items.Required) != "[command command_line quote why]" {
 		t.Errorf("suggestion required %v", sg.Items.Required)
+	}
+
+	// The properties are in the order the model is to write them, which
+	// a Go map would have sorted: found before suggestions, and in a
+	// suggestion the command before its line and the line before the
+	// quote.
+	order := func(keys ...string) {
+		t.Helper()
+		at := -1
+		for _, k := range keys {
+			i := strings.Index(string(b), `"`+k+`":`)
+			if i <= at {
+				t.Errorf("%q is not after the property before it in %s", k, b)
+			}
+			at = i
+		}
+	}
+	order("found", "suggestions", "command", "command_line", "quote", "why")
+	if strings.Contains(string(b), `"answer"`) {
+		t.Errorf("an answer is asked for: %s", b)
 	}
 
 	// The field names the schema asks for are the ones the reply is read
@@ -223,13 +245,17 @@ func TestParseAskReplyForgivesWrapping(t *testing.T) {
 		"with a sentence": "Here is the answer:\n" + obj + "\nHope that helps.",
 		"after thinking":  "<think>\nThe person wants home.  {maybe tp}\n</think>\n\n" + obj,
 		"fenced, thought": "<think>hmm</think>\n```json\n" + obj + "\n```\n",
+		// The template opened the reasoning in the prompt, so only its
+		// close is in the reply, with a brace inside it.
+		"only a close": "The person wants {home}, so landmark.\n</think>\n\n" + obj,
+		"two blocks":   "<think>a {</think> <think>b }</think>\n" + obj,
 	} {
 		a, err := parseAskReply(text)
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue
 		}
-		if !a.Found || a.Answer != "Use landmark." || len(a.Suggestions) != 1 ||
+		if !a.Found || len(a.Suggestions) != 1 ||
 			a.Suggestions[0].CommandLine != "landmark --set-home" {
 			t.Errorf("%s: got %+v", name, a)
 		}
@@ -238,7 +264,7 @@ func TestParseAskReplyForgivesWrapping(t *testing.T) {
 
 func TestParseAskReplyTakesNotFound(t *testing.T) {
 	a, err := parseAskReply(`{"found": false, "answer": "slsh has no command for that.", "suggestions": []}`)
-	if err != nil || a.Found || len(a.Suggestions) != 0 || a.Answer == "" {
+	if err != nil || a.Found || len(a.Suggestions) != 0 {
 		t.Errorf("got %+v, %v", a, err)
 	}
 	a, err = parseAskReply(`{"found": false, "answer": "no", "suggestions": null}`)

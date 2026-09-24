@@ -44,6 +44,7 @@ package main
 // fits.
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -74,9 +75,15 @@ type askExcerpt struct {
 }
 
 // askAnswer is the reply asked for, as the schema below describes it.
+//
+// There is no free-text answer in it.  There was one, and nothing
+// printed it; what it did was give the model a sentence to write before
+// it had chosen anything -- and the instructions supplied the sentence,
+// "slsh has no command for that", ready to copy.  See askSchema.  A
+// reply that still carries one (an old prompt, a server that ignores
+// the schema) has it ignored.
 type askAnswer struct {
 	Found       bool            `json:"found"`
-	Answer      string          `json:"answer"`
 	Suggestions []askSuggestion `json:"suggestions"`
 }
 
@@ -116,19 +123,36 @@ func askEstimateTokens(s string) int {
 // point of writing it down: a model that follows it has its answers
 // printed, and one that does not has them thrown away.  The asking is
 // only so that less is thrown away.
+//
+// Three rules came from reading what the checks threw away (the eval's
+// per-question log, 2026-09-23, qwen3.5:4b and qwen3.5:2b): placeholders
+// for numbers ("--glow N"), which getopt refuses, where the usage line
+// had taught the model to write N; usage lines copied whole, brackets
+// and all; and quotes run on from one text into the next.  Saying so,
+// with the texts fenced (askUser), took the 4B from 73% right to 79%
+// and the 2B from 52% to 72%.
+//
+// The reply for "not found" is written out whole at the end.  A full
+// pair of worked examples, one found and one not, was measured too: it
+// kept the 2B from suggesting anything for a question nothing answers,
+// but cost the 4B three points of right and gave it wrong suggestions it
+// had not made without them, and the 4B is the better model.
 const askSystem = `You answer questions about slsh, a command shell that drives a Second Life avatar.  The person asking wants to know which slsh command does what they describe, and how to type it.
 
-You are shown some slsh commands.  Each has its usage line, a one-line description, and sometimes excerpts from its manual page.  For this answer, those are the only commands that exist.
+You are shown some slsh commands.  Each has its usage line, a one-line description, and sometimes excerpts from its manual page.  The description and each excerpt are between """ marks.  For this answer, those are the only commands that exist.
 
 Rules:
 - Suggest only commands that are shown, and only flags that appear in that command's usage line or excerpts.  Never make up a command, a flag, or what a flag does.
-- command_line is one line the person could type.  It starts with the command's name, and flags come before everything else.  Where the person has to fill something in, write the placeholder the usage line uses, in capitals, such as NAME or PATH.  Do not make up names.
-- quote is copied word for word from that same command's usage line, description or excerpts, and shows that it does what you say.  At least five words.  Do not change, shorten or join words in it.
-- If none of the shown commands does what was asked, set found to false, give no suggestions, and say in answer that slsh has no command for that.  That is a good answer.  A wrong command is a bad one.
-- At most three suggestions, best first.  answer is one or two plain sentences.
+- command_line is one line the person could type.  It starts with the command's name, and flags come before everything else.  Where the person has to fill something in, write a placeholder in capitals, such as NAME or PATH; but where a flag takes a number, write a number, such as 2.  Do not copy [ ] or | from the usage line: write only what would be typed.  Do not make up names.
+- quote is copied word for word from one text between """ marks of that same command, and shows that it does what you say.  At least five words, all from the same text.  Do not change, shorten or join words in it.
+- If none of the shown commands does what was asked, set found to false and give no suggestions.  That is a good answer.  A wrong command is a bad one.
+- At most three suggestions, best first.
 
 Reply with JSON only, in this shape:
-{"found": true, "answer": "...", "suggestions": [{"command": "...", "command_line": "...", "why": "...", "quote": "..."}]}`
+{"found": true, "suggestions": [{"command": "...", "command_line": "...", "quote": "...", "why": "..."}]}
+
+When no shown command does it, the whole reply is:
+{"found": false, "suggestions": []}`
 
 // askMessages is the prompt for one question: the instructions, and the
 // commands with the question after them.
@@ -154,18 +178,27 @@ func askMessages(question string, cands []askCandidate) ([]llm.Message, []askCan
 // excerpts are fenced with triple quotes so that a page's own "## "
 // headings and indented examples cannot be mistaken for the prompt's
 // structure.
+//
+// The brief is fenced the same way, on lines of its own, and the label
+// over an excerpt says "manual" and no more.  Both are for the quote.
+// With the brief on its "description:" line and each excerpt under
+// "from its manual, Options:", the smaller models quoted across the
+// joins -- "put on everything the Current Outfit folder names that is
+// not on from its manual" -- which checkQuote rightly refuses, since no
+// page says it; a quote has to come from one fenced text, and the
+// instructions now say which texts those are.
 func askUser(question string, cands []askCandidate) string {
 	var b strings.Builder
 	b.WriteString("Commands:\n")
 	for _, c := range cands {
 		fmt.Fprintf(&b, "\nCOMMAND %s\n", c.Name)
 		fmt.Fprintf(&b, "usage: %s\n", c.Usage)
-		fmt.Fprintf(&b, "description: %s\n", c.Brief)
+		fmt.Fprintf(&b, "description:\n\"\"\"\n%s\n\"\"\"\n", strings.TrimSpace(c.Brief))
 		for _, e := range c.Excerpts {
 			if e.Heading != "" {
-				fmt.Fprintf(&b, "from its manual, %s:\n", e.Heading)
+				fmt.Fprintf(&b, "manual, %s:\n", e.Heading)
 			} else {
-				b.WriteString("from its manual:\n")
+				b.WriteString("manual:\n")
 			}
 			fmt.Fprintf(&b, "\"\"\"\n%s\n\"\"\"\n", strings.TrimSpace(e.Text))
 		}
@@ -225,6 +258,27 @@ func askFit(question string, in []askCandidate, budget int) []askCandidate {
 // command_line cannot be constrained the same way -- its flags and
 // operands are free text as far as a schema goes -- which is why
 // checkCommandLine exists.
+//
+// The properties are in a fixed order (askObject), because a model
+// writes them in the order the grammar makes it, and what it writes
+// first it has decided by the time it writes the rest.  found is first
+// and is a bare boolean: the decision, with nothing to say before it.
+// Two other orders were measured and are not this one (2026-09-23,
+// Ollama, qwen3.5:4b and qwen3.5:2b with reasoning_effort none, the 82
+// questions of testdata/ask-questions.tsv):
+//
+//   - The map's own order, which is alphabetical and put a free-text
+//     "answer" first.  The model wrote its prose before choosing, and
+//     on questions a shown command did answer it often wrote "slsh has
+//     no command for that" -- the sentence the instructions offered --
+//     and then chose to agree with itself.
+//   - found last, after the suggestions.  More answers came through, but
+//     so did suggestions for questions nothing answers (not-found fell
+//     from 100% to 93% on the 4B and to 80% on the 2B), even when found
+//     was false and the suggestions were thrown away for it.
+//
+// Found first with the answer dropped kept not-found at 100% on both
+// and took the 4B's wrong kept suggestions from 7% of questions to 2%.
 func askSchema(cands []askCandidate) *llm.Schema {
 	command := map[string]any{"type": "string"}
 	if len(cands) > 0 {
@@ -236,13 +290,13 @@ func askSchema(cands []askCandidate) *llm.Schema {
 	}
 	suggestion := map[string]any{
 		"type": "object",
-		"properties": map[string]any{
-			"command":      command,
-			"command_line": map[string]any{"type": "string"},
-			"why":          map[string]any{"type": "string"},
-			"quote":        map[string]any{"type": "string"},
+		"properties": askObject{
+			{"command", command},
+			{"command_line", map[string]any{"type": "string"}},
+			{"quote", map[string]any{"type": "string"}},
+			{"why", map[string]any{"type": "string"}},
 		},
-		"required":             []string{"command", "command_line", "why", "quote"},
+		"required":             []string{"command", "command_line", "quote", "why"},
 		"additionalProperties": false,
 	}
 	most := askMaxSuggestions
@@ -253,15 +307,49 @@ func askSchema(cands []askCandidate) *llm.Schema {
 		Name: "slsh_answer",
 		Schema: map[string]any{
 			"type": "object",
-			"properties": map[string]any{
-				"found":       map[string]any{"type": "boolean"},
-				"answer":      map[string]any{"type": "string"},
-				"suggestions": map[string]any{"type": "array", "items": suggestion, "maxItems": most},
+			"properties": askObject{
+				{"found", map[string]any{"type": "boolean"}},
+				{"suggestions", map[string]any{"type": "array", "items": suggestion, "maxItems": most}},
 			},
-			"required":             []string{"found", "answer", "suggestions"},
+			"required":             []string{"found", "suggestions"},
 			"additionalProperties": false,
 		},
 	}
+}
+
+// askObject is a JSON object that keeps its keys in the order they are
+// written, which a Go map does not: encoding/json sorts a map's keys.
+// The order of a schema's properties is the order a server enforcing it
+// makes the model write them in, and so the order the model decides
+// things in.  See askSchema.
+type askObject []askField
+
+type askField struct {
+	Key   string
+	Value any
+}
+
+func (o askObject) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, f := range o {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		k, err := json.Marshal(f.Key)
+		if err != nil {
+			return nil, err
+		}
+		v, err := json.Marshal(f.Value)
+		if err != nil {
+			return nil, err
+		}
+		b.Write(k)
+		b.WriteByte(':')
+		b.Write(v)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
 }
 
 // askRetryMessages is the one second chance: the conversation so far,
@@ -337,13 +425,15 @@ func askFirstWord(line string) string {
 // and "the model said there is no such command" stay two things.
 func parseAskReply(text string) (askAnswer, error) {
 	s := text
-	// A reasoning block, closed or (cut off) not.
-	if i := strings.Index(s, "<think>"); i >= 0 {
-		if j := strings.Index(s[i:], "</think>"); j >= 0 {
-			s = s[:i] + s[i+j+len("</think>"):]
-		} else {
-			s = s[:i]
-		}
+	// A reasoning block, closed or (cut off) not.  Everything up to the
+	// last closing tag goes, whether or not the opening one is there:
+	// some chat templates write "<think>" into the prompt themselves, so
+	// that the reply starts inside the reasoning and only the close
+	// shows -- and reasoning is where a stray "{" is likeliest.
+	if i := strings.LastIndex(s, "</think>"); i >= 0 {
+		s = s[i+len("</think>"):]
+	} else if i := strings.Index(s, "<think>"); i >= 0 {
+		s = s[:i]
 	}
 	// A fence: whatever is between the first ``` line and the next.
 	if i := strings.Index(s, "```"); i >= 0 {

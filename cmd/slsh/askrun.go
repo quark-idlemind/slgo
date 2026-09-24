@@ -29,6 +29,20 @@ package main
 // suggestion; asking again would cost a second wait on a small model
 // for the chance of an alternative, and the likelier outcome of
 // pressing a model that has already guessed once is a second guess.
+//
+// # No second opinion
+//
+// A second, short question for each suggestion that passed the checks
+// -- "does this command do what they asked? yes or no" -- was tried as
+// a guard against a real command offered for something it does not do.
+// It said no to nearly everything: asked whether pwd, "print the current
+// inventory folder", tells somebody which folder they are in, qwen3.5:4b
+// said no, and when asked for a reason first, said that pwd is a Unix
+// command.  On the eval (2026-09-23, qwen3.5:4b and qwen3.5:2b) it cut
+// the questions answered right by half or more, so it is not here.
+// What guards against such a suggestion is the model's own found, asked
+// for first (askSchema), and honoured: suggestions written beside
+// found=false are dropped (askToCheck).
 
 import (
 	"bufio"
@@ -36,8 +50,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
+	"slices"
 	"strings"
+	"sync"
 	"time"
+	"weak"
 
 	"github.com/quark-idlemind/slgo/internal/askindex"
 	"github.com/quark-idlemind/slgo/internal/llm"
@@ -85,18 +103,46 @@ const (
 // {"chat_template_kwargs": {"enable_thinking": false}} under
 // llama-server, and that is a fact about that model, so it lives in the
 // setting rather than here.
+//
+// c.Timeout is for the whole question, however many requests it takes
+// (askRun and askBudget), and not for each request.
 func newAskClient(c askConfig, extra map[string]any) *llm.Client {
 	if strings.TrimSpace(c.URL) == "" {
 		return nil
 	}
-	return llm.New(llm.Options{
+	d := c.Timeout
+	if d <= 0 {
+		d = llm.DefaultTimeout
+	}
+	client := llm.New(llm.Options{
 		URL:         c.URL,
 		Model:       c.Model,
 		Slot:        c.Slot,
-		Timeout:     c.Timeout,
+		Timeout:     d,
 		Temperature: 0,
 		Extra:       extra,
 	})
+	key := weak.Make(client)
+	askBudgets.Store(key, d)
+	runtime.AddCleanup(client, func(k weak.Pointer[llm.Client]) { askBudgets.Delete(k) }, key)
+	return client
+}
+
+// askBudgets is the time each client made by newAskClient allows one
+// question, all of it.  The client applies its timeout to each request,
+// and a question can be two -- the answer and the retry -- so without
+// this how_timeout=45s could mean ninety.  It is kept here, beside the
+// client rather than in it, because askRun is handed only the client;
+// the keys are weak, and go when the client does.
+var askBudgets sync.Map // weak.Pointer[llm.Client] -> time.Duration
+
+// askBudget is the time client allows one question, or 0 for a client
+// newAskClient did not make, which is held only to each request's own.
+func askBudget(client *llm.Client) time.Duration {
+	if v, ok := askBudgets.Load(weak.Make(client)); ok {
+		return v.(time.Duration)
+	}
+	return 0
 }
 
 // askRun answers one question.  client nil means retrieval only.
@@ -118,11 +164,16 @@ func askRun(ctx context.Context, client *llm.Client, question string, hints []as
 	if client == nil {
 		return res, nil
 	}
+	if d := askBudget(client); d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
 	if len(res.Candidates) == 0 {
 		// Nothing to show the model, and a model shown nothing can
 		// only invent.  This is the answer it would have been told to
 		// give.
-		res.Answer = &askAnswer{Found: false, Answer: "no slsh command matches those words"}
+		res.Answer = &askAnswer{Found: false}
 		return res, nil
 	}
 
@@ -140,27 +191,65 @@ func askRun(ctx context.Context, client *llm.Client, question string, hints []as
 		return res, err
 	}
 	res.Answer = &ans
-	kept, rejected := filterAskAnswer(ans)
+	kept, rejected := filterAskAnswer(askToCheck(ans))
 	res.Kept, res.Rejected = kept, rejected
-	if len(rejected) == 0 || len(kept) > 0 {
-		return res, nil
+	if len(rejected) > 0 && len(kept) == 0 {
+		res.Retried = true
+		reply2, err := client.Chat(ctx, askRetryMessages(msgs, reply.Text, rejected), schema)
+		if err != nil {
+			return res, fmt.Errorf("asking again: %w", err)
+		}
+		res.PromptTokens += reply2.PromptTokens
+		ans2, err := parseAskReply(reply2.Text)
+		if err != nil {
+			return res, fmt.Errorf("asking again: %w", err)
+		}
+		res.Answer = &ans2
+		kept, rejected = filterAskAnswer(askToCheck(ans2))
+		res.Kept = kept
+		res.Rejected = append(res.Rejected, rejected...)
 	}
 
-	res.Retried = true
-	reply2, err := client.Chat(ctx, askRetryMessages(msgs, reply.Text, rejected), schema)
-	if err != nil {
-		return res, fmt.Errorf("asking again: %w", err)
-	}
-	res.PromptTokens += reply2.PromptTokens
-	ans2, err := parseAskReply(reply2.Text)
-	if err != nil {
-		return res, fmt.Errorf("asking again: %w", err)
-	}
-	res.Answer = &ans2
-	kept, rejected = filterAskAnswer(ans2)
-	res.Kept = kept
-	res.Rejected = append(res.Rejected, rejected...)
 	return res, nil
+}
+
+// askToCheck is the answer as askRun checks it: with its
+// suggestions taken away when the model said none of the commands does
+// it, and with each line mended by askMendLine.
+func askToCheck(a askAnswer) askAnswer {
+	if !a.Found {
+		a.Suggestions = nil
+		return a
+	}
+	out := make([]askSuggestion, len(a.Suggestions))
+	for i, s := range a.Suggestions {
+		s.CommandLine = askMendLine(s)
+		out[i] = s
+	}
+	a.Suggestions = out
+	return a
+}
+
+// askMendLine is a suggestion's line with the one slip put right that
+// can be put right without guessing: a line that leaves out the command
+// and starts at its flags -- "--home" where "landmark --home" was meant
+// -- when the suggestion names the command in its command field, which
+// the schema holds to the commands shown.  A "slsh " in front, the
+// shell's own name typed as if it were a command, comes off.  Nothing
+// else is touched, and the mended line goes through every check as if
+// the model had written it so.
+func askMendLine(s askSuggestion) string {
+	line := askCleanLine(s.CommandLine)
+	if rest, ok := strings.CutPrefix(line, "slsh "); ok {
+		line = strings.TrimSpace(rest)
+	}
+	name := strings.TrimSpace(s.Command)
+	if strings.HasPrefix(line, "-") && name != "" {
+		if _, ok := commands[name]; ok {
+			line = name + " " + line
+		}
+	}
+	return line
 }
 
 // askCandidatesFrom turns the index's hits into what the model is
@@ -194,11 +283,12 @@ func askCandidatesFrom(hits []askindex.CommandHit) []askCandidate {
 	return out
 }
 
-// askSkip is a command that is never an answer: ask itself.  Its page
-// is full of questions and of other commands' lines, so it matches
-// nearly every question asked, and "ask" is never what somebody asking
-// wanted to be told.
-func askSkip(name string) bool { return name == "ask" }
+// askSkip is a command that is never an answer: how itself, by the name
+// the command table gives it (howName), so that renaming it again cannot
+// leave this behind.  Its page is full of questions and of other
+// commands' lines, so it matches nearly every question asked, and "how"
+// is never what somebody asking wanted to be told.
+func askSkip(name string) bool { return name == howName }
 
 // askExcerptsOf is the excerpts for one command's matching documents.
 func askExcerptsOf(hits []askindex.Hit) []askExcerpt {
@@ -267,20 +357,6 @@ func askExampleLines(name string, matched []askindex.Hit, n int) []string {
 	return out
 }
 
-// askHintsName is the hints file's name, in the settings directory.
-const askHintsName = "ask-hints.tsv"
-
-// askHintsPath is where the hints file is looked for: beside the
-// settings file, since it is the same kind of thing -- this person's
-// own words for how they use the shell.
-func askHintsPath() (string, error) {
-	dir, err := ConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return dir + string(os.PathSeparator) + askHintsName, nil
-}
-
 // loadAskHints reads a hints file: one hint per line,
 //
 //	words<TAB>command [command...]
@@ -296,6 +372,11 @@ func askHintsPath() (string, error) {
 // and a shell that would not answer any question because of one stale
 // line is worse than one that ignores the line.  readAskHints says
 // which names were left out, for ask to warn about.
+//
+// A second name for a command -- exit for quit, unsit for stand -- is
+// taken as the name the index files that command under (askIndexName),
+// since a hint raises commands by the index's names and would otherwise
+// raise nothing.
 func loadAskHints(path string) ([]askindex.Hint, error) {
 	hints, _, err := readAskHints(path)
 	return hints, err
@@ -326,10 +407,12 @@ func readAskHints(path string) (hints []askindex.Hint, unknown []string, err err
 		}
 		var known []string
 		for _, c := range cmds {
-			if _, ok := commands[c]; ok {
-				known = append(known, c)
-			} else {
+			name, ok := askIndexName(c)
+			switch {
+			case !ok:
 				unknown = append(unknown, fmt.Sprintf("line %d: %s", n, c))
+			case !slices.Contains(known, name):
+				known = append(known, name)
 			}
 		}
 		if len(known) > 0 {
@@ -340,4 +423,20 @@ func readAskHints(path string) (hints []askindex.Hint, unknown []string, err err
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return hints, unknown, nil
+}
+
+// askIndexName is the name the index files the command called name
+// under, which for a command with two names is the one its man page has
+// (askCommands), and whether there is such a command at all.
+func askIndexName(name string) (string, bool) {
+	c, ok := commands[name]
+	if !ok {
+		return "", false
+	}
+	for _, ac := range askCommands() {
+		if ac.c == c {
+			return ac.name, true
+		}
+	}
+	return name, true
 }

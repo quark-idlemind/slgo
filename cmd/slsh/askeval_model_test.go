@@ -127,7 +127,10 @@ func askEvalModel(t *testing.T, client *llm.Client, model string, qs []askEvalQu
 		// The question's own deadline covers a retry too; the client's
 		// timeout is per request.
 		ctx, cancel := context.WithTimeout(context.Background(), 2*timeout+10*time.Second)
-		r, err := askRun(ctx, client, q.Question, nil)
+		// Asked the way the command asks it: "how" and the rest of the
+		// line (howQuestion), so that what is measured is what somebody
+		// typing the question would get.
+		r, err := askRun(ctx, client, howQuestion(strings.Fields(q.Question)), nil)
 		cancel()
 		if err != nil || r == nil || r.Answer == nil {
 			s.Errors++
@@ -179,9 +182,9 @@ func askEvalModel(t *testing.T, client *llm.Client, model string, qs []askEvalQu
 		for _, k := range r.Kept {
 			kept = append(kept, k.CommandLine)
 		}
-		t.Logf("%s %s:%d %q: %s; kept [%s], %d rejected, retried %v, %v",
+		t.Logf("%s %s:%d %q: %s; kept [%s], %d rejected, retried %v, found %v, %v",
 			model, askEvalFile, q.Line, q.Question, verdict,
-			strings.Join(kept, " | "), len(r.Rejected), r.Retried, r.Elapsed.Round(time.Millisecond))
+			strings.Join(kept, " | "), len(r.Rejected), r.Retried, r.Answer.Found, r.Elapsed.Round(time.Millisecond))
 		for _, rj := range r.Rejected {
 			t.Logf("    rejected %q: %s", rj.Suggestion.CommandLine, strings.Join(rj.Reasons, "; "))
 		}
