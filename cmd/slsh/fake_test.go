@@ -119,6 +119,12 @@ type fakeGrid struct {
 	controls  []uint32
 	onControl func(uint32)
 
+	// move is how the fake answers a walk, and faced and halts are the
+	// turns and stops it was asked for.  See walk_test.go.
+	move  func(sl.MoveRequest, func(sl.MoveProgress)) sl.MoveProgress
+	faced []float32
+	halts int
+
 	presence *sl.Presence
 	region   *sl.Region
 	objects  []*sl.Seen

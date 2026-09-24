@@ -117,12 +117,16 @@ var groups = []group{
 		// "unsit" is stand under another name and is not listed, since
 		// a listing that showed one command twice would say nothing
 		// extra about either.
+		//
+		// walk, face and halt follow them for the same reason: walking
+		// is the other way of getting this avatar over there, and the
+		// short one.
 		// maturity is here because the question it answers is asked
 		// about a place: an avatar refused entry to a region is told
 		// its maturity rating is wrong, and this is where somebody
 		// goes next.  What it sets belongs to the account rather than
 		// to the region, which is why it is also under avatars.
-		members: []string{"where", "parcel", "group", "invite", "maturity", "tp", "landmark", "sit", "stand", "who", "look", "map", "regions", "neighbours",
+		members: []string{"where", "parcel", "group", "invite", "maturity", "tp", "landmark", "sit", "stand", "walk", "face", "halt", "who", "look", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "dress", "move", "dump", "rez", "reform", "touch", "texture",
 			"take", "place", "perms", "drop", "fetch", "start", "stop", "link", "unlink"},

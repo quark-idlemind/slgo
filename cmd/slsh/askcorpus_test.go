@@ -218,6 +218,9 @@ var askQuestions = []askQuestion{
 	{"walk across the border into the next region", "neighbours", 3},
 	{"open a real viewer on this avatar", "viewer", 3},
 	{"what is waiting for me to answer", "waiting", 3},
+	{"walk over to that spot", "walk", 3},
+	{"turn to face somebody", "face", 3},
+	{"stop walking", "halt", 3},
 }
 
 // TestAskRetrieval asks the embedded index each question and checks
