@@ -230,3 +230,19 @@ func TestFaceAnswersWithTheHeading(t *testing.T) {
 		t.Errorf("a turn under a viewer gave %v", err)
 	}
 }
+
+// TestPostureIsTheAgents: a fresh session is standing, and an unknown
+// avatar is an error rather than a guess.
+func TestPostureIsTheAgents(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	got, err := r.srv.Posture(context.Background(), &pb.PostureRequest{Agent: "example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Posture != pb.PostureResponse_STANDING || got.SeatLocal != 0 || got.SeatId != "" {
+		t.Errorf("a fresh session: %+v", got)
+	}
+	if _, err := r.srv.Posture(context.Background(), &pb.PostureRequest{Agent: "nobody"}); err == nil {
+		t.Error("an avatar nobody holds had a posture")
+	}
+}

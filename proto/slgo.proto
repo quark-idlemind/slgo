@@ -193,6 +193,14 @@ service Grid {
   // Halt ends any walk and stops the avatar.
   rpc Halt(HaltRequest) returns (HaltResponse);
 
+  // Posture is whether the avatar is standing, sitting on the ground or
+  // sitting on something, as the daemon's own agent knows it.  A client
+  // that attached after the sit has not seen the animation that is the
+  // only evidence of a ground sit, nor necessarily the reparenting, and
+  // would otherwise guess; the agent has watched every one since login,
+  // and it is what a walk is refused on.
+  rpc Posture(PostureRequest) returns (PostureResponse);
+
   // Friends is who this avatar's friends are and which of them are
   // logged in.
   //
@@ -1071,6 +1079,21 @@ message FaceResponse {
 }
 
 message HaltRequest { string agent = 1; }
+
+message PostureRequest { string agent = 1; }
+
+message PostureResponse {
+  enum Posture {
+    STANDING = 0;
+    SITTING_ON_GROUND = 1;
+    SITTING_ON_OBJECT = 2;
+  }
+  Posture posture = 1;
+  // The seat, for SITTING_ON_OBJECT: its local id, always, and its uuid
+  // when the region has described it to this session.
+  uint32 seat_local = 2;
+  string seat_id = 3;
+}
 
 message HaltResponse {
   // Walking says whether a walk was under way.  The avatar is sent a

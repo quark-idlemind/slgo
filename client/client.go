@@ -967,6 +967,13 @@ func (c *Conn) Halt(ctx context.Context) (bool, error) {
 	return r.Walking, nil
 }
 
+// Posture asks slgod how the avatar is placed: standing, sitting on the
+// ground, or sitting on the object whose local id and (when described)
+// uuid come with it.
+func (c *Conn) Posture(ctx context.Context) (*pb.PostureResponse, error) {
+	return c.grid.Posture(ctx, &pb.PostureRequest{Agent: c.agentName()})
+}
+
 // agentName is the session this connection is attached to.
 func (c *Conn) agentName() string {
 	c.mu.RLock()

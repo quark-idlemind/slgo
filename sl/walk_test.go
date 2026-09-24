@@ -166,3 +166,36 @@ func newSession(t *testing.T, h *Hosted) *Session {
 	}
 	return w
 }
+
+func (d *fakeDaemon) Posture(context.Context, *pb.PostureRequest) (*pb.PostureResponse, error) {
+	if d.posture == nil {
+		return nil, status.Error(codes.Unimplemented, "method Posture not implemented")
+	}
+	return d.posture, nil
+}
+
+// TestSeatAsksTheDaemonsAgent: a session attached after the avatar sat on
+// the ground has seen no animation to say so, and the daemon's agent has.
+// Its answer is taken; standing is taken too, over anything the session
+// thought; and a daemon too old to be asked leaves the session's guess.
+func TestSeatAsksTheDaemonsAgent(t *testing.T) {
+	h, d := newFakeDaemon(t)
+	w := newSession(t, h)
+	ctx := context.Background()
+
+	d.posture = &pb.PostureResponse{Posture: pb.PostureResponse_SITTING_ON_GROUND}
+	seat, err := w.Seat(ctx)
+	if err != nil || seat == nil || !seat.Ground {
+		t.Errorf("sitting on the ground: %+v, %v", seat, err)
+	}
+
+	d.posture = &pb.PostureResponse{Posture: pb.PostureResponse_STANDING}
+	if seat, err := w.Seat(ctx); err != nil || seat != nil {
+		t.Errorf("standing: %+v, %v", seat, err)
+	}
+
+	d.posture = nil
+	if seat, err := w.Seat(ctx); err != nil || seat != nil {
+		t.Errorf("an old daemon, and nothing seen: %+v, %v", seat, err)
+	}
+}

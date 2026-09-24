@@ -87,8 +87,12 @@ type fakeDaemon struct {
 	// what it answers.  See walk_test.go.
 	walk   []*pb.MoveEvent
 	walked chan *pb.MoveRequest
-	faced  chan *pb.FaceRequest
-	face   func(*pb.FaceRequest) (*pb.FaceResponse, error)
+
+	// posture is what Posture answers; nil answers Unimplemented, as a
+	// daemon from before it existed would.
+	posture *pb.PostureResponse
+	faced   chan *pb.FaceRequest
+	face    func(*pb.FaceRequest) (*pb.FaceResponse, error)
 }
 
 // newFakeDaemon starts one on loopback and attaches to it.

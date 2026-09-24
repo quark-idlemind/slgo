@@ -167,3 +167,33 @@ func (s *Server) Halt(ctx context.Context, req *pb.HaltRequest) (*pb.HaltRespons
 	}
 	return &pb.HaltResponse{Walking: walking}, nil
 }
+
+// Posture says how the avatar is placed, as the agent knows it.
+//
+// The agent has watched every animation and every reparenting since the
+// session logged in; a client attached since has not, and a ground sit
+// in particular leaves nothing but an animation that was sent once.  So
+// a client that wants to know -- before a walk, which is refused while
+// seated -- asks here rather than guessing from what it happened to see.
+func (s *Server) Posture(ctx context.Context, req *pb.PostureRequest) (*pb.PostureResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	a := h.Agent()
+	if a == nil {
+		return nil, status.Error(codes.Unavailable, "this session is not connected")
+	}
+	p, seat := a.Posture()
+	out := &pb.PostureResponse{SeatLocal: seat.Local}
+	switch p {
+	case agent.SittingOnGround:
+		out.Posture = pb.PostureResponse_SITTING_ON_GROUND
+	case agent.SittingOnObject:
+		out.Posture = pb.PostureResponse_SITTING_ON_OBJECT
+		if !seat.ID.IsZero() {
+			out.SeatId = seat.ID.String()
+		}
+	}
+	return out, nil
+}

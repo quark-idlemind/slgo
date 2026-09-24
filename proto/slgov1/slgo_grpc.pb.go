@@ -51,6 +51,7 @@ const (
 	Grid_Move_FullMethodName             = "/slgo.v1.Grid/Move"
 	Grid_Face_FullMethodName             = "/slgo.v1.Grid/Face"
 	Grid_Halt_FullMethodName             = "/slgo.v1.Grid/Halt"
+	Grid_Posture_FullMethodName          = "/slgo.v1.Grid/Posture"
 	Grid_Friends_FullMethodName          = "/slgo.v1.Grid/Friends"
 	Grid_NoteFriend_FullMethodName       = "/slgo.v1.Grid/NoteFriend"
 	Grid_Handled_FullMethodName          = "/slgo.v1.Grid/Handled"
@@ -217,6 +218,13 @@ type GridClient interface {
 	Face(ctx context.Context, in *FaceRequest, opts ...grpc.CallOption) (*FaceResponse, error)
 	// Halt ends any walk and stops the avatar.
 	Halt(ctx context.Context, in *HaltRequest, opts ...grpc.CallOption) (*HaltResponse, error)
+	// Posture is whether the avatar is standing, sitting on the ground or
+	// sitting on something, as the daemon's own agent knows it.  A client
+	// that attached after the sit has not seen the animation that is the
+	// only evidence of a ground sit, nor necessarily the reparenting, and
+	// would otherwise guess; the agent has watched every one since login,
+	// and it is what a walk is refused on.
+	Posture(ctx context.Context, in *PostureRequest, opts ...grpc.CallOption) (*PostureResponse, error)
 	// Friends is who this avatar's friends are and which of them are
 	// logged in.
 	//
@@ -486,6 +494,16 @@ func (c *gridClient) Halt(ctx context.Context, in *HaltRequest, opts ...grpc.Cal
 	return out, nil
 }
 
+func (c *gridClient) Posture(ctx context.Context, in *PostureRequest, opts ...grpc.CallOption) (*PostureResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PostureResponse)
+	err := c.cc.Invoke(ctx, Grid_Posture_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Friends(ctx context.Context, in *FriendsRequest, opts ...grpc.CallOption) (*FriendsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FriendsResponse)
@@ -686,6 +704,13 @@ type GridServer interface {
 	Face(context.Context, *FaceRequest) (*FaceResponse, error)
 	// Halt ends any walk and stops the avatar.
 	Halt(context.Context, *HaltRequest) (*HaltResponse, error)
+	// Posture is whether the avatar is standing, sitting on the ground or
+	// sitting on something, as the daemon's own agent knows it.  A client
+	// that attached after the sit has not seen the animation that is the
+	// only evidence of a ground sit, nor necessarily the reparenting, and
+	// would otherwise guess; the agent has watched every one since login,
+	// and it is what a walk is refused on.
+	Posture(context.Context, *PostureRequest) (*PostureResponse, error)
 	// Friends is who this avatar's friends are and which of them are
 	// logged in.
 	//
@@ -809,6 +834,9 @@ func (UnimplementedGridServer) Face(context.Context, *FaceRequest) (*FaceRespons
 }
 func (UnimplementedGridServer) Halt(context.Context, *HaltRequest) (*HaltResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Halt not implemented")
+}
+func (UnimplementedGridServer) Posture(context.Context, *PostureRequest) (*PostureResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Posture not implemented")
 }
 func (UnimplementedGridServer) Friends(context.Context, *FriendsRequest) (*FriendsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Friends not implemented")
@@ -1167,6 +1195,24 @@ func _Grid_Halt_Handler(srv interface{}, ctx context.Context, dec func(interface
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Posture_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PostureRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Posture(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Posture_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Posture(ctx, req.(*PostureRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_Friends_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FriendsRequest)
 	if err := dec(in); err != nil {
@@ -1313,6 +1359,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Halt",
 			Handler:    _Grid_Halt_Handler,
+		},
+		{
+			MethodName: "Posture",
+			Handler:    _Grid_Posture_Handler,
 		},
 		{
 			MethodName: "Friends",

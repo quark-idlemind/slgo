@@ -107,6 +107,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // ErrSitRefused is the simulator saying no, in its own words.
@@ -403,6 +404,25 @@ func (w *Session) Seat(ctx context.Context) (*Seat, error) {
 	on, offset := w.sitOn, w.sitOffset
 	w.mu.Unlock()
 
+	// The agent's own answer, where the backend can give it, beats this
+	// session's: the agent has seen every animation and reparenting
+	// since login, and this session only what arrived after it attached.
+	// A session that attached to an avatar already sitting on the ground
+	// has otherwise no evidence of it at all.  An older daemon that
+	// cannot say leaves the session's own guess, below.
+	if pt, ok := w.b.(postureTeller); ok {
+		if p, seat, err := pt.Posture(ctx); err == nil {
+			switch p {
+			case agent.Standing:
+				return nil, nil
+			case agent.SittingOnGround:
+				return &Seat{Ground: true}, nil
+			case agent.SittingOnObject:
+				local, ground = seat.Local, false
+			}
+		}
+	}
+
 	// One listing answers both halves: which local id this avatar is
 	// parented to, and what object that is.  Asked for even when this
 	// session already believes it knows the first, since the second
@@ -447,6 +467,38 @@ func (w *Session) Seat(ctx context.Context) (*Seat, error) {
 		seat.Offset = offset
 	}
 	return seat, nil
+}
+
+// postureTeller is a backend that can say how the avatar is placed as
+// the agent knows it.  Both of this package's backends can; a test's
+// fake need not.
+type postureTeller interface {
+	Posture(ctx context.Context) (agent.Posture, agent.Seat, error)
+}
+
+// Posture for an in-process session is the agent's own.
+func (d *Direct) Posture(ctx context.Context) (agent.Posture, agent.Seat, error) {
+	p, seat := d.a.Posture()
+	return p, seat, nil
+}
+
+// Posture through slgod asks the daemon's agent.
+func (h *Hosted) Posture(ctx context.Context) (agent.Posture, agent.Seat, error) {
+	r, err := h.conn.Posture(ctx)
+	if err != nil {
+		return agent.Standing, agent.Seat{}, err
+	}
+	seat := agent.Seat{Local: r.SeatLocal}
+	if id, err := msg.ParseUUID(r.SeatId); err == nil {
+		seat.ID = id
+	}
+	switch r.Posture {
+	case pb.PostureResponse_SITTING_ON_GROUND:
+		return agent.SittingOnGround, seat, nil
+	case pb.PostureResponse_SITTING_ON_OBJECT:
+		return agent.SittingOnObject, seat, nil
+	}
+	return agent.Standing, seat, nil
 }
 
 // seatOn builds the answer to a sit that worked, out of the object the
