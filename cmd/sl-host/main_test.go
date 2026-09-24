@@ -31,7 +31,7 @@ func ips(ss ...string) []net.IP {
 // the newline between them, and no rule was tried at all.
 func TestEveryAddressIsTriedOnItsOwn(t *testing.T) {
 	rules := mustRules(t, "192.168.9.0/24  192.168.9.20\n")
-	m, ok := choose(rules, ips("192.168.1.166", "192.168.9.5"))
+	m, ok := choose(rules, ips("192.168.1.166", "192.168.9.5"), "")
 	if !ok || m.rule.host != "192.168.9.20" {
 		t.Fatalf("chose %+v, %v; want the rule the second address matches", m.rule, ok)
 	}
@@ -49,7 +49,7 @@ func TestTheFirstMatchingRuleWins(t *testing.T) {
 		{"0/0 192.168.50.1\n192.168.1.0/24 192.168.1.20\n", "192.168.50.1"},
 		{"192.168.9.0/24 192.168.9.20\n192.168.1.0/24 192.168.1.20\n", "192.168.9.20"},
 	} {
-		if m, _ := choose(mustRules(t, c.text), addrs); m.rule.host != c.want {
+		if m, _ := choose(mustRules(t, c.text), addrs, ""); m.rule.host != c.want {
 			t.Errorf("with\n%s chose %s, want %s", c.text, m.rule.host, c.want)
 		}
 	}
@@ -59,17 +59,17 @@ func TestTheFirstMatchingRuleWins(t *testing.T) {
 // script refused it as a bad network, since it wanted four octets.
 func TestACatchAllIsReadAndMatches(t *testing.T) {
 	rules := mustRules(t, "192.168.1.0/24 192.168.1.20\n0/0 192.168.50.1\n")
-	if m, ok := choose(rules, ips("192.168.77.3")); !ok || m.rule.host != "192.168.50.1" {
+	if m, ok := choose(rules, ips("192.168.77.3"), ""); !ok || m.rule.host != "192.168.50.1" {
 		t.Errorf("chose %+v, %v; want the catch-all", m.rule, ok)
 	}
 }
 
 func TestNothingMatchingIsNoAnswer(t *testing.T) {
 	rules := mustRules(t, "192.168.1.0/24 192.168.1.20\n")
-	if m, ok := choose(rules, ips("192.168.9.5")); ok {
+	if m, ok := choose(rules, ips("192.168.9.5"), ""); ok {
 		t.Errorf("chose %+v for an address no rule mentions", m.rule)
 	}
-	if _, ok := choose(nil, ips("192.168.9.5")); ok {
+	if _, ok := choose(nil, ips("192.168.9.5"), ""); ok {
 		t.Error("an empty file chose something")
 	}
 }
@@ -131,7 +131,7 @@ func TestTheListSaysWhichRulesMatch(t *testing.T) {
 	var b bytes.Buffer
 	listRules(&b, mustRules(t,
 		"192.168.1.0/24 192.168.1.20 home\n192.168.9.0/24 192.168.9.20\n0/0 192.168.50.1 anywhere\n"),
-		ips("192.168.9.5"))
+		ips("192.168.9.5"), "")
 	lines := strings.Split(strings.TrimSpace(b.String()), "\n")
 	if len(lines) != 3 {
 		t.Fatalf("listed %d lines:\n%s", len(lines), b.String())
@@ -148,7 +148,7 @@ func TestTheListSaysWhichRulesMatch(t *testing.T) {
 func TestAFailureSaysWhatWasTried(t *testing.T) {
 	var b bytes.Buffer
 	explain(&b, "/home/example/.config/sl-host",
-		mustRules(t, "192.168.1.0/24 192.168.1.20 home\n"), ips("192.168.9.5", "192.168.44.2"))
+		mustRules(t, "192.168.1.0/24 192.168.1.20 home\n"), ips("192.168.9.5", "192.168.44.2"), "")
 	got := b.String()
 	for _, want := range []string{
 		"no rule in /home/example/.config/sl-host matches this network",
@@ -160,5 +160,99 @@ func TestAFailureSaysWhatWasTried(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("the explanation lacks %q:\n%s", want, got)
 		}
+	}
+}
+
+// An address may carry a port, for a slgod that is not on 7807, and it
+// is printed as written.  A port that could never be dialled is refused
+// against its line rather than left to fail as a connection later.
+func TestAnAddressMayCarryAPort(t *testing.T) {
+	var warn bytes.Buffer
+	rules := parseRules(strings.NewReader(
+		"0/0 192.168.1.20:7808 lab\n"+
+			"0/0 [2001:db8::20]:7808\n"+
+			"0/0 2001:db8::21\n"+
+			"0/0 slgod.example:7900\n"+
+			"0/0 192.168.1.20:http\n"+
+			"0/0 192.168.1.20:0\n"+
+			"0/0 192.168.1.20:70000\n"+
+			"0/0 :7808\n"),
+		"rules", &warn)
+	var hosts []string
+	for _, r := range rules {
+		hosts = append(hosts, r.host)
+	}
+	want := []string{"192.168.1.20:7808", "[2001:db8::20]:7808", "2001:db8::21", "slgod.example:7900"}
+	if strings.Join(hosts, " ") != strings.Join(want, " ") {
+		t.Errorf("kept %q, want %q", hosts, want)
+	}
+	for _, line := range []string{"rules:5:", "rules:6:", "rules:7:", "rules:8:"} {
+		if !strings.Contains(warn.String(), line) {
+			t.Errorf("no warning for %s\n%s", line, warn.String())
+		}
+	}
+}
+
+// A rule can name the profiles it is for.  It answers only a question
+// about one of them; a rule naming none answers every question, which is
+// what every rule written before this meant; and a question naming no
+// profile is never answered by a rule that names some.
+func TestRulesForAProfile(t *testing.T) {
+	rules := mustRules(t, ""+
+		"0/0 127.0.0.1:7808 @dev @test the development slgod\n"+
+		"192.168.1.0/24 192.168.1.20 home\n"+
+		"0/0 192.168.50.1 anywhere\n")
+	if rules[0].label != "the development slgod" || rules[0].accounts() != "@dev @test" {
+		t.Errorf("rule 1 read as profiles %q, label %q", rules[0].accounts(), rules[0].label)
+	}
+	home := ips("192.168.1.66")
+	for _, c := range []struct{ profile, want string }{
+		{"dev", "127.0.0.1:7808"},
+		{"test", "127.0.0.1:7808"},
+		{"example", "192.168.1.20"},
+		{"", "192.168.1.20"},
+	} {
+		m, ok := choose(rules, home, c.profile)
+		if !ok || m.rule.host != c.want {
+			t.Errorf("for %q: %q, %v; want %q", c.profile, m.rule.host, ok, c.want)
+		}
+	}
+
+	// With nothing for this profile, nothing: the general rules are
+	// below the one for dev only because the file says so, and a file
+	// with only profile rules has no answer for anyone else.
+	only := mustRules(t, "0/0 127.0.0.1:7808 @dev\n")
+	if _, ok := choose(only, home, "example"); ok {
+		t.Error("a rule for dev answered for example")
+	}
+	if _, ok := choose(only, home, ""); ok {
+		t.Error("a rule for dev answered a question that named no profile")
+	}
+
+	var warn bytes.Buffer
+	if got := parseRules(strings.NewReader("0/0 127.0.0.1 @ dev\n"), "rules", &warn); len(got) != 0 {
+		t.Errorf("a bare @ was taken: %+v", got)
+	}
+	if !strings.Contains(warn.String(), "an @ with no profile name") {
+		t.Errorf("warning = %q", warn.String())
+	}
+}
+
+// -l says which rules are for somebody else, and a failure names the
+// profile it was asked about.
+func TestListingAndExplainingForAProfile(t *testing.T) {
+	rules := mustRules(t, "0/0 127.0.0.1:7808 @dev lab\n0/0 192.168.50.1 anywhere\n")
+	var b bytes.Buffer
+	listRules(&b, rules, ips("192.168.9.5"), "example")
+	lines := strings.Split(strings.TrimSpace(b.String()), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[0], "other") || !strings.Contains(lines[0], "@dev lab") ||
+		!strings.Contains(lines[1], "MATCH") {
+		t.Errorf("listing:\n%s", b.String())
+	}
+
+	b.Reset()
+	explain(&b, "rules", mustRules(t, "0/0 127.0.0.1:7808 @dev\n"), ips("192.168.9.5"), "example")
+	if got := b.String(); !strings.Contains(got, "matches this network for example") || !strings.Contains(got, "@dev") {
+		t.Errorf("explanation:\n%s", got)
 	}
 }

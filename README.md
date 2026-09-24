@@ -1125,8 +1125,25 @@ address. In order:
 2. `addr = ...` in `~/.config/slsh/config`, for slsh -- `server` is
    accepted as another spelling of the same setting;
 3. what the `sl-host` command prints, if it is on `$PATH`, with port
-   7807 joined to it -- sl-host prints a bare host and no port;
+   7807 joined to it unless it names a port of its own;
 4. this machine, when sl-host is not installed.
+
+A rule in sl-host's file may carry a port -- `127.0.0.1:7808` -- and
+may be kept for some profiles with `@` words after the address:
+
+    0/0   127.0.0.1:7808   @dev   the development slgod
+    0/0   127.0.0.1               this machine
+
+A client tells sl-host which avatar it is about to ask for by running
+it with `SLGO_AGENT` set to that profile, or taken out of its
+environment when there is none; `sl-host -a dev` asks the same by
+hand.  A rule with no `@` is for every profile and for a question that
+names none, and the first rule that matches still wins, so a profile's
+own rules go above the general ones.  It travels in the environment
+and not as a flag because an older sl-host refuses a flag it does not
+know, and would take every client down with it.  An older client
+handed `host:port` adds `:7807` to it all the same, so rebuild the
+clients and sl-host together.
 
 Not being installed is the ordinary case on a machine that runs its own
 slgod, so it is a default rather than a failure. sl-host being there and

@@ -118,7 +118,16 @@ func run() error {
 	// Where slgod is.  An address given here or in the file is the
 	// operator saying where to go and is not second-guessed; only the
 	// empty string is worth asking sl-host about.
-	where, err := slhost.Resolve(cfg.Addr)
+	//
+	// One slbotd talks to one slgod.  Holding a single avatar, it asks
+	// sl-host about that profile, whose rules may send it to a slgod
+	// of its own; holding several, it asks about none, and the rules
+	// for every profile decide.
+	var only string
+	if len(cfg.Avatars) == 1 {
+		only = cfg.Avatars[0]
+	}
+	where, err := slhost.ResolveFor(cfg.Addr, only)
 	if err != nil {
 		return err
 	}

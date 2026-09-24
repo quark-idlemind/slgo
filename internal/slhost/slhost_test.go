@@ -185,3 +185,51 @@ func TestMustAddrPassesAnAddressThrough(t *testing.T) {
 		t.Errorf("MustAddr(\"\") = %q, want %q", got, want)
 	}
 }
+
+// sl-host may answer with a port, for a slgod that is not on 7807, and
+// that port is the one used.  Without one the usual port is added, IPv6
+// included, bracketed or not.
+func TestAPortFromSLHostIsKept(t *testing.T) {
+	for _, c := range []struct{ said, want string }{
+		{"192.168.1.42:7808", "192.168.1.42:7808"},
+		{"slgod.example:7900", "slgod.example:7900"},
+		{"[2001:db8::42]:7808", "[2001:db8::42]:7808"},
+		{"192.168.1.42", "192.168.1.42:" + Port},
+		{"2001:db8::42", "[2001:db8::42]:" + Port},
+		{"[2001:db8::42]", "[2001:db8::42]:" + Port},
+	} {
+		fakeSLHost(t, "echo '"+c.said+"'")
+		got, err := Resolve("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != c.want {
+			t.Errorf("sl-host said %q: resolved to %q, want %q", c.said, got, c.want)
+		}
+	}
+}
+
+// sl-host is told which profile is wanted, in $SLGO_AGENT, and told
+// nothing -- the variable taken away, not left as the caller's -- when
+// no profile is named, since then the question is about the daemon's
+// default and not whatever this shell happens to have exported.
+func TestSLHostIsToldWhichProfile(t *testing.T) {
+	fakeSLHost(t, `echo "host-for-${SLGO_AGENT:-nobody}"`)
+	t.Setenv("SLGO_AGENT", "exported")
+
+	got, err := ResolveFor("", "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "host-for-dev:"+Port {
+		t.Errorf("for dev: %q", got)
+	}
+	if got, _ := ResolveFor("", ""); got != "host-for-nobody:"+Port {
+		t.Errorf("for no profile: %q", got)
+	}
+
+	// An address given is still the answer, whoever it is for.
+	if got, _ := ResolveFor("example.com:9999", "dev"); got != "example.com:9999" {
+		t.Errorf("a given address was not kept: %q", got)
+	}
+}

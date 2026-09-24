@@ -126,7 +126,7 @@ func run() error {
 		// Nothing said on the command line and nothing in the file
 		// leaves the question to sl-host, which is how one config
 		// works on a machine whose slgod is somewhere else.
-		if cfg.Addr, err = slhost.Resolve(cfg.Addr); err != nil {
+		if cfg.Addr, err = slhost.ResolveFor(cfg.Addr, cfg.Agent); err != nil {
 			return err
 		}
 		dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

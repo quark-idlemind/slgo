@@ -64,7 +64,7 @@ If you do not say, the address is worked out for you:
 
 1. `addr = ...` in `~/.config/slsh/config`, for `slsh`;
 2. whatever the `sl-host` command prints, if you have one installed --
-   it names the host, and the standard port is added to it;
+   the standard port is added to it unless it names a port of its own;
 3. this machine, if you have no `sl-host`.
 
 That last case is the normal one when you run your own `slgod`, so
@@ -78,8 +78,9 @@ points at the wrong problem entirely.
 for a machine that reaches `slgod` over a network whose address
 changes with where it is.  It reads `~/.config/sl-host` (or
 `$SL_HOSTFILE`), one rule a line: a network, the address to use when
-this machine has an address on it, and a label that is only ever
-shown.
+this machine has an address on it -- with a port, if that slgod is not
+on 7807 -- any `@profile` words the rule is kept for, and a label that
+is only ever shown.
 
     # at home, the LAN address; anywhere else, the router's forward
     192.168.1.0/24   192.168.1.20   home
@@ -91,6 +92,22 @@ once, a VPN -- each on its own.  `sl-host -v` says which rule matched
 and why, and `sl-host -l` lists every rule with whether it matches.
 When none does, it lists the machine's addresses and the rules and
 exits 1.  `SL_HOST=<address>` is an answer for a one-off.
+
+A rule with `@` words is tried only when the question is about one of
+those profiles, which lets a second `slgod`, on another port, be found
+the same way as the first:
+
+    0/0              127.0.0.1:7808   @dev   the development slgod
+    192.168.1.0/24   192.168.1.20            home
+
+Each program tells `sl-host` which avatar it is about to ask for, in
+`SLGO_AGENT` -- the one from `-a`, `$SLGO_AGENT` or `agent =` -- and
+takes that variable away when it has none; `sl-host -a dev` asks the
+same thing by hand.  A rule with no `@` is for every profile, and for
+a question that names none, so put a profile's own rules first.
+`sl-host -l` marks the rules kept for other profiles as `other`.
+Build `sl-host` and the programs from the same checkout: an older
+program adds the standard port to an address that already has one.
 
 ### Profiles
 
@@ -1405,8 +1422,8 @@ to find out.
     # by anybody else, so it is the better one where you have it.
     trusted = Quark Idlemind
 
-    # Where slgod is.  Nothing said asks sl-host, and failing that
-    # means this machine.
+    # Where slgod is.  Nothing said asks sl-host -- about the avatar,
+    # when there is only one -- and failing that means this machine.
     addr =
 
     # What marks a command.  Anything else is somebody talking.

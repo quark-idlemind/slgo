@@ -61,7 +61,7 @@ func Connect(ctx context.Context, o Options) (*sl.Session, error) {
 		if o.First != "" || o.Last != "" {
 			return nil, fmt.Errorf("--first and --last are for --direct; through slgod the session knows who it is")
 		}
-		addr, err := slhost.Resolve(o.Addr)
+		addr, err := slhost.ResolveFor(o.Addr, o.Agent)
 		if err != nil {
 			return nil, err
 		}
