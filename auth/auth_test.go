@@ -246,7 +246,7 @@ func TestTheDefaultSecretPathIsUnderTheHomeDirectory(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	want := filepath.Join(home, ".config", "slrun", "secret")
+	want := filepath.Join(home, ".config", "slgod", "secret")
 	if got := DefaultSecretPath(); got != want {
 		t.Errorf("DefaultSecretPath = %q, want %q", got, want)
 	}
@@ -266,6 +266,67 @@ func TestTheDefaultSecretPathIsUnderTheHomeDirectory(t *testing.T) {
 	}
 	if got != "hunter2" {
 		t.Errorf("secret = %q; surrounding whitespace should be trimmed", got)
+	}
+}
+
+// A machine set up before the secret moved has it under slrun, and
+// nothing under slgod.  That file is still the one to read: a daemon
+// or client that suddenly could not find the secret it has used for
+// months would be a broken lab for the sake of a tidier path.
+func TestTheOldSecretPathIsUsedWhenTheNewOneIsMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	old := filepath.Join(home, ".config", "slrun", "secret")
+	if err := os.MkdirAll(filepath.Dir(old), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(old, []byte("from-the-old-place\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := DefaultSecretPath(); got != old {
+		t.Errorf("DefaultSecretPath = %q, want the old file %q", got, old)
+	}
+	got, err := LoadSecret("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "from-the-old-place" {
+		t.Errorf("secret = %q, want the old file's", got)
+	}
+
+	// slgod's own directory existing, with no secret in it, changes
+	// nothing: it holds slgod's machine config on any machine that has
+	// run slgod, secret or not.
+	if err := os.MkdirAll(filepath.Join(home, ".config", "slgod"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got := DefaultSecretPath(); got != old {
+		t.Errorf("with an empty slgod directory, DefaultSecretPath = %q, want %q", got, old)
+	}
+}
+
+// With both there, the new one wins.  Somebody who has moved the file
+// and left a copy behind has told us which one they mean.
+func TestTheNewSecretPathWinsOverTheOld(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	for _, d := range []string{"slrun", "slgod"} {
+		p := filepath.Join(home, ".config", d, "secret")
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("from-"+d+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := LoadSecret("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "from-slgod" {
+		t.Errorf("secret = %q, want the one under slgod", got)
 	}
 }
 

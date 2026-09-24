@@ -535,8 +535,8 @@ func main() {
 		secret, err := auth.LoadSecret("")
 		if err != nil {
 			log.Fatalf("cannot start: %v\n"+
-				"Create one with:  (umask 077; mkdir -p ~/.config/slrun; "+
-				"openssl rand -hex 32 > ~/.config/slrun/secret)\n"+
+				"Create one with:  (umask 077; mkdir -p ~/.config/slgod; "+
+				"openssl rand -hex 32 > ~/.config/slgod/secret)\n"+
 				"Or pass -no-auth to serve loopback without it.", err)
 		}
 		a, err := auth.New(secret)

@@ -149,11 +149,11 @@ reachable off this machine lets anyone drive the avatar. Clients and the
 daemon therefore prove themselves to each other, both directions, against
 one secret:
 
-    ~/.config/slrun/secret      mode 600, in a directory mode 700
+    ~/.config/slgod/secret      mode 600, in a directory mode 700
 
 One file for the whole lab, shared by every program here. Create it with
 
-    (umask 077; mkdir -p ~/.config/slrun; openssl rand -hex 32 > ~/.config/slrun/secret)
+    (umask 077; mkdir -p ~/.config/slgod; openssl rand -hex 32 > ~/.config/slgod/secret)
 
 which is what `slgod` prints if it cannot find one. The secret never
 crosses the wire in either direction: each side answers a random,

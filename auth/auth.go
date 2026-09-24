@@ -219,17 +219,33 @@ func (s *Server) expireLocked() {
 	s.pendings = keep
 }
 
-// DefaultSecretPath is where the shared secret lives.
+// DefaultSecretPath is where the shared secret lives:
+// ~/.config/slgod/secret.
 //
 // ONE file for the whole lab, shared by every service that uses this
 // package. Two secrets would be two things to keep in step for no gain:
 // anyone holding one already reaches the machine the other runs on.
+//
+// It is under slgod because slgod is what it guards, whichever program
+// is reading it.  It was ~/.config/slrun/secret until 2026-09, named
+// after the first client to use it, and a machine set up before then
+// still has it there -- so when there is nothing at the new path and
+// there is a file at the old one, the old one is the answer.  Only
+// the new path is documented; with neither present, the new path is
+// what an error names and where a new secret should go.
 func DefaultSecretPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".config", "slrun", "secret")
+	path := filepath.Join(home, ".config", "slgod", "secret")
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		legacy := filepath.Join(home, ".config", "slrun", "secret")
+		if _, err := os.Stat(legacy); err == nil {
+			return legacy
+		}
+	}
+	return path
 }
 
 // LoadSecret reads the shared secret, refusing a file others can read.
