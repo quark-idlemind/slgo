@@ -149,6 +149,15 @@ type Config struct {
 	LLMModel   string
 	LLMTimeout time.Duration
 
+	// LLMSlots is how many of the server's slots this daemon uses, the
+	// first so many from slot 0; zero is all of them.  slbotd pins each
+	// conversation to a slot and keeps its cache there, so a slot it
+	// uses is not one anything else can share without spoiling that
+	// cache.  Leaving the last few alone is how another program puts
+	// its own work on the same server: it sends id_slot for a slot
+	// above these, and the two never meet.
+	LLMSlots int
+
 	// ChatJobs is how many conversations one avatar answers at once.
 	// Its own number rather than sharing Jobs, because a reply takes
 	// seconds and a command takes milliseconds: a busy region would
@@ -203,6 +212,21 @@ type Config struct {
 	// something has to be, and this is how many exchanges it waits.
 	// Zero is never.
 	ChatOwn int
+
+	// ChatOwnRest is how long the two must have said nothing to each
+	// other before the count behind ChatOwn starts again; zero is
+	// never.  The bound is there so that two models do not talk for
+	// ever, not so that they may never talk again: after a rest they
+	// may have another conversation, of the same length.
+	ChatOwnRest time.Duration
+
+	// chatBotIDs and chatBotNames are avatars driven by some OTHER
+	// program's model, which ChatOwn and ChatOwnRest bound exactly as
+	// they bound two of this daemon's own.  To this daemon such an
+	// avatar is otherwise a stranger, and neither side of two models
+	// talking is ever the one that gets bored.
+	chatBotIDs   map[msg.UUID]bool
+	chatBotNames map[string]string
 
 	// ChatKeep is how many turns survive a compaction word for word.
 	// The recent ones carry the thread of what is being said; the
@@ -295,6 +319,9 @@ func DefaultConfig() Config {
 		AvatarType:   map[string]float64{},
 		trustedIDs:   map[msg.UUID]bool{},
 		trustedNames: map[string]string{},
+		chatBotIDs:   map[msg.UUID]bool{},
+		chatBotNames: map[string]string{},
+		ChatOwnRest:  30 * time.Minute,
 	}
 }
 
@@ -410,6 +437,34 @@ func (c *Config) Trusts(id msg.UUID, name string) bool {
 	}
 	_, ok := c.trustedNames[strings.ToLower(strings.TrimSpace(name))]
 	return ok
+}
+
+// ChatBot reports whether this avatar is driven by another program's
+// model, and so is bounded like one of this daemon's own.  Matched the
+// way Trusts matches: by id, or by the name the grid says it has.
+func (c *Config) ChatBot(id msg.UUID, name string) bool {
+	if !id.IsZero() && c.chatBotIDs[id] {
+		return true
+	}
+	if name == "" {
+		return false
+	}
+	_, ok := c.chatBotNames[strings.ToLower(strings.TrimSpace(name))]
+	return ok
+}
+
+// ChatBots is who chat-bot named, for saying so: ids as ids and names
+// as names, sorted.
+func (c *Config) ChatBots() []string {
+	out := make([]string, 0, len(c.chatBotIDs)+len(c.chatBotNames))
+	for id := range c.chatBotIDs {
+		out = append(out, id.String())
+	}
+	for _, name := range c.chatBotNames {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Trusted is who the configuration named, for saying so.  The ids are
@@ -622,6 +677,27 @@ func parseConfig(r io.Reader) (Config, error) {
 				return c, fmt.Errorf("line %d: chat-own wants a number, zero or more, got %q", n, value)
 			}
 			c.ChatOwn = v
+		case "chat-own-rest", "chat_own_rest":
+			d, err := time.ParseDuration(value)
+			if err != nil || d < 0 {
+				return c, fmt.Errorf("line %d: chat-own-rest wants a duration like 30m, or 0 for never, got %q", n, value)
+			}
+			c.ChatOwnRest = d
+		case "chat-bot", "chat_bot", "chat-bots", "chat_bots":
+			if value == "" {
+				return c, fmt.Errorf("line %d: chat-bot names nobody", n)
+			}
+			if id, err := msg.ParseUUID(value); err == nil {
+				c.chatBotIDs[id] = true
+			} else {
+				c.chatBotNames[strings.ToLower(value)] = value
+			}
+		case "llm-slots", "llm_slots":
+			v, err := strconv.Atoi(value)
+			if err != nil || v < 0 {
+				return c, fmt.Errorf("line %d: llm-slots wants a number of slots, or 0 for all of them, got %q", n, value)
+			}
+			c.LLMSlots = v
 		case "read-cps", "read_cps":
 			who, cps, err := speedLine(value)
 			if err != nil {

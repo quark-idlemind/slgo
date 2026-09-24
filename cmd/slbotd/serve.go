@@ -452,6 +452,7 @@ func (b *bot) converse(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync
 		Trusted:    b.d.cfg.Trusts(im.From, im.FromName),
 		Known:      len(conv.Turns) > 0,
 		Turns:      conv.Compacted + len(conv.Turns),
+		Recent:     conv.Recent(time.Now(), b.d.cfg.ChatOwnRest),
 	})
 	if !v.Talk {
 		// logf and not chatf: -q drops what other people said, which is

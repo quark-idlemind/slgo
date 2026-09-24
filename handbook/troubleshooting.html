@@ -780,7 +780,7 @@ chat    = *</pre></div>
             <ul>
               <li><code>not answering X: not in the chat list</code>: adjust the <code>chat</code> lines.</li>
               <li><code>too busy talking to answer X</code>: raise <code>chat-jobs</code>, or llama-server's <code>-np</code>.</li>
-              <li><code>not answering X: that is builder, which this daemon drives as well, and they have said 8 things to each other already</code>: two of the daemon's own avatars reached <code>chat-own</code>.</li>
+              <li><code>not answering X: that is builder, which this daemon drives as well, and they have said 8 things to each other already, and will not until they have said nothing for 30m0s</code>: two of the daemon's own avatars, or one and a <code>chat-bot</code> ("which another program's model drives"), reached <code>chat-own</code>.</li>
             </ul>
             <p>A reply can also just be slow. slbotd waits as if reading and typing: with the defaults, a long reply takes minutes.</p>
             <h4>Fix</h4>

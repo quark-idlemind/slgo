@@ -316,3 +316,23 @@ func TestTheFingerprintMovesWithEverythingThatMatters(t *testing.T) {
 		})
 	}
 }
+
+// llm-slots leaves the server's last slots alone: the pool is the first
+// so many, and a setting above what the server has is the server's.
+func TestLLMSlotsLimitsThePool(t *testing.T) {
+	f := newFakeLLM(t) // two slots
+	for _, c := range []struct{ set, want int }{{0, 2}, {1, 1}, {5, 2}} {
+		cfg := DefaultConfig()
+		cfg.LLMURL, cfg.ChatDir, cfg.LLMSlots = f.URL, t.TempDir(), c.set
+		ch, err := NewChatter(cfg, func(string, ...any) {})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ch.ready(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if got := ch.slots.N(); got != c.want {
+			t.Errorf("llm-slots %d: pool of %d, want %d", c.set, got, c.want)
+		}
+	}
+}

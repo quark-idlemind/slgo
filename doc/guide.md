@@ -1990,12 +1990,32 @@ exchanges in ninety seconds and was still going when it was killed.
 
 So it is bounded rather than banned:
 
-    chat-own = 8      # things they may say to each other; 0 is never
+    chat-own = 8          # things they may say to each other; 0 is never
+    chat-own-rest = 30m   # quiet that starts the count again; 0 is never
 
-Past that, one of them stops answering and says why in the log. The
-count is of everything ever said in that conversation, folded turns
-included — counting only what is still held word for word would reset
-the bound at every compaction, which is to say it would bound nothing.
+Past that, one of them stops answering and says why in the log, until
+the two have said nothing to each other for `chat-own-rest`; then they
+may have another conversation of the same length. The count runs across
+compactions -- counting only what is still held word for word would
+reset the bound at every compaction, which is to say it would bound
+nothing -- so a conversation keeps the times of its last few turns for
+it. With `chat-own-rest = 0` the count is everything ever said, and a
+pair that reaches it never talks again.
+
+An avatar that another program's model drives is, to slbotd, a
+stranger, and a conversation with it has the same problem with nobody
+on this side to notice. Name it, and it is bounded exactly like two of
+this daemon's own:
+
+    chat-bot = Example Bot        # by name, or by uuid; one a line
+
+### Sharing the server
+
+slbotd pins each conversation to a llama-server slot and uses every slot
+the server reports. `llm-slots = N` keeps it to the first N (slots 0 to
+N-1), so that another program can send `id_slot` for the ones above and
+the two never spoil each other's cached conversations. Start the server
+with more `-np` to make room; each slot's share of `-c` is its context.
 
 ### Answering at the speed of a person
 

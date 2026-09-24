@@ -301,7 +301,10 @@ example-resident.txt     <span class="c"># only when Example Resident speaks; it
             <tr><td><code>chat-max-tokens</code></td><td><code>160</code></td><td class="what">Longest reply in tokens, at least 16.</td></tr>
             <tr><td><code>chat-reply-limit</code></td><td><code>2</code></td><td class="what">Most IMs one reply is sent as.</td></tr>
             <tr><td><code>chat-temperature</code></td><td><code>0.8</code></td><td class="what">Sampling temperature for replies. Summaries always use 0.2.</td></tr>
-            <tr><td><code>chat-own</code></td><td><code>8</code></td><td class="what">How much two avatars this slbotd drives may say to each other before one stops. 0 means never stop.</td></tr>
+            <tr><td><code>chat-own</code></td><td><code>8</code></td><td class="what">How much two avatars this slbotd drives, or one of them and a <code>chat-bot</code>, may say to each other before one stops answering. 0 means they never talk at all.</td></tr>
+            <tr><td><code>chat-own-rest</code></td><td><code>30m</code></td><td class="what">Silence between the two after which the <code>chat-own</code> count starts again. 0 means it never does.</td></tr>
+            <tr><td><code>chat-bot</code></td><td>none</td><td class="what">An avatar another program's model drives, by name or uuid, one a line. Bounded by <code>chat-own</code> like this daemon's own avatars.</td></tr>
+            <tr><td><code>llm-slots</code></td><td><code>0</code> (all)</td><td class="what">Use only the server's first N slots, leaving the rest to another program that sends <code>id_slot</code> for them.</td></tr>
             <tr><td><code>chat-gap</code></td><td><code>1h</code></td><td class="what">After this much silence the model is told how long it has been. The hint is sent, not stored.</td></tr>
             <tr><td><code>chat-dir</code></td><td><code>~/.local/state/slbotd</code></td><td class="what">Where conversations are kept (under <code>$XDG_STATE_HOME</code> if that is set).</td></tr>
             <tr><td><code>slot-save-path</code></td><td>empty</td><td class="what">The server's <code>--slot-save-path</code>, as this machine sees it. Only used to delete a cache on <code>:forget</code>.</td></tr>
@@ -321,7 +324,7 @@ example-resident.txt     <span class="c"># only when Example Resident speaks; it
         <h2>Pacing</h2>
         <p>slbotd waits as long as a person would. First it is silent for the length of the message divided by <code>read-cps</code>. Then it shows "typing" for up to the length of the reply divided by <code>type-cps</code>. The time the model takes counts toward the wait.</p>
         <p>With the defaults a long reply is slow on purpose: the repository's guide puts a 160-token reply at 3.2 characters a second at about four minutes. To shorten it, lower <code>chat-max-tokens</code> first, which gives shorter replies; raising <code>type-cps</code> or setting <code>pace-max</code> also works.</p>
-        <p>Two avatars on the same slbotd will talk to each other if both are on each other's chat list. Before <code>chat-own</code> existed, one message led to 26 exchanges in ninety seconds. <code>chat-own</code> stops that after 8 by default, or refuse the other avatar with <code>!</code>.</p>
+        <p>Two avatars on the same slbotd will talk to each other if both are on each other's chat list. Before <code>chat-own</code> existed, one message led to 26 exchanges in ninety seconds. <code>chat-own</code> stops that after 8 by default, until the two have been quiet for <code>chat-own-rest</code> (30 minutes); or refuse the other avatar with <code>!</code>. An avatar driven by another program's model, such as an LLM client of your own, is bounded the same way once it is named with <code>chat-bot</code>.</p>
       </section>
 
       <section id="problems">
@@ -468,8 +471,8 @@ example-resident.txt     <span class="c"># only when Example Resident speaks; it
         <details class="fault" id="f-llm-own" data-tags="chat">
           <summary><span class="sym">Two of the bot's avatars stop talking to each other: <code>which this daemon drives as well, and they have said … things to each other already</code></span><span class="where-tag">log</span></summary>
           <div class="fix">
-            <h4>Why</h4><p><code>chat-own</code> (8 by default) stops two avatars this slbotd drives from talking forever.</p>
-            <h4>Fix</h4><p>Working as designed. Raise <code>chat-own</code> if you want longer exchanges, or 0 for no limit, which is rarely what you want.</p>
+            <h4>Why</h4><p><code>chat-own</code> (8 by default) stops two avatars this slbotd drives, or one of them and a <code>chat-bot</code>, from talking forever. The message ends by saying how long they must be quiet before the count starts again (<code>chat-own-rest</code>, 30 minutes by default).</p>
+            <h4>Fix</h4><p>Working as designed. Wait out the rest, raise <code>chat-own</code> for longer exchanges, or shorten <code>chat-own-rest</code>. <code>chat-own = 0</code> means they never talk at all.</p>
           </div>
         </details>
 

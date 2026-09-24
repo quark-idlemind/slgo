@@ -203,6 +203,17 @@ func describe(out *os.File, cfg Config, where string) error {
 		}
 		fmt.Fprintf(out, "model:         %s\n", cfg.LLMURL)
 		fmt.Fprintf(out, "will talk to:  %s\n", strings.Join(cfg.Chat, ", "))
+		rest := "never resets"
+		if cfg.ChatOwnRest > 0 {
+			rest = "counted again after " + cfg.ChatOwnRest.String() + " of silence"
+		}
+		fmt.Fprintf(out, "bots:          %d things said with one, %s\n", cfg.ChatOwn, rest)
+		if bots := cfg.ChatBots(); len(bots) > 0 {
+			fmt.Fprintf(out, "other bots:    %s\n", strings.Join(bots, ", "))
+		}
+		if cfg.LLMSlots > 0 {
+			fmt.Fprintf(out, "slots:         the first %d of the server's\n", cfg.LLMSlots)
+		}
 		fmt.Fprintf(out, "conversations: %s, %d tokens kept, %d at once per avatar\n",
 			store, cfg.ChatContext, cfg.ChatJobs)
 		for _, name := range cfg.Avatars {

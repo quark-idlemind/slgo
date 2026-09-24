@@ -361,3 +361,34 @@ func TestASessionThatIsComingBackIsKept(t *testing.T) {
 	grid.Close()
 	<-done
 }
+
+// An avatar another program's model drives, named with chat-bot, is
+// bounded as this daemon's own are -- and only while the two have not
+// rested.  A person, or a bot after a rest, is answered.
+func TestAnOutsideBotIsBoundedUntilTheyRest(t *testing.T) {
+	d, _, _ := newTestDaemon(t)
+	d.cfg.chatBotNames = map[string]string{"stranger bot": "Stranger Bot"}
+	d.cfg.ChatOwnRest = 30 * time.Minute
+	yes := func(context.Context, *Approach) Verdict { return Verdict{true, "yes"} }
+	bound := ownAvatarsBounded(d, 4, yes)
+	ctx := context.Background()
+
+	if v := bound(ctx, &Approach{From: testStranger, Name: "Stranger Bot", Recent: 3, Turns: 40}); !v.Talk {
+		t.Errorf("below the bound since the last rest: %s", v.Why)
+	}
+	v := bound(ctx, &Approach{From: testStranger, Name: "stranger bot", Recent: 4})
+	if v.Talk {
+		t.Error("an outside bot was answered past the bound")
+	}
+	if !strings.Contains(v.Why, "another program's model") || !strings.Contains(v.Why, "30m0s") {
+		t.Errorf("the reason does not say why or until when: %s", v.Why)
+	}
+	if v := bound(ctx, &Approach{From: testSender, Name: "Trusted Resident", Recent: 40}); !v.Talk {
+		t.Errorf("a person was bounded: %s", v.Why)
+	}
+
+	d.cfg.chatBotIDs = map[msg.UUID]bool{testSender: true}
+	if v := bound(ctx, &Approach{From: testSender, Name: "Somebody Else", Recent: 4}); v.Talk {
+		t.Error("a bot named by id was answered past the bound")
+	}
+}

@@ -80,6 +80,11 @@ type Approach struct {
 	// against it would bound nothing.
 	Known bool
 	Turns int
+
+	// Recent is how many things have been said since the two last
+	// rested -- see Conversation.Recent and chat-own-rest.  What bounds
+	// two models talking, where Turns would bound them for good.
+	Recent int
 }
 
 // Verdict is the answer, and why.
@@ -187,16 +192,24 @@ func listAudience(cfg Config) Audience {
 func ownAvatarsBounded(d *daemon, limit int, next Audience) Audience {
 	return func(ctx context.Context, a *Approach) Verdict {
 		who, ours := d.AvatarFor(a.From)
+		what := "which this daemon drives as well"
 		if !ours {
-			return next(ctx, a)
+			if !d.cfg.ChatBot(a.From, a.Name) {
+				return next(ctx, a)
+			}
+			who, what = a.Name, "which another program's model drives"
 		}
 		if limit <= 0 {
-			return Verdict{false, "that is " + who + ", which this daemon drives as well"}
+			return Verdict{false, "that is " + who + ", " + what}
 		}
-		if a.Turns >= limit {
+		if a.Recent >= limit {
+			rest := "and will not until they have said nothing for " + d.cfg.ChatOwnRest.String()
+			if d.cfg.ChatOwnRest <= 0 {
+				rest = "and chat-own-rest is 0, so not again"
+			}
 			return Verdict{false, fmt.Sprintf(
-				"that is %s, which this daemon drives as well, and they have "+
-					"said %d things to each other already", who, a.Turns)}
+				"that is %s, %s, and they have said %d things to each other already, %s",
+				who, what, a.Recent, rest)}
 		}
 		return next(ctx, a)
 	}

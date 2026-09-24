@@ -122,6 +122,13 @@ type Conversation struct {
 
 	Turns []Turn `json:"turns"`
 
+	// Times is when the last few things were said, compaction or not.
+	// The turns that are folded into the summary lose their times with
+	// them, and a bound on how much two models say in one sitting has
+	// to count across a compaction: with a short context, eight
+	// exchanges can be enough to set one off.
+	Times []time.Time `json:"times,omitempty"`
+
 	// State is the kv cache file the server last wrote for this
 	// conversation, and By is the fingerprint it was written under.
 	// Both, because the file alone says nothing: a state whose
@@ -245,6 +252,43 @@ func Gap(d time.Duration) string {
 func (c *Conversation) Add(role, text string, at time.Time) {
 	c.Turns = append(c.Turns, Turn{Role: role, Text: text, At: at})
 	c.Spoke = at
+	c.Times = append(c.Times, at)
+	if len(c.Times) > keptTimes {
+		c.Times = append([]time.Time(nil), c.Times[len(c.Times)-keptTimes:]...)
+	}
+}
+
+// keptTimes is how many times Add remembers: more than any sensible
+// chat-own, which is what they are for.
+const keptTimes = 64
+
+// Recent is how many things have been said since the two last went
+// rest without saying anything -- counting back from the latest, and
+// none at all if that was itself rest ago.  Zero rest counts everything
+// ever said, compacted or not, as if no rest were ever long enough.
+//
+// A conversation written before the times were kept has only its kept
+// turns to go by, which is right for everything since its last
+// compaction and misses what was folded away before.
+func (c *Conversation) Recent(now time.Time, rest time.Duration) int {
+	if rest <= 0 {
+		return c.Compacted + len(c.Turns)
+	}
+	times := c.Times
+	if len(times) == 0 {
+		for _, t := range c.Turns {
+			times = append(times, t.At)
+		}
+	}
+	n, next := 0, now
+	for i := len(times) - 1; i >= 0; i-- {
+		if next.Sub(times[i]) >= rest {
+			break
+		}
+		n++
+		next = times[i]
+	}
+	return n
 }
 
 // Trim drops the oldest turns until the conversation should fit the
@@ -549,7 +593,12 @@ func (c *Chatter) ready(ctx context.Context) (*Props, error) {
 	if c.props == nil {
 		c.props = p
 		if p.Slots > 0 {
-			c.slots = newSlotPool(p.Slots)
+			n := p.Slots
+			if c.cfg.LLMSlots > 0 && c.cfg.LLMSlots < n {
+				n = c.cfg.LLMSlots
+				c.logf("using slots 0 to %d of the server's %d; the rest are left for other programs", n-1, p.Slots)
+			}
+			c.slots = newSlotPool(n)
 		}
 		c.logf("model %s (%s), %d slots of %d tokens, build %s",
 			p.Alias, p.Ftype, p.Slots, p.Settings.Ctx, p.Build)

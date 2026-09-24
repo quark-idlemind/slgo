@@ -333,3 +333,55 @@ func TestTheBackstoryIsItsOwnMessageWhenItCanBe(t *testing.T) {
 		t.Fatalf("got %d messages, want character, memory and the remark", len(with))
 	}
 }
+
+// Recent counts what was said since the two last went quiet for the
+// rest period, across compactions, and nothing once they have.
+func TestRecentCountsSinceTheLastRest(t *testing.T) {
+	t0 := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	var c Conversation
+	// Three things, a long quiet, then two more close together.
+	for _, m := range []int{0, 1, 2, 60, 61} {
+		c.Add("user", "x", t0.Add(time.Duration(m)*time.Minute))
+	}
+	now := t0.Add(62 * time.Minute)
+	if got := c.Recent(now, 30*time.Minute); got != 2 {
+		t.Errorf("after a 58-minute gap: %d, want 2", got)
+	}
+	if got := c.Recent(now, 2*time.Hour); got != 5 {
+		t.Errorf("with a rest longer than any gap: %d, want 5", got)
+	}
+	if got := c.Recent(t0.Add(95*time.Minute), 30*time.Minute); got != 0 {
+		t.Errorf("rested since the last: %d, want 0", got)
+	}
+
+	// Compaction takes turns away and the count carries on.
+	c.Turns = c.Turns[3:]
+	c.Compacted = 3
+	if got := c.Recent(now, 2*time.Hour); got != 5 {
+		t.Errorf("across a compaction: %d, want 5", got)
+	}
+
+	// Zero rest is everything ever said, which is the old bound.
+	if got := c.Recent(now, 0); got != 5 {
+		t.Errorf("zero rest: %d, want 5", got)
+	}
+
+	// A conversation from before the times were kept goes by its turns.
+	old := Conversation{Turns: []Turn{{At: t0}, {At: t0.Add(time.Minute)}}}
+	if got := old.Recent(t0.Add(2*time.Minute), 30*time.Minute); got != 2 {
+		t.Errorf("without Times: %d, want 2", got)
+	}
+}
+
+// Only the last few times are kept: enough for any bound, and the file
+// does not grow for ever.
+func TestTimesAreKeptToAFew(t *testing.T) {
+	var c Conversation
+	t0 := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < keptTimes+10; i++ {
+		c.Add("user", "x", t0.Add(time.Duration(i)*time.Second))
+	}
+	if len(c.Times) != keptTimes {
+		t.Errorf("kept %d times, want %d", len(c.Times), keptTimes)
+	}
+}

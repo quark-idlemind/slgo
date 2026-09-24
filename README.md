@@ -1373,7 +1373,10 @@ answer, and a refusal beats a permission: `chat = *` with `chat =
 will otherwise talk to each other -- which is not a malfunction, but
 never stops, since neither is answering itself and neither gets bored.
 Measured before there was a bound: one message typed by hand ran to 26
-exchanges in ninety seconds. `chat-own` bounds it.
+exchanges in ninety seconds. `chat-own` bounds it, counted afresh
+after `chat-own-rest` (30 minutes) of silence between the two, and
+`chat-bot` names avatars some other program's model drives, which are
+bounded the same way.
 
 A reply is held back until a person could have written it:
 `len(arrived)/read-cps` seconds of silence, then `len(reply)/type-cps`

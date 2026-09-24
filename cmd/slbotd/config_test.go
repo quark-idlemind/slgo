@@ -331,3 +331,30 @@ func TestHalfAChatConfigurationIsSaidNotFatal(t *testing.T) {
 		t.Error("chat is on with no model")
 	}
 }
+
+// chat-bot, chat-own-rest and llm-slots, and what is refused.
+func TestBotsRestAndSlots(t *testing.T) {
+	c := parse(t, "avatar = example\ntrusted = Quark Idlemind\n"+
+		"chat-bot = Stranger Bot\nchat-bot = 19d17e57-7e57-c0de-11be-a4325a5080a2\n"+
+		"chat-own-rest = 45m\nllm-slots = 4\n")
+	if !c.ChatBot(msg.UUID{}, "stranger BOT") || !c.ChatBot(testStranger, "") || c.ChatBot(testSender, "Trusted Resident") {
+		t.Error("chat-bot did not match by name and by id, and only those")
+	}
+	if c.ChatOwnRest != 45*time.Minute || c.LLMSlots != 4 {
+		t.Errorf("rest %v, slots %d", c.ChatOwnRest, c.LLMSlots)
+	}
+	if got := strings.Join(c.ChatBots(), ","); got != "19d17e57-7e57-c0de-11be-a4325a5080a2,Stranger Bot" {
+		t.Errorf("ChatBots = %q", got)
+	}
+
+	d := parse(t, "avatar = example\ntrusted = Quark Idlemind\n")
+	if d.ChatOwnRest != 30*time.Minute || d.LLMSlots != 0 {
+		t.Errorf("defaults: rest %v, slots %d", d.ChatOwnRest, d.LLMSlots)
+	}
+
+	for _, bad := range []string{"chat-bot =", "chat-own-rest = soon", "chat-own-rest = -1m", "llm-slots = -1", "llm-slots = two"} {
+		if _, err := parseConfig(strings.NewReader("avatar = example\ntrusted = A B\n" + bad + "\n")); err == nil {
+			t.Errorf("%q was taken", bad)
+		}
+	}
+}
