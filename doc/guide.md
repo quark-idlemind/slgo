@@ -196,6 +196,8 @@ and nothing checks that the connection really is loopback.
     slgod example                       one avatar
     slgod example builder helper        three
     slgod -listen :7900 example         somewhere other than the default :7807
+    slgod -config ~/.config/slgod.dev -listen 127.0.0.1:7808 dev
+                                        a second daemon with its own directory
 
 Each argument names a profile. The sessions stay up until the process is
 signalled; clients attach and detach freely without the grid noticing.
@@ -714,6 +716,7 @@ half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
 | | |
 |---|---|
 | `-listen ADDR` | address to serve clients on (default `:7807`) |
+| `-config DIR` | keep profiles and slgod's own files (machine identity, seats, viewer certificate) in DIR, instead of `~/.config/slgo` and `~/.config/slgod`; DIR must exist and be mode 700; the shared secret stays in `~/.config/slgod/secret` |
 | `-no-auth` | serve without authentication; loopback only, and it is not checked |
 | `-group G`, `-group PROFILE=G` | the group to act as, overriding the profile's own |
 | `-start WHERE` | override every profile's start location |

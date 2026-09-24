@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/quark-idlemind/slgo/agent"
 )
 
 func tempMachineDir(t *testing.T) string {
@@ -267,5 +269,89 @@ func TestMachineConfigIsPrivate(t *testing.T) {
 	}
 	if m := fi.Mode().Perm(); m&0o077 != 0 {
 		t.Errorf("directory is mode %04o, want 0700", m)
+	}
+}
+
+// -config puts everything slgod keeps in one directory: the profiles
+// and its own files both, so a second daemon started with another one
+// reads none of the first's.  The directory must already be there and
+// private, because it holds credentials.
+func TestConfigDirHoldsProfilesAndTheDaemonsOwnFiles(t *testing.T) {
+	t.Setenv("SLGO_CONFIG_DIR", "")
+	t.Setenv("SLGOD_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	dir := filepath.Join(t.TempDir(), "slgod.dev")
+	if err := useConfigDir(dir); err == nil {
+		t.Error("a directory that does not exist was taken")
+	}
+
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := useConfigDir(dir); err == nil {
+		t.Error("a directory others can list was taken; it holds credentials")
+	}
+
+	notADir := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := useConfigDir(notADir); err == nil {
+		t.Error("a file was taken as a config directory")
+	}
+
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := useConfigDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := machineConfigDir(); err != nil || got != dir {
+		t.Errorf("machineConfigDir = %q, %v; want %q", got, err, dir)
+	}
+	if got, err := agent.ConfigDir(); err != nil || got != dir {
+		t.Errorf("agent.ConfigDir = %q, %v; want %q", got, err, dir)
+	}
+	if got, err := seatsPath(); err != nil || filepath.Dir(got) != dir {
+		t.Errorf("seatsPath = %q, %v; want it in %q", got, err, dir)
+	}
+
+	// A profile there is one this daemon can log in, and the files the
+	// daemon writes beside it are not mistaken for accounts.
+	profile := "first = Example\nlast = Resident\npassword = $1$00157e577e57c0de028f000000000000\n"
+	if err := os.WriteFile(filepath.Join(dir, "example"), []byte(profile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := loadMachineID(); err != nil {
+		t.Fatal(err)
+	}
+	names, err := agent.ListProfiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 1 || names[0] != "example" {
+		t.Errorf("profiles = %q, want just example", names)
+	}
+}
+
+// A relative -config is made absolute when it is given, so nothing
+// that later changes the working directory can move it.
+func TestConfigDirIsMadeAbsolute(t *testing.T) {
+	t.Setenv("SLGO_CONFIG_DIR", "")
+	t.Setenv("SLGOD_CONFIG_DIR", "")
+	parent := t.TempDir()
+	if err := os.Mkdir(filepath.Join(parent, "dev"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(parent)
+	if err := useConfigDir("dev"); err != nil {
+		t.Fatal(err)
+	}
+	want, _ := filepath.EvalSymlinks(filepath.Join(parent, "dev"))
+	got, _ := filepath.EvalSymlinks(os.Getenv("SLGOD_CONFIG_DIR"))
+	if !filepath.IsAbs(os.Getenv("SLGOD_CONFIG_DIR")) || got != want {
+		t.Errorf("SLGOD_CONFIG_DIR = %q, want %q", os.Getenv("SLGOD_CONFIG_DIR"), want)
 	}
 }

@@ -54,6 +54,48 @@ func machineConfigDir() (string, error) {
 	return filepath.Join(home, ".config", "slgod"), nil
 }
 
+// useConfigDir makes dir the one directory this daemon keeps
+// everything in: the profiles it logs in, which are otherwise
+// ~/.config/slgo, and its own files -- the machine identity, the seats,
+// the viewer certificate -- which are otherwise ~/.config/slgod.  It is
+// what -config does, and what lets a second slgod run beside the first
+// with its own accounts and its own state, a development daemon on
+// another port, say, without the two reading each other's files.
+//
+// It sets the two variables that already name each directory outright,
+// SLGO_CONFIG_DIR and SLGOD_CONFIG_DIR, so that every lookup in the
+// process -- agent's for profiles, this package's for the rest -- lands
+// on the same place without a directory being passed through each.
+// The path is made absolute first, so a later change of working
+// directory cannot move it.
+//
+// The directory has to exist and be private already, 0700 like the
+// profile directory: it holds credentials, and one made here on the
+// strength of a typing slip would only hold nobody's.  The shared
+// secret is not in it.  That is one file for the whole lab, and a
+// daemon that looked for it here would be one its clients could not
+// reach.
+func useConfigDir(dir string) error {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		return err
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("%s is not a directory", abs)
+	}
+	if m := fi.Mode().Perm(); m&0o077 != 0 {
+		return fmt.Errorf("%s is mode %04o, wanted 0700: chmod 700 %s", abs, m, abs)
+	}
+	if err := os.Setenv("SLGO_CONFIG_DIR", abs); err != nil {
+		return err
+	}
+	return os.Setenv("SLGOD_CONFIG_DIR", abs)
+}
+
 func machineConfigPath() (string, error) {
 	dir, err := machineConfigDir()
 	if err != nil {

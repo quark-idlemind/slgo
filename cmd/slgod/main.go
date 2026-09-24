@@ -8,6 +8,11 @@
 //
 // slgod's own settings -- the machine identity it presents to the login
 // server -- live in ~/.config/slgod/config, written on the first run.
+//
+// -config DIR keeps both in DIR instead, which is how a second daemon
+// runs beside the first with accounts and state of its own:
+//
+//	slgod -config ~/.config/slgod.dev -listen 127.0.0.1:7808 dev
 package main
 
 import (
@@ -38,6 +43,8 @@ import (
 func main() {
 	var (
 		listen    = flag.String("listen", ":7807", "address to serve clients on")
+		configDir = flag.String("config", "",
+			"keep profiles and slgod's own files in this directory, not ~/.config/slgo and ~/.config/slgod")
 		noAuth    = flag.Bool("no-auth", false, "serve without authentication; loopback only, and it is not checked")
 		verbose   = flag.Bool("v", false, "log every message the grid sends")
 		start     = flag.String("start", "", "override the profile's start location")
@@ -103,6 +110,12 @@ func main() {
 		redact.SetFull(true)
 		log.Print("WARNING: -log-secrets is on: session ids, circuit codes and capability URLs " +
 			"are logged in full, and anyone who can read this log can use them")
+	}
+	if *configDir != "" {
+		if err := useConfigDir(*configDir); err != nil {
+			log.Fatalf("cannot start: -config: %v", err)
+		}
+		log.Printf("config: %s", os.Getenv("SLGOD_CONFIG_DIR"))
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
