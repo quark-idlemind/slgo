@@ -61,15 +61,28 @@ import (
 // question put to it.
 const howName = "how"
 
+// howCommand is shared by both spellings in the table below.
+var howCommand = &command{
+	params:   "QUESTION...",
+	flags:    func() any { return new(askOptions) },
+	brief:    "which command does what you describe, with a line to type and its man page's words",
+	keywords: "question ask which command does what describe find command search suggest words",
+	man:      howName,
+	run:      cmdAsk,
+}
+
+// "How" is here as well as "how" because what is typed after it is a
+// sentence, and a person typing a sentence starts it with a capital.
+// Every other command is a word somebody learned to type in lower case;
+// this one is the one they type without having learned anything, and
+// "How: no such command" is the answer it exists to prevent.  It is
+// the one spelling allowed, not case-insensitive lookup, which would
+// make "LS" a command too.
+const howCapitalised = "How"
+
 var askCommandTable = map[string]*command{
-	howName: {
-		params:   "QUESTION...",
-		flags:    func() any { return new(askOptions) },
-		brief:    "which command does what you describe, with a line to type and its man page's words",
-		keywords: "question ask which command does what describe find command search suggest words",
-		man:      howName,
-		run:      cmdAsk,
-	},
+	howName:        howCommand,
+	howCapitalised: howCommand,
 }
 
 type askOptions struct {

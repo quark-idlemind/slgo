@@ -4,6 +4,9 @@ whole line, `how` included, in ordinary words, and needs no quoting:
 
     how do I make where I am standing my home
 
+`How`, with a capital, is the same command, since a question typed as a
+sentence starts with one.  No other spelling is.
+
 The answer is a line to type, why it does what was asked, and the
 sentence from that command's man page that says so:
 

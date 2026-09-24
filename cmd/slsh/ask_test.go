@@ -253,6 +253,39 @@ func TestHowPutsItsNameBackInTheQuestion(t *testing.T) {
 	}
 }
 
+// A sentence starts with a capital, so "How do I ..." is the same
+// command asking the same question -- and only that one spelling is,
+// since case-insensitive lookup would make every command two commands.
+func TestHowWithACapitalIsTheSameQuestion(t *testing.T) {
+	if commands[howCapitalised] != commands[howName] {
+		t.Fatalf("%q is not the same command as %q", howCapitalised, howName)
+	}
+	f := &fakeModel{replies: []string{askJSON(t, true, askSetHome)}}
+	x := newAskShell(t, f.serve(t).URL)
+	got := x.do(t, "How do I make where I am standing my home")
+	if !strings.Contains(got, "to type:  landmark --set-home") {
+		t.Errorf("How did not answer as how does:\n%s", got)
+	}
+	if len(f.bodies) != 1 {
+		t.Fatalf("%d requests", len(f.bodies))
+	}
+	msgs, _ := f.bodies[0]["messages"].([]any)
+	var all strings.Builder
+	for _, m := range msgs {
+		mm, _ := m.(map[string]any)
+		s, _ := mm["content"].(string)
+		all.WriteString(s)
+	}
+	if !strings.Contains(all.String(), askHomeQuestion) {
+		t.Errorf("the model was not asked %q:\n%s", askHomeQuestion, all.String())
+	}
+	for _, other := range []string{"HOW", "hOw"} {
+		if _, ok := commands[other]; ok {
+			t.Errorf("%q is a command; only %q and %q should be", other, howName, howCapitalised)
+		}
+	}
+}
+
 func TestAskCommandNotFound(t *testing.T) {
 	f := &fakeModel{replies: []string{askJSON(t, false)}}
 	x := newAskShell(t, f.serve(t).URL)
