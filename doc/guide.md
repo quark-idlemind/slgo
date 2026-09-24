@@ -2043,6 +2043,12 @@ used, because two conversations with one avatar share a prefix — the
 same backstory — and the server would otherwise match it and carry the
 wrong person's words into the reply.
 
+`slbotd` uses every slot the server reports, so anything else sent to
+the same server — slsh's `how`, pointed at it — lands in a slot that
+holds one of these conversations and replaces its cache without
+`slbotd` knowing. The slsh guide, under *Setting up a model for how*,
+says what that is likely to cost.
+
 ### Who it answers
 
 `chat` is a list of its own and not a flag on `trusted`. Driving an

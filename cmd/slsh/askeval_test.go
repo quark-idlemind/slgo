@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -135,6 +136,20 @@ func askEvalFlagArg(cmd, fl string) string {
 	for _, arg := range []string{" 1", " x"} {
 		if checkCommandLine(cmd+" "+fl+arg) == nil {
 			return arg
+		}
+	}
+	// A flag whose value comes from a list (perms --next's letters) takes
+	// neither, and does take the placeholder its usage line writes.
+	if c, ok := commands[cmd]; ok {
+		var ph []string
+		for w := range askPlaceholders(c.usage(cmd)) {
+			ph = append(ph, w)
+		}
+		sort.Strings(ph)
+		for _, w := range ph {
+			if checkCommandLine(cmd+" "+fl+" "+w) == nil {
+				return " " + w
+			}
 		}
 	}
 	return ""

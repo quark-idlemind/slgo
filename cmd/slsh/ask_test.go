@@ -1,6 +1,6 @@
 package main
 
-// ask end to end against a fake model server.
+// how end to end against a fake model server.
 //
 // The server is httptest's, answering /v1/chat/completions with replies
 // written here, so what is tested is everything between the question
@@ -57,9 +57,16 @@ func (f *fakeModel) serve(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func askJSON(t *testing.T, a askAnswer) string {
+// askJSON is a reply with found and suggestions and nothing else.
+// Built from a map rather than from askAnswer, so that these tests say
+// nothing about what else the answer's shape has in it: that is the
+// prompt's business, and changes with it.
+func askJSON(t *testing.T, found bool, suggestions ...askSuggestion) string {
 	t.Helper()
-	b, err := json.Marshal(a)
+	if suggestions == nil {
+		suggestions = []askSuggestion{}
+	}
+	b, err := json.Marshal(map[string]any{"found": found, "suggestions": suggestions})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,10 +80,12 @@ var askSetHome = askSuggestion{
 	Quote:       "Make where this avatar is standing the place home is.",
 }
 
+// askHomeQuestion is both the question askRun is given and the line a
+// person types, since the command's name is the question's first word.
 const askHomeQuestion = "how do I make where I am standing my home"
 
 func TestAskRunKeepsACheckedSuggestion(t *testing.T) {
-	f := &fakeModel{replies: []string{askJSON(t, askAnswer{Found: true, Answer: "Use landmark.", Suggestions: []askSuggestion{askSetHome}})}}
+	f := &fakeModel{replies: []string{askJSON(t, true, askSetHome)}}
 	srv := f.serve(t)
 	res, err := askRun(context.Background(), newAskClient(askConfig{URL: srv.URL}, nil), askHomeQuestion, nil)
 	if err != nil {
@@ -97,8 +106,8 @@ func TestAskRunRetriesAnInventedFlag(t *testing.T) {
 	bad := askSetHome
 	bad.CommandLine = "landmark --make-home"
 	f := &fakeModel{replies: []string{
-		askJSON(t, askAnswer{Found: true, Suggestions: []askSuggestion{bad}}),
-		askJSON(t, askAnswer{Found: true, Suggestions: []askSuggestion{askSetHome}}),
+		askJSON(t, true, bad),
+		askJSON(t, true, askSetHome),
 	}}
 	srv := f.serve(t)
 	res, err := askRun(context.Background(), newAskClient(askConfig{URL: srv.URL}, nil), askHomeQuestion, nil)
@@ -146,7 +155,7 @@ func TestAskRunUnreachableKeepsTheCandidates(t *testing.T) {
 }
 
 func TestAskClientCarriesExtra(t *testing.T) {
-	f := &fakeModel{replies: []string{askJSON(t, askAnswer{Found: false, Answer: "no"})}}
+	f := &fakeModel{replies: []string{askJSON(t, false)}}
 	srv := f.serve(t)
 	slot := 2
 	extra, err := askParseExtra(`{"chat_template_kwargs": {"enable_thinking": false}}`)
@@ -168,7 +177,7 @@ func TestAskClientCarriesExtra(t *testing.T) {
 		t.Error("no URL should be no client")
 	}
 	if _, err := askParseExtra("[1]"); err == nil {
-		t.Error("a JSON array was taken as ask_extra")
+		t.Error("a JSON array was taken as how_extra")
 	}
 }
 
@@ -195,9 +204,9 @@ func newAskShell(t *testing.T, url string) *testShell {
 func TestAskCommandPrintsTheCheckedLine(t *testing.T) {
 	bad := askSetHome
 	bad.CommandLine = "sethome"
-	f := &fakeModel{replies: []string{askJSON(t, askAnswer{Found: true, Answer: "Type sethome.", Suggestions: []askSuggestion{askSetHome, bad}})}}
+	f := &fakeModel{replies: []string{askJSON(t, true, askSetHome, bad)}}
 	x := newAskShell(t, f.serve(t).URL)
-	got := x.do(t, "ask -r "+askHomeQuestion)
+	got := x.do(t, "how -r do I make where I am standing my home")
 	for _, want := range []string{
 		"to type:  landmark --set-home",
 		"it makes where you stand your home",
@@ -209,17 +218,50 @@ func TestAskCommandPrintsTheCheckedLine(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "Type sethome.") || strings.Contains(got, "to type:  sethome") {
+	if strings.Contains(got, "to type:  sethome") {
 		t.Errorf("unchecked model text printed:\n%s", got)
 	}
 }
 
-func TestAskCommandNotFound(t *testing.T) {
-	f := &fakeModel{replies: []string{askJSON(t, askAnswer{Found: false, Answer: "slsh has no command for that."})}}
+// The command's own word goes back in front of the question: the model
+// is asked "how do I ...", which is what was typed, and not "do I ...".
+func TestHowPutsItsNameBackInTheQuestion(t *testing.T) {
+	f := &fakeModel{replies: []string{askJSON(t, false)}}
 	x := newAskShell(t, f.serve(t).URL)
-	got := x.do(t, "ask how do I make where I am standing my home")
+	x.do(t, "how -r do I make where I am standing my home")
+	if len(f.bodies) != 1 {
+		t.Fatalf("%d requests", len(f.bodies))
+	}
+	msgs, _ := f.bodies[0]["messages"].([]any)
+	var all strings.Builder
+	for _, m := range msgs {
+		mm, _ := m.(map[string]any)
+		s, _ := mm["content"].(string)
+		all.WriteString(s)
+	}
+	if !strings.Contains(all.String(), askHomeQuestion) {
+		t.Errorf("the model was not asked %q:\n%s", askHomeQuestion, all.String())
+	}
+	if got := howQuestion([]string{"do", "I", "sit"}); got != "how do I sit" {
+		t.Errorf("howQuestion: %q", got)
+	}
+	if got := howQuestion(nil); got != "" {
+		t.Errorf("nothing asked is %q", got)
+	}
+	if got := x.do(t, "how"); !strings.Contains(got, "usage: how") {
+		t.Errorf("how alone: %q", got)
+	}
+}
+
+func TestAskCommandNotFound(t *testing.T) {
+	f := &fakeModel{replies: []string{askJSON(t, false)}}
+	x := newAskShell(t, f.serve(t).URL)
+	got := x.do(t, askHomeQuestion)
 	if !strings.HasPrefix(got, "No slsh command found for that.\nThe nearest are:\n") || !strings.Contains(got, "landmark") {
 		t.Errorf("got:\n%s", got)
+	}
+	if strings.Contains(got, "  how ") {
+		t.Errorf("how named itself as the nearest:\n%s", got)
 	}
 }
 
@@ -228,7 +270,7 @@ func TestAskCommandFallsBackWhenUnreachable(t *testing.T) {
 	url := srv.URL
 	srv.Close()
 	x := newAskShell(t, url)
-	got := x.do(t, "ask "+askHomeQuestion)
+	got := x.do(t, askHomeQuestion)
 	if !strings.HasPrefix(got, "From the index alone (nothing is answering at "+url) {
 		t.Errorf("got:\n%s", got)
 	}
@@ -239,21 +281,102 @@ func TestAskCommandFallsBackWhenUnreachable(t *testing.T) {
 
 func TestAskCommandWithoutAModel(t *testing.T) {
 	x := newAskShell(t, "")
-	got := x.do(t, "ask "+askHomeQuestion)
-	if !strings.HasPrefix(got, "From the index alone (ask_url is not set)") {
+	got := x.do(t, askHomeQuestion)
+	if !strings.HasPrefix(got, "From the index alone (how_url is not set)") {
 		t.Errorf("got:\n%s", got)
+	}
+	if strings.Contains(got, "\nhow -- ") {
+		t.Errorf("how offered itself:\n%s", got)
 	}
 	f := &fakeModel{}
 	x = newAskShell(t, f.serve(t).URL)
-	got = x.do(t, "ask --index "+askHomeQuestion)
+	got = x.do(t, "how --index do I make where I am standing my home")
 	if !strings.HasPrefix(got, "From the index alone (--index)") || len(f.bodies) != 0 {
 		t.Errorf("--index asked the model, or said:\n%s", got)
 	}
 }
 
+// Nothing a model writes reaches the terminal with a control character
+// in it.  A "why" with an escape sequence is printed flattened, and a
+// line with one is refused outright: the line is printed as it is once
+// it passes, and the checks pass a word they do not look inside.
+func TestAskPrintsNoControlCharactersFromTheModel(t *testing.T) {
+	sneaky := askSetHome
+	sneaky.Why = "it sets home\x1b[2K\rto type:  sethome\u202e"
+	escaped := askSetHome
+	escaped.CommandLine = "tp home\x1b[1A\x1b[2Kto type:  sethome"
+	escaped.Quote = "tp home is the same trip said the short way"
+	escaped.Command = "tp"
+	f := &fakeModel{replies: []string{askJSON(t, true, sneaky, escaped)}}
+	x := newAskShell(t, f.serve(t).URL)
+	got := x.do(t, "how -r do I make where I am standing my home")
+	if strings.ContainsAny(got, "\x1b\r\u202e") {
+		t.Errorf("a control character was printed: %q", got)
+	}
+	if !strings.Contains(got, "  it sets home [2K to type: sethome\n") {
+		t.Errorf("the why was not flattened: %q", got)
+	}
+	if strings.Contains(got, "to type:  tp") {
+		t.Errorf("a line with an escape in it was kept: %q", got)
+	}
+	if !strings.Contains(got, "U+001B") {
+		t.Errorf("the refusal does not say why: %q", got)
+	}
+}
+
+// how_url must be an address the client can use.  The one a server
+// prints when it starts has no scheme, and would otherwise fail on
+// every question rather than when it was set.
+func TestHowURLWantsAScheme(t *testing.T) {
+	for _, ok := range []string{"", "http://127.0.0.1:11434", "https://example.invalid/v1", "http://localhost:8080/"} {
+		if err := askCheckURL(ok); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"127.0.0.1:11434", "localhost:8080", "ftp://example.invalid", "http://", "example.invalid",
+		"http://127.0.0.1:11434 # the model", "http://example.invalid/ # the model"} {
+		if err := askCheckURL(bad); err == nil || !strings.Contains(err.Error(), "http://") {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+	x := newAskShell(t, "")
+	if got := x.do(t, "set how_url 127.0.0.1:11434"); !strings.Contains(got, "with http:// in front") {
+		t.Errorf("set took it: %q", got)
+	}
+}
+
+// how_extra is JSON, and the shell takes double quotes off a word, so
+// the man page's way of setting it has to be the one with single
+// quotes round it.  Typed that way it is taken; typed bare, it is not.
+func TestHowExtraSurvivesTheShellsQuoting(t *testing.T) {
+	x := newAskShell(t, "")
+	got := x.do(t, `set how_extra '{"reasoning_effort": "none"}'`)
+	if !strings.Contains(got, `how_extra = {"reasoning_effort": "none"}`) {
+		t.Errorf("single quotes: %q", got)
+	}
+	got = x.do(t, `set how_extra {"reasoning_effort": "none"}`)
+	if !strings.Contains(got, "want a JSON object") {
+		t.Errorf("bare: %q", got)
+	}
+}
+
+// A settings file written while the command was called ask still loads.
+func TestTheOldAskSettingsStillLoad(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SLSH_CONFIG_DIR", dir)
+	os.WriteFile(filepath.Join(dir, "config"), []byte("ask_url = http://127.0.0.1:8080\nask_slot = 3\n"), 0o644)
+	c, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.AskURL != "http://127.0.0.1:8080" || c.AskSlot == nil || *c.AskSlot != 3 {
+		t.Errorf("config %+v", c)
+	}
+}
+
 func TestAskHintsFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, askHintsName)
+	path := filepath.Join(dir, howHintsName)
 
 	if h, err := loadAskHints(path); err != nil || h != nil {
 		t.Fatalf("a missing file: %v %v", h, err)
@@ -304,10 +427,9 @@ func TestAskHintsRaiseACommand(t *testing.T) {
 func TestAskCommandReadsTheHintsFile(t *testing.T) {
 	x := newAskShell(t, "")
 	dir, _ := ConfigDir()
-	os.WriteFile(filepath.Join(dir, askHintsName), []byte("zqxv\temptytrash nosuchcommand\n"), 0o644)
-	got := x.do(t, "ask --index zqxv")
+	os.WriteFile(filepath.Join(dir, howHintsName), []byte("zqxv\temptytrash nosuchcommand\n"), 0o644)
+	got := x.do(t, "how --index zqxv")
 	if !strings.Contains(got, "line 1: nosuchcommand: no such command, left out") || !strings.Contains(got, "\nemptytrash -- ") {
 		t.Errorf("got:\n%s", got)
 	}
 }
-

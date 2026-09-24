@@ -85,7 +85,7 @@ func askIndex() (*askindex.Index, error) {
 	askIndexOnce.Do(func() {
 		askIndexVal, askIndexErr = askindex.Decode(askIndexData)
 		if askIndexErr != nil {
-			askIndexErr = fmt.Errorf("the ask index in this build is damaged (%v); %s rebuilds it", askIndexErr, askIndexUpdate)
+			askIndexErr = fmt.Errorf("the index how searches is damaged in this build (%v); %s rebuilds it", askIndexErr, askIndexUpdate)
 		}
 	})
 	return askIndexVal, askIndexErr

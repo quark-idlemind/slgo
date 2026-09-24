@@ -77,12 +77,13 @@ type Config struct {
 	Log    bool
 	LogDir string
 
-	// Where "ask" finds a model, and what it asks it for: the server's
-	// base URL (empty is no model, and ask answers from its index
+	// Where "how" finds a model, and what it asks it for: the server's
+	// base URL (empty is no model, and how answers from its index
 	// alone), the model's name, llama-server's slot or nil for none,
 	// how long to wait with zero for the client's default, and a JSON
 	// object merged into every request for what one model needs and
-	// another would refuse.  See ask.go.
+	// another would refuse.  See ask.go.  The fields keep the name the
+	// command had when they were written; the settings are how_*.
 	AskURL     string
 	AskModel   string
 	AskSlot    *int
@@ -458,18 +459,31 @@ var settings = []setting{{
 		return nil
 	},
 }, {
-	name:  "ask_url",
-	about: "the model server \"ask\" uses, like http://127.0.0.1:8080; empty is none",
+	name: "how_url",
+	// The old spellings are kept for a file that has them, as addr
+	// keeps "server": the command was called ask for a while, and a
+	// file that says ask_url would otherwise stop slsh from starting.
+	also:  []string{"ask_url"},
+	about: "the model server \"how\" uses, like http://127.0.0.1:8080; empty is none",
 	show:  func(c *Config) string { return c.AskURL },
-	parse: func(c *Config, v string) error { c.AskURL = strings.TrimSpace(v); return nil },
+	parse: func(c *Config, v string) error {
+		v = strings.TrimSpace(v)
+		if err := askCheckURL(v); err != nil {
+			return err
+		}
+		c.AskURL = v
+		return nil
+	},
 }, {
-	name:  "ask_model",
+	name:  "how_model",
+	also:  []string{"ask_model"},
 	about: "the model name sent to that server; llama-server ignores it, Ollama needs it",
 	show:  func(c *Config) string { return c.AskModel },
 	parse: func(c *Config, v string) error { c.AskModel = strings.TrimSpace(v); return nil },
 }, {
-	name:  "ask_slot",
-	about: "the llama-server slot \"ask\" uses; empty is whichever is free",
+	name:  "how_slot",
+	also:  []string{"ask_slot"},
+	about: "the llama-server slot \"how\" uses; empty is whichever is free",
 	show: func(c *Config) string {
 		if c.AskSlot == nil {
 			return ""
@@ -489,8 +503,9 @@ var settings = []setting{{
 		return nil
 	},
 }, {
-	name:  "ask_timeout",
-	about: "how long \"ask\" waits for the model, like 45s; empty is two minutes",
+	name:  "how_timeout",
+	also:  []string{"ask_timeout"},
+	about: "how long \"how\" waits for the model, like 45s; empty is two minutes",
 	show: func(c *Config) string {
 		if c.AskTimeout == 0 {
 			return ""
@@ -510,12 +525,13 @@ var settings = []setting{{
 		return nil
 	},
 }, {
-	name: "ask_extra",
+	name: "how_extra",
+	also: []string{"ask_extra"},
 	// A JSON object rather than a setting per option, because what goes
 	// here is a fact about one model -- a "thinking" model told not to
 	// think -- and there is no end to those.  Checked when it is set, so
 	// that a typo is found then and not at the next question.
-	about: "a JSON object added to every request \"ask\" makes; see \"man ask\"",
+	about: "a JSON object added to every request \"how\" makes; see \"man how\"",
 	show:  func(c *Config) string { return c.AskExtra },
 	parse: func(c *Config, v string) error {
 		v = strings.TrimSpace(v)

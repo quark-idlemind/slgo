@@ -83,6 +83,13 @@ func TestCommandNamesAreSearchable(t *testing.T) {
 		if strings.Trim(n, "abcdefghijklmnopqrstuvwxyz") != "" {
 			continue // ".", which no question will say
 		}
+		if n == howName {
+			// The one name that is meant to be dropped.  Every question
+			// begins with it, so searching for it would find how's own
+			// page for every question asked -- and how is never the
+			// answer it is looking for (see howNeverAnswer).
+			continue
+		}
 		if askindex.Stopword(n) || len(askindex.Tokens(n)) == 0 {
 			t.Errorf("%s is dropped by the tokenizer, so no question can name it", n)
 		}

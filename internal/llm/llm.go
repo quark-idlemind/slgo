@@ -269,6 +269,16 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, schema *Schema) (*Rep
 		PromptTokens:     out.Usage.Prompt,
 		CompletionTokens: out.Usage.Completion,
 	}
+	if r.Text == "" && ch.FinishReason == "length" {
+		// Nothing, and the limit reached: the tokens went somewhere the
+		// message does not show.  That is what a model that reasons
+		// before it answers looks like when its reasoning is kept apart
+		// from the message and outlasts the allowance, which is the
+		// failure worth naming, since the cure is to tell it not to.
+		return nil, fmt.Errorf("%w: the message was empty and the limit of %d tokens was reached; "+
+			"a model that reasons before it answers may have spent them all on that",
+			ErrMalformed, c.o.MaxTokens)
+	}
 	if r.Text == "" {
 		return nil, fmt.Errorf("%w: the message was empty (finish reason %q)", ErrMalformed, ch.FinishReason)
 	}
