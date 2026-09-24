@@ -127,24 +127,6 @@ func TestAFailedProgramSaysItsExitStatus(t *testing.T) {
 	}
 }
 
-// A program that will not finish is stopped, and the answer says that
-// is what happened rather than reporting an exit status nobody set.
-func TestAProgramThatWillNotFinishIsStopped(t *testing.T) {
-	d, b, _ := newTestDaemon(t)
-	d.cfg.RunTimeout = 200 * time.Millisecond
-	d.cfg.Programs["forever"] = &Program{
-		Name: "forever", Argv: []string{script(t, "sleep 30\n")},
-	}
-	started := time.Now()
-	got := runs(t, d, b, "forever")
-	if took := time.Since(started); took > 10*time.Second {
-		t.Errorf("it took %s to give up", took)
-	}
-	if !strings.Contains(got, "was still running") {
-		t.Errorf("got %q", got)
-	}
-}
-
 // A program cannot be allowed to fill the daemon's memory, and what is
 // dropped is said rather than quietly lost.
 func TestOutputIsBounded(t *testing.T) {

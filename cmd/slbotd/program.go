@@ -48,6 +48,20 @@ import (
 // first line -- and a benchmark's own result is a handful of lines.
 const OutputLimit = 256 << 10
 
+// programWaitDelay is how long a run is waited for once its program has
+// exited or been stopped, while something it started still holds the
+// output open.
+//
+// stopTogether kills the whole process group, which is every child that
+// did not go out of its way to leave it.  One that did -- a daemon that
+// called setsid -- is out of reach of the signal, and without this the
+// answer would wait for it however long it lives.  After the delay the
+// pipe is closed from this end and the run is over; whatever the stray
+// child prints afterwards is lost, which is the right trade.
+//
+// A variable so that a test need not spend five seconds finding out.
+var programWaitDelay = 5 * time.Second
+
 // runProgram runs one of the configured programs and prints what it
 // said.
 func runProgram(ctx context.Context, r *req, out io.Writer, p *Program, args []string) error {
@@ -73,6 +87,8 @@ func runProgram(ctx context.Context, r *req, out io.Writer, p *Program, args []s
 
 	argv := append(append([]string{}, p.Argv...), args...)
 	cmd := exec.CommandContext(run, argv[0], argv[1:]...)
+	stopTogether(cmd)
+	cmd.WaitDelay = programWaitDelay
 	// Appended rather than filtered: os/exec keeps the last of a
 	// repeated name, so this wins over an SLGO_AGENT the daemon was
 	// started with.  It has to: that one names whatever avatar the
@@ -108,6 +124,13 @@ func runProgram(ctx context.Context, r *req, out io.Writer, p *Program, args []s
 	switch {
 	case err == nil:
 		fmt.Fprintf(out, "%s finished in %s\n", p.Name, took)
+		return nil
+	case errors.Is(err, exec.ErrWaitDelay):
+		// The program itself exited 0, and something it left behind
+		// was still holding the output when programWaitDelay ran out.
+		// The run succeeded; the only thing to say is that output may
+		// be missing from the end.
+		fmt.Fprintf(out, "%s finished in %s, leaving something running that still had its output open\n", p.Name, took)
 		return nil
 	case errors.Is(run.Err(), context.DeadlineExceeded):
 		return fmt.Errorf("%s was still running after %s and was stopped",
