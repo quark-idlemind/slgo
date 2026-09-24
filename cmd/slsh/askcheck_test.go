@@ -137,7 +137,7 @@ func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
 		{"set viewer_grid my own grid", ""},
 		{"set how_url http://127.0.0.1:11434", ""},
 		{`set how_extra '{"reasoning_effort": "none"}'`, ""},
-		{"set ask_url http://127.0.0.1:8080", ""},
+		{"set ask_url http://127.0.0.1:8080", `set: no setting called "ask_url"`},
 		{"set how_slot", ""},
 		{"set display_name YOUR_DISPLAY_NAME", `set: no setting called "display_name"; there is addr, agent,`},
 		{"set display_name NAME", `set: no setting called "display_name"`},

@@ -459,11 +459,7 @@ var settings = []setting{{
 		return nil
 	},
 }, {
-	name: "how_url",
-	// The old spellings are kept for a file that has them, as addr
-	// keeps "server": the command was called ask for a while, and a
-	// file that says ask_url would otherwise stop slsh from starting.
-	also:  []string{"ask_url"},
+	name:  "how_url",
 	about: "the model server \"how\" uses, like http://127.0.0.1:8080; empty is none",
 	show:  func(c *Config) string { return c.AskURL },
 	parse: func(c *Config, v string) error {
@@ -476,13 +472,11 @@ var settings = []setting{{
 	},
 }, {
 	name:  "how_model",
-	also:  []string{"ask_model"},
 	about: "the model name sent to that server; llama-server ignores it, Ollama needs it",
 	show:  func(c *Config) string { return c.AskModel },
 	parse: func(c *Config, v string) error { c.AskModel = strings.TrimSpace(v); return nil },
 }, {
 	name:  "how_slot",
-	also:  []string{"ask_slot"},
 	about: "the llama-server slot \"how\" uses; empty is whichever is free",
 	show: func(c *Config) string {
 		if c.AskSlot == nil {
@@ -504,7 +498,6 @@ var settings = []setting{{
 	},
 }, {
 	name:  "how_timeout",
-	also:  []string{"ask_timeout"},
 	about: "how long \"how\" waits for the model, like 45s; empty is two minutes",
 	show: func(c *Config) string {
 		if c.AskTimeout == 0 {
@@ -526,7 +519,6 @@ var settings = []setting{{
 	},
 }, {
 	name: "how_extra",
-	also: []string{"ask_extra"},
 	// A JSON object rather than a setting per option, because what goes
 	// here is a fact about one model -- a "thinking" model told not to
 	// think -- and there is no end to those.  Checked when it is set, so

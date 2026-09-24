@@ -360,20 +360,6 @@ func TestHowExtraSurvivesTheShellsQuoting(t *testing.T) {
 	}
 }
 
-// A settings file written while the command was called ask still loads.
-func TestTheOldAskSettingsStillLoad(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("SLSH_CONFIG_DIR", dir)
-	os.WriteFile(filepath.Join(dir, "config"), []byte("ask_url = http://127.0.0.1:8080\nask_slot = 3\n"), 0o644)
-	c, err := LoadConfig()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.AskURL != "http://127.0.0.1:8080" || c.AskSlot == nil || *c.AskSlot != 3 {
-		t.Errorf("config %+v", c)
-	}
-}
-
 func TestAskHintsFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, howHintsName)
