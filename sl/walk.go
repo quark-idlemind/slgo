@@ -105,6 +105,13 @@ func (w *Session) mover() (Mover, error) {
 // was sent and nothing is wrong with the session.  The error is kept for
 // not being able to ask.
 //
+// A target already within agent.MinWithin (half a metre) of the avatar,
+// or within Within, is Arrived at once and nothing moves: the shortest
+// walk an avatar can make from standing is about a metre (measured
+// 2026-09-24), so a nearer target has no step to take.  A caller planning
+// its own legs should not send ones that short, or it will be told
+// Arrived for ever without going anywhere.
+//
 // Cancelling ctx stops the avatar and ends the walk Cancelled, "client
 // gone".  Another Move takes this one over -- it ends Cancelled,
 // "superseded", and the avatar does not stop in between -- which is how
