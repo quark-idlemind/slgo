@@ -1145,6 +1145,15 @@ know, and would take every client down with it.  An older client
 handed `host:port` adds `:7807` to it all the same, so rebuild the
 clients and sl-host together.
 
+The address a client ends up with also chooses its secret. One shared
+secret, `~/.config/slgod/secret`, is the usual case; a slgod started
+with a secret of its own (`-secret FILE`, or a `secret` in its `-config`
+directory) is reached with a copy kept under the address as dialled --
+`~/.config/slgod/secret.127.0.0.1.7808`, then `secret.127.0.0.1`, then
+the shared one -- with an IPv6 address's colons turned into dots. So
+`localhost:7808` and `127.0.0.1:7808` are two files; doc/guide.md has
+the rest.
+
 Not being installed is the ordinary case on a machine that runs its own
 slgod, so it is a default rather than a failure. sl-host being there and
 *failing* is reported instead:

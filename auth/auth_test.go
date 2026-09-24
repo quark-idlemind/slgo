@@ -409,3 +409,82 @@ func TestServerProofIsPerConnection(t *testing.T) {
 		t.Fatal("the server's proof is the same on two different connections")
 	}
 }
+
+// A client looks for a secret kept for the address it is dialling, then
+// for the host, then the shared one; IPv6 colons become dots, since a
+// colon is not a character every filesystem takes in a name.
+func TestSecretPathsForAnAddress(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "slgod")
+	for _, c := range []struct {
+		addr string
+		want []string
+	}{
+		{"192.0.2.20:7807", []string{"secret.192.0.2.20.7807", "secret.192.0.2.20", "secret"}},
+		{"127.0.0.1:7808", []string{"secret.127.0.0.1.7808", "secret.127.0.0.1", "secret"}},
+		{"[2001:db8::20]:7807", []string{"secret.2001.db8..20.7807", "secret.2001.db8..20", "secret"}},
+		{"Server.Example:7900", []string{"secret.server.example.7900", "secret.server.example", "secret"}},
+		{"server.example", []string{"secret.server.example", "secret"}},
+		{"../evil:7807", []string{"secret"}},
+		{"", []string{"secret"}},
+	} {
+		got := SecretPathsFor(c.addr)
+		var want []string
+		for _, w := range c.want {
+			want = append(want, filepath.Join(dir, w))
+		}
+		if strings.Join(got, "\n") != strings.Join(want, "\n") {
+			t.Errorf("%q:\n got %q\nwant %q", c.addr, got, want)
+		}
+	}
+}
+
+// The most particular file there wins; one that is there and unusable
+// is an error rather than a reason to try the next; with none of the
+// particular ones, the shared secret, and a missing shared secret says
+// what else was looked for.
+func TestLoadSecretForAnAddress(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "slgod")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	put := func(name, value string, mode os.FileMode) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(value+"\n"), mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(filepath.Join(dir, name), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, _, err := LoadSecretFor("192.0.2.20:7807")
+	if err == nil || !strings.Contains(err.Error(), "secret.192.0.2.20.7807") {
+		t.Errorf("with nothing there: %v", err)
+	}
+
+	put("secret", "shared-secret-value", 0o600)
+	put("secret.192.0.2.20", "host-secret-value", 0o600)
+	put("secret.192.0.2.20.7808", "port-secret-value", 0o600)
+	for _, c := range []struct{ addr, want, file string }{
+		{"192.0.2.20:7808", "port-secret-value", "secret.192.0.2.20.7808"},
+		{"192.0.2.20:7807", "host-secret-value", "secret.192.0.2.20"},
+		{"192.0.2.99:7807", "shared-secret-value", "secret"},
+	} {
+		got, file, err := LoadSecretFor(c.addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != c.want || file != filepath.Join(dir, c.file) {
+			t.Errorf("%s: %q from %s, want %q from %s", c.addr, got, file, c.want, c.file)
+		}
+	}
+
+	put("secret.192.0.2.30", "too-open-secret-value", 0o644)
+	if _, _, err := LoadSecretFor("192.0.2.30:7807"); err == nil {
+		t.Error("a secret for this host that others can read was passed over for the shared one")
+	}
+}

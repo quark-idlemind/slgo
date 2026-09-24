@@ -193,6 +193,33 @@ once, and past that a login is refused on the spot, with "too many failed
 logins lately; try again in a few minutes". None of this touches a client
 with the secret on an address nobody is guessing from.
 
+One secret for everything is the usual case and the simplest. A `slgod`
+can keep one of its own instead -- one on another machine, say, or one
+holding somebody else's accounts, which need not answer to every client
+this lab's secret is on. `slgod -secret FILE` names it; with `-config
+DIR` and no `-secret`, a file called `secret` in DIR is used when there
+is one; otherwise it is the shared secret. The daemon logs `secret:` and
+the path it read, and reads it before any avatar logs in.
+
+A client chooses by the address it is about to dial, however it came by
+it -- `--addr`, `addr =`, `sl-host` or the `localhost:7807` default --
+and takes the first of these in `~/.config/slgod/` that exists:
+
+    secret.HOST.PORT            secret.192.0.2.20.7807
+    secret.HOST                 secret.192.0.2.20
+    secret                      the shared secret
+
+The host is as dialled, lowercased and without brackets, and an IPv6
+address has its colons turned into dots, since a colon is not safe in a
+file name everywhere: `[2001:db8::20]:7807` is `secret.2001.db8..20.7807`.
+So `localhost:7808` and `127.0.0.1:7808` are two files, even through the
+same tunnel; reached as the one with no file, a client falls back on the
+shared secret, which a `slgod` with its own refuses. A per-address file
+that is there but unusable -- the wrong mode, empty -- is an error, not
+a reason to try the next. The refusal names the file that was used,
+"(the secret used was PATH)", and a missing shared secret lists the
+per-address files looked for first.
+
 The handshake changed shape once, and a client built before the change
 is told "this client is older than slgod" rather than refused as if its
 secret were wrong. The cure is to rebuild and reinstall every program
@@ -733,7 +760,8 @@ half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
 | | |
 |---|---|
 | `-listen ADDR` | address to serve clients on (default `:7807`) |
-| `-config DIR` | keep profiles and slgod's own files (machine identity, seats, viewer certificate) in DIR, instead of `~/.config/slgo` and `~/.config/slgod`; DIR must exist and be mode 700; the shared secret stays in `~/.config/slgod/secret` |
+| `-config DIR` | keep profiles and slgod's own files (machine identity, seats, viewer certificate) in DIR, instead of `~/.config/slgo` and `~/.config/slgod`; DIR must exist and be mode 700; a file called `secret` in it, if there is one, is this daemon's secret instead of the shared one |
+| `-secret FILE` | the secret clients must prove, instead of `DIR/secret` or `~/.config/slgod/secret`; logged as `secret:` at startup |
 | `-no-auth` | serve without authentication; loopback only, and it is not checked |
 | `-group G`, `-group PROFILE=G` | the group to act as, overriding the profile's own |
 | `-start WHERE` | override every profile's start location |

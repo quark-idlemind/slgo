@@ -268,7 +268,7 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 		return nil, err
 	}
 	if authenticate {
-		if err := login(ctx, cc, binding); err != nil {
+		if err := login(ctx, cc, addr, binding); err != nil {
 			cc.Close()
 			return nil, err
 		}
@@ -324,9 +324,10 @@ func loginRequest(challenge, proof []byte) *pb.LoginRequest {
 	}
 }
 
-// login runs the two-call handshake on this connection.
-func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, error)) error {
-	secret, err := auth.LoadSecret("")
+// login runs the two-call handshake on this connection, with the secret
+// kept for the slgod at addr -- see auth.SecretPathsFor.
+func login(ctx context.Context, cc *grpc.ClientConn, addr string, binding func() ([]byte, error)) error {
+	secret, secretFile, err := auth.LoadSecretFor(addr)
 	if err != nil {
 		return fmt.Errorf("%w\nThe client and slgod share this file", err)
 	}
@@ -351,12 +352,12 @@ func login(ctx context.Context, cc *grpc.ClientConn, binding func() ([]byte, err
 	}
 	done, err := g.Login(ctx, loginRequest(cchal, auth.ClientProof(secret, schal, bind)))
 	if err != nil {
-		return fmt.Errorf("login refused: %w", err)
+		return fmt.Errorf("login refused: %w (the secret used was %s)", err, secretFile)
 	}
 	// The server's half. A server that cannot prove it knows the secret
 	// is not the server, whatever else it says.
 	if subtle.ConstantTimeCompare(auth.ServerProof(secret, cchal, bind), done.GetProof()) != 1 {
-		return fmt.Errorf("slgod did not prove it knows the shared secret; refusing to talk to it")
+		return fmt.Errorf("slgod did not prove it knows the shared secret in %s; refusing to talk to it", secretFile)
 	}
 	return nil
 }

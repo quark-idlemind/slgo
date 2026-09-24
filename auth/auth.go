@@ -33,8 +33,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -246,6 +248,92 @@ func DefaultSecretPath() string {
 		}
 	}
 	return path
+}
+
+// SecretPathsFor lists where a client looks for the secret of the slgod
+// at addr, in order: a file for that host and port, a file for that
+// host, and the shared secret.
+//
+//	~/.config/slgod/secret.192.0.2.20.7807
+//	~/.config/slgod/secret.192.0.2.20
+//	~/.config/slgod/secret
+//
+// One secret for every slgod is still the usual case and needs nothing
+// but the last.  The others are for a slgod that keeps a secret of its
+// own -- one on another machine, reached through a tunnel, say -- and
+// they are keyed on the address the client is about to dial, since that
+// is the one thing every client knows at that moment however it came
+// by it: a flag, a configuration file, or sl-host.
+//
+// The host is written as it was given, lowercased, without brackets.
+// An IPv6 address has its colons turned into dots, because a colon is
+// not a character every filesystem will take in a name -- macOS shows
+// one as a slash -- so [2001:db8::20]:7807 is secret.2001.db8..20.7807.
+// A host that could name another directory gets no file of its own.
+func SecretPathsFor(addr string) []string {
+	def := DefaultSecretPath()
+	home, err := os.UserHomeDir()
+	if def == "" || err != nil {
+		return nil
+	}
+	// The per-address files are only ever looked for under slgod,
+	// even when the shared secret is still in its old place.
+	dir := filepath.Join(home, ".config", "slgod")
+	var out []string
+	if host, port, ok := secretKey(addr); ok {
+		if port != "" {
+			out = append(out, filepath.Join(dir, "secret."+host+"."+port))
+		}
+		out = append(out, filepath.Join(dir, "secret."+host))
+	}
+	return append(out, def)
+}
+
+// secretKey is the host and port of addr as they appear in a secret's
+// file name, or false when addr gives nothing usable.
+func secretKey(addr string) (host, port string, ok bool) {
+	h, p, err := net.SplitHostPort(addr)
+	if err != nil {
+		h, p = addr, ""
+	}
+	h = strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(h, "["), "]"))
+	h = strings.ReplaceAll(h, ":", ".")
+	if h == "" || strings.ContainsAny(h, `/\`) || h == "." || h == ".." {
+		return "", "", false
+	}
+	if strings.ContainsAny(p, `/\:.`) {
+		p = ""
+	}
+	return h, p, true
+}
+
+// LoadSecretFor reads the secret for the slgod at addr: the first of
+// SecretPathsFor that exists.  A file that exists and cannot be used --
+// the wrong mode, empty -- is an error, not a reason to go on to the
+// next: it was put there for this address, and quietly using another
+// secret instead would only fail later with a less useful message.
+//
+// With none there, the error is the shared secret's, with the files
+// that were looked for first named after it.
+func LoadSecretFor(addr string) (string, string, error) {
+	paths := SecretPathsFor(addr)
+	if len(paths) == 0 {
+		s, err := LoadSecret("")
+		return s, "", err
+	}
+	for _, p := range paths[:len(paths)-1] {
+		if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		s, err := LoadSecret(p)
+		return s, p, err
+	}
+	last := paths[len(paths)-1]
+	s, err := LoadSecret(last)
+	if err != nil && errors.Is(err, os.ErrNotExist) && len(paths) > 1 {
+		err = fmt.Errorf("%w\n(looked first for %s)", err, strings.Join(paths[:len(paths)-1], " and "))
+	}
+	return s, last, err
 }
 
 // LoadSecret reads the shared secret, refusing a file others can read.

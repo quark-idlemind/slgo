@@ -96,6 +96,28 @@ func useConfigDir(dir string) error {
 	return os.Setenv("SLGOD_CONFIG_DIR", abs)
 }
 
+// secretPath is the file slgod reads its secret from: the one named by
+// -secret, or a file called secret in the -config directory when there
+// is one, or "" for the shared secret everything else uses.
+//
+// A daemon with a directory of its own may have a secret of its own,
+// and one put there is taken to be meant: a second slgod for other
+// accounts need not answer to the first one's clients.  Its clients
+// find it by address -- see auth.SecretPathsFor.
+func secretPath(flagged, configDir string) string {
+	if flagged != "" {
+		return flagged
+	}
+	if configDir == "" {
+		return ""
+	}
+	p := filepath.Join(configDir, "secret")
+	if _, err := os.Stat(p); err == nil {
+		return p
+	}
+	return ""
+}
+
 func machineConfigPath() (string, error) {
 	dir, err := machineConfigDir()
 	if err != nil {

@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,7 +43,9 @@ import (
 
 func main() {
 	var (
-		listen    = flag.String("listen", ":7807", "address to serve clients on")
+		listen   = flag.String("listen", ":7807", "address to serve clients on")
+		secretAt = flag.String("secret", "",
+			"the shared secret clients must prove; default DIR/secret with -config DIR if there is one, else ~/.config/slgod/secret")
 		configDir = flag.String("config", "",
 			"keep profiles and slgod's own files in this directory, not ~/.config/slgo and ~/.config/slgod")
 		noAuth    = flag.Bool("no-auth", false, "serve without authentication; loopback only, and it is not checked")
@@ -116,6 +119,29 @@ func main() {
 			log.Fatalf("cannot start: -config: %v", err)
 		}
 		log.Printf("config: %s", os.Getenv("SLGOD_CONFIG_DIR"))
+	}
+
+	// The secret is read before any avatar is logged in.  A daemon that
+	// logged its avatars in and only then found it could not start
+	// would have ended whatever sessions they had elsewhere -- another
+	// slgod's, say -- for nothing.
+	var secret string
+	if !*noAuth {
+		path := secretPath(*secretAt, *configDir)
+		var err error
+		if secret, err = auth.LoadSecret(path); err != nil {
+			shown := path
+			if shown == "" {
+				shown = auth.DefaultSecretPath()
+			}
+			log.Fatalf("cannot start: %v\n"+
+				"Create one with:  (umask 077; mkdir -p %s; openssl rand -hex 32 > %s)\n"+
+				"Or pass -no-auth to serve loopback without it.", err, filepath.Dir(shown), shown)
+		}
+		if path == "" {
+			path = auth.DefaultSecretPath()
+		}
+		log.Printf("secret: %s", path)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -545,13 +571,6 @@ func main() {
 	// reachable off this machine lets anyone drive the avatar. On by
 	// default for that reason; --no-auth is for a loopback-only run.
 	if !*noAuth {
-		secret, err := auth.LoadSecret("")
-		if err != nil {
-			log.Fatalf("cannot start: %v\n"+
-				"Create one with:  (umask 077; mkdir -p ~/.config/slgod; "+
-				"openssl rand -hex 32 > ~/.config/slgod/secret)\n"+
-				"Or pass -no-auth to serve loopback without it.", err)
-		}
 		a, err := auth.New(secret)
 		if err != nil {
 			log.Fatalf("cannot start: %v", err)

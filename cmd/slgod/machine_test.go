@@ -355,3 +355,25 @@ func TestConfigDirIsMadeAbsolute(t *testing.T) {
 		t.Errorf("SLGOD_CONFIG_DIR = %q, want %q", os.Getenv("SLGOD_CONFIG_DIR"), want)
 	}
 }
+
+// -secret wins; then a secret in the -config directory, if one is
+// there; then the shared one, which is "".
+func TestWhichSecretSlgodReads(t *testing.T) {
+	dir := t.TempDir()
+	if got := secretPath("", ""); got != "" {
+		t.Errorf("with nothing given: %q", got)
+	}
+	if got := secretPath("", dir); got != "" {
+		t.Errorf("with a -config directory holding no secret: %q", got)
+	}
+	own := filepath.Join(dir, "secret")
+	if err := os.WriteFile(own, []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := secretPath("", dir); got != own {
+		t.Errorf("with a secret in the -config directory: %q", got)
+	}
+	if got := secretPath("/elsewhere/secret", dir); got != "/elsewhere/secret" {
+		t.Errorf("-secret did not win: %q", got)
+	}
+}
