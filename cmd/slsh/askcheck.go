@@ -24,17 +24,40 @@ package main
 // done afterwards, and it is the same parse subOptions does before a
 // command acts.
 //
-// The operands are not checked, and cannot be.  How many a command
+// Most operands are not checked, and cannot be.  How many a command
 // takes and what they mean is decided by the command's own code after
 // the flags are parsed -- "tp" alone takes a region, a position, or the
 // word home -- and the usage line's parameters are prose written for a
 // person rather than a grammar.  A check on them would refuse lines the
-// command takes.  What IS checked is one thing about them: that nothing
-// after the first operand looks like a flag.  getopt stops at the first
-// operand, so "landmark Example Workshop --go" is a request to read a
-// landmark called "Example Workshop --go"; the shell would take it
-// without complaint and do something other than what the model said it
-// would.  That is exactly the case a checker is for.
+// command takes.  What IS checked of every command is one thing about
+// them: that nothing after the first operand looks like a flag.  getopt
+// stops at the first operand, so "landmark Example Workshop --go" is a
+// request to read a landmark called "Example Workshop --go"; the shell
+// would take it without complaint and do something other than what the
+// model said it would.  That is exactly the case a checker is for.
+//
+// # Operands from a list the shell holds
+//
+// Some operands are not names of things in the world but words from a
+// list the shell itself keeps: set's setting names, maturity's ratings,
+// help's groups, man's commands, neighbours' on and off, and the values
+// of put's --round and --filter, wear's --at and perms' letters.  Those
+// ARE checked, because a model will write "set display_name ..." with
+// every appearance of confidence, and the shell's answer to it is a
+// refusal.  Each is checked by the code the command itself would use
+// -- findSetting, sl.ParseMaturity, attachPointArg, permMask -- and
+// never by a copy of its list, which would be free to disagree the day
+// a setting is added.
+//
+// A capitalised placeholder the usage line itself uses -- "set NAME
+// VALUE", "maturity RATING", "--at=POINT" -- passes, because that is
+// what the prompt asks a model to write where a person fills something
+// in.  One the usage line does not use, like YOUR_DISPLAY_NAME, is an
+// operand like any other and has to be in the list.
+//
+// new's --kind is the one such list this cannot reach: it is a switch
+// inside cmdNew rather than a list anything else can ask, and a copy of
+// it here is the thing not to write.
 //
 // The quote, against the command's own words.  The model is asked to
 // support each suggestion with a quotation from what it was shown, and
@@ -49,10 +72,13 @@ package main
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 
 	"github.com/pborman/getopt/v2"
+
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 // askQuoteMinWords is the shortest quote that is evidence of anything.
@@ -72,6 +98,13 @@ func checkCommandLine(line string) error {
 	if strings.HasPrefix(line, "#") {
 		// Do skips these, so the line would do nothing at all.
 		return errors.New("the line is a comment, not a command")
+	}
+	if r, ok := askUntypeable(line); ok {
+		// Nobody can type an escape sequence or a second line into one
+		// line, and a model that puts one there has written something
+		// that would do more to a terminal than print a command: the
+		// line is printed as it is once it passes.
+		return fmt.Errorf("the line has %U in it, which is not a character anybody types", r)
 	}
 	words, _, _, err := parse(line)
 	if err != nil {
@@ -94,11 +127,232 @@ func checkCommandLine(line string) error {
 	if fix := askBeforeParse(c); fix != nil {
 		args = fix(args)
 	}
-	set, err := parseOptions(name, c.params, c.flags(), args)
+	opts := c.flags()
+	set, err := parseOptions(name, c.params, opts, args)
 	if err != nil {
 		return fmt.Errorf("%s: %v", name, err)
 	}
-	return checkNoFlagAfterOperands(name, c, args, set.Args())
+	if err := checkNoFlagAfterOperands(name, c, args, set.Args()); err != nil {
+		return err
+	}
+	if err := checkOperands(name, c, opts, set.Args()); err != nil {
+		return fmt.Errorf("%s: %v", name, err)
+	}
+	return nil
+}
+
+// askUntypeable is the first character in line that is not one a
+// person could type into it: a control character other than tab, which
+// the shell splits on like a space, or a formatting character, which
+// includes the ones that turn text round on the screen.
+func askUntypeable(line string) (rune, bool) {
+	for _, r := range line {
+		if r == '\t' {
+			continue
+		}
+		if unicode.In(r, unicode.Cc, unicode.Cf) {
+			return r, true
+		}
+	}
+	return 0, false
+}
+
+// askOperandRule checks the operands and flag values of one command
+// whose words come from a list the shell holds.  opts is the option
+// struct parseOptions filled in, operands what getopt left, and
+// placeholder says whether a word is one the usage line writes in
+// capitals.  The error is the command's own refusal where it has one,
+// without the command's name, which the caller puts in front.
+type askOperandRule func(opts any, operands []string, placeholder func(string) bool) error
+
+// askOperandRules is every command with such a list, by name.  See the
+// head of this file for why each is checked by the command's own code.
+var askOperandRules = map[string]askOperandRule{
+	"set":        askCheckSet,
+	"maturity":   askCheckMaturity,
+	"help":       askCheckHelp,
+	"man":        askCheckMan,
+	"neighbours": askCheckNeighbours,
+	"put":        askCheckPut,
+	"wear":       askCheckWear,
+	"perms":      askCheckPerms,
+}
+
+// checkOperands runs c's rule, if it has one, under whichever name the
+// line used: a rule is for the command, and a second name for it is the
+// same command.
+func checkOperands(name string, c *command, opts any, operands []string) error {
+	for n, rule := range askOperandRules {
+		if commands[n] != c {
+			continue
+		}
+		ph := askPlaceholders(c.usage(name))
+		return rule(opts, operands, func(w string) bool { return ph[w] })
+	}
+	return nil
+}
+
+// askPlaceholderWord is a word in capitals, as a usage line writes what
+// a person fills in: NAME, VALUE, L$FEE's FEE.
+var askPlaceholderWord = regexp.MustCompile(`[A-Z][A-Z0-9_]*`)
+
+// askPlaceholders is every capitalised word in a usage line.  Only
+// whole words count: the D in "--dry-run" is not in capitals and is
+// not a placeholder, and nothing in lower case ever is.
+func askPlaceholders(usage string) map[string]bool {
+	out := map[string]bool{}
+	for _, loc := range askPlaceholderWord.FindAllStringIndex(usage, -1) {
+		i, j := loc[0], loc[1]
+		if i > 0 && unicode.IsLetter(rune(usage[i-1])) || j < len(usage) && unicode.IsLetter(rune(usage[j])) {
+			continue
+		}
+		out[usage[i:j]] = true
+	}
+	return out
+}
+
+// askCheckSet is set NAME VALUE: the name must be a setting findSetting
+// knows, under any spelling the file takes, and a value must be one that
+// setting's own parse accepts -- into a copy of the defaults, so that
+// nothing is changed by asking.  "auto" is map_ratio's, as cmdSet says;
+// it is measured when it is typed and so passes here only there.
+func askCheckSet(_ any, operands []string, placeholder func(string) bool) error {
+	if len(operands) == 0 || placeholder(operands[0]) {
+		return nil
+	}
+	s, ok := findSetting(operands[0])
+	if !ok {
+		return fmt.Errorf("no setting called %q; there is %s",
+			operands[0], strings.Join(settingNames(), ", "))
+	}
+	if len(operands) == 1 {
+		return nil
+	}
+	value := strings.Join(operands[1:], " ")
+	if len(operands) == 2 && placeholder(value) {
+		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(value), autoWord) {
+		if s.name != autoSetting {
+			return fmt.Errorf("%s: only %s takes %q; every other setting takes the value itself",
+				s.name, autoSetting, autoWord)
+		}
+		return nil
+	}
+	scratch := DefaultConfig()
+	if err := s.parse(&scratch, value); err != nil {
+		return fmt.Errorf("%s: %v", s.name, err)
+	}
+	return nil
+}
+
+// askCheckMaturity is maturity RATING, by sl.ParseMaturity, which is
+// what the command reads the rating with.
+func askCheckMaturity(_ any, operands []string, placeholder func(string) bool) error {
+	if len(operands) == 0 || len(operands) == 1 && placeholder(operands[0]) {
+		return nil
+	}
+	_, err := sl.ParseMaturity(strings.Join(operands, " "))
+	return err
+}
+
+// askCheckHelp is help GROUP: a group, "all", or -- which help answers
+// by saying where that command's help is -- a command.
+func askCheckHelp(_ any, operands []string, placeholder func(string) bool) error {
+	if len(operands) == 0 || placeholder(operands[0]) || operands[0] == "all" {
+		return nil
+	}
+	if _, ok := findGroup(operands[0]); ok {
+		return nil
+	}
+	if _, ok := commands[operands[0]]; ok {
+		return nil
+	}
+	return fmt.Errorf("no group or command %q; groups are %s",
+		operands[0], strings.Join(groupNames(), ", "))
+}
+
+// askCheckMan is man NAME: one command, as cmdMan takes it.
+func askCheckMan(_ any, operands []string, placeholder func(string) bool) error {
+	switch {
+	case len(operands) == 0:
+		return nil
+	case len(operands) > 1:
+		return errors.New("one command at a time")
+	case placeholder(operands[0]):
+		return nil
+	}
+	if _, ok := commands[operands[0]]; !ok {
+		return fmt.Errorf("no command called %q; \"help all\" lists them", operands[0])
+	}
+	return nil
+}
+
+// askCheckNeighbours is neighbours [on|off].  The words are read off the
+// command's own parameters, which name them, rather than written out
+// again here; the command compares them without regard to case.
+func askCheckNeighbours(_ any, operands []string, _ func(string) bool) error {
+	words := strings.Split(strings.Trim(commands["neighbours"].params, "[]"), "|")
+	switch len(operands) {
+	case 0:
+		return nil
+	case 1:
+		for _, w := range words {
+			if strings.EqualFold(operands[0], w) {
+				return nil
+			}
+		}
+		return fmt.Errorf("%q is neither %s", operands[0], strings.Join(words, " nor "))
+	}
+	return errors.New("one word at most")
+}
+
+// askCheckPut is put's --round, --round-x, --round-y and --filter, by
+// the method put reads them with.  A placeholder in one of them is
+// taken out first, so that the rest are still checked.
+func askCheckPut(opts any, _ []string, placeholder func(string) bool) error {
+	o, ok := opts.(*putFlags)
+	if !ok {
+		return nil
+	}
+	c := *o
+	for _, f := range []*string{&c.Round, &c.RX, &c.RY, &c.Filter} {
+		if placeholder(*f) {
+			*f = ""
+		}
+	}
+	_, err := c.resize()
+	return err
+}
+
+// askCheckWear is wear's --at, by attachPointArg, which is how wear
+// reads it: a point's name as the viewer writes it, or its number.
+func askCheckWear(opts any, _ []string, placeholder func(string) bool) error {
+	o, ok := opts.(*wearFlags)
+	if !ok || o.At == "" || placeholder(o.At) {
+		return nil
+	}
+	_, err := attachPointArg(o.At)
+	return err
+}
+
+// askCheckPerms is perms' four sets of letters, by permMask.
+func askCheckPerms(opts any, _ []string, placeholder func(string) bool) error {
+	o, ok := opts.(*permsFlags)
+	if !ok {
+		return nil
+	}
+	for _, f := range []struct{ flag, text string }{
+		{"--owner", o.Owner}, {"--group", o.Group}, {"--everyone", o.Everyone}, {"--next", o.Next},
+	} {
+		if f.text == "" || placeholder(f.text) {
+			continue
+		}
+		if _, err := permMask(f.text); err != nil {
+			return fmt.Errorf("%s: %w", f.flag, err)
+		}
+	}
+	return nil
 }
 
 // askBeforeParse is whatever a command does to its words before it

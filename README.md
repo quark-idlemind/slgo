@@ -1040,7 +1040,19 @@ messages as they arrive. `set` lists the shell's own settings and
 changes one, remembering it for the next slsh.
 
 `help` lists the command groups, `help all` lists every command with
-what it takes, and `man NAME` is the long description of one.
+what it takes, and `man NAME` is the long description of one. `how`
+is for when the name is the thing you do not know: `how do I make
+this my home` looks the question up in an index of every command's
+usage line and man page, built in when slsh is compiled, and -- with a
+small language model set up under Ollama or llama-server -- asks the
+model which of the matching commands does it. What the model suggests
+is printed only after the shell has checked it: the command and its
+flags parsed as the shell would parse them, words from the shell's own
+lists (a setting's name, a rating) found on those lists, and a
+quotation found word for word in that command's page. With no model it
+answers from the index alone. Setting one up, sharing slbotd's
+llama-server, and which small models were measured are in the guide
+below, under *Finding your way about*.
 
 Tab completes commands and inventory paths in command mode, and moves
 between conversations in chat mode -- which is the argument for having

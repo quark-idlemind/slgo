@@ -529,7 +529,7 @@ acting as group Example Builders (87f07e57-…)</span>
         <h2><span class="num">2</span>Finding your way about</h2>
 
         <p>
-          There are seventy-odd commands, and three ways to ask about them. They
+          There are seventy-odd commands, and four ways to ask about them. They
           answer different questions and it is worth knowing which is which.
         </p>
 
@@ -539,6 +539,7 @@ acting as group Example Builders (87f07e57-…)</span>
               <tr><td class="cmd">help</td><td class="what">what groups of commands exist; <code>help region</code> lists one group</td></tr>
               <tr><td class="cmd">place --help</td><td class="what">what that command takes: its flags, one line each</td></tr>
               <tr><td class="cmd">man place</td><td class="what">what that command is <em>for</em>, at length, with examples — and the same flags a paragraph each</td></tr>
+              <tr><td class="cmd">how do I …</td><td class="what">which command does what you describe, when you do not know its name; see <a href="#how">below</a></td></tr>
             </tbody>
           </table>
         </div>
@@ -579,6 +580,189 @@ For one command:       COMMAND --help, or man COMMAND
           <strong>Tab</strong> completes a command name or an inventory path,
           and <strong>up</strong> and <strong>down</strong> walk through what
           you have typed before. Both are worth using from the first minute.
+        </p>
+
+        <h3 id="how">Asking in your own words: how</h3>
+        <p>
+          <code>how</code> is for when you know what you want and not what
+          slsh calls it. The whole line is the question, <code>how</code>
+          included, and needs no quoting:
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">how do I make where I am standing my home</span>
+<span class="p">/$</span> <span class="c">how can I see which avatars are near me</span>
+<span class="p">/$</span> <span class="c">how -i do I take off an attachment</span></pre>
+        </div>
+
+        <p>
+          It looks the question up in an index of every command's usage line,
+          description and man page, which is built into slsh when it is
+          compiled and so cannot fall out of step with the commands. With a
+          language model set up, the best-matching commands and the parts of
+          their pages that matched are shown to the model, which is asked
+          which of them does it. The answer is a line to type, why, and the
+          sentence from that command's man page that says so. Nothing is run.
+        </p>
+
+        <p>
+          What the model suggests is checked before any of it is printed: the
+          line must run a real command with flags that command takes, parsed
+          the way the shell parses what you type; a word that comes from a
+          list slsh keeps — a setting's name after <code>set</code>, a rating
+          after <code>maturity</code> — must be on that list; and the
+          quotation must be found word for word in that command's own page,
+          usage line or description. A suggestion that fails is dropped, and
+          <code>how -r</code> shows what was dropped and why. When nothing
+          survives, <code>how</code> says it found no command for that and
+          names the nearest ones, so that you can read their pages yourself.
+        </p>
+
+        <p>
+          With no model — nothing set, <code>-i</code>, or a server that does
+          not answer — it says which of those it is and answers from the index
+          alone: the best-matching commands, each with its description and
+          the example lines from its own page. That needs nothing installed,
+          and is often enough.
+        </p>
+
+        <h3>Setting up a model for how</h3>
+        <p>
+          Any server that speaks the OpenAI-style
+          <code>/v1/chat/completions</code> will do: Ollama, or llama.cpp's
+          <code>llama-server</code>. A small model is the point — a few
+          billion parameters, on the same machine as everything else. Five
+          settings say where it is, each set with <code>set</code> and kept in
+          the configuration file:
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <tbody>
+              <tr><td class="cmd">how_url</td><td class="what">the server, with <code>http://</code> in front; empty is no model</td></tr>
+              <tr><td class="cmd">how_model</td><td class="what">the model's name; Ollama needs it, llama-server ignores it</td></tr>
+              <tr><td class="cmd">how_slot</td><td class="what">a llama-server slot to use; empty lets the server choose</td></tr>
+              <tr><td class="cmd">how_timeout</td><td class="what">how long to wait for an answer, like <code>45s</code>; empty is two minutes</td></tr>
+              <tr><td class="cmd">how_extra</td><td class="what">a JSON object added to every request, for what one model needs</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          <strong>Its own model under Ollama</strong> is the simplest.
+          With the model pulled (<code>ollama pull qwen3.5:4b</code>):
+        </p>
+
+        <div class="term">
+          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
+<pre><span class="p">/$</span> <span class="c">set how_url http://127.0.0.1:11434</span>
+<span class="p">/$</span> <span class="c">set how_model qwen3.5:4b</span>
+<span class="p">/$</span> <span class="c">set how_extra '{"reasoning_effort": "none"}'</span></pre>
+        </div>
+
+        <p>
+          The last line matters for Qwen3 and Qwen3.5, which reason at length
+          before answering unless told not to. Measured on 2026-09-23 on an M1
+          Max under Ollama, with that reasoning left on: <code>qwen3:4b</code>
+          took about 30 seconds to answer a small test request that took 0.3
+          seconds with it off, and <code>qwen3.5:2b</code> spent its whole
+          allowance of tokens reasoning and returned nothing at all. The other
+          models measured do not reason first and ignore the setting. The
+          single quotes round the JSON are needed: the shell takes double
+          quotes off a word as it does anywhere else, and JSON without them is
+          not JSON, which <code>set</code> refuses.
+        </p>
+
+        <p>
+          <strong>Its own <code>llama-server</code></strong> works the same
+          way with its own address — <code>set how_url
+          http://127.0.0.1:PORT</code> — and no <code>how_model</code>. For a
+          Qwen model, llama-server's own documentation gives
+          <code>{"chat_template_kwargs": {"enable_thinking": false}}</code> as
+          the way to turn the reasoning off; that form has not been measured
+          here. Give each slot room: <code>how</code> keeps its prompt to
+          about three thousand tokens by its own estimate and allows the
+          reply 512, and in the measurements below the prompts averaged
+          between about 1,900 and 2,300 tokens a question as the server
+          counted them. llama-server divides <code>-c</code> among its
+          <code>-np</code> slots, so the 2048 tokens a slot that
+          <code>-c 8192 -np 4</code> gives is too small, and 4096 is enough.
+          (That last is worked out from those numbers, not measured.)
+        </p>
+
+        <p>
+          <strong>Sharing slbotd's <code>llama-server</code></strong> saves
+          running a second model, and has a cost worth knowing. slbotd asks
+          the server how many slots it has and uses every one of them,
+          pinning a conversation to the slot it last spoke in so that its
+          cached context is still there next time
+          (<a href="guide.md">guide.md</a>, <em>How slots are handed
+          out</em>). So today there is no slot slbotd leaves alone, however
+          many the server is started with. Whatever slot <code>how</code>
+          uses — the one <code>how_slot</code> names, or the one the server
+          picks when it is empty — its request replaces what that slot's
+          cache held. slbotd does not know: it still counts the conversation
+          as sitting in that slot, so it does not restore it from disk
+          (<code>cmd/slbotd/chat.go</code>, <code>take</code> and
+          <code>place</code>). Its next turn there will then, as far as can be
+          worked out from the code, be processed from the start — which
+          slbotd's own measurement puts at 5.0 seconds for a 1442-token
+          conversation against 0.53 seconds warm (Qwen2.5-0.5B on an Intel i9
+          with no GPU; see <code>cmd/slbotd/llm.go</code>). The two together
+          have not been measured. Nor should the replies be mixed up by it,
+          since the cache is matched on the words of the prompt and
+          <code>how</code>'s shares none with a conversation's; that too is
+          reasoned rather than watched. And the model answering would be
+          slbotd's, a larger chat model than any measured below. A separate
+          small model under Ollama avoids all of it.
+        </p>
+
+        <p>
+          <strong>Which model.</strong> The recommendation is
+          <code>qwen3.5:4b</code>. These are the numbers it was chosen on:
+          82 invented questions, 15 of which no command answers,
+          put to each model under Ollama on an M1 Max on 2026-09-23, with the
+          prompt as it stood that day. They are a baseline — later changes to
+          the prompt are meant to move them, and this table will be taken
+          again when they do.
+        </p>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>model</th><th>right</th><th>not found</th><th>wrong kept</th><th>mean time</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="cmd">qwen3.5:4b</td><td class="what">76%</td><td class="what">100%</td><td class="what">6%</td><td class="what">3.51 s</td></tr>
+              <tr><td class="cmd">qwen3.5:2b</td><td class="what">42%</td><td class="what">100%</td><td class="what">6%</td><td class="what">1.62 s</td></tr>
+              <tr><td class="cmd">phi4-mini</td><td class="what">54%</td><td class="what">67%</td><td class="what">18%</td><td class="what">3.41 s</td></tr>
+              <tr><td class="cmd">llama3.2:3b</td><td class="what">52%</td><td class="what">73%</td><td class="what">11%</td><td class="what">2.05 s</td></tr>
+              <tr><td class="cmd">qwen3:1.7b</td><td class="what">54%</td><td class="what">53%</td><td class="what">21%</td><td class="what">1.65 s</td></tr>
+              <tr><td class="cmd">qwen3:4b</td><td class="what">24%</td><td class="what">93%</td><td class="what">5%</td><td class="what">2.83 s</td></tr>
+              <tr><td class="cmd">gemma3:4b</td><td class="what">12%</td><td class="what">80%</td><td class="what">18%</td><td class="what">4.08 s</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          <em>Right</em> is the answerable questions whose first line kept
+          runs a command the question expected. <em>Not found</em> is the
+          unanswerable ones where nothing was kept, which is the right answer
+          to them. <em>Wrong kept</em> is every question where a line that
+          passed the checks runs the wrong command — the one kind of mistake
+          the checks cannot catch. The Qwen models were asked with
+          <code>reasoning_effort</code> set to none. The times are for that
+          machine, and a smaller one will be slower.
+        </p>
+
+        <h3>Your own words for things</h3>
+        <p>
+          <code>how-hints.tsv</code>, beside the configuration file, teaches
+          <code>how</code> the words you use: one line each, the words, a tab,
+          and the commands they mean. A question with every word on the left
+          in it brings the commands on the right to the top, with or without
+          a model. <code>man how</code> has the details.
         </p>
       </section>
 
@@ -2270,11 +2454,14 @@ slsh: stopped; 43 lines were not run</span></pre>
           silently does nothing. A <code>#</code> is a comment only where a line
           begins with one: written after a value it becomes part of the value.
           Whether that stops the shell depends on the setting. The ones whose
-          value is checked — <code>escape</code>, <code>log</code> and the five
-          <code>map_*</code> — refuse it and say so. The ones that take their
-          value as text — <code>addr</code>, <code>agent</code>, <code>log_dir</code> and the four
-          <code>viewer_*</code> — take the comment with it, silently, and go
-          looking for a profile or a daemon with a <code>#</code> in its name.
+          value is checked — <code>escape</code>, <code>log</code>, the five
+          <code>map_*</code> and all of <code>how_*</code> but
+          <code>how_model</code> — refuse it and say so. The ones that take
+          their value as text — <code>addr</code>, <code>agent</code>,
+          <code>log_dir</code>, the four <code>viewer_*</code> and
+          <code>how_model</code> — take the comment with it, silently, and go
+          looking for a profile, a daemon or a model with a <code>#</code> in
+          its name.
         </p>
 
         <div class="term">
@@ -2292,7 +2479,14 @@ log_dir = /a/directory   # empty is ~/.local/share/slgo
 viewer_app     = the application to run
 viewer_grid    = the grid nickname it knows the daemon by
 viewer_launch  = open -a {app} --args --grid {grid} --login {first} {last} {password}
-viewer_running = how to tell whether one is running already</span></pre>
+viewer_running = how to tell whether one is running already
+
+# where "how" finds a model; empty how_url is none
+how_url     = http://127.0.0.1:11434
+how_model   = qwen3.5:4b
+how_slot    =
+how_timeout =
+how_extra   = {"reasoning_effort": "none"}</span></pre>
         </div>
 
         <p>
@@ -2483,7 +2677,7 @@ viewer_running = how to tell whether one is running already</span></pre>
               <tr><td class="cmd">start · stop</td><td class="what">scripts inside an object</td></tr>
 
               <tr><td class="group-title" colspan="2">The shell itself</td></tr>
-              <tr><td class="cmd">help · man · echo · set</td><td class="what">help, the long description, a note into a file, and what slsh remembers</td></tr>
+              <tr><td class="cmd">help · man · how · echo · set</td><td class="what">help, the long description, which command does what you describe, a note into a file, and what slsh remembers</td></tr>
               <tr><td class="cmd">. FILE · quit · exit</td><td class="what">running a file of commands, and leaving</td></tr>
             </tbody>
           <tr><td class="group-title" colspan="2">Simulator</td></tr>

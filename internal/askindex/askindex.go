@@ -298,9 +298,20 @@ func (ix *Index) Search(question string, hints ...Hint) []Hit {
 
 // applies is whether every one of a hint's When words is in the
 // question.
+//
+// A When word that Tokens drops altogether -- "what", "is", "this" --
+// can never be found in a question, since the question's copy of it is
+// dropped too, and so a hint that needs it never applies.  Counting it
+// as found instead would make a hint written as "what is this" apply to
+// every question anybody asked, and raise its commands to the top of
+// all of them.  An empty When is still the hint that always applies.
 func applies(h Hint, have map[string]bool) bool {
 	for _, w := range h.When {
-		for _, t := range Tokens(w) {
+		ts := Tokens(w)
+		if len(ts) == 0 {
+			return false
+		}
+		for _, t := range ts {
 			if !have[t] {
 				return false
 			}

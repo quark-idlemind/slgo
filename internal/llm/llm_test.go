@@ -264,6 +264,10 @@ func TestAReplyThatIsNotAReplyIsMalformed(t *testing.T) {
 		{"no choices", `{"choices":[]}`, "no choices"},
 		{"empty", `{"choices":[{"message":{"role":"assistant","content":"  "},"finish_reason":"stop"}]}`, "empty"},
 		{"cut off", `{"choices":[{"message":{"role":"assistant","content":"{\"found\": tr"},"finish_reason":"length"}]}`, "cut off"},
+		// Nothing at all, and the limit reached: the tokens went on
+		// reasoning the message does not carry.
+		{"spent reasoning", `{"choices":[{"message":{"role":"assistant","content":"","reasoning":"Let me think"},"finish_reason":"length"}]}`,
+			"limit of 512 tokens was reached; a model that reasons before it answers"},
 	} {
 		s := newServer(t, 200, c.body)
 		_, err := New(Options{URL: s.URL}).Chat(context.Background(), nil, &Schema{Schema: map[string]any{}})

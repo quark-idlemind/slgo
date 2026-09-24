@@ -159,7 +159,7 @@ var groups = []group{
 		// leaves chat -- and the question it answers, "how do I stop
 		// having to say this every time", is asked about slsh and not
 		// about any avatar.
-		members: []string{"help", "man", "ask", "set", "quit", ".", "echo"},
+		members: []string{"help", "man", "how", "set", "quit", ".", "echo"},
 	},
 }
 

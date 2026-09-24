@@ -201,6 +201,19 @@ func TestHintCommands(t *testing.T) {
 			t.Errorf("give was raised without its When word")
 		}
 	}
+
+	// A When made only of words the tokenizer drops can never be seen in
+	// a question, so the hint never applies -- rather than applying to
+	// every question, which is what counting the dropped words as found
+	// would do.
+	for _, q := range []string{"print a script", "what is this"} {
+		got = ix.SearchCommands(q, Hint{When: []string{"what", "is this"}, Commands: []string{"give"}})
+		for _, c := range got {
+			if c.Command == "give" {
+				t.Errorf("%q: give was raised by a hint whose words are all stopwords", q)
+			}
+		}
+	}
 }
 
 func TestGroupOrder(t *testing.T) {

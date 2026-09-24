@@ -114,6 +114,149 @@ func TestCheckCommandLineRefusesWhatTheShellRefuses(t *testing.T) {
 	}
 }
 
+// Operands and flag values that come from a list the shell keeps are
+// checked against that list, by the code the command uses; the
+// capitalised placeholders its usage line writes pass as they are.
+// Every wrong word here is invented.
+func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
+	for _, c := range []struct {
+		line string
+		want string // "" is taken
+	}{
+		// set: a setting's name, under any spelling the file takes,
+		// and a value that setting's own parse accepts.
+		{"set", ""},
+		{"set NAME", ""},
+		{"set NAME VALUE", ""},
+		{"set map_rows", ""},
+		{"set map_rows 20", ""},
+		{"set map_rows VALUE", ""},
+		{"set prefix ESC", ""},
+		{"set log off", ""},
+		{"set map_ratio auto", ""},
+		{"set viewer_grid my own grid", ""},
+		{"set how_url http://127.0.0.1:11434", ""},
+		{`set how_extra '{"reasoning_effort": "none"}'`, ""},
+		{"set ask_url http://127.0.0.1:8080", ""},
+		{"set how_slot", ""},
+		{"set display_name YOUR_DISPLAY_NAME", `set: no setting called "display_name"; there is addr, agent,`},
+		{"set display_name NAME", `set: no setting called "display_name"`},
+		{"set nickname Example", `set: no setting called "nickname"`},
+		{"set map_rows lots", `set: map_rows: want a whole number, got "lots"`},
+		{"set map_rows N", `set: map_rows: want a whole number, got "N"`},
+		{"set log maybe", `set: log: "maybe" is not on or off`},
+		{"set map_span auto", "set: map_span: only map_ratio takes"},
+		{"set how_url 127.0.0.1:11434", "set: how_url: want the server's address with http:// in front"},
+		{`set how_extra {"reasoning_effort": "none"}`, "set: how_extra: want a JSON object"},
+		{"set how_timeout soon", "set: how_timeout: want a length of time"},
+
+		// maturity: a rating, by sl.ParseMaturity.
+		{"maturity", ""},
+		{"maturity RATING", ""},
+		{"maturity adult", ""},
+		{"maturity PG", ""},
+		{"maturity moderate", ""},
+		{"maturity teen", `maturity: sl: "teen" is not a maturity rating`},
+		{"maturity YOUR_RATING", "is not a maturity rating"},
+
+		// help: a group, all, or a command.
+		{"help", ""},
+		{"help all", ""},
+		{"help GROUP", ""},
+		{"help region", ""},
+		{"help landmark", ""},
+		{"help everything", `help: no group or command "everything"; groups are`},
+
+		// man: one command.
+		{"man", ""},
+		{"man NAME", ""},
+		{"man landmark", ""},
+		{"man how", ""},
+		{"man sethome", `man: no command called "sethome"`},
+		{"man landmark tp", "man: one command at a time"},
+
+		// neighbours: on or off, read off its own parameters.
+		{"neighbours", ""},
+		{"neighbours on", ""},
+		{"neighbours OFF", ""},
+		{"neighbours yes", `neighbours: "yes" is neither on nor off`},
+		{"neighbours on off", "neighbours: one word at most"},
+
+		// put: the roundings and the filters, by put's own method.
+		{"put --round up photo.png", ""},
+		{"put --round MODE FILE", ""},
+		{"put --filter lanczos --round-x down FILE", ""},
+		{"put --filter NAME --round-y nearest FILE", ""},
+		{"put --round sideways FILE", `put: no rounding called "sideways"`},
+		{"put --round-y MODE --filter blurry FILE", `put: no filter called "blurry"`},
+
+		// wear --at: a point by the viewer's name or its number.
+		{`wear --at "left hand" PATH`, ""},
+		{"wear --at 5 PATH", ""},
+		{"wear --at POINT PATH", ""},
+		{"wear --at elbow PATH", `wear: --at: "elbow" is not an attachment point`},
+		{"wear --at 900 PATH", "wear: --at: 900 is not an attachment point"},
+
+		// perms: letters, all or none.
+		{"perms --owner mct --next none NAME", ""},
+		{"perms --everyone LETTERS NAME", ""},
+		{"perms --next all NAME", ""},
+		{"perms --next nomodify NAME", `perms: --next: "n" is not a permission`},
+		{"perms --group LETTERS --owner x NAME", `perms: --owner: "x" is not a permission`},
+
+		// A command with no such list is not touched.
+		{"tp YOUR_REGION", ""},
+		{"landmark --go ANYTHING_AT_ALL", ""},
+	} {
+		err := checkCommandLine(c.line)
+		switch {
+		case c.want == "" && err != nil:
+			t.Errorf("%q: refused: %v", c.line, err)
+		case c.want != "" && err == nil:
+			t.Errorf("%q: taken, want %q", c.line, c.want)
+		case c.want != "" && !strings.Contains(err.Error(), c.want):
+			t.Errorf("%q: %q, want it to say %q", c.line, err, c.want)
+		}
+	}
+}
+
+// The placeholders are the usage line's own capitalised words, and
+// nothing else.
+func TestAskPlaceholdersAreTheUsageLines(t *testing.T) {
+	ph := askPlaceholders(commands["set"].usage("set"))
+	if !ph["NAME"] || !ph["VALUE"] || ph["set"] || ph["YOUR_DISPLAY_NAME"] {
+		t.Errorf("set: %v", ph)
+	}
+	ph = askPlaceholders(commands["put"].usage("put"))
+	if !ph["MODE"] || !ph["FILE"] || ph["put"] {
+		t.Errorf("put: %v in %q", ph, commands["put"].usage("put"))
+	}
+	if ph := askPlaceholders("x --dry-run -N [NAME|UUID] L$FEE"); !ph["N"] || !ph["NAME"] || !ph["UUID"] || !ph["FEE"] || ph["D"] {
+		t.Errorf("%v", ph)
+	}
+}
+
+// A line with a character nobody can type in it is refused: it would be
+// printed as it is, escape sequences and all.  A tab is typeable, and
+// the shell splits on it.
+func TestCheckCommandLineRefusesControlCharacters(t *testing.T) {
+	for line, want := range map[string]string{
+		"ls\x1b[2J":             "U+001B",
+		"tp home\x1b[1Aquit":    "U+001B",
+		"landmark --home\nquit": "U+000A",
+		"say hello\u202e dlrow": "U+202E",
+		"say hi\u200b":          "U+200B",
+	} {
+		err := checkCommandLine(line)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %s", line, err, want)
+		}
+	}
+	if err := checkCommandLine("ls\t-l"); err != nil {
+		t.Errorf("a tab: %v", err)
+	}
+}
+
 // Every example a man page gives is a line the checker takes.  The
 // pages are the other thing that knows what a command accepts, and they
 // were written by somebody who ran the lines; a checker that refused
@@ -292,7 +435,7 @@ func TestFilterAskAnswerKeepsOnlyWhatChecks(t *testing.T) {
 // A not-found answer has nothing to filter, and filtering it finds
 // nothing wrong: "no such command" is an answer, not a failure.
 func TestFilteringNotFoundIsNotARejection(t *testing.T) {
-	kept, rejected := filterAskAnswer(askAnswer{Found: false, Answer: "slsh has no command for that."})
+	kept, rejected := filterAskAnswer(askAnswer{Found: false})
 	if len(kept) != 0 || len(rejected) != 0 {
 		t.Errorf("kept %v, rejected %v", kept, rejected)
 	}
