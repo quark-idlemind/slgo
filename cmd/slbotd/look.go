@@ -148,10 +148,14 @@ func cmdWho(ctx context.Context, r *req, out io.Writer, args []string) error {
 		if name == "" {
 			name = p.ID.String()
 		}
+		far := fmt.Sprintf("%5.0fm", p.Distance)
+		if p.Distance < 0 {
+			far = "    ? "
+		}
 		if o.Long {
-			fmt.Fprintf(out, "%5.0fm  %s  %s\n", p.Distance, p.ID, name)
+			fmt.Fprintf(out, "%s  %s  %s\n", far, p.ID, name)
 		} else {
-			fmt.Fprintf(out, "%5.0fm  %s\n", p.Distance, name)
+			fmt.Fprintf(out, "%s  %s\n", far, name)
 		}
 	}
 	return nil

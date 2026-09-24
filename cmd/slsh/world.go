@@ -182,7 +182,13 @@ func cmdWho(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	}
 	listed := make([]person, 0, len(ps))
 	for i, p := range ps {
-		fmt.Fprintf(out, "%2d  %-32s %6.1fm  %s\n", i+1, p.Name, p.Distance, p.ID)
+		far := fmt.Sprintf("%6.1fm", p.Distance)
+		if p.Distance < 0 {
+			// Sitting on something this session has not been told
+			// about, so not somewhere it can say.
+			far = "     ? "
+		}
+		fmt.Fprintf(out, "%2d  %-32s %s  %s\n", i+1, p.Name, far, p.ID)
 		listed = append(listed, person{ID: p.ID, Name: p.Name})
 	}
 	sh.setListed(listed)

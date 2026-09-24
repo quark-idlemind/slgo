@@ -513,6 +513,13 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 	var outside []sl.Person
 	drawn, under := 0, 0
 	for _, p := range people {
+		if p.Distance < 0 {
+			// Seated on something undescribed: nowhere to draw them,
+			// so they are named underneath like anybody out of the
+			// picture, with a "?" for how far.
+			outside = append(outside, p)
+			continue
+		}
 		col, row, in := g.at(p.Position)
 		if !in {
 			outside = append(outside, p)
@@ -702,6 +709,10 @@ func namesOutside(people []sl.Person, hl mapHighlight) (line string, coloured bo
 		if hl.colour != "" && hl.friends[p.ID] {
 			name = hl.paint(name)
 			coloured = true
+		}
+		if p.Distance < 0 {
+			parts = append(parts, name+" ?")
+			continue
 		}
 		parts = append(parts, fmt.Sprintf("%s %.0fm", name, p.Distance))
 	}

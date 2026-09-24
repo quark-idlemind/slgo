@@ -592,3 +592,57 @@ func TestAPickerSearchEscapesWhatItIsGiven(t *testing.T) {
 		t.Errorf("the search asked for %q", raw)
 	}
 }
+
+// A seated avatar is described as an offset from what it sits on, and
+// Nearby composes it back into the region: up through the seat, a child
+// prim, and the root it is linked to.  One whose seat has not been
+// described is still listed, seated, with no place -- and after
+// everybody who could be placed.
+func TestNearbyPlacesSeatedPeople(t *testing.T) {
+	w, f := newFakeSession(t)
+
+	// A root at 130,128,25 turned a quarter about Z, with the seat a
+	// metre along its own X -- which the quarter turn makes a metre
+	// along the region's Y -- and somebody sitting half a metre above
+	// the seat.
+	root := &Seen{Object: Object{ID: unnamed, Local: 20}, PCode: pcodePrim,
+		Position: msg.Vector3{X: 130, Y: 128, Z: 25}, Rotation: msg.Quaternion{Z: 0.70710677}}
+	seat := &Seen{Object: Object{Local: 21}, PCode: pcodePrim, Parent: 20,
+		Position: msg.Vector3{X: 1}}
+	sitting := avatarAt(somebody, 0, 0, 0.5)
+	sitting.Parent = 21
+	lost := avatarAt(somebodyElse, 0, 0, 0.5)
+	lost.Parent = 99
+	standing := avatarAt(nemo, 140, 128, 25)
+	f.objects = []*Seen{lost, sitting, standing, root, seat, avatarAt(testAgentID, 128, 128, 25)}
+	f.AnswerNames(t, map[msg.UUID]string{somebody: "Example Resident", somebodyElse: "Someone Else"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	all, err := w.Nearby(ctx)
+	if err != nil {
+		t.Fatalf("Nearby: %v", err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("Nearby found %d, want 3: %+v", len(all), all)
+	}
+
+	got := all[0]
+	if got.ID != somebody || !got.Seated {
+		t.Fatalf("nearest is %+v, want the seated one", got)
+	}
+	want := msg.Vector3{X: 130, Y: 129, Z: 25.5}
+	if d := sub3(got.Position, want); d.X*d.X+d.Y*d.Y+d.Z*d.Z > 1e-6 {
+		t.Errorf("seated position = %v, want %v", got.Position, want)
+	}
+	if got.Distance < 2.28 || got.Distance > 2.30 {
+		t.Errorf("seated distance = %v, want about 2.29", got.Distance)
+	}
+
+	if all[1].ID != nemo || all[1].Seated || all[1].Distance < 11.9 || all[1].Distance > 12.1 {
+		t.Errorf("second is %+v, want the one standing 12 m off", all[1])
+	}
+	if last := all[2]; last.ID != somebodyElse || !last.Seated || last.Distance != -1 || last.Position != (msg.Vector3{}) {
+		t.Errorf("last is %+v, want the unplaceable seated one, distance -1", last)
+	}
+}

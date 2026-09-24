@@ -255,6 +255,9 @@ func (sh *Shell) walkTarget(ctx context.Context, name string, rest []string) (ms
 	}
 	switch len(found) {
 	case 1:
+		if found[0].Distance < 0 {
+			return msg.Vector3{}, "", fmt.Errorf("%s is sitting on something this session has not been shown, so where is not known", found[0].Name)
+		}
 		return found[0].Position, found[0].Name, nil
 	case 0:
 	default:

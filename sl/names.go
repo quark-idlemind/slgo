@@ -184,6 +184,15 @@ type Person struct {
 	// way.
 	Distance float32
 	Position msg.Vector3
+
+	// Seated is whether they are sitting on something.  The simulator
+	// then describes a seated avatar as an offset from what it sits on
+	// rather than as a place in the region, and Position is composed
+	// back out of the seat's own placement -- see Nearby.  When the seat
+	// has not been described there is nothing to compose it from:
+	// Position is then zero and Distance is -1, "somewhere here", and
+	// such a person sorts after everybody who could be placed.
+	Seated bool
 }
 
 // Nearby is who else is in the region, nearest first.
@@ -201,10 +210,28 @@ func (w *Session) Nearby(ctx context.Context) ([]Person, error) {
 		return nil, err
 	}
 
+	byLocal := make(map[uint32]*Seen, len(all))
+	for _, o := range all {
+		byLocal[o.Local] = o
+	}
+
 	var ids []msg.UUID
 	var out []Person
 	for _, o := range all {
 		if o.PCode != pcodeAvatar || o.ID == w.me {
+			continue
+		}
+		if o.Parent != 0 {
+			at, ok := placeSeated(o, byLocal)
+			p := Person{ID: o.ID, Seated: true, Distance: -1}
+			if ok {
+				dx := at.X - where.Position.X
+				dy := at.Y - where.Position.Y
+				dz := at.Z - where.Position.Z
+				p.Position, p.Distance = at, sqrt(dx*dx+dy*dy+dz*dz)
+			}
+			out = append(out, p)
+			ids = append(ids, o.ID)
 			continue
 		}
 		dx := o.Position.X - where.Position.X
@@ -229,12 +256,46 @@ func (w *Session) Nearby(ctx context.Context) ([]Person, error) {
 		out[i].Name = w.NameOr(out[i].ID)
 	}
 	sort.Slice(out, func(i, j int) bool {
+		// Nobody unplaced before somebody placed.
+		if (out[i].Distance < 0) != (out[j].Distance < 0) {
+			return out[j].Distance < 0
+		}
 		if out[i].Distance != out[j].Distance {
 			return out[i].Distance < out[j].Distance
 		}
 		return out[i].Name < out[j].Name
 	})
 	return out, nil
+}
+
+// placeSeated is where in the region a seated avatar is.
+//
+// Its own position is an offset in the frame of what it sits on, which
+// may itself be a child prim, placed in the frame of its root.  Each step
+// up the chain rotates the offset into the parent's frame and adds the
+// parent's position, which is what a viewer does to draw it and what the
+// agent does for its own avatar (agent.Objects.worldPlacement).  Measured
+// on Agni, 2026-09-24, before this: a seated avatar a few metres away came
+// back 4004 metres off, at the offset from its seat.
+//
+// A link that has not been described ends it with nothing, rather than a
+// guess somebody would walk to.  Eight steps, as there: a chain that deep
+// is a loop.
+func placeSeated(o *Seen, byLocal map[uint32]*Seen) (msg.Vector3, bool) {
+	at, v := o.Position, o
+	for up := 0; up < 8 && v.Parent != 0; up++ {
+		p := byLocal[v.Parent]
+		if p == nil {
+			return msg.Vector3{}, false
+		}
+		r := p.Rotation.Rotate(at)
+		at = msg.Vector3{X: p.Position.X + r.X, Y: p.Position.Y + r.Y, Z: p.Position.Z + r.Z}
+		v = p
+	}
+	if v.Parent != 0 {
+		return msg.Vector3{}, false
+	}
+	return at, true
 }
 
 // Found is somebody a search turned up.
