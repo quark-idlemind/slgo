@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>slbotd with an LLM — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="bot-llm">
+<style>
+  #bot-llm .cfg-builder .fields { display: grid; gap: 0.9rem 1.2rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+  #bot-llm .cfg-builder .field { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+  #bot-llm .cfg-builder .field > label, #bot-llm .cfg-builder .field > .lab { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-soft); }
+  #bot-llm .cfg-builder .field small { font-size: 0.82rem; color: var(--muted); }
+  #bot-llm .cfg-builder input[type="text"], #bot-llm .cfg-builder input[type="number"], #bot-llm .cfg-builder textarea {
+    font-family: var(--mono); font-size: 0.85rem; color: var(--ink); background: var(--ground);
+    border: 1px solid var(--rule); border-radius: 4px; padding: 0.45rem 0.6rem; width: 100%; max-width: 100%;
+  }
+  #bot-llm .cfg-builder textarea { min-height: 4.2rem; resize: vertical; }
+  #bot-llm .cfg-builder input:focus-visible, #bot-llm .cfg-builder textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #bot-llm .cfg-builder .out { display: flex; flex-direction: column; gap: 0.8rem; min-width: 0; }
+</style>
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Guide · 45 minutes</p>
+    <h1>slbotd with an LLM<span class="caret">_</span></h1>
+    <p class="standfirst">Let the bot's avatar hold conversations by IM, through a language model you run yourself with llama.cpp's llama-server. This page covers setting it up, what to do when it stays silent, and where residents' words end up.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">~45 min, plus the model download</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+
+      <section id="read-first">
+        <h2>Read this first</h2>
+        <div class="note warn"><p class="label">Only llama-server</p>
+          <p>slbotd talks to one kind of model server: <strong>llama-server, from llama.cpp</strong>. It does not work with Ollama, and it does not talk to OpenAI, Anthropic or any other hosted API. There is no API key setting anywhere, and it sends no <code>Authorization</code> header. It speaks plain HTTP to a server you run.</p>
+        </div>
+        <p>The reason is the endpoints. Only one of the four is the chat API that many servers share. The other three are llama.cpp's own:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Endpoint</th><th>What slbotd uses it for</th></tr></thead>
+          <tbody>
+            <tr><td><code>POST /v1/chat/completions</code></td><td class="what">Writing a reply. The OpenAI-style call.</td></tr>
+            <tr><td><code>GET /props</code></td><td class="what">The model, its build, its context size and how many slots the server has. slbotd asks on the first reply, and the reply fails if it cannot.</td></tr>
+            <tr><td><code>POST /slots/N?action=save|restore|erase</code></td><td class="what">Saving each conversation's cache to disk and loading it back, so a conversation picks up in milliseconds instead of being re-read from the start.</td></tr>
+            <tr><td><code>POST /apply-template</code></td><td class="what">Rendering the model's chat template, to find out whether the template keeps the memory note.</td></tr>
+          </tbody>
+        </table></div>
+        <p>A server without <code>/props</code>, like Ollama or a hosted API, gets no replies out of slbotd at all, only an entry in <code>:errors</code> for each message. That is worked out from the code rather than tried.</p>
+        <p>slsh's <code>how</code> feature is different: it works with Ollama too. That is slsh, not slbotd.</p>
+        <p>Because the model is local, nothing is billed. The limits on this page are about load on your machine, and about making replies arrive at a human pace.</p>
+      </section>
+
+      <section id="picture">
+        <h2>How the pieces fit</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 640 200" role="img" aria-label="slbotd sends HTTP to llama-server, on the same machine or another">
+            <defs><marker id="bl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+            <rect class="box server" x="12" y="30" width="170" height="110" rx="6"/>
+            <text class="t-machine" x="24" y="52">slgod machine</text>
+            <rect class="proc" x="24" y="66" width="146" height="26" rx="3"/>
+            <text class="t-proc" x="34" y="84">slgod</text>
+            <rect class="box bot" x="228" y="30" width="190" height="150" rx="6"/>
+            <text class="t-machine" x="240" y="52">slbotd machine</text>
+            <rect class="proc" x="240" y="66" width="166" height="26" rx="3"/>
+            <text class="t-proc" x="250" y="84">slbotd</text>
+            <rect class="proc" x="240" y="130" width="166" height="26" rx="3"/>
+            <text class="t-proc" x="250" y="148">llama-server</text>
+            <path class="link" d="M323,92 L323,128" marker-end="url(#bl-arrow)"/>
+            <text class="t-small" x="330" y="115">HTTP, loopback</text>
+            <path class="link secure" d="M240,79 L172,79" marker-end="url(#bl-arrow)"/>
+            <text class="t-small" x="186" y="72">TLS</text>
+            <rect class="box" x="462" y="30" width="166" height="110" rx="6"/>
+            <text class="t-machine" x="474" y="52">or a GPU machine</text>
+            <rect class="proc" x="474" y="66" width="142" height="26" rx="3"/>
+            <text class="t-proc" x="484" y="84">llama-server</text>
+            <path class="link" d="M406,79 L472,79" marker-end="url(#bl-arrow)" stroke-dasharray="3 3"/>
+            <text class="t-small" x="474" y="116">HTTP: tunnel it</text>
+          </svg>
+          <figcaption>slbotd and slgod can share a machine too. The link to llama-server is plain, unauthenticated HTTP wherever it runs.</figcaption>
+        </figure>
+        <p>Conversation is IMs to the bot's avatar that do <strong>not</strong> start with the command prefix. Commands keep working exactly as before. Only one-to-one IMs are answered; local chat and group IMs never are.</p>
+      </section>
+
+      <section id="setup">
+        <h2>Set it up</h2>
+        <ol class="steps" id="llm-steps">
+          <li><div class="step-body">
+            <h3>Have slbotd taking commands</h3>
+            <p>Do <a href="quickstart-bot.html">Adding slbotd</a> first. Before you add a model, <code>:status</code> should answer.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Get llama-server</h3>
+            <p>llama-server comes with llama.cpp. The steps below are llama.cpp's, not slgo's. They change from time to time, and llama.cpp's own README at <a href="https://github.com/ggml-org/llama.cpp">github.com/ggml-org/llama.cpp</a> is the authority. They have not been measured here.</p>
+            <div class="os-pair">
+              <div class="term" data-os-only="linux" data-where="bot" data-where-label="Linux · on the llama-server machine"><pre><span class="p">$ </span>git clone https://github.com/ggml-org/llama.cpp
+<span class="p">$ </span>cd llama.cpp
+<span class="p">$ </span>cmake -B build
+<span class="p">$ </span>cmake --build build --config Release -j
+<span class="p">$ </span>./build/bin/llama-server --version</pre></div>
+              <div class="term" data-os-only="mac" data-where="bot" data-where-label="macOS · on the llama-server machine"><pre><span class="p">$ </span>git clone https://github.com/ggml-org/llama.cpp
+<span class="p">$ </span>cd llama.cpp
+<span class="p">$ </span>cmake -B build
+<span class="p">$ </span>cmake --build build --config Release -j
+<span class="p">$ </span>./build/bin/llama-server --version</pre></div>
+            </div>
+            <p data-os-only="linux">That is the CPU-only build. With an NVIDIA GPU and the CUDA toolkit installed, make the first <code>cmake</code> line <code>cmake -B build -DGGML_CUDA=ON</code> instead.</p>
+            <p data-os-only="mac">Or, with Homebrew: <code>brew install llama.cpp</code>.</p>
+            <p>Put <code>llama-server</code> somewhere on your <code>PATH</code>, or call it by its full path. Once it is on your <code>PATH</code>, by copying it there or with <code>brew install</code>, csh, tcsh and zsh need <code>rehash</code> before they find it; in sh or bash, <code>hash -r</code>.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Pick a model</h3>
+            <p>llama-server loads one model file, named with <code>-m</code>. slbotd has no say in which: its own <code>llm-model</code> setting is passed along and ignored. What the model needs:</p>
+            <ul>
+              <li><strong>A GGUF file</strong>, the format llama.cpp loads.</li>
+              <li><strong>An instruct or chat model</strong>, with a chat template, since slbotd sends chat messages. A base model is the wrong kind.</li>
+              <li><strong>No long reasoning before it answers.</strong> "Thinking" models can spend their whole token allowance reasoning and return nothing. slbotd has no way to add a per-request field to turn that off, so pick a model that answers directly, or turn reasoning off on the server side. The server-side option has not been tried here.</li>
+              <li><strong>Small enough to answer in seconds</strong> on your hardware. A reply is a few sentences, so a small model goes a long way.</li>
+            </ul>
+            <p>For reference, the measurements in the repository used Qwen2.5-0.5B-Instruct and Qwen2.5-3B-Instruct, both quantised to Q4_K_M, on an Intel i9 with no GPU. That is what was measured, not a recommendation.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Start llama-server</h3>
+            <p>Give it a directory to save conversation caches in, and as many slots as you want conversations live at once:</p>
+            <div class="term" data-where="bot" data-where-label="on the llama-server machine"><pre><span class="p">$ </span>mkdir -p -m 700 ~/.local/state/llama-server/slots
+<span class="p">$ </span>llama-server -m ~/models/your-model.gguf \
+    -c 8192 -np 4 \
+    --slot-save-path ~/.local/state/llama-server/slots \
+    --host 127.0.0.1 --port 8080</pre></div>
+            <dl>
+              <dt><code>-c 8192 -np 4</code></dt><dd>The server splits <code>-c</code> evenly among <code>-np</code> slots, so each slot here holds 2048 tokens. That is what the repository's measurements used. slbotd uses every slot the server reports, pins each conversation to one, and when there are more conversations than slots, saves the oldest to disk to make room.</dd>
+              <dt><code>--slot-save-path DIR</code></dt><dd>Where those saved caches go. Without it, replies still work, but every turn adds an error to <code>:errors</code> because the save fails.</dd>
+              <dt><code>--host 127.0.0.1 --port 8080</code></dt><dd>Loopback only. The server has no authentication worth the name here, so keep it there unless you read <a href="#where-model">Where to run it</a>.</dd>
+            </dl>
+            <p>Do <strong>not</strong> start it with <code>--api-key</code>. slbotd sends no key, so the server would refuse every request.</p>
+            <p>Check it is up by asking for the endpoint slbotd asks for first. It answers with a JSON description of the model, which includes <code>total_slots</code>.</p>
+            <div class="term" data-where="bot" data-where-label="on the slbotd machine"><pre><span class="p">$ </span>curl -s http://127.0.0.1:8080/props</pre></div>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Tell slbotd where the model is, and who to talk to</h3>
+            <p>Chat needs two things in <code>slbotd.conf</code>: an <code>llm-url</code> and at least one <code>chat</code> line. With only one of them, chat stays off. Add these to the file from the quick start, or build a whole file with the <a href="#builder">config builder</a>.</p>
+            <div class="file"><div class="name">~/.config/slgo/slbotd.conf  (added lines)</div><pre><span class="c"># the base URL: slbotd adds /v1/chat/completions, /props and /slots itself</span>
+llm-url   = http://127.0.0.1:8080
+<span class="c"># who the avatar will talk to: * is anyone who IMs it</span>
+chat      = *
+<span class="c"># the character, re-read every turn</span>
+backstory = builder ~/characters/builder.txt
+<span class="c"># the server's --slot-save-path, if this machine can see it</span>
+slot-save-path = ~/.local/state/llama-server/slots</pre></div>
+            <p>Leave <code>/v1</code> off the URL. The backstory file is plain text: who the avatar is and how it talks. A short paragraph is enough to start. See <a href="#character">The character</a>.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Check the file</h3>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>slbotd --check</pre></div>
+            <p>Where it said <code>chat: off</code> before, it now shows the model settings. It also prints a line starting <code>PROBLEM:</code> if the chat setup is half done, and one line per backstory with its assembled size, or <code>BROKEN:</code> and the reason. <code>--check</code> does not contact llama-server.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Restart slbotd</h3>
+            <p>The file is read once, at startup. Stop slbotd and start it again. Look in its log for these two lines, which say chat is on:</p>
+            <ul>
+              <li><code>chatting through http://127.0.0.1:8080, conversations in …</code></li>
+              <li><code>will talk to *</code></li>
+            </ul>
+            <p>If you see <code>CHAT IS OFF:</code> instead, the line after it says why. See <a href="#problems">Problem solving</a>. Commands keep working either way.</p>
+            <p>Order does not matter. slbotd asks nothing of the model at startup, so llama-server can start before or after it.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Say hello</h3>
+            <p>IM the bot's avatar something without the prefix, like <code>hello</code>. Then wait. slbotd holds a reply back until a person could have typed it, so with the default pacing a reply can take a minute or more. The avatar shows "typing" while it waits.</p>
+            <p>On the first reply the log gains a line starting <code>model</code> that names the model, its slots and the server build. That line means llama-server was reached.</p>
+            <p>From a trusted avatar, <code>:chat</code> shows the model, the slots, the backstory path, the chat list and the conversations so far. <code>:forget NAME</code> deletes one conversation for good.</p>
+          </div></li>
+        </ol>
+      </section>
+
+      <section id="builder">
+        <h2>Config builder</h2>
+        <p>Fill this in and copy the result. It writes a whole <code>slbotd.conf</code>, and the llama-server command to match. It only uses settings slbotd reads, with the spellings it expects. Nothing you type leaves this page.</p>
+        <form class="picker cfg-builder" id="cfg-builder" autocomplete="off">
+          <fieldset>
+            <legend>The bot</legend>
+            <div class="fields">
+              <div class="field"><label for="cb-avatar">avatar: the bot's profile</label><input type="text" id="cb-avatar" name="avatar" value="builder" spellcheck="false"><small>A profile on the slgod machine. No spaces.</small></div>
+              <div class="field"><label for="cb-trusted">trusted: one per line</label><textarea id="cb-trusted" name="trusted" spellcheck="false">Example Resident</textarea><small>Legacy names or uuids. They get full control.</small></div>
+              <div class="field"><label for="cb-addr">addr: where slgod is</label><input type="text" id="cb-addr" name="addr" value="localhost:7807" spellcheck="false"><small>Empty leaves it out: sl-host, then localhost.</small></div>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Where llama-server runs</legend>
+            <div class="opts">
+              <label class="opt"><input type="radio" name="where" value="here" checked> same machine as slbotd</label>
+              <label class="opt"><input type="radio" name="where" value="tunnel"> another machine, through an SSH tunnel</label>
+              <label class="opt"><input type="radio" name="where" value="lan"> another machine, on a network you trust</label>
+            </div>
+            <div class="fields">
+              <div class="field" data-cb="lanhost"><label for="cb-host">that machine's address</label><input type="text" id="cb-host" name="host" value="192.0.2.30" spellcheck="false"><small>Host only, no <code>http://</code>.</small></div>
+              <div class="field"><label for="cb-port">port</label><input type="number" id="cb-port" name="port" value="8080" min="1" max="65535"></div>
+              <div class="field"><label for="cb-model">model file</label><input type="text" id="cb-model" name="model" value="~/models/your-model.gguf" spellcheck="false"></div>
+              <div class="field"><label for="cb-np">slots (-np)</label><input type="number" id="cb-np" name="np" value="4" min="1"></div>
+              <div class="field"><label for="cb-perslot">tokens per slot</label><input type="number" id="cb-perslot" name="perslot" value="2048" min="256" step="256"><small>-c is this times the slots.</small></div>
+              <div class="field"><label for="cb-slotdir">--slot-save-path</label><input type="text" id="cb-slotdir" name="slotdir" value="~/.local/state/llama-server/slots" spellcheck="false"></div>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Who it talks to</legend>
+            <div class="opts">
+              <label class="opt"><input type="radio" name="who" value="anyone" checked> anyone who IMs it (<code>*</code>)</label>
+              <label class="opt"><input type="radio" name="who" value="listed"> only people I list</label>
+            </div>
+            <div class="fields">
+              <div class="field" data-cb="allow"><label for="cb-allow">chat: one per line</label><textarea id="cb-allow" name="allow" spellcheck="false">Example Resident</textarea><small>Names or uuids.</small></div>
+              <div class="field"><label for="cb-deny">never answer: one per line</label><textarea id="cb-deny" name="deny" spellcheck="false"></textarea><small>Written as <code>chat = !name</code>. A refusal beats a permission.</small></div>
+              <div class="field"><label for="cb-backstory">backstory file or directory</label><input type="text" id="cb-backstory" name="backstory" value="~/characters/builder.txt" spellcheck="false"><small>Empty leaves it out: no character.</small></div>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Size and pace</legend>
+            <div class="fields">
+              <div class="field"><label for="cb-ctx">chat-context</label><input type="number" id="cb-ctx" name="ctx" value="1536" min="64"><small>Prompt budget in tokens. Over it, old turns are summarised.</small></div>
+              <div class="field"><label for="cb-summary">chat-summary</label><input type="number" id="cb-summary" name="summary" value="200" min="32"><small>Cap on the memory note. Under half of chat-context.</small></div>
+              <div class="field"><label for="cb-maxtok">chat-max-tokens</label><input type="number" id="cb-maxtok" name="maxtok" value="160" min="16"><small>Longest reply, in tokens.</small></div>
+              <div class="field"><label for="cb-jobs">chat-jobs</label><input type="number" id="cb-jobs" name="jobs" value="2" min="1"><small>Conversations answered at once, per avatar.</small></div>
+              <div class="field"><label for="cb-typecps">type-cps</label><input type="text" id="cb-typecps" name="typecps" value="3.2" spellcheck="false"><small>Characters a second it "types" at.</small></div>
+              <div class="field"><label for="cb-pacemax">pace-max</label><input type="text" id="cb-pacemax" name="pacemax" value="0" spellcheck="false"><small>Longest wait before a reply, like 45s. 0 is no limit.</small></div>
+            </div>
+          </fieldset>
+          <div class="result out">
+            <div class="note warn" data-cb="warnings" hidden><p class="label">Check these</p><ul></ul></div>
+            <div class="file" data-cb="conf"><div class="name">~/.config/slgo/slbotd.conf</div><pre></pre></div>
+            <div class="term" data-cb="serverterm" data-where="bot" data-where-label="on the slbotd machine: start llama-server"><pre></pre></div>
+            <div class="term" data-cb="tunnelterm" data-where="bot" data-where-label="on the slbotd machine: keep the tunnel open" hidden><pre></pre></div>
+          </div>
+        </form>
+      </section>
+
+      <section id="where-model">
+        <h2>Where to run it</h2>
+        <p><strong>On the slbotd machine</strong> is the simple case. Bind llama-server to <code>127.0.0.1</code>, point <code>llm-url</code> at it, and set <code>slot-save-path</code> to the same directory as the server's <code>--slot-save-path</code>, so <code>:forget</code> can delete the saved cache too.</p>
+        <p><strong>On a GPU machine</strong> is fine, with one thing to know: the connection is plain HTTP with no authentication. Everything residents say to the avatar crosses it in the clear, and anyone who can reach the port can use the server and read or overwrite the saved caches, which hold conversations. So either:</p>
+        <ul>
+          <li><strong>Tunnel it.</strong> Keep llama-server on <code>127.0.0.1</code> on the GPU machine, and forward the port from the slbotd machine with SSH. slbotd then sees it on its own loopback. (General SSH practice; not something the repository documents.)</li>
+          <li><strong>Or keep it on a network you trust</strong>, bound to that network's address only, never to the internet.</li>
+        </ul>
+        <p>To forward local port 8080 to llama-server on the GPU machine:</p>
+        <div class="term" data-where="bot"><pre><span class="p">$ </span>ssh -N -L 8080:127.0.0.1:8080 you@gpu.example</pre></div>
+        <p>With llama-server elsewhere, leave <code>slot-save-path</code> out of <code>slbotd.conf</code>, since slbotd cannot see that disk. The caches are then left behind when you <code>:forget</code> someone; delete them on the GPU machine by hand.</p>
+        <div class="note"><p class="label">Sharing with slsh</p><p>If slsh's <code>how</code> feature uses the same llama-server, each of its questions lands in a slot slbotd thinks is holding a conversation, and replaces that cache without slbotd knowing. Nothing should break, but as far as the code shows, that conversation's next reply is then read from the start. A cold start was measured at 5.0 s against 0.53 s warm, for a 1442-token conversation on a 0.5B model with no GPU. A separate server for <code>how</code> avoids it.</p></div>
+      </section>
+
+      <section id="linux-mac">
+        <h2>Linux and macOS</h2>
+        <p>slbotd behaves the same on both. Its config is <code>~/.config/slgo/slbotd.conf</code> and its conversations are under <code>~/.local/state/slbotd</code> on macOS as well; it does not use <code>~/Library</code>.</p>
+        <div class="note os"><p class="label">Linux vs macOS, for llama-server</p>
+          <p>This is general guidance about llama.cpp, <strong>not measured here</strong>. The repository's own timings were taken on an Intel i9 with no GPU, and nothing here compares platforms.</p>
+          <ul>
+            <li><strong>macOS on Apple silicon:</strong> llama.cpp builds with Metal, Apple's GPU interface, by default, and the GPU shares the machine's memory. A model that fits in memory can use the GPU without a separate card.</li>
+            <li><strong>Linux with an NVIDIA card:</strong> build with CUDA (<code>-DGGML_CUDA=ON</code>) and install NVIDIA's toolkit first. The model has to fit in the card's memory to be fast.</li>
+            <li><strong>Linux or an Intel Mac without a usable GPU:</strong> the CPU build works. Small models answer in seconds; bigger ones get slow quickly.</li>
+            <li>llama.cpp's documentation describes <code>-ngl</code> (<code>--n-gpu-layers</code>) for how much of the model goes to the GPU. Check what your build does by default.</li>
+          </ul>
+        </div>
+        <p>If replies are slow on any platform, the levers slbotd has are a smaller model, a lower <code>chat-max-tokens</code> and a longer <code>llm-timeout</code>.</p>
+      </section>
+
+      <section id="character">
+        <h2>The character</h2>
+        <p><code>backstory = AVATAR PATH</code> gives an avatar its system prompt. The <code>AVATAR</code> has to be written exactly as in its <code>avatar</code> line, including case: the startup check ignores case, but the lookup when replying does not, so a mismatch passes the check and then finds no backstory. (Worked out from the code.)</p>
+        <ul>
+          <li><strong>A file:</strong> the whole file is the prompt. slbotd adds one sentence of its own: "You are speaking through instant messages in a virtual world. Reply in a few sentences at most, in character, as speech rather than prose. If you are told how long it has been since they last wrote, remark on it."</li>
+          <li><strong>A directory:</strong> <code>default</code> or <code>default.txt</code> is for everyone, and a file named for a person is used when that person is speaking. Only one file is used. Names match ignoring case, with <code>-</code>, <code>_</code> and spaces treated alike; a uuid works as a file name.</li>
+          <li><strong>Includes:</strong> a line that is only <code>./path</code> or <code>../path</code> is replaced by that file. A person's file that does not include <code>./default.txt</code> gets no default character, and nothing warns you; <code>--check</code> shows the assembled sizes.</li>
+          <li>The backstory is re-read every turn, so editing it needs no restart. Everything else in <code>slbotd.conf</code> does.</li>
+          <li>If a backstory cannot be read, the avatar still replies, with no character at all, and <code>no backstory: …</code> goes into <code>:errors</code>.</li>
+        </ul>
+        <div class="file"><div class="name">~/characters/builder/ (a directory backstory)</div><pre>default.txt              <span class="c"># everyone</span>
+example-resident.txt     <span class="c"># only when Example Resident speaks; its first line is ./default.txt</span></pre></div>
+      </section>
+
+      <section id="keys">
+        <h2>The chat settings</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>llm-url</code></td><td>empty</td><td class="what">Base URL of llama-server, without <code>/v1</code>. Empty means no chat.</td></tr>
+            <tr><td><code>chat</code></td><td>none</td><td class="what">Who to talk to: a name, a uuid, <code>*</code> for anyone, <code>!name</code> or <code>!uuid</code> to refuse. Repeat the line. A refusal wins over a permission whatever the order.</td></tr>
+            <tr><td><code>backstory</code></td><td>none</td><td class="what"><code>AVATAR PATH</code>, a file or directory. <code>~</code> is expanded.</td></tr>
+            <tr><td><code>llm-model</code></td><td>empty</td><td class="what">Sent as the model name. llama-server ignores it.</td></tr>
+            <tr><td><code>llm-timeout</code></td><td><code>2m</code></td><td class="what">Limit on each HTTP call to the model. The whole reply gets this plus 30 s.</td></tr>
+            <tr><td><code>chat-jobs</code></td><td><code>2</code></td><td class="what">Conversations one avatar answers at once. Past it, a new message gets silence. Separate from <code>jobs</code>, so talk cannot crowd out commands.</td></tr>
+            <tr><td><code>chat-context</code></td><td><code>1536</code></td><td class="what">Token budget for the prompt, at least 64. Crossing it folds old turns into a memory note.</td></tr>
+            <tr><td><code>chat-keep</code></td><td><code>6</code></td><td class="what">Turns kept word for word through a fold. Even, at least 2.</td></tr>
+            <tr><td><code>chat-summary</code></td><td><code>200</code></td><td class="what">Token cap on the memory note, at least 32. Must be under half of <code>chat-context</code>, or chat is off.</td></tr>
+            <tr><td><code>chat-max-tokens</code></td><td><code>160</code></td><td class="what">Longest reply in tokens, at least 16.</td></tr>
+            <tr><td><code>chat-reply-limit</code></td><td><code>2</code></td><td class="what">Most IMs one reply is sent as.</td></tr>
+            <tr><td><code>chat-temperature</code></td><td><code>0.8</code></td><td class="what">Sampling temperature for replies. Summaries always use 0.2.</td></tr>
+            <tr><td><code>chat-own</code></td><td><code>8</code></td><td class="what">How much two avatars this slbotd drives may say to each other before one stops. 0 means never stop.</td></tr>
+            <tr><td><code>chat-gap</code></td><td><code>1h</code></td><td class="what">After this much silence the model is told how long it has been. The hint is sent, not stored.</td></tr>
+            <tr><td><code>chat-dir</code></td><td><code>~/.local/state/slbotd</code></td><td class="what">Where conversations are kept (under <code>$XDG_STATE_HOME</code> if that is set).</td></tr>
+            <tr><td><code>slot-save-path</code></td><td>empty</td><td class="what">The server's <code>--slot-save-path</code>, as this machine sees it. Only used to delete a cache on <code>:forget</code>.</td></tr>
+            <tr><td><code>read-cps</code></td><td><code>23.0</code></td><td class="what">Characters a second the avatar "reads" at. <code>read-cps = builder 12</code> sets one avatar.</td></tr>
+            <tr><td><code>type-cps</code></td><td><code>3.2</code></td><td class="what">Characters a second it "types" at. Can be set per avatar the same way.</td></tr>
+            <tr><td><code>pace-max</code></td><td><code>0</code></td><td class="what">Ceiling on the whole wait, as a duration like <code>45s</code>. 0 is off.</td></tr>
+          </tbody>
+        </table></div>
+        <p>Most keys also take an underscore spelling, like <code>llm_url</code>. Per-avatar speed lines are not checked against the avatar list, so a misspelt name quietly uses the default speed.</p>
+        <h3>Sizing against the server</h3>
+        <p>Each slot holds <code>-c</code> divided by <code>-np</code> tokens. The prompt, up to about <code>chat-context</code>, and the reply, up to <code>chat-max-tokens</code>, should fit in one slot together. The defaults, 1536 plus 160, fit in the 2048 of <code>-c 8192 -np 4</code>. (That rule is worked out from the code, not measured.)</p>
+        <h3>Memory</h3>
+        <p>When a conversation outgrows <code>chat-context</code>, the older turns are folded into a three-line note by an extra model call, and the last <code>chat-keep</code> turns stay word for word. The backstory is never part of the fold, so it cannot be lost to it. <code>:chat</code> shows the note.</p>
+      </section>
+
+      <section id="pacing">
+        <h2>Pacing</h2>
+        <p>slbotd waits as long as a person would. First it is silent for the length of the message divided by <code>read-cps</code>. Then it shows "typing" for up to the length of the reply divided by <code>type-cps</code>. The time the model takes counts toward the wait.</p>
+        <p>With the defaults a long reply is slow on purpose: the repository's guide puts a 160-token reply at 3.2 characters a second at about four minutes. To shorten it, lower <code>chat-max-tokens</code> first, which gives shorter replies; raising <code>type-cps</code> or setting <code>pace-max</code> also works.</p>
+        <p>Two avatars on the same slbotd will talk to each other if both are on each other's chat list. Before <code>chat-own</code> existed, one message led to 26 exchanges in ninety seconds. <code>chat-own</code> stops that after 8 by default, or refuse the other avatar with <code>!</code>.</p>
+      </section>
+
+      <section id="problems">
+        <h2>Problem solving</h2>
+        <p>A resident whose message could not be answered gets <strong>silence</strong>, never an error. The reason is in slbotd's log and in <code>:errors</code>, as <code>could not answer …: </code> followed by the cause. Parts shown as <code>…</code> vary.</p>
+        <div class="fault-tools">
+          <input type="search" id="fault-search" placeholder="Paste an error or describe the symptom" aria-label="Filter problems">
+          <button type="button" class="chip" data-filter="config" aria-pressed="false">config</button>
+          <button type="button" class="chip" data-filter="server" aria-pressed="false">llama-server</button>
+          <button type="button" class="chip" data-filter="chat" aria-pressed="false">who it answers</button>
+          <button type="button" class="chip" data-filter="pace" aria-pressed="false">slow</button>
+          <span class="fault-count"></span>
+        </div>
+
+        <details class="fault" id="f-llm-off-nourl" data-tags="config">
+          <summary><span class="sym">Startup says <code>CHAT IS OFF: chat names somebody to talk to but no llm-url says where a model is, so nothing will be answered</code></span><span class="where-tag">log</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>There is a <code>chat</code> line but no <code>llm-url</code>. Chat needs both. It is logged at every start and is not fatal: commands still work. <code>:chat</code> says <code>no model is configured; this avatar answers commands only</code>.</p>
+            <h4>Fix</h4><p>Add <code>llm-url = http://127.0.0.1:8080</code> (your server's address) and restart slbotd.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-off-nochat" data-tags="config">
+          <summary><span class="sym">Startup says <code>CHAT IS OFF: llm-url names a model but no chat line says who may be answered, so nothing will be answered</code></span><span class="where-tag">log</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>There is an <code>llm-url</code> but nobody to talk to. Being trusted does not put someone on the chat list; they are separate lists.</p>
+            <h4>Fix</h4><p>Add <code>chat = *</code> for anyone, or a <code>chat</code> line per person, and restart.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-off-summary" data-tags="config">
+          <summary><span class="sym">Startup says <code>CHAT IS OFF: chat-summary is … tokens and chat-context only …; the summary has to be well under the budget or there is no room left to talk</code></span><span class="where-tag">log</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p><code>chat-summary</code> must be less than half of <code>chat-context</code>.</p>
+            <h4>Fix</h4><p>Raise <code>chat-context</code> or lower <code>chat-summary</code>. The defaults, 1536 and 200, are fine. <code>slbotd --check</code> shows the same thing as a <code>PROBLEM:</code> line.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-unknown-key" data-tags="config">
+          <summary><span class="sym">slbotd will not start: <code>line 7: unknown setting "llm-ulr"</code></span><span class="where-tag">startup</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>A key slbotd does not know. Any unknown key is fatal, which is how typos get caught.</p>
+            <h4>Fix</h4><p>Correct the key on that line. <a href="#keys">The chat settings</a> lists the right spellings. There is no key for an API key, because none is used.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-refused" data-tags="server">
+          <summary><span class="sym">No replies; <code>:errors</code> has <code>could not answer …: the model at http://127.0.0.1:8080: …connection refused</code></span><span class="where-tag">:errors</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>Nothing is listening at <code>llm-url</code>. llama-server is not running, is on another port, or is bound to another address. The part after the URL is Go's network error; its exact wording was not recorded here.</p>
+            <h4>Fix</h4><p>Start llama-server, and check that the host and port in <code>llm-url</code> match its <code>--host</code> and <code>--port</code>. From the slbotd machine this should answer:</p>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>curl -s http://127.0.0.1:8080/props</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-404" data-tags="server config">
+          <summary><span class="sym"><code>could not answer …: GET /props: 404 …</code>, or Ollama does not work</span><span class="where-tag">:errors</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>Either <code>llm-url</code> ends in <code>/v1</code>, so slbotd asks for <code>/v1/props</code>, or the server is not llama-server. Ollama and hosted APIs have no <code>/props</code> and no <code>/slots</code>. (The exact text here is worked out from the code.)</p>
+            <h4>Fix</h4><p>Use llama-server, and give the base URL only: <code>llm-url = http://127.0.0.1:8080</code>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-401" data-tags="server">
+          <summary><span class="sym"><code>could not answer …: GET /props: 401 …</code></span><span class="where-tag">:errors</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>llama-server was started with <code>--api-key</code>. slbotd never sends a key. (Worked out from the code.)</p>
+            <h4>Fix</h4><p>Start llama-server without <code>--api-key</code>, bound to loopback, and reach it through an SSH tunnel if it is on another machine. See <a href="#where-model">Where to run it</a>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-timeout" data-tags="server pace">
+          <summary><span class="sym"><code>could not answer …: … context deadline exceeded</code> or <code>Client.Timeout exceeded</code></span><span class="where-tag">:errors</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>The model took longer than <code>llm-timeout</code> (2 minutes by default) for one call. The model is too big or too slow for the machine, or the server is busy with other slots. (The exact wording is Go's, and was not recorded here.)</p>
+            <h4>Fix</h4><p>Use a smaller model or put it on a GPU, lower <code>chat-max-tokens</code>, or raise <code>llm-timeout</code>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-empty" data-tags="server">
+          <summary><span class="sym"><code>the model said nothing at all</code>, or <code>the model answered with no choices at all</code></span><span class="where-tag">:errors</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>The model returned an empty reply. The usual cause is a reasoning model that spent all of <code>chat-max-tokens</code> thinking.</p>
+            <h4>Fix</h4><p>Use an instruct model that answers directly, or turn reasoning off on the server. Raising <code>chat-max-tokens</code> can help, at the cost of slower replies.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-slot-save" data-tags="server">
+          <summary><span class="sym">Replies work, but every turn adds <code>could not keep the context for …: POST /slots/0?action=save: …</code></span><span class="where-tag">:errors</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>llama-server has nowhere to save slot caches. Replies still go out, but conversations resume slower, and these errors fill <code>:errors</code> (up to 50) and set off the trouble notice for trusted people.</p>
+            <h4>Fix</h4><p>Restart llama-server with <code>--slot-save-path DIR</code>, a directory that exists.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-restore" data-tags="server">
+          <summary><span class="sym">Log says <code>the kept context for … would not load (…); starting it again</code></span><span class="where-tag">log</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>A saved cache could not be loaded. It happens after changing the model, the server build, the context size or the backstory, because each cache carries a fingerprint of all of those and one that no longer matches is not used.</p>
+            <h4>Fix</h4><p>Nothing to fix. The conversation text is kept separately; the next reply reads it from the start, which costs a few seconds once.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-slot-clear" data-tags="server">
+          <summary><span class="sym"><code>could not clear slot …</code></span><span class="where-tag">log</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>slbotd erases a slot before giving it to a different conversation, and the server refused.</p>
+            <h4>Fix</h4><p>Check llama-server's own output, and that it is llama-server and not something else on that port.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-summarise" data-tags="server">
+          <summary><span class="sym"><code>could not summarise the conversation with … (…); dropped the oldest exchanges instead</code></span><span class="where-tag">:errors</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>The model call that folds old turns into the memory note failed. The reply still went out, but that conversation lost its oldest turns instead of keeping a note of them.</p>
+            <h4>Fix</h4><p>Look at the cause after the parentheses. Usually it is the same server trouble as the other entries here.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-not-listed" data-tags="chat">
+          <summary><span class="sym">It ignores someone; log says <code>not answering …: not in the chat list</code> or <code>refused in the list by name</code></span><span class="where-tag">log</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>That person is not on a <code>chat</code> line, or is refused with <code>!</code>. Names are matched ignoring case against the legacy name the grid sends, not the display name.</p>
+            <h4>Fix</h4><p>Add them with <code>chat = Name</code> or their uuid, or use <code>chat = *</code>. A <code>!</code> line always wins, so remove it if you meant them to be answered.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-unnoticed" data-tags="chat">
+          <summary><span class="sym">Nothing in the log at all for a message</span><span class="where-tag">chat</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>Only one-to-one IMs are answered. Local chat and group IMs never are. And a message that starts with the prefix, <code>:</code>, is a command, not conversation.</p>
+            <h4>Fix</h4><p>Send a one-to-one IM that does not start with <code>:</code>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-busy" data-tags="chat pace">
+          <summary><span class="sym">Some messages get no reply; log says <code>too busy talking to answer …</code></span><span class="where-tag">log</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>The avatar was already answering <code>chat-jobs</code> conversations (2 by default). Past that a message gets silence by design.</p>
+            <h4>Fix</h4><p>Raise <code>chat-jobs</code>, and give llama-server enough slots (<code>-np</code>) for the extra conversations.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-own" data-tags="chat">
+          <summary><span class="sym">Two of the bot's avatars stop talking to each other: <code>which this daemon drives as well, and they have said … things to each other already</code></span><span class="where-tag">log</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p><code>chat-own</code> (8 by default) stops two avatars this slbotd drives from talking forever.</p>
+            <h4>Fix</h4><p>Working as designed. Raise <code>chat-own</code> if you want longer exchanges, or 0 for no limit, which is rarely what you want.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-slow" data-tags="pace">
+          <summary><span class="sym">Replies arrive minutes later, after a long "typing"</span><span class="where-tag">pacing</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>Pacing. The reply is held until a person could have typed it at <code>type-cps</code>, 3.2 characters a second by default. 600 characters works out at a little over three minutes.</p>
+            <h4>Fix</h4><p>Lower <code>chat-max-tokens</code> for shorter replies, raise <code>type-cps</code>, or set <code>pace-max = 45s</code> to cap the wait. See <a href="#pacing">Pacing</a>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-backstory" data-tags="config">
+          <summary><span class="sym">The avatar has no character; <code>:errors</code> has <code>no backstory: …</code>, or <code>--check</code> says <code>BROKEN: …</code></span><span class="where-tag">:errors</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>The backstory file is missing or unreadable, an include is missing, or includes loop. The avatar replies anyway, with no character.</p>
+            <h4>Fix</h4><p>Run <code>slbotd --check</code>; it shows each backstory's size or what broke. Fix the path; the next reply picks it up without a restart.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-backstory-case" data-tags="config">
+          <summary><span class="sym">The backstory is set and <code>--check</code> accepts it, but replies have no character</span><span class="where-tag">config</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>The avatar in the <code>backstory</code> line is written with different case from its <code>avatar</code> line. The check ignores case; the lookup does not. (Worked out from the code.)</p>
+            <h4>Fix</h4><p>Write it exactly as in the <code>avatar</code> line, then restart.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-store" data-tags="config">
+          <summary><span class="sym"><code>could not write the conversation with …: …</code></span><span class="where-tag">:errors</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>slbotd cannot write to its conversation store, <code>chat-dir</code>.</p>
+            <h4>Fix</h4><p>Check that the directory, <code>~/.local/state/slbotd</code> by default, exists and belongs to the user slbotd runs as.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-shared" data-tags="server pace">
+          <summary><span class="sym">Conversations sometimes restart slowly after slsh's <code>how</code> was used</span><span class="where-tag">llama-server</span></summary>
+          <div class="fix">
+            <h4>Why</h4><p>slbotd uses every slot the server has. A <code>how</code> question sent to the same server overwrites one conversation's cache, and slbotd does not know, so that conversation's next reply is read from the start.</p>
+            <h4>Fix</h4><p>Give <code>how</code> a server of its own.</p>
+          </div>
+        </details>
+      </section>
+
+      <section id="privacy">
+        <h2>Privacy and safety</h2>
+        <h3>Where residents' words go</h3>
+        <p>With <code>chat = *</code>, everyone who sends the avatar a one-to-one IM is talking to your model. Nothing in slbotd tells them that; telling them is up to you. Their words go to:</p>
+        <ul>
+          <li><strong>llama-server</strong>, over HTTP, with the backstory, the memory note and the kept turns. The sender's name is not added by slbotd; the model knows it only if they said it or a per-person backstory does. (Worked out from the code.)</li>
+          <li><strong>The conversation store</strong>, <code>~/.local/state/slbotd/AVATAR/THEIR-UUID.json</code>: every turn with a timestamp, and the memory note. Kept <strong>forever</strong>. Nothing expires it.</li>
+          <li><strong>The saved caches</strong> in llama-server's <code>--slot-save-path</code>, also kept until deleted.</li>
+          <li><strong>slbotd's log</strong>, unless you start it with <code>-q</code>. <code>-q</code> leaves conversation lines out; commands, decisions and connection events are still logged.</li>
+          <li>Things the avatar says through another client, such as you typing in slsh, are recorded into an existing conversation too.</li>
+        </ul>
+        <p><code>:forget NAME</code> deletes one conversation for good, and its saved cache if <code>slot-save-path</code> is set. Otherwise prune the store by hand.</p>
+        <h3>Prompt injection</h3>
+        <p>Anyone on the chat list can type instructions at the model. The model has no tools and no way to run a command: its reply is only ever sent as IM text back to the person who spoke, and slbotd never answers its own IMs. So an injected instruction can change what the avatar says, and nothing else. (Worked out from the code.) What it can realistically do:</p>
+        <ul>
+          <li>get the model to reveal the backstory, including anything a per-person file says about other people. Do not put in a backstory what you would not want read out;</li>
+          <li>get it to repeat that person's own memory note;</li>
+          <li>get it to say something offensive under your avatar's name, which you answer for under the grid's rules.</li>
+        </ul>
+        <p>Each conversation is kept per avatar and person, so one person's memory is not in another's prompt, and a slot is erased before it passes to someone else.</p>
+        <h3>Programs</h3>
+        <p>Chat never runs programs. Commands do, for trusted people. A <code>program</code> line runs an executable with the words the sender typed as its arguments. There is no shell, but there is no sandbox either: it runs as slbotd's user, with slbotd's whole environment. <strong>Never point a <code>program</code> line at a shell, an interpreter or a general tool</strong> like <code>sh</code>, <code>python</code> or <code>curl</code>. That turns "trusted in world" into "a shell on this machine".</p>
+        <h3>The model server</h3>
+        <p>llama-server has no authentication in this setup. Anyone who can reach its port can use it and read or overwrite the saved caches, which hold conversations. Keep it on loopback, or behind an SSH tunnel. The <a href="security.html">security page</a> covers the rest of the system.</p>
+      </section>
+
+      <section id="have">
+        <h2>What you now have</h2>
+        <ul>
+          <li>llama-server running a model you chose, on loopback or behind a tunnel.</li>
+          <li>The bot's avatar answering one-to-one IMs from the people on its chat list, in character, at a human pace.</li>
+          <li>Conversations remembered across weeks through the memory note, and resumed quickly through saved caches.</li>
+          <li>Commands working as before, separately limited.</li>
+          <li>A list of where residents' words are stored, so you can tell them, and prune it.</li>
+        </ul>
+      </section>
+
+      <section id="next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="security.html"><span class="k">Read</span><span class="t">Security</span><span class="d">The shared secret, trusted people, and what each can reach.</span></a>
+          <a class="card" href="setups.html"><span class="k">Compare</span><span class="t">Setups</span><span class="d">Which pieces go on which machine.</span></a>
+          <a class="card" href="troubleshooting.html"><span class="k">Fix</span><span class="t">Troubleshooting</span><span class="d">Every error across slgod, slsh and slbotd.</span></a>
+          <a class="card" href="reference.html"><span class="k">Look up</span><span class="t">Reference</span><span class="d">Every key and flag in one place.</span></a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="quickstart-bot.html">← Adding slbotd</a> <a href="how-llm.html">slsh + LLM →</a></span>
+  </footer>
+</div>
+<script>
+(function () {
+  "use strict";
+  var page = document.getElementById("bot-llm");
+  if (!page) return;
+  var form = page.querySelector("form.cfg-builder");
+  if (!form) return;
+  form.addEventListener("submit", function (e) { e.preventDefault(); });
+
+  function part(name) { return form.querySelector('[data-cb="' + name + '"]'); }
+  function field(name) { return form.elements.namedItem(name); }
+  function text(name) { var el = field(name); return el ? String(el.value).trim() : ""; }
+  function radio(name) { var el = form.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ""; }
+  function lines(name) {
+    return text(name).split(/\n/).map(function (s) { return s.replace(/#.*/, "").trim(); }).filter(Boolean);
+  }
+  function int(name) { var v = parseInt(text(name), 10); return isNaN(v) ? NaN : v; }
+
+  // Write lines into a <pre>: plain text, with "# ..." parts as comments.
+  function render(pre, rows, prompt) {
+    while (pre.firstChild) pre.removeChild(pre.firstChild);
+    rows.forEach(function (row, i) {
+      if (i) pre.appendChild(document.createTextNode("\n"));
+      if (row === "") return;
+      if (row.charAt(0) === "#") {
+        var c = document.createElement("span");
+        c.className = "c";
+        c.textContent = row;
+        pre.appendChild(c);
+        return;
+      }
+      if (prompt && row.charAt(0) !== " ") {
+        var p = document.createElement("span");
+        p.className = "p";
+        p.textContent = "$ ";
+        pre.appendChild(p);
+      }
+      pre.appendChild(document.createTextNode(row));
+    });
+  }
+
+  function setWhere(block, label) {
+    block.setAttribute("data-where-label", label);
+    var chip = block.querySelector(".where");
+    if (chip) chip.textContent = label;
+  }
+
+  function update() {
+    var where = radio("where");
+    var who = radio("who");
+    part("lanhost").hidden = where !== "lan";
+    part("allow").hidden = who !== "listed";
+
+    var warn = [];
+    var avatar = text("avatar");
+    var trusted = lines("trusted");
+    var addr = text("addr");
+    var port = int("port");
+    var host = where === "lan" ? text("host") : "127.0.0.1";
+    var np = int("np"), perslot = int("perslot");
+    var ctx = int("ctx"), summary = int("summary"), maxtok = int("maxtok"), jobs = int("jobs");
+    var slotdir = text("slotdir");
+    var backstory = text("backstory");
+    var allow = lines("allow"), deny = lines("deny");
+
+    if (!avatar) warn.push("No avatar: slbotd refuses to start with no avatar lines.");
+    else if (/[\/\\ ]/.test(avatar)) warn.push("“" + avatar + "” is not a profile name: no spaces or slashes. Use the profile's file name, not the avatar's name.");
+    if (!trusted.length) warn.push("No trusted names: slbotd refuses to start with no trusted lines.");
+    if (/^[a-z]+:\/\/|\//i.test(host)) warn.push("Give the llama-server machine's host only, without http:// or a path.");
+    if (!(port >= 1 && port <= 65535)) warn.push("The port has to be a number from 1 to 65535.");
+    if (who === "listed" && !allow.length) warn.push("Nobody listed to talk to: slbotd would log CHAT IS OFF: llm-url names a model but no chat line says who may be answered.");
+    if (!(ctx >= 64)) warn.push("chat-context has to be at least 64.");
+    if (!(summary >= 32)) warn.push("chat-summary has to be at least 32.");
+    if (!(maxtok >= 16)) warn.push("chat-max-tokens has to be at least 16.");
+    if (!(jobs >= 1)) warn.push("chat-jobs has to be at least 1.");
+    if (ctx >= 64 && summary >= 32 && summary >= Math.floor(ctx / 2)) {
+      warn.push("slbotd would log CHAT IS OFF: chat-summary is " + summary + " tokens and chat-context only " + ctx + ". Keep chat-summary under half of chat-context.");
+    }
+    if (perslot > 0 && ctx > 0 && maxtok > 0 && ctx + maxtok > perslot) {
+      warn.push("chat-context plus chat-max-tokens (" + (ctx + maxtok) + ") is more than one slot holds (" + perslot + "). Raise the tokens per slot or lower the two. (A rule worked out from the code, not measured.)");
+    }
+    if (!/^\d+(\.\d+)?$/.test(text("typecps"))) warn.push("type-cps wants a number, like 3.2.");
+    if (!/^(0|(\d+(\.\d+)?(ns|us|ms|s|m|h))+)$/.test(text("pacemax"))) warn.push("pace-max wants a duration, like 45s or 2m, or 0.");
+    if (/\s/.test(slotdir)) warn.push("Keep the slot directory free of spaces; the command below does not quote it.");
+
+    var url = "http://" + (host.indexOf(":") >= 0 && host.charAt(0) !== "[" ? "[" + host + "]" : host) + ":" + (isNaN(port) ? "" : port);
+    if (where !== "lan") url = "http://127.0.0.1:" + (isNaN(port) ? "" : port);
+
+    var conf = [];
+    conf.push("# slbotd.conf, from the handbook's config builder");
+    conf.push("avatar  = " + avatar);
+    trusted.forEach(function (t) { conf.push("trusted = " + t); });
+    if (addr) conf.push("addr    = " + addr);
+    else conf.push("# addr left out: sl-host if installed, else localhost:7807");
+    conf.push("");
+    conf.push("# conversation, through llama-server");
+    conf.push("llm-url = " + url);
+    if (who === "anyone") conf.push("chat    = *");
+    else allow.forEach(function (a) { conf.push("chat    = " + a); });
+    deny.forEach(function (d) { conf.push("chat    = !" + d.replace(/^!/, "")); });
+    if (backstory) conf.push("backstory = " + avatar + " " + backstory);
+    else conf.push("# no backstory: the avatar answers with no character");
+    if (where === "here" && slotdir) conf.push("slot-save-path = " + slotdir);
+    else if (where !== "here") conf.push("# slot-save-path left out: the caches are on the other machine");
+    conf.push("");
+    conf.push("chat-jobs       = " + text("jobs"));
+    conf.push("chat-context    = " + text("ctx"));
+    conf.push("chat-summary    = " + text("summary"));
+    conf.push("chat-max-tokens = " + text("maxtok"));
+    conf.push("type-cps        = " + text("typecps"));
+    conf.push("pace-max        = " + text("pacemax"));
+    render(part("conf").querySelector("pre"), conf, false);
+
+    var total = (np > 0 && perslot > 0) ? np * perslot : "";
+    var bind = where === "lan" ? host : "127.0.0.1";
+    var cmd = [];
+    if (slotdir) cmd.push("mkdir -p -m 700 " + slotdir);
+    cmd.push("llama-server -m " + text("model") + " \\");
+    cmd.push("    -c " + total + " -np " + (isNaN(np) ? "" : np) + " \\");
+    if (slotdir) cmd.push("    --slot-save-path " + slotdir + " \\");
+    cmd.push("    --host " + bind + " --port " + (isNaN(port) ? "" : port));
+    var serverterm = part("serverterm");
+    render(serverterm.querySelector("pre"), cmd, true);
+    setWhere(serverterm, where === "here" ? "on the slbotd machine: start llama-server" : "on the llama-server machine: start it");
+    serverterm.setAttribute("data-where", where === "here" ? "bot" : "gpu");
+
+    var tunnel = part("tunnelterm");
+    tunnel.hidden = where !== "tunnel";
+    if (where === "tunnel") {
+      var p = isNaN(port) ? "" : port;
+      render(tunnel.querySelector("pre"), ["ssh -N -L " + p + ":127.0.0.1:" + p + " you@gpu.example"], true);
+      setWhere(tunnel, "on the slbotd machine: forward port " + p + " to llama-server, and keep it open");
+    }
+    if (where === "lan") warn.push("On a network you trust only: this traffic is plain HTTP with no authentication, and it carries what residents say.");
+
+    var box = part("warnings");
+    var ul = box.querySelector("ul");
+    while (ul.firstChild) ul.removeChild(ul.firstChild);
+    warn.forEach(function (w) {
+      var li = document.createElement("li");
+      li.textContent = w;
+      ul.appendChild(li);
+    });
+    box.hidden = warn.length === 0;
+  }
+
+  form.addEventListener("input", update);
+  form.addEventListener("change", update);
+  update();
+})();
+</script>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

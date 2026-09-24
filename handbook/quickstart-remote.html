@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>slgod on a server, slsh on your computer — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="quickstart-remote">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Quick start · two machines</p>
+    <h1>slgod on a server, slsh on your computer<span class="caret">_</span></h1>
+    <p class="standfirst">Keep your avatar logged in on a machine that is always on, and drive it from your laptop. The example is the common one: slgod on a Linux server, slsh on a Mac. Other pairings work the same way.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">~30 min</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+      <section id="picture">
+        <h2>The picture</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 640 190" role="img" aria-label="slsh on your computer connects over TCP port 7807, with TLS and the shared secret, to slgod on the server, which holds the avatar on the Second Life grid.">
+            <defs><marker id="qr-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+            <rect class="box laptop" x="12" y="30" width="170" height="120" rx="6"/>
+            <text class="t-machine" x="24" y="52">your computer</text>
+            <rect class="proc" x="24" y="72" width="146" height="26" rx="3"/>
+            <text class="t-proc" x="34" y="90">slsh</text>
+            <text class="t-small" x="24" y="136">secret · macOS</text>
+            <rect class="box server" x="262" y="30" width="170" height="120" rx="6"/>
+            <text class="t-machine" x="274" y="52">server</text>
+            <rect class="proc" x="274" y="72" width="146" height="26" rx="3"/>
+            <text class="t-proc" x="284" y="90">slgod</text>
+            <text class="t-small" x="274" y="120">profile · secret</text>
+            <text class="t-small" x="274" y="136">Linux</text>
+            <path class="link secure" d="M170,85 L274,85" marker-end="url(#qr-arrow)"/>
+            <text class="t-small" x="222" y="76" text-anchor="middle">TCP 7807</text>
+            <text class="t-small" x="222" y="104" text-anchor="middle">TLS + secret</text>
+            <rect class="box grid" x="522" y="45" width="106" height="90" rx="45"/>
+            <text class="t-proc" x="575" y="87" text-anchor="middle">Second</text>
+            <text class="t-proc" x="575" y="104" text-anchor="middle">Life</text>
+            <path class="link grid" d="M432,90 L522,90" marker-end="url(#qr-arrow)"/>
+          </svg>
+          <figcaption>The profile (the avatar's password) stays on the server. Your computer needs slsh and the shared secret, nothing else.</figcaption>
+        </figure>
+        <p>What each machine needs:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>Server (slgod)</th><th>Your computer (slsh)</th></tr></thead>
+          <tbody>
+            <tr><td>Programs</td><td class="what"><code>slgod</code>, <code>slhash</code></td><td class="what"><code>slsh</code>; <code>sl-host</code> only if the laptop moves between networks</td></tr>
+            <tr><td>Built from</td><td class="what" colspan="2">The same commit of the source, on both ends</td></tr>
+            <tr><td>Profile</td><td class="what"><code>~/.config/slgo/example</code></td><td class="what">None</td></tr>
+            <tr><td>Shared secret</td><td class="what" colspan="2"><code>~/.config/slgod/secret</code>, the same bytes on both, mode 600 in a directory of mode 700</td></tr>
+            <tr><td>Network</td><td class="what">Accepts TCP 7807 (or SSH, for the tunnel)</td><td class="what">Can reach it</td></tr>
+          </tbody>
+        </table></div>
+        <p>No certificates to copy. The connection is TLS with a certificate slgod makes fresh at each start and the client deliberately does not check. Both ends prove they hold the secret instead, and the secret itself never crosses the wire.</p>
+      </section>
+
+      <section id="choose">
+        <h2>Choose a route</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Route</th><th>slgod listens on</th><th>Good for</th></tr></thead>
+          <tbody>
+            <tr><td><a href="#route-direct">A. Direct</a></td><td class="what">the server's LAN or VPN address, port 7807</td><td class="what">A home network or a VPN you trust (WireGuard, Tailscale and the like). Least to set up.</td></tr>
+            <tr><td><a href="#route-ssh">B. SSH tunnel</a></td><td class="what"><code>127.0.0.1:7807</code> only</td><td class="what">The locked-down choice. Nothing but SSH is open on the server, and you already trust SSH.</td></tr>
+            <tr><td><a href="#moving-laptop">C. sl-host</a></td><td class="what">as A</td><td class="what">A laptop that reaches the server at one address at home and another away. An add-on to A.</td></tr>
+          </tbody>
+        </table></div>
+        <p>If you are unsure, take <strong>B</strong>. It needs no firewall change and cannot be reached by anyone who cannot already log in to the server.</p>
+      </section>
+
+      <section id="both-ends">
+        <h2>Steps for both routes</h2>
+        <ol class="steps" id="common-steps">
+          <li><div class="step-body">
+            <h3>Build the same tree on both machines</h3>
+            <p>slsh and slgod must come from the same source. The handshake between them has changed shape before, and a client older than its daemon is refused. The simplest way is to clone and build on each machine, at the same commit:</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>git clone https://github.com/quark-idlemind/slgo.git &amp;&amp; cd slgo
+<span class="p">$ </span>go install ./cmd/slgod ./cmd/slhash
+<span class="p">$ </span>git rev-parse --short HEAD</pre></div>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>git clone https://github.com/quark-idlemind/slgo.git &amp;&amp; cd slgo
+<span class="c"># COMMIT is the one the server printed</span>
+<span class="p">$ </span>git checkout COMMIT
+<span class="p">$ </span>go install ./cmd/slsh</pre></div>
+            <p>Both need Go 1.26.1 or newer and the Go bin directory on <code>PATH</code>; <a href="quickstart-local.html#steps">the one-machine guide</a> shows how for each shell. If a program you have just installed is not found although the directory is on <code>PATH</code>, run <code>rehash</code> in csh or zsh, or <code>hash -r</code> in sh or bash. Afterwards <code>slgod -version</code> and <code>slsh --version</code> each print a line that includes the commit they were built from. The two should match.</p>
+            <p>Install only what each machine needs. <code>go install ./cmd/...</code> would put <code>sl-host</code> on the laptop, and slsh would then ask it for the server's address and fail until it has a rules file (<a href="troubleshooting.html#f-sl-host-no-file">details</a>).</p>
+            <h3>Or cross-compile on the Mac</h3>
+            <p>slgo is pure Go with no cgo, so a Mac can build the Linux programs and copy them over. Ask the server what it is first: <code>uname -m</code> printing <code>x86_64</code> means <code>amd64</code>, and <code>aarch64</code> means <code>arm64</code>. Build inside the checkout, so the version line knows its commit, but write the binaries outside it:</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>cd slgo
+<span class="p">$ </span>mkdir -p ~/slgo-linux
+<span class="p">$ </span>env GOOS=linux GOARCH=amd64 go build -o ~/slgo-linux/ ./cmd/slgod ./cmd/slhash
+<span class="p">$ </span>ssh server.example 'mkdir -p ~/go/bin'
+<span class="p">$ </span>scp ~/slgo-linux/slgod ~/slgo-linux/slhash server.example:go/bin/
+<span class="p">$ </span>go install ./cmd/slsh</pre></div>
+            <p>The server's <code>~/go/bin</code> then has to be on its <code>PATH</code>, and a shell already open on the server needs <code>rehash</code> (csh, zsh) or <code>hash -r</code> (sh, bash) to see the new programs. The same works the other way round, with <code>env GOOS=darwin</code> on Linux. Cross-building slsh and slgod for Linux from a Mac has been tried, and both build.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Put the profile and the secret on the server</h3>
+            <p>These are the same commands as on one machine; <a href="quickstart-local.html#steps">steps 3 and 4 there</a> explain each part.</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgo)
+<span class="p">$ </span>(umask 077; printf 'first = Example\nlast = Resident\nstart = last\npassword = %s\n' "`slhash`" &gt; ~/.config/slgo/example)
+<span class="p">$ </span>chmod 700 ~/.config/slgo; chmod 600 ~/.config/slgo/example
+<span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgod; openssl rand -hex 32 &gt; ~/.config/slgod/secret)</pre></div>
+            <p>The secret goes in place <strong>before</strong> slgod starts. slgod reads it when it starts, before any avatar logs in, and stops if it is missing.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Copy the secret to your computer, safely</h3>
+            <p>The client needs the <em>same</em> secret, byte for byte, at the same path. Copy it over SSH. Do not paste it into chat, mail or a notes app: anyone holding it can drive every avatar slgod holds.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgod)
+<span class="p">$ </span>scp server.example:.config/slgod/secret ~/.config/slgod/secret
+<span class="p">$ </span>chmod 700 ~/.config/slgod; chmod 600 ~/.config/slgod/secret</pre></div>
+            <p>The <code>chmod</code> lines matter: slsh refuses a secret whose directory is not 700 or whose file is not 600, on the laptop just as on the server. The path is <code>~/.config/slgod/secret</code> on both; <code>XDG_CONFIG_HOME</code> does not move it.</p>
+            <p>To check the two copies match without showing the secret, compare a checksum on each end:</p>
+            <div class="os-pair">
+              <div class="term" data-where="server" data-where-label="Linux · on the slgod machine"><pre><span class="p">$ </span>sha256sum ~/.config/slgod/secret</pre></div>
+              <div class="term" data-where="laptop" data-where-label="macOS · on your computer"><pre><span class="p">$ </span>shasum -a 256 ~/.config/slgod/secret</pre></div>
+            </div>
+            <p>(<code>sha256sum</code> is the Linux name, <code>shasum -a 256</code> the macOS one. Either machine may be either system; use the one that exists. Ubuntu 24.04 has both, and they print the same line.)</p>
+            <div class="note"><p class="label">Note</p><p>If your computer already has a different shared secret, for a slgod of its own, or the server is to have a secret of its own, do not overwrite yours. Keep the server's copy under the address slsh will dial instead: <code>~/.config/slgod/secret.HOST.PORT</code>. Clients look for that file before the shared one. For route A that is <code>secret.192.0.2.20.7807</code>. For route B, slsh dials <code>localhost:7807</code> unless told otherwise, so it is <code>secret.localhost.7807</code>; with <code>--addr 127.0.0.1:7807</code> it is <code>secret.127.0.0.1.7807</code>. <a href="security.html#several-secrets">When separate secrets are worth it</a>, and <a href="reference.html#secret-order">the full rules</a>.</p></div>
+            <div class="term" data-where="laptop" data-where-label="only for a server with its own secret · on your computer"><pre><span class="p">$ </span>scp server.example:.config/slgod/secret ~/.config/slgod/secret.192.0.2.20.7807
+<span class="p">$ </span>chmod 600 ~/.config/slgod/secret.192.0.2.20.7807</pre></div>
+          </div></li>
+        </ol>
+        <p>Now follow one route.</p>
+      </section>
+
+      <section id="route-direct">
+        <h2>Route A: direct, over a LAN or VPN</h2>
+        <ol class="steps" id="direct-steps">
+          <li><div class="step-body">
+            <h3>Start slgod on the address your computer will use</h3>
+            <p>Give <code>-listen</code> the server's LAN or VPN address. The examples use <code>192.0.2.20</code>; <code>ip addr</code> on Linux, or <code>ifconfig</code> on macOS, shows the real one.</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slgod -listen 192.0.2.20:7807 example</pre></div>
+            <p>With no <code>-listen</code> at all, slgod listens on port 7807 on <strong>every</strong> interface, IPv4 and IPv6. That works too, but naming the one address keeps slgod off networks you did not mean, such as a public interface. Keep this terminal open; <a href="quickstart-local.html#stop-restart">stopping and restarting</a> covers running it for good.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Open port 7807 on the server's firewall</h3>
+            <p>Only the server needs a change; your computer only connects out. These are ordinary firewall commands, nothing slgo sets up for you. Narrow the rule to your own network where you can. They have not been run for this handbook; the ufw line matches the forms in ufw 0.36.2's manual on Ubuntu 24.04, and the firewalld lines are unchecked.</p>
+            <div class="os-pair">
+              <div class="term" data-where="server" data-where-label="Linux server · ufw (Debian, Ubuntu)"><pre><span class="p">$ </span>sudo ufw allow from 192.0.2.0/24 to any port 7807 proto tcp</pre></div>
+              <div class="term" data-where="server" data-where-label="Linux server · firewalld (Fedora, RHEL)"><pre><span class="p">$ </span>sudo firewall-cmd --permanent --add-port=7807/tcp
+<span class="p">$ </span>sudo firewall-cmd --reload</pre></div>
+            </div>
+            <div class="note os"><p class="label">macOS server</p><p>With the macOS firewall turned on, expect to be asked whether <code>slgod</code> may accept incoming connections the first time it listens, and answer Allow. That is how the macOS application firewall normally treats a new program; it has not been watched with slgod. If no prompt appears (slgod started from SSH, say), allow it by hand:</p>
+              <div class="term" data-where="server" data-where-label="macOS · on the slgod machine"><pre><span class="p">$ </span>sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "`which slgod`"
+<span class="p">$ </span>sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "`which slgod`"</pre></div>
+            </div>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Tell slsh where slgod is</h3>
+            <p>Save the address once, in slsh's config file. It is plain text, one <code>key = value</code> a line:</p>
+            <div class="file"><div class="name">~/.config/slsh/config</div><pre>addr = 192.0.2.20:7807</pre></div>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>mkdir -p ~/.config/slsh
+<span class="p">$ </span>echo 'addr = 192.0.2.20:7807' &gt;&gt; ~/.config/slsh/config</pre></div>
+            <p>For a single run, <code>slsh --addr 192.0.2.20:7807</code> does the same without saving anything. Inside a running slsh, <code>set addr 192.0.2.20:7807</code> writes the file for you, and takes effect from the next slsh you start.</p>
+            <p>The address needs its port. A host name works in place of the number (<code>addr = server.example:7807</code>), and an IPv6 address goes in brackets (<code>[2001:db8::20]:7807</code>). How slsh picks an address, and what beats what, is <a href="#addr">below</a>.</p>
+          </div></li>
+        </ol>
+        <div class="note warn"><p class="label">Security</p><p>Direct traffic is encrypted, and both ends prove they hold the secret. What is left is the chance of someone guessing it. slgod slows repeated wrong guesses, and a 64-character random secret is far beyond guessing. Still, do not forward port 7807 from the internet on a whim; read <a href="security.html">Security</a> first. Never start slgod with <code>-no-auth</code> here. slsh cannot talk to such a daemon anyway, and on the default <code>-listen</code> it would let anyone on the network drive the avatar.</p></div>
+      </section>
+
+      <section id="route-ssh">
+        <h2>Route B: an SSH tunnel to a loopback-only slgod</h2>
+        <p>slgod listens only on the server's own loopback address, so no other machine can reach it at all. Your computer forwards a local port to it through SSH. The secret is still checked end to end inside the tunnel. Nothing in slgo sets this up; it is ordinary SSH port forwarding, and the steps below are how the pieces fit rather than a recipe that has been watched end to end.</p>
+        <ol class="steps" id="ssh-steps">
+          <li><div class="step-body">
+            <h3>Start slgod on loopback</h3>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slgod -listen 127.0.0.1:7807 example</pre></div>
+            <p>No firewall change is needed. The server only has to accept SSH: on Linux that is <code>sshd</code>; on macOS turn on <em>Remote Login</em> in System Settings, under General, Sharing.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Open the tunnel from your computer</h3>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>ssh -N -L 7807:127.0.0.1:7807 you@server.example</pre></div>
+            <p>This forwards port 7807 on your computer to port 7807 on the server's loopback. <code>-N</code> runs no remote command; the terminal just holds the tunnel open until you press <kbd>Ctrl</kbd>+<kbd>C</kbd>. To have it open whenever you connect, put the forward in <code>~/.ssh/config</code>:</p>
+            <div class="file"><div class="name">~/.ssh/config (on your computer)</div><pre>Host slgod-tunnel
+    HostName server.example
+    User you
+    LocalForward 7807 127.0.0.1:7807</pre></div>
+            <p>and run <code>ssh -N slgod-tunnel</code>.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Run slsh with no address</h3>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh</pre></div>
+            <p>With no <code>--addr</code>, no <code>addr =</code> and no sl-host, slsh connects to <code>localhost:7807</code>, which is the tunnel. If you have set <code>addr</code> for route A, clear it with <code>set addr ""</code>, or pass <code>--addr localhost:7807</code>.</p>
+          </div></li>
+        </ol>
+      </section>
+
+      <section id="check">
+        <h2>Check it works</h2>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c agents</pre></div>
+        <p>This lists the sessions the server's slgod holds, with their states, and exits. If you see your profile, everything is in place: run <code>slsh</code> and try the <a href="quickstart-local.html#steps">first ten commands</a>. If slsh prints an error instead, find it below.</p>
+      </section>
+
+      <section id="addr">
+        <h2>How slsh finds slgod</h2>
+        <p>slsh settles the address in this order, and stops at the first that gives one:</p>
+        <ol>
+          <li><strong><code>--addr HOST:PORT</code></strong> on the command line.</li>
+          <li><strong><code>addr = HOST:PORT</code></strong> in slsh's config file. <code>server =</code> means the same. The file is <code>~/.config/slsh/config</code>, or <code>$SLSH_CONFIG_DIR/config</code>, or <code>$XDG_CONFIG_HOME/slsh/config</code> when those are set.</li>
+          <li><strong>sl-host</strong>, if it is on your <code>PATH</code>: slsh runs it, telling it which profile it is about to ask for, takes the first word it prints as the address, and adds <code>:7807</code> unless that names a port. If sl-host fails, slsh stops and says so. It does <em>not</em> fall back to localhost.</li>
+          <li><strong><code>localhost:7807</code></strong>, when none of the above applies.</li>
+        </ol>
+        <p>An address from the flag or the file is used as given; sl-host is never asked. Some details:</p>
+        <ul>
+          <li><code>addr</code> is read when slsh starts. <code>set addr ...</code> inside a running slsh saves the new value and says it is for the next slsh.</li>
+          <li>Do not put a <code># comment</code> after the value on the same line. It becomes part of the address, silently. Comments go on a line of their own.</li>
+          <li>If slgod listens on anything but 7807, use <code>--addr</code> or <code>addr =</code> with that port, or put the port in the sl-host rule (<code>192.0.2.20:7808</code>). An sl-host rule can also be kept for one profile; see <a href="sl-host.html#profiles">sl-host</a>.</li>
+          <li>Only slsh reads this file. <code>slrun</code> and <code>slbench</code> take <code>--addr</code>, or ask sl-host, or use localhost. <code>slbotd</code> spells the flag <code>-addr</code> and has <code>addr =</code> in its own <code>slbotd.conf</code>.</li>
+          <li>Which avatar you get is a separate question: <code>--agent</code>, then <code>$SLGO_AGENT</code>, then <code>agent =</code>, then slgod's default. The name is a profile name on the <em>server</em>.</li>
+        </ul>
+      </section>
+
+      <section id="moving-laptop">
+        <h2>A laptop that moves between networks</h2>
+        <p>Suppose the laptop reaches the server at <code>192.168.1.20</code> at home and through a VPN address elsewhere. A fixed <code>addr =</code> is right in one place and wrong in the other. Leave <code>addr</code> empty, install <code>sl-host</code> on the laptop, and give it a rules file saying which address to use on which network. slsh, slrun, slbench and slbotd all ask it.</p>
+        <div class="file"><div class="name">~/.config/sl-host (on your computer)</div><pre>192.168.1.0/24   192.168.1.20   home
+0/0              10.8.0.1       anywhere else, over the VPN</pre></div>
+        <p><a href="sl-host.html">The sl-host page</a> has the rule format, a tester, and what to do when it fails.</p>
+      </section>
+
+      <section id="remote-differences">
+        <h2>What changes when slsh is remote</h2>
+        <ul>
+          <li>Files are on <strong>your computer</strong>. <code>get</code> and <code>put</code>, <code>&gt;</code> redirection, <code>-f</code> command files and the transcript all read and write on the machine slsh runs on. This is read from the code.</li>
+          <li>Profiles are on <strong>the server</strong>. <code>login NAME</code> starts a profile that is in the server's <code>~/.config/slgo</code>.</li>
+          <li><code>viewer --launch</code> starts the viewer on your computer, but the viewer connects to the address slgod's <code>-viewer</code> listener gave. A slgod started with <code>-viewer 127.0.0.1:9000</code> cannot be reached by a viewer on your Mac. See <a href="setups.html">Setups</a>.</li>
+          <li>If your computer drops off the network, slgod notices within about half a minute and releases what that slsh held. The avatar stays logged in.</li>
+        </ul>
+      </section>
+
+      <section id="trouble">
+        <h2>If it does not connect</h2>
+        <p>Match the start of the message slsh printed:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>slsh says</th><th>Usually</th></tr></thead>
+          <tbody>
+            <tr><td><code>cannot reach slgod at … connection refused</code></td><td class="what"><a href="troubleshooting.html#f-unreachable">slgod not running, wrong address or port, a firewall, or slgod on loopback without a tunnel</a></td></tr>
+            <tr><td><code>stat ~/.config/slgod: no such file or directory</code></td><td class="what"><a href="troubleshooting.html#f-no-secret">No secret on this machine yet</a></td></tr>
+            <tr><td><code>has mode 0755, must be 0700</code></td><td class="what"><a href="troubleshooting.html#f-secret-perms">Permissions on the secret or its directory</a></td></tr>
+            <tr><td><code>authentication failed</code> … <code>(the secret used was …)</code></td><td class="what"><a href="troubleshooting.html#f-wrong-secret">The two secrets differ</a>, or the client <a href="troubleshooting.html#f-secret-by-address">picked another file</a></td></tr>
+            <tr><td><code>this client is older than slgod</code></td><td class="what"><a href="troubleshooting.html#f-old-client">Rebuild slsh from the server's commit</a></td></tr>
+            <tr><td><code>tls: first record does not look like a TLS handshake</code></td><td class="what"><a href="troubleshooting.html#f-no-auth-tls">slgod was started with <code>-no-auth</code>, or that port is something else</a></td></tr>
+            <tr><td><code>sl-host: cannot read ~/.config/sl-host</code></td><td class="what"><a href="troubleshooting.html#f-sl-host-no-file">sl-host is installed but has no rules file</a></td></tr>
+            <tr><td><code>sl-host: no rule in … matches this network</code></td><td class="what"><a href="troubleshooting.html#f-sl-host-no-match">No rule covers the network you are on</a></td></tr>
+          </tbody>
+        </table></div>
+        <p>On the server, <code>bind: address already in use</code> when slgod starts means something already holds the port, most often another slgod: <a href="troubleshooting.html#f-port-busy">see here</a>.</p>
+      </section>
+
+      <section id="what-you-have">
+        <h2>What you now have</h2>
+        <ul>
+          <li>slgod on the server, holding your avatar, reachable only on the address you chose (or only through SSH).</li>
+          <li>slsh on your computer, built from the same commit, with the same secret in the same place.</li>
+          <li>An address slsh finds on its own: <code>addr =</code> in its config, the tunnel on <code>localhost:7807</code>, or sl-host.</li>
+          <li>The avatar's password only on the server.</li>
+        </ul>
+      </section>
+
+      <section id="where-next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="sl-host.html"><span class="k">Guide</span><span class="t">sl-host</span><span class="d">One laptop, several networks: let sl-host pick slgod's address.</span></a>
+          <a class="card" href="quickstart-bot.html"><span class="k">Quick start</span><span class="t">Adding slbotd</span><span class="d">Run a bot on the server, beside slgod.</span></a>
+          <a class="card" href="security.html"><span class="k">Guide</span><span class="t">Security</span><span class="d">What a networked slgod exposes, and how to keep it small.</span></a>
+          <a class="card" href="platforms.html"><span class="k">Guide</span><span class="t">Linux &amp; macOS</span><span class="d">Services, firewalls and the other places the two systems differ.</span></a>
+        </div>
+      </section>
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="quickstart-local.html">← One machine</a> <a href="quickstart-bot.html">Adding slbotd →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

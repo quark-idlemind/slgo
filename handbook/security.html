@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Security — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="security">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Guide · before you put slgod on a network</p>
+    <h1>Security<span class="caret">_</span></h1>
+    <p class="standfirst">slgod holds live Second Life sessions, and whoever can talk to it can drive them. This page says in plain words what is worth protecting, what the programs already do about it, and what is left to you. It ends with a self-check.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">~15 min</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+      <section id="protect">
+        <h2>What you are protecting</h2>
+        <p>Two files matter more than anything else.</p>
+        <dl>
+          <dt><code>~/.config/slgod/secret</code></dt>
+          <dd><strong>The shared secret drives every avatar slgod holds.</strong> Every client proves it knows this secret, and nothing else. Anyone with a copy who can reach slgod's port can do anything you can: move the avatars, empty their inventory, speak as them. Every machine that runs a client has a copy, so each one extends that trust. A slgod can have a secret of its own instead; see <a href="#several-secrets">one secret, or one per slgod</a>.</dd>
+          <dt><code>~/.config/slgo/&lt;profile&gt;</code></dt>
+          <dd><strong>A profile is enough to log the account in, from anywhere.</strong> The <code>$1$</code> value in it is an MD5 digest of the password, and that digest is the form that goes to the login server. It keeps the plain password from being reused on other sites. It does not protect the Second Life account.</dd>
+        </dl>
+        <p>The programs refuse to use either file if other users could read it: the directories must be mode 700 and the files 600. That covers other people on the same machine. It does nothing about backups, copies you make, or a machine that is lost.</p>
+        <p>Also sensitive, in descending order:</p>
+        <ul>
+          <li>A profile's <code>viewer_password</code>, which hands the live session to a viewer. It cannot log the account in anywhere else.</li>
+          <li><code>~/.config/slgod/viewer-key.pem</code>, the viewer endpoint's private key.</li>
+          <li>Records of what people said: slsh transcripts, slbotd's conversation store and log, and packet traces. See <a href="#records">What gets written down</a>.</li>
+        </ul>
+        <p>Not secret, but keep it: <code>~/.config/slgod/config</code>, slgod's machine identity. Losing it makes the accounts look to Linden Lab as if they moved to a new computer.</p>
+      </section>
+
+      <section id="network">
+        <h2>slgod on the network</h2>
+        <div class="note warn">
+          <p class="label">Security</p>
+          <p><strong>slgod listens on every interface by default.</strong> <code>-listen</code> defaults to <code>:7807</code>, which accepts connections on all of the machine's addresses, IPv4 and IPv6. On a machine whose clients all run locally, start it with <code>-listen 127.0.0.1:7807</code>.</p>
+        </div>
+        <p>What protects the port:</p>
+        <ul>
+          <li><strong>TLS 1.3.</strong> slgod makes a new self-signed certificate at every start and clients do not check it. That is by design: the certificate provides encryption only, and there is nothing to distribute, pin or rotate.</li>
+          <li><strong>A mutual handshake over the secret.</strong> The client proves it knows the secret, and slgod proves it back. A client refuses to talk to a server that cannot. The proofs answer random single-use challenges and are tied to the TLS session, so they cannot be replayed or relayed by a man in the middle. The secret itself never crosses the network.</li>
+          <li><strong>Throttling.</strong> After three failures from one address, every answer to that address is delayed by half a second, then 1, 2 and 4 seconds. Failures from everywhere count at a tenth of the weight. Past a limit, logins are refused with <code>too many failed logins lately; try again in a few minutes</code>.</li>
+          <li><strong>One error for every failure.</strong> A wrong guess learns nothing from the reply.</li>
+        </ul>
+        <p>With a secret made by <code>openssl rand -hex 32</code>, guessing it is hopeless. A short, hand-typed secret is guessable over time, and every program warns about one under 16 bytes with a line starting <code>WARNING: the shared secret in</code>.</p>
+        <p>What is left: anybody who can reach the port can make slgod do the work of refusing them. By our reading of the throttle, someone flooding it with failures could trip the limit for everyone, you included. That has not been tested. Not exposing the port is the answer.</p>
+        <h3 id="no-auth"><code>-no-auth</code></h3>
+        <p><code>-no-auth</code> turns TLS and the handshake off. slgod then serves plain, unauthenticated connections, on whatever address <code>-listen</code> says; nothing checks that it is loopback. With the default <code>:7807</code>, anyone who can reach the machine can drive the avatars.</p>
+        <p>It is not useful either: slsh, slbotd, slrun and slbench cannot connect to a <code>-no-auth</code> slgod at all (<a href="troubleshooting.html#f-no-auth-tls">what that looks like</a>). slgod's own message when the secret is missing suggests it. Make the secret instead.</p>
+        <h3 id="wire">What crosses the network, and how</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Connection</th><th>Protection</th><th>Carries</th></tr></thead>
+          <tbody>
+            <tr><td>slsh, slbotd, slrun, slbench to slgod</td><td class="what">TLS 1.3 and the mutual handshake</td><td class="what">everything you and your programs do</td></tr>
+            <tr><td>a viewer to slgod's <code>-viewer</code> endpoint</td><td class="what">HTTPS, with a certificate the viewer must trust; the viewer password. The UDP circuit afterwards has no TLS</td><td class="what">the login, then the session itself</td></tr>
+            <tr><td>slbotd to llama-server</td><td class="what">none: plain HTTP, no authentication</td><td class="what">residents' messages, backstories, memory notes</td></tr>
+            <tr><td>slsh's <code>how</code> to <code>how_url</code></td><td class="what">none unless the URL is <code>https://</code>; never authenticated</td><td class="what">your question and excerpts of slsh's own manual; no session data</td></tr>
+            <tr><td><code>slrun --backend</code>, <code>slbench --backend</code></td><td class="what">none</td><td class="what">scripts and their output</td></tr>
+            <tr><td>slgod to Second Life</td><td class="what">Linden Lab's protocol, as for any viewer</td><td class="what">the sessions</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="viewer">
+        <h2>The viewer endpoint</h2>
+        <p>With <code>-viewer ADDR</code>, slgod serves HTTPS logins that hand a held session to a real viewer (<a href="setups.html#viewer">how to set it up</a>). There is no way to serve it without TLS, and a profile can be handed over only if it has a <code>viewer_password</code>. A wrong name, a wrong password or an unhandable profile all get the same answer, so the endpoint does not tell a stranger which avatars are there. Nothing is opened until the password matches.</p>
+        <p>Still, slgod's own guide says none of that makes the endpoint safe to put on a network. The viewer's UDP circuit uses a port the system picks, which no firewall rule can name and no TLS covers.</p>
+        <ul>
+          <li>Bind it to <code>127.0.0.1</code> when the viewer runs on the slgod machine.</li>
+          <li>For a viewer on another machine, bind it to a WireGuard or Tailscale address.</li>
+          <li><code>-viewer :9000</code> listens on every interface. Do not use it.</li>
+        </ul>
+        <p><code>slsh viewer --launch</code> does not use the profile's viewer password. slgod makes a fresh one that works once and expires after a few minutes, because it has to go on the viewer's command line, where other processes can read it. On Linux, other users' processes can usually read command lines too; the single use and the expiry are what limit that.</p>
+      </section>
+
+      <section id="models">
+        <h2>Model servers</h2>
+        <p>Neither slbotd nor slsh sends an API key. They talk plain HTTP to a server you run, and neither the server nor the connection is authenticated.</p>
+        <ul>
+          <li><strong>llama-server for slbotd</strong> receives every resident's words, the backstories, and each person's memory note. Anyone who can reach it can also use it, and, by our reading, reach the saved conversation caches in its <code>--slot-save-path</code>. Keep it on <code>127.0.0.1</code>, or on a network only you are on. slbotd cannot send a key, so a llama-server started with <code>--api-key</code> would refuse it.</li>
+          <li><strong><code>how_url</code> for slsh</strong> receives only the question you typed and excerpts from slsh's own manual pages. No avatar, region, inventory or chat is sent. Over <code>http://</code> to another machine, the question travels unencrypted.</li>
+        </ul>
+        <p>Details are in <a href="bot-llm.html">Bot + LLM</a>.</p>
+      </section>
+
+      <section id="slbotd">
+        <h2>slbotd: trusted people, programs and strangers</h2>
+        <h3 id="trusted">Trusted means everything</h3>
+        <p>A resident on a <code>trusted</code> line has full control of every avatar slbotd holds, by instant message. They can delete inventory, take objects out of the world, give things away, make the avatar say anything, teleport it, and run the configured programs. There is no partial trust and no confirmation step. Through <code>:as</code> and a program's <code>--agent</code> flag, that reaches other avatars slgod holds too.</p>
+        <p>Name trusted people by uuid where you can. A name matches the account's legacy name, not its display name.</p>
+        <h3 id="programs">Programs run as you</h3>
+        <p>A <code>program</code> line lets trusted residents run that executable on the slbotd machine, as slbotd's user, with slbotd's whole environment, and with whatever arguments they type. There is no shell, so no pipes or expansion, but also no sandbox. The only limits are the run timeout and the output cap.</p>
+        <div class="note warn">
+          <p class="label">Security</p>
+          <p>Never point a <code>program</code> line at a shell, an interpreter or a general tool (<code>sh</code>, <code>python</code>, <code>curl</code> and the like). That turns "trusted in-world" into "a shell on your machine". Anything the named program can do with its flags, a trusted resident can do, including naming local files for <code>slrun</code> to read.</p>
+        </div>
+        <h3 id="injection">Prompt injection from chat</h3>
+        <p>Anyone on a <code>chat</code> line (everyone, with <code>chat = *</code>) can write whatever they like to the model. From reading the code: the model has no tools and no way to run commands, its reply goes back only as an instant message to the person who wrote, and it is never read as a command. So an injected instruction can only change what the avatar says. The realistic harms:</p>
+        <ul>
+          <li>The avatar reveals its backstory, including anything a per-person file says about someone else.</li>
+          <li>It reveals that person's own memory note.</li>
+          <li>It says something offensive under the avatar's name. You answer for that under the grid's rules.</li>
+        </ul>
+        <p>Each person's conversation is kept apart from everyone else's, so one resident's memory is not in another's prompt. Only one-to-one instant messages are answered; local chat and group messages never reach the model.</p>
+        <h3 id="residents">Other residents' words</h3>
+        <p>When slbotd chats, what residents write is sent to the model and <strong>kept on disk indefinitely</strong>: in the conversation store (<code>~/.local/state/slbotd/&lt;avatar&gt;/&lt;their-uuid&gt;.json</code>), in slbotd's log unless you pass <code>-q</code>, and in llama-server's slot caches. Nothing expires it. <code>:forget NAME</code> deletes one conversation.</p>
+        <p>Residents are not told they are talking to a model. Nothing in the code does that; it is up to you.</p>
+      </section>
+
+      <section id="records">
+        <h2>What gets written down</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Record</th><th>Holds</th><th>Protected by</th></tr></thead>
+          <tbody>
+            <tr><td>slsh transcript, <code>~/.local/share/slgo/</code></td><td class="what">every command and its output, and all chat and instant messages heard and said</td><td class="what">directory 700, files 600; <code>set log off</code> stops it</td></tr>
+            <tr><td>slgod log (<code>-log</code>)</td><td class="what">avatar names and ids; session ids and capability URLs cut short</td><td class="what">file 600, directory must be 700</td></tr>
+            <tr><td>slgod log with <code>-log-secrets</code></td><td class="what"><strong>live session credentials</strong>: anyone who reads it can take the sessions over</td><td class="what">delete it after debugging</td></tr>
+            <tr><td>packet trace with <code>-trace-bodies</code></td><td class="what">session ids and everybody's chat and instant messages nearby</td><td class="what">file 600; delete it after use</td></tr>
+            <tr><td>slbotd log</td><td class="what">commands, decisions, and conversations unless <code>-q</code></td><td class="what">file 600, directory must be 700</td></tr>
+            <tr><td>slbotd conversation store</td><td class="what">every chat turn, with memory notes</td><td class="what">directories 700</td></tr>
+          </tbody>
+        </table></div>
+        <p>These are safe for you to read and not safe to publish. Treat backups of them the same way.</p>
+      </section>
+
+      <section id="local">
+        <h2>Other people on the same machine</h2>
+        <p>On a machine other people also log in to:</p>
+        <ul>
+          <li>They can connect to slgod's port, even on <code>127.0.0.1</code>, like anyone else. They still need the secret.</li>
+          <li>Every file that holds a secret is checked or created private: profiles, the secret, slgod's directory, seats, the viewer key, logs and traces. A log path planted by another user, or a symbolic link, is refused.</li>
+          <li>slsh's settings file is readable by others (mode 644). It holds no secrets; keep it that way, and never put a password in <code>viewer_launch</code>. slsh fills the password in itself.</li>
+          <li>An administrator, or anyone with root, can read everything. If you do not trust the people who run the machine, do not keep your profiles or secret on it.</li>
+        </ul>
+      </section>
+
+      <section id="topologies">
+        <h2>Recommended configuration</h2>
+        <p>Pick the column that matches where your programs run. "Away" means a client that connects from outside your home network.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>One machine</th><th>Home LAN</th><th>Away, over an SSH tunnel</th><th>Away, over WireGuard or Tailscale</th></tr></thead>
+          <tbody>
+            <tr><td>slgod <code>-listen</code></td><td><code>127.0.0.1:7807</code></td><td class="what">its LAN address, e.g. <code>192.0.2.20:7807</code></td><td><code>127.0.0.1:7807</code></td><td class="what">its tunnel address, port 7807</td></tr>
+            <tr><td>Clients connect with</td><td class="what">nothing to set; no sl-host installed</td><td class="what"><code>addr = 192.0.2.20:7807</code>, or sl-host</td><td class="what"><code>ssh -N -L 7807:127.0.0.1:7807 server.example</code>, then <code>localhost:7807</code></td><td class="what"><code>addr =</code> the tunnel address, or sl-host</td></tr>
+            <tr><td>Firewall</td><td class="what">no rule needed</td><td class="what">allow 7807 from the LAN only</td><td class="what">only SSH is open</td><td class="what">allow 7807 on the tunnel interface only</td></tr>
+            <tr><td>Secret</td><td class="what">on the one machine</td><td class="what">copied to each client over SSH</td><td class="what">copied over SSH</td><td class="what">copied over SSH</td></tr>
+            <tr><td><code>-viewer</code></td><td><code>127.0.0.1:9000</code></td><td class="what"><code>127.0.0.1</code>, viewer on the slgod machine</td><td class="what">viewer on the slgod machine only (see below)</td><td class="what">the tunnel address</td></tr>
+            <tr><td>llama-server, <code>how_url</code></td><td><code>127.0.0.1</code></td><td class="what"><code>127.0.0.1</code>, or the LAN behind the firewall</td><td class="what"><code>127.0.0.1</code> on the machine that uses it</td><td class="what">loopback or the tunnel address</td></tr>
+          </tbody>
+        </table></div>
+        <p>Notes on the table:</p>
+        <ul>
+          <li>Never forward port 7807, or the viewer port, from a router to the internet. The handshake would hold, but it would leave you depending on the secret alone, and open to the flooding described above.</li>
+          <li>The SSH tunnel is general practice rather than something slgo documents, but it fits: TLS and the handshake run end to end inside it, so clients still need the secret. If sl-host is on the client's <code>PATH</code>, set <code>addr = localhost:7807</code> so it is not asked.</li>
+          <li>A remote viewer over an SSH tunnel will not work, as far as we can tell: an SSH forward carries TCP, and the viewer's circuit is UDP. Use WireGuard or Tailscale for that.</li>
+          <li>With a tunnel address, slgod must start after the tunnel is up, or it cannot bind to the address.</li>
+          <li>A "Home LAN" you share with people you do not trust, such as a shared house or an office, is closer to "Away".</li>
+        </ul>
+        <p>Firewall commands for each system are in <a href="platforms.html#firewall">Linux &amp; macOS</a>.</p>
+      </section>
+
+      <section id="several-secrets">
+        <h2>One secret, or one per slgod</h2>
+        <p>One shared secret is the simple case, and the right one for most labs: one file, the same on every machine, and every client can reach every slgod. It also means that anyone holding it can drive every avatar in every slgod that uses it.</p>
+        <p>A slgod can keep a secret of its own instead. Reasons to want that:</p>
+        <ul>
+          <li><strong>It holds accounts that are not yours.</strong> A slgod for someone else's avatars, or one somebody else runs and lets you use, should not accept every client your lab's secret is on. Its owner then only has to trust the machines that hold its own secret.</li>
+          <li><strong>It runs somewhere you trust less</strong>, such as a rented server. If that machine is lost, you replace its secret and the slgods at home are untouched. With one shared secret, every slgod would need the new one.</li>
+        </ul>
+        <p>What a secret reaches is every slgod that uses it. Separate secrets make that smaller. They do not help on a client machine that holds copies of several: whoever gets that machine gets all of them.</p>
+        <p>How it is set up:</p>
+        <ul>
+          <li>On the slgod machine, name the file with <code>-secret FILE</code>, or put it in the <code>-config</code> directory as <code>secret</code>. slgod logs <code>secret: PATH</code> when it starts, so you can see which one it took.</li>
+          <li>On each client machine, keep a copy as <code>~/.config/slgod/secret.HOST.PORT</code>, named after the address that client dials. Clients look for that file first, then <code>secret.HOST</code>, then the shared secret. The full rules are in <a href="reference.html#secret-order">the reference</a>.</li>
+        </ul>
+        <p>The costs: every extra secret is one more file on each client to copy and to rotate. The file name follows the address as dialled, so a client that reaches the same slgod another way (a different tunnel port, <code>localhost</code> instead of <code>127.0.0.1</code>, a new server address) needs the file under the new name. Without it the client falls back to the shared secret and is refused (<a href="troubleshooting.html#f-secret-by-address">what that looks like</a>).</p>
+      </section>
+
+      <section id="secret">
+        <h2>Backing up and rotating the secret</h2>
+        <h3 id="backup">Backing up</h3>
+        <p>The secret itself does not need a backup. If it is lost, make a new one and copy it to your machines. What does deserve a backup:</p>
+        <ul>
+          <li><code>~/.config/slgo/</code>: your profiles. They are credentials, so the backup must be as private as the machine.</li>
+          <li><code>~/.config/slgod/config</code>: slgod's machine identity. Keep it so a rebuilt machine looks like the same computer to Linden Lab.</li>
+        </ul>
+        <h3 id="rotate">Rotating the secret</h3>
+        <p>Do it when a machine that held the secret is lost or given away, when it was copied somewhere it should not be, or when slgod warns that it is short. slgod's own warning says what to do: make a new one, and restart slgod and its clients. slgod reads the secret when it starts. The order below is our suggestion.</p>
+        <div class="term" data-where="server"><pre><span class="c"># 1. make a new secret on the slgod machine</span>
+<span class="p">$ </span>(umask 077; openssl rand -hex 32 &gt; ~/.config/slgod/secret)
+
+<span class="c"># 2. restart slgod; every avatar logs out and in again</span>
+<span class="p">$ </span>systemctl --user restart slgod
+<span class="c">#    on macOS: launchctl kickstart -k gui/`id -u`/local.slgod</span>
+<span class="c">#    in a terminal: Ctrl-C, then start it again</span></pre></div>
+        <div class="term" data-where="laptop" data-where-label="on each client machine you still trust"><pre><span class="c"># 3. copy it over SSH</span>
+<span class="p">$ </span>scp server.example:.config/slgod/secret ~/.config/slgod/secret
+
+<span class="c"># 4. restart anything long-running there, such as slbotd</span></pre></div>
+        <p>A client that still has the old secret gets <a href="troubleshooting.html#f-wrong-secret">authentication failed</a>, and the message names the file it used. That is how you find the one you forgot.</p>
+        <h3 id="rotate-own">Rotating a slgod's own secret</h3>
+        <p>For a slgod with a secret of its own, the steps are the same, with that slgod's file on the server and the per-address copy on each client. Only that slgod and its clients are affected. For a second slgod started with <code>-config ~/.config/slgod.dev</code> and reached as <code>127.0.0.1:7808</code>:</p>
+        <div class="term" data-where="server"><pre><span class="p">$ </span>(umask 077; openssl rand -hex 32 &gt; ~/.config/slgod.dev/secret)</pre></div>
+        <p>Restart that slgod, then on each client that uses it:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>scp server.example:.config/slgod.dev/secret ~/.config/slgod/secret.127.0.0.1.7808
+<span class="p">$ </span>chmod 600 ~/.config/slgod/secret.127.0.0.1.7808</pre></div>
+        <p>When a lost machine held several secrets, rotate every one: the shared <code>secret</code>, and the slgod behind each <code>secret.HOST.PORT</code> or <code>secret.HOST</code> it had.</p>
+        <h3 id="profile-leak">If a profile leaks</h3>
+        <p>Rotating the secret does not help. The <code>$1$</code> value logs the account in on its own. Change the account's password with Linden Lab, run <code>slhash</code> to make the new <code>$1$</code> value, put it in the profile, and restart slgod.</p>
+      </section>
+
+      <section id="check">
+        <h2>Self-check</h2>
+        <p>Tick what is true of your setup. Where an item does not apply to you (no slbotd, say), tick it. Your ticks stay in this browser only.</p>
+        <div class="picker" data-selfcheck>
+          <fieldset>
+            <legend>Must be true</legend>
+            <div class="opts">
+              <label class="opt" for="sc-noauth"><input type="checkbox" id="sc-noauth" data-level="must" data-short="stop using -no-auth"> slgod is never started with <code>-no-auth</code>.</label>
+              <label class="opt" for="sc-listen"><input type="checkbox" id="sc-listen" data-level="must" data-short="bind slgod to 127.0.0.1, a tunnel or a trusted LAN"> slgod listens on <code>127.0.0.1</code>, a tunnel address, or a LAN that only people you trust are on.</label>
+              <label class="opt" for="sc-forward"><input type="checkbox" id="sc-forward" data-level="must" data-short="close port 7807 to the internet"> Port 7807 is not forwarded from a router or otherwise open to the internet.</label>
+              <label class="opt" for="sc-random"><input type="checkbox" id="sc-random" data-level="must" data-short="make the secret with openssl rand -hex 32"> The secret was made with <code>openssl rand -hex 32</code>, and no program warns that it is short.</label>
+              <label class="opt" for="sc-programs"><input type="checkbox" id="sc-programs" data-level="must" data-short="take shells and interpreters out of slbotd's program lines"> slbotd's <code>program</code> lines name only tools like slrun and slbench, never a shell or interpreter.</label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Should be true</legend>
+            <div class="opts">
+              <label class="opt" for="sc-copy"><input type="checkbox" id="sc-copy" data-level="should" data-short="copy the secret only over SSH, to your own machines"> The secret has only been copied over SSH or another encrypted channel, and only to machines you control.</label>
+              <label class="opt" for="sc-viewer"><input type="checkbox" id="sc-viewer" data-level="should" data-short="bind -viewer to 127.0.0.1 or a tunnel"> <code>-viewer</code> is not used, or is bound to <code>127.0.0.1</code> or a tunnel address.</label>
+              <label class="opt" for="sc-models"><input type="checkbox" id="sc-models" data-level="should" data-short="keep model servers on loopback or a trusted network"> llama-server and any <code>how_url</code> server are on loopback or a network only you use.</label>
+              <label class="opt" for="sc-debug"><input type="checkbox" id="sc-debug" data-level="should" data-short="turn off -log-secrets and -trace-bodies, and delete their files"> <code>-log-secrets</code> and <code>-trace-bodies</code> are off, and files written with them are deleted.</label>
+              <label class="opt" for="sc-backup"><input type="checkbox" id="sc-backup" data-level="should" data-short="keep profile backups private"> Backups of the profiles are as private as the machine.</label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Good practice</legend>
+            <div class="opts">
+              <label class="opt" for="sc-uuid"><input type="checkbox" id="sc-uuid" data-level="good" data-short="name slbotd's trusted people by uuid"> slbotd's <code>trusted</code> lines use uuids rather than names.</label>
+              <label class="opt" for="sc-users"><input type="checkbox" id="sc-users" data-level="good" data-short="keep the slgod machine to people you trust"> Nobody you do not trust has an account or admin rights on the slgod machine.</label>
+              <label class="opt" for="sc-store"><input type="checkbox" id="sc-store" data-level="good" data-short="know where residents' words are kept"> If slbotd chats with others, you know where their words are kept and how to delete them.</label>
+              <label class="opt" for="sc-own-secret"><input type="checkbox" id="sc-own-secret" data-level="good" data-short="give a slgod for other people's accounts its own secret"> A slgod that holds other people's accounts, or runs on a machine you trust less, has a secret of its own.</label>
+              <label class="opt" for="sc-rotate"><input type="checkbox" id="sc-rotate" data-level="good" data-short="know how to rotate the secret"> You know how to rotate the secret if a machine holding it is lost.</label>
+            </div>
+          </fieldset>
+          <div class="result" aria-live="polite">
+            <div class="go">
+              <p><strong data-verdict>Tick what is true of your setup.</strong></p>
+              <p data-verdict-detail>The verdict appears here. Every item under "Must be true" should be ticked before slgod is reachable from another machine.</p>
+            </div>
+            <div class="go">
+              <ol data-verdict-list hidden></ol>
+              <p data-verdict-tools hidden><button type="button" class="chip" data-verdict-clear>clear ticks</button></p>
+            </div>
+          </div>
+        </div>
+
+        <script>
+        (function () {
+          var page = document.getElementById('security');
+          if (!page) return;
+          var box = page.querySelector('[data-selfcheck]');
+          if (!box) return;
+          var KEY = 'slgo-handbook:security-check';
+          var items = Array.prototype.slice.call(box.querySelectorAll('input[type=checkbox][data-level]'));
+          var head = box.querySelector('[data-verdict]');
+          var detail = box.querySelector('[data-verdict-detail]');
+          var list = box.querySelector('[data-verdict-list]');
+
+          function missing(level) {
+            return items.filter(function (i) { return i.dataset.level === level && !i.checked; });
+          }
+
+          function update() {
+            var must = missing('must'), should = missing('should'), good = missing('good');
+            var ticked = items.filter(function (i) { return i.checked; }).length;
+            var todo;
+            if (must.length) {
+              head.textContent = 'Not ready for a network: ' + must.length + ' essential ' + (must.length === 1 ? 'item is' : 'items are') + ' open.';
+              detail.textContent = 'Keep slgod on 127.0.0.1 until these are done. Fix these first:';
+              todo = must;
+            } else if (should.length) {
+              head.textContent = 'Sound, with gaps.';
+              detail.textContent = 'The essentials hold. Worth doing next:';
+              todo = should;
+            } else if (good.length) {
+              head.textContent = 'Good.';
+              detail.textContent = 'This matches the recommended setup. Left to consider:';
+              todo = good;
+            } else {
+              head.textContent = 'This matches the recommended setup.';
+              detail.textContent = 'All ' + items.length + ' items ticked.';
+              todo = [];
+            }
+            if (!ticked) {
+              head.textContent = 'Tick what is true of your setup.';
+              detail.textContent = 'The verdict appears here. Every item under "Must be true" should be ticked before slgod is reachable from another machine.';
+              todo = [];
+            }
+            list.innerHTML = '';
+            todo.forEach(function (i) {
+              var li = document.createElement('li');
+              li.textContent = i.dataset.short;
+              list.appendChild(li);
+            });
+            list.hidden = !todo.length;
+            try {
+              var on = items.filter(function (i) { return i.checked; }).map(function (i) { return i.dataset.short; });
+              if (on.length) localStorage.setItem(KEY, JSON.stringify(on)); else localStorage.removeItem(KEY);
+            } catch (e) { /* no storage */ }
+          }
+
+          try {
+            var saved = JSON.parse(localStorage.getItem(KEY) || '[]');
+            items.forEach(function (i) { i.checked = saved.indexOf(i.dataset.short) >= 0; });
+          } catch (e) { /* a fresh start */ }
+          items.forEach(function (i) { i.addEventListener('change', update); });
+          box.querySelector('[data-verdict-clear]').addEventListener('click', function () {
+            items.forEach(function (i) { i.checked = false; });
+            update();
+          });
+          box.querySelector('[data-verdict-tools]').hidden = false;
+          update();
+        })();
+        </script>
+      </section>
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="platforms.html">← Linux &amp; macOS</a> <a href="troubleshooting.html">Troubleshooting →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

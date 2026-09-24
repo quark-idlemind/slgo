@@ -1,0 +1,1063 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Troubleshooting — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="troubleshooting">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Troubleshooting · every message, what it means</p>
+    <h1>When it does not work<span class="caret">_</span></h1>
+    <p class="standfirst">Answer a few yes-or-no questions to find the likely fault, or paste the error you got into the search box. Each entry says why it happens and what to type to fix it.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+      <section id="start-here">
+        <h2>Start here</h2>
+        <p>Work from slgod outwards: first the daemon, then a client on the same machine, then a client on another machine, then the avatar, then slbotd. Each answer narrows the list. The result links to the entries below.</p>
+        <div class="picker" data-ts="flow">
+          <p class="eyebrow" id="ts-trail" data-ts="trail">Question 1</p>
+          <fieldset id="ts-step" data-ts="step">
+            <legend id="ts-question" data-ts="question">Does slgod start and keep running?</legend>
+            <p id="ts-help" data-ts="help">Look at what slgod printed on the slgod machine, or in its <code>-log</code> file. When it is ready, the last line begins <code>serving gRPC on</code>.</p>
+            <div class="opts">
+              <button type="button" class="chip" id="ts-yes" data-ts="yes">Yes</button>
+              <button type="button" class="chip" id="ts-no" data-ts="no">No</button>
+            </div>
+          </fieldset>
+          <div class="result" id="ts-result" data-ts="result" hidden>
+            <div class="go">
+              <p class="label eyebrow" id="ts-result-title" data-ts="result-title">Likely faults</p>
+              <p id="ts-result-help" data-ts="result-help"></p>
+              <ol id="ts-result-list" data-ts="result-list"></ol>
+            </div>
+          </div>
+          <div class="opts">
+            <button type="button" class="chip" id="ts-back" data-ts="back" disabled>Back</button>
+            <button type="button" class="chip" id="ts-restart" data-ts="restart">Start over</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="faults">
+        <h2>Every fault</h2>
+        <p>Paste an error message into the box, or pick a component. Words in the box must all appear in an entry for it to show. The <code>&lt;p&gt;</code>, <code>&lt;path&gt;</code> and similar parts of a message stand for a profile name, a file path and so on.</p>
+        <div class="fault-tools">
+          <input type="search" id="fault-search" placeholder="Paste an error or describe the symptom" aria-label="Filter problems">
+          <button type="button" class="chip" data-filter="slgod" aria-pressed="false">slgod</button>
+          <button type="button" class="chip" data-filter="slsh" aria-pressed="false">slsh</button>
+          <button type="button" class="chip" data-filter="remote" aria-pressed="false">remote</button>
+          <button type="button" class="chip" data-filter="sl-host" aria-pressed="false">sl-host</button>
+          <button type="button" class="chip" data-filter="slbotd" aria-pressed="false">slbotd</button>
+          <button type="button" class="chip" data-filter="llm" aria-pressed="false">llm</button>
+          <button type="button" class="chip" data-filter="macos" aria-pressed="false">macos</button>
+          <button type="button" class="chip" data-filter="linux" aria-pressed="false">linux</button>
+          <span class="fault-count"></span>
+        </div>
+
+        <h3 id="g-slgod">slgod will not start, or starts without the avatar</h3>
+
+        <details class="fault" id="f-command-not-found" data-tags="slsh linux macos">
+          <summary><span class="sym"><code>zsh: command not found: slsh</code>, or <code>slsh: Command not found.</code>, right after installing</span><span class="where-tag">shell</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>Your shell cannot find the program, which is a matter between the shell and its <code>PATH</code>; slsh, slgod and the rest never ran. The wording is the shell's own: <code>zsh: command not found: slsh</code> in zsh, <code>slsh: Command not found.</code> in csh and tcsh, and <code>sh: slsh: command not found</code> from the bash that macOS runs as <code>/bin/sh</code>. There are two causes.</p>
+            <ul>
+              <li><strong><code>~/go/bin</code> is not on your <code>PATH</code>.</strong> <code>go install</code> puts every program there (or in <code>go env GOBIN</code>, if that is set), and nothing adds the directory to the <code>PATH</code> for you.</li>
+              <li><strong>csh or tcsh has not seen the new program yet.</strong> They make a list of the programs on the path when the shell starts and sets its path in <code>~/.cshrc</code>, and a program installed after that is not found until you run <code>rehash</code>, even with the directory on the path. Tried the same way, sh and zsh found the new program without being told.</li>
+            </ul>
+            <p>The shells also remember where they last found a program. If you delete sl-host, typing <code>sl-host</code> is <code>Command not found</code> in every shell, which is what you want; but if there was a second copy further along the <code>PATH</code>, or you have just installed a new one earlier on it, all three shells went on running the copy they had used before, until <code>rehash</code> or <code>hash -r</code>. This affects only what you type: slsh, slrun, slbench and slbotd look sl-host up on the <code>PATH</code> afresh every time they start.</p>
+            <h4>Fix</h4>
+            <p>First see whether the program is there, and whether the shell can find it:</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>ls ~/go/bin
+<span class="p">$ </span>echo $PATH
+<span class="p">$ </span>which slsh</pre></div>
+            <p>If <code>~/go/bin</code> is missing from the <code>PATH</code>, add it as <a href="platforms.html#shells">Shells</a> shows for yours. If it is there, tell the shell to look again:</p>
+            <div class="sh-set">
+              <div class="term" data-sh-only="sh" data-where="laptop" data-where-label="sh or bash · on your computer"><pre><span class="p">$ </span>hash -r</pre></div>
+              <div class="term" data-sh-only="zsh csh" data-where="laptop" data-where-label="zsh, csh or tcsh · on your computer"><pre><span class="p">$ </span>rehash</pre></div>
+            </div>
+            <p>Opening a new terminal does the same.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-port-busy" data-tags="slgod">
+          <summary><span class="sym">slgod logs the avatars in, then stops with a <code>listen tcp :7807: bind: …</code> line</span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slgod binds its port only after every avatar has logged in. If something already holds the port, most often another slgod, the bind fails and slgod exits at once. The usual wording is <code>address already in use</code>, which comes from the operating system; the handbook has not captured that exact line. A port you are not allowed to use gives <code>listen tcp 127.0.0.1:1: bind: permission denied</code>.</p>
+            <p>Because slgod exits straight away, it does not log the avatars out. They stay in the world until the grid times them out. We have read this in the code but have not watched it happen.</p>
+            <h4>Fix</h4>
+            <p>Find what holds the port. If it is another slgod, use that one. Do not start a second slgod for the same profiles (see <a href="#f-second-slgod">the entry below</a>).</p>
+            <div class="os-pair">
+              <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux · on the slgod machine"><pre><span class="p">$ </span>ss -ltnp 'sport = :7807'
+<span class="p">$ </span>pgrep -l slgod</pre></div>
+              <div class="term" data-os-only="mac" data-where="server" data-where-label="macOS · on the slgod machine"><pre><span class="p">$ </span>lsof -nP -iTCP:7807 -sTCP:LISTEN
+<span class="p">$ </span>pgrep -l slgod</pre></div>
+            </div>
+            <p data-os-only="linux">On Ubuntu 24.04, without sudo, <code>ss</code> printed a <code>LISTEN</code> line for the port ending in <code>users:(("slgod",pid=…,fd=…))</code> for an slgod running as the same user, and <code>pgrep -l</code> printed each process id followed by <code>slgod</code>.</p>
+            <p>If something else needs 7807, start slgod on another port with <code>-listen</code>. Every client then needs that port too: in <code>--addr</code> or <code>addr =</code>, or in the sl-host rule, since a client adds <code>:7807</code> to an sl-host answer that has no port (see <a href="#f-sl-host-port">this entry</a>).</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slgod -listen :7900 example</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-config-dir" data-tags="slgod">
+          <summary><span class="sym">slgod stops with <code>cannot start: -config: …</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The directory given to <code>-config</code> is not one slgod will use. It checks three things before anything else, and the message says which failed:</p>
+            <ul>
+              <li><code>stat DIR: no such file or directory</code>: it does not exist. slgod does not create it, because it is meant to hold profiles you put there.</li>
+              <li><code>DIR is mode 0755, wanted 0700: chmod 700 DIR</code>: other users could list it, and it holds credentials.</li>
+              <li><code>DIR is not a directory</code>: the path names a file.</li>
+            </ul>
+            <h4>Fix</h4>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>mkdir -m 700 ~/.config/slgod.dev</pre></div>
+            <p>or <code>chmod 700</code> on the one you have. Then put the profiles for that daemon in it. See <a href="setups.html#second-slgod">A second slgod beside the first</a>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-slgod-secret" data-tags="slgod">
+          <summary><span class="sym">slgod stops with <code>cannot start: stat ~/.config/slgod: no such file or directory</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slgod needs its secret, and it has none. That is the file named by <code>-secret FILE</code>; else <code>DIR/secret</code>, when slgod was started with <code>-config DIR</code> and that file is there; else the shared secret, <code>~/.config/slgod/secret</code>. A <code>-secret</code> file is held to the same rules as the shared one: its directory 700, the file 600. The same <code>cannot start:</code> line appears when the secret is there but its directory or file is open to other users (<code>~/.config/slgod has mode 0755, must be 0700 -- it holds the shared secret; chmod 0700 ~/.config/slgod</code>), or when the file holds no line that is not blank or a comment (<code>~/.config/slgod/secret is empty</code>). The next two lines slgod prints are these, with the file it was looking for in place of <code>~/.config/slgod/secret</code>, written out from the root of the filesystem:</p>
+            <div class="term"><pre><span class="o">Create one with:  (umask 077; mkdir -p ~/.config/slgod; openssl rand -hex 32 &gt; ~/.config/slgod/secret)
+Or pass -no-auth to serve loopback without it.</span></pre></div>
+            <p>slgod reads the secret before it logs any avatar in, so nothing has happened on the grid when it stops. When it does start, it logs <code>secret: PATH</code> with the file it read.</p>
+            <h4>Fix</h4>
+            <p>Make the secret, or fix its modes, then start slgod again. Ignore the <code>-no-auth</code> suggestion: none of the programs here can connect to a daemon started that way (<a href="#f-no-auth-tls">see why</a>).</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgod; openssl rand -hex 32 &gt; ~/.config/slgod/secret)
+<span class="p">$ </span>chmod 700 ~/.config/slgod
+<span class="p">$ </span>chmod 600 ~/.config/slgod/secret</pre></div>
+            <p>The shared secret is always at <code>$HOME/.config/slgod/secret</code>. <code>XDG_CONFIG_HOME</code> does not move it; for slgod, <code>-secret FILE</code> does. If the <code>secret:</code> line names a file you did not mean, check for a <code>secret</code> file in the <code>-config</code> directory, or pass <code>-secret</code>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-short-secret" data-tags="slgod slsh slbotd">
+          <summary><span class="sym"><code>WARNING: the shared secret in &lt;path&gt; is N bytes, which is short enough to guess; at least 16 is wanted.</code></span><span class="where-tag">any program</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>A warning, not a failure: the program carries on. Anyone who can reach port 7807 may try secrets, and the daemon slows repeated failures down, but a short hand-typed secret can still be guessed in time. slgod and every client print this.</p>
+            <h4>Fix</h4>
+            <p>Make a long one, then copy the same file to every client machine and restart slgod and its clients.</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>(umask 077; openssl rand -hex 32 &gt; ~/.config/slgod/secret)</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-no-profile" data-tags="slgod">
+          <summary><span class="sym"><code>&lt;p&gt;: NOT hosted: agent: profile "&lt;p&gt;": open ~/.config/slgo/&lt;p&gt;: no such file or directory</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slgod looked for a profile file with that name and there is none. Check the spelling: the name is the file name in <code>~/.config/slgo</code>, not the avatar's name.</p>
+            <p>This also happens when a flag comes after a profile name. slgod stops reading flags at the first name, so <code>slgod example -v</code> treats <code>-v</code> as a second profile and reports <code>-v: NOT hosted: …</code>.</p>
+            <h4>Fix</h4>
+            <p>Put every flag before the profile names, and check the file exists.</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>ls ~/.config/slgo
+<span class="p">$ </span>slgod -v -log ~/.local/log/slgod.log example</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-profile-mode" data-tags="slgod">
+          <summary><span class="sym"><code>&lt;p&gt;: NOT hosted: agent: ~/.config/slgo is mode 0755, wanted 0700: chmod 700 ~/.config/slgo</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>A profile holds the password, or its <code>$1$</code> digest, which is just as good for logging in. slgod refuses a profile directory that other users can open, and a profile file other users can read: <code>&lt;p&gt;: NOT hosted: agent: ~/.config/slgo/&lt;p&gt; is mode 0644, wanted 0600: chmod 600 ~/.config/slgo/&lt;p&gt;</code>.</p>
+            <h4>Fix</h4>
+            <p>Run the <code>chmod</code> the message names.</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>chmod 700 ~/.config/slgo
+<span class="p">$ </span>chmod 600 ~/.config/slgo/example</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-profile-content" data-tags="slgod">
+          <summary><span class="sym"><code>NOT hosted: agent: &lt;path&gt;: needs first and last</code>, <code>needs password</code> or <code>line N: unknown setting "x"</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The profile file is readable but something in it is wrong. It needs <code>first</code>, <code>last</code> and <code>password</code>. A key it does not know is an error, so a typo cannot pass silently. A line without <code>=</code> gives <code>line N: want key = value, got "…"</code>.</p>
+            <h4>Fix</h4>
+            <p>Edit the file. The keys are listed in the <a href="reference.html#profile-keys">reference</a>. New-style accounts use <code>last = Resident</code>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-not-up-yet" data-tags="slgod">
+          <summary><span class="sym"><code>&lt;p&gt;: not up yet (&lt;err&gt;); trying again</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The login failed for a reason that may clear by itself, such as the network or the login server. slgod keeps trying in the background: after 5 s, 15 s, 30 s, 1 min, 2 min, then every 2 min. It still starts serving clients in the meantime.</p>
+            <h4>Fix</h4>
+            <p>Usually none. Read the error in brackets. If it names a network problem on the slgod machine, fix that; slgod will pick it up.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-login-refused" data-tags="slgod">
+          <summary><span class="sym"><code>&lt;p&gt;: NOT hosted: login refused (key…): &lt;the grid's sentence&gt;</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The grid refused the login for a reason that will not clear by itself. <code>key</code> means the name or password is wrong. <code>tos</code>, <code>update</code> and <code>critical</code> are the other reasons slgod does not retry. The sentence after the colon is the grid's own; the handbook has not captured it.</p>
+            <p>A client that asks for the avatar again too soon after a failure is told <code>&lt;name&gt; failed to log in (&lt;err&gt;); not trying again for &lt;dur&gt;</code>. The wait is there because a login server throttles whatever hammers it.</p>
+            <h4>Fix</h4>
+            <p>Check <code>first</code>, <code>last</code> and <code>password</code> in the profile, then restart slgod. You can make the <code>$1$</code> digest with <code>slhash</code>, which asks for the password with echo off.</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>go install ./cmd/slhash
+<span class="p">$ </span>slhash</pre></div>
+            <p>If the shell says <code>slhash</code> is not found, see <a href="#f-command-not-found">command not found</a>.</p>
+            <div class="note warn"><p class="label">Careful</p><p>If slgod runs under launchd with <code>KeepAlive</code>, or systemd with a short <code>RestartSec</code>, a wrong password means it logs in, fails and restarts over and over. Keep the restart delay generous.</p></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-no-session" data-tags="slgod">
+          <summary><span class="sym"><code>no session came up; nothing to serve</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>Every profile named on the command line failed for good, so slgod has nothing to hold and exits. The lines above it say why each one failed.</p>
+            <h4>Fix</h4>
+            <p>Fix the first <code>NOT hosted</code> line above it: see <a href="#f-no-profile">no such profile</a>, <a href="#f-profile-mode">profile modes</a> or <a href="#f-login-refused">login refused</a>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-log-dir" data-tags="slgod slbotd">
+          <summary><span class="sym"><code>cannot start: log: &lt;dir&gt; is mode 755, so other users can read or replace what is logged there; a log directory has to be 700 (chmod 700 &lt;dir&gt;), or log somewhere else</code></span><span class="where-tag">slgod · slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The log names avatars and holds what people said to them, so <code>-log</code> refuses a directory other users can enter. It also refuses a log file that belongs to someone else or is not a plain file (a symlink, say). slbotd reports the same check as <code>slbotd: log: …</code>.</p>
+            <h4>Fix</h4>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>mkdir -p ~/.local/log
+<span class="p">$ </span>chmod 700 ~/.local/log</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-viewer-port" data-tags="slgod">
+          <summary><span class="sym"><code>viewer: viewer: "9000" has no port</code> or <code>viewer: -viewer-cert and -viewer-key go together</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p><code>-viewer</code> takes an address with a port, like <code>127.0.0.1:9000</code>. <code>-viewer-cert</code> and <code>-viewer-key</code> must be given together, and only with <code>-viewer</code>. An address that is not on this machine fails with <code>viewer: viewer login: listen tcp …: bind: can't assign requested address</code> (the macOS wording).</p>
+            <h4>Fix</h4>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slgod -viewer 127.0.0.1:9000 example</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-no-group" data-tags="slgod">
+          <summary><span class="sym"><code>&lt;p&gt;: no active group (N joined, none chosen: …); parcels that only let a group build will refuse</code></span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>A notice, not a failure. The avatar is in several groups and nothing says which one to act as. A name that matches no group gives <code>no active group: no group named "X"; joined: …</code>, and one that matches two gives <code>"X" names 2 groups; use the uuid</code>.</p>
+            <h4>Fix</h4>
+            <p>Put <code>group = Example Builders</code> (or the group's uuid) in the profile, or start slgod with <code>-group example="Example Builders"</code>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-second-slgod" data-tags="slgod">
+          <summary><span class="sym">A second slgod was started, and now neither holds the avatar</span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>This is worked out from the code; nobody has watched it happen. An avatar can be in only one session on the grid. A second slgod for the same profiles logs the avatars in again, and the grid ends the first daemon's sessions. The first daemon treats being thrown off as deliberate and stays logged out. The second then fails to bind port 7807, because the first still holds it, and exits without logging out. Both have lost their avatars.</p>
+            <h4>Fix</h4>
+            <p>Stop the second one if it is still running. Then ask the first to bring the avatar back:</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slsh -c agents
+<span class="p">$ </span>slsh login example</pre></div>
+            <p>Before you start slgod, check it is not already running (<code>pgrep -l slgod</code>). Under launchd or systemd, start it only through the service manager. To run a second daemon on purpose, give it its own <code>-config</code> directory, its own <code>-listen</code> port and its own accounts (<a href="setups.html#second-slgod">how</a>).</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-kicked" data-tags="slgod slsh slbotd">
+          <summary><span class="sym"><code>&lt;name&gt; is not connected (&lt;why&gt;); it will not come back on its own</code></span><span class="where-tag">slgod · slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The session was ended on purpose: someone ran <code>logout</code>, or the avatar was thrown off the grid, most often because it was logged in somewhere else. slgod logs <code>… -- staying logged out rather than taking the session back</code> and does not retry, so it will not kick you off in turn. A dropped network connection or a region restart is different: slgod reconnects from those by itself.</p>
+            <h4>Fix</h4>
+            <p>First make sure nobody is using that avatar in a viewer. Then ask for it back by name. <code>login</code> always takes a stopped avatar back when you name it; its <code>-f</code> flag is accepted and changes nothing.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c agents
+<span class="p">$ </span>slsh login example</pre></div>
+            <p>slbotd does not force this. It stops asking for an avatar someone logged out on purpose. A trusted resident can send it <code>:host --force</code> by IM once they have checked.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-terminal-closed" data-tags="slgod linux macos">
+          <summary><span class="sym">slgod disappears when the terminal it was started in is closed</span><span class="where-tag">slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slgod handles Ctrl-C (SIGINT) and SIGTERM by logging every avatar out and printing <code>done</code>. It does not handle SIGHUP, which a closing terminal sends. From Go's default behaviour we expect that to end slgod at once, without a logout. This has not been measured.</p>
+            <h4>Fix</h4>
+            <p>Run slgod under launchd or systemd, or inside tmux or screen. See <a href="platforms.html">Linux &amp; macOS</a> for service files.</p>
+          </div>
+        </details>
+
+        <h3 id="g-connect">slsh (or slbotd, slrun) cannot reach slgod</h3>
+        <p>slsh prints <code>slsh: </code> in front of each error. When the connection failed, it also prints <code>--direct logs in without slgod</code> on the next line. slrun, slbench and slbotd give the same text after their own prefix.</p>
+
+        <details class="fault" id="f-unreachable" data-tags="slsh remote slbotd">
+          <summary><span class="sym"><code>slsh: sl: cannot reach slgod at 127.0.0.1:7807: login: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial tcp 127.0.0.1:7807: connect: connection refused"</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>Nothing answered on that address and port. One of these:</p>
+            <ul>
+              <li>slgod is not running, or has not finished logging the avatars in. It opens the port last.</li>
+              <li>The address is wrong. The <code>at …</code> part says what the client used. <a href="#addr-order">Where that came from</a> is below.</li>
+              <li>slgod listens on another port (<code>-listen :7900</code>, say) and the client used 7807.</li>
+              <li>slgod was started with <code>-listen 127.0.0.1:7807</code>, so it takes connections from its own machine only.</li>
+            </ul>
+            <p>If instead the client waits about 30 seconds and then gives up, something on the way is dropping the packets, usually a firewall. That is worked out from the code (the client allows 30 s to connect), not captured.</p>
+            <h4>Fix</h4>
+            <p>On the slgod machine, check slgod is running and which address it serves on: its log has a line <code>serving gRPC on &lt;addr&gt; for &lt;profiles&gt;</code>. Then test the port from the client machine.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>nc -vz server.example 7807
+<span class="p">$ </span>slsh --addr server.example:7807 -c agents</pre></div>
+            <p>If <code>nc</code> cannot connect but slgod is running, open TCP 7807 on the slgod machine's firewall (<a href="#f-firewall">see below</a>). To reach slgod from another machine it must not be started with <code>-listen 127.0.0.1:…</code>, unless you connect through an SSH tunnel.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-no-secret" data-tags="slsh remote slbotd">
+          <summary><span class="sym"><code>slsh: sl: cannot reach slgod at HOST:7807: stat ~/.config/slgod: no such file or directory</code>, then <code>(looked first for …)</code> and <code>The client and slgod share this file</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The client has no shared secret. It reads the secret before it contacts the address, so here "cannot reach" means "has no secret". slgod was not even tried.</p>
+            <p>The <code>(looked first for …)</code> line names the two files a client tries before the shared secret, kept for the address it was about to dial: <code>secret.HOST.PORT</code> and <code>secret.HOST</code>. They are only for a slgod with a secret of its own (<a href="reference.html#secret-order">rules</a>). If you copied such a file and still see this, its name does not match the address as dialled; compare it with the names in that line, and see <a href="#f-secret-by-address">the entry on names</a>.</p>
+            <h4>Fix</h4>
+            <p>Copy the secret from the slgod machine, byte for byte, over a secure route such as scp. On the machine slgod runs on, the file is already there.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgod)
+<span class="p">$ </span>scp server.example:.config/slgod/secret ~/.config/slgod/secret
+<span class="p">$ </span>chmod 600 ~/.config/slgod/secret</pre></div>
+            <div class="note warn"><p class="label">Security</p><p>Whoever holds this file can drive every avatar slgod holds. Do not send it by email or chat, and do not put it in a repository.</p></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-secret-perms" data-tags="slsh remote slbotd">
+          <summary><span class="sym"><code>~/.config/slgod has mode 0755, must be 0700 -- it holds the shared secret; chmod 0700 ~/.config/slgod</code></span><span class="where-tag">slsh · slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The secret's directory or file can be read by other users on this machine. Every program refuses it: a client reports it after <code>cannot reach slgod at …:</code>, and slgod after <code>cannot start:</code>. For the file the message is <code>~/.config/slgod/secret has mode 0644, must be 0600 -- it holds the shared secret; chmod 0600 ~/.config/slgod/secret</code>. A file with only blank and comment lines gives <code>~/.config/slgod/secret is empty</code>.</p>
+            <p>A per-address secret, <code>secret.HOST.PORT</code> or <code>secret.HOST</code>, is checked the same way. One that is there but refused is an error: the client does not fall back to the shared secret. Fix its mode the same way.</p>
+            <p>A copy made with scp or a file manager often arrives with mode 0644.</p>
+            <h4>Fix</h4>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>chmod 0700 ~/.config/slgod
+<span class="p">$ </span>chmod 0600 ~/.config/slgod/secret</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-wrong-secret" data-tags="slsh remote slbotd">
+          <summary><span class="sym"><code>login refused: rpc error: code = Unauthenticated desc = authentication failed (the secret used was PATH)</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The client's secret, in the file the message names, is not the same as slgod's. The daemon gives the same answer for every kind of failure, so the message cannot say more.</p>
+            <p>Look at the file named first:</p>
+            <ul>
+              <li>If it is the shared secret, <code>~/.config/slgod/secret</code>, and this slgod has a secret of its own, the client found no copy kept for the address it dialled. See <a href="#f-secret-by-address">the entry below</a>.</li>
+              <li>If it is a <code>secret.HOST.PORT</code> or <code>secret.HOST</code> file, that copy is out of date, or belongs to another slgod.</li>
+            </ul>
+            <p>Two related messages:</p>
+            <ul>
+              <li><code>login refused: rpc error: code = ResourceExhausted desc = too many failed logins lately; try again in a few minutes (the secret used was PATH)</code>. Failed attempts, yours or anyone else's, have tripped slgod's throttle. After 3 failures from one address slgod delays its answers, from 0.5 s up to 4 s, and past a limit it refuses outright. It forgets an address after 15 minutes of quiet.</li>
+              <li><code>slgod did not prove it knows the shared secret in PATH; refusing to talk to it</code>. The client checks the daemon too. Whatever answered on that port is not your slgod, or its secret is different from the one in <code>PATH</code>.</li>
+            </ul>
+            <h4>Fix</h4>
+            <p>slgod's log names the file it reads, in its <code>secret:</code> line at startup. Copy that file again to the one the client named, so both ends have the same secret. Only the first line that is not blank and not a <code>#</code> comment counts; spaces around it are ignored. Compare the two without printing them:</p>
+            <div class="os-pair">
+              <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux · on each machine"><pre><span class="p">$ </span>sha256sum ~/.config/slgod/secret</pre></div>
+              <div class="term" data-os-only="mac" data-where="server" data-where-label="macOS · on each machine"><pre><span class="p">$ </span>shasum -a 256 ~/.config/slgod/secret</pre></div>
+            </div>
+            <p>Use the paths the two ends named if they are not the shared secret.</p>
+            <p>If you replaced the secret on the slgod machine, restart slgod: it reads the file only at startup. If the throttle tripped, wait a few minutes after fixing the secret.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-secret-by-address" data-tags="slsh remote slbotd">
+          <summary><span class="sym">Works with <code>--addr 127.0.0.1:PORT</code> but not with <code>localhost:PORT</code>, or the other way round</span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>This slgod has a secret of its own, and the client keeps its copy under one address. A client picks the secret by the address exactly as it dials it: <code>secret.127.0.0.1.7808</code> is found for <code>127.0.0.1:7808</code> and for nothing else. Dialling <code>localhost:7808</code> looks for <code>secret.localhost.7808</code> and <code>secret.localhost</code>, finds neither, and uses the shared secret, which this slgod does not accept. This has been seen with a tunnel on local port 7808: reached as <code>localhost:7808</code>, the client fell back to the shared secret and was refused.</p>
+            <p>The refusal says so at its end: <code>(the secret used was …/.config/slgod/secret)</code>, the shared one, where you expected the per-address file. The same happens with a host name and its IP address, a tunnel moved to another local port, or an sl-host answer that differs from the address the file is named for. Remember that a client given no address at all dials <code>localhost:7807</code>.</p>
+            <h4>Fix</h4>
+            <p>Dial the address the file is named for, or give the file the name for the address you dial. Copy it rather than rename it if you use both:</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>cp -p ~/.config/slgod/secret.127.0.0.1.7808 ~/.config/slgod/secret.localhost.7808</pre></div>
+            <p>A file named for the host alone, such as <code>secret.localhost</code>, covers every port on it. Use that only if every slgod reached that way has the same secret. The naming rules, including IPv6, are in <a href="reference.html#secret-order">the reference</a>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-old-client" data-tags="slsh remote slbotd">
+          <summary><span class="sym"><code>this client is older than slgod: it sends its name in a form slgod no longer reads. Rebuild and reinstall it with the same tree as the daemon</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The client was built from an older checkout than the daemon, and the handshake has changed since. This is common when slsh on a laptop was built months before slgod on the server.</p>
+            <h4>Fix</h4>
+            <p>Build every program from the same commit. Compare what each machine runs with <code>--version</code>, then update and rebuild the older one.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh --version
+<span class="p">$ </span>git pull
+<span class="p">$ </span>go install ./cmd/...</pre></div>
+            <p>Then run <code>rehash</code> in csh or zsh, or <code>hash -r</code> in sh, so the shell does not go on running an old copy from somewhere else on the <code>PATH</code>. <code>slsh --version</code> again shows which one it finds.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-no-auth-tls" data-tags="slsh slgod slbotd">
+          <summary><span class="sym"><code>transport: authentication handshake failed: tls: first record does not look like a TLS handshake</code></span><span class="where-tag">slsh · slgod</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The client speaks TLS and the thing on the port does not. Usually slgod was started with <code>-no-auth</code>, which serves plain, unauthenticated gRPC. slsh, slrun, slbench and slbotd always use TLS and the secret handshake, so none of them can connect to a <code>-no-auth</code> daemon. The whole line, as captured:</p>
+            <div class="term"><pre><span class="o">slsh: sl: cannot reach slgod at 127.0.0.1:17809: login: rpc error: code = Unavailable desc = connection error: desc = "transport: authentication handshake failed: tls: first record does not look like a TLS handshake"
+        --direct logs in without slgod</span></pre></div>
+            <p>The other cause is that the port belongs to some other program, not slgod.</p>
+            <h4>Fix</h4>
+            <p>Restart slgod without <code>-no-auth</code>, and set up the shared secret instead. slgod's own startup message suggests <code>-no-auth</code> when the secret is missing; do not follow it.</p>
+            <div class="note warn"><p class="label">Security</p><p>slgod listens on every interface unless told otherwise, and nothing checks that <code>-no-auth</code> is used on loopback only. A <code>-no-auth</code> slgod on the default <code>:7807</code> lets anyone who can reach the port drive the avatars.</p></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-no-sessions" data-tags="slsh">
+          <summary><span class="sym"><code>slsh: sl: cannot attach to that slgod's default session: rpc error: code = NotFound desc = this server holds no sessions</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>You reached slgod and the secret is right, but it holds no avatar at the moment. Either the login is still being retried (<a href="#f-not-up-yet">not up yet</a>), or every avatar has been stopped (<a href="#f-kicked">not connected</a>).</p>
+            <h4>Fix</h4>
+            <p>Read slgod's log. To start an avatar that slgod has a profile for:</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh login example</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-no-agent" data-tags="slsh slbotd">
+          <summary><span class="sym"><code>slsh: sl: cannot attach to "builder": rpc error: code = NotFound desc = no agent named "builder"</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The name you asked for, with <code>--agent</code>, <code>SLGO_AGENT</code> or <code>agent =</code>, is not a session slgod holds. The name is a profile name on the slgod machine, not the avatar's name. A profile slgod has but has never started also counts as not held. If you run two slgods and the profile is on the other one, sl-host sent the client to the wrong one; see <a href="#f-sl-host-profile">this entry</a>.</p>
+            <h4>Fix</h4>
+            <p>List what slgod holds and what it could start, then start the one you want.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c agents
+<span class="p">$ </span>slsh login builder</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-firewall" data-tags="remote macos linux slgod">
+          <summary><span class="sym">slgod works from its own machine, and another machine cannot connect or times out</span><span class="where-tag">slgod machine</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slgod listens on every interface by default, so a host firewall is the usual thing in the way. On macOS the application firewall may ask whether slgod may accept incoming connections the first time it listens. We expect this from how macOS behaves; the handbook has not recorded the dialog.</p>
+            <h4>Fix</h4>
+            <div class="note os"><p class="label">macOS</p><p>If a dialog asks whether slgod may accept incoming connections, allow it. Otherwise look in System Settings, Network, Firewall, Options, and allow slgod there. Rebuilding slgod makes a new binary, so macOS may ask again.</p></div>
+            <div class="note os"><p class="label">Linux</p><p>Allow TCP 7807 in whichever firewall the machine runs. Limit it to your own network where you can. These lines have not been run for this handbook; the ufw one matches the forms in ufw 0.36.2's manual on Ubuntu 24.04, and the firewalld one is unchecked.</p></div>
+            <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux · ufw, or firewalld"><pre><span class="p">$ </span>sudo ufw allow from 192.0.2.0/24 to any port 7807 proto tcp
+<span class="p">$ </span>sudo firewall-cmd --add-port=7807/tcp --permanent &amp;&amp; sudo firewall-cmd --reload</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-first-last" data-tags="slsh">
+          <summary><span class="sym"><code>slsh: --first and --last are for --direct; through slgod the session knows who it is</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>Through slgod you choose an avatar by profile name, not by the avatar's name.</p>
+            <h4>Fix</h4>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -a example</pre></div>
+          </div>
+        </details>
+
+        <h3 id="g-sl-host">sl-host</h3>
+        <p>sl-host runs on the client machine only. A client runs it when no address was given and it is on <code>$PATH</code>. If it is installed and fails, the client stops; it does not fall back to <code>localhost</code>.</p>
+
+        <details class="fault" id="f-sl-host-no-file" data-tags="sl-host slsh slbotd">
+          <summary><span class="sym"><code>slsh: cannot find the host slgod is on: sl-host failed: exit status 2: sl-host: cannot read ~/.config/sl-host</code></span><span class="where-tag">slsh · sl-host</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p><code>sl-host</code> is on your <code>$PATH</code> but it has no rules file. This is the most common first-day problem: <code>go install ./cmd/...</code> installs sl-host along with everything else, and from then on every client asks it for slgod's address instead of using <code>localhost</code>. The next line of the message is <code>--addr HOST:PORT overrides</code>.</p>
+            <h4>Fix</h4>
+            <p>Pick one.</p>
+            <ul>
+              <li><strong>slgod is on this machine:</strong> remove sl-host. Clients then use <code>localhost:7807</code>.</li>
+              <li><strong>slgod is at one fixed address:</strong> set it in slsh (<code>set addr server.example:7807</code>) or in slbotd.conf (<code>addr = server.example:7807</code>). sl-host is not asked when an address is set.</li>
+              <li><strong>your computer moves between networks:</strong> write the rules file. See <a href="sl-host.html">sl-host</a>.</li>
+            </ul>
+            <div class="term" data-where="laptop"><pre><span class="c"># slgod on this machine: take sl-host off the PATH</span>
+<span class="p">$ </span>which sl-host
+<span class="p">$ </span>rm ~/go/bin/sl-host</pre></div>
+            <p>If <code>which</code> names another file, remove that one instead. Clients look sl-host up afresh each time they start, so they stop asking it at once. Your shell may still remember it: run <code>rehash</code> in csh or zsh, or <code>hash -r</code> in sh (<a href="#f-command-not-found">why</a>).</p>
+            <div class="file"><div class="name">~/.config/sl-host</div><pre>192.0.2.0/24   192.0.2.20      home
+0/0            10.8.0.1        anywhere else, over the VPN</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-sl-host-no-rules" data-tags="sl-host">
+          <summary><span class="sym"><code>sl-host: no rules in &lt;path&gt;; each line is a network and the address to use on it, e.g. "0/0 192.168.1.20"</code></span><span class="where-tag">sl-host</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The file exists but no line in it could be used. sl-host reports each bad line and skips it, for example <code>sl-host: ~/.config/sl-host:3: a network and no address to use on it; skipped</code>, or <code>sl-host: &lt;path&gt;:&lt;n&gt;: "&lt;text&gt;" is not a network; skipped</code>.</p>
+            <h4>Fix</h4>
+            <p>Each line is a network, then the address to print, then an optional label. <code>#</code> starts a comment. A network is a CIDR such as <code>192.0.2.0/24</code>, a short IPv4 form such as <code>0/0</code> or <code>10/8</code>, or a single address. Check the file with:</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>sl-host -l</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-sl-host-no-match" data-tags="sl-host remote">
+          <summary><span class="sym"><code>sl-host: no rule in ~/.config/sl-host matches this network.</code></span><span class="where-tag">sl-host</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>You are on a network none of the rules cover. When the client asked about a profile, the line ends <code>matches this network for NAME.</code>, and rules kept for other profiles (<code>@</code> words) were not tried; see <a href="#f-sl-host-profile">the entry on profiles</a>. sl-host lists this machine's addresses and the rules, then ends with <code>add a rule for this network, or set SL_HOST=&lt;address&gt; for a one-off.</code> The client reports it as <code>… sl-host failed: exit status 1: …</code>.</p>
+            <p><code>0/0</code> matches IPv4 addresses only, and <code>::/0</code> IPv6 only. A network that gives you only an IPv6 address needs a <code>::/0</code> rule to catch it. The first rule that matches wins, so put catch-alls last.</p>
+            <h4>Fix</h4>
+            <p>For a one-off, give the address in the environment. For good, add a rule, or a catch-all as the last line.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>env SL_HOST=198.51.100.7 slsh
+<span class="p">$ </span>sl-host -v</pre></div>
+            <div class="file"><div class="name">~/.config/sl-host (last lines)</div><pre>0/0            10.8.0.1        anywhere else, over the VPN
+::/0           2001:db8::7     anywhere else, IPv6</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-sl-host-network-down" data-tags="sl-host">
+          <summary><span class="sym"><code>sl-host: no address found on any interface -- is the network up?</code></span><span class="where-tag">sl-host</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>sl-host found no usable address on this machine. It ignores loopback and link-local addresses, so a machine that is not connected to anything has none. <code>sl-host: cannot read this machine's addresses: &lt;err&gt;</code> means it could not list the interfaces at all.</p>
+            <h4>Fix</h4>
+            <p>Connect to a network, or give the address for this once with <code>SL_HOST</code>, or use <code>--addr</code>.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh --addr 127.0.0.1:7807</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-sl-host-port" data-tags="sl-host remote">
+          <summary><span class="sym">sl-host picks the right machine, but the client tries port 7807 and slgod is on another port</span><span class="where-tag">sl-host</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The rule that matched has an address with no port, and a client adds <code>:7807</code> to an address with none. A slgod started with <code>-listen :7900</code> is not there.</p>
+            <p>If the rule does name a port and the client still tries 7807, the client is older than sl-host: an older client adds <code>:7807</code> whatever sl-host printed, which makes an address that cannot be dialled (read from the code).</p>
+            <h4>Fix</h4>
+            <p>Put the port in the rule, then check what sl-host prints:</p>
+            <div class="file"><div class="name">~/.config/sl-host</div><pre>0/0            server.example:7900    anywhere</pre></div>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>sl-host -v</pre></div>
+            <p>Rebuild the clients from the same checkout as sl-host (<code>go install ./cmd/slsh ./cmd/sl-host</code>, and slrun, slbench or slbotd if you use them). Or give the full address: <code>--addr server.example:7900</code>, <code>set addr server.example:7900</code> in slsh, or <code>addr =</code> in slbotd.conf.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-sl-host-profile" data-tags="sl-host remote">
+          <summary><span class="sym"><code>slsh -a NAME</code> goes to the wrong slgod, or a rule for one profile is never used</span><span class="where-tag">sl-host</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>A rule with <code>@NAME</code> after its address is tried only when the client asks about that profile. The usual causes, most likely first:</p>
+            <ul>
+              <li><strong>Order.</strong> The first matching rule wins. A general rule above the <code>@NAME</code> rule, a catch-all most of all, answers first.</li>
+              <li><strong>Spelling.</strong> The word after <code>@</code> has to be exactly the profile name you give <code>-a</code>, which is the profile's file name. <code>@Dev</code> is not <code>dev</code>.</li>
+              <li><strong>No profile named.</strong> With no <code>-a</code>, no <code>SLGO_AGENT</code> and no <code>agent =</code>, the client asks about no profile, and <code>@</code> rules are never tried. slbotd holding more than one avatar asks about none too.</li>
+              <li><strong>An old sl-host.</strong> One built before profiles could be named reads <code>@NAME</code> as part of the label, so the rule answers for everyone. <code>sl-host -version</code> says which build it is.</li>
+              <li><strong>An old client.</strong> One built before this does not tell sl-host the profile, so sl-host answers for none.</li>
+              <li><strong>An address was given.</strong> <code>--addr</code> or <code>addr =</code> means sl-host is never asked.</li>
+            </ul>
+            <h4>Fix</h4>
+            <p>Ask sl-host the question the client asks, and read which rule it picks and why. These work the same in sh, zsh and csh:</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>sl-host -l -a dev
+<span class="p">$ </span>env SLGO_AGENT=dev sl-host -v
+<span class="p">$ </span>sl-host -version</pre></div>
+            <p><code>-l</code> marks rules kept for other profiles as <code>other</code>. Move the <code>@dev</code> rules above the general ones, fix the spelling, and rebuild sl-host and the clients from the same checkout if either is old. The <a href="sl-host.html#ex-second">sl-host page</a> has a worked example.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-sl-host-empty" data-tags="sl-host">
+          <summary><span class="sym"><code>cannot find the host slgod is on: sl-host printed nothing</code></span><span class="where-tag">sl-host</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>Something called <code>sl-host</code> on your <code>$PATH</code> exited cleanly and printed nothing. The Go sl-host always prints an address or fails, so this is usually an old script or wrapper of the same name.</p>
+            <h4>Fix</h4>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>which sl-host
+<span class="p">$ </span>sl-host -version</pre></div>
+            <p>Replace it with <code>go install ./cmd/sl-host</code>.</p>
+          </div>
+        </details>
+
+        <h3 id="g-slsh">slsh settings, how and the viewer</h3>
+
+        <details class="fault" id="f-slsh-config" data-tags="slsh">
+          <summary><span class="sym"><code>slsh: slsh: ~/.config/slsh/config line 1: unknown setting "hwo_url"</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slsh will not start with a setting it does not know or a value it cannot use. <code>slsh:</code> really does appear twice at the start. Other forms:</p>
+            <ul>
+              <li><code>… line N: want key = value, got "…"</code>: a line with no <code>=</code>.</li>
+              <li><code>… line 1: how_url: want the server's address with http:// in front, like http://127.0.0.1:8080, got "127.0.0.1:11434"</code></li>
+              <li><code>… line 1: how_extra: want a JSON object, like {"reasoning_effort": "none"}: …</code></li>
+              <li><code>… how_timeout: want a length of time, like 45s or 2m, got "…"</code></li>
+            </ul>
+            <p>A <code># comment</code> after a value is part of the value. So <code>how_url = http://127.0.0.1:11434 # ollama</code> fails with <code>got "http://127.0.0.1:11434 # ollama"</code>. On a setting that holds plain text, such as <code>addr</code> or <code>agent</code>, the comment is kept without any error and quietly breaks the value.</p>
+            <h4>Fix</h4>
+            <p>Edit the file named in the message, or clear the setting. Put comments on lines of their own.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c 'set how_url ""'</pre></div>
+            <p>If slsh will not start at all, edit <code>~/.config/slsh/config</code> directly: settings can only be changed from inside slsh once it has started.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-how-no-model" data-tags="slsh llm">
+          <summary><span class="sym"><code>how</code> answers <code>From the index alone (nothing is answering at http://127.0.0.1:11434); …</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p><code>how</code> still answers when no model does, from its built-in index, and the words in brackets say why:</p>
+            <ul>
+              <li><code>how_url is not set</code>: no model is configured. That is the default.</li>
+              <li><code>nothing is answering at &lt;url&gt;</code>: the model server is not running, or is on another port.</li>
+              <li><code>the model at &lt;url&gt; did not answer in time</code>: slower than <code>how_timeout</code> (2 minutes by default).</li>
+              <li><code>the model at &lt;url&gt; refused: …</code>: the server answered with an error, such as a 404 for a model name it does not have.</li>
+            </ul>
+            <h4>Fix</h4>
+            <p>Start the model server, and check the URL and model name. Ollama needs <code>how_model</code>; llama-server ignores it.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>curl -s http://127.0.0.1:11434/v1/models
+<span class="p">$ </span>slsh -c 'set how_url http://127.0.0.1:11434'
+<span class="p">$ </span>slsh -c 'set how_model qwen3.5:4b'</pre></div>
+            <p>There is no API key setting. <code>how</code> sends no <code>Authorization</code> header, so a hosted service that needs a key cannot be used directly.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-how-empty" data-tags="slsh llm">
+          <summary><span class="sym"><code>From the index alone (the model's answer could not be used: … the message was empty and the limit of 512 tokens was reached; …)</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>A model that reasons before it answers spent all 512 tokens reasoning and gave no answer.</p>
+            <h4>Fix</h4>
+            <p>Turn reasoning off in the request. This is the setting slsh's own guide measured with <code>qwen3.5:4b</code>:</p>
+            <p>Inside slsh it is <code>set how_extra '{"reasoning_effort": "none"}'</code>. slsh needs the single quotes to keep the double quotes in the value, so from the command line the quoting depends on the shell:</p>
+            <div class="sh-set">
+              <div class="term" data-sh-only="sh zsh" data-where="laptop" data-where-label="sh or zsh · on your computer"><pre><span class="p">$ </span>slsh -c "set how_extra '{\"reasoning_effort\": \"none\"}'"</pre></div>
+              <div class="term" data-sh-only="csh" data-where="laptop" data-where-label="csh or tcsh · on your computer"><pre><span class="p">$ </span>slsh -c 'set how_extra '"'"'{"reasoning_effort": "none"}'"'"</pre></div>
+            </div>
+            <p>Or put <code>how_extra = {"reasoning_effort": "none"}</code> on a line of its own in <code>~/.config/slsh/config</code>, which needs no quoting at all.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-viewer-none" data-tags="slsh slgod">
+          <summary><span class="sym"><code>this daemon serves no viewer logins.</code></span><span class="where-tag">slsh</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p><code>viewer</code> and <code>viewer --launch</code> need slgod to serve viewer logins, and it was started without <code>-viewer</code>.</p>
+            <h4>Fix</h4>
+            <p>Restart slgod with <code>-viewer</code>. For a viewer on another machine, bind it to an address that machine can reach, preferably a WireGuard or Tailscale address, and make that viewer trust <code>~/.config/slgod/viewer-cert.pem</code>.</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slgod -viewer 127.0.0.1:9000 example</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-viewer-linux" data-tags="slsh linux">
+          <summary><span class="sym"><code>nothing here knows how to start a viewer on linux; put a "viewer_launch = ..." line in slsh's config (~/.config/slsh/config) with {app} {uri} {first} {last} {password} where those belong</code></span><span class="where-tag">slsh · Linux</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p><code>viewer --launch</code> has defaults on macOS only. On Linux, <code>viewer_launch</code> is empty until you set it.</p>
+            <h4>Fix</h4>
+            <p>Set <code>viewer_launch</code> to the command that starts your viewer, with placeholders where its login arguments go: <code>{app}</code>, <code>{grid}</code>, <code>{uri}</code> (slgod's viewer login address), <code>{first}</code>, <code>{last}</code> and <code>{password}</code>. On Linux <code>{app}</code> and <code>{grid}</code> are empty unless you also set <code>viewer_app</code> and <code>viewer_grid</code>. Use <code>--grid {grid}</code>, as the macOS default does, and name the grid you added in the viewer; on macOS a viewer given <code>--loginuri</code> came up on whichever grid it had used last. The lines below are an example that has <strong>not been tried on Linux</strong>: the path is wherever you unpacked the Firestorm OpenSim build (see <a href="platforms.html#viewer">Starting a viewer</a>).</p>
+            <div class="file"><div class="name">~/.config/slsh/config (Linux, not tried)</div><pre>viewer_grid    = slgod
+viewer_launch  = /opt/firestorm-os/firestorm --grid {grid} --login {first} {last} {password}
+viewer_running = pgrep -f /opt/firestorm-os/</pre></div>
+            <p>Do not write a real password into this line: slsh fills in <code>{password}</code> with a one-time password when it launches.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-mac-viewer" data-tags="slsh macos">
+          <summary><span class="sym"><code>viewer --launch</code> on macOS opens a viewer that does not offer slgod's grid, or says <code>a viewer is already running</code></span><span class="where-tag">slsh · macOS</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The macOS default runs <code>open -a Firestorm-OpenSim --args --grid slgod --login …</code>. The Second Life build of Firestorm ignores private grids, so it needs the OpenSim build, installed as <code>Firestorm-OpenSim</code>. If a viewer is already open, slsh refuses with <code>a viewer is already running: starting it again would raise its window and log nobody in, …; quit the viewer and try again</code>, because the login goes on the command line and only a new process reads it.</p>
+            <h4>Fix</h4>
+            <p>Install the Firestorm OpenSim build, or point <code>viewer_app</code> at the viewer you have. Quit any running viewer first. The viewer also has to trust slgod's certificate (append <code>~/.config/slgod/viewer-cert.pem</code> to Firestorm's <code>user_settings/CA.pem</code>, or accept its certificate dialog once).</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c 'set viewer_app Firestorm-OpenSim'</pre></div>
+          </div>
+        </details>
+
+        <h3 id="g-slbotd">slbotd</h3>
+        <p>slbotd prints fatal errors as <code>slbotd: …</code> and exits. Everything after startup goes to its log, each line starting with the profile name. Failures also go into a list you can read in-world by sending the avatar <code>:errors</code>.</p>
+
+        <details class="fault" id="f-bot-config-dir" data-tags="slbotd">
+          <summary><span class="sym"><code>slbotd: ~/.config/slgo is mode 0755, wanted 0700: chmod 700 ~/.config/slgo</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slbotd.conf lives in the profile directory, and slbotd checks that directory is private before reading anything. The file itself holds no secret.</p>
+            <h4>Fix</h4>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>chmod 700 ~/.config/slgo</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-bot-no-config" data-tags="slbotd">
+          <summary><span class="sym"><code>slbotd: open ~/.config/slgo/slbotd.conf: no such file or directory</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slbotd has no config file where it looked. The next line is <code>see slbotd.conf for what goes in it</code>. It looks at <code>-config PATH</code>, then <code>$SLBOTD_CONFIG</code>, then <code>slbotd.conf</code> in the profile directory.</p>
+            <h4>Fix</h4>
+            <p>Create it. The smallest useful file names one avatar and one person it takes commands from:</p>
+            <div class="file"><div class="name">~/.config/slgo/slbotd.conf</div><pre>avatar  = example
+trusted = Quark Idlemind</pre></div>
+            <p>See <a href="quickstart-bot.html">Adding slbotd</a>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-bot-unknown-key" data-tags="slbotd">
+          <summary><span class="sym"><code>slbotd: ~/.config/slgo/slbotd.conf: line 7: unknown setting "llm-ulr"</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>An unknown key stops slbotd, so a misspelt setting cannot quietly do nothing. Keys are not case-sensitive, and most accept <code>-</code> or <code>_</code>.</p>
+            <h4>Fix</h4>
+            <p>Correct the key; the list is in the <a href="reference.html#slbotd-keys">reference</a>. Then check the whole file without connecting anywhere:</p>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>slbotd --check</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-bot-required" data-tags="slbotd">
+          <summary><span class="sym"><code>no avatar lines: name at least one profile to hold</code> or <code>no trusted lines: nobody could send a command, …</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slbotd needs at least one <code>avatar</code> and one <code>trusted</code> line. It also refuses an <code>alias</code> that points at no command (<code>alias "x" points at "y", which is no command</code>) and a <code>backstory</code> for an avatar it does not hold (<code>backstory names "x", which is not an avatar this daemon holds</code>).</p>
+            <h4>Fix</h4>
+            <p>Add the missing lines. A uuid is safer than a name for <code>trusted</code>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-bot-args" data-tags="slbotd">
+          <summary><span class="sym"><code>slbotd takes no arguments; the avatars are named in the configuration</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>Unlike slgod, slbotd takes no profile names on its command line.</p>
+            <h4>Fix</h4>
+            <p>Put <code>avatar = example</code> in slbotd.conf and run <code>slbotd</code> with flags only.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-bot-cannot-host" data-tags="slbotd remote">
+          <summary><span class="sym">The log repeats <code>example: cannot host: cannot reach slgod at HOST:7807: …</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slbotd is a client of slgod, like slsh, and fails for the same reasons. The text after <code>cannot reach slgod at …:</code> is the same as slsh would print: <a href="#f-unreachable">connection refused</a>, <a href="#f-no-secret">no secret</a>, <a href="#f-secret-perms">secret modes</a>, <a href="#f-wrong-secret">wrong secret</a>. slbotd keeps trying, waiting longer each time, up to 2 minutes.</p>
+            <p>Other forms: <code>cannot host: rpc error: … no agent named "x"</code> (slgod has no such profile) and <code>x failed to log in (…); not trying again for 1m0s</code> (read slgod's log).</p>
+            <h4>Fix</h4>
+            <p>Check slgod is running and slbotd has the right <code>addr</code> and the same secret. Profiles belong on the <strong>slgod</strong> machine; slbotd never reads the password. The quickest test is slsh with the same address, on the slbotd machine:</p>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>slsh --addr server.example:7807 -c agents</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-bot-not-trusted" data-tags="slbotd">
+          <summary><span class="sym">The bot ignores a command, and the log says <code>refused a command from X: …</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The sender is not on a <code>trusted</code> line. Names are matched against the <strong>legacy</strong> name the grid sends (such as <code>Example Resident</code>), not the display name. By default a stranger is told nothing.</p>
+            <h4>Fix</h4>
+            <p>Add the person, by uuid if you can, and restart slbotd: it reads the file once, at startup. Set <code>answer-strangers = yes</code> if refused senders should be told <code>I only take commands from people I have been told to trust.</code></p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-bot-busy" data-tags="slbotd">
+          <summary><span class="sym"><code>example is already running 4 commands; try again when one has finished.</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>Each avatar runs at most <code>jobs</code> commands at once (4 by default).</p>
+            <h4>Fix</h4>
+            <p>Wait, or raise <code>jobs</code> in slbotd.conf and restart.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-bot-program" data-tags="slbotd linux macos">
+          <summary><span class="sym"><code>cannot run slbench (&lt;path&gt;): &lt;err&gt;</code> when slbotd runs as a service</span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The built-in <code>slbench</code> and <code>slrun</code> programs are looked up on <code>PATH</code>. We expect launchd and systemd to give services a short <code>PATH</code> that leaves out <code>~/go/bin</code> (not measured here). Programs run on the slbotd machine, so they must be installed there.</p>
+            <h4>Fix</h4>
+            <p>Name each program by its full path. Naming any program replaces the built-in pair, so name both.</p>
+            <div class="file"><div class="name">~/.config/slgo/slbotd.conf</div><pre>program = slbench /home/you/go/bin/slbench
+program = slrun   /home/you/go/bin/slrun</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-chat-off" data-tags="slbotd llm">
+          <summary><span class="sym"><code>CHAT IS OFF: chat names somebody to talk to but no llm-url says where a model is, so nothing will be answered</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>Conversation needs both an <code>llm-url</code> and at least one <code>chat</code> line. slbotd logs this at every start when the setup is half done, then <code>CHAT IS OFF: everything else works; slbotd --check says what the file means</code>. Commands keep working. The other forms are:</p>
+            <ul>
+              <li><code>CHAT IS OFF: llm-url names a model but no chat line says who may be answered, so nothing will be answered</code></li>
+              <li><code>CHAT IS OFF: chat-summary is 200 tokens and chat-context only 256; the summary has to be well under the budget or there is no room left to talk</code></li>
+            </ul>
+            <p>In-world, <code>:chat</code> says <code>no model is configured; this avatar answers commands only</code>.</p>
+            <h4>Fix</h4>
+            <p>Add the missing line, and keep <code>chat-summary</code> under half of <code>chat-context</code>. Then restart.</p>
+            <div class="file"><div class="name">~/.config/slgo/slbotd.conf</div><pre>llm-url = http://127.0.0.1:8080
+chat    = *</pre></div>
+          </div>
+        </details>
+
+        <details class="fault" id="f-chat-silent" data-tags="slbotd llm">
+          <summary><span class="sym">The bot answers commands, but someone who talks to it gets no reply</span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>Only one-to-one instant messages are answered. Local (nearby) chat and group IMs never are. A message that starts with the prefix (<code>:</code>) is a command, not conversation. The person who wrote never sees an error: when something fails they get silence, and the reason goes to the log and <code>:errors</code>. Look in the log for:</p>
+            <ul>
+              <li><code>not answering X: not in the chat list</code>: adjust the <code>chat</code> lines.</li>
+              <li><code>too busy talking to answer X</code>: raise <code>chat-jobs</code>, or llama-server's <code>-np</code>.</li>
+              <li><code>not answering X: that is builder, which this daemon drives as well, and they have said 8 things to each other already</code>: two of the daemon's own avatars reached <code>chat-own</code>.</li>
+            </ul>
+            <p>A reply can also just be slow. slbotd waits as if reading and typing: with the defaults, a long reply takes minutes.</p>
+            <h4>Fix</h4>
+            <p>Send a one-to-one IM with no prefix, and read the log. To shorten the wait, lower <code>chat-max-tokens</code> or set <code>pace-max</code>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llama-unreachable" data-tags="slbotd llm">
+          <summary><span class="sym"><code>:errors</code> shows <code>could not answer X: the model at http://127.0.0.1:8080: …</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slbotd could not reach llama-server at <code>llm-url</code>. The rest of the line is Go's network error, which for a server that is not running should end in <code>connect: connection refused</code> (expected from Go's format, not captured). slbotd asks nothing of the model at startup, so this shows only when someone talks to the bot.</p>
+            <p>When the model was reached, the log line <code>model &lt;alias&gt; (&lt;ftype&gt;), N slots of M tokens, build B</code> appears on the first reply.</p>
+            <h4>Fix</h4>
+            <p>Start llama-server and check the port. Give the base URL without <code>/v1</code>.</p>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>curl -s http://127.0.0.1:8080/props | head -c 300
+<span class="p">$ </span>llama-server -m model.gguf -c 8192 -np 4 --slot-save-path /var/lib/slbotd/slots</pre></div>
+            <p>A model that is too slow gives an error mentioning a deadline or timeout (wording not captured). Raise <code>llm-timeout</code>, use a smaller model, or lower <code>chat-max-tokens</code>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-ollama" data-tags="slbotd llm">
+          <summary><span class="sym">slbotd pointed at Ollama, OpenAI or another hosted API never answers: <code>could not answer X: GET /props: …</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slbotd works only with llama.cpp's <code>llama-server</code>. Before its first reply it asks the server for <code>/props</code>, and it keeps conversations in llama-server's slots. Other servers do not have these, so every message fails and is logged as an error. The exact status text depends on the server and has not been captured. slbotd also sends no API key, so a hosted service would refuse it anyway, and so would a llama-server started with <code>--api-key</code>.</p>
+            <p>This is slbotd only. slsh's <code>how</code> does work with Ollama.</p>
+            <h4>Fix</h4>
+            <p>Run llama-server, without <code>--api-key</code>, on loopback or a network you trust. See <a href="bot-llm.html">Bot + LLM</a>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-llm-empty" data-tags="slbotd llm">
+          <summary><span class="sym"><code>could not answer X: the model said nothing at all</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The model returned an empty reply. <code>the model answered with no choices at all</code> is the same trouble. A "thinking" model can spend its whole token allowance reasoning, and slbotd has no way to pass extra request fields, unlike slsh's <code>how_extra</code>. That cause is our reading of the code and slsh's measurements, not something measured with slbotd.</p>
+            <h4>Fix</h4>
+            <p>Use an instruct model that does not reason first, or turn reasoning off on the server. Raising <code>chat-max-tokens</code> gives more room.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-slot-save" data-tags="slbotd llm">
+          <summary><span class="sym">Chat works, but every reply adds <code>could not keep the context for X: POST /slots/0?action=save: …</code></span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>slbotd saves each conversation's model state between turns, and llama-server was started without <code>--slot-save-path</code>. Replies still go out, but each one adds an entry to <code>:errors</code> (up to 50) and trusted residents get the trouble notice.</p>
+            <h4>Fix</h4>
+            <p>Restart llama-server with <code>--slot-save-path DIR</code>. If slbotd can see that directory too, set <code>slot-save-path</code> in slbotd.conf so <code>:forget</code> can delete the saved state.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-backstory" data-tags="slbotd llm">
+          <summary><span class="sym"><code>:errors</code> shows <code>no backstory: …</code>, and the avatar answers out of character</span><span class="where-tag">slbotd</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The backstory file or directory could not be read, or an include in it is missing or loops. The avatar still answers, with no character. The avatar name in <code>backstory = …</code> must be written exactly as in its <code>avatar</code> line, including case. The startup check ignores case, but the lookup does not (read in the code).</p>
+            <h4>Fix</h4>
+            <p><code>slbotd --check</code> prints one line per backstory with its size, or <code>BROKEN: …</code>. Backstories are re-read on every turn, so a fix takes effect without a restart.</p>
+          </div>
+        </details>
+      </section>
+
+      <section id="collecting">
+        <h2>Collecting information</h2>
+        <p>When the list above does not settle it, gather these before you change anything.</p>
+
+        <h3 id="c-slgod-log">slgod's log</h3>
+        <p>slgod writes to standard error, or to the file given with <code>-log</code>. Each line starts with the time of day only, with no date, so note the date when you copy lines out. Every login, retry, disconnect and reconnect is there, prefixed with the profile name. <code>-v</code> adds every grid message slgod has no handler for; that is mostly useful when reporting a bug.</p>
+        <div class="term" data-where="server"><pre><span class="p">$ </span>tail -n 50 ~/.local/log/slgod.log</pre></div>
+        <div class="os-pair">
+          <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux · slgod under systemd without -log"><pre><span class="p">$ </span>journalctl --user -u slgod -n 50</pre></div>
+          <div class="term" data-os-only="mac" data-where="server" data-where-label="macOS · slgod under launchd"><pre><span class="p">$ </span>tail -n 50 ~/.local/log/slgod.stderr</pre></div>
+        </div>
+        <p>The macOS path is whatever <code>StandardErrorPath</code> names in your LaunchAgent; the one above matches the example on <a href="platforms.html">Linux &amp; macOS</a>.</p>
+
+        <h3 id="c-state">What slgod holds</h3>
+        <p><code>agents</code> lists the sessions slgod holds and the profiles it could start, each with its state: <code>configured</code>, <code>connecting</code>, <code>failed</code> or <code>stopped</code>. <code>status</code> shows the avatar's own session.</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c agents
+<span class="p">$ </span>slsh -c status</pre></div>
+
+        <h3 id="addr-order">Which address a client used</h3>
+        <p>Every client picks slgod's address in this order, and stops at the first that gives one:</p>
+        <ol>
+          <li><code>--addr HOST:PORT</code> on the command line (slbotd: <code>-addr</code>).</li>
+          <li><code>addr =</code> in slsh's config, or in slbotd.conf.</li>
+          <li><code>sl-host</code>, if it is on <code>$PATH</code>: the address it prints, with <code>:7807</code> added unless it names a port. The client tells it which profile it wants in <code>SLGO_AGENT</code>. If it fails, the client stops here.</li>
+          <li><code>localhost:7807</code>.</li>
+        </ol>
+        <p>slrun and slbench have no config file, so they skip step 2. To see what sl-host decides and why:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c 'set addr'
+<span class="p">$ </span>which sl-host
+<span class="p">$ </span>sl-host -v
+<span class="p">$ </span>sl-host -l
+<span class="p">$ </span>sl-host -v -a dev</pre></div>
+        <p><code>sl-host -v</code> prints the address, and explains on standard error which rule matched. <code>sl-host -l</code> lists every rule and marks each one that matches; the first <code>MATCH</code> wins. Add <code>-a</code> and the profile name to ask what a client using that profile would be told.</p>
+
+        <h3 id="c-versions">Versions</h3>
+        <p>Every program prints its build, and client and daemon should come from the same commit. The line names the release it follows, the date and the commit.</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh --version
+<span class="p">$ </span>slgod -version
+<span class="p">$ </span>slbotd -version</pre></div>
+
+        <h3 id="c-slbotd">slbotd</h3>
+        <p><code>slbotd --check</code> reads the config, prints what it means and exits without connecting. It shows the slgod address, the avatars, who is trusted, whether chat is on (and a <code>PROBLEM:</code> line if it is half set up), each backstory's size or <code>BROKEN:</code>, each program's path, and whether each avatar's profile loads. It checks profiles on the machine it runs on, so on a separate slbotd machine the profile lines report errors that do not matter.</p>
+        <div class="term" data-where="bot"><pre><span class="p">$ </span>slbotd --check</pre></div>
+        <p>In-world, send the avatar an IM:</p>
+        <dl>
+          <dt><code>:errors</code></dt><dd>The last 50 failures for that avatar, each shown like <code>3 hours ago: …</code>. Kept in memory only, so lost on restart. <code>:errors clear</code> empties it.</dd>
+          <dt><code>:status</code></dt><dd>Whether the avatar is attached, its position, and the commands running.</dd>
+          <dt><code>:agents</code></dt><dd>slgod's list, with <code>*</code> on the avatars this slbotd attends.</dd>
+          <dt><code>:chat</code></dt><dd>The model, its slots, the backstory and the conversations, or why the model is not answering.</dd>
+        </dl>
+        <p>A trusted resident's first message after an hour of quiet (<code>error-gap</code>) gets one line first, such as <code>(3 things have gone wrong since we last spoke -- say :errors)</code>.</p>
+
+        <div class="note warn"><p class="label">Careful</p><p>Logs and transcripts name avatars and hold what other residents said. Before you paste one anywhere public, replace every name, region and uuid. Never share a log made with <code>-log-secrets</code> or a trace made with <code>-trace-bodies</code>: they hold live session credentials.</p></div>
+      </section>
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="security.html">← Security</a> <a href="reference.html">Reference →</a></span>
+  </footer>
+</div>
+<script>
+(function () {
+  "use strict";
+  var page = document.getElementById("troubleshooting");
+  if (!page) return;
+  var flow = page.querySelector('[data-ts="flow"]');
+  if (!flow) return;
+  function part(name) { return flow.querySelector('[data-ts="' + name + '"]'); }
+
+  // Each question says where Yes and No lead: another question, or a
+  // result, which is a list of fault entries on this page.
+  var Q = {
+    start: { q: "Does slgod start and keep running?",
+      help: "Look at what slgod printed on the slgod machine, or in its <code>-log</code> file. When it is ready, the last line begins <code>serving gRPC on</code>.",
+      yes: "where", no: "r-slgod" },
+    where: { q: "Is slsh on the same machine as slgod?",
+      help: "Answer No if you run slsh (or slbotd) on a laptop or another computer.",
+      yes: "local", no: "remoteFirst" },
+    local: { q: "Does <code>slsh -c agents</code> work there?",
+      help: "It should list the avatars slgod holds. Any <code>slsh: …</code> error counts as No.",
+      yes: "avatar", no: "localErr" },
+    localErr: { q: "Does the error begin <code>slsh: cannot find the host slgod is on</code>?",
+      help: "That wording means sl-host was asked for the address and failed.",
+      yes: "r-slhost-local", no: "r-client" },
+    remoteFirst: { q: "On the slgod machine itself, does <code>slsh -c agents</code> work?",
+      help: "Trying there first separates a slgod problem from a network one. If slsh is not installed on the slgod machine, answer Yes.",
+      yes: "remote", no: "localErr" },
+    remote: { q: "On your computer, does <code>slsh -c agents</code> work?",
+      help: "Run it on the machine you want to use slsh from.",
+      yes: "avatar", no: "remoteErr" },
+    remoteErr: { q: "Does the error begin <code>slsh: cannot find the host slgod is on</code>?",
+      help: "That wording means sl-host was asked for the address and failed.",
+      yes: "r-slhost", no: "remoteNet" },
+    remoteNet: { q: "Does it say <code>connection refused</code>, or wait about 30 seconds and give up?",
+      help: "Both mean the connection never reached slgod. Anything else, such as a message about the secret, is No.",
+      yes: "r-network", no: "r-client-remote" },
+    avatar: { q: "Is the avatar logged in?",
+      help: "<code>slsh -c agents</code> lists every session with its state. Answer No if the avatar you want is missing, <code>failed</code> or <code>stopped</code>, or slsh says it cannot attach.",
+      yes: "which", no: "r-avatar" },
+    which: { q: "Is the trouble with slbotd?",
+      help: "Answer No for problems inside slsh, such as <code>how</code> or <code>viewer</code>.",
+      yes: "botRuns", no: "r-slsh" },
+    botRuns: { q: "Does slbotd start and keep running?",
+      help: "If it stops at once, it printed a line beginning <code>slbotd:</code>.",
+      yes: "botCmds", no: "r-bot-start" },
+    botCmds: { q: "Does the avatar answer a command you send it by IM, such as <code>:help</code>?",
+      help: "Send it as a one-to-one instant message from a resident on a <code>trusted</code> line.",
+      yes: "r-bot-chat", no: "r-bot-cmds" }
+  };
+  var R = {
+    "r-slgod": { t: "slgod stops, or holds no avatar",
+      h: "Match the last lines slgod printed against these.",
+      f: ["f-command-not-found", "f-port-busy", "f-slgod-secret", "f-no-profile", "f-profile-mode", "f-profile-content", "f-login-refused", "f-no-session", "f-log-dir", "f-terminal-closed"] },
+    "r-slhost-local": { t: "sl-host is answering for a local slgod",
+      h: "With slgod on the same machine you do not need sl-host at all.",
+      f: ["f-sl-host-no-file", "f-sl-host-no-match", "f-sl-host-no-rules"] },
+    "r-client": { t: "slsh cannot connect on the slgod machine",
+      h: "Match the error slsh printed.",
+      f: ["f-command-not-found", "f-no-secret", "f-secret-perms", "f-wrong-secret", "f-secret-by-address", "f-unreachable", "f-no-auth-tls", "f-old-client", "f-slsh-config"] },
+    "r-slhost": { t: "sl-host could not give an address",
+      h: "The line after <code>sl-host failed:</code> says which.",
+      f: ["f-sl-host-no-file", "f-sl-host-no-rules", "f-sl-host-no-match", "f-sl-host-network-down", "f-sl-host-empty"] },
+    "r-network": { t: "Your computer cannot reach slgod's port",
+      h: "Check the address, the port and the firewall, in that order.",
+      f: ["f-unreachable", "f-firewall", "f-sl-host-port", "f-sl-host-profile"] },
+    "r-client-remote": { t: "The connection reaches slgod and is refused",
+      h: "These are about the secret and the build. Match the error slsh printed.",
+      f: ["f-no-secret", "f-secret-perms", "f-wrong-secret", "f-secret-by-address", "f-old-client", "f-no-auth-tls"] },
+    "r-avatar": { t: "slgod is up, the avatar is not",
+      h: "slgod's log says why the session is down.",
+      f: ["f-no-sessions", "f-no-agent", "f-kicked", "f-second-slgod", "f-not-up-yet", "f-login-refused", "f-sl-host-profile"] },
+    "r-slsh": { t: "A problem inside slsh",
+      h: "These cover slsh's settings, <code>how</code> and the viewer.",
+      f: ["f-slsh-config", "f-how-no-model", "f-how-empty", "f-viewer-none", "f-viewer-linux", "f-mac-viewer"] },
+    "r-bot-start": { t: "slbotd stops at startup",
+      h: "Match the line beginning <code>slbotd:</code>.",
+      f: ["f-bot-config-dir", "f-bot-no-config", "f-bot-unknown-key", "f-bot-required", "f-bot-args", "f-log-dir", "f-sl-host-no-file"] },
+    "r-bot-cmds": { t: "slbotd runs and does not act on commands",
+      h: "Read slbotd's log; each line starts with the profile name.",
+      f: ["f-bot-cannot-host", "f-bot-not-trusted", "f-bot-busy", "f-bot-program", "f-kicked"] },
+    "r-bot-chat": { t: "Commands work, conversation does not",
+      h: "Send the avatar <code>:errors</code> and <code>:chat</code>, and read its log.",
+      f: ["f-chat-off", "f-chat-silent", "f-llama-unreachable", "f-llm-ollama", "f-llm-empty", "f-slot-save", "f-backstory"] }
+  };
+
+  var trail = [];   // the questions answered so far, for Back
+  var here = "start";
+
+  // In the one-file handbook ids carry the page's name in front.
+  function fault(id) {
+    var all = page.querySelectorAll("details.fault");
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].id === id || all[i].id === "troubleshooting--" + id) return all[i];
+    }
+    return null;
+  }
+
+  function openFault(el) {
+    var search = page.querySelector(".fault-tools input[type=search]");
+    if (search && search.value) {
+      search.value = "";
+      search.dispatchEvent(new Event("input"));
+    }
+    var on = page.querySelector('.fault-tools .chip[aria-pressed="true"]');
+    if (on) on.click();
+    el.hidden = false;
+    el.open = true;
+  }
+
+  function render() {
+    var step = part("step"), result = part("result");
+    part("trail").textContent = R[here] ? "Result" : "Question " + (trail.length + 1);
+    part("back").disabled = trail.length === 0;
+    if (R[here]) {
+      var r = R[here];
+      step.hidden = true;
+      result.hidden = false;
+      part("result-title").textContent = r.t;
+      part("result-help").innerHTML = r.h;
+      var ol = part("result-list");
+      ol.innerHTML = "";
+      r.f.forEach(function (id) {
+        var el = fault(id);
+        if (!el) return;
+        var li = document.createElement("li");
+        var a = document.createElement("a");
+        a.setAttribute("href", "#" + el.id);
+        var sym = el.querySelector(".sym");
+        a.innerHTML = sym ? sym.innerHTML : id;
+        a.addEventListener("click", function () { openFault(el); });
+        li.appendChild(a);
+        ol.appendChild(li);
+      });
+      return;
+    }
+    var q = Q[here];
+    step.hidden = false;
+    result.hidden = true;
+    part("question").innerHTML = q.q;
+    part("help").innerHTML = q.help;
+  }
+
+  function go(next) { trail.push(here); here = next; render(); }
+  part("yes").addEventListener("click", function () { go(Q[here].yes); });
+  part("no").addEventListener("click", function () { go(Q[here].no); });
+  part("back").addEventListener("click", function () {
+    if (trail.length) { here = trail.pop(); render(); }
+  });
+  part("restart").addEventListener("click", function () { trail = []; here = "start"; render(); });
+  render();
+})();
+</script>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

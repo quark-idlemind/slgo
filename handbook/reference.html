@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reference — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="reference">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Reference · files, flags, settings</p>
+    <h1>Reference<span class="caret">_</span></h1>
+    <p class="standfirst">Every file and the mode it must have, the flags that matter for each program, the environment variables, the ports, and the order in which a client picks slgod and the avatar. Type in the box to narrow every table at once.</p>
+    <div class="meta-row"><span class="pill old">existing users</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+      <div class="fault-tools" data-ref="tools">
+        <input type="search" id="ref-filter" data-ref="filter" placeholder="Filter every table: a flag, a path, a variable…" aria-label="Filter the tables on this page">
+        <span data-ref="count" class="pill" id="ref-count"></span>
+      </div>
+
+      <section id="files">
+        <h2>Files and paths</h2>
+        <p>The same paths on Linux and macOS: everything is under <code>~/.config</code> and <code>~/.local</code>, never <code>~/Library</code>. No program uses the macOS Keychain or a Linux secret store. Credentials are plain files, and the programs refuse them when other users could read them.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Path</th><th>What it is</th><th>Mode</th><th>Moved by</th><th>Written by</th></tr></thead>
+          <tbody>
+            <tr><td><code>~/.config/slgod/secret</code></td><td class="what">The shared secret. The same file on the slgod machine and every client machine. The first line that is not blank or a <code>#</code> comment is the secret. A client uses it when no file below is kept for the address it dials (<a href="#secret-order">order</a>).</td><td>600, dir 700. <strong>Refused</strong> otherwise</td><td>For slgod, <code>-secret FILE</code> or a <code>secret</code> in its <code>-config</code> directory. For clients, nothing: always <code>$HOME/.config/slgod</code>, whatever <code>XDG_CONFIG_HOME</code> says</td><td>you</td></tr>
+            <tr><td><code>~/.config/slgod/secret.HOST.PORT</code></td><td class="what">On a client machine: the secret of the one slgod this client reaches at <code>HOST:PORT</code>, for a slgod that keeps a secret of its own. <code>HOST</code> is written as dialled, in lower case; see <a href="#secret-order">how the name is made</a>. Most setups have none.</td><td>600, dir 700. <strong>Refused</strong> otherwise, not skipped</td><td>Nothing</td><td>you</td></tr>
+            <tr><td><code>~/.config/slgod/secret.HOST</code></td><td class="what">The same, for every port on <code>HOST</code>.</td><td>600, dir 700. <strong>Refused</strong> otherwise, not skipped</td><td>Nothing</td><td>you</td></tr>
+            <tr><td><code>DIR/secret</code></td><td class="what">On the slgod machine: the secret of a slgod started with <code>-config DIR</code>, when the file is there. Without it that slgod uses the shared secret.</td><td>600, dir 700. <strong>Refused</strong> otherwise</td><td><code>-secret FILE</code></td><td>you</td></tr>
+            <tr><td><code>~/.config/slgo/</code></td><td class="what">Profile directory, on the slgod machine. Also holds <code>slbotd.conf</code>.</td><td>700. <strong>Refused</strong> otherwise</td><td>slgod <code>-config</code>, else <code>SLGO_CONFIG_DIR</code>, else <code>$XDG_CONFIG_HOME/slgo</code></td><td>you</td></tr>
+            <tr><td><code>~/.config/slgo/&lt;profile&gt;</code></td><td class="what">One avatar's name and password (or its <code>$1$</code> digest, which is just as good for logging in). The file name is the profile name.</td><td>600. <strong>Refused</strong> otherwise</td><td>as the directory</td><td>you</td></tr>
+            <tr><td><code>~/.config/slgo/slbotd.conf</code></td><td class="what">slbotd's configuration. Holds no secret.</td><td>directory must be 700; the file may be readable</td><td><code>-config PATH</code>, <code>SLBOTD_CONFIG</code></td><td>you</td></tr>
+            <tr><td><code>~/.config/slgod/config</code></td><td class="what">slgod's machine identity (<code>mac</code>, <code>id0</code>), invented at random on first run. Not secret, but keep it: a new one makes the accounts look as if they moved to a new computer.</td><td>written 600, dir 700</td><td><code>-config</code>, else <code>SLGOD_CONFIG_DIR</code>, else <code>$XDG_CONFIG_HOME/slgod</code></td><td>slgod</td></tr>
+            <tr><td><code>~/.config/slgod/seats</code></td><td class="what">What each avatar was sitting on, restored after a reconnect.</td><td>600</td><td>as above</td><td>slgod</td></tr>
+            <tr><td><code>~/.config/slgod/viewer-cert.pem</code></td><td class="what">Certificate for the <code>-viewer</code> endpoint. The viewer has to trust it.</td><td>644 (public)</td><td><code>-viewer-cert FILE</code></td><td>slgod, when <code>-viewer</code> is used</td></tr>
+            <tr><td><code>~/.config/slgod/viewer-key.pem</code></td><td class="what">Its private key.</td><td>600</td><td><code>-viewer-key FILE</code></td><td>slgod</td></tr>
+            <tr><td><code>~/.config/slsh/config</code></td><td class="what">slsh settings, <code>key = value</code>. Holds no secret. A missing file is the same as an empty one.</td><td>not checked; created 644</td><td><code>SLSH_CONFIG_DIR</code>, else <code>$XDG_CONFIG_HOME/slsh</code></td><td>you, or <code>set</code></td></tr>
+            <tr><td><code>~/.config/slsh/how-hints.tsv</code></td><td class="what">Your own words for commands, for <code>how</code>. One <code>words&lt;TAB&gt;command</code> per line.</td><td>—</td><td>as slsh's config</td><td>you</td></tr>
+            <tr><td><code>~/.local/share/slgo/&lt;avatar&gt;.log</code></td><td class="what">slsh transcript, one file per avatar, such as <code>example-resident.log</code>. Every command, all output, all chat and IMs.</td><td>600, dir 700</td><td><code>log_dir</code> setting, else <code>$XDG_DATA_HOME/slgo</code></td><td>slsh</td></tr>
+            <tr><td><code>~/.config/sl-host</code></td><td class="what">sl-host's rules. A file, not a directory. On the client machine only.</td><td>not checked</td><td><code>SL_HOSTFILE</code>, else <code>RSSH_HOSTFILE</code> (not <code>XDG_CONFIG_HOME</code>)</td><td>you</td></tr>
+            <tr><td><code>~/.local/log/slgod.log</code></td><td class="what">Suggested place for slgod's <code>-log</code>. Without <code>-log</code>, slgod writes to standard error. Times of day only, no dates.</td><td>600; the directory must be 700 or it is <strong>refused</strong></td><td><code>-log FILE</code></td><td>slgod</td></tr>
+            <tr><td><code>~/.local/log/slbotd.log</code></td><td class="what">Suggested place for slbotd's <code>-log</code>. Names everyone who spoke to an avatar and, without <code>-q</code>, what they said.</td><td>600; directory 700 or <strong>refused</strong></td><td><code>-log PATH</code></td><td>slbotd</td></tr>
+            <tr><td><code>~/.local/state/slbotd/&lt;avatar&gt;/&lt;uuid&gt;.json</code></td><td class="what">slbotd's stored conversations, one per person. Kept until <code>:forget</code> or you delete them.</td><td>directories 700</td><td><code>chat-dir</code>, else <code>$XDG_STATE_HOME/slbotd</code></td><td>slbotd</td></tr>
+            <tr><td><code>-trace FILE</code></td><td class="what">slgod's packet trace. With <code>-trace-bodies</code> it holds session ids and everybody's chat and IMs.</td><td>600</td><td>—</td><td>slgod</td></tr>
+          </tbody>
+        </table></div>
+        <p>A quick way to set every mode on a machine that has all of them:</p>
+        <div class="term"><pre><span class="p">$ </span>chmod 700 ~/.config/slgod ~/.config/slgo ~/.local/log
+<span class="p">$ </span>chmod 600 ~/.config/slgod/secret ~/.config/slgo/example</pre></div>
+      </section>
+
+      <section id="slgod-flags">
+        <h2>slgod</h2>
+        <p><code>usage: slgod [-listen addr] [-log file] [-v] profile [profile...]</code>. Flags must come before the profile names: slgod stops reading flags at the first name. <code>-x</code> and <code>--x</code> both work.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Flag</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>-config DIR</code></td><td>—</td><td class="what">Keep profiles and slgod's own files (machine identity, seats, viewer certificate) in <code>DIR</code> instead of <code>~/.config/slgo</code> and <code>~/.config/slgod</code>. <code>DIR</code> must exist and be mode 700. If <code>DIR</code> holds a file called <code>secret</code>, that is this slgod's secret instead of the shared one. <a href="setups.html#second-slgod">A second slgod</a>.</td></tr>
+            <tr><td><code>-secret FILE</code></td><td><code>DIR/secret</code> with <code>-config DIR</code> if there is one, else <code>~/.config/slgod/secret</code></td><td class="what">The secret clients must prove. Same modes as the shared secret: file 600, directory 700. slgod logs <code>secret: PATH</code> at startup, and reads the file before any avatar logs in. Clients of a slgod with its own secret keep a copy <a href="#secret-order">under the address they dial</a>.</td></tr>
+            <tr><td><code>-listen ADDR</code></td><td><code>:7807</code></td><td class="what">Address for clients. The default is <strong>every interface</strong>. Use <code>127.0.0.1:7807</code> to take connections from this machine only.</td></tr>
+            <tr><td><code>-log FILE</code></td><td>stderr</td><td class="what">Append the log to FILE (600). Its directory must be 700.</td></tr>
+            <tr><td><code>-v</code></td><td>off</td><td class="what">Also log every grid message slgod has no handler for.</td></tr>
+            <tr><td><code>-start WHERE</code></td><td>—</td><td class="what">Override every profile's <code>start</code>: <code>last</code>, <code>home</code> or a region name.</td></tr>
+            <tr><td><code>-group G</code>, <code>-group PROFILE=G</code></td><td>—</td><td class="what">Group to act as, by name or uuid, overriding the profile. Repeatable.</td></tr>
+            <tr><td><code>-neighbours</code></td><td>off</td><td class="what">Hold neighbouring regions' circuits for profiles that do not say, for smoother border crossings.</td></tr>
+            <tr><td><code>-viewer ADDR</code></td><td>—</td><td class="what">Serve viewer logins over HTTPS here, so a real viewer can take a session over. Must include a port, e.g. <code>127.0.0.1:9000</code>.</td></tr>
+            <tr><td><code>-viewer-cert FILE</code>, <code>-viewer-key FILE</code></td><td>self-signed, in <code>~/.config/slgod</code></td><td class="what">Your own certificate for <code>-viewer</code>. Give both, and only with <code>-viewer</code>.</td></tr>
+            <tr><td><code>-no-auth</code></td><td>off</td><td class="what">No TLS and no secret. None of the shipped clients can connect to it. Do not use it.</td></tr>
+            <tr><td><code>-log-secrets</code></td><td>off</td><td class="what">Log session ids, circuit codes and capability URLs in full. Dangerous; for debugging only.</td></tr>
+            <tr><td><code>-trace FILE</code></td><td>—</td><td class="what">Write a packet trace (600).</td></tr>
+            <tr><td><code>-trace-messages A,B</code></td><td>all</td><td class="what">Trace only these messages.</td></tr>
+            <tr><td><code>-trace-bodies</code></td><td>off</td><td class="what">Trace full message bodies, including session ids and everybody's chat.</td></tr>
+            <tr><td><code>-version</code></td><td>—</td><td class="what">Print the build and exit.</td></tr>
+          </tbody>
+        </table></div>
+        <p>Stop slgod with Ctrl-C or SIGTERM: it logs every avatar out (within 30 s) and prints <code>done</code>. A restart is a fresh login for every avatar.</p>
+      </section>
+
+      <section id="slsh-flags">
+        <h2>slsh, slrun and slbench</h2>
+        <p>Options stop at the first word that is not an option. Anything after them is run as one command line, so <code>slsh ls -l</code> is the same as <code>slsh -c "ls -l"</code>. A one-shot run exits 1 if the command failed.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>slsh flag</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>--addr=HOST:PORT</code></td><td class="what">The slgod to attach to. Default: the <code>addr</code> setting, then sl-host, then <code>localhost:7807</code>.</td></tr>
+            <tr><td><code>-a</code>, <code>--agent=NAME</code></td><td class="what">The profile (avatar) to use. Default: <code>$SLGO_AGENT</code>, then the <code>agent</code> setting, then the daemon's default.</td></tr>
+            <tr><td><code>-c</code>, <code>--command=TEXT</code></td><td class="what">Run one command line and exit.</td></tr>
+            <tr><td><code>-f</code>, <code>--file=PATH</code></td><td class="what">Run the commands in a file and exit. Stops at the first line that fails.</td></tr>
+            <tr><td><code>-d</code>, <code>--direct</code></td><td class="what">Log in to Second Life without slgod, using a profile on this machine.</td></tr>
+            <tr><td><code>--first</code>, <code>--last</code></td><td class="what">Avatar name, for <code>--direct</code> only.</td></tr>
+            <tr><td><code>--start=WHERE</code></td><td class="what"><code>last</code>, <code>home</code> or a region, for <code>--direct</code>. Default <code>last</code>.</td></tr>
+            <tr><td><code>--chat</code></td><td class="what">Start in chat mode.</td></tr>
+            <tr><td><code>--escape=KEY</code></td><td class="what">The key that leaves chat mode: <code>ESC</code>, <code>^G</code> or one character.</td></tr>
+            <tr><td><code>-h</code>, <code>--help</code>, <code>--version</code></td><td class="what">Help, or the build.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>slrun / slbench flag</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>--addr</code>, <code>-a</code>/<code>--agent</code>, <code>--direct</code></td><td class="what">As slsh. They do not read slsh's <code>addr</code> setting: without <code>--addr</code> they ask sl-host, then use <code>localhost:7807</code>.</td></tr>
+            <tr><td><code>--backend HOST:PORT</code></td><td class="what">Talk to a <code>script.v1</code> gRPC service instead of Second Life, over an unauthenticated, unencrypted connection.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="sl-host-ref">
+        <h2>sl-host</h2>
+        <p>Runs on the client machine. Prints the address of the slgod machine for the network this machine is on now. <code>usage: sl-host [-v] [-l] [-a PROFILE]</code>. See <a href="sl-host.html">sl-host</a> for a walk-through.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Flag or variable</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>sl-host</code></td><td class="what">Print the address for the current network.</td></tr>
+            <tr><td><code>-a NAME</code></td><td class="what">Answer for this profile: rules kept for other profiles are not tried. Default: <code>$SLGO_AGENT</code>, else no profile.</td></tr>
+            <tr><td><code>-v</code></td><td class="what">Also explain, on standard error, which rule matched and why, ending <code>, for NAME</code> when a profile was asked about.</td></tr>
+            <tr><td><code>-l</code></td><td class="what">List every rule, marking each that matches with <code>MATCH</code> and each kept for other profiles with <code>other</code>, and exit. The first <code>MATCH</code> is the one used.</td></tr>
+            <tr><td><code>-version</code></td><td class="what">Print the build and exit.</td></tr>
+            <tr><td><code>SL_HOST</code>, <code>RSSH_HOST</code></td><td class="what">Print this instead and do not read the file. <code>-l</code> ignores it.</td></tr>
+            <tr><td><code>SL_HOSTFILE</code>, <code>RSSH_HOSTFILE</code></td><td class="what">Rules file, instead of <code>~/.config/sl-host</code>.</td></tr>
+            <tr><td><code>SLGO_AGENT</code></td><td class="what">The profile to answer for, when <code>-a</code> is not given. Clients set it for sl-host to the avatar they want, or remove it when they have none.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Rules file</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>&lt;network&gt; &lt;address&gt;[:&lt;port&gt;] [@profile…] [label…]</code></td><td class="what">One rule per line. <code>#</code> starts a comment; blank lines are ignored.</td></tr>
+            <tr><td>network</td><td class="what">A CIDR (<code>192.0.2.0/24</code>), short IPv4 (<code>0/0</code>, <code>10/8</code>, <code>192.168/16</code>) or one address. <code>0/0</code> matches IPv4 only; use <code>::/0</code> for IPv6.</td></tr>
+            <tr><td>address</td><td class="what">Printed as written, so a hostname works too. It may carry a port: <code>192.0.2.20:7808</code>, <code>[2001:db8::20]:7808</code>. The client adds <code>:7807</code> only when there is none. A port outside 1 to 65535 skips the line with a warning.</td></tr>
+            <tr><td>@profile</td><td class="what">Optional words right after the address, such as <code>@dev</code>: the rule is tried only for those profiles, and never when no profile is named. A rule with none is for every profile. A bare <code>@</code> skips the line with a warning.</td></tr>
+            <tr><td>order</td><td class="what">The first rule that matches any of this machine's addresses wins. Put a profile's rules above the general ones, and catch-alls last. Loopback and link-local addresses are ignored.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Exit</th><th>When</th></tr></thead>
+          <tbody>
+            <tr><td><code>0</code></td><td class="what">A rule matched, or <code>SL_HOST</code> was set. The address is on standard output.</td></tr>
+            <tr><td><code>1</code></td><td class="what">No rule matches this network, or this machine has no usable address.</td></tr>
+            <tr><td><code>2</code></td><td class="what">Usage error, rules file missing or unreadable, or no valid rule in it.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="slbotd-flags">
+        <h2>slbotd</h2>
+        <p>slbotd takes no arguments; the avatars are named in slbotd.conf. <code>-x</code> and <code>--x</code> both work. It listens on no port: you talk to it by instant message in Second Life.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Flag</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>-config PATH</code></td><td class="what">The config file. Default: <code>$SLBOTD_CONFIG</code>, then <code>slbotd.conf</code> in the profile directory.</td></tr>
+            <tr><td><code>-addr HOST:PORT</code></td><td class="what">The slgod to attach to. Overrides <code>addr</code> in the file.</td></tr>
+            <tr><td><code>-check</code></td><td class="what">Print what the config means, and any problems, then exit without connecting.</td></tr>
+            <tr><td><code>-log PATH</code></td><td class="what">Append the log to PATH (600). Its directory must be 700.</td></tr>
+            <tr><td><code>-q</code></td><td class="what">Leave conversation lines out of the log. Commands, offers and connection events are still logged.</td></tr>
+            <tr><td><code>-version</code></td><td class="what">Print the build and exit.</td></tr>
+          </tbody>
+        </table></div>
+        <p>The file is read once, at startup; change it and restart. Backstory files are the exception: they are read again on every turn. Stopping slbotd leaves every avatar logged in.</p>
+      </section>
+
+      <section id="environment">
+        <h2>Environment variables</h2>
+        <p>For one command, put <code>env NAME=value</code> in front of it, which is the same in every shell. For the rest of a terminal session it is <code>export NAME=value</code> in sh and zsh, and <code>setenv NAME value</code> in csh. <a href="platforms.html#shells">Shells</a> has the rest.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Variable</th><th>Read by</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>SLGO_AGENT</code></td><td>slsh, slrun, slbench, sl-host</td><td class="what">Which avatar (profile name). Beaten by <code>--agent</code>, beats <code>agent =</code>. slbotd sets it for the programs it runs. sl-host reads it as the profile to answer for, beaten by its <code>-a</code>; the clients set it for sl-host to the avatar they settled on, or remove it when there is none.</td></tr>
+            <tr><td><code>SLGO_CONFIG_DIR</code></td><td>slgod, slbotd, <code>--direct</code></td><td class="what">Profile directory, and where slbotd looks for slbotd.conf. slgod's <code>-config</code> overrides it.</td></tr>
+            <tr><td><code>SLGOD_CONFIG_DIR</code></td><td>slgod</td><td class="what">Directory for the machine identity, seats and viewer certificate. slgod's <code>-config</code> overrides it. It does <strong>not</strong> move the shared secret, which stays at <code>~/.config/slgod/secret</code>.</td></tr>
+            <tr><td><code>SLSH_CONFIG_DIR</code></td><td>slsh</td><td class="what">Directory for slsh's config and how-hints.tsv.</td></tr>
+            <tr><td><code>SLBOTD_CONFIG</code></td><td>slbotd</td><td class="what">Config file path, beaten by <code>-config</code>.</td></tr>
+            <tr><td><code>XDG_CONFIG_HOME</code></td><td>all</td><td class="what">Base for the <code>slgo</code>, <code>slgod</code> and <code>slsh</code> directories. It does <strong>not</strong> move the shared secret or sl-host's rules.</td></tr>
+            <tr><td><code>XDG_DATA_HOME</code></td><td>slsh</td><td class="what">Base for the transcript directory (<code>slgo</code>).</td></tr>
+            <tr><td><code>XDG_STATE_HOME</code></td><td>slbotd</td><td class="what">Base for the conversation store (<code>slbotd</code>).</td></tr>
+            <tr><td><code>SL_HOST</code>, <code>RSSH_HOST</code></td><td>sl-host</td><td class="what">The answer outright, for a one-off: <code>env SL_HOST=198.51.100.7 slsh</code>.</td></tr>
+            <tr><td><code>SL_HOSTFILE</code>, <code>RSSH_HOSTFILE</code></td><td>sl-host</td><td class="what">Path of the rules file.</td></tr>
+            <tr><td><code>NO_COLOR</code></td><td>slsh</td><td class="what">Any value turns colour off.</td></tr>
+            <tr><td><code>HOME</code></td><td>all</td><td class="what">Every default path starts here, including the secret's.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="ports">
+        <h2>Ports and connections</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Port</th><th>Who listens</th><th>Protocol</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>7807</code>/tcp</td><td>slgod</td><td>gRPC over TLS 1.3, plus a mutual handshake over the shared secret</td><td class="what">Change with <code>-listen</code>. Every interface by default. The certificate is new at every start and deliberately not checked; the secret is what proves each end. Clients ping every 20 s, so a vanished client is dropped in about half a minute.</td></tr>
+            <tr><td>the <code>-viewer</code> port, e.g. <code>9000</code>/tcp</td><td>slgod, only with <code>-viewer</code></td><td>HTTPS, TLS 1.2 or later</td><td class="what">Viewer logins. The viewer checks the certificate, so it must trust <code>viewer-cert.pem</code>. An empty host (<code>:9000</code>) listens on every interface.</td></tr>
+            <tr><td>UDP, chosen by the system</td><td>slgod, for a viewer that took a session</td><td>Second Life's UDP circuit, not encrypted</td><td class="what">No firewall rule can name it. For a viewer on another machine, bind <code>-viewer</code> to a WireGuard or Tailscale address.</td></tr>
+            <tr><td>llama-server's port (<code>8080</code> in these examples)</td><td>llama-server</td><td>HTTP, no authentication</td><td class="what">slbotd's <code>llm-url</code>, and optionally slsh's <code>how_url</code>. Keep it on loopback or a network you trust.</td></tr>
+            <tr><td><code>11434</code>/tcp</td><td>Ollama, if you use it</td><td>HTTP</td><td class="what">For slsh's <code>how</code> only. slbotd does not work with Ollama.</td></tr>
+            <tr><td>none</td><td>slbotd, slsh, sl-host</td><td>—</td><td class="what">They only make outgoing connections.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="address-order">
+        <h2>How a client finds slgod</h2>
+        <p>The first of these that gives an address is used. An address from step 1 or 2 is never second-guessed by sl-host.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Step</th><th>Source</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><code>--addr HOST:PORT</code></td><td class="what">slsh, slrun, slbench. slbotd spells it <code>-addr</code>.</td></tr>
+            <tr><td>2</td><td><code>addr =</code> in the config</td><td class="what">slsh's config (also spelled <code>server</code>), or slbotd.conf. slrun and slbench have no config file.</td></tr>
+            <tr><td>3</td><td><code>sl-host</code> on <code>$PATH</code></td><td class="what">sl-host's answer (its first word), with <code>:7807</code> added unless it names a port. The client passes the profile it wants in <code>SLGO_AGENT</code>. If sl-host is installed and fails, the client stops here with <code>cannot find the host slgod is on</code>.</td></tr>
+            <tr><td>4</td><td><code>localhost:7807</code></td><td class="what">Only when sl-host is not on <code>$PATH</code>.</td></tr>
+          </tbody>
+        </table></div>
+        <p>A service started by launchd or systemd may have a <code>PATH</code> without sl-host on it, and then goes straight to step 4. See <a href="troubleshooting.html#addr-order">troubleshooting</a> for checking what a client chose.</p>
+      </section>
+
+      <section id="secret-order">
+        <h2>Which secret is used</h2>
+        <p>One shared secret for every slgod is the usual case, and then none of this matters: every program uses <code>~/.config/slgod/secret</code>. The rest is for a slgod that keeps a secret of its own.</p>
+        <h3 id="secret-order-client">A client</h3>
+        <p>slsh, slrun, slbench and slbotd choose the secret by the address they are about to dial, however they came by it: <code>--addr</code>, <code>addr =</code>, sl-host, or the <code>localhost:7807</code> default. They take the first of these that exists, all in <code>~/.config/slgod/</code>:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Step</th><th>File</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><code>secret.HOST.PORT</code></td><td class="what">Kept for this host and port.</td></tr>
+            <tr><td>2</td><td><code>secret.HOST</code></td><td class="what">Kept for every port on this host.</td></tr>
+            <tr><td>3</td><td><code>secret</code></td><td class="what">The shared secret.</td></tr>
+          </tbody>
+        </table></div>
+        <p>A file at step 1 or 2 that exists but cannot be used (wrong mode, or empty) is an error. The client does not go on to the next one. When none of the three exists, the error names the shared secret and adds <code>(looked first for …)</code> with the other two paths.</p>
+        <p>How the name is made from the address:</p>
+        <ul>
+          <li>The host is written as the client dialled it, in lower case, with no brackets. <code>localhost:7808</code> and <code>127.0.0.1:7808</code> are different files, even when both reach the same slgod.</li>
+          <li>An IPv6 address has its colons turned into dots, because a colon is not safe in a file name on every filesystem.</li>
+          <li>A host containing <code>/</code> or <code>\</code> gets no file of its own; only the shared secret is looked for.</li>
+        </ul>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Address dialled</th><th>Looked for first</th><th>Then</th></tr></thead>
+          <tbody>
+            <tr><td><code>localhost:7807</code> (the default)</td><td><code>secret.localhost.7807</code></td><td><code>secret.localhost</code></td></tr>
+            <tr><td><code>127.0.0.1:7808</code></td><td><code>secret.127.0.0.1.7808</code></td><td><code>secret.127.0.0.1</code></td></tr>
+            <tr><td><code>192.0.2.20</code> from sl-host, <code>:7807</code> added</td><td><code>secret.192.0.2.20.7807</code></td><td><code>secret.192.0.2.20</code></td></tr>
+            <tr><td><code>Server.Example:7900</code></td><td><code>secret.server.example.7900</code></td><td><code>secret.server.example</code></td></tr>
+            <tr><td><code>[2001:db8::20]:7807</code></td><td><code>secret.2001.db8..20.7807</code></td><td><code>secret.2001.db8..20</code></td></tr>
+          </tbody>
+        </table></div>
+        <h3 id="secret-order-slgod">slgod</h3>
+        <ol>
+          <li><code>-secret FILE</code>.</li>
+          <li><code>DIR/secret</code>, when slgod was started with <code>-config DIR</code> and the file is there.</li>
+          <li><code>~/.config/slgod/secret</code>.</li>
+        </ol>
+        <p>slgod logs <code>secret: PATH</code> at startup, with the one it chose.</p>
+        <h3 id="secret-messages">Messages that name the file</h3>
+        <ul>
+          <li><code>login refused: … (the secret used was PATH)</code>: slgod did not accept the proof made with the secret in <code>PATH</code> (<a href="troubleshooting.html#f-wrong-secret">fix</a>).</li>
+          <li><code>slgod did not prove it knows the shared secret in PATH; refusing to talk to it</code>: whatever answered does not hold the secret in <code>PATH</code>.</li>
+          <li><code>(looked first for … and …)</code>, after a missing shared secret: no per-address file was there either (<a href="troubleshooting.html#f-no-secret">fix</a>).</li>
+        </ul>
+      </section>
+
+      <section id="avatar-order">
+        <h2>How a client picks the avatar</h2>
+        <p>The name is a <strong>profile name</strong> on the slgod machine, not the avatar's name. The client machine needs no profiles, except for <code>--direct</code>.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Step</th><th>Source</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><code>--agent NAME</code>, <code>-a NAME</code></td><td class="what">On the command line.</td></tr>
+            <tr><td>2</td><td><code>SLGO_AGENT</code></td><td class="what">In the environment.</td></tr>
+            <tr><td>3</td><td><code>agent =</code> in slsh's config</td><td class="what">Also spelled <code>profile</code>. Read at startup only.</td></tr>
+            <tr><td>4</td><td>the daemon's default</td><td class="what">The session slgod has held longest. <code>agents</code> marks it with <code>*</code>.</td></tr>
+          </tbody>
+        </table></div>
+        <p>slbotd does not use this order: it attends every <code>avatar</code> in its config, and a command that names none goes to the first one listed.</p>
+      </section>
+
+      <section id="profile-keys">
+        <h2>Profile file keys</h2>
+        <p><code>~/.config/slgo/&lt;profile&gt;</code>, on the slgod machine. <code>key = value</code> lines, <code>#</code> comments. An unknown key is an error.</p>
+        <div class="file"><div class="name">~/.config/slgo/example</div><pre>first           = Example
+last            = Resident
+password        = $1$&lt;the md5 of the password&gt;
+start           = last
+group           = Example Builders
+neighbours      = yes</pre></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>first</code>, <code>last</code></td><td class="what">The avatar's name. Both required. New-style accounts use <code>last = Resident</code>.</td></tr>
+            <tr><td><code>password</code> (<code>passwd</code>)</td><td class="what">Required. <code>$1$</code> plus the md5 of the password (make it with <code>slhash</code>), or plain text. Either is enough to log the account in.</td></tr>
+            <tr><td><code>start</code></td><td class="what"><code>last</code>, <code>home</code> or a region name.</td></tr>
+            <tr><td><code>group</code></td><td class="what">Group to act as, by name or uuid.</td></tr>
+            <tr><td><code>neighbours</code> (<code>neighbors</code>)</td><td class="what"><code>yes</code>/<code>no</code>. Hold neighbouring regions' circuits.</td></tr>
+            <tr><td><code>viewer_password</code></td><td class="what">The password a real viewer must give to take this session over through <code>-viewer</code>. Without it, the session cannot be handed over.</td></tr>
+            <tr><td><code>url</code> (<code>login_url</code>)</td><td class="what">Login server. The default is Second Life's main grid.</td></tr>
+            <tr><td><code>channel</code>, <code>version</code>, <code>mac</code>, <code>id0</code>, <code>platform</code>, <code>platform_version</code>, <code>platform_string</code>, <code>options</code></td><td class="what">Overrides for the login request, for an account that has to look like something in particular. Leave them out otherwise.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="slsh-settings">
+        <h2>slsh settings</h2>
+        <p>In <code>~/.config/slsh/config</code>, or with <code>set NAME VALUE</code> inside slsh, which also writes the file. <code>set</code> alone lists them all; <code>set NAME ""</code> clears one. An unknown name or a bad value in the file stops slsh from starting. A <code># comment</code> after a value becomes part of the value. <em>Startup</em> settings take effect from the next slsh.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>addr</code> (<code>server</code>)</td><td>empty</td><td class="what">Startup. The slgod to attach to, <code>HOST:PORT</code>. Empty: sl-host, then <code>localhost:7807</code>.</td></tr>
+            <tr><td><code>agent</code> (<code>profile</code>)</td><td>empty</td><td class="what">Startup. The avatar's profile name. Empty: the daemon's default.</td></tr>
+            <tr><td><code>escape</code> (<code>prefix</code>, <code>prefix_key</code>)</td><td><code>ESC</code></td><td class="what">Startup. The key that leaves chat mode.</td></tr>
+            <tr><td><code>log</code></td><td>on</td><td class="what">Keep a transcript.</td></tr>
+            <tr><td><code>log_dir</code></td><td>empty</td><td class="what">Transcript directory. Empty: <code>~/.local/share/slgo</code>.</td></tr>
+            <tr><td><code>viewer_app</code></td><td>macOS: <code>Firestorm-OpenSim</code>; Linux: empty</td><td class="what">The viewer application, for <code>{app}</code>.</td></tr>
+            <tr><td><code>viewer_grid</code></td><td>macOS: <code>slgod</code>; Linux: empty</td><td class="what">The grid's nickname in the viewer, for <code>{grid}</code>.</td></tr>
+            <tr><td><code>viewer_launch</code></td><td>macOS: <code>open -a {app} --args --grid {grid} --login {first} {last} {password}</code>; Linux: empty</td><td class="what">The command <code>viewer --launch</code> runs, on the slsh machine. Placeholders: <code>{app}</code> <code>{grid}</code> <code>{uri}</code> <code>{first}</code> <code>{last}</code> <code>{password}</code>. Must be set by hand on Linux.</td></tr>
+            <tr><td><code>viewer_running</code></td><td>macOS: <code>pgrep -f {app}.app/Contents</code>; Linux: empty</td><td class="what">Command that says whether a viewer is already running. Empty skips the check.</td></tr>
+            <tr><td><code>how_url</code></td><td>empty (no model)</td><td class="what">Model server for <code>how</code>, starting <code>http://</code> or <code>https://</code>. slsh adds <code>/v1/chat/completions</code>.</td></tr>
+            <tr><td><code>how_model</code></td><td>empty</td><td class="what">Model name. Ollama needs it; llama-server ignores it.</td></tr>
+            <tr><td><code>how_slot</code></td><td>empty</td><td class="what">llama-server slot number (0 or more).</td></tr>
+            <tr><td><code>how_timeout</code></td><td>empty (2m)</td><td class="what">How long a whole question may take, like <code>45s</code>.</td></tr>
+            <tr><td><code>how_extra</code></td><td>empty</td><td class="what">A JSON object added to every request, e.g. <code>{"reasoning_effort": "none"}</code>.</td></tr>
+            <tr><td><code>map_rows</code>, <code>map_span</code>, <code>map_ratio</code>, <code>map_level</code>, <code>map_friend_colour</code></td><td>see <code>man map</code></td><td class="what">How <code>map</code> draws. <code>map_ratio auto</code> measures the terminal font.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="slbotd-keys">
+        <h2>slbotd.conf keys</h2>
+        <p><code>key = value</code>, <code>#</code> comments to the end of the line, keys not case-sensitive; most also accept <code>_</code> for <code>-</code>. An unknown key stops slbotd. <code>avatar</code>, <code>trusted</code>, <code>program</code>, <code>alias</code> and <code>chat</code> add up when repeated; for the rest the last line wins. The model settings are explained on <a href="bot-llm.html">Bot + LLM</a>.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Key</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>avatar</code> (<code>agent</code>)</td><td>required</td><td class="what">A profile to attend. Repeatable. The first answers commands that name no avatar. The profile itself lives on the slgod machine.</td></tr>
+            <tr><td><code>trusted</code></td><td>required</td><td class="what">Who may send commands, by legacy name or (better) uuid. Repeatable.</td></tr>
+            <tr><td><code>addr</code></td><td>empty</td><td class="what">slgod's <code>HOST:PORT</code>. Empty: sl-host, then <code>localhost:7807</code>.</td></tr>
+            <tr><td><code>prefix</code></td><td><code>:</code></td><td class="what">What starts a command in an IM.</td></tr>
+            <tr><td><code>timeout</code></td><td><code>2m</code></td><td class="what">Limit on one command.</td></tr>
+            <tr><td><code>run-timeout</code></td><td><code>30m</code></td><td class="what">Limit on one run of a program.</td></tr>
+            <tr><td><code>jobs</code></td><td><code>4</code></td><td class="what">Commands one avatar runs at once.</td></tr>
+            <tr><td><code>reply-limit</code></td><td><code>8</code></td><td class="what">Most IMs in one command's answer.</td></tr>
+            <tr><td><code>accept-inventory</code></td><td><code>trusted</code></td><td class="what"><code>trusted</code>, <code>anyone</code> or <code>nobody</code>.</td></tr>
+            <tr><td><code>answer-strangers</code></td><td><code>no</code></td><td class="what">Tell an untrusted sender that their command was refused.</td></tr>
+            <tr><td><code>error-gap</code></td><td><code>1h</code></td><td class="what">Quiet time after which a trusted person gets the one-line trouble notice.</td></tr>
+            <tr><td><code>program</code></td><td><code>slbench</code>, <code>slrun</code></td><td class="what"><code>NAME PATH [ARGS…]</code>. Run directly, with no shell. Naming any program replaces the built-in pair.</td></tr>
+            <tr><td><code>alias</code></td><td><code>autobench</code>→<code>slbench</code>, <code>automate</code>→<code>slrun</code></td><td class="what"><code>alias = FROM TO</code>.</td></tr>
+            <tr><td><code>llm-url</code></td><td>empty (chat off)</td><td class="what">llama-server's base URL, without <code>/v1</code>. llama-server only.</td></tr>
+            <tr><td><code>chat</code></td><td>none</td><td class="what">Who the avatars talk with: a name, a uuid, <code>*</code>, or <code>!name</code> to refuse. Chat is on only with both this and <code>llm-url</code>.</td></tr>
+            <tr><td><code>llm-model</code></td><td>empty</td><td class="what">Passed through; llama-server ignores it.</td></tr>
+            <tr><td><code>llm-timeout</code></td><td><code>2m</code></td><td class="what">Limit on each call to the model.</td></tr>
+            <tr><td><code>backstory</code></td><td>none</td><td class="what"><code>AVATAR PATH</code>: a file, or a directory with <code>default.txt</code> and per-person files.</td></tr>
+            <tr><td><code>chat-jobs</code></td><td><code>2</code></td><td class="what">Conversations one avatar answers at once.</td></tr>
+            <tr><td><code>chat-context</code></td><td><code>1536</code></td><td class="what">Token budget for the prompt before older turns are summarised.</td></tr>
+            <tr><td><code>chat-keep</code></td><td><code>6</code></td><td class="what">Turns kept word for word through a summary.</td></tr>
+            <tr><td><code>chat-summary</code></td><td><code>200</code></td><td class="what">Token cap on the summary. Must be under half of <code>chat-context</code>.</td></tr>
+            <tr><td><code>chat-reply-limit</code></td><td><code>2</code></td><td class="what">Most IMs in one chat reply.</td></tr>
+            <tr><td><code>chat-max-tokens</code></td><td><code>160</code></td><td class="what">Longest reply, in tokens.</td></tr>
+            <tr><td><code>chat-temperature</code></td><td><code>0.8</code></td><td class="what">Sampling temperature.</td></tr>
+            <tr><td><code>chat-own</code></td><td><code>8</code></td><td class="what">How much two of this daemon's own avatars may say to each other (0: no limit).</td></tr>
+            <tr><td><code>chat-gap</code></td><td><code>1h</code></td><td class="what">Quiet time after which the model is told how long it has been.</td></tr>
+            <tr><td><code>chat-dir</code></td><td><code>~/.local/state/slbotd</code></td><td class="what">Where conversations are stored.</td></tr>
+            <tr><td><code>slot-save-path</code></td><td>empty</td><td class="what">llama-server's <code>--slot-save-path</code> as slbotd sees it, so <code>:forget</code> can delete saved state.</td></tr>
+            <tr><td><code>read-cps</code>, <code>type-cps</code></td><td><code>23.0</code>, <code>3.2</code></td><td class="what">Reading and typing speed, for human-like pacing. <code>type-cps = builder 1.5</code> sets one avatar.</td></tr>
+            <tr><td><code>pace-max</code></td><td><code>0</code> (off)</td><td class="what">Ceiling on the whole reading-and-typing wait.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="timings">
+        <h2>Timings and limits</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>What</th><th>Value</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>slgod login retries</td><td>5 s, 15 s, 30 s, 1 min, 2 min, then every 2 min</td><td class="what">For failures that may clear. A wrong password is not retried.</td></tr>
+            <tr><td>slgod reconnect after a drop</td><td>the same waits, indefinitely</td><td class="what">Not after a deliberate logout or being thrown off.</td></tr>
+            <tr><td>Client connect timeout</td><td>30 s</td><td class="what">slsh and slbotd.</td></tr>
+            <tr><td>Keepalive</td><td>ping every 20 s, drop after 10 s without answer</td><td class="what">Both ends.</td></tr>
+            <tr><td>Failed-secret throttle</td><td>after 3 failures from one address: 0.5, 1, 2, then 4 s delays</td><td class="what">Past a limit: <code>too many failed logins lately</code>. Forgotten after 15 min of quiet.</td></tr>
+            <tr><td>Graceful stop</td><td>30 s to log every avatar out</td><td class="what">On Ctrl-C or SIGTERM.</td></tr>
+            <tr><td>Shared secret length</td><td>at least 16 bytes, or a warning</td><td class="what"><code>openssl rand -hex 32</code> gives 64 characters.</td></tr>
+            <tr><td><code>slsh --direct</code> login</td><td>90 s</td><td class="what"></td></tr>
+            <tr><td><code>how</code> request</td><td>512 tokens, at most one retry</td><td class="what"><code>how_timeout</code> covers the whole question.</td></tr>
+            <tr><td>slbotd reconnect to slgod</td><td>2 s up to 2 min</td><td class="what">Checks every 30 s for an avatar someone logged out on purpose.</td></tr>
+            <tr><td>slbotd <code>:errors</code></td><td>last 50 per avatar</td><td class="what">In memory; lost on restart.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="troubleshooting.html">← Troubleshooting</a> <a href="index.html">Start here ↑</a></span>
+  </footer>
+</div>
+<script>
+(function () {
+  "use strict";
+  var page = document.getElementById("reference");
+  if (!page) return;
+  var input = page.querySelector('[data-ref="filter"]');
+  var count = page.querySelector('[data-ref="count"]');
+  if (!input) return;
+  var rows = Array.prototype.slice.call(page.querySelectorAll("main table tbody tr"));
+  var tables = Array.prototype.slice.call(page.querySelectorAll("main .tablewrap"));
+  var sections = Array.prototype.slice.call(page.querySelectorAll("main > section"));
+
+  function apply() {
+    var words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+    var shown = 0;
+    rows.forEach(function (tr) {
+      var text = tr.textContent.toLowerCase();
+      var ok = words.every(function (w) { return text.indexOf(w) >= 0; });
+      tr.hidden = !ok;
+      if (ok) shown++;
+    });
+    tables.forEach(function (t) {
+      t.hidden = words.length > 0 && !t.querySelector("tbody tr:not([hidden])");
+    });
+    sections.forEach(function (s) {
+      s.hidden = words.length > 0 && !s.querySelector(".tablewrap:not([hidden])");
+    });
+    if (count) count.textContent = words.length ? shown + " of " + rows.length + " rows" : rows.length + " rows";
+  }
+  input.addEventListener("input", apply);
+  apply();
+})();
+</script>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>slsh with a language model — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="how-llm">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Quick start · 10 minutes</p>
+    <h1>slsh with a language model<span class="caret">_</span></h1>
+    <p class="standfirst">slsh's <code>how</code> turns a question in your own words
+      into the command that does it. It works with nothing installed. With a
+      small language model beside it, it understands far more ways of asking.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">~10 min</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+
+      <section id="what">
+        <h2>What <code>how</code> does, with and without a model</h2>
+        <p>Type a question at the slsh prompt:</p>
+        <div class="term" data-where="laptop" data-where-label="at the slsh prompt"><pre><span class="p">/$ </span>how do I make where I am standing my home</pre></div>
+        <p><strong>Without a model</strong>, slsh looks the words up in an index of
+          every command's usage line, description and manual page. The index is
+          built into slsh, so it always matches the commands you have. You get the
+          best-matching commands with their descriptions and examples, under a first
+          line that begins <code>From the index alone</code> and says why no model
+          was asked. This needs nothing installed, and is often enough when your
+          words are close to the manual's.</p>
+        <p><strong>With a model</strong>, those best matches and the parts of their
+          pages that matched are shown to the model, which picks the one that does
+          the job. The answer is a line to type, the reason, and the sentence from
+          that command's manual page that says so. slsh checks the suggestion first:
+          it must be a real command with flags that command takes, and the quoted
+          sentence must really be in its page. A suggestion that fails is dropped.
+          <code>how</code> never runs anything.</p>
+        <p>A model is what makes questions phrased nothing like the manual work, such
+          as the one above.</p>
+      </section>
+
+      <section id="what-you-need">
+        <h2>What you need</h2>
+        <ul>
+          <li>A server that speaks the OpenAI-style <code>/v1/chat/completions</code>:
+            <strong>Ollama</strong> (the simplest) or llama.cpp's <strong>llama-server</strong>.</li>
+          <li>A small model, a few billion parameters. It can run on the same machine
+            as slsh. slsh's guide recommends <code>qwen3.5:4b</code> under Ollama.</li>
+          <li>No account and no API key. slsh sends no key, so hosted services that
+            need one (OpenAI, Anthropic and the like) cannot be used directly.</li>
+        </ul>
+        <p>The model runs wherever slsh can reach it over HTTP. That is usually the
+          computer you type on, whether or not slgod runs there too.</p>
+      </section>
+
+      <section id="ollama">
+        <h2>Set it up with Ollama</h2>
+        <ol class="steps" id="ollama-steps">
+          <li><div class="step-body"><h3>Install Ollama and start it</h3>
+            <p>Follow Ollama's own instructions for your system at
+              <a href="https://ollama.com/download">ollama.com/download</a>. On macOS
+              that is an application you open; on Linux it is usually installed as a
+              service that starts by itself. Either way it listens on
+              <code>127.0.0.1:11434</code>. These install steps are Ollama's, not
+              slgo's, and are not repeated here.</p></div></li>
+          <li><div class="step-body"><h3>Fetch the model</h3>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>ollama pull qwen3.5:4b</pre></div></div></li>
+          <li><div class="step-body"><h3>Tell slsh where it is</h3>
+            <p>At the slsh prompt. Each <code>set</code> is saved in
+              <code>~/.config/slsh/config</code>, so this is done once.</p>
+            <div class="term" data-where="laptop" data-where-label="at the slsh prompt"><pre><span class="p">/$ </span>set how_url http://127.0.0.1:11434
+<span class="p">/$ </span>set how_model qwen3.5:4b
+<span class="p">/$ </span>set how_extra '{"reasoning_effort": "none"}'</pre></div>
+            <p>The last line matters for Qwen3 and Qwen3.5 models, which otherwise
+              reason at length before answering. slsh's guide measured one taking
+              about 30 seconds with reasoning on against 0.3 seconds with it off, and
+              a smaller one returning nothing at all. The single quotes are needed:
+              this is slsh's own prompt, and it takes double quotes off a word the
+              way a shell does.</p></div></li>
+          <li><div class="step-body"><h3>Ask</h3>
+            <div class="term" data-where="laptop" data-where-label="at the slsh prompt"><pre><span class="p">/$ </span>how do I make where I am standing my home</pre></div>
+            <p>If the first line still begins <code>From the index alone</code>, the
+              words in brackets after it say why. See <a href="#problems">When it
+              does not use the model</a>.</p></div></li>
+        </ol>
+      </section>
+
+      <section id="settings">
+        <h2>The settings</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>how_url</code></td><td>empty: no model</td><td class="what">The server, with <code>http://</code> or <code>https://</code> in front. A trailing <code>/</code> or <code>/v1</code> is ignored.</td></tr>
+            <tr><td><code>how_model</code></td><td>empty</td><td class="what">The model's name. Ollama needs it; llama-server ignores it.</td></tr>
+            <tr><td><code>how_slot</code></td><td>empty: the server chooses</td><td class="what">A llama-server slot to use.</td></tr>
+            <tr><td><code>how_timeout</code></td><td>2 minutes</td><td class="what">How long to wait for the whole answer, like <code>45s</code>.</td></tr>
+            <tr><td><code>how_extra</code></td><td>empty</td><td class="what">A JSON object added to every request, for what one model needs.</td></tr>
+          </tbody>
+        </table></div>
+        <p><code>how -i</code> answers from the index alone for one question, and
+          <code>how -r</code> also shows what the model suggested and slsh dropped,
+          with the reason.</p>
+      </section>
+
+      <section id="llama-server">
+        <h2>Using llama-server instead</h2>
+        <p>Point <code>how_url</code> at it and leave <code>how_model</code> empty:</p>
+        <div class="term" data-where="laptop" data-where-label="at the slsh prompt"><pre><span class="p">/$ </span>set how_url http://127.0.0.1:8080</pre></div>
+        <p>Give each slot room. <code>how</code> keeps its prompt to about three
+          thousand tokens and allows the reply 512. llama-server divides
+          <code>-c</code> among its <code>-np</code> slots, so <code>-c 8192 -np 4</code>
+          leaves 2048 a slot, which is too small; 4096 a slot is enough. That figure
+          is worked out from measured prompt sizes, not measured itself.</p>
+        <div class="note">
+          <p class="label">Sharing slbotd's llama-server</p>
+          <p>It works, and saves running a second model, but slbotd uses every slot
+            the server has and keeps each conversation's context cached in its slot.
+            A <code>how</code> question overwrites whichever slot it lands in, and
+            slbotd's next reply there starts cold: seconds instead of a fraction of
+            one, by slbotd's own measurements. A separate small model under Ollama
+            avoids that. Setting up llama-server itself is covered on
+            <a href="bot-llm.html">Bot + LLM</a>.</p>
+        </div>
+      </section>
+
+      <section id="privacy">
+        <h2>What is sent to the model</h2>
+        <p>Only the question as you typed it, and excerpts from slsh's own manual
+          pages. No avatar name, region, inventory, chat or settings. The request goes
+          over plain HTTP with no authentication, so keep the model on the same
+          machine or reach it through a tunnel; see <a href="security.html">Security</a>.</p>
+      </section>
+
+      <section id="problems">
+        <h2>When it does not use the model</h2>
+        <p>The first line of the answer says why, in brackets after
+          <code>From the index alone</code>.</p>
+        <dl>
+          <dt><code>how_url is not set</code></dt>
+          <dd>No model is configured. That is the default (<a href="troubleshooting.html#f-how-no-model">more</a>); follow <a href="#ollama">the steps above</a>.</dd>
+          <dt>the server did not answer, or timed out</dt>
+          <dd>Check the server is running and the address is right: open
+            <code>http://127.0.0.1:11434</code> in a browser for Ollama. A first
+            question after starting Ollama can be slow while the model loads.</dd>
+          <dt>slsh will not start after <code>set how_url</code> or <code>set how_extra</code></dt>
+          <dd>The value in the config file is not one slsh accepts: an address without
+            <code>http://</code>, or <code>how_extra</code> that is not a JSON object.
+            The error names the line. See <a href="troubleshooting.html#f-slsh-config">Troubleshooting</a>.</dd>
+        </dl>
+        <p>More, with exact messages: <a href="troubleshooting.html">Troubleshooting</a>,
+          filtered by <em>slsh</em>.</p>
+      </section>
+
+      <section id="next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="quickstart-local.html"><span class="k">Quick start</span><span class="t">Everything on one machine</span><span class="d">If slsh is not running yet.</span></a>
+          <a class="card" href="bot-llm.html"><span class="k">Quick start</span><span class="t">slbotd with a language model</span><span class="d">A bot that holds conversations, through llama-server.</span></a>
+          <a class="card" href="security.html"><span class="k">Before you open a port</span><span class="t">Security</span><span class="d">Model servers have no authentication of their own.</span></a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="bot-llm.html">← Bot + LLM</a> <a href="sl-host.html">sl-host →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

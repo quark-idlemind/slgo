@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Everything on one machine — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="quickstart-local">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Quick start · one machine</p>
+    <h1>Everything on one machine<span class="caret">_</span></h1>
+    <p class="standfirst">Build slgo, give slgod an avatar to hold, and drive that avatar from slsh, all on the computer in front of you. At the end your avatar stays logged in while you come and go.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill time">~20 min</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+      <section id="overview">
+        <h2>What you are setting up</h2>
+        <p><code>slgod</code> is a daemon. It logs your avatar in to Second Life and keeps it logged in. <code>slsh</code> is a shell that attaches to slgod, lets you look around and act, and leaves again. Quitting slsh does not log the avatar out.</p>
+        <p>On one machine you need three things besides the programs:</p>
+        <ul>
+          <li>a <strong>profile</strong>: one small file per avatar, holding its name and password, which slgod reads;</li>
+          <li>a <strong>shared secret</strong>: one file that slgod and every client read, so they can prove to each other who they are;</li>
+          <li><strong>no sl-host</strong>. That helper is for a client whose slgod is on another machine. Installed here by accident, it stops slsh from finding slgod. Step 2 covers it.</li>
+        </ul>
+        <p>Everything lives under <code>~/.config</code> on Linux and on macOS alike. slgo does not use <code>~/Library</code>, the macOS Keychain or a Linux keyring. The files are plain text, protected by their permissions.</p>
+      </section>
+
+      <section id="prerequisites">
+        <h2>Before you start</h2>
+        <dl>
+          <dt>Go 1.26.1 or newer</dt>
+          <dd>The version comes from <code>go.mod</code>. With an older Go, the default setting <code>GOTOOLCHAIN=auto</code> downloads 1.26.1 for you. If you have set <code>GOTOOLCHAIN=local</code>, the build refuses instead. (That is Go's standard behaviour, not something slgo does.)</dd>
+          <dt>git</dt>
+          <dd>To fetch the source. Build inside the git checkout: that is how each program's <code>--version</code> learns which commit it came from.</dd>
+          <dt>openssl</dt>
+          <dd>Only to make the shared secret. Any tool that prints 32 random bytes as hex will do.</dd>
+          <dt>A Second Life account</dt>
+          <dd>Its name and password. The examples use the avatar <em>Example Resident</em> and the profile name <code>example</code>; put your own in their place.</dd>
+        </dl>
+        <p>There is no C compiler to install: slgo is pure Go, with no cgo. Windows is not supported; slsh does not build there.</p>
+        <div class="os-pair">
+          <div class="term" data-os-only="linux" data-where="laptop" data-where-label="Linux · check your Go"><pre><span class="p">$ </span>go version
+<span class="c"># Distribution packages are often older than 1.26.1. If so, get Go from https://go.dev/dl/</span></pre></div>
+          <div class="term" data-os-only="mac" data-where="laptop" data-where-label="macOS · check your Go"><pre><span class="p">$ </span>go version
+<span class="c"># No Go yet? Use the installer from https://go.dev/dl/, or: brew install go</span></pre></div>
+        </div>
+      </section>
+
+      <section id="steps">
+        <h2>The steps</h2>
+        <ol class="steps" id="local-steps">
+          <li><div class="step-body">
+            <h3>Get the source and build</h3>
+            <p>Install only the three programs this setup uses: the daemon, the shell, and <code>slhash</code>, which turns a password into the form a profile stores.</p>
+            <div class="term"><pre><span class="p">$ </span>git clone https://github.com/quark-idlemind/slgo.git
+<span class="p">$ </span>cd slgo
+<span class="p">$ </span>go install ./cmd/slgod ./cmd/slsh ./cmd/slhash</pre></div>
+            <p><code>go install</code> puts the programs in the directory <code>go env GOBIN</code> prints, or, when that is empty, in the <code>bin</code> directory under the one <code>go env GOPATH</code> prints. That is usually <code>~/go/bin</code>, and it has to be on your <code>PATH</code>. The line that puts it there goes in your shell's start-up file, which depends on the shell and not on the system: macOS starts new accounts in zsh, and many Linux systems start them in bash, one of the sh family, but either may run any of the three.</p>
+            <div class="sh-set">
+              <div class="term" data-sh-only="sh" data-where="laptop" data-where-label="sh or bash · on your computer"><pre><span class="p">$ </span>echo 'export PATH="$PATH:$HOME/go/bin"' &gt;&gt; ~/.profile
+<span class="p">$ </span>. ~/.profile
+<span class="p">$ </span>slsh --version</pre></div>
+              <div class="term" data-sh-only="zsh" data-where="laptop" data-where-label="zsh · on your computer"><pre><span class="p">$ </span>echo 'export PATH="$PATH:$HOME/go/bin"' &gt;&gt; ~/.zshrc
+<span class="p">$ </span>. ~/.zshrc
+<span class="p">$ </span>slsh --version</pre></div>
+              <div class="term" data-sh-only="csh" data-where="laptop" data-where-label="csh or tcsh · on your computer"><pre><span class="p">$ </span>echo 'set path = ( $path ~/go/bin )' &gt;&gt; ~/.cshrc
+<span class="p">$ </span>source ~/.cshrc
+<span class="p">$ </span>slsh --version</pre></div>
+            </div>
+            <p data-sh-only="sh">bash reads <code>~/.profile</code> only when <code>~/.bash_profile</code> does not exist, and a terminal that starts bash as a non-login shell reads <code>~/.bashrc</code> instead. If either of those is the file your bash reads, put the line there.</p>
+            <p data-sh-only="csh">tcsh reads <code>~/.tcshrc</code> in place of <code>~/.cshrc</code> when there is one; if you have a <code>~/.tcshrc</code>, put the line there and <code>source</code> that.</p>
+            <p>If you have set <code>GOBIN</code> or <code>GOPATH</code>, use that directory in place of <code>~/go/bin</code>. <code>slsh --version</code> prints one line naming the build and the commit. If the shell says it cannot find <code>slsh</code>, the directory was already on your <code>PATH</code> before the programs arrived and the shell has not looked again: in csh or zsh run <code>rehash</code>, in sh or bash <code>hash -r</code>, or open a new terminal. Do the same whenever you install or remove one of these programs later.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Make sure sl-host is not installed</h3>
+            <p>The README's shortcut, <code>go install ./cmd/...</code>, installs every program here, and <code>sl-host</code> is one of them. Once sl-host is on your <code>PATH</code>, slsh stops assuming slgod is on this machine and asks sl-host instead. With no rules file for sl-host to read, every slsh then stops at once with:</p>
+            <div class="term"><pre><span class="o">slsh: cannot find the host slgod is on: sl-host failed: exit status 2: sl-host: cannot read ~/.config/sl-host
+	--addr HOST:PORT overrides</span></pre></div>
+            <p>Check, and remove it if it is there:</p>
+            <div class="term"><pre><span class="p">$ </span>which sl-host
+<span class="c"># Prints a path, such as /home/you/go/bin/sl-host: remove that file.</span>
+<span class="c"># Prints nothing, or says it is not found: you are fine, and done here.</span>
+<span class="p">$ </span>rm ~/go/bin/sl-host
+<span class="c"># or whichever path which printed</span></pre></div>
+            <p>After removing it, run <code>rehash</code> in csh or zsh, or <code>hash -r</code> in sh or bash, so the shell forgets where it was.</p>
+            <div class="note"><p class="label">Note</p><p>If you would rather keep sl-host, the other ways out are to put <code>addr = localhost:7807</code> in <code>~/.config/slsh/config</code>, or to give sl-host a rules file. Removing it is the simplest, and <a href="sl-host.html">the sl-host page</a> explains when you do want it.</p></div>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Write a profile for your avatar</h3>
+            <p>A profile is a file in <code>~/.config/slgo</code>, and its file name is the profile's name. It looks like this:</p>
+            <div class="file"><div class="name">~/.config/slgo/example</div><pre>first    = Example
+last     = Resident
+password = $1$<span class="c">&lt;the md5 of the password, from slhash&gt;</span>
+start    = last</pre></div>
+            <p>Accounts made in recent years have the last name <code>Resident</code>. <code>start</code> is where the avatar arrives: <code>last</code>, <code>home</code>, or a region name.</p>
+            <p>The password line holds the password's md5 digest, written <code>$1$</code> and hex. <code>slhash</code> makes it and asks for the password with echo off, so the password lands in neither your screen nor your shell history. These make the directory and write the whole file, private from the start:</p>
+            <div class="term"><pre><span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgo)
+<span class="p">$ </span>(umask 077; printf 'first = Example\nlast = Resident\nstart = last\npassword = %s\n' "`slhash`" &gt; ~/.config/slgo/example)
+<span class="p">$ </span>chmod 700 ~/.config/slgo; chmod 600 ~/.config/slgo/example</pre></div>
+            <p>slhash prints its <code>Password:</code> prompt straight to the terminal, so it still asks you even though its output goes into the file.</p>
+            <div class="note warn"><p class="label">Security</p><p>The digest is enough to log the account in. It keeps your plain password from being reused on other sites; it does not protect the Second Life account. Treat the profile like the password itself. slgod refuses a profile directory that group or others can open, and a profile file they can read, which is what the two <code>chmod</code> commands are for.</p></div>
+            <p>Other settings (<code>group</code>, <code>neighbours</code>, <code>viewer_password</code>) are in the <a href="reference.html">reference</a>. An unknown key stops the profile from loading, so check spelling.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Make the shared secret</h3>
+            <p>slgod and every client prove themselves to each other with one secret, in one file. Make it <strong>before</strong> you start slgod:</p>
+            <div class="term"><pre><span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgod; openssl rand -hex 32 &gt; ~/.config/slgod/secret)</pre></div>
+            <p>That is the command slgod prints when the file is missing, with your home directory written out in place of <code>~</code>. The directory must be mode 700 and the file 600; anything looser is refused. The path is always <code>~/.config/slgod/secret</code>: unlike the other files, no environment variable moves it, not even <code>XDG_CONFIG_HOME</code>.</p>
+            <div class="note"><p class="label">Why before</p><p>slgod reads the secret as it starts, before any avatar logs in, and stops at once if it is missing. Nothing starts until it is there.</p></div>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Start slgod</h3>
+            <p>Use a terminal you can leave open. Options go <em>before</em> the profile names; <code>slgod example -v</code> would treat <code>-v</code> as a second profile.</p>
+            <div class="term"><pre><span class="p">$ </span>slgod -listen 127.0.0.1:7807 example</pre></div>
+            <p><code>-listen 127.0.0.1:7807</code> keeps slgod to this machine. Without it, slgod listens on port 7807 on <strong>every</strong> network interface, which you only want when other machines will connect (see <a href="quickstart-remote.html">the remote quick start</a>).</p>
+            <p>slgod logs to the terminal. For each profile it says <code>example: logging in...</code>, then a line naming the avatar and the region it arrived in. The line to wait for begins <code>serving gRPC on 127.0.0.1:7807</code>: from then on clients can connect. The log shows the time of day and no date.</p>
+            <p>If a login fails for a reason that may pass (the grid is slow, the network blipped), slgod says <code>not up yet</code> and keeps trying on its own. A wrong name or password gives <code>NOT hosted</code> instead; fix the profile and start again.</p>
+            <div class="note warn"><p class="label">Careful</p><p>Hold each avatar in only one slgod. One slgod normally holds every avatar you use: name them all when you start it. A second slgod started for a profile the first already holds logs that avatar in again, which ends the first one's session, and then fails to get port 7807, so both end up without it. A second daemon with its own accounts and port is fine; see <a href="setups.html#second-slgod">A second slgod beside the first</a>.</p></div>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Attach with slsh</h3>
+            <p>In a second terminal:</p>
+            <div class="term"><pre><span class="p">$ </span>slsh</pre></div>
+            <p>With no <code>--addr</code>, no <code>addr =</code> setting and no sl-host, slsh connects to <code>localhost:7807</code>. It prints a banner that names the avatar, the region, and the address it came through, and then a prompt. If it prints an error instead, look it up in <a href="troubleshooting.html">troubleshooting</a>.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Try the first ten commands</h3>
+            <p>These are safe to run anywhere. None of them changes anything in the world.</p>
+            <div class="tablewrap"><table>
+              <thead><tr><th>Type</th><th>What it does</th></tr></thead>
+              <tbody>
+                <tr><td><code>where</code></td><td class="what">The region, your position, and the group you are acting as.</td></tr>
+                <tr><td><code>who</code></td><td class="what">Avatars in the region, nearest first.</td></tr>
+                <tr><td><code>agents</code></td><td class="what">The sessions slgod holds. <code>*</code> marks the default and <code>&lt;- this shell</code> marks yours.</td></tr>
+                <tr><td><code>help</code></td><td class="what">Commands by group. Then <code>help inventory</code> for one group, <code>man ls</code> for a full page, <code>ls --help</code> for the flags.</td></tr>
+                <tr><td><code>cd Objects</code></td><td class="what">Inventory is a filesystem. The prompt becomes <code>/Objects$</code>.</td></tr>
+                <tr><td><code>ls -l</code></td><td class="what">What is in the folder you are in.</td></tr>
+                <tr><td><code>chat</code></td><td class="what">Chat mode: the prompt becomes <code>Local&gt;</code>, and what you type is said aloud. Press <kbd>Esc</kbd> to come back.</td></tr>
+                <tr><td><code>waiting</code></td><td class="what">Offers, dialogs and teleports waiting for an answer. The prompt shows a count, like <code>(2) /$</code>, when there are some.</td></tr>
+                <tr><td><code>how do I make where I am standing my home</code></td><td class="what">Finds the command for a job in your own words. It never runs anything. It works without any set-up, and understands far more ways of asking with a language model beside it: <a href="how-llm.html">slsh with a language model</a>.</td></tr>
+                <tr><td><code>set</code></td><td class="what">Lists slsh's settings. <code>set NAME VALUE</code> changes one and saves it.</td></tr>
+              </tbody>
+            </table></div>
+            <p>Then leave with <code>quit</code>, <code>exit</code>, or <kbd>Ctrl</kbd>+<kbd>D</kbd> on an empty line. <strong>The avatar stays logged in.</strong> Run <code>slsh</code> again and you are back at once, with no login wait.</p>
+            <p>For one command without the prompt, use <code>-c</code>: <code>slsh -c "ls -l /Objects"</code>. <code>doc/slsh-guide.html</code> in the source tree is the full slsh guide.</p>
+          </div></li>
+        </ol>
+      </section>
+
+      <section id="stop-restart">
+        <h2>Stopping and restarting</h2>
+        <p><strong>To stop slgod</strong>, press <kbd>Ctrl</kbd>+<kbd>C</kbd> in its terminal (or send it SIGTERM). It logs <code>logging out...</code>, logs every avatar out, and logs <code>done</code>. That can take up to 30 seconds.</p>
+        <p><strong>To restart</strong>, stop it and start it again. Every avatar logs in afresh, which takes a few seconds each. slgod keeps a made-up machine identity in <code>~/.config/slgod/config</code>, written on its first run, so each restart looks to Linden Lab like the same computer. Leave that file alone.</p>
+        <p><strong>To log one avatar out</strong> and keep slgod running, use <code>logout example</code> in slsh. slgod remembers that you did it on purpose and will not bring the avatar back until you run <code>login example</code>.</p>
+        <p><strong>Viewers and slgod</strong> can each take the avatar from the other, and which one ends up with it depends on who logs in last:</p>
+        <ul>
+          <li><strong>A viewer logs in while slgod holds the avatar.</strong> The grid ends slgod's session. slgod takes that as your decision and stays logged out: it does not take the avatar back from the viewer. The one exception is a region restart, which puts everyone out; slgod comes back once the region does.</li>
+          <li><strong>slgod starts, or you run <code>login example</code>, while a viewer has the avatar.</strong> slgod logs in, and the viewer is the one put out.</li>
+        </ul>
+        <p>So after using a viewer, <code>login example</code> in slsh brings the avatar back to slgod. This is how slgod's code decides; it is described from the code rather than watched on the grid. To hand a session to a viewer without logging out at all, see <a href="setups.html#viewer">Letting a viewer take a session</a>.</p>
+        <p>If the grid connection drops on its own (a region restart, a network outage), slgod reconnects by itself and keeps trying for as long as it takes.</p>
+        <div class="note warn"><p class="label">Careful</p><p>Closing the terminal slgod runs in stops it without logging the avatar out. slgod handles only interrupt and terminate; the hang-up a closing terminal sends is not one of them. (This is read from the code, not watched.) To keep slgod running after you close the window, start it inside <code>tmux</code> or <code>screen</code>, or run it as a service. <a href="setups.html">Setups</a> and <a href="platforms.html">Linux &amp; macOS</a> cover services.</p></div>
+        <p>To write the log to a file instead of the terminal, give <code>-log</code> a file in a directory only you can open:</p>
+        <div class="term"><pre><span class="p">$ </span>mkdir -p ~/.local/log &amp;&amp; chmod 700 ~/.local/log
+<span class="p">$ </span>slgod -listen 127.0.0.1:7807 -log ~/.local/log/slgod.log example</pre></div>
+      </section>
+
+      <section id="what-you-have">
+        <h2>What you now have</h2>
+        <ul>
+          <li><code>slgod</code>, <code>slsh</code> and <code>slhash</code> on your <code>PATH</code>, and no <code>sl-host</code>.</li>
+          <li>A profile, <code>~/.config/slgo/example</code>, mode 600 in a directory of mode 700.</li>
+          <li>A shared secret, <code>~/.config/slgod/secret</code>, that slgod and slsh both read.</li>
+          <li>slgod listening on <code>127.0.0.1:7807</code> only, holding your avatar in world.</li>
+          <li>slsh, which attaches in an instant and leaves the avatar where it is when you quit.</li>
+        </ul>
+      </section>
+
+      <section id="where-next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="quickstart-remote.html"><span class="k">Quick start</span><span class="t">slgod on a server</span><span class="d">Move slgod to a machine that is always on, and keep using slsh from this one.</span></a>
+          <a class="card" href="quickstart-bot.html"><span class="k">Quick start</span><span class="t">Adding slbotd</span><span class="d">Run a bot beside slgod that answers people in world.</span></a>
+          <a class="card" href="security.html"><span class="k">Guide</span><span class="t">Security</span><span class="d">What each file protects, and what to keep private.</span></a>
+          <a class="card" href="troubleshooting.html"><span class="k">Help</span><span class="t">Troubleshooting</span><span class="d">Paste an error message and find the fix.</span></a>
+        </div>
+      </section>
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="index.html">← Start here</a> <a href="quickstart-remote.html">Remote slgod →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

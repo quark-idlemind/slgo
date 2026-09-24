@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Setups — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="setups">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Recipes · for existing users</p>
+    <h1>Setups<span class="caret">_</span></h1>
+    <p class="standfirst">Recipes for what comes after the quick starts: keeping slgod running, holding several avatars, moving it, handing a session to a viewer, and upgrading without surprises. Each one starts with when you would want it.</p>
+    <div class="meta-row"><span class="pill old">existing users</span><span class="pill time">pick what you need</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+      <section id="service">
+        <h2>Running slgod as a service</h2>
+        <p><strong>When you want this:</strong> slgod should keep its avatars logged in for days, start when the machine does, and not depend on a terminal staying open.</p>
+        <p>The repository ships no service files. Replace <code>example</code> with your profile names, and the path to slgod if <code>go install</code> put it somewhere other than <code>~/go/bin</code>.</p>
+        <ul>
+          <li><strong>The systemd unit was run.</strong> Checked on Ubuntu 24.04 with systemd 255, September 2026: <code>systemd-analyze --user verify</code> passed, and every command below it did what it says, with slgod logging its avatar out and in each time.</li>
+          <li><strong>The launchd plist has not been tested here.</strong> It is written from general knowledge of launchd and from what slgod does on start and stop. Read it before you use it.</li>
+        </ul>
+        <p>Two things to settle first:</p>
+        <ul>
+          <li>Set up the shared secret before the first start. slgod reads it before it logs any avatar in, and stops if it is missing or its modes are wrong.</li>
+          <li>Make the log directory: <code>mkdir -p ~/.local/log &amp;&amp; chmod 700 ~/.local/log</code>. slgod refuses a log directory other users can enter.</li>
+        </ul>
+        <p>The OS picker in the top bar chooses which one you see.</p>
+        <div class="os-pair">
+          <div class="file" data-os-only="linux"><div class="name">~/.config/systemd/user/slgod.service (Linux, checked on Ubuntu 24.04)</div><pre>[Unit]
+Description=slgod
+
+[Service]
+ExecStart=%h/go/bin/slgod -listen 127.0.0.1:7807 -log %h/.local/log/slgod.log example
+Restart=on-failure
+RestartSec=60
+TimeoutStopSec=45
+
+[Install]
+WantedBy=default.target</pre></div>
+          <div class="file" data-os-only="mac"><div class="name">~/Library/LaunchAgents/local.slgod.plist (macOS, untested template)</div><pre>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"&gt;
+&lt;plist version="1.0"&gt;
+&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;             &lt;string&gt;local.slgod&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;
+  &lt;array&gt;
+    &lt;string&gt;/Users/you/go/bin/slgod&lt;/string&gt;
+    &lt;string&gt;-listen&lt;/string&gt;  &lt;string&gt;127.0.0.1:7807&lt;/string&gt;
+    &lt;string&gt;-log&lt;/string&gt;     &lt;string&gt;/Users/you/.local/log/slgod.log&lt;/string&gt;
+    &lt;string&gt;example&lt;/string&gt;
+  &lt;/array&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;         &lt;true/&gt;
+  &lt;key&gt;KeepAlive&lt;/key&gt;
+  &lt;dict&gt;&lt;key&gt;SuccessfulExit&lt;/key&gt;&lt;false/&gt;&lt;/dict&gt;
+  &lt;key&gt;ThrottleInterval&lt;/key&gt;  &lt;integer&gt;300&lt;/integer&gt;
+  &lt;key&gt;ExitTimeOut&lt;/key&gt;       &lt;integer&gt;45&lt;/integer&gt;
+  &lt;key&gt;StandardOutPath&lt;/key&gt;   &lt;string&gt;/Users/you/.local/log/slgod.stderr&lt;/string&gt;
+  &lt;key&gt;StandardErrorPath&lt;/key&gt; &lt;string&gt;/Users/you/.local/log/slgod.stderr&lt;/string&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;</pre></div>
+        </div>
+        <div class="os-pair">
+          <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux · on the slgod machine"><pre><span class="p">$ </span>systemctl --user daemon-reload
+<span class="p">$ </span>systemctl --user enable --now slgod
+<span class="p">$ </span>loginctl enable-linger $USER
+<span class="p">$ </span>systemctl --user status slgod
+<span class="p">$ </span>systemctl --user restart slgod
+<span class="p">$ </span>systemctl --user stop slgod</pre></div>
+          <div class="term" data-os-only="mac" data-where="server" data-where-label="macOS · on the slgod machine"><pre><span class="p">$ </span>launchctl bootstrap gui/`id -u` ~/Library/LaunchAgents/local.slgod.plist
+<span class="p">$ </span>launchctl print gui/`id -u`/local.slgod
+<span class="p">$ </span>launchctl kickstart -k gui/`id -u`/local.slgod
+<span class="p">$ </span>launchctl bootout gui/`id -u`/local.slgod</pre></div>
+        </div>
+        <p data-os-only="linux">After the first two lines start it, <code>enable-linger</code> keeps it running when you log out, and the last three show its state, restart it and stop it. <code>enable</code> also starts it whenever your user's service manager starts. On Ubuntu 24.04, <code>enable-linger</code> for your own user worked without sudo; <code>loginctl show-user $USER -p Linger</code> then prints <code>Linger=yes</code>. Other distributions may ask for sudo. slgod kept running after the ssh session that started it had closed; other logins of the same user were open at the time, so a full logout and a reboot were not tried.</p>
+        <p data-os-only="mac">The lines load and start it, show its state, restart it, and stop and unload it.</p>
+        <p>Why the templates are the way they are:</p>
+        <ul>
+          <li><strong>Full paths.</strong> launchd does not expand <code>~</code>, so the plist spells out <code>/Users/you</code>. systemd's <code>%h</code> is your home directory.</li>
+          <li><strong><code>-listen 127.0.0.1:7807</code></strong> suits a machine whose clients all run on it. Change it to a LAN or tunnel address if clients connect from elsewhere (see <a href="security.html#topologies">Security</a>).</li>
+          <li><strong>Restart slowly.</strong> If slgod exits because no avatar could log in (a wrong password, say), a service manager that restarts it at once will log in again and again. The login server slows down clients that hammer it. Hence <code>RestartSec=60</code> and <code>ThrottleInterval</code>.</li>
+          <li><strong>Time to log out.</strong> On stop, both send SIGTERM. slgod then logs every avatar out, allowing itself 30 seconds. The stop timeouts give it a little more than that. Under systemd, with one avatar, <code>stop</code> returned within the same second, after slgod had logged <code>logging out...</code> and <code>done</code>, and systemd recorded a clean exit, so <code>Restart=on-failure</code> did not start it again.</li>
+          <li><strong>Both log files.</strong> <code>-log</code> is slgod's own log. launchd's <code>StandardErrorPath</code>, or systemd's journal, catches what slgod cannot log itself, such as a crash. With <code>-log</code> set, <code>systemctl --user status slgod</code> and <code>journalctl --user -u slgod</code> showed only systemd's own starting and stopping lines; slgod's lines were all in the file.</li>
+          <li><strong>No <code>After=network-online.target</code>.</strong> The user service manager has no such unit (<code>systemctl --user list-units --all</code> lists none on Ubuntu 24.04), so the line would do nothing. From reading the code, not from a test: if the network is not up when slgod starts, a login slgod counts as worth retrying is retried, and if no avatar comes up at all slgod exits with an error, and <code>Restart=on-failure</code> starts it again a minute later.</li>
+        </ul>
+        <p>Check it is up with <code>slsh -c agents</code>. A restart is a fresh login for every avatar, which takes a few seconds each.</p>
+        <h3 id="slbotd-service">slbotd as a service</h3>
+        <p>The same pattern works for slbotd: its own unit or plist with <code>-log ~/.local/log/slbotd.log</code> (spelled out in full for launchd), and no other arguments, because slbotd reads everything from <code>slbotd.conf</code>. On Linux, <code>After=slgod.service</code> is tidy but not needed: slbotd keeps retrying slgod by itself. It does not need llama-server to be up at start either. Use full paths in its <code>program</code> lines, because a service's <code>PATH</code> is short.</p>
+      </section>
+
+      <section id="many-avatars">
+        <h2>Several avatars in one slgod</h2>
+        <p><strong>When you want this:</strong> you have more than one account, or you want a second avatar (a bot, a builder) held beside your own.</p>
+        <p>One slgod holds as many avatars as you name. Each is a profile file in <code>~/.config/slgo</code> on the slgod machine:</p>
+        <div class="term" data-where="server"><pre><span class="p">$ </span>slgod -log ~/.local/log/slgod.log example builder</pre></div>
+        <p>Flags come before the profile names. <code>slgod example -v</code> takes <code>-v</code> for a profile.</p>
+        <p>A profile you did not name can be started later, from any client:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c "login builder"
+<span class="p">$ </span>slsh -c agents</pre></div>
+        <p><code>agents</code> lists every session and configured profile with its state, and marks the default with <code>*</code>. The default is the session slgod has held longest.</p>
+        <h3 id="which-avatar">Choosing the avatar in a client</h3>
+        <p>Strongest first:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>How</th><th>Example</th><th>Good for</th></tr></thead>
+          <tbody>
+            <tr><td><code>--agent</code> / <code>-a</code></td><td><code>slsh -a builder</code></td><td class="what">one run</td></tr>
+            <tr><td><code>SLGO_AGENT</code></td><td><span data-sh-only="sh zsh"><code>export SLGO_AGENT=builder</code> <span class="os-tag">sh, zsh</span></span> <span data-sh-only="csh"><code>setenv SLGO_AGENT builder</code> <span class="os-tag">csh</span></span></td><td class="what">one terminal, and every program started from it (slsh, slrun, slbench)</td></tr>
+            <tr><td><code>agent =</code> in slsh's config</td><td><code>set agent builder</code></td><td class="what">slsh from now on (takes effect at the next start)</td></tr>
+            <tr><td>nothing</td><td><code>slsh</code></td><td class="what">the daemon's default</td></tr>
+          </tbody>
+        </table></div>
+        <p>The name is the <strong>profile</strong> name, the file name on the slgod machine, not the avatar's name. slbotd takes its avatars from <code>avatar =</code> lines in <code>slbotd.conf</code> instead.</p>
+        <p>Each account can be in only one session on the grid. Do not name the same profile to two slgods, and do not start a second slgod with the same settings while one is running: the second logs the same accounts in, which ends the first one's sessions, and then fails to get port 7807 (<a href="troubleshooting.html#f-port-busy">port busy</a>). Both end up without their avatars. A second slgod with its own directory, its own port and its own accounts is fine: see <a href="#second-slgod">A second slgod beside the first</a>.</p>
+        <p>To stop one avatar and keep the rest: <code>slsh -c "logout builder"</code>. slgod remembers that and will not bring it back until you say <code>login builder</code>.</p>
+      </section>
+
+      <section id="second-slgod">
+        <h2>A second slgod beside the first</h2>
+        <p><strong>When you want this:</strong> you want a daemon for development or testing, with accounts of its own, that can be started and stopped without touching the slgod you use every day.</p>
+        <p><code>-config DIR</code> tells slgod to keep everything in one directory: the profiles it logs in, which are otherwise in <code>~/.config/slgo</code>, and its own files (machine identity, seats, viewer certificate), which are otherwise in <code>~/.config/slgod</code>. Give the second daemon its own directory and its own port, and the two read none of each other's files.</p>
+        <ol class="steps" id="second-steps">
+          <li><div class="step-body"><h3>Make the directory</h3>
+            <p>It must exist before slgod starts and be mode 700, like the profile directory; slgod refuses anything looser, and does not create it for you.</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>mkdir -m 700 ~/.config/slgod.dev</pre></div></div></li>
+          <li><div class="step-body"><h3>Put a profile in it</h3>
+            <p>A profile here has the same format as one in <code>~/.config/slgo</code>, mode 600. Use an account the first slgod does not hold. This one is called <code>dev</code>:</p>
+            <div class="file"><div class="name">~/.config/slgod.dev/dev</div><pre>first    = Example
+last     = Tester
+start    = last
+password = $1$<span class="c">&lt;the md5 of the password, from slhash&gt;</span></pre></div>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>chmod 600 ~/.config/slgod.dev/dev</pre></div>
+            <p>If you want the second daemon to present the same computer to the login server as the first, copy the machine identity across before its first start. Otherwise it invents one of its own.</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>cp -p ~/.config/slgod/config ~/.config/slgod.dev/config</pre></div></div></li>
+          <li><div class="step-body"><h3>Start it on another port</h3>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slgod -config ~/.config/slgod.dev -listen 127.0.0.1:7808 -log ~/.local/log/slgod.dev.log dev</pre></div>
+            <p>Leave a space between <code>-config</code> and the path: with <code>-config=~/...</code> no shell expands the <code>~</code>. The first log line names the directory in use.</p></div></li>
+          <li><div class="step-body"><h3>Point clients at it</h3>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slsh --addr 127.0.0.1:7808 -a dev</pre></div>
+            <p>A client with no <code>--addr</code> still goes to the first slgod. slbotd takes the address from <code>addr =</code> in its own config.</p></div></li>
+          <li><div class="step-body"><h3>Or let sl-host send dev there</h3>
+            <p>To type <code>slsh -a dev</code> with no <code>--addr</code>, give <a href="sl-host.html">sl-host</a> a rule kept for the <code>dev</code> profile, with the port in the address, <strong>above</strong> the general rules. The clients tell sl-host which profile they are about to ask for, and the first matching rule wins. With sl-host installed every client asks it, so the file needs a rule for the first slgod too:</p>
+            <div class="file"><div class="name">~/.config/sl-host (where the clients run)</div><pre>0/0    127.0.0.1:7808   @dev   the development slgod
+0/0    127.0.0.1               this machine</pre></div>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>sl-host -v -a dev
+<span class="p">$ </span>slsh -a dev</pre></div>
+            <p>The <code>@dev</code> must be spelled exactly as you give it to <code>-a</code>, which is the profile's file name. A client that names no profile, or another one, skips that rule and gets <code>127.0.0.1:7807</code>. Clients on another machine use that machine's address for the server in both rules. Build sl-host and the clients from the same checkout: an older client adds <code>:7807</code> to an address that already has a port. The rules need a network to match, so on a machine with no network up at all this fails; see <a href="sl-host.html#ex-local">the sl-host page</a>.</p></div></li>
+        </ol>
+        <p>Unless you give it one, the second daemon uses the shared secret, <code>~/.config/slgod/secret</code>, like the first. Every client that can reach one can then reach the other, and the clients need nothing beyond the address.</p>
+        <h3 id="second-secret">A secret of its own</h3>
+        <p>If the second daemon holds accounts that the first one's clients should not reach, give it its own secret. Put a file called <code>secret</code> in its <code>-config</code> directory before it starts, and slgod uses that instead of the shared one. (<code>-secret FILE</code> names any other file.) Its log says which it took, in a <code>secret:</code> line.</p>
+        <div class="term" data-where="server"><pre><span class="p">$ </span>(umask 077; openssl rand -hex 32 &gt; ~/.config/slgod.dev/secret)</pre></div>
+        <p>Each client then keeps a copy named after the address it dials, here <code>127.0.0.1:7808</code>. On the same machine:</p>
+        <div class="term" data-where="server"><pre><span class="p">$ </span>cp -p ~/.config/slgod.dev/secret ~/.config/slgod/secret.127.0.0.1.7808</pre></div>
+        <p>A client on another machine copies it over SSH, names it after the address that machine dials (through a tunnel on local port 7808, <code>secret.127.0.0.1.7808</code> again, if it dials <code>127.0.0.1:7808</code>), and sets it to mode 600. The name has to match the address as dialled: <code>--addr localhost:7808</code> looks for <code>secret.localhost.7808</code>, finds nothing, uses the shared secret and is refused (<a href="troubleshooting.html#f-secret-by-address">details</a>). The other clients, dialling <code>7807</code>, go on using the shared secret. The full rules are in <a href="reference.html#secret-order">the reference</a>.</p>
+      </section>
+
+      <section id="two-clients">
+        <h2>Two clients on one avatar</h2>
+        <p><strong>When you want this:</strong> you want slsh in two terminals, or slsh open to watch while slbotd or slrun works through the same avatar.</p>
+        <p>Nothing to set up. Any number of clients can attach to one session. Start them with the same <code>-a</code> (or none, for the default). Type this in one terminal, and again in another, or on another machine:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -a example</pre></div>
+        <p>What to expect:</p>
+        <ul>
+          <li>Each client sees what the grid sends. slgod also passes what one client says (chat, instant messages) to the other clients of that session, so a slsh watching beside slbotd sees both sides of the bot's conversations.</li>
+          <li><code>logout</code> refuses while other clients are attached, and names them, in the form <code>example is in use by slsh[1234]@198.51.100.7; use force to log out anyway</code>.</li>
+          <li>slrun and slbench borrow worn objects ("slots") from slgod. Several runs at once are safe; slgod shares them out. More avatars in slgod means more runs at once.</li>
+          <li>A client machine that vanishes lets go of what it held after about half a minute.</li>
+        </ul>
+      </section>
+
+      <section id="move">
+        <h2>Moving slgod to another machine</h2>
+        <p><strong>When you want this:</strong> slgod has been on your laptop and should live on a server, or you are replacing the server.</p>
+        <p>What moves: the profiles, and slgod's own directory, which holds the secret, its machine identity, seats and viewer certificate. The machine identity matters most. slgod invents it on its first run, and it is what makes the login server see the same computer each time. A new one looks to Linden Lab like the accounts moved to a new machine.</p>
+        <p>This order is our suggestion, pieced together from how each part works; it has not been run end to end.</p>
+        <ol class="steps" id="move-steps">
+          <li><div class="step-body"><h3>Build on the new machine</h3><p>From the same commit as everything else. See <a href="platforms.html#build">Linux &amp; macOS</a> for building on one system for another.</p></div></li>
+          <li><div class="step-body"><h3>Stop the old slgod</h3><p>Ctrl-C, or stop the service. Wait for <code>done</code> in its log: that means every avatar has been logged out. Disable the service so it does not come back.</p></div></li>
+          <li><div class="step-body"><h3>Copy the two directories, keeping their modes</h3>
+            <div class="term" data-where="laptop" data-where-label="on the old slgod machine"><pre><span class="p">$ </span>tar -C ~ -czf - .config/slgo .config/slgod | ssh server.example 'tar -C ~ -xzpf -'</pre></div>
+            <p><code>.config/slgo</code> also holds <code>slbotd.conf</code>, if you have one. If slgod was started with <code>-secret FILE</code>, or with <code>-config DIR</code>, copy that file or directory too. Check the modes on the new machine: 700 on each directory, 600 on the profiles and the secret.</p></div></li>
+          <li><div class="step-body"><h3>Start it on the new machine</h3><p>Only now, and only there. Check its <code>-listen</code> address suits where the clients are.</p></div></li>
+          <li><div class="step-body"><h3>Point the clients at it</h3><p>Change <code>addr</code> in slsh and <code>slbotd.conf</code>, or the rules in each client's <code>~/.config/sl-host</code>. The secret is unchanged, so nothing else on the clients needs to change. The exception is a client that keeps this slgod's secret under its address, as <code>~/.config/slgod/secret.HOST.PORT</code> or <code>secret.HOST</code>: rename that file for the new address, or the client falls back to the shared secret.</p></div></li>
+          <li><div class="step-body"><h3>Re-trust the viewer certificate, if you use one</h3><p>If <code>-viewer</code> now names a different address, slgod replaces its certificate and logs that the viewer must be told about the new one.</p></div></li>
+        </ol>
+        <div class="note os">
+          <p class="label">Linux vs macOS</p>
+          <p>Moving between systems keeps the machine identity, but slgod reports the operating system it runs on (<code>mac</code> or <code>lnx</code>), so that part of the login changes. Profiles can override what is reported, with the <code>platform</code> keys, for an account that has to look like something in particular. Most people do not need to.</p>
+        </div>
+      </section>
+
+      <section id="roaming">
+        <h2>A laptop that moves between networks</h2>
+        <p><strong>When you want this:</strong> your laptop reaches slgod at one address at home and a different one elsewhere (a VPN address, a port forward, a tunnel).</p>
+        <p>Install <code>sl-host</code> on the laptop and give it a rules file. Every client then asks it for slgod's address when you have not given one. The full guide, with the rules format and its checks, is <a href="sl-host.html">sl-host</a>.</p>
+        <div class="file"><div class="name">~/.config/sl-host (on the laptop)</div><pre>192.0.2.0/24   192.0.2.20      home
+0/0            198.51.100.7    anywhere else, over the VPN</pre></div>
+        <p>The first rule that matches wins, so the catch-all goes last. A rule's address with no port gets <code>:7807</code>. If slgod listens on another port, put it in the rule, as in <code>192.0.2.20:7808</code>, and build the clients from the same checkout as sl-host.</p>
+      </section>
+
+      <section id="bot-elsewhere">
+        <h2>slbotd on a third machine</h2>
+        <p><strong>When you want this:</strong> slgod runs on a small always-on server, and slbotd (perhaps with llama-server) belongs on a machine with more memory or a GPU.</p>
+        <p>slbotd is just another client of slgod. It holds no passwords and logs nobody in; slgod does that. So the bot machine needs:</p>
+        <ul>
+          <li>slbotd, built from the same commit as slgod.</li>
+          <li>The shared secret, copied from the slgod machine, mode 600 in a 700 directory. If that slgod has a secret of its own, keep the copy under the address slbotd dials instead, here <code>~/.config/slgod/secret.server.example.7807</code> (<a href="reference.html#secret-order">why</a>).</li>
+          <li><code>~/.config/slgo/slbotd.conf</code>, in a directory of mode 700, with <code>addr</code> pointing at slgod.</li>
+          <li>The backstory files, and room for the conversation store.</li>
+          <li>slrun and slbench, if the bot runs them. They run <strong>on the bot machine</strong>, find slgod the same way any client does, and need the secret too.</li>
+        </ul>
+        <p>The profiles stay on the slgod machine. An avatar in <code>slbotd.conf</code> must have its profile there, not on the bot machine.</p>
+        <div class="file"><div class="name">~/.config/slgo/slbotd.conf (on the bot machine)</div><pre>avatar  = builder
+trusted = c75d7e57-7e57-c0de-b372-000000000001
+
+addr = server.example:7807
+
+program = slrun   /home/you/go/bin/slrun   --addr server.example:7807
+program = slbench /home/you/go/bin/slbench --addr server.example:7807</pre></div>
+        <p>Putting <code>--addr</code> in the <code>program</code> lines saves the programs from asking sl-host. Naming any program replaces the built-in pair, so name both. That the fixed <code>--addr</code> works this way follows from how <code>program</code> lines are built; it has not been tried here.</p>
+        <div class="term" data-where="bot"><pre><span class="p">$ </span>slbotd -check</pre></div>
+        <p><code>-check</code> reads the file and says what it means without connecting. On a separate machine it reports the profiles as missing, because it looks for them locally. That line is harmless here.</p>
+        <p>The full walk-through is <a href="quickstart-bot.html">Adding slbotd</a>, and the model side is <a href="bot-llm.html">Bot + LLM</a>.</p>
+      </section>
+
+      <section id="viewer">
+        <h2>Letting a viewer take a session</h2>
+        <p><strong>When you want this:</strong> you want to see the avatar in Firestorm for a while, without logging it out of slgod or stopping the programs attached to it.</p>
+        <p>slgod can serve a login endpoint of its own. A viewer that logs in there is given the session slgod already holds. The avatar does not leave the grid, and the attached programs carry on.</p>
+        <ol class="steps" id="viewer-steps">
+          <li><div class="step-body"><h3>Give the profile a viewer password</h3><p>Only a profile with <code>viewer_password</code> can be handed over. It is a password for this endpoint only, never sent to Linden Lab. Make its <code>$1$</code> form with <code>slhash</code> (it asks without echoing) and add the line:</p>
+            <div class="file"><div class="name">~/.config/slgo/example (on the slgod machine)</div><pre>first           = Example
+last            = Resident
+password        = $1$&lt;the md5 of the account password&gt;
+viewer_password = $1$&lt;the md5 of a second one, for viewers&gt;</pre></div></div></li>
+          <li><div class="step-body"><h3>Start slgod with <code>-viewer</code></h3>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slgod -viewer 127.0.0.1:9000 -log ~/.local/log/slgod.log example</pre></div>
+            <p>The address needs a port. On first use slgod writes a self-signed certificate to <code>~/.config/slgod/viewer-cert.pem</code> and logs the login URI.</p></div></li>
+          <li><div class="step-body"><h3>Make the viewer trust the certificate</h3><p>In Firestorm, accept the certificate dialog once, or append <code>viewer-cert.pem</code> to Firestorm's <code>user_settings/CA.pem</code>. Adding the grid by hand needs the second way, because the grid manager's check of a new address shows no dialog.</p></div></li>
+          <li><div class="step-body"><h3>Add the grid</h3><p>Use the <strong>OpenSim</strong> build of Firestorm; the Second Life build cannot use a private grid. In Preferences, then OpenSim, add the login URI that <code>slsh viewer</code> prints, with the nickname <code>slgod</code>.</p></div></li>
+          <li><div class="step-body"><h3>Log in</h3><p>Either log in from the viewer as the avatar with the viewer password, or let slsh do it:</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c "viewer --launch"</pre></div>
+            <p>That uses a fresh password from slgod that works once and expires after a few minutes. It has a default on macOS only; on Linux, set <code>viewer_launch</code> first (<a href="platforms.html#viewer">how</a>).</p></div></li>
+        </ol>
+        <p>A wrong name, a wrong password and a profile with no viewer password all get the same answer in the viewer, on purpose: <code>That name and password do not match a session here.</code> slgod's log says which it was.</p>
+        <div class="note warn">
+          <p class="label">Security</p>
+          <p>Keep <code>-viewer</code> on <code>127.0.0.1</code>, or on a WireGuard or Tailscale address for a viewer on another machine. <code>-viewer :9000</code> listens on every interface. The viewer's UDP circuit uses a port the system picks, which no firewall rule can name and no TLS covers. More in <a href="security.html#viewer">Security</a>.</p>
+        </div>
+        <h3 id="viewer-logout">The other way: log out, use a normal login, take it back</h3>
+        <p>Without <code>-viewer</code>, you can let slgod go of the avatar, log in with any viewer as usual, and take it back afterwards:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c "logout example"</pre></div>
+        <p>Use the avatar in a viewer, then quit the viewer, and take it back:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c "login example"</pre></div>
+        <p>Logging in from a viewer without logging out first also works: the grid ends slgod's session, and slgod stays down rather than taking it back. Logging out first is tidier.</p>
+      </section>
+
+      <section id="upgrade">
+        <h2>Upgrading</h2>
+        <p><strong>When you want this:</strong> you have pulled new commits and want every machine on them.</p>
+        <p>The rule is one tree for everything. Clients and slgod talk a protocol that changes between versions, and a client older than slgod is refused with <a href="troubleshooting.html#f-old-client">"this client is older than slgod"</a>.</p>
+        <ol class="steps" id="upgrade-steps">
+          <li><div class="step-body"><h3>Update and rebuild</h3>
+            <div class="term"><pre><span class="p">$ </span>cd slgo &amp;&amp; git pull
+<span class="p">$ </span>go install ./cmd/...</pre></div>
+            <p>On every machine: the slgod machine, each computer you run slsh on, and the bot machine. Or cross-build from one (<a href="platforms.html#cross">how</a>). If you remove sl-host from machines that run slgod, remove it again after <code>go install ./cmd/...</code>. After installing or removing a program, csh, tcsh and zsh need <code>rehash</code> to see the change; in sh or bash, <code>hash -r</code>.</p></div></li>
+          <li><div class="step-body"><h3>Restart slgod</h3><p>Stop it, wait for <code>done</code>, start it. Every avatar logs out and in again, a few seconds each. With a service: <code>systemctl --user restart slgod</code>, or <code>launchctl kickstart -k gui/`id -u`/local.slgod</code>.</p></div></li>
+          <li><div class="step-body"><h3>Restart slbotd</h3><p>It keeps running across a slgod restart and reattaches, but it is running the old binary until you restart it.</p></div></li>
+          <li><div class="step-body"><h3>Compare versions</h3><p><code>slgod -version</code>, <code>slsh --version</code>, <code>slbotd -version</code>. Each names the commit it was built from.</p></div></li>
+        </ol>
+      </section>
+
+      <section id="logs">
+        <h2>Logs and rotating them</h2>
+        <p><strong>When you want this:</strong> slgod or slbotd runs for weeks, and you want a log that is kept somewhere safe and does not grow for ever.</p>
+        <div class="term" data-where="server"><pre><span class="p">$ </span>mkdir -p ~/.local/log &amp;&amp; chmod 700 ~/.local/log
+<span class="p">$ </span>slgod -log ~/.local/log/slgod.log example</pre></div>
+        <p>What to know about these logs:</p>
+        <ul>
+          <li>The file is appended to and kept at mode 600. The directory must be 700; slgod refuses to start otherwise and says what to <code>chmod</code>.</li>
+          <li>slgod's lines carry the time of day, with no date. Over a long run, the date has to come from context.</li>
+          <li>They are safe to read but not to publish. They hold avatar names and ids, and slbotd's log holds what people said to the bot (<code>-q</code> leaves conversation out). Session ids and capability URLs are cut short.</li>
+          <li><code>-log-secrets</code> writes those in full. Use it only while debugging, and delete the log afterwards.</li>
+        </ul>
+        <p>Neither daemon rotates its log or reopens it on a signal, and a hang-up signal stops slgod without logging out. Because the file is opened for appending, truncating it in place works, so copy-and-truncate is the way to rotate while it runs. Moving the file aside does not work, because slgod keeps writing to the moved file until it restarts; that last part is inferred from the code, not tried.</p>
+        <div class="os-pair">
+          <div class="file" data-os-only="linux"><div class="name">/etc/logrotate.d/slgod, or ~/.config/logrotate/slgod (Linux; change the paths)</div><pre>/home/you/.local/log/slgod.log /home/you/.local/log/slbotd.log {
+    weekly
+    rotate 8
+    compress
+    missingok
+    notifempty
+    copytruncate
+    su you you
+}</pre></div>
+          <div class="term" data-os-only="mac" data-where="server" data-where-label="macOS · by hand, or from a scheduled job"><pre><span class="p">$ </span>cd ~/.local/log
+<span class="p">$ </span>cp -p slgod.log slgod.log.`date +%Y%m%d` &amp;&amp; cp /dev/null slgod.log
+<span class="p">$ </span>gzip slgod.log.`date +%Y%m%d`</pre></div>
+        </div>
+        <p data-os-only="linux">In <code>/etc/logrotate.d</code> it needs root, and the system's own logrotate run picks it up; <code>su you you</code> makes it work as you. That way has not been tried here. Without root, keep the file in your home and run logrotate yourself, with a state file of your own:</p>
+        <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux · on the slgod machine"><pre><span class="p">$ </span>mkdir -p ~/.config/logrotate ~/.local/state
+<span class="p">$ </span>logrotate -s ~/.local/state/logrotate.state ~/.config/logrotate/slgod</pre></div>
+        <p data-os-only="linux">Add <code>-f</code> to rotate now, whatever the date. Running it on a schedule, from cron or a systemd timer, is up to you and has not been tried here. Checked on Ubuntu 24.04 with logrotate 3.21.0, September 2026, with <code>-f</code>, as the user, on slgod's log while slgod ran under systemd: the log was copied to <code>slgod.log.1.gz</code> and emptied, slgod kept the same file open, and its next lines went to the start of the emptied file. slbotd's log was not tried.</p>
+        <p>Or rotate when you restart anyway, such as at an upgrade: stop slgod, move the log aside, start it.</p>
+        <p>For a live view without the log file, <code>slsh watch</code> shows what the session sees.</p>
+      </section>
+
+      <section id="slrun">
+        <h2>slrun and slbench, in brief</h2>
+        <p><strong>When you want this:</strong> you write LSL and want to run scripts, or measure their memory, from the command line.</p>
+        <dl>
+          <dt><code>slrun</code></dt>
+          <dd>Runs LSL scripts on the grid and prints what they say, each line prefixed with its file name. It exits non-zero if a script failed to compile, faulted, or never said <code>DONE</code>. Scripts run in objects the avatar wears, or in <code>--object NAME</code>, or in a throwaway prim with <code>--rez</code>. Four run at once by default (<code>-j</code>).</dd>
+          <dt><code>slbench</code></dt>
+          <dd>Measures how much script memory an LSL construct costs, by finding the 512-byte block boundary it crosses. Input comes from <code>--code</code>, <code>--statement</code>, a file, or standard input.</dd>
+        </dl>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slrun --object "Test HUD" a.lsl
+<span class="p">$ </span>slbench --statement "llSin(1.0);"</pre></div>
+        <p>Both connect to slgod the way slsh does, with <code>--addr</code>, sl-host or <code>localhost:7807</code>, <code>-a</code> for the avatar, and the same secret. They do <strong>not</strong> read slsh's <code>addr</code> setting, so on a remote setup give them <code>--addr</code> or sl-host. <code>--backend HOST:PORT</code> talks to a different script service over a connection with no encryption or authentication; keep that on machines you control. The full guides are in the repository's <code>doc/guide.md</code>.</p>
+      </section>
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="sl-host.html">← sl-host</a> <a href="platforms.html">Linux &amp; macOS →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

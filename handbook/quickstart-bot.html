@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Adding slbotd — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="quickstart-bot">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Quick start · 20 minutes</p>
+    <h1>Adding slbotd<span class="caret">_</span></h1>
+    <p class="standfirst">slbotd gives an avatar that slgod holds a set of orders it takes from inside Second Life. At the end of this page you can IM the bot <code>:where</code> from a viewer and get the answer back as an IM.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">~20 min</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+
+      <section id="what">
+        <h2>What slbotd is</h2>
+        <p>slbotd is a second daemon. It sits on the far side of slgod from slsh. It attends one or more avatars at once and does two things with them:</p>
+        <ul>
+          <li>It takes <strong>commands</strong> by instant message from people you have told it to trust. A command is an IM that starts with a colon, like <code>:where</code> or <code>:status</code>.</li>
+          <li>It can hold <strong>conversations</strong> through a language model with anyone you list. That part is optional and has <a href="bot-llm.html">its own page</a>. This page sets up commands only.</li>
+        </ul>
+        <p>slbotd logs nobody in and holds no passwords. For each avatar it asks slgod to host the session, then attaches to it, the same way slsh does. If you kill slbotd, every avatar stays logged in.</p>
+        <p>slbotd listens on <strong>no port</strong>. It has no socket, web page or admin shell. You control it in two ways only: by IM from inside Second Life, and by editing its configuration file and restarting it.</p>
+        <figure class="diagram">
+          <svg viewBox="0 0 640 210" role="img" aria-label="slbotd connects to slgod; commands arrive as IMs through the grid">
+            <defs><marker id="qb-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+            <rect class="box server" x="12" y="30" width="230" height="150" rx="6"/>
+            <text class="t-machine" x="24" y="52">slgod machine</text>
+            <rect class="proc" x="24" y="66" width="206" height="26" rx="3"/>
+            <text class="t-proc" x="34" y="84">slgod</text>
+            <text class="t-small" x="96" y="84">holds builder</text>
+            <rect class="proc" x="24" y="130" width="206" height="26" rx="3"/>
+            <text class="t-proc" x="34" y="148">slbotd</text>
+            <text class="t-small" x="100" y="148">attaches to builder</text>
+            <path class="link secure" d="M127,130 L127,94" marker-end="url(#qb-arrow)"/>
+            <text class="t-small" x="134" y="116">gRPC + TLS, port 7807</text>
+            <rect class="box grid" x="330" y="50" width="120" height="90" rx="45"/>
+            <text class="t-proc" x="390" y="92" text-anchor="middle">Second</text>
+            <text class="t-proc" x="390" y="109" text-anchor="middle">Life</text>
+            <path class="link grid" d="M230,79 L330,90" marker-end="url(#qb-arrow)"/>
+            <rect class="box laptop" x="490" y="60" width="138" height="70" rx="6"/>
+            <text class="t-machine" x="502" y="82">you, in world</text>
+            <text class="t-small" x="502" y="104">IM to Builder</text>
+            <text class="t-small" x="502" y="120">Resident: ":where"</text>
+            <path class="link" d="M490,95 L452,95" marker-end="url(#qb-arrow)"/>
+          </svg>
+          <figcaption>Commands reach slbotd the way any IM reaches an avatar: through the grid and slgod. Nothing connects to slbotd directly.</figcaption>
+        </figure>
+      </section>
+
+      <section id="before">
+        <h2>Before you start</h2>
+        <ul>
+          <li><strong>A running slgod.</strong> If you do not have one yet, do <a href="quickstart-local.html">One machine</a> or <a href="quickstart-remote.html">Remote slgod</a> first. slbotd needs slgod up and holding at least one avatar.</li>
+          <li><strong>A profile for the bot's avatar, on slgod's machine.</strong> slbotd can attend the same avatar you drive with slsh, but most people give the bot an avatar of its own. This page uses a second profile called <code>builder</code>, whose avatar is <strong>Builder Resident</strong>. slgod reads the password, so the profile lives where slgod runs, not where slbotd runs.</li>
+          <li><strong>Your own avatar's name</strong>, to put on the trusted list. This page uses <strong>Example Resident</strong>. The avatar you send commands from has to be in world, in a viewer or through slsh.</li>
+          <li><strong>Go 1.26.1</strong> and the same slgo checkout slgod was built from, on whichever machine runs slbotd. An slbotd built from an older tree is refused with <code>this client is older than slgod</code>.</li>
+        </ul>
+        <div class="note warn"><p class="label">Careful</p><p>An avatar can be in only one session on the grid. If you log a viewer in as an avatar slgod is holding, the viewer takes the session and slgod stays logged out. Send your commands from an avatar slgod is not holding, or use slsh.</p></div>
+      </section>
+
+      <section id="where">
+        <h2>Where slbotd runs</h2>
+        <p>Pick one. Every command block below says which machine it belongs on.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>On the slgod machine</th><th>On its own machine</th></tr></thead>
+          <tbody>
+            <tr><td>Shared secret</td><td class="what">Already there, slgod made it.</td><td class="what">Copy <code>~/.config/slgod/secret</code> from the slgod machine.</td></tr>
+            <tr><td>Finding slgod</td><td class="what"><code>addr = localhost:7807</code></td><td class="what"><code>addr = server.example:7807</code>, or sl-host</td></tr>
+            <tr><td>Profiles</td><td class="what">Beside <code>slbotd.conf</code> in <code>~/.config/slgo</code>.</td><td class="what">Stay on the slgod machine. The bot machine needs only <code>slbotd.conf</code>.</td></tr>
+            <tr><td>Network</td><td class="what">Nothing to open.</td><td class="what">The bot machine must reach TCP 7807 on the slgod machine.</td></tr>
+            <tr><td>Programs (<code>:slbench</code>, <code>:slrun</code>)</td><td class="what">Run here.</td><td class="what">Run on the bot machine, so they are installed there.</td></tr>
+          </tbody>
+        </table></div>
+        <p>On the same machine is simpler, and it is what you want unless you have a reason. A reason might be that slgod runs on a small always-on box and you want the bot, and later its model, on a bigger one.</p>
+        <p>In the steps, blocks marked <strong>on the slgod machine</strong> go where slgod runs. Blocks marked <strong>on the slbotd machine</strong> go where slbotd runs. If that is the same machine, run them all there.</p>
+      </section>
+
+      <section id="steps">
+        <h2>Set it up</h2>
+        <ol class="steps" id="bot-steps">
+          <li><div class="step-body">
+            <h3>Give the bot an avatar</h3>
+            <p>Make a profile file for the bot's avatar on the slgod machine, the same way you made the one for your own avatar. The file name is the profile name. The password line takes the <code>$1$</code> value that <code>slhash</code> prints.</p>
+            <div class="file"><div class="name">~/.config/slgo/builder  (on the slgod machine, mode 600)</div><pre>first    = Builder
+last     = Resident
+password = $1$&lt;the md5 of the password, from slhash&gt;
+start    = last</pre></div>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>chmod 600 ~/.config/slgo/builder</pre></div>
+            <p>You do not have to restart slgod. When slbotd asks slgod to host <code>builder</code>, slgod reads that profile and logs it in. That is how the code reads; it has not been watched end to end here. If you want to be sure first, bring it up by hand:</p>
+            <div class="term" data-where="server"><pre><span class="p">$ </span>slsh login builder</pre></div>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Build slbotd</h3>
+            <p>From the checkout slgod was built from:</p>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>go install ./cmd/slbotd
+<span class="p">$ </span>slbotd -version</pre></div>
+            <p>The binary goes to <code>~/go/bin</code> (or the <code>bin</code> directory under your <code>GOPATH</code>, if you set one; <code>go env GOPATH</code> prints it), which has to be on your <code>PATH</code>. If the shell cannot find <code>slbotd</code> straight after installing it, csh, tcsh and zsh need <code>rehash</code> to see a new command; in sh or bash, <code>hash -r</code>. If you ran <code>go install ./cmd/...</code> instead, you also got <code>sl-host</code>. That matters in step 4.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Own machine only: copy the shared secret</h3>
+            <p>Skip this if slbotd runs on the slgod machine. Otherwise the bot machine needs the same secret file as slgod, with the same modes. Copy it by a secure route, for example with scp:</p>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>mkdir -m 700 -p ~/.config/slgod
+<span class="p">$ </span>scp server.example:.config/slgod/secret ~/.config/slgod/secret
+<span class="p">$ </span>chmod 600 ~/.config/slgod/secret</pre></div>
+            <p>Anyone holding this file can drive every avatar slgod holds. A secret that differs from slgod's gets <code>login refused: … authentication failed (the secret used was PATH)</code> (<a href="troubleshooting.html#f-wrong-secret">fix</a>). If that slgod has a secret of its own, store the copy under the address slbotd dials instead, such as <code>~/.config/slgod/secret.server.example.7807</code> (<a href="reference.html#secret-order">rules</a>).</p>
+            <p>slgod listens on port 7807 on every interface unless it was started with <code>-listen</code>. If yours listens on loopback only, see <a href="quickstart-remote.html">Remote slgod</a> for your choices, including an SSH tunnel.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Write slbotd.conf</h3>
+            <p>The configuration is one file, <code>~/.config/slgo/slbotd.conf</code>. Its directory must be mode 700, or slbotd refuses to start. On the slgod machine that directory already exists and holds the profiles.</p>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>mkdir -p ~/.config/slgo
+<span class="p">$ </span>chmod 700 ~/.config/slgo</pre></div>
+            <p>The smallest useful file names one avatar to hold and one person to trust. Use this on the <strong>slgod machine</strong>:</p>
+            <div class="file"><div class="name">~/.config/slgo/slbotd.conf  (slbotd on the slgod machine)</div><pre>avatar  = builder
+trusted = Example Resident
+
+<span class="c"># slgod on this machine</span>
+addr    = localhost:7807</pre></div>
+            <p>Use this on <strong>its own machine</strong>, with the slgod machine's name or address:</p>
+            <div class="file"><div class="name">~/.config/slgo/slbotd.conf  (slbotd on its own machine)</div><pre>avatar  = builder
+trusted = Example Resident
+
+<span class="c"># where slgod is</span>
+addr    = server.example:7807</pre></div>
+            <p>Writing <code>addr</code> out keeps sl-host out of it. With <code>addr</code> left out, slbotd runs <code>sl-host</code> if it is on your <code>PATH</code>, and falls back to <code>localhost:7807</code> if it is not. An installed sl-host with no rules file is fatal. If the bot machine moves between networks, <a href="sl-host.html">sl-host</a> is the tool; otherwise a fixed <code>addr</code> is simpler.</p>
+            <p>The format is <code>key = value</code>, one per line, and <code>#</code> starts a comment. An unknown key stops slbotd at startup, which catches typos. The file holds no secret.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Check the file</h3>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>slbotd --check</pre></div>
+            <p>This reads the file, prints what it means and exits without connecting anywhere. You get the slgod address, the avatars, the trusted list, the prefix and limits, and <code>chat: off</code>, because there is no model yet. Then one line per avatar saying <code>ok</code> or why its profile would not load.</p>
+            <div class="note"><p class="label">Own machine</p><p><code>--check</code> looks for profiles on the machine it runs on. With slbotd on its own machine the profile line reports that the file is missing, because the profile is on the slgod machine. That is expected and does not stop slbotd. (Worked out from the code, not watched.)</p></div>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Start it</h3>
+            <p>Run it in the foreground the first time, so you can watch what it says:</p>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>slbotd</pre></div>
+            <p>Each log line starts with the profile it is about, like <code>builder: …</code>. If slgod cannot be reached, you see <code>cannot host: cannot reach slgod at …</code>, and slbotd keeps trying, waiting longer each time up to two minutes. It takes no arguments; everything is in the file.</p>
+            <p>Once it works, give it a log file. Its log names everybody who spoke to the avatars. The directory has to be mode 700:</p>
+            <div class="term" data-where="bot"><pre><span class="p">$ </span>mkdir -p ~/.local/log &amp;&amp; chmod 700 ~/.local/log
+<span class="p">$ </span>slbotd -log ~/.local/log/slbotd.log</pre></div>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Send it a command</h3>
+            <p>Send it an IM from your own avatar. If slgod holds your avatar, as it does after the quick starts, do it from slsh: <code>im Builder Resident</code> opens the conversation in chat mode, and what you type there goes to the bot.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh
+<span class="p">/$ </span>im Builder Resident</pre></div>
+            <p>Then type, one line at a time:</p>
+            <div class="term" data-where="world" data-where-label="in the IM to Builder Resident"><pre>:help
+:status
+:where</pre></div>
+            <p>Each answer comes back as an IM. If your avatar is one slgod does not hold, you can use a viewer instead: open an IM to Builder Resident and type the same lines.</p>
+            <p>If nothing comes back, look at slbotd's log. A line saying <code>refused a command from …</code> means the name on your trusted line is not the name that arrived. See <a href="#trusted">Who it obeys</a>.</p>
+          </div></li>
+        </ol>
+      </section>
+
+      <section id="commands">
+        <h2>Talking to it</h2>
+        <p>Only one-to-one IMs count. Local chat and group IMs are never commands. An IM that starts with the prefix, <code>:</code> by default, is a command. Anything else is conversation, which is ignored until you <a href="bot-llm.html">add a model</a>.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Group</th><th>Commands</th></tr></thead>
+          <tbody>
+            <tr><td>looking</td><td class="what"><code>where who look parcel regions objects worn lookup profile friends</code></td></tr>
+            <tr><td>moving</td><td class="what"><code>tp landmark sit stand touch</code></td></tr>
+            <tr><td>talking</td><td class="what"><code>say im offers accept decline chat forget</code></td></tr>
+            <tr><td>inventory</td><td class="what"><code>ls cat mkdir rm mv cp give place take wear detach</code></td></tr>
+            <tr><td>the daemon</td><td class="what"><code>help agents status as host trusted errors</code></td></tr>
+            <tr><td>programs</td><td class="what"><code>slbench</code>, <code>slrun</code> and their aliases <code>autobench</code>, <code>automate</code>, unless your file names others</td></tr>
+          </tbody>
+        </table></div>
+        <dl>
+          <dt><code>:help</code>, <code>:help tp</code></dt><dd>What the commands are, and what one of them does. A line with only the prefix gives the help too.</dd>
+          <dt><code>:status</code></dt><dd>Whether the avatar is attached, its uuid and position, the commands running and any dropped relays.</dd>
+          <dt><code>:agents</code></dt><dd>slgod's list of avatars, with <code>*</code> on the ones this slbotd attends.</dd>
+          <dt><code>:errors</code>, <code>:errors clear</code></dt><dd>The last 50 things that went wrong for this avatar, each with how long ago. Kept in memory only, so a restart empties it.</dd>
+          <dt><code>:as helper where</code></dt><dd>With more than one <code>avatar</code> line, run a command as another of them. The first avatar in the file answers commands that name none.</dd>
+          <dt><code>:tp Testville 128 128 25</code></dt><dd>Words are split on spaces. Quotes group a word only at its start or after <code>=</code>. Nothing is expanded, and nothing reaches a shell.</dd>
+        </dl>
+        <p>An answer can take up to <code>reply-limit</code> IMs, 8 by default. A longer one is cut and says so. Each avatar runs up to <code>jobs</code> commands at once, 4 by default.</p>
+      </section>
+
+      <section id="trusted">
+        <h2>Who it obeys</h2>
+        <p>Every <code>trusted</code> line adds one person. Repeat the line for more. A trusted person has full control of every avatar this slbotd holds: they can delete inventory, take objects out of the world, give things away, make the avatar say anything, teleport it and run the configured programs. There is no partial trust and no confirmation step.</p>
+        <div class="file"><div class="name">~/.config/slgo/slbotd.conf</div><pre>trusted = Example Resident
+<span class="c"># a uuid is better where you have it: it cannot change or be taken</span>
+trusted = c75d7e57-7e57-c0de-b372-000000000001</pre></div>
+        <ul>
+          <li><strong>Names</strong> are matched ignoring case, against the legacy name the grid sends, not the display name. For newer accounts the legacy name ends in <code>Resident</code>.</li>
+          <li><strong>A uuid</strong> is safer. Write it where you have it.</li>
+          <li>By default a command from anyone else is ignored in silence and logged. <code>answer-strangers = yes</code> tells them <code>I only take commands from people I have been told to trust.</code></li>
+          <li>Inventory offered by a trusted person is accepted. <code>accept-inventory</code> takes <code>trusted</code>, <code>anyone</code> or <code>nobody</code>.</li>
+        </ul>
+        <div class="note warn"><p class="label">Security</p><p>Trusting someone in the file is giving them your bot's avatars. It also lets them run the configured programs on the slbotd machine with whatever arguments they type. Never add a <code>program</code> line for a shell, an interpreter or a general tool. The <a href="security.html">security page</a> says more.</p></div>
+      </section>
+
+      <section id="errors">
+        <h2>When it goes quiet</h2>
+        <p>A bot that has been failing for hours looks exactly like one with nothing to say. slbotd has three ways of telling you.</p>
+        <ul>
+          <li><strong>The trouble notice.</strong> When a trusted person writes after an hour of silence (<code>error-gap</code>), the first answer starts with one line such as <code>(something has gone wrong since we last spoke -- say :errors)</code>. Strangers never see it.</li>
+          <li><strong><code>:errors</code></strong> lists what went wrong, newest last.</li>
+          <li><strong>The log</strong> is the full record. It is stderr, or the file given with <code>-log</code>.</li>
+        </ul>
+        <p>Common startup failures, with the text slbotd prints:</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>You see</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td><code>…/slgo is mode 0755, wanted 0700</code></td><td class="what"><code>chmod 700 ~/.config/slgo</code></td></tr>
+            <tr><td><code>open …/slbotd.conf: no such file or directory</code></td><td class="what">Create the file, or name it with <code>-config PATH</code> or <code>$SLBOTD_CONFIG</code>.</td></tr>
+            <tr><td><code>line 7: unknown setting "…"</code></td><td class="what">A typo in a key on that line.</td></tr>
+            <tr><td><code>no avatar lines: name at least one profile to hold</code></td><td class="what">Add an <code>avatar</code> line.</td></tr>
+            <tr><td><code>no trusted lines: nobody could send a command, so nothing would ever happen</code></td><td class="what">Add a <code>trusted</code> line.</td></tr>
+            <tr><td><code>cannot find the host slgod is on: sl-host failed: …</code></td><td class="what">Set <code>addr</code>, or give sl-host a rules file.</td></tr>
+            <tr><td><code>cannot host: cannot reach slgod at …</code></td><td class="what">slgod is not running, the address is wrong, a firewall is in the way, or the secret is missing or has the wrong mode.</td></tr>
+            <tr><td><code>no agent named "…"</code></td><td class="what">The profile does not exist on the slgod machine, or is spelt differently.</td></tr>
+          </tbody>
+        </table></div>
+        <p>The <a href="troubleshooting.html">troubleshooting page</a> has the rest.</p>
+      </section>
+
+      <section id="service">
+        <h2>Running it as a service</h2>
+        <p>The repository ships no service files. It gives guidance for launchd on macOS only: pass <code>-log</code>, send stdout and stderr into <code>~/.local/log</code>, and spell every path out in full, because launchd does not expand <code>~</code>. The two templates below are worked out from that and from the code. Neither has been run with slbotd here. The systemd unit passes <code>systemd-analyze --user verify</code> on Ubuntu 24.04 with systemd 255 (checked September 2026), and the same commands started, restarted and stopped slgod's unit cleanly there (<a href="setups.html#service">Setups</a>).</p>
+        <p>Things that hold for both. A service gets a minimal <code>PATH</code>, so give <code>program</code> lines absolute paths, and set <code>addr</code> rather than relying on sl-host being found. Start order does not matter: slbotd keeps retrying slgod, and asks nothing of a model until the first conversation. It stops cleanly on SIGTERM.</p>
+        <div class="os-pair">
+          <div data-os-only="linux">
+            <div class="file"><div class="name">~/.config/systemd/user/slbotd.service  (verified, not run)</div><pre>[Unit]
+Description=slbotd
+
+[Service]
+ExecStart=%h/go/bin/slbotd -log %h/.local/log/slbotd.log
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target</pre></div>
+            <div class="term" data-where="bot" data-where-label="Linux · on the slbotd machine"><pre><span class="p">$ </span>systemctl --user daemon-reload
+<span class="p">$ </span>systemctl --user enable --now slbotd
+<span class="p">$ </span>loginctl enable-linger $USER</pre></div>
+            <p data-os-only="linux">The last line keeps it running when you are not logged in. There is no <code>After=network-online.target</code>, because the user service manager has no such unit; slbotd keeps retrying slgod by itself.</p>
+          </div>
+          <div data-os-only="mac">
+            <div class="file"><div class="name">~/Library/LaunchAgents/example.slbotd.plist  (not tested here)</div><pre>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"&gt;
+&lt;plist version="1.0"&gt;
+&lt;dict&gt;
+  &lt;key&gt;Label&lt;/key&gt;&lt;string&gt;example.slbotd&lt;/string&gt;
+  &lt;key&gt;ProgramArguments&lt;/key&gt;
+  &lt;array&gt;
+    &lt;string&gt;/Users/you/go/bin/slbotd&lt;/string&gt;
+    &lt;string&gt;-log&lt;/string&gt;
+    &lt;string&gt;/Users/you/.local/log/slbotd.log&lt;/string&gt;
+  &lt;/array&gt;
+  &lt;key&gt;RunAtLoad&lt;/key&gt;&lt;true/&gt;
+  &lt;key&gt;KeepAlive&lt;/key&gt;&lt;true/&gt;
+  &lt;key&gt;StandardOutPath&lt;/key&gt;&lt;string&gt;/Users/you/.local/log/slbotd.stderr&lt;/string&gt;
+  &lt;key&gt;StandardErrorPath&lt;/key&gt;&lt;string&gt;/Users/you/.local/log/slbotd.stderr&lt;/string&gt;
+&lt;/dict&gt;
+&lt;/plist&gt;</pre></div>
+            <div class="term" data-where="bot" data-where-label="macOS · on the slbotd machine"><pre><span class="p">$ </span>launchctl bootstrap gui/`id -u` ~/Library/LaunchAgents/example.slbotd.plist</pre></div>
+          </div>
+        </div>
+        <p>Replace <code>/Users/you</code> with your home directory. With the OS switch in the top bar you see one of the two; flip it to see the other.</p>
+      </section>
+
+      <section id="stopping">
+        <h2>Stopping it</h2>
+        <p>Press Ctrl-C, or send SIGTERM (which is what <code>systemctl --user stop slbotd</code> and <code>launchctl bootout</code> do). slbotd logs <code>stopped; the avatars are still logged in</code> and exits. It is telling the truth: slgod still holds them.</p>
+        <p>To log the bot's avatar out as well, ask slgod:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh logout builder</pre></div>
+        <p>slgod remembers that you logged it out on purpose. A running slbotd stops asking for it, and checks every 30 seconds whether someone brought it back. <code>slsh login builder</code> brings it back. From in world, <code>:host --force</code> does the same; check nobody else is using that avatar first.</p>
+        <p>To change a setting, edit <code>slbotd.conf</code> and restart slbotd. The file is read once, at startup.</p>
+      </section>
+
+      <section id="have">
+        <h2>What you now have</h2>
+        <ul>
+          <li>slbotd attending Builder Resident through slgod, on the slgod machine or its own.</li>
+          <li>Commands by IM from the people on your trusted list, answered by IM.</li>
+          <li><code>:errors</code> and the trouble notice, so a quiet bot can tell you why.</li>
+          <li>Plain IMs without the prefix are ignored for now.</li>
+        </ul>
+      </section>
+
+      <section id="next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="bot-llm.html"><span class="k">Guide</span><span class="t">slbotd with an LLM</span><span class="d">Let the bot hold conversations through a llama-server you run yourself.</span></a>
+          <a class="card" href="security.html"><span class="k">Read</span><span class="t">Security</span><span class="d">What the shared secret and the trusted list give away.</span></a>
+          <a class="card" href="troubleshooting.html"><span class="k">Fix</span><span class="t">Troubleshooting</span><span class="d">Every error, searchable.</span></a>
+          <a class="card" href="reference.html"><span class="k">Look up</span><span class="t">Reference</span><span class="d">Every slbotd.conf key and flag.</span></a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="quickstart-remote.html">← Remote slgod</a> <a href="bot-llm.html">slbotd with an LLM →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

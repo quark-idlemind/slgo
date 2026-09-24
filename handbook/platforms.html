@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Linux &amp; macOS — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="platforms">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Guide · both systems</p>
+    <h1>Linux &amp; macOS<span class="caret">_</span></h1>
+    <p class="standfirst">Every program here runs on both, from the same source, with the same files in the same places. This page covers the handful of places where the two systems still part ways, and what to check when slsh and slgod run on different ones.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">reference</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+      <section id="short">
+        <h2>The short version</h2>
+        <p>The code is the same on both systems. There is no cgo and no native library, and nothing is installed outside your home directory. The things that are the same:</p>
+        <ul>
+          <li>Every file lives under <code>~/.config</code>, <code>~/.local/share</code> or <code>~/.local/state</code>, on macOS too. Nothing goes in <code>~/Library/Application Support</code>. That is deliberate.</li>
+          <li>Nothing uses the macOS Keychain or the Linux secret service. Passwords and the shared secret are plain files, protected by Unix permission bits, and the programs check those bits the same way on both systems.</li>
+          <li>slgod listens on TCP port 7807 on both. No Unix socket is used anywhere.</li>
+          <li>A Linux slsh talks to a macOS slgod, and the other way round, with nothing special set up. What they need is the same shared secret and a build from the same source tree.</li>
+        </ul>
+        <p>What differs:</p>
+        <ul>
+          <li>How you keep slgod running: a launchd agent on macOS, a systemd unit on Linux.</li>
+          <li>The firewall you may have to open, if clients connect from other machines.</li>
+          <li><code>slsh viewer --launch</code> knows how to start Firestorm on macOS. On Linux you tell it how.</li>
+          <li>Which operating system the Second Life login server is told about. slgod reports the system it runs on.</li>
+        </ul>
+        <div class="note os">
+          <p class="label">Showing</p>
+          <p>This page shows Linux and macOS next to each other, because your machines may not all run the same one.</p>
+          <p><label for="only-mine"><input type="checkbox" id="only-mine" data-only-mine> Show only the system picked in the top bar</label></p>
+        </div>
+      </section>
+
+      <section id="compare">
+        <h2>Side by side</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Topic</th><th data-os-side="linux">Linux</th><th data-os-side="mac">macOS</th></tr></thead>
+          <tbody>
+            <tr><td>Settings and profiles</td><td class="what" data-os-side="linux"><code>~/.config/slgo</code>, <code>~/.config/slgod</code>, <code>~/.config/slsh</code></td><td class="what" data-os-side="mac"><code>~/.config/slgo</code>, <code>~/.config/slgod</code>, <code>~/.config/slsh</code> (not <code>~/Library</code>)</td></tr>
+            <tr><td>Shared secret</td><td class="what" data-os-side="linux"><code>~/.config/slgod/secret</code>, always</td><td class="what" data-os-side="mac"><code>~/.config/slgod/secret</code>, always</td></tr>
+            <tr><td>A secret kept for one address</td><td class="what" colspan="2">The same name on both: <code>~/.config/slgod/secret.HOST.PORT</code>. An IPv6 address has its colons turned into dots, <code>secret.2001.db8..20.7807</code>, because macOS shows a colon in a file name as a slash (<a href="reference.html#secret-order">rules</a>).</td></tr>
+            <tr><td><code>XDG_CONFIG_HOME</code> and friends</td><td class="what" data-os-side="linux">honoured when set, except for the secret and the sl-host rules</td><td class="what" data-os-side="mac">honoured when set, except for the secret and the sl-host rules; usually not set on a Mac</td></tr>
+            <tr><td>Keychain / secret service</td><td class="what" data-os-side="linux">not used</td><td class="what" data-os-side="mac">not used</td></tr>
+            <tr><td>Keeping slgod running</td><td class="what" data-os-side="linux">a systemd user unit (not shipped; a template is in <a href="setups.html#service">Setups</a>)</td><td class="what" data-os-side="mac">a LaunchAgent plist (not shipped; a template is in <a href="setups.html#service">Setups</a>)</td></tr>
+            <tr><td>Where a service's output goes</td><td class="what" data-os-side="linux">the journal, unless you pass <code>-log</code></td><td class="what" data-os-side="mac">the files <code>StandardOutPath</code> and <code>StandardErrorPath</code> name</td></tr>
+            <tr><td>Firewall</td><td class="what" data-os-side="linux">ufw, firewalld or nftables, depending on the distribution</td><td class="what" data-os-side="mac">the application firewall, if it is turned on</td></tr>
+            <tr><td><code>slsh viewer --launch</code></td><td class="what" data-os-side="linux">no default; set <code>viewer_launch</code> yourself</td><td class="what" data-os-side="mac">starts Firestorm-OpenSim with <code>open -a</code></td></tr>
+            <tr><td>Operating system the login server is told</td><td class="what" data-os-side="linux"><code>lnx</code>, with the kernel version from <code>uname</code></td><td class="what" data-os-side="mac"><code>mac</code>, with the macOS version</td></tr>
+            <tr><td>Opening a saved texture</td><td class="what" data-os-side="linux"><code>xdg-open file.png</code></td><td class="what" data-os-side="mac"><code>open file.png</code></td></tr>
+            <tr><td>Windows</td><td class="what" colspan="2">Not supported. slsh does not build for Windows.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="build">
+        <h2>Building, and building for the other system</h2>
+        <p>You need Go 1.26.1 or newer. With Go's default setting, an older Go fetches the right version by itself. Build from inside the git checkout, so that <code>--version</code> can say which commit you have:</p>
+        <div class="term"><pre><span class="p">$ </span>cd slgo
+<span class="c"># every program, into ~/go/bin</span>
+<span class="p">$ </span>go install ./cmd/...</pre></div>
+        <p>That is the same on both systems, and in every shell. <code>~/go/bin</code> (or whatever <code>go env GOBIN</code> says) must be on your <code>PATH</code>; <a href="#shells">Shells</a> says how to put it there in yours. In csh or tcsh, run <code>rehash</code> afterwards, or the shell will not see the new programs. <code>rehash</code> in zsh and <code>hash -r</code> in sh make a shell forget an older copy it ran before.</p>
+        <div class="note warn">
+          <p class="label">Careful</p>
+          <p><code>go install ./cmd/...</code> also installs <code>sl-host</code>. Once sl-host is on your <code>PATH</code>, every client asks it where slgod is, and fails if it has no rules file. On a machine that runs slgod itself, delete <code>~/go/bin/sl-host</code> (then <code>rehash</code> in csh or zsh, <code>hash -r</code> in sh), or see <a href="troubleshooting.html#f-sl-host-no-file">the fix in Troubleshooting</a>.</p>
+        </div>
+        <h3 id="cross">Building for the other system</h3>
+        <p>Because the code is pure Go, one machine can build binaries for the other. Set <code>GOOS</code> and <code>GOARCH</code> for the one command, with <code>env</code> in front so that it reads the same in sh, zsh and csh, and write the result outside the source tree. From a Mac, Linux builds of slsh (<code>amd64</code> and <code>arm64</code>), slgod (<code>amd64</code>) and slbotd (<code>arm64</code>) were tried, and each built cleanly. Building is not running: nobody has yet run a cross-built slgod against the grid.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Target machine</th><th><code>uname -m</code> says</th><th>Set</th></tr></thead>
+          <tbody>
+            <tr><td>Linux on a PC or most cloud servers</td><td><code>x86_64</code></td><td><code>GOOS=linux GOARCH=amd64</code></td></tr>
+            <tr><td>Linux on ARM (a Raspberry Pi with a 64-bit system, ARM cloud servers)</td><td><code>aarch64</code></td><td><code>GOOS=linux GOARCH=arm64</code></td></tr>
+            <tr><td>A Mac with Apple silicon</td><td><code>arm64</code></td><td><code>GOOS=darwin GOARCH=arm64</code></td></tr>
+            <tr><td>An Intel Mac</td><td><code>x86_64</code></td><td><code>GOOS=darwin GOARCH=amd64</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>For example, to build the Linux slgod on a Mac and copy it to the server:</p>
+        <div class="term" data-where="laptop" data-where-label="macOS · in the slgo checkout"><pre><span class="p">$ </span>env GOOS=linux GOARCH=amd64 go build -o ~/build/linux-amd64/slgod ./cmd/slgod
+<span class="p">$ </span>scp ~/build/linux-amd64/slgod server.example:go/bin/slgod</pre></div>
+        <p>Or every program at once; this was tried in sh, zsh and csh, and gave all seven. With more than one package, <code>go build -o</code> takes a directory, written with a slash at the end, and puts each program in it under its own name:</p>
+        <div class="term" data-where="laptop" data-where-label="in the slgo checkout"><pre><span class="p">$ </span>env GOOS=linux GOARCH=amd64 go build -o ~/build/linux-amd64/ ./cmd/slgod ./cmd/slbotd ./cmd/slsh ./cmd/slrun ./cmd/slbench ./cmd/sl-host ./cmd/slhash</pre></div>
+        <p>Keep the output out of the checkout. A binary built inside <code>cmd/&lt;name&gt;</code> must never be committed.</p>
+        <p>Whichever way you build, build every machine's programs from the same commit. A client older than slgod is refused with <a href="troubleshooting.html#f-old-client">"this client is older than slgod"</a>. Run <code>slgod -version</code> and <code>slsh --version</code> on each machine to compare.</p>
+      </section>
+
+      <section id="services">
+        <h2>Keeping slgod running</h2>
+        <p>slgod is meant to stay up while clients come and go. Started in a terminal, it stops when that terminal closes. Nothing handles the hang-up signal, so the avatars are not logged out cleanly then. For anything longer than an afternoon, run it under the system's service manager. The repository ships no service files. <a href="setups.html#service">Setups</a> has a template for each: the systemd unit has been run on Ubuntu 24.04, and the launchd plist has not been tested.</p>
+        <div class="os-pair" style="grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));">
+          <div class="note os" data-os-side="linux">
+            <p class="label">Linux</p>
+            <p>A systemd <strong>user</strong> unit in <code>~/.config/systemd/user/slgod.service</code>. It runs as you, so it finds <code>~/.config</code>. To keep it running when you are not logged in, run <code>loginctl enable-linger $USER</code> once; on Ubuntu 24.04 that needed no sudo. systemd stops it with SIGTERM, which slgod handles by logging every avatar out. Checked on Ubuntu 24.04 with systemd 255, September 2026.</p>
+          </div>
+          <div class="note os" data-os-side="mac">
+            <p class="label">macOS</p>
+            <p>A LaunchAgent plist in <code>~/Library/LaunchAgents</code>. It runs as you while you are logged in. launchd does not expand <code>~</code>, so every path in the plist is spelled out in full. launchd stops it with SIGTERM too, and by default gives it about 20 seconds before killing it, which is less than the 30 seconds slgod allows for logging out.</p>
+          </div>
+        </div>
+        <p>Either way, the service's <code>PATH</code> is short. slgod does not care, but slbotd runs slbench and slrun by name unless its <code>program</code> lines give full paths. Give full paths.</p>
+      </section>
+
+      <section id="firewall">
+        <h2>Firewalls</h2>
+        <p>You only need to think about a firewall when a client on another machine connects to slgod. If everything runs on one machine, start slgod with <code>-listen 127.0.0.1:7807</code> and no firewall rule is needed.</p>
+        <p>slgod does not configure any firewall. The commands below are ordinary use of each system's tools, shown as a starting point. Allow TCP 7807 only from the networks your clients are on. None of them has been run for this handbook, because each changes the machine's rules and needs root. On Ubuntu 24.04 the ufw lines match the forms in ufw 0.36.2's manual (<code>man ufw</code>); firewalld was not installed there, so its lines are unchecked.</p>
+        <div class="os-pair" style="grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));">
+          <div class="term" data-os-side="linux" data-where="server" data-where-label="Linux · on the slgod machine"><pre><span class="c"># ufw (Ubuntu, Debian): only the home LAN</span>
+<span class="p">$ </span>sudo ufw allow from 192.0.2.0/24 to any port 7807 proto tcp
+
+<span class="c"># or only over a WireGuard interface</span>
+<span class="p">$ </span>sudo ufw allow in on wg0 to any port 7807 proto tcp
+
+<span class="c"># firewalld (Fedora, RHEL)</span>
+<span class="p">$ </span>sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="192.0.2.0/24" port port="7807" protocol="tcp" accept'
+<span class="p">$ </span>sudo firewall-cmd --reload</pre></div>
+          <div class="term" data-os-side="mac" data-where="server" data-where-label="macOS · on the slgod machine"><pre><span class="c"># is the application firewall on?</span>
+<span class="p">$ </span>/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+
+<span class="c"># let slgod accept connections</span>
+<span class="p">$ </span>sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add ~/go/bin/slgod
+<span class="p">$ </span>sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp ~/go/bin/slgod</pre></div>
+        </div>
+        <div class="note os">
+          <p class="label">Linux vs macOS</p>
+          <p>The macOS application firewall works per program, not per port, and cannot limit which addresses may connect. If it is on, macOS may ask whether slgod may accept incoming connections the first time a client connects from another machine. A rebuilt slgod is a different binary and may be asked about again. We have not watched either happen; both come from how that firewall generally behaves. To limit who can reach port 7807 on a Mac, bind slgod to a specific address with <code>-listen</code>, such as a tunnel address.</p>
+        </div>
+        <p>A firewall that silently drops the connection shows up in slsh as a wait of up to 30 seconds and then an error, rather than an immediate "connection refused". See <a href="troubleshooting.html#f-unreachable">slgod unreachable</a>.</p>
+        <p>Never forward port 7807 from your router to the internet. See <a href="security.html#topologies">Security</a> for what to do instead.</p>
+      </section>
+
+      <section id="viewer">
+        <h2>Starting a viewer</h2>
+        <p><code>slsh viewer --launch</code> starts a real viewer and logs it into the session slgod already holds (slgod must be started with <code>-viewer</code>; see <a href="setups.html#viewer">Setups</a>). The command it runs comes from slsh's <code>viewer_launch</code> setting, and that has a default only on macOS.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Setting</th><th data-os-side="mac">macOS default</th><th data-os-side="linux">Linux default</th></tr></thead>
+          <tbody>
+            <tr><td><code>viewer_app</code></td><td data-os-side="mac"><code>Firestorm-OpenSim</code></td><td class="what" data-os-side="linux">empty</td></tr>
+            <tr><td><code>viewer_grid</code></td><td data-os-side="mac"><code>slgod</code></td><td class="what" data-os-side="linux">empty</td></tr>
+            <tr><td><code>viewer_launch</code></td><td data-os-side="mac"><code>open -a {app} --args --grid {grid} --login {first} {last} {password}</code></td><td class="what" data-os-side="linux">empty</td></tr>
+            <tr><td><code>viewer_running</code></td><td data-os-side="mac"><code>pgrep -f {app}.app/Contents</code></td><td class="what" data-os-side="linux">empty, so no check is made</td></tr>
+          </tbody>
+        </table></div>
+        <p>On Linux, with nothing set, <code>viewer --launch</code> says so and stops, before it asks slgod for anything. Seen on Ubuntu 24.04:</p>
+        <div class="term" data-where="laptop" data-where-label="Linux · on your computer"><pre><span class="p">$ </span>slsh -c "viewer --launch"
+<span class="o">slsh: viewer: nothing here knows how to start a viewer on linux; put a "viewer_launch = ..." line in slsh's config (~/.config/slsh/config) with {app} {uri} {first} {last} {password} where those belong</span></pre></div>
+        <p>So write one. The template is split into words and run directly, with no shell. The placeholders are <code>{app}</code>, <code>{grid}</code>, <code>{uri}</code>, <code>{first}</code>, <code>{last}</code> and <code>{password}</code>. Use <code>--grid {grid}</code> rather than <code>{uri}</code>, as the macOS default does: on macOS, a viewer given <code>--loginuri</code> came up on whichever grid it had used last. The line below is only a shape to adapt. <strong>No viewer has been started this way on Linux.</strong> The path is wherever you unpacked the Firestorm OpenSim build, and the flags are the ones that work on macOS.</p>
+        <div class="file" data-os-side="linux"><div class="name">~/.config/slsh/config (Linux, an example to adapt; not tried)</div><pre>viewer_grid    = slgod
+viewer_launch  = /opt/firestorm-os/firestorm --grid {grid} --login {first} {last} {password}
+viewer_running = pgrep -f /opt/firestorm-os/</pre></div>
+        <div class="note os">
+          <p class="label">Both systems</p>
+          <p>Use the <strong>OpenSim</strong> build of Firestorm. The Second Life build cannot be pointed at a private grid at all: on macOS it was seen to ignore the grid and go to the normal Second Life login screen. The grid has to be added in the viewer once by hand (Preferences, then OpenSim), with the login URI <code>slsh viewer</code> prints and the nickname <code>viewer_grid</code> names.</p>
+        </div>
+      </section>
+
+      <section id="modes">
+        <h2>File permissions</h2>
+        <p>These are the same on both systems. Where the table says "refused", the program will not start until you fix the mode, and it prints the <code>chmod</code> to run.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Path</th><th>Mode</th><th>If it is wider</th></tr></thead>
+          <tbody>
+            <tr><td><code>~/.config/slgod/</code></td><td><code>700</code></td><td class="what">refused, by slgod and every client (<a href="troubleshooting.html#f-secret-perms">fix</a>)</td></tr>
+            <tr><td><code>~/.config/slgod/secret</code></td><td><code>600</code></td><td class="what">refused</td></tr>
+            <tr><td><code>~/.config/slgod/secret.HOST.PORT</code>, <code>secret.HOST</code>, a <code>-secret</code> file</td><td><code>600</code></td><td class="what">refused; a client does not fall back to the shared secret</td></tr>
+            <tr><td><code>~/.config/slgo/</code> (profiles, slbotd.conf)</td><td><code>700</code></td><td class="what">refused, by slgod and slbotd</td></tr>
+            <tr><td><code>~/.config/slgo/&lt;profile&gt;</code></td><td><code>600</code></td><td class="what">refused</td></tr>
+            <tr><td><code>~/.config/slgod/</code></td><td><code>700</code></td><td class="what">created that way by slgod</td></tr>
+            <tr><td><code>~/.config/slgod/config</code>, <code>seats</code>, <code>viewer-key.pem</code></td><td><code>600</code></td><td class="what">written that way by slgod</td></tr>
+            <tr><td><code>~/.config/slgod/viewer-cert.pem</code></td><td><code>644</code></td><td class="what">public; fine as it is</td></tr>
+            <tr><td>the <code>-log</code> directory, e.g. <code>~/.local/log</code></td><td><code>700</code></td><td class="what">refused if it already exists wider</td></tr>
+            <tr><td>the <code>-log</code> and <code>-trace</code> files</td><td><code>600</code></td><td class="what">narrowed to 600 when opened</td></tr>
+            <tr><td><code>~/.config/slsh/config</code></td><td><code>644</code></td><td class="what">no secrets in it, so not checked</td></tr>
+            <tr><td><code>~/.local/share/slgo/</code> (slsh transcripts)</td><td><code>700</code> / files <code>600</code></td><td class="what">created that way</td></tr>
+            <tr><td><code>~/.local/state/slbotd/</code> (conversations)</td><td><code>700</code></td><td class="what">created that way</td></tr>
+          </tbody>
+        </table></div>
+        <p>A <code>umask</code> does not matter for the files the programs create themselves. It does matter for files you create by hand, which is why the command that makes the secret sets one:</p>
+        <div class="term"><pre><span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgod; openssl rand -hex 32 &gt; ~/.config/slgod/secret)</pre></div>
+      </section>
+
+      <section id="terminal">
+        <h2>Terminals</h2>
+        <p>slsh has its own line editor, history, completion and pager, so it needs no readline, <code>$PAGER</code> or <code>$EDITOR</code>, on either system. It uses a few common VT100 sequences, never clears the screen, and never moves the cursor to a fixed position, so your scrollback stays intact. Terminal.app, iTerm2 and the usual Linux terminals all speak those sequences.</p>
+        <ul>
+          <li>Window resizes are followed. With no size available, slsh assumes 80 by 24.</li>
+          <li><code>NO_COLOR</code>, set to anything, turns colour off.</li>
+          <li>With input from a pipe rather than a terminal, slsh reads plain lines, with no editing and no colour. <code>-c</code> and <code>-f</code> read nothing from the terminal.</li>
+          <li>ESC leaves chat mode. If your terminal or a multiplexer holds on to ESC, choose another key with <code>--escape</code>.</li>
+          <li><code>set map_ratio auto</code> measures the font by asking the terminal. A terminal that does not answer needs the ratio set by hand (<code>man set</code> in slsh).</li>
+          <li>slsh never touches the clipboard, on either system.</li>
+        </ul>
+        <p>To keep slgod running in a terminal you might close, use tmux or screen, or better, a service.</p>
+      </section>
+
+      <section id="shells">
+        <h2>Shells: sh, zsh and csh</h2>
+        <p>The commands in this handbook are written for three families of shell: sh (with bash, dash and ksh), zsh, and csh (with tcsh). slgo has no preference among them. macOS starts zsh for a new account and many Linux distributions start bash, but any of the three will do.</p>
+        <p>Where a command can be written to run unchanged in all three, it is, and it is shown once. Where it cannot, it is shown once per shell, each labelled; the <strong>shell</strong> switch in the top bar hides the ones that are not yours. Whichever shell you use, the prompt in the examples is always shown as <code>$</code>. Type what follows it. Lines starting with <code>#</code> are notes, not commands, and they sit on lines of their own because at a prompt zsh and csh do not take <code>#</code> as the start of a comment: pasted after a command, it would reach the program as more words.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th></th><th>sh, bash</th><th>zsh</th><th>csh, tcsh</th></tr></thead>
+          <tbody>
+            <tr><td>Files read at start</td><td class="what"><code>~/.profile</code>; bash reads <code>~/.bash_profile</code> instead when it exists, and <code>~/.bashrc</code> in a shell that is not a login shell</td><td class="what"><code>~/.zshenv</code> always, <code>~/.zprofile</code> at login, <code>~/.zshrc</code> when interactive</td><td class="what"><code>~/.cshrc</code> (tcsh reads <code>~/.tcshrc</code> instead when it exists), then <code>~/.login</code> at login</td></tr>
+            <tr><td>A variable for programs you start</td><td><code>export NAME=value</code></td><td><code>export NAME=value</code></td><td><code>setenv NAME value</code></td></tr>
+            <tr><td>After installing or removing a program</td><td><code>hash -r</code></td><td><code>rehash</code></td><td><code>rehash</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>To put <code>~/go/bin</code> on your <code>PATH</code> for good, add one line to the file your shell reads, then open a new terminal or read the file again. If you set <code>GOPATH</code> or <code>GOBIN</code>, use that directory instead.</p>
+        <div class="sh-set">
+          <div class="term" data-sh-only="sh" data-where="laptop" data-where-label="sh or bash · on your computer"><pre><span class="c"># add to ~/.profile (bash: ~/.bash_profile or ~/.bashrc)</span>
+export PATH="$PATH:$HOME/go/bin"
+
+<span class="c"># then, in this terminal</span>
+<span class="p">$ </span>. ~/.profile</pre></div>
+          <div class="term" data-sh-only="zsh" data-where="laptop" data-where-label="zsh · on your computer"><pre><span class="c"># add to ~/.zshrc (or ~/.zprofile)</span>
+export PATH="$PATH:$HOME/go/bin"
+
+<span class="c"># then, in this terminal</span>
+<span class="p">$ </span>. ~/.zshrc</pre></div>
+          <div class="term" data-sh-only="csh" data-where="laptop" data-where-label="csh or tcsh · on your computer"><pre><span class="c"># add to ~/.cshrc (or ~/.tcshrc, if you have one)</span>
+set path = ( $path ~/go/bin )
+
+<span class="c"># then, in this terminal</span>
+<span class="p">$ </span>source ~/.cshrc</pre></div>
+        </div>
+        <p>csh and tcsh keep a list of the programs on the <code>PATH</code>, made when the shell starts or the path is set. A program installed after that is <code>Command not found.</code> until you run <code>rehash</code>. All three shells also remember where they last found a program, so after installing a second copy earlier on the <code>PATH</code>, they go on running the old one until <code>rehash</code> (csh, zsh) or <code>hash -r</code> (sh, bash). <a href="troubleshooting.html#f-command-not-found">Troubleshooting</a> has both.</p>
+        <p>To set a variable for one command only, put <code>env</code> in front. That form is the same in every shell, and it is the one this handbook uses:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>env NO_COLOR=1 slsh</pre></div>
+      </section>
+
+      <section id="logs">
+        <h2>Where things are written</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>What</th><th data-os-side="linux">Linux</th><th data-os-side="mac">macOS</th></tr></thead>
+          <tbody>
+            <tr><td>slgod or slbotd in a terminal</td><td class="what" colspan="2">standard error, unless you pass <code>-log FILE</code></td></tr>
+            <tr><td>with <code>-log</code></td><td class="what" colspan="2">the file you name; <code>~/.local/log/slgod.log</code> and <code>~/.local/log/slbotd.log</code> are the suggested places</td></tr>
+            <tr><td>run as a service, without <code>-log</code></td><td class="what" data-os-side="linux">the journal: <code>journalctl --user -u slgod</code></td><td class="what" data-os-side="mac">the file named by <code>StandardErrorPath</code></td></tr>
+            <tr><td>slsh transcript</td><td class="what" colspan="2"><code>~/.local/share/slgo/&lt;avatar&gt;.log</code>, or <code>$XDG_DATA_HOME/slgo</code>, or slsh's <code>log_dir</code></td></tr>
+            <tr><td>slbotd conversations</td><td class="what" colspan="2"><code>~/.local/state/slbotd/</code>, or <code>$XDG_STATE_HOME/slbotd</code>, or <code>chat-dir</code></td></tr>
+            <tr><td>slgod's identity, seats, viewer certificate</td><td class="what" colspan="2"><code>~/.config/slgod/</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>slgod's log lines carry the time of day and no date. Neither daemon rotates its log. See <a href="setups.html#logs">Logs and rotating them</a>.</p>
+      </section>
+
+      <section id="mixed">
+        <h2>slsh on macOS, slgod on Linux</h2>
+        <p>This is the most common mixed setup: a Linux server holds the avatars and you drive them from a Mac. Nothing about it is special to the two systems, but these are the things that trip people. Tick them off as you go.</p>
+        <ol class="steps" id="mixed-steps">
+          <li><div class="step-body"><h3>Same source, both machines</h3><p>Build slgod on the server and slsh on the Mac from the same commit, or cross-build the Linux one on the Mac (<a href="#cross">above</a>). Compare <code>slgod -version</code> and <code>slsh --version</code>.</p></div></li>
+          <li><div class="step-body"><h3>Profiles on the server only</h3><p>Profiles live in <code>~/.config/slgo</code> on the Linux machine, mode 700 for the directory and 600 for each file. The Mac needs none unless you use <code>--direct</code>.</p></div></li>
+          <li><div class="step-body"><h3>Choose what slgod listens on</h3><p>On a trusted LAN the default <code>:7807</code> works. Through an SSH tunnel, use <code>-listen 127.0.0.1:7807</code>. Over WireGuard or Tailscale, use the server's tunnel address. <a href="security.html#topologies">Security</a> compares them.</p></div></li>
+          <li><div class="step-body"><h3>Open the firewall on Linux</h3><p>Only for the LAN or tunnel your Mac is on, as in <a href="#firewall">Firewalls</a>. Not needed for an SSH tunnel.</p></div></li>
+          <li><div class="step-body"><h3>Copy the secret to the Mac</h3><p>Over SSH, into a directory of mode 700:</p>
+            <div class="term" data-where="laptop" data-where-label="macOS · your computer"><pre><span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgod)
+<span class="p">$ </span>scp server.example:.config/slgod/secret ~/.config/slgod/secret
+<span class="p">$ </span>chmod 600 ~/.config/slgod/secret</pre></div></div></li>
+          <li><div class="step-body"><h3>Tell slsh where slgod is</h3><p>One of: <code>slsh --addr server.example:7807</code> each time; <code>set addr server.example:7807</code> once in slsh; or sl-host rules if the Mac moves between networks (<a href="sl-host.html">sl-host</a>).</p></div></li>
+          <li><div class="step-body"><h3>Check for a stray sl-host</h3><p>If you ran <code>go install ./cmd/...</code> on the Mac, sl-host is on your <code>PATH</code> and will be asked first. With <code>addr</code> set it is not asked. Without <code>addr</code>, give it a rules file or delete it (<a href="troubleshooting.html#f-sl-host-no-file">fix</a>).</p></div></li>
+          <li><div class="step-body"><h3>Try it</h3>
+            <div class="term" data-where="laptop" data-where-label="macOS · your computer"><pre><span class="p">$ </span>slsh -c agents</pre></div>
+            <p>It lists the sessions slgod holds. If it fails, <a href="troubleshooting.html">Troubleshooting</a> has each error.</p></div></li>
+          <li><div class="step-body"><h3>A viewer on the Mac, if you want one</h3><p>slgod's <code>-viewer</code> address must be one the Mac can reach, and in practice that means a tunnel address. The Mac's Firestorm-OpenSim must trust the Linux slgod's <code>~/.config/slgod/viewer-cert.pem</code>: copy that file to the Mac and add it to Firestorm's <code>user_settings/CA.pem</code>, or accept the certificate dialog once. <code>viewer_launch</code> already has a default on the Mac.</p></div></li>
+        </ol>
+        <p>Remember where files end up: <code>get</code>, <code>put</code>, <code>&gt;</code> redirection, <code>-f</code> files and the transcript all read and write <strong>on the Mac</strong>, where slsh runs, not on the server.</p>
+
+        <h3 id="reverse">And the other way round: slgod on a Mac</h3>
+        <p>Everything above applies with the systems swapped. The differences:</p>
+        <ul>
+          <li>A LaunchAgent runs only while you are logged in to the Mac. For a Mac that nobody logs in to, a LaunchDaemon run as your user is the usual answer; that is general macOS practice and has not been tried here.</li>
+          <li>A sleeping Mac holds no sessions. When it wakes, the connection to the grid will have ended, and slgod retries a dropped connection by itself. Keep a Mac that serves slgod awake, in System Settings or by running slgod under <code>caffeinate -i</code>.</li>
+          <li>The application firewall cannot limit by address. Use <code>-listen</code> with a specific address instead.</li>
+          <li>On the Linux client, <code>slsh viewer --launch</code> needs <code>viewer_launch</code> set (see <a href="#viewer">Starting a viewer</a>).</li>
+          <li>The login server is told the avatars are on a Mac. If you move slgod between systems later, see <a href="setups.html#move">Moving slgod</a>.</li>
+        </ul>
+      </section>
+
+      <script>
+      (function () {
+        var page = document.getElementById('platforms');
+        if (!page) return;
+        var box = page.querySelector('[data-only-mine]');
+        if (!box) return;
+        var KEY = 'slgo-handbook:platforms-only-mine';
+        function apply() {
+          page.querySelectorAll('[data-os-side]').forEach(function (el) {
+            if (box.checked) el.setAttribute('data-os-only', el.getAttribute('data-os-side'));
+            else el.removeAttribute('data-os-only');
+          });
+          try { if (box.checked) localStorage.setItem(KEY, '1'); else localStorage.removeItem(KEY); } catch (e) { /* no storage */ }
+        }
+        try { box.checked = localStorage.getItem(KEY) === '1'; } catch (e) { box.checked = false; }
+        box.addEventListener('change', apply);
+        apply();
+      })();
+      </script>
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="setups.html">← Setups</a> <a href="security.html">Security →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>sl-host — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="sl-host">
+<style>
+  #sl-host .tester label.lbl { font-family: var(--mono); font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 0.35rem; }
+  #sl-host .tester textarea, #sl-host .tester input[type="text"] {
+    font-family: var(--mono); font-size: 0.82rem; line-height: 1.55; width: 100%; box-sizing: border-box;
+    padding: 0.6rem 0.75rem; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); color: var(--ink);
+  }
+  #sl-host .tester textarea { min-height: 9.5rem; resize: vertical; white-space: pre; overflow-x: auto; }
+  #sl-host .tester .presets { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.5rem; }
+  #sl-host .tester .presets span { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+  #sl-host .tester .out { border-top: 1px solid var(--rule); padding-top: 1.1rem; display: flex; flex-direction: column; gap: 0.8rem; }
+  #sl-host .tester .verdict { font-size: 1rem; }
+  #sl-host .tester .verdict code { font-size: 0.9em; }
+  #sl-host .tester td.state { font-family: var(--mono); font-size: 0.78rem; white-space: nowrap; }
+  #sl-host .tester tr.win td { background: var(--ok-soft); }
+  #sl-host .tester tr.win td.state { color: var(--ok); font-weight: 600; }
+  #sl-host .tester .msgs { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-soft); }
+  #sl-host .tester .msgs li.err { color: var(--warn-ink); }
+</style>
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Helper · client machines only</p>
+    <h1>sl-host<span class="caret">_</span></h1>
+    <p class="standfirst">A small helper for a laptop that reaches slgod at different addresses in different places. It looks at which network the laptop is on and prints the address to use there. Most setups do not need it.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">~10 min</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+      <section id="what">
+        <h2>What it is</h2>
+        <p><code>sl-host</code> prints the address of the machine slgod runs on, as seen from whichever network <em>this</em> machine is on right now. It reads a small rules file, compares each rule with this machine's own addresses, and prints the address from the first rule that fits.</p>
+        <p>It runs on the <strong>client</strong> machine: the one with slsh, slrun, slbench or slbotd. slgod never runs it and never reads its file. You seldom run it yourself either; the clients run it when they need an address and were not given one.</p>
+        <div class="file"><div class="name">~/.config/sl-host</div><pre>192.168.1.0/24   192.168.1.20   home
+0/0              10.8.0.1       anywhere else, over the VPN</pre></div>
+        <p>On the home network (any address in <code>192.168.1.0/24</code>) that prints <code>192.168.1.20</code>, the server's LAN address. Anywhere else it prints <code>10.8.0.1</code>, the server's address on a VPN such as WireGuard or Tailscale.</p>
+        <p>A rule can also carry a port, for a slgod that does not listen on 7807, and can be kept for one profile, so that <code>slsh -a dev</code> finds a second slgod while every other profile finds the first. See <a href="#ex-second">the example</a>.</p>
+      </section>
+
+      <section id="not-needed">
+        <h2>When you need it, and when you do not</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Your setup</th><th>sl-host?</th></tr></thead>
+          <tbody>
+            <tr><td class="what">slgod and the clients on the same machine</td><td class="what"><strong>No.</strong> Do not install it.</td></tr>
+            <tr><td class="what">slgod elsewhere, at an address that never changes</td><td class="what"><strong>No.</strong> Put <code>addr = HOST:7807</code> in <code>~/.config/slsh/config</code>, or pass <code>--addr</code>.</td></tr>
+            <tr><td class="what">slgod reached through an SSH tunnel on <code>localhost</code></td><td class="what"><strong>No.</strong> With no sl-host the clients use <code>localhost:7807</code> anyway.</td></tr>
+            <tr><td class="what">A laptop that reaches slgod one way at home and another way away</td><td class="what"><strong>Yes.</strong> This is what it is for.</td></tr>
+            <tr><td class="what">Several client programs (slsh, slrun, slbench, slbotd) that should all agree</td><td class="what"><strong>Useful.</strong> slrun and slbench have no config file, so sl-host is the one place all of them look.</td></tr>
+          </tbody>
+        </table></div>
+        <h3 id="accident">Installed by accident, it breaks a one-machine setup</h3>
+        <p>A client that was given no address checks whether <code>sl-host</code> is on your <code>PATH</code>. If it is not, the client uses <code>localhost:7807</code>, which is right when slgod runs on the same machine. If it <em>is</em>, the client runs it and uses its answer. When sl-host fails, the client stops. It does not fall back to localhost, because that would turn "sl-host is misconfigured" into a refused connection and point you at the wrong problem.</p>
+        <p><code>go install ./cmd/...</code> installs every program in the source tree, sl-host included. On a machine with no rules file, every client then stops with:</p>
+        <div class="term"><pre><span class="o">slsh: cannot find the host slgod is on: sl-host failed: exit status 2: sl-host: cannot read ~/.config/sl-host
+	--addr HOST:PORT overrides</span></pre></div>
+        <p>Pick one fix:</p>
+        <ul>
+          <li><strong>Remove it</strong>, the simplest. <code>which sl-host</code> prints where it is, usually <code>~/go/bin/sl-host</code>; remove that file with <code>rm</code>, then run <code>rehash</code> in csh or zsh, or <code>hash -r</code> in sh or bash, so the shell forgets it.</li>
+          <li><strong>Set the address</strong>: <code>addr = localhost:7807</code> in <code>~/.config/slsh/config</code>. An address from the config file or <code>--addr</code> means sl-host is never asked. That covers slsh only; slrun and slbench still ask sl-host.</li>
+          <li><strong>Give it rules</strong> that point at this machine; see <a href="#examples">the examples</a>.</li>
+        </ul>
+        <p>If you see <code>no host configured</code> instead, that wording belongs to the old shell script sl-host replaced, and the current program never prints it. Most likely an old copy of the script comes earlier on your <code>PATH</code>.</p>
+      </section>
+
+      <section id="clients">
+        <h2>How clients use it</h2>
+        <p>Every client settles where slgod is in the same order:</p>
+        <ol>
+          <li>An address on the command line: <code>--addr HOST:PORT</code> for slsh, slrun and slbench, <code>-addr</code> for slbotd.</li>
+          <li>An address in the client's config: <code>addr =</code> in <code>~/.config/slsh/config</code> for slsh, or in <code>slbotd.conf</code> for slbotd.</li>
+          <li><strong>sl-host</strong>, if it is on <code>PATH</code>.</li>
+          <li><code>localhost:7807</code>.</li>
+        </ol>
+        <p>At step 3 the client runs <code>sl-host</code> with no arguments and takes the first word it prints as the address.</p>
+        <ul>
+          <li><strong>The port.</strong> If the answer has no port, the client adds <code>:7807</code>. An IPv6 answer then comes out in brackets, like <code>[2001:db8::10]:7807</code>. If the answer names a port, such as <code>192.0.2.20:7808</code> or <code>[2001:db8::20]:7808</code>, the client uses it as given. That port comes from the rule, so a slgod started with <code>-listen :7808</code> can be found this way. The address as it comes out here is also what picks the secret file, for a slgod with a secret of its own: <code>192.0.2.20</code> becomes <code>192.0.2.20:7807</code>, and the client looks first for <code>~/.config/slgod/secret.192.0.2.20.7807</code> (<a href="reference.html#secret-order">rules</a>).</li>
+          <li><strong>The profile.</strong> The client first works out which avatar it wants: <code>-a</code>, then <code>$SLGO_AGENT</code>, then <code>agent =</code> in its config. It runs sl-host with <code>SLGO_AGENT</code> set to that profile name, or with <code>SLGO_AGENT</code> removed when there is none, so the answer is about the avatar it is about to ask for. slbotd does this only when it holds exactly one avatar; holding several, it asks about none. <a href="#profiles">Rules for one profile</a> use it.</li>
+          <li>A non-zero exit stops the client. What sl-host wrote to standard error is included in the client's message, followed by the hint <code>--addr HOST:PORT overrides</code>.</li>
+          <li>If sl-host exits 0 but prints nothing, the client says <code>cannot find the host slgod is on: sl-host printed nothing</code>.</li>
+        </ul>
+        <div class="note warn"><p class="label">Careful</p><p>Build the clients and sl-host from the same checkout. An older client that gets <code>192.0.2.20:7808</code> from a newer sl-host adds <code>:7807</code> to it and cannot connect. An older sl-host has never heard of <code>SLGO_AGENT</code> or <code>@profile</code> words; it takes an <code>@</code> word for part of the label, so a rule meant for one profile answers for every one. An older client that does not set <code>SLGO_AGENT</code> still works with rules that name no profile.</p></div>
+      </section>
+
+      <section id="install">
+        <h2>Installing it</h2>
+        <p>On the client machine, from the source checkout:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>go install ./cmd/sl-host
+<span class="p">$ </span>which sl-host</pre></div>
+        <p>If <code>which</code> does not find it, run <code>rehash</code> in csh or zsh, or <code>hash -r</code> in sh or bash, and ask again. The clients find it through <code>PATH</code>, so the Go bin directory (usually <code>~/go/bin</code>) has to be on it. A client started by a service manager sees that service's <code>PATH</code>, which may not include your shell's; that is general service-manager behaviour, not something sl-host checks. Then write the rules file, below, before you run a client.</p>
+      </section>
+
+      <section id="rules">
+        <h2>The rules file</h2>
+        <p>The file is <code>~/.config/sl-host</code>. It is a <em>file</em> at that path, not a directory. <code>$SL_HOSTFILE</code> names a different one. The path is under <code>$HOME/.config</code> even when <code>XDG_CONFIG_HOME</code> is set.</p>
+        <p>One rule a line:</p>
+        <div class="file"><div class="name">format</div><pre>&lt;network&gt;   &lt;address&gt;[:&lt;port&gt;]   [@profile ...]   [label ...]</pre></div>
+        <dl>
+          <dt>network</dt>
+          <dd>Which network this machine has to be on for the rule to apply. Any of:
+            <ul>
+              <li>a CIDR: <code>192.168.1.0/24</code>, <code>2001:db8::/32</code>;</li>
+              <li>IPv4 with the trailing zero octets left off: <code>0/0</code>, <code>10/8</code>, <code>192.168/16</code>;</li>
+              <li>a bare address, which means that one address: <code>192.0.2.5</code> is <code>192.0.2.5/32</code>, and an IPv6 address is <code>/128</code>.</li>
+            </ul>
+          </dd>
+          <dt>address</dt>
+          <dd>What to print on that network: slgod's address as seen from there. It is printed exactly as written, so a host name works too. It may carry a port: <code>192.0.2.20:7808</code>, <code>server.example:7808</code>, or <code>[2001:db8::20]:7808</code> for IPv6, which needs the brackets when there is a port. With no port the client adds <code>:7807</code>. A port that is not a number from 1 to 65535, or a port with no host, makes sl-host warn and skip the line.</dd>
+          <dt>@profile</dt>
+          <dd>Optional. Words that start with <code>@</code>, straight after the address, keep the rule for those profiles: <code>@dev</code>, or <code>@dev @test</code>. The name is the profile name, the same one you give <code>-a</code>, spelled exactly the same. An <code>@</code> on its own makes sl-host warn and skip the line. See <a href="#profiles">rules for one profile</a>.</dd>
+          <dt>label</dt>
+          <dd>Optional free text, the rest of the line after any <code>@</code> words. Only <code>-v</code>, <code>-l</code> and error messages show it.</dd>
+        </dl>
+        <p>How the rules are applied:</p>
+        <ul>
+          <li><strong>The first rule that matches wins.</strong> Put specific networks first and catch-alls last.</li>
+          <li>A rule matches if <em>any</em> of this machine's addresses is in its network. A machine often has several at once (wired and wireless, a VPN, a bridge for virtual machines), and each rule is tried against every one of them.</li>
+          <li>Only interfaces that are up count, and loopback (<code>127.0.0.1</code>, <code>::1</code>) and link-local (<code>169.254.x.x</code>, <code>fe80::</code>) addresses are left out. They say nothing about where the machine is.</li>
+          <li><code>0/0</code> matches every IPv4 address and no IPv6 one. <code>::/0</code> matches every IPv6 address and no IPv4 one. A machine that has only IPv6 addresses on some network needs a <code>::/0</code> rule to be caught there.</li>
+          <li><code>#</code> starts a comment anywhere on a line. Blank lines are ignored.</li>
+          <li>A line sl-host cannot read is reported on standard error and skipped. The rest of the file is still used.</li>
+        </ul>
+        <h3 id="profiles">Rules for one profile</h3>
+        <p>sl-host is told which profile the client wants, in <code>SLGO_AGENT</code>. To ask by hand, run <code>sl-host -a NAME</code>, or <code>env SLGO_AGENT=NAME sl-host</code>. <code>-a</code> wins over <code>SLGO_AGENT</code>.</p>
+        <ul>
+          <li>A rule with no <code>@</code> word is for every profile, and for a question that names no profile. A file written before profiles could be named means what it always meant.</li>
+          <li>A rule with <code>@</code> words is tried only when the question names one of them. It never answers a question that names no profile.</li>
+          <li>The first matching rule still wins. Put a profile's own rules <strong>above</strong> the general ones, or a general catch-all answers first.</li>
+          <li>If only <code>@</code> rules cover this network and the question names another profile, or none, nothing matches and sl-host exits 1.</li>
+        </ul>
+      </section>
+
+      <section id="examples">
+        <h2>Worked examples</h2>
+        <h3 id="ex-away">Home LAN, and a VPN everywhere else</h3>
+        <div class="file"><div class="name">~/.config/sl-host</div><pre><span class="c"># at home, the server's LAN address</span>
+192.168.1.0/24   192.168.1.20   home
+<span class="c"># anywhere else, the server's address on the VPN</span>
+0/0              10.8.0.1       anywhere else</pre></div>
+        <p>The VPN address reaches the server from anywhere the VPN is up. Do not forward port 7807 from your router instead: that puts slgod on the internet with only the secret to guard it (<a href="security.html">Security</a>). Without a VPN, <a href="quickstart-remote.html#route-ssh">an SSH tunnel</a> does the same job; see the next example.</p>
+
+        <h3 id="ex-vpn">Home LAN, a VPN, and an SSH tunnel as the catch-all</h3>
+        <div class="file"><div class="name">~/.config/sl-host</div><pre>192.168.1.0/24   192.168.1.20   home
+10.8/16          10.8.0.1       vpn
+0/0              127.0.0.1      anywhere else, through an SSH tunnel</pre></div>
+        <p><code>10.8/16</code> is short for <code>10.8.0.0/16</code>. Away from home with the VPN up, the laptop has a café address <em>and</em> a <code>10.8.x.x</code> address. Both the <code>vpn</code> rule and the catch-all match, and <code>vpn</code> wins because it comes first. With the VPN down, only the catch-all matches, and the client connects to this machine's port 7807, where an SSH tunnel to the server has to be running (<code>ssh -N -L 7807:127.0.0.1:7807 you@server.example</code>, <a href="quickstart-remote.html#route-ssh">Route B</a>). Without the tunnel that is a connection refused, not an sl-host error.</p>
+
+        <h3 id="ex-ipv6">With IPv6</h3>
+        <div class="file"><div class="name">~/.config/sl-host</div><pre>192.168.1.0/24   192.168.1.20   home
+0/0              server.example anywhere else, IPv4
+::/0             server.example anywhere else, IPv6</pre></div>
+        <p>The last line catches a network that gives the laptop only IPv6 addresses, which <code>0/0</code> never matches. The address here is a host name, which sl-host prints as written; the client then looks it up.</p>
+
+        <h3 id="ex-second">A second slgod on another port, for one profile</h3>
+        <p>A second slgod runs on the server on port 7808 (<a href="setups.html#second-slgod">how</a>) and holds the profile <code>dev</code>. You want <code>slsh -a dev</code> to reach it, and everything else to reach the first one.</p>
+        <div class="file"><div class="name">~/.config/sl-host</div><pre><span class="c"># the development slgod, for the dev profile only; above the general rules</span>
+192.168.1.0/24   192.168.1.20:7808   @dev   the development slgod, home
+0/0              10.8.0.1:7808       @dev   the development slgod, away
+<span class="c"># everyone else, on the usual port</span>
+192.168.1.0/24   192.168.1.20        home
+0/0              10.8.0.1            anywhere else</pre></div>
+        <p>At home, <code>slsh -a dev</code> connects to <code>192.168.1.20:7808</code>. <code>slsh -a example</code>, or plain <code>slsh</code> with no avatar named anywhere, skips the two <code>@dev</code> rules and connects to <code>192.168.1.20:7807</code>. If both slgods run on the laptop itself, one rule is enough: <code>0/0 127.0.0.1:7808 @dev the development slgod</code>, above the general rules.</p>
+        <p>Check each side by hand. These work the same in sh, zsh and csh:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>sl-host -v -a dev
+<span class="p">$ </span>env SLGO_AGENT=dev sl-host -v
+<span class="p">$ </span>sl-host -v</pre></div>
+        <p>The second slgod has to listen where the rules send clients: with <code>-listen 127.0.0.1:7808</code> it can be reached from the server itself and nowhere else. To reach it over the LAN and the VPN, start it with <code>-listen :7808</code> and let the server's firewall admit only those networks, as for the first (<a href="security.html">Security</a>).</p>
+
+        <h3 id="ex-local">A machine that runs its own slgod and keeps sl-host</h3>
+        <div class="file"><div class="name">~/.config/sl-host</div><pre>0/0    127.0.0.1   this machine
+::/0   127.0.0.1   this machine</pre></div>
+        <p>This works while the machine is on a network. With no network at all it has no address sl-host counts, since loopback is left out, and sl-host fails with <code>no address found on any interface</code> (read from the code). Removing sl-host is the better fix for a one-machine setup.</p>
+      </section>
+
+      <section id="tester">
+        <h2>Try your rules</h2>
+        <p>Paste a rules file, the addresses this machine has and, if you like, the profile a client would ask about, and see which rule sl-host would pick and where the client would connect. It follows the same rules as the program: first match wins, <code>0/0</code> matches only IPv4, short networks are filled out with zeros, a bare address is <code>/32</code>, a port in the address is kept, and a rule with <code>@</code> words is tried only for those profiles. It takes IPv4 addresses for the machine; IPv6 rules are read, and never match an IPv4 address. Nothing leaves this page.</p>
+        <div class="picker tester">
+          <div>
+            <label class="lbl" for="slh-rules">Rules file</label>
+            <textarea id="slh-rules" data-t="rules" rows="9" spellcheck="false" autocapitalize="off" autocomplete="off"># the dev profile has a second slgod, on port 7808
+192.168.1.0/24   192.168.1.20:7808   @dev   development, home
+0/0              10.8.0.1:7808       @dev   development, anywhere else
+# every other profile, and a client that names none
+192.168.1.0/24   192.168.1.20        home
+10.8/16          10.8.0.1            vpn
+0/0              127.0.0.1           anywhere else, through an SSH tunnel
+::/0             2001:db8::7         anywhere else, IPv6</textarea>
+          </div>
+          <div>
+            <label class="lbl" for="slh-addrs">This machine's addresses (IPv4, separated by spaces)</label>
+            <input type="text" id="slh-addrs" data-t="addrs" value="198.51.100.23 10.8.0.6" spellcheck="false" autocapitalize="off" autocomplete="off">
+            <div class="presets"><span>try:</span>
+              <button type="button" class="chip" data-addrs="192.168.1.37">at home</button>
+              <button type="button" class="chip" data-addrs="198.51.100.23 10.8.0.6">away, VPN up</button>
+              <button type="button" class="chip" data-addrs="198.51.100.23">away, no VPN</button>
+              <button type="button" class="chip" data-addrs="127.0.0.1 169.254.10.20">no network</button>
+            </div>
+          </div>
+          <div>
+            <label class="lbl" for="slh-profile">Profile the client asks about (optional)</label>
+            <input type="text" id="slh-profile" data-t="profile" value="dev" spellcheck="false" autocapitalize="off" autocomplete="off">
+            <div class="presets"><span>try:</span>
+              <button type="button" class="chip" data-profile="dev">dev</button>
+              <button type="button" class="chip" data-profile="example">example</button>
+              <button type="button" class="chip" data-profile="">none named</button>
+            </div>
+            <p class="msgs" style="margin-top:0.5rem">This is what <code>-a</code> gives slsh, slrun or slbench, or <code>SLGO_AGENT</code>, or <code>agent =</code>. Empty means no profile is named anywhere.</p>
+            <p class="msgs">To see your real addresses: <code>ip -4 addr</code> on Linux, <code>ifconfig | grep 'inet '</code> on macOS. Or run <code>sl-host -l -a dev</code>, which does all of this for real.</p>
+          </div>
+          <div class="out" aria-live="polite">
+            <p class="verdict" data-t="verdict"></p>
+            <div class="tablewrap"><table>
+              <thead><tr><th>Line</th><th>Network</th><th>Address</th><th>For</th><th>Result</th><th>Label</th></tr></thead>
+              <tbody data-t="rows"></tbody>
+            </table></div>
+            <ul class="msgs" data-t="msgs"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="checking">
+        <h2>Checking with -v and -l</h2>
+        <div class="term" data-where="laptop"><pre><span class="c"># print the address for the network you are on</span>
+<span class="p">$ </span>sl-host
+<span class="c"># and say on standard error which rule matched, and why</span>
+<span class="p">$ </span>sl-host -v
+<span class="c"># the same, for the profile dev</span>
+<span class="p">$ </span>sl-host -v -a dev
+<span class="c"># list every rule with whether it matches, and exit</span>
+<span class="p">$ </span>sl-host -l
+<span class="p">$ </span>sl-host -l -a dev
+<span class="p">$ </span>sl-host -version</pre></div>
+        <p><code>-a NAME</code> asks about that profile. Without it, sl-host asks about the profile in <code>SLGO_AGENT</code>, if that is set, so in a shell where you have exported <code>SLGO_AGENT</code> a plain <code>sl-host -v</code> answers for that profile.</p>
+        <p><code>-v</code> adds one line to standard error, in this form:</p>
+        <div class="term"><pre><span class="o">sl-host: 192.0.2.10 (network 0/0 matched our &lt;addr&gt;) [anywhere else]</span></pre></div>
+        <p>When the question names a profile, the part in parentheses ends with it: <code>(network 0/0 matched our &lt;addr&gt;, for dev)</code>.</p>
+        <p><code>-l</code> prints every rule: the network, the address, <code>MATCH</code>, <code>-</code> or <code>other</code>, then the rule's <code>@</code> words and label and which of this machine's addresses matched. <code>other</code> marks a rule for other profiles than the one asked about, whatever its network; sl-host would not try it. This is what one measured run printed, before profiles existed, with the machine's own addresses replaced:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>sl-host -l
+<span class="o">10.99.0.0/16         10.99.0.5        -        lab
+0/0                  192.0.2.10       MATCH    anywhere else (via &lt;our-addr&gt;)
+::/0                 2001:db8::10     MATCH    v6 (via &lt;our-addr&gt;)</span></pre></div>
+        <p><code>-l</code> marks every rule that matches, not only the winner. The winner is the first <code>MATCH</code>. <code>-l</code> ignores <code>SL_HOST</code>, since listing the rules is its whole point.</p>
+        <p>Any other argument prints <code>usage: sl-host [-v] [-l] [-a PROFILE]</code> and exits 2.</p>
+      </section>
+
+      <section id="overrides">
+        <h2>Overrides: SL_HOST, SL_HOSTFILE and SLGO_AGENT</h2>
+        <dl>
+          <dt><code>SL_HOST</code></dt>
+          <dd>If set, sl-host prints it as the answer and reads no file, so it works even with no rules file. For a one-off, in a café with a network no rule covers: <code>env SL_HOST=192.0.2.20 slsh</code>. That reaches sl-host because the client runs it as a child process, which inherits the environment (read from the code). To keep it for the rest of the terminal session, <code>export SL_HOST=192.0.2.20</code> in sh or zsh, or <code>setenv SL_HOST 192.0.2.20</code> in csh; <code>unset SL_HOST</code> or <code>unsetenv SL_HOST</code> drops it again. With <code>-v</code> it says <code>sl-host: SL_HOST/RSSH_HOST override</code>. It is the answer whichever profile is asked about, and it may carry a port too.</dd>
+          <dt><code>SL_HOSTFILE</code></dt>
+          <dd>Read the rules from this file instead of <code>~/.config/sl-host</code>. Handy for trying a new file before replacing the old one: <code>env SL_HOSTFILE=$HOME/new-rules sl-host -l</code>.</dd>
+          <dt><code>SLGO_AGENT</code></dt>
+          <dd>The profile the question is about, when <code>-a</code> is not given. The clients set it for sl-host to the avatar they are about to ask for, and remove it when they have none; slbotd holding several avatars asks about none. By hand: <code>env SLGO_AGENT=dev sl-host -v</code>. It is the same variable slsh, slrun and slbench read to choose the avatar.</dd>
+          <dt><code>RSSH_HOST</code>, <code>RSSH_HOSTFILE</code></dt>
+          <dd>Older names for the same two, left over from the script sl-host replaced. Each is used only when its <code>SL_</code> name is not set.</dd>
+        </dl>
+      </section>
+
+      <section id="exit-status">
+        <h2>Exit status and messages</h2>
+        <p>Output on standard output is only ever the address. Everything else goes to standard error. <code>~/.config/sl-host</code> stands for whichever file is in use.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Exit</th><th>When</th><th>Standard error says</th></tr></thead>
+          <tbody>
+            <tr><td><code>0</code></td><td class="what">A rule matched</td><td class="what">Nothing, or with <code>-v</code> the line above</td></tr>
+            <tr><td><code>0</code></td><td class="what"><code>SL_HOST</code> is set</td><td class="what">Nothing, or with <code>-v</code> <code>sl-host: SL_HOST/RSSH_HOST override</code></td></tr>
+            <tr><td><code>1</code></td><td class="what">No rule matches this network</td><td class="what"><code>sl-host: no rule in ~/.config/sl-host matches this network.</code>, or, when a profile was asked about, <code>… matches this network for dev.</code>; then this machine's addresses, the rules, and a hint (below)</td></tr>
+            <tr><td><code>1</code></td><td class="what">No usable address: the network is down</td><td class="what"><code>sl-host: no address found on any interface -- is the network up?</code></td></tr>
+            <tr><td><code>1</code></td><td class="what">The machine's addresses cannot be read</td><td class="what"><code>sl-host: cannot read this machine's addresses: …</code></td></tr>
+            <tr><td><code>2</code></td><td class="what">The rules file is missing or unreadable</td><td class="what"><code>sl-host: cannot read ~/.config/sl-host</code></td></tr>
+            <tr><td><code>2</code></td><td class="what">The file has no rule sl-host can read</td><td class="what"><code>sl-host: no rules in ~/.config/sl-host; each line is a network and the address to use on it, e.g. "0/0 192.168.1.20"</code></td></tr>
+            <tr><td><code>2</code></td><td class="what">A stray argument</td><td class="what"><code>usage: sl-host [-v] [-l] [-a PROFILE]</code></td></tr>
+          </tbody>
+        </table></div>
+        <p>When nothing matches, the message lists what it compared, because that shows which side is wrong. Its layout, from one measured run with the machine's addresses replaced:</p>
+        <div class="term"><pre><span class="o">sl-host: no rule in ~/.config/sl-host matches this network.
+  our addresses: &lt;v6 addr&gt; &lt;v4 addr&gt;
+  rules:
+    10.99.0.0/16       10.99.0.5        lab
+  add a rule for this network, or set SL_HOST=&lt;address&gt; for a one-off.</span></pre></div>
+        <p>The rules in that list show their <code>@</code> words before the label, so a rule kept for another profile is easy to spot.</p>
+        <p>A line that cannot be read is skipped with a warning, and the rest of the file is used:</p>
+        <div class="term"><pre><span class="o">sl-host: ~/.config/sl-host:3: a network and no address to use on it; skipped
+sl-host: ~/.config/sl-host:4: "192.168.300/24" is not a network; skipped</span></pre></div>
+        <p>The first of those two lines was measured. The second is built from the program's format, with an example network in it. The program's other reasons to skip a line, read from the code, are <code>"192.0.2.20:0": the port must be a number from 1 to 65535</code>, <code>":7808" has a port and no host</code>, and <code>an @ with no profile name after it</code>.</p>
+        <p>A client that runs sl-host passes its complaint on, as in the <a href="#not-needed">missing-file message</a> above. <a href="troubleshooting.html#f-sl-host-no-file">No rules file</a> and <a href="troubleshooting.html#f-sl-host-no-match">no matching rule</a> are in troubleshooting too, and so is <a href="troubleshooting.html#f-sl-host-profile">a profile that reaches the wrong slgod</a>.</p>
+      </section>
+
+      <section id="where-next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="quickstart-remote.html"><span class="k">Quick start</span><span class="t">slgod on a server</span><span class="d">Direct, over SSH, or with sl-host: getting slsh to a remote slgod.</span></a>
+          <a class="card" href="setups.html"><span class="k">Guide</span><span class="t">Setups</span><span class="d">Whole arrangements of machines, and which pieces go where.</span></a>
+          <a class="card" href="troubleshooting.html"><span class="k">Help</span><span class="t">Troubleshooting</span><span class="d">Paste an error message and find the fix.</span></a>
+        </div>
+      </section>
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook</span>
+    <span class="pager"><a href="how-llm.html">← slsh + LLM</a> <a href="setups.html">Setups →</a></span>
+  </footer>
+</div>
+<script>
+(function () {
+  "use strict";
+  var page = document.getElementById("sl-host");
+  if (!page) return;
+  var box = page.querySelector(".tester");
+  if (!box) return;
+  var rulesEl = box.querySelector('[data-t="rules"]');
+  var addrsEl = box.querySelector('[data-t="addrs"]');
+  var profileEl = box.querySelector('[data-t="profile"]');
+  var verdict = box.querySelector('[data-t="verdict"]');
+  var rowsEl = box.querySelector('[data-t="rows"]');
+  var msgsEl = box.querySelector('[data-t="msgs"]');
+  var FILE = "~/.config/sl-host";
+
+  // One dotted-quad, the way Go's net.ParseIP reads it: four decimal
+  // octets, 0-255, no leading zeros.  Returns a uint32 or null.
+  function ipv4(s) {
+    var parts = s.split(".");
+    if (parts.length !== 4) return null;
+    var n = 0;
+    for (var i = 0; i < 4; i++) {
+      var p = parts[i];
+      if (!/^\d{1,3}$/.test(p) || (p.length > 1 && p[0] === "0")) return null;
+      var v = Number(p);
+      if (v > 255) return null;
+      n = n * 256 + v;
+    }
+    return n >>> 0;
+  }
+
+  function dotted(n) {
+    return [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
+  }
+
+  function maskOf(bits) {
+    return bits === 0 ? 0 : (0xFFFFFFFF << (32 - bits)) >>> 0;
+  }
+
+  // parseNetwork, as sl-host has it: a CIDR, IPv4 with trailing zero
+  // octets left off, or a bare address.
+  function parseNetwork(s) {
+    var slash = s.indexOf("/");
+    var addr = slash < 0 ? s : s.slice(0, slash);
+    var bits = slash < 0 ? null : s.slice(slash + 1);
+    var bad = { error: JSON.stringify(s) + " is not a network" };
+    if (addr.indexOf(":") >= 0) {
+      // IPv6: checked loosely here; it can never match an IPv4 address.
+      if (!/^[0-9a-fA-F:.]+$/.test(addr) || !/::|(:[0-9a-fA-F]{1,4}){2,}/.test(":" + addr)) return bad;
+      if (bits !== null && !(/^\d{1,3}$/.test(bits) && Number(bits) <= 128)) return bad;
+      return { v6: true, text: s, shown: addr + "/" + (bits === null ? "128" : bits) };
+    }
+    var parts = addr.split(".");
+    while (parts.length < 4) parts.push("0");
+    var ip = ipv4(parts.join("."));
+    if (ip === null) return bad;
+    if (bits === null) bits = "32";
+    if (!/^\d{1,2}$/.test(bits) || (bits.length > 1 && bits[0] === "0") || Number(bits) > 32) return bad;
+    var b = Number(bits);
+    var m = maskOf(b);
+    return { v6: false, text: s, net: (ip & m) >>> 0, mask: m, shown: dotted((ip & m) >>> 0) + "/" + b };
+  }
+
+  // splitHostPort, the way Go's net.SplitHostPort reads an address:
+  // null when there is no port to split off (a bare host, a bare IPv6
+  // address, or one in brackets with nothing after), else the two parts.
+  function splitHostPort(s) {
+    var host, port;
+    if (s[0] === "[") {
+      var close = s.indexOf("]");
+      if (close < 0 || close + 1 >= s.length || s[close + 1] !== ":") return null;
+      host = s.slice(1, close);
+      port = s.slice(close + 2);
+      if (/[\[\]]/.test(host) || /[:\[\]]/.test(port)) return null;
+    } else {
+      var i = s.lastIndexOf(":");
+      if (i < 0) return null;
+      host = s.slice(0, i);
+      port = s.slice(i + 1);
+      if (/[:\[\]]/.test(host) || /[\[\]]/.test(port)) return null;
+    }
+    return { host: host, port: port };
+  }
+
+  // checkAddress, as sl-host has it: an address with no port is fine;
+  // one with a port needs a host and a port from 1 to 65535.
+  function checkAddress(s) {
+    var hp = splitHostPort(s);
+    if (!hp) return null;
+    if (hp.host === "") return JSON.stringify(s) + " has a port and no host";
+    var n = /^[+-]?\d+$/.test(hp.port) ? Number(hp.port) : NaN;
+    if (!(n >= 1 && n <= 65535)) return JSON.stringify(s) + ": the port must be a number from 1 to 65535";
+    return null;
+  }
+
+  // What a client connects to: the address as given if it has a port,
+  // else with :7807 joined on, in brackets for IPv6.
+  function withPort(h) {
+    if (splitHostPort(h)) return h;
+    h = h.replace(/^\[/, "").replace(/\]$/, "");
+    return (h.indexOf(":") >= 0 ? "[" + h + "]" : h) + ":7807";
+  }
+
+  function parseRules(text, warn) {
+    var rules = [];
+    text.split("\n").forEach(function (raw, i) {
+      var n = i + 1;
+      var line = raw;
+      var hash = line.indexOf("#");
+      if (hash >= 0) line = line.slice(0, hash);
+      var f = line.trim().split(/\s+/).filter(Boolean);
+      if (!f.length) return;
+      var where = "sl-host: " + FILE + ":" + n + ": ";
+      if (f.length < 2) {
+        warn.push(where + "a network and no address to use on it; skipped");
+        return;
+      }
+      var net = parseNetwork(f[0]);
+      if (net.error) {
+        warn.push(where + net.error + "; skipped");
+        return;
+      }
+      var bad = checkAddress(f[1]);
+      if (bad) {
+        warn.push(where + bad + "; skipped");
+        return;
+      }
+      // The @ words come straight after the address; the label is the rest.
+      var rest = f.slice(2), profiles = [];
+      while (rest.length && rest[0][0] === "@") profiles.push(rest.shift().slice(1));
+      if (profiles.indexOf("") >= 0) {
+        warn.push(where + "an @ with no profile name after it; skipped");
+        return;
+      }
+      rules.push({ line: n, net: net, host: f[1], profiles: profiles, label: rest.join(" ") });
+    });
+    return rules;
+  }
+
+  // A rule naming no profile is for every question; one naming some only
+  // for those, and never for a question that names none.
+  function isFor(rule, profile) {
+    return !rule.profiles.length || rule.profiles.indexOf(profile) >= 0;
+  }
+
+  // This machine's addresses, as sl-host would count them: IPv4 only
+  // here, with loopback and link-local left out.
+  function parseAddrs(text, notes) {
+    var out = [];
+    text.split(/[\s,]+/).filter(Boolean).forEach(function (w) {
+      if (w.indexOf(":") >= 0) { notes.push(w + ": this tester takes IPv4 addresses only; left out"); return; }
+      var ip = ipv4(w);
+      if (ip === null) { notes.push(w + ": not an IPv4 address; left out"); return; }
+      if ((ip >>> 24) === 127) { notes.push(w + ": loopback, which sl-host leaves out"); return; }
+      if ((ip >>> 16) === ((169 << 8) | 254)) { notes.push(w + ": link-local, which sl-host leaves out"); return; }
+      out.push({ text: w, ip: ip });
+    });
+    return out;
+  }
+
+  function firstIn(net, addrs) {
+    if (net.v6) return null;
+    for (var i = 0; i < addrs.length; i++) {
+      if (((addrs[i].ip & net.mask) >>> 0) === net.net) return addrs[i];
+    }
+    return null;
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function code(text) { return el("code", "", text); }
+
+  function say(parts) {
+    verdict.textContent = "";
+    parts.forEach(function (p) {
+      verdict.appendChild(typeof p === "string" ? document.createTextNode(p) : p);
+    });
+  }
+
+  function update() {
+    var warn = [], notes = [];
+    var rules = parseRules(rulesEl.value, warn);
+    var addrs = parseAddrs(addrsEl.value, notes);
+    var profile = profileEl.value.trim();
+    var forWhom = profile ? " for " + profile : "";
+
+    rowsEl.textContent = "";
+    var winner = null;
+    rules.forEach(function (r) {
+      var mine = isFor(r, profile);
+      var hit = mine ? firstIn(r.net, addrs) : null;
+      var tr = el("tr");
+      var state;
+      if (!mine) state = profile ? "other: not for " + profile + ", not tried" : "other: no profile named, not tried";
+      else if (hit && !winner) { winner = { rule: r, addr: hit }; tr.className = "win"; state = "wins, via " + hit.text; }
+      else if (hit) state = "matches too, via " + hit.text + "; an earlier rule won";
+      else if (r.net.v6) state = "IPv6: no IPv4 address is in it";
+      else state = "-";
+      var netCell = el("td");
+      netCell.appendChild(code(r.net.text));
+      if (r.net.shown !== r.net.text) netCell.appendChild(document.createTextNode(" = " + r.net.shown));
+      tr.appendChild(el("td", "", String(r.line)));
+      tr.appendChild(netCell);
+      var hostCell = el("td"); hostCell.appendChild(code(r.host)); tr.appendChild(hostCell);
+      var forCell = el("td", "what");
+      if (r.profiles.length) forCell.appendChild(code("@" + r.profiles.join(" @")));
+      else forCell.textContent = "every profile";
+      tr.appendChild(forCell);
+      tr.appendChild(el("td", "state", state));
+      tr.appendChild(el("td", "what", r.label));
+      rowsEl.appendChild(tr);
+    });
+
+    if (!rules.length) {
+      say(["sl-host would print nothing and exit 2: ",
+        code("sl-host: no rules in " + FILE + "; each line is a network and the address to use on it, e.g. \"0/0 192.168.1.20\"")]);
+    } else if (!addrs.length) {
+      say(["sl-host would print nothing and exit 1: ",
+        code("sl-host: no address found on any interface -- is the network up?")]);
+    } else if (!winner) {
+      say(["No rule matches. sl-host would exit 1 with ",
+        code("sl-host: no rule in " + FILE + " matches this network" + forWhom + "."),
+        ", and the client would stop. Add a rule for this network, or a catch-all at the end."]);
+    } else {
+      var h = winner.rule.host;
+      var hostport = withPort(h);
+      say(["sl-host prints ", code(h), " (line " + winner.rule.line + ", network ",
+        code(winner.rule.net.text), " matched ", code(winner.addr.text), profile ? ", for " + profile : "",
+        "). The client connects to ", code(hostport),
+        hostport === h ? ", the port the rule gives." : ", adding the usual port."]);
+    }
+
+    msgsEl.textContent = "";
+    warn.forEach(function (w) { msgsEl.appendChild(el("li", "err", w)); });
+    notes.forEach(function (w) { msgsEl.appendChild(el("li", "", w)); });
+    msgsEl.style.display = msgsEl.children.length ? "" : "none";
+  }
+
+  rulesEl.addEventListener("input", update);
+  addrsEl.addEventListener("input", update);
+  profileEl.addEventListener("input", update);
+  box.querySelectorAll("button[data-profile]").forEach(function (b) {
+    b.addEventListener("click", function () { profileEl.value = b.getAttribute("data-profile"); update(); });
+  });
+  box.querySelectorAll("button[data-addrs]").forEach(function (b) {
+    b.addEventListener("click", function () { addrsEl.value = b.getAttribute("data-addrs"); update(); });
+  });
+  update();
+})();
+</script>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

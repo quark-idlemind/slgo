@@ -72,3 +72,7 @@
 # issue is only worth anything if it says what was actually seen -- so
 # it stays out of the repository.  See issues/README.md.
 /issues/
+
+# handbook/bundle.py writes the one-file build here by default; it is
+# published, not kept.
+/handbook/handbook-bundle.html

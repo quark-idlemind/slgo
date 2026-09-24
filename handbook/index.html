@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="index" data-title="slgo handbook">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">slgo handbook · setting up and keeping it running</p>
+    <h1>Second Life, from a terminal<span class="caret">_</span></h1>
+    <p class="standfirst">slgo is a handful of programs that share one idea: a
+      daemon keeps your avatar logged in, and everything else comes and goes
+      around it. This handbook gets those programs running, on one machine or
+      spread over several.</p>
+    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+
+      <section id="pieces">
+        <h2>The pieces</h2>
+        <p>You only ever need the first two. Everything else is optional and
+          can be added later without starting over.</p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Program</th><th>What it does</th><th>Where it runs</th></tr></thead>
+            <tbody>
+              <tr><td><code>slgod</code></td><td class="what">The daemon. Logs one or more avatars in and keeps them there. Holds the passwords. Listens for clients on TCP port 7807.</td><td class="what">One machine that stays on: a desktop, a small server, a Mac mini.</td></tr>
+              <tr><td><code>slsh</code></td><td class="what">The shell you type into. Chat, move, look at objects, manage inventory. Closing it leaves the avatar in-world.</td><td class="what">The slgod machine, or any machine that can reach it.</td></tr>
+              <tr><td><code>slbotd</code></td><td class="what">A bot that drives an avatar held by slgod. Takes commands by instant message and, with a language model, can hold a conversation.</td><td class="what">The slgod machine or a machine of its own.</td></tr>
+              <tr><td><code>llama-server</code></td><td class="what">llama.cpp's model server. Not part of slgo. slbotd needs it only for conversation.</td><td class="what">Wherever there is a GPU or enough memory.</td></tr>
+              <tr><td><code>sl-host</code></td><td class="what">Prints the address of the slgod machine for whichever network your laptop is on now.</td><td class="what">Only a client machine that moves between networks.</td></tr>
+              <tr><td><code>slrun</code>, <code>slbench</code></td><td class="what">Run a script against an avatar; measure one. They connect just like slsh.</td><td class="what">Same as slsh.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          <p class="label">The two things every connection needs</p>
+          <p>Every client reaches slgod on <strong>TCP port 7807</strong>, over
+            TLS, and proves itself with <strong>one shared secret</strong>: the
+            file <code>~/.config/slgod/secret</code>. The same file must be on
+            every machine that runs a client. There are no per-user accounts
+            and no certificates to copy.</p>
+        </div>
+      </section>
+
+      <section id="picker-section">
+        <h2>Which setup is yours?</h2>
+        <p>Answer four questions. The picture and the reading list follow
+          your answers, and this browser remembers them.</p>
+        <form class="picker" id="picker" aria-label="Choose a setup">
+          <fieldset>
+            <legend>Where will slgod run?</legend>
+            <div class="opts">
+              <label class="opt"><input type="radio" name="slgod" value="here" id="pk-slgod-here" checked> On the computer I type on</label>
+              <label class="opt"><input type="radio" name="slgod" value="remote" id="pk-slgod-remote"> On another machine</label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>What does the computer you type on run?</legend>
+            <div class="opts">
+              <label class="opt"><input type="radio" name="myos" value="mac" id="pk-myos-mac"> macOS</label>
+              <label class="opt"><input type="radio" name="myos" value="linux" id="pk-myos-linux" checked> Linux</label>
+            </div>
+          </fieldset>
+          <fieldset data-when="remote">
+            <legend>And the slgod machine?</legend>
+            <div class="opts">
+              <label class="opt"><input type="radio" name="srvos" value="linux" id="pk-srvos-linux" checked> Linux</label>
+              <label class="opt"><input type="radio" name="srvos" value="mac" id="pk-srvos-mac"> macOS</label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Do you want a bot (slbotd)?</legend>
+            <div class="opts">
+              <label class="opt"><input type="radio" name="bot" value="none" id="pk-bot-none" checked> Not now</label>
+              <label class="opt"><input type="radio" name="bot" value="with-slgod" id="pk-bot-with"> Yes, beside slgod</label>
+              <label class="opt"><input type="radio" name="bot" value="own" id="pk-bot-own"> Yes, on a machine of its own</label>
+            </div>
+          </fieldset>
+          <fieldset data-when="bot">
+            <legend>Should the bot talk, using a language model?</legend>
+            <div class="opts">
+              <label class="opt"><input type="radio" name="llm" value="yes" id="pk-llm-yes" checked> Yes</label>
+              <label class="opt"><input type="radio" name="llm" value="no" id="pk-llm-no"> Commands only</label>
+            </div>
+            <div class="opts" aria-label="Bot machine system">
+              <label class="opt"><input type="radio" name="botos" value="linux" id="pk-botos-linux" checked> bot machine: Linux</label>
+              <label class="opt"><input type="radio" name="botos" value="mac" id="pk-botos-mac"> bot machine: macOS</label>
+            </div>
+          </fieldset>
+          <div class="result" aria-live="polite">
+            <div class="go">
+              <p class="eyebrow">Your setup</p>
+              <p><strong class="scenario">Everything on one machine</strong></p>
+              <ol></ol>
+              <a class="button" href="quickstart-local.html">Open the quick start</a>
+            </div>
+            <figure class="diagram" style="margin:0">
+              <svg role="img" aria-label="The machines in your setup and what runs on each"></svg>
+              <figcaption>Green lines are TLS with the shared secret. The dashed line is slgod's own connection to the grid.</figcaption>
+            </figure>
+          </div>
+        </form>
+      </section>
+
+      <section id="new">
+        <h2>New to slgo</h2>
+        <p>Start with one machine even if you mean to end up with several.
+          Once slsh works beside slgod, moving slgod to a server is a matter
+          of copying one file and naming an address.</p>
+        <div class="cards">
+          <a class="card" href="quickstart-local.html"><span class="k">Quick start</span><span class="t">Everything on one machine</span><span class="d">Build, make a profile, start slgod, type your first commands in slsh.</span></a>
+          <a class="card" href="quickstart-remote.html"><span class="k">Quick start</span><span class="t">slgod on a server</span><span class="d">Keep the avatar online on a machine that stays up, and connect from your laptop. Includes macOS to Linux.</span></a>
+          <a class="card" href="quickstart-bot.html"><span class="k">Quick start</span><span class="t">Adding slbotd</span><span class="d">Give a second avatar to a bot that takes commands by instant message.</span></a>
+          <a class="card" href="bot-llm.html"><span class="k">Quick start</span><span class="t">slbotd with a language model</span><span class="d">Put llama-server behind the bot so it can hold a conversation, and fix it when it goes quiet.</span></a>
+        </div>
+      </section>
+
+      <section id="existing">
+        <h2>Already running it</h2>
+        <div class="cards">
+          <a class="card" href="setups.html"><span class="k">Recipes</span><span class="t">Setups</span><span class="d">Services, several avatars, moving slgod, the viewer endpoint, upgrading.</span></a>
+          <a class="card" href="sl-host.html"><span class="k">Helper</span><span class="t">sl-host</span><span class="d">When a laptop needs a different address at home and away, and why it can break a setup that doesn't.</span></a>
+          <a class="card" href="platforms.html"><span class="k">Platforms</span><span class="t">Linux &amp; macOS</span><span class="d">What differs, what doesn't, and mixing the two.</span></a>
+          <a class="card" href="security.html"><span class="k">Before you open a port</span><span class="t">Security</span><span class="d">What the secret protects, what an open port exposes, what a bot sends to its model.</span></a>
+          <a class="card" href="troubleshooting.html"><span class="k">When it breaks</span><span class="t">Troubleshooting</span><span class="d">Paste the error you got, or answer a few yes/no questions, and it finds the fix.</span></a>
+          <a class="card" href="reference.html"><span class="k">Lookup</span><span class="t">Reference</span><span class="d">Files, modes, flags, variables and the order clients look things up in.</span></a>
+        </div>
+      </section>
+
+      <section id="how-found">
+        <h2>How a client finds slgod</h2>
+        <p>Every client (slsh, slrun, slbench, slbotd) asks the same questions
+          in the same order and stops at the first answer. Most setup problems
+          are one of these steps answering when you didn't expect it to.</p>
+        <ol>
+          <li><code>--addr HOST:PORT</code> on the command line.</li>
+          <li><code>addr =</code> in the client's config file (slsh: <code>~/.config/slsh/config</code>).</li>
+          <li><code>sl-host</code>, if it is on your <code>$PATH</code>. The client tells it which profile it wants, and adds port 7807 to its answer unless the answer names a port. If it fails, the client stops here with an error. It does not fall back.</li>
+          <li><code>localhost:7807</code>.</li>
+        </ol>
+        <div class="note warn">
+          <p class="label">A common first stumble</p>
+          <p><code>go install ./cmd/...</code> installs <code>sl-host</code>
+            too. Once it is on your path, clients run it, and without its rules
+            file every client fails with <code>sl-host: cannot read
+            ~/.config/sl-host</code>. If slgod is on the same machine, delete
+            the sl-host binary, then run <code>rehash</code> (csh, zsh) or
+            <code>hash -r</code> (sh, bash). <a href="sl-host.html#not-needed">More on sl-host</a>.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook · examples use invented names (Example Resident, Testville) and documentation addresses</span>
+    <span class="pager"><a href="quickstart-local.html">One machine →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>
