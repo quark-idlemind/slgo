@@ -81,6 +81,14 @@ type fakeDaemon struct {
 	offers  *pb.OfferRecord
 	handled chan *pb.HandledRequest
 	handle  func(*pb.HandledRequest) *pb.HandledResponse
+
+	// walk is what a Move streams, the last of it the end, and walked
+	// the request it was asked; faced is the Face asked for and face
+	// what it answers.  See walk_test.go.
+	walk   []*pb.MoveEvent
+	walked chan *pb.MoveRequest
+	faced  chan *pb.FaceRequest
+	face   func(*pb.FaceRequest) (*pb.FaceResponse, error)
 }
 
 // newFakeDaemon starts one on loopback and attaches to it.

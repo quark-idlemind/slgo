@@ -36,6 +36,17 @@ type Object struct {
 	Position msg.Vector3
 	Rotation msg.Quaternion
 
+	// Velocity is how fast it was last said to be moving, in metres a
+	// second, and Moved is when that was said -- which is also when
+	// Position was.  Only the terse updates carry it here, and they are
+	// sent for what moves, so it is zero for anything that has only ever
+	// been described.  Moved is kept apart from Last because Last moves
+	// on for things that say nothing about where the object is, a name
+	// arriving among them, and anything reckoning where the object has
+	// got to since needs the age of the position and not of the entry.
+	Velocity msg.Vector3
+	Moved    time.Time
+
 	// Shape is the prim's profile and path, still packed.  Both kinds
 	// of update carry it, so it is known as soon as anything is.
 	Shape msg.PrimShape
@@ -599,8 +610,9 @@ func (o *Objects) moved(t *msg.Terse) bool {
 	defer o.mu.Unlock()
 	for _, v := range o.byID {
 		if v.Local == t.LocalID {
-			v.Position, v.Rotation = t.Position, t.Rotation
+			v.Position, v.Rotation, v.Velocity = t.Position, t.Rotation, t.Velocity
 			v.Last = time.Now()
+			v.Moved = v.Last
 			return true
 		}
 	}

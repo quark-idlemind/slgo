@@ -63,6 +63,7 @@ import (
 	"fmt"
 	"github.com/quark-idlemind/slgo/auth"
 	"google.golang.org/grpc/credentials"
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -70,6 +71,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/llsd"
@@ -900,6 +902,76 @@ func (c *Conn) Neighbours(ctx context.Context, set *bool) (*pb.NeighboursRespons
 func (c *Conn) Control(ctx context.Context, flags uint32) error {
 	_, err := c.grid.Control(ctx, &pb.ControlRequest{Agent: c.agent, Flags: flags})
 	return err
+}
+
+// Move asks the server to walk the avatar to a place in its region, and
+// hands each report on how it is going to progress, on this goroutine,
+// until the last; the last is what it returns, and progress is not given
+// it.  The request's agent is filled in.
+//
+// The walk is the server's and not this side's: it steers ten times a
+// second from where the avatar actually is, and it stops the avatar the
+// moment this call's stream ends.  So cancelling ctx is how a walk is
+// abandoned, and what a program that exits in the middle of one does
+// without having to think about it.  See the rpc in slgo.proto.
+//
+// A walk that could not start is not an error: it is a last report whose
+// state says why.  The error is for the call itself.
+func (c *Conn) Move(ctx context.Context, req *pb.MoveRequest, progress func(*pb.MoveEvent)) (*pb.MoveEvent, error) {
+	r := proto.Clone(req).(*pb.MoveRequest)
+	r.Agent = c.agentName()
+	stream, err := c.grid.Move(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		e, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				err = errors.New("client: the walk's stream ended without saying how the walk did")
+			}
+			return nil, err
+		}
+		if e.State != pb.MoveEvent_MOVING {
+			return e, nil
+		}
+		if progress != nil {
+			progress(e)
+		}
+	}
+}
+
+// Face turns the avatar toward a place, or to a heading when target is
+// nil, and returns the heading it was given.
+func (c *Conn) Face(ctx context.Context, target *pb.Vector3, yaw float32) (float32, error) {
+	req := &pb.FaceRequest{Agent: c.agentName()}
+	if target != nil {
+		req.Toward = &pb.FaceRequest_Target{Target: target}
+	} else {
+		req.Toward = &pb.FaceRequest_Yaw{Yaw: yaw}
+	}
+	r, err := c.grid.Face(ctx, req)
+	if err != nil {
+		return 0, err
+	}
+	return r.Yaw, nil
+}
+
+// Halt ends any walk and stops the avatar, and says whether a walk was
+// under way.
+func (c *Conn) Halt(ctx context.Context) (bool, error) {
+	r, err := c.grid.Halt(ctx, &pb.HaltRequest{Agent: c.agentName()})
+	if err != nil {
+		return false, err
+	}
+	return r.Walking, nil
+}
+
+// agentName is the session this connection is attached to.
+func (c *Conn) agentName() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.agent
 }
 
 // Flush empties the server's object cache.

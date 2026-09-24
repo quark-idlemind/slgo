@@ -48,6 +48,9 @@ const (
 	Grid_Cap_FullMethodName              = "/slgo.v1.Grid/Cap"
 	Grid_Send_FullMethodName             = "/slgo.v1.Grid/Send"
 	Grid_Control_FullMethodName          = "/slgo.v1.Grid/Control"
+	Grid_Move_FullMethodName             = "/slgo.v1.Grid/Move"
+	Grid_Face_FullMethodName             = "/slgo.v1.Grid/Face"
+	Grid_Halt_FullMethodName             = "/slgo.v1.Grid/Halt"
 	Grid_Friends_FullMethodName          = "/slgo.v1.Grid/Friends"
 	Grid_NoteFriend_FullMethodName       = "/slgo.v1.Grid/NoteFriend"
 	Grid_Handled_FullMethodName          = "/slgo.v1.Grid/Handled"
@@ -179,6 +182,41 @@ type GridClient interface {
 	// the same shape as everything else that moves an avatar: fly, stop,
 	// jump, and the nudges a walk is made of.
 	Control(ctx context.Context, in *ControlRequest, opts ...grpc.CallOption) (*ControlResponse, error)
+	// Move walks the avatar to a place in its region, and streams how it
+	// is going until it is over.
+	//
+	// It belongs to the server for Control's reason and one more.  A walk
+	// is a control flag held down on AgentUpdate, ten times a second,
+	// with the body turned toward the target from where the avatar
+	// actually is -- and the one that holds a flag down has to be the one
+	// certain to let go of it.  A client that crashed mid-walk would leave
+	// the last update it caused saying "forward", and the avatar would
+	// walk until it met something.  The server steers, and a client that
+	// goes away -- this stream ending, for any reason -- stops the avatar.
+	//
+	// The stream is a MoveEvent about every quarter of a second while the
+	// avatar moves, and one final event, whose state is anything but
+	// MOVING, after which it ends.  A walk that cannot start -- a target
+	// outside the region, an avatar that is sitting, a viewer driving it
+	// -- is that final event and nothing else, before anything is sent.
+	//
+	// One walk per avatar.  A second Move takes the first over without
+	// stopping in between, and the first stream ends CANCELLED with the
+	// reason "superseded"; Halt ends it with "halted" and stops the
+	// avatar.
+	//
+	// It walks a straight line and avoids nothing.  What is in the way is
+	// the client's to steer round, by asking again with a different
+	// target; the server notices only that the avatar has stopped getting
+	// closer, which is BLOCKED.
+	Move(ctx context.Context, in *MoveRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MoveEvent], error)
+	// Face turns the avatar toward a place, or to a heading, without
+	// moving it.  Every update after it keeps the facing, the server's
+	// own once-a-second ones included.  A walk under way is ended by it,
+	// as a superseded one.
+	Face(ctx context.Context, in *FaceRequest, opts ...grpc.CallOption) (*FaceResponse, error)
+	// Halt ends any walk and stops the avatar.
+	Halt(ctx context.Context, in *HaltRequest, opts ...grpc.CallOption) (*HaltResponse, error)
 	// Friends is who this avatar's friends are and which of them are
 	// logged in.
 	//
@@ -409,6 +447,45 @@ func (c *gridClient) Control(ctx context.Context, in *ControlRequest, opts ...gr
 	return out, nil
 }
 
+func (c *gridClient) Move(ctx context.Context, in *MoveRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MoveEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Grid_ServiceDesc.Streams[1], Grid_Move_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[MoveRequest, MoveEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Grid_MoveClient = grpc.ServerStreamingClient[MoveEvent]
+
+func (c *gridClient) Face(ctx context.Context, in *FaceRequest, opts ...grpc.CallOption) (*FaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FaceResponse)
+	err := c.cc.Invoke(ctx, Grid_Face_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gridClient) Halt(ctx context.Context, in *HaltRequest, opts ...grpc.CallOption) (*HaltResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HaltResponse)
+	err := c.cc.Invoke(ctx, Grid_Halt_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Friends(ctx context.Context, in *FriendsRequest, opts ...grpc.CallOption) (*FriendsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FriendsResponse)
@@ -574,6 +651,41 @@ type GridServer interface {
 	// the same shape as everything else that moves an avatar: fly, stop,
 	// jump, and the nudges a walk is made of.
 	Control(context.Context, *ControlRequest) (*ControlResponse, error)
+	// Move walks the avatar to a place in its region, and streams how it
+	// is going until it is over.
+	//
+	// It belongs to the server for Control's reason and one more.  A walk
+	// is a control flag held down on AgentUpdate, ten times a second,
+	// with the body turned toward the target from where the avatar
+	// actually is -- and the one that holds a flag down has to be the one
+	// certain to let go of it.  A client that crashed mid-walk would leave
+	// the last update it caused saying "forward", and the avatar would
+	// walk until it met something.  The server steers, and a client that
+	// goes away -- this stream ending, for any reason -- stops the avatar.
+	//
+	// The stream is a MoveEvent about every quarter of a second while the
+	// avatar moves, and one final event, whose state is anything but
+	// MOVING, after which it ends.  A walk that cannot start -- a target
+	// outside the region, an avatar that is sitting, a viewer driving it
+	// -- is that final event and nothing else, before anything is sent.
+	//
+	// One walk per avatar.  A second Move takes the first over without
+	// stopping in between, and the first stream ends CANCELLED with the
+	// reason "superseded"; Halt ends it with "halted" and stops the
+	// avatar.
+	//
+	// It walks a straight line and avoids nothing.  What is in the way is
+	// the client's to steer round, by asking again with a different
+	// target; the server notices only that the avatar has stopped getting
+	// closer, which is BLOCKED.
+	Move(*MoveRequest, grpc.ServerStreamingServer[MoveEvent]) error
+	// Face turns the avatar toward a place, or to a heading, without
+	// moving it.  Every update after it keeps the facing, the server's
+	// own once-a-second ones included.  A walk under way is ended by it,
+	// as a superseded one.
+	Face(context.Context, *FaceRequest) (*FaceResponse, error)
+	// Halt ends any walk and stops the avatar.
+	Halt(context.Context, *HaltRequest) (*HaltResponse, error)
 	// Friends is who this avatar's friends are and which of them are
 	// logged in.
 	//
@@ -688,6 +800,15 @@ func (UnimplementedGridServer) Send(context.Context, *SendRequest) (*SendRespons
 }
 func (UnimplementedGridServer) Control(context.Context, *ControlRequest) (*ControlResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Control not implemented")
+}
+func (UnimplementedGridServer) Move(*MoveRequest, grpc.ServerStreamingServer[MoveEvent]) error {
+	return status.Error(codes.Unimplemented, "method Move not implemented")
+}
+func (UnimplementedGridServer) Face(context.Context, *FaceRequest) (*FaceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Face not implemented")
+}
+func (UnimplementedGridServer) Halt(context.Context, *HaltRequest) (*HaltResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Halt not implemented")
 }
 func (UnimplementedGridServer) Friends(context.Context, *FriendsRequest) (*FriendsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Friends not implemented")
@@ -999,6 +1120,53 @@ func _Grid_Control_Handler(srv interface{}, ctx context.Context, dec func(interf
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_Move_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(MoveRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(GridServer).Move(m, &grpc.GenericServerStream[MoveRequest, MoveEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Grid_MoveServer = grpc.ServerStreamingServer[MoveEvent]
+
+func _Grid_Face_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Face(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Face_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Face(ctx, req.(*FaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_Halt_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HaltRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Halt(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Halt_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Halt(ctx, req.(*HaltRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_Friends_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FriendsRequest)
 	if err := dec(in); err != nil {
@@ -1139,6 +1307,14 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Grid_Control_Handler,
 		},
 		{
+			MethodName: "Face",
+			Handler:    _Grid_Face_Handler,
+		},
+		{
+			MethodName: "Halt",
+			Handler:    _Grid_Halt_Handler,
+		},
+		{
 			MethodName: "Friends",
 			Handler:    _Grid_Friends_Handler,
 		},
@@ -1161,6 +1337,11 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _Grid_Stream_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "Move",
+			Handler:       _Grid_Move_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "slgo.proto",

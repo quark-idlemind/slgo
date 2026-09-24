@@ -52,8 +52,9 @@ type Look struct {
 	Up     msg.Vector3
 	Far    float32
 
-	// ControlFlags and State go out unchanged; movement lives in
-	// them, and this package has no opinion about movement.
+	// ControlFlags and State go out unchanged.  A walk's own flags are
+	// not kept here but beside it, and ORed in as each update is built;
+	// see walk.go.
 	ControlFlags uint32
 	State        uint8
 }
@@ -155,10 +156,11 @@ func (a *Agent) sendPresence(ctx context.Context, every time.Duration) {
 
 // agentUpdate is one AgentUpdate built from a Look.
 //
-// One place rather than two, so that the one-shot Control sends cannot
-// drift from what the presence loop sends: everything except the flags
-// has to be the same, because the simulator scopes its interest list by
-// the camera and would believe a one-shot that got it wrong.
+// One place rather than three, so that the one-shot Control sends and a
+// walk's steering cannot drift from what the presence loop sends:
+// everything except the flags has to be the same, because the simulator
+// scopes its interest list by the camera and would believe a one-shot
+// that got it wrong.
 func (a *Agent) agentUpdate(l Look) *msg.AgentUpdate {
 	m := &msg.AgentUpdate{}
 	d := &m.AgentData
@@ -169,7 +171,14 @@ func (a *Agent) agentUpdate(l Look) *msg.AgentUpdate {
 	d.CameraLeftAxis = l.Left
 	d.CameraUpAxis = l.Up
 	d.Far = l.Far
-	d.ControlFlags = l.ControlFlags
+	// What a walk is holding down, and which way the avatar faces, go
+	// on every update and not only on the walk's own: the presence
+	// loop's update a second later that carried neither would let go of
+	// the flag and turn the avatar back to face east.  See walk.go.
+	flags, body := a.drive()
+	d.ControlFlags = l.ControlFlags | flags
+	d.BodyRotation = body
+	d.HeadRotation = body
 	d.State = l.State
 	return m
 }

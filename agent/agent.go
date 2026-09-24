@@ -138,6 +138,11 @@ type Agent struct {
 	// moveMu serializes moves; see moveTo.
 	moveMu sync.Mutex
 
+	// walker is the walk under way, if there is one, and what every
+	// AgentUpdate holds down and which way it faces.  See walk.go; the
+	// move above is to another simulator, and is not this.
+	walker walker
+
 	// forgetSeen asks the dispatch goroutine to forget the sequence
 	// numbers it has seen.  msg.Dispatcher.Forget is safe on that
 	// goroutine and nowhere else, and the tap is that goroutine.

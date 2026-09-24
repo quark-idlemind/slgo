@@ -155,6 +155,44 @@ service Grid {
   // jump, and the nudges a walk is made of.
   rpc Control(ControlRequest) returns (ControlResponse);
 
+  // Move walks the avatar to a place in its region, and streams how it
+  // is going until it is over.
+  //
+  // It belongs to the server for Control's reason and one more.  A walk
+  // is a control flag held down on AgentUpdate, ten times a second,
+  // with the body turned toward the target from where the avatar
+  // actually is -- and the one that holds a flag down has to be the one
+  // certain to let go of it.  A client that crashed mid-walk would leave
+  // the last update it caused saying "forward", and the avatar would
+  // walk until it met something.  The server steers, and a client that
+  // goes away -- this stream ending, for any reason -- stops the avatar.
+  //
+  // The stream is a MoveEvent about every quarter of a second while the
+  // avatar moves, and one final event, whose state is anything but
+  // MOVING, after which it ends.  A walk that cannot start -- a target
+  // outside the region, an avatar that is sitting, a viewer driving it
+  // -- is that final event and nothing else, before anything is sent.
+  //
+  // One walk per avatar.  A second Move takes the first over without
+  // stopping in between, and the first stream ends CANCELLED with the
+  // reason "superseded"; Halt ends it with "halted" and stops the
+  // avatar.
+  //
+  // It walks a straight line and avoids nothing.  What is in the way is
+  // the client's to steer round, by asking again with a different
+  // target; the server notices only that the avatar has stopped getting
+  // closer, which is BLOCKED.
+  rpc Move(MoveRequest) returns (stream MoveEvent);
+
+  // Face turns the avatar toward a place, or to a heading, without
+  // moving it.  Every update after it keeps the facing, the server's
+  // own once-a-second ones included.  A walk under way is ended by it,
+  // as a superseded one.
+  rpc Face(FaceRequest) returns (FaceResponse);
+
+  // Halt ends any walk and stops the avatar.
+  rpc Halt(HaltRequest) returns (HaltResponse);
+
   // Friends is who this avatar's friends are and which of them are
   // logged in.
   //
@@ -938,6 +976,107 @@ message ControlRequest {
 }
 
 message ControlResponse {}
+
+// ------------------------------------------------------------ walking
+
+message MoveRequest {
+  string agent = 1;
+
+  // Target is where to walk to, in the region's own metres.  Only x and
+  // y are walked to: the ground decides the height.  A target outside
+  // the region -- 0 to 256 on each side, which is every region on
+  // Second Life's own grid -- is refused as OUT_OF_REGION before
+  // anything moves; a walk never crosses a border.
+  Vector3 target = 2;
+
+  // Within is how close is close enough, flat, in metres.  Anything
+  // under half a metre, zero included, is half a metre.
+  float within = 3;
+
+  // Run runs rather than walks, which is SetAlwaysRun for the length of
+  // the walk and not a control flag.
+  bool run = 4;
+
+  // Timeout ends the walk CANCELLED, reason "timeout", if it has not
+  // arrived by then.  Zero is no limit.
+  uint32 timeout_ms = 5;
+
+  // What BLOCKED means: less than stall_distance metres closer to the
+  // target over stall_ms.  Zero is the default for each, 0.3 metres
+  // and 2000 milliseconds.
+  float stall_distance = 6;
+  uint32 stall_ms = 7;
+}
+
+// MoveEvent is how a walk is going, or how it ended.
+message MoveEvent {
+  enum State {
+    // MOVING is every event but the last.
+    MOVING = 0;
+    // ARRIVED is within the distance asked for.
+    ARRIVED = 1;
+    // BLOCKED is a walk that stopped getting closer.
+    BLOCKED = 2;
+    // CANCELLED is a walk ended by something else, which reason names:
+    // "superseded", "halted", "client gone", "timeout", "left the
+    // region", "seated", "a viewer took over", "session ended", or
+    // "overshot" for a walk that stopped outside within three times.
+    CANCELLED = 3;
+    // OUT_OF_REGION is a target not in the region; nothing moved.
+    OUT_OF_REGION = 4;
+    // REFUSED is a walk that could not start -- the avatar is sitting,
+    // or a viewer is driving it -- and reason says which.
+    REFUSED = 5;
+  }
+  State state = 1;
+  string reason = 2;
+
+  // Position is where the avatar is, and exact whether that is the
+  // simulator's own figure for it rather than the whole metres of
+  // CoarseLocationUpdate.  It is exact once the region has described the
+  // avatar, which is soon after it arrives.
+  Vector3 position = 3;
+  bool exact = 4;
+
+  // Velocity is in metres a second, as the simulator last said.
+  Vector3 velocity = 5;
+
+  // Yaw is which way the avatar faces, as the simulator last said:
+  // radians anticlockwise from east, between minus pi and pi.
+  float yaw = 6;
+
+  // Remaining is the flat distance still to go.
+  float remaining = 7;
+
+  // SinceProgress is how long since the avatar last got stall_distance
+  // closer, and elapsed how long the walk has been going.
+  uint32 since_progress_ms = 8;
+  uint32 elapsed_ms = 9;
+}
+
+message FaceRequest {
+  string agent = 1;
+
+  // Toward a place in the region, or to a heading in radians
+  // anticlockwise from east.
+  oneof toward {
+    Vector3 target = 2;
+    float yaw = 3;
+  }
+}
+
+message FaceResponse {
+  // Yaw is the heading the avatar was given.
+  float yaw = 1;
+}
+
+message HaltRequest { string agent = 1; }
+
+message HaltResponse {
+  // Walking says whether a walk was under way.  The avatar is sent a
+  // stop either way.
+  bool walking = 1;
+}
 
 // ------------------------------------------------------------ presence
 
