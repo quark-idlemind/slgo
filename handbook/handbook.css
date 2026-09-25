@@ -1016,6 +1016,7 @@ dd { margin: 0; color: var(--ink-soft); }
   font-family: var(--mono);
   font-size: 0.8rem;
   line-height: 1.6;
+  tab-size: 4;
 }
 .file .copy { background: var(--surface); color: var(--muted); border-color: var(--rule); top: 0.28rem; }
 .file .copy:hover { color: var(--accent-ink); border-color: var(--accent); }
@@ -1051,6 +1052,20 @@ dd { margin: 0; color: var(--ink-soft); }
 .note.os > .label { color: var(--os-ink); }
 .note ul { gap: 0.3rem; }
 .note p { margin: 0; }
+/* Words quoted exactly as they arrived, on the lines they arrived on. */
+.note pre.quote {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
 
 /* ---------------------------------------------------- Linux / macOS */
 

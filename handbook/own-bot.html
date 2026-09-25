@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your own bot — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="own-bot">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Guide · writing a program</p>
+    <h1>Your own bot</h1>
+    <p class="standfirst">slsh and slbotd are Go programs built on slgo's <code>sl</code> package, and a program of your own can use it the same way. This page builds a shop greeter one step at a time. It greets people who arrive, remembers who it has greeted, answers questions in local chat and by IM, and hands out a gift.</p>
+    <div class="meta-row"><span class="pill time">~1 hour</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+
+      <section id="what">
+        <h2>What you will build</h2>
+        <p>The greeter drives an avatar that slgod holds. Every few seconds it looks around. When somebody new comes within 20 metres, it turns to face them, greets them by name in local chat and offers them a gift. Anyone who says <code>info</code> nearby, or sends it by IM, is told where they are. The greeter keeps the list of people it has greeted in a file, so a restart does not greet the whole shop again.</p>
+        <p>This is what a visitor received when the greeter was tested on 25 September 2026. A small program attached to the visitor's avatar recorded it. The lines marked <code>&gt;&gt;</code> are what the visitor did. The names of the place are invented.</p>
+        <div class="term" data-where-label="the visitor's side, as recorded"><pre>15:09:54  ..     waiting for the greeter
+15:09:59  local  Mirkwin Resident: Hello Quark, welcome to Example Workshop! I have sent you a Welcome Kit. Say info, or IM me info, to hear about this place.
+15:09:59  offer  Mirkwin Resident offers "Welcome Kit"
+15:10:09  &gt;&gt;     say "info" nearby
+15:10:09  local  Mirkwin Resident: This is Example Workshop, in Brackenfen.
+15:10:15  &gt;&gt;     IM "info" straight after
+15:10:15  IM     Mirkwin Resident: This is Example Workshop, in Brackenfen.</pre></div>
+        <p>The finished program is <a href="../examples/greeter/main.go"><code>examples/greeter/main.go</code></a> in the slgo checkout. Every piece of it on this page is copied from that file, and the handbook build checks that the copies still match.</p>
+      </section>
+
+      <section id="how">
+        <h2>How your program reaches the avatar</h2>
+        <ul>
+          <li><strong>slgod holds the avatar</strong> and speaks the grid's protocol. Your program attaches to slgod the way slsh does: over TLS on port 7807, proving itself with the shared secret. The <code>sl</code> package finds the secret file the same way every client does (<a href="reference.html#secret-order">rules</a>).</li>
+          <li><strong>The avatar outlives your program.</strong> When the program stops, crashes or is rebuilt, the avatar stays logged in. Several programs can attach to one avatar at once, so you can watch it in slsh while your bot runs.</li>
+          <li><strong>A call waits until it can see the result.</strong> <code>Rez</code> returns the object it made, and <code>Sit</code> returns once the avatar is seated. Where the grid gives no reply, the package watches for the effect, and a call that could not confirm what it did returns an error saying so. Chat and IMs are acknowledged by nothing, so <code>Say</code> and <code>SendIM</code> return once the message is on its way. Every call takes a context and can fail.</li>
+          <li><strong>What the grid tells the avatar arrives on channels.</strong> You subscribe to chat and IMs and read them in a loop. <a href="#events">What can arrive</a> lists every kind, and <a href="#actions">What a bot can do</a> lists the actions.</li>
+          <li><strong>There is also a way without slgod.</strong> <code>sl.LoginDirect</code> logs the avatar in from your program. The avatar then logs out when the program exits. Everything after the login is the same.</li>
+        </ul>
+      </section>
+
+      <section id="before">
+        <h2>Before you start</h2>
+        <ul>
+          <li><strong>A running slgod holding the bot's avatar.</strong> This page calls the profile <code>greeter</code> and its avatar <strong>Mirkwin Resident</strong>. Making a profile for a bot is step 1 of <a href="quickstart-bot.html#steps">Adding slbotd</a>. You do not need slbotd itself.</li>
+          <li><strong>The slgo checkout slgod was built from</strong>, and Go 1.26.1 or newer. Build your bot against that same tree, because slgod refuses a client built from an older one.</li>
+          <li><strong>slsh</strong>, to put the gift in the bot's inventory in step 8.</li>
+          <li><strong>A place for the bot to stand</strong>, and the land owner's agreement to run a greeter there.</li>
+        </ul>
+        <div class="note warn"><p class="label">The grid says it is a bot</p><p>In testing, the first IM the greeter sent a visitor arrived with this in front of it (the avatar's name is invented):</p>
+<pre class="quote">You are chatting with a bot, Mirkwin Resident. Do not share any personal information.
+Learn more at https://second.life/scripted-agents.</pre>
+<p>slgo does not send it, and your program cannot stop it. It did not come again when the greeter IMed the same visitor two minutes later. The address is Linden Lab's page on scripted agents: read it before you put a bot in a shop.</p></div>
+      </section>
+
+      <section id="steps">
+        <h2>Build it</h2>
+        <ol class="steps" id="greeter-steps">
+          <li><div class="step-body">
+            <h3>Make a module beside the checkout</h3>
+            <p>Make a directory for the program next to your <code>slgo</code> checkout, and point the new module at that checkout:</p>
+            <div class="term"><pre><span class="p">$ </span>mkdir greeter
+<span class="p">$ </span>cd greeter
+<span class="p">$ </span>go mod init example.com/greeter
+<span class="p">$ </span>go mod edit -replace github.com/quark-idlemind/slgo=../slgo</pre></div>
+            <p>The <code>replace</code> line builds your program from the same tree as your slgod. The path is relative to the <code>greeter</code> directory, so change <code>../slgo</code> if your checkout is somewhere else. The module name <code>example.com/greeter</code> is yours to choose.</p>
+            <p>To skip the typing, run the finished greeter from inside the checkout instead: <code>go run ./examples/greeter</code> with the flags from step 9.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Connect</h3>
+            <p>Put this in <code>main.go</code>. It attaches to the avatar slgod holds under the profile <code>greeter</code>, and prints where it is:</p>
+            <div class="file"><div class="name">greeter/main.go</div><pre>package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/quark-idlemind/slgo/sl"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Attach to the avatar slgod holds under the profile "greeter".
+	s, err := sl.Dial(ctx, "localhost:7807", "greeter")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer s.Close()
+
+	where, err := s.Where(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%s is in %s at %.0f, %.0f, %.0f\n", s.Info().AvatarName,
+		where.Region, where.Position.X, where.Position.Y, where.Position.Z)
+}</pre></div>
+            <p><code>go mod tidy</code> finds the package in your checkout and records it. Then run the program:</p>
+            <div class="term"><pre><span class="p">$ </span>go mod tidy
+<span class="o">go: found github.com/quark-idlemind/slgo/sl in github.com/quark-idlemind/slgo v0.0.0-00010101000000-000000000000</span>
+<span class="p">$ </span>go run .
+<span class="o">Mirkwin Resident is in Brackenfen at 87, 172, 4004</span></pre></div>
+            <p>That output is from the test, with the names invented.</p>
+            <ul>
+              <li><code>sl.Dial</code> takes slgod's address and a profile name. An empty name takes <code>$SLGO_AGENT</code> if it is set, and otherwise the session slgod has held longest.</li>
+              <li>Unlike the programs in the checkout, it does not ask sl-host where slgod is. Your program is told the address.</li>
+              <li>If it fails, the error is the one slsh would print, and <a href="troubleshooting.html">Troubleshooting</a> has them.</li>
+            </ul>
+            <p>From here on, <code>main.go</code> is the finished greeter. Copy the whole of <code>examples/greeter/main.go</code> over it now, and read on for what each part does.</p>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Listen</h3>
+            <p>A bot is a loop that waits for something to happen and deals with it. In this package, what happens arrives on Go channels. You subscribe to each kind and <code>select</code> over them:</p>
+            <div class="file" data-from="../examples/greeter/main.go"><div class="name">examples/greeter/main.go · listen</div><pre>// listen is the event loop.  Everything the bot does starts here, and
+// runs one thing at a time.
+func (g *greeter) listen(ctx context.Context) error {
+	// Step 3: subscribe before doing anything else, so that nothing
+	// said in between is missed.  Local chat from avatars only, at the
+	// three volumes a person speaks at; every kind of IM.
+	chat := g.s.Chat(sl.ChatFilter{
+		SourceTypes: []uint8{sl.SourceAgent},
+		Types:       []uint8{sl.ChatWhisper, sl.ChatSay, sl.ChatShout},
+	}, 0)
+	defer g.s.StopChat(chat)
+	ims := g.s.IMs(0)
+	defer g.s.StopIMs(ims)
+
+	// Step 4: nothing announces an arrival, so look around on a timer.
+	tick := time.NewTicker(g.o.every)
+	defer tick.Stop()
+	g.look(ctx)
+
+	for {
+		select {
+		case &lt;-ctx.Done():
+			log.Printf("stopping; the avatar is still logged in")
+			return nil
+		case &lt;-g.s.Done():
+			return fmt.Errorf("the connection to slgod ended: %v", g.s.Err())
+		case l, ok := &lt;-chat:
+			if !ok {
+				return errors.New("the chat subscription ended")
+			}
+			g.heard(ctx, l)
+		case im, ok := &lt;-ims:
+			if !ok {
+				return errors.New("the IM subscription ended")
+			}
+			g.told(ctx, im)
+		case &lt;-tick.C:
+			g.look(ctx)
+		}
+	}
+}</pre></div>
+            <ul>
+              <li><strong>Subscribe first.</strong> A subscription hears what arrives after it is made, and nothing earlier.</li>
+              <li><strong>The filter</strong> here hears avatars only, at the three volumes a person speaks at. Without it you also get objects talking, script errors and typing notices.</li>
+              <li><strong>Each channel has a buffer</strong>, 64 by default. If your loop falls behind and a buffer fills, new items are dropped rather than holding up the session. <code>ChatDropped</code> and <code>IMsDropped</code> count them. Keep each handler short.</li>
+              <li><strong><code>s.Done()</code></strong> closes when the connection to slgod ends. The program then exits with an error, and a service manager can start it again.</li>
+              <li><strong><code>ctx</code></strong> is cancelled by Ctrl-C or SIGTERM, which <code>main</code> arranges. The avatar stays logged in either way.</li>
+              <li><strong>One handler runs at a time.</strong> That keeps the state simple, and nothing in this program needs a lock.</li>
+            </ul>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Notice who arrives</h3>
+            <p>Nothing on the grid announces that somebody has walked in. So the bot looks around every few seconds, and compares what it sees with the last look:</p>
+            <div class="file" data-from="../examples/greeter/main.go"><div class="name">examples/greeter/main.go · look</div><pre>// look finds who is within reach, and deals with whoever has just
+// arrived.
+func (g *greeter) look(ctx context.Context) {
+	people, err := g.s.Nearby(ctx)
+	if err != nil {
+		log.Printf("cannot see who is here: %v", err)
+		return
+	}
+	now := map[msg.UUID]bool{}
+	for _, p := range people {
+		// Distance is -1 for somebody seated on something the region
+		// has not described, who is here but cannot be placed.
+		if p.Distance &lt; 0 || float64(p.Distance) &gt; g.o.radius {
+			continue
+		}
+		// Nearby puts a shortened id where a name has not arrived
+		// yet.  Wait for the name rather than greet a number: it is
+		// usually there by the next look.
+		name := g.s.Name(p.ID)
+		if name == "" {
+			continue
+		}
+		now[p.ID] = true
+		if !g.here[p.ID] {
+			g.arrived(ctx, p, name)
+		}
+	}
+	g.here = now
+}</pre></div>
+            <ul>
+              <li><code>Nearby</code> lists the other avatars in the region, nearest first, with a distance in metres. It asks slgod, which has been listening since before your program started, so people who were already there are included.</li>
+              <li>It is cheap. Measured on 25 September 2026, with the program and slgod on one Mac and 808 objects known in the region: 108 ms for the first call, then 2 to 3 ms.</li>
+              <li>A name reaches the avatar a moment after the person does. Until it arrives, <code>Nearby</code> shows a shortened uuid, and the greeter waits for the next look rather than greet a number.</li>
+              <li><code>here</code> is who was in reach at the last look. Anybody in reach now who was not there then has just arrived. This was tested by teleporting the bot away and back, with <code>-every 2s</code>. On its return, the next look found the three people there and greeted the one it had not met.</li>
+            </ul>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Remember who was greeted</h3>
+            <p>An arrival is looked up in the memory first:</p>
+            <div class="file" data-from="../examples/greeter/main.go"><div class="name">examples/greeter/main.go · arrived</div><pre>// arrived decides what to say to somebody who has just come within
+// reach: a greeting if they are new, a welcome back if they have been
+// away long enough, and nothing otherwise.
+func (g *greeter) arrived(ctx context.Context, p sl.Person, name string) {
+	// Step 5: remember people by uuid.  A name is what is shown; the
+	// uuid is who they are.
+	id := p.ID.String()
+	v := g.mem.Visitors[id]
+	switch {
+	case v == nil:
+		g.greet(ctx, p, name, false)
+		v = &amp;visitor{Name: name, First: time.Now()}
+		g.mem.Visitors[id] = v
+	case g.o.again &gt; 0 &amp;&amp; time.Since(v.Last) &gt;= g.o.again:
+		g.greet(ctx, p, name, true)
+	default:
+		log.Printf("%s is here again; greeted on %s", name, v.First.Format(time.DateOnly))
+	}
+	v.Last = time.Now()
+	if err := g.mem.save(); err != nil {
+		log.Printf("cannot save %s: %v", g.o.memory, err)
+	}
+}</pre></div>
+            <p>The memory is a JSON file, read at startup and written after every arrival:</p>
+            <div class="file" data-from="../examples/greeter/main.go"><div class="name">examples/greeter/main.go · visitor, memory, loadMemory, save</div><pre>// visitor is one person the greeter has greeted.
+type visitor struct {
+	Name  string    `json:"name"`
+	First time.Time `json:"first"` // when they were first greeted
+	Last  time.Time `json:"last"`  // when they last came within reach
+}
+
+// memory is everyone greeted, by uuid, kept in a file so that a restart
+// does not greet the whole shop again.
+type memory struct {
+	path     string
+	Visitors map[string]*visitor `json:"visitors"`
+}
+
+// loadMemory reads the file, or starts an empty memory if there is none.
+func loadMemory(path string) (*memory, error) {
+	m := &amp;memory{path: path}
+	b, err := os.ReadFile(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		// Nobody greeted yet.
+	case err != nil:
+		return nil, err
+	default:
+		if err := json.Unmarshal(b, m); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+	}
+	if m.Visitors == nil {
+		m.Visitors = map[string]*visitor{}
+	}
+	return m, nil
+}
+
+// save writes the whole file under a new name and then renames it over
+// the old one, so that a crash part way leaves the last good copy
+// rather than half of one.  Mode 600, because it names everybody who
+// came in.
+func (m *memory) save() error {
+	b, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := m.path + ".new"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, m.path)
+}</pre></div>
+            <ul>
+              <li><strong>People are keyed by uuid.</strong> The uuid is who somebody is; the name is kept only so that you can read the file.</li>
+              <li><strong><code>save</code> writes a new file</strong> and renames it over the old one. A crash part way through leaves the last good copy.</li>
+              <li><strong>Mode 600</strong>, because the file names everybody who came in.</li>
+              <li><strong>Leaving somebody out.</strong> To keep the greeter away from somebody, your staff for example, put their uuid in the file before it starts. That is how the tests on this page left two avatars alone.</li>
+            </ul>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Greet</h3>
+            <div class="file" data-from="../examples/greeter/main.go"><div class="name">examples/greeter/main.go · greet</div><pre>// greet says hello in local chat, and offers somebody new the gift.
+func (g *greeter) greet(ctx context.Context, p sl.Person, name string, back bool) {
+	// Step 6: act.  Turn to face them first.  It does not matter if
+	// that fails, so it is only logged.
+	if _, err := g.s.Face(ctx, p.Position); err != nil {
+		log.Printf("cannot face %s: %v", name, err)
+	}
+
+	first := strings.Fields(name)[0]
+	line := fmt.Sprintf("Welcome back, %s!", first)
+	if !back {
+		place, _ := g.land(ctx)
+		line = fmt.Sprintf("Hello %s, welcome to %s!", first, place)
+		// Step 8: the gift.  It is an offer: they have to accept it.
+		if g.gift != nil {
+			err := g.s.GiveToAvatar(ctx, p.ID, g.gift.ID, g.gift.Name, int8(g.gift.Type))
+			if err != nil {
+				log.Printf("cannot offer %s to %s: %v", g.gift.Name, name, err)
+			} else {
+				log.Printf("offered %s to %s", g.gift.Name, name)
+				line += " I have sent you a " + g.gift.Name + "."
+			}
+		}
+	}
+	line += " Say info, or IM me info, to hear about this place."
+	if err := g.s.Say(ctx, line, 0); err != nil {
+		log.Printf("cannot greet %s: %v", name, err)
+		return
+	}
+	log.Printf("greeted %s", name)
+}</pre></div>
+            <ul>
+              <li><code>Face</code> turns the avatar toward a place in the region without moving it. <code>Move</code> walks there; see <a href="#actions">What a bot can do</a>.</li>
+              <li><code>Say</code> puts a line in local chat on channel 0. <code>SayAs</code> does the same with <code>sl.ChatWhisper</code> or <code>sl.ChatShout</code>.</li>
+              <li>The greeting uses the first word of the name. For a newer account the name is the username followed by <code>Resident</code>.</li>
+              <li>With <code>-again</code> set, somebody away longer than that is welcomed back instead, without a second gift. From the test, with <code>-again 24h</code> and a last visit two days before: <code>Welcome back, Quark! Say info, or IM me info, to hear about this place.</code></li>
+            </ul>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Answer questions</h3>
+            <p>A line of local chat goes to <code>heard</code>, and an IM goes to <code>told</code>:</p>
+            <div class="file" data-from="../examples/greeter/main.go"><div class="name">examples/greeter/main.go · heard, told, tooSoon, asksForInfo</div><pre>// heard is one line of local chat from an avatar.
+func (g *greeter) heard(ctx context.Context, l sl.Line) {
+	// Step 7: answer.  Skip anything this avatar said itself.
+	if l.Source == g.s.Me() || l.Mine {
+		return
+	}
+	if !asksForInfo(l.Text) || tooSoon(g.answeredNearby, l.Source) {
+		return
+	}
+	if err := g.s.Say(ctx, g.info(ctx), 0); err != nil {
+		log.Printf("cannot answer %s: %v", l.From, err)
+		return
+	}
+	log.Printf("told %s about this place, in local chat", l.From)
+}
+
+// told is one instant message.
+func (g *greeter) told(ctx context.Context, im *sl.IM) {
+	// An IM can be a dozen kinds of thing.  Conversation is true only
+	// for somebody writing to this avatar: not a typing notice, a
+	// group message, an offer, or this avatar's own words from another
+	// client.
+	if !im.Conversation() {
+		return
+	}
+	var reply string
+	switch {
+	case asksForInfo(im.Text):
+		if tooSoon(g.answeredIM, im.From) {
+			return
+		}
+		reply = g.info(ctx)
+	case time.Since(g.pointed[im.From]) &gt; time.Hour:
+		// Anything else gets one pointer an hour, and then silence.
+		// Answering every IM is how two bots talk to each other
+		// until somebody notices.
+		g.pointed[im.From] = time.Now()
+		reply = "I am this shop's greeter, and a bot. IM me info to hear about this place."
+	default:
+		return
+	}
+	if err := g.s.SendIM(ctx, im.From, reply); err != nil {
+		log.Printf("cannot answer %s: %v", im.FromName, err)
+		return
+	}
+	log.Printf("answered an IM from %s", im.FromName)
+}
+
+// tooSoon is whether this person was given the information in the last
+// half minute, and notes that they are being given it now if not.
+func tooSoon(last map[msg.UUID]time.Time, who msg.UUID) bool {
+	if time.Since(last[who]) &lt; 30*time.Second {
+		return true
+	}
+	last[who] = time.Now()
+	return false
+}
+
+// asksForInfo is whether a line asks for the information: the word
+// info on its own, in any case, with or without a question mark.
+func asksForInfo(text string) bool {
+	t := strings.ToLower(strings.TrimSpace(text))
+	return strings.TrimRight(t, "?!. ") == "info"
+}</pre></div>
+            <p>Both answer with the same text, made from what the land says about itself:</p>
+            <div class="file" data-from="../examples/greeter/main.go"><div class="name">examples/greeter/main.go · info, land</div><pre>// info is the answer to "info": where this is, in the land's own words.
+func (g *greeter) info(ctx context.Context) string {
+	name, desc := g.land(ctx)
+	text := "This is " + name
+	if where, err := g.s.Where(ctx); err == nil {
+		text += ", in " + where.Region
+	}
+	text += "."
+	if desc != "" {
+		text += " " + desc
+	}
+	return text
+}
+
+// land is the parcel's name and description, which its owner sets in a
+// viewer under About Land.
+func (g *greeter) land(ctx context.Context) (name, desc string) {
+	p, err := g.s.Parcel(ctx, 10*time.Second)
+	if err != nil {
+		log.Printf("cannot read the parcel: %v", err)
+		return "the shop", ""
+	}
+	return p.Name, p.Desc
+}</pre></div>
+            <ul>
+              <li><strong>Skip your own words.</strong> The grid sends the avatar what it said itself. Measured: a line the bot said in local chat arrived on its own subscription, from <code>s.Me()</code>. A bot that answers everything it hears would answer itself.</li>
+              <li><strong>Answer only conversation.</strong> An IM can be a dozen kinds of thing: typing notices, group chat, inventory and teleport offers. <code>Conversation()</code> is true only for a person writing to this avatar. It is false for what this avatar sent from another client, which arrives marked <code>Mine</code>.</li>
+              <li><strong>Limit what you say.</strong> The information goes to one person at most once in 30 seconds, counted separately nearby and by IM. Any other IM gets one pointer an hour, then silence. In testing, the visitor's avatar was itself run by slbotd with a language model, which sent the greeter two replies within four seconds of the pointer. The greeter said nothing more. Without the limit, the two would have talked until somebody stopped one of them.</li>
+              <li><strong>The land's own words.</strong> The parcel name and description are what the owner sets under About Land in a viewer. The test parcel had no description, so the answer was only the name and the region.</li>
+            </ul>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Hand out a gift</h3>
+            <p>Put the gift in a folder at the top of the bot's inventory. With slsh, attached to the bot's avatar, a notecard made from a text file will do:</p>
+            <div class="term"><pre><span class="p">$ </span>slsh -a greeter
+<span class="p">/$ </span>mkdir Greeter
+<span class="p">/$ </span>new --from welcome-kit.txt "Greeter/Welcome Kit"</pre></div>
+            <p>The greeter finds it at startup, and checks it can be given more than once:</p>
+            <div class="file" data-from="../examples/greeter/main.go"><div class="name">examples/greeter/main.go · findGift</div><pre>// findGift finds the gift in a folder at the top of the bot's inventory,
+// and checks that it can be given away more than once.
+func findGift(ctx context.Context, s *sl.Session, folder, name string) (*sl.Item, error) {
+	f, err := s.Folder(ctx, folder)
+	if err != nil {
+		return nil, err
+	}
+	it, err := s.FindItem(ctx, f, name)
+	if err != nil {
+		return nil, err
+	}
+	// Without transfer it cannot be given at all.  Without copy it can
+	// be given once: the first visitor to accept takes the only one.
+	if it.OwnerMask&amp;sl.PermTransfer == 0 {
+		return nil, fmt.Errorf("%s is no-transfer, so it cannot be given", name)
+	}
+	if it.OwnerMask&amp;sl.PermCopy == 0 {
+		return nil, fmt.Errorf("%s is no-copy, so only the first visitor would get one", name)
+	}
+	return it, nil
+}</pre></div>
+            <ul>
+              <li><strong>Permissions.</strong> An item that is not transferable cannot be given at all. One that is not copyable can be given once, and the first visitor to accept takes the only one. The greeter refuses to start with either, rather than find out from a visitor.</li>
+              <li><strong><code>GiveToAvatar</code> is an offer.</strong> The visitor's viewer asks them to accept or decline, and nothing tells the bot which they chose. In the test the offer arrived in the same second as the greeting.</li>
+              <li><strong>An offer nobody answers stays pending</strong> on the visitor's side.</li>
+            </ul>
+          </div></li>
+
+          <li><div class="step-body">
+            <h3>Run it</h3>
+            <div class="term"><pre><span class="p">$ </span>go build
+<span class="p">$ </span>./greeter -agent greeter -gift "Welcome Kit"</pre></div>
+            <div class="tablewrap"><table>
+              <thead><tr><th>Flag</th><th>Default</th><th>What it does</th></tr></thead>
+              <tbody>
+                <tr><td><code>-addr</code></td><td><code>localhost:7807</code></td><td class="what">Where slgod is.</td></tr>
+                <tr><td><code>-agent</code></td><td>empty</td><td class="what">Which of slgod's avatars to use. Empty takes <code>$SLGO_AGENT</code>, or else the one slgod has held longest.</td></tr>
+                <tr><td><code>-radius</code></td><td>20</td><td class="what">Greet people who come within this many metres.</td></tr>
+                <tr><td><code>-every</code></td><td><code>5s</code></td><td class="what">How often to look around.</td></tr>
+                <tr><td><code>-again</code></td><td>0</td><td class="what">Welcome somebody back after this long away. 0 greets each person once.</td></tr>
+                <tr><td><code>-memory</code></td><td><code>greeted.json</code></td><td class="what">The file that remembers who has been greeted.</td></tr>
+                <tr><td><code>-folder</code></td><td><code>Greeter</code></td><td class="what">The top-level inventory folder the gift is in.</td></tr>
+                <tr><td><code>-gift</code></td><td>empty</td><td class="what">The item to offer each new visitor. Empty offers nothing.</td></tr>
+              </tbody>
+            </table></div>
+            <p>The log goes to stderr. This is the run that the visitor's record at the top of the page came from, with the names invented. Two people already standing there had been added to the memory file by hand beforehand, dated 1 September, so that the test would leave them alone:</p>
+            <div class="term" data-where-label="the greeter's log"><pre>2026/09/25 15:09:58 attached to Mirkwin Resident, in Brackenfen at 87, 172, 4004
+2026/09/25 15:09:58 2 people greeted before, in greeted.json
+2026/09/25 15:09:58 the gift is Welcome Kit
+2026/09/25 15:09:58 Taren Holt is here again; greeted on 2026-09-01
+2026/09/25 15:09:59 offered Welcome Kit to Quark Idlemind
+2026/09/25 15:09:59 greeted Quark Idlemind
+2026/09/25 15:09:59 Perrick Hobb is here again; greeted on 2026-09-01
+2026/09/25 15:10:09 told Quark Idlemind about this place, in local chat
+2026/09/25 15:10:15 answered an IM from Quark Idlemind
+2026/09/25 15:10:30 stopping; the avatar is still logged in</pre></div>
+            <p>The last line is the greeter being stopped with SIGTERM, which is what Ctrl-C sends too. In an earlier run, restarted after it had greeted Quark Idlemind, it remembered them:</p>
+            <div class="term" data-where-label="the greeter's log, restarted"><pre>2026/09/25 15:09:29 Quark Idlemind is here again; greeted on 2026-09-25</pre></div>
+            <p>Everybody already in reach when the greeter starts counts as arriving. Started with an empty memory file, it greets the whole room at once; in testing it did exactly that.</p>
+          </div></li>
+        </ol>
+      </section>
+
+      <section id="events">
+        <h2>What can arrive</h2>
+        <p>The greeter reads local chat and IMs. These are all the kinds of thing a session can hear, and how to get each one. <code>s</code> is the <code>*sl.Session</code>.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>What</th><th>How you get it</th><th>Worth knowing</th></tr></thead>
+          <tbody>
+            <tr><td>Local chat</td><td class="what"><code>s.Chat(filter, depth)</code>, a channel of <code>sl.Line</code></td><td class="what">Filter by speaker, by kind of speaker and by chat type. The avatar's own lines come back.</td></tr>
+            <tr><td>Instant messages</td><td class="what"><code>s.IMs(depth)</code>, a channel of <code>*sl.IM</code></td><td class="what"><code>Dialog</code> says which kind. <code>Conversation()</code> is somebody writing to this avatar.</td></tr>
+            <tr><td>Items offered</td><td class="what"><code>s.InventoryOffers()</code>, then <code>s.AcceptInventoryOffer</code> or <code>s.DeclineInventoryOffer</code></td><td class="what">slgod keeps offers made while nothing was attached, so a list read at startup includes them.</td></tr>
+            <tr><td>Friendship offers</td><td class="what"><code>s.Offers()</code>, then <code>Accept</code> or <code>Decline</code> on the offer</td><td class="what"></td></tr>
+            <tr><td>Teleport offers</td><td class="what"><code>s.Lures()</code>, then <code>s.AcceptLure</code> or <code>s.DeclineLure</code></td><td class="what"></td></tr>
+            <tr><td>Requests to be teleported to the bot</td><td class="what"><code>s.TeleportRequests()</code>, then <code>s.AnswerTeleportRequest</code> or <code>s.RefuseTeleportRequest</code></td><td class="what"></td></tr>
+            <tr><td>Group invitations</td><td class="what"><code>s.Invitations()</code>, then <code>s.AcceptInvitation</code> or <code>s.DeclineInvitation</code></td><td class="what"></td></tr>
+            <tr><td>Script dialogs</td><td class="what">Set <code>s.OnDialog</code> to a function, or call <code>s.WaitDialog</code>; answer with <code>s.Answer</code></td><td class="what">A dialog is kept as well as delivered, so one that appears the moment a script starts is not missed.</td></tr>
+            <tr><td>Script permission requests</td><td class="what"><code>s.Permissions(depth)</code>, a channel of <code>*sl.Permission</code>; answer with <code>Grant</code>, <code>GrantAll</code> or <code>Deny</code></td><td class="what">Read the request first. <code>GrantAll</code> can hand over the avatar's money and its movement.</td></tr>
+            <tr><td>Arriving in another region</td><td class="what"><code>s.RegionChanges(depth)</code></td><td class="what">Checking <code>Where</code> is not the same: two teleports out and back leave it unchanged.</td></tr>
+            <tr><td>The simulator refusing something</td><td class="what">Set <code>s.OnAlert</code> to a function, or read <code>s.Alerts()</code></td><td class="what">Often the only word a refusal gets.</td></tr>
+            <tr><td>The connection ending</td><td class="what"><code>s.Done()</code> and <code>s.Err()</code></td><td class="what"></td></tr>
+            <tr><td>Somebody arriving</td><td class="what">Nothing arrives. Look with <code>s.Nearby</code>.</td><td class="what">See step 4.</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
+      <section id="actions">
+        <h2>What a bot can do</h2>
+        <p>Every action is a method on the session. These are the ones a bot reaches for first. Run <code>go doc ./sl</code> in the checkout for the rest. Each call's comment says what it waits for and what it cannot tell.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>To</th><th>Calls</th></tr></thead>
+          <tbody>
+            <tr><td>Talk</td><td class="what"><code>Say</code>, <code>SayAs</code> (whisper, say or shout, on any channel), <code>SendIM</code>, <code>Typing</code></td></tr>
+            <tr><td>Move</td><td class="what"><code>Move</code> (walk to a place, with progress), <code>Face</code>, <code>Halt</code>, <code>TeleportLocal</code>, <code>GoHome</code>, <code>Sit</code>, <code>SitOnGround</code>, <code>Stand</code></td></tr>
+            <tr><td>Find and use objects</td><td class="what"><code>ObjectsNamed</code>, <code>AllObjects</code>, <code>Properties</code>, <code>Touch</code></td></tr>
+            <tr><td>Deal with people</td><td class="what"><code>Nearby</code>, <code>Lookup</code> (by name), <code>Names</code>, <code>Profile</code>, <code>OfferTeleport</code>, <code>OfferFriendship</code>, <code>InviteToGroup</code></td></tr>
+            <tr><td>Use inventory</td><td class="what"><code>ListInventory</code>, <code>Folder</code>, <code>FindItem</code>, <code>GiveToAvatar</code>, <code>CreateFolder</code>, <code>RezFromInventory</code>, <code>Wear</code></td></tr>
+            <tr><td>Know the place</td><td class="what"><code>Where</code>, <code>Region</code>, <code>Parcel</code>, <code>ParcelAt</code></td></tr>
+            <tr><td>Share the avatar</td><td class="what"><code>Lock</code>, <code>TryLock</code>, <code>Unlock</code>: a name that only one program may hold at a time</td></tr>
+          </tbody>
+        </table></div>
+        <p>Every one of them takes a context and returns an error. A bot that runs for weeks will meet each error sooner or later, so log it and carry on unless it means the session is gone.</p>
+      </section>
+
+      <section id="surprises">
+        <h2>Things you would not guess</h2>
+        <ul>
+          <li><strong>Your own chat comes back.</strong> Measured, as in step 7.</li>
+          <li><strong>The grid marks the bot's IMs.</strong> See <a href="#before">Before you start</a>.</li>
+          <li><strong><code>Where</code> is approximate.</strong> Between arrivals it follows the grid's coarse location updates, which carry whole metres. Above 1020 metres they carry no height, so the height stays at what it was when the avatar arrived (from the code). Measured: after a short walk left the bot at 4001.2 metres, <code>Where</code> still said 4004. <code>Nearby</code> measures distances from it, so leave a few metres to spare in a radius.</li>
+          <li><strong>Names arrive late.</strong> See step 4.</li>
+          <li><strong>A gift is only an offer.</strong> See step 8.</li>
+          <li><strong>Everyone present at startup counts as arriving.</strong> See step 9.</li>
+        </ul>
+      </section>
+
+      <section id="running">
+        <h2>Keeping it running</h2>
+        <ul>
+          <li><strong>Run it as a service.</strong> The launchd and systemd templates for <a href="quickstart-bot.html#service">slbotd</a> fit with the program's path and flags in place of slbotd's. That has not been tried with the greeter. Give <code>-memory</code> an absolute path, because a service's working directory is not yours.</li>
+          <li><strong>When the connection to slgod ends</strong>, when slgod restarts for example, the greeter exits with an error. <code>Restart=on-failure</code> or <code>KeepAlive</code> starts it again, and the memory file means nobody is greeted twice.</li>
+          <li><strong>When the avatar is logged out on purpose</strong>, with <code>slsh logout</code>, the connection to slgod stays up and the program keeps waiting. slgod keeps a client's connection while the session under it comes and goes. That is from slbotd's code, and has not been tried with the greeter.</li>
+          <li><strong>Attend, don't use.</strong> The greeter attaches with <code>sl.DialWeak</code> rather than <code>sl.Dial</code>. That tells slgod the program only attends the avatar, so <code>slsh logout</code> does not refuse on its account.</li>
+          <li><strong>Two programs on one avatar</strong> both hear everything. If only one of them should act, have each take a lock with <code>TryLock</code> and act only while holding it. slgod frees a lock when its holder's connection ends.</li>
+        </ul>
+        <div class="note warn"><p class="label">Security</p><p>Your program uses the same shared secret as slsh, and the secret opens every avatar slgod holds. Treat the machine your bot runs on like the slgod machine. The <a href="security.html">security page</a> says more.</p></div>
+      </section>
+
+      <section id="next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="../examples/greeter/main.go"><span class="k">Code</span><span class="t">The whole greeter</span><span class="d">examples/greeter/main.go, with its tests beside it.</span></a>
+          <a class="card" href="../doc/guide.md"><span class="k">Read</span><span class="t">The slgod guide</span><span class="d">Two clients on one avatar, and what that means if you are writing one.</span></a>
+          <a class="card" href="quickstart-bot.html"><span class="k">Compare</span><span class="t">Adding slbotd</span><span class="d">A bigger bot built the same way: commands by IM, and a model behind it.</span></a>
+          <a class="card" href="security.html"><span class="k">Read</span><span class="t">Security</span><span class="d">What the shared secret gives a program that holds it.</span></a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook · for <span class="hb-version">the slgo in this checkout</span></span>
+    <span class="pager"><a href="how-llm.html">← slsh + LLM</a> <a href="setups.html">Setups →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>
