@@ -59,7 +59,9 @@
 greeted.json
 greeted.json.new
 
-# Anything else built here.
+# Anything else built here.  Python's compiled copies too: bundle.py
+# imports apidoc.py and asks for none, but another script may not.
+__pycache__/
 *.o
 *.a
 *.test
