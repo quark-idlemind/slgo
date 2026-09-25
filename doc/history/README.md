@@ -18,7 +18,7 @@ The authorities on current behaviour are, in order:
 |---|---|
 | the code | what it actually does |
 | `slsh`'s man pages | `man tp`, `man sit`, `man parcel`, ... |
-| `doc/guide.md`, `doc/slsh-guide.html` | the two user guides |
+| `doc/guide.md`, `handbook/slsh-guide.html` | the two user guides |
 | `doc/memory.md`, `doc/slots.md`, `doc/login-parameters.md` | measured reference that is still true |
 
 ## What is here

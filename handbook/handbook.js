@@ -40,14 +40,9 @@
     return null;
   }
 
-  // The slsh guide lives in doc/, beside the handbook rather than in it.
-  var ELSEWHERE = { "slsh-guide": "../doc/slsh-guide.html" };
-
   function hrefFor(id) {
     if (bundled) return "#" + id;
-    var here = location.pathname.indexOf("/doc/") >= 0;
-    if (ELSEWHERE[id]) return here ? id + ".html" : ELSEWHERE[id];
-    return (here ? "../handbook/" : "") + id + ".html";
+    return id + ".html";
   }
 
   // The plywood cube every prim starts as: the mark in the status bar.

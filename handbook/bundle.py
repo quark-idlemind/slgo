@@ -5,8 +5,7 @@
     python3 handbook/bundle.py --page NAME [OUT]   one page on its own
                                           (default: NAME-bundle.html here)
 
-Every page is a file of its own with one <article class="page" id=NAME>,
-here or, for the slsh guide, in doc/.
+Every page is a file of its own with one <article class="page" id=NAME>.
 The bundle holds every article, the stylesheet and the script inline;
 handbook.js sees more than one article and shows one at a time.  Ids
 inside a page become NAME--id so that two pages may use the same one,
@@ -29,21 +28,11 @@ PAGES = [
     "security", "troubleshooting", "reference",
 ]
 
-# Pages that live outside this directory, by the path a handbook page
-# links to them with.
-ELSEWHERE = {"slsh-guide": "../doc/slsh-guide.html"}
-
 # A relative link to a file that is not a page (the guide's link to
 # doc/guide.md) has nowhere to go in one file, so it goes to the tree.
 TREE = "https://github.com/quark-idlemind/slgo/blob/main/"
 
 ARTICLE = re.compile(r'<article class="page"[^>]*>.*?</article>', re.S)
-
-
-def source(page):
-    if page in ELSEWHERE:
-        return os.path.normpath(os.path.join(HERE, ELSEWHERE[page]))
-    return os.path.join(HERE, page + ".html")
 
 
 def rewrite(page, html):
@@ -61,12 +50,12 @@ def rewrite(page, html):
             return m.group(0)
         if target.startswith("#"):
             return '%s="#%s"' % (m.group(1), ident(target[1:]))
-        f = re.match(r"^(?:\.\./[a-z]+/)?([a-z0-9-]+)\.html(?:#(.+))?$", target)
+        f = re.match(r"^([a-z0-9-]+)\.html(?:#(.+))?$", target)
         if f and f.group(1) in PAGES:
             other = f.group(1)
             return '%s="#%s"' % (m.group(1), other + ("--" + f.group(2) if f.group(2) else ""))
         if re.match(r"^[a-z0-9_./-]+$", target) and not target.startswith("/"):
-            where = os.path.dirname(os.path.relpath(source(page), os.path.dirname(HERE)))
+            where = os.path.basename(HERE)
             return '%s="%s"' % (m.group(1), TREE + os.path.normpath(os.path.join(where, target)))
         sys.exit("%s.html: a link the bundle cannot follow: %s" % (page, target))
 
@@ -87,7 +76,7 @@ def main():
     head = ('<title>slgo handbook</title>\n'
             '<meta name="description" content="Setting up slgod, slsh, slbotd and sl-host, on one machine or several.">\n')
     for page in ([only] if only else PAGES):
-        text = open(source(page)).read()
+        text = open(os.path.join(HERE, page + ".html")).read()
         found = ARTICLE.findall(text)
         if len(found) != 1:
             sys.exit("%s.html: want one <article class=\"page\">, found %d" % (page, len(found)))

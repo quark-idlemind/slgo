@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>slsh — a user's guide</title>
-<link rel="stylesheet" href="../handbook/handbook.css">
+<link rel="stylesheet" href="handbook.css">
 </head>
 <body>
 <article class="page" id="slsh-guide" data-title="slsh — a user's guide">
@@ -13,7 +13,7 @@
 
   <header class="masthead">
     <div>
-      <p class="eyebrow">A user's guide</p>
+      <p class="eyebrow">Guide · the shell, command by command</p>
       <h1><span class="caret">/$ </span>slsh</h1>
       <p class="said">said "slush"</p>
       <p class="standfirst">
@@ -22,6 +22,7 @@
         queues up at the prompt. It has no view — which is exactly why it can
         be scripted, piped and left running.
       </p>
+      <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">reference</span></div>
     </div>
     <div class="term">
       <pre><span class="p">/$</span> <span class="k">cd Objects</span>
@@ -335,7 +336,7 @@ For one command:       COMMAND --help, or man COMMAND
           the server how many slots it has and uses every one of them,
           pinning a conversation to the slot it last spoke in so that its
           cached context is still there next time
-          (<a href="guide.md">guide.md</a>, <em>How slots are handed
+          (<a href="../doc/guide.md">doc/guide.md</a>, <em>How slots are handed
           out</em>). So today there is no slot slbotd leaves alone, however
           many the server is started with. Whatever slot <code>how</code>
           uses — the one <code>how_slot</code> names, or the one the server
@@ -2296,11 +2297,11 @@ how_extra   = {"reasoning_effort": "none"}</span></pre>
   </div>
 
   <footer>
-    <span>slsh — part of slgo</span>
-    <span>Second Life is a trademark of Linden Research, Inc.</span>
+    <span>slgo handbook · Second Life is a trademark of Linden Research, Inc.</span>
+    <span class="pager"><a href="how-llm.html">← slsh + LLM</a> <a href="sl-host.html">sl-host →</a></span>
   </footer>
 </div>
 </article>
-<script src="../handbook/handbook.js"></script>
+<script src="handbook.js"></script>
 </body>
 </html>

@@ -12,7 +12,7 @@ viewer.
 
 There is a fifth, `slsh`, an interactive shell for inventory, the
 region around you and chat. It has a guide of its own:
-[doc/slsh-guide.html](slsh-guide.html). Everything under "Connecting"
+[handbook/slsh-guide.html](../handbook/slsh-guide.html). Everything under "Connecting"
 below applies to it as well.
 
 ---

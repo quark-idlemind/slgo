@@ -117,10 +117,13 @@ case.
 `doc/` describes what is here now:
 
     doc/guide.md            slgod, slrun and slbench, for a user
-    doc/slsh-guide.html     slsh, for a user
     doc/memory.md           how Second Life allocates script memory
     doc/slots.md            sharing the objects that scripts run in
     doc/login-parameters.md what a viewer sends to log in
+
+`handbook/` is the handbook, as web pages: setting slgod, slsh and
+slbotd up on one machine or several, and `handbook/slsh-guide.html`,
+the user's guide to slsh.  `handbook/bundle.py` folds it into one file.
 
 `doc/history/` is the implementation plans, written before the work and
 kept for the measurements folded into them.  A plan says what somebody
@@ -1085,7 +1088,7 @@ move is UDP, because AIS refuses to change a parent. A folder renamed
 to `odd / name \ here` comes back with exactly that name.
 
 For how to use the commands rather than how they work, see
-[doc/slsh-guide.html](doc/slsh-guide.html); the daemon and the two
+[handbook/slsh-guide.html](handbook/slsh-guide.html); the daemon and the two
 benchmark programs are in [doc/guide.md](doc/guide.md).
 
 ## Two clients on one avatar
