@@ -130,6 +130,11 @@ def main():
     css = open(os.path.join(HERE, "handbook.css")).read()
     js = open(os.path.join(HERE, "handbook.js")).read()
     parts = []
+    # The file is UTF-8 and says so.  Without this a browser opening it
+    # from disk may read it as Latin-1, and every arrow, dash and dot in
+    # it arrives as two or three letters of nonsense.  First, because a
+    # browser looks for it only near the top.
+    charset = '<meta charset="utf-8">\n'
     head = ('<title>slgo handbook</title>\n'
             '<meta name="description" content="Setting up slgod, slsh, slbotd and sl-host, on one machine or several.">\n')
     for page in ([only] if only else PAGES):
@@ -146,7 +151,7 @@ def main():
             head = "<title>%s</title>\n" % (title.group(1).strip() if title else page)
         parts.append(article)
     doc = (
-        head
+        charset + head
         + "<style>\n" + css + "</style>\n"
         + "\n".join(parts)
         + "\n<script>\n" + js.replace("</script", "<\\/script") + "</script>\n"
