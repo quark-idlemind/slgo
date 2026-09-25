@@ -435,8 +435,8 @@ Or pass -no-auth to serve loopback without it.</span></pre></div>
             <h4>Why</h4>
             <p>slgod listens on every interface by default, so a host firewall is the usual thing in the way. On macOS the application firewall may ask whether slgod may accept incoming connections the first time it listens. We expect this from how macOS behaves; the handbook has not recorded the dialog.</p>
             <h4>Fix</h4>
-            <div class="note os"><p class="label">macOS</p><p>If a dialog asks whether slgod may accept incoming connections, allow it. Otherwise look in System Settings, Network, Firewall, Options, and allow slgod there. Rebuilding slgod makes a new binary, so macOS may ask again.</p></div>
-            <div class="note os"><p class="label">Linux</p><p>Allow TCP 7807 in whichever firewall the machine runs. Limit it to your own network where you can. These lines have not been run for this handbook; the ufw one matches the forms in ufw 0.36.2's manual on Ubuntu 24.04, and the firewalld one is unchecked.</p></div>
+            <div class="note os" data-os-only="mac"><p class="label">macOS</p><p>If a dialog asks whether slgod may accept incoming connections, allow it. Otherwise look in System Settings, Network, Firewall, Options, and allow slgod there. Rebuilding slgod makes a new binary, so macOS may ask again.</p></div>
+            <div class="note os" data-os-only="linux"><p class="label">Linux</p><p>Allow TCP 7807 in whichever firewall the machine runs. Limit it to your own network where you can. These lines have not been run for this handbook; the ufw one matches the forms in ufw 0.36.2's manual on Ubuntu 24.04, and the firewalld one is unchecked.</p></div>
             <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux · ufw, or firewalld"><pre><span class="p">$ </span>sudo ufw allow from 192.0.2.0/24 to any port 7807 proto tcp
 <span class="p">$ </span>sudo firewall-cmd --add-port=7807/tcp --permanent &amp;&amp; sudo firewall-cmd --reload</pre></div>
           </div>

@@ -73,6 +73,6 @@
 # it stays out of the repository.  See issues/README.md.
 /issues/
 
-# handbook/bundle.py writes the one-file build here by default; it is
-# published, not kept.
-/handbook/handbook-bundle.html
+# handbook/bundle.py writes the one-file build here by default, and a
+# single page's build as NAME-bundle.html; they are published, not kept.
+/handbook/*-bundle.html

@@ -27,6 +27,9 @@
   var root = document.documentElement;
   var articles = Array.prototype.slice.call(document.querySelectorAll("article.page"));
   var bundled = articles.length > 1;
+  // One page folded into one file on its own (bundle.py --page): there
+  // is nowhere for the site bar's links to go, so it has none.
+  var alone = articles.length === 1 && !!articles[0].dataset.alone;
 
   function store(key, value) {
     try {
@@ -72,8 +75,14 @@
     return /mac|iphone|ipad/i.test(p) ? "mac" : "linux";
   }
 
+  // Which systems the reader's machines run: "linux", "mac", or "both"
+  // for a setup that mixes them.  Content tagged data-os-only for one
+  // system hides when the other alone is chosen; content tagged "both"
+  // is for mixed setups and shows only then.  "both" is the state with
+  // no attribute, which is also what a page is with no script.
   function setOS(os) {
-    root.setAttribute("data-os", os);
+    if (os === "both") root.removeAttribute("data-os");
+    else root.setAttribute("data-os", os);
     store("os", os);
     document.querySelectorAll(".os-toggle:not(.sh-toggle) button").forEach(function (b) {
       b.setAttribute("aria-pressed", String(b.dataset.os === os));
@@ -101,7 +110,7 @@
 
     var brand = document.createElement("a");
     brand.className = "brand";
-    brand.href = hrefFor("index");
+    brand.href = alone ? "#" : hrefFor("index");
     brand.innerHTML = CUBE + "slgo <span>handbook</span>";
     inner.appendChild(brand);
 
@@ -125,15 +134,16 @@
       a.dataset.page = p.id;
       nav.appendChild(a);
     });
-    inner.appendChild(nav);
+    if (!alone) inner.appendChild(nav);
 
     var tog = document.createElement("div");
     tog.className = "os-toggle";
     tog.setAttribute("role", "group");
-    tog.setAttribute("aria-label", "Show instructions for");
+    tog.setAttribute("aria-label", "Show instructions for the systems your machines run");
     tog.innerHTML = '<span class="os-label">OS</span>' +
-      '<button type="button" data-os="linux">Linux</button>' +
-      '<button type="button" data-os="mac">macOS</button>';
+      '<button type="button" data-os="linux" title="Every machine runs Linux">Linux</button>' +
+      '<button type="button" data-os="mac" title="Every machine runs macOS">macOS</button>' +
+      '<button type="button" data-os="both" title="Machines of both kinds">both</button>';
     tog.querySelectorAll("button").forEach(function (b) {
       b.addEventListener("click", function () { setOS(b.dataset.os); });
     });
@@ -158,7 +168,7 @@
     clock.title = "Second Life Time: the clock on the Pacific coast, which the grid keeps";
     sltClock(clock);
     inner.appendChild(clock);
-    inner.appendChild(menu);
+    if (!alone) inner.appendChild(menu);
 
     bar.appendChild(inner);
     document.body.insertBefore(bar, document.body.firstChild);
@@ -198,6 +208,9 @@
         if (num) num.remove();
         a.textContent = clone.textContent.trim();
         li.appendChild(a);
+        // A section for one system, or for mixed setups, takes its
+        // entry here with it when it hides.
+        if (s.dataset.osOnly) li.dataset.osOnly = s.dataset.osOnly;
         ol.appendChild(li);
         links[s.id] = a;
       });
@@ -502,10 +515,20 @@
       });
     } catch (e) { /* a fresh start */ }
     if (!store("picker")) {
-      var mine = form.querySelector('input[name="myos"][value="' + (root.getAttribute("data-os") || "linux") + '"]');
+      var mine = form.querySelector('input[name="myos"][value="' + guessOS() + '"]');
       if (mine) mine.checked = true;
     }
-    form.addEventListener("change", update);
+    form.addEventListener("change", function () {
+      update();
+      // The picker names every machine, so the top bar can follow it:
+      // one system if they all run the same one, both if they mix.
+      var systems = {};
+      systems[val("myos")] = 1;
+      if (val("slgod") === "remote") systems[val("srvos")] = 1;
+      if (val("bot") === "own") systems[val("botos") || "linux"] = 1;
+      var list = Object.keys(systems);
+      setOS(list.length === 1 ? list[0] : "both");
+    });
     update();
   }
 
@@ -535,9 +558,10 @@
   }
 
   function init() {
-    setOS(store("os") || guessOS());
     buildBar();
-    setOS(root.getAttribute("data-os"));
+    // No guess: a browser knows the machine it runs on and nothing about
+    // the others.  Until the reader says, every system shows, labelled.
+    setOS(store("os") || "both");
     setShell(store("shell") || "");
 
     document.querySelectorAll(".term, .file").forEach(function (b) { addWhere(b); addCopy(b); });

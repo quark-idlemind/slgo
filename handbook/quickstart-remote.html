@@ -116,8 +116,8 @@
             <p>The <code>chmod</code> lines matter: slsh refuses a secret whose directory is not 700 or whose file is not 600, on the laptop just as on the server. The path is <code>~/.config/slgod/secret</code> on both; <code>XDG_CONFIG_HOME</code> does not move it.</p>
             <p>To check the two copies match without showing the secret, compare a checksum on each end:</p>
             <div class="os-pair">
-              <div class="term" data-where="server" data-where-label="Linux · on the slgod machine"><pre><span class="p">$ </span>sha256sum ~/.config/slgod/secret</pre></div>
-              <div class="term" data-where="laptop" data-where-label="macOS · on your computer"><pre><span class="p">$ </span>shasum -a 256 ~/.config/slgod/secret</pre></div>
+              <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux · on the slgod machine"><pre><span class="p">$ </span>sha256sum ~/.config/slgod/secret</pre></div>
+              <div class="term" data-os-only="mac" data-where="laptop" data-where-label="macOS · on your computer"><pre><span class="p">$ </span>shasum -a 256 ~/.config/slgod/secret</pre></div>
             </div>
             <p>(<code>sha256sum</code> is the Linux name, <code>shasum -a 256</code> the macOS one. Either machine may be either system; use the one that exists. Ubuntu 24.04 has both, and they print the same line.)</p>
             <div class="note"><p class="label">Note</p><p>If your computer already has a different shared secret, for a slgod of its own, or the server is to have a secret of its own, do not overwrite yours. Keep the server's copy under the address slsh will dial instead: <code>~/.config/slgod/secret.HOST.PORT</code>. Clients look for that file before the shared one. For route A that is <code>secret.192.0.2.20.7807</code>. For route B, slsh dials <code>localhost:7807</code> unless told otherwise, so it is <code>secret.localhost.7807</code>; with <code>--addr 127.0.0.1:7807</code> it is <code>secret.127.0.0.1.7807</code>. <a href="security.html#several-secrets">When separate secrets are worth it</a>, and <a href="reference.html#secret-order">the full rules</a>.</p></div>
@@ -142,11 +142,11 @@
             <h3>Open port 7807 on the server's firewall</h3>
             <p>Only the server needs a change; your computer only connects out. These are ordinary firewall commands, nothing slgo sets up for you. Narrow the rule to your own network where you can. They have not been run for this handbook; the ufw line matches the forms in ufw 0.36.2's manual on Ubuntu 24.04, and the firewalld lines are unchecked.</p>
             <div class="os-pair">
-              <div class="term" data-where="server" data-where-label="Linux server · ufw (Debian, Ubuntu)"><pre><span class="p">$ </span>sudo ufw allow from 192.0.2.0/24 to any port 7807 proto tcp</pre></div>
-              <div class="term" data-where="server" data-where-label="Linux server · firewalld (Fedora, RHEL)"><pre><span class="p">$ </span>sudo firewall-cmd --permanent --add-port=7807/tcp
+              <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux server · ufw (Debian, Ubuntu)"><pre><span class="p">$ </span>sudo ufw allow from 192.0.2.0/24 to any port 7807 proto tcp</pre></div>
+              <div class="term" data-os-only="linux" data-where="server" data-where-label="Linux server · firewalld (Fedora, RHEL)"><pre><span class="p">$ </span>sudo firewall-cmd --permanent --add-port=7807/tcp
 <span class="p">$ </span>sudo firewall-cmd --reload</pre></div>
             </div>
-            <div class="note os"><p class="label">macOS server</p><p>With the macOS firewall turned on, expect to be asked whether <code>slgod</code> may accept incoming connections the first time it listens, and answer Allow. That is how the macOS application firewall normally treats a new program; it has not been watched with slgod. If no prompt appears (slgod started from SSH, say), allow it by hand:</p>
+            <div class="note os" data-os-only="mac"><p class="label">macOS server</p><p>With the macOS firewall turned on, expect to be asked whether <code>slgod</code> may accept incoming connections the first time it listens, and answer Allow. That is how the macOS application firewall normally treats a new program; it has not been watched with slgod. If no prompt appears (slgod started from SSH, say), allow it by hand:</p>
               <div class="term" data-where="server" data-where-label="macOS · on the slgod machine"><pre><span class="p">$ </span>sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "`which slgod`"
 <span class="p">$ </span>sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "`which slgod`"</pre></div>
             </div>

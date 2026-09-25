@@ -699,10 +699,16 @@ dd { margin: 0; color: var(--ink-soft); }
 
 /* ---------------------------------------------------- Linux / macOS */
 
-/* Anything tagged for one system hides when the reader has picked the
-   other.  With no choice made (no script), both show, each labelled. */
+/* The top bar asks which systems the reader's machines run: Linux,
+   macOS, or both, for a setup that mixes them.  Anything tagged for one
+   system hides when the other alone is picked; anything tagged "both"
+   is for mixed setups and shows only then.  "Both" is the state with no
+   data-os attribute, which is also what a page is with no script: every
+   system shows, each labelled. */
 html[data-os="linux"] [data-os-only="mac"],
-html[data-os="mac"] [data-os-only="linux"] { display: none !important; }
+html[data-os="linux"] [data-os-only="both"],
+html[data-os="mac"] [data-os-only="linux"],
+html[data-os="mac"] [data-os-only="both"] { display: none !important; }
 
 /* Shells.  Most commands here are written to run unchanged in sh (and
    bash, dash, ksh), zsh, and csh (and tcsh).  Where they cannot be, the

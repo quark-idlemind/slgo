@@ -36,8 +36,8 @@
         </ul>
         <div class="note os">
           <p class="label">Showing</p>
-          <p>This page shows Linux and macOS next to each other, because your machines may not all run the same one.</p>
-          <p><label for="only-mine"><input type="checkbox" id="only-mine" data-only-mine> Show only the system picked in the top bar</label></p>
+          <p>This page shows Linux and macOS side by side whatever the top bar says, because it is about where they differ.</p>
+          <p><label for="only-mine"><input type="checkbox" id="only-mine" data-only-mine> Follow the top bar on this page too</label></p>
         </div>
       </section>
 
@@ -253,7 +253,7 @@ set path = ( $path ~/go/bin )
         <p>slgod's log lines carry the time of day and no date. Neither daemon rotates its log. See <a href="setups.html#logs">Logs and rotating them</a>.</p>
       </section>
 
-      <section id="mixed">
+      <section id="mixed" data-os-only="both">
         <h2>slsh on macOS, slgod on Linux</h2>
         <p>This is the most common mixed setup: a Linux server holds the avatars and you drive them from a Mac. Nothing about it is special to the two systems, but these are the things that trip people. Tick them off as you go.</p>
         <ol class="steps" id="mixed-steps">

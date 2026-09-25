@@ -2,6 +2,8 @@
 """Fold the handbook into one self-contained HTML file.
 
     python3 handbook/bundle.py [OUT]      (default: handbook-bundle.html here)
+    python3 handbook/bundle.py --page NAME [OUT]   one page on its own
+                                          (default: NAME-bundle.html here)
 
 Every page is a file of its own with one <article class="page" id=NAME>,
 here or, for the slsh guide, in doc/.
@@ -72,20 +74,34 @@ def rewrite(page, html):
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "handbook-bundle.html")
+    args = sys.argv[1:]
+    only = None
+    if args[:1] == ["--page"]:
+        if len(args) < 2 or args[1] not in PAGES:
+            sys.exit("--page wants one of: " + " ".join(PAGES))
+        only, args = args[1], args[2:]
+    out = args[0] if args else os.path.join(HERE, (only or "handbook") + "-bundle.html")
     css = open(os.path.join(HERE, "handbook.css")).read()
     js = open(os.path.join(HERE, "handbook.js")).read()
     parts = []
-    for page in PAGES:
+    head = ('<title>slgo handbook</title>\n'
+            '<meta name="description" content="Setting up slgod, slsh, slbotd and sl-host, on one machine or several.">\n')
+    for page in ([only] if only else PAGES):
         text = open(source(page)).read()
         found = ARTICLE.findall(text)
         if len(found) != 1:
             sys.exit("%s.html: want one <article class=\"page\">, found %d" % (page, len(found)))
-        parts.append(rewrite(page, found[0]))
+        article = rewrite(page, found[0])
+        if only:
+            # Alone in its file: the script shows no links to other pages,
+            # and the page keeps its own title.
+            article = article.replace('<article class="page"', '<article class="page" data-alone="1"', 1)
+            title = re.search(r"<title>(.*?)</title>", text, re.S)
+            head = "<title>%s</title>\n" % (title.group(1).strip() if title else page)
+        parts.append(article)
     doc = (
-        '<title>slgo handbook</title>\n'
-        '<meta name="description" content="Setting up slgod, slsh, slbotd and sl-host, on one machine or several.">\n'
-        "<style>\n" + css + "</style>\n"
+        head
+        + "<style>\n" + css + "</style>\n"
         + "\n".join(parts)
         + "\n<script>\n" + js.replace("</script", "<\\/script") + "</script>\n"
     )
