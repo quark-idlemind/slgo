@@ -43,6 +43,7 @@
               <tr><td><code>llama-server</code></td><td class="what">llama.cpp's model server. Not part of slgo. slbotd needs it only for conversation.</td><td class="what">Wherever there is a GPU or enough memory.</td></tr>
               <tr><td><code>sl-host</code></td><td class="what">Prints the address of the slgod machine for whichever network your laptop is on now.</td><td class="what">Only a client machine that moves between networks.</td></tr>
               <tr><td><code>slrun</code>, <code>slbench</code></td><td class="what">Run a script against an avatar; measure one. They connect just like slsh.</td><td class="what">Same as slsh.</td></tr>
+              <tr><td>Your own program</td><td class="what">Go code that drives an avatar through slgod with the <code>sl</code> package, as slsh and slbotd do. <a href="own-bot.html">Your own bot</a> writes one.</td><td class="what">Same as slsh.</td></tr>
             </tbody>
           </table>
         </div>
@@ -132,6 +133,10 @@
           <a class="card" href="slsh-guide.html"><span class="k">Guide</span><span class="t">The slsh guide</span><span class="d">The shell, a part at a time: inventory, moving about, objects, people, and every command.</span></a>
           <a class="card" href="how-llm.html"><span class="k">Quick start</span><span class="t">slsh with a language model</span><span class="d"><code>how</code> finds the command for a question in your own words. A small model beside it understands far more ways of asking.</span></a>
         </div>
+        <p>If you write Go, a bot of your own is the step after that.</p>
+        <div class="cards">
+          <a class="card" href="own-bot.html"><span class="k">Guide</span><span class="t">Your own bot</span><span class="d">A shop greeter, step by step: local chat, IMs, remembering visitors and handing out a gift.</span></a>
+        </div>
       </section>
 
       <section id="existing">
@@ -168,6 +173,14 @@
             </ul>
           </div>
           <div>
+            <h3>Write your own</h3>
+            <ul>
+              <li><a href="own-bot.html#steps">Write a bot, step by step</a></li>
+              <li><a href="own-bot.html#events">Hear chat, IMs and offers</a></li>
+              <li><a href="own-bot.html#actions">Make an avatar act from Go</a></li>
+            </ul>
+          </div>
+          <div>
             <h3>Look something up</h3>
             <ul>
               <li><a href="troubleshooting.html#faults">An error message</a></li>
@@ -198,6 +211,7 @@
           <li><code>sl-host</code>, if it is on your <code>$PATH</code>. The client tells it which profile it wants, and adds port 7807 to its answer unless the answer names a port. If it fails, the client stops here with an error. It does not fall back.</li>
           <li><code>localhost:7807</code>.</li>
         </ol>
+        <p>A program of your own that uses the <code>sl</code> package does none of this: it is given the address. See <a href="own-bot.html#steps">Your own bot</a>.</p>
         <div class="note warn">
           <p class="label">A common first stumble</p>
           <p><code>go install ./cmd/...</code> installs <code>sl-host</code>

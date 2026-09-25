@@ -19,8 +19,9 @@
     { id: "quickstart-remote", title: "Remote slgod", group: "setup", d: "slgod on a server, slsh on your computer" },
     { id: "quickstart-bot", title: "Adding slbotd", group: "setup", d: "a bot that takes commands by instant message" },
     { id: "bot-llm", title: "Bot + LLM", group: "setup", d: "the bot holds conversations through llama-server" },
-    { id: "slsh-guide", title: "slsh guide", group: "slsh", d: "the shell, command by command" },
-    { id: "how-llm", title: "slsh + LLM", group: "slsh", d: "how, with a language model beside it" },
+    { id: "slsh-guide", title: "slsh guide", group: "use", d: "the shell, command by command" },
+    { id: "how-llm", title: "slsh + LLM", group: "use", d: "how, with a language model beside it" },
+    { id: "own-bot", title: "Your own bot", group: "use", d: "a program of your own in Go: a greeter, step by step" },
     { id: "setups", title: "Setups", group: "run", d: "services, several avatars, moving slgod, upgrading" },
     { id: "sl-host", title: "sl-host", group: "run", d: "one address at home, another away" },
     { id: "platforms", title: "Linux & macOS", group: "run", d: "where the two differ, and mixing them" },
@@ -30,7 +31,7 @@
   ];
   var GROUPS = [
     { key: "setup", title: "Set up" },
-    { key: "slsh", title: "Using slsh" },
+    { key: "use", title: "Using slgo" },
     { key: "run", title: "Keep it running" }
   ];
 

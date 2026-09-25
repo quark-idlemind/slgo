@@ -20,6 +20,7 @@ for it (class="hb-version"), in the words the programs' --version uses.
 Read from a checkout, a page says it is for the slgo in that checkout.
 """
 
+import html
 import os
 import re
 import subprocess
@@ -29,8 +30,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 PAGES = [
     "index", "quickstart-local", "quickstart-remote", "quickstart-bot",
-    "bot-llm", "slsh-guide", "how-llm", "setups", "sl-host", "platforms",
-    "security", "troubleshooting", "reference",
+    "bot-llm", "slsh-guide", "how-llm", "own-bot", "setups", "sl-host",
+    "platforms", "security", "troubleshooting", "reference",
 ]
 
 # A relative link to a file that is not a page (the guide's link to
@@ -118,8 +119,31 @@ def check_order():
                      % (page, " and ".join(got) or "nowhere", " and ".join(want)))
 
 
+def check_excerpts():
+    """A block marked data-from="PATH" is a copy of part of that file,
+    PATH relative to this directory: the "Your own bot" page quotes the
+    greeter in examples/ that way, function by function.  The program
+    is compiled and tested with the tree and the page is not, so this is
+    what notices the day they part: every such block, with its markup
+    taken out, has to appear in the file exactly as it stands."""
+    for page in PAGES:
+        text = open(os.path.join(HERE, page + ".html")).read()
+        for m in re.finditer(r'<div class="file" data-from="([^"]+)">.*?<pre>(.*?)</pre>', text, re.S):
+            path = os.path.normpath(os.path.join(HERE, m.group(1)))
+            try:
+                source = open(path).read()
+            except OSError as e:
+                sys.exit("%s.html: quotes %s, which cannot be read: %s" % (page, m.group(1), e))
+            code = html.unescape(re.sub(r"<[^>]+>", "", m.group(2)))
+            if code not in source:
+                first = code.split("\n", 1)[0]
+                sys.exit("%s.html: the copy of %s that begins\n  %s\nno longer matches the file"
+                         % (page, m.group(1), first))
+
+
 def main():
     check_order()
+    check_excerpts()
     args = sys.argv[1:]
     only = None
     if args[:1] == ["--page"]:

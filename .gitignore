@@ -48,6 +48,17 @@
 # for offline work is theirs and does not belong in this repository.
 /message_template.msg
 
+# The example programs in examples/: "go build" inside one leaves the
+# binary beside its source, and "go build ./examples/greeter" leaves it
+# here.  A new example wants its name in both places, as a command does.
+/examples/*/greeter
+/greeter
+
+# The file the greeter remembers visitors in.  It names everybody the
+# bot has met, so wherever it is run from, it stays out.
+greeted.json
+greeted.json.new
+
 # Anything else built here.
 *.o
 *.a
