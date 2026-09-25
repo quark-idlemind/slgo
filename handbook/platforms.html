@@ -13,7 +13,7 @@
     <p class="eyebrow">Guide · both systems</p>
     <h1>Linux &amp; macOS</h1>
     <p class="standfirst">Every program here runs on both, from the same source, with the same files in the same places. This page covers the handful of places where the two systems still part ways, and what to check when slsh and slgod run on different ones.</p>
-    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">reference</span></div>
+    <div class="meta-row"><span class="pill time">reference</span></div>
   </header>
   <div class="body-grid">
     <nav class="rail" aria-label="On this page"></nav>
@@ -64,7 +64,7 @@
 
       <section id="build">
         <h2>Building, and building for the other system</h2>
-        <p>You need Go 1.26.1 or newer. With Go's default setting, an older Go fetches the right version by itself. Build from inside the git checkout, so that <code>--version</code> can say which commit you have:</p>
+        <p>You need Go 1.26.1 or newer, from <a href="https://go.dev/dl/">go.dev/dl</a> on either system. With Go's default setting, an older Go fetches the right version by itself. Build from inside the git checkout, so that <code>--version</code> can say which commit you have:</p>
         <div class="term"><pre><span class="p">$ </span>cd slgo
 <span class="c"># every program, into ~/go/bin</span>
 <span class="p">$ </span>go install ./cmd/...</pre></div>
@@ -308,7 +308,7 @@ set path = ( $path ~/go/bin )
   </div>
   <footer>
     <span>slgo handbook</span>
-    <span class="pager"><a href="setups.html">← Setups</a> <a href="security.html">Security →</a></span>
+    <span class="pager"><a href="sl-host.html">← sl-host</a> <a href="security.html">Security →</a></span>
   </footer>
 </div>
 </article>

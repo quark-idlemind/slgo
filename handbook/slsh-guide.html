@@ -22,7 +22,7 @@
         queues up at the prompt. It has no view — which is exactly why it can
         be scripted, piped and left running.
       </p>
-      <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">reference</span></div>
+      <div class="meta-row"><span class="pill time">reference</span></div>
     </div>
     <div class="term">
       <pre><span class="p">/$</span> <span class="k">cd Objects</span>
@@ -64,6 +64,19 @@
       <!-- ------------------------------------------------ connecting -->
       <section id="connect">
         <h2><span class="num">1</span>Getting connected</h2>
+
+        <div class="note">
+          <p class="label">Before this guide</p>
+          <p>
+            Most of this guide has slsh attached to slgod, so slgod has to be
+            running first. If it is not yet, <a href="quickstart-local.html">Everything on one
+            machine</a> sets both up on the computer you type on, and
+            <a href="quickstart-remote.html">slgod on a server</a> puts slgod
+            on a machine that stays on. If slsh prints an error where the
+            prompt should be, look it up in
+            <a href="troubleshooting.html">Troubleshooting</a>.
+          </p>
+        </div>
 
         <p>
           Type <code>slsh</code> and you are at a prompt, in a region, as an
@@ -124,8 +137,11 @@ acting as group Example Builders (87f07e57-…)</span>
         <p>
           <code>--addr HOST:PORT</code> says where slgod is. Without it the
           address comes from <code>addr =</code> in the configuration file,
-          then from an <code>sl-host</code> command if you have one, then from
-          this machine — which is the usual case, so most people never pass it.
+          then from an <a href="sl-host.html"><code>sl-host</code></a> command
+          if you have one, then from this machine — which is the usual case, so
+          most people never pass it. The reference has
+          <a href="reference.html#address-order">the whole order</a>, for
+          every client.
         </p>
 
         <p>
@@ -267,7 +283,12 @@ For one command:       COMMAND --help, or man COMMAND
           and is often enough.
         </p>
 
-        <h3>Setting up a model for how</h3>
+        <h3 id="how-model">Setting up a model for how</h3>
+        <p>
+          <a href="how-llm.html">slsh with a language model</a> goes through
+          it step by step, from installing Ollama to the first answer. What
+          follows is the detail, and the numbers the recommendation rests on.
+        </p>
         <p>
           Any server that speaks the OpenAI-style
           <code>/v1/chat/completions</code> will do: Ollama, or llama.cpp's
@@ -1997,7 +2018,12 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
           </p>
           <p>
             Which viewer is launched, and how, are settings — see
-            <a href="#config">the configuration file</a>.
+            <a href="#config">the configuration file</a>. The daemon's half,
+            the profile's <code>viewer_password</code> and the
+            <code>-viewer</code> flag, is set up in
+            <a href="setups.html#viewer">Letting a viewer take a session</a>,
+            and what the endpoint exposes is in
+            <a href="security.html#viewer">Security</a>.
           </p>
         </div>
       </section>
@@ -2066,6 +2092,12 @@ slsh: stopped; 43 lines were not run</span></pre>
           <code>how_model</code> — take the comment with it, silently, and go
           looking for a profile, a daemon or a model with a <code>#</code> in
           its name.
+        </p>
+
+        <p>
+          The reference keeps the same settings as a table, each with its
+          default, beside the other programs' files:
+          <a href="reference.html#slsh-settings">slsh settings</a>.
         </p>
 
         <div class="term">
@@ -2298,7 +2330,7 @@ how_extra   = {"reasoning_effort": "none"}</span></pre>
 
   <footer>
     <span>slgo handbook · Second Life is a trademark of Linden Research, Inc.</span>
-    <span class="pager"><a href="how-llm.html">← slsh + LLM</a> <a href="sl-host.html">sl-host →</a></span>
+    <span class="pager"><a href="bot-llm.html">← slbotd with an LLM</a> <a href="how-llm.html">slsh + LLM →</a></span>
   </footer>
 </div>
 </article>

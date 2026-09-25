@@ -24,7 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 PAGES = [
     "index", "quickstart-local", "quickstart-remote", "quickstart-bot",
-    "bot-llm", "how-llm", "slsh-guide", "sl-host", "setups", "platforms",
+    "bot-llm", "slsh-guide", "how-llm", "setups", "sl-host", "platforms",
     "security", "troubleshooting", "reference",
 ]
 
@@ -62,7 +62,30 @@ def rewrite(page, html):
     return re.sub(r'\b(href)="([^"]*)"', link, html)
 
 
+def check_order():
+    """PAGES is the reading order, and two other lists repeat it: the
+    script's, which makes the site bar's menus, and the footers' pager
+    links, which are written into each page so that it works on its own.
+    A page moved in one and not the others sends the reader sideways."""
+    js = open(os.path.join(HERE, "handbook.js")).read()
+    listed = re.findall(r'\{ id: "([a-z0-9-]+)"', js)
+    if listed != PAGES:
+        sys.exit("handbook.js lists the pages as:\n  %s\nbundle.py as:\n  %s"
+                 % (" ".join(listed), " ".join(PAGES)))
+    for i, page in enumerate(PAGES):
+        text = open(os.path.join(HERE, page + ".html")).read()
+        m = re.search(r'<span class="pager">(.*?)</span>\s*</footer>', text, re.S)
+        if not m:
+            sys.exit("%s.html: no pager at the end of its footer" % page)
+        got = re.findall(r'href="([a-z0-9-]+)\.html"', m.group(1))
+        want = ([PAGES[i - 1]] if i else []) + [PAGES[(i + 1) % len(PAGES)]]
+        if got != want:
+            sys.exit("%s.html: the pager goes to %s; the page order says %s"
+                     % (page, " and ".join(got) or "nowhere", " and ".join(want)))
+
+
 def main():
+    check_order()
     args = sys.argv[1:]
     only = None
     if args[:1] == ["--page"]:

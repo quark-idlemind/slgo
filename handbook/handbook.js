@@ -8,20 +8,30 @@
 (function () {
   "use strict";
 
+  // In reading order, which is also the order of the footers' pager
+  // links (bundle.py checks them against its own copy of this list).
+  // A page with a group sits in that group's menu in the site bar; one
+  // without is a link of its own there.  The brand is the way to the
+  // start page, so on a wide screen "Start here" has no link of its own.
   var PAGES = [
     { id: "index", title: "Start here" },
-    { id: "quickstart-local", title: "One machine" },
-    { id: "quickstart-remote", title: "Remote slgod" },
-    { id: "quickstart-bot", title: "Adding slbotd" },
-    { id: "bot-llm", title: "Bot + LLM" },
-    { id: "how-llm", title: "slsh + LLM" },
-    { id: "slsh-guide", title: "slsh guide" },
-    { id: "sl-host", title: "sl-host" },
-    { id: "setups", title: "Setups" },
-    { id: "platforms", title: "Linux & macOS" },
-    { id: "security", title: "Security" },
+    { id: "quickstart-local", title: "One machine", group: "setup", d: "slgod and slsh on the computer you type on" },
+    { id: "quickstart-remote", title: "Remote slgod", group: "setup", d: "slgod on a server, slsh on your computer" },
+    { id: "quickstart-bot", title: "Adding slbotd", group: "setup", d: "a bot that takes commands by instant message" },
+    { id: "bot-llm", title: "Bot + LLM", group: "setup", d: "the bot holds conversations through llama-server" },
+    { id: "slsh-guide", title: "slsh guide", group: "slsh", d: "the shell, command by command" },
+    { id: "how-llm", title: "slsh + LLM", group: "slsh", d: "how, with a language model beside it" },
+    { id: "setups", title: "Setups", group: "run", d: "services, several avatars, moving slgod, upgrading" },
+    { id: "sl-host", title: "sl-host", group: "run", d: "one address at home, another away" },
+    { id: "platforms", title: "Linux & macOS", group: "run", d: "where the two differ, and mixing them" },
+    { id: "security", title: "Security", group: "run", d: "before slgod goes on a network" },
     { id: "troubleshooting", title: "Troubleshooting" },
     { id: "reference", title: "Reference" }
+  ];
+  var GROUPS = [
+    { key: "setup", title: "Set up" },
+    { key: "slsh", title: "Using slsh" },
+    { key: "run", title: "Keep it running" }
   ];
 
   var root = document.documentElement;
@@ -53,12 +63,15 @@
 
   // Second Life Time is the Pacific coast's, and the viewer's status bar
   // shows it.  So does this one.
-  function sltClock(el) {
+  function sltClock(el, ticked) {
     var fmt;
     try {
       fmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" });
     } catch (e) { el.hidden = true; return; }
-    function tick() { el.innerHTML = "<b>" + esc(fmt.format(new Date())) + "</b> SLT"; }
+    function tick() {
+      el.innerHTML = "<b>" + esc(fmt.format(new Date())) + "</b> SLT";
+      if (ticked) ticked();
+    }
     tick();
     setInterval(tick, 15000);
   }
@@ -95,6 +108,21 @@
     });
   }
 
+  // The chrome, dark as the viewer's or light.  Grey on black is hard on
+  // some eyes however well it measures, so the reader can turn the bar,
+  // the menus, the search, the contents and the terminals light, with
+  // near-black text.  Dark is the default: it is the viewer's own look.
+  function setPanels(light) {
+    if (light) root.setAttribute("data-panels", "light");
+    else root.removeAttribute("data-panels");
+    store("panels", light ? "light" : null);
+    var b = document.querySelector(".panels-button");
+    if (b) {
+      b.setAttribute("aria-pressed", String(!!light));
+      b.title = light ? "Dark bar, menus and terminals" : "Light bar, menus and terminals, with dark text";
+    }
+  }
+
   // ------------------------------------------------------------ site bar
 
   function buildBar() {
@@ -106,6 +134,8 @@
     var brand = document.createElement("a");
     brand.className = "brand";
     brand.href = alone ? "#" : hrefFor("index");
+    brand.title = "Start here";
+    brand.dataset.page = "index";
     brand.innerHTML = CUBE + "slgo <span>handbook</span>";
     inner.appendChild(brand);
 
@@ -122,14 +152,89 @@
     var nav = document.createElement("nav");
     nav.className = "sitenav";
     nav.setAttribute("aria-label", "Handbook pages");
-    PAGES.forEach(function (p) {
+
+    function pageLink(p, withWords) {
       var a = document.createElement("a");
       a.href = hrefFor(p.id);
-      a.textContent = p.title;
       a.dataset.page = p.id;
-      nav.appendChild(a);
+      if (withWords && p.d) {
+        a.innerHTML = '<span class="t">' + esc(p.title) + '</span><span class="d">' + esc(p.d) + '</span>';
+      } else {
+        a.textContent = p.title;
+      }
+      return a;
+    }
+
+    // Only in the narrow menu, where there is no room for the brand to
+    // be the obvious way home.
+    var home = pageLink(PAGES[0]);
+    home.className = "home-link";
+    nav.appendChild(home);
+
+    GROUPS.forEach(function (g) {
+      var wrap = document.createElement("div");
+      wrap.className = "navgroup";
+      wrap.dataset.group = g.key;
+      var label = document.createElement("span");
+      label.className = "navgroup-label";
+      label.textContent = g.title;
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "navgroup-button";
+      button.textContent = g.title;
+      button.setAttribute("aria-expanded", "false");
+      var list = document.createElement("div");
+      list.className = "navgroup-menu";
+      list.id = "hb-menu-" + g.key;
+      button.setAttribute("aria-controls", list.id);
+      PAGES.forEach(function (p) {
+        if (p.group === g.key) list.appendChild(pageLink(p, true));
+      });
+      button.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var open = !wrap.classList.contains("open");
+        closeMenus();
+        wrap.classList.toggle("open", open);
+        button.setAttribute("aria-expanded", String(open));
+      });
+      wrap.appendChild(label);
+      wrap.appendChild(button);
+      wrap.appendChild(list);
+      nav.appendChild(wrap);
+    });
+    PAGES.forEach(function (p) {
+      if (!p.group && p.id !== "index") nav.appendChild(pageLink(p));
     });
     if (!alone) inner.appendChild(nav);
+    buildSearch(inner);
+
+    var panels = document.createElement("button");
+    panels.type = "button";
+    panels.className = "panels-button";
+    panels.setAttribute("aria-label", "Light bar, menus and terminals");
+    panels.setAttribute("aria-pressed", "false");
+    // Half a disc: the usual mark for a contrast setting.
+    panels.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/>' +
+      '<path d="M10 2.5 A7.5 7.5 0 0 1 10 17.5 Z" fill="currentColor"/></svg>';
+    panels.addEventListener("click", function () {
+      setPanels(root.getAttribute("data-panels") !== "light");
+    });
+    inner.appendChild(panels);
+
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest || !e.target.closest(".navgroup")) closeMenus();
+      if (!e.target.closest || !e.target.closest(".search-panel, .search-button")) closeSearch();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      var open = document.querySelector(".navgroup.open .navgroup-button");
+      closeMenus();
+      if (open) open.focus();
+      if (searchOpen()) {
+        closeSearch();
+        document.querySelector(".search-button").focus();
+      }
+    });
 
     var tog = document.createElement("div");
     tog.className = "os-toggle";
@@ -142,7 +247,10 @@
     tog.querySelectorAll("button").forEach(function (b) {
       b.addEventListener("click", function () { setOS(b.dataset.os); });
     });
-    inner.appendChild(tog);
+    // The switches and the clock keep together when the bar wraps.
+    var tools = document.createElement("div");
+    tools.className = "bar-tools";
+    tools.appendChild(tog);
 
     var sh = document.createElement("div");
     sh.className = "os-toggle sh-toggle";
@@ -156,24 +264,333 @@
     sh.querySelectorAll("button").forEach(function (b) {
       b.addEventListener("click", function () { setShell(b.dataset.shell); });
     });
-    inner.appendChild(sh);
+    tools.appendChild(sh);
 
     var clock = document.createElement("span");
     clock.className = "slt";
     clock.title = "Second Life Time: the clock on the Pacific coast, which the grid keeps";
-    sltClock(clock);
-    inner.appendChild(clock);
+    tools.appendChild(clock);
+    inner.appendChild(tools);
     if (!alone) inner.appendChild(menu);
 
     bar.appendChild(inner);
     document.body.insertBefore(bar, document.body.firstChild);
+
+    // Keep the bar to one row.  Laid out whole, does it wrap?  Then
+    // without the clock?  Then fold the menus behind "pages".  Measured
+    // each time rather than set at a width, because the fit depends on
+    // the font, the window and the hour: at ten o'clock the clock gains
+    // a digit.
+    function wraps() {
+      return inner.getBoundingClientRect().height > parseFloat(getComputedStyle(inner).minHeight) + 6;
+    }
+    function fit() {
+      bar.classList.remove("clockless", "folded");
+      if (!wraps()) return;
+      bar.classList.add("clockless");
+      if (!wraps()) return;
+      bar.classList.add("folded");
+    }
+    var pending = false;
+    window.addEventListener("resize", function () {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(function () { pending = false; fit(); });
+    });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+    sltClock(clock, fit);
+    fit();
   }
 
+  function closeMenus() {
+    document.querySelectorAll(".navgroup.open").forEach(function (g) {
+      g.classList.remove("open");
+      g.querySelector(".navgroup-button").setAttribute("aria-expanded", "false");
+    });
+  }
+
+  // The page being read, and the menu it is in: that menu's button is
+  // lit the way a page's own link would be.
   function markNav(id) {
-    document.querySelectorAll(".sitenav a").forEach(function (a) {
+    document.querySelectorAll(".sitebar a[data-page]").forEach(function (a) {
       a.classList.toggle("here", a.dataset.page === id);
       if (a.dataset.page === id) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".navgroup").forEach(function (g) {
+      g.classList.toggle("here", !!g.querySelector('a[data-page="' + id + '"]'));
+    });
+  }
+
+  // -------------------------------------------------------------- search
+  // One box for every page: each section is a place to go, and so is
+  // each troubleshooting entry.  In the one-file build every page is
+  // here already.  A page opened on its own reads its neighbours when
+  // the browser lets it, which is when the pages are served over http;
+  // opened as a file it is refused, and searches itself alone.
+
+  var searchIndex = null;   // [{page, title, href, text, low, lowTitle, kind}]
+  var searchScope = "";     // a note on what was searched, when not everything
+
+  var GLASS = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
+    '<path d="M12.6 12.6 L17.5 17.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+
+  function pageTitle(id) {
+    for (var i = 0; i < PAGES.length; i++) if (PAGES[i].id === id) return PAGES[i].title;
+    return id;
+  }
+
+  // The words of an element as a reader sees them: no script or style,
+  // and none of what this script adds (copy buttons, ticks, the
+  // machine labels on terminals), nor any part named in drop.
+  function wordsOf(el, drop) {
+    var clone = el.cloneNode(true);
+    clone.querySelectorAll("script, style, .copy, .tick, .progress, .term > .where" + (drop ? ", " + drop : ""))
+      .forEach(function (n) { n.remove(); });
+    // One block's last word and the next one's first are two words.
+    clone.querySelectorAll("div, p, li, pre, td, th, h3, h4, dt, dd, summary, label")
+      .forEach(function (n) { n.appendChild(document.createTextNode(" ")); });
+    return clone.textContent.replace(/\s+/g, " ").trim();
+  }
+
+  function headingOf(h) {
+    var clone = h.cloneNode(true);
+    var num = clone.querySelector(".num");
+    if (num) num.remove();
+    return clone.textContent.replace(/\s+/g, " ").trim();
+  }
+
+  // href builds the link to an id on this page: "#id" when the page is
+  // in this document, "page.html#id" when it was read from beside it.
+  function indexArticle(article, id, href) {
+    var out = [];
+    var where = pageTitle(id);
+    function add(title, target, text, kind) {
+      var low = (where + " " + title + " " + text).toLowerCase();
+      out.push({ page: where, title: title, href: href(target), text: text, low: low, lowTitle: title.toLowerCase(), kind: kind });
+    }
+    var h1 = article.querySelector("h1");
+    var head = article.querySelector(".masthead");
+    add(h1 ? headingOf(h1) : where, "", head ? wordsOf(head, "h1, .eyebrow, .meta-row, nav") : "", "page");
+    article.querySelectorAll("main > section[id]").forEach(function (s) {
+      var h = s.querySelector("h2");
+      add(h ? headingOf(h) : where, s.id, wordsOf(s, "h2, details.fault"), "section");
+      s.querySelectorAll("details.fault[id]").forEach(function (d) {
+        var sym = d.querySelector("summary .sym") || d.querySelector("summary");
+        add(sym ? sym.textContent.replace(/\s+/g, " ").trim() : "", d.id, wordsOf(d, "summary, .fix > h4"), "fault");
+      });
+    });
+    return out;
+  }
+
+  function buildIndex(done) {
+    if (searchIndex) return done();
+    if (bundled) {
+      searchIndex = [];
+      articles.forEach(function (a) {
+        searchIndex = searchIndex.concat(indexArticle(a, a.id, function (t) { return "#" + (t || a.id); }));
+      });
+      return done();
+    }
+    var here = articles[0];
+    var mine = here ? indexArticle(here, here.id, function (t) { return t ? "#" + t : "#"; }) : [];
+    function alone_() {
+      searchIndex = mine;
+      searchScope = alone ? "This page only." :
+        "This page only: opened as a file, a page cannot read the others. " +
+        "python3 handbook/bundle.py builds the one-file handbook, which searches every page.";
+      done();
+    }
+    if (alone || !window.fetch || !window.DOMParser || !here) return alone_();
+    var others = PAGES.filter(function (p) { return p.id !== here.id; });
+    Promise.all(others.map(function (p) {
+      return fetch(p.id + ".html").then(function (r) {
+        if (!r.ok) throw new Error(p.id + ": " + r.status);
+        return r.text();
+      }).then(function (text) {
+        var doc = new DOMParser().parseFromString(text, "text/html");
+        var art = doc.querySelector("article.page");
+        if (!art) throw new Error(p.id + ": no article");
+        return indexArticle(art, p.id, function (t) { return p.id + ".html" + (t ? "#" + t : ""); });
+      });
+    })).then(function (lists) {
+      // Keep the reading order: pages before this one, this one, the rest.
+      var all = [], at = 0;
+      PAGES.forEach(function (p) {
+        if (p.id === here.id) all = all.concat(mine);
+        else all = all.concat(lists[at++]);
+      });
+      searchIndex = all;
+      done();
+    }, alone_);
+  }
+
+  function occurrences(hay, w) {
+    var n = 0, at = hay.indexOf(w);
+    while (at >= 0 && n < 5) { n++; at = hay.indexOf(w, at + w.length); }
+    return n;
+  }
+
+  // Every word has to appear, as in the troubleshooting and reference
+  // filters.  Words in a heading count most, then the whole phrase, then
+  // how often the words come up; ties keep the reading order.
+  function runSearch(q) {
+    var words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    var phrase = words.join(" ");
+    var hits = [];
+    searchIndex.forEach(function (e, n) {
+      var score = 0;
+      for (var i = 0; i < words.length; i++) {
+        var c = occurrences(e.low, words[i]);
+        if (!c) return;
+        score += c + (e.lowTitle.indexOf(words[i]) >= 0 ? 10 : 0);
+      }
+      if (words.length > 1 && e.low.indexOf(phrase) >= 0) score += 8;
+      if (e.kind === "page") score += 2;
+      hits.push({ e: e, score: score, n: n });
+    });
+    hits.sort(function (a, b) { return b.score - a.score || a.n - b.n; });
+    return hits;
+  }
+
+  function reEscape(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+  // A line or two of the text around the first word found, with every
+  // word marked.
+  function snippet(text, words) {
+    var low = text.toLowerCase(), at = -1;
+    words.forEach(function (w) {
+      var i = low.indexOf(w);
+      if (i >= 0 && (at < 0 || i < at)) at = i;
+    });
+    var start = 0, end = Math.min(text.length, 170);
+    if (at > 60) {
+      start = text.lastIndexOf(" ", at - 50) + 1;
+      end = Math.min(text.length, start + 170);
+    }
+    if (end < text.length) { var sp = text.lastIndexOf(" ", end); if (sp > start + 60) end = sp; }
+    var raw = text.slice(start, end), html = "", last = 0, m;
+    var re = new RegExp(words.map(reEscape).sort(function (a, b) { return b.length - a.length; }).join("|"), "gi");
+    while ((m = re.exec(raw))) {
+      html += esc(raw.slice(last, m.index)) + "<mark>" + esc(m[0]) + "</mark>";
+      last = m.index + m[0].length;
+    }
+    html += esc(raw.slice(last));
+    return (start > 0 ? "… " : "") + html + (end < text.length ? " …" : "");
+  }
+
+  function searchOpen() {
+    var p = document.querySelector(".search-panel");
+    return !!p && !p.hidden;
+  }
+
+  function closeSearch() {
+    var p = document.querySelector(".search-panel");
+    if (!p || p.hidden) return;
+    p.hidden = true;
+    document.querySelector(".search-button").setAttribute("aria-expanded", "false");
+  }
+
+  function buildSearch(inner) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "search-button";
+    button.title = "Search every page  ( / )";
+    button.setAttribute("aria-label", "Search the handbook");
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-controls", "hb-search-panel");
+    button.innerHTML = GLASS;
+    inner.appendChild(button);
+
+    var panel = document.createElement("div");
+    panel.className = "search-panel";
+    panel.id = "hb-search-panel";
+    panel.hidden = true;
+    panel.setAttribute("role", "search");
+    panel.innerHTML =
+      '<input type="search" id="hb-search" autocomplete="off" spellcheck="false" ' +
+      'placeholder="A command, a message, a setting, a file" aria-label="Search the handbook">' +
+      '<p class="search-count" aria-live="polite"></p>' +
+      '<ol class="search-results"></ol>' +
+      '<p class="search-scope" hidden></p>';
+    inner.appendChild(panel);
+    var input = panel.querySelector("input");
+    var count = panel.querySelector(".search-count");
+    var list = panel.querySelector(".search-results");
+    var scope = panel.querySelector(".search-scope");
+
+    function render() {
+      var q = input.value.trim();
+      list.innerHTML = "";
+      if (!searchIndex) { count.textContent = "Reading the pages…"; return; }
+      scope.hidden = !searchScope;
+      scope.textContent = searchScope;
+      if (!q) { count.textContent = "Every word you type has to appear. Enter opens the first place."; return; }
+      var words = q.toLowerCase().split(/\s+/).filter(Boolean);
+      var hits = runSearch(q);
+      count.textContent = hits.length ? (hits.length === 1 ? "1 place" : hits.length + " places") +
+        (hits.length > 40 ? ", the first 40 shown" : "") : "Nothing has every word.";
+      hits.slice(0, 40).forEach(function (h) {
+        var e = h.e;
+        var li = document.createElement("li");
+        var a = document.createElement("a");
+        a.href = e.href;
+        a.innerHTML = '<span class="sr-where">' + esc(e.page) + (e.kind === "page" ? ", the page" : "") + '</span>' +
+          '<span class="sr-title">' + esc(e.title) + '</span>' +
+          (e.text ? '<span class="sr-text">' + snippet(e.text, words) + '</span>' : "");
+        li.appendChild(a);
+        list.appendChild(li);
+      });
+    }
+
+    function open() {
+      closeMenus();
+      panel.hidden = false;
+      button.setAttribute("aria-expanded", "true");
+      input.focus();
+      input.select();
+      render();
+      buildIndex(render);
+    }
+
+    button.addEventListener("click", function () {
+      if (searchOpen()) closeSearch(); else open();
+    });
+    input.addEventListener("input", render);
+    input.addEventListener("keydown", function (e) {
+      var first = list.querySelector("a");
+      if (e.key === "Enter" && first) { e.preventDefault(); first.click(); }
+      else if (e.key === "ArrowDown" && first) { e.preventDefault(); first.focus(); }
+    });
+    list.addEventListener("keydown", function (e) {
+      var links = Array.prototype.slice.call(list.querySelectorAll("a"));
+      var i = links.indexOf(document.activeElement);
+      if (e.key === "ArrowDown" && i >= 0 && i < links.length - 1) { e.preventDefault(); links[i + 1].focus(); }
+      else if (e.key === "ArrowUp" && i > 0) { e.preventDefault(); links[i - 1].focus(); }
+      else if (e.key === "ArrowUp" && i === 0) { e.preventDefault(); input.focus(); }
+    });
+    // A place on this page, when the page is one file of many: the
+    // browser scrolls there, and this opens it if it is an entry.
+    list.addEventListener("click", function (e) {
+      var a = e.target.closest && e.target.closest("a");
+      if (!a) return;
+      closeSearch();
+      if (bundled) return;   // the router takes it from here
+      var h = a.getAttribute("href");
+      if (h.charAt(0) === "#") {
+        var el = h.length > 1 ? document.getElementById(h.slice(1)) : null;
+        if (el) reveal(el);
+        else { e.preventDefault(); window.scrollTo(0, 0); }
+      }
+    });
+    // "/" opens the search from anywhere but a field being typed in.
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      var t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      e.preventDefault();
+      open();
     });
   }
 
@@ -211,6 +628,25 @@
       });
       rail.appendChild(ol);
     }
+    // On a narrow screen there is no room beside the page, so the
+    // contents sit above it, folded, and open with this.  On a wide one
+    // the stylesheet hides the button and the list is always there.
+    var fold = document.createElement("button");
+    fold.type = "button";
+    fold.className = "rail-toggle";
+    fold.textContent = "On this page";
+    fold.setAttribute("aria-expanded", "false");
+    fold.addEventListener("click", function () {
+      var open = rail.classList.toggle("open");
+      fold.setAttribute("aria-expanded", String(open));
+    });
+    rail.insertBefore(fold, rail.firstChild);
+    rail.addEventListener("click", function (e) {
+      if (e.target.closest && e.target.closest("a")) {
+        rail.classList.remove("open");
+        fold.setAttribute("aria-expanded", "false");
+      }
+    });
     if (!("IntersectionObserver" in window)) return;
     var watcher = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
@@ -484,6 +920,8 @@
         steps.push(["platforms", "Read where Linux and macOS differ — your machines mix them"]);
       }
       if (slgod === "remote" || bot === "own") steps.push(["security", "Check the security notes for networked slgod"]);
+      // Every setup ends with somebody at the slsh prompt.
+      steps.push(["slsh-guide", "Then learn the shell, command by command"]);
 
       var out = form.querySelector(".result");
       out.querySelector(".scenario").textContent = name;
@@ -538,6 +976,25 @@
 
   // ------------------------------------------------------------ routing
 
+  // Make a place that was linked to visible before going there.  A
+  // troubleshooting entry opens, and comes out from under the page's own
+  // filter if that has hidden it; a section kept for one system shows
+  // every system, since somebody asked for it by name.
+  function reveal(el) {
+    if (!el) return;
+    if (el.tagName === "DETAILS") {
+      if (el.hidden) {
+        var tools = el.closest("section") && el.closest("section").querySelector(".fault-tools");
+        var box = tools && tools.querySelector("input[type=search]");
+        if (box && box.value) { box.value = ""; box.dispatchEvent(new Event("input")); }
+        var chip = tools && tools.querySelector('.chip[aria-pressed="true"]');
+        if (chip) chip.click();
+      }
+      el.open = true;
+    }
+    if (!el.getClientRects().length && el.closest("[data-os-only]")) setOS("both");
+  }
+
   function show(target) {
     var el = target ? document.getElementById(target) : null;
     var page = el ? (el.classList.contains("page") ? el : el.closest("article.page")) : null;
@@ -547,13 +1004,14 @@
     markNav(page.id);
     var t = page.querySelector("h1");
     if (t) document.title = page.dataset.title || t.textContent + " — slgo handbook";
-    if (el && el !== page) el.scrollIntoView();
+    if (el && el !== page) { reveal(el); el.scrollIntoView(); }
     else window.scrollTo(0, 0);
-    if (el && el.tagName === "DETAILS") el.open = true;
   }
 
   function init() {
+    if (store("panels") === "light") root.setAttribute("data-panels", "light");
     buildBar();
+    setPanels(store("panels") === "light");
     // No guess: a browser knows the machine it runs on and nothing about
     // the others.  Until the reader says, every system shows, labelled.
     setOS(store("os") || "both");
@@ -566,7 +1024,7 @@
       if (only) { prepare(only); markNav(only.id); }
       if (location.hash) {
         var d = document.getElementById(location.hash.slice(1));
-        if (d && d.tagName === "DETAILS") d.open = true;
+        if (d) { reveal(d); d.scrollIntoView(); }
       }
       return;
     }
@@ -578,6 +1036,10 @@
       if (!id || !document.getElementById(id)) return;
       e.preventDefault();
       document.querySelector(".sitebar").classList.remove("open");
+      var pages = document.querySelector(".menu-button");
+      if (pages) pages.setAttribute("aria-expanded", "false");
+      closeMenus();
+      closeSearch();
       try { history.pushState(null, "", "#" + id); } catch (err) { /* the frame may refuse */ }
       show(id);
     });

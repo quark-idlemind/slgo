@@ -34,7 +34,7 @@
         <h2>Before you start</h2>
         <dl>
           <dt>Go 1.26.1 or newer</dt>
-          <dd>The version comes from <code>go.mod</code>. With an older Go, the default setting <code>GOTOOLCHAIN=auto</code> downloads 1.26.1 for you. If you have set <code>GOTOOLCHAIN=local</code>, the build refuses instead. (That is Go's standard behaviour, not something slgo does.)</dd>
+          <dd>Get it from <a href="https://go.dev/dl/">go.dev/dl</a>, which has it for Linux and macOS alike. The version comes from <code>go.mod</code>. With an older Go, the default setting <code>GOTOOLCHAIN=auto</code> downloads 1.26.1 for you. If you have set <code>GOTOOLCHAIN=local</code>, the build refuses instead. (That is Go's standard behaviour, not something slgo does.)</dd>
           <dt>git</dt>
           <dd>To fetch the source. Build inside the git checkout: that is how each program's <code>--version</code> learns which commit it came from.</dd>
           <dt>openssl</dt>
@@ -43,12 +43,9 @@
           <dd>Its name and password. The examples use the avatar <em>Example Resident</em> and the profile name <code>example</code>; put your own in their place.</dd>
         </dl>
         <p>There is no C compiler to install: slgo is pure Go, with no cgo. Windows is not supported; slsh does not build there.</p>
-        <div class="os-pair">
-          <div class="term" data-os-only="linux" data-where="laptop" data-where-label="Linux · check your Go"><pre><span class="p">$ </span>go version
-<span class="c"># Distribution packages are often older than 1.26.1. If so, get Go from https://go.dev/dl/</span></pre></div>
-          <div class="term" data-os-only="mac" data-where="laptop" data-where-label="macOS · check your Go"><pre><span class="p">$ </span>go version
-<span class="c"># No Go yet? Use the installer from https://go.dev/dl/, or: brew install go</span></pre></div>
-        </div>
+        <p>To see which Go you have, if any:</p>
+        <div class="term" data-where="laptop" data-where-label="check your Go"><pre><span class="p">$ </span>go version</pre></div>
+        <p>If the shell cannot find <code>go</code>, get it from <a href="https://go.dev/dl/">go.dev/dl</a> and follow the installation instructions there.</p>
       </section>
 
       <section id="steps">
@@ -190,6 +187,7 @@ start    = last</pre></div>
       <section id="where-next">
         <h2>Where next</h2>
         <div class="cards">
+          <a class="card" href="slsh-guide.html"><span class="k">Guide</span><span class="t">The slsh guide</span><span class="d">Past the first ten commands: inventory, moving about, objects, people, and every command.</span></a>
           <a class="card" href="quickstart-remote.html"><span class="k">Quick start</span><span class="t">slgod on a server</span><span class="d">Move slgod to a machine that is always on, and keep using slsh from this one.</span></a>
           <a class="card" href="quickstart-bot.html"><span class="k">Quick start</span><span class="t">Adding slbotd</span><span class="d">Run a bot beside slgod that answers people in world.</span></a>
           <a class="card" href="security.html"><span class="k">Guide</span><span class="t">Security</span><span class="d">What each file protects, and what to keep private.</span></a>

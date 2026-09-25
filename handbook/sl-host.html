@@ -12,7 +12,7 @@
   #sl-host .tester label.lbl { font-family: var(--mono); font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 0.35rem; }
   #sl-host .tester textarea, #sl-host .tester input[type="text"] {
     font-family: var(--mono); font-size: 0.82rem; line-height: 1.55; width: 100%; box-sizing: border-box;
-    padding: 0.6rem 0.75rem; border: 1px solid var(--rule); border-radius: 4px; background: var(--ground); color: var(--ink);
+    padding: 0.6rem 0.75rem; border: 1px solid var(--field-edge); border-radius: 4px; background: var(--ground); color: var(--ink);
   }
   #sl-host .tester textarea { min-height: 9.5rem; resize: vertical; white-space: pre; overflow-x: auto; }
   #sl-host .tester .presets { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.5rem; }
@@ -22,7 +22,7 @@
   #sl-host .tester .verdict code { font-size: 0.9em; }
   #sl-host .tester td.state { font-family: var(--mono); font-size: 0.78rem; white-space: nowrap; }
   #sl-host .tester tr.win td { background: var(--ok-soft); }
-  #sl-host .tester tr.win td.state { color: var(--ok); font-weight: 600; }
+  #sl-host .tester tr.win td.state { color: var(--ok-ink); font-weight: 600; }
   #sl-host .tester .msgs { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-soft); }
   #sl-host .tester .msgs li.err { color: var(--warn-ink); }
 </style>
@@ -31,7 +31,7 @@
     <p class="eyebrow">Helper · client machines only</p>
     <h1>sl-host</h1>
     <p class="standfirst">A small helper for a laptop that reaches slgod at different addresses in different places. It looks at which network the laptop is on and prints the address to use there. Most setups do not need it.</p>
-    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span><span class="pill time">~10 min</span></div>
+    <div class="meta-row"><span class="pill time">~10 min</span></div>
   </header>
   <div class="body-grid">
     <nav class="rail" aria-label="On this page"></nav>
@@ -301,7 +301,7 @@ sl-host: ~/.config/sl-host:4: "192.168.300/24" is not a network; skipped</span><
         <h2>Where next</h2>
         <div class="cards">
           <a class="card" href="quickstart-remote.html"><span class="k">Quick start</span><span class="t">slgod on a server</span><span class="d">Direct, over SSH, or with sl-host: getting slsh to a remote slgod.</span></a>
-          <a class="card" href="setups.html"><span class="k">Guide</span><span class="t">Setups</span><span class="d">Whole arrangements of machines, and which pieces go where.</span></a>
+          <a class="card" href="setups.html"><span class="k">Recipes</span><span class="t">Setups</span><span class="d">Moving slgod, several avatars, services, upgrading.</span></a>
           <a class="card" href="troubleshooting.html"><span class="k">Help</span><span class="t">Troubleshooting</span><span class="d">Paste an error message and find the fix.</span></a>
         </div>
       </section>
@@ -309,7 +309,7 @@ sl-host: ~/.config/sl-host:4: "192.168.300/24" is not a network; skipped</span><
   </div>
   <footer>
     <span>slgo handbook</span>
-    <span class="pager"><a href="slsh-guide.html">← slsh guide</a> <a href="setups.html">Setups →</a></span>
+    <span class="pager"><a href="setups.html">← Setups</a> <a href="platforms.html">Linux &amp; macOS →</a></span>
   </footer>
 </div>
 <script>
