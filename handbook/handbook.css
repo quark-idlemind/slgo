@@ -393,6 +393,51 @@ h1 .caret { color: var(--accent); font-family: var(--mono); font-weight: 400; }
   margin-top: 0.2rem;
 }
 
+/* The few pages read most, kept in the masthead of the start page the
+   way a landmark keeps a place: one or two of them, not a list. */
+.landmarks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.8rem;
+  margin-top: 0.3rem;
+}
+.landmarks .lbl {
+  font-family: var(--sans);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted);
+}
+a.landmark {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.55rem;
+  padding: 0.55rem 1rem 0.55rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+a.landmark::before {
+  content: "";
+  align-self: center;
+  flex: none;
+  width: 0.85rem;
+  height: 0.85rem;
+  background: var(--accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.6a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.6a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+a.landmark:hover { border-color: var(--accent); transform: translateY(-1px); text-decoration: none; }
+a.landmark .t { font-weight: 700; font-size: 0.92rem; }
+a.landmark .d { font-size: 0.8rem; color: var(--muted); }
+
 /* Tags, the way the inventory tags an item. */
 .pill {
   font-family: var(--sans);
