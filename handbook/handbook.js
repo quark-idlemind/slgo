@@ -587,6 +587,8 @@
         steps.push(["platforms", "Read where Linux and macOS differ — your machines mix them"]);
       }
       if (slgod === "remote" || bot === "own") steps.push(["security", "Check the security notes for networked slgod"]);
+      // Every setup ends with somebody at the slsh prompt.
+      steps.push(["slsh-guide", "Then learn the shell, command by command"]);
 
       var out = form.querySelector(".result");
       out.querySelector(".scenario").textContent = name;

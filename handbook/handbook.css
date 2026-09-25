@@ -556,6 +556,27 @@ a.landmark .d { font-size: 0.8rem; color: var(--muted); }
 .pill.new { color: var(--ok-ink); border-color: var(--ok); background: var(--ok-soft); }
 .pill.old { color: var(--m-laptop); border-color: var(--m-laptop); background: color-mix(in srgb, var(--m-laptop) 12%, var(--surface)); }
 .pill.time { color: var(--os-ink); border-color: var(--os); background: var(--os-soft); }
+/* On the start page the two readers' tags are the two ways in. */
+a.pill { text-decoration: none; font-weight: 700; transition: transform 120ms ease, box-shadow 120ms ease; }
+a.pill:hover { text-decoration: none; transform: translateY(-1px); box-shadow: var(--shadow); }
+
+/* The start page's list of jobs, for someone already running slgo:
+   each a link into the section of a page that does it. */
+.tasks {
+  display: grid;
+  gap: 1.3rem 2rem;
+  grid-template-columns: repeat(auto-fill, minmax(14.5rem, 1fr));
+}
+.tasks > div { display: flex; flex-direction: column; gap: 0.55rem; }
+.tasks h3 {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tasks ul { list-style: none; padding: 0; gap: 0.4rem; }
+.tasks li { font-size: 0.94rem; }
 
 .body-grid {
   display: grid;

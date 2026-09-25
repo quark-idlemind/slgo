@@ -21,7 +21,7 @@
       <a class="landmark" href="slsh-guide.html"><span class="t">The slsh guide</span><span class="d">the shell, command by command</span></a>
       <a class="landmark" href="troubleshooting.html"><span class="t">Troubleshooting</span><span class="d">paste the error, find the fix</span></a>
     </nav>
-    <div class="meta-row"><span class="pill new">new users</span><span class="pill old">existing users</span></div>
+    <div class="meta-row"><a class="pill new" href="#picker-section">new users: pick your setup ↓</a><a class="pill old" href="#existing">existing users: go to a task ↓</a></div>
   </header>
   <div class="body-grid">
     <nav class="rail" aria-label="On this page"></nav>
@@ -123,19 +123,65 @@
           <a class="card" href="quickstart-local.html"><span class="k">Quick start</span><span class="t">Everything on one machine</span><span class="d">Build, make a profile, start slgod, type your first commands in slsh.</span></a>
           <a class="card" href="quickstart-remote.html"><span class="k">Quick start</span><span class="t">slgod on a server</span><span class="d">Keep the avatar online on a machine that stays up, and connect from your laptop. Includes macOS to Linux.</span></a>
           <a class="card" href="quickstart-bot.html"><span class="k">Quick start</span><span class="t">Adding slbotd</span><span class="d">Give a second avatar to a bot that takes commands by instant message.</span></a>
-          <a class="card" href="bot-llm.html"><span class="k">Quick start</span><span class="t">slbotd with a language model</span><span class="d">Put llama-server behind the bot so it can hold a conversation, and fix it when it goes quiet.</span></a>
+          <a class="card" href="bot-llm.html"><span class="k">Guide</span><span class="t">slbotd with a language model</span><span class="d">Put llama-server behind the bot so it can hold a conversation, and fix it when it goes quiet.</span></a>
+        </div>
+        <p>Once slsh answers, the shell itself is the next thing to learn.</p>
+        <div class="cards">
+          <a class="card" href="slsh-guide.html"><span class="k">Guide</span><span class="t">The slsh guide</span><span class="d">The shell, a part at a time: inventory, moving about, objects, people, and every command.</span></a>
+          <a class="card" href="how-llm.html"><span class="k">Quick start</span><span class="t">slsh with a language model</span><span class="d"><code>how</code> finds the command for a question in your own words. A small model beside it understands far more ways of asking.</span></a>
         </div>
       </section>
 
       <section id="existing">
         <h2>Already running it</h2>
+        <p>Go straight to the job. Each link opens the part of a page that
+          does it.</p>
+        <div class="tasks">
+          <div>
+            <h3>Keep it running</h3>
+            <ul>
+              <li><a href="setups.html#service">Run slgod as a service</a></li>
+              <li><a href="setups.html#upgrade">Upgrade every machine</a></li>
+              <li><a href="setups.html#logs">Keep the logs, and rotate them</a></li>
+            </ul>
+          </div>
+          <div>
+            <h3>Change the arrangement</h3>
+            <ul>
+              <li><a href="setups.html#many-avatars">Hold several avatars in one slgod</a></li>
+              <li><a href="setups.html#second-slgod">Run a second slgod beside the first</a></li>
+              <li><a href="setups.html#two-clients">Drive one avatar from two clients</a></li>
+              <li><a href="setups.html#move">Move slgod to another machine</a></li>
+              <li><a href="sl-host.html">Use a laptop at home and away</a></li>
+              <li><a href="setups.html#bot-elsewhere">Give slbotd a machine of its own</a></li>
+              <li><a href="setups.html#viewer">Let a viewer take a session</a></li>
+            </ul>
+          </div>
+          <div>
+            <h3>Keep it safe</h3>
+            <ul>
+              <li><a href="security.html#network">Put slgod on a network</a></li>
+              <li><a href="security.html#secret">Back up or rotate the secret</a></li>
+              <li><a href="security.html#check">Check your setup</a></li>
+            </ul>
+          </div>
+          <div>
+            <h3>Look something up</h3>
+            <ul>
+              <li><a href="troubleshooting.html#faults">An error message</a></li>
+              <li><a href="reference.html">A file, flag or variable</a></li>
+              <li><a href="slsh-guide.html#reference">A slsh command</a></li>
+            </ul>
+          </div>
+        </div>
+        <p>Or read a page from the top:</p>
         <div class="cards">
           <a class="card" href="setups.html"><span class="k">Recipes</span><span class="t">Setups</span><span class="d">Services, several avatars, moving slgod, the viewer endpoint, upgrading.</span></a>
           <a class="card" href="sl-host.html"><span class="k">Helper</span><span class="t">sl-host</span><span class="d">When a laptop needs a different address at home and away, and why it can break a setup that doesn't.</span></a>
           <a class="card" href="platforms.html"><span class="k">Platforms</span><span class="t">Linux &amp; macOS</span><span class="d">What differs, what doesn't, and mixing the two.</span></a>
           <a class="card" href="security.html"><span class="k">Before you open a port</span><span class="t">Security</span><span class="d">What the secret protects, what an open port exposes, what a bot sends to its model.</span></a>
           <a class="card" href="troubleshooting.html"><span class="k">When it breaks</span><span class="t">Troubleshooting</span><span class="d">Paste the error you got, or answer a few yes/no questions, and it finds the fix.</span></a>
-          <a class="card" href="reference.html"><span class="k">Lookup</span><span class="t">Reference</span><span class="d">Files, modes, flags, variables and the order clients look things up in.</span></a>
+          <a class="card" href="reference.html"><span class="k">Look up</span><span class="t">Reference</span><span class="d">Files, modes, flags, variables and the order clients look things up in.</span></a>
         </div>
       </section>
 

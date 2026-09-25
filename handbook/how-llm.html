@@ -10,7 +10,7 @@
 <article class="page" id="how-llm">
 <div class="wrap">
   <header class="masthead">
-    <p class="eyebrow">Quick start · 10 minutes</p>
+    <p class="eyebrow">Quick start · slsh's how, with a model</p>
     <h1>slsh with a language model</h1>
     <p class="standfirst">slsh's <code>how</code> turns a question in your own words
       into the command that does it. It works with nothing installed. With a
@@ -49,7 +49,7 @@
           <li>A server that speaks the OpenAI-style <code>/v1/chat/completions</code>:
             <strong>Ollama</strong> (the simplest) or llama.cpp's <strong>llama-server</strong>.</li>
           <li>A small model, a few billion parameters. It can run on the same machine
-            as slsh. slsh's guide recommends <code>qwen3.5:4b</code> under Ollama.</li>
+            as slsh. <a href="slsh-guide.html#how-model">slsh's guide</a> recommends <code>qwen3.5:4b</code> under Ollama.</li>
           <li>No account and no API key. slsh sends no key, so hosted services that
             need one (OpenAI, Anthropic and the like) cannot be used directly.</li>
         </ul>
@@ -76,7 +76,7 @@
 <span class="p">/$ </span>set how_model qwen3.5:4b
 <span class="p">/$ </span>set how_extra '{"reasoning_effort": "none"}'</pre></div>
             <p>The last line matters for Qwen3 and Qwen3.5 models, which otherwise
-              reason at length before answering. slsh's guide measured one taking
+              reason at length before answering. <a href="slsh-guide.html#how-model">slsh's guide</a> measured one taking
               about 30 seconds with reasoning on against 0.3 seconds with it off, and
               a smaller one returning nothing at all. The single quotes are needed:
               this is slsh's own prompt, and it takes double quotes off a word the
@@ -158,8 +158,9 @@
       <section id="next">
         <h2>Where next</h2>
         <div class="cards">
+          <a class="card" href="slsh-guide.html#learn"><span class="k">Guide</span><span class="t">The slsh guide</span><span class="d">What <code>how</code> does in full, and <code>help</code> and <code>man</code> beside it.</span></a>
           <a class="card" href="quickstart-local.html"><span class="k">Quick start</span><span class="t">Everything on one machine</span><span class="d">If slsh is not running yet.</span></a>
-          <a class="card" href="bot-llm.html"><span class="k">Quick start</span><span class="t">slbotd with a language model</span><span class="d">A bot that holds conversations, through llama-server.</span></a>
+          <a class="card" href="bot-llm.html"><span class="k">Guide</span><span class="t">slbotd with a language model</span><span class="d">A bot that holds conversations, through llama-server.</span></a>
           <a class="card" href="security.html"><span class="k">Before you open a port</span><span class="t">Security</span><span class="d">Model servers have no authentication of their own.</span></a>
         </div>
       </section>
