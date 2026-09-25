@@ -108,6 +108,21 @@
     });
   }
 
+  // The chrome, dark as the viewer's or light.  Grey on black is hard on
+  // some eyes however well it measures, so the reader can turn the bar,
+  // the menus, the search, the contents and the terminals light, with
+  // near-black text.  Dark is the default: it is the viewer's own look.
+  function setPanels(light) {
+    if (light) root.setAttribute("data-panels", "light");
+    else root.removeAttribute("data-panels");
+    store("panels", light ? "light" : null);
+    var b = document.querySelector(".panels-button");
+    if (b) {
+      b.setAttribute("aria-pressed", String(!!light));
+      b.title = light ? "Dark bar, menus and terminals" : "Light bar, menus and terminals, with dark text";
+    }
+  }
+
   // ------------------------------------------------------------ site bar
 
   function buildBar() {
@@ -192,6 +207,19 @@
     });
     if (!alone) inner.appendChild(nav);
     buildSearch(inner);
+
+    var panels = document.createElement("button");
+    panels.type = "button";
+    panels.className = "panels-button";
+    panels.setAttribute("aria-label", "Light bar, menus and terminals");
+    panels.setAttribute("aria-pressed", "false");
+    // Half a disc: the usual mark for a contrast setting.
+    panels.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/>' +
+      '<path d="M10 2.5 A7.5 7.5 0 0 1 10 17.5 Z" fill="currentColor"/></svg>';
+    panels.addEventListener("click", function () {
+      setPanels(root.getAttribute("data-panels") !== "light");
+    });
+    inner.appendChild(panels);
 
     document.addEventListener("click", function (e) {
       if (!e.target.closest || !e.target.closest(".navgroup")) closeMenus();
@@ -981,7 +1009,9 @@
   }
 
   function init() {
+    if (store("panels") === "light") root.setAttribute("data-panels", "light");
     buildBar();
+    setPanels(store("panels") === "light");
     // No guess: a browser knows the machine it runs on and nothing about
     // the others.  Until the reader says, every system shows, labelled.
     setOS(store("os") || "both");

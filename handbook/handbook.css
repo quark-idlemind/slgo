@@ -65,12 +65,25 @@
   --bar-muted: #9aa4ab;
   --bar-rule: #3b434a;
   --bar-field-edge: #7a8086;
+  --bar-hover: rgba(255, 255, 255, 0.06);
+  --bar-press: rgba(255, 255, 255, 0.1);
+  --bar-here-bg: rgba(79, 209, 184, 0.1);
+  --bar-here-edge: rgba(79, 209, 184, 0.35);
+  --bar-well: rgba(0, 0, 0, 0.18);
+  --bar-field-bg: rgba(0, 0, 0, 0.25);
+  --bar-lift: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 2px 8px rgba(0, 0, 0, 0.18);
   --term-bg: #1c2125;
   --term-ink: #e9ecee;
   --term-muted: #96a1a8;
   --term-out: #b9c2c9;
   --term-accent: #4fd1b8;
   --term-rule: #323a41;
+  --on-term-accent: #14201d;      /* text on a pressed switch */
+  --copy-bg: rgba(0, 0, 0, 0.2);
+  --mark-bg: rgba(79, 209, 184, 0.2);
+  --dot-laptop: #7fb9e8;
+  --dot-server: #e2a765;
+  --dot-bot: #b59df0;
 
   /* One colour per machine, used by the topology drawings and the
      "run this on" title above each command block: sky for the laptop,
@@ -169,6 +182,50 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px -14px rgba(0, 0, 0, 0.6);
 }
 
+/* Grey on black is hard on some eyes, however well it measures.  Two
+   ways out of it.  A reader whose system asks for more contrast gets
+   the dark chrome's greys at full strength.  And the switch in the bar
+   (data-panels="light") turns the chrome itself light: the bar, the
+   menus, the search, the contents, the location chips and the
+   terminals, with near-black text.  It holds in either page theme,
+   so these come after the dark blocks. */
+@media (prefers-contrast: more) {
+  :root:not([data-panels="light"]) {
+    --bar-muted: #e6e9eb;
+    --term-muted: #e9ecee;
+    --term-out: #e9ecee;
+    --bar-rule: #6c757c;
+    --term-rule: #6c757c;
+  }
+}
+:root[data-panels="light"] {
+  --bar-bg: #eef3f6;
+  --bar-bg-2: #ffffff;
+  --bar-ink: #1b262d;
+  --bar-muted: #34424a;
+  --bar-rule: #b9c7d1;
+  --bar-field-edge: #6b7780;
+  --bar-hover: rgba(10, 40, 60, 0.06);
+  --bar-press: rgba(10, 40, 60, 0.1);
+  --bar-here-bg: rgba(10, 110, 97, 0.1);
+  --bar-here-edge: rgba(10, 110, 97, 0.45);
+  --bar-well: #ffffff;
+  --bar-field-bg: #ffffff;
+  --bar-lift: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 2px 8px rgba(20, 50, 70, 0.12);
+  --term-bg: #f6f8fa;
+  --term-ink: #1b262d;
+  --term-muted: #34424a;
+  --term-out: #2b3940;
+  --term-accent: #0a6e61;
+  --term-rule: #c5d2db;
+  --on-term-accent: #ffffff;
+  --copy-bg: #ffffff;
+  --mark-bg: rgba(10, 110, 97, 0.14);
+  --dot-laptop: #2e7fb5;
+  --dot-server: #b0722a;
+  --dot-bot: #7a5cc7;
+}
+
 * { box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
@@ -204,11 +261,13 @@ body {
   top: env(safe-area-inset-top, 0px);
   z-index: 10;
   border-bottom: 1px solid var(--bar-rule);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 2px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--bar-lift);
 }
 
 .sitebar-inner {
-  max-width: 82rem;
+  /* A little wider than the page, so that on a wide screen the menus,
+     search, the panels switch, both switches and the clock fit one row. */
+  max-width: 86rem;
   margin: 0 auto;
   padding-inline: clamp(1rem, 4vw, 3rem);
   display: flex;
@@ -251,8 +310,8 @@ body {
   white-space: nowrap;
   border: 1px solid transparent;
 }
-.sitenav a:hover { color: var(--bar-ink); background: rgba(255, 255, 255, 0.06); }
-.sitenav a.here { color: var(--term-accent); background: rgba(79, 209, 184, 0.1); border-color: rgba(79, 209, 184, 0.35); }
+.sitenav a:hover { color: var(--bar-ink); background: var(--bar-hover); }
+.sitenav a.here { color: var(--term-accent); background: var(--bar-here-bg); border-color: var(--bar-here-edge); }
 
 .bar-tools {
   display: flex;
@@ -294,9 +353,9 @@ body {
   transform: translateY(-0.1rem) rotate(45deg);
   opacity: 0.75;
 }
-.navgroup-button:hover { color: var(--bar-ink); background: rgba(255, 255, 255, 0.06); }
-.navgroup.here > .navgroup-button { color: var(--term-accent); background: rgba(79, 209, 184, 0.1); border-color: rgba(79, 209, 184, 0.35); }
-.navgroup.open > .navgroup-button { color: var(--bar-ink); background: rgba(255, 255, 255, 0.1); }
+.navgroup-button:hover { color: var(--bar-ink); background: var(--bar-hover); }
+.navgroup.here > .navgroup-button { color: var(--term-accent); background: var(--bar-here-bg); border-color: var(--bar-here-edge); }
+.navgroup.open > .navgroup-button { color: var(--bar-ink); background: var(--bar-press); }
 .navgroup.open > .navgroup-button::after { transform: translateY(0.08rem) rotate(225deg); }
 .navgroup-menu {
   display: none;
@@ -326,7 +385,7 @@ body {
 
 /* Search: a button in the bar, and under it a floater like the menus,
    holding the box and the places found. */
-.search-button {
+.search-button, .panels-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -339,8 +398,9 @@ body {
   border-radius: 999px;
   cursor: pointer;
 }
-.search-button svg { width: 0.95rem; height: 0.95rem; display: block; }
-.search-button:hover, .search-button[aria-expanded="true"] { color: var(--bar-ink); background: rgba(255, 255, 255, 0.08); }
+.search-button svg, .panels-button svg { width: 0.95rem; height: 0.95rem; display: block; }
+.search-button:hover, .search-button[aria-expanded="true"],
+.panels-button:hover, .panels-button[aria-pressed="true"] { color: var(--bar-ink); background: var(--bar-press); }
 .search-panel {
   position: absolute;
   top: calc(100% + 0.4rem);
@@ -366,7 +426,7 @@ body {
   font-size: 0.95rem;
   padding: 0.55rem 0.75rem;
   color: var(--bar-ink);
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--bar-field-bg);
   border: 1px solid var(--bar-field-edge);
   border-radius: 6px;
 }
@@ -384,11 +444,11 @@ body {
   border: 1px solid transparent;
   border-radius: 5px;
 }
-.search-results a:hover, .search-results a:focus-visible { background: rgba(255, 255, 255, 0.06); border-color: var(--bar-rule); outline: none; text-decoration: none; }
+.search-results a:hover, .search-results a:focus-visible { background: var(--bar-hover); border-color: var(--bar-rule); outline: none; text-decoration: none; }
 .search-results .sr-where { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bar-muted); }
 .search-results .sr-title { font-size: 0.86rem; font-weight: 600; }
 .search-results .sr-text { font-size: 0.78rem; line-height: 1.5; color: var(--bar-muted); }
-.search-results mark { color: var(--term-accent); background: rgba(79, 209, 184, 0.2); border-radius: 2px; padding: 0 0.1em; }
+.search-results mark { color: var(--term-accent); background: var(--mark-bg); border-radius: 2px; padding: 0 0.1em; }
 
 /* The clock the status bar shows: Second Life Time, which is the
    Pacific coast's. */
@@ -422,6 +482,7 @@ body {
 .sitebar.folded.open .sitenav { display: flex; }
 .sitebar.folded .menu-button { display: inline-flex; order: 2; margin-left: 0; }
 .sitebar.folded .search-button { order: 2; margin-left: auto; }
+.sitebar.folded .panels-button { order: 2; }
 .sitebar.folded .bar-tools > .os-toggle { order: 1; }
 .sitebar.folded .slt { display: none; }
 /* Folded behind "pages", every menu is open at once, under its name. */
@@ -475,7 +536,7 @@ body {
   overflow: hidden;
   font-family: var(--sans);
   font-size: 0.68rem;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--bar-well);
 }
 .os-toggle button {
   background: transparent;
@@ -487,7 +548,7 @@ body {
   letter-spacing: 0.03em;
 }
 .os-toggle button:hover { color: var(--bar-ink); }
-.os-toggle button[aria-pressed="true"] { background: var(--term-accent); color: #14201d; font-weight: 700; }
+.os-toggle button[aria-pressed="true"] { background: var(--term-accent); color: var(--on-term-accent); font-weight: 700; }
 .os-toggle .os-label {
   padding: 0.32rem 0.45rem;
   color: var(--bar-muted);
@@ -759,8 +820,8 @@ nav.rail a {
   padding: 0.32rem 0.9rem 0.32rem 0.85rem;
   border-left: 3px solid transparent;
 }
-nav.rail a:hover { color: var(--bar-ink); background: rgba(255, 255, 255, 0.04); }
-nav.rail a.here { color: var(--term-accent); border-left-color: var(--term-accent); background: rgba(79, 209, 184, 0.08); }
+nav.rail a:hover { color: var(--bar-ink); background: var(--bar-hover); }
+nav.rail a.here { color: var(--term-accent); border-left-color: var(--term-accent); background: var(--bar-here-bg); }
 
 /* The notecard.  Everything meant to be read is on one. */
 main {
@@ -872,9 +933,9 @@ dd { margin: 0; color: var(--ink-soft); }
   flex: none;
   box-shadow: 0 0 5px currentColor;
 }
-.term[data-where="laptop"] .where::before { background: #7fb9e8; color: #7fb9e8; }
-.term[data-where="server"] .where::before { background: #e2a765; color: #e2a765; }
-.term[data-where="bot"] .where::before { background: #b59df0; color: #b59df0; }
+.term[data-where="laptop"] .where::before { background: var(--dot-laptop); color: var(--dot-laptop); }
+.term[data-where="server"] .where::before { background: var(--dot-server); color: var(--dot-server); }
+.term[data-where="bot"] .where::before { background: var(--dot-bot); color: var(--dot-bot); }
 
 .term pre {
   margin: 0;
@@ -900,7 +961,7 @@ dd { margin: 0; color: var(--ink-soft); }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--term-muted);
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--copy-bg);
   border: 1px solid var(--term-rule);
   border-radius: 3px;
   padding: 0.22rem 0.5rem;
