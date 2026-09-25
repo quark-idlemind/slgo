@@ -8,20 +8,30 @@
 (function () {
   "use strict";
 
+  // In reading order, which is also the order of the footers' pager
+  // links (bundle.py checks them against its own copy of this list).
+  // A page with a group sits in that group's menu in the site bar; one
+  // without is a link of its own there.  The brand is the way to the
+  // start page, so on a wide screen "Start here" has no link of its own.
   var PAGES = [
     { id: "index", title: "Start here" },
-    { id: "quickstart-local", title: "One machine" },
-    { id: "quickstart-remote", title: "Remote slgod" },
-    { id: "quickstart-bot", title: "Adding slbotd" },
-    { id: "bot-llm", title: "Bot + LLM" },
-    { id: "how-llm", title: "slsh + LLM" },
-    { id: "slsh-guide", title: "slsh guide" },
-    { id: "sl-host", title: "sl-host" },
-    { id: "setups", title: "Setups" },
-    { id: "platforms", title: "Linux & macOS" },
-    { id: "security", title: "Security" },
+    { id: "quickstart-local", title: "One machine", group: "setup", d: "slgod and slsh on the computer you type on" },
+    { id: "quickstart-remote", title: "Remote slgod", group: "setup", d: "slgod on a server, slsh on your computer" },
+    { id: "quickstart-bot", title: "Adding slbotd", group: "setup", d: "a bot that takes commands by instant message" },
+    { id: "bot-llm", title: "Bot + LLM", group: "setup", d: "the bot holds conversations through llama-server" },
+    { id: "slsh-guide", title: "slsh guide", group: "slsh", d: "the shell, command by command" },
+    { id: "how-llm", title: "slsh + LLM", group: "slsh", d: "how, with a language model beside it" },
+    { id: "setups", title: "Setups", group: "run", d: "services, several avatars, moving slgod, upgrading" },
+    { id: "sl-host", title: "sl-host", group: "run", d: "one address at home, another away" },
+    { id: "platforms", title: "Linux & macOS", group: "run", d: "where the two differ, and mixing them" },
+    { id: "security", title: "Security", group: "run", d: "before slgod goes on a network" },
     { id: "troubleshooting", title: "Troubleshooting" },
     { id: "reference", title: "Reference" }
+  ];
+  var GROUPS = [
+    { key: "setup", title: "Set up" },
+    { key: "slsh", title: "Using slsh" },
+    { key: "run", title: "Keep it running" }
   ];
 
   var root = document.documentElement;
@@ -106,6 +116,8 @@
     var brand = document.createElement("a");
     brand.className = "brand";
     brand.href = alone ? "#" : hrefFor("index");
+    brand.title = "Start here";
+    brand.dataset.page = "index";
     brand.innerHTML = CUBE + "slgo <span>handbook</span>";
     inner.appendChild(brand);
 
@@ -122,14 +134,70 @@
     var nav = document.createElement("nav");
     nav.className = "sitenav";
     nav.setAttribute("aria-label", "Handbook pages");
-    PAGES.forEach(function (p) {
+
+    function pageLink(p, withWords) {
       var a = document.createElement("a");
       a.href = hrefFor(p.id);
-      a.textContent = p.title;
       a.dataset.page = p.id;
-      nav.appendChild(a);
+      if (withWords && p.d) {
+        a.innerHTML = '<span class="t">' + esc(p.title) + '</span><span class="d">' + esc(p.d) + '</span>';
+      } else {
+        a.textContent = p.title;
+      }
+      return a;
+    }
+
+    // Only in the narrow menu, where there is no room for the brand to
+    // be the obvious way home.
+    var home = pageLink(PAGES[0]);
+    home.className = "home-link";
+    nav.appendChild(home);
+
+    GROUPS.forEach(function (g) {
+      var wrap = document.createElement("div");
+      wrap.className = "navgroup";
+      wrap.dataset.group = g.key;
+      var label = document.createElement("span");
+      label.className = "navgroup-label";
+      label.textContent = g.title;
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "navgroup-button";
+      button.textContent = g.title;
+      button.setAttribute("aria-expanded", "false");
+      var list = document.createElement("div");
+      list.className = "navgroup-menu";
+      list.id = "hb-menu-" + g.key;
+      button.setAttribute("aria-controls", list.id);
+      PAGES.forEach(function (p) {
+        if (p.group === g.key) list.appendChild(pageLink(p, true));
+      });
+      button.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var open = !wrap.classList.contains("open");
+        closeMenus();
+        wrap.classList.toggle("open", open);
+        button.setAttribute("aria-expanded", String(open));
+      });
+      wrap.appendChild(label);
+      wrap.appendChild(button);
+      wrap.appendChild(list);
+      nav.appendChild(wrap);
+    });
+    PAGES.forEach(function (p) {
+      if (!p.group && p.id !== "index") nav.appendChild(pageLink(p));
     });
     if (!alone) inner.appendChild(nav);
+
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest || !e.target.closest(".navgroup")) closeMenus();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      var open = document.querySelector(".navgroup.open .navgroup-button");
+      closeMenus();
+      if (open) open.focus();
+    });
 
     var tog = document.createElement("div");
     tog.className = "os-toggle";
@@ -142,7 +210,10 @@
     tog.querySelectorAll("button").forEach(function (b) {
       b.addEventListener("click", function () { setOS(b.dataset.os); });
     });
-    inner.appendChild(tog);
+    // The switches and the clock keep together when the bar wraps.
+    var tools = document.createElement("div");
+    tools.className = "bar-tools";
+    tools.appendChild(tog);
 
     var sh = document.createElement("div");
     sh.className = "os-toggle sh-toggle";
@@ -156,24 +227,37 @@
     sh.querySelectorAll("button").forEach(function (b) {
       b.addEventListener("click", function () { setShell(b.dataset.shell); });
     });
-    inner.appendChild(sh);
+    tools.appendChild(sh);
 
     var clock = document.createElement("span");
     clock.className = "slt";
     clock.title = "Second Life Time: the clock on the Pacific coast, which the grid keeps";
     sltClock(clock);
-    inner.appendChild(clock);
+    tools.appendChild(clock);
+    inner.appendChild(tools);
     if (!alone) inner.appendChild(menu);
 
     bar.appendChild(inner);
     document.body.insertBefore(bar, document.body.firstChild);
   }
 
+  function closeMenus() {
+    document.querySelectorAll(".navgroup.open").forEach(function (g) {
+      g.classList.remove("open");
+      g.querySelector(".navgroup-button").setAttribute("aria-expanded", "false");
+    });
+  }
+
+  // The page being read, and the menu it is in: that menu's button is
+  // lit the way a page's own link would be.
   function markNav(id) {
-    document.querySelectorAll(".sitenav a").forEach(function (a) {
+    document.querySelectorAll(".sitebar a[data-page]").forEach(function (a) {
       a.classList.toggle("here", a.dataset.page === id);
       if (a.dataset.page === id) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".navgroup").forEach(function (g) {
+      g.classList.toggle("here", !!g.querySelector('a[data-page="' + id + '"]'));
     });
   }
 
@@ -211,6 +295,25 @@
       });
       rail.appendChild(ol);
     }
+    // On a narrow screen there is no room beside the page, so the
+    // contents sit above it, folded, and open with this.  On a wide one
+    // the stylesheet hides the button and the list is always there.
+    var fold = document.createElement("button");
+    fold.type = "button";
+    fold.className = "rail-toggle";
+    fold.textContent = "On this page";
+    fold.setAttribute("aria-expanded", "false");
+    fold.addEventListener("click", function () {
+      var open = rail.classList.toggle("open");
+      fold.setAttribute("aria-expanded", String(open));
+    });
+    rail.insertBefore(fold, rail.firstChild);
+    rail.addEventListener("click", function (e) {
+      if (e.target.closest && e.target.closest("a")) {
+        rail.classList.remove("open");
+        fold.setAttribute("aria-expanded", "false");
+      }
+    });
     if (!("IntersectionObserver" in window)) return;
     var watcher = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
@@ -578,6 +681,9 @@
       if (!id || !document.getElementById(id)) return;
       e.preventDefault();
       document.querySelector(".sitebar").classList.remove("open");
+      var pages = document.querySelector(".menu-button");
+      if (pages) pages.setAttribute("aria-expanded", "false");
+      closeMenus();
       try { history.pushState(null, "", "#" + id); } catch (err) { /* the frame may refuse */ }
       show(id);
     });

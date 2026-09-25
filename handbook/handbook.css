@@ -232,6 +232,78 @@ body {
 .sitenav a:hover { color: var(--bar-ink); background: rgba(255, 255, 255, 0.06); }
 .sitenav a.here { color: var(--term-accent); background: rgba(79, 209, 184, 0.1); border-color: rgba(79, 209, 184, 0.35); }
 
+.bar-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1.1rem;
+  margin-left: auto;
+}
+@media (max-width: 52rem) {
+  /* Narrow, the switches wrap one by one around the pages button, as
+     they did before they were kept together. */
+  .bar-tools { display: contents; }
+}
+
+/* The pages come in three menus, the way the viewer's top menus hold
+   its windows, and the two pages people come back to stand on their
+   own beside them.  The brand is the way home. */
+.sitenav { align-items: center; }
+.sitenav .home-link { display: none; }
+.navgroup { position: relative; }
+.navgroup-label { display: none; }
+.navgroup-button {
+  font: inherit;
+  color: var(--bar-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.32rem 0.6rem;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.navgroup-button::after {
+  content: "";
+  width: 0.34rem;
+  height: 0.34rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-0.1rem) rotate(45deg);
+  opacity: 0.75;
+}
+.navgroup-button:hover { color: var(--bar-ink); background: rgba(255, 255, 255, 0.06); }
+.navgroup.here > .navgroup-button { color: var(--term-accent); background: rgba(79, 209, 184, 0.1); border-color: rgba(79, 209, 184, 0.35); }
+.navgroup.open > .navgroup-button { color: var(--bar-ink); background: rgba(255, 255, 255, 0.1); }
+.navgroup.open > .navgroup-button::after { transform: translateY(0.08rem) rotate(225deg); }
+.navgroup-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 0.35rem;
+  background: var(--bar-bg);
+  border: 1px solid var(--bar-rule);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+}
+.navgroup.open > .navgroup-menu { display: grid; gap: 0.1rem; }
+.sitenav .navgroup-menu a {
+  display: grid;
+  gap: 0.12rem;
+  white-space: normal;
+  border-radius: 5px;
+  padding: 0.45rem 0.75rem 0.5rem;
+}
+.navgroup-menu a .t { color: var(--bar-ink); font-weight: 600; font-size: 0.8rem; }
+.navgroup-menu a .d { color: var(--bar-muted); font-size: 0.72rem; }
+.navgroup-menu a.here .t { color: var(--term-accent); }
+
 /* The clock the status bar shows: Second Life Time, which is the
    Pacific coast's. */
 .slt {
@@ -259,6 +331,34 @@ body {
   .sitebar.open .sitenav { display: flex; }
   .menu-button { display: inline-flex !important; }
   .slt { display: none; }
+  /* Folded behind "pages", every menu is open at once, under its name. */
+  .sitenav .home-link { display: inline-block; }
+  .navgroup { flex-basis: 100%; }
+  .navgroup-button { display: none; }
+  .navgroup-label {
+    display: block;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--bar-muted);
+    padding: 0.45rem 0.6rem 0.15rem;
+  }
+  .navgroup-menu,
+  .navgroup.open > .navgroup-menu {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+    position: static;
+    width: auto;
+    max-width: none;
+    padding: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+  }
+  .sitenav .navgroup-menu a { display: inline-block; border-radius: 999px; padding: 0.32rem 0.6rem; }
+  .navgroup-menu a .t { font-weight: 400; font-size: inherit; color: inherit; }
+  .navgroup-menu a .d { display: none; }
 }
 
 .menu-button {
@@ -324,7 +424,9 @@ body {
   align-items: end;
   grid-template-columns: minmax(0, 1fr);
 }
-.masthead > div { display: grid; gap: 1rem; }
+/* The slsh guide wraps its words in a div beside its terminal.  Only
+   that wrapper: the tag row is a div too, and stays a row. */
+.masthead > div:not(.meta-row) { display: grid; gap: 1rem; }
 @media (min-width: 60rem) {
   .masthead:has(> .term) { grid-template-columns: minmax(0, 1fr) minmax(20rem, 27rem); gap: clamp(1.5rem, 4vw, 3rem); }
 }
@@ -494,8 +596,39 @@ nav.rail::before {
 @media (min-width: 62rem) {
   nav.rail { position: sticky; top: 4.2rem; max-height: calc(100vh - 5.5rem); overflow-y: auto; }
 }
+/* The script adds a button that folds the contents away; it is only
+   seen on a narrow screen, where the contents sit above the page. */
+.rail-toggle { display: none; }
 @media (max-width: 61.99rem) {
-  nav.rail { display: none; }
+  nav.rail::before { display: none; }
+  .rail-toggle {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    font: inherit;
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--bar-ink);
+    background: linear-gradient(var(--bar-bg-2), var(--bar-bg));
+    border: 0;
+    padding: 0.7rem 0.9rem;
+    cursor: pointer;
+  }
+  .rail-toggle::after {
+    content: "";
+    width: 0.4rem;
+    height: 0.4rem;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-0.12rem) rotate(45deg);
+  }
+  nav.rail.open .rail-toggle { border-bottom: 1px solid var(--bar-rule); }
+  nav.rail.open .rail-toggle::after { transform: translateY(0.1rem) rotate(225deg); }
+  nav.rail:not(.open) ol { display: none; }
+  /* Without the script there is no button to open it with. */
+  nav.rail:not(:has(.rail-toggle)) { display: none; }
 }
 nav.rail ol {
   list-style: none;
