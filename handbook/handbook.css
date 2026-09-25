@@ -17,20 +17,29 @@
   --sky-bottom: #d3e2ec;
   --ground: #dde9f1;              /* what page-local styles paint on */
   --grid-line: rgba(28, 88, 128, 0.085);
-  --sea: #2f7fb5;                 /* the world map's water */
+  --sea: #2c78ab;                 /* the world map's water */
 
   --surface: #ffffff;             /* a notecard */
   --surface-2: #edf3f7;
   --ink: #1b262d;
   --ink-soft: #45545d;
-  --muted: #6d7d87;
+  --muted: #55626a;
   --rule: #cfdce5;
   --rule-soft: #e1eaf0;
+  /* The edge of a text field, which has to stand out from what is round
+     it (3:1) where a rule between two things need not. */
+  --field-edge: #78828a;
 
   /* The teal-green of the mark. */
   --accent: #12a08c;
   --accent-ink: #0a6e61;
   --accent-soft: #d9f2ec;
+  /* A button, a pressed chip, a step's number: a fill and the text on
+     it.  Light text on a darker teal here, dark text on a lighter one in
+     the dark theme; either way 4.5:1 or more. */
+  --accent-fill: #0d7c6d;
+  --ok-fill: #3b7a14;
+  --on-fill: #ffffff;
 
   /* Ban lines: security and failure notes. */
   --warn: #cf3a2e;
@@ -45,7 +54,7 @@
   /* Your own land, and the green dot an avatar makes on the minimap:
      success, for ticked steps. */
   --ok: #58a827;
-  --ok-ink: #3b7a14;
+  --ok-ink: #37720f;
   --ok-soft: #e3f2d6;
 
   /* The viewer's chrome: the status bar and every floater stay dark in
@@ -55,9 +64,10 @@
   --bar-ink: #e6e9eb;
   --bar-muted: #9aa4ab;
   --bar-rule: #3b434a;
+  --bar-field-edge: #7a8086;
   --term-bg: #1c2125;
   --term-ink: #e9ecee;
-  --term-muted: #8f9aa2;
+  --term-muted: #96a1a8;
   --term-out: #b9c2c9;
   --term-accent: #4fd1b8;
   --term-rule: #323a41;
@@ -68,6 +78,7 @@
   --m-laptop: #2e7fb5;
   --m-server: #b0722a;
   --m-bot: #7a5cc7;
+  --m-laptop-ink: #2970a0;        /* the laptop's colour, as text */
 
   --sans: "DejaVu Sans", "Bitstream Vera Sans", Verdana, "Segoe UI", sans-serif;
   --mono: "DejaVu Sans Mono", "Bitstream Vera Sans Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -96,6 +107,11 @@
     --accent: #3fcbb2;
     --accent-ink: #74dcc9;
     --accent-soft: #10352f;
+  --accent-fill: #3fcbb2;
+  --ok-fill: #8fd65e;
+  --on-fill: #0f1d18;
+  --field-edge: #737b83;
+  --m-laptop-ink: #7fb9e8;
     --warn: #f07d73;
     --warn-ink: #f59d95;
     --warn-soft: #3b1815;
@@ -131,6 +147,11 @@
   --accent: #3fcbb2;
   --accent-ink: #74dcc9;
   --accent-soft: #10352f;
+  --accent-fill: #3fcbb2;
+  --ok-fill: #8fd65e;
+  --on-fill: #0f1d18;
+  --field-edge: #737b83;
+  --m-laptop-ink: #7fb9e8;
   --warn: #f07d73;
   --warn-ink: #f59d95;
   --warn-soft: #3b1815;
@@ -346,7 +367,7 @@ body {
   padding: 0.55rem 0.75rem;
   color: var(--bar-ink);
   background: rgba(0, 0, 0, 0.25);
-  border: 1px solid var(--bar-rule);
+  border: 1px solid var(--bar-field-edge);
   border-radius: 6px;
 }
 .search-panel input::placeholder { color: var(--bar-muted); }
@@ -541,7 +562,7 @@ h1 {
   text-wrap: balance;
   color: var(--ink);
 }
-h1 .caret { color: var(--accent); font-family: var(--mono); font-weight: 400; }
+h1 .caret { color: var(--accent-ink); font-family: var(--mono); font-weight: 400; }
 
 .said {
   font-family: var(--sans);
@@ -625,7 +646,7 @@ a.landmark .d { font-size: 0.8rem; color: var(--muted); }
   white-space: nowrap;
 }
 .pill.new { color: var(--ok-ink); border-color: var(--ok); background: var(--ok-soft); }
-.pill.old { color: var(--m-laptop); border-color: var(--m-laptop); background: color-mix(in srgb, var(--m-laptop) 12%, var(--surface)); }
+.pill.old { color: var(--m-laptop-ink); border-color: var(--m-laptop); background: color-mix(in srgb, var(--m-laptop) 12%, var(--surface)); }
 .pill.time { color: var(--os-ink); border-color: var(--os); background: var(--os-soft); }
 /* On the start page the two readers' tags are the two ways in. */
 a.pill { text-decoration: none; font-weight: 700; transition: transform 120ms ease, box-shadow 120ms ease; }
@@ -884,10 +905,8 @@ dd { margin: 0; color: var(--ink-soft); }
   border-radius: 3px;
   padding: 0.22rem 0.5rem;
   cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: color 120ms ease, border-color 120ms ease;
 }
-.term:hover .copy, .copy:focus-visible { opacity: 1; }
 .copy:hover { color: var(--term-accent); border-color: var(--term-accent); }
 /* A terminal with no title bar keeps the button clear of its first line. */
 .term > pre:first-child { padding-right: 4.5rem; }
@@ -1089,12 +1108,12 @@ ol.steps > li::before {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--accent-fill);
+  color: var(--on-fill);
   grid-row: 1 / span 2;
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
-ol.steps > li.done::before { content: "✓"; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+ol.steps > li.done::before { content: "✓"; background: var(--ok-fill); box-shadow: 0 0 0 3px var(--ok-soft); }
 ol.steps > li > .step-body { display: flex; flex-direction: column; gap: 0.8rem; min-width: 0; }
 ol.steps > li > .step-body > h3:first-child { margin-top: 0.3rem; }
 .tick {
@@ -1190,12 +1209,16 @@ a.card:hover { border-color: var(--accent); transform: translateY(-1px); box-sha
   gap: 0.6rem;
   align-items: center;
 }
+/* A browser's own placeholder grey is too faint to read against a
+   filled box; this one is the page's muted ink, at full strength. */
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+
 .fault-tools input[type="search"] {
   font: inherit;
   font-family: var(--mono);
   font-size: 0.84rem;
   padding: 0.55rem 0.8rem;
-  border: 1px solid var(--rule);
+  border: 1px solid var(--field-edge);
   border-radius: 5px;
   background: var(--surface-2);
   color: var(--ink);
@@ -1213,7 +1236,7 @@ a.card:hover { border-color: var(--accent); transform: translateY(-1px); box-sha
   cursor: pointer;
 }
 .chip:hover { border-color: var(--accent); }
-.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #ffffff; font-weight: 700; }
+.chip[aria-pressed="true"] { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-fill); font-weight: 700; }
 .fault-count { font-family: var(--sans); font-size: 0.72rem; color: var(--muted); }
 
 details.fault {
@@ -1311,15 +1334,17 @@ details.fault .fix h4 {
   font-family: var(--sans);
   font-size: 0.8rem;
   font-weight: 700;
-  background: var(--accent);
-  color: #ffffff;
+  background: var(--accent-fill);
+  color: var(--on-fill);
   text-decoration: none;
   padding: 0.6rem 1.05rem;
   border-radius: 5px;
   width: fit-content;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset;
 }
-.button:hover { filter: brightness(1.08); text-decoration: none; }
+/* A ring rather than a lighter fill: lightening the fill would take the
+   text under 4.5:1. */
+.button:hover { box-shadow: 0 0 0 3px var(--accent-soft); text-decoration: none; }
 
 /* ------------------------------------------------------------- diagrams
    The machines are boxes; the grid is drawn as the world map draws a
