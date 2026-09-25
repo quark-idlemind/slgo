@@ -3,7 +3,8 @@
 
     python3 handbook/bundle.py [OUT]      (default: handbook-bundle.html here)
 
-Every page is a file of its own with one <article class="page" id=NAME>.
+Every page is a file of its own with one <article class="page" id=NAME>,
+here or, for the slsh guide, in doc/.
 The bundle holds every article, the stylesheet and the script inline;
 handbook.js sees more than one article and shows one at a time.  Ids
 inside a page become NAME--id so that two pages may use the same one,
@@ -22,11 +23,25 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 PAGES = [
     "index", "quickstart-local", "quickstart-remote", "quickstart-bot",
-    "bot-llm", "how-llm", "sl-host", "setups", "platforms", "security",
-    "troubleshooting", "reference",
+    "bot-llm", "how-llm", "slsh-guide", "sl-host", "setups", "platforms",
+    "security", "troubleshooting", "reference",
 ]
 
+# Pages that live outside this directory, by the path a handbook page
+# links to them with.
+ELSEWHERE = {"slsh-guide": "../doc/slsh-guide.html"}
+
+# A relative link to a file that is not a page (the guide's link to
+# doc/guide.md) has nowhere to go in one file, so it goes to the tree.
+TREE = "https://github.com/quark-idlemind/slgo/blob/main/"
+
 ARTICLE = re.compile(r'<article class="page"[^>]*>.*?</article>', re.S)
+
+
+def source(page):
+    if page in ELSEWHERE:
+        return os.path.normpath(os.path.join(HERE, ELSEWHERE[page]))
+    return os.path.join(HERE, page + ".html")
 
 
 def rewrite(page, html):
@@ -44,10 +59,13 @@ def rewrite(page, html):
             return m.group(0)
         if target.startswith("#"):
             return '%s="#%s"' % (m.group(1), ident(target[1:]))
-        f = re.match(r"^([a-z0-9-]+)\.html(?:#(.+))?$", target)
+        f = re.match(r"^(?:\.\./[a-z]+/)?([a-z0-9-]+)\.html(?:#(.+))?$", target)
         if f and f.group(1) in PAGES:
             other = f.group(1)
             return '%s="#%s"' % (m.group(1), other + ("--" + f.group(2) if f.group(2) else ""))
+        if re.match(r"^[a-z0-9_./-]+$", target) and not target.startswith("/"):
+            where = os.path.dirname(os.path.relpath(source(page), os.path.dirname(HERE)))
+            return '%s="%s"' % (m.group(1), TREE + os.path.normpath(os.path.join(where, target)))
         sys.exit("%s.html: a link the bundle cannot follow: %s" % (page, target))
 
     return re.sub(r'\b(href)="([^"]*)"', link, html)
@@ -59,7 +77,7 @@ def main():
     js = open(os.path.join(HERE, "handbook.js")).read()
     parts = []
     for page in PAGES:
-        text = open(os.path.join(HERE, page + ".html")).read()
+        text = open(source(page)).read()
         found = ARTICLE.findall(text)
         if len(found) != 1:
             sys.exit("%s.html: want one <article class=\"page\">, found %d" % (page, len(found)))

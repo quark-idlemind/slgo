@@ -15,6 +15,7 @@
     { id: "quickstart-bot", title: "Adding slbotd" },
     { id: "bot-llm", title: "Bot + LLM" },
     { id: "how-llm", title: "slsh + LLM" },
+    { id: "slsh-guide", title: "slsh guide" },
     { id: "sl-host", title: "sl-host" },
     { id: "setups", title: "Setups" },
     { id: "platforms", title: "Linux & macOS" },
@@ -36,9 +37,32 @@
     return null;
   }
 
+  // The slsh guide lives in doc/, beside the handbook rather than in it.
+  var ELSEWHERE = { "slsh-guide": "../doc/slsh-guide.html" };
+
   function hrefFor(id) {
     if (bundled) return "#" + id;
-    return id + ".html";
+    var here = location.pathname.indexOf("/doc/") >= 0;
+    if (ELSEWHERE[id]) return here ? id + ".html" : ELSEWHERE[id];
+    return (here ? "../handbook/" : "") + id + ".html";
+  }
+
+  // The plywood cube every prim starts as: the mark in the status bar.
+  var CUBE = '<svg viewBox="0 0 20 22" aria-hidden="true">' +
+    '<path d="M10 1 L19 6 L10 11 L1 6 Z" fill="#dcb67c"/>' +
+    '<path d="M1 6 L10 11 L10 21 L1 16 Z" fill="#b98a4e"/>' +
+    '<path d="M19 6 L10 11 L10 21 L19 16 Z" fill="#8e6635"/></svg>';
+
+  // Second Life Time is the Pacific coast's, and the viewer's status bar
+  // shows it.  So does this one.
+  function sltClock(el) {
+    var fmt;
+    try {
+      fmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" });
+    } catch (e) { el.hidden = true; return; }
+    function tick() { el.innerHTML = "<b>" + esc(fmt.format(new Date())) + "</b> SLT"; }
+    tick();
+    setInterval(tick, 15000);
   }
 
   // ------------------------------------------------------ Linux / macOS
@@ -78,7 +102,7 @@
     var brand = document.createElement("a");
     brand.className = "brand";
     brand.href = hrefFor("index");
-    brand.innerHTML = "slgo<span>/</span>handbook";
+    brand.innerHTML = CUBE + "slgo <span>handbook</span>";
     inner.appendChild(brand);
 
     var menu = document.createElement("button");
@@ -128,6 +152,12 @@
       b.addEventListener("click", function () { setShell(b.dataset.shell); });
     });
     inner.appendChild(sh);
+
+    var clock = document.createElement("span");
+    clock.className = "slt";
+    clock.title = "Second Life Time: the clock on the Pacific coast, which the grid keeps";
+    sltClock(clock);
+    inner.appendChild(clock);
     inner.appendChild(menu);
 
     bar.appendChild(inner);
@@ -148,23 +178,31 @@
     var rail = article.querySelector("nav.rail");
     if (!rail || rail.dataset.built) return;
     rail.dataset.built = "1";
-    var ol = document.createElement("ol");
     var links = {};
-    article.querySelectorAll("main > section[id]").forEach(function (s) {
-      var h = s.querySelector("h2");
-      if (!h) return;
-      var li = document.createElement("li");
-      var a = document.createElement("a");
-      a.href = "#" + s.id;
-      var clone = h.cloneNode(true);
-      var num = clone.querySelector(".num");
-      if (num) num.remove();
-      a.textContent = clone.textContent.trim();
-      li.appendChild(a);
-      ol.appendChild(li);
-      links[s.id] = a;
-    });
-    rail.appendChild(ol);
+    if (rail.querySelector("ol")) {
+      // The page wrote its own contents, with titles shorter than the
+      // headings.  Keep them; only mark the one being read.
+      rail.querySelectorAll("a[href^='#']").forEach(function (a) {
+        links[a.getAttribute("href").slice(1)] = a;
+      });
+    } else {
+      var ol = document.createElement("ol");
+      article.querySelectorAll("main > section[id]").forEach(function (s) {
+        var h = s.querySelector("h2");
+        if (!h) return;
+        var li = document.createElement("li");
+        var a = document.createElement("a");
+        a.href = "#" + s.id;
+        var clone = h.cloneNode(true);
+        var num = clone.querySelector(".num");
+        if (num) num.remove();
+        a.textContent = clone.textContent.trim();
+        li.appendChild(a);
+        ol.appendChild(li);
+        links[s.id] = a;
+      });
+      rail.appendChild(ol);
+    }
     if (!("IntersectionObserver" in window)) return;
     var watcher = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
@@ -344,11 +382,11 @@
       });
       x += boxW + gap;
     });
-    // The grid, always on the right.
+    // The grid, always on the right: a region tile, as the map draws one.
     var gx = W - 118;
-    parts.push('<rect class="box grid" x="' + gx + '" y="60" width="106" height="90" rx="45"/>');
-    parts.push('<text class="t-proc" x="' + (gx + 53) + '" y="102" text-anchor="middle">Second</text>');
-    parts.push('<text class="t-proc" x="' + (gx + 53) + '" y="119" text-anchor="middle">Life</text>');
+    parts.push('<rect class="box grid" x="' + gx + '" y="60" width="106" height="90" rx="8"/>');
+    parts.push('<text class="t-grid" x="' + (gx + 53) + '" y="102" text-anchor="middle">Second</text>');
+    parts.push('<text class="t-grid" x="' + (gx + 53) + '" y="119" text-anchor="middle">Life</text>');
 
     (plan.links || []).forEach(function (l) {
       var a = centers[l.from];

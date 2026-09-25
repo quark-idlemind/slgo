@@ -2,368 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>slsh — a user's guide</title>
+<link rel="stylesheet" href="../handbook/handbook.css">
 </head>
 <body>
-<style>
-  :root {
-    --ground: #f1f2f5;
-    --surface: #ffffff;
-    --surface-2: #e7eaf0;
-    --ink: #131a26;
-    --ink-soft: #3f4a5d;
-    --muted: #6b7688;
-    --rule: #d6dbe3;
-    --rule-soft: #e4e8ee;
-    --accent: #a85f09;
-    --accent-ink: #7d4606;
-    --accent-soft: #f5e7d2;
-
-    /* The terminal is a terminal in either theme. */
-    --term-bg: #161d29;
-    --term-ink: #dfe4ec;
-    --term-muted: #8d99ad;
-    --term-accent: #e9a64a;
-    --term-rule: #2a3446;
-
-    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-    --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-
-    --measure: 66ch;
-    --gap: clamp(1.1rem, 2.4vw, 1.6rem);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground: #0e131c;
-      --surface: #141b26;
-      --surface-2: #1a2230;
-      --ink: #e4e8ef;
-      --ink-soft: #c2cad7;
-      --muted: #8b95a7;
-      --rule: #26303f;
-      --rule-soft: #1e2734;
-      --accent: #e9a64a;
-      --accent-ink: #f2bc6b;
-      --accent-soft: #33270f;
-    }
-  }
-
-  :root[data-theme="dark"] {
-    --ground: #0e131c;
-    --surface: #141b26;
-    --surface-2: #1a2230;
-    --ink: #e4e8ef;
-    --ink-soft: #c2cad7;
-    --muted: #8b95a7;
-    --rule: #26303f;
-    --rule-soft: #1e2734;
-    --accent: #e9a64a;
-    --accent-ink: #f2bc6b;
-    --accent-soft: #33270f;
-  }
-
-  * { box-sizing: border-box; }
-
-  body {
-    margin: 0;
-    background: var(--ground);
-    color: var(--ink);
-    font-family: var(--serif);
-    font-size: 1.0625rem;
-    line-height: 1.62;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  .wrap {
-    max-width: 78rem;
-    margin: 0 auto;
-    padding: 0 clamp(1rem, 4vw, 3rem) 6rem;
-  }
-
-  /* ---------------------------------------------------------- masthead */
-
-  .masthead {
-    padding: clamp(3rem, 8vw, 5.5rem) 0 clamp(2rem, 5vw, 3rem);
-    border-bottom: 1px solid var(--rule);
-    display: grid;
-    gap: clamp(1.5rem, 4vw, 3rem);
-    grid-template-columns: minmax(0, 1fr);
-    align-items: end;
-  }
-
-  @media (min-width: 60rem) {
-    .masthead { grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem); }
-  }
-
-  .eyebrow {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0 0 1.1rem;
-  }
-
-  h1 {
-    font-family: var(--mono);
-    font-size: clamp(2.6rem, 8vw, 4.2rem);
-    font-weight: 500;
-    letter-spacing: -0.03em;
-    line-height: 1;
-    margin: 0;
-    text-wrap: balance;
-  }
-
-  h1 .caret {
-    color: var(--accent);
-    font-weight: 400;
-  }
-
-  .said {
-    font-family: var(--mono);
-    font-size: 0.85rem;
-    color: var(--muted);
-    margin: 0.9rem 0 0;
-  }
-
-  .standfirst {
-    max-width: 46ch;
-    margin: 1.4rem 0 0;
-    font-size: 1.17rem;
-    line-height: 1.55;
-    color: var(--ink-soft);
-    text-wrap: pretty;
-  }
-
-  /* ---------------------------------------------------------- terminal */
-
-  .term {
-    background: var(--term-bg);
-    color: var(--term-ink);
-    border-radius: 4px;
-    border: 1px solid var(--term-rule);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .term pre {
-    margin: 0;
-    padding: 1rem 1.1rem;
-    overflow-x: auto;
-    font-family: var(--mono);
-    font-size: 0.815rem;
-    line-height: 1.72;
-    tab-size: 4;
-  }
-
-  .term .p { color: var(--term-accent); }          /* the prompt */
-  .term .c { color: var(--term-ink); font-weight: 600; }  /* what you type */
-  .term .o { color: var(--term-muted); }           /* what comes back */
-  .term .n { color: var(--term-muted); font-style: italic; }
-
-  .copy {
-    position: absolute;
-    top: 0.45rem;
-    right: 0.45rem;
-    font-family: var(--mono);
-    font-size: 0.66rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--term-muted);
-    background: transparent;
-    border: 1px solid var(--term-rule);
-    border-radius: 3px;
-    padding: 0.25rem 0.5rem;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
-  }
-
-  .term:hover .copy, .copy:focus-visible { opacity: 1; }
-  .copy:hover { color: var(--term-accent); border-color: var(--term-accent); }
-
-  /* ---------------------------------------------------------- layout */
-
-  .body-grid {
-    display: grid;
-    gap: clamp(2rem, 5vw, 4rem);
-    grid-template-columns: minmax(0, 1fr);
-    padding-top: clamp(2rem, 5vw, 3.5rem);
-  }
-
-  @media (min-width: 60rem) {
-    .body-grid { grid-template-columns: 13.5rem minmax(0, 1fr); align-items: start; }
-  }
-
-  nav.rail {
-    font-family: var(--mono);
-    font-size: 0.78rem;
-    line-height: 1.5;
-  }
-
-  @media (min-width: 60rem) {
-    nav.rail { position: sticky; top: 1.5rem; max-height: calc(100vh - 3rem); overflow-y: auto; }
-  }
-
-  nav.rail ol {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-  }
-
-  nav.rail a {
-    color: var(--muted);
-    text-decoration: none;
-    display: block;
-    padding-left: 0.75rem;
-    border-left: 2px solid var(--rule);
-  }
-
-  nav.rail a:hover { color: var(--ink); }
-  nav.rail a.here { color: var(--accent-ink); border-left-color: var(--accent); }
-
-  main { min-width: 0; display: flex; flex-direction: column; gap: clamp(2.6rem, 6vw, 4rem); }
-
-  section { display: flex; flex-direction: column; gap: var(--gap); scroll-margin-top: 1.5rem; }
-
-  h2 {
-    font-family: var(--mono);
-    font-size: clamp(1.25rem, 2.6vw, 1.6rem);
-    font-weight: 600;
-    letter-spacing: -0.015em;
-    margin: 0;
-    padding-top: 1.4rem;
-    border-top: 1px solid var(--rule);
-    text-wrap: balance;
-  }
-
-  h2 .num {
-    color: var(--muted);
-    font-weight: 400;
-    font-size: 0.72em;
-    margin-right: 0.7em;
-  }
-
-  h3 {
-    font-family: var(--mono);
-    font-size: 0.96rem;
-    font-weight: 600;
-    letter-spacing: 0;
-    margin: 0.6rem 0 0;
-    color: var(--ink);
-  }
-
-  p, ul, ol.prose { margin: 0; max-width: var(--measure); }
-  p { text-wrap: pretty; }
-
-  ul { padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.45rem; }
-  li::marker { color: var(--muted); }
-
-  a { color: var(--accent-ink); text-underline-offset: 0.18em; }
-
-  code {
-    font-family: var(--mono);
-    font-size: 0.86em;
-    background: var(--surface-2);
-    border-radius: 3px;
-    padding: 0.1em 0.34em;
-  }
-
-  strong { font-weight: 600; }
-
-  .note {
-    max-width: var(--measure);
-    border-left: 2px solid var(--accent);
-    background: var(--accent-soft);
-    padding: 0.85rem 1.1rem;
-    border-radius: 0 3px 3px 0;
-    font-size: 0.97rem;
-  }
-
-  .note p { margin: 0; }
-  .note p + p { margin-top: 0.6rem; }
-
-  /* ---------------------------------------------------------- tables */
-
-  .tablewrap { overflow-x: auto; }
-
-  table {
-    border-collapse: collapse;
-    width: 100%;
-    font-size: 0.9rem;
-  }
-
-  th, td {
-    text-align: left;
-    vertical-align: baseline;
-    padding: 0.5rem 1.1rem 0.5rem 0;
-    border-bottom: 1px solid var(--rule-soft);
-  }
-
-  th {
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--muted);
-    font-weight: 500;
-    border-bottom-color: var(--rule);
-  }
-
-  td.cmd {
-    font-family: var(--mono);
-    font-size: 0.83rem;
-    white-space: nowrap;
-    color: var(--ink);
-    padding-right: 1.6rem;
-  }
-
-  td.keys {
-    font-family: var(--mono);
-    font-size: 0.83rem;
-    white-space: nowrap;
-    color: var(--accent-ink);
-    padding-right: 1.6rem;
-  }
-
-  td.what { color: var(--ink-soft); }
-
-  /* ------------------------------------------------------ reference */
-
-  .group-title {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--accent-ink);
-    padding-top: 1.4rem;
-  }
-
-  footer {
-    margin-top: clamp(3rem, 7vw, 5rem);
-    padding-top: 1.4rem;
-    border-top: 1px solid var(--rule);
-    font-family: var(--mono);
-    font-size: 0.76rem;
-    color: var(--muted);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem 1.6rem;
-  }
-
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
-
-  @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; scroll-behavior: auto !important; }
-  }
-
-  html { scroll-behavior: smooth; }
-</style>
+<article class="page" id="slsh-guide" data-title="slsh — a user's guide">
 
 <div class="wrap">
 
@@ -380,13 +24,12 @@
       </p>
     </div>
     <div class="term">
-      <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">cd Objects</span>
-<span class="p">/Objects$</span> <span class="c">ls -l lantern</span>
+      <pre><span class="p">/$</span> <span class="k">cd Objects</span>
+<span class="p">/Objects$</span> <span class="k">ls -l lantern</span>
 <span class="o">object     2026-08-02T15:09:30 40f17e57-… /Objects/lantern</span>
-<span class="p">/Objects$</span> <span class="c">place lantern</span>
+<span class="p">/Objects$</span> <span class="k">place lantern</span>
 <span class="o">"lantern" a8de7e57-… (local 83565482) is at 129, 128, 25</span>
-<span class="p">/Objects$</span> <span class="c">start lantern</span>
+<span class="p">/Objects$</span> <span class="k">start lantern</span>
 <span class="o">started    flicker</span></pre>
     </div>
   </header>
@@ -428,15 +71,14 @@
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">$</span> <span class="c">slsh</span>
-<span class="p">/$</span> <span class="c">where</span>
+          <pre><span class="p">$</span> <span class="k">slsh</span>
+<span class="p">/$</span> <span class="k">where</span>
 <span class="o">Testville at 128, 128, 25
 acting as group Example Builders (87f07e57-…)</span>
-<span class="p">/$</span> <span class="c">who</span>
+<span class="p">/$</span> <span class="k">who</span>
 <span class="o"> 1  Example Resident                    3.1m  d8467e57-…
  2  Another Resident                   12.4m  7ed37e57-…</span>
-<span class="p">/$</span> <span class="c">quit</span></pre>
+<span class="p">/$</span> <span class="k">quit</span></pre>
         </div>
 
         <p>
@@ -472,10 +114,9 @@ acting as group Example Builders (87f07e57-…)</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">$</span> <span class="c">slsh -c "ls -l Objects"</span>
-<span class="p">$</span> <span class="c">slsh -f tidy-up.slsh</span>
-<span class="p">$</span> <span class="c">slsh --direct -c where</span>            <span class="n">log in, ask, log out</span></pre>
+          <pre><span class="p">$</span> <span class="k">slsh -c "ls -l Objects"</span>
+<span class="p">$</span> <span class="k">slsh -f tidy-up.slsh</span>
+<span class="p">$</span> <span class="k">slsh --direct -c where</span>            <span class="c">log in, ask, log out</span></pre>
         </div>
 
         <h3>Which daemon, and which avatar</h3>
@@ -551,8 +192,7 @@ acting as group Example Builders (87f07e57-…)</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">help</span>
+          <pre><span class="p">/$</span> <span class="k">help</span>
 <span class="o">Commands are grouped.  For a group:  help GROUP
 For everything:        help all
 For one command:       COMMAND --help, or man COMMAND
@@ -590,10 +230,9 @@ For one command:       COMMAND --help, or man COMMAND
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">how do I make where I am standing my home</span>
-<span class="p">/$</span> <span class="c">how can I see which avatars are near me</span>
-<span class="p">/$</span> <span class="c">how -i do I take off an attachment</span></pre>
+          <pre><span class="p">/$</span> <span class="k">how do I make where I am standing my home</span>
+<span class="p">/$</span> <span class="k">how can I see which avatars are near me</span>
+<span class="p">/$</span> <span class="k">how -i do I take off an attachment</span></pre>
         </div>
 
         <p>
@@ -655,10 +294,9 @@ For one command:       COMMAND --help, or man COMMAND
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">set how_url http://127.0.0.1:11434</span>
-<span class="p">/$</span> <span class="c">set how_model qwen3.5:4b</span>
-<span class="p">/$</span> <span class="c">set how_extra '{"reasoning_effort": "none"}'</span></pre>
+          <pre><span class="p">/$</span> <span class="k">set how_url http://127.0.0.1:11434</span>
+<span class="p">/$</span> <span class="k">set how_model qwen3.5:4b</span>
+<span class="p">/$</span> <span class="k">set how_extra '{"reasoning_effort": "none"}'</span></pre>
         </div>
 
         <p>
@@ -797,11 +435,10 @@ For one command:       COMMAND --help, or man COMMAND
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/Objects$</span> <span class="c">chat</span>
-<span class="p">Local&gt;</span> <span class="c">hello everyone</span>
+          <pre><span class="p">/Objects$</span> <span class="k">chat</span>
+<span class="p">Local&gt;</span> <span class="k">hello everyone</span>
 <span class="o">14:22:07 &gt; [Local] hello everyone</span>
-<span class="n">&lt;ESC&gt;</span>
+<span class="c">&lt;ESC&gt;</span>
 <span class="p">/Objects$</span></pre>
         </div>
 
@@ -842,20 +479,19 @@ For one command:       COMMAND --help, or man COMMAND
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">cd Objects</span>
-<span class="p">/Objects$</span> <span class="c">ls</span>
+          <pre><span class="p">/$</span> <span class="k">cd Objects</span>
+<span class="p">/Objects$</span> <span class="k">ls</span>
 <span class="o">/Objects/lantern
 /Objects/sign
 /Objects/spares</span>
-<span class="p">/Objects$</span> <span class="c">ls -l</span>                    <span class="n">kind, when, id, path</span>
+<span class="p">/Objects$</span> <span class="k">ls -l</span>                    <span class="c">kind, when, id, path</span>
 <span class="o">object     2026-08-02T15:09:30 40f17e57-… /Objects/lantern
 object     2026-07-29T09:41:12 91357e57-… /Objects/sign
 folder     -                   1ae57e57-… /Objects/spares</span>
-<span class="p">/Objects$</span> <span class="c">ls -lt</span>                   <span class="n">newest first</span>
-<span class="p">/Objects$</span> <span class="c">ls -r spares</span>             <span class="n">and four levels below it</span>
-<span class="p">/Objects$</span> <span class="c">ls -l lantern</span>            <span class="n">not a folder: lists what it names</span>
-<span class="p">/Objects$</span> <span class="c">find lantern</span>             <span class="n">names containing it, from here down</span></pre>
+<span class="p">/Objects$</span> <span class="k">ls -lt</span>                   <span class="c">newest first</span>
+<span class="p">/Objects$</span> <span class="k">ls -r spares</span>             <span class="c">and four levels below it</span>
+<span class="p">/Objects$</span> <span class="k">ls -l lantern</span>            <span class="c">not a folder: lists what it names</span>
+<span class="p">/Objects$</span> <span class="k">find lantern</span>             <span class="c">names containing it, from here down</span></pre>
         </div>
 
         <h3>Names are not unique, so ids are accepted everywhere</h3>
@@ -882,12 +518,11 @@ folder     -                   1ae57e57-… /Objects/spares</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">ls -l /Scripts/greeter</span>
+          <pre><span class="p">/$</span> <span class="k">ls -l /Scripts/greeter</span>
 <span class="o">script     2026-08-07T12:06:57 cb567e57-… /Scripts/greeter
 script     2026-08-07T11:26:01 e9d97e57-… /Scripts/greeter
 script     2026-08-07T11:25:53 7e277e57-… /Scripts/greeter</span>
-<span class="p">/$</span> <span class="c">ls /Scripts/greeter</span>          <span class="n">without -l, three identical lines</span>
+<span class="p">/$</span> <span class="k">ls /Scripts/greeter</span>          <span class="c">without -l, three identical lines</span>
 <span class="o">/Scripts/greeter
 /Scripts/greeter
 /Scripts/greeter</span></pre>
@@ -910,14 +545,13 @@ script     2026-08-07T11:25:53 7e277e57-… /Scripts/greeter</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/Scripts$</span> <span class="c">rm greeter</span>
+          <pre><span class="p">/Scripts$</span> <span class="k">rm greeter</span>
 <span class="o">slsh: rm: "greeter" is 3 things here: say --newest or --oldest to delete one of
 them, --remove-all-copies for all 3, or name one by its id, which ls -l prints
 beside the date</span>
-<span class="p">/Scripts$</span> <span class="c">rm --oldest greeter</span>
+<span class="p">/Scripts$</span> <span class="k">rm --oldest greeter</span>
 <span class="o">greeter: removed the oldest of 3, acquired 2026-08-07T11:25:53 (7e277e57-…)</span>
-<span class="p">/Scripts$</span> <span class="c">rm --remove-all-copies greeter</span>
+<span class="p">/Scripts$</span> <span class="k">rm --remove-all-copies greeter</span>
 <span class="o">greeter: removed 2 copies</span></pre>
         </div>
 
@@ -939,11 +573,10 @@ beside the date</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/Scripts$</span> <span class="c">rm *</span>
+          <pre><span class="p">/Scripts$</span> <span class="k">rm *</span>
 <span class="o">slsh: rm: * means every item in this folder: say rm --remove-all-copies * if that
 is what you want</span>
-<span class="p">/Scripts$</span> <span class="c">rm --remove-all-copies *</span>
+<span class="p">/Scripts$</span> <span class="k">rm --remove-all-copies *</span>
 <span class="o">*: removed 645 items</span></pre>
         </div>
 
@@ -1013,11 +646,10 @@ is what you want</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">where</span>
+          <pre><span class="p">/$</span> <span class="k">where</span>
 <span class="o">Pelmar Reach at 28, 72, 2001
 acting as group Lorn Family (488f7e57-…)</span>
-<span class="p">/$</span> <span class="c">parcel</span>
+<span class="p">/$</span> <span class="k">parcel</span>
 <span class="o">Thrushmoor
   local    5
   owner    f5d57e57-…  KerraYule Resident
@@ -1061,8 +693,7 @@ acting as group Lorn Family (488f7e57-…)</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">parcel --map</span>
+          <pre><span class="p">/$</span> <span class="k">parcel --map</span>
 <span class="o">                        llllllllll
                         llllllllll
            kkkkkkkkkk
@@ -1144,13 +775,12 @@ acting as group Lorn Family (488f7e57-…)</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">group</span>
+          <pre><span class="p">/$</span> <span class="k">group</span>
 <span class="o">active  87f07e57-… Example Builders
         29af7e57-… Testville Gardeners</span>
-<span class="p">/$</span> <span class="c">group testville gardeners</span>     <span class="n">case does not matter</span>
+<span class="p">/$</span> <span class="k">group testville gardeners</span>     <span class="c">case does not matter</span>
 <span class="o">acting as Testville Gardeners (29af7e57-…)</span>
-<span class="p">/$</span> <span class="c">group none</span>
+<span class="p">/$</span> <span class="k">group none</span>
 <span class="o">acting as no group, which is what land that grants building to a group refuses</span></pre>
         </div>
 
@@ -1170,11 +800,10 @@ acting as group Lorn Family (488f7e57-…)</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">invite Example Resident Example Builders</span>
+          <pre><span class="p">/$</span> <span class="k">invite Example Resident Example Builders</span>
 <span class="o">asked Example Resident into Example Builders (87f07e57-…), in its everyone role
 nothing answers an invitation, so this says what was sent and not what became of it; they see it as an instant message and it waits for them</span>
-<span class="p">/$</span> <span class="c">invite Example Resident Testville Gardeners</span>   <span class="n">a member, but not one who may invite</span>
+<span class="p">/$</span> <span class="k">invite Example Resident Testville Gardeners</span>   <span class="c">a member, but not one who may invite</span>
 <span class="o">slsh: invite: sl: this avatar cannot invite into that group: this avatar is in "Testville Gardeners" (29af7e57-…) and its role there does not carry the power to invite</span></pre>
         </div>
 
@@ -1200,13 +829,12 @@ nothing answers an invitation, so this says what was sent and not what became of
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">tp Nightmire Sea 128 128 25</span>
+          <pre><span class="p">/$</span> <span class="k">tp Nightmire Sea 128 128 25</span>
 <span class="o">teleporting to Nightmire Sea at 128, 128, 25
 slsh: tp: sl: the grid refused the teleport: … RegionTPAccessBlocked: "You aren't allowed in that Region due to your maturity Rating. …"</span>
-<span class="p">/$</span> <span class="c">maturity adult</span>
+<span class="p">/$</span> <span class="k">maturity adult</span>
 <span class="o">this avatar is shown land rated adult and below</span>
-<span class="p">/$</span> <span class="c">tp Nightmire Sea 128 128 25</span>
+<span class="p">/$</span> <span class="k">tp Nightmire Sea 128 128 25</span>
 <span class="o">teleporting to Nightmire Sea at 128, 128, 25
 Nightmire Sea at 128, 128, 26</span></pre>
         </div>
@@ -1242,8 +870,7 @@ Nightmire Sea at 128, 128, 26</span></pre>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">map</span>
+          <pre><span class="p">/$</span> <span class="k">map</span>
 <span class="o">around you in Pelmar Reach at 28, 72, 2001
 +-------------------------------------+
 |                                     |
@@ -1373,13 +1000,12 @@ a digit is that many in one cell, and + is more than nine
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">tp 128 128 25</span>              <span class="n">a position in this region</span>
-<span class="p">/$</span> <span class="c">tp ~10 ~ ~</span>                 <span class="n">ten metres east, same y, same height</span>
-<span class="p">/$</span> <span class="c">tp ~ ~ ~50</span>                 <span class="n">fifty metres up, without moving</span>
-<span class="p">/$</span> <span class="c">tp 300 128 25</span>              <span class="n">44 metres into the region east of here</span>
-<span class="p">/$</span> <span class="c">tp -10 128 25</span>              <span class="n">246 metres into the one to the west</span>
-<span class="p">/$</span> <span class="c">tp 128 -1 25</span>               <span class="n">255 metres into the region to the south</span></pre>
+          <pre><span class="p">/$</span> <span class="k">tp 128 128 25</span>              <span class="c">a position in this region</span>
+<span class="p">/$</span> <span class="k">tp ~10 ~ ~</span>                 <span class="c">ten metres east, same y, same height</span>
+<span class="p">/$</span> <span class="k">tp ~ ~ ~50</span>                 <span class="c">fifty metres up, without moving</span>
+<span class="p">/$</span> <span class="k">tp 300 128 25</span>              <span class="c">44 metres into the region east of here</span>
+<span class="p">/$</span> <span class="k">tp -10 128 25</span>              <span class="c">246 metres into the one to the west</span>
+<span class="p">/$</span> <span class="k">tp 128 -1 25</span>               <span class="c">255 metres into the region to the south</span></pre>
         </div>
 
         <p>
@@ -1403,10 +1029,9 @@ a digit is that many in one cell, and + is more than nine
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">tp Example Landing</span>
-<span class="p">/$</span> <span class="c">tp Example Landing 33 73 1000.5</span>
-<span class="p">/$</span> <span class="c">tp --wait 60 Example Shallows</span></pre>
+          <pre><span class="p">/$</span> <span class="k">tp Example Landing</span>
+<span class="p">/$</span> <span class="k">tp Example Landing 33 73 1000.5</span>
+<span class="p">/$</span> <span class="k">tp --wait 60 Example Shallows</span></pre>
         </div>
 
         <p>
@@ -1426,8 +1051,7 @@ a digit is that many in one cell, and + is more than nine
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">regions Pelmar</span>
+          <pre><span class="p">/$</span> <span class="k">regions Pelmar</span>
 <span class="o">Pelmar Reach                      43648, 43648   moderate  47991483540340736
 Pelmara                           43712, 43584  general   48061852284502016
 Pelmar Bay                        43584, 43584   moderate  47921114796146688</span></pre>
@@ -1535,8 +1159,7 @@ Pelmar Bay                        43584, 43584   moderate  47921114796146688</sp
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">landmark</span>
+          <pre><span class="p">/$</span> <span class="k">landmark</span>
 <span class="o">8 landmarks
   /Favorites/Workspace
   /Ravensdon/Ravensdon Boutique Shop
@@ -1546,7 +1169,7 @@ Pelmar Bay                        43584, 43584   moderate  47921114796146688</sp
   /Landmarks/stage 3 thrushmoor             656a7e57-…
   /Landmarks/stage 3 daskwell hub
   /Landmarks/Workspace</span>
-<span class="p">/$</span> <span class="c">landmark stage 3 daskwell hub</span>
+<span class="p">/$</span> <span class="k">landmark stage 3 daskwell hub</span>
 <span class="o">stage 3 daskwell hub
   in       /Landmarks
   region   8cf47e57-…
@@ -1569,11 +1192,10 @@ Pelmar Bay                        43584, 43584   moderate  47921114796146688</sp
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">landmark --make Pelmar Reach Workshop</span>   <span class="n">of where the avatar stands</span>
-<span class="p">/$</span> <span class="c">landmark --go Thrushmoor</span>
-<span class="p">/$</span> <span class="c">landmark --home</span>
-<span class="p">/$</span> <span class="c">tp home</span>                          <span class="n">the same trip, said shorter</span></pre>
+          <pre><span class="p">/$</span> <span class="k">landmark --make Pelmar Reach Workshop</span>   <span class="c">of where the avatar stands</span>
+<span class="p">/$</span> <span class="k">landmark --go Thrushmoor</span>
+<span class="p">/$</span> <span class="k">landmark --home</span>
+<span class="p">/$</span> <span class="k">tp home</span>                          <span class="c">the same trip, said shorter</span></pre>
         </div>
 
         <h3>Home, and setting it</h3>
@@ -1596,11 +1218,10 @@ Pelmar Bay                        43584, 43584   moderate  47921114796146688</sp
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">landmark --set-home</span>
+          <pre><span class="p">/$</span> <span class="k">landmark --set-home</span>
 <span class="o">setting home to Pelmar Reach at 26, 66, 24
 Home position set.</span>
-<span class="p">/$</span> <span class="c">landmark --set-home</span>       <span class="n">a region away, on land this account does not control</span>
+<span class="p">/$</span> <span class="k">landmark --set-home</span>       <span class="c">a region away, on land this account does not control</span>
 <span class="o">setting home to Corvane at 44, 66, 24
 slsh: landmark: sl: the grid would not set home here: You can only set your &#39;Home Location&#39; on your land or at a mainland Infohub.</span></pre>
         </div>
@@ -1646,11 +1267,10 @@ slsh: landmark: sl: the grid would not set home here: You can only set your &#39
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">landmark --go Ravensdon Boutique Shop</span>
+          <pre><span class="p">/$</span> <span class="k">landmark --go Ravensdon Boutique Shop</span>
 <span class="o">going to Ravensdon Boutique Shop
 Dell of Ashes at 113, 109, 1011</span>
-<span class="p">/$</span> <span class="c">where</span>                        <span class="n">one second later</span>
+<span class="p">/$</span> <span class="k">where</span>                        <span class="c">one second later</span>
 <span class="o">Pelmar Reach at 26, 66, 24</span></pre>
         </div>
 
@@ -1714,12 +1334,11 @@ Dell of Ashes at 113, 109, 1011</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">neighbours</span>
+          <pre><span class="p">/$</span> <span class="k">neighbours</span>
 <span class="o">neighbours are off; this avatar cannot walk over a border</span>
-<span class="p">/$</span> <span class="c">neighbours on</span>
+<span class="p">/$</span> <span class="k">neighbours on</span>
 <span class="o">neighbours are on; no circuit is open yet, and the first offer can take a minute to come round</span>
-<span class="p">/$</span> <span class="c">neighbours</span>                   <span class="n">a few seconds later</span>
+<span class="p">/$</span> <span class="k">neighbours</span>                   <span class="c">a few seconds later</span>
 <span class="o">neighbours are on, 3 circuits held
 Kelva Sands                       43647, 43647   203.0.113.9:13021     44 heard
 Pelmar Mill                       43647, 43648   203.0.113.17:13010    41 heard
@@ -1835,11 +1454,10 @@ Orrick Gate                       43648, 43647   203.0.113.28:12035    100 heard
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">sit</span>
+          <pre><span class="p">/$</span> <span class="k">sit</span>
 <span class="o">sat on the ground
 Pelmar Reach at 28, 72, 2001</span>
-<span class="p">/$</span> <span class="c">stand</span>
+<span class="p">/$</span> <span class="k">stand</span>
 <span class="o">stood up
 Pelmar Reach at 28, 72, 2001</span></pre>
         </div>
@@ -1901,13 +1519,12 @@ Pelmar Reach at 28, 72, 2001</span></pre>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">wear Objects/badge</span>
+          <pre><span class="p">/$</span> <span class="k">wear Objects/badge</span>
 <span class="o">badge is worn on HUD top right</span>
-<span class="p">/$</span> <span class="c">worn</span>
+<span class="p">/$</span> <span class="k">worn</span>
 <span class="o">left hand          lantern
 HUD top right      badge</span>
-<span class="p">/$</span> <span class="c">detach badge</span>
+<span class="p">/$</span> <span class="k">detach badge</span>
 <span class="o">badge is no longer worn on HUD top right</span></pre>
         </div>
 
@@ -1940,14 +1557,13 @@ HUD top right      badge</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">place Objects/lantern</span>
+          <pre><span class="p">/$</span> <span class="k">place Objects/lantern</span>
 <span class="o">"lantern" a8de7e57-… (local 83565482) is at 129, 128, 25</span>
-<span class="p">/$</span> <span class="c">move lantern 128 130 25</span>
+<span class="p">/$</span> <span class="k">move lantern 128 130 25</span>
 <span class="o">lantern is at 128.0, 130.0, 25.0</span>
-<span class="p">/$</span> <span class="c">touch lantern</span>
+<span class="p">/$</span> <span class="k">touch lantern</span>
 <span class="o">touched lantern, face 0</span>
-<span class="p">/$</span> <span class="c">take lantern</span>
+<span class="p">/$</span> <span class="k">take lantern</span>
 <span class="o">"lantern" a8de7e57-… (local 83565482) is in inventory as lantern</span></pre>
         </div>
 
@@ -1967,10 +1583,9 @@ HUD top right      badge</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">link chair seat "left leg" "right leg"</span>
+          <pre><span class="p">/$</span> <span class="k">link chair seat "left leg" "right leg"</span>
 <span class="o">"chair" 5ef67e57-… (local 83565614) is one object of 4 prims</span>
-<span class="p">/$</span> <span class="c">unlink chair</span>
+<span class="p">/$</span> <span class="k">unlink chair</span>
 <span class="o">"chair" 5ef67e57-… (local 83565614) came apart into 4 objects:
   5ef67e57-…                           chair
   76167e57-…                           Object
@@ -1998,11 +1613,10 @@ prints too</span></pre>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">perms --next cmt --everyone none lantern</span>
+          <pre><span class="p">/$</span> <span class="k">perms --next cmt --everyone none lantern</span>
 <span class="o">everyone may now nothing
 the next owner may now copy, modify, transfer</span>
-<span class="p">/$</span> <span class="c">texture -f 2 --id d8467e57-… lantern</span>
+<span class="p">/$</span> <span class="k">texture -f 2 --id d8467e57-… lantern</span>
 <span class="o">lantern: face 2</span></pre>
         </div>
       </section>
@@ -2023,12 +1637,11 @@ the next owner may now copy, modify, transfer</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">new --kind script --from flicker.lsl flicker</span>
+          <pre><span class="p">/$</span> <span class="k">new --kind script --from flicker.lsl flicker</span>
 <span class="o">flicker 73427e57-…</span>
-<span class="p">/$</span> <span class="c">save flicker.lsl flicker</span>
+<span class="p">/$</span> <span class="k">save flicker.lsl flicker</span>
 <span class="o">flicker: 81 bytes written, and it compiled</span>
-<span class="p">/$</span> <span class="c">cat flicker</span>
+<span class="p">/$</span> <span class="k">cat flicker</span>
 <span class="o">default
 {
     state_entry()
@@ -2053,14 +1666,13 @@ the next owner may now copy, modify, transfer</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">ls --in lantern</span>
+          <pre><span class="p">/$</span> <span class="k">ls --in lantern</span>
 <span class="o">lsltext    flicker</span>
-<span class="p">/$</span> <span class="c">new --in lantern --from flicker.lsl flicker</span>
+<span class="p">/$</span> <span class="k">new --in lantern --from flicker.lsl flicker</span>
 <span class="o">flicker is in lantern and running</span>
-<span class="p">/$</span> <span class="c">stop lantern</span>
+<span class="p">/$</span> <span class="k">stop lantern</span>
 <span class="o">stopped    flicker</span>
-<span class="p">/$</span> <span class="c">start lantern flicker</span>
+<span class="p">/$</span> <span class="k">start lantern flicker</span>
 <span class="o">started    flicker</span></pre>
         </div>
 
@@ -2087,13 +1699,12 @@ the next owner may now copy, modify, transfer</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">say the lantern is lit</span>
+          <pre><span class="p">/$</span> <span class="k">say the lantern is lit</span>
 <span class="o">14:22:07 &gt; [Local] the lantern is lit</span>
-<span class="p">/$</span> <span class="c">chat</span>
-<span class="p">Local&gt;</span> <span class="c">and the door is open</span>
+<span class="p">/$</span> <span class="k">chat</span>
+<span class="p">Local&gt;</span> <span class="k">and the door is open</span>
 <span class="o">14:22:19 &gt; [Local] and the door is open</span>
-<span class="n">&lt;ESC&gt;</span></pre>
+<span class="c">&lt;ESC&gt;</span></pre>
         </div>
 
         <h3>Instant messages</h3>
@@ -2105,16 +1716,15 @@ the next owner may now copy, modify, transfer</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">im Example Resident are you about?</span>
+          <pre><span class="p">/$</span> <span class="k">im Example Resident are you about?</span>
 <span class="o">* new conversation with Example Resident
 14:23:04 &gt; [IM Example Resident] are you about?</span>
-<span class="p">/$</span> <span class="c">im Example Resident</span>              <span class="n">no text: go and talk</span>
-<span class="p">Example Resident&gt;</span> <span class="c">I am here</span>
-<span class="n">&lt;TAB&gt;</span>                              <span class="n">next conversation</span>
+<span class="p">/$</span> <span class="k">im Example Resident</span>              <span class="c">no text: go and talk</span>
+<span class="p">Example Resident&gt;</span> <span class="k">I am here</span>
+<span class="c">&lt;TAB&gt;</span>                              <span class="c">next conversation</span>
 <span class="p">Local&gt;</span>
-<span class="n">&lt;ESC&gt;</span>
-<span class="p">/$</span> <span class="c">talk</span>
+<span class="c">&lt;ESC&gt;</span>
+<span class="p">/$</span> <span class="k">talk</span>
 <span class="o">*  1  Local
    2  Example Resident</span></pre>
         </div>
@@ -2144,8 +1754,7 @@ the next owner may now copy, modify, transfer</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">profile Example Resident</span>
+          <pre><span class="p">/$</span> <span class="k">profile Example Resident</span>
 <span class="o">Example Resident
   key       d8467e57-…
   born      9/15/2004
@@ -2190,15 +1799,14 @@ the next owner may now copy, modify, transfer</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">(2) /$</span> <span class="c">waiting</span>
+          <pre><span class="p">(2) /$</span> <span class="k">waiting</span>
 <span class="o">1  dialog      a lantern "on or off?"
                 1 on, 2 off
 2  teleport    Another Resident teleport: "Come and see this!"
                 answer (takes it, and waits for the arrival), no, ignore</span>
-<span class="p">(2) /$</span> <span class="c">answer 1 on</span>
+<span class="p">(2) /$</span> <span class="k">answer 1 on</span>
 <span class="o">pressed "on" on a lantern</span>
-<span class="p">(1) /$</span> <span class="c">ignore 2</span>
+<span class="p">(1) /$</span> <span class="k">ignore 2</span>
 <span class="o">2 is still waiting, and no longer counted; waiting -a lists it</span></pre>
         </div>
 
@@ -2231,13 +1839,12 @@ the next owner may now copy, modify, transfer</span>
         </div>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">(1) /$</span> <span class="c">answer 1</span>
+          <pre><span class="p">(1) /$</span> <span class="k">answer 1</span>
 <span class="o">a sign asks: your name?
 type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
-<span class="p">1 text&gt;</span> <span class="c">Example Resident</span>
-<span class="p">2 text&gt;</span> <span class="c">of no fixed abode</span>
-<span class="n">&lt;^D&gt;</span>
+<span class="p">1 text&gt;</span> <span class="k">Example Resident</span>
+<span class="p">2 text&gt;</span> <span class="k">of no fixed abode</span>
+<span class="c">&lt;^D&gt;</span>
 <span class="o">told a sign 2 lines</span></pre>
         </div>
 
@@ -2269,8 +1876,7 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">agents</span>
+          <pre><span class="p">/$</span> <span class="k">agents</span>
 <span class="o">* example     Example Resident          Testville   &lt;- this shell
   builder     Builder Resident          Testville
   helper                                stopped: logged out
@@ -2306,8 +1912,7 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">status</span>
+          <pre><span class="p">/$</span> <span class="k">status</span>
 <span class="o">Example Resident (example) in Testville
   simulator   Second Life Server 2026-08-03.30838755483
   packets     49309 in, 14714 out (0 resent, 0 abandoned)
@@ -2348,13 +1953,12 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">viewer</span>
+          <pre><span class="p">/$</span> <span class="k">viewer</span>
 <span class="o">viewer logins at https://127.0.0.1:9000/
   add a grid with that login URI and log in as Example Resident
   no viewer has taken this session
   "viewer --launch" starts one and logs it in, with a password good for that one login</span>
-<span class="p">/$</span> <span class="c">viewer --launch</span>
+<span class="p">/$</span> <span class="k">viewer --launch</span>
 <span class="o">starting a viewer at https://127.0.0.1:9000/, logged in as Example Resident
   open -a Firestorm-OpenSim --args --grid slgod --login Example Resident PASSWORD
   the password it was given works once and expires in 5 minutes</span></pre>
@@ -2408,13 +2012,12 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="p">/$</span> <span class="c">ls -l /Objects &gt; listing</span>
-<span class="p">/$</span> <span class="c">echo done &gt;&gt; listing</span>
-<span class="p">/$</span> <span class="c">. moves</span>                       <span class="n">run a file of commands</span>
+          <pre><span class="p">/$</span> <span class="k">ls -l /Objects &gt; listing</span>
+<span class="p">/$</span> <span class="k">echo done &gt;&gt; listing</span>
+<span class="p">/$</span> <span class="k">. moves</span>                       <span class="c">run a file of commands</span>
 
-<span class="p">$</span> <span class="c">awk '{print "mv " $3 " /Objects/spares"}' listing &gt; moves</span>
-<span class="p">$</span> <span class="c">slsh -f moves</span>
+<span class="p">$</span> <span class="k">awk '{print "mv " $3 " /Objects/spares"}' listing &gt; moves</span>
+<span class="p">$</span> <span class="k">slsh -f moves</span>
 <span class="o">slsh: cd: no folder "spares"
 slsh: moves:1: cd spares
 slsh: stopped; 43 lines were not run</span></pre>
@@ -2465,8 +2068,7 @@ slsh: stopped; 43 lines were not run</span></pre>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="o"># which daemon, and which of its avatars
+          <pre><span class="o"># which daemon, and which of its avatars
 addr    = HOST:PORT
 agent   = NAME
 escape  = ESC
@@ -2508,8 +2110,7 @@ how_extra   = {"reasoning_effort": "none"}</span></pre>
         </p>
 
         <div class="term">
-          <button class="copy" type="button" aria-label="Copy this transcript">copy</button>
-<pre><span class="o">2026-08-26 15:56:29 $ where
+          <pre><span class="o">2026-08-26 15:56:29 $ where
 2026-08-26 15:56:29   Testville at 33, 70, 2001
 2026-08-26 15:56:33 * new conversation with Example Resident
 2026-08-26 15:56:33 &lt; [IM Example Resident] are you still at the build
@@ -2699,36 +2300,7 @@ how_extra   = {"reasoning_effort": "none"}</span></pre>
     <span>Second Life is a trademark of Linden Research, Inc.</span>
   </footer>
 </div>
-
-<script>
-  // Copy a transcript. The prompt and the commentary go with it: what is
-  // wanted is usually the command, and a person pasting into a shell can
-  // see at a glance what they took.
-  document.querySelectorAll(".copy").forEach(function (button) {
-    button.addEventListener("click", function () {
-      var pre = button.parentElement.querySelector("pre");
-      navigator.clipboard.writeText(pre.innerText).then(function () {
-        var was = button.textContent;
-        button.textContent = "copied";
-        setTimeout(function () { button.textContent = was; }, 1200);
-      });
-    });
-  });
-
-  // Mark the section being read in the rail.
-  var links = {};
-  document.querySelectorAll("nav.rail a").forEach(function (a) {
-    links[a.getAttribute("href").slice(1)] = a;
-  });
-  var watcher = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (!entry.isIntersecting) return;
-      Object.keys(links).forEach(function (id) { links[id].classList.remove("here"); });
-      var here = links[entry.target.id];
-      if (here) here.classList.add("here");
-    });
-  }, { rootMargin: "-10% 0px -75% 0px" });
-  document.querySelectorAll("main section").forEach(function (s) { watcher.observe(s); });
-</script>
+</article>
+<script src="../handbook/handbook.js"></script>
 </body>
 </html>

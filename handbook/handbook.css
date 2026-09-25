@@ -1,208 +1,289 @@
-/* The slgo handbook.  One stylesheet for every page.
+/* The slgo handbook.  One stylesheet for every page, and for the slsh
+   guide in doc/, so the two read as one set.
 
-   The palette and type are doc/slsh-guide.html's, so the two read as
-   one set: slate ground, amber accent, Charter for prose and the
-   system monospace for anything a person would type. */
+   The look is the grid's own, seen through the viewer's chrome and with
+   the viewer taken away: a pale Windlight sky for a ground, with the
+   world map's region grid faintly drawn on it; white notecards for
+   anything meant to be read; dark, slightly translucent floaters for
+   anything typed or clicked; and the viewer's own face, DejaVu Sans,
+   wherever it is installed.  The accent is the teal-green of the
+   Second Life mark.  Notes are coloured the way the land overlay
+   colours parcels: green for what is yours and went right, red for a
+   ban line, gold for land that is for sale and wants a look. */
 
 :root {
-  --ground: #f1f2f5;
-  --surface: #ffffff;
-  --surface-2: #e7eaf0;
-  --ink: #131a26;
-  --ink-soft: #3f4a5d;
-  --muted: #6b7688;
-  --rule: #d6dbe3;
-  --rule-soft: #e4e8ee;
-  --accent: #a85f09;
-  --accent-ink: #7d4606;
-  --accent-soft: #f5e7d2;
+  /* The world, in daylight. */
+  --sky-top: #e9f1f6;
+  --sky-bottom: #d3e2ec;
+  --ground: #dde9f1;              /* what page-local styles paint on */
+  --grid-line: rgba(28, 88, 128, 0.085);
+  --sea: #2f7fb5;                 /* the world map's water */
 
-  /* Security and failure notes. */
-  --warn: #b3261e;
-  --warn-ink: #8c1d17;
-  --warn-soft: #f8e1df;
+  --surface: #ffffff;             /* a notecard */
+  --surface-2: #edf3f7;
+  --ink: #1b262d;
+  --ink-soft: #45545d;
+  --muted: #6d7d87;
+  --rule: #cfdce5;
+  --rule-soft: #e1eaf0;
 
-  /* Platform notes: where Linux and macOS part ways. */
-  --os: #2f5f8f;
-  --os-ink: #234a70;
-  --os-soft: #dfe9f4;
+  /* The teal-green of the mark. */
+  --accent: #12a08c;
+  --accent-ink: #0a6e61;
+  --accent-soft: #d9f2ec;
 
-  /* Success, for ticked steps. */
-  --ok: #2e7d4f;
-  --ok-soft: #dcefe3;
+  /* Ban lines: security and failure notes. */
+  --warn: #cf3a2e;
+  --warn-ink: #a52d23;
+  --warn-soft: #fae2df;
 
-  /* The site bar and the terminal stay dark in both themes. */
-  --bar-bg: #0f1520;
-  --bar-ink: #dfe4ec;
-  --bar-muted: #8d99ad;
-  --term-bg: #161d29;
-  --term-ink: #dfe4ec;
-  --term-muted: #8d99ad;
-  --term-accent: #e9a64a;
-  --term-rule: #2a3446;
+  /* Land for sale: platform notes, where Linux and macOS part ways. */
+  --os: #c99a13;
+  --os-ink: #85650a;
+  --os-soft: #f9efd0;
+
+  /* Your own land, and the green dot an avatar makes on the minimap:
+     success, for ticked steps. */
+  --ok: #58a827;
+  --ok-ink: #3b7a14;
+  --ok-soft: #e3f2d6;
+
+  /* The viewer's chrome: the status bar and every floater stay dark in
+     both themes, and the terminal is a terminal. */
+  --bar-bg: #24292e;
+  --bar-bg-2: #2d3338;
+  --bar-ink: #e6e9eb;
+  --bar-muted: #9aa4ab;
+  --bar-rule: #3b434a;
+  --term-bg: #1c2125;
+  --term-ink: #e9ecee;
+  --term-muted: #8f9aa2;
+  --term-out: #b9c2c9;
+  --term-accent: #4fd1b8;
+  --term-rule: #323a41;
 
   /* One colour per machine, used by the topology drawings and the
-     "run this on" chips above each command block. */
-  --m-laptop: #2f5f8f;
-  --m-server: #a85f09;
-  --m-bot: #6b4fa0;
+     "run this on" title above each command block: sky for the laptop,
+     plywood for the server, purple for the bot. */
+  --m-laptop: #2e7fb5;
+  --m-server: #b0722a;
+  --m-bot: #7a5cc7;
 
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --sans: "DejaVu Sans", "Bitstream Vera Sans", Verdana, "Segoe UI", sans-serif;
+  --mono: "DejaVu Sans Mono", "Bitstream Vera Sans Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-  --measure: 68ch;
+  --measure: 64ch;
   --gap: clamp(1rem, 2.2vw, 1.45rem);
+  --radius: 6px;
+  --shadow: 0 1px 2px rgba(20, 50, 70, 0.06), 0 10px 28px -14px rgba(20, 50, 70, 0.28);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --ground: #0e131c;
-    --surface: #141b26;
-    --surface-2: #1a2230;
-    --ink: #e4e8ef;
-    --ink-soft: #c2cad7;
-    --muted: #8b95a7;
-    --rule: #26303f;
-    --rule-soft: #1e2734;
-    --accent: #e9a64a;
-    --accent-ink: #f2bc6b;
-    --accent-soft: #33270f;
-    --warn: #f07a70;
-    --warn-ink: #f59a92;
-    --warn-soft: #3a1714;
-    --os: #7fb0e0;
-    --os-ink: #9cc3ea;
-    --os-soft: #152536;
-    --ok: #6cc893;
-    --ok-soft: #13291d;
-    --m-laptop: #7fb0e0;
-    --m-server: #e9a64a;
-    --m-bot: #b69be6;
+    --sky-top: #0d1c2a;
+    --sky-bottom: #08121c;
+    --ground: #0b1723;
+    --grid-line: rgba(140, 190, 230, 0.075);
+    --sea: #2b6f9e;
+    --surface: #1b2229;
+    --surface-2: #242d35;
+    --ink: #e6eaed;
+    --ink-soft: #c1cad0;
+    --muted: #8e9aa3;
+    --rule: #333d46;
+    --rule-soft: #29323a;
+    --accent: #3fcbb2;
+    --accent-ink: #74dcc9;
+    --accent-soft: #10352f;
+    --warn: #f07d73;
+    --warn-ink: #f59d95;
+    --warn-soft: #3b1815;
+    --os: #e3b95a;
+    --os-ink: #eccd86;
+    --os-soft: #35290f;
+    --ok: #8fd65e;
+    --ok-ink: #a9e37e;
+    --ok-soft: #1b3312;
+    --bar-bg: #171b1f;
+    --bar-bg-2: #1e2428;
+    --m-laptop: #7fb9e8;
+    --m-server: #e2a765;
+    --m-bot: #b59df0;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px -14px rgba(0, 0, 0, 0.6);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ground: #0e131c;
-  --surface: #141b26;
-  --surface-2: #1a2230;
-  --ink: #e4e8ef;
-  --ink-soft: #c2cad7;
-  --muted: #8b95a7;
-  --rule: #26303f;
-  --rule-soft: #1e2734;
-  --accent: #e9a64a;
-  --accent-ink: #f2bc6b;
-  --accent-soft: #33270f;
-  --warn: #f07a70;
-  --warn-ink: #f59a92;
-  --warn-soft: #3a1714;
-  --os: #7fb0e0;
-  --os-ink: #9cc3ea;
-  --os-soft: #152536;
-  --ok: #6cc893;
-  --ok-soft: #13291d;
-  --m-laptop: #7fb0e0;
-  --m-server: #e9a64a;
-  --m-bot: #b69be6;
+  --sky-top: #0d1c2a;
+  --sky-bottom: #08121c;
+  --ground: #0b1723;
+  --grid-line: rgba(140, 190, 230, 0.075);
+  --sea: #2b6f9e;
+  --surface: #1b2229;
+  --surface-2: #242d35;
+  --ink: #e6eaed;
+  --ink-soft: #c1cad0;
+  --muted: #8e9aa3;
+  --rule: #333d46;
+  --rule-soft: #29323a;
+  --accent: #3fcbb2;
+  --accent-ink: #74dcc9;
+  --accent-soft: #10352f;
+  --warn: #f07d73;
+  --warn-ink: #f59d95;
+  --warn-soft: #3b1815;
+  --os: #e3b95a;
+  --os-ink: #eccd86;
+  --os-soft: #35290f;
+  --ok: #8fd65e;
+  --ok-ink: #a9e37e;
+  --ok-soft: #1b3312;
+  --bar-bg: #171b1f;
+  --bar-bg-2: #1e2428;
+  --m-laptop: #7fb9e8;
+  --m-server: #e2a765;
+  --m-bot: #b59df0;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px -14px rgba(0, 0, 0, 0.6);
 }
 
 * { box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
 
+/* The ground: sky above, sea below, and the map's grid over both.  A
+   region is 256 m square; the lines here are 64 px apart, which is the
+   map at a zoom where a region is a tile. */
 body {
   margin: 0;
-  background: var(--ground);
+  min-height: 100vh;
+  background-color: var(--ground);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(180deg, var(--sky-top) 0, var(--sky-bottom) 100%);
+  background-size: 64px 64px, 64px 64px, 100% 100%;
+  background-attachment: scroll, scroll, fixed;
   color: var(--ink);
-  font-family: var(--serif);
-  font-size: 1.0625rem;
-  line-height: 1.62;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ------------------------------------------------------------ site bar */
+/* ------------------------------------------------------------ status bar
+   The viewer's top bar: where you are, the clock in SLT, and the
+   switches.  Dark in both themes. */
 
 .sitebar {
-  background: var(--bar-bg);
+  background: linear-gradient(var(--bar-bg-2), var(--bar-bg));
   color: var(--bar-ink);
   position: sticky;
   top: env(safe-area-inset-top, 0px);
   z-index: 10;
-  border-bottom: 1px solid var(--term-rule);
+  border-bottom: 1px solid var(--bar-rule);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 
 .sitebar-inner {
-  max-width: 80rem;
+  max-width: 82rem;
   margin: 0 auto;
   padding-inline: clamp(1rem, 4vw, 3rem);
   display: flex;
   align-items: center;
-  gap: 0.4rem 1.4rem;
+  gap: 0.4rem 1.1rem;
   min-height: 3.1rem;
   flex-wrap: wrap;
 }
 
 .brand {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 0.92rem;
   color: var(--bar-ink);
   text-decoration: none;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
-.brand span { color: var(--term-accent); }
+.brand svg { width: 1.15rem; height: 1.3rem; display: block; }
+.brand span { color: var(--bar-muted); font-weight: 400; }
 
 .sitenav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.15rem 0.2rem;
-  font-family: var(--mono);
-  font-size: 0.74rem;
+  gap: 0.15rem 0.15rem;
+  font-family: var(--sans);
+  font-size: 0.76rem;
   flex: 1 1 auto;
 }
 
 .sitenav a {
   color: var(--bar-muted);
   text-decoration: none;
-  padding: 0.35rem 0.55rem;
-  border-radius: 3px;
+  padding: 0.32rem 0.6rem;
+  border-radius: 999px;
   white-space: nowrap;
+  border: 1px solid transparent;
 }
-.sitenav a:hover { color: var(--bar-ink); background: #1c2536; }
-.sitenav a.here { color: var(--term-accent); background: #1c2536; }
+.sitenav a:hover { color: var(--bar-ink); background: rgba(255, 255, 255, 0.06); }
+.sitenav a.here { color: var(--term-accent); background: rgba(79, 209, 184, 0.1); border-color: rgba(79, 209, 184, 0.35); }
 
-.sitenav .menu-toggle { display: none; }
+/* The clock the status bar shows: Second Life Time, which is the
+   Pacific coast's. */
+.slt {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  color: var(--bar-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.slt::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}
+.slt b { color: var(--bar-ink); font-weight: 600; }
 
 @media (max-width: 52rem) {
   .sitenav { flex-basis: 100%; order: 3; padding-bottom: 0.5rem; display: none; }
   .sitebar.open .sitenav { display: flex; }
   .menu-button { display: inline-flex !important; }
+  .slt { display: none; }
 }
 
 .menu-button {
   display: none;
   margin-left: auto;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 0.72rem;
   color: var(--bar-ink);
   background: transparent;
-  border: 1px solid var(--term-rule);
-  border-radius: 3px;
+  border: 1px solid var(--bar-rule);
+  border-radius: 4px;
   padding: 0.3rem 0.6rem;
   cursor: pointer;
 }
 
-/* The Linux / macOS switch. */
+/* The Linux / macOS switch, and the shell switch beside it: the
+   viewer's segmented buttons. */
 .os-toggle {
   display: inline-flex;
-  border: 1px solid var(--term-rule);
-  border-radius: 4px;
+  border: 1px solid var(--bar-rule);
+  border-radius: 5px;
   overflow: hidden;
-  font-family: var(--mono);
-  font-size: 0.7rem;
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  background: rgba(0, 0, 0, 0.18);
 }
 .os-toggle button {
   background: transparent;
@@ -211,55 +292,95 @@ body {
   padding: 0.32rem 0.6rem;
   cursor: pointer;
   font: inherit;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
-.os-toggle button[aria-pressed="true"] { background: var(--term-accent); color: #161d29; }
+.os-toggle button:hover { color: var(--bar-ink); }
+.os-toggle button[aria-pressed="true"] { background: var(--term-accent); color: #14201d; font-weight: 700; }
 .os-toggle .os-label {
   padding: 0.32rem 0.55rem;
   color: var(--bar-muted);
-  border-right: 1px solid var(--term-rule);
+  border-right: 1px solid var(--bar-rule);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.62rem;
+  display: inline-flex;
+  align-items: center;
 }
 
-/* --------------------------------------------------------------- page */
+/* ----------------------------------------------------------------- page */
 
 .wrap {
-  max-width: 80rem;
+  max-width: 82rem;
   margin: 0 auto;
   padding-inline: clamp(1rem, 4vw, 3rem);
   padding-block: 0 5rem;
 }
 
+/* The arrival: the masthead stands on the sky, above the notecard. */
 .masthead {
-  padding-block: clamp(2.4rem, 7vw, 4.5rem) clamp(1.8rem, 4vw, 2.6rem);
-  border-bottom: 1px solid var(--rule);
+  padding-block: clamp(2.2rem, 6vw, 4rem) clamp(1.6rem, 4vw, 2.4rem);
   display: grid;
   gap: 1rem;
+  align-items: end;
+  grid-template-columns: minmax(0, 1fr);
+}
+.masthead > div { display: grid; gap: 1rem; }
+@media (min-width: 60rem) {
+  .masthead:has(> .term) { grid-template-columns: minmax(0, 1fr) minmax(20rem, 27rem); gap: clamp(1.5rem, 4vw, 3rem); }
 }
 
+/* The location bar: the strip at the top of the viewer that says where
+   you are.  Here it says where you are in the handbook. */
 .eyebrow {
-  font-family: var(--mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  max-width: 100%;
+  font-family: var(--sans);
   font-size: 0.72rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bar-ink);
+  background: linear-gradient(var(--bar-bg-2), var(--bar-bg));
+  border: 1px solid var(--bar-rule);
+  border-radius: 5px;
+  padding: 0.35rem 0.75rem 0.35rem 0.6rem;
+  margin: 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+}
+.eyebrow::before {
+  content: "";
+  flex: none;
+  width: 0.8rem;
+  height: 0.8rem;
+  background: var(--term-accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.6a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.6a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+h1 {
+  font-family: var(--sans);
+  font-size: clamp(1.9rem, 5vw, 2.9rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  margin: 0;
+  text-wrap: balance;
+  color: var(--ink);
+}
+h1 .caret { color: var(--accent); font-family: var(--mono); font-weight: 400; }
+
+.said {
+  font-family: var(--sans);
+  font-size: 0.82rem;
   color: var(--muted);
   margin: 0;
 }
 
-h1 {
-  font-family: var(--mono);
-  font-size: clamp(2rem, 6vw, 3.4rem);
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  margin: 0;
-  text-wrap: balance;
-}
-h1 .caret { color: var(--accent); font-weight: 400; }
-
 .standfirst {
-  max-width: 58ch;
+  max-width: 56ch;
   margin: 0;
-  font-size: 1.17rem;
+  font-size: 1.08rem;
   line-height: 1.55;
   color: var(--ink-soft);
   text-wrap: pretty;
@@ -269,43 +390,64 @@ h1 .caret { color: var(--accent); font-weight: 400; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-top: 0.3rem;
+  margin-top: 0.2rem;
 }
 
+/* Tags, the way the inventory tags an item. */
 .pill {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 0.22rem 0.55rem;
+  padding: 0.24rem 0.6rem;
   border-radius: 999px;
   border: 1px solid var(--rule);
   color: var(--muted);
   background: var(--surface);
   white-space: nowrap;
 }
-.pill.new { color: var(--ok); border-color: var(--ok); }
-.pill.old { color: var(--os-ink); border-color: var(--os); }
-.pill.time { color: var(--accent-ink); border-color: var(--accent); }
+.pill.new { color: var(--ok-ink); border-color: var(--ok); background: var(--ok-soft); }
+.pill.old { color: var(--m-laptop); border-color: var(--m-laptop); background: color-mix(in srgb, var(--m-laptop) 12%, var(--surface)); }
+.pill.time { color: var(--os-ink); border-color: var(--os); background: var(--os-soft); }
 
 .body-grid {
   display: grid;
-  gap: clamp(2rem, 5vw, 4rem);
+  gap: clamp(1.4rem, 3vw, 2.2rem);
   grid-template-columns: minmax(0, 1fr);
-  padding-top: clamp(1.8rem, 4vw, 3rem);
+  align-items: start;
 }
 
 @media (min-width: 62rem) {
-  .body-grid { grid-template-columns: 13.5rem minmax(0, 1fr); align-items: start; }
+  .body-grid { grid-template-columns: 14rem minmax(0, 1fr); }
 }
 
+/* The on-page contents: a floater, docked at the left and staying put. */
 nav.rail {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  line-height: 1.5;
+  font-family: var(--sans);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  background: color-mix(in srgb, var(--bar-bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--bar-ink);
+  border: 1px solid var(--bar-rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+nav.rail::before {
+  content: "On this page";
+  display: block;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bar-muted);
+  padding: 0.55rem 0.9rem;
+  background: linear-gradient(var(--bar-bg-2), var(--bar-bg));
+  border-bottom: 1px solid var(--bar-rule);
 }
 @media (min-width: 62rem) {
-  nav.rail { position: sticky; top: 4.6rem; max-height: calc(100vh - 6rem); overflow-y: auto; }
+  nav.rail { position: sticky; top: 4.2rem; max-height: calc(100vh - 5.5rem); overflow-y: auto; }
 }
 @media (max-width: 61.99rem) {
   nav.rail { display: none; }
@@ -313,26 +455,33 @@ nav.rail {
 nav.rail ol {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0.5rem 0;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0;
+  max-width: none;
 }
 nav.rail a {
-  color: var(--muted);
+  color: var(--bar-muted);
   text-decoration: none;
   display: block;
-  padding-left: 0.75rem;
-  border-left: 2px solid var(--rule);
+  padding: 0.32rem 0.9rem 0.32rem 0.85rem;
+  border-left: 3px solid transparent;
 }
-nav.rail a:hover { color: var(--ink); }
-nav.rail a.here { color: var(--accent-ink); border-left-color: var(--accent); }
+nav.rail a:hover { color: var(--bar-ink); background: rgba(255, 255, 255, 0.04); }
+nav.rail a.here { color: var(--term-accent); border-left-color: var(--term-accent); background: rgba(79, 209, 184, 0.08); }
 
+/* The notecard.  Everything meant to be read is on one. */
 main {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: clamp(2.4rem, 5vw, 3.4rem);
+  gap: clamp(2.2rem, 5vw, 3.2rem);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: clamp(1.1rem, 3vw, 2.4rem) clamp(1rem, 3.2vw, 2.6rem) clamp(1.6rem, 4vw, 3rem);
 }
 
 section {
@@ -343,26 +492,28 @@ section {
 }
 
 h2 {
-  font-family: var(--mono);
-  font-size: clamp(1.2rem, 2.5vw, 1.5rem);
-  font-weight: 600;
+  font-family: var(--sans);
+  font-size: clamp(1.2rem, 2.4vw, 1.45rem);
+  font-weight: 700;
   letter-spacing: -0.015em;
   margin: 0;
-  padding-top: 1.3rem;
-  border-top: 1px solid var(--rule);
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--rule-soft);
   text-wrap: balance;
 }
+main > section:first-child > h2 { padding-top: 0; border-top: 0; }
 h2 .num {
-  color: var(--muted);
-  font-weight: 400;
+  color: var(--accent-ink);
+  font-weight: 700;
   font-size: 0.72em;
   margin-right: 0.7em;
+  font-variant-numeric: tabular-nums;
 }
 
 h3 {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 0.98rem;
-  font-weight: 600;
+  font-weight: 700;
   margin: 0.5rem 0 0;
   scroll-margin-top: 4.4rem;
   text-wrap: balance;
@@ -371,9 +522,10 @@ h3 {
 p, ul, ol, dl { margin: 0; max-width: var(--measure); }
 p { text-wrap: pretty; }
 ul, ol { padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.45rem; }
-li::marker { color: var(--muted); }
-a { color: var(--accent-ink); text-underline-offset: 0.18em; }
-strong { font-weight: 600; }
+li::marker { color: var(--accent); }
+a { color: var(--accent-ink); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+a:hover { text-decoration-thickness: 2px; }
+strong { font-weight: 700; }
 
 code, kbd {
   font-family: var(--mono);
@@ -387,31 +539,39 @@ kbd { border: 1px solid var(--rule); border-bottom-width: 2px; }
 
 dl { display: grid; gap: 0.35rem 1.2rem; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 40rem) { dl { grid-template-columns: max-content minmax(0, 1fr); } }
-dt { font-family: var(--mono); font-size: 0.86rem; color: var(--accent-ink); }
+dt { font-family: var(--sans); font-size: 0.86rem; font-weight: 700; color: var(--accent-ink); }
 dd { margin: 0; color: var(--ink-soft); }
 
-/* --------------------------------------------------------- terminals */
+/* ------------------------------------------------------------- floaters
+   A terminal is a floater: dark, translucent at the edge, with a title
+   bar that says which machine it is on. */
 
 .term {
   background: var(--term-bg);
   color: var(--term-ink);
-  border-radius: 4px;
+  border-radius: var(--radius);
   border: 1px solid var(--term-rule);
   position: relative;
   max-width: 100%;
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
 .term .where {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-family: var(--mono);
-  font-size: 0.66rem;
+  font-family: var(--sans);
+  font-size: 0.64rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--term-muted);
-  padding: 0.5rem 1.1rem 0;
+  padding: 0.5rem 4.5rem 0.5rem 0.9rem;
+  background: linear-gradient(var(--bar-bg-2), var(--bar-bg));
+  border-bottom: 1px solid var(--term-rule);
 }
+/* The dot is the one an avatar makes on the minimap, in the colour of
+   the machine it stands for. */
 .term .where::before {
   content: "";
   width: 0.55rem;
@@ -419,59 +579,80 @@ dd { margin: 0; color: var(--ink-soft); }
   border-radius: 50%;
   background: var(--term-muted);
   flex: none;
+  box-shadow: 0 0 5px currentColor;
 }
-.term[data-where="laptop"] .where::before { background: #7fb0e0; }
-.term[data-where="server"] .where::before { background: #e9a64a; }
-.term[data-where="bot"] .where::before { background: #b69be6; }
+.term[data-where="laptop"] .where::before { background: #7fb9e8; color: #7fb9e8; }
+.term[data-where="server"] .where::before { background: #e2a765; color: #e2a765; }
+.term[data-where="bot"] .where::before { background: #b59df0; color: #b59df0; }
 
 .term pre {
   margin: 0;
   padding: 0.85rem 1.1rem 0.95rem;
   overflow-x: auto;
   font-family: var(--mono);
-  font-size: 0.82rem;
-  line-height: 1.6;
+  font-size: 0.81rem;
+  line-height: 1.65;
   white-space: pre;
+  tab-size: 4;
 }
-.term .c { color: var(--term-muted); }     /* a comment */
-.term .p { color: var(--term-accent); user-select: none; }  /* a prompt */
-.term .o { color: #aab4c3; }               /* output */
+.term .p { color: var(--term-accent); user-select: none; }   /* a prompt */
+.term .k { color: var(--term-ink); font-weight: 700; }        /* what you type, where it is marked */
+.term .c { color: var(--term-muted); }                        /* a comment, or a note beside a line */
+.term .o { color: var(--term-out); }                          /* what comes back */
 
 .copy {
   position: absolute;
-  top: 0.45rem;
+  top: 0.32rem;
   right: 0.5rem;
-  font-family: var(--mono);
-  font-size: 0.66rem;
+  font-family: var(--sans);
+  font-size: 0.62rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--term-muted);
-  background: var(--term-bg);
+  background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--term-rule);
   border-radius: 3px;
-  padding: 0.25rem 0.5rem;
+  padding: 0.22rem 0.5rem;
   cursor: pointer;
-  opacity: 0.55;
+  opacity: 0.6;
   transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .term:hover .copy, .copy:focus-visible { opacity: 1; }
 .copy:hover { color: var(--term-accent); border-color: var(--term-accent); }
+/* A terminal with no title bar keeps the button clear of its first line. */
+.term > pre:first-child { padding-right: 4.5rem; }
 
-/* A file's contents, as opposed to commands. */
+/* A file's contents: a notecard, as opposed to commands.  The title bar
+   names the file. */
 .file {
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius);
   background: var(--surface);
   max-width: 100%;
   position: relative;
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
 .file .name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-family: var(--mono);
   font-size: 0.74rem;
-  color: var(--muted);
-  padding: 0.5rem 1rem;
+  color: var(--ink-soft);
+  padding: 0.45rem 4.5rem 0.45rem 0.9rem;
+  background: var(--surface-2);
   border-bottom: 1px solid var(--rule-soft);
   overflow-wrap: anywhere;
+}
+.file .name::before {
+  content: "";
+  flex: none;
+  width: 0.8rem;
+  height: 0.8rem;
+  background: var(--accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 2h9l5 5v15H5zm8 1.5V8h4.5zM8 12h8v1.6H8zm0 3.5h8v1.6H8z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 2h9l5 5v15H5zm8 1.5V8h4.5zM8 12h8v1.6H8zm0 3.5h8v1.6H8z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .file pre {
   margin: 0;
@@ -481,36 +662,40 @@ dd { margin: 0; color: var(--ink-soft); }
   font-size: 0.8rem;
   line-height: 1.6;
 }
-.file .copy { background: var(--surface); color: var(--muted); border-color: var(--rule); top: 0.3rem; }
+.file .copy { background: var(--surface); color: var(--muted); border-color: var(--rule); top: 0.28rem; }
 .file .copy:hover { color: var(--accent-ink); border-color: var(--accent); }
 .file pre .c { color: var(--muted); }
 
-/* --------------------------------------------------------------- notes */
+/* ---------------------------------------------------------------- notes
+   Coloured the way the land overlay colours parcels. */
 
 .note {
   max-width: var(--measure);
-  border-left: 3px solid var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-left: 4px solid var(--accent);
   background: var(--accent-soft);
   padding: 0.8rem 1.1rem;
-  border-radius: 0 3px 3px 0;
-  font-size: 0.97rem;
+  border-radius: 3px var(--radius) var(--radius) 3px;
+  font-size: 0.92rem;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
 }
 .note > .label {
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
+  font-family: var(--sans);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  font-weight: 700;
   color: var(--accent-ink);
   margin: 0;
 }
-.note.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.note.warn { border-color: color-mix(in srgb, var(--warn) 35%, transparent); border-left-color: var(--warn); background: var(--warn-soft); }
 .note.warn > .label { color: var(--warn-ink); }
-.note.os { border-left-color: var(--os); background: var(--os-soft); }
+.note.os { border-color: color-mix(in srgb, var(--os) 40%, transparent); border-left-color: var(--os); background: var(--os-soft); }
 .note.os > .label { color: var(--os-ink); }
 .note ul { gap: 0.3rem; }
+.note p { margin: 0; }
 
 /* ---------------------------------------------------- Linux / macOS */
 
@@ -535,41 +720,73 @@ html:not([data-shell]) .sh-set { grid-template-columns: repeat(auto-fit, minmax(
 html:not([data-os]) .os-pair { grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
 
 .os-tag {
-  font-family: var(--mono);
-  font-size: 0.64rem;
+  font-family: var(--sans);
+  font-size: 0.6rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  font-weight: 700;
   color: var(--os-ink);
   border: 1px solid var(--os);
+  background: var(--os-soft);
   border-radius: 3px;
-  padding: 0.05rem 0.35rem;
+  padding: 0.05rem 0.4rem;
   white-space: nowrap;
   vertical-align: 0.1em;
 }
 
-/* ---------------------------------------------------------- tables */
+/* --------------------------------------------------------------- tables
+   List views, the way the inventory and the people panels draw them. */
 
-.tablewrap { overflow-x: auto; max-width: 100%; }
-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+.tablewrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--rule-soft); border-radius: var(--radius); }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
 th, td {
   text-align: left;
   vertical-align: baseline;
-  padding: 0.5rem 1.1rem 0.5rem 0;
+  padding: 0.5rem 1.1rem 0.5rem 0.8rem;
   border-bottom: 1px solid var(--rule-soft);
 }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
 th {
-  font-family: var(--mono);
-  font-size: 0.68rem;
+  font-family: var(--sans);
+  font-size: 0.64rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
-  font-weight: 500;
+  font-weight: 700;
+  background: var(--surface-2);
   border-bottom-color: var(--rule);
 }
 td code { white-space: nowrap; }
 td.what { color: var(--ink-soft); }
 
-/* ------------------------------------------------------------- steps */
+/* The slsh guide's command tables. */
+td.cmd {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  color: var(--ink);
+  padding-right: 1.6rem;
+}
+td.keys {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  color: var(--accent-ink);
+  padding-right: 1.6rem;
+}
+td.group-title {
+  font-family: var(--sans);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--surface-2) !important;
+  padding-top: 0.7rem;
+}
+
+/* ---------------------------------------------------------------- steps */
 
 /* A numbered procedure.  The script adds a tick box to each step and
    remembers what was ticked, per page, in this browser. */
@@ -588,27 +805,27 @@ ol.steps > li {
 }
 ol.steps > li::before {
   content: counter(step);
-  font-family: var(--mono);
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-family: var(--sans);
+  font-size: 0.86rem;
+  font-weight: 700;
   width: 2.1rem;
   height: 2.1rem;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  border: 1.5px solid var(--accent);
-  color: var(--accent-ink);
-  background: var(--surface);
+  background: var(--accent);
+  color: #ffffff;
   grid-row: 1 / span 2;
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-ol.steps > li.done::before { content: "✓"; background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+ol.steps > li.done::before { content: "✓"; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
 ol.steps > li > .step-body { display: flex; flex-direction: column; gap: 0.8rem; min-width: 0; }
 ol.steps > li > .step-body > h3:first-child { margin-top: 0.3rem; }
 .tick {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 0.72rem;
   color: var(--muted);
   cursor: pointer;
@@ -617,8 +834,8 @@ ol.steps > li > .step-body > h3:first-child { margin-top: 0.3rem; }
 .tick input { accent-color: var(--ok); width: 1rem; height: 1rem; }
 
 .progress {
-  font-family: var(--mono);
-  font-size: 0.74rem;
+  font-family: var(--sans);
+  font-size: 0.72rem;
   color: var(--muted);
   display: flex;
   align-items: center;
@@ -628,9 +845,10 @@ ol.steps > li > .step-body > h3:first-child { margin-top: 0.3rem; }
 .progress .bar {
   width: 10rem;
   max-width: 100%;
-  height: 0.4rem;
+  height: 0.45rem;
   border-radius: 999px;
   background: var(--surface-2);
+  border: 1px solid var(--rule-soft);
   overflow: hidden;
 }
 .progress .bar i { display: block; height: 100%; background: var(--ok); width: 0; transition: width 200ms ease; }
@@ -644,37 +862,51 @@ ol.steps > li > .step-body > h3:first-child { margin-top: 0.3rem; }
   padding: 0;
 }
 
-/* ------------------------------------------------------------- cards */
+/* ------------------------------------------------------------ landmarks
+   A link to another page is a landmark: a place kept, to go to. */
 
 .cards {
   display: grid;
-  gap: 1rem;
+  gap: 0.9rem;
   grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr));
 }
 .card {
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: 5px;
-  padding: 1.05rem 1.15rem 1.15rem;
+  background: var(--surface-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem 1.1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.5rem;
   text-decoration: none;
   color: inherit;
-  transition: border-color 120ms ease, transform 120ms ease;
+  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
 }
-a.card:hover { border-color: var(--accent); transform: translateY(-1px); }
+a.card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); text-decoration: none; }
 .card .k {
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
+  font-weight: 700;
+  color: var(--accent-ink);
 }
-.card .t { font-family: var(--mono); font-weight: 600; font-size: 1rem; color: var(--ink); }
-.card .d { font-size: 0.94rem; color: var(--ink-soft); }
+.card .k::before {
+  content: "";
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.6a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.6a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.card .t { font-family: var(--sans); font-weight: 700; font-size: 0.98rem; color: var(--ink); }
+.card .d { font-size: 0.88rem; color: var(--ink-soft); }
 
-/* ------------------------------------------------- troubleshooting */
+/* ------------------------------------------------------ troubleshooting */
 
 .fault-tools {
   display: flex;
@@ -685,34 +917,36 @@ a.card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .fault-tools input[type="search"] {
   font: inherit;
   font-family: var(--mono);
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   padding: 0.55rem 0.8rem;
   border: 1px solid var(--rule);
-  border-radius: 4px;
-  background: var(--surface);
+  border-radius: 5px;
+  background: var(--surface-2);
   color: var(--ink);
   flex: 1 1 18rem;
   min-width: 0;
 }
 .chip {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  padding: 0.3rem 0.65rem;
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  padding: 0.3rem 0.7rem;
   border-radius: 999px;
   border: 1px solid var(--rule);
-  background: var(--surface);
+  background: var(--surface-2);
   color: var(--ink-soft);
   cursor: pointer;
 }
-.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
-.fault-count { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); }
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #ffffff; font-weight: 700; }
+.fault-count { font-family: var(--sans); font-size: 0.72rem; color: var(--muted); }
 
 details.fault {
   background: var(--surface);
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: var(--radius);
   max-width: 100%;
 }
+details.fault[open] { border-color: var(--accent); }
 details.fault > summary {
   cursor: pointer;
   padding: 0.75rem 1rem;
@@ -723,18 +957,18 @@ details.fault > summary {
 }
 details.fault > summary::-webkit-details-marker { display: none; }
 details.fault > summary::before {
-  content: "+";
-  font-family: var(--mono);
+  content: "▸";
+  font-family: var(--sans);
   color: var(--accent);
   width: 0.8rem;
   flex: none;
 }
-details.fault[open] > summary::before { content: "−"; }
+details.fault[open] > summary::before { content: "▾"; }
 details.fault > summary .sym { flex: 1 1 auto; min-width: 0; }
 details.fault > summary .sym code { font-size: 0.82em; }
 details.fault > summary .where-tag {
-  font-family: var(--mono);
-  font-size: 0.64rem;
+  font-family: var(--sans);
+  font-size: 0.6rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
@@ -748,39 +982,40 @@ details.fault > .fix {
 }
 details.fault .fix h4 {
   margin: 0.3rem 0 0;
-  font-family: var(--mono);
-  font-size: 0.7rem;
+  font-family: var(--sans);
+  font-size: 0.64rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 500;
+  color: var(--accent-ink);
+  font-weight: 700;
 }
 @media (max-width: 30rem) { details.fault > .fix { padding-left: 1rem; } }
 
-/* ------------------------------------------------------- the picker */
+/* ------------------------------------------------------------ the picker */
 
 .picker {
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
   padding: clamp(1rem, 3vw, 1.6rem);
   display: grid;
   gap: 1.3rem;
 }
 .picker fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; min-width: 0; }
-.picker legend { font-family: var(--mono); font-size: 0.86rem; font-weight: 600; padding: 0; margin-bottom: 0.4rem; }
+.picker legend { font-family: var(--sans); font-size: 0.86rem; font-weight: 700; padding: 0; margin-bottom: 0.4rem; }
 .picker .opts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .picker label.opt {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
   border: 1px solid var(--rule);
-  border-radius: 4px;
+  border-radius: 5px;
   padding: 0.45rem 0.75rem;
-  font-size: 0.93rem;
+  font-size: 0.88rem;
   cursor: pointer;
-  background: var(--ground);
+  background: var(--surface);
 }
+.picker label.opt:hover { border-color: var(--accent); }
 .picker label.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 .picker input[type="radio"] { accent-color: var(--accent); }
 .picker .result {
@@ -791,62 +1026,66 @@ details.fault .fix h4 {
 }
 @media (min-width: 52rem) { .picker .result { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; } }
 .picker .result .go { display: flex; flex-direction: column; gap: 0.6rem; }
-.picker .result .go ol { font-size: 0.95rem; }
+.picker .result .go ol { font-size: 0.9rem; }
 .button {
   display: inline-block;
-  font-family: var(--mono);
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-weight: 700;
   background: var(--accent);
-  color: var(--surface);
+  color: #ffffff;
   text-decoration: none;
-  padding: 0.6rem 1rem;
-  border-radius: 4px;
+  padding: 0.6rem 1.05rem;
+  border-radius: 5px;
   width: fit-content;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset;
 }
-.button:hover { filter: brightness(1.08); }
+.button:hover { filter: brightness(1.08); text-decoration: none; }
 
-/* --------------------------------------------------------- diagrams */
+/* ------------------------------------------------------------- diagrams
+   The machines are boxes; the grid is drawn as the world map draws a
+   region: a tile of sea, with its name on it. */
 
 .diagram {
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
   padding: 0.8rem;
   overflow-x: auto;
   max-width: 100%;
 }
 .diagram svg { display: block; width: 100%; height: auto; min-width: 30rem; }
-.diagram figcaption { font-size: 0.86rem; color: var(--muted); padding: 0.5rem 0.3rem 0; }
+.diagram figcaption { font-size: 0.82rem; color: var(--muted); padding: 0.5rem 0.3rem 0; }
 svg .box { fill: var(--surface); stroke: var(--rule); stroke-width: 1.5; }
 svg .box.laptop { stroke: var(--m-laptop); }
 svg .box.server { stroke: var(--m-server); }
 svg .box.bot { stroke: var(--m-bot); }
-svg .box.grid { stroke: var(--muted); stroke-dasharray: 5 4; }
-svg .proc { fill: var(--surface-2); stroke: none; }
-svg .t-machine { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; fill: var(--muted); }
-svg .t-proc { font-family: var(--mono); font-size: 13px; font-weight: 600; fill: var(--ink); }
-svg .t-small { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+svg .box.grid { fill: var(--sea); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; }
+svg .proc { fill: var(--surface-2); stroke: var(--rule-soft); stroke-width: 1; }
+svg .t-machine { font-family: var(--sans); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; fill: var(--muted); }
+svg .t-proc { font-family: var(--mono); font-size: 13px; font-weight: 700; fill: var(--ink); }
+svg .t-grid { font-family: var(--sans); font-size: 12px; font-weight: 700; fill: #ffffff; }
+svg .t-small { font-family: var(--sans); font-size: 10px; fill: var(--muted); }
 svg .link { stroke: var(--ink-soft); stroke-width: 1.5; fill: none; }
 svg .link.secure { stroke: var(--ok); }
 svg .link.grid { stroke: var(--muted); stroke-dasharray: 4 4; }
 svg .arrowhead { fill: var(--ink-soft); }
 
-/* ------------------------------------------------------------ footer */
+/* --------------------------------------------------------------- footer */
 
 footer {
-  margin-top: clamp(3rem, 7vw, 5rem);
-  padding-top: 1.4rem;
+  margin-top: clamp(2.4rem, 6vw, 4rem);
+  padding-top: 1.2rem;
   border-top: 1px solid var(--rule);
-  font-family: var(--mono);
-  font-size: 0.76rem;
+  font-family: var(--sans);
+  font-size: 0.74rem;
   color: var(--muted);
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem 1.6rem;
   justify-content: space-between;
 }
-footer a { color: var(--muted); }
+footer a { color: var(--accent-ink); }
 .pager { display: flex; gap: 1rem; flex-wrap: wrap; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
