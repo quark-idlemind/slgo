@@ -28,6 +28,7 @@ into the build cache, which needs the module proxy.  After that it is a
 few seconds.
 """
 
+import bisect
 import contextlib
 import json
 import os
@@ -49,6 +50,13 @@ REPO = "https://github.com/quark-idlemind/slgo"
 # same three methods, which is more than half of everything here and
 # says less than the file does.  A link to one goes to its line there.
 GENERATED = {"msg": "msg/messages_gen.go"}
+
+# Whole packages left out, and the file to read instead.  These two are
+# the Go that protoc generates from the service definitions: messages,
+# getters, and the gRPC plumbing between a client and slgod.  sl, which
+# a program of its own uses, exposes none of it.  client, the layer under
+# sl, does, and a link from its page goes to the declaration's line.
+INSTEAD = {"proto/slgov1": "proto/slgo.proto", "proto/scriptv1": "proto/script.proto"}
 
 OPEN = '<div class="Documentation-content js-docContent">'
 
@@ -156,6 +164,8 @@ class Module:
     def link(self, rel, frag, here):
         """Where a link to another package of this module goes."""
         name = frag[1:] if frag else ""
+        if rel in INSTEAD:
+            return self.blob + (self.left_out.get(rel, {}).get(name) or INSTEAD[rel])
         if name in self.left_out.get(rel, {}):
             return self.blob + self.left_out[rel][name]
         if rel == here:
@@ -163,6 +173,25 @@ class Module:
         if rel not in self.ids:
             return "api.html"
         return self.ids[rel] + ".html" + frag
+
+
+def sources(doc):
+    """Where each declaration on a page is, by id, for a page that will
+    not be shown.  A type's or a function's heading holds the link to its
+    source; a constant or a field sits inside a declaration whose link
+    comes before it."""
+    srcs = [(m.start(), m.group(1)) for m in re.finditer(r'data-src="([^"]+)"', doc)]
+    at = [a for a, _ in srcs]
+    out = {}
+    for m in re.finditer(r'<(h\d|span)\b[^>]*\bid="([^"]+)"', doc):
+        i = bisect.bisect(at, m.start())
+        if m.group(1) == "span":
+            src = srcs[i - 1][1] if i else None
+        else:
+            src = srcs[i][1] if i < len(srcs) else None
+        if src:
+            out[m.group(2)] = src
+    return out
 
 
 def leave_out(doc, file):
@@ -371,6 +400,9 @@ def build(commit):
         rel = mod.rel(p["ImportPath"])
         doc = documentation(pages[p["ImportPath"]])
         doc = re.sub(r'href="/files/[^"]*?/%s/([^"]+)"' % re.escape(mod.path), r'data-src="\1"', doc)
+        if rel in INSTEAD:
+            mod.left_out[rel] = sources(doc)
+            continue
         if rel in GENERATED:
             doc, gone = leave_out(doc, GENERATED[rel])
             mod.left_out[rel] = gone
@@ -379,7 +411,13 @@ def build(commit):
                           'one struct per message. A link to one goes to its line there.</p>'
                           % (len(gone), esc(mod.blob), GENERATED[rel], GENERATED[rel]))
         docs[p["ImportPath"]] = doc
+    notes["proto"] = ('\n    <p class="api-note">The Go generated from these definitions is left out: '
+                      '%s. Read the definitions instead. A link to a generated type from another '
+                      'package goes to its line in the generated code.</p>'
+                      % ", ".join('<code>%s</code> from <a href="%s%s">%s</a>' % (rel, esc(mod.blob), f, f.split("/")[-1])
+                                  for rel, f in sorted(INSTEAD.items())))
 
+    pkgs = [p for p in pkgs if mod.rel(p["ImportPath"]) not in INSTEAD]
     arts = []
     for i, p in enumerate(pkgs):
         rel = mod.rel(p["ImportPath"])

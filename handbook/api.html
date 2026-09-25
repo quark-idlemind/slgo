@@ -36,7 +36,8 @@
         <ul>
           <li><strong>From the source, as it is built.</strong> <code>bundle.py</code> runs <code>go doc -http</code>, which serves pkgsite's pages for this checkout, and keeps the documentation part of each. So the pages say what the comments said at the commit in the footer.</li>
           <li><strong>Links.</strong> A type from another package here goes to its page. One from the standard library, or a module slgo uses, goes to pkg.go.dev. A declaration's name goes to its source on GitHub, at the same commit.</li>
-          <li><strong>Left out.</strong> <code>msg</code>'s message structures, generated from Linden Lab's message template, are not here. There are nearly fourteen hundred, each one line of documentation and the same three methods. A link to one goes to its line in the generated file.</li>
+          <li><strong>Left out: <code>msg</code>'s message structures.</strong> They are generated from Linden Lab's message template: nearly fourteen hundred, each one line of documentation and the same three methods. A link to one goes to its line in the generated file.</li>
+          <li><strong>Left out: <code>proto/slgov1</code> and <code>proto/scriptv1</code>.</strong> They are the Go generated from <code>proto/slgo.proto</code> and <code>proto/script.proto</code>, the messages between a client and slgod. <code>sl</code> exposes none of it. <code>client</code>, the layer under <code>sl</code>, does, and a link from its page goes to the declaration's line in the generated code. Read the <code>.proto</code> files for the definitions.</li>
         </ul>
       </section>
 
