@@ -14,10 +14,15 @@ and links between pages become #anchors:
     other.html          ->  #other
     other.html#part     ->  #other--part
     #part  (in NAME)    ->  #NAME--part
+
+It also says which slgo the handbook is for, where the pages leave room
+for it (class="hb-version"), in the words the programs' --version uses.
+Read from a checkout, a page says it is for the slgo in that checkout.
 """
 
 import os
 import re
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -60,6 +65,35 @@ def rewrite(page, html):
         sys.exit("%s.html: a link the bundle cannot follow: %s" % (page, target))
 
     return re.sub(r'\b(href)="([^"]*)"', link, html)
+
+
+def edition():
+    """Which slgo this build of the handbook is for, as internal/version
+    says it for a program built from the same tree:
+
+        slgo v0.7.0 (2026-09-25) fc8dfda
+        slgo development build after v0.7.0 (2026-09-26) 1a2b3c4 modified
+
+    The release is the tag on this commit, or else the last one before
+    it; the date is the commit's, in UTC as the Go toolchain records it;
+    "modified" means the tracked files have edits the commit does not.
+    None outside a git checkout, and then the pages say what they say."""
+    def git(*args):
+        env = dict(os.environ, TZ="UTC")
+        r = subprocess.run(["git", "-C", HERE] + list(args), capture_output=True, text=True, env=env)
+        return r.stdout.strip() if r.returncode == 0 else None
+    commit = git("rev-parse", "--short=7", "HEAD")
+    if not commit:
+        return None
+    release = git("describe", "--tags", "--exact-match", "--match", "v[0-9]*", "HEAD")
+    if not release:
+        last = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD")
+        release = "development build after " + last if last else "development build"
+    date = git("log", "-1", "--format=%cd", "--date=format-local:%Y-%m-%d") or "unknown"
+    line = "slgo %s (%s) %s" % (release, date, commit)
+    if git("status", "--porcelain", "--untracked-files=no"):
+        line += " modified"
+    return line
 
 
 def check_order():
@@ -117,6 +151,13 @@ def main():
         + "\n".join(parts)
         + "\n<script>\n" + js.replace("</script", "<\\/script") + "</script>\n"
     )
+    stamp = edition()
+    if stamp:
+        # A browser breaks a line after a hyphen, and a date broken there
+        # reads as two numbers; the date in brackets is kept whole.
+        stamp = re.sub(r"\(([0-9-]+|unknown)\)", r'<span class="nowrap">(\1)</span>', stamp)
+        doc = re.sub(r'<span class="hb-version">[^<]*</span>',
+                     lambda m: '<span class="hb-version">%s</span>' % stamp, doc)
     with open(out, "w") as f:
         f.write(doc)
     print(out)

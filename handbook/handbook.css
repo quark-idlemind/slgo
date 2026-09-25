@@ -648,6 +648,11 @@ h1 .caret { color: var(--accent-ink); font-family: var(--mono); font-weight: 400
   margin-top: 0.2rem;
 }
 
+/* Which slgo the handbook is for, in the words --version uses, so a
+   reader can hold one against the other.  bundle.py writes it in. */
+.edition { margin: 0; font-size: 0.86rem; color: var(--ink-soft); max-width: 60ch; }
+.nowrap { white-space: nowrap; }
+
 /* The few pages read most, kept in the masthead of the start page the
    way a landmark keeps a place: one or two of them, not a list. */
 .landmarks {
