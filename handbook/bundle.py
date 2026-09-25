@@ -4,6 +4,11 @@
     python3 handbook/bundle.py [OUT]      (default: handbook-bundle.html here)
     python3 handbook/bundle.py --page NAME [OUT]   one page on its own
                                           (default: NAME-bundle.html here)
+    python3 handbook/bundle.py --no-api [OUT]      without the Go packages
+
+The one file also carries the documentation of every Go package in the
+module, a page each, made by go doc from the source as it is built; see
+apidoc.py.  That needs Go, and the first time it needs the network.
 
 Every page is a file of its own with one <article class="page" id=NAME>.
 The bundle holds every article, the stylesheet and the script inline;
@@ -27,12 +32,21 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# apidoc.py is beside this, and importing it would otherwise leave its
+# compiled copy in the tree, which is one thing never to commit.
+sys.dont_write_bytecode = True
+sys.path.insert(0, HERE)
+import apidoc  # noqa: E402
 
 PAGES = [
     "index", "quickstart-local", "quickstart-remote", "quickstart-bot",
-    "bot-llm", "slsh-guide", "how-llm", "own-bot", "setups", "sl-host",
-    "platforms", "security", "troubleshooting", "reference",
+    "bot-llm", "slsh-guide", "how-llm", "own-bot", "api", "setups",
+    "sl-host", "platforms", "security", "troubleshooting", "reference",
 ]
+
+# What a link may name as page.html: the pages, and in the one file the
+# Go packages' pages as well, which main adds.
+KNOWN = set(PAGES)
 
 # A relative link to a file that is not a page (the guide's link to
 # doc/guide.md) has nowhere to go in one file, so it goes to the tree.
@@ -57,7 +71,7 @@ def rewrite(page, html):
         if target.startswith("#"):
             return '%s="#%s"' % (m.group(1), ident(target[1:]))
         f = re.match(r"^([a-z0-9-]+)\.html(?:#(.+))?$", target)
-        if f and f.group(1) in PAGES:
+        if f and f.group(1) in KNOWN:
             other = f.group(1)
             return '%s="#%s"' % (m.group(1), other + ("--" + f.group(2) if f.group(2) else ""))
         if re.match(r"^[a-z0-9_./-]+$", target) and not target.startswith("/"):
@@ -95,6 +109,23 @@ def edition():
     if git("status", "--porcelain", "--untracked-files=no"):
         line += " modified"
     return line
+
+
+def commit():
+    """The commit this is built from, in full, or None outside git."""
+    r = subprocess.run(["git", "-C", HERE, "rev-parse", "HEAD"], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def check_links(doc):
+    """Every #anchor in the one file names something in it.  A link that
+    goes nowhere in one file does nothing when clicked, which nobody
+    reports; the Go packages' pages alone carry thousands of links."""
+    ids = set(re.findall(r'\bid="([^"]+)"', doc))
+    broken = sorted({t for t in re.findall(r'\bhref="#([^"]*)"', doc) if t and t not in ids})
+    if broken:
+        sys.exit("%d links go nowhere in the bundle, among them:\n  %s"
+                 % (len(broken), "\n  ".join(broken[:15])))
 
 
 def check_order():
@@ -146,6 +177,10 @@ def main():
     check_excerpts()
     args = sys.argv[1:]
     only = None
+    api = True
+    if "--no-api" in args:
+        args.remove("--no-api")
+        api = False
     if args[:1] == ["--page"]:
         if len(args) < 2 or args[1] not in PAGES:
             sys.exit("--page wants one of: " + " ".join(PAGES))
@@ -161,8 +196,20 @@ def main():
     charset = '<meta charset="utf-8">\n'
     head = ('<title>slgo handbook</title>\n'
             '<meta name="description" content="Setting up slgod, slsh, slbotd and sl-host, on one machine or several.">\n')
+    # The Go packages first, since the page that lists them is one of
+    # the pages, and their names are names a link may use.
+    listing, packages = None, []
+    if api and not only:
+        listing, packages = apidoc.build(commit())
+        KNOWN.update(name for name, _ in packages)
     for page in ([only] if only else PAGES):
         text = open(os.path.join(HERE, page + ".html")).read()
+        if listing is not None:
+            # What a checkout says in their place, replaced by the list.
+            text, n = re.subn(r'<section id="packages" data-generated="api">.*?</section>',
+                              lambda m: listing, text, flags=re.S)
+            if page == "api" and n != 1:
+                sys.exit("api.html: no <section data-generated=\"api\"> to put the packages in")
         found = ARTICLE.findall(text)
         if len(found) != 1:
             sys.exit("%s.html: want one <article class=\"page\">, found %d" % (page, len(found)))
@@ -174,6 +221,8 @@ def main():
             title = re.search(r"<title>(.*?)</title>", text, re.S)
             head = "<title>%s</title>\n" % (title.group(1).strip() if title else page)
         parts.append(article)
+    for name, article in packages:
+        parts.append(rewrite(name, article))
     doc = (
         charset + head
         + "<style>\n" + css + "</style>\n"
@@ -187,6 +236,8 @@ def main():
         stamp = re.sub(r"\(([0-9-]+|unknown)\)", r'<span class="nowrap">(\1)</span>', stamp)
         doc = re.sub(r'<span class="hb-version">[^<]*</span>',
                      lambda m: '<span class="hb-version">%s</span>' % stamp, doc)
+    if not only:
+        check_links(doc)
     with open(out, "w") as f:
         f.write(doc)
     print(out)

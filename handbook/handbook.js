@@ -22,6 +22,7 @@
     { id: "slsh-guide", title: "slsh guide", group: "use", d: "the shell, command by command" },
     { id: "how-llm", title: "slsh + LLM", group: "use", d: "how, with a language model beside it" },
     { id: "own-bot", title: "Your own bot", group: "use", d: "a program of your own in Go: a greeter, step by step" },
+    { id: "api", title: "Go packages", group: "use", d: "every package's documentation, from its source" },
     { id: "setups", title: "Setups", group: "run", d: "services, several avatars, moving slgod, upgrading" },
     { id: "sl-host", title: "sl-host", group: "run", d: "one address at home, another away" },
     { id: "platforms", title: "Linux & macOS", group: "run", d: "where the two differ, and mixing them" },
@@ -365,7 +366,7 @@
   // in this document, "page.html#id" when it was read from beside it.
   function indexArticle(article, id, href) {
     var out = [];
-    var where = pageTitle(id);
+    var where = article.dataset.label || pageTitle(id);
     function add(title, target, text, kind) {
       var low = (where + " " + title + " " + text).toLowerCase();
       out.push({ page: where, title: title, href: href(target), text: text, low: low, lowTitle: title.toLowerCase(), kind: kind });
@@ -373,6 +374,22 @@
     var h1 = article.querySelector("h1");
     var head = article.querySelector(".masthead");
     add(h1 ? headingOf(h1) : where, "", head ? wordsOf(head, "h1, .eyebrow, .meta-row, nav") : "", "page");
+    if (article.classList.contains("api-pkg")) {
+      // A Go package is found by its declarations, a place each, and
+      // not by a Types section the length of a book.  The overview and
+      // the constants and variables are read as sections.
+      article.querySelectorAll("main > section[id]").forEach(function (s) {
+        if (!/(overview|constants|variables)$/.test(s.id)) return;
+        var h = s.querySelector("h2");
+        add(h ? headingOf(h) : where, s.id, wordsOf(s, "h2"), "section");
+      });
+      article.querySelectorAll("main h3[data-kind], main h4[data-kind]").forEach(function (h) {
+        var text = wordsOf(h.parentElement, ".Documentation-typeMethod, .Documentation-typeFunc, " +
+          ".Documentation-typeConstant, .Documentation-typeVariable, .api-self");
+        add(h.id.replace(/^.*--/, ""), h.id, text.slice(0, 600), "api");
+      });
+      return out;
+    }
     article.querySelectorAll("main > section[id]").forEach(function (s) {
       var h = s.querySelector("h2");
       add(h ? headingOf(h) : where, s.id, wordsOf(s, "h2, details.fault"), "section");
@@ -973,6 +990,28 @@
     buildSteps(article);
     buildFaults(article);
     buildPicker(article);
+    buildApi(article);
+  }
+
+  // A Go package's page, as apidoc.py leaves it: a declaration's name
+  // says which file it is in, and becomes the link to it here, once,
+  // for the page being read -- there are thousands, and one address
+  // but for the file.  Each type, function and heading gets the mark
+  // that links to itself, the way pkg.go.dev has one.
+  function buildApi(article) {
+    var base = article.dataset.srcBase;
+    if (!base) return;
+    article.querySelectorAll("a[data-src]").forEach(function (a) {
+      a.href = base + a.dataset.src;
+    });
+    article.querySelectorAll("main h3[id], main h4[id]").forEach(function (h) {
+      var a = document.createElement("a");
+      a.className = "api-self";
+      a.href = "#" + h.id;
+      a.textContent = "¶";
+      a.setAttribute("aria-label", "Link to " + h.textContent.trim());
+      h.appendChild(a);
+    });
   }
 
   // ------------------------------------------------------------ routing
@@ -1002,7 +1041,8 @@
     if (!page) page = document.getElementById("index") || articles[0];
     articles.forEach(function (a) { a.hidden = a !== page; });
     prepare(page);
-    markNav(page.id);
+    // A package's page is lit as the Go packages page it hangs from.
+    markNav(page.dataset.parent || page.id);
     var t = page.querySelector("h1");
     if (t) document.title = page.dataset.title || t.textContent + " — slgo handbook";
     if (el && el !== page) { reveal(el); el.scrollIntoView(); }

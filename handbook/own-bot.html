@@ -532,7 +532,7 @@ func findGift(ctx context.Context, s *sl.Session, folder, name string) (*sl.Item
 
       <section id="actions">
         <h2>What a bot can do</h2>
-        <p>Every action is a method on the session. These are the ones a bot reaches for first. Run <code>go doc ./sl</code> in the checkout for the rest. Each call's comment says what it waits for and what it cannot tell.</p>
+        <p>Every action is a method on the session. These are the ones a bot reaches for first. The rest are on the <a href="api.html">Go packages</a> page, under <code>sl</code>, and <code>go doc ./sl</code> prints them in a checkout. Each call's comment says what it waits for and what it cannot tell.</p>
         <div class="tablewrap"><table>
           <thead><tr><th>To</th><th>Calls</th></tr></thead>
           <tbody>
@@ -578,6 +578,7 @@ func findGift(ctx context.Context, s *sl.Session, folder, name string) (*sl.Item
           <a class="card" href="../examples/greeter/main.go"><span class="k">Code</span><span class="t">The whole greeter</span><span class="d">examples/greeter/main.go, with its tests beside it.</span></a>
           <a class="card" href="../doc/guide.md"><span class="k">Read</span><span class="t">The slgod guide</span><span class="d">Two clients on one avatar, and what that means if you are writing one.</span></a>
           <a class="card" href="quickstart-bot.html"><span class="k">Compare</span><span class="t">Adding slbotd</span><span class="d">A bigger bot built the same way: commands by IM, and a model behind it.</span></a>
+          <a class="card" href="api.html"><span class="k">Look up</span><span class="t">Go packages</span><span class="d">Every package's documentation: sl and the layers under it.</span></a>
           <a class="card" href="security.html"><span class="k">Read</span><span class="t">Security</span><span class="d">What the shared secret gives a program that holds it.</span></a>
         </div>
       </section>
@@ -586,7 +587,7 @@ func findGift(ctx context.Context, s *sl.Session, folder, name string) (*sl.Item
   </div>
   <footer>
     <span>slgo handbook · for <span class="hb-version">the slgo in this checkout</span></span>
-    <span class="pager"><a href="how-llm.html">← slsh + LLM</a> <a href="setups.html">Setups →</a></span>
+    <span class="pager"><a href="how-llm.html">← slsh + LLM</a> <a href="api.html">Go packages →</a></span>
   </footer>
 </div>
 </article>

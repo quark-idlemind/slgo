@@ -1485,3 +1485,90 @@ footer a { color: var(--accent-ink); }
    faults a search leaves out and, in the one-file build, every page
    but one; a fieldset or a flex box would otherwise stay on show. */
 [hidden] { display: none !important; }
+
+/* ------------------------------------------------------- Go packages
+   A package's page is pkgsite's documentation markup, the classes
+   pkg.go.dev uses, kept as it came (apidoc.py) and drawn in the
+   handbook's own tokens: declarations are notecards, light in the light
+   theme, and a name links to its source. */
+
+.api-doc .Documentation-type,
+.api-doc .Documentation-function,
+.api-doc .Documentation-typeFunc,
+.api-doc .Documentation-typeMethod,
+.api-doc .Documentation-typeConstant,
+.api-doc .Documentation-typeVariable,
+.api-doc .Documentation-declaration {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.api-doc .Documentation-type { gap: 0.7rem; }
+.api-doc .Documentation-typeMethod,
+.api-doc .Documentation-typeFunc { margin-top: 0.6rem; padding-left: 1rem; border-left: 2px solid var(--rule-soft); }
+.api-doc [id] { scroll-margin-top: 4.4rem; }
+
+.api-doc pre {
+  margin: 0;
+  padding: 0.7rem 0.95rem;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  tab-size: 4;
+  max-width: 100%;
+}
+.api-doc pre a { text-decoration: none; }
+.api-doc pre a:hover { text-decoration: underline; }
+.api-doc pre .comment { color: var(--muted); }
+
+.api-doc h3,
+.api-doc h4 {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 1.1rem 0 0;
+  overflow-wrap: anywhere;
+}
+.api-doc h4 { font-size: 0.88rem; margin-top: 0.2rem; }
+.api-doc .Documentation-overview h3 { font-family: var(--sans); font-size: 0.98rem; }
+.api-doc .Documentation-source { font-weight: 700; }
+.api-doc .Documentation-declarationLink { font-size: 0.78rem; }
+.api-self {
+  margin-left: 0.45rem;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-weight: 400;
+  text-decoration: none;
+}
+.api-self:hover, .api-self:focus-visible { color: var(--accent-ink); }
+
+.api-doc .Documentation-indexList,
+.api-doc .Documentation-toc {
+  list-style: none;
+  padding-left: 0;
+  gap: 0.2rem;
+  max-width: none;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+.api-doc .Documentation-toc { font-family: var(--sans); font-size: 0.88rem; }
+.api-doc .Documentation-indexList ul {
+  list-style: none;
+  padding-left: 1.4rem;
+  margin-top: 0.2rem;
+  gap: 0.2rem;
+  max-width: none;
+}
+.api-doc .Documentation-indexList a { text-decoration: none; overflow-wrap: anywhere; }
+.api-doc .Documentation-indexList a:hover { text-decoration: underline; }
+
+.api-none { color: var(--muted); }
+.masthead .api-note { font-size: 0.92rem; color: var(--ink-soft); max-width: var(--measure); }
+.pill.api-import { max-width: 100%; text-transform: none; letter-spacing: 0; font-size: 0.78rem; }
+.pill.api-import code { background: none; padding: 0; overflow-wrap: anywhere; }

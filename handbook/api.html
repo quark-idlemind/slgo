@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Go packages — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="api">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Reference · the code</p>
+    <h1>Go packages</h1>
+    <p class="standfirst">The documentation of every Go package in slgo, a page each, as <code>go doc</code> makes it from the comments in the source. pkg.go.dev cannot show them while the repository is private, so the handbook carries them.</p>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+
+      <section id="start">
+        <h2>Where to start</h2>
+        <p>A program of your own needs <code>sl</code>. It is the layer that knows the protocol: you call <code>Say</code>, <code>Move</code> or <code>GiveToAvatar</code> on a session, and it returns once it has seen the thing happen. Its methods take and return a few types from <code>msg</code>, chiefly <code>UUID</code> and <code>Vector3</code>. <a href="own-bot.html">Your own bot</a> puts them to work.</p>
+        <p>The rest are the layers under <code>sl</code>, and what the commands are made of: <code>client</code> is the connection to slgod, <code>agent</code> the connection to the grid, and <code>msg</code> the grid's messages.</p>
+      </section>
+
+      <section id="packages" data-generated="api">
+        <h2>Where the pages are</h2>
+        <p>The package pages are made when the handbook is folded into one file, so they are in that file and not in this directory:</p>
+        <div class="term"><pre><span class="p">$ </span>python3 handbook/bundle.py</pre></div>
+        <p>Go makes them, so that needs Go, and the first time it needs the network. In a checkout, the same documentation is a command away. <code>go doc ./sl</code> prints a package, <code>go doc ./sl Session.Say</code> prints one method, and <code>go doc -http ./sl</code> shows the pages in a browser.</p>
+      </section>
+
+      <section id="made">
+        <h2>How these pages are made</h2>
+        <ul>
+          <li><strong>From the source, as it is built.</strong> <code>bundle.py</code> runs <code>go doc -http</code>, which serves pkgsite's pages for this checkout, and keeps the documentation part of each. So the pages say what the comments said at the commit in the footer.</li>
+          <li><strong>Links.</strong> A type from another package here goes to its page. One from the standard library, or a module slgo uses, goes to pkg.go.dev. A declaration's name goes to its source on GitHub, at the same commit.</li>
+          <li><strong>Left out: <code>msg</code>'s message structures.</strong> They are generated from Linden Lab's message template: nearly fourteen hundred, each one line of documentation and the same three methods. A link to one goes to its line in the generated file.</li>
+          <li><strong>Left out: <code>proto/slgov1</code> and <code>proto/scriptv1</code>.</strong> They are the Go generated from <code>proto/slgo.proto</code> and <code>proto/script.proto</code>, the messages between a client and slgod. <code>sl</code> exposes none of it. <code>client</code>, the layer under <code>sl</code>, does, and a link from its page goes to the declaration's line in the generated code. Read the <code>.proto</code> files for the definitions.</li>
+        </ul>
+      </section>
+
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook · for <span class="hb-version">the slgo in this checkout</span></span>
+    <span class="pager"><a href="own-bot.html">← Your own bot</a> <a href="setups.html">Setups →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>
