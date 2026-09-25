@@ -1208,7 +1208,10 @@ details.fault .fix h4 {
   display: grid;
   gap: 1rem;
 }
-@media (min-width: 52rem) { .picker .result { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; } }
+/* The reading list, then the picture under it at the picker's full
+   width.  Beside the list the picture had half of it, less than the
+   30rem it needs, and the grid it draws on the right was scrolled out
+   of sight. */
 .picker .result .go { display: flex; flex-direction: column; gap: 0.6rem; }
 .picker .result .go ol { font-size: 0.9rem; }
 .button {
@@ -1279,5 +1282,8 @@ footer a { color: var(--accent-ink); }
   html { scroll-behavior: auto; }
 }
 
-/* In the one-file build every page is present and only one shows. */
-.page[hidden] { display: none !important; }
+/* Hidden means hidden, whatever display a rule above gave the thing.
+   The script hides the picker's questions that do not apply, the
+   faults a search leaves out and, in the one-file build, every page
+   but one; a fieldset or a flex box would otherwise stay on show. */
+[hidden] { display: none !important; }
