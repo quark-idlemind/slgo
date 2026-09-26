@@ -97,22 +97,33 @@ Without `-l` the same listing is the same path several times over,
 which is honest and says nothing about which is which.
 
 A folder wins where a folder and an item share a name, as `cd` does;
-the id names the item.  A path that is neither is reported as the
-name it is rather than as the folder it was tried as first.
+the id names the item.  Two folders of one name are listed as
+themselves, one line each, since the path cannot say which of them
+to open.  A path that is neither is reported as the name it is rather
+than as the folder it was tried as first.
 
-Inventory names are not unique.  A path names the first of them.
-The id names exactly one, and `cat`, `rm`, `mv`, `drop` and the rest
-take an id anywhere they take a path.  `get` looks like it belongs
-on that list and does not: the uuid it takes is a texture's asset
-id, which is not what this column prints.
+The name is matched exactly, in the case it has: `greeter` does not
+list `Greeter`.  A name that matches nothing is refused, naming what
+differs from it only in case.
+
+Inventory names are not unique, and every other command refuses a
+path that names several things, listing their ids.  The id names
+exactly one, and `cat`, `rm`, `mv`, `drop` and the rest take an id
+anywhere they take a path.  `get` looks like it belongs on that list
+and does not: the uuid it takes is a texture's asset id, which is not
+what this column prints.
 
 ## Inside a rezzed object
 
 The ids in a `-l` listing `--in` an object belong to the object's
 own copies, not to the inventory items they came from.  `rm --in`,
 `mv --in`, `cat --in` and `fetch` take either: the name, matched
-exactly and in the case it has, or one of these ids, which is how one
-of two items of the same name is chosen.
+exactly and in the case it has, or one of these ids.
+
+An object's names are unique, although names that differ only in case
+are two names there as well.  It renames a second item of one name
+as it goes in: putting `Script` into a prim that already holds one
+leaves `Script` and `Script 1`.
 
 ## Examples
 

@@ -9,12 +9,11 @@ shell is in unless it begins with a slash, or the key of an item.
 
     give Example Resident Objects/lantern
 
-The key is the form to reach for where a folder holds two items of one
-name.  A path takes the first of them, in listing order, and says
-nothing about the other -- which is a worse bargain here than
-elsewhere, because this hands the thing to a person rather than
-printing it.  `ls -l` puts the key beside each duplicate for exactly
-this.
+The item's name is matched exactly, in the case it has, and has to
+mean one thing.  Where a folder holds two items of one name, the path
+is refused and the refusal lists their keys, since offering the first
+of them would hand a person something nobody chose.  The key names
+one; `ls -l` puts it beside each duplicate as well.
 
 A person is resolved the way `im` resolves one: the session's cache is
 asked, then whoever is standing in the region, and last the grid's own

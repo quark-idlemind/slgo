@@ -546,9 +546,9 @@ func inTrash(path string, bins []string) bool {
 // A uuid is looked up as an item id or as an asset id, and matches at
 // most one thing: the two ids are unique and a person pasting one from
 // "ls -l" has the first, which the grid will not take.  Anything else
-// is a name, matched without regard to case as the rest of the shell
-// matches names, against the entry's own name or against its whole path
-// with or without the leading separator a listing prints.
+// is a name, matched without regard to case, against the entry's own
+// name or against its whole path with or without the leading separator
+// a listing prints.
 //
 // It is one function rather than two so that the same rule decides what
 // was meant whether the answer is a landmark, a refusal about the
@@ -640,10 +640,10 @@ func withAsset(e sl.Entry) (sl.Entry, error) {
 // sharePath says whether everything here sits at the same path, which
 // is what a name in one folder twice comes to.
 //
-// Compared without regard to case, as everything else that matches a
-// path here is: two names differing only in case are not two names a
-// person can tell apart at a prompt, so offering the path as the way to
-// choose between them would be offering nothing.
+// Compared without regard to case, because matchLandmarks matches a
+// path that way: two paths differing only in case would each still
+// answer to both, so offering the path as the way to choose between
+// them would be offering nothing.
 func sharePath(es []sl.Entry) bool {
 	for _, e := range es[1:] {
 		if !strings.EqualFold(e.Path, es[0].Path) {

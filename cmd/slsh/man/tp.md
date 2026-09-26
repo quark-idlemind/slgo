@@ -34,8 +34,8 @@ itself and the whole of what goes out is "home".  It is
 `landmark --home` under a shorter name and behaves identically,
 including the wait.
 
-The word is matched without regard to case, as every other name this
-shell matches is, so `tp HOME` is the same trip.
+The word is matched without regard to case, since it is this shell's
+word rather than a name the grid keeps, so `tp HOME` is the same trip.
 
 Going home while standing at home is refused: the grid will not shorten
 a teleport that arrives where it started, and says `CouldntTPCloser`.

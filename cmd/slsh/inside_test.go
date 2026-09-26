@@ -314,15 +314,15 @@ func TestStartingOneNamedScriptLeavesTheRestAlone(t *testing.T) {
 //
 // A name that is not in the object is a typo or a script somebody
 // deleted, and either way the answer is what the object does hold.  An
-// object with no scripts at all gets its own sentence: "no script called
-// x" would read as a denial that the box has any, which is the thing
-// most worth saying when it is true.
+// object with no scripts at all gets its own sentence: "no script x"
+// would read as a denial that the box has any, which is the thing most
+// worth saying when it is true.
 func TestStartRefusesWhatIsNotThere(t *testing.T) {
 	x := aBoxHolding(t,
 		&heldItem{Name: "greeter", ID: aGreeter},
 	)
 	got := x.do(t, "start Box1 footstool")
-	if !strings.Contains(got, `no script called "footstool"`) {
+	if !strings.Contains(got, `no script "footstool" in Box1`) {
 		t.Errorf("start of a script that is not there printed %q", got)
 	}
 	if !strings.Contains(got, "ls --in") {
@@ -439,9 +439,9 @@ func serveScriptUpload(t *testing.T, x *testShell, verdict string) {
 // back, one for its id and one for a copy of the whole of it.  A
 // mistyped name took the shell down with a nil dereference.
 //
-// So the refusal is the shell's rather than the sl package's, and it
-// says both halves of what went wrong: which object was looked in, and
-// which name was not in it.
+// They look the name up with sl.PickNamed now, which refuses rather
+// than answering nil, and the refusal says both halves of what went
+// wrong: which object was looked in, and which name was not in it.
 func TestRmAndMvInsideRefuseWhatIsNotThere(t *testing.T) {
 	x := aBoxHolding(t,
 		&heldItem{Name: "greeter", ID: aGreeter},
@@ -450,7 +450,7 @@ func TestRmAndMvInsideRefuseWhatIsNotThere(t *testing.T) {
 
 	for _, line := range []string{"rm --in Box1 footstool", "mv --in Box1 footstool warden"} {
 		got := x.do(t, line)
-		if !strings.Contains(got, `Box1 holds nothing called "footstool"`) {
+		if !strings.Contains(got, `nothing called "footstool" in Box1`) {
 			t.Errorf("%q printed %q", line, got)
 		}
 		if !strings.Contains(got, "ls --in") {
@@ -493,6 +493,62 @@ func TestRmAndMvInsideRefuseWhatIsNotThere(t *testing.T) {
 	}
 	if renames[0].InventoryData.ItemID != aGreeter {
 		t.Errorf("the rename named item %s", renames[0].InventoryData.ItemID)
+	}
+}
+
+// TestANameInsideAnObjectIsSpeltAsItIs.
+//
+// An object keeps "Greeter" and "greeter" as two scripts, so each verb
+// that names one inside it takes the one spelt that way, and a third
+// spelling is nothing -- with what differs from it only in case offered
+// in place of the pointer at ls --in, since that is the likelier typo.
+func TestANameInsideAnObjectIsSpeltAsItIs(t *testing.T) {
+	upper := msg.MustParseUUID("e1c87e57-7e57-c0de-3ad9-0cdb6c24e8f4")
+	x := aBoxHolding(t,
+		&heldItem{Name: "greeter", ID: aGreeter},
+		&heldItem{Name: "Greeter", ID: upper},
+	)
+
+	if got := x.do(t, "start Box1 Greeter"); !strings.Contains(got, "started    Greeter") {
+		t.Errorf("start of Greeter printed %q", got)
+	}
+	sent := sentOfShell[*msg.SetScriptRunning](x)
+	if len(sent) != 1 || sent[0].Script.ItemID != upper {
+		t.Errorf("start of Greeter sent %+v, want the one spelt that way", sent)
+	}
+
+	for _, line := range []string{"rm --in Box1 GREETER", "mv --in Box1 GREETER warden", "cat --in Box1 GREETER"} {
+		got := x.do(t, line)
+		if !strings.Contains(got, `nothing called "GREETER" in Box1; did you mean "greeter" or "Greeter"?`) {
+			t.Errorf("%q printed %q", line, got)
+		}
+		if strings.Contains(got, "ls --in") {
+			t.Errorf("%q offered ls --in beside a near miss: %q", line, got)
+		}
+	}
+	if got := x.do(t, "stop Box1 GREETER"); !strings.Contains(got, `no script "GREETER" in Box1; did you mean`) {
+		t.Errorf("stop of a third spelling printed %q", got)
+	}
+	if got := sentOfShell[*msg.RemoveTaskInventory](x); len(got) != 0 {
+		t.Errorf("a refused rm --in sent %d removals", len(got))
+	}
+}
+
+// TestRmInsideRefusesRemoveAllCopies: an object renames a second item
+// of one name, so a name inside one is one item at most and there are
+// no copies to remove all of.  Accepting the flag and removing one would
+// be the flag saying something the command did not do.
+func TestRmInsideRefusesRemoveAllCopies(t *testing.T) {
+	x := aBoxHolding(t, &heldItem{Name: "greeter", ID: aGreeter})
+	got := x.do(t, "rm --in Box1 --remove-all-copies greeter")
+	if !strings.Contains(got, "--remove-all-copies does not apply inside an object") {
+		t.Errorf("rm --in --remove-all-copies printed %q", got)
+	}
+	if got := sentOfShell[*msg.RemoveTaskInventory](x); len(got) != 0 {
+		t.Errorf("a refused rm --in sent %d removals", len(got))
+	}
+	if got := x.do(t, "rm --in Box1 greeter"); !strings.Contains(got, `deleted "greeter" from Box1`) {
+		t.Errorf("rm --in without the flag printed %q", got)
 	}
 }
 

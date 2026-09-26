@@ -68,6 +68,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -197,55 +198,70 @@ func (sh *Shell) resolveDir(ctx context.Context, path string) ([]string, msg.UUI
 	return cur, id, nil
 }
 
-// folderAt resolves a list of names to a folder id.
+// folderAt resolves a list of names to a folder id, each name picking
+// out one folder through sl.PickNamed.
 func (sh *Shell) folderAt(ctx context.Context, names []string) (msg.UUID, error) {
 	if len(names) == 0 {
 		return sh.s.InventoryRoot(), nil
 	}
-	es, err := sh.s.ListInventory(ctx, sl.JoinPath(names[:len(names)-1]...), 0)
+	parent := names[:len(names)-1]
+	es, err := sh.s.ListInventory(ctx, sl.JoinPath(parent...), 0)
 	if err != nil {
 		return msg.UUID{}, err
 	}
-	want := names[len(names)-1]
+	var folders []sl.Entry
 	for _, e := range es {
-		if e.Folder && strings.EqualFold(e.Name, want) {
-			return e.ID, nil
+		if e.Folder {
+			folders = append(folders, e)
 		}
 	}
-	return msg.UUID{}, fmt.Errorf("no folder %q", want)
+	f, err := sl.PickNamed(folders, names[len(names)-1], "folder", sh.inFolder(parent))
+	if err != nil {
+		return msg.UUID{}, err
+	}
+	return f.ID, nil
+}
+
+// inFolder is a folder as a refusal names it: "here" for the one the
+// shell is in, and its path otherwise.
+func (sh *Shell) inFolder(names []string) string {
+	sh.mu.Lock()
+	here := slices.Equal(names, sh.cwd)
+	sh.mu.Unlock()
+	if here {
+		return "here"
+	}
+	return "in /" + sl.JoinPath(names...)
 }
 
 // entryAt finds one entry, by path or by id, folder or item.
 //
-// An id is worth taking because names are not unique: a folder can hold
-// eighteen things called the same thing, and a path names the first of
-// them.  ls -l prints the id beside the path for exactly this, so that
-// a listing of duplicates can still be edited into commands that mean
-// one each.
+// A path has to mean one thing, whatever the command is about to do
+// with it: a name that means several is refused through sl.PickNamed,
+// listing their ids.  Reading is not let off, because a person is not
+// always there to take a second look -- "cat notes > file" in a script
+// would write the wrong notecard to disk and say nothing.  ls -l prints
+// the id beside the path, and an id is taken wherever a path is.
 //
-// Taking the first is right for reading -- cat, get and the rest print
-// or copy, and doing it to the wrong one of two identical items costs
-// nothing but a second look.  rm does not use this: deleting is
-// permanent, so it asks entriesAt what the name really means and refuses
-// a name that means several.
 // The index needs no length check, and the reason is one level down:
 // entriesIn returns an error for every path that matches nothing, so a
 // nil error here carries at least one entry.  Checked rather than
 // assumed, because the shape invites the assumption.
 func (sh *Shell) entryAt(ctx context.Context, path string) (sl.Entry, error) {
-	es, err := sh.entriesAt(ctx, path)
+	in, es, err := sh.entriesIn(ctx, path)
 	if err != nil {
 		return sl.Entry{}, err
 	}
-	return es[0], nil
+	return sl.PickNamed(es, es[0].Name, "", sh.inFolder(in))
 }
 
-// entriesAt is entryAt for everything the path names, in listing order.
+// entriesAt is entryAt for everything the path names, in listing order,
+// matched exactly through sl.AllNamed.
 //
 // A path can name more than one thing, since a folder may hold a dozen
-// items called the same thing -- which is what rm --newest, --oldest and
-// --remove-all-copies are for, and what rm refuses without one of them.
-// An id names exactly one, so that form returns the one.
+// items called exactly the same thing -- which is what rm --newest,
+// --oldest and --remove-all-copies are for, and what rm refuses without
+// one of them.  An id names exactly one, so that form returns the one.
 func (sh *Shell) entriesAt(ctx context.Context, path string) ([]sl.Entry, error) {
 	_, es, err := sh.entriesIn(ctx, path)
 	return es, err
@@ -291,29 +307,11 @@ func (sh *Shell) entriesIn(ctx context.Context, path string) ([]string, []sl.Ent
 	if err != nil {
 		return nil, nil, err
 	}
-	want := names[len(names)-1]
-	found := matchName(es, want)
-	if len(found) == 0 {
-		return nil, nil, fmt.Errorf("nothing called %q here", want)
+	found, err := sl.AllNamed(es, names[len(names)-1], "", sh.inFolder(in))
+	if err != nil {
+		return nil, nil, err
 	}
 	return in, found, nil
-}
-
-// matchName picks out everything of a name, keeping the listing order
-// so that the first is the one a path means where one is taken.
-//
-// The comparison ignores case, as the rest of the shell does: the grid
-// keeps the case a name was given but does not make two names that
-// differ only in case into two different names worth telling apart at a
-// prompt.
-func matchName(es []sl.Entry, want string) []sl.Entry {
-	var found []sl.Entry
-	for _, e := range es {
-		if strings.EqualFold(e.Name, want) {
-			found = append(found, e)
-		}
-	}
-	return found
 }
 
 // entryByID looks for an id here, then anywhere below the root, and
@@ -666,7 +664,9 @@ func cmdLs(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 // the older meaning of the two and the one cd agrees with; the item can
 // still be named by its id.  The refusal from the folder attempt is
 // dropped rather than reported, because "no folder" is not what went
-// wrong when the name was never meant to be one.
+// wrong when the name was never meant to be one.  Two folders of one
+// name land here too, and are listed as themselves: the path cannot say
+// which of them to open, and their ids are what can.
 func (sh *Shell) toList(ctx context.Context, path string, deep bool) ([]string, []sl.Entry, error) {
 	names, id, err := sh.resolveDir(ctx, path)
 	if err != nil {
@@ -1220,10 +1220,17 @@ func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			strings.Join(said[:len(said)-1], ", "), said[len(said)-1])
 	}
 	if o.In != "" {
-		// Choosing among duplicates is choosing by date, and what an
-		// object holds is not dated: sl.TaskItem carries a name, a kind
-		// and an id, and the item it was copied from kept the date.
-		if said := o.whichOne(); len(said) > 0 && !o.AllCopies {
+		// None of the three has anything to choose among: an object
+		// renames a second item of one name, so a name inside one means
+		// one item at most.  Why: doc/names.md#measured
+		if o.AllCopies {
+			return fmt.Errorf("--remove-all-copies does not apply inside an object: " +
+				"an object renames a second item of one name, so there is only ever one")
+		}
+		// And choosing by date could not be done anyway: sl.TaskItem
+		// carries a name, a kind and an id, and the item it was copied
+		// from kept the date.
+		if said := o.whichOne(); len(said) > 0 {
 			return fmt.Errorf("%s does not apply inside an object: what one holds has no dates on it", said[0])
 		}
 		return sh.removeInside(ctx, out, o.In, args)

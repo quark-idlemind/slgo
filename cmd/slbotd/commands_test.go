@@ -301,7 +301,7 @@ func TestStandTakesNothing(t *testing.T) {
 func TestANameThatMeansTwoThingsIsRefused(t *testing.T) {
 	kids := []sl.Entry{
 		{ID: testLamp, Name: "a lamp"},
-		{ID: testStranger, Name: "A Lamp"},
+		{ID: testStranger, Name: "a lamp"},
 		{ID: testSender, Name: "something else"},
 	}
 	_, err := pickEntry(kids, "a lamp", "Objects")
@@ -314,17 +314,36 @@ func TestANameThatMeansTwoThingsIsRefused(t *testing.T) {
 		}
 	}
 
-	// One is one, whatever its case.
-	e, err := pickEntry(kids, "SOMETHING ELSE", "Objects")
-	if err != nil || e.ID != testSender {
-		t.Errorf("pickEntry = %v, %v", e, err)
-	}
-
 	// And nothing says where it looked, since a path that resolved to
 	// the wrong folder looks exactly like a missing item.
 	_, err = pickEntry(kids, "a hat", "")
 	if err == nil || !strings.Contains(err.Error(), "the inventory root") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+// The grid keeps "A Lamp" and "a lamp" as two names, so a name is the
+// one spelt that way and a case variant beside it is neither a second
+// meaning nor a stand-in.
+func TestPickEntryMatchesTheCaseItHas(t *testing.T) {
+	kids := []sl.Entry{
+		{ID: testLamp, Name: "a lamp"},
+		{ID: testStranger, Name: "A Lamp"},
+		{ID: testSender, Name: "something else"},
+	}
+	for want, id := range map[string]msg.UUID{"a lamp": testLamp, "A Lamp": testStranger} {
+		if e, err := pickEntry(kids, want, "Objects"); err != nil || e.ID != id {
+			t.Errorf("pickEntry(%q) = %v, %v; want %s", want, e.ID, err, id)
+		}
+	}
+
+	// Another case is not a match, and the refusal says what is there.
+	_, err := pickEntry(kids, "SOMETHING ELSE", "Objects")
+	if err == nil {
+		t.Fatal(`"SOMETHING ELSE" was taken for "something else"`)
+	}
+	if !strings.Contains(err.Error(), `did you mean "something else"?`) {
+		t.Errorf("the refusal does not offer the near miss: %v", err)
 	}
 }
 

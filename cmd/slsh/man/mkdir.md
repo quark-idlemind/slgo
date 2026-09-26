@@ -13,10 +13,10 @@ What it prints is the new folder's id.
 
 ## Nothing stops two folders sharing a name
 
-Asking twice makes two folders with one name.  A path then means
-the first of them, and the second can only be named by its id, which
-is what `ls -l` prints ids for.  Where that has happened by
-accident, `mv` renames one of them and the ambiguity is gone.
+Asking twice makes two folders with one name.  A path through that
+name then means neither of them and is refused, listing both ids;
+`ls -l` prints them too.  Where that has happened by accident, `mv`
+given one of the ids renames it, and the ambiguity is gone.
 
 ## What a name may contain
 

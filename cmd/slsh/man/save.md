@@ -8,10 +8,14 @@ Two arguments, the file first and the item second.  The item takes
 the rest of the line, since a name with spaces in it is ordinary in
 inventory and rare on disk.
 
-The item's own type decides which write happens.  A link is refused
-rather than followed: it carries the type of whatever it points at,
-so it looks exactly like the notecard it names, and the write would
-go to the link's own item, which is not where the text lives.
+The item's own type decides which write happens.  A link is followed
+to the item it points at, and it is that item's type; see the end of
+this page.
+
+The item's name is matched exactly, in the case it has, and has to
+mean one thing.  Where a folder holds two of one name, the path is
+refused and the refusal lists their ids: writing the first of them
+would overwrite a notecard nobody chose.  An id names one.
 
 ## A script that does not compile is still saved
 

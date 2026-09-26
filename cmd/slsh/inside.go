@@ -160,33 +160,26 @@ func (sh *Shell) listInside(ctx context.Context, out io.Writer, what string, lon
 	return nil
 }
 
-// findInside is sl.FindInObject for the two commands that must find
-// something, and is the shell's sentence for not finding it.
+// findInside is the one item inside an object that a name or an id
+// means, for the commands that act on one: rm --in, mv --in, cat --in
+// and fetch.  Not finding it is a refusal, never a nil item.
 //
-// sl.FindInObject reports "it is not in there" as a nil item and no
-// error, and does it deliberately: sl.Run and sl.InstallScript ask
-// whether a script is in the object in order to decide whether to put
-// one there, so not being there is an answer they act on rather than a
-// failure -- sl/inventory_test.go pins that down by name.  Teaching it
-// to return an error would break both of those to save a nil check
-// here.  So the check belongs at the call sites that did mean to find
-// something, and rm --in and mv --in are both of them: each read the
-// item straight back and panicked on the nil.
-//
-// The refusal is scriptsIn's sentence with a wider noun.  An object
-// holds notecards and textures beside its scripts and these two verbs
-// work on all of them, so it says "nothing called" rather than "no
-// script called", and it names the object as well as the missing item:
-// with several boxes about, which one was asked is half the answer.
+// A name picks it out through sl.PickNamed, exactly and in the case it
+// has.  An object renames a second item of one name, so what can go
+// wrong here is a name nothing has, and the refusal names the object
+// as well as the item: with several boxes about, which one was asked
+// is half the answer.  It is "nothing called" rather than scriptsIn's
+// "no script", because an object holds notecards and textures beside
+// its scripts and these verbs work on all of them.
 //
 // A uuid is the id the object gives its copy, the one "ls -l --in"
-// prints, and it is how one of two items with a name is chosen.
+// prints.
 func (sh *Shell) findInside(ctx context.Context, o *sl.Object, name string) (*sl.TaskItem, error) {
+	items, err := sh.s.TaskInventory(ctx, o)
+	if err != nil {
+		return nil, err
+	}
 	if id, err := msg.ParseUUID(strings.TrimSpace(name)); err == nil {
-		items, err := sh.s.TaskInventory(ctx, o)
-		if err != nil {
-			return nil, err
-		}
 		for i := range items {
 			if items[i].ID == id {
 				return &items[i], nil
@@ -195,15 +188,22 @@ func (sh *Shell) findInside(ctx context.Context, o *sl.Object, name string) (*sl
 		return nil, fmt.Errorf("%s holds nothing with the id %s; \"ls -l --in\" lists what it does hold",
 			o.Name, id)
 	}
-	it, err := sh.s.FindInObject(ctx, o, name)
+	it, err := sl.PickNamed(items, name, "", "in "+o.Name)
 	if err != nil {
-		return nil, err
+		return nil, orLookInside(err)
 	}
-	if it == nil {
-		return nil, fmt.Errorf("%s holds nothing called %q; \"ls --in\" lists what it does hold",
-			o.Name, name)
+	return &it, nil
+}
+
+// orLookInside says where to look after a refusal that found nothing
+// like the name, which is when what the object holds is the answer.  A
+// refusal with a near miss in it has a better answer already.
+func orLookInside(err error) error {
+	var ne *sl.NameError
+	if errors.As(err, &ne) && len(ne.IDs) == 0 && len(ne.Near) == 0 {
+		return fmt.Errorf("%w; \"ls --in\" lists what it does hold", err)
 	}
-	return it, nil
+	return err
 }
 
 // removeInside deletes items from inside an object.
@@ -633,8 +633,8 @@ func (sh *Shell) setRunning(ctx context.Context, out io.Writer, args []string, r
 	return nil
 }
 
-// scriptsIn is the scripts inside an object: the one named, or all of
-// them when nothing is named.
+// scriptsIn is the scripts inside an object: the one named, picked out
+// through sl.PickNamed, or all of them when nothing is named.
 //
 // "lsltext" is what the contents file calls a script, and is what tells
 // one from the notecards and textures beside it; sl.RemoveScripts
@@ -648,21 +648,21 @@ func (sh *Shell) scriptsIn(ctx context.Context, o *sl.Object, name string) ([]sl
 	}
 	var scripts []sl.TaskItem
 	for _, it := range items {
-		if it.Type != "lsltext" {
-			continue
+		if it.Type == "lsltext" {
+			scripts = append(scripts, it)
 		}
-		if name != "" && it.Name != name {
-			continue
-		}
-		scripts = append(scripts, it)
 	}
-	switch {
-	case len(scripts) > 0:
-		return scripts, nil
-	case name == "":
+	if name != "" {
+		it, err := sl.PickNamed(scripts, name, "script", "in "+o.Name)
+		if err != nil {
+			return nil, orLookInside(err)
+		}
+		return []sl.TaskItem{it}, nil
+	}
+	if len(scripts) == 0 {
 		return nil, fmt.Errorf("%s holds no scripts; \"ls --in\" lists what it does hold", o.Name)
 	}
-	return nil, fmt.Errorf("%s holds no script called %q; \"ls --in\" lists what it does hold", o.Name, name)
+	return scripts, nil
 }
 
 // scriptAsk is how long one GetScriptRunning is given to be answered.

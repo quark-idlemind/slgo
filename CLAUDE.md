@@ -224,9 +224,9 @@ comment in the same change.
 
 ## Shared helpers
 
-Some waits are easy to get wrong and are written once. Use these rather
-than a loop of your own, and add a line here when another is shared the
-same way.
+Some waits, and a few other things, are easy to get wrong and are
+written once. Use these rather than a loop of your own, and add a line
+here when another is shared the same way.
 
 - `poll`, in `sl/session.go`: asks a read -- AIS, the backend -- until
   it holds, returning `ctx.Err()` at once when the caller gives up and
@@ -244,3 +244,12 @@ same way.
   `ErrNotHere`. A local id read straight off `o.Local` into a message
   names whatever has that number where the avatar is now, and
   `TestNoLocalIDIsSentStraightOffAnObject` refuses one.
+- `PickNamed`, in `sl/pick.go`: the one inventory entry or item inside
+  an object that a name means, matched exactly, in the case it has. It
+  refuses a name several things have, listing their ids, and a name
+  nothing has, offering what differs from it only in case; `AllNamed`,
+  beside it, is the same match for a command that acts on every one of
+  a name. A person's name is not one of these, and is matched ignoring
+  case. `TestNoInventoryNameIsMatchedIgnoringCase` refuses a
+  `strings.EqualFold` on a `.Name` or `.Path` in `sl`, `slsh` or
+  `slbotd` until it is listed there with what it matches.

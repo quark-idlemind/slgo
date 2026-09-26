@@ -49,9 +49,10 @@ one there already.
 
 Moving and renaming at once is two commands, in either order.
 
-A folder can hold several things of one name, and a path means the
-first of them.  Where that is not the one wanted, `ls -l` prints the
-id beside each and an id may be given wherever a path is.
+A folder can hold several things of one name, and a path that means
+several is refused, listing their ids.  `ls -l` prints the id beside
+each too, and an id may be given wherever a path is.  The name is
+matched exactly, in the case it has.
 
 ## Examples
 
