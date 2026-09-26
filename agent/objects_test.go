@@ -70,12 +70,12 @@ func terseBlob(local uint32, pos msg.Vector3) []byte {
 	for range 6 { // velocity and acceleration, three each
 		w.u16(32767)
 	}
-	// Rotation runs from minus one to one, and all four components are
-	// sent here even though only three are kept.
+	// Rotation runs from minus one to one, all four components, and
+	// is kept normalised with W made positive.
 	w.u16(65535)  // X, the top of the range
 	w.u16(0)      // Y, the bottom
 	w.u16(65535)  // Z
-	w.u16(0)      // W, dropped on the way in
+	w.u16(0)      // W, the bottom
 	for range 3 { // angular velocity
 		w.u16(32767)
 	}
@@ -229,18 +229,18 @@ func TestAFullUpdateIsRememberedFromItsBytes(t *testing.T) {
 	}
 }
 
-// TestTheNarrowPlacementFormsAreAcceptedToo: the placement blob comes in
-// several widths and the width is the only thing that says which.  An
+// TestTheSixteenBitPlacementFormIsAcceptedToo: the placement blob comes
+// in several widths and the width is the only thing that says which.  An
 // avatar's is sixteen bytes longer than a prim's because it starts with
-// a collision plane, and the narrow forms are integers quantised over
-// the region rather than floats -- so zero is the bottom of the range
+// a collision plane, and the thirty-two byte form is integers quantised
+// over ranges rather than floats -- so zero is the bottom of each range
 // and not the origin.
-func TestTheNarrowPlacementFormsAreAcceptedToo(t *testing.T) {
+func TestTheSixteenBitPlacementFormIsAcceptedToo(t *testing.T) {
 	t.Parallel()
 
-	// Thirty-two bytes of zeroes: position and rotation both at the
-	// bottom of their ranges, which for a position is half a region
-	// below the corner.
+	// Thirty-two bytes of zeroes: X and Y half a region below the
+	// corner, Z a region's width below the ground, and all four
+	// components of the rotation at minus one.
 	quantised := make([]byte, 32)
 	// The same, with a collision plane in front of it, which is what an
 	// avatar sends.
@@ -262,13 +262,43 @@ func TestTheNarrowPlacementFormsAreAcceptedToo(t *testing.T) {
 			if !ok {
 				t.Fatal("not remembered")
 			}
-			if want := (msg.Vector3{X: -128, Y: -128, Z: -128}); got.Position != want {
+			if want := (msg.Vector3{X: -128, Y: -128, Z: -256}); got.Position != want {
 				t.Errorf("position = %+v, want %+v", got.Position, want)
 			}
-			if want := (msg.Quaternion{X: -1, Y: -1, Z: -1}); got.Rotation != want {
+			// Minus one four times is twice a unit quaternion with W
+			// negative, so what is kept is it halved and turned round.
+			if want := (msg.Quaternion{X: 0.5, Y: 0.5, Z: 0.5}); got.Rotation != want {
 				t.Errorf("rotation = %+v, want %+v", got.Rotation, want)
 			}
 		})
+	}
+}
+
+// TestPlacementWidthsAreCounted: every placement blob an ObjectUpdate
+// carries is counted by its width, the ones nothing reads as well,
+// since the count is how a day's traffic says which forms the
+// simulator really sends.
+func TestPlacementWidthsAreCounted(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	block := func(local uint32, width int) msg.ObjectUpdate_ObjectData {
+		return msg.ObjectUpdate_ObjectData{ID: local, FullID: aPrim, PCode: 9, ObjectData: make([]byte, width)}
+	}
+	feed(t, a,
+		arriving(t, block(1, 60), block(2, 60), block(3, 32)),
+		arriving(t, block(4, 76), block(5, 16), block(6, 60)),
+	)
+
+	want := map[int]uint64{60: 3, 32: 1, 76: 1, 16: 1}
+	got := a.PlacementWidths()
+	if len(got) != len(want) {
+		t.Errorf("widths = %v, want %v", got, want)
+	}
+	for w, n := range want {
+		if got[w] != n {
+			t.Errorf("%d bytes counted %d times, want %d (all: %v)", w, got[w], n, got)
+		}
 	}
 }
 

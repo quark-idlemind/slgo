@@ -683,9 +683,13 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 		Clients:         int32(h.ClientCount()),
 		Unhandled:       map[string]uint64{},
 		Viewer:          s.viewerFor(h.Name),
+		PlacementWidths: map[uint32]uint64{},
 	}
 	for id, n := range a.Disp.Unhandled() {
 		out.Unhandled[id.String()] = n
+	}
+	for w, n := range a.PlacementWidths() {
+		out.PlacementWidths[uint32(w)] = n
 	}
 	return out, nil
 }

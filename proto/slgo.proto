@@ -885,6 +885,13 @@ message StatusResponse {
   // thing: state the daemon holds, about one agent, that a client
   // cannot work out for itself.
   ViewerEndpoint viewer = 13;
+
+  // How many ObjectUpdate placement blobs have arrived, by width in
+  // bytes.  The width says which form a blob is in: the daemon reads
+  // 60, 124 and 32, and 76, 140 and 48 for an avatar, and counts every
+  // width it is sent, the ones it does not read as well.  It is here to
+  // show which forms the simulator really sends.
+  map<uint32, uint64> placement_widths = 14;
 }
 
 // ViewerEndpoint is slgod's own login server, and whether a viewer has

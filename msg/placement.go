@@ -7,59 +7,61 @@ import (
 )
 
 // DecodePlacement reads the position and rotation out of the packed
-// blob in an ObjectUpdate.
+// blob in an ObjectUpdate, and reports false for a width it does not
+// know.
 //
-// The blob comes in several widths and the width is how you tell which
-// it is.  The wide ones are plain floats; the narrow ones are integers
-// quantised over the region, which is why the ranges below are in
-// terms of the region's size.  An avatar's blob is sixteen bytes
-// longer than a prim's because it starts with a collision plane.
+// The width is how you tell which form the blob is.  Sixty bytes are
+// plain floats, and 124 are the same with room for more after them,
+// which is not read.  Thirty-two are sixteen bit fractions, laid out
+// and ranged as the viewer's sixteen bit reader has them
+// (llviewerobject.cpp:1636-1695).  An avatar's blob is sixteen bytes
+// longer than a prim's, 76, 140 or 48, because it starts with a
+// collision plane.  No other width is read.
+// Why: doc/placement.md#the-widths
 func DecodePlacement(b []byte) (Vector3, Quaternion, bool) {
-	const region = 256.0
-
 	// Avatars carry a collision plane first.
 	switch len(b) {
-	case 76, 48:
+	case 76, 140, 48:
 		b = b[16:]
 	}
 
 	switch len(b) {
-	case 60:
+	case 60, 124:
 		// Floats: position, velocity, acceleration, rotation, angular
-		// velocity, twelve bytes each.
+		// velocity, twelve bytes each.  Whatever follows them in the
+		// wider form is ignored, as the viewer ignores it
+		// (llviewerobject.cpp:1215-1219, 1394-1402).
 		return placeVec(b[0:12]), placeQuat(b[36:48]), true
 
 	case 32:
 		// Sixteen bit: position 6, velocity 6, acceleration 6,
-		// rotation 8, angular velocity 6.
+		// rotation 8, angular velocity 6.  The rotation's fourth
+		// component is kept, as DecodeTerse keeps it: dropping it and
+		// recovering W as positive reads a -q as its mirror image.
 		p := Vector3{
-			X: u16f(b[0:2], -0.5*region, 1.5*region),
-			Y: u16f(b[2:4], -0.5*region, 1.5*region),
-			Z: u16f(b[4:6], -0.5*region, 1.5*region),
+			X: u16f(b[0:2], -0.5*regionWidth, 1.5*regionWidth),
+			Y: u16f(b[2:4], -0.5*regionWidth, 1.5*regionWidth),
+			Z: u16f(b[4:6], placeMinZ, placeMaxZ),
 		}
-		q := Quaternion{
-			X: u16f(b[18:20], -1, 1),
-			Y: u16f(b[20:22], -1, 1),
-			Z: u16f(b[22:24], -1, 1),
-		}
-		return p, q, true
-
-	case 16:
-		// Eight bit, the coarsest form.
-		p := Vector3{
-			X: u8f(b[0], -0.5*region, 1.5*region),
-			Y: u8f(b[1], -0.5*region, 1.5*region),
-			Z: u8f(b[2], -0.5*region, 1.5*region),
-		}
-		q := Quaternion{
-			X: u8f(b[9], -1, 1),
-			Y: u8f(b[10], -1, 1),
-			Z: u8f(b[11], -1, 1),
-		}
+		q := PackQuaternion(
+			u16f(b[18:20], -1, 1),
+			u16f(b[20:22], -1, 1),
+			u16f(b[22:24], -1, 1),
+			u16f(b[24:26], -1, 1),
+		)
 		return p, q, true
 	}
 	return Vector3{}, Quaternion{}, false
 }
+
+// The heights a sixteen bit position runs over: the viewer's MIN_HEIGHT
+// and MAX_HEIGHT (llviewerobject.cpp:1305-1306), which on Second Life
+// are a region's width below zero (llworld.h:125) and SL_MAX_OBJECT_Z
+// (llworld.cpp:207, llmath/xform.h:38).
+const (
+	placeMinZ = -regionWidth
+	placeMaxZ = 4096
+)
 
 func lef32(b []byte) float32 {
 	return math.Float32frombits(binary.LittleEndian.Uint32(b))
@@ -85,10 +87,6 @@ func u16f(b []byte, lo, hi float32) float32 {
 		return 0
 	}
 	return v
-}
-
-func u8f(b uint8, lo, hi float32) float32 {
-	return lo + (hi-lo)*(float32(b)/255)
 }
 
 // Terse is one object out of an ImprovedTerseObjectUpdate.
