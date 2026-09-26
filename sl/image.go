@@ -10,7 +10,7 @@ package sl
 // # What this deliberately does not do
 //
 // It does not resize. Second Life takes a texture only if each side is
-// a power of two (see textureSize), and an image that is not gets an
+// a power of two (see checkTextureDims), and an image that is not gets an
 // error naming TextureDim rather than a silent rescale: which resampling
 // a picture deserves is the caller's business, and a client that quietly
 // halves somebody's artwork is worse than one that refuses it.

@@ -229,7 +229,7 @@ const MaxDecodeSize = 4096
 // MinTextureSize is the smallest a viewer will resize a dimension to.
 //
 // The grid itself goes lower -- 1x1 and 2x2 both upload -- so this is a
-// floor on TextureDim and not on what textureSize will accept. It is
+// floor on TextureDim and not on what checkTextureDims will accept. It is
 // the viewer's MIN_IMAGE_SIZE, and there is no reason to make a texture
 // smaller than the one Second Life's own client would.
 const MinTextureSize = 4
