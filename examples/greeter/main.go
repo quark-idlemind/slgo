@@ -275,8 +275,8 @@ func (g *greeter) heard(ctx context.Context, l sl.Line) {
 func (g *greeter) told(ctx context.Context, im *sl.IM) {
 	// An IM can be a dozen kinds of thing.  Conversation is true only
 	// for somebody writing to this avatar: not a typing notice, a
-	// group message, an offer, or this avatar's own words from another
-	// client.
+	// group message, an offer, a script's message from an object, or
+	// this avatar's own words from another client.
 	if !im.Conversation() {
 		return
 	}

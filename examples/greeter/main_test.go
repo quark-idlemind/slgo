@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 func TestAsksForInfo(t *testing.T) {
@@ -80,4 +82,36 @@ func TestTooSoon(t *testing.T) {
 	if tooSoon(last, a) {
 		t.Error("an ask after half a minute was refused")
 	}
+}
+
+// TestAnObjectIsNotAnswered: a script's message carries its owner's id
+// and whatever name the object has, so answering it writes to the
+// owner about something they never said.  A person saying the same is
+// answered.
+func TestAnObjectIsNotAnswered(t *testing.T) {
+	who := msg.UUID{0xbb, 3}
+	for _, text := range []string{"info", "hello"} {
+		object := &sl.IM{Dialog: sl.DialogFromTask, From: who, FromName: "Example Resident", Text: text}
+		if answers(object) {
+			t.Errorf("an object saying %q was answered", text)
+		}
+		person := &sl.IM{Dialog: sl.DialogMessage, From: who, FromName: "Example Resident", Text: text}
+		if !answers(person) {
+			t.Errorf("a person saying %q was not answered", text)
+		}
+	}
+}
+
+// answers is whether told sets about answering im.  The greeter here
+// has no session, so answering is as far as it gets: the first thing
+// asked of a nil session panics.
+func answers(im *sl.IM) (answered bool) {
+	g := &greeter{answeredIM: map[msg.UUID]time.Time{}, pointed: map[msg.UUID]time.Time{}}
+	defer func() {
+		if recover() != nil {
+			answered = true
+		}
+	}()
+	g.told(context.Background(), im)
+	return false
 }

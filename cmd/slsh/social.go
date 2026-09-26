@@ -312,6 +312,14 @@ func (sh *Shell) heard(m *sl.IM) {
 			sh.noticef("new conversation with %s", name)
 		}
 		sh.printf("%s < [IM %s] %s", stamp(), c.Label(), m.Text)
+	case m.Dialog == sl.DialogFromTask:
+		// A script's message.  The name is the object's and From its
+		// owner, who did not write it, so it opens no conversation.
+		obj := m.FromName
+		if obj == "" {
+			obj = sh.s.NameOr(m.ID)
+		}
+		sh.printf("%s < [Object] %s: %s", stamp(), obj, m.Text)
 	case m.Dialog == sl.DialogFriendshipOffered:
 		sh.noticef("%s offers friendship -- accept %s, or decline %s",
 			name, firstWord(name), firstWord(name))

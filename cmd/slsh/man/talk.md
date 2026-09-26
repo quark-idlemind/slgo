@@ -40,6 +40,15 @@ the session's memory of who has been talked to, and it ends when the
 shell does.  `Local` cannot be closed either, which is what makes tab a
 cycle: pressing it enough times always comes back to speaking out loud.
 
+A message from an object -- a script's `llInstantMessage` -- opens
+nothing.  It is printed as
+
+    12:00:00 < [Object] NAME: TEXT
+
+where NAME is whatever the object is called, which can be anybody's
+name.  Its sender is the object's owner, who did not write it, so there
+is nobody in it to answer.
+
 The names can improve, but not by themselves.  An instant message
 carries a key and sometimes no name at all, so a conversation can
 appear as the first eight characters of a key in brackets --

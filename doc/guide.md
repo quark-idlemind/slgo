@@ -1698,6 +1698,14 @@ A name can be matched, which is what makes a file written in names
 work, but a display name is not what arrives: the legacy name is. Where
 you have the uuid, write the uuid.
 
+A message from an object -- a script's `llInstantMessage` -- is never
+obeyed and never answered, whatever it says it is. It carries whatever
+name the object was given and its owner's id, so an object named after
+somebody trusted, or one a trusted person owns, would pass on either.
+The log says `ignored an instant message from the object ...`. What the
+grid puts in those two fields was measured, and is in
+[im-senders.md](im-senders.md).
+
 ### Talking back
 
 An instant message that does **not** begin with the prefix is not a

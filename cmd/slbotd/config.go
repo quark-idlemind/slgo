@@ -428,6 +428,11 @@ func (c *Config) check() error {
 // name is what an instant message carries and the id is what it is
 // really from, so a file written in names is matched on what the grid
 // said the sender is called.
+//
+// A name is safe to match on a remark: the simulator replaces whatever
+// name an avatar's client puts on one, and a script's message, which
+// carries any name its object has, never gets here.
+// Why: doc/im-senders.md
 func (c *Config) Trusts(id msg.UUID, name string) bool {
 	if !id.IsZero() && c.trustedIDs[id] {
 		return true

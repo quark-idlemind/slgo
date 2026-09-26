@@ -27,14 +27,24 @@ import (
 // are the ones this package acts on; the rest arrive with their number
 // intact and nothing happens.
 const (
-	DialogMessage            = 0
-	DialogMessageBox         = 1
-	DialogGroupInvitation    = 3
-	DialogInventoryOffered   = 4
-	DialogInventoryAccepted  = 5
-	DialogInventoryDeclined  = 6
-	DialogSessionSend        = 17
-	DialogBusyAutoResponse   = 19
+	DialogMessage           = 0
+	DialogMessageBox        = 1
+	DialogGroupInvitation   = 3
+	DialogInventoryOffered  = 4
+	DialogInventoryAccepted = 5
+	DialogInventoryDeclined = 6
+	DialogSessionSend       = 17
+
+	// DialogFromTask is a script's llInstantMessage.  From is the
+	// object's OWNER, ID is the object, and FromName is whatever the
+	// object is called, which can be anybody's name.
+	// See doc/im-senders.md.
+	DialogFromTask = 19
+
+	// DialogDoNotDisturbAutoResponse is the reply a viewer sends by
+	// itself to a message that reached somebody set to do not disturb.
+	DialogDoNotDisturbAutoResponse = 20
+
 	DialogTeleportLure       = 22
 	DialogLureAccepted       = 23
 	DialogGodlikeLure        = 25
@@ -68,7 +78,7 @@ type IM struct {
 	// ID is what the message carried in its id field, which means
 	// different things per dialog: the conversation for a private
 	// message, the transaction for a friendship offer, the folder
-	// for an inventory offer.
+	// for an inventory offer, the object for DialogFromTask.
 	ID msg.UUID
 
 	// Group is set when it came from a group rather than a person.
@@ -116,9 +126,13 @@ func (m *IM) Conversation() bool { return m.Spoken() && !m.Mine }
 // deliberately different questions with different names, because the
 // cost of confusing them falls entirely on the second: something that
 // answers its own remarks talks to itself for ever.
+//
+// A script's message is not spoken: its name is the object's and its
+// From is the owner, who did not write it.  Nor is a do-not-disturb
+// auto response, which the far viewer sent by itself.
 func (m *IM) Spoken() bool {
 	switch m.Dialog {
-	case DialogMessage, DialogMessageBox, DialogBusyAutoResponse:
+	case DialogMessage, DialogMessageBox:
 		return !m.Group && !m.From.IsZero()
 	}
 	return false
@@ -653,12 +667,12 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 		w.deliverIM(im)
 		return
 	}
-	// A group invitation is the one kind whose sender is not a person:
-	// the id is the group and the agent-name field is whoever invited
-	// (see invite.go), so learning the two together would file a
-	// person's name under a group's id and every name printed for that
-	// group afterwards would be wrong.
-	if b.Dialog != DialogGroupInvitation {
+	// Two kinds carry a name that is not the sender id's.  A group
+	// invitation's id is the group and its name whoever invited (see
+	// invite.go); a script's message has its owner's id and the
+	// object's name.  Learning either pair files a wrong name under
+	// that id, and every name printed for it afterwards is wrong.
+	if b.Dialog != DialogGroupInvitation && b.Dialog != DialogFromTask {
 		w.learn(im.From, im.FromName)
 	}
 
@@ -772,8 +786,10 @@ func DialogName(d uint8) string {
 		return "inventory declined"
 	case DialogSessionSend:
 		return "group message"
-	case DialogBusyAutoResponse:
-		return "busy auto response"
+	case DialogFromTask:
+		return "object message"
+	case DialogDoNotDisturbAutoResponse:
+		return "do not disturb auto response"
 	case DialogTeleportLure:
 		return "teleport lure"
 	case DialogLureAccepted:
