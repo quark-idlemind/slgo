@@ -310,6 +310,47 @@ func TestLogoutFromTheViewerLeavesTheSessionUp(t *testing.T) {
 	sim.never(t, "LogoutRequest")
 }
 
+// TestAViewerThatLogsOutIsNoLongerJoined: a viewer quitting sends
+// LogoutRequest, and after it nobody is on the circuit.  Counting that
+// viewer as still there was a status that said a viewer had the session
+// when none had, and a daemon holding off from getting the avatar home
+// for a person who had gone.  The next viewer to join is counted again.
+func TestAViewerThatLogsOutIsNoLongerJoined(t *testing.T) {
+	sim, _, c, first, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	first.connect(testCircuitCode)
+	first.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+	if !c.Joined() {
+		t.Fatal("the viewer is not joined after the handshake")
+	}
+
+	first.send(&msg.LogoutRequest{}, msg.FlagReliable)
+	first.waitSeen(t, "LogoutReply", 5*time.Second)
+	deadline := time.Now().Add(5 * time.Second)
+	for c.Joined() {
+		if time.Now().After(deadline) {
+			t.Fatal("a viewer that logged out is still joined")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	// Nobody is there to be told the avatar moved.
+	c.RegionChanged("Sandbox Goguen")
+	if n := sentToViewer(census, "AgentAlertMessage"); n != 0 {
+		t.Errorf("a viewer that had logged out was told %d times", n)
+	}
+	first.close()
+
+	second := newFakeViewer(t, c.Addr())
+	defer second.close()
+	go second.run()
+	second.connect(testCircuitCode)
+	second.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+	if !c.Joined() {
+		t.Error("the next viewer to join is not counted")
+	}
+}
+
 // TestOrdinaryMessagesReachTheGrid: absorbing the handshake must not
 // turn into absorbing everything.
 func TestOrdinaryMessagesReachTheGrid(t *testing.T) {

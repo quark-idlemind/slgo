@@ -184,7 +184,10 @@ func (c *Circuit) Close() {
 	}
 }
 
-// Joined reports whether a viewer has completed the handshake.
+// Joined reports whether a viewer has completed the handshake and not
+// logged out since.  A viewer that goes without logging out -- a crash,
+// a lost connection -- sends nothing, and still counts until another
+// takes the circuit.
 func (c *Circuit) Joined() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -401,6 +404,12 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 		// with it.
 		c.record(FromViewer, p, Absorbed)
 		c.sendLogoutReply()
+		// That viewer has left: it is not attached any more, and what
+		// the region says has nobody to go to until the next one
+		// joins, which sets this again.
+		c.mu.Lock()
+		c.joined = false
+		c.mu.Unlock()
 		c.logf("viewer: the viewer logged out; the session stays up")
 
 	case "StartPingCheck", "CompletePingCheck":

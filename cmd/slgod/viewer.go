@@ -321,9 +321,9 @@ func (v *viewerHost) LoginURI() string {
 // Attached reports whether a viewer has taken this profile's circuit.
 //
 // A circuit exists from the first login and is kept afterwards, so its
-// existence says only that a viewer once arrived; the handshake is the
-// nearest thing to a live answer, since a viewer that quits sends
-// nothing to say so.
+// existence says only that a viewer once arrived; the handshake, undone
+// by a logout, is the nearest thing to a live answer.  A viewer that
+// goes without logging out sends nothing to say so.
 func (v *viewerHost) Attached(profile string) bool {
 	c, ok := v.circuits.Load(profile)
 	return ok && c.(*viewer.Circuit).Joined()

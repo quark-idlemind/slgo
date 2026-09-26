@@ -1026,3 +1026,36 @@ func TestAViewerCircuitReachesAProfileHostedAgain(t *testing.T) {
 		return strings.Contains(said.String(), "no longer trying to get home: a viewer teleported this avatar")
 	})
 }
+
+// TestAViewerThatLogsOutIsNotReportedAttached: the status a client reads,
+// and the daemon's own question before it asks to go home, both come from
+// Attached.  A viewer that logged out has left, and saying it still had
+// the session held the daemon off for somebody who was gone.
+func TestAViewerThatLogsOutIsNotReportedAttached(t *testing.T) {
+	r := newHomingRig(t, 0)
+	h, _ := r.host(t)
+	vh, _ := viewerLoginTo(t, r.ctx, r.srv, "viewer-secret")
+	r.srv.SetViewer(vh)
+	attached := func() bool {
+		st, err := r.srv.Status(r.ctx, &pb.StatusRequest{Agent: "example"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st.GetViewer().GetAttached()
+	}
+
+	c, err := vh.circuitFor("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialUDP("udp", nil, c.Addr())
+	if err != nil {
+		t.Skipf("no loopback UDP: %v", err)
+	}
+	defer conn.Close()
+
+	viewerSends(t, conn, h.Agent(), 1, &msg.CompleteAgentMovement{})
+	waitFor(t, 5*time.Second, "the viewer to be reported attached", attached)
+	viewerSends(t, conn, h.Agent(), 3, &msg.LogoutRequest{})
+	waitFor(t, 5*time.Second, "the viewer to be reported gone", func() bool { return !attached() })
+}

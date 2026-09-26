@@ -319,10 +319,19 @@ func TestAViewerBeingHandedTheSessionStopsIt(t *testing.T) {
 	}
 }
 
+// comingAndGoing is a viewer endpoint whose viewer a test can log out.
+type comingAndGoing struct {
+	fakeViewer
+	on atomic.Bool
+}
+
+func (v *comingAndGoing) Attached(string) bool { return v.on.Load() }
+
 // TestAReconnectWithAViewerOnDoesNotGoHome: a reconnect is the grid's
 // doing, and does not hand the wheel back to the daemon.  The person at
 // the viewer that was handed the session is still there, and a loop that
-// started again would teleport the avatar out from under them.
+// started again would teleport the avatar out from under them.  Once
+// that viewer has logged out, the next reconnect goes home again.
 func TestAReconnectWithAViewerOnDoesNotGoHome(t *testing.T) {
 	quickHoming(t)
 	listenSlowly(t)
@@ -331,7 +340,9 @@ func TestAReconnectWithAViewerOnDoesNotGoHome(t *testing.T) {
 	refuse(t, sim, agent.KeyNoHost)
 
 	waitFor(t, 5*time.Second, "the loop to be running", func() bool { return asked(sim) >= 1 })
-	srv.SetViewer(&fakeViewer{attached: true})
+	v := &comingAndGoing{}
+	v.on.Store(true)
+	srv.SetViewer(v)
 	h.ViewerAttached()
 	waitFor(t, 5*time.Second, "the loop to stop", func() bool { return !homing(h) })
 
@@ -347,6 +358,13 @@ func TestAReconnectWithAViewerOnDoesNotGoHome(t *testing.T) {
 	if homing(h) {
 		t.Error("the loop is still running under a viewer")
 	}
+
+	v.on.Store(false)
+	was = asked(sim)
+	reconnectNow(t, h)
+	waitFor(t, 5*time.Second, "the next session to ask, with the viewer gone", func() bool {
+		return asked(sim) > was
+	})
 }
 
 // TestAClientSittingDoesNotStopIt: a sit moves the avatar up to ten

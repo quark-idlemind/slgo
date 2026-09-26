@@ -171,10 +171,9 @@ func showViewer(ctx context.Context, out io.Writer, conn *client.Conn) error {
 	fmt.Fprintf(out, "viewer logins at %s\n", v.GetLoginUri())
 	fmt.Fprintf(out, "  add a grid with that login URI and log in as %s\n", st.GetAgent().GetAvatarName())
 	if v.GetAttached() {
-		// One-sided, and said as such: a viewer that quits tells the
-		// daemon nothing, so this is the last thing that happened
-		// rather than what is happening.
-		fmt.Fprintln(out, "  a viewer has taken this session; nothing says when one leaves, so it may have gone")
+		// One-sided, and said as such: a viewer that logs out is
+		// noticed, but one that crashes tells the daemon nothing.
+		fmt.Fprintln(out, "  a viewer has taken this session; one that went without logging out would still show here")
 	} else {
 		fmt.Fprintln(out, "  no viewer has taken this session")
 	}
