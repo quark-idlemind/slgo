@@ -56,7 +56,7 @@ died, and the stream is the thing slgod already watches for that. A
 client that crashed, was killed, or was unplugged gives its places back
 without having said anything. A request the daemon settles just as the
 stream ends is not kept either: its places go straight back rather than
-to a grant nobody holds.
+to a grant nobody holds, and a lock asked for then is not taken.
 
 ## Asking and being answered
 

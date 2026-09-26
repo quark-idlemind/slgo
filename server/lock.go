@@ -75,9 +75,17 @@ func newLocks() *locks {
 
 // acquire takes a lock if it is free and reports whether it got it.
 // The second return is who has it when it did not.
+//
+// A client whose stream has ended gets nothing, here or in queue: its
+// request can be handled just after releaseAll ran for it, and what it
+// took then would be held for good.  closed is set before releaseAll
+// takes mu, so one of the two always sees the other.
 func (l *locks) acquire(name string, c *Client) (bool, *Client) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if c.closed.Load() {
+		return false, nil
+	}
 	if h, ok := l.held[name]; ok && h != c {
 		return false, h
 	}
@@ -94,6 +102,9 @@ func (l *locks) queue(name string, c *Client) chan struct{} {
 	defer l.mu.Unlock()
 
 	ready := make(chan struct{})
+	if c.closed.Load() {
+		return ready // never ready: its waiter ends with the stream
+	}
 	if h, ok := l.held[name]; !ok || h == c {
 		l.held[name] = c
 		close(ready)

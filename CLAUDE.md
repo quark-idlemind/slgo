@@ -255,3 +255,7 @@ here when another is shared the same way.
   case. `TestNoInventoryNameIsMatchedIgnoringCase` refuses a
   `strings.EqualFold` on a `.Name` or `.Path` in `sl`, `slsh` or
   `slbotd` until it is listed there with what it matches.
+- `Conn.sendPacket`, in `client/client.go`: every send on an attach
+  stream, one at a time under `sendMu`, since gRPC allows one sender per
+  stream. `TestEverySendOnTheStreamIsOneAtATime` refuses a send anywhere
+  else in `client`.
