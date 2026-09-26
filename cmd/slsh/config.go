@@ -89,6 +89,9 @@ type Config struct {
 	AskSlot    *int
 	AskTimeout time.Duration
 	AskExtra   string
+
+	// NoticeKeep is how long a group notice is kept for "notice".
+	NoticeKeep time.Duration
 }
 
 // CellRatio is the shape of a character cell in whatever font somebody
@@ -166,6 +169,7 @@ func DefaultConfig() Config {
 		MapLevel:        mapDefaultLevel,
 		MapFriendColour: mapDefaultFriendColour,
 		Log:             true,
+		NoticeKeep:      noticeDefaultKeep,
 	}
 	c.ViewerApp, c.ViewerGrid, c.ViewerLaunch, c.ViewerRunning = viewerDefaults(runtime.GOOS)
 	return c
@@ -367,6 +371,18 @@ var settings = []setting{{
 	about: "where the transcript goes; empty is the default place",
 	show:  func(c *Config) string { return c.LogDir },
 	parse: func(c *Config, v string) error { c.LogDir = v; return nil },
+}, {
+	name:  "notice_keep",
+	about: "how long a group notice is kept for \"notice\", like 15m",
+	show:  func(c *Config) string { return durationWord(c.NoticeKeep) },
+	parse: func(c *Config, v string) error {
+		d, err := time.ParseDuration(strings.TrimSpace(v))
+		if err != nil || d <= 0 {
+			return fmt.Errorf("want a length of time, like 15m or 1h, got %q", v)
+		}
+		c.NoticeKeep = d
+		return nil
+	},
 }, {
 	name:  "viewer_app",
 	about: "the viewer \"viewer --launch\" starts; the OpenSim build, not the other one",

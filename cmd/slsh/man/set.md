@@ -85,12 +85,13 @@ nothing.
 ## What there is
 
 `set` is the listing, and it is the one place they are all written
-down, so this page does not copy it.  They fall into three:
+down, so this page does not copy it.  They fall into these:
 
     addr, agent, escape             slsh itself
     log, log_dir                    the transcript
     viewer_*                        what "viewer --launch" starts
     map_*                           how "map" draws its picture
+    notice_keep                     how long "notice" keeps one
 
 The map's are the ones most worth knowing about, because the picture
 is drawn to the shape of the font it is being read in: `map_ratio`

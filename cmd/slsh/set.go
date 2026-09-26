@@ -136,7 +136,11 @@ func cmdSet(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	}
 
 	if !s.startup {
+		// Under mu, for what reads it off the command goroutine;
+		// see noticeKeep.
+		sh.mu.Lock()
 		sh.cfg = next
+		sh.mu.Unlock()
 	}
 	fmt.Fprintf(out, "%s = %s\n", s.name, valueOrEmpty(s.show(&next)))
 	fmt.Fprintf(out, "written to %s\n", path)
