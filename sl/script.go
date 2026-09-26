@@ -2,6 +2,7 @@ package sl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -186,6 +187,9 @@ func (r *Result) Contains(s string) bool {
 // capability wants.  And the compile result is checked before waiting,
 // because waiting a minute for output from something that did not
 // compile is a slow way to learn nothing.
+//
+// A caller that gives up while the script runs gets the Result so far,
+// with what was heard until then, together with the context's error.
 func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	if s.In == nil {
 		return nil, fmt.Errorf("sl: Run needs an object to run in")
@@ -248,15 +252,24 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	// install rather than after it succeeds, because an install that
 	// failed on the way back may still have started the script.  On a
 	// context of its own: an interrupted run is the one that most needs
-	// this, and its context is already cancelled.
+	// this, and its context is already cancelled.  A stop that fails is
+	// a warning on the result, or joined to the error when there is no
+	// result to carry it.
 	if !s.KeepRunning && !s.NotRunning {
 		defer func() {
 			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
-			if serr := w.SetScriptRunning(sctx, s.In, task.ID, false); serr != nil && res != nil {
+			serr := w.SetScriptRunning(sctx, s.In, task.ID, false)
+			if serr == nil {
+				return
+			}
+			if res != nil {
 				res.Warnings = append(res.Warnings, fmt.Sprintf(
 					"%q could not be stopped and may still be running: %v", s.Name, serr))
+				return
 			}
+			err = errors.Join(err, fmt.Errorf(
+				"sl: %q could not be stopped and may still be running: %w", s.Name, serr))
 		}()
 	}
 
@@ -287,7 +300,9 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	if s.Done == "" {
 		// No sentinel: there is nothing to wait for but the clock.
 		if err := w.Settle(ctx, s.Timeout); err != nil {
-			return nil, err
+			res.Lines = col.collected()
+			res.Elapsed = time.Since(start)
+			return res, err
 		}
 	} else {
 		t := time.NewTimer(s.Timeout)

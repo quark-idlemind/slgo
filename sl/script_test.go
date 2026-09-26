@@ -23,6 +23,7 @@ package sl
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -891,9 +892,51 @@ func TestARunWithNoSentinelStillAnswersToTheCaller(t *testing.T) {
 	})
 	answerContents(t, f, thePrim, theContentsFile)
 	<-up.body
+	f.Relay(t, objectSaid(thePrim, ChatSay, "part of the way"))
 
-	if _, err := wait(); !errors.Is(err, context.DeadlineExceeded) {
+	res, err := wait()
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Run = %v, want the context's reason", err)
+	}
+	// What was heard before the caller gave up is still the caller's,
+	// as it is on the run with a sentinel.
+	if res == nil || !res.Contains("part of the way") {
+		t.Errorf("Run = %+v, want the line heard before the caller gave up", res)
+	}
+}
+
+// TestAStopThatFailsAfterAFailedInstallIsNotLost: the stop is there for
+// an install that failed on the way back, and that run has no Result to
+// carry a warning, so the stop's failure is joined to the install's.
+func TestAStopThatFailsAfterAFailedInstallIsNotLost(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	gone := errors.New("the circuit is gone")
+	serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
+		// The upload may have started the script, and by the time
+		// the stop goes out the circuit has gone.
+		f.FailSends(gone)
+		return http.StatusBadRequest, "no"
+	})
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(context.Background(), Script{
+			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+
+	res, err := wait()
+	if res != nil {
+		t.Errorf("Run = %+v for an install that failed", res)
+	}
+	var ce *CapError
+	if !errors.As(err, &ce) {
+		t.Errorf("Run = %v, want the install's failure", err)
+	}
+	if !errors.Is(err, gone) || !strings.Contains(fmt.Sprint(err), "may still be running") {
+		t.Errorf("Run = %v, want the failed stop joined to it", err)
 	}
 }
 
