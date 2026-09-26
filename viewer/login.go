@@ -101,11 +101,12 @@ type Lookup func(first, last string) *Handover
 // session that is already running.
 //
 // It is deliberately an http.Handler rather than a server: where it is
-// bound is the caller's decision, and the only sensible answer is
-// loopback.  This hands a live grid session to whoever asks with the
-// right name and password, and the password is one an attacker who can
-// already read the profile has anyway -- so the protection that matters
-// is that the endpoint is not reachable.
+// bound is the caller's decision, and the sensible answers are loopback
+// or the address of a private tunnel (doc/guide.md, "Handing a session
+// to a viewer").  This hands a live grid session to whoever asks with
+// the right name and password, and the password is one an attacker who
+// can already read the profile has anyway -- so the protection that
+// matters is that nobody else can reach the endpoint.
 func LoginHandler(find Lookup, logf func(string, ...any)) http.Handler {
 	if logf == nil {
 		logf = log.Printf

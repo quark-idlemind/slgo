@@ -322,7 +322,7 @@ func (c *Circuit) notePeer(ua *net.UDPAddr) {
 // 4096.  Both were dropped as retransmissions before ever reaching
 // fromViewer, which is the only thing that replays the region and
 // answers the movement request, while the peer was noticed anyway
-// because the tap that notices it runs ahead of the duplicate check.
+// because the tap that noticed it then ran ahead of the duplicate check.
 // The daemon logged a viewer appearing and then said nothing, and the
 // viewer sat at STATE_AGENT_WAIT with a grey world until slgod was
 // restarted.
@@ -351,9 +351,9 @@ func (c *Circuit) notePeer(ua *net.UDPAddr) {
 // in this region either way.  The receiver has nothing of its own to
 // forget -- it carries no state at all from one datagram to the next.
 //
-// Called from notePeer, which runs on the dispatch goroutine as the
-// circuit's tap.  That is what makes Dispatcher.Forget safe: it writes
-// fields no lock protects, on the one goroutine that owns them.
+// Called from notePeer, which runs on the dispatch goroutine from admit,
+// the circuit's gate.  That is what makes Dispatcher.Forget safe: it
+// writes fields no lock protects, on the one goroutine that owns them.
 func (c *Circuit) forgetTheLastViewer() {
 	c.disp.Forget()
 	// A sender that has stopped has nothing left in flight, so there is
@@ -387,8 +387,8 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 
 	case "CompleteAgentMovement":
 		// The request to be put in the region.  The avatar is
-		// already there; what the viewer needs is the answer -- and
-		// then everything the region said once, before it existed.
+		// already there; what the viewer needs is everything the
+		// region said once, before it existed, and then the answer.
 		c.record(FromViewer, p, Absorbed)
 		c.describeRegion()
 		c.sendMovementComplete()
@@ -555,8 +555,10 @@ func (c *Circuit) forward(p *msg.Packet) {
 }
 
 // checkCircuit says so when a viewer claims a circuit that is not this
-// session's.  It is a loud log rather than a refusal: the login endpoint
-// is what decides who may attach, and by here the answer is already yes.
+// session's.  Only the admitted viewer's address gets here with a wrong
+// claim -- admit refuses one from anywhere else -- so it is a loud log
+// rather than a refusal: the login endpoint is what decides who may
+// attach, and by here the answer is already yes.
 //
 // What it says is which of the two did not match, and not what either
 // should have been.  The session's own circuit code and session id are,
@@ -754,10 +756,10 @@ func (c *Circuit) sendMovementComplete() {
 // indication of what it is waiting for.
 //
 // Both are replayed rather than rebuilt.  The handshake is the message
-// the simulator sent, kept whole: what this package decodes from it is
-// twelve fields of thirty odd, and the ones it drops include every
-// terrain texture id, so a viewer given a reconstruction would render
-// ground with nothing on it.
+// the simulator sent, kept whole: what package agent decodes from it
+// (regionFromHandshake) is fourteen fields of thirty odd, and the ones it
+// drops include every terrain texture id, so a viewer given a
+// reconstruction would render ground with nothing on it.
 func (c *Circuit) describeRegion() {
 	a := c.session()
 	if a == nil {
@@ -814,9 +816,10 @@ func (c *Circuit) describeRegion() {
 	// offered teleport arrived four minutes before the viewer did and
 	// was never seen.
 	//
-	// Sent last, and after the region, because a viewer showing an
-	// invitation before it has drawn anything is a dialogue over a grey
-	// screen.
+	// Sent last here, after the handshake and the land -- though still
+	// ahead of the AgentMovementComplete that fromViewer sends once this
+	// returns -- because a viewer showing an invitation before it has
+	// drawn anything is a dialogue over a grey screen.
 	if waiting := a.Offers().Take(); len(waiting) > 0 {
 		for _, m := range waiting {
 			c.toViewer(m, msg.FlagReliable)
@@ -970,16 +973,18 @@ func (c *Circuit) FromSim(p *msg.Packet) {
 		return
 
 	case "TeleportStart", "TeleportProgress":
-		// The messages here about something the viewer did not ask
-		// for.  Its own teleports out of this region are refused in
-		// fromViewer, so a start on this circuit is always another
-		// client's -- slsh tp, or a lure accepted somewhere else.
+		// Mostly about something the viewer did not ask for.  Its
+		// own teleports out of this region are refused in
+		// fromViewer, so a start on this circuit is another
+		// client's -- slsh tp, or a lure accepted somewhere else --
+		// or the start of the viewer's own teleport within the
+		// region, which is the cost set out below.
 		//
 		// Handed over, TeleportStart puts a viewer in the teleport
 		// tunnel: the world torn down, a progress bar, and no way
 		// out except TeleportFinish, TeleportLocal or
 		// TeleportFailed.  TeleportFinish is withheld from the
-		// event queue (see caps.go) precisely because it is the
+		// event queue (withheldEvents) precisely because it is the
 		// dangerous one, so a viewer sent the start would sit in the
 		// tunnel over a teleport it did not ask for and could not
 		// have stopped.  TeleportProgress is the same message with a
@@ -1012,16 +1017,15 @@ func (c *Circuit) FromSim(p *msg.Packet) {
 	case "CrossedRegion", "EnableSimulator":
 		// The same address, offered for walking rather than for
 		// teleporting.  Both are UDPBlackListed and both are withheld
-		// from the event queue with the reasoning in caps.go; this arm
-		// is the other road, on the same terms as TeleportFinish above.
+		// from the event queue, with the reasoning on withheldEvents;
+		// this arm is the other road, on the same terms as
+		// TeleportFinish above.
 		//
-		// CrossedRegion is the more speculative of the two, and
-		// deliberately so: nobody has seen one on this grid, so this
-		// costs nothing until a grid sends one and closes a hole the
-		// moment one does.  EnableSimulator is the opposite -- it
-		// arrives constantly, and on Agni it arrives on the queue, so
-		// what this arm covers is a grid that puts it where the
-		// template says it no longer goes.
+		// On Agni both arrive on the queue -- CrossedRegion only to
+		// a session holding a child circuit to the region over the
+		// border, EnableSimulator over and over for as long as its
+		// offer goes untaken -- so what this arm covers is a grid
+		// that puts them where the template says they no longer go.
 		c.record(FromSim, p, Absorbed)
 		return
 	}

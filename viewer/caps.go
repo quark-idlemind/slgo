@@ -92,9 +92,10 @@ type EventQueue struct {
 //
 // So it is withheld, and the cost is plain rather than hidden: the
 // viewer draws this region and nothing beyond it.  Neighbouring
-// regions are void.  Making them work means slgod holding the child
-// connections itself and handing on what they say, which is the same
-// piece of work as region crossing and is not built.
+// regions are void.  slgod can hold the child connections itself
+// (agent.Options.Neighbours, off by default), but making them work in
+// the viewer means offering it slgod's own port for each, and that is
+// not built.
 //
 // EnableSimulator is the other half of that introduction and was
 // relayed for as long as this front end has existed, which made the
@@ -147,9 +148,10 @@ type EventQueue struct {
 // nobody asked for it at all, and slgod acts on one itself when it
 // arrives (agent/crossing.go) -- so a viewer given it would be a second
 // thing following the same crossing, by its own circuit, with these
-// ids.  Withheld here and absorbed in Circuit.FromSim, both roads,
-// which costs nothing while no grid sends one and closes the hole the
-// day one does.
+// ids.  Withheld here and absorbed in Circuit.FromSim, both roads.
+// Agni sends it on the queue, to a session holding a child circuit to
+// the region over the border; without one the border is a wall and it
+// never comes.
 //
 // TeleportFailed is NOT withheld, and it is the one of these that can
 // be let through.  It carries no address and no invitation to
@@ -192,7 +194,8 @@ type event struct {
 // Bounded for the same reason the packet backlog is: the session must
 // not grow without limit because a window is open somewhere and idle.
 // Unlike packets, these are rare enough that reaching this at all means
-// the viewer has stopped polling.
+// nothing has polled for a long while -- a viewer that stopped, or none
+// yet, since the session hands its events here from login on.
 const QueueLimit = 512
 
 // NewEventQueue prepares one.

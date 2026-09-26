@@ -8,13 +8,13 @@
 // slgod is a simulator to the viewer and a client to the simulator, and
 // moves messages between them.
 //
-// This file is the part that goes in first, before a single message is
-// relayed, because of how the far end fails.  A viewer that is missing
-// something does not say so: it renders an empty grey world and waits,
-// looking exactly the same whether the fault is a message never sent, a
-// message sent in the wrong direction, or a message the relay ate.  With
-// no record of what crossed, every one of those is the same symptom and
-// the only tool is guessing.
+// This file is the record of what crossed, and it is here because of how
+// the far end fails.  A viewer that is missing something does not say
+// so: it renders an empty grey world and waits, looking exactly the same
+// whether the fault is a message never sent, a message sent in the wrong
+// direction, or a message the relay ate.  With no record of what
+// crossed, every one of those is the same symptom and the only tool is
+// guessing.
 //
 // So there are two records, and they answer different questions.
 //
@@ -27,8 +27,8 @@
 // what was dropped and why.  It answers "what is missing", and that is
 // the question that actually finds these faults.  A viewer stuck at a
 // grey screen is nearly always waiting on one particular message, and a
-// census showing that message with a count of zero -- or, worse, a count
-// under "dropped: wrong direction" -- names the bug outright, where the
+// census showing that message with a count of zero -- or, worse, under a
+// disposition other than forwarded -- names the bug outright, where the
 // transcript would have to be read to notice the absence of something.
 package viewer
 
@@ -54,8 +54,9 @@ const (
 	FromSim Direction = iota
 	ToSim
 
-	// FromViewer and ToViewer are the circuit that exists only while
-	// a viewer is attached, on which slgod is the simulator.
+	// FromViewer and ToViewer are the viewer's circuit, on which slgod
+	// is the simulator.  It outlasts any one viewer, so it can be up
+	// with none attached.
 	FromViewer
 	ToViewer
 )
@@ -89,19 +90,20 @@ const (
 	// session, or a ping this side answers itself.
 	Absorbed
 
-	// WrongWay means the message travelled in a direction it has no
-	// business travelling, per doc/messages.txt.  It is the shape a
-	// classification mistake takes, and counting it is how the
-	// mistake gets found instead of becoming a viewer that sits
-	// there.
+	// WrongWay is for a message travelling in a direction it has no
+	// business travelling, per doc/messages.txt.  Nothing records it
+	// yet: the relay checks no direction, and forwards whatever it
+	// does not absorb.
 	WrongWay
 
-	// NoViewer means there was nothing attached to forward to, which
-	// is ordinary while slgod runs on its own.
+	// NoViewer means there was nowhere to forward it: no viewer had
+	// joined, which is ordinary while slgod runs on its own, or, for
+	// a message from the viewer, there was no session to give it to.
 	NoViewer
 
-	// Unclassified means nothing said what to do with it.  Every one
-	// of these is a gap in the table.
+	// Unclassified is for a message nothing said what to do with.
+	// Nothing records it yet either: there is no classification
+	// table, and fromViewer forwards what it does not name.
 	Unclassified
 
 	// Dropped means there was somewhere to send it and no room to
@@ -155,8 +157,9 @@ type key struct {
 
 // Census tallies what crossed, by message and direction.
 //
-// It is safe for concurrent use, which it has to be: the two circuits
-// have their own dispatch goroutines and both write here.
+// It is safe for concurrent use, which it has to be: each circuit's
+// dispatch and send goroutines write here, and so does the one that
+// passes the simulator's messages to the viewer.
 type Census struct {
 	mu     sync.Mutex
 	rows   map[key]*Count
@@ -232,12 +235,11 @@ func (c *Census) Seen(name string, dir Direction) bool {
 }
 
 // Report renders the census as a table, one line per message and
-// direction, with a column for anything that was not forwarded.
+// direction, with a last column saying what became of its packets:
+// each disposition that happened, and how many times.
 //
-// The dropped column is the point.  A message with a large "wrong
-// direction" count is a classification mistake; one that is entirely
-// "unclassified" is a gap in the table; and a message that appears
-// nowhere at all is the one a stuck viewer is probably waiting for.
+// A message that appears nowhere at all is the one a stuck viewer is
+// probably waiting for, and one that was not forwarded says why.
 func (c *Census) Report() string {
 	rows := c.Counts()
 
@@ -310,9 +312,9 @@ func NewTrace(w io.Writer, only []string, bodies bool) *Trace {
 
 // Write records one packet travelling in one direction.
 //
-// It is safe to call from both dispatch goroutines at once, and it
-// serialises them: the file's order is the order Write was reached,
-// which is as close to the order things happened as a relay can know.
+// It is safe to call from any goroutine, and it serialises them: the
+// file's order is the order the entries reached the lock, which is as
+// close to the order things happened as a relay can know.
 func (t *Trace) Write(dir Direction, p *msg.Packet, what Disposition) {
 	if t == nil || t.w == nil {
 		return
