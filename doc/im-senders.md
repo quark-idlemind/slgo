@@ -80,6 +80,25 @@ group sends with `FromGroup` set and the group in `AgentID`, and a
 message the grid itself sends this way is named "Second Life" and
 carries no region and a zero position.
 
+Two more dialogs come from an object, and by the viewer's source carry
+the object's name in the same way. Neither was measured.
+
+- 9, `IM_TASK_INVENTORY_OFFERED`, an object giving an item. Its id
+  field is the transaction (`llinstantmessage.h:81-84`).
+  `inventory_offer_handler` shows the name as the object's
+  (`OBJECTFROMNAME`), links the agent id as its owner, or as its group
+  when `FromGroup` is set, and uses the notice for one's own objects
+  when that id is the viewer's avatar (`llimprocessing.cpp:360-397`).
+- 31, `IM_FROM_TASK_AS_ALERT`, a script's message shown as an alert.
+  The viewer shows the name as the sender's (`llimprocessing.cpp:1941-1951`)
+  and does nothing with the agent id but check it against the mute
+  list. That it is the owner's is inferred from `llinstantmessage.h:141-144`,
+  which calls 31 "Similar to IM_FROM_TASK".
+
+`clean_name_from_im`, which strips "Resident" only from a name that
+came from a user rather than a script, leaves out 9, 19 and 31 alike
+(`llimprocessing.cpp:89-139`). Line numbers are Firestorm's.
+
 ## What slgo does with them
 
 Until 2026-09-26 slgo called dialog 19 `DialogBusyAutoResponse` and
@@ -89,6 +108,10 @@ counted it as conversation. Now:
   (`DialogFromTask`) and for 20 (`DialogDoNotDisturbAutoResponse`).
 - The session learns no name from 19, as it learns none from a group
   invitation, whose name is not the group's either.
+- It learns none from 9 (`DialogTaskInventoryOffered`) or 31
+  (`DialogFromTaskAsAlert`), which are treated as 19. That they carry
+  the owner's id and the object's name is read from the viewer's
+  source, above, and not measured.
 - slbotd ignores a script's message entirely: no command, no model and
   no report of trouble. It logs
   `ignored an instant message from the object "NAME", owned by OWNER`.

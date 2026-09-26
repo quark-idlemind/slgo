@@ -129,6 +129,39 @@ func TestAScriptDoesNotTeachItsOwnerItsName(t *testing.T) {
 	}
 }
 
+// TestAnObjectsOfferOrAlertDoesNotRenameItsOwner: dialogs 9 and 31 are
+// built as 19 is, by the viewer's reading, with the owner's id and the
+// object's name.  Neither changes what the session calls the owner.
+func TestAnObjectsOfferOrAlertDoesNotRenameItsOwner(t *testing.T) {
+	for _, d := range []uint8{DialogTaskInventoryOffered, DialogFromTaskAsAlert} {
+		t.Run(DialogName(d), func(t *testing.T) {
+			w, f := newFakeSession(t)
+			ims := w.IMs(4)
+			w.learn(somebody, "Quark Idlemind")
+
+			id := msg.MustParseUUID("57327e57-7e57-c0de-3d85-fc737241ec86")
+			m := arrivingIM(somebody, "Doorbell", d, id, "somebody is at the door")
+			m.MessageBlock.ToAgentID = somebody
+			if d == DialogTaskInventoryOffered {
+				m.MessageBlock.BinaryBucket = []byte{byte(AssetNotecard)}
+			}
+			f.Relay(t, m)
+
+			select {
+			case im := <-ims:
+				if im.Dialog != d || im.From != somebody || im.FromName != "Doorbell" {
+					t.Errorf("dialog %d from %s, name %q", im.Dialog, im.From, im.FromName)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("the message never reached the subscription")
+			}
+			if got := w.Name(somebody); got != "Quark Idlemind" {
+				t.Errorf("the owner is now called %q, which is the object", got)
+			}
+		})
+	}
+}
+
 // TestDialogNames: the numbers are how the protocol says what arrived,
 // and this is the only place that turns them back into words.
 func TestDialogNames(t *testing.T) {
@@ -139,10 +172,12 @@ func TestDialogNames(t *testing.T) {
 		DialogInventoryOffered:         "inventory offer",
 		DialogInventoryAccepted:        "inventory accepted",
 		DialogInventoryDeclined:        "inventory declined",
+		DialogTaskInventoryOffered:     "object inventory offer",
 		DialogSessionSend:              "group message",
 		DialogFromTask:                 "object message",
 		DialogDoNotDisturbAutoResponse: "do not disturb auto response",
 		DialogTeleportLure:             "teleport lure",
+		DialogFromTaskAsAlert:          "object alert",
 		DialogGroupNotice:              "group notice",
 		DialogFriendshipOffered:        "friendship offer",
 		DialogFriendshipAccepted:       "friendship accepted",
