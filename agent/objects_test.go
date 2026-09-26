@@ -274,6 +274,34 @@ func TestTheSixteenBitPlacementFormIsAcceptedToo(t *testing.T) {
 	}
 }
 
+// TestPlacementWidthsAreCounted: every placement blob an ObjectUpdate
+// carries is counted by its width, the ones nothing reads as well,
+// since the count is how a day's traffic says which forms the
+// simulator really sends.
+func TestPlacementWidthsAreCounted(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	block := func(local uint32, width int) msg.ObjectUpdate_ObjectData {
+		return msg.ObjectUpdate_ObjectData{ID: local, FullID: aPrim, PCode: 9, ObjectData: make([]byte, width)}
+	}
+	feed(t, a,
+		arriving(t, block(1, 60), block(2, 60), block(3, 32)),
+		arriving(t, block(4, 76), block(5, 16), block(6, 60)),
+	)
+
+	want := map[int]uint64{60: 3, 32: 1, 76: 1, 16: 1}
+	got := a.PlacementWidths()
+	if len(got) != len(want) {
+		t.Errorf("widths = %v, want %v", got, want)
+	}
+	for w, n := range want {
+		if got[w] != n {
+			t.Errorf("%d bytes counted %d times, want %d (all: %v)", w, got[w], n, got)
+		}
+	}
+}
+
 // TestAnUnreadablePlacementStillNamesTheObject: a blob of a width
 // nothing recognises is not a reason to lose the object.  What it is
 // and where it hangs are still known; only where it is is not.

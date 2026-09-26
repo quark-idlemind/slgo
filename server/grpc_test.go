@@ -153,6 +153,11 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	if st.GetUnhandled()["ChatFromSimulator"] == 0 {
 		t.Errorf("unhandled = %v, want ChatFromSimulator among them", st.GetUnhandled())
 	}
+	// The object update above carried an empty placement blob, which
+	// nothing reads and which is counted all the same.
+	if got := st.GetPlacementWidths(); len(got) != 1 || got[0] != 1 {
+		t.Errorf("placement widths = %v, want the one empty blob", got)
+	}
 
 	// And Send refuses what sendMessage refuses, rather than reporting
 	// that nothing was put on the wire as success.

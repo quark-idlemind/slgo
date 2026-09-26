@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/quark-idlemind/slgo/client"
@@ -68,6 +69,19 @@ func cmdStatus(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	fmt.Fprintf(out, "  duplicates  %d\n", st.Duplicates)
 	fmt.Fprintf(out, "  clients     %d\n", st.Clients)
 	fmt.Fprintf(out, "  caps        %d\n", len(a.GetCaps()))
+
+	if len(st.PlacementWidths) > 0 {
+		widths := make([]uint32, 0, len(st.PlacementWidths))
+		for w := range st.PlacementWidths {
+			widths = append(widths, w)
+		}
+		sort.Slice(widths, func(i, j int) bool { return widths[i] < widths[j] })
+		counts := make([]string, len(widths))
+		for i, w := range widths {
+			counts[i] = fmt.Sprintf("%d bytes: %d", w, st.PlacementWidths[w])
+		}
+		fmt.Fprintf(out, "  placements  %s\n", strings.Join(counts, ", "))
+	}
 
 	if len(st.Unhandled) > 0 {
 		keys := make([]string, 0, len(st.Unhandled))

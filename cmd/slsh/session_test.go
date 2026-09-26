@@ -53,6 +53,26 @@ func TestStatusIsTheCircuitRatherThanTheWorld(t *testing.T) {
 	}
 }
 
+// TestStatusCountsPlacementsByWidth: the width of an ObjectUpdate's
+// placement blob says which form it is in, and the line says how many
+// of each have arrived, narrowest first.  A daemon that has counted
+// none prints no line.
+func TestStatusCountsPlacementsByWidth(t *testing.T) {
+	x, d := newDaemonShell(t)
+	d.status = &pb.StatusResponse{
+		Agent:           &pb.AgentInfo{Name: "fake"},
+		PlacementWidths: map[uint32]uint64{76: 40, 60: 2211, 32: 3},
+	}
+	if got, want := x.do(t, "status"), "placements  32 bytes: 3, 60 bytes: 2211, 76 bytes: 40\n"; !strings.Contains(got, want) {
+		t.Errorf("status should say %q:\n%s", want, got)
+	}
+
+	d.status = &pb.StatusResponse{Agent: &pb.AgentInfo{Name: "fake"}}
+	if got := x.do(t, "status"); strings.Contains(got, "placements") {
+		t.Errorf("no placements counted should print no line:\n%s", got)
+	}
+}
+
 // TestStatusPutsTheCommonestUnhandledMessageFirst.
 //
 // "no handler for" names the messages this build does not understand,

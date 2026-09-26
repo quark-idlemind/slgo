@@ -66,3 +66,8 @@ here or in the viewer describes.
 Every new prim in the rez measurements was first reported in the 60
 byte form (`rez.md`). No 32 or 48 byte blob has been recorded, and the
 tests for that form are built from the layout, not captured.
+
+So the daemon counts every blob by its width, unread widths included,
+and `slsh status` prints the counts on its `placements` line. A day's
+traffic there says whether the sixteen bit form, or any width not read
+here, is ever sent.
