@@ -84,7 +84,7 @@
 
       <section id="slsh-flags">
         <h2>slsh, slrun and slbench</h2>
-        <p>Options stop at the first word that is not an option. Anything after them is run as one command line, so <code>slsh ls -l</code> is the same as <code>slsh -c "ls -l"</code>. A one-shot run exits 1 if the command failed.</p>
+        <p>Options stop at the first word that is not an option, and what follows them is a command. One argument is a command line, read as <code>-c</code> reads one, so <code>slsh "ls -l &gt; list"</code> redirects. Several arguments are words as your shell split them, and are not split again: <code>slsh rm "Old Stuff"</code> removes the one item, and a <code>&gt;</code> inside an argument is text. An argument that is only <code>&gt;</code> or <code>&gt;&gt;</code> redirects into the file after it, as in <code>slsh ls -l \&gt; list</code>. That sends only the command's output to the file, where your shell's own <code>&gt;</code> would also catch slsh's errors, which it prints on standard output. A one-shot run exits 1 if the command failed.</p>
         <div class="tablewrap"><table>
           <thead><tr><th>slsh flag</th><th>What it does</th></tr></thead>
           <tbody>

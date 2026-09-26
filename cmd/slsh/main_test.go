@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -308,6 +309,120 @@ func TestWhatIsLeftOnTheCommandLineIsACommand(t *testing.T) {
 	}
 	if !strings.Contains(got, "left on the line") {
 		t.Errorf("the arguments were not run as a command:\n%s", got)
+	}
+}
+
+// TestOneArgumentIsALine, split and redirected as -c would, so that
+// slsh "ls -l > list" works as it reads.
+func TestOneArgumentIsALine(t *testing.T) {
+	_, addr := newAuthDaemon(t)
+	path := filepath.Join(t.TempDir(), "list")
+
+	var err error
+	got := capturingStdout(t, func() {
+		err = runWith(t, t.TempDir(), "--addr", addr, "--agent", "fake",
+			"echo one   line > "+path)
+	})
+	if err != nil {
+		t.Fatalf("run = %v\n%s", err, got)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "one line\n" {
+		t.Errorf("the file holds %q; the line should have been split and redirected", b)
+	}
+}
+
+// TestSeveralArgumentsAreTheCallingShellsWords, and are not split
+// again: split, rm "Old Stuff" removes a folder called Old before it
+// fails on Stuff.  An apostrophe is a letter and a > inside a word is
+// part of it -- split, this one empties a file -- and the transcript
+// says the line in a form that reads back as the same words.
+func TestSeveralArgumentsAreTheCallingShellsWords(t *testing.T) {
+	_, addr := newAuthDaemon(t)
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	path := filepath.Join(t.TempDir(), "old")
+
+	var err error
+	got := capturingStdout(t, func() {
+		err = runWith(t, t.TempDir(), "--addr", addr, "--agent", "fake",
+			"echo", "two  spaces", "it's", "Notes > "+path)
+	})
+	if err != nil {
+		t.Fatalf("run = %v\n%s", err, got)
+	}
+	if want := "two  spaces it's Notes > " + path; !strings.Contains(got, want) {
+		t.Errorf("want %q, got:\n%s", want, got)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Error("a > inside an argument redirected")
+	}
+
+	log, _ := os.ReadFile(filepath.Join(data, "slgo", "quark-idlemind.log"))
+	line := `$ echo "two  spaces" "it's" "Notes > ` + path + `"`
+	if !strings.Contains(string(log), line) {
+		t.Errorf("the transcript should say %s:\n%s", line, log)
+	}
+}
+
+// TestAGreaterThanOnItsOwnRedirects, since slsh's errors are on its
+// stdout and the calling shell's > would put them in the file too.
+func TestAGreaterThanOnItsOwnRedirects(t *testing.T) {
+	_, addr := newAuthDaemon(t)
+	path := filepath.Join(t.TempDir(), "list")
+
+	var err error
+	got := capturingStdout(t, func() {
+		err = runWith(t, t.TempDir(), "--addr", addr, "--agent", "fake",
+			"echo", "into the file", ">", path)
+	})
+	if err != nil {
+		t.Fatalf("run = %v\n%s", err, got)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "into the file\n" {
+		t.Errorf("the file holds %q", b)
+	}
+	if strings.Contains(got, "into the file") {
+		t.Errorf("redirected output reached the terminal:\n%s", got)
+	}
+}
+
+// TestAFailedOneShotRunReturns rather than exiting, so that what run
+// deferred still happens: for --direct that is the logout, and here it
+// is the daemon seeing the session let go.  main says nothing more,
+// since the shell has said what failed.
+func TestAFailedOneShotRunReturns(t *testing.T) {
+	d, addr := newAuthDaemon(t)
+
+	var err error
+	got := capturingStdout(t, func() {
+		err = runWith(t, t.TempDir(), "--addr", addr, "--agent", "fake",
+			"no-such-command", "at all")
+	})
+	if !errors.Is(err, errReported) {
+		t.Fatalf("run = %v, want errReported", err)
+	}
+	if n := strings.Count(got, "no such command"); n != 1 {
+		t.Errorf("the failure should be said once, said %d times:\n%s", n, got)
+	}
+	select {
+	case <-d.ended:
+	case <-time.After(5 * time.Second):
+		t.Error("the session was not closed")
+	}
+}
+
+// TestAFileThatWillNotOpenIsSaid by main, since no line of it ran to
+// report anything.
+func TestAFileThatWillNotOpenIsSaid(t *testing.T) {
+	_, addr := newAuthDaemon(t)
+	path := filepath.Join(t.TempDir(), "not-there")
+
+	var err error
+	capturingStdout(t, func() {
+		err = runWith(t, t.TempDir(), "--addr", addr, "--agent", "fake", "-f", path)
+	})
+	if err == nil || errors.Is(err, errReported) || !strings.Contains(err.Error(), "not-there") {
+		t.Errorf("run = %v, want the open failure itself", err)
 	}
 }
 
