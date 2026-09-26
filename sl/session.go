@@ -456,9 +456,11 @@ func (w *Session) alertsSince(mark int) string {
 	if mark >= len(w.alerts) {
 		return ""
 	}
-	said := w.alerts[mark:]
-	for i, a := range said {
-		said[i] = strconv.Quote(a)
+	// Quoted into a slice of its own: the alerts are kept, and quoting
+	// them where they lie would quote them again at the next timeout.
+	said := make([]string, 0, len(w.alerts)-mark)
+	for _, a := range w.alerts[mark:] {
+		said = append(said, strconv.Quote(a))
 	}
 	return "; the simulator said " + strings.Join(said, ", ")
 }
