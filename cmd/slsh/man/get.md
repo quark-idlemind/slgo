@@ -39,6 +39,10 @@ looks its asset up itself.
 The grid stores JPEG 2000.  What is written is a PNG, and the report
 says the size it decoded to and how many bytes that came from.
 
+Any shape decodes, power of two or not, up to 4096 on each side, which
+is the viewer's own limit.  A texture claiming more is refused before
+it is decoded; `--raw` still writes it.
+
 The file is the item's name, with separators replaced, and `.png` or
 `.j2c` on the end.  A texture asked for by uuid has no name here, so
 the file is called after the uuid.

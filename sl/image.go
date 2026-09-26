@@ -53,7 +53,22 @@ type TextureOptions struct {
 const DefaultRatio = 8
 
 // DecodeTexture turns a codestream into a picture.
+//
+// It is liberal where EncodeTexture is strict: any shape decodes, power
+// of two or not, up to MaxDecodeSize on each side. A codestream claiming
+// more is refused before anything is allocated for it, since the decoder
+// sizes its buffers from the header and the header says whatever the
+// bytes say. The size is read by the decoder's own parser, so it is the
+// size the decoder would have believed.
 func DecodeTexture(b []byte) (image.Image, error) {
+	c, err := j2k.DecodeConfig(bytes.NewReader(b))
+	if err != nil {
+		return nil, fmt.Errorf("sl: decoding a texture of %d bytes: %w", len(b), err)
+	}
+	if c.Width > MaxDecodeSize || c.Height > MaxDecodeSize {
+		return nil, fmt.Errorf("sl: a texture of %d bytes claims to be %dx%d, "+
+			"and nothing larger than %d a side is decoded", len(b), c.Width, c.Height, MaxDecodeSize)
+	}
 	m, err := j2k.Decode(bytes.NewReader(b))
 	if err != nil {
 		return nil, fmt.Errorf("sl: decoding a texture of %d bytes: %w", len(b), err)

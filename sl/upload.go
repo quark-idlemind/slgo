@@ -223,6 +223,9 @@ var jpeg2000SOC = []byte{0xff, 0x4f, 0xff, 0x51}
 // either -- its own cap is MAX_IMAGE_SIZE_DEFAULT, which is 2048.
 const MaxTextureSize = 2048
 
+// MaxDecodeSize is the viewer's MAX_IMAGE_SIZE, llimage/llimage.h:56.
+const MaxDecodeSize = 4096
+
 // MinTextureSize is the smallest a viewer will resize a dimension to.
 //
 // The grid itself goes lower -- 1x1 and 2x2 both upload -- so this is a
