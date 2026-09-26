@@ -56,10 +56,10 @@ avatar never having moved.
 
 ## Orphans
 
-An orphan is timed from the last word about it, and since it was first
-heard was the wrong clock. A region goes on describing a prim whose
-root it never describes to us, and that is an update that cannot be
-judged, so the prim was taken back in as soon as it was dropped:
+An orphan is timed from the last word about it; timing it from when it
+was first heard was the wrong clock. A region goes on describing a prim
+whose root it never describes to us, and that is an update that cannot
+be judged, so the prim was taken back in as soon as it was dropped:
 measured on a live region, one such prim was deleted and re-created
 every minute for hours, losing its name each time and costing a fresh
 name lookup to get it back.
