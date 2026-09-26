@@ -438,7 +438,7 @@ func cmdGive(ctx context.Context, r *req, out io.Writer, args []string) error {
 
 // placeFlags is what place was asked for.
 type placeFlags struct {
-	Away float64 `getopt:"--away=METRES  how far in front of the avatar to put it [2]"`
+	Away float64 `getopt:"--away=METRES  how far east of the avatar to put it [2]"`
 	Help bool    `getopt:"--help -h      show what this command takes"`
 }
 

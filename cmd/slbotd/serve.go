@@ -12,8 +12,8 @@ package main
 //	everything else     logged, and left for a person to answer
 //
 // A command is a remark that begins with the prefix.  Anything else is
-// a remark, and a daemon that answered one would be a daemon holding a
-// conversation it cannot hold.
+// a remark, which is answered only when a model is configured and the
+// Audience says to; see converse.
 //
 // The rule about who is obeyed is in one place, Config.Trusts, and it
 // is asked before the line is even split into words.  That is
@@ -389,9 +389,10 @@ func (b *bot) say(ctx context.Context, s *sl.Session, to msg.UUID, text string) 
 // own faults to a stranger is both out of character and more than they
 // should be told about the machine it runs on.
 //
-// Only on a FRESH approach: after a silence longer than error-gap, or
-// the first thing this person has ever said to this avatar.  Somebody
-// working with an avatar all afternoon has been told already.
+// Only on a FRESH approach: after a silence of error-gap or more, or
+// the first thing this person has said to this avatar since the daemon
+// started.  Somebody working with an avatar all afternoon has been told
+// already.
 //
 // Whether it is fresh is decided for every remark, command or not, so
 // that the reckoning of when somebody last spoke does not depend on

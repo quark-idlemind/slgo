@@ -105,9 +105,9 @@ type Said struct {
 
 	// Prompt is how many tokens the whole conversation came to and
 	// Cached how many of them the server did not have to process
-	// again.  Both are read rather than estimated: the trimming below
-	// is driven by what the tokeniser actually counted, which is the
-	// difference between a budget and a guess at one.
+	// again.  Both are read rather than estimated: compaction in
+	// chat.go is driven by what the tokeniser actually counted, which
+	// is the difference between a budget and a guess at one.
 	Prompt int
 	Cached int
 }

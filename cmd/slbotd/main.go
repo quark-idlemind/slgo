@@ -2,16 +2,17 @@
 // them over instant messages.
 //
 //	slbotd
-//	slbotd -config ~/.config/slgo/slbotd.conf -v
+//	slbotd -config ~/.config/slgo/slbotd.conf -q
 //
 // It is a client of slgod and holds no credentials of its own.  For
 // each avatar named in its configuration it asks slgod to bring the
 // session up, attaches to it, and then listens: an instant message
 // beginning with the prefix -- ":" unless the file says otherwise -- is
-// a command, and anything else is somebody talking and is logged and
-// left alone.  Commands are obeyed only from the avatars the
-// configuration trusts, and inventory offered by one of them is
-// accepted without anybody being at a keyboard.
+// a command, and anything else is somebody talking, which is logged and
+// answered only when a model is configured to answer it.  Commands are
+// obeyed only from the avatars the configuration trusts, and inventory
+// offered by one of them is accepted without anybody being at a
+// keyboard.
 //
 // The commands are a subset of what slsh can do -- looking, moving,
 // talking, inventory and building -- and the programs slbench and slrun,
@@ -19,8 +20,8 @@
 // to.  ":help" lists them; ":help COMMAND" says what one takes.
 //
 // The configuration is ~/.config/slgo/slbotd.conf, beside the profiles
-// it names.  See config.go for what goes in it, and the example at the
-// foot of this file's documentation in doc/slbotd.md.
+// it names.  See config.go for what goes in it, and doc/guide.md, under
+// "The configuration", for an example.
 //
 // # What it does not do
 //

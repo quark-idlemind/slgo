@@ -149,7 +149,7 @@ type Conversation struct {
 	Compacted int `json:"compacted,omitempty"`
 
 	// Tokens is what the server counted the last prompt at.  Measured
-	// rather than estimated, and it is what drives the trimming: a
+	// rather than estimated, and it is what decides when to compact: a
 	// budget checked against a guess at the tokeniser is a budget that
 	// is wrong in whichever direction the guess leans.
 	Tokens int `json:"tokens,omitempty"`
@@ -674,7 +674,7 @@ func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, 
 
 	// Whether this turn is about to rewrite the conversation, which
 	// decides whether restoring the old context is worth anything: it
-	// would be thrown away by the compaction two lines later.
+	// would be thrown away by the compaction just below.
 	folding := c.shouldCompact(conv)
 	if !mine && !folding {
 		c.place(ctx, conv, slot, fingerprint)
@@ -708,11 +708,9 @@ func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, 
 	conv.Add("assistant", answer.Text, now)
 	conv.Tokens = answer.Prompt
 
-	// Saved before trimming.  The cache holds the prompt that was just
-	// processed, and that is the one worth keeping: llama-server
-	// matches whatever prefix the next prompt shares with it and
-	// reprocesses the rest, so a trim costs the tail of the cache
-	// rather than making the file wrong.
+	// The cache holds the prompt that was just processed, and that is
+	// the one worth keeping: llama-server matches whatever prefix the
+	// next prompt shares with it and reprocesses the rest.
 	if n, err := c.llm.SaveSlot(ctx, slot, conv.stateName()); err != nil {
 		// Not fatal, and not even unusual: a server started without
 		// --slot-save-path refuses every one of these.  The

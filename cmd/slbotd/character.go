@@ -6,7 +6,7 @@ package main
 // character, worn with everybody, which is where this started and still
 // what most avatars want.  A directory is a character that knows who it
 // is talking to: "default" in it is what everybody gets, and a file
-// named for one person is added to it when that person is the one
+// named for one person is used instead when that person is the one
 // speaking.
 //
 // One file is chosen and not two: the person's if there is one, the
@@ -161,8 +161,9 @@ func includePath(line string) (string, bool) {
 	return p, true
 }
 
-// characterFiles picks the two files a person is owed from a directory:
-// the default, and their own if there is one.  Either may be empty.
+// characterFiles finds the two files that may be a person's character
+// in a directory: the default, and their own if there is one.  Either
+// may be empty.
 //
 // The directory is listed rather than guessed at, so that one rule
 // covers every way somebody might have spelt the name.  Guessing means

@@ -1504,7 +1504,8 @@ to find out.
     trusted = Quark Idlemind
 
     # Where slgod is.  Nothing said asks sl-host -- about the avatar,
-    # when there is only one -- and failing that means this machine.
+    # when there is only one -- or, where sl-host is not installed,
+    # means this machine.
     addr =
 
     # What marks a command.  Anything else is somebody talking.

@@ -2,9 +2,10 @@ package main
 
 // Moving: teleporting, landmarks, sitting and touching.
 //
-// These are the commands that change where the avatar is, and every one
-// of them ends by saying where it ended up.  A person sending commands
-// over instant messages cannot see the avatar, so "it worked" is not an
+// These are the commands that change where the avatar is, and touch,
+// which acts on something where it is.  Every one that moves the avatar
+// ends by saying where it ended up.  A person sending commands over
+// instant messages cannot see the avatar, so "it worked" is not an
 // answer -- the position is.
 
 import (

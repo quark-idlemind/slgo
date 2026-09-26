@@ -105,9 +105,9 @@ type daemon struct {
 	mu   sync.Mutex
 	bots map[string]*bot
 
-	// order is the avatars as the configuration named them.  It decides
-	// which is listed first and which "as" resolves a bare name to, and
-	// a map has no order to offer.
+	// order is the avatars as the configuration named them, for Bots
+	// and so for everything that goes through them in turn.  A map has
+	// no order to offer.
 	order []string
 }
 
@@ -412,11 +412,12 @@ func (d *daemon) noteTrouble(avatar, text string) {
 }
 
 // sinceSeen is how long it has been since this person last said
-// anything to this avatar, and whether they ever have.
+// anything to this avatar, and whether they have said anything since
+// the daemon started.  It records now as the latest.
 //
-// Recording the time is the caller's business, once it has decided the
-// remark is one worth counting: a typing notification is not somebody
-// speaking, and treating it as such would mean nobody was ever away.
+// So it is called only for a remark worth counting: a typing
+// notification is not somebody speaking, and treating it as such would
+// mean nobody was ever away.
 func (b *bot) sinceSeen(who msg.UUID, now time.Time) (time.Duration, bool) {
 	b.seenMu.Lock()
 	defer b.seenMu.Unlock()

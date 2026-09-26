@@ -3,7 +3,7 @@ package main
 // The commands a trusted avatar may send, and how a line becomes one.
 //
 // An instant message that begins with the prefix is a command; anything
-// else is somebody talking and is logged and left alone.  What follows
+// else is somebody talking, which is serve.go's business.  What follows
 // the prefix is split into words the way a shell splits them -- quotes
 // hold a word together and nothing else is interpreted, because there
 // is no shell here and a line that looked like it expanded something
@@ -39,11 +39,9 @@ import (
 // req is one command being run: which avatar is doing it, and who
 // asked.
 //
-// The sender travels with it because several commands answer differently
-// for different people -- "as" may only reach avatars this daemon holds,
-// and an error says who it was addressed to -- and because a command
-// that wants to say something back to the person who sent it should not
-// have to be told again who that was.
+// The sender travels with it so that a command that wants to say
+// something back to the person who sent it need not be told again who
+// that was.  No command reads it; "as" passes it on.
 type req struct {
 	d *daemon
 
@@ -70,7 +68,8 @@ type req struct {
 	// the exception the rule names: this struct IS the request, it is
 	// made for one command and thrown away after it, and the
 	// alternative is a second context argument threaded through every
-	// command signature for the sake of the two that want it.
+	// command signature for the sake of the one that wants it,
+	// runProgram.
 	base context.Context
 }
 

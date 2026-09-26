@@ -26,7 +26,8 @@ package main
 // The format is the profiles' own: key = value, # to the end of the
 // line for a comment, and an unknown key is an error rather than a
 // setting that silently does nothing.  Some keys may be given more than
-// once -- avatar, trusted, program, alias -- and those accumulate; the
+// once -- avatar, trusted, chat, chat-bot, program, alias -- and those
+// accumulate; backstory, read-cps and type-cps keep one per avatar; the
 // rest take the last word.
 
 import (
@@ -59,12 +60,11 @@ type Config struct {
 	Path string
 
 	// Avatars are the profiles to hold, in the order they were
-	// written.  The order is the only thing that decides which one
-	// answers a command that names no avatar, so it is kept.
+	// written, which is the order they are listed in.
 	Avatars []string
 
-	// Addr is the slgod to attach to.  Empty asks sl-host, and failing
-	// that means this machine.
+	// Addr is the slgod to attach to.  Empty asks sl-host, or means
+	// this machine where sl-host is not installed.
 	Addr string
 
 	// Prefix is what marks a command.  An instant message that does not
@@ -167,8 +167,8 @@ type Config struct {
 
 	// ChatContext is how many tokens of conversation are sent.  It is
 	// a budget on the PROMPT, checked against what the server says it
-	// actually counted rather than against a guess, and the oldest
-	// turns go when it is exceeded.
+	// actually counted rather than against a guess, and the older turns
+	// are folded into the summary when it is exceeded.
 	ChatContext int
 
 	// ChatReply bounds a reply in instant messages, and ChatTokens
@@ -203,13 +203,14 @@ type Config struct {
 	PaceMax    time.Duration
 
 	// ChatOwn is how many things two avatars THIS daemon drives may say
-	// to each other before one of them stops answering.
+	// to each other before one of them stops answering -- or one of
+	// them and an avatar that chat-bot names.
 	//
 	// They are not stopped outright, because two of them talking is not
 	// a malfunction and an operator who wants it not to happen can
 	// write the name with a "!" in front of it.  What is wrong with it
 	// is that neither side will ever be the one to get bored, so
-	// something has to be, and this is how many exchanges it waits.
+	// something has to be, and this is how many things said it waits.
 	// Zero is never.
 	ChatOwn int
 
@@ -809,8 +810,8 @@ func sortedProgramNames(c Config) []string {
 // with no model would be a daemon that has decided who to talk to and
 // has nothing to say, and a model with no chat list is one that could
 // talk and has been told to talk to nobody.  Either on its own is
-// almost certainly a half-finished configuration, which check() says
-// so about.
+// almost certainly a half-finished configuration, which ChatProblem
+// says so about.
 func (c *Config) ChatOn() bool { return c.LLMURL != "" && len(c.Chat) > 0 }
 
 // ChatStore is where conversations are kept.

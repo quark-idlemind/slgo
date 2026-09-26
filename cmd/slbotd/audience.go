@@ -164,7 +164,8 @@ func listAudience(cfg Config) Audience {
 }
 
 // ownAvatarsBounded lets two avatars this daemon drives talk to each
-// other, and makes the conversation end.
+// other, and makes the conversation end.  An avatar chat-bot names, which
+// another program's model drives, is bounded the same way.
 //
 // A flat refusal was the first answer here and it was the wrong one.
 // Two of these talking is not a malfunction -- what actually happened
@@ -185,10 +186,11 @@ func listAudience(cfg Config) Audience {
 // when it was stopped by hand.  Starting it took a person; stopping it
 // was never going to happen on its own.
 //
-// The count is of everything ever said in that conversation, folded
-// turns included.  Counting what is still held word for word would
-// reset the bound at every compaction, which is to say it would bound
-// nothing at all.
+// The count is Approach.Recent: what the two have said since they last
+// rested for chat-own-rest, or everything ever said when that is zero,
+// folded turns included either way.  Counting what is still held word
+// for word would reset the bound at every compaction, which is to say it
+// would bound nothing at all.
 func ownAvatarsBounded(d *daemon, limit int, next Audience) Audience {
 	return func(ctx context.Context, a *Approach) Verdict {
 		who, ours := d.AvatarFor(a.From)
