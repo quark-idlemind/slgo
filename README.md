@@ -200,8 +200,9 @@ the protocol needs.
 | `Variable N` | `[]byte` | N byte little endian length, then bytes |
 | `Fixed N` | `[N]byte` | N bytes |
 
-Everything is little endian except the packet sequence number, `IPADDR`
-and `IPPORT`.
+Everything is little endian except what is in network order: the
+packet sequence number, the acknowledgements appended to a packet, a
+Low message's number, `IPADDR` and `IPPORT`.
 
 ## Where the wire format came from
 
