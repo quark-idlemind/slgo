@@ -2,78 +2,25 @@ package server
 
 // Sitting down again after a login.
 //
-// An avatar that was sitting on something when its session ended comes
-// back standing.  Nothing on the grid remembers the seat: a sit is a
-// request the simulator acts on and does not record, and the Current
-// Outfit folder -- which does record what an avatar is wearing -- has
-// nothing to say about where it is.  So the remembering is this
-// daemon's to do, and it is worth doing here rather than in a client
-// because it is this daemon that logs the avatar in, including at its
-// own startup when no client is attached to notice.
+// Nothing on the grid remembers a seat, so this daemon does: it is what
+// logs the avatar in, including at startup with no client attached.
+// What is remembered is the seat's object id; a local id is the
+// region's own numbering, handed out afresh every time.
 //
-// # What is remembered, and when
+// It is learned two ways.  AvatarSitResponse carries the seat's object
+// id however the sit was asked for.  The watch reads what the avatar is
+// parented to, which is what notices standing up -- there is no message
+// for that -- and any sit the first missed.  The watch has three
+// answers, seated on this, standing, and no opinion, because the
+// region's description of the avatar may not have arrived; only
+// standing forgets.
 //
-// The object's id, which is the thing that survives.  A local id does
-// not: locals are the region's own numbering and are handed out afresh
-// every time, so the number an avatar was parented to last week names
-// something else entirely today.
-//
-// It is learned two ways, because neither alone is enough.
-//
-// AvatarSitResponse is the simulator telling the avatar that just sat
-// down where it has been put, and it carries the seat's OBJECT id
-// already resolved.  That is the good source: it needs nothing looked
-// up, it arrives however the sit was asked for, and it is the
-// simulator's own word.
-//
-// The watch is the other, and it is what notices STANDING UP -- there
-// is no message for that -- and any sit the first source missed.  A
-// seated avatar is PARENTED to its seat, and the parent is in the
-// region's own description of the avatar, so both facts are there to be
-// read.
-//
-// The watch alone was tried first and is not enough on its own.  The
-// parent is a LOCAL id, and turning one into an object means finding
-// that object in the region listing -- which is exactly what may be
-// missing.  Measured: an avatar seated on a chair, with the chair
-// absent from a listing of 976 objects.  The parent was known, the seat
-// was not, and there was nothing to write down.  Why the chair was
-// never described was not established -- a packet thrown away as
-// undecodable is the likeliest reason -- and the object store now asks
-// for a parent it has not heard of, but a watch that depends on a
-// description arriving is still at the mercy of one that does not.
-//
-// # Not knowing is not standing
-//
-// The distinction the watch turns on.  The region's description of this
-// avatar may be missing -- it has not arrived yet, or it was lost --
-// and a watch that read that as "standing" would throw away a perfectly
-// good seat because it looked away at the wrong moment.  So the watch
-// has three answers and not two: seated on this, standing, and no
-// opinion.  Only the second forgets.
-//
-// # Why the restore retries
-//
-// A region does not hand over its contents at once.  The avatar is in
-// world and able to move some seconds before the object it was sitting
-// on has been described, and a sit request naming an object the
-// simulator has not got to yet is answered with nothing at all.  So the
-// request is repeated for a while and then given up on, which also
-// covers the case that matters more: the seat is genuinely gone, taken
-// home by its owner, and no amount of asking will bring it back.
-//
-// # Somebody else deciding is not a reason to stop watching
-//
-// The homing loop stops for the rest of the session when a client
-// teleports, because its job is to put an avatar back where it belongs
-// and somebody who teleported has taken that decision.  This is not that.  Its job is to
-// remember, so a client sitting the avatar somewhere else is not
-// something to get out of the way of -- it is the next thing to write
-// down, and the watch does.
-//
-// The RESTORE gets out of the way, and only the restore: an avatar
-// somebody has already sat down while this was asking is left where
-// they put it.
+// The restore asks again for a while, since a sit naming an object the
+// simulator has not described yet is answered with nothing, and then
+// gives up, which also covers a seat that is gone.  It leaves alone an
+// avatar somebody else sat down meanwhile, and the watch goes on writing
+// down whatever the avatar sits on.
+// Why: doc/daemon.md#sitting-down-again
 
 import (
 	"context"
@@ -183,12 +130,7 @@ func (h *Hosted) seatward(ctx context.Context, pace seatPace) {
 // The two are not the same question and only the first is the one being
 // asked: an avatar sitting on a chair nobody has described is sitting
 // on it just the same.
-//
-// Measured, and the reason it is written this way: a restart where the
-// chair was absent from the region listing throughout confirmed the sit
-// only on the sixth and last attempt, eighty-five seconds in, because
-// each round was waiting to recognise an object rather than to see the
-// avatar sit down.  It had actually sat within seconds.
+// Why: doc/daemon.md#what-counts-as-having-sat-down
 func (h *Hosted) resit(ctx context.Context, want msg.UUID, pace seatPace) {
 	for attempt := 0; attempt < pace.tries; attempt++ {
 		if local, known := h.seatedLocal(); known && local != 0 {

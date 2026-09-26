@@ -2,29 +2,19 @@ package server
 
 // The active group, and why the server has to keep it.
 //
-// A parcel usually grants "create objects" to a GROUP rather than to
-// individuals, and a login starts with NONE active.  A viewer hides
-// this by storing the group in its settings and re-sending it every
-// time, which makes it feel like a property of the account; headless it
-// is not.  So an avatar that builds happily through a viewer cannot rez
-// a thing here, and the refusal blames the land -- the wrong place to
-// look.
-//
-// Settling it once, after logging in, is therefore not enough: a
-// reconnect is a FRESH LOGIN, with a new session id and no active
-// group, and an avatar that was building five minutes ago silently
-// stops being able to.  That is a fault found in the field on
-// 2026-08-07, on a session that had reconnected.
-//
-// So the resolved uuid belongs to the Hosted, which survives
-// reconnection, rather than to the agent, which does not -- and the
-// supervisor reapplies it every time it puts a new session in place.
+// A parcel usually grants "create objects" to a group, and a login
+// starts with none active, so an avatar without its group cannot rez
+// and the refusal blames the land.  A reconnect is a fresh login, so
+// settling the group once is not enough: the resolved uuid belongs to
+// the Hosted, which survives reconnection, and the supervisor reapplies
+// it every time it puts a new session in place.
 //
 // The uuid is re-sent rather than re-derived.  Working out WHICH group
 // means waiting for the list, which is not in the login response and
 // arrives later on the event queue, so re-deriving would stall every
 // reconnect for as long as that takes to reach an answer that cannot
 // have changed.
+// Why: doc/daemon.md#the-active-group
 
 import (
 	"context"
