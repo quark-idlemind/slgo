@@ -64,9 +64,9 @@ package server
 //
 // # Somebody else deciding is not a reason to stop watching
 //
-// The homing loop stops for good when a client teleports, because its
-// job is to put an avatar back where it belongs and somebody who
-// teleported has taken that decision.  This is not that.  Its job is to
+// The homing loop stops for the rest of the session when a client
+// teleports, because its job is to put an avatar back where it belongs
+// and somebody who teleported has taken that decision.  This is not that.  Its job is to
 // remember, so a client sitting the avatar somewhere else is not
 // something to get out of the way of -- it is the next thing to write
 // down, and the watch does.
@@ -124,8 +124,8 @@ func (s *Server) Seats() Seats {
 // SeatWatch how often the seat is read afterwards.
 //
 // Vars so that a test can shorten them.  A test of the retry that ran
-// at the real pace would take two minutes to watch three attempts, and
-// a test nobody will run is not one.
+// at the real pace would take most of a minute to watch three attempts,
+// and a test nobody will run is not one.
 var (
 	SeatSettle = 10 * time.Second
 	SeatRetry  = 15 * time.Second

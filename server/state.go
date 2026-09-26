@@ -104,8 +104,8 @@ func retryAfter(tries int) time.Duration {
 	return ReconnectDelays[tries-1]
 }
 
-// agentState is the set of things the server knows about but is not
-// holding: profiles that exist, and logins that failed.
+// agentState is what the server knows about agents it is not holding:
+// logins that failed, and logins still under way.
 type agentState struct {
 	mu       sync.Mutex
 	failures map[string]*failure

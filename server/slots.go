@@ -56,8 +56,8 @@ import (
 //
 // It has to agree with what the clients believe, since they are the ones
 // that turn a place into an object: a place the client cannot wear is a
-// grant nobody can use.  cmd/slgod sets it from the same list the
-// clients read.
+// grant nobody can use.  A test in cmd/slgod holds it to
+// session.AutoPool, the number the clients wear.
 const SlotsPerAgent = 12
 
 // where is what one slot stands for.  Only the daemon looks at it.
