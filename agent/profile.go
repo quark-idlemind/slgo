@@ -16,7 +16,7 @@ import (
 //
 // and a profile is named by the file:
 //
-//	acct, err := client.LoginAs(ctx, "example")
+//	acct, err := agent.LoginAs(ctx, "example")
 //
 // The file is key = value lines, # for comments:
 //

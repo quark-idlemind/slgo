@@ -389,13 +389,15 @@ type Options struct {
 	// the profile's name on the front.
 	//
 	// It is not a trace and not an error channel: what belongs here
-	// is what nothing else would ever say.  Today that is the child
-	// circuits opening and closing, which a client can now list --
-	// see Neighbours -- but only as they stand: a circuit that opened
-	// and closed between two of a client's questions was never there
-	// as far as the listing is concerned, and this is where it went.
-	// So is a DisableSimulator from the region the avatar is in, which
-	// a viewer would end the session over and this session does not.
+	// is what nothing else would ever say.  Today that is a packet
+	// dropped because the session was not keeping up, and the backlog
+	// of packets as it climbs.  It is the child circuits opening and
+	// closing, which a client can list -- see Neighbours -- but only
+	// as they stand: a circuit that opened and closed between two of a
+	// client's questions was never there as far as the listing is
+	// concerned, and this is where it went.  And it is a
+	// DisableSimulator from the region the avatar is in, which a
+	// viewer would end the session over and this session does not.
 	Log func(format string, v ...any)
 
 	// Idle ends the session when nothing has arrived from the
@@ -694,9 +696,10 @@ func (a *Agent) release() {
 	a.dropNeighbours("the session ended")
 }
 
-// register installs the handlers the circuit itself needs.  All of them
+// register installs the handlers the circuit itself needs.  All but two
 // are Inline: they are trivial, and running them in order keeps the
-// handshake deterministic.
+// handshake deterministic.  The two are CrossedRegion's and
+// EnableSimulator's, and followCrossings and followNeighbours say why.
 func (a *Agent) register() {
 	// A store of its own until the handshake says which region this
 	// is.  Objects can be described before that arrives, and they are
@@ -725,7 +728,10 @@ func (a *Agent) register() {
 	// "groups" is not among the ones this server honours -- so asking
 	// there gets a missing field, which reads exactly like belonging to
 	// none. The simulator volunteers the real list moments after the
-	// handshake and again whenever it changes.
+	// handshake and again whenever it changes -- on the event queue,
+	// where noteGroups reads it, and not on the circuit when it was
+	// looked for there.  This is the circuit's road, for a grid that
+	// sends it that way.
 	a.Disp.MustHandle("AgentGroupDataUpdate", func(p *msg.Packet) {
 		m := p.Message.(*msg.AgentGroupDataUpdate)
 		gs := make([]Group, 0, len(m.GroupData))
@@ -1218,7 +1224,7 @@ func (a *Agent) seated(at msg.Vector3) msg.Vector3 {
 	return at
 }
 
-// ChannelVersion is the simulator'a build string.
+// ChannelVersion is the simulator's build string.
 func (a *Agent) ChannelVersion() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -1257,7 +1263,7 @@ func (a *Agent) Logout(ctx context.Context, timeout time.Duration) error {
 	return err
 }
 
-// Close stops the session'a goroutines and the socket without telling
+// Close stops the session's goroutines and the socket without telling
 // the simulator anything, and returns once the goroutines have.
 //
 // A session that ended on its own -- kicked, silent, a move that failed

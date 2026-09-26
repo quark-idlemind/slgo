@@ -108,10 +108,10 @@ func teleportDestination(body any) (addr *net.UDPAddr, seed string, handle uint6
 // an event body.
 //
 // Every shape it expects was measured in the TeleportFinish above.
-// CrossedRegion's block is read by this same function, on the strength
-// of that measurement rather than one of its own; crossingDestination
-// says so where it asks for it, and says what it costs if the two ever
-// turn out to differ.
+// CrossedRegion's block is read by this same function: that was
+// inferred from the TeleportFinish first, and a captured CrossedRegion
+// has since agreed with it; crossingDestination says so where it asks
+// for it.
 func destination(info map[string]any) (addr *net.UDPAddr, seed string, handle uint64) {
 	if info == nil {
 		return nil, "", 0
@@ -175,9 +175,9 @@ func usableSeed(seed string) string {
 // declares a single one: TeleportFinish.Info is Single and still came
 // back as Info[0] on every measurement.  So the array is the shape to
 // expect, and a bare map is taken as well, because a grid that sent one
-// would otherwise read as an event that never arrived at all.  Taking
-// both is what lets CrossedRegion, whose blocks are Single as well and
-// have never been seen, be read by the same function.
+// would otherwise read as an event that never arrived at all.
+// CrossedRegion's blocks are Single in the template too, and came back
+// as arrays in the one body captured.
 func eventBlock(body any, name string) map[string]any {
 	m := llsd.Map(body)
 	if m == nil {

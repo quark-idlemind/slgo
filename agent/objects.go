@@ -81,8 +81,7 @@ type Object struct {
 	AttachItem  msg.UUID
 
 	// First and Last are when the simulator first and last said
-	// anything about this object.  Last is what an age based sweep
-	// would work from, if one turns out to be needed.
+	// anything about this object.  Last is what Trim ages an orphan by.
 	First time.Time
 	Last  time.Time
 
@@ -322,8 +321,10 @@ const orphanGrace = time.Minute
 //
 // A child's position is relative to its root, so children are judged
 // by where their root is and go with it.  An orphan whose root never
-// turned up goes once it is old enough to be sure the root is not
-// coming.
+// turned up goes once the region has said nothing about it for
+// orphanGrace, and what hangs off an avatar whose seat is not known
+// stays with the avatar.
+//
 // Everyone watching the store gets a say: an object is kept if it is
 // within ANY viewpoint's draw distance.  A store shared by three
 // avatars in three corners of a region holds what all three can see,
@@ -377,7 +378,7 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 	n := 0
 	for id, v := range o.byID {
 		if v.PCode == pcodeAvatar {
-			// See update: people are kept whatever the distance.
+			// See pcodeAvatar: people are kept whatever the distance.
 			continue
 		}
 		at, known, onPerson := anchor(v)
@@ -632,8 +633,9 @@ func (o *Objects) worthDescribing(at msg.Vector3, camera msg.Vector3, far float3
 // A root's position is a place; a child's is an offset from its root,
 // and an attachment's is an offset from the avatar wearing it.  So the
 // answer is found by walking up until something with no parent is
-// reached -- an avatar has none, which is what makes an attachment
-// judged by where its wearer is standing.
+// reached -- a standing avatar has none, which is what makes an
+// attachment judged by where its wearer is standing, and a seated one's
+// parent is its seat, which the walk goes on up into.
 //
 // Not found means the chain leaves the store before the top, and the
 // caller cannot say where this is at all.  It is a different answer
@@ -653,18 +655,18 @@ func (o *Objects) anchorLocked(local uint32) (msg.Vector3, bool) {
 	return msg.Vector3{}, false
 }
 
-// byLocal is one object by the local id the region numbers it with.
-//
-// It is a scan, for the reason kill is: the store is keyed by full id,
-// because that is the only name an object keeps, and the messages that
-// refer to one by local id alone are rare enough that a second index
-// would cost more to maintain than it saved.
 // ByLocal is byLocal, exported for the one caller outside this package
 // that has a local id and nothing else: a seated avatar names its seat
 // by local id and by nothing else, so answering "what is it sitting on"
 // means turning one into an object.  See server/seat.go.
 func (o *Objects) ByLocal(local uint32) (*Object, bool) { return o.byLocal(local) }
 
+// byLocal is one object by the local id the region numbers it with.
+//
+// It is a scan, for the reason kill is: the store is keyed by full id,
+// because that is the only name an object keeps, and the messages that
+// refer to one by local id alone are rare enough that a second index
+// would cost more to maintain than it saved.
 func (o *Objects) byLocal(local uint32) (*Object, bool) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -1120,9 +1122,9 @@ func (a *Agent) Redescribe() int {
 //
 // It gives up when the chain runs out of described objects rather than
 // guessing at the missing link, since a wrong answer here is a position
-// somebody would act on.  Eight steps for the reason anchorLocked has
-// eight: a linkset that deep is a loop, and a loop must not be walked
-// for ever.
+// somebody would act on.  Eight steps at most, as in anchorLocked and
+// Trim: a chain that deep is a loop, and a loop must not be walked for
+// ever.
 func (o *Objects) worldPlacement(local uint32) (msg.Vector3, msg.Quaternion, bool) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()

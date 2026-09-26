@@ -448,7 +448,8 @@ func DecodeParcel(body any) *Parcel {
 	// a binary field, and is the reading that makes sense of what was
 	// measured: 56 a4 80 0b on a residential parcel is fly, scripts
 	// and landmarks allowed, where the other way round is a parcel
-	// nobody may fly over.  Stage 4 checks it against a viewer's panel.
+	// nobody may fly over.  A viewer's own panel agreed; see the
+	// ParcelFlags bits above.
 	v.Flags = uint32(llsd.Int(b, "ParcelFlags"))
 
 	return v

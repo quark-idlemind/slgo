@@ -19,8 +19,8 @@ import (
 // It lives here rather than in a client for the reason the circuit
 // does: it has to keep being sent, and a client that stopped would
 // silently take object streaming with it.  A client that wants to move
-// the camera sets it through Agent.Look; the default is a fixed view
-// from wherever the avatar arrived.
+// the camera sets it through Agent.SetLook; the default looks east from
+// wherever the avatar is, and setCenter keeps it there.
 
 // DefaultDrawDistance is the Far value sent when none is set.
 const DefaultDrawDistance = 128

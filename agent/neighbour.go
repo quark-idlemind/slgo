@@ -260,12 +260,12 @@ func (a *Agent) noteEnableSimulator(body any) {
 	}
 	for _, row := range offeredSimulators(body) {
 		// The handle arrives as LLSD binary and the port as a plain
-		// integer, in the shapes stage 0's probe read successfully;
-		// llsd.Int takes either.  The address is four binary bytes
-		// in network order and is used as bytes, for the reason
-		// teleport.go's destination gives at more length: read as a
-		// number it would come out backwards, and only on a live
-		// grid.
+		// integer, in the shapes the probe of stage 0 of
+		// doc/history/neighbours.md read successfully; llsd.Int takes
+		// either.  The address is four binary bytes in network order
+		// and is used as bytes, for the reason teleport.go's
+		// destination gives at more length: read as a number it would
+		// come out backwards, and only on a live grid.
 		a.openNeighbour(uint64(llsd.Int(row, "Handle")),
 			neighbourAddr(llsd.Bytes(row, "IP"), llsd.Int(row, "Port")))
 	}
@@ -317,11 +317,11 @@ func neighbourAddr(ip []byte, port int64) *net.UDPAddr {
 // circuit.
 //
 // The template marks the message UDPBlackListed, which says it belongs
-// on the event queue, and that is where all 57 of stage 0's arrived.
-// It is read here as well for the reason crossing.go reads CrossedRegion
-// both ways: a deprecation flag is a promise a grid need not keep, and
-// reading both roads costs one handler where reading one and guessing
-// wrong costs the whole option on that grid.  The circuit road needs
+// on the event queue, and that is where all 57 of the 200 second run
+// arrived.  It is read here as well for the reason crossing.go reads
+// CrossedRegion both ways: a deprecation flag is a promise a grid need
+// not keep, and reading both roads costs one handler where reading one
+// and guessing wrong costs the whole option on that grid.  The circuit road needs
 // none of the LLSD guesswork above -- the generated type decodes IPADDR
 // as four bytes in network order and IPPORT as a port -- so what is
 // left to refuse is an address that names nowhere.

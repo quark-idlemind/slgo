@@ -85,10 +85,10 @@ func (s *Appearances) noteAt(m *msg.AvatarAppearance, at time.Time) {
 
 // copyAppearance takes the message out of the packet it arrived in.
 //
-// Every block here is either a slice or contains one, and those point
-// into the receive buffer, which is reused.  Keeping the message without
-// copying it means holding an appearance that quietly becomes some later
-// packet's bytes.
+// Every block but Sender is either a slice or contains one, and those
+// point into the receive buffer, which is reused.  Keeping the message
+// without copying it means holding an appearance that quietly becomes
+// some later packet's bytes.
 func copyAppearance(m *msg.AvatarAppearance) *msg.AvatarAppearance {
 	c := *m
 	c.ObjectData.TextureEntry = append([]byte(nil), m.ObjectData.TextureEntry...)

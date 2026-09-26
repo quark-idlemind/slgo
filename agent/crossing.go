@@ -19,7 +19,7 @@ import (
 // measured both ways.  A viewer keeps circuits to the simulators around
 // it, answering the EnableSimulator each one is offered through, and a
 // crossing is seamless precisely because the region over the border was
-// already talking to it.  slgod connects to one simulator at a time by
+// already talking to it.  slgod connected to one simulator at a time by
 // choice (c1e9d11), and while it did the border was a wall: an avatar
 // walked at Pelmar Reach's west edge, stopped dead at x=0, and stayed
 // there for twelve seconds; from the other side he was pinned at x=255
@@ -27,9 +27,8 @@ import (
 // -- one UDP socket, UseCircuitCode with this session's own three ids,
 // and an answer to the handshake -- and the same walk crosses in two
 // seconds, with the message arriving on the event queue exactly once.
-// See doc/history/neighbours.md, which is the plan for holding those
-// circuits properly; until it is built the handler below is reached
-// only by a client that opened one by hand.
+// Options.Neighbours holds those circuits now: see neighbour.go, and
+// doc/history/neighbours.md for the plan it was built from.
 //
 // **The shapes were inferred and then confirmed.**  Stage 7 read this
 // message with the reader written for a measured TeleportFinish, on the
@@ -67,17 +66,18 @@ func (a *Agent) noteCrossedRegion(body any) {
 // TeleportFinish's destination is there would find two vectors and no
 // address at all.
 //
-// Everything else is inference.  The fields inside RegionData are read
-// with the reader written for the measured TeleportFinish -- handle and
-// address as LLSD binary, port as an integer, seed as a string -- on the
-// grounds that the two messages describe the same thing and the template
-// declares their fields with the same types.  Nobody has seen the bytes.
-// If the inference is wrong the failure is contained: destination
+// The fields inside RegionData are read with the reader written for the
+// measured TeleportFinish -- handle and address as LLSD binary, port as
+// an integer, seed as a string.  That was inferred first, on the grounds
+// that the two messages describe the same thing and the template
+// declares their fields with the same types, and a captured body has
+// since agreed with every field: agniCrossedRegion, in the test beside
+// this file.  A shape nobody expected still fails closed: destination
 // refuses an address it cannot build out of four bytes and a port in
-// range, so a shape nobody expected reads as a body with no destination
-// in it, and a body with no destination in it is one to do nothing
-// about.  What that costs is a crossing not followed, which is where
-// this daemon stood before this file existed.
+// range, so it reads as a body with no destination in it, and a body
+// with no destination in it is one to do nothing about.  What that
+// costs is a crossing not followed, which is where this daemon stood
+// before this file existed.
 func crossingDestination(body any) (addr *net.UDPAddr, seed string, handle uint64) {
 	return destination(eventBlock(body, "RegionData"))
 }
@@ -85,20 +85,22 @@ func crossingDestination(body any) (addr *net.UDPAddr, seed string, handle uint6
 // followCrossings acts on a CrossedRegion that arrives on the circuit.
 //
 // The template marks the message UDPBlackListed, which says it belongs
-// on the event queue, and stage 6 made the point that a deprecation flag
-// is a promise a grid need not keep.  Reading both roads costs one
-// handler; reading one and guessing wrong costs an avatar that has
-// walked into a region this session is not connected to.
+// on the event queue, and stage 6 of doc/history/teleport.md made the
+// point that a deprecation flag is a promise a grid need not keep.
+// Reading both roads costs one handler; reading one and guessing wrong
+// costs an avatar that has walked into a region this session is not
+// connected to.
 //
-// It is deliberately NOT Inline, and it is the only handler in this
-// package that has a reason to say so.  A move waits for the new
-// simulator's AgentMovementComplete, which is delivered by the handler
-// registered for it -- inline, on the dispatch goroutine.  Run inline,
-// this would be that goroutine, so the arrival it is waiting for could
-// not be dispatched until it returned: the move would wait out its
+// It is deliberately NOT Inline, like EnableSimulator's in
+// followNeighbours, and for a reason of its own.  A move waits for the
+// new simulator's AgentMovementComplete, which is delivered by the
+// handler registered for it -- inline, on the dispatch goroutine.  Run
+// inline, this would be that goroutine, so the arrival it is waiting for
+// could not be dispatched until it returned: the move would wait out its
 // timeout and end the session, every time, for a crossing that was
 // working perfectly.  That is not a reading of the dispatcher -- it was
-// tried, and the circuit test below timed out on exactly that.
+// tried, and TestACrossedRegionOnTheCircuitIsFollowedTheSameWay timed
+// out on exactly that.
 func (a *Agent) followCrossings() {
 	a.Disp.MustHandle("CrossedRegion", func(p *msg.Packet) {
 		m, ok := p.Message.(*msg.CrossedRegion)
