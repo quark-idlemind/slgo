@@ -394,7 +394,9 @@ func TestAChildAnswersThePings(t *testing.T) {
 // repeats an offer for as long as it goes untaken -- 57 times in 200
 // seconds, naming four regions -- so the repeats arrive whatever we do,
 // and a second circuit to a neighbour would give it two sets of sequence
-// numbers under one circuit code.
+// numbers under one circuit code.  A repeat is an offer at the address
+// already held, to a child still heard from; see
+// TestAReOfferAtAnotherAddressReplacesTheChild for the other kind.
 func TestASecondOfferForANeighbourAlreadyHeldOpensNothingNew(t *testing.T) {
 	a, from, _, sim, handle := neighbourly(t)
 
@@ -442,8 +444,8 @@ func TestAnOfferForTheRegionTheAvatarIsInIsNotTakenUp(t *testing.T) {
 
 // TestAnOfferOvertakenByAMoveIntoItsRegionIsNotKept: the check on the
 // handle is made before the lock, and the avatar can move into the
-// offered region, and the move drop the neighbours, while the offer
-// waits for it.  What was dialled is closed rather than listed.
+// offered region, and the move close the child to it, while the offer
+// waits for the lock.  What was dialled is closed rather than listed.
 func TestAnOfferOvertakenByAMoveIntoItsRegionIsNotKept(t *testing.T) {
 	a, _, _, sim, handle := neighbourly(t)
 
@@ -523,11 +525,28 @@ func TestAnOfferWithNoUsableAddressIsNotDialled(t *testing.T) {
 	}
 }
 
+// ring is the eight regions around (x, y), each a simulator of its own.
+func ring(t *testing.T, x, y uint32) map[uint64]*fakeSim {
+	t.Helper()
+	sims := map[uint64]*fakeSim{}
+	for rx := x - 1; rx <= x+1; rx++ {
+		for ry := y - 1; ry <= y+1; ry++ {
+			if rx == x && ry == y {
+				continue
+			}
+			sim, handle := aNeighbour(t, fmt.Sprintf("the region at %d, %d", rx, ry), rx, ry)
+			sims[handle] = sim
+		}
+	}
+	return sims
+}
+
 // TestNoMoreThanTheCapAreOpened: eight regions can surround one, and the
 // offers come from the far end -- nothing in a daemon should open
-// sockets at a stranger's pace.  The one turned down is said out loud
-// rather than dropped in silence, and said once however often it is
-// offered again.
+// sockets at a stranger's pace.  Every child held here is beside the
+// avatar's region, so there is none to make room with, and the offer
+// past the cap is turned down: said out loud rather than dropped in
+// silence, and said once however often it is offered again.
 func TestNoMoreThanTheCapAreOpened(t *testing.T) {
 	var said logLines
 	a, from, _ := twoRegions(t, Options{
@@ -536,20 +555,18 @@ func TestNoMoreThanTheCapAreOpened(t *testing.T) {
 		Log:        said.log,
 	})
 
-	// One more than fits, each a different grid square, and the last
-	// one twice over so that a line per offer would show up as more
-	// than one.
-	var over *fakeSim
-	for i := range MaxNeighbours + 1 {
-		sim, handle := aNeighbour(t, fmt.Sprintf("neighbour %d", i), uint32(43634+i), 43648)
+	_, here := from.sim.arrival()
+	x, y := msg.GridCoords(here)
+	for handle, sim := range ring(t, x, y) {
 		from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
-		if i == MaxNeighbours {
-			over = sim
-			from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
-		}
 	}
-
 	waitFor(t, "the circuits to open", func() bool { return len(a.Neighbours()) == MaxNeighbours })
+
+	// One more than fits, twice over so that a line per offer would
+	// show up as more than one.
+	over, handle := aNeighbour(t, "one too many", x-8, y)
+	from.eq.push("EnableSimulator", enableSimulator(handle, over.addr()))
+	from.eq.push("EnableSimulator", enableSimulator(handle, over.addr()))
 	time.Sleep(300 * time.Millisecond)
 
 	if got := a.Neighbours(); len(got) != MaxNeighbours {
@@ -561,16 +578,270 @@ func TestNoMoreThanTheCapAreOpened(t *testing.T) {
 	if lines := said.saying("is the limit"); len(lines) != 1 {
 		t.Errorf("the cap was reported %d times, want once: %v", len(lines), lines)
 	}
+	if lines := said.saying("circuit closed"); len(lines) != 0 {
+		t.Errorf("a neighbour was closed to make room: %v", lines)
+	}
 }
 
-// TestAMoveDropsTheChildren: after a move the avatar is somewhere else
-// and the circuits held are to the regions that surrounded the one it
-// left.  On a crossing one of them is the region it has just arrived in,
-// which would sit in the map as a second circuit to the simulator the
-// root is now talking to.
-func TestAMoveDropsTheChildren(t *testing.T) {
+// TestTheCapClosesWhatIsNoLongerANeighbourFirst: children outlive a
+// move, so after a teleport the ring around the region left can fill the
+// cap while the new region's offers are still arriving.  An offer at the
+// cap closes a child whose region does not touch the avatar's -- never
+// one that does -- rather than being turned down.
+//
+// The avatar lands two squares west of the region left, so that the
+// ring's west column is beside both regions and holds its lowest
+// handles: a cap that closed in handle order alone would close one of
+// those.
+func TestTheCapClosesWhatIsNoLongerANeighbourFirst(t *testing.T) {
 	var said logLines
 	a, from, to := twoRegions(t, Options{
+		Neighbours: true,
+		OnEvent:    func(string, []byte) {},
+		Log:        said.log,
+	})
+	_, left := from.sim.arrival()
+	x, y := msg.GridCoords(left)
+	at, _ := to.sim.arrival()
+	to.sim.arrivalAt(at, msg.RegionHandle(x-2, y))
+
+	held := ring(t, x, y)
+	for handle, sim := range held {
+		from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	}
+	waitFor(t, "the ring to be held", func() bool { return len(a.Neighbours()) == MaxNeighbours })
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if got := a.Neighbours(); len(got) != MaxNeighbours {
+		t.Fatalf("%d circuits held after the teleport, want the ring kept", len(got))
+	}
+
+	// The new region offers its own west neighbour.
+	west, westAt := aNeighbour(t, "the new region's west", x-3, y)
+	to.eq.push("EnableSimulator", enableSimulator(westAt, west.addr()))
+	west.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the offer to be held", func() bool {
+		for _, n := range a.Neighbours() {
+			if n.Handle == westAt {
+				return true
+			}
+		}
+		return false
+	})
+
+	got := a.Neighbours()
+	if len(got) != MaxNeighbours {
+		t.Errorf("%d circuits held, want the cap of %d", len(got), MaxNeighbours)
+	}
+	holding := map[uint64]bool{}
+	for _, n := range got {
+		holding[n.Handle] = true
+	}
+	closed := 0
+	for handle := range held {
+		// The ring's west column is the one beside the region
+		// arrived in.
+		rx, _ := msg.GridCoords(handle)
+		switch {
+		case holding[handle]:
+		case rx == x-1:
+			t.Errorf("%s, beside the region arrived in, was closed", gridSquare(handle))
+		default:
+			closed++
+		}
+	}
+	if closed != 1 {
+		t.Errorf("%d of the ring closed, want the one that made room", closed)
+	}
+	if lines := said.saying("to make room"); len(lines) != 1 {
+		t.Errorf("making room was reported as %v", lines)
+	}
+	if lines := said.saying("is the limit"); len(lines) != 0 {
+		t.Errorf("the offer was turned down: %v", lines)
+	}
+}
+
+// childConn is the connection under the child held for a region.
+func childConn(t *testing.T, a *Agent, handle uint64) *net.UDPConn {
+	t.Helper()
+	a.neighMu.Lock()
+	defer a.neighMu.Unlock()
+	c := a.neighbours[handle]
+	if c == nil {
+		t.Fatalf("no child held for %s", gridSquare(handle))
+	}
+	return c.sock.conn.Load()
+}
+
+// TestATeleportKeepsTheChildren: a child is kept until its simulator
+// lets it go, as a viewer keeps one.  Measured on Agni, a region the
+// avatar came back to within seconds of leaving offered none of its
+// neighbours again, so a session that let them go on every move came
+// back holding none.  The teleport here lands far from the region left,
+// so the child is no longer beside the avatar, and is kept anyway.
+func TestATeleportKeepsTheChildren(t *testing.T) {
+	var said logLines
+	a, from, to := twoRegions(t, Options{
+		Neighbours: true,
+		OnEvent:    func(string, []byte) {},
+		Log:        said.log,
+	})
+	at, _ := to.sim.arrival()
+	to.sim.arrivalAt(at, msg.RegionHandle(43552, 43728))
+	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	sim.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the neighbour to be listed", func() bool { return len(a.Neighbours()) == 1 })
+	conn := childConn(t, a, handle)
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if got := a.Neighbours(); len(got) != 1 || got[0].Handle != handle {
+		t.Fatalf("Neighbours = %+v after a teleport, want the child kept", got)
+	}
+	if lines := said.saying("circuit closed"); len(lines) != 0 {
+		t.Errorf("the teleport closed a circuit: %v", lines)
+	}
+	if givenBack(conn) {
+		t.Error("the kept child's socket was closed")
+	}
+
+	// And it is still a circuit: a ping after the move is answered.
+	ping := &msg.StartPingCheck{}
+	ping.PingID.PingID = 9
+	sim.send(ping, 0)
+	sim.waitSeen(t, "CompletePingCheck", 5*time.Second)
+}
+
+// TestACrossingClosesTheChildForTheRegionArrivedIn: the child to the
+// region the avatar walks into would be a second circuit to the
+// simulator the root now talks to, so the move closes that one, and
+// only that one.  The child for it here is a simulator of its own, which
+// is enough: the move goes by the handle.
+func TestACrossingClosesTheChildForTheRegionArrivedIn(t *testing.T) {
+	var said logLines
+	a, from, to := twoRegions(t, Options{
+		Neighbours: true,
+		OnEvent:    func(string, []byte) {},
+		Log:        said.log,
+	})
+	mill, millAt := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+	_, over := to.sim.arrival()
+	x, y := msg.GridCoords(over)
+	ahead, aheadAt := aNeighbour(t, to.sim.regionNm, x, y)
+
+	from.eq.push("EnableSimulator", enableSimulator(millAt, mill.addr()))
+	from.eq.push("EnableSimulator", enableSimulator(aheadAt, ahead.addr()))
+	waitFor(t, "both neighbours to be held", func() bool { return len(a.Neighbours()) == 2 })
+	conn := childConn(t, a, aheadAt)
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if got := a.Neighbours(); len(got) != 1 || got[0].Handle != millAt {
+		t.Errorf("Neighbours = %+v after the crossing, want only %s", got, gridSquare(millAt))
+	}
+	waitFor(t, "the closed child's socket to be given back", func() bool { return givenBack(conn) })
+	lines := said.saying("circuit closed")
+	if len(lines) != 1 || !strings.Contains(lines[0], gridSquare(aheadAt)) {
+		t.Errorf("closing was reported as %v", lines)
+	}
+}
+
+// TestADisableSimulatorClosesThatChild: DisableSimulator on a child's own
+// circuit is its simulator letting it go.  The message has no body, so
+// the circuit it came on is what says which child: the other is left
+// alone.  And the region can be offered and held again afterwards.
+func TestADisableSimulatorClosesThatChild(t *testing.T) {
+	var said logLines
+	a, from, _ := twoRegions(t, Options{
+		Neighbours: true,
+		OnEvent:    func(string, []byte) {},
+		Log:        said.log,
+	})
+	mill, millAt := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+	gate, gateAt := aNeighbour(t, "Orrick Gate", 43648, 43647)
+
+	from.eq.push("EnableSimulator", enableSimulator(millAt, mill.addr()))
+	from.eq.push("EnableSimulator", enableSimulator(gateAt, gate.addr()))
+	mill.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "both neighbours to be held", func() bool { return len(a.Neighbours()) == 2 })
+	conn := childConn(t, a, millAt)
+
+	mill.send(&msg.DisableSimulator{}, msg.FlagReliable)
+
+	waitFor(t, "the disabled child to go", func() bool { return len(a.Neighbours()) == 1 })
+	if got := a.Neighbours(); got[0].Handle != gateAt {
+		t.Errorf("Neighbours = %+v, want only the one not disabled", got)
+	}
+	waitFor(t, "its socket to be given back", func() bool { return givenBack(conn) })
+	lines := said.saying("circuit closed")
+	if len(lines) != 1 || !strings.Contains(lines[0], gridSquare(millAt)) ||
+		!strings.Contains(lines[0], "disabled") {
+		t.Errorf("closing was reported as %v", lines)
+	}
+	select {
+	case <-a.Done():
+		t.Fatalf("a neighbour's DisableSimulator ended the session: %v", a.Err())
+	default:
+	}
+
+	from.eq.push("EnableSimulator", enableSimulator(millAt, mill.addr()))
+	waitFor(t, "the region to be dialled again", func() bool { return dialled(mill) == 2 })
+	waitFor(t, "the region to be held again", func() bool { return len(a.Neighbours()) == 2 })
+}
+
+// TestAReOfferAtAnotherAddressReplacesTheChild: an offer of a region
+// already held, naming another address, is the region's simulator
+// somewhere else, and the viewer replaces its entry for it
+// (LLWorld::addRegion).  The old circuit is closed and the new address
+// dialled.
+func TestAReOfferAtAnotherAddressReplacesTheChild(t *testing.T) {
+	var said logLines
+	a, from, _ := twoRegions(t, Options{
+		Neighbours: true,
+		OnEvent:    func(string, []byte) {},
+		Log:        said.log,
+	})
+	was, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+	now := newFakeSim(t)
+	now.regionNm = "Pelmar Mill"
+	go now.run()
+	t.Cleanup(now.close)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, was.addr()))
+	was.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the neighbour to be held", func() bool { return len(a.Neighbours()) == 1 })
+	conn := childConn(t, a, handle)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, now.addr()))
+	now.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the new address to be held", func() bool {
+		got := a.Neighbours()
+		return len(got) == 1 && got[0].Addr == now.addr().String()
+	})
+	waitFor(t, "the old circuit's socket to be given back", func() bool { return givenBack(conn) })
+	if n := dialled(was); n != 1 {
+		t.Errorf("the old address was dialled %d times, want once", n)
+	}
+	if lines := said.saying("offered again at"); len(lines) != 1 {
+		t.Errorf("replacing was reported as %v", said.saying("circuit closed"))
+	}
+}
+
+// TestAReOfferOfASilentChildReplacesIt: a child that has heard nothing
+// for NeighbourTimeout is dead, and an offer of its region at the same
+// address dials it afresh rather than being taken as a repeat, as the
+// viewer replaces a region whose circuit died.  The child is made silent
+// by hand, well inside the watchdog's first look, so it is the offer
+// that finds it dead.
+func TestAReOfferOfASilentChildReplacesIt(t *testing.T) {
+	var said logLines
+	a, from, _ := twoRegions(t, Options{
 		Neighbours: true,
 		OnEvent:    func(string, []byte) {},
 		Log:        said.log,
@@ -578,22 +849,89 @@ func TestAMoveDropsTheChildren(t *testing.T) {
 	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
 
 	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
-	sim.waitSeen(t, "UseCircuitCode", 5*time.Second)
-	waitFor(t, "the neighbour to be listed", func() bool { return len(a.Neighbours()) == 1 })
+	sim.waitSeen(t, "RegionHandshakeReply", 5*time.Second)
+	waitFor(t, "the neighbour to be held", func() bool { return len(a.Neighbours()) == 1 })
+	conn := childConn(t, a, handle)
+	a.neighMu.Lock()
+	a.neighbours[handle].lastHeard.Store(time.Now().Add(-2 * NeighbourTimeout).UnixNano())
+	a.neighMu.Unlock()
 
-	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
-		t.Fatalf("moveTo: %v", err)
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	waitFor(t, "the region to be dialled again", func() bool { return dialled(sim) == 2 })
+	waitFor(t, "the dead circuit's socket to be given back", func() bool { return givenBack(conn) })
+	waitFor(t, "the fresh circuit to be held", func() bool {
+		a.neighMu.Lock()
+		defer a.neighMu.Unlock()
+		c := a.neighbours[handle]
+		return c != nil && c.sock.conn.Load() != conn
+	})
+	if lines := said.saying("nothing heard"); len(lines) != 1 {
+		t.Errorf("replacing was reported as %v", said.saying("circuit closed"))
 	}
-	if got := a.Neighbours(); len(got) != 0 {
-		t.Errorf("Neighbours = %+v after a move; they belong to the region left", got)
+}
+
+// TestASilentChildIsDroppedAndOfferedAfresh: a simulator that went away
+// without a DisableSimulator sends nothing more, and the viewer drops a
+// circuit that has been silent for its circuit timeout.  The child here
+// hears its handshake and then nothing, is closed by its watchdog, and
+// the next offer of the region is dialled.
+func TestASilentChildIsDroppedAndOfferedAfresh(t *testing.T) {
+	var said logLines
+	a, from, _ := twoRegions(t, Options{
+		Neighbours:       true,
+		OnEvent:          func(string, []byte) {},
+		Log:              said.log,
+		neighbourTimeout: 300 * time.Millisecond,
+	})
+	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	sim.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the neighbour to be held", func() bool { return len(a.Neighbours()) == 1 })
+	conn := childConn(t, a, handle)
+
+	waitFor(t, "the silent child to be dropped", func() bool { return len(a.Neighbours()) == 0 })
+	waitFor(t, "its socket to be given back", func() bool { return givenBack(conn) })
+	if lines := said.saying("nothing heard for"); len(lines) != 1 {
+		t.Errorf("dropping was reported as %v", said.saying("circuit closed"))
 	}
-	if lines := said.saying("circuit closed"); len(lines) != 1 {
-		t.Errorf("closing was reported %d times: %v", len(lines), lines)
+	select {
+	case <-a.Done():
+		t.Fatalf("a silent neighbour ended the session: %v", a.Err())
+	default:
+	}
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	waitFor(t, "the region to be dialled again", func() bool { return dialled(sim) == 2 })
+	waitFor(t, "the region to be held again", func() bool { return len(a.Neighbours()) == 1 })
+}
+
+// TestAdjacentIsAnEdgeOrACorner: the cap goes by it, so a region two
+// squares off, or the region itself, is not a neighbour.
+func TestAdjacentIsAnEdgeOrACorner(t *testing.T) {
+	here := msg.RegionHandle(43648, 43648)
+	for _, c := range []struct {
+		x, y uint32
+		want bool
+	}{
+		{43647, 43648, true},
+		{43649, 43648, true},
+		{43648, 43649, true},
+		{43649, 43647, true},
+		{43647, 43649, true},
+		{43648, 43648, false},
+		{43650, 43648, false},
+		{43648, 43646, false},
+		{43650, 43650, false},
+	} {
+		if got := adjacent(msg.RegionHandle(c.x, c.y), here); got != c.want {
+			t.Errorf("adjacent(%d, %d) = %v, want %v", c.x, c.y, got, c.want)
+		}
 	}
 }
 
 // TestClosingTheSessionClosesTheChildrenAndLeavesNoGoroutineBehind: a
-// child is three goroutines and a socket, so getting this wrong leaks
+// child is four goroutines and a socket, so getting this wrong leaks
 // them per neighbour rather than failing.  Close closes done, cancels
 // and then waits on the group they are in -- which is also why opening
 // one has to be as careful about a session that is ending as moveTo is.
