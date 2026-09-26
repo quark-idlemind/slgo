@@ -19,6 +19,11 @@ is named by its name, matched exactly and in the case it has.  The
 id beside a line of `ls -l --in` belongs to the object's own copy,
 and is not something to give this.
 
+Nothing answers a rename, so the object's contents are read back
+until the item has its new name, for up to fifteen seconds, and one
+that never does is an error rather than reported done.  The viewer
+renames nothing the avatar may not modify.
+
 ## What decides between moving and renaming
 
 The destination.  If it names a folder, this is a move and the name
