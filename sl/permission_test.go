@@ -350,3 +350,43 @@ func TestPermissionSubscriptionsCloseWhenTheSessionEnds(t *testing.T) {
 		}
 	}
 }
+
+// TestAnUnansweredPermissionRequestIsForgotten: kept by the dialogs'
+// rule, and told to OnHandled the same way -- after UnansweredFor, or
+// as the oldest of more than MaxUnanswered.
+func TestAnUnansweredPermissionRequestIsForgotten(t *testing.T) {
+	w, stop := newTestSession(t)
+	defer stop()
+	var told handledSink
+	told.on(w)
+
+	w.permission(testScriptQuestion(PermissionAttach))
+	w.mu.Lock()
+	w.asked[0].At = time.Now().Add(-UnansweredFor - time.Minute)
+	w.mu.Unlock()
+	if n := len(w.Asked()); n != 0 {
+		t.Errorf("Asked = %d, want the overdue request forgotten", n)
+	}
+	got := told.take()
+	if want := "the request from Grabby Box for attach was forgotten after 1h unanswered by this session"; len(got) != 1 || got[0].String() != want {
+		t.Errorf("told %+v, want %q", got, want)
+	}
+
+	first := testScriptQuestion(PermissionDebit)
+	w.permission(first)
+	for range MaxUnanswered {
+		w.permission(testScriptQuestion(PermissionAttach))
+	}
+	left := w.Asked()
+	if len(left) != MaxUnanswered {
+		t.Fatalf("Asked = %d, want %d", len(left), MaxUnanswered)
+	}
+	for _, q := range left {
+		if q.Wants == PermissionDebit {
+			t.Error("the oldest request is still kept")
+		}
+	}
+	if got := told.take(); len(got) != 1 || !strings.Contains(got[0].How, "oldest") {
+		t.Errorf("told %+v, want the oldest dropped", got)
+	}
+}

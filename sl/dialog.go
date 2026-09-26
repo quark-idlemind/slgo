@@ -103,20 +103,49 @@ func (w *Session) dialog(m *msg.ScriptDialog) {
 	}
 
 	w.mu.Lock()
+	gone := w.pruneDialogsLocked(d.At, 1)
 	w.dialogs = append(w.dialogs, d)
-	fn := w.OnDialog
+	fn, told := w.OnDialog, w.handledForLocked(gone)
 	w.mu.Unlock()
 
+	tellHandled(told, gone)
 	if fn != nil {
 		fn(d)
 	}
 }
 
-// Dialogs returns the dialogs seen so far, oldest first.
+// Dialogs returns the dialogs waiting for an answer, oldest first.
+//
+// One that has been answered, or dropped with ForgetDialog, is gone from
+// here, and so is one nobody answered within UnansweredFor, or the
+// oldest when more than MaxUnanswered are waiting; see OnHandled.
 func (w *Session) Dialogs() []Dialog {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	return append([]Dialog(nil), w.dialogs...)
+	gone := w.pruneDialogsLocked(time.Now(), 0)
+	out := append([]Dialog(nil), w.dialogs...)
+	told := w.handledForLocked(gone)
+	w.mu.Unlock()
+
+	tellHandled(told, gone)
+	return out
+}
+
+// pruneDialogsLocked forgets the dialogs that are overdue, leaving room
+// for room more, and says what went for OnHandled.  Called with mu held.
+func (w *Session) pruneDialogsLocked(now time.Time, room int) []Handled {
+	drop, how := overdue(w.dialogs, func(d Dialog) time.Time { return d.At }, now, room)
+	var out []Handled
+	for i, d := range drop {
+		w.forgetDialogLocked(d)
+		what := "the dialog from "
+		if d.IsTextBox() {
+			what = "the text box from "
+		}
+		out = append(out, Handled{
+			What: what + orID(d.ObjectName, d.Object), How: how[i], By: droppedBy, At: now,
+		})
+	}
+	return out
 }
 
 // WaitDialog waits for a dialog that match accepts, and returns it.
@@ -128,6 +157,7 @@ func (w *Session) WaitDialog(ctx context.Context, timeout time.Duration, match f
 	if match == nil {
 		match = func(Dialog) bool { return true }
 	}
+	w.Dialogs() // forgets what is overdue before looking
 	var found Dialog
 	err := w.await(ctx, timeout, "a dialog", func() bool {
 		for _, d := range w.dialogs {
@@ -160,11 +190,17 @@ func (w *Session) AnswerText(ctx context.Context, d Dialog, text string) error {
 	return w.answer(ctx, d, 0, text)
 }
 
-// Forget drops a dialog from the list without answering it, which is
-// what ignoring one on screen amounts to.
+// ForgetDialog drops a dialog from the list without answering it, which
+// is what ignoring one on screen amounts to.
 func (w *Session) ForgetDialog(d Dialog) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.forgetDialogLocked(d)
+}
+
+// forgetDialogLocked drops a dialog, answered or not.  Called with mu
+// held.
+func (w *Session) forgetDialogLocked(d Dialog) {
 	for i, x := range w.dialogs {
 		if x.At.Equal(d.At) && x.Object == d.Object && x.Channel == d.Channel {
 			w.dialogs = append(w.dialogs[:i], w.dialogs[i+1:]...)
@@ -195,15 +231,19 @@ func (w *Session) AnswerIndex(ctx context.Context, d Dialog, i int) error {
 }
 
 func (w *Session) answer(ctx context.Context, d Dialog, index int, label string) error {
-	// Answered is done: a dialog that stayed on the list would be
-	// offered again to whoever asks what is waiting.
-	defer w.ForgetDialog(d)
-
 	m := &msg.ScriptDialogReply{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.Data.ObjectID = d.Object
 	m.Data.ChatChannel = d.Channel
 	m.Data.ButtonIndex = int32(index)
 	m.Data.ButtonLabel = append([]byte(label), 0)
-	return w.Send(ctx, m)
+	if err := w.Send(ctx, m); err != nil {
+		return err
+	}
+	// Answered is done: a dialog that stayed on the list would be
+	// offered again to whoever asks what is waiting.  Only after the
+	// send: a dialog whose answer never left is still waiting.  Same
+	// shape as a permission request's.
+	w.ForgetDialog(d)
+	return nil
 }

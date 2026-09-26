@@ -62,6 +62,16 @@ Dialogs and permission requests are not kept.  One raised before this
 shell attached is not known here; it is waiting in the world, and a
 viewer would show it.
 
+Nor are they listed for ever.  A dialog or a permission request nobody
+has answered leaves the listing after an hour, and no more than 32 of
+each are listed: when another arrives, the oldest goes.  A line says so
+when one goes:
+
+    12:03:04 * the dialog from Example Box was forgotten after 1h unanswered by this session -- it is no longer waiting
+
+That answers nothing.  The script that asked for permission is still
+waiting for an answer, and a dialog expires where it was raised.
+
 So an empty listing says what it is an account of, rather than
 `nothing waiting` alone, which reads as an answer:
 

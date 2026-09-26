@@ -88,7 +88,8 @@ type OfferRecord struct {
 
 // Handled is an offer somebody dealt with.
 type Handled struct {
-	// Key is the daemon's name for it.
+	// Key is the daemon's name for it, and empty for a dialog or a
+	// permission request, which the daemon does not keep.
 	Key string
 
 	// What is the offer, for a person: "the teleport Example Resident
@@ -101,7 +102,9 @@ type Handled struct {
 
 	// By is the program that did it, as it named itself to the daemon.
 	// Empty when the daemon saw the answer go out without being told
-	// first, and so cannot say which program sent it.
+	// first, and so cannot say which program sent it.  "this session"
+	// for a dialog or a permission request this session dropped
+	// unanswered; see UnansweredFor.
 	By string
 
 	At time.Time

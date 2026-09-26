@@ -202,6 +202,11 @@ func (q *Permission) answer(ctx context.Context, granted Perms) error {
 func (w *Session) forgetPermission(q *Permission) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.forgetPermissionLocked(q)
+}
+
+// forgetPermissionLocked is forgetPermission with mu held.
+func (w *Session) forgetPermissionLocked(q *Permission) {
 	for i, x := range w.asked {
 		if x == q {
 			w.asked = append(w.asked[:i], w.asked[i+1:]...)
@@ -224,13 +229,16 @@ func (w *Session) permission(m *msg.ScriptQuestion) {
 	}
 
 	w.mu.Lock()
+	gone := w.pruneAskedLocked(q.At, 1)
 	w.asked = append(w.asked, q)
 	subs := make([]*permSub, 0, len(w.permSubs))
 	for _, s := range w.permSubs {
 		subs = append(subs, s)
 	}
+	told := w.handledForLocked(gone)
 	w.mu.Unlock()
 
+	tellHandled(told, gone)
 	for _, s := range subs {
 		select {
 		case s.ch <- q:
@@ -247,11 +255,33 @@ func (w *Session) permission(m *msg.ScriptQuestion) {
 // this list is for is deciding what still needs deciding -- a listing
 // that kept them would count a script twice over and offer to answer
 // it again.  It is not a history: nothing keeps one of these after
-// Grant, GrantAll or Deny has sent.
+// Grant, GrantAll or Deny has sent.  Nor after UnansweredFor with no
+// answer, or once it is the oldest of more than MaxUnanswered waiting;
+// see OnHandled.
 func (w *Session) Asked() []*Permission {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	return append([]*Permission(nil), w.asked...)
+	gone := w.pruneAskedLocked(time.Now(), 0)
+	out := append([]*Permission(nil), w.asked...)
+	told := w.handledForLocked(gone)
+	w.mu.Unlock()
+
+	tellHandled(told, gone)
+	return out
+}
+
+// pruneAskedLocked forgets the requests that are overdue, leaving room
+// for room more, and says what went for OnHandled.  Called with mu held.
+func (w *Session) pruneAskedLocked(now time.Time, room int) []Handled {
+	drop, how := overdue(w.asked, func(q *Permission) time.Time { return q.At }, now, room)
+	var out []Handled
+	for i, q := range drop {
+		w.forgetPermissionLocked(q)
+		out = append(out, Handled{
+			What: "the request from " + orID(q.ObjectName, q.Object) + " for " + q.Wants.String(),
+			How:  how[i], By: droppedBy, At: now,
+		})
+	}
+	return out
 }
 
 // Permissions returns a channel of scripts asking for permission, and
