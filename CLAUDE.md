@@ -72,16 +72,23 @@ will leave the others behind and the tests will fail somewhere else
 entirely.
 
 A grid square is invented too, and marked the way a uuid is: the high
-byte of an invented square is always `0xAA`. On each axis the invented
-square is `0xAA80 + (real - centre)`, where `centre` is the real square
-of the region the group is about. A region and its neighbours move
-together, so the one to the west is still x-1 and a test of a crossing
-still crosses, and nothing of the real number is left. Regions that are
-not neighbours each get their own centre, so the distance between them
-is not kept either. In decimal a marked square is 43520 to 43775. Every
-form is worked out again from the invented square rather than edited by
-hand: the pair, `msg.RegionHandle(x, y)`, the decimal handle and its
-bytes. Linden's sandboxes keep their real squares.
+byte of both coordinates of an invented square is always `0xAA`. On
+each axis the invented square is `base + (real - centre)`, where
+`centre` is the real square of the region the group is about. A region
+and its neighbours move together, so the one to the west is still x-1
+and a test of a crossing still crosses, and nothing of the real number
+is left. The first group, the home region's, has the base `0xAA80` on
+both axes; each further group gets a base of its own, anywhere in
+`0xAA00`-`0xAAFF` on each axis, so that no two regions share a square
+and the distance between groups is not kept either. In decimal a marked
+square is 43520 to 43775. Every form is worked out again from the
+invented square rather than edited by hand: the pair,
+`msg.RegionHandle(x, y)`, the decimal handle and its bytes. Linden's
+sandboxes keep their real squares, and each one used is in
+`tools/known-squares` with where it was observed. `tools/check-identities`
+reads the square out of every handle it finds and refuses one that is
+not marked, not a placeholder with both coordinates below 16, and not
+on that list; a bare `(x, y)` it leaves to the list of real names below.
 
 Names hide in the same way. They wrap across comment lines, they appear
 downcased in tests that check case-insensitive matching, they turn up
