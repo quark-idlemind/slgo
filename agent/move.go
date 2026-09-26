@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -31,6 +32,12 @@ import (
 // holders above would be holding.
 type socket struct {
 	conn atomic.Pointer[net.UDPConn]
+
+	// mu orders swap against Close, and closed is Close having run: a
+	// connection swapped in after it would be one nothing ever closes.
+	// Reads and writes load the pointer and never take it.
+	mu     sync.Mutex
+	closed bool
 }
 
 func newSocket(c *net.UDPConn) *socket {
@@ -40,19 +47,26 @@ func newSocket(c *net.UDPConn) *socket {
 }
 
 // swap puts a new connection under the sender and the receiver and
-// returns the one it replaced, still open.
+// returns the one it replaced, still open.  A socket that has been
+// closed takes nothing and reports false; c is then the caller's to
+// close.
 //
 // The receiver is almost certainly blocked in ReadFrom on the old
 // connection at this moment, and a store on its own would leave it there
 // until the region it has left said something.  A deadline in the past
 // makes that read return immediately; closing would too, but the old
 // connection stays open until the move has succeeded.
-func (s *socket) swap(c *net.UDPConn) *net.UDPConn {
+func (s *socket) swap(c *net.UDPConn) (*net.UDPConn, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil, false
+	}
 	old := s.conn.Swap(c)
 	if old != nil {
 		_ = old.SetReadDeadline(time.Now())
 	}
-	return old
+	return old, true
 }
 
 func (s *socket) Write(p []byte) (int, error) {
@@ -90,12 +104,18 @@ func (s *socket) SetReadDeadline(t time.Time) error {
 
 func (s *socket) local() net.Addr { return s.conn.Load().LocalAddr() }
 
-// Close closes the connection in use.  A connection a move replaced is
-// the mover's to close, not this.
+// Close closes the connection in use, once; a second call does nothing.
+// A connection a move replaced is the mover's to close, not this.
 func (s *socket) Close() error {
 	if s == nil {
 		return nil
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
 	if c := s.conn.Load(); c != nil {
 		return c.Close()
 	}
@@ -167,26 +187,25 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 	a.moveMu.Lock()
 	defer a.moveMu.Unlock()
 
-	// A session that has ended is not moved.  Close closes done,
-	// cancels, closes the socket and then waits on the goroutines, and
-	// a move is the first thing in this package that spawns after
-	// Connect has returned: the new region's poll added to that group
-	// during the wait is the documented way to panic a WaitGroup.  The
-	// dial has the same shape and a smaller cost -- a connection dialled
-	// after Close has closed the socket is one nothing will ever close.
+	// A session that has ended is not moved.  However it ended, done
+	// is closed, the context cancelled and the socket closed, and Close
+	// waits on the goroutines; a move is the first thing in this
+	// package that spawns after Connect has returned, and the new
+	// region's poll added to that group during the wait is the
+	// documented way to panic a WaitGroup.  The dial has the same shape
+	// and a smaller cost -- a connection dialled after the socket was
+	// closed is one nothing will ever close, which is why the swap
+	// below refuses one too.
 	//
 	// This refuses a move for a session already over; it does not
-	// prevent a Close arriving in the middle of one, which cannot be
+	// prevent an end arriving in the middle of one, which cannot be
 	// prevented and does not need to be.  What that costs is a
 	// handshake against a socket that closes under it, which fails and
 	// says so, and a poll that starts and stops again -- both of them
 	// what closing a session means.
 	select {
 	case <-a.done:
-		if err := a.Err(); err != nil {
-			return fmt.Errorf("agent: move to %s: the session has ended: %w", addr, err)
-		}
-		return fmt.Errorf("agent: move to %s: the session has ended", addr)
+		return a.moveRefused(addr)
 	default:
 	}
 
@@ -211,11 +230,16 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 	a.entering = &arrival{}
 	a.mu.Unlock()
 
-	old := a.sock.swap(conn)
-	// Last, whichever way this ends.  While the handshake is out the
-	// old address is the only one that has ever answered us, and a
-	// failed move that had already closed it would leave the session
-	// with no socket at all rather than with a bad one.
+	old, ok := a.sock.swap(conn)
+	if !ok {
+		// The session ended after it was asked above, and took the
+		// socket with it.
+		conn.Close()
+		return a.moveRefused(addr)
+	}
+	// Last, whichever way this ends: while the handshake is out the old
+	// address is the only one that has ever answered us.  A move that
+	// fails ends the session, and that closes the new one.
 	defer old.Close()
 
 	// Forget rides the sender's message channel, so it is served in
@@ -286,6 +310,14 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 		a.startEventQueue(a.runCtx, a.opts.OnEvent)
 	}
 	return nil
+}
+
+// moveRefused is the error for a move asked of a session that is over.
+func (a *Agent) moveRefused(addr *net.UDPAddr) error {
+	if err := a.Err(); err != nil {
+		return fmt.Errorf("agent: move to %s: the session has ended: %w", addr, err)
+	}
+	return fmt.Errorf("agent: move to %s: the session has ended", addr)
 }
 
 // moveFailed ends the session and says which move ended it.

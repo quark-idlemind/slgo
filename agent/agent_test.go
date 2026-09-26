@@ -288,6 +288,16 @@ func testAccount(f *fakeSim) *Account {
 	}
 }
 
+// givenBack reports whether a connection has been closed, without
+// sending anything on one that has not.
+func givenBack(c *net.UDPConn) bool {
+	rc, err := c.SyscallConn()
+	if err != nil {
+		return errors.Is(err, net.ErrClosed)
+	}
+	return errors.Is(rc.Control(func(uintptr) {}), net.ErrClosed)
+}
+
 func TestSessionHandshake(t *testing.T) {
 	sim := newFakeSim(t)
 	defer sim.close()
@@ -500,6 +510,7 @@ func TestWatchdogEndsSilentSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
+	conn := a.sock.conn.Load()
 
 	// The simulator stops answering but keeps its socket, which is
 	// what a lost circuit actually looks like.  Closing it instead
@@ -517,6 +528,9 @@ func TestWatchdogEndsSilentSession(t *testing.T) {
 	if err := a.Err(); err == nil || !strings.Contains(err.Error(), "silent") {
 		t.Errorf("Err = %v, want something about silence", err)
 	}
+	// Given back by the session ending, not left for a Close that a
+	// supervisor replacing it never makes.
+	waitFor(t, "the socket to be closed", func() bool { return givenBack(conn) })
 }
 
 // TestWatchdogToleratesTraffic: an active simulator must never trip it.
