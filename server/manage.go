@@ -206,6 +206,10 @@ func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 		_ = a.Logout(out, 10*time.Second)
 	}
 	h.notify(pb.AgentEvent_DISCONNECTED, "logged out on request; it will not come back until asked for by name")
+	// And the streams end, after the notice so that it arrives first.
+	// A client left attached to a session that is down would wait on
+	// it for good; see Hosted.ended.
+	h.end("")
 
 	// It keeps its place in the map so that it can be reported as
 	// STOPPED rather than looking like a name nobody has heard of, but

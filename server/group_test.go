@@ -11,6 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
@@ -373,6 +376,24 @@ func TestKickedSessionStaysDown(t *testing.T) {
 	first := h.Agent()
 	atLogin := logins.Load()
 
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serving := make(chan struct{})
+	go func() { defer close(serving); srv.Serve(ctx, ln) }()
+	defer func() { cancel(); <-serving }()
+
+	// A client attached before the kick, whose stream has to end with it.
+	watching, err := client.Dial(context.Background(), ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer watching.Close()
+	if _, err := watching.Attach(context.Background(), "example"); err != nil {
+		t.Fatal(err)
+	}
+
 	// The grid ejects the avatar, the way it does when the same
 	// account logs in from somewhere else.
 	kick := &msg.KickUser{}
@@ -421,23 +442,29 @@ func TestKickedSessionStaysDown(t *testing.T) {
 		t.Errorf("a stopped session is still the default: %s", d.Name)
 	}
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	serving := make(chan struct{})
-	go func() { defer close(serving); srv.Serve(ctx, ln) }()
-	defer func() { cancel(); <-serving }()
-
 	c, err := client.Dial(context.Background(), ln.Addr().String(), plaintext())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
 
-	if _, err := c.Attach(context.Background(), "example"); err == nil {
+	_, refused := c.Attach(context.Background(), "example")
+	if refused == nil {
 		t.Error("attaching to a session the grid ended was allowed")
-	} else if !strings.Contains(err.Error(), "not connected") {
-		t.Errorf("attach refused, but not helpfully: %v", err)
+	} else if !strings.Contains(refused.Error(), "not connected") {
+		t.Errorf("attach refused, but not helpfully: %v", refused)
+	}
+
+	// And the client that was attached is told the same, the same way:
+	// its stream ends rather than staying on a session that is not
+	// coming back.
+	select {
+	case <-watching.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream outlived a session the grid ended")
+	}
+	if got, want := status.Convert(watching.Err()), status.Convert(refused); got.Code() != codes.FailedPrecondition ||
+		got.Message() != want.Message() {
+		t.Errorf("the stream ended with %v, and an attach is refused with %v", watching.Err(), refused)
 	}
 }

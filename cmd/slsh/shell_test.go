@@ -24,6 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -956,6 +959,27 @@ func TestRunEndsWhenTheSessionDoes(t *testing.T) {
 	}()
 	if err := x.Run(context.Background()); err != nil {
 		t.Fatalf("Run = %v", err)
+	}
+}
+
+// TestRunSaysTheSessionEndedAndWhy: slgod ends the stream of a session
+// that is stopped for good or no longer hosted, and says why in a
+// sentence for a person.  The shell passes the sentence on as the reason
+// it stopped, without the rpc status wrapped round it.
+func TestRunSaysTheSessionEndedAndWhy(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.mu.Lock()
+	x.grid.endedWith = status.Error(codes.FailedPrecondition,
+		"example is not connected (logged out); it will not come back on its own")
+	x.grid.mu.Unlock()
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		x.grid.Close()
+	}()
+	err := x.Run(context.Background())
+	want := "the session ended: example is not connected (logged out); it will not come back on its own"
+	if err == nil || err.Error() != want {
+		t.Fatalf("Run = %v, want %q", err, want)
 	}
 }
 

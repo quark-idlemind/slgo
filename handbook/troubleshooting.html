@@ -269,6 +269,7 @@ Or pass -no-auth to serve loopback without it.</span></pre></div>
           <div class="fix">
             <h4>Why</h4>
             <p>The session was ended on purpose: someone ran <code>logout</code>, or the avatar was thrown off the grid, most often because it was logged in somewhere else. slgod logs <code>… -- staying logged out rather than taking the session back</code> and does not retry, so it will not kick you off in turn. A dropped network connection or a region restart is different: slgod reconnects from those by itself.</p>
+            <p>A program attached to the avatar when it happens is told the same thing: slgod ends its connection with this line. slsh prints it after <code>slsh: the session ended:</code> and exits. That is from the code and its tests, not watched on a live grid.</p>
             <h4>Fix</h4>
             <p>First make sure nobody is using that avatar in a viewer. Then ask for it back by name. <code>login</code> always takes a stopped avatar back when you name it; its <code>-f</code> flag is accepted and changes nothing.</p>
             <div class="term" data-where="laptop"><pre><span class="p">$ </span>slsh -c agents

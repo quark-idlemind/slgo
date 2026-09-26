@@ -178,7 +178,9 @@ func (h *Hosted) Info() *Info {
 //
 // Status rather than a call of its own: it already answers with the
 // current AgentInfo, and the daemon rebuilds that from the live
-// session rather than from what it said at attach time.
+// session rather than from what it said at attach time.  It asks by
+// the name the attach was answered with, so a session attached with no
+// name is asked about rather than whichever is the default by now.
 func (h *Hosted) Refresh(ctx context.Context) (*Info, error) {
 	st, err := h.conn.Status(ctx)
 	if err != nil {

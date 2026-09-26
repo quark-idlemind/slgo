@@ -84,17 +84,14 @@ func (b *bot) takeKept(ctx context.Context, s *sl.Session) {
 }
 
 // read is the listening loop proper.
+//
+// It ends when the session's stream does.  slgod keeps the stream open
+// across a session that drops and is re-established, and ends it when
+// the session is stopped for good or no longer hosted -- so the stream
+// ending is the whole of how this learns a session is not coming back,
+// and there is nothing to ask slgod about it.
 func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM,
 	notices <-chan *pb.AgentEvent) {
-	// Endable from inside as well as from outside.  slgod's stream
-	// deliberately OUTLIVES the session under it -- a session that
-	// drops is re-established and the client keeps its stream and its
-	// subscriptions across that -- so a session which is never coming
-	// back does not end this loop by itself.  drainNotices is what
-	// notices, and this is how it says so.
-	ctx, gone := context.WithCancel(ctx)
-	defer gone()
-
 	// Jobs get a context of their own so that the end of the session
 	// stops them: a benchmark still running against a session that has
 	// gone is a benchmark that will fail slowly rather than at once.
@@ -105,7 +102,7 @@ func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM,
 		jobs.Wait()
 	}()
 
-	go b.drainNotices(jobCtx, notices, gone)
+	go b.drainNotices(jobCtx, notices)
 	// An avatar that has just been logged in may be missing part of
 	// its outfit: the simulator puts most attachments back, not all.
 	// See dress.go.
@@ -133,7 +130,11 @@ func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM,
 // notices are worth having anyway: a kick, a region change and a
 // reconnect all arrive here and are the only warning a log gets that
 // the session under an attendant has been replaced.
-func (b *bot) drainNotices(ctx context.Context, notices <-chan *pb.AgentEvent, gone func()) {
+//
+// They are logged and nothing more.  Whether a session that went away
+// is coming back is not read off them: the stream ending is what says
+// it is not.  See read.
+func (b *bot) drainNotices(ctx context.Context, notices <-chan *pb.AgentEvent) {
 	if notices == nil {
 		return
 	}
@@ -150,28 +151,6 @@ func (b *bot) drainNotices(ctx context.Context, notices <-chan *pb.AgentEvent, g
 				detail = n.GetRegion()
 			}
 			b.logf("slgod reports %s %s", strings.ToLower(n.GetKind().String()), detail)
-
-			// A session that ended may be coming back -- slgod
-			// re-establishes one that dropped, under this same stream
-			// -- or may not, if somebody logged the avatar out on
-			// purpose.  The two look identical from here and the
-			// stream ends for neither, so the attendant would sit
-			// holding a session that no longer exists, believing it
-			// was attached, until the daemon was restarted.  That is
-			// exactly what it did.
-			//
-			// Which it is comes from asking slgod rather than from
-			// reading the sentence it sent.  The words are for a
-			// person; matching on them would be one more thing to be
-			// wrong about when they change.
-			switch n.GetKind() {
-			case pb.AgentEvent_DISCONNECTED, pb.AgentEvent_KICKED:
-				if b.d.stoppedAt(ctx, b.name) {
-					b.logf("that session is not coming back; letting go of it")
-					gone()
-					return
-				}
-			}
 		}
 	}
 }

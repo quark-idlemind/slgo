@@ -123,7 +123,9 @@ func (s *Server) SetAuth(a *auth.Server) {
 // The connection behind it is replaced when it has to be re-established,
 // so it is reached through Agent() rather than being a field.  Clients
 // keep their streams and their subscriptions across that; only the
-// circuit underneath changes.
+// circuit underneath changes.  A Hosted that is finished with for good
+// -- stopped deliberately, or no longer held by the server -- ends them
+// instead; see ended.
 type Hosted struct {
 	Name string
 
@@ -175,6 +177,13 @@ type Hosted struct {
 	// Log is where anything worth a person's attention goes.  Nil is
 	// silence, which is what a test wants; cmd/slgod sets it.
 	Log func(format string, v ...any)
+
+	// over is closed once, when this Hosted will carry no session
+	// again, and removedWhy is the reason given by Remove, for a
+	// session that Down has nothing to say about.  Both guarded by mu,
+	// and over is made on first use; see ended and end.
+	over       chan struct{}
+	removedWhy string
 
 	stopped  atomic.Bool
 	attempts atomic.Uint64
@@ -420,6 +429,50 @@ func (h *Hosted) Down() string {
 	return "logged out"
 }
 
+// ended is closed when this Hosted is finished with for good: stopped
+// deliberately, or removed from the server.  A reconnect does not close
+// it, because a reconnect is this same Hosted carrying on.
+//
+// Made on first use rather than in a constructor, since a Hosted is a
+// plain struct and is built as one in more than one place.
+func (h *Hosted) ended() <-chan struct{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.over == nil {
+		h.over = make(chan struct{})
+	}
+	return h.over
+}
+
+// end closes ended, once; a second call changes nothing.  removed is
+// the reason to give when Down has none, and is "" from the paths that
+// stop the session, since stopping gives Down one.
+func (h *Hosted) end(removed string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.over == nil {
+		h.over = make(chan struct{})
+	}
+	select {
+	case <-h.over:
+		return
+	default:
+	}
+	h.removedWhy = removed
+	close(h.over)
+}
+
+// whyEnded is why a session that has ended cannot be used: Down's
+// reason, or failing that the one it was removed with.
+func (h *Hosted) whyEnded() string {
+	if why := h.Down(); why != "" {
+		return why
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.removedWhy
+}
+
 // ReconnectDelays are the waits before each attempt to re-establish a
 // session, the last repeating.  They are generous on purpose: a login
 // server will throttle a client that hammers it, and a failure here is
@@ -464,6 +517,9 @@ func (h *Hosted) supervise(ctx context.Context) {
 			h.logf("%v -- staying logged out rather than taking the session back", err)
 			h.notify(pb.AgentEvent_DISCONNECTED, errText(err)+
 				" (not reconnecting; this session was ended deliberately)")
+			// After the notice, so that a client is told why before
+			// its stream ends.
+			h.end("")
 			return
 		}
 
@@ -597,15 +653,24 @@ func (s *Server) Add(name string, a *agent.Agent) (*Hosted, error) {
 // in progress.  What it does settle is the default: a removed session
 // gives up its rank, so it comes back at the END of the queue if it is
 // hosted again rather than reclaiming a default it used to hold.
+//
+// And it ends the stream of every client still attached, with the
+// refusal an attach to a stopped session gets.  The name may be hosted
+// again, by a new login, and a client left on the old stream would be
+// held by something the server no longer holds while its calls by name
+// reached the new one.
 func (s *Server) Remove(name string) (*Hosted, bool) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	h, ok := s.agents[name]
 	if !ok || h == nil {
+		s.mu.Unlock()
 		return nil, false
 	}
 	delete(s.agents, name)
 	h.rank = 0
+	s.mu.Unlock()
+
+	h.end("no longer hosted here")
 	return h, true
 }
 

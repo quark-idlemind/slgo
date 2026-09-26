@@ -93,6 +93,11 @@ type fakeDaemon struct {
 	posture *pb.PostureResponse
 	faced   chan *pb.FaceRequest
 	face    func(*pb.FaceRequest) (*pb.FaceResponse, error)
+
+	// other is what Status answers for any name but info's, the empty
+	// one included: the session a daemon's default has moved to once
+	// info's has gone.  Nil answers that nothing by that name is held.
+	other *pb.AgentInfo
 }
 
 // newFakeDaemon starts one on loopback and attaches to it.
@@ -293,6 +298,21 @@ func (d *fakeDaemon) Cap(context.Context, *pb.CapRequest) (*pb.CapResponse, erro
 	return d.cap, nil
 }
 
+// Status answers for the session it is asked about, by name, as the
+// daemon does.
+func (d *fakeDaemon) Status(_ context.Context, r *pb.StatusRequest) (*pb.StatusResponse, error) {
+	if d.fail != nil {
+		return nil, d.fail
+	}
+	if r.GetAgent() == d.info.GetName() {
+		return &pb.StatusResponse{Agent: d.info}, nil
+	}
+	if d.other == nil {
+		return nil, errors.New("no agent by that name")
+	}
+	return &pb.StatusResponse{Agent: d.other}, nil
+}
+
 // TestAttachingSaysWhichSessionItGot: an empty name is passed through
 // rather than resolved here, because the daemon picks -- the session it
 // has held longest -- and the Attached frame says which.  Every client
@@ -311,6 +331,42 @@ func TestAttachingSaysWhichSessionItGot(t *testing.T) {
 	}
 	if h.Info().Name != "quark" {
 		t.Errorf("the attached session is %q", h.Info().Name)
+	}
+}
+
+// TestRefreshAsksAboutTheSessionItIsAttachedTo: Refresh is a Status
+// call, and it used to be asked by the name the attach was asked with.
+// An empty one took the daemon's default then and again at every
+// refresh, so once the default moved -- the first avatar logged out
+// while another was still up -- a refresh would have taken the other
+// avatar's identity, and the session gone on sending as somebody it was
+// not attached to.
+func TestRefreshAsksAboutTheSessionItIsAttachedTo(t *testing.T) {
+	t.Parallel()
+	d, conn := dialFakeDaemon(t)
+	d.other = &pb.AgentInfo{
+		Name:       "helper",
+		AgentId:    "c2de7e57-7e57-c0de-6355-a0471ecd3e72",
+		SessionId:  "3c907e57-7e57-c0de-e29b-3fe3bad0d0f1",
+		AvatarName: "Helper Resident",
+	}
+
+	h, err := AttachConn(context.Background(), conn, "")
+	if err != nil {
+		t.Fatalf("AttachConn: %v", err)
+	}
+	t.Cleanup(func() { h.Close() })
+
+	info, err := h.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if info.Name != "quark" || info.AgentID != testAgentID || info.SessionID != testSessionID {
+		t.Errorf("Refresh answered with %s (%s, session %s), not the session attached to",
+			info.Name, info.AgentID, info.SessionID)
+	}
+	if got := h.Info().AvatarName; got != "Quark Idlemind" {
+		t.Errorf("the session now believes it is %q", got)
 	}
 }
 

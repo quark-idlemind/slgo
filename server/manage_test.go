@@ -15,6 +15,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
@@ -481,5 +483,203 @@ func TestLogoutStaysOut(t *testing.T) {
 	}
 	if h2, ok := srv.Agent("example"); !ok || h2.Stopped() {
 		t.Error("it is not running after being forced back up")
+	}
+}
+
+// ---------------------------------------------- a session that has ended
+
+// hostOwn connects an avatar to a simulator of its own and hosts it
+// under name, so that which session a call reached shows in who
+// answers it.
+func hostOwn(t *testing.T, srv *Server, name, first, agentID, sessionID string) *Hosted {
+	t.Helper()
+	sim := newSim(t)
+	a, err := agent.Connect(context.Background(), &agent.Account{
+		AgentID:     msg.MustParseUUID(agentID),
+		SessionID:   msg.MustParseUUID(sessionID),
+		CircuitCode: 4242,
+		SimIP:       sim.addr().IP,
+		SimPort:     sim.addr().Port,
+		FirstName:   first,
+		LastName:    "Resident",
+	}, agent.Options{Timeout: 10 * time.Second, SkipCaps: true})
+	if err != nil {
+		t.Fatalf("connecting %s: %v", name, err)
+	}
+	t.Cleanup(func() {
+		a.Close()
+		sim.close()
+	})
+	h, err := srv.Add(name, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
+}
+
+// TestAnEmptyNameStaysWithTheSessionItGot: a client that attached with
+// no name has every later call answered about the session it attached
+// to.
+//
+// It used to send the empty name again with each one, and the daemon
+// resolved it afresh to whatever the default was by then.  A stopped
+// session is never the default, so once the first avatar was logged out
+// with another still up, the client's stream stayed on the first while
+// its Status -- and its Control, its Cap and its viewer credential --
+// went to the other.
+func TestAnEmptyNameStaysWithTheSessionItGot(t *testing.T) {
+	srv := New()
+	hostOwn(t, srv, "example", "Example",
+		"876e7e57-7e57-c0de-8597-66b760a8cb5f", "8d1b7e57-7e57-c0de-3bf6-2277c65663be")
+	hostOwn(t, srv, "helper", "Helper",
+		"cc927e57-7e57-c0de-c19b-d08ec9dd2a78", "62dd7e57-7e57-c0de-3696-7405a159362c")
+	r := &rig{srv: srv}
+	r.serve(t)
+	ctx := context.Background()
+
+	c, err := client.Dial(ctx, r.ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	info, err := c.Attach(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.GetName() != "example" {
+		t.Fatalf("attached to %q, want the default, example", info.GetName())
+	}
+
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: "example", Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	if d, ok := srv.Default(); !ok || d.Name != "helper" {
+		t.Fatal("the default did not move to the session still up, so this tests nothing")
+	}
+
+	st, err := c.Status(ctx)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	a := st.GetAgent()
+	if a.GetName() != "example" || a.GetAvatarName() != "Example Resident" {
+		t.Errorf("Status describes %s (%s), not the session this client attached to",
+			a.GetName(), a.GetAvatarName())
+	}
+	if a.GetState() != pb.AgentInfo_STOPPED {
+		t.Errorf("Status says the session is %v, want STOPPED", a.GetState())
+	}
+}
+
+// TestLoggingOutEndsTheStreamsOnIt: a session put down on purpose is not
+// coming back on its own, so a client attached to it is told so by its
+// stream ending, in the words a new attach to it is refused with.
+//
+// The stream used to stay open, and a client learnt nothing from it:
+// slbotd sat on one believing it was attached until the daemon was
+// restarted.
+func TestLoggingOutEndsTheStreamsOnIt(t *testing.T) {
+	r := newRig(t, nil)
+	c := r.dial(t)
+	defer c.Close()
+	h, _ := r.srv.Agent("example")
+	ctx := context.Background()
+
+	if _, err := r.srv.Logout(ctx, &pb.LogoutRequest{Agent: "example", Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-c.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream outlived a session that was logged out")
+	}
+	ended := c.Err()
+	if status.Code(ended) != codes.FailedPrecondition {
+		t.Fatalf("the stream ended with %v, want FailedPrecondition", ended)
+	}
+
+	// Told why first: the notice was queued before the end, and goes
+	// out ahead of it.
+	told := false
+	for n := range c.Notices() {
+		told = told || n.GetKind() == pb.AgentEvent_DISCONNECTED
+	}
+	if !told {
+		t.Error("the stream ended without the notice saying why")
+	}
+
+	// In the words a new attach is refused with, so that a client
+	// hears the one thing the one way whichever it was doing.
+	again, err := client.Dial(ctx, r.ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Close()
+	_, refused := again.Attach(ctx, "example")
+	got, want := status.Convert(ended).Message(), status.Convert(refused).Message()
+	if got != want || !strings.Contains(got, "it will not come back on its own") {
+		t.Errorf("the stream ended with %q, and an attach is refused with %q", got, want)
+	}
+
+	// And the client is let go of, as one that hung up is.
+	waitFor(t, 5*time.Second, "the client to be let go", func() bool { return h.ClientCount() == 0 })
+}
+
+// TestRemovingASessionEndsTheStreamsOnIt: a name the server no longer
+// holds may be hosted again by a new login.  A client left on the old
+// stream would be held by a session nothing holds while its calls by
+// name reached the new one, so the stream ends, and a client wanting the
+// new session attaches again.
+//
+// Carrying the stream over to the new session is not done: ending it
+// tells a client what a new attach would, the same way.
+func TestRemovingASessionEndsTheStreamsOnIt(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+	var logins atomic.Int64
+	srv := startable(t, loginServer(t, sim, &logins, nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv.SetBase(ctx, nil, nil)
+
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	old, _ := srv.Agent("example")
+	r := &rig{srv: srv}
+	r.serve(t)
+	c := r.dial(t)
+	defer c.Close()
+
+	// Up, not stopped: the one case where nothing but the removal can
+	// say the session is gone.
+	if _, ok := srv.Remove("example"); !ok {
+		t.Fatal("nothing was removed")
+	}
+	select {
+	case <-c.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream outlived its session being removed")
+	}
+	st := status.Convert(c.Err())
+	if st.Code() != codes.FailedPrecondition ||
+		st.Message() != "example is not connected (no longer hosted here); it will not come back on its own" {
+		t.Errorf("the stream ended with %v", c.Err())
+	}
+
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	now, _ := srv.Agent("example")
+	if now == old {
+		t.Fatal("the name was not hosted again")
+	}
+	fresh := r.dial(t)
+	defer fresh.Close()
+	waitFor(t, 5*time.Second, "the old session to let its client go", func() bool {
+		return old.ClientCount() == 0
+	})
+	if n := now.ClientCount(); n != 1 {
+		t.Errorf("the new session has %d clients, want the one that attached to it", n)
 	}
 }

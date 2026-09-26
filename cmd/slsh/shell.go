@@ -24,6 +24,9 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -157,7 +160,7 @@ func (sh *Shell) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-sh.s.Done():
 			sh.term.Print("")
-			return sh.s.Err()
+			return sessionEnded(sh.s.Err())
 		case r, ok := <-keys:
 			if !ok {
 				return nil
@@ -165,6 +168,18 @@ func (sh *Shell) Run(ctx context.Context) error {
 			sh.key(ctx, r)
 		}
 	}
+}
+
+// sessionEnded says plainly that the daemon ended this shell's session,
+// and why.  slgod ends a stream with FailedPrecondition and a sentence
+// for a person when the session under it is stopped for good or no
+// longer hosted, and the sentence is shown without the rpc wrapping.
+// Any other ending is passed on as it came.
+func sessionEnded(err error) error {
+	if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
+		return fmt.Errorf("the session ended: %s", st.Message())
+	}
+	return err
 }
 
 // Quit stops the shell.  Safe from anywhere, and more than once.
