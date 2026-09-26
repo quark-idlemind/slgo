@@ -810,6 +810,40 @@ func (o *Objects) sent(p *msg.Packet) {
 	o.forgetAppearance(locals...)
 }
 
+// placementWidths counts the placement blobs ObjectUpdates carry, by
+// width in bytes.
+type placementWidths struct {
+	mu sync.Mutex
+	n  map[int]uint64
+}
+
+func (w *placementWidths) count(width int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.n == nil {
+		w.n = map[int]uint64{}
+	}
+	w.n[width]++
+}
+
+// PlacementWidths is how many ObjectUpdate placement blobs this
+// session has been sent, by width in bytes, unread widths included.
+//
+// The width says which form a blob is in, and msg.DecodePlacement
+// reads 60, 124 and 32, and 76, 140 and 48 for an avatar.  No 32 byte
+// blob has been recorded, and this is how a day's traffic says whether
+// one is ever sent.
+// Why: doc/placement.md#what-has-been-seen
+func (a *Agent) PlacementWidths() map[int]uint64 {
+	a.placements.mu.Lock()
+	defer a.placements.mu.Unlock()
+	out := make(map[int]uint64, len(a.placements.n))
+	for w, n := range a.placements.n {
+		out[w] = n
+	}
+	return out
+}
+
 // trackObjects registers the handlers that keep the registry current.
 //
 // They are inline so that the picture is up to date before anything
@@ -821,6 +855,7 @@ func (a *Agent) trackObjects() {
 		var parents []uint32
 		for i := range m.ObjectData {
 			d := &m.ObjectData[i]
+			a.placements.count(len(d.ObjectData))
 			a.Objects().update(d, l.Center, l.Far)
 			parents = a.orphaned(parents, d.ParentID)
 		}

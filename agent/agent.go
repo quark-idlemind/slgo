@@ -156,6 +156,10 @@ type Agent struct {
 
 	eq eventQueue
 
+	// placements counts ObjectUpdate placement blobs by width; see
+	// PlacementWidths.
+	placements placementWidths
+
 	urlMu sync.Mutex
 	urls  map[string]bool
 

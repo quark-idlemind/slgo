@@ -2753,9 +2753,15 @@ type StatusResponse struct {
 	// over.  It rides with the counters because it is the same kind of
 	// thing: state the daemon holds, about one agent, that a client
 	// cannot work out for itself.
-	Viewer        *ViewerEndpoint `protobuf:"bytes,13,opt,name=viewer,proto3" json:"viewer,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Viewer *ViewerEndpoint `protobuf:"bytes,13,opt,name=viewer,proto3" json:"viewer,omitempty"`
+	// How many ObjectUpdate placement blobs have arrived, by width in
+	// bytes.  The width says which form a blob is in: the daemon reads
+	// 60, 124 and 32, and 76, 140 and 48 for an avatar, and counts every
+	// width it is sent, the ones it does not read as well.  It is here to
+	// show which forms the simulator really sends.
+	PlacementWidths map[uint32]uint64 `protobuf:"bytes,14,rep,name=placement_widths,json=placementWidths,proto3" json:"placement_widths,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StatusResponse) Reset() {
@@ -2875,6 +2881,13 @@ func (x *StatusResponse) GetUnhandled() map[string]uint64 {
 func (x *StatusResponse) GetViewer() *ViewerEndpoint {
 	if x != nil {
 		return x.Viewer
+	}
+	return nil
+}
+
+func (x *StatusResponse) GetPlacementWidths() map[uint32]uint64 {
+	if x != nil {
+		return x.PlacementWidths
 	}
 	return nil
 }
@@ -6130,7 +6143,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x12ListAgentsResponse\x12*\n" +
 	"\x06agents\x18\x01 \x03(\v2\x12.slgo.v1.AgentInfoR\x06agents\"%\n" +
 	"\rStatusRequest\x12\x14\n" +
-	"\x05agent\x18\x01 \x01(\tR\x05agent\"\xa4\x04\n" +
+	"\x05agent\x18\x01 \x01(\tR\x05agent\"\xc1\x05\n" +
 	"\x0eStatusResponse\x12(\n" +
 	"\x05agent\x18\x01 \x01(\v2\x12.slgo.v1.AgentInfoR\x05agent\x12\x1d\n" +
 	"\n" +
@@ -6149,9 +6162,13 @@ const file_slgo_proto_rawDesc = "" +
 	" \x01(\x04R\x0funknownMessages\x12\x18\n" +
 	"\aclients\x18\v \x01(\x05R\aclients\x12D\n" +
 	"\tunhandled\x18\f \x03(\v2&.slgo.v1.StatusResponse.UnhandledEntryR\tunhandled\x12/\n" +
-	"\x06viewer\x18\r \x01(\v2\x17.slgo.v1.ViewerEndpointR\x06viewer\x1a<\n" +
+	"\x06viewer\x18\r \x01(\v2\x17.slgo.v1.ViewerEndpointR\x06viewer\x12W\n" +
+	"\x10placement_widths\x18\x0e \x03(\v2,.slgo.v1.StatusResponse.PlacementWidthsEntryR\x0fplacementWidths\x1a<\n" +
 	"\x0eUnhandledEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x04R\x05value:\x028\x01\x1aB\n" +
+	"\x14PlacementWidthsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\rR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x04R\x05value:\x028\x01\"I\n" +
 	"\x0eViewerEndpoint\x12\x1b\n" +
 	"\tlogin_uri\x18\x01 \x01(\tR\bloginUri\x12\x1a\n" +
@@ -6438,7 +6455,7 @@ func file_slgo_proto_rawDescGZIP() []byte {
 }
 
 var file_slgo_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 76)
+var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 77)
 var file_slgo_proto_goTypes = []any{
 	(AgentEvent_Kind)(0),             // 0: slgo.v1.AgentEvent.Kind
 	(AgentInfo_State)(0),             // 1: slgo.v1.AgentInfo.State
@@ -6520,6 +6537,7 @@ var file_slgo_proto_goTypes = []any{
 	(*FlushRequest)(nil),             // 77: slgo.v1.FlushRequest
 	(*FlushResponse)(nil),            // 78: slgo.v1.FlushResponse
 	nil,                              // 79: slgo.v1.StatusResponse.UnhandledEntry
+	nil,                              // 80: slgo.v1.StatusResponse.PlacementWidthsEntry
 }
 var file_slgo_proto_depIdxs = []int32{
 	14, // 0: slgo.v1.ClientPacket.attach:type_name -> slgo.v1.Attach
@@ -6549,78 +6567,79 @@ var file_slgo_proto_depIdxs = []int32{
 	27, // 24: slgo.v1.StatusResponse.agent:type_name -> slgo.v1.AgentInfo
 	79, // 25: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
 	36, // 26: slgo.v1.StatusResponse.viewer:type_name -> slgo.v1.ViewerEndpoint
-	15, // 27: slgo.v1.SendRequest.message:type_name -> slgo.v1.OutboundMessage
-	53, // 28: slgo.v1.MoveRequest.target:type_name -> slgo.v1.Vector3
-	2,  // 29: slgo.v1.MoveEvent.state:type_name -> slgo.v1.MoveEvent.State
-	53, // 30: slgo.v1.MoveEvent.position:type_name -> slgo.v1.Vector3
-	53, // 31: slgo.v1.MoveEvent.velocity:type_name -> slgo.v1.Vector3
-	53, // 32: slgo.v1.FaceRequest.target:type_name -> slgo.v1.Vector3
-	3,  // 33: slgo.v1.PostureResponse.posture:type_name -> slgo.v1.PostureResponse.Posture
-	53, // 34: slgo.v1.PresenceResponse.position:type_name -> slgo.v1.Vector3
-	53, // 35: slgo.v1.PresenceResponse.look_at:type_name -> slgo.v1.Vector3
-	53, // 36: slgo.v1.PresenceResponse.camera:type_name -> slgo.v1.Vector3
-	56, // 37: slgo.v1.PresenceResponse.groups:type_name -> slgo.v1.GroupMembership
-	59, // 38: slgo.v1.AttachmentsResponse.attachments:type_name -> slgo.v1.SimAttachment
-	53, // 39: slgo.v1.ObjectInfo.scale:type_name -> slgo.v1.Vector3
-	53, // 40: slgo.v1.ObjectInfo.position:type_name -> slgo.v1.Vector3
-	62, // 41: slgo.v1.ObjectInfo.rotation:type_name -> slgo.v1.Quaternion
-	63, // 42: slgo.v1.ObjectInfo.shape:type_name -> slgo.v1.PrimShape
-	61, // 43: slgo.v1.ObjectsResponse.objects:type_name -> slgo.v1.ObjectInfo
-	71, // 44: slgo.v1.NeighboursResponse.neighbours:type_name -> slgo.v1.NeighbourInfo
-	73, // 45: slgo.v1.FriendsResponse.friends:type_name -> slgo.v1.Friend
-	4,  // 46: slgo.v1.Grid.Login:input_type -> slgo.v1.LoginRequest
-	6,  // 47: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
-	32, // 48: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
-	34, // 49: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
-	28, // 50: slgo.v1.Grid.Host:input_type -> slgo.v1.HostRequest
-	30, // 51: slgo.v1.Grid.Logout:input_type -> slgo.v1.LogoutRequest
-	54, // 52: slgo.v1.Grid.Presence:input_type -> slgo.v1.PresenceRequest
-	60, // 53: slgo.v1.Grid.Objects:input_type -> slgo.v1.ObjectsRequest
-	57, // 54: slgo.v1.Grid.Attachments:input_type -> slgo.v1.AttachmentsRequest
-	65, // 55: slgo.v1.Grid.Region:input_type -> slgo.v1.RegionRequest
-	67, // 56: slgo.v1.Grid.Land:input_type -> slgo.v1.LandRequest
-	69, // 57: slgo.v1.Grid.Neighbours:input_type -> slgo.v1.NeighboursRequest
-	77, // 58: slgo.v1.Grid.Flush:input_type -> slgo.v1.FlushRequest
-	39, // 59: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
-	41, // 60: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
-	43, // 61: slgo.v1.Grid.Control:input_type -> slgo.v1.ControlRequest
-	45, // 62: slgo.v1.Grid.Move:input_type -> slgo.v1.MoveRequest
-	47, // 63: slgo.v1.Grid.Face:input_type -> slgo.v1.FaceRequest
-	49, // 64: slgo.v1.Grid.Halt:input_type -> slgo.v1.HaltRequest
-	50, // 65: slgo.v1.Grid.Posture:input_type -> slgo.v1.PostureRequest
-	72, // 66: slgo.v1.Grid.Friends:input_type -> slgo.v1.FriendsRequest
-	75, // 67: slgo.v1.Grid.NoteFriend:input_type -> slgo.v1.NoteFriendRequest
-	19, // 68: slgo.v1.Grid.Handled:input_type -> slgo.v1.HandledRequest
-	37, // 69: slgo.v1.Grid.ViewerCredential:input_type -> slgo.v1.ViewerCredentialRequest
-	5,  // 70: slgo.v1.Grid.Login:output_type -> slgo.v1.LoginResponse
-	16, // 71: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
-	33, // 72: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
-	35, // 73: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
-	29, // 74: slgo.v1.Grid.Host:output_type -> slgo.v1.HostResponse
-	31, // 75: slgo.v1.Grid.Logout:output_type -> slgo.v1.LogoutResponse
-	55, // 76: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
-	64, // 77: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
-	58, // 78: slgo.v1.Grid.Attachments:output_type -> slgo.v1.AttachmentsResponse
-	66, // 79: slgo.v1.Grid.Region:output_type -> slgo.v1.RegionInfo
-	68, // 80: slgo.v1.Grid.Land:output_type -> slgo.v1.LandInfo
-	70, // 81: slgo.v1.Grid.Neighbours:output_type -> slgo.v1.NeighboursResponse
-	78, // 82: slgo.v1.Grid.Flush:output_type -> slgo.v1.FlushResponse
-	40, // 83: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
-	42, // 84: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
-	44, // 85: slgo.v1.Grid.Control:output_type -> slgo.v1.ControlResponse
-	46, // 86: slgo.v1.Grid.Move:output_type -> slgo.v1.MoveEvent
-	48, // 87: slgo.v1.Grid.Face:output_type -> slgo.v1.FaceResponse
-	52, // 88: slgo.v1.Grid.Halt:output_type -> slgo.v1.HaltResponse
-	51, // 89: slgo.v1.Grid.Posture:output_type -> slgo.v1.PostureResponse
-	74, // 90: slgo.v1.Grid.Friends:output_type -> slgo.v1.FriendsResponse
-	76, // 91: slgo.v1.Grid.NoteFriend:output_type -> slgo.v1.NoteFriendResponse
-	20, // 92: slgo.v1.Grid.Handled:output_type -> slgo.v1.HandledResponse
-	38, // 93: slgo.v1.Grid.ViewerCredential:output_type -> slgo.v1.ViewerCredentialResponse
-	70, // [70:94] is the sub-list for method output_type
-	46, // [46:70] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	80, // 27: slgo.v1.StatusResponse.placement_widths:type_name -> slgo.v1.StatusResponse.PlacementWidthsEntry
+	15, // 28: slgo.v1.SendRequest.message:type_name -> slgo.v1.OutboundMessage
+	53, // 29: slgo.v1.MoveRequest.target:type_name -> slgo.v1.Vector3
+	2,  // 30: slgo.v1.MoveEvent.state:type_name -> slgo.v1.MoveEvent.State
+	53, // 31: slgo.v1.MoveEvent.position:type_name -> slgo.v1.Vector3
+	53, // 32: slgo.v1.MoveEvent.velocity:type_name -> slgo.v1.Vector3
+	53, // 33: slgo.v1.FaceRequest.target:type_name -> slgo.v1.Vector3
+	3,  // 34: slgo.v1.PostureResponse.posture:type_name -> slgo.v1.PostureResponse.Posture
+	53, // 35: slgo.v1.PresenceResponse.position:type_name -> slgo.v1.Vector3
+	53, // 36: slgo.v1.PresenceResponse.look_at:type_name -> slgo.v1.Vector3
+	53, // 37: slgo.v1.PresenceResponse.camera:type_name -> slgo.v1.Vector3
+	56, // 38: slgo.v1.PresenceResponse.groups:type_name -> slgo.v1.GroupMembership
+	59, // 39: slgo.v1.AttachmentsResponse.attachments:type_name -> slgo.v1.SimAttachment
+	53, // 40: slgo.v1.ObjectInfo.scale:type_name -> slgo.v1.Vector3
+	53, // 41: slgo.v1.ObjectInfo.position:type_name -> slgo.v1.Vector3
+	62, // 42: slgo.v1.ObjectInfo.rotation:type_name -> slgo.v1.Quaternion
+	63, // 43: slgo.v1.ObjectInfo.shape:type_name -> slgo.v1.PrimShape
+	61, // 44: slgo.v1.ObjectsResponse.objects:type_name -> slgo.v1.ObjectInfo
+	71, // 45: slgo.v1.NeighboursResponse.neighbours:type_name -> slgo.v1.NeighbourInfo
+	73, // 46: slgo.v1.FriendsResponse.friends:type_name -> slgo.v1.Friend
+	4,  // 47: slgo.v1.Grid.Login:input_type -> slgo.v1.LoginRequest
+	6,  // 48: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
+	32, // 49: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
+	34, // 50: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
+	28, // 51: slgo.v1.Grid.Host:input_type -> slgo.v1.HostRequest
+	30, // 52: slgo.v1.Grid.Logout:input_type -> slgo.v1.LogoutRequest
+	54, // 53: slgo.v1.Grid.Presence:input_type -> slgo.v1.PresenceRequest
+	60, // 54: slgo.v1.Grid.Objects:input_type -> slgo.v1.ObjectsRequest
+	57, // 55: slgo.v1.Grid.Attachments:input_type -> slgo.v1.AttachmentsRequest
+	65, // 56: slgo.v1.Grid.Region:input_type -> slgo.v1.RegionRequest
+	67, // 57: slgo.v1.Grid.Land:input_type -> slgo.v1.LandRequest
+	69, // 58: slgo.v1.Grid.Neighbours:input_type -> slgo.v1.NeighboursRequest
+	77, // 59: slgo.v1.Grid.Flush:input_type -> slgo.v1.FlushRequest
+	39, // 60: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
+	41, // 61: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
+	43, // 62: slgo.v1.Grid.Control:input_type -> slgo.v1.ControlRequest
+	45, // 63: slgo.v1.Grid.Move:input_type -> slgo.v1.MoveRequest
+	47, // 64: slgo.v1.Grid.Face:input_type -> slgo.v1.FaceRequest
+	49, // 65: slgo.v1.Grid.Halt:input_type -> slgo.v1.HaltRequest
+	50, // 66: slgo.v1.Grid.Posture:input_type -> slgo.v1.PostureRequest
+	72, // 67: slgo.v1.Grid.Friends:input_type -> slgo.v1.FriendsRequest
+	75, // 68: slgo.v1.Grid.NoteFriend:input_type -> slgo.v1.NoteFriendRequest
+	19, // 69: slgo.v1.Grid.Handled:input_type -> slgo.v1.HandledRequest
+	37, // 70: slgo.v1.Grid.ViewerCredential:input_type -> slgo.v1.ViewerCredentialRequest
+	5,  // 71: slgo.v1.Grid.Login:output_type -> slgo.v1.LoginResponse
+	16, // 72: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
+	33, // 73: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
+	35, // 74: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
+	29, // 75: slgo.v1.Grid.Host:output_type -> slgo.v1.HostResponse
+	31, // 76: slgo.v1.Grid.Logout:output_type -> slgo.v1.LogoutResponse
+	55, // 77: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
+	64, // 78: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
+	58, // 79: slgo.v1.Grid.Attachments:output_type -> slgo.v1.AttachmentsResponse
+	66, // 80: slgo.v1.Grid.Region:output_type -> slgo.v1.RegionInfo
+	68, // 81: slgo.v1.Grid.Land:output_type -> slgo.v1.LandInfo
+	70, // 82: slgo.v1.Grid.Neighbours:output_type -> slgo.v1.NeighboursResponse
+	78, // 83: slgo.v1.Grid.Flush:output_type -> slgo.v1.FlushResponse
+	40, // 84: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
+	42, // 85: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
+	44, // 86: slgo.v1.Grid.Control:output_type -> slgo.v1.ControlResponse
+	46, // 87: slgo.v1.Grid.Move:output_type -> slgo.v1.MoveEvent
+	48, // 88: slgo.v1.Grid.Face:output_type -> slgo.v1.FaceResponse
+	52, // 89: slgo.v1.Grid.Halt:output_type -> slgo.v1.HaltResponse
+	51, // 90: slgo.v1.Grid.Posture:output_type -> slgo.v1.PostureResponse
+	74, // 91: slgo.v1.Grid.Friends:output_type -> slgo.v1.FriendsResponse
+	76, // 92: slgo.v1.Grid.NoteFriend:output_type -> slgo.v1.NoteFriendResponse
+	20, // 93: slgo.v1.Grid.Handled:output_type -> slgo.v1.HandledResponse
+	38, // 94: slgo.v1.Grid.ViewerCredential:output_type -> slgo.v1.ViewerCredentialResponse
+	71, // [71:95] is the sub-list for method output_type
+	47, // [47:71] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_slgo_proto_init() }
@@ -6658,7 +6677,7 @@ func file_slgo_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_slgo_proto_rawDesc), len(file_slgo_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   76,
+			NumMessages:   77,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
