@@ -106,7 +106,9 @@ type Session struct {
 	// take it away from the second.
 	animWatch int
 
-	// Replies keyed by what was asked.
+	// Replies keyed by what was asked.  created holds an entry only
+	// while CreateItem is waiting on that callback id: nil until the
+	// reply comes, and gone when the wait ends.
 	created map[uint32]*msg.UpdateCreateInventoryItem_InventoryData
 
 	// taskInv holds the filename from ReplyTaskInventory and taskSeen
@@ -737,11 +739,16 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 	case *msg.TeleportFailed:
 		w.teleportAnswered(&teleportAnswer{failed: true, refusal: agent.ReadTeleportFailed(t)})
 
+	// Kept only for a creation this session is waiting on.  The reply
+	// to another client's comes here too, since slgod relays it to all
+	// of them, and so does one that arrives after its wait gave up.
 	case *msg.UpdateCreateInventoryItem:
 		w.mu.Lock()
 		for i := range t.InventoryData {
 			d := t.InventoryData[i]
-			w.created[d.CallbackID] = &d
+			if _, waiting := w.created[d.CallbackID]; waiting {
+				w.created[d.CallbackID] = &d
+			}
 		}
 		w.mu.Unlock()
 

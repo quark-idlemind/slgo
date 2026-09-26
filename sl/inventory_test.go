@@ -181,6 +181,105 @@ func TestCreatingAnItemWaitsForItsCallbackToComeBack(t *testing.T) {
 	}
 }
 
+// TestCreateItemCallbackIDsAreNeverShared: the reply says nothing about
+// what was asked for except the callback id, so two creations sharing
+// one each take whichever item is answered first.  Ids read off the
+// clock were shared by two creations in the same tick.
+func TestCreateItemCallbackIDsAreNeverShared(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	const n = 50
+	type result struct {
+		asked string
+		it    *Item
+		err   error
+	}
+	results := make(chan result, n)
+	var start sync.WaitGroup
+	start.Add(1)
+	for i := range n {
+		name := fmt.Sprintf("note %d", i)
+		go func() {
+			start.Wait()
+			it, err := w.CreateItem(context.Background(), name, "", 7, 7)
+			results <- result{name, it, err}
+		}()
+	}
+	start.Done()
+
+	var sent []*msg.CreateInventoryItem
+	waitFor(t, "every creation to be asked for", func() bool {
+		sent = sentOf[*msg.CreateInventoryItem](f)
+		return len(sent) == n
+	})
+	asked := map[uint32]string{}
+	for _, m := range sent {
+		cb, name := m.InventoryBlock.CallbackID, trimNul(m.InventoryBlock.Name)
+		if other, shared := asked[cb]; shared {
+			t.Errorf("%q and %q both went out as callback %d", other, name, cb)
+		}
+		asked[cb] = name
+	}
+
+	// Each answered with the item it asked for, as the simulator does.
+	for cb, name := range asked {
+		f.Relay(t, &msg.UpdateCreateInventoryItem{
+			InventoryData: []msg.UpdateCreateInventoryItem_InventoryData{{
+				CallbackID: cb, ItemID: theChild, FolderID: aFolder,
+				Name: append([]byte(name), 0), Type: 7, InvType: 7,
+			}},
+		})
+	}
+	for range n {
+		select {
+		case r := <-results:
+			if r.err != nil {
+				t.Errorf("CreateItem %q: %v", r.asked, r.err)
+			} else if r.it.Name != r.asked {
+				t.Errorf("asked for %q and was handed %q", r.asked, r.it.Name)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("a creation never saw its reply")
+		}
+	}
+
+	// And nothing is kept once every wait is over.
+	w.mu.Lock()
+	left := len(w.created)
+	w.mu.Unlock()
+	if left != 0 {
+		t.Errorf("%d replies are still kept after every creation finished", left)
+	}
+}
+
+// TestCreateItemForgetsWhatItStoppedWaitingFor: a reply that arrives
+// after its wait has ended is kept by nobody.  Kept, it sat in the
+// session for as long as the session lasted, waiting to be taken as the
+// answer to a later request that happened to draw the same id.
+func TestCreateItemForgetsWhatItStoppedWaitingFor(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wait := aside(t, func() (*Item, error) {
+		return w.CreateItem(ctx, "a script", "", int8(AssetLSLText), int8(AssetLSLText))
+	})
+	m := waitSent[*msg.CreateInventoryItem](t, f)
+	cancel()
+	if _, err := wait(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("CreateItem = %v, want the context's reason", err)
+	}
+
+	relayCreated(t, f, m.InventoryBlock.CallbackID)
+	w.mu.Lock()
+	left := len(w.created)
+	w.mu.Unlock()
+	if left != 0 {
+		t.Errorf("a reply nobody was waiting for was kept")
+	}
+}
+
 // TestCreateItemReportsWhatDidNotHappen: an item nobody confirmed is not
 // an item, and the two ways of not being confirmed are worth telling
 // apart.
