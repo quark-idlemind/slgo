@@ -32,8 +32,15 @@ Messages of dialog 1 (a message box) and dialog 19, sent by an avatar
 with an invented name, were not delivered at all: nothing arrived
 within 30 seconds.
 
-No other dialog was tried. In particular an inventory offer (dialog 4),
-which `accept-inventory = trusted` also matches by name, was not.
+An inventory offer (dialog 4), which `accept-inventory = trusted` also
+matches by name, was measured on Agni on 2026-09-26. One avatar offered
+a notecard of its own to another twice: once with its own name in
+`FromAgentName` and once with an invented one. Both offers arrived
+carrying the sender's own name and id, and both were declined. The
+simulator replaces the name on an offer as it does on a message. Only
+two offers were sent; that it does so every time is inferred from them.
+
+No other dialog was tried.
 
 ## An object's message
 
@@ -97,7 +104,9 @@ What reaches `Trusts` from a remark is a message for which
 group, and not sent by this avatar. On dialog 0 the name is the one the
 simulator wrote, as measured above. Dialog 1 with an invented name was
 not delivered. A script's message, whose name is its object's, no
-longer gets there.
+longer gets there. An inventory offer's name, which
+`accept-inventory = trusted` matches, is the simulator's too, as
+measured above.
 
 The name the simulator writes is the sender's own. "Two things to know
 before trusting it" in `doc/guide.md` says that is the legacy name and
