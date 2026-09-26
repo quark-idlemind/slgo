@@ -63,7 +63,12 @@ type Compressed struct {
 	// is one.
 	Tree *uint8
 
-	// Text is the floating text above an object, with its colour.
+	// Text is the floating text above an object, and TextColor its
+	// colour as the four bytes arrived: red, green, blue, and the alpha
+	// subtracted from 255, which the simulator sends that way so that
+	// opaque text, the usual kind, zero encodes
+	// (llviewerobject.cpp:1532-1533 and 1872).  TextRGBA is the colour
+	// with the alpha the right way up.
 	Text      string
 	TextColor [4]uint8
 
@@ -114,6 +119,21 @@ type PrimShape struct {
 	ProfileBegin     uint16
 	ProfileEnd       uint16
 	ProfileHollow    uint16
+}
+
+// TextRGBA is the floating text's colour with the alpha the right way
+// up.  TextColor holds it as sent, with the alpha flipped.
+func (c *Compressed) TextRGBA() [4]byte { return textRGBA(c.TextColor) }
+
+// TextRGBA is the floating text's colour with the alpha the right way
+// up.  TextColor holds the bytes as sent, and the simulator sends the
+// alpha subtracted from 255, in this message as in the compressed one
+// (llviewerobject.cpp:1532-1533).
+func (d *ObjectUpdate_ObjectData) TextRGBA() [4]byte { return textRGBA(d.TextColor) }
+
+func textRGBA(sent [4]byte) [4]byte {
+	sent[3] = 255 - sent[3]
+	return sent
 }
 
 // IsAttachment reports whether this object is worn.
