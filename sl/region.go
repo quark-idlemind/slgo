@@ -281,8 +281,11 @@ func (w *Session) current(v visit) bool {
 //
 // It is o's own if o was found in the visit the avatar is on now.
 // Otherwise o is looked up by its id in the region the avatar is in,
-// and what that region calls it is written back into o and sent; one
-// the region has not described is refused with ErrNotHere.
+// and what that region calls it is written back into o and sent.  An
+// answer from a visit that is already over -- the avatar moved during
+// the lookup, or the region could not be named -- is looked up once
+// more.  One the region has not described, or a second stale answer,
+// is refused with ErrNotHere.
 // Why: doc/local-ids.md
 func (w *Session) local(ctx context.Context, o *Object) (uint32, error) {
 	if o == nil {
@@ -298,12 +301,25 @@ func (w *Session) local(ctx context.Context, o *Object) (uint32, error) {
 		return 0, fmt.Errorf("sl: local id %d may belong to another region, "+
 			"and there is no object id to look it up by", o.Local)
 	}
-	found, err := w.fetch(ctx, "", o.ID.String())
-	if err != nil {
-		return 0, err
-	}
-	for _, s := range found {
-		if s.ID == o.ID && s.Local != 0 {
+	for range 2 {
+		found, err := w.fetch(ctx, "", o.ID.String())
+		if err != nil {
+			return 0, err
+		}
+		var s *Seen
+		for _, c := range found {
+			if c.ID == o.ID && c.Local != 0 {
+				s = c
+				break
+			}
+		}
+		if s == nil {
+			break
+		}
+		w.mu.Lock()
+		ok := w.current(s.from)
+		w.mu.Unlock()
+		if ok {
 			o.Local, o.from = s.Local, s.from
 			return o.Local, nil
 		}

@@ -58,6 +58,11 @@ var (
 	testObjects   = msg.MustParseUUID("a9a87e57-7e57-c0de-b748-062ee08c11ee")
 	testTrash     = msg.MustParseUUID("aa8f7e57-7e57-c0de-e8da-278417da2fea")
 	thePrim       = msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")
+
+	// testRegion names the region the fake is in.  sl sends a local id
+	// found by looking an object up only while the region it was found
+	// in is named and still the avatar's.
+	testRegion = msg.MustParseUUID("a4fd7e57-7e57-c0de-559f-7a9b7da6044a")
 )
 
 // autoItemID is the inventory id of the nth auto object, made up rather
@@ -414,7 +419,7 @@ func (f *fakeGrid) Ground(ctx context.Context, west, south, east, north float32)
 }
 
 func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
-	return &sl.Region{Name: "Test Region"}, true, nil
+	return &sl.Region{ID: testRegion, Name: "Test Region"}, true, nil
 }
 
 func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {

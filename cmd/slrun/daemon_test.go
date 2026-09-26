@@ -495,7 +495,7 @@ func (d *fakeDaemon) Presence(ctx context.Context, r *pb.PresenceRequest) (*pb.P
 }
 
 func (d *fakeDaemon) Region(context.Context, *pb.RegionRequest) (*pb.RegionInfo, error) {
-	return &pb.RegionInfo{Name: "Test Region", Known: true}, nil
+	return &pb.RegionInfo{Id: testRegion.String(), Name: "Test Region", Known: true}, nil
 }
 
 func (d *fakeDaemon) Flush(context.Context, *pb.FlushRequest) (*pb.FlushResponse, error) {
