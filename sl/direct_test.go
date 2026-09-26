@@ -20,6 +20,7 @@ package sl
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -307,6 +308,71 @@ func TestADirectCapabilityGoesStraightToTheSimulator(t *testing.T) {
 	}
 	if resp.Status != 200 || string(resp.Body) != "some llsd" {
 		t.Errorf("DoCap = %+v", resp)
+	}
+}
+
+// TestADirectRegionChangeBringsTheNewRegionsCapabilities: Info used to
+// be what Login read and nothing after, so a direct session that had
+// teleported went on listing the capabilities of the region it logged
+// in to -- which is what `caps` under --direct printed.  The session
+// follows a region change with Refresh, and that reads the agent again.
+func TestADirectRegionChangeBringsTheNewRegionsCapabilities(t *testing.T) {
+	d := aDirectSession(t)
+	d.regions = make(chan *RegionChange, 32)
+	d.info.Caps = []string{"EventQueueGet"} // what Login found
+	w, err := New(d)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	was := w.Info()
+
+	// The agent has the new region's set, and says the avatar moved the
+	// way it does, from its dispatch goroutine.
+	d.a.SetCaps(agent.Caps{"SimulatorFeatures": "https://sim.example.net/cap/features"})
+	d.regionChanged("Example Region", 1)
+
+	waitFor(t, "the new region's capabilities", func() bool {
+		return w.Info().HasCap("SimulatorFeatures")
+	})
+	got := w.Info()
+	if got.HasCap("EventQueueGet") {
+		t.Errorf("the login region's capabilities are still listed: %v", got.Caps)
+	}
+	if got.Name != was.Name || got.AgentID != was.AgentID || got.SessionID != was.SessionID ||
+		got.AvatarName != was.AvatarName || got.InventoryRoot != was.InventoryRoot {
+		t.Errorf("the move changed who the session is: %+v, was %+v", got, was)
+	}
+	// Replaced rather than edited: a caller holding the old one holds
+	// what was true when it asked.
+	if !slices.Equal(was.Caps, []string{"EventQueueGet"}) {
+		t.Errorf("the Info held from before the move was edited: %v", was.Caps)
+	}
+	if d.Info() != got {
+		t.Error("the backend's Info is not the one the session was handed")
+	}
+}
+
+// TestAMovedDirectSessionIsNamedForTheRegionItIsIn: the rest of what
+// Refresh installs, which an agent that was never connected cannot
+// supply -- the region's name and the build of its simulator.
+func TestAMovedDirectSessionIsNamedForTheRegionItIsIn(t *testing.T) {
+	d := aDirectSession(t)
+	was := d.Info()
+
+	got := d.moved("Example Region", "Example Server 2026.09.01",
+		agent.Caps{"SimulatorFeatures": "https://sim.example.net/cap/features"})
+	if got.Region != "Example Region" || got.Channel != "Example Server 2026.09.01" ||
+		!slices.Equal(got.Caps, []string{"SimulatorFeatures"}) {
+		t.Errorf("after the move Info = %+v", got)
+	}
+	if got.AvatarName != was.AvatarName || got.SessionID != was.SessionID {
+		t.Errorf("the move changed who the session is: %+v, was %+v", got, was)
+	}
+	if was.Region != "Test Region" {
+		t.Errorf("the Info held from before the move was edited: %+v", was)
+	}
+	if d.Info() != got {
+		t.Error("Info does not hand back what the move installed")
 	}
 }
 

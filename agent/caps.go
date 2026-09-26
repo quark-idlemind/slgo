@@ -95,6 +95,37 @@ func (a *Agent) Caps() Caps {
 	return Caps{}
 }
 
+// WaitCaps is Caps once they belong to the region the avatar is in.
+//
+// A move announces the arrival -- OnRegionChange -- before it asks the
+// new region for its capabilities, so Caps read on hearing it is still
+// the set of the region left.  This waits for a move under way to
+// finish and answers at once when there is none.  It fails with ctx's
+// error if ctx ends first, and fails rather than hand back the old set
+// if the move ended the session.
+//
+// Firestorm makes the same wait: after a teleport it runs what needs
+// the new region's capabilities from a callback for their arrival
+// (LLAgent::handleTeleportFinished, newview/llagent.cpp:4976-4995).
+func (a *Agent) WaitCaps(ctx context.Context) (Caps, error) {
+	if s := a.capsDue.Load(); s != nil {
+		select {
+		case <-s.wait():
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	select {
+	case <-a.done:
+		if err := a.Err(); err != nil {
+			return nil, fmt.Errorf("agent: the session has ended: %w", err)
+		}
+		return nil, fmt.Errorf("agent: the session has ended")
+	default:
+	}
+	return a.Caps(), nil
+}
+
 // Seed is the capability the set above was fetched from: the seed of
 // the region the avatar is in NOW.
 //

@@ -136,6 +136,11 @@ type Agent struct {
 	// handshake exactly as it was.
 	arrived atomic.Pointer[signal]
 
+	// capsDue, when a move has installed one, is fired when that move
+	// is over: the capabilities are the new region's, or the move has
+	// failed and ended the session.  See WaitCaps.
+	capsDue atomic.Pointer[signal]
+
 	// moveMu serializes moves; see moveTo.
 	moveMu sync.Mutex
 
@@ -334,6 +339,10 @@ type Options struct {
 	// object cache describes somewhere else.  This package does not
 	// know what a client is and does not learn it here -- the
 	// callback is the whole of what it says.
+	//
+	// The move has not yet asked the new region for its
+	// capabilities when this runs, so Caps is still the old set;
+	// anything that wants the new one waits for it with WaitCaps.
 	//
 	// It runs on the dispatch goroutine, like Relay, so keep it
 	// quick and do not block in it: a slow one stops this session

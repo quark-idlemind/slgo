@@ -323,6 +323,8 @@ changes, each with the right name and handle and none spurious**. The
 notice reached a subscriber about **400ms before `Teleport` returned**
 to the caller that asked for it. `Info.Region` read "Pelmar Reach"
 throughout, which is that field's contract working rather than failing.
+The contract has changed since, and a region change now revises it; see
+"`sl.Direct` goes stale" under the open questions.
 
 ### Stage 5 -- slsh (done)
 
@@ -549,6 +551,18 @@ built once in `Login` (`sl/direct.go:73`) and never revised, so a direct
 session that moves reports the region it started in. Whatever stage 4
 does about telling a client the region changed has to reach this too.
 
+It did not, at first. Stage 4 told the session, and the later fix for a
+re-established session made every region change end in
+`Backend.Refresh`; the hosted backend asks the daemon, which reads its
+agent again, while `Direct.Refresh` handed back what `Login` had read.
+So `caps` under `--direct` went on listing the login region's
+capabilities after a teleport. Fixed since: `Direct.Refresh` reads the
+region's name, its simulator's build and its capabilities from the agent
+and keeps the rest of `Login`'s answer, and it waits for the
+capabilities first, for the reason under "A client can be told before
+the capabilities have moved", below. Read from the code and tested
+against a fake region, not watched on the grid.
+
 **Two regions with no id look like one region.** `enterRegion` keys the
 object store on the region's uuid, so two regions that both report a
 zero `RegionID` would share a store. It has never been reachable --
@@ -580,6 +594,20 @@ on rather than a starting gun, and the alternative -- firing after the
 whole move -- would put the notice behind the object updates the new
 region is already sending. Worth knowing before something reacts to a
 region change by fetching.
+
+Something does now: every region change ends in `Backend.Refresh`, which
+reads the capability list, and read inside that window the list is the
+region left's. The notice stays where it is. `Agent.WaitCaps` answers
+with the capabilities once a move under way has fetched the new set,
+and fails rather than hand back the old one if the move ended the
+session; `moveTo` installs what it waits on before the socket moves, so
+nothing can hear of the arrival first. `Direct.Refresh` waits on it. The
+hosted backend does not: `Hosted.Refresh` is a `Status`, which the
+daemon answers from the agent's capabilities without waiting, and a
+round trip to the daemon ought to be much shorter than that window --
+so a hosted session's `Info.Caps` after a teleport is probably the
+region left's until the next region change. That is inferred from the
+code, not seen.
 
 **The two arrival messages can be delivered out of order, and the
 session believes the second one it sees.** `agent/agent.go` says a move
