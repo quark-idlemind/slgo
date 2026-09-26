@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -643,5 +644,172 @@ func TestAGrantSettledAsItsStreamEndsIsNotKept(t *testing.T) {
 		}
 	default:
 		t.Fatal("the next request was not answered")
+	}
+}
+
+// asker is a client known only to the pool, for the tests that ask it
+// directly: its answers wait on ctl for the test to read.
+func asker() *Client {
+	return &Client{ctl: make(chan *pb.ServerPacket, 4), jammed: make(chan struct{})}
+}
+
+// answerTo is the next answer an asker was given.
+func answerTo(t *testing.T, c *Client, within time.Duration) *pb.SlotsGranted {
+	t.Helper()
+	select {
+	case p := <-c.ctl:
+		return p.GetGranted()
+	case <-time.After(within):
+		t.Fatalf("no answer within %v", within)
+		return nil
+	}
+}
+
+// hostedOnDemand is a daemon that has brought "example" up the way Host
+// does, so that it can be logged out and forced back up: a forced Host
+// replaces the Hosted with a new one under the same name.
+func hostedOnDemand(t *testing.T) (*Server, context.Context) {
+	t.Helper()
+	sim := newSim(t)
+	t.Cleanup(sim.close)
+	var logins atomic.Int64
+	srv := startable(t, loginServer(t, sim, &logins, nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	srv.SetBase(ctx, nil, nil)
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	return srv, ctx
+}
+
+// TestALoggedOutAvatarKeepsItsPlaces: a logged-out avatar is still
+// hosted, and a forced Host brings it back wearing the same things.
+// Asking for places meanwhile -- which the anywhere search does of every
+// avatar in turn -- passes its places over rather than throwing them
+// away for good, and a request that waits for them is given twelve once
+// it is back.
+func TestALoggedOutAvatarKeepsItsPlaces(t *testing.T) {
+	srv, ctx := hostedOnDemand(t)
+	sp := srv.slotsOf()
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, agent := range []string{"example", ""} {
+		c := asker()
+		sp.ask(ctx, c, &pb.Slots{Want: 1, Try: true, Agent: agent, Request: uint64(i + 1)})
+		if g := answerTo(t, c, 5*time.Second); g.GetGrant() != "" {
+			t.Errorf("a place on a logged-out avatar was granted: %v", g.GetHeld())
+		}
+	}
+
+	waiter := asker()
+	go sp.ask(ctx, waiter, &pb.Slots{Want: SlotsPerAgent, Agent: "example", WaitSeconds: 30, Request: 3})
+	time.Sleep(200 * time.Millisecond) // the wait is on the daemon
+	select {
+	case p := <-waiter.ctl:
+		t.Fatalf("a request for a logged-out avatar's places was answered at once: %v", p)
+	default:
+	}
+
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example", Force: true}); err != nil {
+		t.Fatalf("forcing it back up: %v", err)
+	}
+	g := answerTo(t, waiter, 10*time.Second)
+	if g.GetGrant() == "" || len(g.GetHeld()) != SlotsPerAgent {
+		t.Fatalf("once it was back, the waiting request got %d places (%s), want %d",
+			len(g.GetHeld()), g.GetWhy(), SlotsPerAgent)
+	}
+	more := asker()
+	sp.ask(ctx, more, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: 4})
+	if g := answerTo(t, more, 5*time.Second); g.GetGrant() != "" {
+		t.Errorf("a thirteenth place came out of one avatar: %v", g.GetHeld())
+	}
+}
+
+// TestAPlaceHeldAcrossItsAvatarLeavingIsNotGrantedTwice: a forced Host
+// replaces the avatar under the same name, and its new places stand for
+// the same objects as the old.  So while a client still holds old ones
+// the name is given no new ones; the old grant renews and goes back as
+// ever, putting nothing back; and then the new places go to whoever was
+// waiting for them.
+func TestAPlaceHeldAcrossItsAvatarLeavingIsNotGrantedTwice(t *testing.T) {
+	srv, ctx := hostedOnDemand(t)
+	sp := srv.slotsOf()
+
+	holder := asker()
+	sp.ask(ctx, holder, &pb.Slots{Want: 4, Try: true, Agent: "example", Request: 1})
+	held := answerTo(t, holder, 5*time.Second)
+	if held.GetGrant() == "" {
+		t.Fatalf("four places would not go to one client: %s", held.GetWhy())
+	}
+	holds := map[uint32]bool{}
+	for _, p := range held.GetHeld() {
+		holds[p.GetSlot()] = true
+	}
+
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example", Force: true}); err != nil {
+		t.Fatalf("forcing it back up: %v", err)
+	}
+
+	// Whatever can be had of the name while the old grant is out.
+	var got []*pb.SlotHeld
+	for i := 0; i <= SlotsPerAgent; i++ {
+		c := asker()
+		sp.ask(ctx, c, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: uint64(10 + i)})
+		g := answerTo(t, c, 5*time.Second)
+		if g.GetGrant() == "" {
+			break
+		}
+		got = append(got, g.GetHeld()...)
+	}
+	for _, p := range got {
+		if holds[p.GetSlot()] {
+			t.Errorf("slot %d was granted while a client held it from before its avatar left", p.GetSlot())
+		}
+	}
+	if len(got) != 0 {
+		t.Fatalf("the name was given %d places while a grant on its old ones was out", len(got))
+	}
+
+	waiter := asker()
+	go sp.ask(ctx, waiter, &pb.Slots{Want: SlotsPerAgent, Agent: "example", WaitSeconds: 30, Request: 2})
+	time.Sleep(200 * time.Millisecond) // the wait is on the daemon
+	select {
+	case p := <-waiter.ctl:
+		t.Fatalf("a request was answered while the old grant was out: %v", p)
+	default:
+	}
+
+	// Still the holder's to renew, and to give back -- twice, even.
+	sp.renew(holder, &pb.RenewSlots{Grant: held.GetGrant(), Seconds: 60, Request: 3})
+	if g := answerTo(t, holder, 5*time.Second); g.GetGrant() != held.GetGrant() {
+		t.Errorf("renewing the old grant was answered %q (%s), want %q",
+			g.GetGrant(), g.GetWhy(), held.GetGrant())
+	}
+	sp.release(holder, held.GetGrant(), true)
+	sp.release(holder, held.GetGrant(), true)
+
+	g := answerTo(t, waiter, 10*time.Second)
+	if g.GetGrant() == "" || len(g.GetHeld()) != SlotsPerAgent {
+		t.Fatalf("once the old grant was back, the waiting request got %d places (%s), want %d",
+			len(g.GetHeld()), g.GetWhy(), SlotsPerAgent)
+	}
+	seen := map[uint32]bool{}
+	for _, p := range g.GetHeld() {
+		if p.GetAgent() != "example" || seen[p.GetSlot()] {
+			t.Errorf("the waiting request was given %v", g.GetHeld())
+			break
+		}
+		seen[p.GetSlot()] = true
+	}
+	more := asker()
+	sp.ask(ctx, more, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: 4})
+	if g := answerTo(t, more, 5*time.Second); g.GetGrant() != "" {
+		t.Errorf("a place given back after its avatar left came back beside the new ones: %v", g.GetHeld())
 	}
 }

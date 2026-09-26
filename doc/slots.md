@@ -108,6 +108,38 @@ built on 2026-09-26, and the tests in `client/slots_test.go`,
 `cmd/slrun/daemon_test.go` check it against a fake daemon and a fake
 stream.
 
+## When an avatar is logged out, or leaves
+
+Each avatar the daemon hosts has twelve places. One that is logged out is
+still hosted: it is listed as stopped, and `Host` with force brings it
+back. So its places stay in the pool and are passed over while it is
+down, however many requests look at them. A request that names it waits
+for it to be hosted again, bounded by `wait_seconds` when it gives one; a
+request that names nobody is served from the other avatars.
+
+An avatar leaves the daemon when it is removed, which is what a forced
+`Host` does to the stopped session it replaces before it logs in again.
+Its places go with it, and the name, hosted again, is given twelve new
+ones -- but not while a client still holds any of the old. An old place
+and a new one with the same avatar and number are the same object, and
+two holders of it is the failure this whole pool is built against. The
+holder keeps its grant: it can renew it and give it back as before, and
+giving it back puts nothing into the pool. Once the last old place has
+been given back or has run out, the new ones go in, and a request that
+was waiting for them is woken.
+
+A session that drops and is logged back in by the daemon is none of
+these. It keeps its places, and they are handed out as usual while it is
+reconnecting: the daemon still holds the old connection until the new
+one is up. That is read from the code, not watched.
+
+Until 2026-09-26 a request that met a logged-out avatar's places threw
+them away for the life of the daemon, and hosting the avatar again did
+not bring them back. That was found by reading the code. The behaviour
+above was built then and has not been watched on the grid; the tests in
+`server/slots_test.go` check it against a fake login server and
+simulator, and `internal/slots/slots_test.go` checks the pool's half.
+
 ## All of them or none
 
 A caller given four of the eight it asked for has two choices and both

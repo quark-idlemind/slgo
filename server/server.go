@@ -351,7 +351,13 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	s.ranked++
 	h.rank = s.ranked
 	s.agents[name] = h
+	sp := s.slots
 	s.mu.Unlock()
+
+	// A request already waiting for this avatar's places hears of them.
+	if sp != nil {
+		sp.sync()
+	}
 
 	go h.supervise(ctx)
 	// A profile that asked to start at home may not have got there: the
@@ -639,14 +645,21 @@ func (h *Hosted) notice(ev *pb.AgentEvent) {
 // Add hosts an already connected agent.
 func (s *Server) Add(name string, a *agent.Agent) (*Hosted, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if _, dup := s.agents[name]; dup {
+		s.mu.Unlock()
 		return nil, fmt.Errorf("server: %q is already hosted", name)
 	}
 	s.ranked++
 	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}, rank: s.ranked, seats: s.seats,
 		offers: newOfferLog(time.Now()), viewerOn: func() bool { return s.viewerAttached(name) }}
 	s.agents[name] = h
+	sp := s.slots
+	s.mu.Unlock()
+
+	// As StartAgent: a request waiting for its places hears of them.
+	if sp != nil {
+		sp.sync()
+	}
 	return h, nil
 }
 
@@ -663,6 +676,9 @@ func (s *Server) Add(name string, a *agent.Agent) (*Hosted, error) {
 // again, by a new login, and a client left on the old stream would be
 // held by something the server no longer holds while its calls by name
 // reached the new one.
+//
+// Its places in the shared pool go with it; a name hosted again is
+// given new ones once no grant holds the old.  See slots.go.
 func (s *Server) Remove(name string) (*Hosted, bool) {
 	s.mu.Lock()
 	h, ok := s.agents[name]
@@ -672,8 +688,12 @@ func (s *Server) Remove(name string) (*Hosted, bool) {
 	}
 	delete(s.agents, name)
 	h.rank = 0
+	sp := s.slots
 	s.mu.Unlock()
 
+	if sp != nil {
+		sp.removeAgent(name)
+	}
 	h.end("no longer hosted here")
 	return h, true
 }
@@ -741,9 +761,13 @@ func (s *Server) Close(ctx context.Context) {
 		}
 	}
 	s.agents = map[string]*Hosted{}
+	sp := s.slots
 	s.mu.Unlock()
 
 	for _, h := range hosted {
+		if sp != nil {
+			sp.removeAgent(h.Name)
+		}
 		// Mark it stopped first, so the supervisor does not
 		// treat a deliberate logout as a failure to recover
 		// from.
