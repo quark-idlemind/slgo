@@ -295,6 +295,60 @@ func TestAnInstantMessageOpensAConversationAndSaysSo(t *testing.T) {
 	}
 }
 
+// TestAnObjectsMessageIsShownAsAnObjects.
+//
+// A script's message carries its owner's id and any name the object
+// has.  Taken for conversation it would open one with the owner under
+// a name that may be somebody else's, and what was typed there would
+// go to the owner.
+func TestAnObjectsMessageIsShownAsAnObjects(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	object := msg.MustParseUUID("6dc67e57-7e57-c0de-132d-c92f933df25c")
+	m := imFrom(testSomebody, "A Friend", sl.DialogFromTask, "the door is open")
+	m.MessageBlock.ID = object
+	x.grid.Relay(t, m)
+
+	got := waits(t, x, "the door is open")
+	if !strings.Contains(got, "< [Object] A Friend: the door is open") {
+		t.Errorf("an object's message printed:\n%s", got)
+	}
+	if strings.Contains(got, "[IM ") || strings.Contains(got, "new conversation") {
+		t.Errorf("an object's message was taken for a conversation:\n%s", got)
+	}
+	if list, _ := x.talk.All(); len(list) != 1 {
+		t.Errorf("%d conversations, want only Local", len(list))
+	}
+
+	// With no name on it, it is the object's key: never the owner's
+	// name, which is somebody else.
+	knows(t, x, map[msg.UUID]string{testSomebody: "Some Body"})
+	x.out.Reset()
+	m = imFrom(testSomebody, "", sl.DialogFromTask, "no name on this one")
+	m.MessageBlock.ID = object
+	x.grid.Relay(t, m)
+	if got := waits(t, x, "no name on this one"); !strings.Contains(got, "< [Object] (6dc67e57): no name") {
+		t.Errorf("an unnamed object's message printed:\n%s", got)
+	}
+}
+
+// TestADoNotDisturbReplyIsShownAsOne: the far viewer sent it by itself,
+// so it is said to be that rather than shown as the person talking.
+func TestADoNotDisturbReplyIsShownAsOne(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	x.grid.Relay(t, imFrom(testFriend, "A Friend", sl.DialogDoNotDisturbAutoResponse, "away until evening"))
+	got := waits(t, x, "away until evening")
+	if !strings.Contains(got, "* do not disturb auto response from A Friend: away until evening") {
+		t.Errorf("an auto response printed:\n%s", got)
+	}
+	if strings.Contains(got, "new conversation") {
+		t.Errorf("an auto response opened a conversation:\n%s", got)
+	}
+}
+
 // TestAnOfferOfFriendshipSaysHowToAnswerIt, by the first name alone,
 // since that is what accept and decline take.
 func TestAnOfferOfFriendshipSaysHowToAnswerIt(t *testing.T) {

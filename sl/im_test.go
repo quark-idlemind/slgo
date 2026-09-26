@@ -48,7 +48,7 @@ func offerBucket(a AssetType, item msg.UUID) []byte {
 	return append([]byte{byte(a)}, item[:]...)
 }
 
-// TestConversationIsOnlySomebodyTalking: the three dialogs a person
+// TestConversationIsOnlySomebodyTalking: the two dialogs a person
 // can be behind, and nothing else.  A caller writing a chat program
 // asks this rather than learning the numbers, so a wrong answer here
 // puts group notices and typing notifications in somebody's log.
@@ -60,7 +60,8 @@ func TestConversationIsOnlySomebodyTalking(t *testing.T) {
 	}{
 		{"a private message", IM{Dialog: DialogMessage, From: somebody}, true},
 		{"a message box", IM{Dialog: DialogMessageBox, From: somebody}, true},
-		{"a busy response", IM{Dialog: DialogBusyAutoResponse, From: somebody}, true},
+		{"a script's message", IM{Dialog: DialogFromTask, From: somebody}, false},
+		{"a do not disturb auto response", IM{Dialog: DialogDoNotDisturbAutoResponse, From: somebody}, false},
 		{"a group message", IM{Dialog: DialogSessionSend, From: somebody}, false},
 		{"a teleport lure", IM{Dialog: DialogTeleportLure, From: somebody}, false},
 		{"an inventory offer", IM{Dialog: DialogInventoryOffered, From: somebody}, false},
@@ -80,24 +81,73 @@ func TestConversationIsOnlySomebodyTalking(t *testing.T) {
 	}
 }
 
+// TestAScriptAndAnAutoResponseAreNotSpoken: dialog 19 is a script's
+// llInstantMessage, which carries its owner's id and any name the
+// object was given, and 20 is a viewer answering by itself.  Either
+// taken for conversation is answered, or obeyed, as a person.
+func TestAScriptAndAnAutoResponseAreNotSpoken(t *testing.T) {
+	for _, d := range []uint8{DialogFromTask, DialogDoNotDisturbAutoResponse} {
+		for _, mine := range []bool{false, true} {
+			im := IM{Dialog: d, From: somebody, FromName: "Quark Idlemind", Text: ":where", Mine: mine}
+			if im.Spoken() {
+				t.Errorf("a %s (mine %v) is Spoken", DialogName(d), mine)
+			}
+			if im.Conversation() {
+				t.Errorf("a %s (mine %v) is Conversation", DialogName(d), mine)
+			}
+		}
+	}
+}
+
+// TestAScriptDoesNotTeachItsOwnerItsName: a script's message arrives
+// with the owner's id and the object's name, the shape measured in
+// doc/im-senders.md.  It is delivered as it came, and the object's
+// name is not filed under the owner.
+func TestAScriptDoesNotTeachItsOwnerItsName(t *testing.T) {
+	w, f := newFakeSession(t)
+	ims := w.IMs(4)
+
+	object := msg.MustParseUUID("57327e57-7e57-c0de-3d85-fc737241ec86")
+	m := arrivingIM(somebody, "Doorbell", DialogFromTask, object, "somebody is at the door")
+	m.MessageBlock.ToAgentID = somebody
+	m.MessageBlock.BinaryBucket = []byte("Pelmar Reach/128/64/22")
+	f.Relay(t, m)
+
+	select {
+	case im := <-ims:
+		if im.From != somebody || im.ID != object || im.FromName != "Doorbell" {
+			t.Errorf("from %s, object %s, name %q", im.From, im.ID, im.FromName)
+		}
+		if string(im.Bucket) != "Pelmar Reach/128/64/22" {
+			t.Errorf("bucket = %q", im.Bucket)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the message never reached the subscription")
+	}
+	if got := w.Name(somebody); got != "" {
+		t.Errorf("the owner is now called %q, which is the object", got)
+	}
+}
+
 // TestDialogNames: the numbers are how the protocol says what arrived,
 // and this is the only place that turns them back into words.
 func TestDialogNames(t *testing.T) {
 	cases := map[uint8]string{
-		DialogMessage:            "message",
-		DialogMessageBox:         "message box",
-		DialogGroupInvitation:    "group invitation",
-		DialogInventoryOffered:   "inventory offer",
-		DialogInventoryAccepted:  "inventory accepted",
-		DialogInventoryDeclined:  "inventory declined",
-		DialogSessionSend:        "group message",
-		DialogBusyAutoResponse:   "busy auto response",
-		DialogTeleportLure:       "teleport lure",
-		DialogFriendshipOffered:  "friendship offer",
-		DialogFriendshipAccepted: "friendship accepted",
-		DialogFriendshipDeclined: "friendship declined",
-		DialogTypingStart:        "typing",
-		DialogTypingStop:         "stopped typing",
+		DialogMessage:                  "message",
+		DialogMessageBox:               "message box",
+		DialogGroupInvitation:          "group invitation",
+		DialogInventoryOffered:         "inventory offer",
+		DialogInventoryAccepted:        "inventory accepted",
+		DialogInventoryDeclined:        "inventory declined",
+		DialogSessionSend:              "group message",
+		DialogFromTask:                 "object message",
+		DialogDoNotDisturbAutoResponse: "do not disturb auto response",
+		DialogTeleportLure:             "teleport lure",
+		DialogFriendshipOffered:        "friendship offer",
+		DialogFriendshipAccepted:       "friendship accepted",
+		DialogFriendshipDeclined:       "friendship declined",
+		DialogTypingStart:              "typing",
+		DialogTypingStop:               "stopped typing",
 	}
 	for d, want := range cases {
 		if got := DialogName(d); got != want {

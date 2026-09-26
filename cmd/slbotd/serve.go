@@ -4,10 +4,11 @@ package main
 //
 // Everything an avatar is told arrives as an instant message, and
 // ImprovedInstantMessage is a dozen different messages wearing one
-// name.  Three of them matter here:
+// name.  Four kinds matter here:
 //
 //	a conversation      somebody talking, which may be a command
 //	an inventory offer  somebody handing over an item or a folder
+//	a script's message  logged and ignored, whatever name it carries
 //	everything else     logged, and left for a person to answer
 //
 // A command is a remark that begins with the prefix.  Anything else is
@@ -195,6 +196,14 @@ func (b *bot) arrived(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync.
 		return
 	case sl.DialogInventoryOffered:
 		b.offered(ctx, s, im)
+		return
+	case sl.DialogFromTask:
+		// A script's message: its owner's id and whatever name the
+		// object was given, so it could pass for a trusted person by
+		// either.  Never a command, never talked to.
+		// Why: doc/im-senders.md
+		b.logf("ignored an instant message from the object %q, owned by %s",
+			im.FromName, s.NameOr(im.From))
 		return
 	}
 

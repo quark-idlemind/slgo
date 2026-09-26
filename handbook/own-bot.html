@@ -360,8 +360,8 @@ func (g *greeter) heard(ctx context.Context, l sl.Line) {
 func (g *greeter) told(ctx context.Context, im *sl.IM) {
 	// An IM can be a dozen kinds of thing.  Conversation is true only
 	// for somebody writing to this avatar: not a typing notice, a
-	// group message, an offer, or this avatar's own words from another
-	// client.
+	// group message, an offer, a script's message from an object, or
+	// this avatar's own words from another client.
 	if !im.Conversation() {
 		return
 	}
@@ -431,7 +431,7 @@ func (g *greeter) land(ctx context.Context) (name, desc string) {
 }</pre></div>
             <ul>
               <li><strong>Skip your own words.</strong> The grid sends the avatar what it said itself. Measured: a line the bot said in local chat arrived on its own subscription, from <code>s.Me()</code>. A bot that answers everything it hears would answer itself.</li>
-              <li><strong>Answer only conversation.</strong> An IM can be a dozen kinds of thing: typing notices, group chat, inventory and teleport offers. <code>Conversation()</code> is true only for a person writing to this avatar. It is false for what this avatar sent from another client, which arrives marked <code>Mine</code>.</li>
+              <li><strong>Answer only conversation.</strong> An IM can be a dozen kinds of thing: typing notices, group chat, inventory and teleport offers. <code>Conversation()</code> is true only for a person writing to this avatar. It is false for what this avatar sent from another client, which arrives marked <code>Mine</code>. It is false for a script's <code>llInstantMessage</code> too, which carries its owner's uuid and whatever name the object was given: answering it would answer the owner, under a name that may be anybody's.</li>
               <li><strong>Limit what you say.</strong> The information goes to one person at most once in 30 seconds, counted separately nearby and by IM. Any other IM gets one pointer an hour, then silence. In testing, the visitor's avatar was itself run by slbotd with a language model, which sent the greeter two replies within four seconds of the pointer. The greeter said nothing more. Without the limit, the two would have talked until somebody stopped one of them.</li>
               <li><strong>The land's own words.</strong> The parcel name and description are what the owner sets under About Land in a viewer. The test parcel had no description, so the answer was only the name and the region.</li>
             </ul>

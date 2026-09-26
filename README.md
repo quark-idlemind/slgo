@@ -120,6 +120,7 @@ case.
     doc/memory.md           how Second Life allocates script memory
     doc/slots.md            sharing the objects that scripts run in
     doc/login-parameters.md what a viewer sends to log in
+    doc/im-senders.md       who an instant message says it is from
 
 `handbook/` is the handbook, as web pages: setting slgod, slsh and
 slbotd up on one machine or several, and `handbook/slsh-guide.html`,

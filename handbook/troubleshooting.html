@@ -775,10 +775,11 @@ chat    = *</pre></div>
           <summary><span class="sym">The bot answers commands, but someone who talks to it gets no reply</span><span class="where-tag">slbotd</span></summary>
           <div class="fix">
             <h4>Why</h4>
-            <p>Only one-to-one instant messages are answered. Local (nearby) chat and group IMs never are. A message that starts with the prefix (<code>:</code>) is a command, not conversation. The person who wrote never sees an error: when something fails they get silence, and the reason goes to the log and <code>:errors</code>. Look in the log for:</p>
+            <p>Only one-to-one instant messages are answered. Local (nearby) chat, group IMs and messages from objects never are. A message that starts with the prefix (<code>:</code>) is a command, not conversation. The person who wrote never sees an error: when something fails they get silence, and the reason goes to the log and <code>:errors</code>. Look in the log for:</p>
             <ul>
               <li><code>not answering X: not in the chat list</code>: adjust the <code>chat</code> lines.</li>
               <li><code>too busy talking to answer X</code>: raise <code>chat-jobs</code>, or llama-server's <code>-np</code>.</li>
+              <li><code>ignored an instant message from the object "X", owned by Y</code>: a script sent it with <code>llInstantMessage</code>. slbotd never answers or obeys an object, whatever it is called.</li>
               <li><code>not answering X: that is builder, which this daemon drives as well, and they have said 8 things to each other already, and will not until they have said nothing for 30m0s</code>: two of the daemon's own avatars, or one and a <code>chat-bot</code> ("which another program's model drives"), reached <code>chat-own</code>.</li>
             </ul>
             <p>A reply can also just be slow. slbotd waits as if reading and typing: with the defaults, a long reply takes minutes.</p>

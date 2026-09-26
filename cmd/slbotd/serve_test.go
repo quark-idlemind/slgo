@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -115,6 +116,87 @@ func TestTrustByNameIsObeyed(t *testing.T) {
 	if got := string(ims[0].MessageBlock.Message); !strings.Contains(got, "Nowhere") {
 		t.Errorf("answered %q", got)
 	}
+}
+
+// A script's message carries its owner's id and whatever name the
+// object was given, so an object named after somebody trusted, or one
+// a trusted person owns, passes Trusts by name or by id.  It is
+// ignored entirely: no command, no model, no report of trouble.
+func TestAnObjectIsNotObeyed(t *testing.T) {
+	d, b, grid := newTestDaemon(t)
+	f := newFakeLLM(t)
+	withChat(t, d, f, Anyone)
+	logged := &logBook{}
+	d.logf = logged.logf
+	d.cfg.ErrorGap = time.Hour
+	b.errf("could not do the thing")
+	defer serving(t, b)()
+
+	object := msg.MustParseUUID("6dc67e57-7e57-c0de-132d-c92f933df25c")
+	for _, owner := range []msg.UUID{testSender, testStranger} {
+		for _, text := range []string{":where", "hello there"} {
+			m := incoming(owner, "Trusted Resident", sl.DialogFromTask, text)
+			m.MessageBlock.ID = object
+			grid.deliver(t, m)
+		}
+	}
+	quiet(grid)
+
+	if ims := grid.IMsSent(); len(ims) != 0 {
+		t.Errorf("an object was answered: %q", string(ims[0].MessageBlock.Message))
+	}
+	if asks := f.sawAsks(); len(asks) != 0 {
+		t.Errorf("the model was asked %d times about an object", len(asks))
+	}
+	if b.trouble.unreported() != 1 {
+		t.Error("an object's message marked the trouble reported")
+	}
+	if n := logged.count(`ignored an instant message from the object "Trusted Resident"`); n != 4 {
+		t.Errorf("logged %d of 4 objects' messages as ignored:\n%s", n, logged)
+	}
+
+	// The person, on the loop that ignored the object: told about the
+	// trouble, since the object was not them speaking, and obeyed.
+	grid.deliver(t, incoming(testSender, "Trusted Resident", sl.DialogMessage, ":where"))
+	ims := waitIMs(t, grid, 2)
+	var told, answered bool
+	for _, m := range ims {
+		told = told || strings.Contains(string(m.MessageBlock.Message), "gone wrong")
+		answered = answered || strings.Contains(string(m.MessageBlock.Message), "Nowhere at 128")
+	}
+	if !told || !answered {
+		t.Errorf("told %v, answered %v", told, answered)
+	}
+}
+
+// logBook keeps what a daemon logs, for a test about what it said.
+type logBook struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+func (l *logBook) logf(format string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.lines = append(l.lines, fmt.Sprintf(format, args...))
+}
+
+func (l *logBook) count(s string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, line := range l.lines {
+		if strings.Contains(line, s) {
+			n++
+		}
+	}
+	return n
+}
+
+func (l *logBook) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return strings.Join(l.lines, "\n")
 }
 
 // Somebody who is not trusted is not answered at all by default.  An

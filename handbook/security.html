@@ -96,6 +96,7 @@
         <h3 id="trusted">Trusted means everything</h3>
         <p>A resident on a <code>trusted</code> line has full control of every avatar slbotd holds, by instant message. They can delete inventory, take objects out of the world, give things away, make the avatar say anything, teleport it, and run the configured programs. There is no partial trust and no confirmation step. Through <code>:as</code> and a program's <code>--agent</code> flag, that reaches other avatars slgod holds too.</p>
         <p>Name trusted people by uuid where you can. A name matches the account's legacy name, not its display name.</p>
+        <p>Messages from objects are ignored, commands and all. A script's <code>llInstantMessage</code> carries whatever name the object was given and its owner's uuid, so an object named after a trusted person, or one a trusted person owns, would match either way. The log line is <code>ignored an instant message from the object …</code>.</p>
         <h3 id="programs">Programs run as you</h3>
         <p>A <code>program</code> line lets trusted residents run that executable on the slbotd machine, as slbotd's user, with slbotd's whole environment, and with whatever arguments they type. There is no shell, so no pipes or expansion, but also no sandbox. The only limits are the run timeout and the output cap.</p>
         <div class="note warn">
@@ -109,7 +110,7 @@
           <li>It reveals that person's own memory note.</li>
           <li>It says something offensive under the avatar's name. You answer for that under the grid's rules.</li>
         </ul>
-        <p>Each person's conversation is kept apart from everyone else's, so one resident's memory is not in another's prompt. Only one-to-one instant messages are answered; local chat and group messages never reach the model.</p>
+        <p>Each person's conversation is kept apart from everyone else's, so one resident's memory is not in another's prompt. Only one-to-one instant messages are answered; local chat, group messages and messages sent by objects never reach the model.</p>
         <h3 id="residents">Other residents' words</h3>
         <p>When slbotd chats, what residents write is sent to the model and <strong>kept on disk indefinitely</strong>: in the conversation store (<code>~/.local/state/slbotd/&lt;avatar&gt;/&lt;their-uuid&gt;.json</code>), in slbotd's log unless you pass <code>-q</code>, and in llama-server's slot caches. Nothing expires it. <code>:forget NAME</code> deletes one conversation.</p>
         <p>Residents are not told they are talking to a model. Nothing in the code does that; it is up to you.</p>
