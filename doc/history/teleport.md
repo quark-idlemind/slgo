@@ -616,6 +616,23 @@ reorder is reproduced in `agent/move_test.go` by a fake simulator that
 delivers its handshake behind the movement; it was not seen again on the
 grid to check the fix against.
 
+That fix missed one path, found afterwards by reading the code rather
+than on the grid. The region's record -- its id and name and the rest of
+what the handshake says, which `Region` and the daemon's `Region` call
+answer with -- was still taken from the handshake at once, and had the
+handle added to it when it was read. So in the ordinary order, between
+the two messages, it gave the new region's id and name beside the old
+region's handle. During a move the record now waits in `arrival` as the
+name did, and one helper, `publishArrival`, installs it with its handle
+and the position together; `Region`, `RegionName`, `RegionHandle` and
+`Here` all read that one stored record. Outside a move the handshake is
+still taken at once, keeping whatever handle is held, which on the
+circuit's own region is that region's or, at login, none yet. This is
+the viewer's order as well: Firestorm fills in a region's name and id
+from its handshake (`newview/llviewerregion.cpp:3277-3287`) but makes it
+the agent's region only in `process_agent_movement_complete`
+(`newview/llviewermessage.cpp:3917`).
+
 **A dropped region change is worse than a dropped anything else.** Every
 hop from the daemon to a subscriber drops rather than blocks, because
 blocking any of them stops a stream or the dispatch goroutine; a session

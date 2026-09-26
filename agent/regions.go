@@ -180,8 +180,8 @@ type RegionChangeHandler func(name string, handle uint64)
 // one it was in.
 //
 // It is called from arrive and not from the RegionHandshake handler,
-// which is where the name, the object store and the terrain change and
-// so is the obvious place for it.  The obvious place is the wrong one,
+// which is where the object store and the terrain change and so is the
+// obvious place for it.  The obvious place is the wrong one,
 // because the handshake does not carry the handle: that comes in
 // AgentMovementComplete, and a notice fired from the handshake would
 // pair the new region's name with the handle of the region the avatar
