@@ -81,7 +81,7 @@ func TestTheParcelUnderfootIsKept(t *testing.T) {
 	if a.Parcel() != nil {
 		t.Fatal("a session that has heard nothing claims to know a parcel")
 	}
-	a.deliver(parcelEvent(t, aParcel("Thrushmoor", 5, 3)), nil)
+	a.deliver(context.Background(), parcelEvent(t, aParcel("Thrushmoor", 5, 3)), nil)
 
 	p := a.Parcel()
 	if p == nil {
@@ -98,10 +98,10 @@ func TestTheParcelUnderfootIsKept(t *testing.T) {
 // sequence id is the only thing that tells the two apart.
 func TestAReplyIsLeftForWhoeverAsked(t *testing.T) {
 	a := eqAgent("")
-	a.deliver(parcelEvent(t, aParcel("Thrushmoor", 5, 3)), nil)
+	a.deliver(context.Background(), parcelEvent(t, aParcel("Thrushmoor", 5, 3)), nil)
 
 	var seen int
-	a.deliver(parcelEvent(t, aParcel("Quill Lodge", 9, -10000)),
+	a.deliver(context.Background(), parcelEvent(t, aParcel("Quill Lodge", 9, -10000)),
 		func(string, []byte) { seen++ })
 
 	if p := a.Parcel(); p == nil || p.Name != "Thrushmoor" {
@@ -117,7 +117,7 @@ func TestAReplyIsLeftForWhoeverAsked(t *testing.T) {
 // uuids as text, flags as raw bytes, the box as reals.
 func TestTheParcelIsDecodedAsTheGridSendsIt(t *testing.T) {
 	a := eqAgent("")
-	a.deliver(parcelEvent(t, aParcel("Thrushmoor", 5, 3)), nil)
+	a.deliver(context.Background(), parcelEvent(t, aParcel("Thrushmoor", 5, 3)), nil)
 	p := a.Parcel()
 
 	if want := msg.MustParseUUID("fcf97e57-7e57-c0de-31c3-89b609d7e31a"); p.Owner != want {
@@ -167,7 +167,7 @@ func TestNonsenseCostsTheParcelAndNotTheQueue(t *testing.T) {
 		{"ParcelData": "not a block at all"},
 		{"ParcelData": []any{map[string]any{"Name": "no local id and no sequence"}}},
 	} {
-		a.deliver(parcelEvent(t, body), nil)
+		a.deliver(context.Background(), parcelEvent(t, body), nil)
 	}
 	// The last of those is a push with sequence zero, which is a real
 	// push: what it must not do is arrive as something other than a
@@ -269,7 +269,7 @@ func TestAPartialOverlaySaysSo(t *testing.T) {
 func TestACrossingDropsTheLand(t *testing.T) {
 	a, _, to := twoRegions(t, Options{SkipCaps: true})
 
-	a.deliver(parcelEvent(t, aParcel("Thrushmoor", 5, 3)), nil)
+	a.deliver(context.Background(), parcelEvent(t, aParcel("Thrushmoor", 5, 3)), nil)
 	a.parcels.noteOverlay(overlayPacket4(0, OverlayOwned))
 	if a.Parcel() == nil || a.Overlay().Packets() == 0 {
 		t.Fatal("nothing was held before the move")
