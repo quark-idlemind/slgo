@@ -154,3 +154,88 @@ func TestTwoFoldersOfOneNameAreNeitherOfThem(t *testing.T) {
 		t.Errorf("ls -l of two folders of one name printed %q", got)
 	}
 }
+
+// TestALandmarkIsNamedAsItIsSpelt: a landmark is an inventory item, so
+// "Thrushmoor" and "thrushmoor" are two of them and each is reached by
+// its own spelling.  A third spelling goes nowhere, and says which two
+// it is near -- by name, or by whole path where a path was typed.
+func TestALandmarkIsNamedAsItIsSpelt(t *testing.T) {
+	x := newTestShell(t)
+	withLandmarks(x)
+	lower := msg.MustParseUUID("e3317e57-7e57-c0de-7c5a-50c372c8379b")
+	lowerAsset := msg.MustParseUUID("f3877e57-7e57-c0de-213b-833e20dd884c")
+	twiceOver(x, "thrushmoor", lower, lowerAsset)
+	answerLandmarkTeleport(t, x)
+
+	for _, line := range []string{"landmark --go THRUSHMOOR", "landmark THRUSHMOOR"} {
+		got := x.do(t, line)
+		if !strings.Contains(got, `no landmark "THRUSHMOOR"; did you mean "Thrushmoor" or "thrushmoor"?`) {
+			t.Errorf("%q printed %q", line, got)
+		}
+	}
+	if got := x.do(t, "landmark --go /landmarks/thrushmoor"); !strings.Contains(got,
+		`did you mean "Landmarks/Thrushmoor" or "Landmarks/thrushmoor"?`) {
+		t.Errorf("a path in another case printed %q", got)
+	}
+	if m := sentLandmark(x); m != nil {
+		t.Fatalf("a name in another case moved the avatar: %v", m.Info.LandmarkID)
+	}
+
+	if got := x.do(t, "landmark --go thrushmoor"); !strings.Contains(got, "going to thrushmoor") {
+		t.Errorf("landmark --go thrushmoor printed %q", got)
+	}
+	if m := sentLandmark(x); m == nil || m.Info.LandmarkID != lowerAsset {
+		t.Errorf("landmark --go thrushmoor went to %v, want %s", m, lowerAsset)
+	}
+}
+
+// TestDetachNamesWhatIsWornAsItIsSpelt: "a lamp" and "A Lamp" are two
+// items, and both may be on at once.  Each is taken off by its own
+// spelling, and a third takes nothing off.
+func TestDetachNamesWhatIsWornAsItIsSpelt(t *testing.T) {
+	x := newTestShell(t)
+	upper := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000a2")
+	addObjectItem(x, upper, "A Lamp")
+	wearThings(x,
+		&sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
+			AttachItem: testLamp, AttachPoint: 1},
+		&sl.Seen{Object: sl.Object{ID: testNote, Local: 11}, PCode: 9,
+			AttachItem: upper, AttachPoint: sl.HUDTop},
+	)
+	x.grid.AnswerDetach(0)
+
+	got := x.do(t, "detach A LAMP")
+	if !strings.Contains(got, `nothing called "A LAMP" on the avatar; did you mean`) ||
+		!strings.Contains(got, `"a lamp"`) || !strings.Contains(got, `"A Lamp"`) {
+		t.Errorf("detach of a third spelling printed %q", got)
+	}
+	if _, ok := lastDetach(x); ok {
+		t.Fatal("a name in another case took something off")
+	}
+
+	x.do(t, "detach A Lamp")
+	if m, ok := lastDetach(x); !ok || m.ObjectData.ItemID != upper {
+		t.Errorf("detach A Lamp took off %v, want %s", m, upper)
+	}
+}
+
+// TestAnOfferedItemIsNamedAsItIsSpelt: the whole of an item's name is
+// matched in the case it has, and the whole of it in another case is
+// not found as part of itself either -- it is refused with the name it
+// is near.  Part of a name is a search, and still ignores case.
+func TestAnOfferedItemIsNamedAsItIsSpelt(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.Relay(t, offering(testFriend, "A Friend", "A Big Box", sl.AssetObject, testLamp))
+	waitForOffers(t, x, 0, 1)
+
+	got := x.do(t, "accept a big box")
+	if !strings.Contains(got, `no offered item "a big box"; did you mean "A Big Box"?`) {
+		t.Errorf("accept of the whole name in another case printed %q", got)
+	}
+	if n := len(x.grid.Sent()); n != 0 {
+		t.Fatalf("%d messages went out for a name in another case", n)
+	}
+	if got := x.do(t, "accept BIG"); !strings.Contains(got, `accepted "A Big Box"`) {
+		t.Errorf("accept of part of the name printed %q", got)
+	}
+}

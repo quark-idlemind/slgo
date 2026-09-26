@@ -160,6 +160,14 @@ No folder is named on the way out.  The simulator files a new landmark
 under Landmarks without being asked.  If the asset will not read, the
 item is made anyway and the command says so.
 
+A name is matched exactly, in the case it has, as every inventory
+name is: `Example Workshop` and `example workshop` are two landmarks.
+A name no landmark has but one has in another case is refused, and
+the refusal names what it is near:
+
+    landmark example workshop
+    slsh: landmark: no landmark "example workshop"; did you mean "Example Workshop"?
+
 A name is not made unique by anything.  Two landmarks called the same
 thing are two landmarks called the same thing, and naming one of them
 afterwards is refused with both listed.  Where they are in different

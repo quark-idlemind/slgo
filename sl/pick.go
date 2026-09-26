@@ -10,7 +10,7 @@ import (
 
 // Named is what PickNamed and AllNamed choose among: an inventory
 // Entry, or a TaskItem inside an object.  Only this package's types
-// satisfy it.
+// satisfy it; anything else is chosen among by PickNamedFunc.
 type Named interface {
 	nameAndID() (string, msg.UUID)
 }
@@ -40,20 +40,7 @@ func (it TaskItem) nameAndID() (string, msg.UUID) { return it.Name, it.ID }
 // phrase that can follow the noun: "here", "in Objects".  The refusal
 // is a *NameError.
 func PickNamed[T Named](items []T, name, what, where string) (T, error) {
-	var zero T
-	found, err := AllNamed(items, name, what, where)
-	if err != nil {
-		return zero, err
-	}
-	if len(found) > 1 {
-		e := &NameError{Name: name, What: what, Where: where}
-		for _, x := range found {
-			_, id := x.nameAndID()
-			e.IDs = append(e.IDs, id)
-		}
-		return zero, e
-	}
-	return found[0], nil
+	return PickNamedFunc(items, name, what, where, T.nameAndID)
 }
 
 // AllNamed is everything in items called name exactly, in the order
@@ -61,10 +48,36 @@ func PickNamed[T Named](items []T, name, what, where string) (T, error) {
 // or a delete told to take them all.  None is refused as PickNamed
 // refuses it.
 func AllNamed[T Named](items []T, name, what, where string) ([]T, error) {
+	return AllNamedFunc(items, name, what, where, T.nameAndID)
+}
+
+// PickNamedFunc is PickNamed for things whose name and id are read by
+// key: a worn attachment, a link in the Current Outfit folder, an
+// offer.  The rule and the refusals are PickNamed's.
+func PickNamedFunc[T any](items []T, name, what, where string, key func(T) (string, msg.UUID)) (T, error) {
+	var zero T
+	found, err := AllNamedFunc(items, name, what, where, key)
+	if err != nil {
+		return zero, err
+	}
+	if len(found) > 1 {
+		e := &NameError{Name: name, What: what, Where: where}
+		for _, x := range found {
+			_, id := key(x)
+			e.IDs = append(e.IDs, id)
+		}
+		return zero, e
+	}
+	return found[0], nil
+}
+
+// AllNamedFunc is AllNamed for things whose name and id are read by
+// key.
+func AllNamedFunc[T any](items []T, name, what, where string, key func(T) (string, msg.UUID)) ([]T, error) {
 	var found []T
 	var near []string
 	for _, x := range items {
-		n, _ := x.nameAndID()
+		n, _ := key(x)
 		switch {
 		case n == name:
 			found = append(found, x)

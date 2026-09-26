@@ -249,7 +249,9 @@ here when another is shared the same way.
   refuses a name several things have, listing their ids, and a name
   nothing has, offering what differs from it only in case; `AllNamed`,
   beside it, is the same match for a command that acts on every one of
-  a name. A person's name is not one of these, and is matched ignoring
+  a name, and `PickNamedFunc` and `AllNamedFunc` are the two for things
+  whose name is read by a function -- a worn attachment, an outfit
+  link. A person's name is not one of these, and is matched ignoring
   case. `TestNoInventoryNameIsMatchedIgnoringCase` refuses a
   `strings.EqualFold` on a `.Name` or `.Path` in `sl`, `slsh` or
   `slbotd` until it is listed there with what it matches.

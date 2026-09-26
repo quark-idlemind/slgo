@@ -15,9 +15,9 @@ Only a rename: an object holds no folders, so there is nowhere in
 one to move anything to.  The object is named by the word the region
 calls it or by its uuid, and a name several objects answer to is
 refused with their uuids rather than guessed at.  The thing inside
-is named by its name, matched exactly and in the case it has.  The
-id beside a line of `ls -l --in` belongs to the object's own copy,
-and is not something to give this.
+is named by its name, matched exactly and in the case it has, or by
+the id beside it in `ls -l --in`, which belongs to the object's own
+copy.  An inventory item's id names nothing inside an object.
 
 Nothing answers a rename, so the object's contents are read back
 until the item has its new name, for up to fifteen seconds, and one

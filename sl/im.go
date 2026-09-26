@@ -414,6 +414,13 @@ func (w *Session) InventoryOffers() []*InventoryOffer {
 // said which they mean, and an item whose name is the beginning of
 // another's would otherwise never be nameable on its own.
 //
+// The item's whole name is matched exactly, in the case it has, as
+// PickNamed matches an inventory name, and the giver's ignoring case,
+// as a person's name is.  Part of a name is a search and ignores case,
+// but an item whose name is the whole of this one in another case is
+// left out of it: that is another name, and taking it here would be
+// taking it as if it had been typed.  Why: doc/names.md
+//
 // Nothing here picks between the matches, and that is the point: this
 // used to hand back the first hit, so two offers under the one name
 // answered the older of them and said nothing whatever about the other.
@@ -427,8 +434,10 @@ func (w *Session) InventoryOffersFor(name string) []*InventoryOffer {
 	var whole, part []*InventoryOffer
 	for _, o := range os {
 		switch {
-		case strings.EqualFold(o.Name, name) || strings.EqualFold(o.FromName, name):
+		case o.Name == name || strings.EqualFold(o.FromName, name):
 			whole = append(whole, o)
+		case strings.EqualFold(o.Name, name):
+			// Another spelling of the whole name: neither.
 		case strings.Contains(strings.ToLower(o.Name), lower):
 			part = append(part, o)
 		}

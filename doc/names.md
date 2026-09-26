@@ -28,9 +28,13 @@ and `--oldest` exist.
 
 ## What is done with a name
 
-The rule is `sl.PickNamed` (`sl/pick.go`). `sl`'s walk down a path
-uses it, as do `slsh`'s paths and its names inside an object, and
-`slbotd`'s paths.
+The rule is `sl.PickNamed` (`sl/pick.go`), and `sl.PickNamedFunc` for
+things whose name is read some other way. `sl`'s walk down a path uses
+it, as do `slsh`'s paths and its names inside an object, `slbotd`'s
+paths, `detach` in both and `slbotd`'s `landmark`. `slsh`'s
+`landmark`, which also takes a whole path, and `accept` and `decline`,
+which also take the giver's name, match an item's name by the same
+rule and take their near-miss hint from `sl.AllNamedFunc`.
 
 - **Case matters.** A name is matched exactly, in the case it has.
   Asked for `object` among `Object`, `object` and `objectT`, a rule that
@@ -49,20 +53,36 @@ every one of a name: `slsh`'s `ls` of a path, which lists them, and
 `rm`, which refuses them unless `--newest`, `--oldest` or
 `--remove-all-copies` says which.
 
+Two offers under one name are the exception to the ids: `accept` and
+`decline` refuse them with a count and send a person to `waiting`,
+whose number is what answers one, since neither takes an id.
+
 Inside an object an exact name is unique, so only the near miss can
 happen there, and `rm --in` refuses `--remove-all-copies`: there is
 never more than one to remove.
 
 A person's name is different. The grid ignores case in one, and so do
-`slsh` and `slbotd`.
+`slsh` and `slbotd`, `accept`'s giver and the friendship offers
+included.
+
+## Searches
+
+A search for part of a name ignores case, as a search does, and picks
+nothing by itself: `find`, `worn` with a word, and `objects` with a
+word in `slsh` only list what they find. Where a command searches after
+the whole name has matched nothing -- `slbotd`'s `landmark`, and
+`accept` and `decline` for part of an offered item's name -- a thing
+whose whole name is the word in another case is not taken as a search
+result. That would be taking a case variant as if it had been typed; it
+is refused with the near-miss hint instead.
 
 ## Not yet moved
 
-Some names from inventory are still matched ignoring case: a landmark
-in `landmark`, in `slsh` and in `slbotd`; a worn object, or its link in
-the Current Outfit folder, in `detach`, in both; and an offer in
-`slsh`'s `accept` and `decline` (`sl.InventoryOffersFor`). Each of them
-refuses a name that means several things, so none picks between two;
-each will take a case variant when it is the only thing that matches.
-`TestNoInventoryNameIsMatchedIgnoringCase`, in `sl/pick_test.go`, lists
-the ones it can find, and fails on a new one.
+`sl.FindItem`, `sl.Folder` and `agent.Inventory.FindFolder` match a
+name exactly but take the first of several without a word, and
+`sl.Worn` finds an item through `FindItem`. `sl.FindInObject` takes the
+first exact match too, which inside an object is the only one.
+
+`TestNoInventoryNameIsMatchedIgnoringCase`, in `sl/pick_test.go`,
+refuses a new `strings.EqualFold` on a name in `sl`, `slsh` or
+`slbotd` until it is listed there with what it matches.

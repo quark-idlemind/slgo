@@ -362,7 +362,7 @@ func TestLandmarkSaysWhatSomethingIsWhenItIsNotOne(t *testing.T) {
 func TestALinkIsNotALandmark(t *testing.T) {
 	err := noSuchLandmark([]sl.Entry{
 		{Name: "Thrushmoor", Type: int(sl.AssetLandmark), IsLink: true},
-	}, nil, "Thrushmoor")
+	}, nil, nil, "Thrushmoor")
 	if err == nil {
 		t.Fatal("a link was accepted as a landmark")
 	}

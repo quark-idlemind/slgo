@@ -63,6 +63,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -221,10 +222,10 @@ func landmarkList(ctx context.Context, sh *Shell, out io.Writer) error {
 	// inventory that has none.
 	seen := map[string]int{}
 	for _, e := range kept {
-		seen[strings.ToLower(e.Path)]++
+		seen[e.Path]++
 	}
 	for _, e := range kept {
-		if seen[strings.ToLower(e.Path)] > 1 {
+		if seen[e.Path] > 1 {
 			fmt.Fprintf(out, "  /%-40s %s\n", e.Path, e.ID)
 			continue
 		}
@@ -546,9 +547,10 @@ func inTrash(path string, bins []string) bool {
 // A uuid is looked up as an item id or as an asset id, and matches at
 // most one thing: the two ids are unique and a person pasting one from
 // "ls -l" has the first, which the grid will not take.  Anything else
-// is a name, matched without regard to case, against the entry's own
-// name or against its whole path with or without the leading separator
-// a listing prints.
+// is a name, matched exactly, in the case it has, as sl.PickNamed
+// matches one -- against the entry's own name, or against its whole
+// path with or without the leading separator a listing prints.  A
+// landmark is an inventory item, and "Home" and "home" are two of them.
 //
 // It is one function rather than two so that the same rule decides what
 // was meant whether the answer is a landmark, a refusal about the
@@ -567,11 +569,28 @@ func matchLandmarks(es []sl.Entry, want string) []sl.Entry {
 	path := strings.TrimPrefix(want, string(sl.PathSeparator))
 	var out []sl.Entry
 	for _, e := range es {
-		if strings.EqualFold(e.Name, want) || strings.EqualFold(e.Path, path) {
+		if e.Name == want || e.Path == path {
 			out = append(out, e)
 		}
 	}
 	return out
+}
+
+// nearLandmarks is the refusal for a name no kept landmark has, when
+// one has it in another case: sl.AllNamedFunc's, naming them as the
+// hint, by name or by whole path as the name was typed.  Nil when none
+// is that close.
+func nearLandmarks(kept []sl.Entry, want string) error {
+	key := func(e sl.Entry) (string, msg.UUID) { return e.Name, e.ID }
+	if strings.ContainsRune(want, sl.PathSeparator) {
+		want = strings.TrimPrefix(want, string(sl.PathSeparator))
+		key = func(e sl.Entry) (string, msg.UUID) { return e.Path, e.ID }
+	}
+	_, err := sl.AllNamedFunc(kept, want, "landmark", "", key)
+	if ne := (*sl.NameError)(nil); errors.As(err, &ne) && len(ne.Near) > 0 {
+		return err
+	}
+	return nil
 }
 
 // findLandmark turns what somebody typed into exactly one landmark.
@@ -601,7 +620,7 @@ func findLandmark(ctx context.Context, sh *Shell, out io.Writer, name string) (s
 	case 1:
 		return withAsset(match[0])
 	case 0:
-		return sl.Entry{}, noSuchLandmark(all, trashed, name)
+		return sl.Entry{}, noSuchLandmark(all, kept, trashed, name)
 	}
 
 	// Two landmarks in one folder can share a name outright -- stage 3
@@ -640,13 +659,11 @@ func withAsset(e sl.Entry) (sl.Entry, error) {
 // sharePath says whether everything here sits at the same path, which
 // is what a name in one folder twice comes to.
 //
-// Compared without regard to case, because matchLandmarks matches a
-// path that way: two paths differing only in case would each still
-// answer to both, so offering the path as the way to choose between
-// them would be offering nothing.
+// Compared exactly, as matchLandmarks compares a path: two paths that
+// differ only in case are two paths, and each names its own landmark.
 func sharePath(es []sl.Entry) bool {
 	for _, e := range es[1:] {
-		if !strings.EqualFold(e.Path, es[0].Path) {
+		if e.Path != es[0].Path {
 			return false
 		}
 	}
@@ -660,9 +677,10 @@ func sharePath(es []sl.Entry) bool {
 // asked for really is there and really is a landmark, and a person who
 // deleted it an hour ago and has forgotten is owed the sentence rather
 // than "no landmark called that".  Then whatever else answers to the
-// name -- a link, a notecard, a folder -- and only then the two ways of
-// naming nothing at all.
-func noSuchLandmark(all, trashed []sl.Entry, name string) error {
+// name -- a link, a notecard, a folder -- and only then the ways of
+// naming nothing at all: a uuid, a kept landmark's name in another
+// case, and nothing like anything.
+func noSuchLandmark(all, kept, trashed []sl.Entry, name string) error {
 	if gone := matchLandmarks(trashed, name); len(gone) > 0 {
 		return inTheTrash(gone, name)
 	}
@@ -681,6 +699,9 @@ func noSuchLandmark(all, trashed []sl.Entry, name string) error {
 			"of its two ids; a uuid that is not something this avatar holds is refused "+
 			"rather than sent, because the grid answers a landmark id it does not "+
 			"recognise with silence and never with an error", id)
+	}
+	if err := nearLandmarks(kept, name); err != nil {
+		return err
 	}
 	return fmt.Errorf("no landmark called %q; \"landmark\" lists the ones this avatar holds", name)
 }

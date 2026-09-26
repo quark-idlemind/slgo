@@ -35,9 +35,10 @@ back has to come from the original in inventory.  `--newest` and
 `--oldest` do not apply with it: what an object holds has no dates
 on it.  Nor does `--remove-all-copies`: an object renames a second
 item of one name as it goes in, so there is only ever one.  What
-follows is a name, matched exactly and in the case it has.  The
-paths and the uuids above are inventory's.  The id beside a line of
-`ls -l --in` is not something to hand back to this.
+follows is a name, matched exactly and in the case it has, or the id
+beside it in `ls -l --in`, which belongs to the object's own copy.
+The paths and the uuids above are inventory's, and name nothing
+inside an object.
 
 ## One name can mean a dozen items
 

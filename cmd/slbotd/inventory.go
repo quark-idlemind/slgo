@@ -587,23 +587,18 @@ func cmdDetach(ctx context.Context, r *req, out io.Writer, args []string) error 
 	if err != nil {
 		return err
 	}
-	var found []*sl.Attached
-	for _, w := range worn {
-		if strings.EqualFold(w.Object.Name, want) {
-			found = append(found, w)
-		}
-	}
-	switch len(found) {
-	case 0:
-		return fmt.Errorf("nothing called %q is being worn", want)
-	case 1:
-	default:
-		return fmt.Errorf("%d worn objects are called %q", len(found), want)
-	}
-	if err := s.TakeOff(ctx, found[0].Item); err != nil {
+	// The name as it is spelt, through sl.PickNamedFunc: several worn
+	// objects of it are refused with the ids of their items, and none
+	// with any worn in another case as the hint.
+	w, err := sl.PickNamedFunc(worn, want, "worn object", "",
+		func(a *sl.Attached) (string, msg.UUID) { return a.Object.Name, a.Item })
+	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "took off %s\n", found[0].Object.Name)
+	if err := s.TakeOff(ctx, w.Item); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "took off %s\n", w.Object.Name)
 	return nil
 }
 

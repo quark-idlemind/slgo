@@ -212,7 +212,7 @@ func caseBlindNamesIn(fset *token.FileSet, f *ast.File) []caseBlind {
 func TestNoInventoryNameIsMatchedIgnoringCase(t *testing.T) {
 	// What each of these matches ignoring case.
 	matching := map[string]string{
-		"sl.InventoryOffersFor": "an offer, by what is offered or who offered it, whole or in part: a search",
+		"sl.InventoryOffersFor": "an offered item's whole name in another case, which its part-name search leaves out",
 		"slsh.chooseGroup":      "a group's name",
 		"slsh.regionNamed":      "a region's name, which the map matches ignoring case",
 		"slsh.printFound":       "a person's display name against their name",
@@ -220,13 +220,6 @@ func TestNoInventoryNameIsMatchedIgnoringCase(t *testing.T) {
 		"slsh.namedExactly":     "a person's name, among what a search found",
 		"slbotd.personNamed":    "a person's name or username",
 		"slbotd.pickRegion":     "a region's name, which the map matches ignoring case",
-
-		// Inventory, and not yet moved to exact names.
-		"slsh.matchLandmarks":   "a landmark, by name or by path",
-		"slsh.sharePath":        "whether landmarks share a path, as matchLandmarks compares one",
-		"slsh.detachFromOutfit": "a link in the Current Outfit folder, by name",
-		"slbotd.cmdDetach":      "a worn object, by name",
-		"slbotd.cmdLandmark":    "a landmark, by name",
 	}
 
 	seen := map[string]bool{}
