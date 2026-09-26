@@ -31,9 +31,8 @@ a run to that share.
 A run asks for a number of objects and gets that many or none.  One
 that cannot be served waits for enough of them to come free rather
 than starting narrower than it asked for.  A run that names an avatar
-the daemon does not host is refused at once, since there is nothing
-to wait for; one that names a hosted avatar that is logged out waits
-for it.
+the daemon does not host, or one that is logged out, is refused at
+once, since there is nothing to wait for.
 
 ## Options
 

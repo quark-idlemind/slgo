@@ -929,13 +929,14 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	return err
 }
 
-// holds is whether name is in the server's map at all: hosted, stopped,
-// or reserved by a login still under way.
-func (s *Server) holds(name string) bool {
+// holding is the server's entry for name.  ok is whether the name is in
+// the map at all -- hosted, stopped, or reserved by a login still under
+// way, which has no Hosted yet and gives nil.
+func (s *Server) holding(name string) (h *Hosted, ok bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	_, ok := s.agents[name]
-	return ok
+	h, ok = s.agents[name]
+	return h, ok
 }
 
 // hosted is every avatar this daemon holds, by name.

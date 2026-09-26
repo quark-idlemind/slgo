@@ -48,7 +48,7 @@ whichever avatars have places free — twelve wanted on a daemon holding
 three avatars may come back as eight of one and four of another, and the
 answer says which avatar each place belongs to. A caller that minds names
 one, and then it is that avatar or a wait -- or a refusal, when the
-daemon does not host it.
+daemon does not host it or it is logged out.
 
 `Slots`, `RenewSlots` and `ReleaseSlots` ride on the client's STREAM
 rather than being calls of their own, for the reason a lock does and more
@@ -111,12 +111,17 @@ stream.
 
 ## When an avatar is logged out, or leaves
 
-Each avatar the daemon hosts has twelve places. One that is logged out is
-still hosted: it is listed as stopped, and `Host` with force brings it
-back. So its places stay in the pool and are passed over while it is
-down, however many requests look at them. A request that names it waits
-for it to be hosted again, bounded by `wait_seconds` when it gives one; a
-request that names nobody is served from the other avatars.
+Each avatar the daemon hosts has twelve places. One that is logged out
+-- stopped, on request or by the grid throwing it off -- is still hosted
+and listed, but it comes back only when somebody hosts it again on
+purpose, with `Host` and force. So a request that names it is refused at
+once, a try or not, with `"NAME" is logged out`, and the reason after it
+when the grid ended the session. A request already waiting for it when it
+logs out is refused then, with the same words. Its places stay in the
+pool, passed over by requests that name nobody, which are served from
+the other avatars; those still count it among the avatars whose places
+there could ever be, so one that wants more than the others have waits
+for it.
 
 An avatar leaves the daemon when it is removed, which is what a forced
 `Host` does to the stopped session it replaces before it logs in again.
@@ -132,22 +137,27 @@ was waiting for them is woken.
 A request naming an avatar the daemon does not host at all is refused at
 once, with `no avatar called "NAME" is hosted here`, and a try is given
 the same answer. That includes a profile the daemon could start and has
-not. One whose `Host` is still logging it in is waited for, as a
-logged-out one is. A request already waiting when its avatar leaves is
-not woken by the leaving: it waits on for the name to be hosted again,
-and is refused the next time something wakes it if it has not been.
+not. One whose `Host` is still logging it in is waited for, and is woken
+when the avatar arrives; if the login fails nothing wakes it, and it is
+refused when something else in the pool changes, or gives up when its
+bound runs out. A request already waiting when its avatar is removed is
+woken and refused.
 
 A session that drops and is logged back in by the daemon is none of
-these. It keeps its places, and they are handed out as usual while it is
-reconnecting: the daemon still holds the old connection until the new
-one is up. That is read from the code, not watched.
+these: it is never marked stopped. It keeps its places, and they are
+handed out as usual while it is reconnecting, since the daemon still
+holds the old connection until the new one is up. That is read from the
+code, not watched.
 
 Until 2026-09-26 a request that met a logged-out avatar's places threw
 them away for the life of the daemon, and hosting the avatar again did
 not bring them back; and a request naming an avatar the daemon did not
 host, with no bound on its wait, waited for ever. Both were found by
-reading the code. The behaviour above was built then and has not been
-watched on the grid; the tests in `server/slots_test.go` check it
+reading the code. The first fix had a request naming a logged-out avatar
+wait for it, on the belief that such an avatar was often reconnecting;
+a reconnecting session is never stopped, and a stopped one does not come
+back on its own, so it is refused instead. The behaviour above was built
+then and has not been watched on the grid; the tests in `server/slots_test.go` check it
 against a fake login server and simulator, and
 `internal/slots/slots_test.go` checks the pool's half.
 

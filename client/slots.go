@@ -90,8 +90,8 @@ type asking struct {
 //
 // agent asks for them on one avatar; empty takes them from wherever they
 // are free, which may be more than one.  An avatar the daemon does not
-// host comes back at once with Why set; one it hosts that is logged out
-// is waited for.
+// host, or one that is logged out, comes back at once with Why set, and
+// so does a wait for one that logs out meanwhile.
 //
 // A caller that gives up through ctx need do nothing more: the daemon is
 // not told, and what it grants for the request later is given back.

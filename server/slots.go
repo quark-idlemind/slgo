@@ -285,14 +285,11 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 		// was holding when this client attached.
 		sp.sync()
 
-		// An avatar the daemon does not host has no places and none are
-		// coming, so it is refused rather than waited for.  One that is
-		// logged out, or still being logged in, is waited for: hosting
-		// it gives it places.
-		only, most := req.GetAgent(), sp.most(req.GetAgent())
-		if only != "" && most == 0 {
-			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{},
-				fmt.Sprintf("no avatar called %q is hosted here", only)))
+		// A named avatar that is not hosted here, or is logged out, has
+		// no places to wait for.
+		why, ended := sp.named(req.GetAgent())
+		if why != "" {
+			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, why))
 			return
 		}
 
@@ -301,7 +298,7 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 		// ever, and the daemon is the only thing that knows how many
 		// there are.  The pool cannot say -- a place away being tidied
 		// is not in it at all -- and would simply never fill.
-		if want > most {
+		if most := sp.most(req.GetAgent()); want > most {
 			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, fmt.Sprintf(
 				"%d objects were asked for and %s %d",
 				want, hasOrHave(req.GetAgent()), most)))
@@ -335,6 +332,9 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 		// blocking nobody.
 		select {
 		case <-r.Wait:
+		case <-ended:
+			// The avatar named was logged out, thrown off or removed,
+			// and asking again says so.
 		case <-lapsed:
 			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{},
 				fmt.Sprintf("%d objects were still not free after %v", want, wait)))
@@ -345,18 +345,43 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 	}
 }
 
+// named says why a request naming agent is refused at once, or "" when
+// it may wait; and then what closes when that avatar is finished with,
+// so that a request waiting for it is refused at that moment.
+//
+// A name the daemon does not hold has no places, and a logged-out avatar
+// comes back only when somebody hosts it again on purpose, so neither is
+// waited for.  A name that Host is still logging in is: it has no Hosted
+// yet, and so nothing to watch, and arriving wakes the request.
+// Why: doc/slots.md#when-an-avatar-is-logged-out-or-leaves
+func (sp *slotPool) named(agent string) (why string, ended <-chan struct{}) {
+	if agent == "" || sp.srv == nil {
+		return "", nil
+	}
+	h, ok := sp.srv.holding(agent)
+	switch {
+	case !ok:
+		return fmt.Sprintf("no avatar called %q is hosted here", agent), nil
+	case h == nil:
+		return "", nil
+	case h.Stopped():
+		why := fmt.Sprintf("%q is logged out", agent)
+		if down := h.Down(); down != "" && down != "logged out" {
+			why += " (" + down + ")"
+		}
+		return why, nil
+	}
+	return "", h.ended()
+}
+
 // most is how many places there could ever be: one avatar's worth when
-// one was named and the daemon holds it -- logged out, and still being
-// logged in, count -- none when it does not, and every hosted avatar's
-// otherwise.
+// one was named, and every hosted avatar's otherwise -- a logged-out one
+// included, whose places are passed over until it is hosted again.
 func (sp *slotPool) most(agent string) int {
-	if sp.srv == nil {
+	if agent != "" {
 		return SlotsPerAgent
 	}
-	if agent != "" {
-		if !sp.srv.holds(agent) {
-			return 0
-		}
+	if sp.srv == nil {
 		return SlotsPerAgent
 	}
 	return SlotsPerAgent * len(sp.srv.hosted())
