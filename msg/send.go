@@ -213,10 +213,13 @@ func (s *Sender) queue(ctx context.Context, ob *outbound) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	// Test for a stopped sender before offering the message.  The
-	// channel is buffered, so a plain three way select would
-	// sometimes take the send case against a closed done channel
-	// and swallow the message without a word.
+	// Refuse a sender already stopped before offering the message.
+	// The channel is buffered, so a plain three way select would
+	// sometimes take the send case against a closed done channel and
+	// return nil for a message nothing will read.  This narrows that
+	// rather than closing it: a Run that stops between the check and
+	// the send leaves the message queued and discarded, which is what
+	// "queued, not sent" allows.
 	select {
 	case <-s.done:
 		return ErrSenderClosed
@@ -254,6 +257,9 @@ func (s *Sender) ConfirmAck(seq uint32) {
 
 // Run writes until ctx is cancelled or the connection fails.  Call it
 // as a goroutine, as with Receiver.Run.
+//
+// Call it once.  Run marks the Sender stopped as it returns, after which
+// every send is refused with ErrSenderClosed, and a second call panics.
 func (s *Sender) Run(ctx context.Context) error {
 	defer close(s.done)
 
