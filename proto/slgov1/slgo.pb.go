@@ -2755,10 +2755,10 @@ type StatusResponse struct {
 	// cannot work out for itself.
 	Viewer *ViewerEndpoint `protobuf:"bytes,13,opt,name=viewer,proto3" json:"viewer,omitempty"`
 	// How many ObjectUpdate placement blobs have arrived, by width in
-	// bytes.  The width says which form a blob is in: the daemon reads 60
-	// and 32, and 76 and 48 for an avatar, and counts every width it is
-	// sent, the ones it does not read as well.  It is here to show which
-	// forms the simulator really sends.
+	// bytes.  The width says which form a blob is in: the daemon reads
+	// 60, 124 and 32, and 76, 140 and 48 for an avatar, and counts every
+	// width it is sent, the ones it does not read as well.  It is here to
+	// show which forms the simulator really sends.
 	PlacementWidths map[uint32]uint64 `protobuf:"bytes,14,rep,name=placement_widths,json=placementWidths,proto3" json:"placement_widths,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache

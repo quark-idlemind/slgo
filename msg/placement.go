@@ -11,23 +11,26 @@ import (
 // know.
 //
 // The width is how you tell which form the blob is.  Sixty bytes are
-// plain floats.  Thirty-two are sixteen bit fractions, laid out and
-// ranged as the viewer's sixteen bit reader has them
+// plain floats, and 124 are the same with room for more after them,
+// which is not read.  Thirty-two are sixteen bit fractions, laid out
+// and ranged as the viewer's sixteen bit reader has them
 // (llviewerobject.cpp:1636-1695).  An avatar's blob is sixteen bytes
-// longer than a prim's, 76 or 48, because it starts with a collision
-// plane.  No other width is read.
+// longer than a prim's, 76, 140 or 48, because it starts with a
+// collision plane.  No other width is read.
 // Why: doc/placement.md#the-widths
 func DecodePlacement(b []byte) (Vector3, Quaternion, bool) {
 	// Avatars carry a collision plane first.
 	switch len(b) {
-	case 76, 48:
+	case 76, 140, 48:
 		b = b[16:]
 	}
 
 	switch len(b) {
-	case 60:
+	case 60, 124:
 		// Floats: position, velocity, acceleration, rotation, angular
-		// velocity, twelve bytes each.
+		// velocity, twelve bytes each.  Whatever follows them in the
+		// wider form is ignored, as the viewer ignores it
+		// (llviewerobject.cpp:1215-1219, 1394-1402).
 		return placeVec(b[0:12]), placeQuat(b[36:48]), true
 
 	case 32:

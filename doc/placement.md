@@ -47,19 +47,27 @@ There is no sixteen byte layout anywhere in the viewer. The comment at
 
 - 60, and 76 behind its collision plane: floats, as the viewer reads
   them.
-- 32, and 48 behind its collision plane: the viewer's sixteen bit
-  layout and ranges, with the fourth rotation component kept and
-  normalised the way `DecodeTerse` keeps it. In terse updates the
-  simulator was measured not to keep W positive; in this form nothing
-  has been measured, and it is read the same way because the viewer's
-  reader keeps all four.
-- Nothing else. 124 and 140, which the viewer reads, are not read here.
+- 124, and 140 behind its collision plane: the same 60 bytes of
+  floats, with whatever follows them ignored. The viewer reads these
+  widths this way, and says that is how a width made longer for data
+  added later is to be read (1215-1219).
+- 32, and 48 behind its collision plane, although the viewer's
+  `ObjectUpdate` path does not read either width and its comment says
+  the simulator never sends them. The owner decided to read them all
+  the same, with the viewer's sixteen bit layout and ranges from the
+  unreached case above, and to count every width so that traffic
+  shows whether they occur (see below). The fourth rotation component
+  is kept and normalised the way `DecodeTerse` keeps it. In terse
+  updates the simulator was measured not to keep W positive; in this
+  form nothing has been measured, and it is read the same way because
+  the viewer's reader keeps all four.
+- Nothing else.
 
 Before 2026-09-26 the 32 byte form's rotation dropped W and recovered it
 as positive, which reads a -q as the mirror image of q; its Z ran over
 -128 to 384 metres, the span X and Y use, so nothing above 384 metres
-could be said in it; and a 16 byte width was read in a layout nothing
-here or in the viewer describes.
+could be said in it; a 16 byte width was read in a layout nothing
+here or in the viewer describes; and 124 and 140 were not read at all.
 
 ## What has been seen
 

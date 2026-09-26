@@ -123,9 +123,10 @@ func TestDecodeTerseTruncated(t *testing.T) {
 	}
 }
 
-// The ObjectUpdate placement blob comes in four widths and the width
+// The ObjectUpdate placement blob comes in six widths and the width
 // is the only thing that says which layout it is.  Sixty bytes are
-// plain floats; thirty-two are sixteen bit fractions of ranges, so the
+// plain floats, and 124 the same with more after them; thirty-two are
+// sixteen bit fractions of ranges, so the
 // same blob read as the wrong width gives a position that is in range
 // and stable and wrong -- exactly the failure the terse decoder above
 // was written against.
@@ -219,6 +220,39 @@ func TestDecodePlacement(t *testing.T) {
 	}
 }
 
+// TestAWiderFloatBlobIsReadForItsFirstSixtyBytes: 124 bytes are the
+// sixty byte form with room for more after it, and 140 the avatar's
+// seventy-six, and the viewer reads the part it knows and ignores the
+// rest (llviewerobject.cpp:1215-1219, 1394-1402).
+func TestAWiderFloatBlobIsReadForItsFirstSixtyBytes(t *testing.T) {
+	pos := Vector3{200.5, 17.25, 3012.75}
+	rot := Quaternion{-0.125, 0.5, 0.25}
+	// Something in the part that is not read, so that reading it
+	// would show.
+	more := make([]byte, 64)
+	for i := range more {
+		more[i] = 0x41
+	}
+	plane := make([]byte, 16)
+
+	for _, c := range []struct {
+		what string
+		b    []byte
+	}{
+		{"124 bytes", append(placeFloats(pos, rot), more...)},
+		{"140 bytes", append(append(append([]byte(nil), plane...), placeFloats(pos, rot)...), more...)},
+	} {
+		p, q, ok := DecodePlacement(c.b)
+		if !ok {
+			t.Errorf("%s were not recognised", c.what)
+			continue
+		}
+		if p != pos || q != rot {
+			t.Errorf("%s decoded to %v %v, want %v %v", c.what, p, q, pos, rot)
+		}
+	}
+}
+
 // TestASixteenBitRotationSentNegatedIsTheSameRotation: the thirty-two
 // byte form carries all four components of the rotation, as the terse
 // form does, and the same holds of it: q and -q are one rotation, and
@@ -274,11 +308,11 @@ func TestASixteenByteBlobIsNotRead(t *testing.T) {
 	}
 }
 
-// TestDecodePlacementUnknownWidth: a length that is none of the four is
+// TestDecodePlacementUnknownWidth: a length that is none of the six is
 // a layout this build does not know, and guessing at one would put the
 // object somewhere plausible and wrong.
 func TestDecodePlacementUnknownWidth(t *testing.T) {
-	for _, n := range []int{0, 1, 15, 16, 17, 31, 33, 44, 59, 61, 77} {
+	for _, n := range []int{0, 1, 15, 16, 17, 31, 33, 44, 59, 61, 77, 123, 125, 139, 141} {
 		if p, q, ok := DecodePlacement(make([]byte, n)); ok {
 			t.Errorf("%d bytes decoded to %v %v", n, p, q)
 		}

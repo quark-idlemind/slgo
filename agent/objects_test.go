@@ -70,12 +70,12 @@ func terseBlob(local uint32, pos msg.Vector3) []byte {
 	for range 6 { // velocity and acceleration, three each
 		w.u16(32767)
 	}
-	// Rotation runs from minus one to one, and all four components are
-	// sent here even though only three are kept.
+	// Rotation runs from minus one to one, all four components, and
+	// is kept normalised with W made positive.
 	w.u16(65535)  // X, the top of the range
 	w.u16(0)      // Y, the bottom
 	w.u16(65535)  // Z
-	w.u16(0)      // W, dropped on the way in
+	w.u16(0)      // W, the bottom
 	for range 3 { // angular velocity
 		w.u16(32767)
 	}

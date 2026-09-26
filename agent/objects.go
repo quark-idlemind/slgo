@@ -830,9 +830,9 @@ func (w *placementWidths) count(width int) {
 // session has been sent, by width in bytes, unread widths included.
 //
 // The width says which form a blob is in, and msg.DecodePlacement
-// reads 60 and 32, and 76 and 48 for an avatar.  No 32 byte blob has
-// been recorded, and this is how a day's traffic says whether one is
-// ever sent.
+// reads 60, 124 and 32, and 76, 140 and 48 for an avatar.  No 32 byte
+// blob has been recorded, and this is how a day's traffic says whether
+// one is ever sent.
 // Why: doc/placement.md#what-has-been-seen
 func (a *Agent) PlacementWidths() map[int]uint64 {
 	a.placements.mu.Lock()
