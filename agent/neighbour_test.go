@@ -394,7 +394,9 @@ func TestAChildAnswersThePings(t *testing.T) {
 // repeats an offer for as long as it goes untaken -- 57 times in 200
 // seconds, naming four regions -- so the repeats arrive whatever we do,
 // and a second circuit to a neighbour would give it two sets of sequence
-// numbers under one circuit code.
+// numbers under one circuit code.  A repeat is an offer at the address
+// already held, to a child still heard from; see
+// TestAReOfferAtAnotherAddressReplacesTheChild for the other kind.
 func TestASecondOfferForANeighbourAlreadyHeldOpensNothingNew(t *testing.T) {
 	a, from, _, sim, handle := neighbourly(t)
 
@@ -793,6 +795,117 @@ func TestADisableSimulatorClosesThatChild(t *testing.T) {
 	waitFor(t, "the region to be held again", func() bool { return len(a.Neighbours()) == 2 })
 }
 
+// TestAReOfferAtAnotherAddressReplacesTheChild: an offer of a region
+// already held, naming another address, is the region's simulator
+// somewhere else, and the viewer replaces its entry for it
+// (LLWorld::addRegion).  The old circuit is closed and the new address
+// dialled.
+func TestAReOfferAtAnotherAddressReplacesTheChild(t *testing.T) {
+	var said logLines
+	a, from, _ := twoRegions(t, Options{
+		Neighbours: true,
+		OnEvent:    func(string, []byte) {},
+		Log:        said.log,
+	})
+	was, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+	now := newFakeSim(t)
+	now.regionNm = "Pelmar Mill"
+	go now.run()
+	t.Cleanup(now.close)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, was.addr()))
+	was.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the neighbour to be held", func() bool { return len(a.Neighbours()) == 1 })
+	conn := childConn(t, a, handle)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, now.addr()))
+	now.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the new address to be held", func() bool {
+		got := a.Neighbours()
+		return len(got) == 1 && got[0].Addr == now.addr().String()
+	})
+	waitFor(t, "the old circuit's socket to be given back", func() bool { return givenBack(conn) })
+	if n := dialled(was); n != 1 {
+		t.Errorf("the old address was dialled %d times, want once", n)
+	}
+	if lines := said.saying("offered again at"); len(lines) != 1 {
+		t.Errorf("replacing was reported as %v", said.saying("circuit closed"))
+	}
+}
+
+// TestAReOfferOfASilentChildReplacesIt: a child that has heard nothing
+// for NeighbourTimeout is dead, and an offer of its region at the same
+// address dials it afresh rather than being taken as a repeat, as the
+// viewer replaces a region whose circuit died.  The child is made silent
+// by hand, well inside the watchdog's first look, so it is the offer
+// that finds it dead.
+func TestAReOfferOfASilentChildReplacesIt(t *testing.T) {
+	var said logLines
+	a, from, _ := twoRegions(t, Options{
+		Neighbours: true,
+		OnEvent:    func(string, []byte) {},
+		Log:        said.log,
+	})
+	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	sim.waitSeen(t, "RegionHandshakeReply", 5*time.Second)
+	waitFor(t, "the neighbour to be held", func() bool { return len(a.Neighbours()) == 1 })
+	conn := childConn(t, a, handle)
+	a.neighMu.Lock()
+	a.neighbours[handle].lastHeard.Store(time.Now().Add(-2 * NeighbourTimeout).UnixNano())
+	a.neighMu.Unlock()
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	waitFor(t, "the region to be dialled again", func() bool { return dialled(sim) == 2 })
+	waitFor(t, "the dead circuit's socket to be given back", func() bool { return givenBack(conn) })
+	waitFor(t, "the fresh circuit to be held", func() bool {
+		a.neighMu.Lock()
+		defer a.neighMu.Unlock()
+		c := a.neighbours[handle]
+		return c != nil && c.sock.conn.Load() != conn
+	})
+	if lines := said.saying("nothing heard"); len(lines) != 1 {
+		t.Errorf("replacing was reported as %v", said.saying("circuit closed"))
+	}
+}
+
+// TestASilentChildIsDroppedAndOfferedAfresh: a simulator that went away
+// without a DisableSimulator sends nothing more, and the viewer drops a
+// circuit that has been silent for its circuit timeout.  The child here
+// hears its handshake and then nothing, is closed by its watchdog, and
+// the next offer of the region is dialled.
+func TestASilentChildIsDroppedAndOfferedAfresh(t *testing.T) {
+	var said logLines
+	a, from, _ := twoRegions(t, Options{
+		Neighbours:       true,
+		OnEvent:          func(string, []byte) {},
+		Log:              said.log,
+		neighbourTimeout: 300 * time.Millisecond,
+	})
+	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	sim.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	waitFor(t, "the neighbour to be held", func() bool { return len(a.Neighbours()) == 1 })
+	conn := childConn(t, a, handle)
+
+	waitFor(t, "the silent child to be dropped", func() bool { return len(a.Neighbours()) == 0 })
+	waitFor(t, "its socket to be given back", func() bool { return givenBack(conn) })
+	if lines := said.saying("nothing heard for"); len(lines) != 1 {
+		t.Errorf("dropping was reported as %v", said.saying("circuit closed"))
+	}
+	select {
+	case <-a.Done():
+		t.Fatalf("a silent neighbour ended the session: %v", a.Err())
+	default:
+	}
+
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	waitFor(t, "the region to be dialled again", func() bool { return dialled(sim) == 2 })
+	waitFor(t, "the region to be held again", func() bool { return len(a.Neighbours()) == 1 })
+}
+
 // TestAdjacentIsAnEdgeOrACorner: the cap goes by it, so a region two
 // squares off, or the region itself, is not a neighbour.
 func TestAdjacentIsAnEdgeOrACorner(t *testing.T) {
@@ -818,7 +931,7 @@ func TestAdjacentIsAnEdgeOrACorner(t *testing.T) {
 }
 
 // TestClosingTheSessionClosesTheChildrenAndLeavesNoGoroutineBehind: a
-// child is three goroutines and a socket, so getting this wrong leaks
+// child is four goroutines and a socket, so getting this wrong leaks
 // them per neighbour rather than failing.  Close closes done, cancels
 // and then waits on the group they are in -- which is also why opening
 // one has to be as careful about a session that is ending as moveTo is.

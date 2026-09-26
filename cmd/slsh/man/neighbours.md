@@ -49,15 +49,16 @@ measured both at 2001 and at ground level.
 
 The set changes as the avatar moves, and not all at once.  A circuit
 is kept until the simulator at the other end says it has let the
-avatar go, as a viewer keeps one, so after a teleport the listing can
-still hold the regions around the one left, beside the new region's
-own as they are offered.  That is what makes coming back work:
-measured on Agni on 2026-09-26, a region returned to within about ten
-seconds of leaving it offered none of its neighbours again, and a
-session that had let them go came back holding none.  A move closes
-only the circuit to the region moved into, which is where the avatar
-now stands.  At the limit of eight, a circuit to a region that is not
-beside this one is let go to make room for a new offer.
+avatar go, or has been silent for a hundred seconds, as a viewer keeps
+one, so after a teleport the listing can still hold the regions around
+the one left, beside the new region's own as they are offered.  That
+is what makes coming back work: measured on Agni on 2026-09-26, a
+region returned to within about ten seconds of leaving it offered none
+of its neighbours again, and a session that had let them go came back
+holding none.  A move closes only the circuit to the region moved
+into, which is where the avatar now stands.  At the limit of eight, a
+circuit to a region that is not beside this one is let go to make room
+for a new offer.
 
 ## The listing
 

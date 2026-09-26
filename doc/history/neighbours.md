@@ -318,14 +318,26 @@ So slgo now does what the viewer does:
 - Turning neighbours off, and the session ending, still close every
   child.
 
-What the viewer does and slgo does not: its message layer drops a
-circuit that has had no ping for 100 seconds
-(`llmessage/llcircuit.cpp:1065`, the figure from
-`newview/llstartup.cpp:916`), and a later `EnableSimulator` for that
-handle replaces the dead region (`llworld.cpp:520-559`). A child here
-whose simulator goes away without a `DisableSimulator` is held until the
-session ends, neighbours are turned off, or the cap closes it to make
-room once it is no longer beside the avatar.
+A simulator can also go away without a `DisableSimulator`, and a child
+kept across moves would then be held for the rest of the session, where
+before the next move cleared it. The viewer has two answers and slgo
+now has both:
+
+- **A circuit silent for 100 seconds is closed.** The viewer's message
+  layer drops a circuit whose last answer to one of its own pings is
+  older than its circuit timeout (`llmessage/llcircuit.cpp:1065`, the
+  figure from `newview/llstartup.cpp:916`). slgo sends no pings of its
+  own on any circuit, so a child counts from the last packet of any
+  kind, as the root's idle watchdog does and on the same loop. A live
+  neighbour is far from that quiet: stage 0 counted five
+  `StartPingCheck` on a child in thirty seconds.
+- **An offer of a held region replaces a stale child**: one held at
+  another address, or silent past that timeout, as `LLWorld::addRegion`
+  replaces a region whose host changed or whose circuit died
+  (`llworld.cpp:520-559`). An offer at the same address to a child still
+  heard from remains a repeat.
+
+Neither has been seen on the grid; both follow the viewer.
 
 Not yet checked on the grid: a teleport away and back within ten
 seconds, with the circuits still up on the return.

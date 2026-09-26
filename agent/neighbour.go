@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
@@ -55,12 +56,14 @@ import (
 // **A child is kept until its simulator lets it go**, as a viewer keeps
 // one: across a teleport, across a crossing, for as long as the session
 // and the option last.  DisableSimulator on the child's own circuit is
-// what closes it.  A region the avatar came back to within seconds of
-// leaving offered none of its neighbours again, measured, so a session
-// that let its children go on every move came back holding none.  A move
-// closes only the child to the region moved into (neighboursAfterMove),
-// and the cap closes the ones that are no longer beside the avatar's
-// region (MaxNeighbours).
+// what closes it -- or, for a simulator that went away without saying
+// so, NeighbourTimeout with nothing heard, or an offer of the same
+// region at another address.  A region the avatar came back to within
+// seconds of leaving offered none of its neighbours again, measured, so
+// a session that let its children go on every move came back holding
+// none.  A move closes only the child to the region moved into
+// (neighboursAfterMove), and the cap closes the ones that are no longer
+// beside the avatar's region (MaxNeighbours).
 // Why: doc/history/neighbours.md#kept-across-a-move
 //
 // **What is deliberately not handled here.**  A neighbour describes
@@ -92,6 +95,18 @@ import (
 // to make room, and is turned down only when every child held is a
 // neighbour.
 const MaxNeighbours = 8
+
+// NeighbourTimeout is how long a child circuit may hear nothing from its
+// simulator before it is closed.
+//
+// It is the viewer's circuit timeout (newview/llstartup.cpp:916), which
+// llmessage/llcircuit.cpp:1065 applies to every circuit, a child's
+// included.  The viewer counts from the last answer to a ping of its
+// own; this session sends none on any circuit, so it counts from the
+// last packet of any kind, as the root's watchdog does.  A live
+// neighbour is never that quiet: it pinged a child five times in thirty
+// seconds.
+const NeighbourTimeout = 100 * time.Second
 
 // A Neighbour is one region beside this one, or beside one the avatar
 // has left, and what this session has of it.
@@ -143,7 +158,7 @@ type child struct {
 	recv *msg.Receiver
 	disp *msg.Dispatcher
 
-	// cancel ends this circuit's three goroutines.  Its context is
+	// cancel ends this circuit's four goroutines.  Its context is
 	// the session's, so a session that ends takes its children with
 	// it whether or not anyone drops them first.
 	cancel context.CancelFunc
@@ -155,6 +170,11 @@ type child struct {
 
 	shook atomic.Bool
 	heard atomic.Uint64
+
+	// lastHeard is when anything last arrived on the circuit, as unix
+	// nanoseconds, the way the root's lastPacket is.  The tap writes
+	// it; the child's watchdog and a repeated offer read it.
+	lastHeard atomic.Int64
 }
 
 // NeighboursOn reports whether this session takes the offers up.
@@ -393,17 +413,25 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		return
 	}
 
-	// A neighbour already held is the offer being repeated, which is
-	// what happens until it is taken up.  The address is not compared:
-	// a region that moved to another host between two offers would go
-	// on being talked to at the old one, which would send no
-	// DisableSimulator once gone, until the session ends or the option
-	// is turned off.  Nothing has ever measured one moving, and
-	// redialling on a changed address is the wrong trade without that
-	// -- it would hand anything that could forge an offer a way to make
-	// this session drop a working circuit.
-	if _, held := a.neighbours[handle]; held {
-		return
+	// A neighbour already held at the same address, and still heard
+	// from, is the offer being repeated, which is what happens until it
+	// is taken up.  One held at another address, or silent past the
+	// timeout, is stale and is replaced, as LLWorld::addRegion replaces
+	// a region whose host changed or whose circuit died
+	// (newview/llworld.cpp:520-559).
+	if old, held := a.neighbours[handle]; held {
+		var why string
+		switch {
+		case !old.addr.IP.Equal(addr.IP) || old.addr.Port != addr.Port:
+			why = fmt.Sprintf("the region was offered again at %s", addr)
+		case old.silent(a.neighbourTimeout()):
+			why = "nothing heard from it, and the region was offered again"
+		default:
+			return
+		}
+		delete(a.neighbours, handle)
+		old.close()
+		a.logf("neighbour %s at %s: circuit closed, %s", gridSquare(handle), old.addr, why)
 	}
 	if len(a.neighbours) >= MaxNeighbours {
 		// Room is made out of a child kept from before a move whose
@@ -448,8 +476,14 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		// counter is the whole of what this stage does with a
 		// region's description of itself; see the head of this file
 		// for why none of it reaches the object store.
-		msg.WithTap(func(*msg.Packet) { c.heard.Add(1) }),
+		msg.WithTap(func(*msg.Packet) {
+			c.heard.Add(1)
+			c.lastHeard.Store(time.Now().UnixNano())
+		}),
 	)
+	// Heard from as of now, as the root is at Connect, so that a
+	// simulator that never answers is silence too.
+	c.lastHeard.Store(time.Now().UnixNano())
 
 	// The handshake, answered every time it arrives rather than once:
 	// it was measured arriving twice about a second apart, with
@@ -497,9 +531,19 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		a.dropNeighbour(c, "the simulator disabled it")
 	}, msg.Inline())
 
+	// And the watchdog the root has, on the viewer's figure: a
+	// simulator that went away without a DisableSimulator is silence.
+	timeout := a.neighbourTimeout()
+	watch := func() {
+		a.watchSilence(ctx, timeout, c.heardAt, func(since time.Duration) {
+			a.dropNeighbour(c, fmt.Sprintf("nothing heard for %s", since.Round(time.Second)))
+		})
+	}
+
 	if !a.spawnChild(func() { _ = c.send.Run(ctx) }) ||
 		!a.spawnChild(func() { _ = c.recv.Run(ctx) }) ||
-		!a.spawnChild(func() { _ = c.disp.Run(ctx, c.recv.C()) }) {
+		!a.spawnChild(func() { _ = c.disp.Run(ctx, c.recv.C()) }) ||
+		!a.spawnChild(watch) {
 		// The session ended between the check above and here.  The
 		// socket is closed rather than left to a Close that has
 		// already been through its list.
@@ -659,6 +703,21 @@ func (c *child) close() {
 		c.cancel()
 	}
 	c.sock.Close()
+}
+
+// heardAt is when anything last arrived on the circuit.
+func (c *child) heardAt() time.Time { return time.Unix(0, c.lastHeard.Load()) }
+
+// silent reports whether nothing has arrived for longer than timeout,
+// which is what the viewer calls a dead circuit.
+func (c *child) silent(timeout time.Duration) bool { return time.Since(c.heardAt()) > timeout }
+
+// neighbourTimeout is NeighbourTimeout, or what a test put in its place.
+func (a *Agent) neighbourTimeout() time.Duration {
+	if a.opts.neighbourTimeout > 0 {
+		return a.opts.neighbourTimeout
+	}
+	return NeighbourTimeout
 }
 
 func (c *child) setRegionName(name string) {
