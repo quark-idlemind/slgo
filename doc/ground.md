@@ -125,9 +125,31 @@ timeout for a script that will say nothing. The check:
   (`llinventory/llparcelflags.h`).
 
 Past the region's flags, nothing is said where it cannot be told: a
-worn object, whose position is the avatar's and of which nothing was
-measured; land that has not arrived; an object the region has not
+worn object (see below); land that has not arrived; an object the region has not
 described; a parcel set to no group with group scripts on; and a parcel
 or an object that does not answer. Only one unrotated, unlinked cube
 was measured, so a rotated prim, a child prim and a linkset are placed
 by arithmetic that nothing has checked.
+
+### Worn objects
+
+A worn object is checked for the region's flags and for nothing else.
+Measured on Agni on 2026-09-26, with this check built in, on the same
+kind of parcel (it runs only its owner's and its group's scripts, and
+lets only its group build): an avatar that is a member of the parcel's
+group stood on the ground, about 2 m up, and `slrun` ran a script in a
+worn HUD attachment, its default shared object. The script ran and
+printed its line, both with the avatar's active group set to the
+parcel's group and with no active group. The attachment's own group was
+not read, and an avatar outside the parcel's group was not tried.
+
+### Checked on the grid
+
+Measured on the same parcel on the same day, with this check built in:
+`slrun --rez` on the parcel's ground, with the active group set to the
+parcel's group, rezzed a prim whose script ran, and `Run` found no
+reason to block it. The blocked case could not be set up there: without
+the group the land refuses the rez ("You cannot create objects here."),
+and slsh cannot change an object's group. So what `Run` does when it
+blocks a run rests on the first measurement in this section and on the
+unit tests, not on a blocked run seen on the grid.

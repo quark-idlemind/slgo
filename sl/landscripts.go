@@ -96,8 +96,8 @@ type placed struct {
 	root  *Seen
 }
 
-// placedInWorld finds o in the region.  A worn object is not: its
-// position is the avatar's business, and nothing was measured of one.
+// placedInWorld finds o in the region, and a worn object is not in it.
+// Why: doc/ground.md#worn-objects
 func (w *Session) placedInWorld(ctx context.Context, o *Object) (*placed, bool) {
 	if o == nil || o.ID.IsZero() {
 		return nil, false
