@@ -409,7 +409,7 @@ func TestCreateHandsBackWhatTheBuildMade(t *testing.T) {
 func TestSetDescriptionReadsItBackBecauseNothingConfirmsIt(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	waitErr := asideErr(t, func() error {
 		return w.SetDescription(context.Background(), o, "a thing")
@@ -441,7 +441,7 @@ func TestSetDescriptionReadsItBackBecauseNothingConfirmsIt(t *testing.T) {
 func TestSetDescriptionReportsWhatDidNotHappen(t *testing.T) {
 	w, f := newFakeSession(t)
 	f.FailSends(errors.New("the circuit is gone"))
-	err := w.SetDescription(context.Background(), &Object{ID: thePrim, Local: 77}, "a thing")
+	err := w.SetDescription(context.Background(), foundHere(w, &Object{ID: thePrim, Local: 77}), "a thing")
 	if err == nil {
 		t.Error("SetDescription confirmed a description that never went out")
 	}
@@ -456,7 +456,7 @@ func TestPlaceSaysAllThreeThingsInOneMessage(t *testing.T) {
 	scale := msg.Vector3{X: 4, Y: 5, Z: 6}
 	rot := msg.Quaternion{X: 0.5, Y: 0.5, Z: 0.5}
 
-	err := w.Place(context.Background(), &Object{ID: thePrim, Local: 77}, at, rot, scale)
+	err := w.Place(context.Background(), foundHere(w, &Object{ID: thePrim, Local: 77}), at, rot, scale)
 	if err != nil {
 		t.Fatalf("Place: %v", err)
 	}
@@ -823,7 +823,7 @@ func TestSetDescriptionStopsWhenTheCallerGivesUp(t *testing.T) {
 	cancel()
 
 	start := time.Now()
-	err := w.SetDescription(ctx, &Object{ID: thePrim, Local: 77}, "a thing")
+	err := w.SetDescription(ctx, foundHere(w, &Object{ID: thePrim, Local: 77}), "a thing")
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("SetDescription = %v, want the context's reason", err)
 	}

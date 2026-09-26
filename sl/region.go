@@ -18,8 +18,12 @@ package sl
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
+
+	"github.com/quark-idlemind/slgo/msg"
 )
 
 // refreshTimeout bounds the ask that follows a region change.  Long
@@ -137,6 +141,9 @@ func (w *Session) regionChanged(c *RegionChange) {
 // different a region away.  Field by field, and each of them is a
 // decision rather than a sweep:
 //
+//   - at: the visit, which starts afresh with the region's uuid unknown.
+//     Every Object found before now carries the old one, so its local id
+//     is looked up again before it is sent; see Session.local.
 //   - locals, parents, killed: local ids, which are the region's own
 //     numbering and are handed out again by the next region.  A local
 //     id kept across a move does not go stale, it goes WRONG: it names
@@ -206,6 +213,7 @@ func (w *Session) regionChanged(c *RegionChange) {
 //     is no way to fail one and abandoning it would leave its caller
 //     waiting for ever rather than timing out with a reason.
 func (w *Session) dropRegionState() {
+	w.at = newVisit()
 	clear(w.locals)
 	clear(w.owners)
 	clear(w.objectNames)
@@ -215,4 +223,103 @@ func (w *Session) dropRegionState() {
 	clear(w.taskInv)
 	clear(w.taskSeen)
 	clear(w.asking)
+}
+
+// A visit is one stay in one run of a region, which is what a local id
+// belongs to.
+//
+// n is drawn afresh on every region change, and a re-established
+// session arrives as one, so a region that restarted under the avatar
+// is a new visit although its uuid is the same.  The numbers are drawn
+// for the whole process rather than for each session, so that an Object
+// from one Session never matches another's by coincidence.  Zero is no
+// visit, which is what an Object built by hand has.
+type visit struct {
+	region msg.UUID // zero until the backend has said
+	n      uint64
+}
+
+var visits atomic.Uint64
+
+func newVisit() visit { return visit{n: visits.Add(1)} }
+
+// here is the visit the avatar is on, asking the backend for the
+// region's uuid the first time it is wanted in each.  An answer that
+// arrives after the avatar has moved again is not kept, and a region
+// that cannot be named leaves it zero.
+func (w *Session) here(ctx context.Context) visit {
+	w.mu.Lock()
+	v := w.at
+	w.mu.Unlock()
+	if !v.region.IsZero() {
+		return v
+	}
+	r, known, err := w.b.Region(ctx)
+	if err != nil || !known || r == nil || r.ID.IsZero() {
+		return v
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.at.n != v.n {
+		return v
+	}
+	w.at.region = r.ID
+	return w.at
+}
+
+// current is whether a local id handed out in v means the same prim
+// now.  One from a region that was never named is not trusted.  With mu
+// held.
+func (w *Session) current(v visit) bool {
+	return v.n != 0 && !v.region.IsZero() && v == w.at
+}
+
+// local is the local id to send for o, and every call that sends one
+// takes it from here.
+//
+// It is o's own if o was found in the visit the avatar is on now.
+// Otherwise o is looked up by its id in the region the avatar is in,
+// and what that region calls it is written back into o and sent; one
+// the region has not described is refused with ErrNotHere.
+// Why: doc/local-ids.md
+func (w *Session) local(ctx context.Context, o *Object) (uint32, error) {
+	if o == nil {
+		return 0, errors.New("sl: no object to send")
+	}
+	w.mu.Lock()
+	now := o.Local != 0 && w.current(o.from)
+	w.mu.Unlock()
+	if now {
+		return o.Local, nil
+	}
+	if o.ID.IsZero() {
+		return 0, fmt.Errorf("sl: local id %d may belong to another region, "+
+			"and there is no object id to look it up by", o.Local)
+	}
+	found, err := w.fetch(ctx, "", o.ID.String())
+	if err != nil {
+		return 0, err
+	}
+	for _, s := range found {
+		if s.ID == o.ID && s.Local != 0 {
+			o.Local, o.from = s.Local, s.from
+			return o.Local, nil
+		}
+	}
+	who := o.ID.String()
+	if o.Name != "" {
+		who = fmt.Sprintf("%q %s", o.Name, o.ID)
+	}
+	return 0, fmt.Errorf("sl: %s is %w, or is beyond the draw distance", who, ErrNotHere)
+}
+
+// localNow is o's local id in the visit the avatar is on, as far as the
+// session knows without asking: o's own if it is current, or else what
+// the updates relayed since arriving said, or zero.  It is for reading
+// what the session was told, never for sending.  With mu held.
+func (w *Session) localNow(o *Object) uint32 {
+	if o.Local != 0 && w.current(o.from) {
+		return o.Local
+	}
+	return w.locals[o.ID]
 }

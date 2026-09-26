@@ -728,11 +728,11 @@ func TestSetItemStopsWhenTheCallerGivesUp(t *testing.T) {
 // the caller cleared still set -- and the caller would read the mask
 // back and see it.
 func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) {
-	o := &Object{ID: thePrim, Local: 77}
+	prim := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 
 	t.Run("some bits on and the rest off", func(t *testing.T) {
 		w, f := newFakeSession(t)
-		if err := w.SetObjectPermissions(context.Background(), o, WhoNextOwner, PermCopy); err != nil {
+		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoNextOwner, PermCopy); err != nil {
 			t.Fatalf("SetObjectPermissions: %v", err)
 		}
 		got := sentOf[*msg.ObjectPermissions](f)
@@ -754,7 +754,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 
 	t.Run("everything on leaves nothing to clear", func(t *testing.T) {
 		w, f := newFakeSession(t)
-		if err := w.SetObjectPermissions(context.Background(), o, WhoOwner, PermAll); err != nil {
+		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoOwner, PermAll); err != nil {
 			t.Fatalf("SetObjectPermissions: %v", err)
 		}
 		if got := sentOf[*msg.ObjectPermissions](f); len(got) != 1 {
@@ -764,7 +764,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 
 	t.Run("everything off leaves nothing to set", func(t *testing.T) {
 		w, f := newFakeSession(t)
-		if err := w.SetObjectPermissions(context.Background(), o, WhoEveryone, 0); err != nil {
+		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoEveryone, 0); err != nil {
 			t.Fatalf("SetObjectPermissions: %v", err)
 		}
 		got := sentOf[*msg.ObjectPermissions](f)
@@ -776,7 +776,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 	t.Run("the first message never went", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.FailSends(errors.New("the circuit is gone"))
-		if err := w.SetObjectPermissions(context.Background(), o, WhoOwner, PermCopy); err == nil {
+		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoOwner, PermCopy); err == nil {
 			t.Error("SetObjectPermissions reported permissions it never sent")
 		}
 	})

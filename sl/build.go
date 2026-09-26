@@ -170,6 +170,10 @@ func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 
 // Place sets an object's position, rotation and scale in one message.
 func (w *Session) Place(ctx context.Context, o *Object, at msg.Vector3, rot msg.Quaternion, scale msg.Vector3) error {
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 	data := make([]byte, 0, 36)
 	data = appendVector(data, at)
 	data = appendQuaternion(data, rot)
@@ -178,7 +182,7 @@ func (w *Session) Place(ctx context.Context, o *Object, at msg.Vector3, rot msg.
 	m := &msg.MultipleObjectUpdate{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ObjectData = []msg.MultipleObjectUpdate_ObjectData{{
-		ObjectLocalID: o.Local,
+		ObjectLocalID: local,
 		Type:          updPosition | updRotation | updScale,
 		Data:          data,
 	}}
@@ -195,10 +199,14 @@ func (w *Session) Place(ctx context.Context, o *Object, at msg.Vector3, rot msg.
 // the write.  Building three hid it, since the other two took long
 // enough for the value to land.
 func (w *Session) SetDescription(ctx context.Context, o *Object, desc string) error {
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 	m := &msg.ObjectDescription{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ObjectData = []msg.ObjectDescription_ObjectData{
-		{LocalID: o.Local, Description: append([]byte(desc), 0)},
+		{LocalID: local, Description: append([]byte(desc), 0)},
 	}
 	if err := w.Send(ctx, m); err != nil {
 		return err
@@ -387,7 +395,7 @@ func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, at, scal
 			}
 		}
 		if found != nil {
-			return &Object{ID: found.ID, Local: found.Local}, nil
+			return &Object{ID: found.ID, Local: found.Local, from: found.from}, nil
 		}
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("%w: a prim of ours to appear at %v (after %s)%s",

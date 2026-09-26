@@ -329,7 +329,7 @@ func (w *Session) AskToWear(ctx context.Context, it *Item, point int) error {
 // and may be shared with the other avatars in it.  What settles it is
 // the parent -- an attachment hangs off the avatar wearing it.
 func (w *Session) WornObjects(ctx context.Context) ([]*Attached, error) {
-	seen, err := w.b.Objects(ctx, "", "")
+	seen, err := w.fetch(ctx, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +397,7 @@ func (w *Session) WornFromItem(ctx context.Context, item msg.UUID) (*Attached, b
 	if item.IsZero() {
 		return nil, false
 	}
-	seen, err := w.b.Objects(ctx, "", "")
+	seen, err := w.fetch(ctx, "", "")
 	if err != nil {
 		return nil, false
 	}

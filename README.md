@@ -2078,7 +2078,11 @@ the capabilities are fetched again and the new region describes itself
 from nothing. Promoting the child instead is stage 3 of
 [doc/history/neighbours.md](doc/history/neighbours.md), and objects in a neighbouring
 region do not reach a client at all -- local ids are the region's own
-numbering and nothing above `agent` carries a region alongside one.
+numbering, and what the daemon says about objects carries no region, so
+a client is told only about the one the avatar stands in. An `sl.Object`
+does remember which region its local id came from, but only so that one
+found before a move is looked up again after it; see
+[doc/local-ids.md](doc/local-ids.md).
 
 No appearance is ever sent. What other avatars look like *is* kept --
 `AvatarAppearance` is said once and cannot be asked for again, so

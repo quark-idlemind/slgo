@@ -246,6 +246,19 @@ func newFakeSession(t *testing.T) (*Session, *fakeBackend) {
 	return w, f
 }
 
+// foundHere marks an object as found in the region the session is in
+// now, as one that came back from ObjectsNamed would be, and hands it
+// back.
+//
+// Most tests here are about what a call sends for an object rather than
+// about finding it.  An Object built by hand is looked up by its id
+// before its local id is sent, and this fake's region has described
+// nothing; see TestALocalIDIsTheRegionsItCameFrom for the looking up.
+func foundHere(w *Session, o *Object) *Object {
+	o.from = w.here(context.Background())
+	return o
+}
+
 // barrierID is a message number the template does not have.  See
 // Relay.
 var barrierID = msg.MakeID(msg.FreqLow, 65530)

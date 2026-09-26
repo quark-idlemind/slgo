@@ -14,13 +14,34 @@ import (
 //
 // Both identifiers are needed and neither is enough.  Capabilities and
 // property requests take the id; most of the older messages take the
-// local id, which is a per-region handle that does not survive a region
-// crossing or a relog.
+// local id, which is the region's own numbering: the next region hands
+// the same numbers out to its own objects, and a region that restarts
+// numbers everything afresh.
+//
+// So an Object found here remembers which region, and which run of it,
+// its local id was handed out in, and every call that sends a local id
+// checks that first.  If the avatar has moved since, or the session has
+// been re-established, the object is looked up again by its id in the
+// region the avatar is in now, Local is brought up to date, and the new
+// number is what goes out.  One that is not there is refused with
+// ErrNotHere, and the old number is never sent.
+//
+// An Object built by hand has no region, and is always looked up before
+// its local id is sent; so is one found through another Session.  That
+// makes the id what identifies it, and Local only a hint.
 type Object struct {
 	ID    msg.UUID
 	Local uint32
 	Name  string
+
+	// from is the visit Local was handed out in; see Session.local.
+	from visit
 }
+
+// ErrNotHere is an object that is not in the region the avatar is in
+// now, as far as that region has described it, so there is no local id
+// to send for it.
+var ErrNotHere = errors.New("not in this region")
 
 func (o Object) String() string {
 	if o.Name != "" {
@@ -58,10 +79,14 @@ func (w *Session) Rez(ctx context.Context, opt RezOptions) (*Object, error) {
 //
 // ObjectName has no reply, so the only way to know it took is to ask.
 func (w *Session) SetName(ctx context.Context, o *Object, name string) error {
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 	m := &msg.ObjectName{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ObjectData = []msg.ObjectName_ObjectData{
-		{LocalID: o.Local, Name: append([]byte(name), 0)},
+		{LocalID: local, Name: append([]byte(name), 0)},
 	}
 	if err := w.Send(ctx, m); err != nil {
 		return err
@@ -149,7 +174,11 @@ func (w *Session) Properties(ctx context.Context, o *Object, timeout time.Durati
 	})
 	defer stop()
 
-	if err := w.Send(ctx, w.selectMsg(o.Local)); err != nil {
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.Send(ctx, w.selectMsg(local)); err != nil {
 		return nil, err
 	}
 	t := time.NewTimer(timeout)
@@ -187,7 +216,11 @@ func (w *Session) deselectMsg(locals ...uint32) *msg.ObjectDeselect {
 func (w *Session) Select(ctx context.Context, objs ...*Object) error {
 	locals := make([]uint32, 0, len(objs))
 	for _, o := range objs {
-		locals = append(locals, o.Local)
+		l, err := w.local(ctx, o)
+		if err != nil {
+			return err
+		}
+		locals = append(locals, l)
 	}
 	return w.Send(ctx, w.selectMsg(locals...))
 }
@@ -211,7 +244,11 @@ func (w *Session) Link(ctx context.Context, root *Object, children ...*Object) e
 	m := &msg.ObjectLink{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	for _, o := range all {
-		m.ObjectData = append(m.ObjectData, msg.ObjectLink_ObjectData{ObjectLocalID: o.Local})
+		local, err := w.local(ctx, o)
+		if err != nil {
+			return err
+		}
+		m.ObjectData = append(m.ObjectData, msg.ObjectLink_ObjectData{ObjectLocalID: local})
 	}
 	if err := w.Send(ctx, m); err != nil {
 		return err
@@ -298,7 +335,11 @@ func (w *Session) Unlink(ctx context.Context, prims ...*Object) error {
 	m := &msg.ObjectDelink{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	for _, o := range prims {
-		m.ObjectData = append(m.ObjectData, msg.ObjectDelink_ObjectData{ObjectLocalID: o.Local})
+		local, err := w.local(ctx, o)
+		if err != nil {
+			return err
+		}
+		m.ObjectData = append(m.ObjectData, msg.ObjectDelink_ObjectData{ObjectLocalID: local})
 	}
 	if err := w.Send(ctx, m); err != nil {
 		return err
@@ -324,7 +365,11 @@ func (w *Session) Unlink(ctx context.Context, prims ...*Object) error {
 func (w *Session) Parent(o *Object) (uint32, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	p, ok := w.parents[o.Local]
+	local := w.localNow(o)
+	if local == 0 {
+		return 0, false
+	}
+	p, ok := w.parents[local]
 	return p, ok
 }
 
@@ -421,6 +466,10 @@ func (w *Session) derezToInventory(ctx context.Context, o *Object, folder msg.UU
 	if err := w.Settle(ctx, 2*time.Second); err != nil {
 		return nil, false, err
 	}
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return nil, false, err
+	}
 
 	m := &msg.DeRezObject{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
@@ -428,7 +477,7 @@ func (w *Session) derezToInventory(ctx context.Context, o *Object, folder msg.UU
 	m.AgentBlock.DestinationID = folder
 	m.AgentBlock.TransactionID = randomUUID()
 	m.AgentBlock.PacketCount, m.AgentBlock.PacketNumber = 1, 0
-	m.ObjectData = []msg.DeRezObject_ObjectData{{ObjectLocalID: o.Local}}
+	m.ObjectData = []msg.DeRezObject_ObjectData{{ObjectLocalID: local}}
 	if err := w.Send(ctx, m); err != nil {
 		return nil, false, err
 	}
@@ -459,13 +508,17 @@ func (w *Session) Delete(ctx context.Context, o *Object, trash msg.UUID) error {
 	if err := w.Settle(ctx, time.Second); err != nil {
 		return err
 	}
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 	m := &msg.DeRezObject{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.AgentBlock.Destination = derezTrash
 	m.AgentBlock.DestinationID = trash
 	m.AgentBlock.TransactionID = randomUUID()
 	m.AgentBlock.PacketCount, m.AgentBlock.PacketNumber = 1, 0
-	m.ObjectData = []msg.DeRezObject_ObjectData{{ObjectLocalID: o.Local}}
+	m.ObjectData = []msg.DeRezObject_ObjectData{{ObjectLocalID: local}}
 	return w.Send(ctx, m)
 }
 

@@ -82,6 +82,10 @@ type Session struct {
 
 	mu sync.Mutex
 
+	// at is the visit the avatar is on: which region, and which run of
+	// it, a local id means something in.  See Object and Session.local.
+	at visit
+
 	// What the simulator has said about objects.
 	locals      map[msg.UUID]uint32   // object id to local id
 	owners      map[msg.UUID]msg.UUID // object id to owner
@@ -326,6 +330,7 @@ func New(b Backend) (*Session, error) {
 
 	w := &Session{
 		b: b, me: info.AgentID, invRoot: info.InventoryRoot,
+		at:          newVisit(),
 		locals:      map[msg.UUID]uint32{},
 		owners:      map[msg.UUID]msg.UUID{},
 		objectNames: map[msg.UUID]string{},
@@ -669,7 +674,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			delete(w.killed, o.ID)
 			if item, ok := attachItem(o.NameValue); ok {
 				w.attach[item] = &Attached{
-					Object: Object{ID: o.FullID, Local: o.ID},
+					Object: Object{ID: o.FullID, Local: o.ID, from: w.at},
 					Item:   item,
 					Point:  attachPoint(o.State),
 				}
