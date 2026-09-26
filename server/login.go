@@ -21,8 +21,8 @@ import (
 //
 // Unauthenticated and bound to loopback it was merely unwise; reachable
 // from another machine it would let anyone drive somebody else's avatar.
-// The exchange is the same one slrund uses, from the same package, so
-// there is one implementation and one secret.
+// The exchange is package auth's, which the client package speaks too,
+// so there is one implementation and one secret.
 //
 // It belongs to the CONNECTION. TLS made the session and the handshake
 // proved who is on the far end of it, so there is nothing to carry on

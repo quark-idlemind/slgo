@@ -2,129 +2,32 @@ package server
 
 // Getting home, and giving up trying when somebody else has the wheel.
 //
-// A profile may say "start = home", which asks the login server to put
-// the avatar at its home position.  That is a request and not a
-// promise: if the home REGION is down when the login happens, the grid
-// puts the avatar somewhere else entirely and says nothing about it
-// afterwards.  What comes up is a session in the wrong place, with the
-// wrong land under it -- and for a lab whose avatars are meant to be
-// standing on their own parcel that is a working day spent wondering
-// why nothing can rez.
+// A profile that says "start = home" may still come up somewhere else:
+// when the home region is down, the login server puts the avatar
+// elsewhere and says nothing.  So such a session asks to go home, once
+// a minute, until it gets there.  Nothing says where home is, so the
+// grid's answer decides:
 //
-// So a session that asked to start at home keeps asking to GO home
-// until it gets there, once a minute, for up to an hour.  A region that
-// was down comes back and the avatar walks in on the next attempt with
-// nobody watching.
+//   - a TeleportFinish or a TeleportLocal: it moved, so it is home.
+//   - a TeleportFailed carrying CouldntTPCloser: it is already there.
+//   - a TeleportFailed carrying RegionTPAccessBlocked: asking again
+//     will not change it.  The loop stops at once, and the refusal is
+//     kept across reconnects until a new home is set through this
+//     daemon (forgetHome) or the daemon restarts.
+//   - anything else, or silence: ask again a minute later, for up to
+//     HomeLimit of asking in all, counted across reconnects until the
+//     avatar gets home.  Once it is spent, each reconnect asks once more.
 //
-// # How anything here knows whether it is home already
+// The log says the first answer, each change of answer, and the line
+// that gives up.
 //
-// It does not, and cannot: nothing in the protocol answers "where is
-// home", and the daemon has never been told.  What it can do is ask to
-// go there and read what the grid says, which is exactly what the first
-// attempt is for.  Four answers, all of them measured in sl against
-// Agni -- the access refusal on a teleport to somewhere other than
-// home, and read here as meaning the same on the way home, which has
-// not been seen:
-//
-//   - a TeleportFinish, or a TeleportLocal: the avatar moved, so it is
-//     home now and there is nothing more to do.
-//   - a TeleportFailed carrying CouldntTPCloser: the grid will not
-//     shorten a teleport that arrives where it started, which is the
-//     grid's way of saying the avatar is already there.  Done.
-//   - a TeleportFailed carrying RegionTPAccessBlocked: not home, and
-//     never going to be by asking.  See below.
-//   - anything else, or silence: not home and not going, so wait a
-//     minute and ask again.
-//
-// So the cost is one teleport request per login, and what the grid does
-// with it depends on how exactly the login placed the avatar.  Measured
-// on Agni on 2026-09-02, the first time this ran in service: three
-// sessions that had logged in at home were each answered with a
-// TeleportLocal -- a move inside the region -- and logged "home, after
-// one attempt", finishing within seconds and leaving all three at the
-// coordinates they had started at.  The CouldntTPCloser refusal is
-// real and was measured the same day from the shell, going home while
-// standing exactly on the home point; which of the two answers comes
-// back is the grid's arithmetic and not something to depend on.
-//
-// Either way the avatar ends up at home and the loop stops, which is
-// all this needs, and it buys not having to know where home is.
-//
-// # When it stops without getting there
-//
-// Asking again is worth doing only for an obstacle that goes away, and
-// the one this loop was built for does: a region that is down comes
-// back, in minutes.  Not every refusal is that.
-//
-// RegionTPAccessBlocked is the grid's key for a region this avatar may
-// not enter.  It was measured for a maturity rating above what the
-// avatar may be shown, and the name says access in general; either way
-// it is the same answer every time it is asked, because nothing about
-// the avatar or the region changes by asking.  So that refusal stops
-// the loop at once, with one line naming the key and the grid's
-// sentence, and it is remembered: a reconnect does not ask again.  What
-// clears it is a new home being set through this daemon (see
-// forgetHome), since the refusal was about the old one, or the daemon
-// restarting.
-//
-// Anything else -- no_host, which is a region that is down, or silence,
-// or a key nobody here has seen -- is asked about once a minute for an
-// hour, and then given up on with one line saying so and naming the
-// last answer.  An hour is well past how long a region takes to come
-// back; a refusal that has not changed in that time is not a region on
-// its way back up.
-//
-// The hour is an hour of ASKING, counted across reconnects until the
-// avatar gets home.  A session that reconnects every half hour would
-// otherwise start a fresh hour each time and never give up -- the same
-// loop for ever, by the back door.  Time between loops, while there is
-// no session to ask with, is not counted, so a session that was down
-// for a day does not come back having spent its hour.  Once the hour
-// is spent, each reconnect asks once more -- a fresh login is a fresh
-// question, and one request per login is what this has always cost --
-// and gives up again at once if that is refused.  Getting home resets
-// it all.
-//
-// What it says while it tries is the first answer, then any answer
-// that differs from the one before, then the line that gives up.  A
-// refusal that never changes is two lines in all: one saying it is not
-// home and why, and one an hour later saying it has stopped asking.
-// Saying it every tenth attempt, as this once did, was too often to be
-// quiet and too rare to notice.
-//
-// # Why a client teleporting stops it
-//
-// Because the point is to put an avatar back where it belongs, not to
-// keep it there.  Somebody who types "tp" has taken the wheel, and a
-// daemon that dragged the avatar home a minute later would be a poltergeist:
-// the shell would report an arrival and the avatar would leave again by
-// itself, with nothing on the screen to say why.
-//
-// So any teleport a CLIENT asks for stops the loop for the rest of the
-// session, and so does one asked for at a viewer.  They arrive by two
-// roads: a client's messages through sendMessage, and a viewer's down
-// its own circuit straight to the session, with the circuit telling
-// ViewerSent of each one it passes on.  It stops on the request rather
-// than on an arrival, so a teleport that is refused stops it too: the
-// person meant to be somewhere else, and finding out they cannot is
-// their business.
-//
-// A viewer being handed the session stops it as well, before the viewer
-// has asked for anything: a person at a viewer has the wheel.  See
-// ViewerAttached.
-//
-// A reconnect starts it again, and that is deliberate.  A reconnect is
-// a fresh login with "start = home" in it, so the same question is
-// being asked again by the same means, and whatever a client did with
-// the previous session was about a session that no longer exists.
-// What the GRID said is another matter, and is kept: the hour of asking
-// and an access refusal both outlive a reconnect, for the reasons in
-// the section above.
-//
-// A viewer still on the session is the exception: a reconnect is the
-// grid's doing and does not hand the wheel back.  So before each attempt
-// the loop asks the viewer endpoint, and one that says a viewer is on
-// stops it for the rest of that session, as the other stops do.
+// A teleport asked for by a client (sendMessage) or at a viewer
+// (ViewerSent), or a viewer being handed the session (ViewerAttached),
+// stops the loop for the rest of the session: somebody else has the
+// wheel.  It stops on the request, so a refused teleport stops it too.
+// A reconnect is a fresh login with "start = home" in it and starts the
+// loop again; a viewer still on the session stops it before it asks.
+// Why: doc/daemon.md#getting-home
 
 import (
 	"bytes"
@@ -203,9 +106,8 @@ type homeAnswer struct {
 	// its key from.  Zero for an arrival, and for silence.
 	//
 	// The key is what the loop decides on and the words are only for
-	// the log.  Deciding on the words is what this used to do, by
-	// searching them for a copy of the key kept in this file; the key
-	// is the grid's, and it is written down once, in agent.
+	// the log: the key is the grid's, and it is written down once, in
+	// agent.
 	refusal agent.Refusal
 }
 

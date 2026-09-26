@@ -67,8 +67,8 @@ type Server struct {
 	// see seat.go.  Nil remembers nothing, which is the old behaviour.
 	seats Seats
 
-	// failures and inflight cover starting agents on demand: what did
-	// not work, and what is already being tried.
+	// starts covers starting agents on demand: what did not work, and
+	// what is already being tried.
 	starts agentState
 
 	// slots is the shared objects, handed out a number at a time and
@@ -316,9 +316,9 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 		opts.OnEvent = func(name string, body []byte) { h.relayEvent(name, body) }
 	}
 	// The avatar being somewhere else is news for every client, and it
-	// is the daemon that finds out: the grid announces a teleport to
-	// the session, not to whoever is attached to it.  Chained like the
-	// two above, for their reason.
+	// is the daemon that finds out: the grid announces a teleport or a
+	// crossing to the session, not to whoever is attached to it.
+	// Chained like the two above, for their reason.
 	if caller := opts.OnRegionChange; caller != nil {
 		opts.OnRegionChange = func(region string, handle uint64) {
 			caller(region, handle)
@@ -608,8 +608,8 @@ func (h *Hosted) notify(kind pb.AgentEvent_Kind, detail string) {
 // noteRegion says the avatar is in a different region, with the name
 // and handle of the one it is in now.
 //
-// This is the teleport arriving, and it is the same news the reconnect
-// path sends: everything you were holding is stale.  A client that
+// This is a teleport or a border crossing arriving, and it is the same
+// news the reconnect path sends: everything you were holding is stale.  A client that
 // handles one handles the other, which is why it is the kind that
 // already exists rather than a new one -- and why it goes out as a
 // notice.  The message subscription stream carries what the grid said;
@@ -707,8 +707,10 @@ func (s *Server) Agent(name string) (*Hosted, bool) {
 }
 
 // Ranked lists the hosted sessions oldest first, which is the order a
-// client should prefer them in: the first is the default, and a client
-// that cannot be satisfied by one tries the next.
+// client should prefer them in, and a client that cannot be satisfied
+// by one tries the next.  The default is the first that is not stopped:
+// a logout or a removal gives up a session's place, but a session the
+// grid ended keeps it, and Default passes over it.
 func (s *Server) Ranked() []*Hosted {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -718,8 +720,8 @@ func (s *Server) Ranked() []*Hosted {
 			out = append(out, h)
 		}
 	}
-	// Rank 0 means "gave up its place" -- a session that was stopped --
-	// and must sort LAST rather than first, which is where a plain
+	// Rank 0 means "gave up its place" -- a session logged out or
+	// removed -- and must sort LAST rather than first, which is where a plain
 	// numeric compare would put it.  It is still listed; it is simply
 	// not at the head of a list whose head means "the default".
 	sort.Slice(out, func(i, j int) bool {
@@ -782,7 +784,7 @@ func (s *Server) Close(ctx context.Context) {
 type Stats struct {
 	Clients     int64
 	Relayed     uint64 // messages handed to at least one client
-	Dropped     uint64 // relays skipped because a client was not keeping up
+	Dropped     uint64 // frames skipped because a client was not keeping up, counted as its stream ends
 	Reconnects  uint64 // sessions re-established
 	ReconnectAt uint64 // attempts made, successful or not
 }
@@ -862,9 +864,10 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 			Time:    20 * time.Second, // ping an idle connection
 			Timeout: 10 * time.Second, // and give up if nothing comes back
 		}),
-		// Clients ping too, and the default policy would call a client
-		// that pings more often than every two hours abusive and
-		// disconnect it.
+		// Clients ping too, every twenty seconds whether or not a stream
+		// is open, and gRPC's default policy would call a client that
+		// pings more often than every five minutes, or without a stream,
+		// abusive and disconnect it.
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,

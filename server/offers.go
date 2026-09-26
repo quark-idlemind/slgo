@@ -2,16 +2,10 @@ package server
 
 // Offers that arrive while nobody is attached.
 //
-// Somebody offers this avatar a teleport, an item, their friendship or a
-// place in a group, and the offer is an instant message carrying an id
-// that answers it and nothing else does.  It arrives once.  Before this
-// the daemon acknowledged it and relayed it to whoever was attached, and
-// with nobody attached it was acknowledged and dropped -- so the program
-// somebody starts BECAUSE they were away was the one program that could
-// never be told, and "nothing waiting" read as an answer when it was a
-// blind spot.
-//
-// So the daemon keeps them, per avatar, until they are dealt with:
+// An offer -- a teleport, an item, friendship, a place in a group -- is
+// an instant message carrying the one id that answers it, and it arrives
+// once.  So the daemon keeps them, per avatar, until they are dealt
+// with:
 //
 //   - The record is filled from the relay, before the fan-out and before
 //     the early return for a session with nobody attached, like the
@@ -34,11 +28,7 @@ package server
 // a teleport offered (dialog 22), a request to be offered one (26), an
 // item handed over (4), an offer of friendship (38) and an invitation
 // into a group (3).  Script dialogs and permission requests are not
-// kept.  Both come from an object in the region, both are almost always
-// the result of something an attached client just did, and whether an
-// answer to one still reaches it from another region has never been
-// watched -- so a record of them would be a list of questions that may
-// no longer have anybody asking.
+// kept.
 //
 // # What makes one unanswerable, and so drops it
 //
@@ -54,22 +44,12 @@ package server
 // the record says how many have gone, so a client can say its listing
 // is not the whole of it.
 //
-// And that is all.  Nothing is dropped on a timer, because nothing in the
-// viewer drops these on one either: none of the five notifications has a
-// duration in its template (skins/default/xui/en/notifications.xml), and
-// the group invitation is marked persist, which carries it across a
-// logout (llpersistentnotificationstorage.cpp).  Nothing is dropped when
-// the avatar changes region, because none of the five belongs to a
-// region: each is answered by quoting its id to the grid or to the
-// person who made it, never to an object that stayed behind.  And
-// nothing is dropped when the daemon re-establishes the session, because
-// the answers quote ids the offer carried and not anything of the
-// session's own.  That last is inferred rather than watched, from the
-// grid delivering these same five kinds to an avatar at login, out of
-// offline storage, to be answered with those same ids.
+// Nothing else drops one: not a timer, not a change of region, and not
+// the daemon re-establishing the session.
 //
 // The record lives in memory and goes with the process.  An offer made
 // while the daemon was down is not in it, and Since says where it starts.
+// Why: doc/daemon.md#offers-kept-while-nobody-is-attached
 
 import (
 	"sync"

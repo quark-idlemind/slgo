@@ -2,45 +2,19 @@ package server
 
 // The shared objects, handed out a number at a time.
 //
-// # What is being shared
+// Every hosted avatar wears objects that programs run scripts in --
+// slrun one per script it runs at once, slbench several for its search
+// -- and two runs in one object overwrite each other's script and data
+// and both report success.  So the daemon hands them out, from one pool
+// across every avatar: it is the only thing that can see all of them at
+// once.
 //
-// Every hosted avatar wears a set of objects that programs run scripts
-// in -- slrun one per script it runs at once, slbench four for its
-// search.  Two runs in one object overwrite each other's script and each
-// other's data, and both report success, so the objects have to be
-// handed out.
-//
-// # Why the daemon and not the clients
-//
-// The clients did it themselves until now, with a lock per object and an
-// allocation lock over them, and an invariant every one of them had to
-// keep for the scheme not to deadlock.  That works and it is delicate,
-// and it cannot answer the question a caller actually asks: give me
-// twelve, from wherever they are.  Here there is one pool for the whole
-// daemon, so a request for twelve is answered out of three avatars if
-// that is where the free ones are, atomically, by the only thing that
-// can see all of them at once.
-//
-// # What a slot is, and is not
-//
-// A PLACE: an avatar and a number, nothing more.  Not an object.  The
-// daemon deliberately does not know which object stands in which place,
-// because knowing would mean reading inventory to learn which worn items
-// are pool objects -- the item's name is the only thing that says so,
-// and names live in AIS rather than on the wire.  The client already
-// knows all of that: it is the one that wears a missing object and makes
-// a missing item.
-//
-// So the daemon hands out exclusion and the client hands out objects,
-// which is the division that was there before and is worth keeping.
-//
-// # Leases
-//
+// What it hands out is a PLACE, an avatar and a number, and not an
+// object: which object stands in which place is the client's to know.
 // A grant belongs to the stream that asked for it and is given back when
-// that stream ends, however it ended -- the same lease a lock has, for
-// the same reason.  The clock on top of that is for the client that
-// wedges without dying: it is connected, so its stream says it is alive,
-// and it is never going to give anything back.
+// that stream ends, as a lock is; the clock on top is for a client that
+// wedges without dying.
+// Why: doc/slots.md#who-decides
 
 import (
 	"context"
@@ -56,8 +30,8 @@ import (
 //
 // It has to agree with what the clients believe, since they are the ones
 // that turn a place into an object: a place the client cannot wear is a
-// grant nobody can use.  cmd/slgod sets it from the same list the
-// clients read.
+// grant nobody can use.  A test in cmd/slgod holds it to
+// session.AutoPool, the number the clients wear.
 const SlotsPerAgent = 12
 
 // where is what one slot stands for.  Only the daemon looks at it.
