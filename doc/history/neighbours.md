@@ -375,13 +375,23 @@ kept pushing for twelve seconds before calling itself blocked.
   walk back does not arise within those few seconds. How long a
   simulator keeps that child was not measured; the region left behind
   by a teleport kept its circuit about fifty seconds.
-- **From a fresh login it did not cross.** At the same border, after a
-  login with slgo holding a child circuit to the western neighbour,
-  open and busy, a walk west was held at the line -- x between -0.26
-  and -0.97 -- for twelve seconds, three times, and never crossed. A
-  build from before `Kept across a move` did the same. Stage 2 crossed
-  at this point on 2026-08-16 with the same kind of circuit. What has
-  changed since, in slgo or on the grid, is not known.
+- **A child opened at login did not carry a crossing.** At the same
+  border, after a login with slgo holding a child circuit to the
+  western neighbour, open and busy, a walk west was held at the line
+  -- x between -0.26 and -0.97 -- for twelve seconds, three times, and
+  never crossed. A build from before `Kept across a move` did the same,
+  and so did the earliest build `walk` can drive, from 2026-09-24.
+- **A child opened on arriving by teleport did.** Between two Linden
+  sandboxes, the child slgo opened to Sandbox Newcomb on arrival in
+  Sandbox Goguen carried the avatar west in 4.4 seconds, and in 5 after
+  a teleport within Goguen first. Back at the border that failed, with
+  the region's neighbours offered afresh on a teleport arrival -- the
+  avatar had been away long enough for the old ones to be disabled --
+  the same walk west crossed in 4.7 seconds. So the land lets the
+  avatar over, and slgo's child circuits can carry it; the ones opened
+  at login cannot. Stage 2 crossed on a child opened at login on
+  2026-08-16. Whether slgo changed how it opens the login-time children
+  since then, or the grid changed its timing at login, is not known.
 
 ### Stage 3 -- the crossing, by promotion
 
