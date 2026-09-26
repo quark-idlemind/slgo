@@ -63,8 +63,8 @@ type Sculpt struct {
 
 // Light is a prim that gives off light.
 type Light struct {
-	// Colour is RGB with the fourth byte unused here; Intensity is
-	// carried in it on the wire and is split out.
+	// Colour is the first three of four colour bytes on the wire; the
+	// fourth carries Intensity, which is split out.
 	Colour    [3]uint8
 	Intensity float32
 	Radius    float32

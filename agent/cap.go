@@ -55,8 +55,8 @@ func (r *CapResponse) OK() bool { return r.Status >= 200 && r.Status < 300 }
 // holding the grid connection or in a client on the far end of a link
 // to it.  An Agent implements it by making the HTTPS request; a client
 // implements it by asking the server to.  Nothing that uses a
-// capability -- inventory today, script upload next -- needs to know
-// which it is talking to.
+// capability -- inventory, script upload -- needs to know which it is
+// talking to.
 type CapDoer interface {
 	DoCap(ctx context.Context, req CapRequest) (*CapResponse, error)
 	HasCap(name string) bool

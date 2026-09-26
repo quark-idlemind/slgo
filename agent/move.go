@@ -18,10 +18,10 @@ import (
 // event queue belong to the region and none of them survive.
 //
 // What must survive is everything outside this package that reached
-// through the Agent to talk to the simulator.  Six places hold a.Send,
-// a.Recv or a.Disp -- server/grpc.go, server/group.go, sl/direct.go and
-// viewer/circuit.go -- and none of them is told a move happened, so the
-// objects keep their identity and the connection underneath them moves.
+// through the Agent to talk to the simulator.  The server, sl.Direct and
+// the viewer front end all hold a.Send, a.Recv or a.Disp, and none of
+// them is told a move happened, so the objects keep their identity and
+// the connection underneath them moves.
 
 // socket is the connection the sender and the receiver were built over,
 // with the one currently in use behind an atomic pointer.
@@ -159,11 +159,12 @@ func (s *socket) Close() error {
 // A move that fails after step 2 ends the session.  There is nothing to
 // go back to: the origin hands the agent off before it says where to, so
 // a circuit restored to it is a circuit to a region the avatar is not in
-// -- which is the state stage 0 measured, where everything looked
-// healthy for fifty seconds while the avatar was somewhere else.  Ending
-// it says so at once and lets the reconnect above run in seconds rather
-// than after the watchdog's minute, and a reconnect is a fresh login,
-// which lands the avatar wherever the grid thinks it is.
+// -- which is the state stage 0 of doc/history/teleport.md measured,
+// where everything looked healthy for fifty seconds while the avatar was
+// somewhere else.  Ending it says so at once and lets the reconnect
+// above run in seconds rather than after the watchdog's minute, and a
+// reconnect is a fresh login, which lands the avatar wherever the grid
+// thinks it is.
 //
 // The region's own facts need nothing here but the one mark that a move
 // is arriving.  The new simulator sends a RegionHandshake like any
@@ -332,8 +333,8 @@ func (a *Agent) moveRefused(addr *net.UDPAddr) error {
 // The name of the failure matters as much as the failure: a session that
 // stopped because a simulator it was handed to never answered reads,
 // without this, as the same "simulator silent" the watchdog reports for
-// any lost circuit -- which is what stage 0 saw and could not tell apart
-// from a teleport.
+// any lost circuit -- which is what stage 0 of doc/history/teleport.md
+// saw and could not tell apart from a teleport.
 func (a *Agent) moveFailed(addr *net.UDPAddr, err error) error {
 	e := fmt.Errorf("agent: move to %s: %w", addr, err)
 	a.fail(e)

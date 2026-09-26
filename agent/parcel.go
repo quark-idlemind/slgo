@@ -124,6 +124,9 @@ type Parcel struct {
 
 // The ParcelFlags bits, from the viewer's llparcel.h.  Only the ones a
 // person would ask about are named; the word is kept whole either way.
+// The ones a viewer's About Land panel shows, and the byte order
+// DecodeParcel reads the word in, were checked against that panel.
+// Why: doc/history/parcel.md#stage-4----live-on-the-grid-run
 const (
 	ParcelAllowFly           = 1 << 0
 	ParcelAllowOtherScripts  = 1 << 1
@@ -161,19 +164,6 @@ const (
 	ParcelUseEstateVoice    = 1 << 30
 	ParcelDenyAgeUnverified = 1 << 31
 )
-
-// Checked against a viewer's own About Land panel for Pelmar Reach's
-// Thrushmoor, whose flags word is 0x56a4800b, on 2026-08-18: fly, other
-// scripts, landmarks, group scripts, group build and group object entry
-// set, and terraform, damage, building by everyone, object entry by
-// everyone and the search listing clear.  Every checkbox agreed, which
-// is what says the word is read most significant byte first -- read the
-// other way it is a parcel nobody may fly over.
-//
-// It also settled two bits this file had wrong: 29 is voice and 30 is
-// the estate's voice channel, where they had been 28 and 29, and there
-// is no "group fly" flag at all.  The panel is the only place those
-// could have been caught.
 
 // Overlay dimensions.  A region is 256 metres and the overlay describes
 // it in 4 metre squares, one byte each, so it is a 64 by 64 grid that
@@ -448,7 +438,8 @@ func DecodeParcel(body any) *Parcel {
 	// a binary field, and is the reading that makes sense of what was
 	// measured: 56 a4 80 0b on a residential parcel is fly, scripts
 	// and landmarks allowed, where the other way round is a parcel
-	// nobody may fly over.  Stage 4 checks it against a viewer's panel.
+	// nobody may fly over.  A viewer's own panel agreed; see the
+	// ParcelFlags bits above.
 	v.Flags = uint32(llsd.Int(b, "ParcelFlags"))
 
 	return v

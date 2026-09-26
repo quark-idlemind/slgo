@@ -418,9 +418,9 @@ viewer's own message says only that something was invalid.
 A teleport **within** the region, with the viewer attached, was followed
 by the viewer exactly as intended -- it moved to (12, 128, 22) and drew
 the new spot. Absorbing `TeleportStart` costs a viewer the
-progress bar of its own within-region teleport, and the trace prices
-that: `TeleportStart` and `TeleportLocal` arrived **twenty microseconds
-apart**, so the tunnel is entered and left in one burst.
+progress bar of its own within-region teleport, and the trace, on Agni,
+prices that: `TeleportStart` and `TeleportLocal` arrived **twenty
+microseconds apart**, so the tunnel is entered and left in one burst.
 
 ### Stage 7 -- walking over the border (done, unverified)
 
@@ -582,7 +582,9 @@ grid's answer, never a wrong one, and it wants a second look if
 `Agent.Caps` from a field into a method, and stage 4 added a method to
 `sl.Backend`, which anything implementing that interface outside this
 tree has to grow. All three are exported, and v0.2.0 set the precedent:
-a caller reading only a patch number would not look.
+a caller reading only a patch number would not look. Nothing outside
+`agent` in this tree had used `Agent.Conn`, which is the unexported
+`sock` now.
 
 **A client can be told before the capabilities have moved.** The notice
 fires from `AgentMovementComplete`, on the dispatch goroutine, while
@@ -628,7 +630,9 @@ still calling itself by the old region's name with the old region's
 object store attached -- and object updates arriving in that window go
 into the store of a region the avatar has left. It was found by a `tp`
 whose read-back line named the region it had just left, which is the
-harmless end of it.
+harmless end of it; the notice that the region had changed named it
+too. In the ordinary order it was the other way about, the new name
+around the old position, for as long as the movement took to follow.
 
 `moveTo` waits for the movement message alone. Waiting for both is the
 obvious fix and needs a decision about what to do when only one comes.

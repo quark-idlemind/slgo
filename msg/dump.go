@@ -15,24 +15,37 @@ import (
 // that unhandled messages got dumped.  Being able to diff two captures
 // is worth more than being able to read one.
 //
-// The shape is fixed so it can be parsed:
+// The shape is fixed so it can be parsed.  DumpPacket writes the
+// packet's header and then what DumpMessage writes:
 //
+//	sequence: 1234
+//	flags: [reliable, ack]
+//	acks: [42, 43]
 //	message: ChatFromSimulator
 //	id: {freq: Low, number: 139}
-//	sequence: 1234
-//	flags: [reliable, zerocoded]
-//	acks: [42, 43]
 //	blocks:
 //	  ChatData:                     # a Single block is a mapping
 //	    FromName: "Example Resident"
+//	    SourceID: 00000000-0000-0000-0000-000000000000
+//	    OwnerID: 00000000-0000-0000-0000-000000000000
+//	    SourceType: 0
+//	    ChatType: 0
+//	    Audible: 0
+//	    Position: {x: 0, y: 0, z: 0}
 //	    Message: "hello"
-//	  Packets:                      # Multiple and Variable are sequences
+//
+// and a Multiple or Variable block is a sequence:
+//
+//	message: PacketAck
+//	id: {freq: Fixed, number: 251}
+//	blocks:
+//	  Packets:
 //	    - ID: 42
 //	    - ID: 43
 //
-// Variable fields render as a quoted string when the bytes look like
-// text, and as a quoted "0x..." hex string when they do not.  The
-// template says which fields are which, so nothing is ambiguous.
+// The template says which blocks are which, so that much is never
+// ambiguous.  Variable fields render as a quoted string when the bytes
+// look like text, and as a quoted "0x..." hex string when they do not.
 
 // DumpMessage renders a message as YAML.
 func DumpMessage(m Message) string {

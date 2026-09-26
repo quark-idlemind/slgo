@@ -4,7 +4,8 @@ An `ObjectUpdate` carries an object's position and rotation, with its
 velocities, in a packed blob, `ObjectData`, and nothing in the message
 says which of several layouts the blob uses except its width in bytes.
 `msg.DecodePlacement` (`msg/placement.go`) reads it. This is what that
-follows, and what has and has not been seen.
+follows, and what has and has not been seen. The terse update, which
+has a layout of its own, is at the end.
 
 ## The widths
 
@@ -79,3 +80,30 @@ So the daemon counts every blob by its width, unread widths included,
 and `slsh status` prints the counts on its `placements` line. A day's
 traffic there says whether the sixteen bit form, or any width not read
 here, is ever sent.
+
+## The terse update
+
+`ImprovedTerseObjectUpdate` carries a blob of its own, which
+`msg.DecodeTerse` (`msg/placement.go`) reads.
+
+### Its position is floats
+
+The layout was read off real blobs rather than assumed, and the
+assumption was wrong: the position is three plain floats, not the
+quantised pair of bytes per axis that everything after it uses.
+Decoding it as quantised gave positions that looked like positions --
+in range, stable, changing plausibly -- while being nowhere near where
+the objects actually were, which is the kind of wrong that does not
+announce itself.
+
+### Its rotation's sign
+
+All four components of the rotation are on the wire, and the fourth is
+not only there to be thrown away. The simulator does not keep W
+positive, and q and -q are the same rotation, so keeping X, Y and Z as
+they came and recovering W as positive -- which is what `msg.Quaternion`
+does -- turns a -q into the mirror image of q: a yaw of plus a quarter
+turn read as minus one. Measured on Agni, 2026-09-24: an avatar walking
+north read as facing south on some walks and not on others.
+`PackQuaternion` normalises and puts the sign where `Quaternion` expects
+it.

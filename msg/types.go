@@ -2,8 +2,9 @@
 // types, a generic encoder and decoder driven by struct tags, and the
 // message structures generated from message_template.msg.
 //
-// Numbers on the wire are little endian, with three exceptions that are
-// network order: the packet sequence number, IPADDR and IPPORT.
+// Numbers on the wire are little endian, with exceptions that are
+// network order: the packet sequence number and the acknowledgements
+// appended to a packet, a Low message's number, IPADDR and IPPORT.
 package msg
 
 //go:generate go run ../cmd/msggen -out messages_gen.go
@@ -203,10 +204,10 @@ var ErrShort = errors.New("msg: truncated message")
 //
 // It is here because a child prim is described in its root's frame:
 // the position and rotation on a child's update are relative to the
-// root, and putting one on the map needs the root's rotation applied
-// to it.  Standard quaternion sandwich, v' = q v q*, written out
-// rather than through a matrix because it is used a few times and a
-// matrix type would be a package.
+// root, and putting one in region coordinates needs the root's
+// rotation applied to it.  Standard quaternion sandwich, v' = q v q*,
+// written out rather than through a matrix because it is used a few
+// times and a matrix type would be a package.
 func (q Quaternion) Rotate(v Vector3) Vector3 {
 	x, y, z, w := q.X, q.Y, q.Z, q.W()
 
@@ -224,11 +225,9 @@ func (q Quaternion) Rotate(v Vector3) Vector3 {
 
 // Conjugate is the rotation that undoes this one.
 func (q Quaternion) Conjugate() Quaternion {
-	// The wire form keeps W non-negative by negating the vector part
-	// when it would not be, so the conjugate of a rotation whose W is
-	// recovered rather than stored is the negated vector -- which is
-	// what this type already holds.  Negating it again gives the
-	// original, so the conjugate has to carry its own sign.
+	// The conjugate negates the vector part and keeps W.  W is
+	// recovered from the vector's length, so negating the vector alone
+	// leaves it as it was, non-negative as the wire form keeps it.
 	return Quaternion{X: -q.X, Y: -q.Y, Z: -q.Z}
 }
 

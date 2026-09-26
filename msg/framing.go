@@ -20,7 +20,7 @@ const HeaderSize = 6
 // Header is the packet header that precedes a message.
 type Header struct {
 	Flags    uint8
-	Sequence uint32 // network order on the wire, unlike everything else
+	Sequence uint32 // network order on the wire
 	Extra    []byte
 }
 
