@@ -33,7 +33,13 @@ const (
 	DialogInventoryOffered  = 4
 	DialogInventoryAccepted = 5
 	DialogInventoryDeclined = 6
-	DialogSessionSend       = 17
+
+	// DialogTaskInventoryOffered is an object giving an item.  As with
+	// DialogFromTask, From is the owner and FromName the object's; read
+	// from the viewer's source, not measured.  See doc/im-senders.md.
+	DialogTaskInventoryOffered = 9
+
+	DialogSessionSend = 17
 
 	// DialogFromTask is a script's llInstantMessage.  From is the
 	// object's OWNER, ID is the object, and FromName is whatever the
@@ -49,6 +55,12 @@ const (
 	DialogLureAccepted    = 23
 	DialogGodlikeLure     = 25
 	DialogTeleportRequest = 26
+
+	// DialogFromTaskAsAlert is a script's message the viewer shows as
+	// an alert.  FromName is the object's, and From is taken to be its
+	// owner as with DialogFromTask; read from the viewer's source, not
+	// measured.  See doc/im-senders.md.
+	DialogFromTaskAsAlert = 31
 
 	// DialogGroupNotice is a notice posted to a group; see notice.go.
 	// The other two answer the item one carries.
@@ -683,12 +695,20 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 		w.deliverIM(im)
 		return
 	}
-	// Two kinds carry a name that is not the sender id's.  A group
+	// Some kinds carry a name that is not the sender id's.  A group
 	// invitation's id is the group and its name whoever invited (see
-	// invite.go); a script's message has its owner's id and the
-	// object's name.  Learning either pair files a wrong name under
-	// that id, and every name printed for it afterwards is wrong.
-	learn := b.Dialog != DialogGroupInvitation && b.Dialog != DialogFromTask
+	// invite.go).  An object's message, alert or item has its owner's
+	// id and the object's name: measured for 19, read from the
+	// viewer's source for 9 and 31.  Learning any such pair files a
+	// wrong name under that id, and every name printed for it
+	// afterwards is wrong.
+	// Why: doc/im-senders.md#an-objects-message
+	learn := true
+	switch b.Dialog {
+	case DialogGroupInvitation,
+		DialogTaskInventoryOffered, DialogFromTask, DialogFromTaskAsAlert:
+		learn = false
+	}
 	// A group notice may carry the group's id with the poster's name,
 	// and one whose bucket does not name the group cannot be told apart.
 	if n, ok := GroupNoticeFrom(im); ok && (n.Group.IsZero() || n.Group == im.From) {
@@ -806,6 +826,8 @@ func DialogName(d uint8) string {
 		return "inventory accepted"
 	case DialogInventoryDeclined:
 		return "inventory declined"
+	case DialogTaskInventoryOffered:
+		return "object inventory offer"
 	case DialogSessionSend:
 		return "group message"
 	case DialogFromTask:
@@ -822,6 +844,8 @@ func DialogName(d uint8) string {
 		return "godlike teleport"
 	case DialogTeleportRequest:
 		return "teleport request"
+	case DialogFromTaskAsAlert:
+		return "object alert"
 	case DialogGroupNotice:
 		return "group notice"
 	case DialogGroupNoticeInventoryAccepted:
