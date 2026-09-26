@@ -33,6 +33,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/llsd"
+	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/server"
 	"github.com/quark-idlemind/slgo/viewer"
 )
@@ -847,4 +848,106 @@ func TestARefusedViewerLoginSaysNothingAndOpensNothing(t *testing.T) {
 	if _, ok := handable.circuits.Load("example"); !ok {
 		t.Error("an accepted login opened no circuit, so the checks above prove nothing")
 	}
+}
+
+// A viewer and the daemon's own attempts to get the avatar home.
+//
+// A profile with "start = home" keeps asking to go home until it gets
+// there, and stops when somebody else takes the wheel.  A viewer takes
+// it through this endpoint and moves the avatar down its own circuit,
+// neither of which the server sees unless slgod tells it; these are the
+// two places it does.
+
+// homingSession hosts a session that starts at home, standing in a
+// region with this handle, and captures what it says.  Its first
+// attempt to go home is five seconds off, so the loop is still running
+// when a test acts on it.
+func homingSession(t *testing.T, handle uint64) (*server.Server, *server.Hosted, context.Context, *logCapture) {
+	t.Helper()
+	sim := newSim(t)
+	sim.mu.Lock()
+	sim.handle = handle
+	sim.mu.Unlock()
+	hs := loginServer(t, sim)
+
+	srv := server.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		stop, done := context.WithTimeout(context.Background(), 10*time.Second)
+		defer done()
+		srv.Close(stop)
+		cancel()
+	})
+	login := agent.Login{First: "Example", Last: "Resident", Password: "secret", URL: hs.URL, Start: "home"}
+	h, err := srv.StartAgent(ctx, "example", login, agent.Options{Idle: -1})
+	if err != nil {
+		t.Fatalf("hosting a session: %v", err)
+	}
+	said := &logCapture{}
+	h.Log = func(format string, v ...any) { fmt.Fprintf(said, format+"\n", v...) }
+	return srv, h, ctx, said
+}
+
+// TestAViewerLoginStopsTheDaemonTakingTheAvatarHome: a person at a
+// viewer has the wheel from the moment the session is handed over, and
+// a daemon that went on asking to go home would teleport the avatar out
+// from under them.
+func TestAViewerLoginStopsTheDaemonTakingTheAvatarHome(t *testing.T) {
+	srv, _, ctx, said := homingSession(t, 0)
+	_, url := viewerLoginTo(t, ctx, srv, "viewer-secret")
+
+	if got := viewerLogin(t, url, "Example", "Resident", "viewer-secret"); !strings.Contains(got, "<name>sim_port</name>") {
+		t.Fatalf("the viewer login was refused:\n%s", got)
+	}
+	if !strings.Contains(said.String(), "no longer trying to get home: a viewer was handed this session") {
+		t.Errorf("handing the session to a viewer did not stop the daemon taking it home; it said:\n%s", said)
+	}
+}
+
+// TestAViewerTeleportOnItsCircuitStopsTheDaemonTakingTheAvatarHome: a
+// viewer's teleport inside the region goes down the circuit this daemon
+// opened for it, straight to the session.  The circuit is opened here
+// without a login, so that it is the teleport that stops the loop and
+// not the handover.
+func TestAViewerTeleportOnItsCircuitStopsTheDaemonTakingTheAvatarHome(t *testing.T) {
+	here := msg.RegionHandle(3, 5)
+	srv, h, ctx, said := homingSession(t, here)
+	vh, _ := viewerLoginTo(t, ctx, srv, "viewer-secret")
+
+	a := h.Agent()
+	waitFor(t, 5*time.Second, "the session to know which region it is in", func() bool {
+		return a.RegionHandle() == here
+	})
+	c, err := vh.circuitFor("example", h)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := net.DialUDP("udp", nil, c.Addr())
+	if err != nil {
+		t.Skipf("no loopback UDP: %v", err)
+	}
+	defer conn.Close()
+	claim := &msg.UseCircuitCode{}
+	claim.CircuitCode.Code = a.Account.CircuitCode
+	claim.CircuitCode.SessionID = a.Account.SessionID
+	claim.CircuitCode.ID = a.Account.AgentID
+	tp := &msg.TeleportLocationRequest{}
+	tp.Info.RegionHandle = here
+	tp.Info.Position = msg.Vector3{X: 12, Y: 240, Z: 27}
+	for i, m := range []msg.Message{claim, tp} {
+		body, err := m.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := msg.AppendHeader(nil, &msg.Header{Sequence: uint32(i + 1)})
+		out = msg.AppendID(out, msg.IDOf(m))
+		if _, err := conn.Write(append(out, body...)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	waitFor(t, 5*time.Second, "the daemon to stop taking the avatar home", func() bool {
+		return strings.Contains(said.String(), "no longer trying to get home: a viewer teleported this avatar")
+	})
 }

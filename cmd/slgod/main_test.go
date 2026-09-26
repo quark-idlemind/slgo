@@ -63,6 +63,10 @@ type fakeSim struct {
 	peer   *net.UDPAddr
 	seq    uint32
 	groups []msg.AgentGroupDataUpdate_GroupData
+
+	// handle is the region the avatar is told it is in.  Zero, which
+	// is a region the session does not know, unless a test sets one.
+	handle uint64
 }
 
 func newSim(t *testing.T) *fakeSim {
@@ -144,16 +148,18 @@ func (f *fakeSim) run() {
 			rh.RegionInfo.SimName = []byte("Testville\x00")
 			f.send(rh, msg.FlagReliable)
 		case "CompleteAgentMovement":
+			f.mu.Lock()
+			gs, handle := f.groups, f.handle
+			f.mu.Unlock()
+
 			amc := &msg.AgentMovementComplete{}
 			amc.Data.Position = msg.Vector3{X: 1, Y: 2, Z: 3}
+			amc.Data.RegionHandle = handle
 			amc.SimData.ChannelVersion = []byte("Fake Server\x00")
 			f.send(amc, msg.FlagReliable)
 
 			// The membership list, which is what slgod needs before it
 			// can decide which group to act as.
-			f.mu.Lock()
-			gs := f.groups
-			f.mu.Unlock()
 			f.sendGroups(gs...)
 
 			// A message the daemon has no handler for, which is how a

@@ -470,7 +470,7 @@ func (v *viewerHost) find(first, last string) *viewer.Handover {
 	// and the token the capabilities are gated on is minted.  Looking
 	// a session up is now free and tells the asker nothing.
 	hand.Admit = func() error {
-		c, err := v.circuitFor(profile, h.Agent)
+		c, err := v.circuitFor(profile, h)
 		if err != nil {
 			return fmt.Errorf("no circuit for %s: %w", name, err)
 		}
@@ -487,6 +487,8 @@ func (v *viewerHost) find(first, last string) *viewer.Handover {
 		// straight from the grid; only the event queue comes past
 		// here, because it has to have a single reader.
 		hand.Seed = v.capBase(profile, token) + "/seed"
+		// A person at a viewer has the wheel from here on.
+		h.ViewerAttached()
 		return nil
 	}
 	return hand
@@ -584,17 +586,20 @@ func (v *viewerHost) hostedNamed(name string) (string, *server.Hosted) {
 // login response and nothing else needs it: a session nobody watches
 // never opens one.  Kept afterwards, because a viewer that is restarted
 // logs in again and there is no reason to move the port under it.
-func (v *viewerHost) circuitFor(profile string, session func() *agent.Agent) (*viewer.Circuit, error) {
+func (v *viewerHost) circuitFor(profile string, h *server.Hosted) (*viewer.Circuit, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
 	if c, ok := v.circuits.Load(profile); ok {
 		return c.(*viewer.Circuit), nil
 	}
-	c, err := viewer.Listen(v.host, session, v.census, v.trace, v.logf)
+	c, err := viewer.Listen(v.host, h.Agent, v.census, v.trace, v.logf)
 	if err != nil {
 		return nil, err
 	}
+	// What the viewer sends reaches the session down this circuit, past
+	// the server, so the server is told of it here.
+	c.OnForward(func(m msg.Message) { h.ViewerSent(msg.IDOf(m)) })
 	c.Run(v.ctx)
 	v.circuits.Store(profile, c)
 	return c, nil

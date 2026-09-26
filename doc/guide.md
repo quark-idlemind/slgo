@@ -334,6 +334,18 @@ shell reports an arrival and the avatar leaves again by itself with
 nothing on the screen to say why. It stops on the request rather than
 on an arrival, so a teleport that is refused stops it too.
 
+**So does a viewer.** Handing the session to a viewer -- with
+`viewer --launch`, or any viewer logging in at the daemon's viewer
+endpoint -- stops it at once, before the viewer has asked for anything:
+a person at a viewer has the wheel. A teleport asked for at the viewer
+stops it the same way, and a new home set there forgets what the grid
+said about the old one, as a client's does -- but only when the viewer
+sends it as a message. Firestorm's source sends Set Home to Here
+through the region's `HomeLocation` capability where the region offers
+one, and that goes to the grid without passing `slgod` (read in the
+source, not watched); after an access refusal, set the new home with
+`landmark --set-home` instead.
+
 A reconnect starts it again, and so does a restart: both are fresh
 logins with `start = home` in them, so the same question is being asked
 again by the same means. What the grid has said is kept across a

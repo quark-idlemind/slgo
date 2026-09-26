@@ -189,7 +189,9 @@ func TestArrivingStopsIt(t *testing.T) {
 // nothing on the screen to say why.
 func TestAClientTeleportStopsIt(t *testing.T) {
 	quickHoming(t)
+	listenSlowly(t)
 	h, sim, _ := homeRig(t, "home")
+	log := listen(h)
 	refuse(t, sim, agent.KeyNoHost)
 
 	waitFor(t, 5*time.Second, "the loop to be running", func() bool { return asked(sim) >= 2 })
@@ -212,6 +214,101 @@ func TestAClientTeleportStopsIt(t *testing.T) {
 	time.Sleep(10 * HomeRetry)
 	if n := asked(sim); n != settled {
 		t.Errorf("asked %d more times after a client teleported the avatar", n-settled)
+	}
+	if got := log.said("no longer trying to get home: a client teleported this avatar"); len(got) != 1 {
+		t.Errorf("said %q; want one line saying a client took the wheel", log.all())
+	}
+}
+
+// TestAViewerTeleportStopsIt: a viewer on the session sends its
+// teleports down its own circuit, past sendMessage, and they take the
+// wheel just as a client's do.  These two are the ones the viewer
+// circuit passes on, and a request to go home a minute after one of
+// them is the daemon teleporting the avatar out from under the person
+// at the viewer.
+func TestAViewerTeleportStopsIt(t *testing.T) {
+	for _, m := range []msg.Message{&msg.TeleportLocationRequest{}, &msg.TeleportRequest{}} {
+		t.Run(m.MsgInfo().Name, func(t *testing.T) {
+			quickHoming(t)
+			listenSlowly(t)
+			h, sim, _ := homeRig(t, "home")
+			log := listen(h)
+			refuse(t, sim, agent.KeyNoHost)
+
+			waitFor(t, 5*time.Second, "the loop to be running", func() bool { return asked(sim) >= 2 })
+			h.ViewerSent(msg.IDOf(m))
+
+			time.Sleep(3 * HomeRetry)
+			settled := asked(sim)
+			time.Sleep(10 * HomeRetry)
+			if n := asked(sim); n != settled {
+				t.Errorf("asked %d more times after a viewer teleported the avatar", n-settled)
+			}
+			if got := log.said("no longer trying to get home: a viewer teleported this avatar"); len(got) != 1 {
+				t.Errorf("said %q; want one line saying a viewer took the wheel", log.all())
+			}
+		})
+	}
+}
+
+// awaitingAnswer says whether an attempt is waiting for the grid to
+// answer it.
+func awaitingAnswer(h *Hosted) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.homeAnswers != nil
+}
+
+// TestAViewerTeleportIsNotTakenForArrivingHome: a double-click inside
+// the region is answered with a TeleportLocal, and nothing in it says
+// whose request it answers.  Arriving while an attempt waits, it would
+// be read as the avatar getting home: a false "home" in the log, and the
+// rest of the hour of asking given up.
+func TestAViewerTeleportIsNotTakenForArrivingHome(t *testing.T) {
+	quickHoming(t)
+	listenSlowly(t)
+	h, sim, _ := homeRig(t, "home")
+	log := listen(h)
+
+	// Silence, so that each attempt waits the whole of its time.
+	waitFor(t, 5*time.Second, "an attempt to be waiting for its answer", func() bool {
+		return asked(sim) >= 1 && awaitingAnswer(h)
+	})
+	h.ViewerSent(msg.IDOf(&msg.TeleportLocationRequest{}))
+	sim.send(&msg.TeleportLocal{}, 0)
+
+	waitFor(t, 5*time.Second, "the loop to stop", func() bool { return !homing(h) })
+	time.Sleep(3 * HomeRetry)
+	if got := log.said("home, after"); len(got) != 0 {
+		t.Errorf("the answer to a viewer's teleport was taken for getting home: %q", got)
+	}
+	if got := log.said("no longer trying to get home: a viewer teleported this avatar"); len(got) != 1 {
+		t.Errorf("said %q; want one line saying a viewer took the wheel", log.all())
+	}
+}
+
+// TestAViewerBeingHandedTheSessionStopsIt: a person at a viewer has the
+// wheel from the moment the session is handed over, before the viewer
+// has asked for anything.
+func TestAViewerBeingHandedTheSessionStopsIt(t *testing.T) {
+	quickHoming(t)
+	listenSlowly(t)
+	h, sim, _ := homeRig(t, "home")
+	log := listen(h)
+	refuse(t, sim, agent.KeyNoHost)
+
+	waitFor(t, 5*time.Second, "the loop to be running", func() bool { return asked(sim) >= 2 })
+	h.ViewerAttached()
+
+	waitFor(t, 5*time.Second, "the loop to stop", func() bool { return !homing(h) })
+	time.Sleep(3 * HomeRetry)
+	settled := asked(sim)
+	time.Sleep(10 * HomeRetry)
+	if n := asked(sim); n != settled {
+		t.Errorf("asked %d more times after a viewer was handed the session", n-settled)
+	}
+	if got := log.said("no longer trying to get home: a viewer was handed this session"); len(got) != 1 {
+		t.Errorf("said %q; want one line saying a viewer took the session", log.all())
 	}
 }
 
@@ -599,6 +696,24 @@ func TestSettingANewHomeForgetsTheRefusal(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
+	was := asked(sim)
+	reconnectNow(t, h)
+	waitFor(t, 5*time.Second, "the new home to be asked for", func() bool { return asked(sim) > was })
+}
+
+// TestAViewerSettingANewHomeForgetsTheRefusal: the same, set at a viewer,
+// whose message goes down its own circuit rather than through
+// sendMessage.
+func TestAViewerSettingANewHomeForgetsTheRefusal(t *testing.T) {
+	quickHoming(t)
+	h, sim, _ := homeRig(t, "home")
+	refuse(t, sim, agent.KeyRegionTPAccessBlocked)
+
+	waitFor(t, 5*time.Second, "the loop to stop", func() bool {
+		return asked(sim) >= 1 && !homing(h)
+	})
+	h.ViewerSent(msg.IDOf(&msg.SetStartLocationRequest{}))
 
 	was := asked(sim)
 	reconnectNow(t, h)

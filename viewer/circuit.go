@@ -79,6 +79,10 @@ type Circuit struct {
 	peer   *net.UDPAddr
 	joined bool
 
+	// forwarded is told of each message passed on to the simulator.
+	// Guarded by mu.  See OnForward.
+	forwarded func(msg.Message)
+
 	// pending holds the appearances kept from before this viewer
 	// attached, until the viewer has been told the avatars they
 	// describe exist.  See dressAvatars.
@@ -185,6 +189,22 @@ func (c *Circuit) Joined() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.joined
+}
+
+// OnForward sets what is told of each message the viewer sends that this
+// circuit passes on to the simulator, just before it goes.  Nil tells
+// nothing.
+//
+// What a viewer sends reaches the session down this circuit and through
+// nothing else of the daemon's, so a teleport or a new home asked for at
+// a viewer is seen here or not at all.  What is absorbed here is not
+// told: the grid never hears it.
+//
+// It is called on the circuit's dispatch goroutine and must not block.
+func (c *Circuit) OnForward(f func(msg.Message)) {
+	c.mu.Lock()
+	c.forwarded = f
+	c.mu.Unlock()
 }
 
 // admit decides whether a datagram is this circuit's viewer talking.
@@ -504,6 +524,15 @@ func (c *Circuit) forward(p *msg.Packet) {
 		return
 	}
 	c.record(FromViewer, p, Forwarded)
+
+	// Before the send, so that whoever is told has heard of the request
+	// before any answer to it can come back.
+	c.mu.Lock()
+	told := c.forwarded
+	c.mu.Unlock()
+	if told != nil {
+		told(p.Message)
+	}
 
 	var err error
 	if p.Header.Reliable() {
