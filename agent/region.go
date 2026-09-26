@@ -54,6 +54,16 @@ type Region struct {
 	Protocols uint64
 }
 
+// The Flags bits that stop every script in a region, from the viewer's
+// llmessage/llregionflags.h.  The viewer tells a person "This region is
+// not running any scripts" for the first and "An administrator has
+// temporarily stopped scripts in this region" for the second
+// (llstatusbar.cpp:1698-1705).
+const (
+	RegionSkipScripts       = 1 << 13 // REGION_FLAGS_SKIP_SCRIPTS
+	RegionEstateSkipScripts = 1 << 21 // REGION_FLAGS_ESTATE_SKIP_SCRIPTS
+)
+
 // regionState is the region's handshake as it arrived, kept whole.
 //
 // It is replaced when a handshake comes, as the object store is, so that

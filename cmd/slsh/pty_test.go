@@ -172,6 +172,11 @@ func (b *fakeBackend) Events() <-chan *sl.QueueEvent { return nil }
 func (b *fakeBackend) Land(ctx context.Context) (*sl.Land, error) {
 	return &sl.Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
 }
+
+// Ground knows no land: none has arrived.
+func (b *fakeBackend) Ground(ctx context.Context, west, south, east, north float32) (float32, bool, error) {
+	return 0, false, nil
+}
 func (b *fakeBackend) Done() <-chan struct{}   { return b.done }
 func (b *fakeBackend) Err() error              { return nil }
 func (b *fakeBackend) Close() error            { return nil }

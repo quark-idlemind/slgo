@@ -230,6 +230,15 @@ type Backend interface {
 	// has been up for hours is the only thing that still has it.
 	Land(ctx context.Context) (*Land, error)
 
+	// Ground is the height of the land in the region the avatar is in:
+	// the highest it comes in a rectangle, in metres from the region's
+	// south west corner, which for a point is the height there.  Known
+	// is false where the land under it has not all arrived.
+	//
+	// Here for the reason Land is: the heightmap is sent once, when the
+	// avatar arrives, and never again for the asking.
+	Ground(ctx context.Context, west, south, east, north float32) (height float32, known bool, err error)
+
 	// Neighbours is the circuits held to the regions AROUND that one,
 	// and whether the session is holding any at all.  A non-nil set
 	// turns them on or off first, and the answer describes what is

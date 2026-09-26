@@ -1060,6 +1060,7 @@ Each is reported and each makes the run fail:
     (3, 4) : ERROR : Syntax error        would not compile
     slrun: Math Error                    crashed while running
     it did not say DONE within 1m0s      never finished
+    the land doesn't run this ...        will not run where it is
 
 The compiler's line and column **count from zero** -- measured, a bad
 token on the fifth line of a script reports line 4 -- but `sl` sends
@@ -1074,6 +1075,15 @@ ERROR : Syntax error`. With a newline in front, nothing we send has
 anything on line 0, so `(0, 0)` can only be an upload that went missing
 -- and one that did is simply sent again. Measured on thirty scripts at
 once: three runs in eight failed that way before, none in eight after.
+
+The last is said as soon as the script has compiled, without waiting
+for the timeout: the region is running no scripts, or the object is
+within 50 m of the ground on a parcel that runs only its owner's
+scripts, or its group's as well, and the object is neither the owner's
+nor in the group. The simulator reports such a script running and it
+never says a word. Worn objects, the default, are checked only for the
+region; the 50 m is inferred from one measurement. See
+[ground.md](ground.md#where-the-land-stops-running-scripts).
 
 `slrun` exits non-zero if **any** script failed, so it can be used
 from a Makefile or a test script. It exits 0 only if every script

@@ -370,6 +370,10 @@ func TestEveryCallSaysWhichAgentItCouldNotFind(t *testing.T) {
 			_, err := empty.Neighbours(ctx, &pb.NeighboursRequest{Agent: n})
 			return err
 		},
+		"Ground": func(n string) error {
+			_, err := empty.Ground(ctx, &pb.GroundRequest{Agent: n})
+			return err
+		},
 		"Friends": func(n string) error {
 			_, err := empty.Friends(ctx, &pb.FriendsRequest{Agent: n})
 			return err
@@ -807,6 +811,62 @@ func TestASessionThatFellOverIsStillConnecting(t *testing.T) {
 	})
 	if h.info().GetConnected() {
 		t.Error("a session with no circuit reported itself connected")
+	}
+}
+
+// flatLand is one LayerData land body holding a single flat patch at
+// the region's south west corner: the group header (stride 16, patches
+// of 16, layer L), quant_wbits 0x06, a DC offset of 41.5, a range of 2,
+// patch id 0, an end of block, and the end of the patches.  Every
+// height in it is 41.5 + 2/2.
+var flatLand = []byte{0x10, 0x00, 0x10, 0x4c, 0x06, 0x00, 0x00, 0x26, 0x42, 0x02, 0x00, 0x00, 0x26, 0x10}
+
+// TestTheGroundIsAnsweredFromTheLandTheSessionWasSent: the heightmap is
+// sent once, on arrival, so the server decodes it as it comes and a
+// client asks it.
+func TestTheGroundIsAnsweredFromTheLandTheSessionWasSent(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+	h, _ := r.srv.Agent("example")
+
+	got, err := r.srv.Ground(ctx, &pb.GroundRequest{Agent: "example", West: 3, South: 4, East: 3, North: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetKnown() {
+		t.Fatalf("ground = %v, known before any land arrived", got.GetHeight())
+	}
+
+	m := &msg.LayerData{}
+	m.LayerID.Type = 'L'
+	m.LayerData.Data = flatLand
+	r.sim.send(m, 0)
+	waitFor(t, 5*time.Second, "the land to be kept", func() bool {
+		n, _, _ := h.Agent().Terrain().Stats()
+		return n == 1
+	})
+
+	got, err = r.srv.Ground(ctx, &pb.GroundRequest{Agent: "example", West: 3, South: 4, East: 3, North: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.GetKnown() || got.GetHeight() != 42.5 {
+		t.Errorf("ground at a point = %v, known %v; want 42.5", got.GetHeight(), got.GetKnown())
+	}
+	got, err = r.srv.Ground(ctx, &pb.GroundRequest{Agent: "example", West: 1, South: 1, East: 14, North: 2.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.GetKnown() || got.GetHeight() != 42.5 {
+		t.Errorf("highest in a rectangle = %v, known %v; want 42.5", got.GetHeight(), got.GetKnown())
+	}
+	// The patch beside it never came.
+	got, err = r.srv.Ground(ctx, &pb.GroundRequest{Agent: "example", West: 10, South: 1, East: 20, North: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetKnown() {
+		t.Errorf("highest over land that never came = %v, known", got.GetHeight())
 	}
 }
 

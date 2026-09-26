@@ -128,6 +128,10 @@ func (r *runner) sendIn(p place, src string) (results, info []string, err error)
 			OOM: res.Fault.OutOfMemory(),
 		}
 	}
+	// Returned without waiting, so there was no timeout to report.
+	if res.Blocked != "" {
+		return results, info, fmt.Errorf("%s: %s", obj.Name, res.Blocked)
+	}
 	if !res.Finished {
 		return results, info, fmt.Errorf("the script did not say DONE within %v", r.Timeout)
 	}

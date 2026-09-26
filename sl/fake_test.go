@@ -135,6 +135,11 @@ type fakeBackend struct {
 	regionKnown bool
 	regionErr   error
 
+	// ground answers Ground, for a rectangle in the region; unset, no
+	// land has arrived.
+	ground    func(west, south, east, north float32) (float32, bool)
+	groundErr error
+
 	// neighbours is what the far end holds, and it is changed by a
 	// set the way a real backend changes it: turning them off drops
 	// what is held rather than only refusing the next offer, which is
@@ -892,6 +897,19 @@ func (f *fakeBackend) Land(ctx context.Context) (*Land, error) {
 		return &Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
 	}
 	return f.land, nil
+}
+
+func (f *fakeBackend) Ground(ctx context.Context, west, south, east, north float32) (float32, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.groundErr != nil {
+		return 0, false, f.groundErr
+	}
+	if f.ground == nil {
+		return 0, false, nil
+	}
+	h, known := f.ground(west, south, east, north)
+	return h, known, nil
 }
 
 func (f *fakeBackend) Lock(ctx context.Context, name string) error {

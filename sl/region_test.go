@@ -71,7 +71,8 @@ func TestARegionChangeDropsWhatTheRegionSaidAndKeepsWhatItDidNot(t *testing.T) {
 	// exactly alike.
 	w.mu.Lock()
 	filled := len(w.locals) == 3 && len(w.parents) == 3 && len(w.killed) == 1 &&
-		len(w.attach) == 1 && len(w.owners) == 1 && len(w.objectNames) == 1 &&
+		len(w.attach) == 1 && len(w.owners) == 1 && len(w.groups) == 1 &&
+		len(w.objectNames) == 1 &&
 		len(w.taskInv) == 1 && len(w.taskSeen) == 1 && len(w.asking) == 1
 	w.mu.Unlock()
 	if !filled {
@@ -95,6 +96,7 @@ func TestARegionChangeDropsWhatTheRegionSaidAndKeepsWhatItDidNot(t *testing.T) {
 		{"the objects reported killed", len(w.killed)},
 		{"the attachments as the last region described them", len(w.attach)},
 		{"who owns what", len(w.owners)},
+		{"what group each is in", len(w.groups)},
 		{"what things are called", len(w.objectNames)},
 		{"the task inventory filenames", len(w.taskInv)},
 		{"which objects answered about their contents", len(w.taskSeen)},

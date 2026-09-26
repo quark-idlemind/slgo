@@ -151,12 +151,12 @@ func (w *Session) regionChanged(c *RegionChange) {
 //     an object here as confidently as it named one there.  killed is
 //     the worst of the three, because a stale kill makes an object that
 //     exists read as one that was destroyed.
-//   - owners, objectNames: keyed by object id, which is grid-wide, but
-//     what they describe is a prim in the region left behind.  They are
-//     dropped because they are answers about things nothing here can
-//     see, act on or ask about any more, and because a session that
-//     kept every region it ever visited would answer questions about a
-//     region from what it heard in another one.
+//   - owners, groups, objectNames: keyed by object id, which is
+//     grid-wide, but what they describe is a prim in the region left
+//     behind.  They are dropped because they are answers about things
+//     nothing here can see, act on or ask about any more, and because a
+//     session that kept every region it ever visited would answer
+//     questions about a region from what it heard in another one.
 //   - attach: the attachments follow the avatar, and are still dropped.
 //     The Attached that is kept holds the object id and the local id
 //     the LAST region gave them, and the new simulator re-describes
@@ -217,6 +217,7 @@ func (w *Session) dropRegionState() {
 	w.at = newVisit()
 	clear(w.locals)
 	clear(w.owners)
+	clear(w.groups)
 	clear(w.objectNames)
 	clear(w.parents)
 	clear(w.attach)

@@ -553,7 +553,7 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 			say("%sthe capability answered: %s\n", tag(path), answer)
 		}
 	}
-	return verdict(path, res.Compiled, res.Errors, fault, res.Finished)
+	return verdict(path, res.Compiled, res.Errors, fault, res.Blocked, res.Finished)
 }
 
 // quiet reports whether an error is the run being stopped rather than
@@ -585,7 +585,7 @@ func quiet(err error) bool {
 // slrun decides, and the two must not drift: a run reported as having
 // succeeded when it did not is a probe that quietly measured nothing, and
 // that must not depend on which side of the seam the script ran on.
-func verdict(path string, compiled bool, errs []string, fault string, finished bool) bool {
+func verdict(path string, compiled bool, errs []string, fault, blocked string, finished bool) bool {
 	switch {
 	case !compiled:
 		// Under one lock, so that a refusal several lines long stays in
@@ -602,6 +602,11 @@ func verdict(path string, compiled bool, errs []string, fault string, finished b
 
 	case fault != "":
 		say("%s%s\n", tag(path), fault)
+		return false
+
+	// Not waited out, with or without a sentinel: nothing is coming.
+	case blocked != "":
+		say("%s%s\n", tag(path), blocked)
 		return false
 
 	case !finished && flags.Done != "":
