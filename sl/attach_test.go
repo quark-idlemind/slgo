@@ -605,10 +605,7 @@ func TestWornSaysWhatWentWrong(t *testing.T) {
 // is -- would have it read the old name back as the new one.
 func rezAndName(t *testing.T, f *fakeBackend, id msg.UUID, local uint32, name string) {
 	t.Helper()
-	waitSent[*msg.ObjectAdd](t, f)
-	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: id, ID: local}))
-	waitSentN[*msg.RequestObjectPropertiesFamily](t, f, 1)
-	f.Relay(t, familyReply(id, testAgentID, "Object"))
+	confirmRez(t, f, id, local, 1)
 	waitSent[*msg.ObjectName](t, f)
 	waitSentN[*msg.RequestObjectPropertiesFamily](t, f, 2)
 	f.Relay(t, familyReply(id, testAgentID, name))
@@ -757,10 +754,7 @@ func TestEnsureAttachedSaysWhichStepFailed(t *testing.T) {
 
 		// The rez goes through and then the circuit dies, so the
 		// rename is the step that fails.
-		waitSent[*msg.ObjectAdd](t, f)
-		f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: thePrim, ID: 77}))
-		waitSent[*msg.RequestObjectPropertiesFamily](t, f)
-		f.Relay(t, familyReply(thePrim, testAgentID, "Object"))
+		confirmRez(t, f, thePrim, 77, 1)
 		f.FailSends(errors.New("the circuit is gone"))
 
 		_, err := wait()

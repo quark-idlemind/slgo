@@ -63,8 +63,8 @@ func TestAnObjectNamesBothOfItsIdentifiers(t *testing.T) {
 	}
 }
 
-// TestRezMakesOnePrimAndConfirmsWeOwnIt: a local id that is new to this
-// session is not necessarily one we just made -- objects stream in the
+// TestRezMakesOnePrimAndConfirmsWeOwnIt: a prim that is new to the
+// region is not necessarily one we just made -- objects stream in the
 // whole time -- so the rez is not finished until something says the new
 // prim is ours.
 func TestRezMakesOnePrimAndConfirmsWeOwnIt(t *testing.T) {
@@ -85,9 +85,9 @@ func TestRezMakesOnePrimAndConfirmsWeOwnIt(t *testing.T) {
 		t.Errorf("scale = %+v", got)
 	}
 
-	// The region describes something new, which is not yet known to be
-	// ours, so the session asks whose it is.
-	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: thePrim, ID: 77}))
+	// The region describes something new where the rez lands, which is
+	// not yet known to be ours, so the session asks whose it is.
+	appear(t, f, &Seen{Object: Object{ID: thePrim, Local: 77}, Position: landing(add)})
 	q := waitSent[*msg.RequestObjectPropertiesFamily](t, f)
 	if q.ObjectData.ObjectID != thePrim {
 		t.Errorf("asked about %s, want the new prim", q.ObjectData.ObjectID)

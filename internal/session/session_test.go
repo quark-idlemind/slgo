@@ -1672,6 +1672,15 @@ func confirmRez(t *testing.T, f *fakeGrid) {
 	f.onSend = func(m msg.Message) {
 		switch v := m.(type) {
 		case *msg.ObjectAdd:
+			// Where the simulator puts it: the prim's bottom on the
+			// point asked for, so its centre half its height above.
+			at := v.ObjectData.RayEnd
+			at.Z += v.ObjectData.Scale.Z / 2
+			f.mu.Lock()
+			f.objects = append(f.objects, &sl.Seen{
+				Object: sl.Object{ID: thePrim, Local: 77}, PCode: 9, Position: at,
+			})
+			f.mu.Unlock()
 			go f.relay(t, &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{
 				{FullID: thePrim, ID: 77},
 			}})

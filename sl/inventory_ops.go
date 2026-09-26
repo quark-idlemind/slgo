@@ -482,8 +482,12 @@ func (w *Session) GiveToAvatar(ctx context.Context, to msg.UUID, id msg.UUID, na
 
 // localIDs is what is in the region now, so a new arrival can be told
 // from what was already there.
+//
+// The backend's list as it stands, without asking for names: that
+// waits for the answers to stop, which is seconds whenever anything in
+// the region goes unanswered, and a local id is all this is for.
 func (w *Session) localIDs(ctx context.Context) (map[uint32]bool, error) {
-	all, err := w.AllObjects(ctx, 30*time.Second)
+	all, err := w.fetch(ctx, "", "")
 	if err != nil {
 		return nil, err
 	}
