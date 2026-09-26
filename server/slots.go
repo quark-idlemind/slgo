@@ -69,7 +69,7 @@ type where struct {
 	// left the object fit to use -- which includes every grant that ran
 	// out, since a caller that wedged is exactly the caller whose script
 	// is still talking.  It is the next holder's job to clear it, and it
-	// is told so.
+	// is told so.  Read and written under slotPool.mu.
 	dirty bool
 }
 
@@ -207,7 +207,7 @@ func (sp *slotPool) addAgent(name string) {
 func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 	want := int(req.GetWant())
 	if want < 1 {
-		c.send(granted("", nil, time.Time{}, "a request for no objects"))
+		c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, "a request for no objects"))
 		return
 	}
 
@@ -234,7 +234,7 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 		// there are.  The pool cannot say -- a place away being tidied
 		// is not in it at all -- and would simply never fill.
 		if most := sp.most(req.GetAgent()); want > most {
-			c.send(granted("", nil, time.Time{}, fmt.Sprintf(
+			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, fmt.Sprintf(
 				"%d objects were asked for and %s %d",
 				want, hasOrHave(req.GetAgent()), most)))
 			return
@@ -242,15 +242,15 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 
 		r, err := sp.pool.GetWhere(want, timeout, match)
 		if err != nil {
-			c.send(granted("", nil, time.Time{}, err.Error()))
+			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, err.Error()))
 			return
 		}
 		if r.Filled() {
-			c.send(granted(sp.keep(c, r), r.Slots, r.Expire, ""))
+			c.answer(sp.granted(req.GetRequest(), sp.keep(c, r), r.Slots, r.Expire, ""))
 			return
 		}
 		if req.GetTry() {
-			c.send(granted("", nil, time.Time{},
+			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{},
 				fmt.Sprintf("%d objects are not free", want)))
 			return
 		}
@@ -314,16 +314,16 @@ func (sp *slotPool) mine(c *Client, token string) *grant {
 func (sp *slotPool) renew(c *Client, req *pb.RenewSlots) {
 	g := sp.mine(c, req.GetGrant())
 	if g == nil {
-		c.send(granted("", nil, time.Time{}, "no such grant"))
+		c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, "no such grant"))
 		return
 	}
 	until, err := sp.pool.Renew(g.id, time.Duration(req.GetSeconds())*time.Second)
 	if err != nil {
 		sp.forget(g.token)
-		c.send(granted("", nil, time.Time{}, err.Error()))
+		c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, err.Error()))
 		return
 	}
-	c.send(granted(g.token, g.held, until, ""))
+	c.answer(sp.granted(req.GetRequest(), g.token, g.held, until, ""))
 }
 
 // release gives a grant back.
@@ -361,7 +361,10 @@ func (sp *slotPool) releaseAll(c *Client) {
 
 // markDirty says whether the objects behind a grant were left fit to
 // use.  The flag is on the slot's own data, so it survives the grant.
+// Under mu, because an answer being built may be reading it.
 func (sp *slotPool) markDirty(g *grant, dirty bool) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
 	for i := range g.held {
 		if w, ok := g.held[i].Data.(*where); ok {
 			w.dirty = dirty
@@ -375,12 +378,14 @@ func (sp *slotPool) forget(token string) {
 	delete(sp.grants, token)
 }
 
-// granted builds the answer.
-func granted(token string, held []slots.Slot, expires time.Time, why string) *pb.ServerPacket {
-	g := &pb.SlotsGranted{Grant: token, Why: why}
+// granted builds the answer to request.
+func (sp *slotPool) granted(request uint64, token string, held []slots.Slot, expires time.Time, why string) *pb.ServerPacket {
+	g := &pb.SlotsGranted{Request: request, Grant: token, Why: why}
 	if !expires.IsZero() {
 		g.Expires = expires.Unix()
 	}
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
 	for _, s := range held {
 		w, ok := s.Data.(*where)
 		if !ok {

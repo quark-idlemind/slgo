@@ -25,6 +25,12 @@ var _ pb.GridServer = (*Server)(nil)
 // the grid because the acknowledgement has already gone.
 const streamDepth = 1024
 
+// controlDepth is how many answers about objects may wait to be sent to
+// one client.  Each answers a request of that client's own, so it fills
+// only for a client with this many out at once, or one that has stopped
+// reading.
+const controlDepth = 64
+
 // Client is one attached stream, the thing the C client calls a
 // session_t.
 type Client struct {
@@ -38,6 +44,15 @@ type Client struct {
 	// being taken away.  See Attach.weak in slgo.proto.
 	weak bool
 	out  chan *pb.ServerPacket
+
+	// ctl carries answers about objects, which are never dropped: a
+	// client that lost a grant would wait for places the daemon
+	// believes it gave.  The writer empties it before out, and jammed
+	// is closed if it ever overflows.
+	// Why: doc/slots.md#asking-and-being-answered
+	ctl     chan *pb.ServerPacket
+	jammed  chan struct{}
+	jamOnce sync.Once
 
 	mu    sync.RWMutex
 	subs  map[msg.ID]bool
@@ -171,6 +186,26 @@ func (c *Client) send(p *pb.ServerPacket) {
 	default:
 		c.dropped.Add(1)
 	}
+}
+
+// answer queues an answer about objects on ctl.  One that does not fit
+// ends the client's stream rather than being dropped.
+func (c *Client) answer(p *pb.ServerPacket) {
+	if c.closed.Load() {
+		return
+	}
+	select {
+	case c.ctl <- p:
+	default:
+		c.jamOnce.Do(func() { close(c.jammed) })
+	}
+}
+
+// jam is how a stream whose ctl overflowed ends.
+func jam() error {
+	return status.Errorf(codes.ResourceExhausted,
+		"more than %d answers about objects were waiting to be sent to this client; "+
+			"its stream is ended rather than one of them lost", controlDepth)
 }
 
 // relay hands a packet to every client that asked for it.
@@ -385,12 +420,14 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	}
 
 	c := &Client{
-		host:  h,
-		name:  clientName(ctx),
-		weak:  att.GetWeak(),
-		out:   make(chan *pb.ServerPacket, streamDepth),
-		subs:  map[msg.ID]bool{},
-		names: map[string]bool{},
+		host:   h,
+		name:   clientName(ctx),
+		weak:   att.GetWeak(),
+		out:    make(chan *pb.ServerPacket, streamDepth),
+		ctl:    make(chan *pb.ServerPacket, controlDepth),
+		jammed: make(chan struct{}),
+		subs:   map[msg.ID]bool{},
+		names:  map[string]bool{},
 	}
 	if len(att.Subscribe) > 0 {
 		c.setSubs(&pb.Subscribe{Set: att.Subscribe})
@@ -429,6 +466,19 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	ended := h.ended()
 
 	for {
+		// Answers about objects first: somebody is waiting on each, and
+		// relayed traffic may be a thousand frames deep.
+		select {
+		case <-c.jammed:
+			return jam()
+		case p := <-c.ctl:
+			if err := stream.Send(p); err != nil {
+				return err
+			}
+			continue
+		default:
+		}
+
 		select {
 		case <-ctx.Done():
 			return nil
@@ -437,6 +487,12 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 				return nil
 			}
 			return err
+		case <-c.jammed:
+			return jam()
+		case p := <-c.ctl:
+			if err := stream.Send(p); err != nil {
+				return err
+			}
 		case p := <-c.out:
 			if err := stream.Send(p); err != nil {
 				return err
@@ -445,9 +501,11 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 			// What was queued before the end goes out first -- the
 			// notice saying why, above all.  Only what is queued now:
 			// a removed session may still be relaying.
-			for n := len(c.out); n > 0; n-- {
-				if err := stream.Send(<-c.out); err != nil {
-					return err
+			for _, q := range []chan *pb.ServerPacket{c.ctl, c.out} {
+				for n := len(q); n > 0; n-- {
+					if err := stream.Send(<-q); err != nil {
+						return err
+					}
 				}
 			}
 			return notComingBack(h.Name, h.whyEnded())
@@ -483,7 +541,8 @@ func (s *Server) streamRecv(ctx context.Context, stream pb.Grid_StreamServer, c 
 			// In a goroutine for the reason a waiting lock is: a client
 			// queued for objects still sends and receives, and blocking
 			// the reader here would stop relaying its grid traffic
-			// while it waited.
+			// while it waited.  So answers do not come back in the
+			// order they were asked for, and each carries its request.
 			go s.slotsOf().ask(ctx, c, b.Slots)
 		case *pb.ClientPacket_RenewSlots:
 			s.slotsOf().renew(c, b.RenewSlots)

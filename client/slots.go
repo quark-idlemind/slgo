@@ -57,7 +57,23 @@ func (g *Grant) Held() bool { return g != nil && g.ID != "" }
 // granting is the state of what this connection has asked for.
 type granting struct {
 	mu      sync.Mutex
-	waiting []chan *pb.SlotsGranted
+	next    uint64
+	waiting []*asking // oldest first
+
+	// gaveUp is the requests for places whose caller stopped waiting.
+	// The daemon is not told and grants them anyway, and what it grants
+	// is given straight back.
+	gaveUp map[uint64]bool
+}
+
+// asking is one request waiting for its answer.
+type asking struct {
+	id    uint64
+	reply chan *pb.SlotsGranted
+
+	// places says it asked for places, rather than to renew a grant the
+	// caller still holds: only the first may be given back unasked.
+	places bool
 }
 
 // Slots asks for n places, all of them or none, for as long as timeout.
@@ -68,6 +84,9 @@ type granting struct {
 //
 // agent asks for them on one avatar; empty takes them from wherever they
 // are free, which may be more than one.
+//
+// A caller that gives up through ctx need do nothing more: the daemon is
+// not told, and what it grants for the request later is given back.
 func (c *Conn) Slots(ctx context.Context, n int, timeout time.Duration, agent string) (*Grant, error) {
 	return c.askSlots(ctx, n, timeout, agent, false)
 }
@@ -87,19 +106,13 @@ func (c *Conn) askSlots(ctx context.Context, n int, timeout time.Duration, agent
 	}
 
 	// Registered before asking, so an answer cannot arrive first.
-	reply := make(chan *pb.SlotsGranted, 1)
-	c.grants.await(reply)
-	defer c.grants.stopAwaiting(reply)
-
-	if err := stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_Slots{
+	w := c.grants.await(true)
+	return c.ask(ctx, stream, w, &pb.ClientPacket{Body: &pb.ClientPacket_Slots{
 		Slots: &pb.Slots{
 			Want: uint32(n), Seconds: uint32(timeout / time.Second),
-			Try: try, Agent: agent,
+			Try: try, Agent: agent, Request: w.id,
 		},
-	}}); err != nil {
-		return nil, err
-	}
-	return c.awaitGrant(ctx, reply)
+	}})
 }
 
 // Renew puts a grant's clock back, for work that cannot say in advance
@@ -109,16 +122,10 @@ func (c *Conn) RenewSlots(ctx context.Context, id string, timeout time.Duration)
 	if stream == nil {
 		return nil, fmt.Errorf("client: not connected")
 	}
-	reply := make(chan *pb.SlotsGranted, 1)
-	c.grants.await(reply)
-	defer c.grants.stopAwaiting(reply)
-
-	if err := stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_RenewSlots{
-		RenewSlots: &pb.RenewSlots{Grant: id, Seconds: uint32(timeout / time.Second)},
-	}}); err != nil {
-		return nil, err
-	}
-	return c.awaitGrant(ctx, reply)
+	w := c.grants.await(false)
+	return c.ask(ctx, stream, w, &pb.ClientPacket{Body: &pb.ClientPacket_RenewSlots{
+		RenewSlots: &pb.RenewSlots{Grant: id, Seconds: uint32(timeout / time.Second), Request: w.id},
+	}})
 }
 
 // ReleaseSlots gives a grant back.
@@ -140,59 +147,123 @@ func (c *Conn) ReleaseSlots(id string, clean bool) error {
 	}})
 }
 
-func (c *Conn) awaitGrant(ctx context.Context, reply chan *pb.SlotsGranted) (*Grant, error) {
-	select {
-	case got := <-reply:
-		g := &Grant{ID: got.GetGrant(), Why: got.GetWhy()}
-		if at := got.GetExpires(); at != 0 {
-			g.Expires = time.Unix(at, 0)
-		}
-		for _, h := range got.GetHeld() {
-			g.Places = append(g.Places, Place{
-				Agent: h.GetAgent(), Slot: int(h.GetSlot()), Dirty: h.GetDirty(),
-			})
-		}
-		return g, nil
-	case <-c.Done():
-		return nil, c.Err()
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-func (g *granting) await(reply chan *pb.SlotsGranted) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.waiting = append(g.waiting, reply)
-}
-
-func (g *granting) stopAwaiting(reply chan *pb.SlotsGranted) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	for i, w := range g.waiting {
-		if w == reply {
-			g.waiting = append(g.waiting[:i:i], g.waiting[i+1:]...)
-			return
-		}
-	}
-}
-
-// deliver hands an answer to whoever asked, oldest first.
+// ask sends a request and waits for the answer to it.
 //
-// Oldest first because there is nothing in the answer to match it to a
-// request: a grant is named by the daemon, so the name arrives WITH the
-// answer rather than being something the asker chose.  One connection
-// asking for two lots at once would have to tell them apart by order,
-// which is what this does.
-func (g *granting) deliver(got *pb.SlotsGranted) {
+// A caller that stops waiting leaves a grant nobody will use, which
+// holds the places until it runs out or this stream ends.  So one that
+// arrives for it, or had just arrived, goes straight back.
+func (c *Conn) ask(ctx context.Context, stream pb.Grid_StreamClient, w *asking, p *pb.ClientPacket) (*Grant, error) {
+	err := stream.Send(p)
+	if err == nil {
+		select {
+		case got := <-w.reply:
+			return grantOf(got), nil
+		case <-c.Done():
+			err = c.Err()
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+	}
+	if late := c.grants.giveUp(w); late != "" {
+		c.giveBack(late)
+	}
+	return nil, err
+}
+
+func grantOf(got *pb.SlotsGranted) *Grant {
+	g := &Grant{ID: got.GetGrant(), Why: got.GetWhy()}
+	if at := got.GetExpires(); at != 0 {
+		g.Expires = time.Unix(at, 0)
+	}
+	for _, h := range got.GetHeld() {
+		g.Places = append(g.Places, Place{
+			Agent: h.GetAgent(), Slot: int(h.GetSlot()), Dirty: h.GetDirty(),
+		})
+	}
+	return g
+}
+
+// giveBack releases a grant nobody asked for any longer, NOT clean:
+// nothing was done in the objects, and clean would wipe out whatever
+// mark the last holder left on them.
+func (c *Conn) giveBack(id string) {
+	_ = c.ReleaseSlots(id, false)
+}
+
+// await registers a request and numbers it.  places says it asks for
+// places rather than to renew a grant.
+func (g *granting) await(places bool) *asking {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if len(g.waiting) == 0 {
-		return
+	g.next++
+	w := &asking{id: g.next, reply: make(chan *pb.SlotsGranted, 1), places: places}
+	g.waiting = append(g.waiting, w)
+	return w
+}
+
+// giveUp stops waiting.  It returns the grant to give back when the
+// answer had already arrived, and otherwise remembers the request so
+// that deliver gives back what arrives for it.
+func (g *granting) giveUp(w *asking) string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for i, x := range g.waiting {
+		if x == w {
+			g.waiting = append(g.waiting[:i:i], g.waiting[i+1:]...)
+			if w.places {
+				if g.gaveUp == nil {
+					g.gaveUp = map[uint64]bool{}
+				}
+				g.gaveUp[w.id] = true
+			}
+			return ""
+		}
 	}
 	select {
-	case g.waiting[0] <- got:
+	case got := <-w.reply:
+		if w.places {
+			return got.GetGrant()
+		}
 	default:
 	}
-	g.waiting = g.waiting[1:]
+	return ""
+}
+
+// deliver hands an answer to the request it names.  It returns a grant
+// to give back when that request was given up on.
+//
+// An answer naming no request is from a daemon older than the numbers.
+// It goes to whoever has waited longest, which is right as long as one
+// request is out at a time.
+// Why: doc/slots.md#asking-and-being-answered
+func (g *granting) deliver(got *pb.SlotsGranted) (giveBack string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	i := -1
+	if id := got.GetRequest(); id == 0 {
+		if len(g.waiting) > 0 {
+			i = 0
+		}
+	} else {
+		for j, w := range g.waiting {
+			if w.id == id {
+				i = j
+				break
+			}
+		}
+		if i < 0 && g.gaveUp[id] {
+			delete(g.gaveUp, id)
+			return got.GetGrant()
+		}
+	}
+	if i < 0 {
+		return ""
+	}
+	w := g.waiting[i]
+	g.waiting = append(g.waiting[:i:i], g.waiting[i+1:]...)
+	select {
+	case w.reply <- got:
+	default:
+	}
+	return ""
 }

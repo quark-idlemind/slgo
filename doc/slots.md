@@ -56,6 +56,35 @@ died, and the stream is the thing slgod already watches for that. A
 client that crashed, was killed, or was unplugged gives its places back
 without having said anything.
 
+## Asking and being answered
+
+Each `Slots` and `RenewSlots` carries a number the client chose, and the
+`SlotsGranted` that answers it carries the number back. Answers do not
+come back in the order they were asked for — a try or a renewal is
+answered at once, a wait when places come free — so a client with two
+requests out on one stream tells the answers apart by number. A daemon
+older than the number answers with 0, and the client then gives each
+answer to the request that has waited longest, which is right while only
+one is out at a time.
+
+A client that stops waiting does not tell the daemon, which grants the
+request anyway once places come free. The client gives that grant
+straight back, and not clean: nothing ran in the objects, and clean would
+wipe out the mark the last holder left on them.
+
+Answers are never dropped. The daemon's queue to each client drops
+relayed traffic when the client falls behind, which costs nothing on the
+grid; a grant dropped there would leave the client waiting for places
+the daemon believes it gave. So answers have a queue of their own, 64
+deep, sent ahead of relayed traffic. It fills only for a client with
+that many requests out at once, or one that has stopped reading, and
+that client's stream is ended — which gives back everything it holds —
+rather than an answer lost.
+
+None of this section was watched on the grid. It is how the code was
+built on 2026-09-26, and the tests in `client/slots_test.go` and
+`server/slots_test.go` check it against a fake daemon and a fake stream.
+
 ## All of them or none
 
 A caller given four of the eight it asked for has two choices and both

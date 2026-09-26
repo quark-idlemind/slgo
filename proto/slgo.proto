@@ -398,6 +398,13 @@ message Slots {
   // and for a caller that named an avatar and meant it.  Empty is
   // anywhere.
   string agent = 4;
+
+  // Request is the client's own number for this ask, which the answer
+  // carries back in SlotsGranted.request.  Answers do not come back in
+  // the order they were asked for -- a wait ends when places come free
+  // -- so a client with more than one ask out matches them by this.
+  // Zero is a client older than the field.
+  uint64 request = 5;
 }
 
 // RenewSlots puts a grant's clock back, for work that cannot say in
@@ -405,6 +412,9 @@ message Slots {
 message RenewSlots {
   string grant = 1;
   uint32 seconds = 2;
+
+  // Request is as in Slots.
+  uint64 request = 3;
 }
 
 // ReleaseSlots gives a grant back.  Ending the stream does the same
@@ -636,6 +646,11 @@ message SlotsGranted {
 
   // Why nothing was given, when nothing was.  For a person to read.
   string why = 4;
+
+  // Request is the number of the Slots or RenewSlots this answers.
+  // Zero is a daemon older than the field, whose answers a client can
+  // only match to its asks in the order they were made.
+  uint64 request = 5;
 }
 
 // SlotHeld is one place to run.

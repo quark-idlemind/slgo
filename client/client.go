@@ -628,7 +628,11 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 				}
 			}
 		case *pb.ServerPacket_Granted:
-			c.grants.deliver(b.Granted)
+			// Given back off this loop: a send can wait on flow
+			// control, and this loop is how everything else arrives.
+			if late := c.grants.deliver(b.Granted); late != "" {
+				go c.giveBack(late)
+			}
 		case *pb.ServerPacket_Locked:
 			// Never dropped: somebody is waiting on this, and losing
 			// it would leave them waiting for a lock they have been

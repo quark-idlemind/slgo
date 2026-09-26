@@ -681,7 +681,13 @@ type Slots struct {
 	// four objects spread over three avatars may be in three regions --
 	// and for a caller that named an avatar and meant it.  Empty is
 	// anywhere.
-	Agent         string `protobuf:"bytes,4,opt,name=agent,proto3" json:"agent,omitempty"`
+	Agent string `protobuf:"bytes,4,opt,name=agent,proto3" json:"agent,omitempty"`
+	// Request is the client's own number for this ask, which the answer
+	// carries back in SlotsGranted.request.  Answers do not come back in
+	// the order they were asked for -- a wait ends when places come free
+	// -- so a client with more than one ask out matches them by this.
+	// Zero is a client older than the field.
+	Request       uint64 `protobuf:"varint,5,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -744,12 +750,21 @@ func (x *Slots) GetAgent() string {
 	return ""
 }
 
+func (x *Slots) GetRequest() uint64 {
+	if x != nil {
+		return x.Request
+	}
+	return 0
+}
+
 // RenewSlots puts a grant's clock back, for work that cannot say in
 // advance how long it will take.
 type RenewSlots struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Grant         string                 `protobuf:"bytes,1,opt,name=grant,proto3" json:"grant,omitempty"`
-	Seconds       uint32                 `protobuf:"varint,2,opt,name=seconds,proto3" json:"seconds,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Grant   string                 `protobuf:"bytes,1,opt,name=grant,proto3" json:"grant,omitempty"`
+	Seconds uint32                 `protobuf:"varint,2,opt,name=seconds,proto3" json:"seconds,omitempty"`
+	// Request is as in Slots.
+	Request       uint64 `protobuf:"varint,3,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -794,6 +809,13 @@ func (x *RenewSlots) GetGrant() string {
 func (x *RenewSlots) GetSeconds() uint32 {
 	if x != nil {
 		return x.Seconds
+	}
+	return 0
+}
+
+func (x *RenewSlots) GetRequest() uint64 {
+	if x != nil {
+		return x.Request
 	}
 	return 0
 }
@@ -1753,7 +1775,11 @@ type SlotsGranted struct {
 	// refused, because by then the objects may be somebody else's.
 	Expires int64 `protobuf:"varint,3,opt,name=expires,proto3" json:"expires,omitempty"`
 	// Why nothing was given, when nothing was.  For a person to read.
-	Why           string `protobuf:"bytes,4,opt,name=why,proto3" json:"why,omitempty"`
+	Why string `protobuf:"bytes,4,opt,name=why,proto3" json:"why,omitempty"`
+	// Request is the number of the Slots or RenewSlots this answers.
+	// Zero is a daemon older than the field, whose answers a client can
+	// only match to its asks in the order they were made.
+	Request       uint64 `protobuf:"varint,5,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1814,6 +1840,13 @@ func (x *SlotsGranted) GetWhy() string {
 		return x.Why
 	}
 	return ""
+}
+
+func (x *SlotsGranted) GetRequest() uint64 {
+	if x != nil {
+		return x.Request
+	}
+	return 0
 }
 
 // SlotHeld is one place to run.
@@ -5946,16 +5979,18 @@ const file_slgo_proto_rawDesc = "" +
 	"\vrenew_slots\x18\a \x01(\v2\x13.slgo.v1.RenewSlotsH\x00R\n" +
 	"renewSlots\x12<\n" +
 	"\rrelease_slots\x18\b \x01(\v2\x15.slgo.v1.ReleaseSlotsH\x00R\freleaseSlotsB\x06\n" +
-	"\x04body\"]\n" +
+	"\x04body\"w\n" +
 	"\x05Slots\x12\x12\n" +
 	"\x04want\x18\x01 \x01(\rR\x04want\x12\x18\n" +
 	"\aseconds\x18\x02 \x01(\rR\aseconds\x12\x10\n" +
 	"\x03try\x18\x03 \x01(\bR\x03try\x12\x14\n" +
-	"\x05agent\x18\x04 \x01(\tR\x05agent\"<\n" +
+	"\x05agent\x18\x04 \x01(\tR\x05agent\x12\x18\n" +
+	"\arequest\x18\x05 \x01(\x04R\arequest\"V\n" +
 	"\n" +
 	"RenewSlots\x12\x14\n" +
 	"\x05grant\x18\x01 \x01(\tR\x05grant\x12\x18\n" +
-	"\aseconds\x18\x02 \x01(\rR\aseconds\":\n" +
+	"\aseconds\x18\x02 \x01(\rR\aseconds\x12\x18\n" +
+	"\arequest\x18\x03 \x01(\x04R\arequest\":\n" +
 	"\fReleaseSlots\x12\x14\n" +
 	"\x05grant\x18\x01 \x01(\tR\x05grant\x12\x14\n" +
 	"\x05clean\x18\x02 \x01(\bR\x05clean\",\n" +
@@ -6009,12 +6044,13 @@ const file_slgo_proto_rawDesc = "" +
 	"\x0fHandledResponse\x12\x18\n" +
 	"\aclaimed\x18\x01 \x01(\bR\aclaimed\x12/\n" +
 	"\aearlier\x18\x02 \x01(\v2\x15.slgo.v1.OfferHandledR\aearlier\x12\x1a\n" +
-	"\brestored\x18\x03 \x01(\bR\brestored\"w\n" +
+	"\brestored\x18\x03 \x01(\bR\brestored\"\x91\x01\n" +
 	"\fSlotsGranted\x12\x14\n" +
 	"\x05grant\x18\x01 \x01(\tR\x05grant\x12%\n" +
 	"\x04held\x18\x02 \x03(\v2\x11.slgo.v1.SlotHeldR\x04held\x12\x18\n" +
 	"\aexpires\x18\x03 \x01(\x03R\aexpires\x12\x10\n" +
-	"\x03why\x18\x04 \x01(\tR\x03why\"J\n" +
+	"\x03why\x18\x04 \x01(\tR\x03why\x12\x18\n" +
+	"\arequest\x18\x05 \x01(\x04R\arequest\"J\n" +
 	"\bSlotHeld\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x12\n" +
 	"\x04slot\x18\x02 \x01(\rR\x04slot\x12\x14\n" +
