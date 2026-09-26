@@ -324,7 +324,8 @@ func objectsFolder(ctx context.Context, s *sl.Session) (msg.UUID, error) {
 //
 // A named object is left exactly as it was found -- it is somebody's
 // object, and the script that ran in it is the only trace.  One rezzed
-// here is ours and goes in the trash afterwards, unless keep.
+// here is ours and goes in the trash afterwards, unless keep; one whose
+// rez was given up on, and was made all the same, goes at once.
 //
 // The same object is used for every run, which is not merely tidy: a
 // benchmark carries a reading from one script to the next through the
@@ -361,7 +362,14 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 
 	obj, err := s.Rez(ctx, sl.RezOptions{At: at})
 	if err != nil {
-		return nil, nil, fmt.Errorf("rezzing something to run in: %w", err)
+		err = fmt.Errorf("rezzing something to run in: %w", err)
+		if obj != nil {
+			// Given up on, and made all the same: nobody else has its id.
+			if derr := throwAway(ctx, s, obj); derr != nil {
+				err = errors.Join(err, fmt.Errorf("%s, which was rezzed for it, is still there: %w", obj, derr))
+			}
+		}
+		return nil, nil, err
 	}
 	if err := s.SetName(ctx, obj, "slgo run "+time.Now().Format("15:04:05")); err != nil {
 		// Not fatal: the name is so that a fault header reads well.
@@ -372,13 +380,7 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 		return obj, nil, nil
 	}
 	return obj, func() {
-		// A fresh context: the run's may well be why we are here.
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		trash, err := s.TrashFolder(ctx)
-		if err == nil {
-			err = s.Delete(ctx, obj, trash)
-		}
+		err := throwAway(ctx, s, obj)
 		switch {
 		case errors.Is(err, sl.ErrTimeout):
 			// Asked for and not confirmed, which is not the same as
@@ -388,6 +390,18 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 			fmt.Fprintf(os.Stderr, "%s is still there: %v\n", obj, err)
 		}
 	}, nil
+}
+
+// throwAway puts an object rezzed to run in into the trash.  On a
+// context of its own, bounded: the run's may well be why it is going.
+func throwAway(ctx context.Context, s *sl.Session, obj *sl.Object) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	trash, err := s.TrashFolder(ctx)
+	if err == nil {
+		err = s.Delete(ctx, obj, trash)
+	}
+	return err
 }
 
 // sayWhenDropped makes a lost message say so.

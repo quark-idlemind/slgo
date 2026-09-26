@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -108,6 +109,11 @@ type fakeGrid struct {
 
 	presence *sl.Presence
 	objects  []*sl.Seen
+
+	// afterObjects, when set, is called with the lock held once each
+	// answer to Objects has been made: what changes there is seen by
+	// the next look and not this one.
+	afterObjects func()
 
 	presenceErr, objectsErr, sendErr, capErr error
 
@@ -405,6 +411,9 @@ func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, e
 			continue
 		}
 		out = append(out, o)
+	}
+	if f.afterObjects != nil {
+		f.afterObjects()
 	}
 	return out, nil
 }
@@ -1637,6 +1646,55 @@ func TestRunInReportsARezThatWasRefused(t *testing.T) {
 	_, _, err := RunIn(context.Background(), s, "", false)
 	if err == nil || !strings.Contains(err.Error(), "rezzing") {
 		t.Errorf("RunIn = %v, want it to say what it was doing", err)
+	}
+}
+
+// TestRunInClearsAwayARezGivenUpOn: a run given up on while its object
+// is being looked for may have one standing by then, and Rez hands it
+// back.  Nobody else holds its id, so it goes in the trash before the
+// cancel is returned.
+func TestRunInClearsAwayARezGivenUpOn(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// The prim appears as the first look after the rez is answered, so
+	// only the last look sees it; its delete is answered with its kill.
+	looked := false
+	f.mu.Lock()
+	f.afterObjects = func() {
+		for _, m := range f.sent {
+			add, ok := m.(*msg.ObjectAdd)
+			if !ok || looked {
+				continue
+			}
+			looked = true
+			at := add.ObjectData.RayEnd
+			at.Z += add.ObjectData.Scale.Z / 2
+			f.objects = append(f.objects, &sl.Seen{
+				Object: sl.Object{ID: thePrim, Local: 77}, PCode: 9, Owner: testMe, Position: at,
+			})
+			cancel()
+		}
+	}
+	f.onSend = func(m msg.Message) {
+		if d, ok := m.(*msg.DeRezObject); ok {
+			go f.relay(t, &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: d.ObjectData[0].ObjectLocalID}}})
+		}
+	}
+	f.mu.Unlock()
+
+	obj, undo, err := RunIn(ctx, s, "", false)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("RunIn = %v, want the caller's cancel", err)
+	}
+	if obj != nil || undo != nil {
+		t.Errorf("RunIn handed back %v with its error", obj)
+	}
+	d := firstOf[*msg.DeRezObject](t, f)
+	if d.ObjectData[0].ObjectLocalID != 77 || d.AgentBlock.DestinationID != testTrash {
+		t.Errorf("sent %+v; want the prim that was made deleted into the trash", d)
 	}
 }
 

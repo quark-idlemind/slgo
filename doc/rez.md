@@ -67,6 +67,10 @@ A caller that gives up is told so at once, after one more look on a
 context the cancel does not reach (`lastLook`). A prim that look finds
 passes the same rules, so it is confirmed, and `Build` returns it with
 the error so that the caller can clear it away, as `slsh`'s `rez` does.
+`Rez` hands it back the same way, and the two callers that rez a prim
+for their own use, the object `slrun` runs in and the one
+`EnsureAttached` makes to wear, delete it into the trash before
+returning the error.
 
 Recognising a rez by novelty alone went wrong twice before this. It
 reported an object that had just been taken, whose entry lingered until

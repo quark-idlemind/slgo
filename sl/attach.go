@@ -2,6 +2,7 @@ package sl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -424,7 +425,8 @@ func (w *Session) WornFromItem(ctx context.Context, item msg.UUID) (*Attached, b
 // Three states, in the order they cost: worn already, which is nothing
 // but a lookup; in inventory but not on, which is a wear; and not there
 // at all, which is a rez, a take and a wear.  The last happens once in
-// the life of an account.
+// the life of an account.  A rez given up on whose prim was made all
+// the same is deleted again.
 func (w *Session) EnsureAttached(ctx context.Context, folder msg.UUID, name string, point int) (*Attached, error) {
 	items, err := w.FolderItems(ctx, folder)
 	if err != nil {
@@ -456,7 +458,11 @@ func (w *Session) EnsureAttached(ctx context.Context, folder msg.UUID, name stri
 
 	obj, err := w.Rez(ctx, RezOptions{At: at})
 	if err != nil {
-		return nil, fmt.Errorf("sl: making %q to attach: %w", name, err)
+		err = fmt.Errorf("sl: making %q to attach: %w", name, err)
+		if obj != nil {
+			err = errors.Join(err, w.dropRezzed(ctx, obj))
+		}
+		return nil, err
 	}
 	if err := w.SetName(ctx, obj, name); err != nil {
 		return nil, fmt.Errorf("sl: naming %q: %w", name, err)
@@ -470,6 +476,23 @@ func (w *Session) EnsureAttached(ctx context.Context, folder msg.UUID, name stri
 		return nil, fmt.Errorf("sl: putting %q on: %w", name, err)
 	}
 	return a, nil
+}
+
+// dropRezzed deletes a prim that a failed call rezzed and will not hand
+// back, into the trash as a viewer's delete goes.  On a context of its
+// own, since a call that failed because its caller gave up has a
+// cancelled one.
+func (w *Session) dropRezzed(ctx context.Context, o *Object) error {
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	trash, err := w.TrashFolder(dctx)
+	if err == nil {
+		err = w.Delete(dctx, o, trash)
+	}
+	if err != nil {
+		return fmt.Errorf("sl: %s, which it rezzed, could not be deleted: %w", o, err)
+	}
+	return nil
 }
 
 // TakeOff detaches a worn item back into inventory.
