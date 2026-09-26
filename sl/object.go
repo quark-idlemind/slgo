@@ -348,11 +348,19 @@ const (
 // Nothing answers a take over UDP: the item turns up in the folder
 // over AIS some seconds later, so this polls the folder for something
 // that was not there before rather than waiting for a message.
+//
+// The item is known by the object's name, which is o.Name if it has
+// one.  An object handed in without a name is asked what it is called
+// first, within the same timeout, and one whose name cannot be learned
+// is not taken: every fresh prim is called "Object", and the first new
+// item in a folder is not necessarily this one.
 func (w *Session) Take(ctx context.Context, o *Object, folder msg.UUID, timeout time.Duration) (*Item, error) {
-	return w.derezToInventory(ctx, o, folder, derezTakeIntoInventory, timeout)
+	it, _, err := w.derezToInventory(ctx, o, folder, derezTakeIntoInventory, timeout)
+	return it, err
 }
 
-// TakeCopy takes a copy and leaves the original standing.
+// TakeCopy takes a copy and leaves the original standing.  The item is
+// known by the object's name, as Take's is.
 //
 // The viewer calls this Take Copy and sends the same destination
 // (llviewermenu.cpp:6420); the enum comments it as "try to leave copy in
@@ -366,11 +374,13 @@ func (w *Session) Take(ctx context.Context, o *Object, folder msg.UUID, timeout 
 // is the difference between a person checking their inventory and a
 // person checking their permissions.
 func (w *Session) TakeCopy(ctx context.Context, o *Object, folder msg.UUID, timeout time.Duration) (*Item, error) {
-	it, err := w.derezToInventory(ctx, o, folder, derezAcquireCopy, timeout)
+	it, derezzed, err := w.derezToInventory(ctx, o, folder, derezAcquireCopy, timeout)
 	if err == nil {
 		return it, nil
 	}
-	if !errors.Is(err, ErrTimeout) {
+	// Only a take that went out and came to nothing is a refusal: a
+	// name that could not be learned times out before anything is sent.
+	if !derezzed || !errors.Is(err, ErrTimeout) {
 		return nil, err
 	}
 	if _, still := w.ObjectByID(ctx, o.ID, 5*time.Second); still == nil {
@@ -379,24 +389,37 @@ func (w *Session) TakeCopy(ctx context.Context, o *Object, folder msg.UUID, time
 	return nil, err
 }
 
-func (w *Session) derezToInventory(ctx context.Context, o *Object, folder msg.UUID, destination uint8, timeout time.Duration) (*Item, error) {
+// derezToInventory takes an object into a folder and waits for its
+// item.  The bool says whether the take went out, which is what tells a
+// take that came to nothing from one that never began.
+func (w *Session) derezToInventory(ctx context.Context, o *Object, folder msg.UUID, destination uint8, timeout time.Duration) (*Item, bool, error) {
 	if timeout == 0 {
 		timeout = 40 * time.Second
 	}
 	before, err := w.FolderItems(ctx, folder)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	had := map[msg.UUID]bool{}
 	for _, it := range before {
 		had[it.ID] = true
 	}
 
-	if err := w.Select(ctx, o); err != nil {
-		return nil, err
+	// The item takes the object's name, and the name is what tells it
+	// from anything else new in the folder.  Asking selects the object,
+	// which the derez needs anyway.
+	name := o.Name
+	if name == "" {
+		p, err := w.Properties(ctx, o, timeout)
+		if err != nil {
+			return nil, false, fmt.Errorf("sl: learning what %s is called, to know its item by: %w", o, err)
+		}
+		name = p.Name
+	} else if err := w.Select(ctx, o); err != nil {
+		return nil, false, err
 	}
 	if err := w.Settle(ctx, 2*time.Second); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	m := &msg.DeRezObject{}
@@ -407,25 +430,25 @@ func (w *Session) derezToInventory(ctx context.Context, o *Object, folder msg.UU
 	m.AgentBlock.PacketCount, m.AgentBlock.PacketNumber = 1, 0
 	m.ObjectData = []msg.DeRezObject_ObjectData{{ObjectLocalID: o.Local}}
 	if err := w.Send(ctx, m); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if err := w.Settle(ctx, 2*time.Second); err != nil {
-			return nil, err
+			return nil, true, err
 		}
 		now, err := w.FolderItems(ctx, folder)
 		if err != nil {
 			continue
 		}
 		for _, it := range now {
-			if !had[it.ID] && (o.Name == "" || it.Name == o.Name) {
-				return it, nil
+			if !had[it.ID] && it.Name == name {
+				return it, true, nil
 			}
 		}
 	}
-	return nil, fmt.Errorf("%w: %s to appear in inventory after taking it", ErrTimeout, o)
+	return nil, true, fmt.Errorf("%w: %s to appear in inventory as %q after taking it", ErrTimeout, o, name)
 }
 
 // Delete sends an object to the trash.

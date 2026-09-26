@@ -669,6 +669,110 @@ func TestTakeGivesUpWhenNothingArrives(t *testing.T) {
 	}
 }
 
+// TestTakeWithNoNameAsksWhatTheObjectIsCalled: every fresh prim is
+// called "Object", so taking the first new item in the folder takes
+// whatever else turned up there first.  The object is asked its name,
+// and the item is the new one of that name.
+func TestTakeWithNoNameAsksWhatTheObjectIsCalled(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	old := anItem(theOther, "workbench")
+	unrelated := anItem(ourElsewhere, "Object")
+	taken := anItem(theChild, "probe")
+
+	var mu sync.Mutex
+	stage, reads := 0, 0
+	f.ServeInventory(t, func(folder msg.UUID) []*Item {
+		mu.Lock()
+		defer mu.Unlock()
+		reads++
+		switch stage {
+		case 0:
+			return []*Item{old}
+		case 1:
+			// Something else new of ours, landing first.
+			return []*Item{old, unrelated}
+		}
+		return []*Item{old, unrelated, taken}
+	})
+
+	o := &Object{ID: thePrim, Local: 77}
+	wait := aside(t, func() (*Item, error) {
+		return w.Take(context.Background(), o, aFolder, 0)
+	})
+
+	// The selection a take makes is answered with the object's
+	// properties, which is where its name comes from.
+	waitSent[*msg.ObjectSelect](t, f)
+	props := propertiesOf(thePrim)
+	props.ObjectData[0].Name = []byte("probe\x00")
+	f.Relay(t, props)
+
+	waitSent[*msg.DeRezObject](t, f)
+	mu.Lock()
+	stage, reads = 1, 0
+	mu.Unlock()
+	waitFor(t, "the folder to be read with only the unrelated item new", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return reads > 0
+	})
+	mu.Lock()
+	stage = 2
+	mu.Unlock()
+
+	it, err := wait()
+	if err != nil {
+		t.Fatalf("Take: %v", err)
+	}
+	if it.ID != theChild {
+		t.Errorf("took %s %q, want the item named for the object", it.ID, it.Name)
+	}
+	if got := sentOf[*msg.ObjectSelect](f); len(got) != 1 {
+		t.Errorf("%d selections went out, want the one the take needs", len(got))
+	}
+}
+
+// TestTakeWithNoNameRefusesWhenTheNameCannotBeLearned: without the name
+// there is nothing to know the item by, and a take that cannot tell its
+// item from another is not made at all.
+func TestTakeWithNoNameRefusesWhenTheNameCannotBeLearned(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a take", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
+
+		_, err := w.Take(context.Background(), &Object{ID: thePrim, Local: 77}, aFolder, time.Second)
+		if !errors.Is(err, ErrTimeout) {
+			t.Errorf("Take = %v, want the name's timeout", err)
+		}
+		if got := sentOf[*msg.DeRezObject](f); len(got) != 0 {
+			t.Errorf("an object was taken with no name to know its item by: %s", f.describe())
+		}
+	})
+
+	// A copy that times out on an object still standing is reported as
+	// refused for its permissions.  One that never went out was not
+	// refused by anybody.
+	t.Run("a copy", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
+		f.objects = []*Seen{{Object: Object{ID: thePrim, Local: 77, Name: "probe"}, PCode: pcodePrim}}
+
+		_, err := w.TakeCopy(context.Background(), &Object{ID: thePrim, Local: 77}, aFolder, time.Second)
+		if err == nil || strings.Contains(err.Error(), "not copied") {
+			t.Errorf("TakeCopy = %v, want it to say the name could not be learned", err)
+		}
+		if got := sentOf[*msg.DeRezObject](f); len(got) != 0 {
+			t.Errorf("an object was copied with no name to know its item by: %s", f.describe())
+		}
+	})
+}
+
 // TestTakeReportsWhatDidNotHappen: a take is several seconds of waiting
 // either side of the derez, and every step of it can fail on its own --
 // a caller that has given up must not be held through both waits, and a
@@ -688,7 +792,7 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 		}
 		f.mu.Unlock()
 
-		_, err := w.Take(context.Background(), &Object{Local: 77}, aFolder, 30*time.Second)
+		_, err := w.Take(context.Background(), &Object{Local: 77, Name: "workbench"}, aFolder, 30*time.Second)
 		if err == nil {
 			t.Error("Take waited for an item to arrive from a derez that was not sent")
 		}
@@ -710,7 +814,7 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 		f.FailSends(errors.New("the circuit is gone"))
-		if _, err := w.Take(context.Background(), &Object{Local: 77}, aFolder, time.Second); err == nil {
+		if _, err := w.Take(context.Background(), &Object{Local: 77, Name: "workbench"}, aFolder, time.Second); err == nil {
 			t.Error("Take went ahead without a selection")
 		}
 	})
@@ -721,7 +825,7 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 		ctx, cancel := context.WithCancel(context.Background())
 		wait := aside(t, func() (*Item, error) {
-			return w.Take(ctx, &Object{Local: 77}, aFolder, 30*time.Second)
+			return w.Take(ctx, &Object{Local: 77, Name: "workbench"}, aFolder, 30*time.Second)
 		})
 		waitSent[*msg.ObjectSelect](t, f)
 		cancel()
@@ -736,7 +840,7 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 		ctx, cancel := context.WithCancel(context.Background())
 		wait := aside(t, func() (*Item, error) {
-			return w.Take(ctx, &Object{Local: 77}, aFolder, 30*time.Second)
+			return w.Take(ctx, &Object{Local: 77, Name: "workbench"}, aFolder, 30*time.Second)
 		})
 		waitSent[*msg.DeRezObject](t, f)
 		cancel()
