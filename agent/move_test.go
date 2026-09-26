@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -39,18 +41,7 @@ func newRegion(t *testing.T, name string, id msg.UUID) *fakeRegion {
 
 	queue := r.eq.handler()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/seed", func(w http.ResponseWriter, _ *http.Request) {
-		body, err := llsd.Encode(map[string]any{
-			EventQueueCap:       r.http.URL + "/event",
-			"SimulatorFeatures": r.http.URL + "/features",
-		})
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/llsd+xml")
-		w.Write(body)
-	})
+	mux.HandleFunc("/seed", func(w http.ResponseWriter, _ *http.Request) { r.answerSeed(w) })
 	mux.HandleFunc("/event", func(w http.ResponseWriter, req *http.Request) {
 		r.polls.Add(1)
 		// A simulator holds a poll open until it has something to say.
@@ -71,6 +62,39 @@ func newRegion(t *testing.T, name string, id msg.UUID) *fakeRegion {
 }
 
 func (r *fakeRegion) seed() string { return r.http.URL + "/seed" }
+
+// answerSeed is this region's capabilities, as its seed gives them.
+func (r *fakeRegion) answerSeed(w http.ResponseWriter) {
+	body, err := llsd.Encode(map[string]any{
+		EventQueueCap:       r.http.URL + "/event",
+		"SimulatorFeatures": r.http.URL + "/features",
+	})
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/llsd+xml")
+	w.Write(body)
+}
+
+// heldSeed is a seed for r that answers only once released, so that a
+// move can be caught between saying the avatar has arrived and having
+// the new region's capabilities.
+func (r *fakeRegion) heldSeed(t *testing.T) (seed string, release func()) {
+	t.Helper()
+	hold := make(chan struct{})
+	var once sync.Once
+	release = func() { once.Do(func() { close(hold) }) }
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-hold
+		r.answerSeed(w)
+	}))
+	// Cleanups run last first: the request held here is let go before
+	// Close waits for it.
+	t.Cleanup(s.Close)
+	t.Cleanup(release)
+	return s.URL + "/seed", release
+}
 
 func (r *fakeRegion) saw(name string) bool { return r.count(name) > 0 }
 
@@ -930,5 +954,91 @@ func TestAMoveWithNoSeedLeavesNoneBehind(t *testing.T) {
 	}
 	if got := a.Seed(); got != "" {
 		t.Errorf("seed = %q after a move that carried none", got)
+	}
+}
+
+// TestWaitCapsIsTheNewRegionsSetAndNotTheOldOne: a move says the avatar
+// has arrived before it has asked the new region for its capabilities,
+// so anything reacting to that by reading Caps gets the region left's
+// set.  WaitCaps is what it reads instead: it waits for as long as its
+// context lets it, and then answers with the region arrived in.
+func TestWaitCapsIsTheNewRegionsSetAndNotTheOldOne(t *testing.T) {
+	type heard struct {
+		name string
+		caps Caps
+	}
+	var self atomic.Pointer[Agent]
+	told := make(chan heard, 4)
+	a, from, to := twoRegions(t, Options{
+		OnRegionChange: func(name string, _ uint64) { told <- heard{name, self.Load().Caps()} }})
+	self.Store(a)
+
+	if caps, err := a.WaitCaps(context.Background()); err != nil {
+		t.Fatalf("WaitCaps with no move under way: %v", err)
+	} else if u, _ := caps.Get(EventQueueCap); !strings.HasPrefix(u, from.http.URL) {
+		t.Errorf("with no move under way WaitCaps = %s %q, want the login region's", EventQueueCap, u)
+	}
+
+	seed, release := to.heldSeed(t)
+	moved := make(chan error, 1)
+	go func() { moved <- a.moveTo(context.Background(), to.sim.addr(), seed) }()
+
+	var got heard
+	select {
+	case got = <-told:
+	case err := <-moved:
+		t.Fatalf("the move ended without saying the region changed: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("a move said nothing about the region changing")
+	}
+	// Why this exists: at the notice the set is still the old one.
+	if u, _ := got.caps.Get(EventQueueCap); !strings.HasPrefix(u, from.http.URL) {
+		t.Errorf("at the notice %s = %q; the new region had not been asked yet, "+
+			"so it should still be the region left's", EventQueueCap, u)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if caps, err := a.WaitCaps(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("WaitCaps while the new region was being asked = %v, %v; "+
+			"want it to wait until its context ended", caps.Names(), err)
+	}
+
+	time.AfterFunc(100*time.Millisecond, release)
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	caps, err := a.WaitCaps(ctx)
+	if err != nil {
+		t.Fatalf("WaitCaps: %v", err)
+	}
+	if u, _ := caps.Get(EventQueueCap); !strings.HasPrefix(u, to.http.URL) {
+		t.Errorf("WaitCaps = %s %q, want one of %s, the region arrived in", EventQueueCap, u, to.http.URL)
+	}
+	if got.name != to.sim.regionNm || a.RegionName() != to.sim.regionNm {
+		t.Errorf("told %q and the session says %q, want %q", got.name, a.RegionName(), to.sim.regionNm)
+	}
+	if err := <-moved; err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+}
+
+// TestWaitCapsFailsWhenTheMoveEndedTheSession: a move whose new region
+// will not give its capabilities ends the session, and the set left
+// behind is the region left's.  Handing that back would be the stale
+// answer WaitCaps is there to prevent.
+func TestWaitCapsFailsWhenTheMoveEndedTheSession(t *testing.T) {
+	a, _, to := twoRegions(t, Options{})
+	refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "no", http.StatusInternalServerError)
+	}))
+	t.Cleanup(refused.Close)
+
+	if err := a.moveTo(context.Background(), to.sim.addr(), refused.URL+"/seed"); err == nil {
+		t.Fatal("a move whose seed was refused succeeded")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if caps, err := a.WaitCaps(ctx); err == nil {
+		t.Errorf("WaitCaps after the move ended the session = %v", caps.Names())
 	}
 }

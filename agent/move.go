@@ -226,6 +226,15 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 	arrived := newSignal()
 	a.arrived.Store(&arrived)
 	defer a.arrived.Store(nil)
+	// Before anything can say the avatar has arrived, so that whoever
+	// hears it and asks for the capabilities waits for these rather
+	// than being handed the region left's.  See WaitCaps.
+	capsDue := newSignal()
+	a.capsDue.Store(&capsDue)
+	defer func() {
+		a.capsDue.Store(nil)
+		capsDue.fire()
+	}()
 	a.mu.Lock()
 	a.entering = &arrival{}
 	a.mu.Unlock()
