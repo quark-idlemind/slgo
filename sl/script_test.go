@@ -1070,6 +1070,49 @@ func TestAScriptCanFaultAfterSayingItHadFinished(t *testing.T) {
 	}
 }
 
+// TestGivingUpDuringAFaultIsStillGivingUp: a caller that cancels while
+// the run waits for a fault's reason gets the context's error, as it
+// does anywhere else in the wait, and the result so far with the fault
+// in it.  The pause puts the cancel inside the grace, as above.
+func TestGivingUpDuringAFaultIsStillGivingUp(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(ctx, Script{
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
+			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+	<-up.body
+
+	f.Relay(t, objectSaid(thePrim, ChatDebug,
+		"Test HUD [script:a script] Script run-time error"))
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	res, err := wait()
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Run = %v, want the context's reason", err)
+	}
+	if res == nil {
+		t.Fatal("a run given up on during a fault came back with no result")
+	}
+	if res.Fault == nil || res.Fault.Script != "a script" || res.Fault.Reason != "" {
+		t.Errorf("fault = %+v, want the one heard, with no reason yet", res.Fault)
+	}
+	if !res.Contains("Script run-time error") || res.Finished {
+		t.Errorf("Run = %+v, want the header heard and the run unfinished", res)
+	}
+	if res.Elapsed >= faultGrace {
+		t.Errorf("the run waited %s after being given up on", res.Elapsed)
+	}
+}
+
 // TestRemoveScriptsSettlesBeforeSayingItIsDone: an object's contents
 // take a moment to catch up with a removal, so a caller that read them
 // straight afterwards would see the script it had just taken out.

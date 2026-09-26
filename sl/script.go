@@ -359,6 +359,14 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 				res.Finished = true
 			case <-g.C:
 			case <-ctx.Done():
+				// Given up on, as below, with the fault as far as
+				// it was heard.
+				g.Stop()
+				t.Stop()
+				res.Fault = col.faultSeen()
+				res.Lines = col.collected()
+				res.Elapsed = time.Since(start)
+				return res, ctx.Err()
 			}
 			g.Stop()
 		case <-t.C:
