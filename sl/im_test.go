@@ -742,9 +742,13 @@ func TestInventoryOffersForNarrowHowAPersonWould(t *testing.T) {
 			[]string{"A Big Box", "hovertext.lsl"}},
 		{"none at all", "", nil, nil},
 		{"by name", "A Big Box", []*InventoryOffer{box, script}, []string{"A Big Box"}},
-		{"by name, any case", "a big BOX", []*InventoryOffer{box, script}, []string{"A Big Box"}},
+		// An item's name is spelt as it is: the whole of it in another
+		// case is another name, and is not found as part of this one.
+		{"not by the whole name in another case", "a big BOX", []*InventoryOffer{box, script}, nil},
 		{"by part of the name", "box", []*InventoryOffer{box, script}, []string{"A Big Box"}},
+		{"by part of the name, any case", "BIG", []*InventoryOffer{box, script}, []string{"A Big Box"}},
 		{"by who sent it", "Someone Else", []*InventoryOffer{box, script}, []string{"hovertext.lsl"}},
+		{"by who sent it, any case", "someone else", []*InventoryOffer{box, script}, []string{"hovertext.lsl"}},
 		{"by something nobody said", "trousers", []*InventoryOffer{box, script}, nil},
 		// The whole of a name beats part of another, or an item called
 		// the beginning of something else could never be asked for.

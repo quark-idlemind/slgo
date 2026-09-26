@@ -7,6 +7,11 @@ is in, or the uuid of an item.  Redirection is the other half of it:
 that line is how a script gets onto the disk.  `save` writes the
 text back.
 
+The name is matched exactly, in the case it has, and has to mean one
+thing.  A path that names two items is refused, listing their ids,
+although reading is harmless: with the output going to a file there
+may be nobody to notice that it was the other one.
+
 With `--in` it reads one from inside a rezzed object instead:
 
     cat --in lantern greeter

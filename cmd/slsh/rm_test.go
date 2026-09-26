@@ -125,35 +125,3 @@ func TestPickByAge(t *testing.T) {
 		}
 	}
 }
-
-// TestMatchName is what a name means: everything of it, in listing
-// order -- which is why a plain rm of a name that means three things
-// refuses, and why --remove-all-copies has three to delete.
-func TestMatchName(t *testing.T) {
-	id := func(n byte) msg.UUID { var u msg.UUID; u[15] = n; return u }
-	es := []sl.Entry{
-		{Name: "slrun-bench", ID: id(1)},
-		{Name: "other", ID: id(2)},
-		{Name: "SLRUN-BENCH", ID: id(3)}, // the grid keeps case; we ignore it
-		{Name: "slrun-bench", ID: id(4)},
-	}
-
-	got := matchName(es, "slrun-bench")
-	if len(got) != 3 {
-		t.Fatalf("got %d matches, want 3", len(got))
-	}
-	if got[0].ID != id(1) {
-		t.Errorf("listing order should put this one first, got %v", got[0].ID)
-	}
-	var names []string
-	for _, e := range got {
-		names = append(names, e.Name)
-	}
-	if want := "slrun-bench,SLRUN-BENCH,slrun-bench"; strings.Join(names, ",") != want {
-		t.Errorf("listing order not kept: %v", names)
-	}
-
-	if n := len(matchName(es, "nothing of the sort")); n != 0 {
-		t.Errorf("got %d matches for a name that is not there", n)
-	}
-}

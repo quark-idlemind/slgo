@@ -10,8 +10,10 @@ The object comes first and the item takes the rest of the line, as in
 `drop`, so an object whose name has a space in it has to be quoted and
 an item whose name has one need not be.  The object is named by the
 word the region calls it or by its uuid.  The item is named exactly,
-in the case it has, or by the id `ls -l --in` prints for it, which is
-how one of two items of the same name is chosen.
+in the case it has, or by the id `ls -l --in` prints for it.  An
+object renames a second item of one name as it goes in, so a name
+inside one is never two items; a name that is nothing there is
+refused, naming what differs from it only in case.
 
 It lands in the folder the shell is in, where `new` and `mkdir` would
 make something.  A viewer would put it in the folder for its kind

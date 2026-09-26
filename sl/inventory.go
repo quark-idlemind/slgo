@@ -535,7 +535,14 @@ func (w *Session) TaskInventory(ctx context.Context, o *Object) ([]TaskItem, err
 	return parseTaskInventory(body), nil
 }
 
-// FindInObject looks for something inside an object by name.
+// FindInObject looks for something inside an object by name, matched
+// exactly, in the case it has.  An object renames an exact duplicate,
+// so there is at most one.  Why: doc/names.md#measured
+//
+// Nothing of that name is a nil item and no error, because Run and
+// InstallScript act on that answer: not finding the script is how they
+// decide to put one in.  A caller that means to find something wants
+// PickNamed over TaskInventory, which refuses instead.
 func (w *Session) FindInObject(ctx context.Context, o *Object, name string) (*TaskItem, error) {
 	items, err := w.TaskInventory(ctx, o)
 	if err != nil {

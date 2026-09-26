@@ -587,23 +587,18 @@ func cmdDetach(ctx context.Context, r *req, out io.Writer, args []string) error 
 	if err != nil {
 		return err
 	}
-	var found []*sl.Attached
-	for _, w := range worn {
-		if strings.EqualFold(w.Object.Name, want) {
-			found = append(found, w)
-		}
-	}
-	switch len(found) {
-	case 0:
-		return fmt.Errorf("nothing called %q is being worn", want)
-	case 1:
-	default:
-		return fmt.Errorf("%d worn objects are called %q", len(found), want)
-	}
-	if err := s.TakeOff(ctx, found[0].Item); err != nil {
+	// The name as it is spelt, through sl.PickNamedFunc: several worn
+	// objects of it are refused with the ids of their items, and none
+	// with any worn in another case as the hint.
+	w, err := sl.PickNamedFunc(worn, want, "worn object", "",
+		func(a *sl.Attached) (string, msg.UUID) { return a.Object.Name, a.Item })
+	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "took off %s\n", found[0].Object.Name)
+	if err := s.TakeOff(ctx, w.Item); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "took off %s\n", w.Object.Name)
 	return nil
 }
 
@@ -635,33 +630,18 @@ func entryAt(ctx context.Context, s *sl.Session, path string) (sl.Entry, error) 
 // pickEntry is the choosing, kept apart from the listing so that the
 // rule can be read and tested without an inventory to list.
 //
-// Matching ignores case, as every name this daemon matches does, and a
-// name that means more than one thing is refused with the ids rather
-// than resolved.  Which of two identical names somebody meant is not
-// something to guess at when the answer is a delete.
+// The rule is sl.PickNamed's: the name matched exactly, in the case it
+// has, since the grid keeps "Lamp" and "lamp" as two names; a name that
+// means more than one thing refused with the ids rather than resolved;
+// and a name that means nothing refused with any that differ from it
+// only in case.  A person's name is another matter: the grid ignores
+// case in one, and so does this daemon.
 func pickEntry(kids []sl.Entry, want, parent string) (sl.Entry, error) {
-	var found []sl.Entry
-	for _, e := range kids {
-		if strings.EqualFold(e.Name, want) {
-			found = append(found, e)
-		}
-	}
 	where := parent
 	if where == "" {
 		where = "the inventory root"
 	}
-	switch len(found) {
-	case 0:
-		return sl.Entry{}, fmt.Errorf("nothing called %q in %s", want, where)
-	case 1:
-		return found[0], nil
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "%d things in %s are called %q:", len(found), where, want)
-	for _, e := range found {
-		fmt.Fprintf(&b, "\n  %s", e.ID)
-	}
-	return sl.Entry{}, fmt.Errorf("%s", b.String())
+	return sl.PickNamed(kids, want, "", "in "+where)
 }
 
 // folderAt is the folder a path names, including the root for an empty

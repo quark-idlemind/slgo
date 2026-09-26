@@ -13,8 +13,9 @@ command means the friendship offer, and the item has to be named.
 
 The traps are `accept`'s traps, since it is the same picking: what is
 typed is tried against the items first, so a word that could be either
-takes the item; and a word that matches two of anything is refused
-with a count, so nothing is answered by accident.
+takes the item; a word that matches two of anything is refused with a
+count, so nothing is answered by accident; and the whole of an item's
+name is matched in the case it has.
 
 ## Saying no is not the same as saying nothing
 

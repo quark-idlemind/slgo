@@ -33,14 +33,19 @@ Delete from inside a rezzed object rather than from inventory.  It
 is a delete and not a take: the copy is gone, and anything wanted
 back has to come from the original in inventory.  `--newest` and
 `--oldest` do not apply with it: what an object holds has no dates
-on it.  What follows is a name, matched exactly and in the case it
-has.  The paths and the uuids above are inventory's.  The id beside
-a line of `ls -l --in` is not something to hand back to this.
+on it.  Nor does `--remove-all-copies`: an object renames a second
+item of one name as it goes in, so there is only ever one.  What
+follows is a name, matched exactly and in the case it has, or the id
+beside it in `ls -l --in`, which belongs to the object's own copy.
+The paths and the uuids above are inventory's, and name nothing
+inside an object.
 
 ## One name can mean a dozen items
 
 Inventory names are not unique, so a path may name several things.
-A plain `rm` refuses that and deletes nothing.
+A plain `rm` refuses that and deletes nothing.  A name is matched
+exactly, in the case it has: `Greeter` beside `greeter` is another
+name, not another copy, and `--remove-all-copies` leaves it alone.
 
     /Scripts$ rm greeter
     slsh: rm: "greeter" is 3 things here: say --newest or --oldest

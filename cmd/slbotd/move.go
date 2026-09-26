@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -267,34 +268,10 @@ func cmdLandmark(ctx context.Context, r *req, out io.Writer, args []string) erro
 		return nil
 	}
 
-	var matched []sl.Entry
-	for _, e := range kept {
-		if strings.EqualFold(e.Name, want) {
-			matched = append(matched, e)
-		}
+	e, err := pickLandmark(kept, want)
+	if err != nil {
+		return err
 	}
-	if len(matched) == 0 {
-		lower := strings.ToLower(want)
-		for _, e := range kept {
-			if strings.Contains(strings.ToLower(e.Name), lower) {
-				matched = append(matched, e)
-			}
-		}
-	}
-	switch len(matched) {
-	case 0:
-		return fmt.Errorf("no landmark called %q", want)
-	case 1:
-	default:
-		var b strings.Builder
-		fmt.Fprintf(&b, "%d landmarks answer to %q:", len(matched), want)
-		for _, e := range matched {
-			fmt.Fprintf(&b, "\n  %s", e.Path)
-		}
-		return fmt.Errorf("%s", b.String())
-	}
-
-	e := matched[0]
 	lm, err := s.Landmark(ctx, e.Asset)
 	if err != nil {
 		return err
@@ -315,6 +292,44 @@ func cmdLandmark(ctx context.Context, r *req, out io.Writer, args []string) erro
 		return err
 	}
 	return sayPosition(ctx, s, out)
+}
+
+// pickLandmark is the one kept landmark a word means.
+//
+// The whole name first, through sl.PickNamed: matched exactly, in the
+// case it has, and refused with the ids when several landmarks have it.
+// A name nothing has but something has in another case is refused with
+// that as the hint, rather than handed to the search below, which would
+// find it and take it as if it had been typed.  Only then is the word
+// searched for as part of a name, ignoring case, as a search does; one
+// hit is the answer, and several are listed and refused.
+func pickLandmark(kept []sl.Entry, want string) (sl.Entry, error) {
+	e, err := sl.PickNamed(kept, want, "landmark", "")
+	if err == nil {
+		return e, nil
+	}
+	if ne := (*sl.NameError)(nil); errors.As(err, &ne) && (len(ne.IDs) > 0 || len(ne.Near) > 0) {
+		return sl.Entry{}, err
+	}
+	lower := strings.ToLower(want)
+	var matched []sl.Entry
+	for _, e := range kept {
+		if strings.Contains(strings.ToLower(e.Name), lower) {
+			matched = append(matched, e)
+		}
+	}
+	switch len(matched) {
+	case 0:
+		return sl.Entry{}, fmt.Errorf("no landmark called %q", want)
+	case 1:
+		return matched[0], nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d landmarks answer to %q:", len(matched), want)
+	for _, e := range matched {
+		fmt.Fprintf(&b, "\n  %s", e.Path)
+	}
+	return sl.Entry{}, fmt.Errorf("%s", b.String())
 }
 
 // landmarksHeld is the landmarks in inventory that are real, kept and

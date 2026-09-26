@@ -614,7 +614,10 @@ func cmdDetach(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 //
 // Matched on the name, the item id or the link id, because all three
 // are things a listing here prints and any of them may be what got
-// copied.
+// copied.  The name goes through sl.PickNamedFunc: exactly, in the case
+// it has.  Several links of it are refused with their item ids, and a
+// name only a link in another case has is refused with that as the
+// hint, which says more than "not worn" would.
 //
 // A folder that cannot be read comes back as an error and not as "no
 // such thing", because not knowing is not the same as knowing there is
@@ -625,27 +628,45 @@ func (sh *Shell) detachFromOutfit(ctx context.Context, out io.Writer, want strin
 	if err != nil {
 		return false, err
 	}
-	id, notAnID := msg.ParseUUID(strings.TrimSpace(want))
-
-	var found []sl.OutfitLink
+	var links []sl.OutfitLink
 	for _, l := range outfit {
-		if l.Folder {
-			continue
+		if !l.Folder {
+			links = append(links, l)
 		}
-		if strings.EqualFold(l.Name, want) || (notAnID == nil && (l.Item == id || l.Link == id)) {
-			found = append(found, l)
-		}
-	}
-	if len(found) == 0 {
-		return false, nil
-	}
-	if len(found) > 1 {
-		return true, fmt.Errorf("%q is %d things in the Current Outfit folder, and this "+
-			"cannot tell them apart -- name one by its item id, which \"worn -l\" prints",
-			want, len(found))
 	}
 
-	l := found[0]
+	var l sl.OutfitLink
+	if id, err := msg.ParseUUID(strings.TrimSpace(want)); err == nil {
+		var found []sl.OutfitLink
+		for _, x := range links {
+			if x.Item == id || x.Link == id {
+				found = append(found, x)
+			}
+		}
+		switch len(found) {
+		case 0:
+			return false, nil
+		case 1:
+			l = found[0]
+		default:
+			return true, fmt.Errorf("%q is %d things in the Current Outfit folder, and this "+
+				"cannot tell them apart -- name one by its item id, which \"worn -l\" prints",
+				want, len(found))
+		}
+	} else {
+		var err error
+		l, err = sl.PickNamedFunc(links, want, "", "in the Current Outfit folder",
+			func(l sl.OutfitLink) (string, msg.UUID) { return l.Name, l.Item })
+		var ne *sl.NameError
+		switch {
+		case err == nil:
+		case errors.As(err, &ne) && (len(ne.IDs) > 0 || len(ne.Near) > 0):
+			return true, err
+		default:
+			return false, nil
+		}
+	}
+
 	if l.Kind == sl.AssetBodypart {
 		// "no eyes", "no hair": the slots a body part can occupy are
 		// all words that take no article, which is why the sentence
@@ -750,9 +771,9 @@ func wornFrom(worn []*sl.Attached, item msg.UUID) (*sl.Attached, bool) {
 // name in two folders are told apart by where they sit, and nothing
 // about a worn object says which folder its item came from, so honouring
 // the rest of the path would mean walking inventory to answer a question
-// the answer cannot settle.  A name that is worn twice is refused
-// instead, with the points printed, since "worn -l" gives the item ids
-// that do settle it.
+// the answer cannot settle.  The name is its item's, picked out through
+// sl.PickNamedFunc: exactly, in the case it has, and a name that is worn
+// twice is refused with the item ids, which settle it.
 func findWorn(ctx context.Context, sh *Shell, worn []*sl.Attached, want string) (*sl.Attached, string, error) {
 	// Nothing is named until something has to be: a key given for a key
 	// is answered without reading inventory at all.
@@ -776,24 +797,39 @@ func findWorn(ctx context.Context, sh *Shell, worn []*sl.Attached, want string) 
 	leaf := names[len(names)-1]
 
 	byID := sh.itemNames(ctx)
-	var found []*sl.Attached
-	for _, a := range worn {
-		if strings.EqualFold(byID[a.Item], leaf) {
-			found = append(found, a)
+	a, err := sl.PickNamedFunc(worn, leaf, "", "on the avatar",
+		func(a *sl.Attached) (string, msg.UUID) { return byID[a.Item], a.Item })
+	var ne *sl.NameError
+	switch {
+	case err == nil:
+		return a, byID[a.Item], nil
+	case !errors.As(err, &ne):
+		return nil, "", err
+	case len(ne.IDs) > 0:
+		// The points as well as the ids, since where each is worn is
+		// what a person can see.
+		var where []string
+		for _, id := range ne.IDs {
+			if a, ok := wornFrom(worn, id); ok {
+				where = append(where, sl.AttachPointName(a.Point))
+			}
 		}
+		return nil, "", fmt.Errorf("%q is worn on %s; say which by its item id, which \"worn -l\" "+
+			"prints beside the point:\n  %s", leaf, strings.Join(where, " and on "),
+			strings.Join(idStrings(ne.IDs), "\n  "))
+	case len(ne.Near) > 0:
+		return nil, "", err
 	}
-	switch len(found) {
-	case 0:
-		return nil, "", notWorn(leaf)
-	case 1:
-		return found[0], byID[found[0].Item], nil
+	return nil, "", notWorn(leaf)
+}
+
+// idStrings is ids as text, for a list in a refusal.
+func idStrings(ids []msg.UUID) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = id.String()
 	}
-	var where []string
-	for _, a := range found {
-		where = append(where, sl.AttachPointName(a.Point))
-	}
-	return nil, "", fmt.Errorf("%q is worn on %s; say which by its item id, which \"worn -l\" prints",
-		leaf, strings.Join(where, " and on "))
+	return out
 }
 
 // notWorn is the answer to a word that names nothing worn.

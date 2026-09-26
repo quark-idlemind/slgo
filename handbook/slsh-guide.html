@@ -527,8 +527,16 @@ folder     -                   1ae57e57-… /Objects/spares</span>
           The date column is the whole date, down to the second, because that
           is the other thing that tells two copies of one name apart — and it
           is what <code>rm --newest</code> and <code>rm --oldest</code> choose
-          by. Reading commands take the first of several and think nothing of
-          it; <code>rm</code> does not, for the reason below.
+          by. No command takes the first of several: a path that names more
+          than one thing is refused, even by a command that only reads, and
+          the refusal lists their ids. <code>rm</code> has more ways out,
+          below.
+        </p>
+        <p>
+          Names are matched exactly, in the case they have. The grid keeps
+          "lantern" and "Lantern" as two names, and so does the shell. A name
+          spelt a way nothing is spelt is refused, and the refusal names what
+          differs from it only in case.
         </p>
 
         <p>

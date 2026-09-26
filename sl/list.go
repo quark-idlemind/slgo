@@ -211,6 +211,9 @@ func (w *Session) ListFolder(ctx context.Context, folder msg.UUID, depth uint) (
 // about ids; there is no call that takes a path.  Each step is one
 // request, so a deep path costs a request per segment -- which is why
 // the id form exists.
+//
+// Each name picks out one folder through PickNamed: exactly, and never
+// the first of two folders of one name.
 func (w *Session) resolvePath(ctx context.Context, path string) (msg.UUID, string, error) {
 	id := w.invRoot
 	if id.IsZero() {
@@ -222,21 +225,21 @@ func (w *Session) resolvePath(ctx context.Context, path string) (msg.UUID, strin
 		if err != nil {
 			return msg.UUID{}, "", err
 		}
-		var next msg.UUID
+		var folders []Entry
 		for _, e := range kids {
-			if e.Folder && strings.EqualFold(e.Name, name) {
-				next = e.ID
-				break
+			if e.Folder {
+				folders = append(folders, e)
 			}
 		}
-		if next.IsZero() {
-			where := JoinPath(walked...)
-			if where == "" {
-				where = "the inventory root"
-			}
-			return msg.UUID{}, "", fmt.Errorf("sl: no folder %q in %s", name, where)
+		where := JoinPath(walked...)
+		if where == "" {
+			where = "the inventory root"
 		}
-		id, walked = next, append(walked, name)
+		next, err := PickNamed(folders, name, "folder", "in "+where)
+		if err != nil {
+			return msg.UUID{}, "", fmt.Errorf("sl: %w", err)
+		}
+		id, walked = next.ID, append(walked, name)
 	}
 	return id, JoinPath(walked...), nil
 }

@@ -15,9 +15,9 @@ Only a rename: an object holds no folders, so there is nowhere in
 one to move anything to.  The object is named by the word the region
 calls it or by its uuid, and a name several objects answer to is
 refused with their uuids rather than guessed at.  The thing inside
-is named by its name, matched exactly and in the case it has.  The
-id beside a line of `ls -l --in` belongs to the object's own copy,
-and is not something to give this.
+is named by its name, matched exactly and in the case it has, or by
+the id beside it in `ls -l --in`, which belongs to the object's own
+copy.  An inventory item's id names nothing inside an object.
 
 Nothing answers a rename, so the object's contents are read back
 until the item has its new name, for up to fifteen seconds, and one
@@ -49,9 +49,10 @@ one there already.
 
 Moving and renaming at once is two commands, in either order.
 
-A folder can hold several things of one name, and a path means the
-first of them.  Where that is not the one wanted, `ls -l` prints the
-id beside each and an id may be given wherever a path is.
+A folder can hold several things of one name, and a path that means
+several is refused, listing their ids.  `ls -l` prints the id beside
+each too, and an id may be given wherever a path is.  The name is
+matched exactly, in the case it has.
 
 ## Examples
 

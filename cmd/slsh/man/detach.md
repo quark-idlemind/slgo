@@ -10,7 +10,10 @@ the avatar is a sentence saying so rather than a detach that reports
 success and does nothing.
 
 A path is allowed and only its last name is used: nothing about a worn
-object says which folder its item came from.  A uuid is looked for as
+object says which folder its item came from.  The name is matched
+exactly, in the case it has: `hat` and `Hat` are two items, and both
+may be on.  A name worn only in another case is refused, and the
+refusal names what it is near.  A uuid is looked for as
 either the inventory item or the worn object, since the region's answer
 holds both.
 
@@ -30,8 +33,8 @@ therefore be wearing something nothing here has ever heard of, and
 on; it is this session not having been told.  `worn` lists what can be
 seen.
 
-A name that is worn twice is refused with the points
-printed.  `worn -l` gives the item ids, which are what tells the two
+A name that is worn twice is refused with the points and the item ids
+printed, as `worn -l` prints them; an item id is what tells the two
 apart.
 
 ## It waits

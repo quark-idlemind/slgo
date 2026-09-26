@@ -1014,6 +1014,14 @@ func (sh *Shell) inventoryOffer(args []string) (*sl.InventoryOffer, bool, error)
 	case 1:
 		return hits[0], true, nil
 	case 0:
+		// An item offered under this name in another case is not a
+		// match, but it is the likely typo, and sl.AllNamedFunc's hint
+		// says more than the friendship offers' refusal would.
+		_, err := sl.AllNamedFunc(items, want, "offered item", "",
+			func(o *sl.InventoryOffer) (string, msg.UUID) { return o.Name, o.Item })
+		if ne := (*sl.NameError)(nil); errors.As(err, &ne) && len(ne.Near) > 0 {
+			return nil, false, err
+		}
 		// Not ours; the friendship offers get the same word next.
 		return nil, false, nil
 	}

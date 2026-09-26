@@ -301,7 +301,7 @@ func TestStandTakesNothing(t *testing.T) {
 func TestANameThatMeansTwoThingsIsRefused(t *testing.T) {
 	kids := []sl.Entry{
 		{ID: testLamp, Name: "a lamp"},
-		{ID: testStranger, Name: "A Lamp"},
+		{ID: testStranger, Name: "a lamp"},
 		{ID: testSender, Name: "something else"},
 	}
 	_, err := pickEntry(kids, "a lamp", "Objects")
@@ -314,17 +314,36 @@ func TestANameThatMeansTwoThingsIsRefused(t *testing.T) {
 		}
 	}
 
-	// One is one, whatever its case.
-	e, err := pickEntry(kids, "SOMETHING ELSE", "Objects")
-	if err != nil || e.ID != testSender {
-		t.Errorf("pickEntry = %v, %v", e, err)
-	}
-
 	// And nothing says where it looked, since a path that resolved to
 	// the wrong folder looks exactly like a missing item.
 	_, err = pickEntry(kids, "a hat", "")
 	if err == nil || !strings.Contains(err.Error(), "the inventory root") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+// The grid keeps "A Lamp" and "a lamp" as two names, so a name is the
+// one spelt that way and a case variant beside it is neither a second
+// meaning nor a stand-in.
+func TestPickEntryMatchesTheCaseItHas(t *testing.T) {
+	kids := []sl.Entry{
+		{ID: testLamp, Name: "a lamp"},
+		{ID: testStranger, Name: "A Lamp"},
+		{ID: testSender, Name: "something else"},
+	}
+	for want, id := range map[string]msg.UUID{"a lamp": testLamp, "A Lamp": testStranger} {
+		if e, err := pickEntry(kids, want, "Objects"); err != nil || e.ID != id {
+			t.Errorf("pickEntry(%q) = %v, %v; want %s", want, e.ID, err, id)
+		}
+	}
+
+	// Another case is not a match, and the refusal says what is there.
+	_, err := pickEntry(kids, "SOMETHING ELSE", "Objects")
+	if err == nil {
+		t.Fatal(`"SOMETHING ELSE" was taken for "something else"`)
+	}
+	if !strings.Contains(err.Error(), `did you mean "something else"?`) {
+		t.Errorf("the refusal does not offer the near miss: %v", err)
 	}
 }
 
@@ -373,5 +392,81 @@ func TestStatusSaysWhatTheAttendantIsDoing(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("status did not say %q:\n%s", want, got)
 		}
+	}
+}
+
+// A landmark's whole name is matched as it is spelt, and several of it
+// are refused with their ids.  A name only another spelling has is
+// refused with that spelling as the hint rather than found by the
+// search that follows, which would take it as if it had been typed.
+// The search, for part of a name, still ignores case.
+func TestPickLandmarkMatchesTheCaseItHas(t *testing.T) {
+	id := func(n byte) msg.UUID { return msg.UUID{0: 0xdd, 15: n} }
+	kept := []sl.Entry{
+		{ID: id(1), Name: "Thrushmoor", Path: "Landmarks/Thrushmoor"},
+		{ID: id(2), Name: "thrushmoor", Path: "Landmarks/thrushmoor"},
+		{ID: id(3), Name: "Pelmar Reach Workshop", Path: "Landmarks/Pelmar Reach Workshop"},
+		{ID: id(4), Name: "Twice", Path: "Landmarks/Twice"},
+		{ID: id(5), Name: "Twice", Path: "Twice"},
+	}
+	for want, n := range map[string]byte{"Thrushmoor": 1, "thrushmoor": 2, "WORKSHOP": 3} {
+		if e, err := pickLandmark(kept, want); err != nil || e.ID != id(n) {
+			t.Errorf("pickLandmark(%q) = %v, %v; want %s", want, e.ID, err, id(n))
+		}
+	}
+
+	_, err := pickLandmark(kept, "THRUSHMOOR")
+	if err == nil || !strings.Contains(err.Error(), `did you mean "Thrushmoor" or "thrushmoor"?`) {
+		t.Errorf("pickLandmark(THRUSHMOOR) = %v; want the two spellings offered", err)
+	}
+	// One other spelling is not taken for the name either.
+	if e, err := pickLandmark(kept[1:], "THRUSHMOOR"); err == nil {
+		t.Errorf("pickLandmark took %q for THRUSHMOOR", e.Name)
+	}
+
+	_, err = pickLandmark(kept, "Twice")
+	if err == nil || !strings.Contains(err.Error(), id(4).String()) || !strings.Contains(err.Error(), id(5).String()) {
+		t.Errorf("pickLandmark(Twice) = %v; want both ids", err)
+	}
+	if _, err := pickLandmark(kept, "nowhere"); err == nil || !strings.Contains(err.Error(), `no landmark called "nowhere"`) {
+		t.Errorf("pickLandmark(nowhere) = %v", err)
+	}
+}
+
+// A worn object is named as it is spelt, and one worn under another
+// spelling of the name is offered rather than taken off.
+func TestDetachMatchesTheCaseAWornObjectHas(t *testing.T) {
+	d, b, f := newTestDaemon(t)
+	upper := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-000000000002")
+	f.objects = []*sl.Seen{
+		{Object: sl.Object{ID: testMe, Local: 1}, PCode: 47},
+		{Object: sl.Object{ID: msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000001"),
+			Name: "a lamp", Local: 10}, Parent: 1, PCode: 9, AttachItem: testLamp, AttachPoint: 1},
+		{Object: sl.Object{ID: msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000002"),
+			Name: "A Lamp", Local: 11}, Parent: 1, PCode: 9, AttachItem: upper, AttachPoint: 2},
+	}
+	detached := func() []msg.UUID {
+		var out []msg.UUID
+		for _, m := range f.Sent() {
+			if d, ok := m.(*msg.DetachAttachmentIntoInv); ok {
+				out = append(out, d.ObjectData.ItemID)
+			}
+		}
+		return out
+	}
+
+	got := send(t, d, b, "detach A LAMP")
+	if !strings.Contains(got, `no worn object "A LAMP"; did you mean "a lamp" or "A Lamp"?`) {
+		t.Errorf("detach of a third spelling printed %q", got)
+	}
+	if got := detached(); len(got) != 0 {
+		t.Fatalf("a name in another case took off %v", got)
+	}
+
+	if got := send(t, d, b, "detach A Lamp"); !strings.Contains(got, "took off A Lamp") {
+		t.Errorf("detach A Lamp printed %q", got)
+	}
+	if got := detached(); len(got) != 1 || got[0] != upper {
+		t.Errorf("detach A Lamp took off %v, want %s", got, upper)
 	}
 }

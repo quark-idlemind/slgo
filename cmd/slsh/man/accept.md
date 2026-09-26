@@ -7,6 +7,12 @@ something after it, that names one: part of the name of whoever
 offered friendship, or part of the name of the item offered, or the
 whole name of whoever sent the item.
 
+A person's name, whole or part, is matched without regard to case, and
+so is part of an item's name, since that is a search.  The whole of an
+item's name is matched in the case it has.  An item offered as
+`A Big Box` is not what `accept a big box` names, and is not found as
+part of it either: the refusal names what it is near.
+
     accept
     accept lantern
 

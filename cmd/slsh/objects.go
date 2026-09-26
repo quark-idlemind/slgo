@@ -323,10 +323,10 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 // is no such region: the map answers the prefix "home" with nine longer
 // names and nothing that is exactly it.
 //
-// Without regard to case, as every other name this shell matches is:
-// "Home" at a prompt is the same word, and a rule that sent one of them
-// to the map and the other to the account's home position would be a
-// difference nobody could see.
+// Without regard to case, since it is this shell's word and not a name
+// the grid keeps: "Home" at a prompt is the same word, and a rule that
+// sent one of them to the map and the other to the account's home
+// position would be a difference nobody could see.
 //
 // It is here rather than inside teleportTarget because home is not a
 // target of the kind that function reads: it names no region this shell
