@@ -39,6 +39,21 @@ A session with clients attached is left alone and the refusal names
 them: the programs that attached, under the names they authenticated
 with, rather than a count of them.
 
+## What happens to whoever is attached
+
+With `-f`, every program attached to that avatar is let go, and told
+why in the words an attach to it is refused with from then on:
+
+    example is not connected (logged out); it will not come back on its own
+
+A shell attached to the avatar being logged out -- this one, if it
+is the avatar named -- stops there, saying `the session ended:` in
+front of that line.  A shell attached to another avatar carries on.
+
+A session the daemon loses and brings back by itself is different:
+nothing attached to it is let go, and a shell on it carries on once
+it is back.
+
 ## Nothing here is the way to end this shell
 
 A shell attached to the daemon leaves the avatar logged in when it

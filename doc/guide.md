@@ -470,6 +470,19 @@ Both refuse to be casual about it. A logout will not take a session that
 clients are attached to -- it names them instead -- because a benchmark
 mid-run has a script installed and a reading half taken.
 
+Forced, it lets them go. Each program attached to that avatar has its
+connection ended with the reason, in the words an attach to it is
+refused with from then on:
+
+    example is not connected (logged out); it will not come back on its own
+
+An `slsh` on that avatar stops, saying `the session ended:` in front of
+it, and `slbotd` lets go and waits for the avatar to be logged in again.
+The same happens, with the grid's reason in the brackets, when the grid
+throws the avatar off. A session that drops and is reconnected is
+different: nothing attached to it is let go. All of this is from the
+code and its tests; it has not been watched on a live grid.
+
 ### Handing a session to a viewer
 
     slgod -viewer 127.0.0.1:9000 example

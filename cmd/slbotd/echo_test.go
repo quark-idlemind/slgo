@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -300,20 +301,23 @@ func TestADetachedAvatarIsNotTreatedAsOurOwn(t *testing.T) {
 	}
 }
 
-// slgod's stream OUTLIVES the session under it: a session that drops is
-// re-established and the client keeps its stream and its subscriptions
-// across that.  So a session which is never coming back -- because
-// somebody logged the avatar out on purpose -- does not end the
-// listening loop by itself, and the attendant sat holding a session
-// that no longer existed, believing it was attached, until the daemon
-// was restarted.
+// slgod ends the stream of a session that is not coming back -- logged
+// out on purpose, thrown off, or no longer hosted -- and keeps it open
+// across one that dropped and is being re-established.  So the stream
+// ending is how an attendant learns its session has gone for good, and
+// a notice is something to log: nothing is asked of slgod on the
+// strength of one.
 //
-// Measured on a live daemon before this: a forced logout from the shell
-// left slbotd with no "detached" line, no retry, and slgod reporting one
-// client that was really only the shell asking.
-func TestASessionThatIsNotComingBackIsLetGo(t *testing.T) {
+// It used to ask.  The stream stayed open under a session that was
+// never coming back, so the attendant asked slgod after every
+// disconnection whether the avatar had been stopped; before it did
+// that, it sat holding a session that no longer existed until the
+// daemon was restarted.
+func TestTheStreamEndingIsWhatLetsASessionGo(t *testing.T) {
 	d, b, grid := newTestDaemon(t)
+	var asked atomic.Int64
 	d.agents = func(ctx context.Context) ([]*pb.AgentInfo, error) {
+		asked.Add(1)
 		return []*pb.AgentInfo{{Name: "example", State: pb.AgentInfo_STOPPED}}, nil
 	}
 
@@ -322,44 +326,27 @@ func TestASessionThatIsNotComingBackIsLetGo(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); b.read(context.Background(), s, ims, grid.notices) }()
 
-	// slgod says the session went away, and says the avatar is stopped.
+	// While the stream is open the session is slgod's to bring back,
+	// whatever slgod would say if asked.
 	grid.notices <- &pb.AgentEvent{
 		Kind:   pb.AgentEvent_DISCONNECTED,
 		Detail: "logged out on request; it will not come back until asked for by name",
 	}
+	select {
+	case <-done:
+		t.Fatal("let go of a session on the strength of a notice, with its stream still open")
+	case <-time.After(500 * time.Millisecond):
+	}
 
+	grid.Close()
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		t.Fatal("the attendant held on to a session that was never coming back")
+		t.Fatal("the attendant held on to a session whose stream had ended")
 	}
-}
-
-// A session that merely dropped IS coming back, under the same stream,
-// so letting go of it would throw away a working attachment and make
-// the attendant reconnect for nothing.
-func TestASessionThatIsComingBackIsKept(t *testing.T) {
-	d, b, grid := newTestDaemon(t)
-	d.agents = func(ctx context.Context) ([]*pb.AgentInfo, error) {
-		return []*pb.AgentInfo{{Name: "example", State: pb.AgentInfo_CONNECTING}}, nil
+	if n := asked.Load(); n != 0 {
+		t.Errorf("slgod was asked %d time(s) whether the session had stopped", n)
 	}
-
-	s := b.Session()
-	ims := s.IMs(IMDepth)
-	done := make(chan struct{})
-	go func() { defer close(done); b.read(context.Background(), s, ims, grid.notices) }()
-
-	grid.notices <- &pb.AgentEvent{
-		Kind: pb.AgentEvent_DISCONNECTED, Detail: "the simulator went quiet",
-	}
-
-	select {
-	case <-done:
-		t.Fatal("let go of a session slgod is re-establishing")
-	case <-time.After(2 * time.Second):
-	}
-	grid.Close()
-	<-done
 }
 
 // An avatar another program's model drives, named with chat-bot, is

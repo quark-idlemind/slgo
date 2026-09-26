@@ -1937,7 +1937,8 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
           <code>login</code> afterwards needs <code>-f</code>, because
           undoing a deliberate stop should be deliberate too. Both refuse to be
           casual: <code>logout</code> will not take a session that clients are
-          attached to, and names them instead.
+          attached to, and names them instead. Forced, it lets them go: a shell
+          attached to that avatar stops, saying the session ended and why.
         </p>
 
         <div class="term">

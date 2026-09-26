@@ -185,6 +185,10 @@ type fakeGrid struct {
 	// once it has been asked for laterAt times.
 	later   []*sl.Seen
 	laterAt int
+
+	// endedWith is what Err says once the stream is over: nil for one
+	// that closed, and slgod's status for one it ended.
+	endedWith error
 }
 
 // invDir is a folder in the fake inventory, and invItem a thing in one.
@@ -1637,7 +1641,11 @@ func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error
 func (f *fakeGrid) Messages() <-chan *sl.Message  { return f.msgs }
 func (f *fakeGrid) Events() <-chan *sl.QueueEvent { return f.events }
 func (f *fakeGrid) Done() <-chan struct{}         { return f.done }
-func (f *fakeGrid) Err() error                    { return nil }
+func (f *fakeGrid) Err() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.endedWith
+}
 
 func (f *fakeGrid) RegionChanges() <-chan *sl.RegionChange { return f.regions }
 
