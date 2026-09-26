@@ -869,6 +869,9 @@ func (w *Session) scriptRunning(object, item msg.UUID, running bool) {
 // other -- an object update and a properties reply, say -- and a
 // predicate over the accumulated state says that plainly where a
 // condition variable per fact would not.
+//
+// It is for what the session has been told.  What has to be asked for,
+// a round trip each time, is poll's.
 func (w *Session) await(ctx context.Context, timeout time.Duration, what string, ok func() bool) error {
 	deadline := time.Now().Add(timeout)
 
@@ -901,6 +904,73 @@ func (w *Session) await(ctx context.Context, timeout time.Duration, what string,
 			return ctx.Err()
 		}
 	}
+}
+
+// poll asks read until it holds, pausing every between asks.  It is how
+// a call here confirms what the grid does not answer: by looking.
+//
+// It stops early for two things.  The caller giving up returns
+// ctx.Err(), and the deadline passing returns ErrTimeout naming what
+// was waited for.  A read that fails is asked again, and a timeout
+// whose last read failed says why.  A read that holds is believed even
+// if ctx was cancelled meanwhile, since the thing did happen.
+//
+// The mistake it prevents is the loop of read, check the deadline,
+// time.Sleep, go round, ignoring the read's error.  A cancelled read
+// fails at once, or, like Direct's Presence, never looks at ctx, so that
+// loop sleeps on to its own deadline and then reports a timeout, which
+// is neither true nor quick.  So ctx is checked here after every read,
+// not left to the read.  TestNothingInThisPackageSleeps refuses the
+// loop.
+//
+// await is its neighbour, for what the session has already been told.
+func poll(ctx context.Context, timeout, every time.Duration, what string,
+	read func(context.Context) (bool, error)) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		ok, err := read(ctx)
+		if ok {
+			return nil
+		}
+		if gone := ctx.Err(); gone != nil {
+			return gone
+		}
+		if time.Now().After(deadline) {
+			// A read's own ErrTimeout is its way of saying "not yet",
+			// and is not worth quoting.
+			var last string
+			if err != nil && !errors.Is(err, ErrTimeout) {
+				last = fmt.Sprintf("; the last look failed: %v", err)
+			}
+			return fmt.Errorf("%w: %s (after %s)%s", ErrTimeout, what, timeout, last)
+		}
+		t := time.NewTimer(every)
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		}
+	}
+}
+
+// lastLookFor bounds lastLook's one read.
+const lastLookFor = 3 * time.Second
+
+// lastLook is for a call that asked for something to be made and whose
+// poll has failed.  If the caller gave up, what was asked for may exist
+// by now, and the caller has to be told of it to clean it up -- as Build
+// returns what it made -- so this reads once more, on a context the
+// cancel does not reach, and reports whether the read held.  After a
+// timeout it reports false without reading: poll has only just looked.
+func lastLook(ctx context.Context, read func(context.Context) (bool, error)) bool {
+	if ctx.Err() == nil {
+		return false
+	}
+	look, cancel := context.WithTimeout(context.WithoutCancel(ctx), lastLookFor)
+	defer cancel()
+	ok, _ := read(look)
+	return ok
 }
 
 func trimNul(b []byte) string {

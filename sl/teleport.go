@@ -178,18 +178,15 @@ func (w *Session) TeleportLocal(ctx context.Context, to msg.Vector3, timeout tim
 	// on whatever is under the point, so the height it settles at is
 	// its choice and not ours.
 	const near = 4.0 // metres
-	deadline := time.Now().Add(timeout)
-	for {
-		p, err := w.Where(ctx)
-		if err == nil && dist2(p.Position, to) < near*near {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("sl: the avatar did not arrive at %v; "+
-				"a parcel that will not have this avatar refuses silently: %w", to, ErrTimeout)
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
+	return poll(ctx, timeout, 500*time.Millisecond, fmt.Sprintf("the avatar to arrive at %v; "+
+		"a parcel that will not have this avatar refuses silently", to),
+		func(ctx context.Context) (bool, error) {
+			p, err := w.Where(ctx)
+			if err != nil {
+				return false, err
+			}
+			return dist2(p.Position, to) < near*near, nil
+		})
 }
 
 // DefaultTeleportTimeout is how long a teleport to another region is

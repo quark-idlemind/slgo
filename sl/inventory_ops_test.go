@@ -184,6 +184,67 @@ func TestCreateFolderRefusesWhatItCouldNotAskFor(t *testing.T) {
 	})
 }
 
+// TestCreateFolderStopsWhenTheCallerGivesUp: a caller that gives up is
+// told so at once, not twenty seconds later as a timeout.  The folder
+// may have been made by then, and a caller that is not told of it
+// cannot take it away again.
+//
+// The caller gives up while the first look after the request is being
+// answered, and that look finds nothing; where the folder is made at
+// the same moment, only a look after the cancel can see it.
+func TestCreateFolderStopsWhenTheCallerGivesUp(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		made bool
+	}{
+		{"before anything was made", false},
+		{"as the folder was made", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var mu sync.Mutex
+			looked, made := false, false
+			f.ServeInventoryTree(t, func(id msg.UUID) ([]*Folder, []*Item) {
+				asked := sentOf[*msg.CreateInventoryFolder](f)
+				if id != testInvRoot || len(asked) == 0 {
+					return nil, nil
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				var out []*Folder
+				if made {
+					out = append(out, &Folder{
+						ID: asked[0].FolderData.FolderID, ParentID: testInvRoot, Name: "lanterns",
+					})
+				}
+				if !looked {
+					looked, made = true, tc.made
+					cancel()
+				}
+				return out, nil
+			})
+
+			id, err := whenCancelled(t, ctx, func(ctx context.Context) (msg.UUID, error) {
+				return w.CreateFolder(ctx, msg.UUID{}, "lanterns")
+			})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("CreateFolder = %v, want the caller's cancel", err)
+			}
+			var want msg.UUID
+			if tc.made {
+				want = onlySent[*msg.CreateInventoryFolder](t, f).FolderData.FolderID
+			}
+			if id != want {
+				t.Errorf("CreateFolder handed back %s, want %s", id, want)
+			}
+		})
+	}
+}
+
 // TestDeletingGoesOverAISBecauseTheOtherWayDoesNothing: the UDP move
 // into Trash is accepted and ignored, so this is a DELETE, and the
 // difference between an item and a category is one word of the path.
@@ -421,6 +482,62 @@ func TestCopyItemReportsWhatDidNotHappen(t *testing.T) {
 	})
 }
 
+// TestCopyItemStopsWhenTheCallerGivesUp: a caller that gives up is told
+// so at once, not at the end of the wait it asked for.  The copy may
+// have been made by then, and is handed back with the cancel so that
+// the caller can delete it; see TestCreateFolderStopsWhenTheCallerGivesUp
+// for how the two cases are staged.
+func TestCopyItemStopsWhenTheCallerGivesUp(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		made bool
+	}{
+		{"before anything was made", false},
+		{"as the copy was made", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			before := anItem(theOther, "workbench")
+			copied := anItem(theChild, "workbench spare")
+			var mu sync.Mutex
+			looked, made := false, false
+			f.ServeInventory(t, func(msg.UUID) []*Item {
+				if len(sentOf[*msg.CopyInventoryItem](f)) == 0 {
+					return []*Item{before}
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				out := []*Item{before}
+				if made {
+					out = append(out, copied)
+				}
+				if !looked {
+					looked, made = true, tc.made
+					cancel()
+				}
+				return out
+			})
+
+			got, err := whenCancelled(t, ctx, func(ctx context.Context) (*Item, error) {
+				return w.CopyItem(ctx, theOther, aFolder, "workbench spare", time.Minute)
+			})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("CopyItem = %v, want the caller's cancel", err)
+			}
+			switch {
+			case tc.made && (got == nil || got.ID != theChild):
+				t.Errorf("CopyItem handed back %v, want the copy that was made", got)
+			case !tc.made && got != nil:
+				t.Errorf("CopyItem handed back %s, and nothing was made", got.ID)
+			}
+		})
+	}
+}
+
 // TestSetItemChangesOnlyWhatItWasGiven: an empty name or description
 // means leave it alone, and a nil mask means leave the permissions
 // alone -- so a caller changing a description does not have to know the
@@ -570,6 +687,39 @@ func TestSetItemWaitsForADescriptionAsItWaitsForAName(t *testing.T) {
 	}
 	if got.Desc != "the new description" {
 		t.Errorf("SetItem confirmed a description of %q", got.Desc)
+	}
+}
+
+// TestSetItemStopsWhenTheCallerGivesUp: the change never shows here, and
+// the caller gives up while the first read back is being answered.  It
+// is told so at once, rather than fifteen seconds later that the item
+// did not change.
+func TestSetItemStopsWhenTheCallerGivesUp(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	it := anItem(theChild, "workbench")
+	var a *ais
+	a = serveAIS(t, f, func(id msg.UUID) ([]*Folder, []*Item) {
+		if id != testInvRoot {
+			return nil, nil
+		}
+		if len(a.changes()) > 0 {
+			cancel()
+		}
+		return nil, []*Item{it}
+	})
+
+	got, err := whenCancelled(t, ctx, func(ctx context.Context) (*Item, error) {
+		return w.SetItem(ctx, theChild, "workbench renamed", "", nil)
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("SetItem = %v, want the caller's cancel", err)
+	}
+	if got != nil {
+		t.Errorf("SetItem handed back %q, which never changed", got.Name)
 	}
 }
 
@@ -762,6 +912,56 @@ func TestRezFromInventoryReportsWhatDidNotHappen(t *testing.T) {
 	})
 }
 
+// TestRezFromInventoryStopsWhenTheCallerGivesUp: a caller that gives up
+// is told so at once, not a minute later as a timeout.  The object may
+// be standing there by then, and is handed back with the cancel so that
+// the caller can take it; see TestCreateFolderStopsWhenTheCallerGivesUp
+// for how the two cases are staged.
+func TestRezFromInventoryStopsWhenTheCallerGivesUp(t *testing.T) {
+	at := msg.Vector3{X: 130, Y: 128, Z: 25}
+	for _, tc := range []struct {
+		name string
+		made bool
+	}{
+		{"before anything was made", false},
+		{"as the object was made", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			looked := false
+			f.mu.Lock()
+			f.afterObjects = func() {
+				if looked || !sentLocked[*msg.RezObject](f) {
+					return
+				}
+				looked = true
+				if tc.made {
+					f.objects = append(f.objects, seenAt(thePrim, 12, at))
+				}
+				cancel()
+			}
+			f.mu.Unlock()
+
+			o, err := whenCancelled(t, ctx, func(ctx context.Context) (*Object, error) {
+				return w.RezFromInventory(ctx, anItem(theChild, "workbench"), at, msg.UUID{}, time.Minute)
+			})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("RezFromInventory = %v, want the caller's cancel", err)
+			}
+			switch {
+			case tc.made && (o == nil || o.Local != 12):
+				t.Errorf("RezFromInventory handed back %v, want the object that was made", o)
+			case !tc.made && o != nil:
+				t.Errorf("RezFromInventory handed back %v, and nothing was made", o)
+			}
+		})
+	}
+}
+
 // TestGivingSomethingAwayIsAnInstantMessage: there is no message for
 // this.  The asset type and the id go in the bucket of an IM, and that
 // is the whole protocol for handing something over.
@@ -854,6 +1054,31 @@ func TestActivateGroupSaysWhatItUsuallyMeans(t *testing.T) {
 			t.Errorf("ActivateGroup = %v, want it to name the usual cause", err)
 		}
 	})
+}
+
+// TestActivateGroupStopsWhenTheCallerGivesUp: the group is read back
+// from the presence, which answers whatever the context, as Direct's
+// does.  So only the wait can notice the caller giving up, and it has
+// to, rather than read on to the end of the minute.
+func TestActivateGroupStopsWhenTheCallerGivesUp(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.mu.Lock()
+	f.afterPresence = func() {
+		if sentLocked[*msg.ActivateGroup](f) {
+			cancel()
+		}
+	}
+	f.mu.Unlock()
+
+	_, err := whenCancelled(t, ctx, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, w.ActivateGroup(ctx, testRegionID, time.Minute)
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("ActivateGroup = %v, want the caller's cancel", err)
+	}
 }
 
 // TestTheItemChecksumCountsEveryFieldTheSimulatorCounts: sent as zero,
