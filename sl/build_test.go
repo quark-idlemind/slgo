@@ -3,9 +3,10 @@ package sl
 // Making an object out of nothing.
 //
 // A build is a sequence of things that are not confirmed by replies.  A
-// rez is a request the simulator may place where it likes, so the prim
-// is put where it belongs afterwards rather than trusted to have landed
-// there; a rename has no reply, so the name is read back; a description
+// rez is answered by the prim turning up, its bottom rather than its
+// centre on the point asked for, so it is recognised by where it stands
+// and then put where it belongs; a rename has no reply, so the name is
+// read back; a description
 // only arrives in the full properties, which have to be asked for by
 // selecting the object; and a link shows up as the children naming the
 // root as their parent in an update that would have arrived anyway.
@@ -24,6 +25,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,12 +40,38 @@ func describedAs(id msg.UUID, desc string) *msg.ObjectProperties {
 	return m
 }
 
-// confirmRez plays the simulator's side of a rez: the region describes
-// something new, and answers the question of whose it is.
+// landing is where the simulator puts the prim an ObjectAdd asks for,
+// as measured on Agni: X and Y as sent, and Z raised by half the height,
+// added in float32, so that the prim's bottom is on the point.  See
+// doc/rez.md.
+func landing(add *msg.ObjectAdd) msg.Vector3 {
+	at := add.ObjectData.RayEnd
+	at.Z += add.ObjectData.Scale.Z / 2
+	return at
+}
+
+// appear puts a prim in the region the way a simulator does: the
+// backend's list of the region gains it, and the session is relayed its
+// update.
+func appear(t *testing.T, f *fakeBackend, s *Seen) {
+	t.Helper()
+	if s.PCode == 0 {
+		s.PCode = pcodePrim
+	}
+	f.mu.Lock()
+	f.objects = append(f.objects, s)
+	f.mu.Unlock()
+	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: s.ID, ID: s.Local, ParentID: s.Parent}))
+}
+
+// confirmRez plays the simulator's side of a rez: the prim appears
+// where the simulator puts one, and the question of whose it is gets
+// answered.
 func confirmRez(t *testing.T, f *fakeBackend, id msg.UUID, local uint32, ask int) {
 	t.Helper()
-	waitSentN[*msg.ObjectAdd](t, f, ask)
-	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: id, ID: local}))
+	add := waitSentN[*msg.ObjectAdd](t, f, ask)
+	appear(t, f, &Seen{Object: Object{ID: id, Local: local},
+		Position: landing(add), Scale: add.ObjectData.Scale})
 	q := waitSentN[*msg.RequestObjectPropertiesFamily](t, f, ask)
 	if q.ObjectData.ObjectID != id {
 		t.Errorf("asked whose %s is, want %s", q.ObjectData.ObjectID, id)
@@ -72,8 +100,7 @@ func TestBuildFinishesEachPrimBeforeStartingTheNext(t *testing.T) {
 	confirmRez(t, f, thePrim, 77, 1)
 
 	// The prim is told where it goes rather than trusted to have landed
-	// there: a rez is a request, and the simulator places it near the
-	// ray at a height of its own choosing.
+	// there: the simulator puts its bottom on the point, not its centre.
 	place := waitSent[*msg.MultipleObjectUpdate](t, f)
 	if len(place.ObjectData) != 1 || place.ObjectData[0].ObjectLocalID != 77 {
 		t.Fatalf("placed %+v", place.ObjectData)
@@ -254,11 +281,24 @@ func TestBuildReportsWhatDidNotHappen(t *testing.T) {
 	})
 }
 
-// TestBuildOneRefusesAPrimItCouldNotFinish: the name and the description
-// are separate round trips after the rez, and a prim that is standing
-// there under the wrong name is worse than one that was never made.
-func TestBuildOneRefusesAPrimItCouldNotFinish(t *testing.T) {
+// TestBuildHandsBackAPrimItCouldNotFinish: the name and the
+// description are separate round trips after the rez, and a prim that
+// is standing there under the wrong name is worse than one that was
+// never made -- so the build fails.  But the prim exists, and the build
+// hands it back with the error, since nothing else knows its ids and
+// somebody has to be able to clear it away.
+func TestBuildHandsBackAPrimItCouldNotFinish(t *testing.T) {
 	t.Parallel()
+
+	handedBack := func(t *testing.T, b *Built, err error) {
+		t.Helper()
+		if err == nil {
+			t.Error("Build reported a prim it could not finish")
+		}
+		if b == nil || len(b.Parts) != 1 || b.Root != b.Parts[0] || b.Root.ID != thePrim || b.Root.Local != 77 {
+			t.Errorf("Build = %+v, want the prim it made handed back", b)
+		}
+	}
 
 	t.Run("the placement never went", func(t *testing.T) {
 		t.Parallel()
@@ -270,9 +310,8 @@ func TestBuildOneRefusesAPrimItCouldNotFinish(t *testing.T) {
 			return w.Build(context.Background(), []Prim{{Name: "workbench"}})
 		})
 		confirmRez(t, f, thePrim, 77, 1)
-		if _, err := wait(); err == nil {
-			t.Error("Build reported a prim it could not place")
-		}
+		b, err := wait()
+		handedBack(t, b, err)
 	})
 
 	t.Run("the description never went", func(t *testing.T) {
@@ -283,9 +322,8 @@ func TestBuildOneRefusesAPrimItCouldNotFinish(t *testing.T) {
 			return w.Build(context.Background(), []Prim{{Description: "a thing"}})
 		})
 		confirmRez(t, f, thePrim, 77, 1)
-		if _, err := wait(); err == nil {
-			t.Error("Build reported a prim it could not describe")
-		}
+		b, err := wait()
+		handedBack(t, b, err)
 	})
 
 	t.Run("the rename did not take", func(t *testing.T) {
@@ -301,10 +339,67 @@ func TestBuildOneRefusesAPrimItCouldNotFinish(t *testing.T) {
 		// Renamed to something else entirely, which is what a name the
 		// simulator would not accept comes back as.
 		f.Relay(t, familyReply(thePrim, testAgentID, "Object"))
-		if _, err := wait(); err == nil {
-			t.Error("Build reported a prim under a name it does not have")
-		}
+		b, err := wait()
+		handedBack(t, b, err)
 	})
+}
+
+// TestBuildHandsBackEveryPrimWhenALaterOneFails: the prims finished
+// before the one that failed are standing in the region too, and
+// dropping them with the error left them there with nobody holding
+// their ids -- slsh clears away half a build only when it is given one.
+func TestBuildHandsBackEveryPrimWhenALaterOneFails(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	wait := aside(t, func() (*Built, error) {
+		return w.Build(context.Background(), []Prim{
+			{Position: msg.Vector3{X: 128, Y: 128, Z: 25}},
+			{Name: "top", Position: msg.Vector3{X: 128, Y: 128, Z: 26}},
+		})
+	})
+	confirmRez(t, f, thePrim, 77, 1)
+	waitSentN[*msg.MultipleObjectUpdate](t, f, 1)
+	confirmRez(t, f, theChild, 78, 2)
+	waitSentN[*msg.MultipleObjectUpdate](t, f, 2)
+	waitSent[*msg.ObjectName](t, f)
+	waitSentN[*msg.RequestObjectPropertiesFamily](t, f, 3)
+	f.Relay(t, familyReply(theChild, testAgentID, "Object"))
+
+	b, err := wait()
+	if err == nil || !strings.Contains(err.Error(), "prim 2 of 2") {
+		t.Errorf("Build = %v, want it to name the prim that failed", err)
+	}
+	if b == nil || len(b.Parts) != 2 || b.Root != b.Parts[0] ||
+		b.Parts[0].ID != thePrim || b.Parts[1].ID != theChild {
+		t.Fatalf("Build = %+v, want both prims handed back", b)
+	}
+	// Nothing is linked on the way out: the prims are loose, and what
+	// becomes of them is the caller's to say.
+	if got := sentOf[*msg.ObjectLink](f); len(got) != 0 {
+		t.Errorf("a failed build went on to link %d times", len(got))
+	}
+}
+
+// TestCreateHandsBackWhatTheBuildMade: Create is Build and more, and a
+// build that failed part way has to reach the caller in one piece.
+func TestCreateHandsBackWhatTheBuildMade(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	failSendsAfter[*msg.RequestObjectPropertiesFamily](f, errors.New("the circuit is gone"))
+	wait := aside(t, func() (*Built, error) {
+		return w.Create(context.Background(), ObjectJSON{Prims: []PrimJSON{{
+			Type: "box", Name: "workbench", Pos: []float32{128, 128, 25},
+		}}})
+	})
+	confirmRez(t, f, thePrim, 77, 1)
+	b, err := wait()
+	if err == nil {
+		t.Error("Create reported an object it could not place")
+	}
+	if b == nil || len(b.Parts) != 1 || b.Root.ID != thePrim {
+		t.Errorf("Create = %+v, want the prim that was made handed back", b)
+	}
 }
 
 // TestSetDescriptionReadsItBackBecauseNothingConfirmsIt:
@@ -414,31 +509,49 @@ func TestInRangeOnlyRefusesWhatWouldNotBeDescribed(t *testing.T) {
 	}
 }
 
-// TestFindingOursSkipsWhatWasAlreadyThere: a local id that is new to
-// this session is not necessarily one we just made -- objects stream in
-// the whole time -- and local id 0 is an attachment, which is never a
-// fresh rez.
+// More prims of ours, for the tests of telling a new one from the
+// rest.
+var (
+	ourElsewhere = msg.MustParseUUID("61987e57-7e57-c0de-9478-9591867eb8c2")
+	ourNearby    = msg.MustParseUUID("77047e57-7e57-c0de-79eb-36fdeebcb523")
+)
+
+// ours is a root prim of ours the region describes at a position.
+func ours(id msg.UUID, local uint32, at msg.Vector3) *Seen {
+	return &Seen{Object: Object{ID: id, Local: local}, PCode: pcodePrim,
+		Owner: testAgentID, Position: at}
+}
+
+// TestFindingOursSkipsWhatWasAlreadyThere: what the region held before
+// the rez is read from the backend, which heard all of it, and not from
+// what this session was relayed since it attached.  An update about
+// something already there arrives during a rez as a matter of course,
+// and one of ours standing on the very spot -- one a take has just
+// removed, before its kill arrives -- is not the new one.
 func TestFindingOursSkipsWhatWasAlreadyThere(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
+	at := msg.Vector3{X: 128, Y: 128, Z: 25}
+	spot := msg.Vector3{X: 128, Y: 128, Z: 25.25}
 
-	// Two objects the session already knows about before anything is
-	// rezzed: one worn, one somebody else's standing in the region.
-	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: theOther, ID: 0}))
-	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: theChild, ID: 12}))
+	// Nothing of this was relayed: the session attached after it was
+	// said, and only the backend heard it.
+	f.objects = []*Seen{ours(theOther, 12, spot)}
 
 	wait := aside(t, func() (*Object, error) {
-		return w.Rez(context.Background(), RezOptions{At: msg.Vector3{X: 128, Y: 128, Z: 25}})
+		return w.Rez(context.Background(), RezOptions{At: at})
 	})
 	waitSent[*msg.ObjectAdd](t, f)
-	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: thePrim, ID: 77}))
 
-	// Only the new one is asked about: the other two were there before.
-	q := waitSent[*msg.RequestObjectPropertiesFamily](t, f)
-	if q.ObjectData.ObjectID != thePrim {
-		t.Fatalf("asked about %s, want the prim just rezzed", q.ObjectData.ObjectID)
-	}
-	f.Relay(t, familyReply(thePrim, testAgentID, "Object"))
+	// Now the region says it again, and somebody has asked whose it is.
+	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: theOther, ID: 12}))
+	f.Relay(t, familyReply(theOther, testAgentID, "Object"))
+	// And the avatar, which is ours and new to the list when a build
+	// follows a login closely, standing where the prim was asked for.
+	appear(t, f, &Seen{Object: Object{ID: testAgentID, Local: 3}, PCode: pcodeAvatar,
+		Owner: testAgentID, Position: spot})
+
+	confirmRez(t, f, thePrim, 77, 1)
 
 	o, err := wait()
 	if err != nil {
@@ -459,19 +572,20 @@ func TestFindingOursWillNotClaimSomebodyElsesPrim(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 
+	at := msg.Vector3{X: 128, Y: 128, Z: 25}
 	wait := aside(t, func() (*Object, error) {
-		return w.rezAt(context.Background(), msg.Vector3{X: 128, Y: 128, Z: 25},
-			msg.Vector3{X: 1, Y: 1, Z: 1}, msg.Quaternion{})
+		return w.rezAt(context.Background(), at, msg.Vector3{X: 1, Y: 1, Z: 1}, msg.Quaternion{})
 	})
 	waitSent[*msg.ObjectAdd](t, f)
 
-	// Somebody else's prim arriving in the middle of our rez, which is
-	// the ordinary state of a busy region.
-	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: theOther, ID: 90}))
+	// Somebody else's prim arriving on the same spot in the middle of
+	// our rez, which is the ordinary state of a busy sandbox.
+	spot := msg.Vector3{X: 128, Y: 128, Z: 25.5}
+	appear(t, f, &Seen{Object: Object{ID: theOther, Local: 90}, Position: spot})
 	waitSent[*msg.RequestObjectPropertiesFamily](t, f)
 	f.Relay(t, familyReply(theOther, theChild, "not ours"))
 
-	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: thePrim, ID: 91}))
+	appear(t, f, &Seen{Object: Object{ID: thePrim, Local: 91}, Position: spot})
 	waitSentN[*msg.RequestObjectPropertiesFamily](t, f, 2)
 	f.Relay(t, familyReply(thePrim, testAgentID, "Object"))
 
@@ -482,6 +596,216 @@ func TestFindingOursWillNotClaimSomebodyElsesPrim(t *testing.T) {
 	if o.ID != thePrim {
 		t.Errorf("rezAt took %s, which belongs to somebody else", o)
 	}
+}
+
+// TestFindingOursTakesThePrimWhereItWasAskedFor: a prim of ours that is
+// new is not necessarily the one just made -- a script of ours, or
+// another client of this avatar, can make one at the same moment -- and
+// taking the first new one of ours has handed back the wrong one.  The
+// simulator gives X and Y back exactly as sent, so one anywhere else,
+// even a centimetre off, is somebody else's rez.
+func TestFindingOursTakesThePrimWhereItWasAskedFor(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	at := msg.Vector3{X: 128, Y: 128, Z: 25}
+	wait := aside(t, func() (*Object, error) {
+		return w.Rez(context.Background(), RezOptions{At: at})
+	})
+	waitSent[*msg.ObjectAdd](t, f)
+
+	appear(t, f, ours(ourElsewhere, 80, msg.Vector3{X: 130, Y: 128, Z: 25.25}))
+	appear(t, f, ours(ourNearby, 81, msg.Vector3{X: 128.01, Y: 128, Z: 25.25}))
+	f.Relay(t, familyReply(ourElsewhere, testAgentID, "Object"))
+	f.Relay(t, familyReply(ourNearby, testAgentID, "Object"))
+	appear(t, f, ours(thePrim, 82, msg.Vector3{X: 128, Y: 128, Z: 25.25}))
+
+	o, err := wait()
+	if err != nil {
+		t.Fatalf("Rez: %v", err)
+	}
+	if o.ID != thePrim {
+		t.Errorf("rezzed %s, want the one where it was asked for", o)
+	}
+	if n := len(sentOf[*msg.RequestObjectPropertiesFamily](f)); n != 0 {
+		t.Errorf("%d objects were asked about, and every owner was known", n)
+	}
+}
+
+// TestFindingOursAcceptsAPrimRaisedToTheGround: a prim asked for under
+// the ground comes up to rest on it, so Z is a floor and not a match.
+// Nothing measured ever came back lower than it was asked for, so one
+// below the point is not the rez.
+func TestFindingOursAcceptsAPrimRaisedToTheGround(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	at := msg.Vector3{X: 128, Y: 128, Z: 20}
+	f.objects = []*Seen{
+		ours(ourElsewhere, 80, msg.Vector3{X: 128, Y: 128, Z: 19.5}),
+		ours(thePrim, 81, msg.Vector3{X: 128, Y: 128, Z: 23.75}),
+	}
+	o, err := w.findOurs(context.Background(), nil, at, msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}, time.Second)
+	if err != nil {
+		t.Fatalf("findOurs: %v", err)
+	}
+	if o.ID != thePrim {
+		t.Errorf("found %s, want the one raised to the ground", o)
+	}
+}
+
+// TestFindingOursPrefersTheOneAtTheHeightItShouldBe: two of ours on the
+// same spot are told apart by height -- the new one's centre is half
+// its height above the point -- and one whose owner is still unknown is
+// waited for rather than passed over for one further off.
+func TestFindingOursPrefersTheOneAtTheHeightItShouldBe(t *testing.T) {
+	t.Parallel()
+
+	at := msg.Vector3{X: 128, Y: 128, Z: 25}
+	scale := msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}
+
+	t.Run("both known", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		f.objects = []*Seen{
+			ours(ourElsewhere, 80, msg.Vector3{X: 128, Y: 128, Z: 28}),
+			ours(thePrim, 81, msg.Vector3{X: 128, Y: 128, Z: 25.25}),
+		}
+		o, err := w.findOurs(context.Background(), nil, at, scale, time.Second)
+		if err != nil {
+			t.Fatalf("findOurs: %v", err)
+		}
+		if o.ID != thePrim {
+			t.Errorf("found %s, want the one half its height above the point", o)
+		}
+	})
+
+	t.Run("the nearer one unknown", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		nearer := ours(thePrim, 81, msg.Vector3{X: 128, Y: 128, Z: 25.25})
+		nearer.Owner = msg.UUID{}
+		f.objects = []*Seen{ours(ourElsewhere, 80, msg.Vector3{X: 128, Y: 128, Z: 28}), nearer}
+
+		wait := aside(t, func() (*Object, error) {
+			return w.findOurs(context.Background(), nil, at, scale, 20*time.Second)
+		})
+		q := waitSent[*msg.RequestObjectPropertiesFamily](t, f)
+		if q.ObjectData.ObjectID != thePrim {
+			t.Errorf("asked about %s, want the nearer one", q.ObjectData.ObjectID)
+		}
+		f.Relay(t, familyReply(thePrim, testAgentID, "Object"))
+
+		o, err := wait()
+		if err != nil {
+			t.Fatalf("findOurs: %v", err)
+		}
+		if o.ID != thePrim {
+			t.Errorf("found %s before the nearer one's owner was known", o)
+		}
+	})
+}
+
+// TestFindingOursGivesUpOnAPrimAnywhereElse: nothing new of ours where
+// the rez was asked for is a rez not confirmed, whatever else of ours
+// turned up, and the timeout says where it was looking.
+func TestFindingOursGivesUpOnAPrimAnywhereElse(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	at := msg.Vector3{X: 128, Y: 128, Z: 25}
+	f.objects = []*Seen{
+		ours(ourElsewhere, 80, msg.Vector3{X: 128, Y: 128.01, Z: 25.25}),
+		ours(ourNearby, 81, msg.Vector3{X: 127.99, Y: 128, Z: 25.25}),
+	}
+	_, err := w.findOurs(context.Background(), nil, at, msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}, 300*time.Millisecond)
+	if !errors.Is(err, ErrTimeout) {
+		t.Fatalf("findOurs = %v, want a timeout", err)
+	}
+	if !strings.Contains(err.Error(), "128") {
+		t.Errorf("findOurs = %v, want it to say where it looked", err)
+	}
+}
+
+// TestFindingOursAsksWithoutHoldingTheLock: a family request is a send,
+// and a send can wait on the daemon.  Holding the session's lock over it
+// stops the reader goroutine handling anything until it returns.
+func TestFindingOursAsksWithoutHoldingTheLock(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	var free atomic.Bool
+	f.mu.Lock()
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.RequestObjectPropertiesFamily); !ok {
+			return
+		}
+		// A few tries, since the reader takes the lock for a moment
+		// now and then on its own account.
+		for range 20 {
+			if w.mu.TryLock() {
+				w.mu.Unlock()
+				free.Store(true)
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	f.mu.Unlock()
+
+	wait := aside(t, func() (*Object, error) {
+		return w.Rez(context.Background(), RezOptions{At: msg.Vector3{X: 128, Y: 128, Z: 25}})
+	})
+	confirmRez(t, f, thePrim, 77, 1)
+	if _, err := wait(); err != nil {
+		t.Fatalf("Rez: %v", err)
+	}
+	if !free.Load() {
+		t.Error("the owner was asked for with the session's lock held")
+	}
+}
+
+// TestRezIsMadeInTheActiveGroup: a viewer rezzes in the avatar's
+// active group.  A prim of no group on land that runs only its group's
+// scripts holds a script the simulator reports running and that never
+// runs.
+func TestRezIsMadeInTheActiveGroup(t *testing.T) {
+	t.Parallel()
+	group := msg.MustParseUUID("80f37e57-7e57-c0de-682d-3aa3f92b7cc4")
+
+	t.Run("the group is sent", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		f.mu.Lock()
+		f.presence.ActiveGroup = group
+		f.mu.Unlock()
+
+		wait := aside(t, func() (*Built, error) {
+			return w.Build(context.Background(), []Prim{{Position: msg.Vector3{X: 128, Y: 128, Z: 25}}})
+		})
+		confirmRez(t, f, thePrim, 77, 1)
+		if _, err := wait(); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		if got := onlySent[*msg.ObjectAdd](t, f).AgentData.GroupID; got != group {
+			t.Errorf("rezzed in group %s, want the active group %s", got, group)
+		}
+	})
+
+	t.Run("the group cannot be learned", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		f.mu.Lock()
+		f.presenceErr = errors.New("nobody knows where we are")
+		f.mu.Unlock()
+		_, err := w.rezAt(context.Background(), msg.Vector3{X: 128, Y: 128, Z: 25},
+			msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}, msg.Quaternion{})
+		if err == nil {
+			t.Error("rezAt went ahead without knowing the group to rez in")
+		}
+		if got := sentOf[*msg.ObjectAdd](f); len(got) != 0 {
+			t.Errorf("a prim was rezzed in no group: %s", f.describe())
+		}
+	})
 }
 
 // TestSetDescriptionStopsWhenTheCallerGivesUp: the same promise SetName

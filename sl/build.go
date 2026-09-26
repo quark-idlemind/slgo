@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
@@ -67,7 +68,8 @@ const (
 // one, with the first prim as the root.
 //
 // One prim or many goes through the same call: a single prim is
-// returned as it is, with nothing to link.
+// returned as it is, with nothing to link.  Every prim is made in the
+// avatar's active group, as a viewer makes one.
 //
 // Each prim is rezzed and confirmed before the next, rather than
 // rezzing them all and sorting out afterwards which is which.  Objects
@@ -76,6 +78,14 @@ const (
 // batch means matching answers to intentions with nothing to match on
 // -- two prims of the same size at the same place are indistinguishable
 // once both exist.
+//
+// A build that fails part way returns what it made alongside the
+// error: every prim that was rezzed, the one that failed among them if
+// it got as far as existing, unlinked if the link was not reached.
+// They are standing in the region, and clearing them away is the
+// caller's to decide.  A nil Built means nothing was made that this
+// call knows of -- a rez that was never confirmed may still have made a
+// prim, but nothing says which one it is.
 func (w *Session) Build(ctx context.Context, prims []Prim) (*Built, error) {
 	if len(prims) == 0 {
 		return nil, fmt.Errorf("sl: Build needs at least one prim")
@@ -98,11 +108,18 @@ func (w *Session) Build(ctx context.Context, prims []Prim) (*Built, error) {
 	b := &Built{Parts: make([]*Object, 0, len(prims))}
 	for i, p := range prims {
 		o, err := w.buildOne(ctx, p)
-		if err != nil {
-			return nil, fmt.Errorf("sl: prim %d of %d (%q): %w",
-				i+1, len(prims), p.Name, err)
+		if o != nil {
+			b.Parts = append(b.Parts, o)
 		}
-		b.Parts = append(b.Parts, o)
+		if err != nil {
+			err = fmt.Errorf("sl: prim %d of %d (%q): %w",
+				i+1, len(prims), p.Name, err)
+			if len(b.Parts) == 0 {
+				return nil, err
+			}
+			b.Root = b.Parts[0]
+			return b, err
+		}
 	}
 	b.Root = b.Parts[0]
 
@@ -117,6 +134,9 @@ func (w *Session) Build(ctx context.Context, prims []Prim) (*Built, error) {
 }
 
 // buildOne rezzes a prim and makes it match its description.
+//
+// Once the rez is confirmed the prim exists, so a later step failing
+// returns it with the error rather than losing its ids.
 func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 	size := p.Size
 	if size == (msg.Vector3{}) {
@@ -128,21 +148,21 @@ func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 		return nil, err
 	}
 
-	// Say where it goes rather than trusting where it landed.  A rez
-	// is a request: the simulator places the prim near the ray and
-	// need not put it exactly there.
+	// Say where it goes rather than trusting where it landed.  The
+	// simulator puts the prim's bottom on the point rather than its
+	// centre, and lifts one asked for underground onto the ground.
 	if err := w.Place(ctx, o, p.Position, p.Rotation, size); err != nil {
-		return nil, err
+		return o, err
 	}
 
 	if p.Name != "" {
 		if err := w.SetName(ctx, o, p.Name); err != nil {
-			return nil, err
+			return o, err
 		}
 	}
 	if p.Description != "" {
 		if err := w.SetDescription(ctx, o, p.Description); err != nil {
-			return nil, err
+			return o, err
 		}
 	}
 	return o, nil
@@ -235,15 +255,24 @@ func distance(a, b msg.Vector3) float32 {
 // rezAt is Rez with the scale and rotation given, and is what Build
 // uses.
 func (w *Session) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quaternion, shape ...Shape) (*Object, error) {
-	w.mu.Lock()
-	before := make(map[uint32]bool, len(w.locals))
-	for _, l := range w.locals {
-		before[l] = true
+	// In the avatar's active group, as a viewer rezzes: land that runs
+	// only its group's scripts does not run one in a prim of no group.
+	// Why: doc/rez.md#the-group-a-prim-is-made-in
+	group, err := w.ActiveGroup(ctx)
+	if err != nil {
+		return nil, err
 	}
-	w.mu.Unlock()
+
+	// What the region held before, from the backend: this session has
+	// only heard what was relayed since it attached.
+	before, err := w.localIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	m := &msg.ObjectAdd{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.AgentData.GroupID = group
 	d := &m.ObjectData
 	d.PCode, d.Material, d.AddFlags = 9, 3, 2
 
@@ -265,55 +294,109 @@ func (w *Session) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quat
 	if err = w.Send(ctx, m); err != nil {
 		return nil, err
 	}
-	return w.findOurs(ctx, before, 15*time.Second)
+	return w.findOurs(ctx, before, at, scale, 15*time.Second)
 }
 
-// findOurs waits for an object we own that was not there before.
+// rezSlack is how far, in metres, a new prim may be from where the
+// rules in landedAt put it: more than the float32 spacing of a
+// position anywhere below 8,192 m.
+const rezSlack = 0.001
+
+// rezPoll is how often findOurs looks at the region again.  Each look
+// is the backend's whole object list.
+const rezPoll = 250 * time.Millisecond
+
+// landedAt reports whether a prim the region describes at p could be
+// the one rezzed at at.  X and Y come back as they were sent; Z comes
+// back at or above it, since the simulator puts the prim's bottom on
+// the point and raises one asked for underground to rest on the ground.
+// Why: doc/rez.md#where-a-new-prim-lands
+func landedAt(p, at msg.Vector3) bool {
+	return math.Abs(float64(p.X-at.X)) <= rezSlack &&
+		math.Abs(float64(p.Y-at.Y)) <= rezSlack &&
+		p.Z >= at.Z-rezSlack
+}
+
+// findOurs waits for the prim a rez at at, of this scale, made.
 //
-// Ownership is confirmed rather than assumed.  A local id that is new
-// to this session is not necessarily one we just made: objects stream
-// in the whole time, and building on somebody else's prim by mistake
-// fails later in ways that look like something else.
-func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, timeout time.Duration) (*Object, error) {
-	var found *Object
+// It is a root prim that was not in the region before, stands where
+// landedAt says a rez at at lands, and is owned by us.  Among several,
+// the one whose centre is nearest half its height above the point is
+// taken, and none is taken while a nearer one's owner is unknown.
+//
+// Ownership is confirmed rather than assumed: building on somebody
+// else's prim by mistake fails later in ways that look like something
+// else.  An owner nobody has heard is asked for, once, and never with
+// the session's lock held.
+// Why: doc/rez.md#how-a-rez-is-recognised
+func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, at, scale msg.Vector3, timeout time.Duration) (*Object, error) {
+	w.mu.Lock()
+	mark := len(w.alerts)
+	w.mu.Unlock()
+
+	centre := at.Z + scale.Z/2
 	asked := map[msg.UUID]bool{}
-	err := w.await(ctx, timeout, "a prim of ours to appear", func() bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		all, err := w.fetch(ctx, "", "")
+		if err != nil {
+			return nil, err
+		}
+		var near []*Seen
+		for _, s := range all {
+			// The avatar is excluded by id as well as by kind: it is
+			// owned by us, and being handed it as a fresh prim is how
+			// it came to be renamed once.
+			if before[s.Local] || s.Parent != 0 || s.IsAvatar() || s.ID == w.me ||
+				!landedAt(s.Position, at) {
+				continue
+			}
+			near = append(near, s)
+		}
+		sort.SliceStable(near, func(i, j int) bool {
+			return math.Abs(float64(near[i].Position.Z-centre)) <
+				math.Abs(float64(near[j].Position.Z-centre))
+		})
+
+		var found *Seen
 		var toAsk []msg.UUID
-		for id, local := range w.locals {
-			// Local id 0 is an attachment and is never a fresh rez.
-			if local == 0 || before[local] {
-				continue
+		w.mu.Lock()
+		unknown := false
+		for _, s := range near {
+			owner := s.Owner
+			if owner.IsZero() {
+				owner = w.owners[s.ID]
 			}
-			// Nor is the avatar itself, which is an object in range
-			// owned by us like any other -- and one whose update can
-			// arrive after the snapshot when a build follows a login
-			// closely.  Rezzing a prim and being handed the avatar is
-			// a confusing way to find that out, and renaming it is
-			// worse.
-			if id == w.me {
-				continue
+			if owner == w.me && !unknown {
+				found = s
+				break
 			}
-			if w.owners[id] == w.me {
-				found = &Object{ID: id, Local: local}
-				return true
-			}
-			if !asked[id] {
-				asked[id] = true
-				toAsk = append(toAsk, id)
+			if owner.IsZero() {
+				unknown = true
+				if !asked[s.ID] {
+					asked[s.ID] = true
+					toAsk = append(toAsk, s.ID)
+				}
 			}
 		}
+		w.mu.Unlock()
+
 		for _, id := range toAsk {
-			q := &msg.RequestObjectPropertiesFamily{}
-			q.AgentData.AgentID, q.AgentData.SessionID = w.agentBlock()
-			q.ObjectData.ObjectID = id
-			_ = w.b.Send(ctx, q, true)
+			if err := w.Send(ctx, w.familyRequest(id)); err != nil {
+				return nil, err
+			}
 		}
-		return false
-	})
-	if err != nil {
-		return nil, err
+		if found != nil {
+			return &Object{ID: found.ID, Local: found.Local}, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("%w: a prim of ours to appear at %v (after %s)%s",
+				ErrTimeout, at, timeout, w.alertsSince(mark))
+		}
+		if err := w.Settle(ctx, rezPoll); err != nil {
+			return nil, err
+		}
 	}
-	return found, nil
 }
 
 func appendVector(b []byte, v msg.Vector3) []byte {

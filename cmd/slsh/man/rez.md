@@ -31,6 +31,10 @@ Without it, a failure removes what it made and says it has: half a
 build is prims standing in the region that nobody asked for.  This is
 for the case where the wreckage is the interesting part.
 
+What it cannot remove is a prim whose making the region never
+confirmed, since nothing says which prim that is.  The error then says
+the prim did not appear.
+
 ## This is not what everyone means by rezzing
 
 `Rez` is the word everybody uses for putting an inventory object into
@@ -46,6 +50,14 @@ written for another region names coordinates that land somewhere else
 here, so `--at` moves the whole thing without the file having to be
 edited: the root lands on the point given, and every other prim keeps
 the vector from the root that the file gave it.
+
+## The group it belongs to
+
+Every prim is made in the group the avatar is acting as, which is what
+a viewer does, so `group` decides it.  That matters for more than
+whether the land lets it build: on land that runs only its group's
+scripts, a script in a prim of no group was seen reported as running
+and never run.
 
 ## What is made, and what is not
 
@@ -68,6 +80,6 @@ Build one here rather than at the position the file records:
 
     rez --at 128,128,25 probe.json
 
-See also: `dump`, `reform`, `place` for putting an inventory object
-into the world, `link` and `unlink`, and `take` for bringing what was
-built in.
+See also: `dump`, `reform`, `group`, `place` for putting an inventory
+object into the world, `link` and `unlink`, and `take` for bringing
+what was built in.

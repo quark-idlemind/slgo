@@ -20,6 +20,10 @@ refused by land that would otherwise allow it, and the refusal talks
 about the land rather than about the group, then sends the reader to
 the land tool, which has nothing to show.
 
+It is also the group every prim `rez` makes belongs to, as a viewer's
+do.  On land that runs only its group's scripts, a script in a prim of
+no group was seen reported as running and never run.
+
 A viewer remembers the active group from one session to the next and a
 headless login does not: the login itself always comes up acting as
 nobody, and a refusal that blames the land is the first sign of it.

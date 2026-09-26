@@ -3,10 +3,12 @@ package sl
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
@@ -97,10 +99,46 @@ func (w *Session) FindItem(ctx context.Context, folder msg.UUID, name string) (*
 	return nil, fmt.Errorf("sl: no item named %q in folder %s", name, folder)
 }
 
+// callbackSeq numbers the items this process asks to be created, as
+// the viewer's LLInventoryCallbackManager does (llviewerinventory.cpp:
+// 1060-1071).  It starts at a random point rather than at one, because
+// slgod relays the reply to every client of the avatar, and two clients
+// counting from the same place would each take the other's item.
+var callbackSeq atomic.Uint32
+
+func init() {
+	u := randomUUID()
+	callbackSeq.Store(binary.LittleEndian.Uint32(u[:4]))
+}
+
+// nextCallbackID is the id for one creation.  Never zero, which the
+// viewer takes as no callback at all, and kept to 31 bits as the ids
+// before it were, so that it survives a signed 32 bit integer.
+func nextCallbackID() uint32 {
+	for {
+		if id := callbackSeq.Add(1) & 0x7fffffff; id != 0 {
+			return id
+		}
+	}
+}
+
 // CreateItem makes an empty inventory item and waits for the simulator
 // to confirm it, which it does by echoing back a callback id.
 func (w *Session) CreateItem(ctx context.Context, name, desc string, assetType, invType int8) (*Item, error) {
-	cb := uint32(time.Now().UnixNano() & 0x7fffffff)
+	cb := nextCallbackID()
+
+	// Waited for from before the request goes, and forgotten when the
+	// wait ends however it ends, so that a reply arriving late is not
+	// kept for a request that is not waiting.
+	w.mu.Lock()
+	w.created[cb] = nil
+	w.mu.Unlock()
+	defer func() {
+		w.mu.Lock()
+		delete(w.created, cb)
+		w.mu.Unlock()
+	}()
+
 	m := &msg.CreateInventoryItem{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	b := &m.InventoryBlock

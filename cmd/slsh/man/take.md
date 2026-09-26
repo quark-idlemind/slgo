@@ -20,6 +20,10 @@ is waited for in the folder it was to land in, so somebody else's
 object produces no message from the region, and after forty seconds the
 command gives up saying only that the item never appeared.
 
+The item is known by the object's name, because a new item in that
+folder is not necessarily this one.  An object whose name the region
+will not say is not taken at all.
+
 An object with several prims comes in as one item -- a linkset is one
 object, which is why `unlink` exists.
 

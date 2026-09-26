@@ -394,6 +394,11 @@ makes it feel permanent. Headless it is not -- so an avatar that builds
 happily through a viewer cannot rez a thing here, and the refusal blames
 the land, which is the wrong place to look.
 
+It is also the group a prim slgo makes belongs to -- `rez`, `slrun
+--rez` -- as a viewer's do. On land that runs only its group's scripts,
+a script in a prim of no group was seen reported as running and never
+run; see `doc/rez.md`.
+
 A profile's own `group` line settles it; `-group` overrides that, by
 name or uuid, and the `PROFILE=GROUP` form says which avatar it is for.
 The setting belongs to the session rather than to a client, so every

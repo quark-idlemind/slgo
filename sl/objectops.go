@@ -112,6 +112,9 @@ func jsonTypeOf(word string) string {
 // inventory scripts are installed.  What it does not do is take the
 // object into inventory: an object being built is usually about to be
 // looked at.
+//
+// A failure part way returns what was made with the error, as Build
+// does, so the caller can take it away.
 func (w *Session) Create(ctx context.Context, o ObjectJSON) (*Built, error) {
 	prims, err := o.BuildList()
 	if err != nil {
@@ -119,7 +122,7 @@ func (w *Session) Create(ctx context.Context, o ObjectJSON) (*Built, error) {
 	}
 	built, err := w.Build(ctx, prims)
 	if err != nil {
-		return nil, err
+		return built, err
 	}
 
 	// Names and descriptions are set after the link, since linking is
