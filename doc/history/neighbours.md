@@ -357,6 +357,32 @@ Checked on Agni on 2026-09-26, after the change, with `slgod
 This was one round trip. It is the case that failed before: a quick
 return, with the circuits still up.
 
+### Walking back over a border soon after crossing it
+
+Measured on Agni on 2026-09-26, with `slgod -neighbours` and a scratch
+build whose `walk` was allowed a target a few metres past the edge and
+kept pushing for twelve seconds before calling itself blocked.
+
+- **A quick return crosses.** The avatar was teleported just inside a
+  region's east edge, walked east into the next region, and crossed in
+  2.6 seconds. It walked straight back west and crossed again in 1.7
+  seconds. Neither time did slgo hold a circuit to the region walked
+  into: a crossing closes the root it leaves, as it did before
+  `Kept across a move`, and the region walked back into had not
+  offered itself as a neighbour. Inferred: each simulator still held
+  the avatar as a child agent from the moment before, which is what a
+  crossing needs, so the problem stage 3's root swap was to solve for a
+  walk back does not arise within those few seconds. How long a
+  simulator keeps that child was not measured; the region left behind
+  by a teleport kept its circuit about fifty seconds.
+- **From a fresh login it did not cross.** At the same border, after a
+  login with slgo holding a child circuit to the western neighbour,
+  open and busy, a walk west was held at the line -- x between -0.26
+  and -0.97 -- for twelve seconds, three times, and never crossed. A
+  build from before `Kept across a move` did the same. Stage 2 crossed
+  at this point on 2026-08-16 with the same kind of circuit. What has
+  changed since, in slgo or on the grid, is not known.
+
 ### Stage 3 -- the crossing, by promotion
 
 Stage 0 crossed without this, because `moveTo` dialled the new simulator
