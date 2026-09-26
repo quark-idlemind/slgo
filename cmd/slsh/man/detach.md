@@ -42,6 +42,11 @@ arrives some time later.  `detach` polls until the region agrees before
 it says the thing is off, and a wait that runs out is reported as not
 knowing rather than as failing.
 
+Either way its link is taken out of the Current Outfit folder, since a
+link left there puts the thing back on at the next login.  When that
+fails too, the report says both: that the region has not agreed, and
+that the link is still there.
+
 ## Clothing comes off; a body part does not
 
 `detach` takes off a system wearable too, and works out which it is
