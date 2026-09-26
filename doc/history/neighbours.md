@@ -429,6 +429,17 @@ kept pushing for twelve seconds before calling itself blocked.
   So a child opened at login carries a crossing until the avatar
   teleports within the region, and a child opened on a teleport arrival
   still carries one after it. Why is not yet known.
+- **What was tried, and did not hold.** The same afternoon, logging on
+  a scratch build showed that after such a teleport the neighbour's
+  `EstablishAgentCommunication` sometimes comes again every five to
+  eight seconds, where it had come once. The viewer answers one by
+  asking that neighbour's seed and polling its event queue, and slgo
+  does neither. A scratch build doing both crossed after a 28-metre
+  teleport twice, and was then held five times in a row, the build
+  that would have been merged among them. After an 87-metre teleport
+  it never crossed. It was not kept. A walk to the same spot crossed
+  every time, with or without it. Whether a real viewer is held after
+  a teleport within the region was not tried.
 
 ### Stage 3 -- the crossing, by promotion
 
