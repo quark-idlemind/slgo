@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
-// MaxPacketSize is the largest datagram we will read.  It matches
-// NET_BUFFER_SIZE in the C client.
+// MaxPacketSize is the largest datagram we will read, and the most a
+// zero coded body may expand to.  It matches NET_BUFFER_SIZE in the C
+// client.
 const MaxPacketSize = 0x2000
 
 // ErrUnknownMessage is reported for a message number that is not in the
@@ -52,7 +53,7 @@ type Stats struct {
 	Runts   uint64 // too short to hold a header
 	Unknown uint64 // message number not in the template
 	Failed  uint64 // header, ack, zero coding or body decode failures
-	Padded  uint64 // decoded, with a tail the simulator left off read as zeros
+	Padded  uint64 // decoded past the end: a width read as zeros, or a Variable field cut short
 	Dropped uint64 // discarded because the channel was full
 
 	// Peak is the most packets ever waiting for the consumer at once,

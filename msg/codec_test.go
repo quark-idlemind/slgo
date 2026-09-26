@@ -2,6 +2,7 @@ package msg
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand"
 	"reflect"
 	"strings"
@@ -819,5 +820,49 @@ func TestAZerocodedMessageCutIntoItsDataIsNotTheSame(t *testing.T) {
 	}
 	if back.ObjectData[0].JointAxisOrAnchor.Z != 0 {
 		t.Errorf("Z = %v; the missing four bytes should read as zero", back.ObjectData[0].JointAxisOrAnchor.Z)
+	}
+}
+
+// TestAVariablePayloadIsCutNotPadded, for each width of length prefix:
+// the most it can say, with three bytes behind it, is those three.
+// Why: doc/wire.md#past-the-end
+func TestAVariablePayloadIsCutNotPadded(t *testing.T) {
+	for _, size := range []int{1, 2, 4} {
+		t.Run(fmt.Sprintf("Variable,%d", size), func(t *testing.T) {
+			f := fieldPlan{name: "Data", kind: kVariable, size: size}
+			v := reflect.New(reflect.TypeOf([]byte(nil))).Elem()
+			r := &cur{b: append(bytes.Repeat([]byte{0xff}, size), "abc"...), lenient: true}
+			if err := decodeField(r, v, &f); err != nil {
+				t.Fatal(err)
+			}
+			if got := v.Bytes(); string(got) != "abc" {
+				t.Errorf("decoded as %d bytes, % x ...", len(got), got[:min(8, len(got))])
+			}
+			if !r.padded || !r.atEnd() {
+				t.Errorf("padded %v, %d bytes left; want padded and none", r.padded, r.remaining())
+			}
+		})
+	}
+}
+
+// TestAVariablePrefixThatRunsOffTheEndIsEmpty: as in the viewer, a
+// length that is not all there is no length, however much of it is.
+func TestAVariablePrefixThatRunsOffTheEndIsEmpty(t *testing.T) {
+	for _, size := range []int{1, 2, 4} {
+		for have := 0; have < size; have++ {
+			f := fieldPlan{name: "Data", kind: kVariable, size: size}
+			v := reflect.New(reflect.TypeOf([]byte(nil))).Elem()
+			r := &cur{b: bytes.Repeat([]byte{0x05}, have), lenient: true}
+			if err := decodeField(r, v, &f); err != nil {
+				t.Errorf("Variable,%d with %d bytes of it: %v", size, have, err)
+				continue
+			}
+			if got := v.Bytes(); len(got) != 0 {
+				t.Errorf("Variable,%d with %d bytes of it decoded as %d bytes", size, have, len(got))
+			}
+			if !r.padded {
+				t.Errorf("Variable,%d with %d bytes of it was not counted", size, have)
+			}
+		}
 	}
 }

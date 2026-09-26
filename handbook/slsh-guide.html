@@ -1982,7 +1982,9 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
           messages arriving that this build has no handler for, which is how a
           protocol change announces itself; <code>placements</code> does the
           same for the form an object's position arrives in, counting the
-          objects described so far by it. <code>watch</code> prints what is
+          objects described so far by it, and <code>decoding</code>, which
+          appears only once there is something to count, says how many
+          packets did not decode whole. <code>watch</code> prints what is
           actually crossing the wire and opens a connection of its own, so
           watching everything for an hour does not disturb the shell you are
           typing in.

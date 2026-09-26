@@ -11,8 +11,9 @@ which is the other way round from the `agents` listing, where the
 profile is the first column.  Under it the simulator's own channel
 version, the packet counters, how many clients the daemon has
 attached to this session, how many capabilities the simulator
-granted, and how many objects have been described in each form of
-placement.
+granted, how many objects have been described in each form of
+placement, and how many packets did not decode whole, when any have
+not.
 
 ## What the counters are for
 
@@ -43,6 +44,20 @@ not been seen.  Any other width is counted and not read: the object
 is known, and where it is is not.  The line is there to say whether
 anything but 60 and 76 turns up, and it prints nothing until an
 object has been described.
+
+## Decoding
+
+The `decoding` line appears once a packet has arrived that did not
+decode whole, and prints nothing before.  Undecodable packets were
+thrown away, and whatever they said with them: a header or body that
+does not add up, or a zero coded one that would expand past the 8,192
+bytes a packet can hold.  Read past the end are packets that stopped
+before their message did and were read anyway, as the viewer reads
+them: the simulator is known to leave off the tail of a packet's last
+run of zeros now and then, and the zeros are put back.  The count
+also takes in a field that says it holds more than the packet has
+left, which is cut at the end of the packet; that is not known to
+happen, and this is where it would show.
 
 ## The messages with no handler
 

@@ -24,9 +24,9 @@ func (w *buf) bytes(v []byte) { w.b = append(w.b, v...) }
 
 // cur is a reading cursor over a message body.
 //
-// A lenient cursor reads past the end as zeros rather than failing,
-// and says that it did in padded.  See unmarshal for when that is
-// right.
+// A lenient cursor reads a width past the end as zeros, and cuts a
+// payload at the end (see cut), rather than failing, and says that it
+// did either in padded.  See Unmarshal for when that is right.
 type cur struct {
 	b       []byte
 	i       int
@@ -50,6 +50,24 @@ func (r *cur) take(n int) ([]byte, error) {
 		r.i = len(r.b)
 		r.padded = true
 		return s, nil
+	}
+	s := r.b[r.i : r.i+n]
+	r.i += n
+	return s, nil
+}
+
+// cut takes n bytes, or on a lenient cursor as many of them as there
+// are.  It is for a Variable field's payload, which is cut at the end
+// of the body and never padded: its length is only what the packet
+// claims.  A negative n, a four byte length on a 32 bit build, is more
+// than there is.
+func (r *cur) cut(n int) ([]byte, error) {
+	if n < 0 || r.remaining() < n {
+		if !r.lenient {
+			return nil, ErrShort
+		}
+		n = r.remaining()
+		r.padded = true
 	}
 	s := r.b[r.i : r.i+n]
 	r.i += n

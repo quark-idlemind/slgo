@@ -59,6 +59,14 @@ func TestCursorRefusesANegativeLength(t *testing.T) {
 	if r.remaining() != 4 {
 		t.Errorf("the cursor moved: %d bytes left", r.remaining())
 	}
+	if _, err := r.cut(-1); !errors.Is(err, ErrShort) || r.remaining() != 4 {
+		t.Errorf("cut(-1) returned %v with %d bytes left, want ErrShort and 4", err, r.remaining())
+	}
+	// On a lenient cursor it is more than there is, like any other.
+	r.lenient = true
+	if s, err := r.cut(-1); err != nil || len(s) != 4 || !r.padded {
+		t.Errorf("lenient cut(-1) returned %d bytes, %v, padded %v; want the four there are", len(s), err, r.padded)
+	}
 }
 
 // TestFieldErrorNamesTheFieldAndKeepsTheCause: being told only

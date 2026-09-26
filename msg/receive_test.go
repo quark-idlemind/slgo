@@ -714,6 +714,68 @@ func TestReceivePadsNothingThatWasWhole(t *testing.T) {
 	}
 }
 
+// zerocoded frames a message body, however it was made, the way a
+// simulator frames a zerocoded packet.
+func zerocoded(m Message, body []byte) []byte {
+	payload := append(AppendID(nil, m.MsgInfo().ID), body...)
+	return ZeroCollapse(AppendHeader(nil, &Header{Flags: FlagZerocoded, Sequence: 7}), payload)
+}
+
+// TestReceiveCutsAPayloadThatRunsPastTheEnd: a Variable field whose
+// length says more than the packet holds is the bytes that are there,
+// not its length in zeros, and the packet is counted.
+// Why: doc/wire.md#past-the-end
+func TestReceiveCutsAPayloadThatRunsPastTheEnd(t *testing.T) {
+	m := &ImprovedInstantMessage{}
+	m.AgentData.AgentID = MustParseUUID("375a7e57-7e57-c0de-69ca-9ca6ea976a3b")
+	m.MessageBlock.Message = []byte("hello")
+	m.MetaData = []ImprovedInstantMessage_MetaData{{Data: []byte("abc")}}
+	body, err := m.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The body ends in MetaData's two byte length and "abc".
+	if string(body[len(body)-5:]) != "\x03\x00abc" {
+		t.Fatalf("body ends % x", body[len(body)-5:])
+	}
+	body[len(body)-5], body[len(body)-4] = 0xff, 0xff
+
+	got, st := collect(t, newFakeConn(zerocoded(m, body)))
+	im, ok := got[0].Message.(*ImprovedInstantMessage)
+	if !ok {
+		t.Fatalf("not decoded: %v", got[0].Err)
+	}
+	if d := im.MetaData[0].Data; string(d) != "abc" {
+		t.Errorf("a length of 65,535 with abc behind it decoded as %d bytes, % x ...", len(d), d[:min(8, len(d))])
+	}
+	if !sameMessage(t, im, m) {
+		t.Errorf("decoded as\n%+v\nwant\n%+v", im, m)
+	}
+	if st.Padded != 1 || st.Failed != 0 {
+		t.Errorf("stats %+v; want one padded and none failed", st)
+	}
+}
+
+// TestReceiveRefusesABodyThatExpandsPastMaxPacketSize: a message that
+// would decode, but only from more than the viewer's buffer holds, is
+// a failure.  Why: doc/wire.md#zero-expansion
+func TestReceiveRefusesABodyThatExpandsPastMaxPacketSize(t *testing.T) {
+	m := &ImprovedInstantMessage{}
+	m.MessageBlock.BinaryBucket = make([]byte, MaxPacketSize)
+	raw := packet(t, FlagZerocoded, 7, m)
+	if len(raw) > 200 {
+		t.Fatalf("the packet is %d bytes; it should be mostly one run", len(raw))
+	}
+
+	got, st := collect(t, newFakeConn(raw))
+	if got[0].Message != nil || got[0].Err == nil {
+		t.Errorf("a %d byte packet expanding past %d decoded: %v", len(raw), MaxPacketSize, got[0].Err)
+	}
+	if st.Failed != 1 {
+		t.Errorf("stats %+v; want one failed", st)
+	}
+}
+
 // sameMessage compares by what goes on the wire, which is the equality
 // that matters and the one that does not care whether an empty field
 // decoded as nil or as zero length.

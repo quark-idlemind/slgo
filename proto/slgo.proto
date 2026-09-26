@@ -892,6 +892,14 @@ message StatusResponse {
   // width it is sent, the ones it does not read as well.  It is here to
   // show which forms the simulator really sends.
   map<uint32, uint64> placement_widths = 14;
+
+  // How many packets decoded only by reading past their end: a
+  // zerocoded message whose last fields were read as zeros, which the
+  // simulator's zero coder is known to cause, or whose Variable field
+  // said it was longer than the packet and was cut at its end, which
+  // is not known to happen.  Undecodable, above, counts the packets
+  // that did not decode at all.
+  uint64 padded = 15;
 }
 
 // ViewerEndpoint is slgod's own login server, and whether a viewer has
