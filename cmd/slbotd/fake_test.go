@@ -224,6 +224,11 @@ func (f *fakeGrid) Land(ctx context.Context) (*sl.Land, error) {
 	return &sl.Land{Overlay: &agent.Overlay{}}, nil
 }
 
+// Ground knows no land: none has arrived.
+func (f *fakeGrid) Ground(ctx context.Context, west, south, east, north float32) (float32, bool, error) {
+	return 0, false, nil
+}
+
 func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
 	return &sl.Neighbours{}, nil
 }

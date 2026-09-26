@@ -43,6 +43,7 @@ const (
 	Grid_Attachments_FullMethodName      = "/slgo.v1.Grid/Attachments"
 	Grid_Region_FullMethodName           = "/slgo.v1.Grid/Region"
 	Grid_Land_FullMethodName             = "/slgo.v1.Grid/Land"
+	Grid_Ground_FullMethodName           = "/slgo.v1.Grid/Ground"
 	Grid_Neighbours_FullMethodName       = "/slgo.v1.Grid/Neighbours"
 	Grid_Flush_FullMethodName            = "/slgo.v1.Grid/Flush"
 	Grid_Cap_FullMethodName              = "/slgo.v1.Grid/Cap"
@@ -136,6 +137,14 @@ type GridClient interface {
 	// believes it is standing on when the asking fails or is not worth
 	// the wait.
 	Land(ctx context.Context, in *LandRequest, opts ...grpc.CallOption) (*LandInfo, error)
+	// Ground is the height of the land: at a point, or the highest it
+	// comes anywhere in a rectangle.
+	//
+	// Held by the server for the reason Land is.  The heightmap arrives
+	// once, in the first seconds after the avatar does, and a region sends
+	// it again to nobody who asks; the server decodes it as it comes, as a
+	// viewer does, and answers from that.
+	Ground(ctx context.Context, in *GroundRequest, opts ...grpc.CallOption) (*GroundResponse, error)
 	// Neighbours reads the circuits held to the regions AROUND that one,
 	// and can turn them on and off.
 	//
@@ -405,6 +414,16 @@ func (c *gridClient) Land(ctx context.Context, in *LandRequest, opts ...grpc.Cal
 	return out, nil
 }
 
+func (c *gridClient) Ground(ctx context.Context, in *GroundRequest, opts ...grpc.CallOption) (*GroundResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GroundResponse)
+	err := c.cc.Invoke(ctx, Grid_Ground_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Neighbours(ctx context.Context, in *NeighboursRequest, opts ...grpc.CallOption) (*NeighboursResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(NeighboursResponse)
@@ -622,6 +641,14 @@ type GridServer interface {
 	// believes it is standing on when the asking fails or is not worth
 	// the wait.
 	Land(context.Context, *LandRequest) (*LandInfo, error)
+	// Ground is the height of the land: at a point, or the highest it
+	// comes anywhere in a rectangle.
+	//
+	// Held by the server for the reason Land is.  The heightmap arrives
+	// once, in the first seconds after the avatar does, and a region sends
+	// it again to nobody who asks; the server decodes it as it comes, as a
+	// viewer does, and answers from that.
+	Ground(context.Context, *GroundRequest) (*GroundResponse, error)
 	// Neighbours reads the circuits held to the regions AROUND that one,
 	// and can turn them on and off.
 	//
@@ -810,6 +837,9 @@ func (UnimplementedGridServer) Region(context.Context, *RegionRequest) (*RegionI
 }
 func (UnimplementedGridServer) Land(context.Context, *LandRequest) (*LandInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method Land not implemented")
+}
+func (UnimplementedGridServer) Ground(context.Context, *GroundRequest) (*GroundResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Ground not implemented")
 }
 func (UnimplementedGridServer) Neighbours(context.Context, *NeighboursRequest) (*NeighboursResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Neighbours not implemented")
@@ -1054,6 +1084,24 @@ func _Grid_Land_Handler(srv interface{}, ctx context.Context, dec func(interface
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridServer).Land(ctx, req.(*LandRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_Ground_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GroundRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).Ground(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_Ground_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).Ground(ctx, req.(*GroundRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1331,6 +1379,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Land",
 			Handler:    _Grid_Land_Handler,
+		},
+		{
+			MethodName: "Ground",
+			Handler:    _Grid_Ground_Handler,
 		},
 		{
 			MethodName: "Neighbours",

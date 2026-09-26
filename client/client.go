@@ -902,6 +902,22 @@ func (c *Conn) Land(ctx context.Context) (*pb.LandInfo, error) {
 	return c.grid.Land(ctx, &pb.LandRequest{Agent: c.agent})
 }
 
+// Ground is the height of the land in the region the avatar is in: the
+// highest it comes in a rectangle, which for a point is the height
+// there.  Known is false where the land under it has not all arrived.
+//
+// It goes to the server for the reason Land does: the heightmap is sent
+// once, when the avatar arrives, and never again for the asking.
+func (c *Conn) Ground(ctx context.Context, west, south, east, north float32) (float32, bool, error) {
+	r, err := c.grid.Ground(ctx, &pb.GroundRequest{
+		Agent: c.agent, West: west, South: south, East: east, North: north,
+	})
+	if err != nil {
+		return 0, false, err
+	}
+	return r.GetHeight(), r.GetKnown(), nil
+}
+
 // Neighbours reads the circuits the server holds to the regions around
 // the one the avatar is in, and turns them on or off.
 //

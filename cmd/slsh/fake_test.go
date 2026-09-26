@@ -1819,6 +1819,11 @@ func (f *fakeGrid) Land(ctx context.Context) (*sl.Land, error) {
 	return &sl.Land{Overlay: agent.OverlayFrom(nil, 0)}, nil
 }
 
+// Ground knows no land: none has arrived.
+func (f *fakeGrid) Ground(ctx context.Context, west, south, east, north float32) (float32, bool, error) {
+	return 0, false, nil
+}
+
 func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -89,6 +89,7 @@ type Session struct {
 	// What the simulator has said about objects.
 	locals      map[msg.UUID]uint32   // object id to local id
 	owners      map[msg.UUID]msg.UUID // object id to owner
+	groups      map[msg.UUID]msg.UUID // object id to group, from its properties
 	objectNames map[msg.UUID]string   // object id to name
 	parents     map[uint32]uint32     // local id to parent local id
 	attach      map[msg.UUID]*Attached
@@ -333,6 +334,7 @@ func New(b Backend) (*Session, error) {
 		at:          newVisit(),
 		locals:      map[msg.UUID]uint32{},
 		owners:      map[msg.UUID]msg.UUID{},
+		groups:      map[msg.UUID]msg.UUID{},
 		objectNames: map[msg.UUID]string{},
 		parents:     map[uint32]uint32{},
 		attach:      map[msg.UUID]*Attached{},
@@ -695,6 +697,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 	case *msg.ObjectPropertiesFamily:
 		w.mu.Lock()
 		w.owners[t.ObjectData.ObjectID] = t.ObjectData.OwnerID
+		w.groups[t.ObjectData.ObjectID] = t.ObjectData.GroupID
 		w.objectNames[t.ObjectData.ObjectID] = trimNul(t.ObjectData.Name)
 		w.mu.Unlock()
 
@@ -704,6 +707,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		for i := range t.ObjectData {
 			o := &t.ObjectData[i]
 			w.owners[o.ObjectID] = o.OwnerID
+			w.groups[o.ObjectID] = o.GroupID
 			w.objectNames[o.ObjectID] = trimNul(o.Name)
 			out = append(out, &Properties{
 				Object: o.ObjectID, Name: trimNul(o.Name),

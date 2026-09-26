@@ -206,6 +206,25 @@ func TestAScriptThatNeverSaysDoneIsAFailureNamingTheWordAndTheWait(t *testing.T)
 	}
 }
 
+// TestLandThatWillNotRunTheScriptIsAFailureSayingWhy: sl returns such a
+// run as soon as it compiles, so it is neither a timeout nor, without a
+// sentinel, a clock deliberately waited out.
+func TestLandThatWillNotRunTheScriptIsAFailureSayingWhy(t *testing.T) {
+	reset(t)
+	why := "the land doesn't run this object's scripts here"
+	for _, done := range []string{"DONE", ""} {
+		flags.Done = done
+		got := stdoutOf(t, func() {
+			if verdict("a.lsl", true, nil, "", why, false) {
+				t.Errorf("done %q: a run on land that will not run it was reported as a success", done)
+			}
+		})
+		if !strings.Contains(got, why) || strings.Contains(got, "within") {
+			t.Errorf("done %q: printed %q", done, got)
+		}
+	}
+}
+
 // TestACompilerRefusalIsPrintedInSecondLifesOwnWords: a compiler message
 // is evidence, and the only useful form of evidence is the verbatim one
 // -- the line and column in it are counted in the source that was sent.
@@ -717,7 +736,7 @@ func TestARefusalArrivesInOnePieceWithSomethingElsePrinting(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 20; i++ {
-				verdict("a.lsl", false, errs, "", false)
+				verdict("a.lsl", false, errs, "", "", false)
 			}
 		}()
 		wg.Wait()

@@ -702,6 +702,7 @@ func TestEveryCallNamesTheSessionTheAttachGot(t *testing.T) {
 			conn.NoteFriend(ctx, theOther, true)
 			conn.Region(ctx)
 			conn.Land(ctx)
+			conn.Ground(ctx, 1, 2, 3, 4)
 			conn.Neighbours(ctx, nil)
 			conn.Control(ctx, 0)
 			conn.Flush(ctx)
@@ -713,8 +714,8 @@ func TestEveryCallNamesTheSessionTheAttachGot(t *testing.T) {
 
 			mu.Lock()
 			defer mu.Unlock()
-			if len(asked) < 17 {
-				t.Errorf("%d calls reached the daemon, want 17: %v", len(asked), asked)
+			if len(asked) < 18 {
+				t.Errorf("%d calls reached the daemon, want 18: %v", len(asked), asked)
 			}
 			for _, a := range asked {
 				if !strings.HasSuffix(a, fmt.Sprintf("asked for %q", tc.want)) {

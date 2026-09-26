@@ -423,6 +423,11 @@ func (h *Hosted) Land(ctx context.Context) (*Land, error) {
 	return out, nil
 }
 
+// Ground asks the daemon, which decoded the terrain as it arrived.
+func (h *Hosted) Ground(ctx context.Context, west, south, east, north float32) (float32, bool, error) {
+	return h.conn.Ground(ctx, west, south, east, north)
+}
+
 func (h *Hosted) Neighbours(ctx context.Context, set *bool) (*Neighbours, error) {
 	r, err := h.conn.Neighbours(ctx, set)
 	if err != nil {
