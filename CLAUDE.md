@@ -7,6 +7,13 @@ live grid, standing next to other people's homes. Everything captured
 that way names somebody: an avatar, the parcel they live on, the region
 it is in, the object they left running, and the uuid of each.
 
+A place is named by more than its name. A region's grid square is one
+map lookup from the region's name -- the `(x, y)` pair says it, and so
+do the handle made from it and that handle's bytes -- so an invented
+region name written next to the real square hides nothing. That has
+happened here: the region names in the measurements were replaced, and
+the squares beside them were left.
+
 **Nothing that identifies a real resident, their land, their objects or
 their groups belongs in a file here.** Not in documentation, not in a
 test fixture, not in a comment, not in an example, and not in a commit
@@ -25,8 +32,11 @@ credential being in somebody's config file to the account being theirs
 Linden Lab's own published constants stay as they are, because they are
 protocol rather than people: the built-in animation asset ids in
 `agent/posture.go`, the grid names, "Governor Linden", and the parcel
-name "Protected Land", which `cmd/slsh/parcel.go` matches on.  Every
-real uuid of that kind is listed in `tools/known-uuids`, with where
+name "Protected Land", which `cmd/slsh/parcel.go` matches on.  So do
+Linden's public sandbox regions, their names and their squares: nobody
+lives in a sandbox, and a test that has to check arithmetic against a
+square the grid really answered with uses one.  Every real uuid of that
+kind is listed in `tools/known-uuids`, with where
 Linden publishes it, and a real uuid that is not on that list does not
 belong here.
 
@@ -61,11 +71,58 @@ kept in step: hyphenated text, hexdump groups of eight
 will leave the others behind and the tests will fail somewhere else
 entirely.
 
+A grid square is invented too, and marked the way a uuid is: the high
+byte of an invented square is always `0xAA`. On each axis the invented
+square is `0xAA80 + (real - centre)`, where `centre` is the real square
+of the region the group is about. A region and its neighbours move
+together, so the one to the west is still x-1 and a test of a crossing
+still crosses, and nothing of the real number is left. Regions that are
+not neighbours each get their own centre, so the distance between them
+is not kept either. In decimal a marked square is 43520 to 43775. Every
+form is worked out again from the invented square rather than edited by
+hand: the pair, `msg.RegionHandle(x, y)`, the decimal handle and its
+bytes. Linden's sandboxes keep their real squares.
+
 Names hide in the same way. They wrap across comment lines, they appear
 downcased in tests that check case-insensitive matching, they turn up
 as Go identifiers (a name welded to a word, like `<place>Asset`),
 and one region name may be the
 prefix another test searches by.
+
+### An example is made up, not copied
+
+Most of what has leaked here did not leak as a capture. It leaked as an
+example: a comment that needed a region and took the one in the log it
+was written from, a test that needed a person and took the one who
+answered, a man page that needed output and pasted the last run with its
+names swapped and its numbers left alone.
+
+So an example is invented from nothing, not adapted from something
+real. Its name is not the one in the capture, its uuid carries the mark,
+and its numbers were never on the grid. The same goes for an example
+somebody gives in conversation to say what they mean: that is the real
+thing, told so that it is understood, and what goes in the file is an
+equivalent made up for the purpose.
+
+A measurement is the one case where the real thing is the point. It
+goes through the replacement list whole, and every number in it is
+looked at, not only the words.
+
+### Saying what was replaced
+
+A change that takes a real name out of the tree must not write it down
+again on the way out. Its commit message says what was replaced and
+where -- "invent the region squares in the neighbour tests" -- and never
+what it was: not the name, not part of it, not a description that picks
+it out ("the parcel next to ours", "the avatar that was lent"), and not
+"A becomes B because A is a real name". The same holds for a pull
+request, a release note, a comment and an issue title.
+
+Taking something out of the tree does not take it out of the history:
+the diff of the commit that removes it shows it. So anything that was
+ever committed is also written into the record of what the history
+holds, `public-audit-*.md`, which is untracked, by its replacement and
+never by itself, so that the rewrite before publishing catches it.
 
 ### Checking before a commit that adds captured output
 
@@ -87,8 +144,11 @@ repository -- writing the names down here is the thing being prevented
 live grid has no such file, and the check says so and passes rather
 than failing on them.
 
-When a measurement brings a new name in, add it to that list at the
-same time; a checker is only as good as what it has been told about.
+When a measurement brings a new name, uuid or grid square in, add it to
+that list at the same time; a checker is only as good as what it has
+been told about. A number goes in the forms it is written in -- a
+square as its pair, a handle in decimal and as bytes -- and never bare,
+where it would match a byte count somewhere else.
 
 ## Never commit a binary
 
@@ -130,3 +190,27 @@ Where a document here says what happens, it was watched happening. Do
 not write a measurement that was not taken, do not compose a transcript
 out of two real ones, and do not tidy the grid's own words. If
 something was inferred rather than measured, the sentence says so.
+
+## Comments are short, and the reasons live in doc/
+
+A comment says what the code does, where that is not plain from the
+code, and the constraint that makes it so -- in a few lines. The story
+of how it came to be that way is worth keeping, and it goes in `doc/`:
+the measurement, what was tried first and failed, the transcript. The
+code keeps one line pointing at it:
+
+    // Poll the destination until the item shows: a UDP move has no
+    // reply, and one into Trash is accepted and ignored.
+    // Why: doc/<topic>.md#<section>
+
+A reader should be able to understand the code without opening the
+document, and open it only to learn why this path was chosen over
+another. The test for what stays is whether it helps someone reading
+the code, not its length. A long comment is worth a second look, but
+there is no limit, and a doc comment that says how to use a package or
+a function is often rightly long.
+
+A comment that says something the code no longer does is worse than
+none, because a reader believes it, and a model believes it more readily
+than a person does. So a change that makes a comment untrue fixes the
+comment in the same change.
