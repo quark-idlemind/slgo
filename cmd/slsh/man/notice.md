@@ -42,9 +42,12 @@ that never arrived.
 
 The group is named from this avatar's own list of groups, the one
 `group` prints.  A notice from a group that list does not have yet --
-it arrives on its own shortly after login -- is shown with the first
-eight characters of the group's key instead, and `notice N` gives the
-whole key.
+it arrives on its own shortly after login -- is announced with the
+first eight characters of the group's key instead, and the list is
+asked for again.  `notice` and `notice N` name the group afresh each
+time, so a notice announced by its key is listed by name once the name
+is known.  A group that still cannot be named is listed by its key,
+and `notice N` gives the whole key.
 
 ## What it does not do
 

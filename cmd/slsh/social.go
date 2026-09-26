@@ -209,6 +209,9 @@ func (sh *Shell) watch(ctx context.Context) {
 	// own and prints its own line as well -- see cmdTP for why both are
 	// wanted.
 	regions := sh.s.RegionChanges(0)
+	// The group names a notice is announced with, asked for now so that
+	// the first notice need not wait for them.  See heardNotice.
+	sh.groups.kick()
 	// An offer another client of this avatar has dealt with, or a dialog
 	// or a permission request nobody answered in time, which is gone
 	// from waiting as of now.  Said, because a number a person was about

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -41,7 +44,72 @@ func noticeShell(t *testing.T) (*testShell, *fakeClock) {
 	x.grid.presence.Groups = []sl.Group{{ID: exampleGroupID, Name: "Example Group"}}
 	clock := &fakeClock{t: time.Date(2026, 3, 4, 12, 3, 4, 0, time.Local)}
 	x.notices.now = clock.Now
+	x.groups.now = clock.Now
+	// What watch asks for as it starts.
+	x.groups.refresh(t.Context())
+	t.Cleanup(x.groups.settle)
 	return x, clock
+}
+
+// settle waits for the refresh in flight, if there is one.
+func (g *groupNameCache) settle() {
+	g.mu.Lock()
+	done := g.flight
+	g.mu.Unlock()
+	if done != nil {
+		<-done
+	}
+}
+
+// groupAsks stands in for the group list: it answers with groups, or
+// with fail while that is set, and counts the asks.  Each ask waits for
+// gate to close, when there is a gate.
+type groupAsks struct {
+	mu     sync.Mutex
+	n      int
+	groups []sl.Group
+	fail   error
+	gate   chan struct{}
+}
+
+func (a *groupAsks) fetch(ctx context.Context) ([]sl.Group, error) {
+	a.mu.Lock()
+	a.n++
+	gate, groups, fail := a.gate, a.groups, a.fail
+	a.mu.Unlock()
+	if gate != nil {
+		<-gate
+	}
+	return groups, fail
+}
+
+func (a *groupAsks) count() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.n
+}
+
+// coldGroups empties the shell's cache and has it ask a instead, which
+// knows Example Group.
+func coldGroups(x *testShell) *groupAsks {
+	a := &groupAsks{groups: []sl.Group{{ID: exampleGroupID, Name: "Example Group"}}}
+	x.groups.names = nil
+	x.groups.fetch = a.fetch
+	return a
+}
+
+// hearPromptly is heardNow, failing if hearing waits on anything.
+func (x *testShell) hearPromptly(t *testing.T, m *sl.IM) string {
+	t.Helper()
+	got := make(chan string, 1)
+	go func() { got <- x.heardNow(m) }()
+	select {
+	case s := <-got:
+		return s
+	case <-time.After(10 * time.Second):
+		t.Fatal("hearing a notice waited on the group list")
+		return ""
+	}
 }
 
 // groupNotice is a notice as sl delivers it.
@@ -243,5 +311,121 @@ func TestNoticesArriveWhileTheyAreRead(t *testing.T) {
 	<-done
 	if got := x.do(t, "notice 50"); !strings.Contains(got, "notice   50") {
 		t.Errorf("notice 50 said %q", got)
+	}
+}
+
+func TestACachedGroupNamesANoticeWithoutAsking(t *testing.T) {
+	x, _ := noticeShell(t)
+	a := coldGroups(x)
+	x.groups.names = map[msg.UUID]string{exampleGroupID: "Example Group"}
+	got := x.hearPromptly(t, groupNotice(exampleGroupID, "S|B", ""))
+	if !strings.Contains(got, "in Example Group: S") {
+		t.Errorf("arrival printed %q", got)
+	}
+	x.groups.settle()
+	if n := a.count(); n != 0 {
+		t.Errorf("a cached group was asked for %d times", n)
+	}
+}
+
+func TestAMissIsAnnouncedByKeyAndNamedOnceKnown(t *testing.T) {
+	x, _ := noticeShell(t)
+	a := coldGroups(x)
+	a.gate = make(chan struct{})
+
+	got := x.hearPromptly(t, groupNotice(exampleGroupID, "First|one", ""))
+	if !strings.Contains(got, "notice 1 from Example Resident in group 41467e57: First") {
+		t.Errorf("a miss printed %q", got)
+	}
+	close(a.gate)
+	x.groups.settle()
+	if n := a.count(); n != 1 {
+		t.Errorf("a miss asked %d times, want 1", n)
+	}
+
+	got = x.hearPromptly(t, groupNotice(exampleGroupID, "Second|two", ""))
+	if !strings.Contains(got, "notice 2 from Example Resident in Example Group: Second") {
+		t.Errorf("the next from that group printed %q", got)
+	}
+	// The first, announced by key, now lists by name.
+	if got := x.do(t, "notice"); !strings.Contains(got, "notice 1 from Example Resident in Example Group: First") {
+		t.Errorf("listing:\n%s", got)
+	}
+	if got := x.do(t, "notice 1"); !strings.Contains(got, "group    Example Group\n") {
+		t.Errorf("notice 1:\n%s", got)
+	}
+	if n := a.count(); n != 1 {
+		t.Errorf("reading the notices asked %d more times", n-1)
+	}
+}
+
+func TestNoticeNAsksWhenTheBackgroundCouldNot(t *testing.T) {
+	x, _ := noticeShell(t)
+	a := coldGroups(x)
+	a.fail = errors.New("the circuit went away")
+	x.hearPromptly(t, groupNotice(exampleGroupID, "S|B", ""))
+	x.groups.settle()
+	a.mu.Lock()
+	a.fail = nil
+	a.mu.Unlock()
+
+	if got := x.do(t, "notice 1"); !strings.Contains(got, "group    Example Group\n") {
+		t.Errorf("notice 1:\n%s", got)
+	}
+	if n := a.count(); n != 2 {
+		t.Errorf("asked %d times, want the background's and notice's", n)
+	}
+}
+
+func TestABurstOfMissesAsksOnce(t *testing.T) {
+	x, clock := noticeShell(t)
+	a := coldGroups(x)
+	a.gate = make(chan struct{})
+	for i := 0; i < 20; i++ {
+		// Past the rate limit each time, so only the first ask still
+		// being in flight holds the others back.
+		clock.Add(groupRefreshEvery)
+		group := exampleGroupID
+		if i%2 == 1 {
+			group = otherGroupID
+		}
+		got := x.hearPromptly(t, groupNotice(group, fmt.Sprintf("S%d|B", i), ""))
+		if !strings.Contains(got, "in group ") {
+			t.Errorf("miss %d printed %q", i, got)
+		}
+	}
+	close(a.gate)
+	x.groups.settle()
+	if n := a.count(); n != 1 {
+		t.Errorf("twenty misses asked %d times, want 1", n)
+	}
+}
+
+func TestMissesAskAtMostEveryThirtySeconds(t *testing.T) {
+	x, clock := noticeShell(t)
+	a := coldGroups(x)
+	hear := func(subject string) {
+		t.Helper()
+		x.hearPromptly(t, groupNotice(otherGroupID, subject+"|B", ""))
+		x.groups.settle()
+	}
+	hear("A")
+	hear("B")
+	clock.Add(groupRefreshEvery - time.Second)
+	hear("C")
+	if n := a.count(); n != 1 {
+		t.Errorf("within %s misses asked %d times, want 1", groupRefreshEvery, n)
+	}
+	clock.Add(time.Second)
+	hear("D")
+	if n := a.count(); n != 2 {
+		t.Errorf("after %s misses asked %d times, want 2", groupRefreshEvery, n)
+	}
+	// A command may always ask: the person is waiting anyway.
+	if got := x.do(t, "notice 1"); !strings.Contains(got, "group    "+otherGroupID.String()) {
+		t.Errorf("notice 1:\n%s", got)
+	}
+	if n := a.count(); n != 3 {
+		t.Errorf("notice 1 left the count at %d, want 3", n)
 	}
 }

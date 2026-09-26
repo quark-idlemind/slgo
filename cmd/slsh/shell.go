@@ -81,8 +81,10 @@ type Shell struct {
 	numbers map[string]int
 	nextNum int
 
-	// notices is the group notices heard lately; see notice.go.
+	// notices is the group notices heard lately, and groups the names
+	// they are shown with; see notice.go.
 	notices noticeBoard
+	groups  groupNameCache
 
 	// entry is the multi-line answer being typed, if one is.
 	entry *entry
@@ -121,6 +123,7 @@ func NewShell(cfg Config, t *Term, s *sl.Session) *Shell {
 		talk:  NewConversations(),
 		quit:  make(chan struct{}),
 	}
+	sh.groups.fetch = groupsOf(s)
 	if cfg.Chat {
 		sh.mode = modeChat
 	}

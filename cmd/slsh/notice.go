@@ -9,7 +9,9 @@ package main
 // A notice repeating one still kept -- the same group, subject and body
 // -- is dropped without a word.  Numbers climb for the whole session and
 // are never handed out twice, so a number on the screen names that
-// notice or nothing.  The bucket layout: doc/group-notices.md
+// notice or nothing.  The group is named from a cache of this avatar's
+// group list, when shown rather than when heard.  The bucket layout,
+// and why the cache: doc/group-notices.md
 
 import (
 	"context"
@@ -43,12 +45,12 @@ const noticeDefaultKeep = 15 * time.Minute
 const noticeSubjectMax = 72
 
 // keptNotice is one notice with its number and when it arrived here.
-// group is the group's name, empty when this avatar's list lacks it.
+// The group is kept as its key and named when shown, so a notice
+// announced by key lists by name once the name is known.
 type keptNotice struct {
-	n     int
-	at    time.Time
-	from  string
-	group string
+	n    int
+	at   time.Time
+	from string
 	*sl.GroupNotice
 }
 
@@ -83,7 +85,7 @@ func (b *noticeBoard) pruneLocked(keep time.Duration) {
 
 // add keeps a notice and numbers it, unless it repeats one still kept,
 // when it returns false and nothing changes.
-func (b *noticeBoard) add(n *sl.GroupNotice, from, group string, keep time.Duration) (*keptNotice, bool) {
+func (b *noticeBoard) add(n *sl.GroupNotice, from string, keep time.Duration) (*keptNotice, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.pruneLocked(keep)
@@ -93,7 +95,7 @@ func (b *noticeBoard) add(n *sl.GroupNotice, from, group string, keep time.Durat
 		}
 	}
 	b.last++
-	k := &keptNotice{n: b.last, at: b.clock(), from: from, group: group, GroupNotice: n}
+	k := &keptNotice{n: b.last, at: b.clock(), from: from, GroupNotice: n}
 	b.kept = append(b.kept, k)
 	return k, true
 }
@@ -125,11 +127,11 @@ func (b *noticeBoard) get(n int, keep time.Duration) (*keptNotice, error) {
 	return nil, fmt.Errorf("there is no notice %d; the last to arrive was %d", n, b.last)
 }
 
-// groupWord is the group as a line names it.
-func (k *keptNotice) groupWord() string {
+// groupWord is the group as a line names it, given its name or "".
+func (k *keptNotice) groupWord(name string) string {
 	switch {
-	case k.group != "":
-		return k.group
+	case name != "":
+		return name
 	case k.Group.IsZero():
 		return "a group it did not name"
 	}
@@ -137,8 +139,8 @@ func (k *keptNotice) groupWord() string {
 }
 
 // line is the notice in one line, without the time.
-func (k *keptNotice) line() string {
-	return fmt.Sprintf("notice %d from %s in %s: %s", k.n, k.from, k.groupWord(), oneLine(k.Subject, noticeSubjectMax))
+func (k *keptNotice) line(group string) string {
+	return fmt.Sprintf("notice %d from %s in %s: %s", k.n, k.from, k.groupWord(group), oneLine(k.Subject, noticeSubjectMax))
 }
 
 // oneLine is s with its line breaks and tabs made spaces, cut to max
@@ -164,15 +166,25 @@ func (sh *Shell) noticeKeep() time.Duration {
 
 // heardNotice keeps a notice that has arrived and announces it, or
 // drops it if it repeats one still kept.
+//
+// It runs on the goroutine that delivers every IM, so it names the
+// group only from what is cached, and a miss asks for the list in the
+// background rather than waiting for it.
+// Why: doc/group-notices.md#naming-the-group
 func (sh *Shell) heardNotice(m *sl.IM) {
 	n, ok := sl.GroupNoticeFrom(m)
 	if !ok {
 		return
 	}
-	k, fresh := sh.notices.add(n, sh.noticeFrom(n), sh.groupName(n.Group), sh.noticeKeep())
-	if fresh {
-		sh.noticef("%s", k.line())
+	k, fresh := sh.notices.add(n, sh.noticeFrom(n), sh.noticeKeep())
+	if !fresh {
+		return
 	}
+	name, known := sh.groups.name(n.Group)
+	if !known {
+		sh.groups.kick()
+	}
+	sh.noticef("%s", k.line(name))
 }
 
 // noticeFrom is who posted it.  From is not asked for a name when it
@@ -189,19 +201,124 @@ func (sh *Shell) noticeFrom(n *sl.GroupNotice) string {
 	return "somebody"
 }
 
-// groupName is what this avatar's own list of groups calls id, or
-// empty.  A notice only comes from a group the avatar is in.
-func (sh *Shell) groupName(id msg.UUID) string {
+// groupLookupTimeout is how long one ask for the group list may take.
+const groupLookupTimeout = 2 * time.Second
+
+// groupRefreshEvery is the least time between two refreshes a notice
+// arriving starts.  A command's own refresh is not counted.
+const groupRefreshEvery = 30 * time.Second
+
+// groupNameCache is what this avatar's own list of groups calls each group
+// it is in, as last asked, so that heard can name a notice's group
+// without waiting on the network.  Everything is under mu.
+type groupNameCache struct {
+	mu     sync.Mutex
+	names  map[msg.UUID]string // nil until a refresh has succeeded
+	now    func() time.Time    // nil is time.Now
+	fetch  func(context.Context) ([]sl.Group, error)
+	flight chan struct{} // closed when the refresh in flight ends; nil if none
+	kicked time.Time     // when kick last started one
+}
+
+// name is what the list calls id, and whether it has id at all.  The
+// zero key is no group, and never a miss.
+func (g *groupNameCache) name(id msg.UUID) (string, bool) {
 	if id.IsZero() {
-		return ""
+		return "", true
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	name, ok := g.names[id]
+	return name, ok
+}
+
+// kick starts a refresh in the background, unless one is in flight or
+// kick started one less than groupRefreshEvery ago.  It never waits.
+func (g *groupNameCache) kick() {
+	g.mu.Lock()
+	now := time.Now()
+	if g.now != nil {
+		now = g.now()
+	}
+	if g.flight != nil || (!g.kicked.IsZero() && now.Sub(g.kicked) < groupRefreshEvery) {
+		g.mu.Unlock()
+		return
+	}
+	g.kicked = now
+	done := make(chan struct{})
+	g.flight = done
+	g.mu.Unlock()
+	go g.run(context.Background(), done)
+}
+
+// refresh asks for the list and waits for the answer, joining a
+// refresh already in flight rather than starting a second.
+func (g *groupNameCache) refresh(ctx context.Context) {
+	g.mu.Lock()
+	done := g.flight
+	if done == nil {
+		done = make(chan struct{})
+		g.flight = done
+		g.mu.Unlock()
+		g.run(ctx, done)
+		return
+	}
+	g.mu.Unlock()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
+// run is one refresh, which done belongs to.  A list that could not be
+// had leaves the cache as it was.
+func (g *groupNameCache) run(ctx context.Context, done chan struct{}) {
+	ctx, cancel := context.WithTimeout(ctx, groupLookupTimeout)
 	defer cancel()
-	p, err := sh.s.Where(ctx)
-	if err != nil {
-		return ""
+	groups, err := g.fetch(ctx)
+	g.mu.Lock()
+	if err == nil {
+		g.names = make(map[msg.UUID]string, len(groups))
+		for _, gr := range groups {
+			g.names[gr.ID] = gr.Name
+		}
 	}
-	return nameOfGroup(p.Groups, id)
+	g.flight = nil
+	g.mu.Unlock()
+	close(done)
+}
+
+// groupsOf is the group list as a session gives it.
+func groupsOf(s *sl.Session) func(context.Context) ([]sl.Group, error) {
+	return func(ctx context.Context) ([]sl.Group, error) {
+		p, err := s.Where(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return p.Groups, nil
+	}
+}
+
+// namesFor names the groups of kept, refreshing the cache first if any
+// of them is missing from it.  It may wait, so commands only.
+func (sh *Shell) namesFor(ctx context.Context, kept ...*keptNotice) map[msg.UUID]string {
+	lookup := func() (map[msg.UUID]string, bool) {
+		names := map[msg.UUID]string{}
+		all := true
+		for _, k := range kept {
+			name, ok := sh.groups.name(k.Group)
+			names[k.Group] = name
+			all = all && ok
+		}
+		return names, all
+	}
+	names, all := lookup()
+	if all {
+		return names
+	}
+	sh.groups.refresh(ctx)
+	names, _ = lookup()
+	return names
 }
 
 func cmdNotice(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
@@ -217,8 +334,9 @@ func cmdNotice(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		if len(kept) == 0 {
 			fmt.Fprintf(out, "no group notices kept; each is kept for %s after it arrives\n", durationWord(keep))
 		}
+		names := sh.namesFor(ctx, kept...)
 		for _, k := range kept {
-			fmt.Fprintf(out, "%s  %s\n", k.at.Local().Format("15:04:05"), k.line())
+			fmt.Fprintf(out, "%s  %s\n", k.at.Local().Format("15:04:05"), k.line(names[k.Group]))
 		}
 		return nil
 	case 1:
@@ -234,8 +352,9 @@ func cmdNotice(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	if err != nil {
 		return err
 	}
-	group := k.groupWord()
-	if k.group == "" && !k.Group.IsZero() {
+	name := sh.namesFor(ctx, k)[k.Group]
+	group := k.groupWord(name)
+	if name == "" && !k.Group.IsZero() {
 		group = k.Group.String()
 	}
 	fmt.Fprintf(out, "notice   %d\n", k.n)
