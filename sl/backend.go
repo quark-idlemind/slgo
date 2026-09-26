@@ -85,8 +85,9 @@ type Info struct {
 
 	InventoryRoot msg.UUID
 
-	// Channel is the client name and version the login server was
-	// given, and Caps are the capabilities the simulator offered.
+	// Channel is the build of the simulator the avatar is in, and
+	// Caps are the capabilities its region offered.  Both belong to
+	// the region, and are read again with Region.
 	Channel string
 	Caps    []string
 }
@@ -136,9 +137,9 @@ type Backend interface {
 	// take fourteen hours to notice.
 	Info() *Info
 
-	// Refresh asks again, for a backend that can, and hands back what
-	// is true now.  A backend whose identity cannot change answers
-	// with what it has.
+	// Refresh asks again and hands back what is true now: the region
+	// and its capabilities and, for a backend whose session can be
+	// re-established underneath, the identity.
 	//
 	// Called when the session is told the avatar has changed region,
 	// since that is also how a re-established session announces

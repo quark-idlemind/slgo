@@ -426,13 +426,13 @@ func (w *Session) agentBlock() (msg.UUID, msg.UUID) {
 // arrives as a region change -- the daemon says so in the detail, and
 // this does not read the detail: matching on the words would be one
 // more thing to be wrong about when they change, which is issues/006.
-// An ordinary teleport refreshes an identity that has not moved, which
-// costs one call and changes nothing.
+// An ordinary teleport gets the same identity back, with the new
+// region's name and capabilities.
 //
 // It runs OFF the reader goroutine.  Anything that waits on the daemon
-// from there stops the relay this session is reading, and a session
-// that stops reading stops hearing about the very thing it is trying
-// to react to.
+// -- or, direct, on the new region's capabilities -- from there stops
+// the relay this session is reading, and a session that stops reading
+// stops hearing about the very thing it is trying to react to.
 func (w *Session) refreshIdentity(ctx context.Context) {
 	info, err := w.b.Refresh(ctx)
 	if err != nil || info == nil || info.SessionID.IsZero() {

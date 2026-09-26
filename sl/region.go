@@ -27,8 +27,9 @@ import (
 )
 
 // refreshTimeout bounds the ask that follows a region change.  Long
-// enough for a daemon that is busy reconnecting, short enough that a
-// daemon which will never answer is not waited on for ever.
+// enough for a daemon that is busy reconnecting, or a region slow to
+// give its capabilities, short enough that one which will never answer
+// is not waited on for ever.
 const refreshTimeout = 30 * time.Second
 
 // DefaultRegionDepth is the buffer a region-change subscription gets

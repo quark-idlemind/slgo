@@ -14,6 +14,7 @@ package sl
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
@@ -22,8 +23,13 @@ import (
 
 // Direct is a session this process holds.
 type Direct struct {
-	a        *agent.Agent
-	info     *Info
+	a *agent.Agent
+
+	// mu guards info, which is replaced when the avatar changes
+	// region; see Refresh.
+	mu   sync.RWMutex
+	info *Info
+
 	messages chan *Message
 	events   chan *QueueEvent
 
@@ -168,8 +174,8 @@ func (d *Direct) event(name string, body []byte) {
 // -- one per teleport against one per packet -- and the buffer, which
 // is sized for that rather than for the relay.
 //
-// Info is deliberately not revised.  It is what was known at attach
-// time and says so; see Info.Region.
+// Info is not revised here: this runs before the move has the new
+// region's capabilities.  The session asks Refresh when it reads this.
 func (d *Direct) regionChanged(region string, handle uint64) {
 	select {
 	case d.regions <- &RegionChange{Region: region, Handle: handle}:
@@ -177,20 +183,48 @@ func (d *Direct) regionChanged(region string, handle uint64) {
 	}
 }
 
-func (d *Direct) Info() *Info { return d.info }
+func (d *Direct) Info() *Info {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.info
+}
 
-// Refresh has nothing to ask.  A session this process logged in itself
-// changes identity only by logging in again, which builds another
-// Session rather than changing this one -- the case Backend.Refresh
-// exists for is a DAEMON re-establishing a session under a client that
-// stayed attached, and there is no daemon here.
-func (d *Direct) Refresh(context.Context) (*Info, error) { return d.info, nil }
-func (d *Direct) Messages() <-chan *Message              { return d.messages }
-func (d *Direct) Events() <-chan *QueueEvent             { return d.events }
-func (d *Direct) RegionChanges() <-chan *RegionChange    { return d.regions }
-func (d *Direct) Done() <-chan struct{}                  { return d.a.Done() }
-func (d *Direct) Err() error                             { return d.a.Err() }
-func (d *Direct) HasCap(name string) bool                { return d.a.HasCap(name) }
+// Refresh reads where the avatar is now: the region, its simulator's
+// build and the capabilities it offered.  Who the session is does not
+// change -- only a login makes a new one, and that builds another
+// Direct -- so the rest is kept from Login.
+//
+// The region-change notice comes before the move has asked the new
+// region for its capabilities, so this waits for them, for as long as
+// ctx and refreshTimeout allow, rather than take the old region's.
+// Why: doc/history/teleport.md#open-questions
+func (d *Direct) Refresh(ctx context.Context) (*Info, error) {
+	ctx, cancel := context.WithTimeout(ctx, refreshTimeout)
+	defer cancel()
+	caps, err := d.a.WaitCaps(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return d.moved(d.a.RegionName(), d.a.ChannelVersion(), caps), nil
+}
+
+// moved installs the Info for a session now in region, keeping who it
+// is, and returns it.
+func (d *Direct) moved(region, channel string, caps agent.Caps) *Info {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	next := *d.info
+	next.Region, next.Channel, next.Caps = region, channel, caps.Names()
+	d.info = &next
+	return &next
+}
+
+func (d *Direct) Messages() <-chan *Message           { return d.messages }
+func (d *Direct) Events() <-chan *QueueEvent          { return d.events }
+func (d *Direct) RegionChanges() <-chan *RegionChange { return d.regions }
+func (d *Direct) Done() <-chan struct{}               { return d.a.Done() }
+func (d *Direct) Err() error                          { return d.a.Err() }
+func (d *Direct) HasCap(name string) bool             { return d.a.HasCap(name) }
 
 // Close ends the session.  Unlike a hosted one there is nobody else
 // holding it, so this logs out rather than merely hanging up.
@@ -412,5 +446,5 @@ func (d *Direct) activeGroup(ctx context.Context) (string, bool) {
 }
 
 func (d *Direct) String() string {
-	return fmt.Sprintf("direct session as %s", d.info.AvatarName)
+	return fmt.Sprintf("direct session as %s", d.Info().AvatarName)
 }
