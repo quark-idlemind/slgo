@@ -7,9 +7,10 @@ package sl
 // way and not run by default.
 //
 // It CHANGES THINGS: it rezzes prims on whatever land the avatar is
-// standing on, and takes them away again.  A failure part way through
-// can leave a prim behind, which is worth knowing before running it
-// somewhere that matters.
+// standing on, and takes them away again.  A prim whose rez was never
+// confirmed is one nothing knows the id of, so a failure there can
+// leave it behind, which is worth knowing before running it somewhere
+// that matters.
 //
 // This exists because Build had no test at all.  It is the one
 // operation that puts several prims in the world and links them in a
@@ -94,20 +95,12 @@ func TestBuildLinksToTheFirstPrim(t *testing.T) {
 	}
 
 	b, err := s.Build(ctx, prims)
+	clearAway(t, s, b, err)
 	if err != nil {
 		t.Fatalf("build: %v\n"+
 			"        (an avatar with no active group cannot rez on land that "+
 			"grants building to one)", err)
 	}
-	// Take it away whatever happens next, so a failed assertion does
-	// not leave a tower standing.
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		if err := s.Delete(ctx, b.Root, msg.UUID{}); err != nil {
-			t.Logf("could not clean up %s: %v", b.Root.ID, err)
-		}
-	})
 
 	if len(b.Parts) != len(prims) {
 		t.Fatalf("built %d prims, asked for %d", len(b.Parts), len(prims))
@@ -164,16 +157,10 @@ func TestBuildOnePrim(t *testing.T) {
 		Position: at,
 		Size:     msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5},
 	}})
+	clearAway(t, s, b, err)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		if err := s.Delete(ctx, b.Root, msg.UUID{}); err != nil {
-			t.Logf("could not clean up %s: %v", b.Root.ID, err)
-		}
-	})
 
 	if len(b.Parts) != 1 {
 		t.Fatalf("built %d prims, want 1", len(b.Parts))
@@ -181,4 +168,28 @@ func TestBuildOnePrim(t *testing.T) {
 	if parent, known := s.Parent(b.Root); known && parent != 0 {
 		t.Errorf("a lone prim reports parent %d, want 0", parent)
 	}
+}
+
+// clearAway takes a build away when the test ends, whatever happens
+// next, so a failed assertion does not leave a tower standing.  A build
+// that finished is one linkset and goes with its root; one that failed
+// hands back prims that may not be joined, so each goes on its own.
+func clearAway(t *testing.T, s *Session, b *Built, buildErr error) {
+	t.Helper()
+	if b == nil {
+		return
+	}
+	parts := []*Object{b.Root}
+	if buildErr != nil {
+		parts = b.Parts
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		for _, p := range parts {
+			if err := s.Delete(ctx, p, msg.UUID{}); err != nil {
+				t.Logf("could not clean up %s: %v", p.ID, err)
+			}
+		}
+	})
 }

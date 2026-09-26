@@ -254,11 +254,24 @@ func TestBuildReportsWhatDidNotHappen(t *testing.T) {
 	})
 }
 
-// TestBuildOneRefusesAPrimItCouldNotFinish: the name and the description
-// are separate round trips after the rez, and a prim that is standing
-// there under the wrong name is worse than one that was never made.
-func TestBuildOneRefusesAPrimItCouldNotFinish(t *testing.T) {
+// TestBuildHandsBackAPrimItCouldNotFinish: the name and the
+// description are separate round trips after the rez, and a prim that
+// is standing there under the wrong name is worse than one that was
+// never made -- so the build fails.  But the prim exists, and the build
+// hands it back with the error, since nothing else knows its ids and
+// somebody has to be able to clear it away.
+func TestBuildHandsBackAPrimItCouldNotFinish(t *testing.T) {
 	t.Parallel()
+
+	handedBack := func(t *testing.T, b *Built, err error) {
+		t.Helper()
+		if err == nil {
+			t.Error("Build reported a prim it could not finish")
+		}
+		if b == nil || len(b.Parts) != 1 || b.Root != b.Parts[0] || b.Root.ID != thePrim || b.Root.Local != 77 {
+			t.Errorf("Build = %+v, want the prim it made handed back", b)
+		}
+	}
 
 	t.Run("the placement never went", func(t *testing.T) {
 		t.Parallel()
@@ -270,9 +283,8 @@ func TestBuildOneRefusesAPrimItCouldNotFinish(t *testing.T) {
 			return w.Build(context.Background(), []Prim{{Name: "workbench"}})
 		})
 		confirmRez(t, f, thePrim, 77, 1)
-		if _, err := wait(); err == nil {
-			t.Error("Build reported a prim it could not place")
-		}
+		b, err := wait()
+		handedBack(t, b, err)
 	})
 
 	t.Run("the description never went", func(t *testing.T) {
@@ -283,9 +295,8 @@ func TestBuildOneRefusesAPrimItCouldNotFinish(t *testing.T) {
 			return w.Build(context.Background(), []Prim{{Description: "a thing"}})
 		})
 		confirmRez(t, f, thePrim, 77, 1)
-		if _, err := wait(); err == nil {
-			t.Error("Build reported a prim it could not describe")
-		}
+		b, err := wait()
+		handedBack(t, b, err)
 	})
 
 	t.Run("the rename did not take", func(t *testing.T) {
@@ -301,10 +312,67 @@ func TestBuildOneRefusesAPrimItCouldNotFinish(t *testing.T) {
 		// Renamed to something else entirely, which is what a name the
 		// simulator would not accept comes back as.
 		f.Relay(t, familyReply(thePrim, testAgentID, "Object"))
-		if _, err := wait(); err == nil {
-			t.Error("Build reported a prim under a name it does not have")
-		}
+		b, err := wait()
+		handedBack(t, b, err)
 	})
+}
+
+// TestBuildHandsBackEveryPrimWhenALaterOneFails: the prims finished
+// before the one that failed are standing in the region too, and
+// dropping them with the error left them there with nobody holding
+// their ids -- slsh clears away half a build only when it is given one.
+func TestBuildHandsBackEveryPrimWhenALaterOneFails(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+
+	wait := aside(t, func() (*Built, error) {
+		return w.Build(context.Background(), []Prim{
+			{Position: msg.Vector3{X: 128, Y: 128, Z: 25}},
+			{Name: "top", Position: msg.Vector3{X: 128, Y: 128, Z: 26}},
+		})
+	})
+	confirmRez(t, f, thePrim, 77, 1)
+	waitSentN[*msg.MultipleObjectUpdate](t, f, 1)
+	confirmRez(t, f, theChild, 78, 2)
+	waitSentN[*msg.MultipleObjectUpdate](t, f, 2)
+	waitSent[*msg.ObjectName](t, f)
+	waitSentN[*msg.RequestObjectPropertiesFamily](t, f, 3)
+	f.Relay(t, familyReply(theChild, testAgentID, "Object"))
+
+	b, err := wait()
+	if err == nil || !strings.Contains(err.Error(), "prim 2 of 2") {
+		t.Errorf("Build = %v, want it to name the prim that failed", err)
+	}
+	if b == nil || len(b.Parts) != 2 || b.Root != b.Parts[0] ||
+		b.Parts[0].ID != thePrim || b.Parts[1].ID != theChild {
+		t.Fatalf("Build = %+v, want both prims handed back", b)
+	}
+	// Nothing is linked on the way out: the prims are loose, and what
+	// becomes of them is the caller's to say.
+	if got := sentOf[*msg.ObjectLink](f); len(got) != 0 {
+		t.Errorf("a failed build went on to link %d times", len(got))
+	}
+}
+
+// TestCreateHandsBackWhatTheBuildMade: Create is Build and more, and a
+// build that failed part way has to reach the caller in one piece.
+func TestCreateHandsBackWhatTheBuildMade(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	failSendsAfter[*msg.RequestObjectPropertiesFamily](f, errors.New("the circuit is gone"))
+	wait := aside(t, func() (*Built, error) {
+		return w.Create(context.Background(), ObjectJSON{Prims: []PrimJSON{{
+			Type: "box", Name: "workbench", Pos: []float32{128, 128, 25},
+		}}})
+	})
+	confirmRez(t, f, thePrim, 77, 1)
+	b, err := wait()
+	if err == nil {
+		t.Error("Create reported an object it could not place")
+	}
+	if b == nil || len(b.Parts) != 1 || b.Root.ID != thePrim {
+		t.Errorf("Create = %+v, want the prim that was made handed back", b)
+	}
 }
 
 // TestSetDescriptionReadsItBackBecauseNothingConfirmsIt:

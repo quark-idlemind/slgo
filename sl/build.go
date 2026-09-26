@@ -76,6 +76,14 @@ const (
 // batch means matching answers to intentions with nothing to match on
 // -- two prims of the same size at the same place are indistinguishable
 // once both exist.
+//
+// A build that fails part way returns what it made alongside the
+// error: every prim that was rezzed, the one that failed among them if
+// it got as far as existing, unlinked if the link was not reached.
+// They are standing in the region, and clearing them away is the
+// caller's to decide.  A nil Built means nothing was made that this
+// call knows of -- a rez that was never confirmed may still have made a
+// prim, but nothing says which one it is.
 func (w *Session) Build(ctx context.Context, prims []Prim) (*Built, error) {
 	if len(prims) == 0 {
 		return nil, fmt.Errorf("sl: Build needs at least one prim")
@@ -98,11 +106,18 @@ func (w *Session) Build(ctx context.Context, prims []Prim) (*Built, error) {
 	b := &Built{Parts: make([]*Object, 0, len(prims))}
 	for i, p := range prims {
 		o, err := w.buildOne(ctx, p)
-		if err != nil {
-			return nil, fmt.Errorf("sl: prim %d of %d (%q): %w",
-				i+1, len(prims), p.Name, err)
+		if o != nil {
+			b.Parts = append(b.Parts, o)
 		}
-		b.Parts = append(b.Parts, o)
+		if err != nil {
+			err = fmt.Errorf("sl: prim %d of %d (%q): %w",
+				i+1, len(prims), p.Name, err)
+			if len(b.Parts) == 0 {
+				return nil, err
+			}
+			b.Root = b.Parts[0]
+			return b, err
+		}
 	}
 	b.Root = b.Parts[0]
 
@@ -117,6 +132,9 @@ func (w *Session) Build(ctx context.Context, prims []Prim) (*Built, error) {
 }
 
 // buildOne rezzes a prim and makes it match its description.
+//
+// Once the rez is confirmed the prim exists, so a later step failing
+// returns it with the error rather than losing its ids.
 func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 	size := p.Size
 	if size == (msg.Vector3{}) {
@@ -132,17 +150,17 @@ func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 	// is a request: the simulator places the prim near the ray and
 	// need not put it exactly there.
 	if err := w.Place(ctx, o, p.Position, p.Rotation, size); err != nil {
-		return nil, err
+		return o, err
 	}
 
 	if p.Name != "" {
 		if err := w.SetName(ctx, o, p.Name); err != nil {
-			return nil, err
+			return o, err
 		}
 	}
 	if p.Description != "" {
 		if err := w.SetDescription(ctx, o, p.Description); err != nil {
-			return nil, err
+			return o, err
 		}
 	}
 	return o, nil

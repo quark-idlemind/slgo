@@ -31,6 +31,10 @@ Without it, a failure removes what it made and says it has: half a
 build is prims standing in the region that nobody asked for.  This is
 for the case where the wreckage is the interesting part.
 
+What it cannot remove is a prim whose making the region never
+confirmed, since nothing says which prim that is.  The error then says
+the prim did not appear.
+
 ## This is not what everyone means by rezzing
 
 `Rez` is the word everybody uses for putting an inventory object into
