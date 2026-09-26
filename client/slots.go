@@ -142,7 +142,7 @@ func (c *Conn) ReleaseSlots(id string, clean bool) error {
 	if stream == nil {
 		return fmt.Errorf("client: not connected")
 	}
-	return stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_ReleaseSlots{
+	return c.sendPacket(stream, &pb.ClientPacket{Body: &pb.ClientPacket_ReleaseSlots{
 		ReleaseSlots: &pb.ReleaseSlots{Grant: id, Clean: clean},
 	}})
 }
@@ -153,7 +153,7 @@ func (c *Conn) ReleaseSlots(id string, clean bool) error {
 // holds the places until it runs out or this stream ends.  So one that
 // arrives for it, or had just arrived, goes straight back.
 func (c *Conn) ask(ctx context.Context, stream pb.Grid_StreamClient, w *asking, p *pb.ClientPacket) (*Grant, error) {
-	err := stream.Send(p)
+	err := c.sendPacket(stream, p)
 	if err == nil {
 		select {
 		case got := <-w.reply:

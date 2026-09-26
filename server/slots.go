@@ -246,7 +246,14 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 			return
 		}
 		if r.Filled() {
-			c.answer(sp.granted(req.GetRequest(), sp.keep(c, r), r.Slots, r.Expire, ""))
+			token := sp.keep(c, r)
+			if token == "" {
+				// The stream ended while this was settled, and what
+				// it held has already been given back.
+				sp.pool.Return(r.ID)
+				return
+			}
+			c.answer(sp.granted(req.GetRequest(), token, r.Slots, r.Expire, ""))
 			return
 		}
 		if req.GetTry() {
@@ -289,9 +296,17 @@ func hasOrHave(agent string) string {
 // keep files a grant against the client that asked and names it, so
 // that the client can talk about it afterwards and so that the end of
 // its stream gives it back.
+//
+// It files nothing, and returns "", for a client whose stream has ended:
+// releaseAll has been or is about to be, and a grant filed after it
+// would hold its places until it ran out.  closed is set before
+// releaseAll takes mu, so one of the two always sees the other.
 func (sp *slotPool) keep(c *Client, r slots.Response) string {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
+	if c.closed.Load() {
+		return ""
+	}
 	sp.next++
 	g := &grant{id: r.ID, token: fmt.Sprintf("g%d", sp.next), who: c, held: r.Slots}
 	sp.grants[g.token] = g

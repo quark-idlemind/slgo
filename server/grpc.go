@@ -25,10 +25,10 @@ var _ pb.GridServer = (*Server)(nil)
 // the grid because the acknowledgement has already gone.
 const streamDepth = 1024
 
-// controlDepth is how many answers about objects may wait to be sent to
-// one client.  Each answers a request of that client's own, so it fills
-// only for a client with this many out at once, or one that has stopped
-// reading.
+// controlDepth is how many answers to its requests -- for a lock or for
+// places -- may wait to be sent to one client.  Each answers a request of
+// that client's own, so it fills only for a client with this many out at
+// once, or one that has stopped reading.
 const controlDepth = 64
 
 // Client is one attached stream, the thing the C client calls a
@@ -45,10 +45,10 @@ type Client struct {
 	weak bool
 	out  chan *pb.ServerPacket
 
-	// ctl carries answers about objects, which are never dropped: a
-	// client that lost a grant would wait for places the daemon
-	// believes it gave.  The writer empties it before out, and jammed
-	// is closed if it ever overflows.
+	// ctl carries the answers to this client's requests for a lock or
+	// for places, which are never dropped: a client that lost one would
+	// wait for ever for what the daemon believes it gave.  The writer
+	// empties it before out, and jammed is closed if it ever overflows.
 	// Why: doc/slots.md#asking-and-being-answered
 	ctl     chan *pb.ServerPacket
 	jammed  chan struct{}
@@ -73,7 +73,7 @@ type Client struct {
 func (c *Client) lock(ctx context.Context, h *Hosted, req *pb.Lock) {
 	name := req.GetName()
 	if name == "" {
-		c.send(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
+		c.answer(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
 			Locked: &pb.Locked{Held: false, Holder: "a lock needs a name"},
 		}})
 		return
@@ -81,7 +81,7 @@ func (c *Client) lock(ctx context.Context, h *Hosted, req *pb.Lock) {
 
 	if req.GetTry() {
 		ok, holder := h.lockSet().acquire(name, c)
-		c.send(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
+		c.answer(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
 			Locked: &pb.Locked{Name: name, Held: ok, Holder: holderName(holder)},
 		}})
 		return
@@ -91,7 +91,7 @@ func (c *Client) lock(ctx context.Context, h *Hosted, req *pb.Lock) {
 	go func() {
 		select {
 		case <-ready:
-			c.send(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
+			c.answer(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
 				Locked: &pb.Locked{Name: name, Held: true},
 			}})
 		case <-ctx.Done():
@@ -188,8 +188,8 @@ func (c *Client) send(p *pb.ServerPacket) {
 	}
 }
 
-// answer queues an answer about objects on ctl.  One that does not fit
-// ends the client's stream rather than being dropped.
+// answer queues the answer to a request of the client's own on ctl.  One
+// that does not fit ends the client's stream rather than being dropped.
 func (c *Client) answer(p *pb.ServerPacket) {
 	if c.closed.Load() {
 		return
@@ -204,7 +204,7 @@ func (c *Client) answer(p *pb.ServerPacket) {
 // jam is how a stream whose ctl overflowed ends.
 func jam() error {
 	return status.Errorf(codes.ResourceExhausted,
-		"more than %d answers about objects were waiting to be sent to this client; "+
+		"more than %d answers to this client's requests were waiting to be sent to it; "+
 			"its stream is ended rather than one of them lost", controlDepth)
 }
 
@@ -466,7 +466,7 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	ended := h.ended()
 
 	for {
-		// Answers about objects first: somebody is waiting on each, and
+		// Answers to requests first: somebody is waiting on each, and
 		// relayed traffic may be a thousand frames deep.
 		select {
 		case <-c.jammed:

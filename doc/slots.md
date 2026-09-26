@@ -54,7 +54,9 @@ rather than being calls of their own, for the reason a lock does and more
 so: what a client holds has to be given back when it dies, however it
 died, and the stream is the thing slgod already watches for that. A
 client that crashed, was killed, or was unplugged gives its places back
-without having said anything.
+without having said anything. A request the daemon settles just as the
+stream ends is not kept either: its places go straight back rather than
+to a grant nobody holds.
 
 ## Asking and being answered
 
@@ -76,14 +78,23 @@ Answers are never dropped. The daemon's queue to each client drops
 relayed traffic when the client falls behind, which costs nothing on the
 grid; a grant dropped there would leave the client waiting for places
 the daemon believes it gave. So answers have a queue of their own, 64
-deep, sent ahead of relayed traffic. It fills only for a client with
-that many requests out at once, or one that has stopped reading, and
-that client's stream is ended — which gives back everything it holds —
-rather than an answer lost.
+deep, sent ahead of relayed traffic, which the answers to locks share for
+the same reason. It fills only for a client with that many requests out
+at once, or one that has stopped reading, and that client's stream is
+ended — which gives back everything it holds — rather than an answer
+lost.
+
+Every send a client makes on its stream is one at a time, behind one
+lock: gRPC's documentation says two at once on a stream are not safe,
+and a client sends from all its callers and from the loop that gives
+grants back. That is taken from the documentation, not seen: with the
+lock taken out, the race detector found nothing in two hundred runs of
+every kind of send at once against a fake daemon.
 
 None of this section was watched on the grid. It is how the code was
-built on 2026-09-26, and the tests in `client/slots_test.go` and
-`server/slots_test.go` check it against a fake daemon and a fake stream.
+built on 2026-09-26, and the tests in `client/slots_test.go`,
+`client/send_test.go` and `server/slots_test.go` check it against a fake
+daemon and a fake stream.
 
 ## All of them or none
 
