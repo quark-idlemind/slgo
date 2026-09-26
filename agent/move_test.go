@@ -740,6 +740,100 @@ func TestTheNewRegionsCoarseLocationWaitsForTheArrival(t *testing.T) {
 	}
 }
 
+// TestTheRegionRecordIsNotTakenBeforeTheAvatarIsThere: Region is the
+// whole of what the handshake said, with the handle the movement gave,
+// and it changes when the name and the place do.  Taken from the
+// handshake at once, it answered until the movement came with the new
+// region's id and name around the old region's handle.
+func TestTheRegionRecordIsNotTakenBeforeTheAvatarIsThere(t *testing.T) {
+	a, from, to := twoRegions(t, Options{SkipCaps: true})
+	to.sim.mu.Lock()
+	to.sim.lateMovement = true
+	to.sim.mu.Unlock()
+
+	moved := make(chan error, 1)
+	go func() { moved <- a.moveTo(context.Background(), to.sim.addr(), to.seed()) }()
+
+	to.sim.waitSeen(t, "RegionHandshakeReply", 5*time.Second)
+	_, left := from.sim.arrival()
+	wantRegion(t, a, "between the handshake and the movement", from.sim.regionID, from.sim.regionNm, left)
+
+	if err := <-moved; err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	_, arrived := to.sim.arrival()
+	wantRegion(t, a, "after the move", to.sim.regionID, to.sim.regionNm, arrived)
+}
+
+// TestTheRegionRecordWaitsForAHandshakeBehindTheMovement: the other
+// order, which a trace on Agni caught.  The held movement's handle is not
+// the region's until the handshake it waits for has come.
+func TestTheRegionRecordWaitsForAHandshakeBehindTheMovement(t *testing.T) {
+	a, from, to := twoRegions(t, Options{SkipCaps: true})
+	to.sim.mu.Lock()
+	to.sim.lateHandshake = true
+	to.sim.mu.Unlock()
+
+	moved := make(chan error, 1)
+	go func() { moved <- a.moveTo(context.Background(), to.sim.addr(), to.seed()) }()
+
+	// The handshake is a timer's length behind the movement.
+	waitFor(t, "the movement to be held for the handshake", func() bool {
+		a.mu.RLock()
+		defer a.mu.RUnlock()
+		return a.entering != nil && a.entering.moved != nil
+	})
+	_, left := from.sim.arrival()
+	wantRegion(t, a, "between the movement and the handshake", from.sim.regionID, from.sim.regionNm, left)
+
+	if err := <-moved; err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	_, arrived := to.sim.arrival()
+	wantRegion(t, a, "after the move", to.sim.regionID, to.sim.regionNm, arrived)
+}
+
+// TestALoginsHandshakeKeepsTheHandleItFinds: outside a move the
+// handshake is taken as it comes, with whatever handle is held, which on
+// the circuit's own region can only be that region's or none.  None is
+// what the ordinary order gives, and the movement fills it in; in the
+// other order the movement's handle has to survive the handshake.
+func TestALoginsHandshakeKeepsTheHandleItFinds(t *testing.T) {
+	t.Parallel()
+
+	const name = "the test region"
+	handle := msg.RegionHandle(43648, 43648)
+	movement := &msg.AgentMovementComplete{}
+	movement.Data.RegionHandle = handle
+
+	t.Run("handshake first", func(t *testing.T) {
+		a, _ := offlineSession(t)
+		feed(t, a, handshakeFor(aRegion, name))
+		wantRegion(t, a, "before the movement", aRegion, name, 0)
+		feed(t, a, movement)
+		wantRegion(t, a, "after the movement", aRegion, name, handle)
+	})
+	t.Run("movement first", func(t *testing.T) {
+		a, _ := offlineSession(t)
+		feed(t, a, movement, handshakeFor(aRegion, name))
+		wantRegion(t, a, "after the handshake", aRegion, name, handle)
+		if got := a.RegionHandle(); got != handle {
+			t.Errorf("RegionHandle = %d after the handshake, want %d", got, handle)
+		}
+	})
+}
+
+// wantRegion checks that Region answers with one region throughout: its
+// id and name, and the handle it is expected to carry.
+func wantRegion(t *testing.T, a *Agent, when string, id msg.UUID, name string, handle uint64) {
+	t.Helper()
+	r, known := a.Region()
+	if !known || r.ID != id || r.Name != name || r.Handle != handle {
+		t.Errorf("%s Region is %q %s handle %d (known %v), want %q %s handle %d",
+			when, r.Name, r.ID, r.Handle, known, name, id, handle)
+	}
+}
+
 // TestAMoveWhoseRegionNeverIntroducesItselfEndsTheSession: an arrival
 // with no handshake is a session in a region it has no name for, holding
 // the objects of the one it left, and never having answered the

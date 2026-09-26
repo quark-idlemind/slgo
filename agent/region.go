@@ -54,13 +54,15 @@ type Region struct {
 	Protocols uint64
 }
 
-// regionState is the current region and a way to notice it changing.
+// regionState is the region's handshake as it arrived, kept whole.
+//
+// It is replaced when a handshake comes, as the object store is, so that
+// the two describe the same region.  What was decoded from it is
+// published apart from it, with its handle; see publishArrival.
 type regionState struct {
-	mu      sync.RWMutex
-	current Region
-	known   bool
+	mu sync.RWMutex
 
-	// handshake is the message as it arrived, kept whole.
+	// handshake is the message as it arrived.
 	//
 	// Region above is what this package needs and is not what a
 	// viewer needs: regionFromHandshake keeps twelve fields of a
@@ -76,24 +78,19 @@ type regionState struct {
 // Region returns what the simulator said about itself, and whether the
 // handshake has happened yet.
 //
-// The handle is filled in here rather than at handshake time.
-// RegionHandshake does not carry it: it arrives later, with
-// AgentMovementComplete, so recording it during the handshake records
-// a zero.
+// It is the region the avatar is in, handle and all: RegionHandshake
+// does not carry the handle, and the one here came with the
+// AgentMovementComplete that put the avatar in this region.  During a
+// move the new region's handshake waits for the movement, and until both
+// have come this is still the region being left; see arrival.  The
+// handle is zero only at login, between the first handshake and the
+// first movement.
 func (a *Agent) Region() (Region, bool) {
-	a.region.mu.RLock()
-	r, known := a.region.current, a.region.known
-	a.region.mu.RUnlock()
-	r.Handle = a.RegionHandle()
-	return r, known
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.here, a.introduced
 }
 
-// setRegion records a handshake and reports whether this is a
-// different region from the last one.
-//
-// The comparison is on the region id rather than the name: two regions
-// can share a name, and a region can be renamed without becoming a
-// different place.
 // Handshake is the RegionHandshake this region sent, or nil before it
 // has arrived.  It is the message itself so that it can be passed on
 // entire, rather than rebuilt from the part of it this package models.
@@ -108,15 +105,6 @@ func (a *Agent) setHandshake(m *msg.RegionHandshake) {
 	a.region.mu.Lock()
 	a.region.handshake = m
 	a.region.mu.Unlock()
-}
-
-func (a *Agent) setRegion(r Region) (changed bool) {
-	a.region.mu.Lock()
-	defer a.region.mu.Unlock()
-	changed = a.region.known && a.region.current.ID != r.ID
-	a.region.current = r
-	a.region.known = true
-	return changed
 }
 
 // first4 returns the RegionInfo4 block, which is variable and which

@@ -190,7 +190,6 @@ type Agent struct {
 	mu          sync.RWMutex
 	friends     map[msg.UUID]*Friend
 	look        Look
-	regionName  string
 	activeGroup msg.UUID
 	groups      []Group
 	regionFlags uint32
@@ -204,9 +203,14 @@ type Agent struct {
 
 	region regionState
 
+	// here is the region the session says the avatar is in, its handle
+	// included, and introduced whether a handshake has named one yet.
+	// Only publishArrival writes them.
+	here       Region
+	introduced bool
+
 	position msg.Vector3
 	lookAt   msg.Vector3
-	handle   uint64
 	channel  string
 	kicked   string
 
@@ -219,9 +223,9 @@ type Agent struct {
 // arrival is a region being arrived in, put together out of the two
 // messages that say so.
 //
-// The region's name comes in RegionHandshake and its handle and the
-// avatar's place in it in AgentMovementComplete, and the session is not
-// in the new region until it has both.  The simulator sends them in
+// The region's id and name come in RegionHandshake and its handle and
+// the avatar's place in it in AgentMovementComplete, and the session is
+// not in the new region until it has both.  The simulator sends them in
 // that order, and UDP does not deliver them in it: a trace on Agni
 // caught the handshake, seq=1, arriving 985ms behind the movement,
 // seq=2.  A session that took each as it came spent that second at the
@@ -232,14 +236,13 @@ type Agent struct {
 // the movement took to follow.
 //
 // So during a move neither is taken on its own.  Each is held here
-// until the other comes, and then the name, the handle and the position
-// become the session's together, under the one lock anything reading
-// them takes.
+// until the other comes, and then the region, its handle and the
+// position become the session's together, in publishArrival, under the
+// one lock anything reading them takes.
 type arrival struct {
-	// named says the handshake has come, and name is what it called
-	// the region.
-	named bool
-	name  string
+	// named says the handshake has come, and region is what it said.
+	named  bool
+	region Region
 
 	// moved is the movement, when it came first.
 	moved *msg.AgentMovementComplete
@@ -744,23 +747,24 @@ func (a *Agent) register() {
 
 	a.Disp.MustHandle("RegionHandshake", func(p *msg.Packet) {
 		m := p.Message.(*msg.RegionHandshake)
-		name := trimNul(m.RegionInfo.SimName)
+		r := regionFromHandshake(m)
 		var moved *msg.AgentMovementComplete
 		a.mu.Lock()
 		if e := a.entering; e != nil {
-			// A move's: the name waits for the movement, or the
+			// A move's: the region waits for the movement, or the
 			// movement that was waiting for it is taken below.
-			e.named, e.name = true, name
+			e.named, e.region = true, r
 			moved, e.moved = e.moved, nil
 		} else {
-			a.regionName = name
+			// This circuit's own region, so the handle held is its
+			// own or, at login, none yet: never another region's.
+			r.Handle = a.here.Handle
+			a.publishArrival(r, true, nil)
 		}
 		a.regionFlags = m.RegionInfo.RegionFlags
 		a.mu.Unlock()
 
-		r := regionFromHandshake(m)
 		a.setHandshake(m)
-		a.setRegion(r)
 		// Whichever region this is, its objects are kept apart from
 		// the last one's.  What tells anything ABOVE this package
 		// that the region changed is fired from
@@ -901,28 +905,24 @@ func (a *Agent) register() {
 // RegionHandshake handler for the other half, which calls this again
 // with the movement it held.  Outside a move -- the first arrival of a
 // session, or a second one in the region the avatar is already in --
-// the name is whatever the handshake last recorded, which is this
-// circuit's region's or, at login, nothing yet: never another region's.
+// the region is whatever the handshake last recorded, which is this
+// circuit's region or, at login, none yet: never another region.
 func (a *Agent) arrive(m *msg.AgentMovementComplete) {
 	a.mu.Lock()
+	r, known := a.here, a.introduced
 	if e := a.entering; e != nil {
 		if !e.named {
 			e.moved = m
 			a.mu.Unlock()
 			return
 		}
-		a.regionName = e.name
+		r, known = e.region, true
 		a.entering = nil
 	}
-	// The handle this session held until now, which is what says
-	// whether the avatar has arrived somewhere it was not, and the name
-	// of the region it has arrived in; both are read under the lock
-	// that writes the place, so that the three cannot be of two regions.
-	was, name := a.handle, a.regionName
-	a.position = m.Data.Position
-	a.lookAt = m.Data.LookAt
-	a.handle = m.Data.RegionHandle
-	a.channel = trimNul(m.SimData.ChannelVersion)
+	r.Handle = m.Data.RegionHandle
+	// was is the handle held until now, which is what says whether the
+	// avatar has arrived somewhere it was not.
+	was := a.publishArrival(r, known, m)
 	a.mu.Unlock()
 	a.setCenter(m.Data.Position)
 	a.inRegion.fire()
@@ -931,7 +931,27 @@ func (a *Agent) arrive(m *msg.AgentMovementComplete) {
 	if s := a.arrived.Load(); s != nil {
 		s.fire()
 	}
-	a.regionChanged(was, m.Data.RegionHandle, name)
+	a.regionChanged(was, r.Handle, r.Name)
+}
+
+// publishArrival makes r the region the session says the avatar is in,
+// with the handle r carries, and known says whether a handshake has
+// named it.  Given a movement, it takes the avatar's place from m in the
+// same moment.  It returns the handle held before.  The caller holds
+// a.mu.
+//
+// Region, RegionName, RegionHandle and Here read what this writes, under
+// the same lock, so none of them can answer with one region's id or name
+// beside another's handle or place.  See arrival.
+func (a *Agent) publishArrival(r Region, known bool, m *msg.AgentMovementComplete) (was uint64) {
+	was = a.here.Handle
+	a.here, a.introduced = r, known
+	if m != nil {
+		a.position = m.Data.Position
+		a.lookAt = m.Data.LookAt
+		a.channel = trimNul(m.SimData.ChannelVersion)
+	}
+	return was
 }
 
 func (a *Agent) handshake(ctx context.Context, timeout time.Duration) error {
@@ -1028,7 +1048,6 @@ func (a *Agent) Err() error {
 	return nil
 }
 
-// RegionName is the simulator'a name, once RegionHandshake has arrived.
 // Group is one of the avatar's memberships.
 type Group struct {
 	ID     msg.UUID
@@ -1080,10 +1099,11 @@ func (a *Agent) ActiveGroup() msg.UUID {
 	return a.activeGroup
 }
 
+// RegionName is the name of the region the avatar is in; see Region.
 func (a *Agent) RegionName() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	return a.regionName
+	return a.here.Name
 }
 
 // Position is where the avatar is.
@@ -1123,7 +1143,7 @@ func (a *Agent) Position() msg.Vector3 {
 // them under.
 func (a *Agent) Here() (at msg.Vector3, handle uint64, region string) {
 	a.mu.RLock()
-	at, handle, region = a.position, a.handle, a.regionName
+	at, handle, region = a.position, a.here.Handle, a.here.Name
 	a.mu.RUnlock()
 	return a.seated(at), handle, region
 }
@@ -1160,7 +1180,7 @@ func (a *Agent) ChannelVersion() string {
 func (a *Agent) RegionHandle() uint64 {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	return a.handle
+	return a.here.Handle
 }
 
 // WaitForRegionHandshake blocks until the simulator has introduced the

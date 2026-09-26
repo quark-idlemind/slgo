@@ -168,7 +168,7 @@ func (s *socket) Close() error {
 // The region's own facts need nothing here but the one mark that a move
 // is arriving.  The new simulator sends a RegionHandshake like any
 // other, and the handler for it already swaps the object store, drops
-// the terrain and the appearances and records the flags; the name it
+// the terrain and the appearances and records the flags; the region it
 // holds with the movement until both have come, which is what the mark
 // is for.
 func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) error {
