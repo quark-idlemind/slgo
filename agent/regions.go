@@ -146,11 +146,15 @@ func (a *Agent) enterRegion(region msg.UUID) {
 
 	// The land of the region just left describes somewhere else.  It
 	// is dropped on a crossing and not on the first handshake, where
-	// patches may already have arrived ahead of it.
+	// patches may already have arrived ahead of it.  So are the local
+	// ids asked about there: each region numbers its own objects.
 	if !first {
 		a.terrain.forget()
 		a.appearance.forget()
 		a.parcels.forget()
+		a.askedMu.Lock()
+		a.asked = nil
+		a.askedMu.Unlock()
 	}
 
 	if a.regions == nil {

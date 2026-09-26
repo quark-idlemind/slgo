@@ -676,7 +676,47 @@ func TestSomethingThatMovesIntoRangeIsAskedAbout(t *testing.T) {
 	}
 }
 
-// TestAParentNothingDescribedIsAskedFor: a child names its parent by
+// TestALocalIdIsAskedAboutAgainInTheNextRegion: local ids are each
+// region's own numbering, so having asked about 4242 in the region left
+// says nothing about the 4242 in the region entered.
+func TestALocalIdIsAskedAboutAgainInTheNextRegion(t *testing.T) {
+	t.Parallel()
+
+	a, sent := offlineSession(t)
+	a.SetLook(Look{Center: msg.Vector3{X: 100, Y: 100, Z: 2000}, Far: 128})
+	a.enterRegion(msg.MustParseUUID("4fc67e57-7e57-c0de-34bf-817c02bfddc1"))
+
+	m := &msg.ImprovedTerseObjectUpdate{}
+	m.ObjectData = []msg.ImprovedTerseObjectUpdate_ObjectData{
+		{Data: terseBlob(4242, msg.Vector3{X: 101, Y: 101, Z: 2001})},
+	}
+	asked := func() []uint32 {
+		var out []uint32
+		for _, sm := range sent.messages(t) {
+			if r, ok := sm.(*msg.RequestMultipleObjects); ok {
+				for _, d := range r.ObjectData {
+					out = append(out, d.ID)
+				}
+			}
+		}
+		return out
+	}
+
+	feed(t, a, m)
+	sent.waitFor(t, 1)
+	if got := asked(); len(got) != 1 {
+		t.Fatalf("asked about %v in the first region, want 4242 once", got)
+	}
+
+	a.enterRegion(msg.MustParseUUID("503a7e57-7e57-c0de-a24e-aaab5ca4ff8e"))
+	feed(t, a, m)
+	sent.waitFor(t, 2)
+	if got := asked(); len(got) != 2 || got[1] != 4242 {
+		t.Errorf("asked about %v, want 4242 again in the new region", got)
+	}
+}
+
+// TestAParentNothingDescribedIsAskedFor:a child names its parent by
 // local id alone, and the region describes each object once.  A parent
 // whose description was lost is never sent again unasked, and nothing
 // under it can be placed -- a seat, and the avatar on it, and what the

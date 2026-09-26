@@ -106,7 +106,8 @@ type Agent struct {
 
 	// asked remembers which local ids were recently asked about, so
 	// that something moving on the edge of the draw distance is not
-	// asked for several times a second.  See askAgain.
+	// asked for several times a second.  Forgotten on entering another
+	// region.  See askAgain.
 	askedMu sync.Mutex
 	asked   map[uint32]time.Time
 
