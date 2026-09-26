@@ -164,3 +164,37 @@ as well.
 
 So a program run for a command leads a process group of its own, and
 stopping it signals the whole group.
+
+## Who an avatar answers is one decision
+
+`Audience` is a function and not a lookup at the call site,
+deliberately. The list in the configuration is the FIRST answer to the
+question rather than the last one: whether to answer somebody is the
+kind of decision that will want to weigh who they are, what they said,
+how often they have said it today, whether this avatar is in the middle
+of something, and whether the region is one to be talking in at all.
+Every one of those wants to arrive at one decision with one place to
+change it, rather than as another condition bolted onto the message
+handler -- which is where such conditions go when there is no obvious
+place for them, and where they are impossible to find afterwards.
+
+So the message handler asks one question and gets one answer, and what
+is behind it can grow without anything above it moving.
+
+## A character composes itself
+
+A backstory directory gives a person one file -- theirs, or the default
+-- and what that file includes is its own business. Composition belongs
+to the file rather than to the code. Joining two files in a fixed order
+can only ever say one thing -- the character, then the person -- and
+the useful arrangements are not all that shape: the shared part often
+wants to come LAST, nearest the conversation, where a model weighs
+hardest; two people may share a third file that is neither of those;
+and a paragraph several characters have in common should be written
+once. An include says all of them and a rule in the code says one.
+
+What it costs is that a person's file can forget the character and
+nothing will say so -- an avatar that is suddenly nobody, quietly. That
+is the price of the file deciding, and `slbotd --check` assembles every
+character so the answer is at least visible before anybody is logged
+in.

@@ -4,18 +4,10 @@ package main
 //
 // This is a function and not a lookup at the call site, deliberately.
 // The list in the configuration is the FIRST answer to the question
-// rather than the last one: whether to answer somebody is the kind of
-// decision that will want to weigh who they are, what they said, how
-// often they have said it today, whether this avatar is in the middle
-// of something, and whether the region is one to be talking in at all.
-// Every one of those wants to arrive here, at one decision with one
-// place to change it, rather than as another condition bolted onto the
-// message handler -- which is where such conditions go when there is no
-// obvious place for them, and where they are impossible to find
-// afterwards.
-//
-// So the message handler asks one question and gets one answer, and
-// what is behind it can grow without anything above it moving.
+// rather than the last one, and whatever else comes to weigh on it
+// arrives here, at one decision with one place to change it, rather
+// than as another condition bolted onto the message handler.
+// Why: doc/slbotd.md#who-an-avatar-answers-is-one-decision
 
 import (
 	"context"
