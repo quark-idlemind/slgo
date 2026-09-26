@@ -133,6 +133,13 @@ var (
 	SeatWatch  = 30 * time.Second
 )
 
+// seatPace is the four above, read once as a loop starts, so that a test
+// putting them back afterwards does not race a loop still running.
+type seatPace struct {
+	settle, retry, watch time.Duration
+	tries                int
+}
+
 // keepSeat starts the loop that puts this avatar back on what it was
 // sitting on, and then watches for it to sit on something else.
 //
@@ -151,20 +158,21 @@ func (h *Hosted) keepSeat(ctx context.Context) {
 	h.seating = cancel
 	h.mu.Unlock()
 
-	go h.seatward(ctx)
+	pace := seatPace{settle: SeatSettle, retry: SeatRetry, watch: SeatWatch, tries: SeatTries}
+	go h.seatward(ctx, pace)
 }
 
 // seatward restores the remembered seat and then keeps the memory up to
 // date.
-func (h *Hosted) seatward(ctx context.Context) {
+func (h *Hosted) seatward(ctx context.Context, pace seatPace) {
 	want := h.seats.Seat(h.Name)
 	if !want.IsZero() {
-		if !sleepFor(ctx, SeatSettle) {
+		if !sleepFor(ctx, pace.settle) {
 			return
 		}
-		h.resit(ctx, want)
+		h.resit(ctx, want, pace)
 	}
-	h.watchSeat(ctx)
+	h.watchSeat(ctx, pace)
 }
 
 // resit asks to sit on what was remembered, until it works or until
@@ -181,8 +189,8 @@ func (h *Hosted) seatward(ctx context.Context) {
 // only on the sixth and last attempt, eighty-five seconds in, because
 // each round was waiting to recognise an object rather than to see the
 // avatar sit down.  It had actually sat within seconds.
-func (h *Hosted) resit(ctx context.Context, want msg.UUID) {
-	for attempt := 0; attempt < SeatTries; attempt++ {
+func (h *Hosted) resit(ctx context.Context, want msg.UUID, pace seatPace) {
+	for attempt := 0; attempt < pace.tries; attempt++ {
 		if local, known := h.seatedLocal(); known && local != 0 {
 			h.saySeated(want, local, attempt)
 			return
@@ -199,7 +207,7 @@ func (h *Hosted) resit(ctx context.Context, want msg.UUID) {
 		if err := a.Send.Send(ctx, m); err != nil {
 			return
 		}
-		if !sleepFor(ctx, SeatRetry) {
+		if !sleepFor(ctx, pace.retry) {
 			return
 		}
 	}
@@ -207,7 +215,7 @@ func (h *Hosted) resit(ctx context.Context, want msg.UUID) {
 	// an avatar standing where it used to sit is a thing somebody will
 	// otherwise wonder about.
 	h.logf("could not sit on %s again after %d attempts; it may no longer be there",
-		want, SeatTries)
+		want, pace.tries)
 }
 
 // saySeated reports what the avatar ended up on, in whatever detail is
@@ -263,9 +271,9 @@ func (h *Hosted) seatedLocal() (uint32, bool) {
 // What is remembered is read afresh each round rather than kept here,
 // because the other source writes to it too and a copy held in this
 // loop would go stale the moment it did.
-func (h *Hosted) watchSeat(ctx context.Context) {
+func (h *Hosted) watchSeat(ctx context.Context, pace seatPace) {
 	for {
-		if !sleepFor(ctx, SeatWatch) {
+		if !sleepFor(ctx, pace.watch) {
 			return
 		}
 		on, known := h.currentSeat()

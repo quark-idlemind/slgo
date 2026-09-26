@@ -353,7 +353,13 @@ func TestStartAgentWatchesWhatTheAvatarSends(t *testing.T) {
 		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
 		agent.Options{
 			Timeout: 10 * time.Second, SkipCaps: true, Idle: -1,
-			SendTap: func(*msg.Packet) { mine.Add(1) },
+			// Only the lure: the session sends other things of its own
+			// meanwhile, and counting those made this fail under load.
+			SendTap: func(p *msg.Packet) {
+				if p.ID == msg.IDOf(&msg.TeleportLureRequest{}) {
+					mine.Add(1)
+				}
+			},
 		})
 	if err != nil {
 		t.Fatal(err)
