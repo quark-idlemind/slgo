@@ -394,6 +394,8 @@ type Options struct {
 	// see Neighbours -- but only as they stand: a circuit that opened
 	// and closed between two of a client's questions was never there
 	// as far as the listing is concerned, and this is where it went.
+	// So is a DisableSimulator from the region the avatar is in, which
+	// a viewer would end the session over and this session does not.
 	Log func(format string, v ...any)
 
 	// Idle ends the session when nothing has arrived from the
@@ -925,6 +927,22 @@ func (a *Agent) register() {
 		a.kicked = reason
 		a.mu.Unlock()
 		a.fail(&Kicked{Reason: reason})
+	}, msg.Inline())
+
+	// The simulator the avatar is in disabling its circuit.  A viewer
+	// ends the session over one (LLWorld::removeRegion,
+	// newview/llworld.cpp:688-709); none has been seen from the region
+	// the avatar is in, so it is said and nothing is ended, and a
+	// simulator that has really let go falls silent for the watchdog.
+	// A child's comes on its own circuit and dispatcher: openNeighbour.
+	// Why: doc/history/neighbours.md#a-disablesimulator-on-the-root-circuit
+	a.Disp.MustHandle("DisableSimulator", func(p *msg.Packet) {
+		a.mu.RLock()
+		here := a.here
+		a.mu.RUnlock()
+		a.logf("region %s %s at %s: the simulator the avatar is in sent DisableSimulator; "+
+			"a viewer would end the session here, and this one is carrying on",
+			quoted(here.Name), gridSquare(here.Handle), p.Addr)
 	}, msg.Inline())
 }
 

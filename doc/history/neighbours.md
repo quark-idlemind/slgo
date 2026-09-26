@@ -357,6 +357,34 @@ Checked on Agni on 2026-09-26, after the change, with `slgod
 This was one round trip. It is the case that failed before: a quick
 return, with the circuits still up.
 
+### A DisableSimulator on the root circuit
+
+The viewer takes a `DisableSimulator` the same way whichever circuit
+brings it: `process_disable_simulator` (`newview/llworld.cpp:1715`)
+hands the sender to `LLWorld::removeRegion`, and when that is the
+region the agent is in, `removeRegion` removes nothing and
+force-disconnects, "You have been disconnected"
+(`llworld.cpp:688-709`).
+
+slgo says so and ends nothing. One on the root circuit is logged in one
+line -- the region's name and square, the simulator's address, and
+that a viewer would end the session here -- and the session goes on,
+with no logout, no reconnect, and its children left alone. The message
+is still relayed as before, to a client that subscribed to it and to an
+attached viewer, whose own handler, reading its code, would then
+disconnect it. A simulator that has really let go stops sending, and
+the idle watchdog ends the session then, as for any circuit gone quiet.
+
+None has been seen from the region the avatar is in, so what one would
+mean there is not known, and nothing is ended until one has been. The
+one seen on a root circuit is stage 0's in `doc/history/teleport.md`,
+from the region left behind by a teleport slgo did not then follow; a
+viewer, having followed it, would have removed that region quietly. A
+move now swaps the root's socket as it begins, and nothing more is read
+from the region left. Inferred from the code rather than seen: a
+session that does not poll the event queue follows no teleport, and
+would log that one here.
+
 ### Walking back over a border soon after crossing it
 
 Measured on Agni on 2026-09-26, with `slgod -neighbours` and a scratch

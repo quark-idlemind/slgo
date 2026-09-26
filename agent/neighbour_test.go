@@ -789,10 +789,71 @@ func TestADisableSimulatorClosesThatChild(t *testing.T) {
 		t.Fatalf("a neighbour's DisableSimulator ended the session: %v", a.Err())
 	default:
 	}
+	if lines := said.saying("sent DisableSimulator"); len(lines) != 0 {
+		t.Errorf("a neighbour's DisableSimulator was taken for the root's: %v", lines)
+	}
 
 	from.eq.push("EnableSimulator", enableSimulator(millAt, mill.addr()))
 	waitFor(t, "the region to be dialled again", func() bool { return dialled(mill) == 2 })
 	waitFor(t, "the region to be held again", func() bool { return len(a.Neighbours()) == 2 })
+}
+
+// TestADisableSimulatorOnTheRootIsSaidAndEndsNothing: a viewer ends the
+// session when the region the avatar is in disables its circuit, and
+// none has been seen, so this session says so in one line and carries
+// on.  The root circuit still carries messages, the session has not
+// ended, and the child held is left alone.
+func TestADisableSimulatorOnTheRootIsSaidAndEndsNothing(t *testing.T) {
+	var said logLines
+	a, from, _ := twoRegions(t, Options{
+		Neighbours: true,
+		OnEvent:    func(string, []byte) {},
+		Log:        said.log,
+	})
+	mill, millAt := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+	from.eq.push("EnableSimulator", enableSimulator(millAt, mill.addr()))
+	waitFor(t, "the neighbour to be held", func() bool { return len(a.Neighbours()) == 1 })
+	root := a.sock.conn.Load()
+
+	from.sim.send(&msg.DisableSimulator{}, msg.FlagReliable)
+
+	waitFor(t, "the DisableSimulator to be said", func() bool {
+		return len(said.saying("sent DisableSimulator")) > 0
+	})
+	lines := said.saying("sent DisableSimulator")
+	if len(lines) != 1 {
+		t.Fatalf("said %d times: %v", len(lines), lines)
+	}
+	for _, want := range []string{
+		quoted(from.sim.regionNm),
+		gridSquare(msg.RegionHandle(43648, 43648)),
+		from.sim.addr().String(),
+		"a viewer would end the session",
+	} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("the line %q does not say %q", lines[0], want)
+		}
+	}
+
+	// Still the circuit the avatar is in, and still carrying messages.
+	if err := a.Send.Send(context.Background(), &msg.AgentPause{}); err != nil {
+		t.Fatal(err)
+	}
+	from.sim.waitSeen(t, "AgentPause", 5*time.Second)
+	select {
+	case <-a.Done():
+		t.Fatalf("the root's DisableSimulator ended the session: %v", a.Err())
+	default:
+	}
+	if givenBack(root) || a.sock.conn.Load() != root {
+		t.Error("the root circuit's socket was closed or replaced")
+	}
+	if got := a.Neighbours(); len(got) != 1 || got[0].Handle != millAt {
+		t.Errorf("Neighbours = %+v, want the child left alone", got)
+	}
+	if closed := said.saying("circuit closed"); len(closed) != 0 {
+		t.Errorf("the root's DisableSimulator closed a child: %v", closed)
+	}
 }
 
 // TestAReOfferAtAnotherAddressReplacesTheChild: an offer of a region
