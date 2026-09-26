@@ -787,6 +787,14 @@ func TestReconnect(t *testing.T) {
 		t.Errorf("stats = %+v", st)
 	}
 
+	// A reconnect is the same Hosted carrying on, not one that ended,
+	// so nothing has told its streams to end.
+	select {
+	case <-h.ended():
+		t.Error("a reconnect ended the session's streams")
+	default:
+	}
+
 	// The client kept its stream and its subscription: a message on
 	// the new circuit still reaches it.
 	deadline = time.Now().Add(5 * time.Second)

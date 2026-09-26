@@ -570,3 +570,116 @@ func TestAnEmptyNameStaysWithTheSessionItGot(t *testing.T) {
 		t.Errorf("Status says the session is %v, want STOPPED", a.GetState())
 	}
 }
+
+// TestLoggingOutEndsTheStreamsOnIt: a session put down on purpose is not
+// coming back on its own, so a client attached to it is told so by its
+// stream ending, in the words a new attach to it is refused with.
+//
+// The stream used to stay open, and a client learnt nothing from it:
+// slbotd sat on one believing it was attached until the daemon was
+// restarted.
+func TestLoggingOutEndsTheStreamsOnIt(t *testing.T) {
+	r := newRig(t, nil)
+	c := r.dial(t)
+	defer c.Close()
+	h, _ := r.srv.Agent("example")
+	ctx := context.Background()
+
+	if _, err := r.srv.Logout(ctx, &pb.LogoutRequest{Agent: "example", Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-c.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream outlived a session that was logged out")
+	}
+	ended := c.Err()
+	if status.Code(ended) != codes.FailedPrecondition {
+		t.Fatalf("the stream ended with %v, want FailedPrecondition", ended)
+	}
+
+	// Told why first: the notice was queued before the end, and goes
+	// out ahead of it.
+	told := false
+	for n := range c.Notices() {
+		told = told || n.GetKind() == pb.AgentEvent_DISCONNECTED
+	}
+	if !told {
+		t.Error("the stream ended without the notice saying why")
+	}
+
+	// In the words a new attach is refused with, so that a client
+	// hears the one thing the one way whichever it was doing.
+	again, err := client.Dial(ctx, r.ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Close()
+	_, refused := again.Attach(ctx, "example")
+	got, want := status.Convert(ended).Message(), status.Convert(refused).Message()
+	if got != want || !strings.Contains(got, "it will not come back on its own") {
+		t.Errorf("the stream ended with %q, and an attach is refused with %q", got, want)
+	}
+
+	// And the client is let go of, as one that hung up is.
+	waitFor(t, 5*time.Second, "the client to be let go", func() bool { return h.ClientCount() == 0 })
+}
+
+// TestRemovingASessionEndsTheStreamsOnIt: a name the server no longer
+// holds may be hosted again by a new login.  A client left on the old
+// stream would be held by a session nothing holds while its calls by
+// name reached the new one, so the stream ends, and a client wanting the
+// new session attaches again.
+//
+// Carrying the stream over to the new session is not done: ending it
+// tells a client what a new attach would, the same way.
+func TestRemovingASessionEndsTheStreamsOnIt(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+	var logins atomic.Int64
+	srv := startable(t, loginServer(t, sim, &logins, nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv.SetBase(ctx, nil, nil)
+
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	old, _ := srv.Agent("example")
+	r := &rig{srv: srv}
+	r.serve(t)
+	c := r.dial(t)
+	defer c.Close()
+
+	// Up, not stopped: the one case where nothing but the removal can
+	// say the session is gone.
+	if _, ok := srv.Remove("example"); !ok {
+		t.Fatal("nothing was removed")
+	}
+	select {
+	case <-c.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream outlived its session being removed")
+	}
+	st := status.Convert(c.Err())
+	if st.Code() != codes.FailedPrecondition ||
+		st.Message() != "example is not connected (no longer hosted here); it will not come back on its own" {
+		t.Errorf("the stream ended with %v", c.Err())
+	}
+
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	now, _ := srv.Agent("example")
+	if now == old {
+		t.Fatal("the name was not hosted again")
+	}
+	fresh := r.dial(t)
+	defer fresh.Close()
+	waitFor(t, 5*time.Second, "the old session to let its client go", func() bool {
+		return old.ClientCount() == 0
+	})
+	if n := now.ClientCount(); n != 1 {
+		t.Errorf("the new session has %d clients, want the one that attached to it", n)
+	}
+}

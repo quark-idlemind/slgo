@@ -381,8 +381,7 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 	// nothing.  Being told why beats a session that looks fine and is
 	// not.
 	if why := h.Down(); why != "" {
-		return status.Errorf(codes.FailedPrecondition,
-			"%s is not connected (%s); it will not come back on its own", h.Name, why)
+		return notComingBack(h.Name, why)
 	}
 
 	c := &Client{
@@ -416,14 +415,18 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 		return err
 	}
 
-	// The stream deliberately does not watch the agent.  A session
-	// that ends is re-established under it, and the client keeps
-	// its stream and its subscriptions across that; it learns what
-	// happened from the events Hosted.notify sends.
+	// The stream watches the Hosted and not the agent.  A session that
+	// drops is re-established under the same Hosted, and the client
+	// keeps its stream and its subscriptions across that, learning what
+	// happened from the events Hosted.notify sends.  One that is
+	// finished with for good ends the stream with the refusal a new
+	// attach to it would get, so that a client is not left holding a
+	// session that is never coming back.
 	//
 	// One goroutine reads what the client sends; this one writes.
 	errc := make(chan error, 1)
 	go func() { errc <- s.streamRecv(ctx, stream, c, h) }()
+	ended := h.ended()
 
 	for {
 		select {
@@ -438,8 +441,25 @@ func (s *Server) Stream(stream pb.Grid_StreamServer) error {
 			if err := stream.Send(p); err != nil {
 				return err
 			}
+		case <-ended:
+			// What was queued before the end goes out first -- the
+			// notice saying why, above all.  Only what is queued now:
+			// a removed session may still be relaying.
+			for n := len(c.out); n > 0; n-- {
+				if err := stream.Send(<-c.out); err != nil {
+					return err
+				}
+			}
+			return notComingBack(h.Name, h.whyEnded())
 		}
 	}
+}
+
+// notComingBack is the refusal for a session that is down for good,
+// given alike to an attach and to a stream the session ended under.
+func notComingBack(name, why string) error {
+	return status.Errorf(codes.FailedPrecondition,
+		"%s is not connected (%s); it will not come back on its own", name, why)
 }
 
 func (s *Server) streamRecv(ctx context.Context, stream pb.Grid_StreamServer, c *Client, h *Hosted) error {
