@@ -118,3 +118,49 @@ So it is said, loudly, every time the daemon starts and again whenever
 anybody asks; and the avatars are attended. Silence was never the
 alternative: a setting that does nothing and says nothing is the fault
 this used to be trying to prevent.
+
+## Waiting for a stopped avatar
+
+An attendant whose avatar somebody stopped on purpose watches for it
+to be started again, and it polls rather than being pushed to, and that
+is deliberate. An attendant with no session has no stream to be told
+anything on -- slgod's notices travel to the clients attached to an
+agent, and this one is attached to nothing -- so being "informed" would
+mean a new daemon-wide event channel. A read every half minute achieves
+the same thing, costs one small call, and is self-healing in the two
+ways a stream is not: it works when this daemon started AFTER the
+logout, with no event to have missed, and it needs no reconnecting when
+slgod itself restarts.
+
+## Putting the outfit back on
+
+The simulator puts most of an avatar's attachments back by itself at
+login, but not all of them, and a viewer covers the gap; what was
+measured is in `sl/wearable.go`. slbotd did not, so every time slgod
+restarted the avatars it holds came back missing part of their outfits
+-- a head of hair, a dress -- and stayed that way until somebody
+noticed and dressed them by hand.
+
+A pass that fails outright is tried again rather than given up on. The
+session an attach lands on can be one about to be replaced --
+measured: a first session silent from the start, whose inventory
+capability answered 404, re-established 74 seconds later -- and giving
+up on the first error left that avatar missing part of its outfit until
+the next restart.
+
+## Stopping a program and what it started
+
+`exec.CommandContext` on its own kills the one process it started and
+nothing else. A program that is a shell script -- or anything else that
+starts children -- leaves those children running, and they hold the
+other end of the output pipe, so `Wait` goes on waiting for them: the
+run's deadline passes, the script is killed, and the answer still does
+not come until the last grandchild exits on its own. Measured
+2026-09-23 with a script that was only "sleep 7": killed at 200 ms,
+`Run` returned after 7.0 s on an M1 Max. The same script on an Intel i9
+returned at 200 ms, but only because its /bin/sh had not yet started
+the sleep (about 350 ms there); killed at 1 s, it waited the full 7 s
+as well.
+
+So a program run for a command leads a process group of its own, and
+stopping it signals the whole group.

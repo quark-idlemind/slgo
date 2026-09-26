@@ -7,11 +7,9 @@ package main
 // attachment point, and an outfit that has several on one point comes
 // back without the rest.  See the note in sl/wearable.go for what was
 // measured.  A viewer covers the gap by putting on, once the Current
-// Outfit folder has loaded, whatever it names that is not on.
-//
-// Nothing here did, so every time slgod restarted the avatars it holds
-// came back missing part of their outfits -- a head of hair, a dress --
-// and stayed that way until somebody noticed and dressed them by hand.
+// Outfit folder has loaded, whatever it names that is not on, and so
+// does this.
+// Why: doc/slbotd.md#putting-the-outfit-back-on
 //
 // This is the attendant's job rather than slgod's because the work is
 // inventory work, and this side is where inventory is understood: the
@@ -69,13 +67,9 @@ func (b *bot) keepDressed(ctx context.Context, s *sl.Session) {
 	for pass := 0; pass < DressPasses; pass++ {
 		report, err := s.RestoreOutfit(ctx, 0)
 		if err != nil {
-			// Tried again rather than given up on.  The session an
-			// attach lands on can be one about to be replaced --
-			// measured: a first session silent from the start, whose
-			// inventory capability answered 404, re-established 74
-			// seconds later -- and giving up on the first error left
-			// that avatar missing part of its outfit until the next
-			// restart.
+			// Tried again rather than given up on: the session an
+			// attach lands on can be one about to be replaced.
+			// Why: doc/slbotd.md#putting-the-outfit-back-on
 			b.errf("cannot put the outfit back on: %v", err)
 			if !time.Now().Before(giveUp) || !sleep(ctx, DressRetry) {
 				return
