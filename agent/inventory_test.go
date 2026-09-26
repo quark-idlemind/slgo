@@ -774,6 +774,56 @@ func TestADeeperReadingIsWholeDownToItsDepth(t *testing.T) {
 	wantHolds(t, s.Inventory, grandkid, "the grandchild, read", uid(102))
 }
 
+// TestADeeperReadingOfAMove: one reply to ?depth=1 reads whole both the
+// folder a folder left and the one it went to, and names the one that
+// moved without its contents.  It keeps them, whichever of its two
+// parents the reply is read in first; a folder the reply no longer
+// names anywhere goes, with what was in it.  The parents are read in
+// map order, so each round is a fresh draw of it.
+func TestADeeperReadingOfAMove(t *testing.T) {
+	root, from, to, moved, gone := uid(0), uid(1), uid(2), uid(3), uid(4)
+	inside, lost, thing := uid(100), uid(101), uid(102)
+	a := newAIS()
+	hs := httptest.NewServer(a.handler())
+	defer hs.Close()
+	ctx := context.Background()
+
+	for range 32 {
+		a.folder(root, "My Inventory", "", []string{from, to}, nil)
+		a.folder(from, "From", root, []string{moved, gone}, []string{thing})
+		a.folder(to, "To", root, nil, nil)
+		a.folder(moved, "Moved", from, nil, []string{inside})
+		a.folder(gone, "Gone", from, nil, []string{lost})
+		s := invSession(hs.URL, msg.MustParseUUID(root))
+		if err := s.FetchInventory(ctx, FetchOptions{}); err != nil {
+			t.Fatal(err)
+		}
+
+		a.folder(from, "From", root, nil, nil)
+		a.folder(to, "To", root, []string{moved}, []string{thing})
+		a.folder(moved, "Moved", to, nil, []string{inside})
+		if err := FetchFolderDepth(ctx, s, s.Inventory, msg.MustParseUUID(root), 1); err != nil {
+			t.Fatal(err)
+		}
+
+		wantHolds(t, s.Inventory, from, "the folder it left")
+		wantHolds(t, s.Inventory, to, "the folder it went to", moved, thing)
+		wantHolds(t, s.Inventory, moved, "the folder that moved", inside)
+		if _, ok := s.Inventory.Folder(msg.MustParseUUID(gone)); ok {
+			t.Error("the folder that went is still known")
+		}
+		if _, ok := s.Inventory.Item(msg.MustParseUUID(lost)); ok {
+			t.Error("the item that was in the folder that went is still known")
+		}
+		if folders, items := s.Inventory.Counts(); folders != 4 || items != 2 {
+			t.Errorf("%d folders and %d items, want 4 and 2", folders, items)
+		}
+		if t.Failed() {
+			return
+		}
+	}
+}
+
 // TestAPartOfAFolderIsNotTakenForAllOfIt: only a listing that is plainly
 // the whole of a folder loses anything from it.  The viewer takes a
 // folder's contents as known only when AIS sends categories, items and

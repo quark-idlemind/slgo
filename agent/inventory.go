@@ -72,7 +72,9 @@ type Item struct {
 // folder whose whole contents are read -- by FetchInventory, FetchFolder,
 // or FetchFolderDepth down to the depth asked for -- no longer lists
 // what has gone from it, and what has gone is forgotten: a folder, with
-// everything under it.
+// everything under it.  What one reply shows in another folder has
+// moved, and is not forgotten, even where the same reply reads the
+// folder it left.
 type Inventory struct {
 	mu      sync.RWMutex
 	root    msg.UUID
@@ -243,19 +245,18 @@ func (inv *Inventory) putItem(i *Item) {
 	inv.contents[i.ParentID] = append(inv.contents[i.ParentID], i.ID)
 }
 
-// keepOnly takes out of a folder every child folder and item it lists
-// that is not in listed, which is what a full reading of it found.
-// Each is listed nowhere else, so its record goes too.  The caller
-// holds mu.
-func (inv *Inventory) keepOnly(folder msg.UUID, listed map[msg.UUID]bool) {
-	for _, id := range slices.Clone(inv.children[folder]) {
+// keepOnly notes in r, for take to drop, every child folder and item a
+// folder lists that is not in listed, which is what a full reading of
+// it found.  The caller holds mu.
+func (inv *Inventory) keepOnly(folder msg.UUID, listed map[msg.UUID]bool, r *reply) {
+	for _, id := range inv.children[folder] {
 		if !listed[id] {
-			inv.dropFolder(id)
+			r.folders = append(r.folders, id)
 		}
 	}
-	for _, id := range slices.Clone(inv.contents[folder]) {
+	for _, id := range inv.contents[folder] {
 		if !listed[id] {
-			inv.dropItem(id)
+			r.items = append(r.items, id)
 		}
 	}
 }
@@ -502,14 +503,29 @@ func fetchDepth(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID, dep
 	return inv.take(id, m, depth), nil
 }
 
+// reply is what one reply put into the tree, and what the folders it
+// read whole no longer list.
+type reply struct {
+	put            map[msg.UUID]bool
+	folders, items []msg.UUID
+}
+
 // take records a reply to a request for a folder's children at a depth,
 // returning the child folders found.  It holds the lock throughout, so
 // nothing reads a reply half recorded, and a folder's listing is set
 // against the tree as it is.
+//
+// What a folder read whole no longer lists is dropped once the whole
+// reply is in, and only if the reply did not put it somewhere else: a
+// folder can leave one parent for another within one reply, and the
+// two are read in map order.  The viewer too applies a reply only once
+// it has read all of it, and deletes last (llaisapi.cpp:850-851,
+// 1778-1784).
 func (inv *Inventory) take(id msg.UUID, m map[string]any, depth int) []msg.UUID {
 	inv.mu.Lock()
 	defer inv.mu.Unlock()
 
+	r := &reply{put: map[msg.UUID]bool{}}
 	// The folder describes itself at the top level.  There is no key to
 	// fall back on here -- this is the body of the reply, not an entry
 	// in a map -- so one that does not name itself is passed over, and
@@ -517,25 +533,38 @@ func (inv *Inventory) take(id msg.UUID, m map[string]any, depth int) []msg.UUID 
 	self := folderFrom(m)
 	if !self.ID.IsZero() {
 		inv.putFolder(self)
+		r.put[self.ID] = true
 	}
 	folder := id
 	if self.ID != id {
 		folder = msg.UUID{}
 	}
-	return absorb(inv, folder, llsd.Map(m["_embedded"]), 0, depth)
+	kids := absorb(inv, r, folder, llsd.Map(m["_embedded"]), 0, depth)
+	for _, gone := range r.folders {
+		if !r.put[gone] {
+			inv.dropFolder(gone)
+		}
+	}
+	for _, gone := range r.items {
+		if !r.put[gone] {
+			inv.dropItem(gone)
+		}
+	}
+	return kids
 }
 
 // absorb records what an _embedded map holds and returns the child
 // folders found at this level.  The map is what folder holds, level
 // folders below the one a request at depth asked for; a zero folder is
-// one the reply did not name.  The caller holds inv.mu.
+// one the reply did not name.  What it puts, and what a folder it reads
+// whole no longer lists, it notes in r.  The caller holds inv.mu.
 //
 // It recurses, which is the whole point of asking for a depth: a reply
 // to depth=2 nests each child category's own _embedded inside it, and
 // reading only the outer one throws away everything the extra round
 // trip was avoided for.  The request costs the same either way; the
 // difference is only whether the answer is kept.
-func absorb(inv *Inventory, folder msg.UUID, emb map[string]any, level, depth int) []msg.UUID {
+func absorb(inv *Inventory, r *reply, folder msg.UUID, emb map[string]any, level, depth int) []msg.UUID {
 	if emb == nil {
 		return nil
 	}
@@ -557,11 +586,12 @@ func absorb(inv *Inventory, folder msg.UUID, emb map[string]any, level, depth in
 			continue
 		}
 		inv.putFolder(f)
+		r.put[f.ID] = true
 		kids = append(kids, f.ID)
 		listed[f.ID] = true
 
 		// Whatever came down with it, however deep.
-		absorb(inv, f.ID, llsd.Map(cm["_embedded"]), level+1, depth)
+		absorb(inv, r, f.ID, llsd.Map(cm["_embedded"]), level+1, depth)
 	}
 
 	// Items and links are the same thing to us: a link is an item
@@ -584,12 +614,13 @@ func absorb(inv *Inventory, folder msg.UUID, emb map[string]any, level, depth in
 			}
 			it.IsLink = key == "links"
 			inv.putItem(it)
+			r.put[it.ID] = true
 			listed[it.ID] = true
 		}
 	}
 
 	if !folder.IsZero() && whole(emb, level, depth) {
-		inv.keepOnly(folder, listed)
+		inv.keepOnly(folder, listed, r)
 	}
 	return kids
 }
