@@ -239,15 +239,18 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 			}
 			return nil, err
 		}
+		// Nor when the way in was taken and the object's copy could
+		// not be found after it: deleting this one never touches that.
 		if err := w.Settle(ctx, 6*time.Second); err != nil {
-			return nil, err
+			return nil, errors.Join(err, w.dropScriptCopy(ctx, it, s.Name))
 		}
 		task, err = w.FindInObject(ctx, s.In, s.Name)
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(err, w.dropScriptCopy(ctx, it, s.Name))
 		}
 		if task == nil {
-			return nil, fmt.Errorf("sl: %q never turned up inside %s", s.Name, s.In)
+			return nil, errors.Join(fmt.Errorf("sl: %q never turned up inside %s", s.Name, s.In),
+				w.dropScriptCopy(ctx, it, s.Name))
 		}
 		// The copy in the avatar's inventory was only the way in.  The
 		// object has its own now, which is the one every later run
@@ -356,6 +359,14 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 				res.Finished = true
 			case <-g.C:
 			case <-ctx.Done():
+				// Given up on, as below, with the fault as far as
+				// it was heard.
+				g.Stop()
+				t.Stop()
+				res.Fault = col.faultSeen()
+				res.Lines = col.collected()
+				res.Elapsed = time.Since(start)
+				return res, ctx.Err()
 			}
 			g.Stop()
 		case <-t.C:
@@ -374,9 +385,9 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	return res, nil
 }
 
-// dropScriptCopy deletes the inventory copy of a script that did not get
-// into its object.  On a context of its own, since a run that failed
-// because its caller gave up has a cancelled one.
+// dropScriptCopy deletes the inventory copy of a script whose run failed
+// while putting it in its object.  On a context of its own, since a run
+// that failed because its caller gave up has a cancelled one.
 func (w *Session) dropScriptCopy(ctx context.Context, it *Item, name string) error {
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()

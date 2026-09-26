@@ -35,10 +35,10 @@ what throws something away.
 ## What decides between moving and renaming
 
 The destination.  If it names a folder, this is a move and the name
-is kept.  If it is a plain name that is no folder, this is a rename
-and the place is kept.  If it is neither -- a path through folders
-that do not exist -- it is refused, since a rename cannot be to a
-path.
+is kept.  If it is a plain name that no folder has, in any case, this
+is a rename and the place is kept.  If it is neither -- a path through
+folders that do not exist -- it is refused, since a rename cannot be
+to a path.
 
 The trap is in the first of those.  A destination is tried as a
 folder first, so renaming something to a word that happens to be a
@@ -46,6 +46,17 @@ folder here moves it into that folder instead, quietly and
 successfully.  `mv README Notecards` beside a folder called
 Notecards does not make a notecard called Notecards; it files the
 one there already.
+
+A name that is not quite one folder is refused as `cd` refuses it,
+and nothing moves or is renamed.  Two folders of the name are listed
+by their ids.  A folder whose name differs only in case is offered
+instead:
+
+    mv readme objects
+    slsh: mv: no folder "objects" here; did you mean "Objects"?
+
+So nothing is renamed to a name that a folder here has in another
+case: such a line is likelier a move with a slip in it than a rename.
 
 Moving and renaming at once is two commands, in either order.
 
