@@ -1128,6 +1128,7 @@ not confirm within ten seconds: it may still be standing.
 | `--first NAME`, `--last NAME` | the avatar's name, for `--direct` |
 | `--start WHERE` | where to arrive, for `--direct`: `last` (the default), `home`, or a region name |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there -- a simulator, or a viewer daemon -- instead of in Second Life |
+| `--wait DUR` | with `--backend`, the longest to wait for a free group when every one is busy, after which the run fails; as long as it takes by default. The unit is required. ^C while waiting gives up the place in the queue |
 | `--version` | say which build this is, and exit |
 
 ---
