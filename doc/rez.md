@@ -73,6 +73,8 @@ closely (fc26d52).
 Measured on Agni on 2026-09-26: on a parcel that runs only group
 scripts, a script in a prim that had no group, within 50 m of the
 ground, never executed, though the simulator reported it running.
+[ground.md](ground.md#where-the-land-stops-running-scripts) has the
+measurement, and what `Run` does about it.
 
 `rezAt` sets `GroupID` in the `ObjectAdd` to the avatar's active group,
 as a viewer does. Firestorm's `LLToolPlacer` sends

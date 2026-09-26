@@ -90,6 +90,9 @@ func clearScript(ctx context.Context, s *sl.Session, obj *sl.Object, name string
 		return fmt.Errorf("clearing %q in %s: it would not compile: %v",
 			name, obj, res.Errors)
 	}
+	if res.Blocked != "" {
+		return fmt.Errorf("clearing %q in %s: %s", name, obj, res.Blocked)
+	}
 	if !res.Finished {
 		// The object took the script and never spoke.  Whatever was in
 		// there is stopped -- installing over a name destroys what it

@@ -288,7 +288,8 @@ func (r *remote) once(ctx context.Context, place int, path, src string) bool {
 			finished = ev.GetFinished().GetSentinel()
 		}
 	}
-	return verdict(path, compiled, errs, fault, finished)
+	// script.v1 has no word for land that will not run the script.
+	return verdict(path, compiled, errs, fault, "", finished)
 }
 
 // Close gives the object back and undoes whatever getting it took.

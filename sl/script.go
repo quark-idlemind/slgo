@@ -131,6 +131,20 @@ type Result struct {
 	// Lines, on the debug channel, and the script runs on.
 	Fault *Fault
 
+	// Blocked is why the land will not run this script, where that
+	// could be told before the run: scripts are stopped in the region,
+	// or the object is within the 50 m above the ground that a parcel's
+	// rules reach, on a parcel that runs only its owner's scripts, or
+	// its group's as well, and the object is neither its owner's nor in
+	// its group.  The simulator reports such a script running and it
+	// says nothing, so a blocked run does not wait for it: it returns
+	// once the compile is answered, with Finished false.
+	//
+	// The 50 m is inferred from one measurement, and a worn object is
+	// checked only for the region.
+	// Why: doc/ground.md#where-the-land-stops-running-scripts
+	Blocked string
+
 	Elapsed time.Duration
 
 	// Warnings are what went wrong around the run without spoiling it:
@@ -141,7 +155,8 @@ type Result struct {
 }
 
 // Failed reports whether the script did not get to the end: it either
-// would not compile, or it faulted, or it never said it had finished.
+// would not compile, or it faulted, or it never said it had finished --
+// which a blocked run has not.
 func (r *Result) Failed() bool { return !r.Compiled || r.Fault != nil || !r.Finished }
 
 // Said returns the text of every line, which is usually what a test
@@ -187,6 +202,9 @@ func (r *Result) Contains(s string) bool {
 // capability wants.  And the compile result is checked before waiting,
 // because waiting a minute for output from something that did not
 // compile is a slow way to learn nothing.
+//
+// Land that will not run the script is looked for before the install,
+// and a run on it is not waited out; see Result.Blocked.
 //
 // A caller that gives up while the script runs gets the Result so far,
 // with what was heard until then, together with the context's error.
@@ -243,6 +261,13 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 		warnings = append(warnings, note)
 	}
 
+	// Installed all the same where the land will not run it, as asked;
+	// only the wait for its output is not.
+	var blocked string
+	if !s.NotRunning {
+		blocked = w.scriptsBlocked(ctx, s.In)
+	}
+
 	// Listen before compiling.
 	// The fault watch is by script name: the header the simulator
 	// sends names the script, and an object may hold several.  Another
@@ -291,11 +316,12 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 		State:    up.State,
 		Message:  up.Message,
 		Item:     task.ID,
+		Blocked:  blocked,
 	}
 	if !up.Compiled {
 		res.Answer = up.Body
 	}
-	if !up.Compiled {
+	if !up.Compiled || blocked != "" {
 		// Nothing will be said, so do not wait for it.
 		res.Lines = col.collected()
 		res.Elapsed = time.Since(start)

@@ -83,3 +83,51 @@ The decoder in `agent` was not itself run against the grid. It was
 checked offline against that port: on 256 patches of random
 coefficients, encoded as the viewer's encoder lays them out, the two
 gave the same height, to the bit, at 20,000 random points.
+
+## Where the land stops running scripts
+
+Measured on Agni on 2026-09-26, on a parcel that runs only group
+scripts (`ParcelAllowOtherScripts` off, `ParcelAllowGroupScripts` on):
+a script in a 0.5 m cube that had no group, within about 50 m of the
+ground, never executed, and the simulator reported it running
+(`ScriptRunning` true) all the same. Moved higher, it ran; moved back
+down, it paused; raised again, it resumed. The boundary lay between
+50.16 and 50.62 m above the ground at the cube's centre.
+
+Inferred from that one spot, and not measured anywhere else: measured
+against the decoded ground, the reading that fits best is that the
+simulator compares the object's bottom with the highest ground under
+it, and stops its scripts while the bottom is less than 50 m above. That
+is the viewer's `PARCEL_HEIGHT`, "Height above ground that parcel
+boundary ends" (`llinventory/llparcel.h:46`).
+
+`sl.Session.Run` looks for this before it installs a script, and when it
+finds it the run is still installed and compiled, as asked, but returns
+at once with `Result.Blocked` saying why, rather than waiting out its
+timeout for a script that will say nothing. The check:
+
+- The region's flags come first. With `REGION_FLAGS_SKIP_SCRIPTS` or
+  `REGION_FLAGS_ESTATE_SKIP_SCRIPTS` set (`llmessage/llregionflags.h`)
+  the viewer tells a person that scripts are stopped in the region
+  (`newview/llstatusbar.cpp:1698-1705`), and a run is blocked wherever
+  the object is. What the simulator does under either was not
+  measured.
+- The prim the script is in is placed in the region, through its root
+  when it is a child. Its bottom and the box around it, square to the
+  region, come from its position, rotation and size; the highest ground
+  in that box comes from the decoded terrain. A bottom 50 m or more
+  above it is not checked further.
+- The parcel under the prim's centre is asked for. Scripts on for
+  everyone run everything. The parcel owner's objects run. With group
+  scripts on, an object whose group is the parcel's runs, which takes a
+  properties request to the object's root to learn. Anything else is
+  blocked. The flags are read as the viewer names them
+  (`llinventory/llparcelflags.h`).
+
+Past the region's flags, nothing is said where it cannot be told: a
+worn object, whose position is the avatar's and of which nothing was
+measured; land that has not arrived; an object the region has not
+described; a parcel set to no group with group scripts on; and a parcel
+or an object that does not answer. Only one unrotated, unlinked cube
+was measured, so a rotated prim, a child prim and a linkset are placed
+by arithmetic that nothing has checked.
