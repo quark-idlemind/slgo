@@ -149,7 +149,7 @@ func TestRunListensBeforeItCompiles(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 	up := serveUpload(t, f, "UpdateScriptTask", compiles)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	var mu sync.Mutex
 	var heard []string
@@ -225,7 +225,7 @@ func TestRunWillNotWaitForOutputFromSomethingThatDidNotCompile(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {", Done: "FINISHED", Timeout: time.Minute,
 		})
 	})
@@ -254,7 +254,7 @@ func TestRunStopsWhenTheScriptFaults(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
 		})
 	})
@@ -293,7 +293,7 @@ func TestRunCarriesOnPastAFaultWhenAskedTo(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {}", Done: "FINISHED", IgnoreFault: true,
 			Timeout: time.Minute,
 		})
@@ -333,7 +333,7 @@ func TestRunWithNoSentinelHasNothingToWaitForButTheClock(t *testing.T) {
 
 		wait := aside(t, func() (*Result, error) {
 			return w.Run(context.Background(), Script{
-				In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+				In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 				Source: "default {}", Timeout: 50 * time.Millisecond,
 			})
 		})
@@ -356,7 +356,7 @@ func TestRunWithNoSentinelHasNothingToWaitForButTheClock(t *testing.T) {
 
 		wait := aside(t, func() (*Result, error) {
 			return w.Run(context.Background(), Script{
-				In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+				In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 				Source: "default {}", Done: "FINISHED",
 				Timeout: 50 * time.Millisecond,
 			})
@@ -391,7 +391,7 @@ func TestRunReportsWhatDidNotHappen(t *testing.T) {
 	t.Run("the object could not be read", func(t *testing.T) {
 		f.FailSends(errors.New("the circuit is gone"))
 		_, err := w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script", Source: "default {}",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script", Source: "default {}",
 		})
 		if err == nil {
 			t.Error("Run compiled into an object it could not read")
@@ -405,7 +405,7 @@ func TestRunReportsWhatDidNotHappen(t *testing.T) {
 		// never asked for one looks like.
 		wait := aside(t, func() (*Result, error) {
 			return w.Run(context.Background(), Script{
-				In: &Object{ID: thePrim, Local: 77}, Name: "a script", Source: "default {}",
+				In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script", Source: "default {}",
 			})
 		})
 		answerContents(t, f, thePrim, theContentsFile)
@@ -426,7 +426,7 @@ func TestRunReportsWhatDidNotHappen(t *testing.T) {
 
 		wait := aside(t, func() (*Result, error) {
 			return w.Run(ctx, Script{
-				In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+				In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 				Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
 			})
 		})
@@ -458,7 +458,7 @@ func TestRunPutsTheScriptInWhenItIsNotThere(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
 		})
 	})
@@ -499,7 +499,7 @@ func TestRunSaysWhenTheCopyNeverArrived(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script", Source: "default {}",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script", Source: "default {}",
 		})
 	})
 	held := objectHolding(f, thePrim)
@@ -524,7 +524,7 @@ func TestInstallScriptIsTheHalfThatCompiles(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 	up := serveUpload(t, f, "UpdateScriptTask", compiles)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	wait := aside(t, func() (*UploadResult, error) {
 		return w.InstallScript(context.Background(), o, "a script", "default {}", true)
@@ -551,7 +551,7 @@ func TestInstallScriptCopiesItInFirstWhenItHasTo(t *testing.T) {
 	w, f := newFakeSession(t)
 	serveUpload(t, f, "UpdateScriptAgent", compiles)
 	up := serveUpload(t, f, "UpdateScriptTask", compiles)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	wait := aside(t, func() (*UploadResult, error) {
 		return w.InstallScript(context.Background(), o, "a script", "default {}", false)
@@ -581,7 +581,7 @@ func TestInstallScriptRefusesWhatItCannotDo(t *testing.T) {
 	if _, err := w.InstallScript(context.Background(), nil, "a script", "", true); err == nil {
 		t.Error("InstallScript installed into no object")
 	}
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	if _, err := w.InstallScript(context.Background(), o, "", "", true); err == nil {
 		t.Error("InstallScript installed something with no name")
 	}
@@ -596,7 +596,7 @@ func TestInstallScriptRefusesWhatItCannotDo(t *testing.T) {
 		w, f := newFakeSession(t)
 		serveUpload(t, f, "UpdateScriptAgent", compiles)
 		wait := aside(t, func() (*UploadResult, error) {
-			return w.InstallScript(context.Background(), &Object{ID: thePrim, Local: 77},
+			return w.InstallScript(context.Background(), foundHere(w, &Object{ID: thePrim, Local: 77}),
 				"a script", "default {}", true)
 		})
 		held := objectHolding(f, thePrim)
@@ -617,7 +617,7 @@ func TestInstallScriptRefusesWhatItCannotDo(t *testing.T) {
 func TestRemoveScriptsTakesOutOnlyTheScripts(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	wait := aside(t, func() (int, error) {
 		return w.RemoveScripts(context.Background(), o, func(name string) bool {
@@ -646,7 +646,7 @@ func TestRemoveScriptsTakesOutOnlyTheScripts(t *testing.T) {
 func TestRemoveScriptsLeavesWhatDoesNotMatch(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	wait := aside(t, func() (int, error) {
 		return w.RemoveScripts(context.Background(), o, func(string) bool { return false })
@@ -670,12 +670,12 @@ func TestRemoveScriptsLeavesWhatDoesNotMatch(t *testing.T) {
 // go looking for the scripts.
 func TestRemoveScriptsReportsWhatDidNotHappen(t *testing.T) {
 	t.Parallel()
-	o := &Object{ID: thePrim, Local: 77}
+	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 
 	t.Run("the object could not be read", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.FailSends(errors.New("the circuit is gone"))
-		if _, err := w.RemoveScripts(context.Background(), o, func(string) bool { return true }); err == nil {
+		if _, err := w.RemoveScripts(context.Background(), oAt(w), func(string) bool { return true }); err == nil {
 			t.Error("RemoveScripts reported on an object it could not read")
 		}
 	})
@@ -684,7 +684,7 @@ func TestRemoveScriptsReportsWhatDidNotHappen(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
 		wait := aside(t, func() (int, error) {
-			return w.RemoveScripts(context.Background(), o, func(string) bool { return true })
+			return w.RemoveScripts(context.Background(), oAt(w), func(string) bool { return true })
 		})
 		answerContents(t, f, thePrim, theContentsFile)
 		f.FailSends(errors.New("the circuit is gone"))
@@ -703,7 +703,7 @@ func TestRemoveScriptsReportsWhatDidNotHappen(t *testing.T) {
 // several scripts, so the pair is what says which one to start.
 func TestSetScriptRunningNamesBothTheObjectAndTheScript(t *testing.T) {
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	if err := w.SetScriptRunning(context.Background(), o, theChild, true); err != nil {
 		t.Fatalf("SetScriptRunning: %v", err)
@@ -729,7 +729,7 @@ func TestSetScriptRunningNamesBothTheObjectAndTheScript(t *testing.T) {
 // only that the run failed cannot tell which of them to look at.
 func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
 	t.Parallel()
-	o := &Object{ID: thePrim, Local: 77}
+	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 	gone := errors.New("the circuit is gone")
 
 	t.Run("the item was never created", func(t *testing.T) {
@@ -737,7 +737,7 @@ func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
 		w, f := newFakeSession(t)
 		failSendsAfter[*msg.RequestTaskInventory](f, gone)
 		wait := aside(t, func() (*Result, error) {
-			return w.Run(context.Background(), Script{In: o, Name: "a script"})
+			return w.Run(context.Background(), Script{In: oAt(w), Name: "a script"})
 		})
 		objectHolding(f, thePrim).answer(t, "")
 		if _, err := wait(); err == nil {
@@ -751,7 +751,7 @@ func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
 		serveUpload(t, f, "UpdateScriptAgent", compiles)
 		failSendsAfter[*msg.CreateInventoryItem](f, gone)
 		wait := aside(t, func() (*Result, error) {
-			return w.Run(context.Background(), Script{In: o, Name: "a script"})
+			return w.Run(context.Background(), Script{In: oAt(w), Name: "a script"})
 		})
 		held := objectHolding(f, thePrim)
 		held.answer(t, "")
@@ -771,7 +771,7 @@ func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 		defer cancel()
 		wait := aside(t, func() (*Result, error) {
-			return w.Run(ctx, Script{In: o, Name: "a script"})
+			return w.Run(ctx, Script{In: oAt(w), Name: "a script"})
 		})
 		held := objectHolding(f, thePrim)
 		held.answer(t, "")
@@ -789,7 +789,7 @@ func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
 		serveUpload(t, f, "UpdateScriptAgent", compiles)
 		failSendsAfter[*msg.UpdateTaskInventory](f, gone)
 		wait := aside(t, func() (*Result, error) {
-			return w.Run(context.Background(), Script{In: o, Name: "a script"})
+			return w.Run(context.Background(), Script{In: oAt(w), Name: "a script"})
 		})
 		held := objectHolding(f, thePrim)
 		held.answer(t, "")
@@ -806,7 +806,7 @@ func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
 // way in fails as it is when it succeeds.
 func TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory(t *testing.T) {
 	t.Parallel()
-	o := &Object{ID: thePrim, Local: 77}
+	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 	gone := errors.New("the circuit is gone")
 
 	for _, c := range []struct {
@@ -832,7 +832,7 @@ func TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory(t *testing.T) {
 			})
 
 			wait := aside(t, func() (*Result, error) {
-				return w.Run(context.Background(), Script{In: o, Name: "a script"})
+				return w.Run(context.Background(), Script{In: oAt(w), Name: "a script"})
 			})
 			objectHolding(f, thePrim).answer(t, "")
 			m := waitSent[*msg.CreateInventoryItem](t, f)
@@ -859,7 +859,7 @@ func TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory(t *testing.T) {
 // call is about to depend on.
 func TestInstallScriptStopsAtTheSameStepsForTheSameReasons(t *testing.T) {
 	t.Parallel()
-	o := &Object{ID: thePrim, Local: 77}
+	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 	gone := errors.New("the circuit is gone")
 
 	t.Run("the item was never created", func(t *testing.T) {
@@ -867,7 +867,7 @@ func TestInstallScriptStopsAtTheSameStepsForTheSameReasons(t *testing.T) {
 		w, f := newFakeSession(t)
 		failSendsAfter[*msg.RequestTaskInventory](f, gone)
 		wait := aside(t, func() (*UploadResult, error) {
-			return w.InstallScript(context.Background(), o, "a script", "default {}", true)
+			return w.InstallScript(context.Background(), oAt(w), "a script", "default {}", true)
 		})
 		objectHolding(f, thePrim).answer(t, "")
 		if _, err := wait(); err == nil {
@@ -881,7 +881,7 @@ func TestInstallScriptStopsAtTheSameStepsForTheSameReasons(t *testing.T) {
 		serveUpload(t, f, "UpdateScriptAgent", compiles)
 		failSendsAfter[*msg.CreateInventoryItem](f, gone)
 		wait := aside(t, func() (*UploadResult, error) {
-			return w.InstallScript(context.Background(), o, "a script", "default {}", true)
+			return w.InstallScript(context.Background(), oAt(w), "a script", "default {}", true)
 		})
 		objectHolding(f, thePrim).answer(t, "")
 		m := waitSent[*msg.CreateInventoryItem](t, f)
@@ -898,7 +898,7 @@ func TestInstallScriptStopsAtTheSameStepsForTheSameReasons(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 		defer cancel()
 		wait := aside(t, func() (*UploadResult, error) {
-			return w.InstallScript(ctx, o, "a script", "default {}", true)
+			return w.InstallScript(ctx, oAt(w), "a script", "default {}", true)
 		})
 		objectHolding(f, thePrim).answer(t, "")
 		m := waitSent[*msg.CreateInventoryItem](t, f)
@@ -915,7 +915,7 @@ func TestInstallScriptStopsAtTheSameStepsForTheSameReasons(t *testing.T) {
 		serveUpload(t, f, "UpdateScriptAgent", compiles)
 		failSendsAfter[*msg.UpdateTaskInventory](f, gone)
 		wait := aside(t, func() (*UploadResult, error) {
-			return w.InstallScript(context.Background(), o, "a script", "default {}", true)
+			return w.InstallScript(context.Background(), oAt(w), "a script", "default {}", true)
 		})
 		objectHolding(f, thePrim).answer(t, "")
 		m := waitSent[*msg.CreateInventoryItem](t, f)
@@ -938,7 +938,7 @@ func TestARunWithNoSentinelStillAnswersToTheCaller(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(ctx, Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {}", Timeout: time.Minute,
 		})
 	})
@@ -973,7 +973,7 @@ func TestAStopThatFailsAfterAFailedInstallIsNotLost(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
 		})
 	})
@@ -1003,7 +1003,7 @@ func TestAScriptCanFaultAfterSayingItHadFinished(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
 		})
 	})
@@ -1041,7 +1041,7 @@ func TestAScriptCanFaultAfterSayingItHadFinished(t *testing.T) {
 func TestRemoveScriptsSettlesBeforeSayingItIsDone(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	// Less patience than the settle takes, which is where a caller that
 	// has given up lands.
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
@@ -1103,7 +1103,7 @@ func TestScriptRunningAnswersOnlyForTheScriptItWasAskedAbout(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 	f.quietScripts = true // the answers here are relayed by hand
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
 	q := waitSent[*msg.GetScriptRunning](t, f)
@@ -1145,7 +1145,7 @@ func TestScriptRunningBelievesAStoppedScriptToo(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 	f.quietScripts = true // the answers here are relayed by hand
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
 	waitSent[*msg.GetScriptRunning](t, f)
@@ -1173,13 +1173,13 @@ func TestScriptRunningBelievesAStoppedScriptToo(t *testing.T) {
 // ever -- and reporting that as a stopped script would have somebody
 // told their script is not running when nothing here can say either way.
 func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
-	o := &Object{ID: thePrim, Local: 77}
+	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 
 	t.Run("nothing answered", func(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
 		f.quietScripts = true // the answers here are relayed by hand
-		is, err := w.ScriptRunning(context.Background(), o, theChild, 200*time.Millisecond)
+		is, err := w.ScriptRunning(context.Background(), oAt(w), theChild, 200*time.Millisecond)
 		if !errors.Is(err, ErrTimeout) {
 			t.Errorf("ScriptRunning = %v, %v; want a timeout", is, err)
 		}
@@ -1198,7 +1198,7 @@ func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.quietScripts = true // the answers here are relayed by hand
 		f.FailSends(errors.New("the circuit is gone"))
-		if is, err := w.ScriptRunning(context.Background(), o, theChild, 30*time.Second); err == nil {
+		if is, err := w.ScriptRunning(context.Background(), oAt(w), theChild, 30*time.Second); err == nil {
 			t.Errorf("ScriptRunning = %v with the circuit gone", is)
 		}
 		if got := f.Sent(); len(got) != 0 {
@@ -1211,7 +1211,7 @@ func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.quietScripts = true // the answers here are relayed by hand
 		ctx, cancel := context.WithCancel(context.Background())
-		got := askRunning(w, ctx, o, theChild, 30*time.Second)
+		got := askRunning(w, ctx, oAt(w), theChild, 30*time.Second)
 		waitSent[*msg.GetScriptRunning](t, f)
 		cancel()
 		select {
@@ -1246,7 +1246,7 @@ func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
 func TestScriptRunningListensBeforeItAsks(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	f.mu.Lock()
 	f.onSend = func(m msg.Message) {
@@ -1302,7 +1302,7 @@ func TestTheAnswerAboutAScriptComesOffTheEventQueue(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 	f.quietScripts = true // the answers here are relayed by hand
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
 	waitSent[*msg.GetScriptRunning](t, f)
@@ -1349,7 +1349,7 @@ func TestAnEventQueueAnswerIsSiftedTheWayAMessageIs(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 	f.quietScripts = true // the answers here are relayed by hand
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
 	waitSent[*msg.GetScriptRunning](t, f)
@@ -1399,7 +1399,7 @@ func TestABlockThatIsNotAnArrayIsStillABlock(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 	f.quietScripts = true // the answers here are relayed by hand
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	got := askRunning(w, context.Background(), o, theChild, 30*time.Second)
 	waitSent[*msg.GetScriptRunning](t, f)
@@ -1428,7 +1428,7 @@ func TestTheEventQueueEndingIsNotTheSessionEnding(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 	f.quietScripts = true // the answers here are relayed by hand
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	f.EndEvents()
 
@@ -1564,7 +1564,7 @@ func stopsSent(f *fakeBackend, item msg.UUID) int {
 // the run stops it at the end: finished, timed out or interrupted, the
 // last on a context of its own, since the run's own is cancelled by then.
 func TestARunStopsItsScriptHoweverItEnds(t *testing.T) {
-	o := &Object{ID: thePrim, Local: 77}
+	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 	for _, c := range []struct {
 		name string
 		end  func(t *testing.T, f *fakeBackend, cancel func())
@@ -1589,7 +1589,7 @@ func TestARunStopsItsScriptHoweverItEnds(t *testing.T) {
 
 			wait := aside(t, func() (*Result, error) {
 				return w.Run(ctx, Script{
-					In: o, Name: "a script", Source: "default {}", Done: "FINISHED",
+					In: oAt(w), Name: "a script", Source: "default {}", Done: "FINISHED",
 					Timeout: 300 * time.Millisecond, KeepRunning: c.keep,
 				})
 			})
@@ -1622,7 +1622,7 @@ func TestAnEarlierCopyStillRunningIsStoppedBeforeTheRunListens(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
 		})
 	})
@@ -1653,7 +1653,7 @@ func TestAnEarlierCopyThatStoppedCostsOneQuestion(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
 		})
 	})
@@ -1684,7 +1684,7 @@ func TestTheCopyInInventoryIsDeletedOnceTheObjectHasItsOwn(t *testing.T) {
 
 	wait := aside(t, func() (*Result, error) {
 		return w.Run(context.Background(), Script{
-			In: &Object{ID: thePrim, Local: 77}, Name: "a script",
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
 			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
 		})
 	})

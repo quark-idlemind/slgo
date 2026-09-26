@@ -236,9 +236,13 @@ func (w *Session) SetShape(ctx context.Context, o *Object, s Shape) error {
 	if err != nil {
 		return err
 	}
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 	m := &msg.ObjectShape{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
-	d := msg.ObjectShape_ObjectData{ObjectLocalID: o.Local}
+	d := msg.ObjectShape_ObjectData{ObjectLocalID: local}
 	p.FillShape(&d)
 	m.ObjectData = []msg.ObjectShape_ObjectData{d}
 	return w.Send(ctx, m)

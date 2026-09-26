@@ -341,6 +341,10 @@ func (w *Session) SetItem(ctx context.Context, item msg.UUID, name, desc string,
 func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8, mask uint32) error {
 	on := mask & PermAll
 	off := PermAll &^ on
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 
 	send := func(set uint8, bits uint32) error {
 		if bits == 0 {
@@ -350,7 +354,7 @@ func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8
 		m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 		m.HeaderData.Override = false
 		m.ObjectData = []msg.ObjectPermissions_ObjectData{{
-			ObjectLocalID: o.Local, Field: who, Set: set, Mask: bits,
+			ObjectLocalID: local, Field: who, Set: set, Mask: bits,
 		}}
 		return w.Send(ctx, m)
 	}

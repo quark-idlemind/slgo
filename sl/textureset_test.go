@@ -122,7 +122,7 @@ func TestSetFacesSendsOneMessageWithEverythingInIt(t *testing.T) {
 	for i := range faces {
 		faces[i].ScaleS, faces[i].ScaleT = 1, 1
 	}
-	if err := w.SetFaces(context.Background(), aThing(), faces); err != nil {
+	if err := w.SetFaces(context.Background(), aThing(w), faces); err != nil {
 		t.Fatalf("SetFaces: %v", err)
 	}
 	m := onlySent[*msg.ObjectImage](t, f)
@@ -137,7 +137,7 @@ func TestSetFacesSendsOneMessageWithEverythingInIt(t *testing.T) {
 		t.Errorf("%d faces went out", len(back))
 	}
 
-	if err := w.SetFaces(context.Background(), aThing(), nil); err == nil {
+	if err := w.SetFaces(context.Background(), aThing(w), nil); err == nil {
 		t.Error("an object with no faces was textured")
 	}
 }
@@ -238,7 +238,7 @@ func TestFacesAsksTheRegionWhenNothingHasDescribedTheAppearance(t *testing.T) {
 	f.objects[0].TextureEntry = nil
 	f.mu.Unlock()
 
-	got, err := w.Faces(context.Background(), aThing())
+	got, err := w.Faces(context.Background(), aThing(w))
 	if err != nil {
 		t.Fatalf("Faces: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestFacesAsksNothingWhenItAlreadyKnows(t *testing.T) {
 	w, f := newFakeSession(t)
 	aRegionThatKeepsTheAppearance(t, f, PlainFaces(8))
 
-	if _, err := w.Faces(context.Background(), aThing()); err != nil {
+	if _, err := w.Faces(context.Background(), aThing(w)); err != nil {
 		t.Fatalf("Faces: %v", err)
 	}
 	if n := len(sentOf[*msg.RequestMultipleObjects](f)); n != 0 {
@@ -279,10 +279,10 @@ func TestTwoChangesInARowCompose(t *testing.T) {
 	truth := aRegionThatKeepsTheAppearance(t, f, PlainFaces(8))
 
 	ctx := context.Background()
-	if err := w.SetFace(ctx, aThing(), AllFaces, func(fc *Face) { fc.SetColour(255, 0, 0) }); err != nil {
+	if err := w.SetFace(ctx, aThing(w), AllFaces, func(fc *Face) { fc.SetColour(255, 0, 0) }); err != nil {
 		t.Fatalf("colouring every face: %v", err)
 	}
-	if err := w.SetFace(ctx, aThing(), 2, func(fc *Face) { fc.SetColour(0, 255, 0) }); err != nil {
+	if err := w.SetFace(ctx, aThing(w), 2, func(fc *Face) { fc.SetColour(0, 255, 0) }); err != nil {
 		t.Fatalf("colouring face 2: %v", err)
 	}
 
@@ -313,7 +313,7 @@ func TestAChangeRefusesAnAppearanceNothingHasDescribed(t *testing.T) {
 	f.objects = []*Seen{{Object: Object{ID: thePrim, Local: 4242, Name: "a thing"}}}
 	f.mu.Unlock()
 
-	err := w.SetFace(context.Background(), aThing(), 0, func(fc *Face) { fc.SetColour(255, 0, 0) })
+	err := w.SetFace(context.Background(), aThing(w), 0, func(fc *Face) { fc.SetColour(255, 0, 0) })
 	if err == nil {
 		t.Fatal("a change went out against an appearance nothing had described")
 	}
@@ -323,7 +323,7 @@ func TestAChangeRefusesAnAppearanceNothingHasDescribed(t *testing.T) {
 
 	// The report is still answered, because white is the truth about
 	// such a prim.
-	faces, err := w.Faces(context.Background(), aThing())
+	faces, err := w.Faces(context.Background(), aThing(w))
 	if err != nil {
 		t.Fatalf("Faces: %v", err)
 	}

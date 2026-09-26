@@ -216,17 +216,21 @@ func u16bytes(v uint16) []byte {
 // have a description.  Read the object's faces, change the ones that
 // should change, and send them all back -- which is what SetFace does.
 func (w *Session) SetFaces(ctx context.Context, o *Object, faces []Face) error {
-	if o == nil || o.Local == 0 {
+	if o == nil || (o.Local == 0 && o.ID.IsZero()) {
 		return fmt.Errorf("sl: nothing to texture")
 	}
 	te, err := EncodeTextureEntry(faces)
 	if err != nil {
 		return err
 	}
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 	m := &msg.ObjectImage{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ObjectData = []msg.ObjectImage_ObjectData{{
-		ObjectLocalID: o.Local,
+		ObjectLocalID: local,
 		MediaURL:      nil,
 		TextureEntry:  te,
 	}}
@@ -315,12 +319,16 @@ func (w *Session) describeAgain(ctx context.Context, seen *Seen) (*Seen, error) 
 	if seen.Local == 0 {
 		return nil, nil
 	}
+	local, err := w.local(ctx, &seen.Object)
+	if err != nil {
+		return nil, err
+	}
 	m := &msg.RequestMultipleObjects{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ObjectData = []msg.RequestMultipleObjects_ObjectData{
 		// Miss type 0 is "I have nothing at all", which is the truth
 		// once the appearance has been forgotten.
-		{CacheMissType: 0, ID: seen.Local},
+		{CacheMissType: 0, ID: local},
 	}
 	if err := w.Send(ctx, m); err != nil {
 		return nil, err

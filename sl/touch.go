@@ -115,13 +115,17 @@ func (t Touch) updateSurface() msg.ObjectGrabUpdate_SurfaceInfo {
 // may not be listening, and it may take a second to do whatever it does
 // -- so what a caller waits for is the script's own output, not this.
 func (w *Session) TouchStart(ctx context.Context, o *Object, t Touch) error {
-	if o == nil || o.Local == 0 {
+	if o == nil || (o.Local == 0 && o.ID.IsZero()) {
 		return fmt.Errorf("sl: nothing to touch")
+	}
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
 	}
 	t = t.fill()
 	m := &msg.ObjectGrab{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
-	m.ObjectData.LocalID = o.Local
+	m.ObjectData.LocalID = local
 	m.ObjectData.GrabOffset = t.Offset
 	m.SurfaceInfo = []msg.ObjectGrab_SurfaceInfo{t.grabSurface()}
 	return w.Send(ctx, m)
@@ -149,13 +153,17 @@ func (w *Session) TouchMove(ctx context.Context, o *Object, t Touch, held time.D
 
 // TouchEnd finishes a touch: the script's touch_end.
 func (w *Session) TouchEnd(ctx context.Context, o *Object, t Touch) error {
-	if o == nil || o.Local == 0 {
+	if o == nil || (o.Local == 0 && o.ID.IsZero()) {
 		return fmt.Errorf("sl: nothing to touch")
+	}
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
 	}
 	t = t.fill()
 	m := &msg.ObjectDeGrab{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
-	m.ObjectData.LocalID = o.Local
+	m.ObjectData.LocalID = local
 	m.SurfaceInfo = []msg.ObjectDeGrab_SurfaceInfo{t.degrabSurface()}
 	return w.Send(ctx, m)
 }

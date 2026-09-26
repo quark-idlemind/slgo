@@ -554,7 +554,7 @@ func TestPutInObjectSendsTheWholeItem(t *testing.T) {
 	it.BaseMask, it.OwnerMask = PermAll, PermAll
 	it.GroupMask, it.EveryoneMask, it.NextOwnerMask = PermCopy, PermMove, PermTransfer
 
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	if err := w.PutInObject(context.Background(), o, it); err != nil {
 		t.Fatalf("PutInObject: %v", err)
 	}
@@ -587,7 +587,7 @@ func TestPutInObjectSendsTheWholeItem(t *testing.T) {
 // means nothing to the object.
 func TestRemoveFromObjectNamesTheObjectsOwnId(t *testing.T) {
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	if err := w.RemoveFromObject(context.Background(), o, theChild); err != nil {
 		t.Fatalf("RemoveFromObject: %v", err)
 	}
@@ -740,7 +740,7 @@ func xferPacket(id uint64, seq uint32, last bool, data []byte) *msg.SendXferPack
 func TestTheContentsOfAnObjectComeOverXfer(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	wait := aside(t, func() ([]TaskItem, error) {
 		return w.TaskInventory(context.Background(), o)
@@ -782,7 +782,7 @@ func TestTheContentsOfAnObjectComeOverXfer(t *testing.T) {
 func TestTaskInventoryAsksAgainRatherThanReuseAFilename(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	// The first read, answered with a name and nothing else, so the
 	// session has one remembered.
@@ -824,12 +824,12 @@ func TestTaskInventoryAsksAgainRatherThanReuseAFilename(t *testing.T) {
 // transfer are three separate things that can fail, and an empty answer
 // from any of them reads like an empty object.
 func TestTaskInventoryReportsWhatWentWrong(t *testing.T) {
-	o := &Object{ID: thePrim, Local: 77}
+	prim := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 
 	t.Run("the request never went", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.FailSends(errors.New("the circuit is gone"))
-		if _, err := w.TaskInventory(context.Background(), o); err == nil {
+		if _, err := w.TaskInventory(context.Background(), prim(w)); err == nil {
 			t.Error("TaskInventory waited for a reply to a request that never went")
 		}
 	})
@@ -838,7 +838,7 @@ func TestTaskInventoryReportsWhatWentWrong(t *testing.T) {
 		w, _ := newFakeSession(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if _, err := w.TaskInventory(ctx, o); !errors.Is(err, context.Canceled) {
+		if _, err := w.TaskInventory(ctx, prim(w)); !errors.Is(err, context.Canceled) {
 			t.Errorf("TaskInventory = %v, want the context's reason", err)
 		}
 	})
@@ -847,7 +847,7 @@ func TestTaskInventoryReportsWhatWentWrong(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
 		wait := aside(t, func() ([]TaskItem, error) {
-			return w.TaskInventory(context.Background(), o)
+			return w.TaskInventory(context.Background(), prim(w))
 		})
 		waitSent[*msg.RequestTaskInventory](t, f)
 		f.Relay(t, replyTaskInventory(thePrim, "inventory_37c9.tmp"))
@@ -870,7 +870,7 @@ func TestTaskInventoryReportsWhatWentWrong(t *testing.T) {
 func TestFindInObjectAnswersNothingRatherThanFailing(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	wait := aside(t, func() (*TaskItem, error) {
 		return w.FindInObject(context.Background(), o, "a script")
@@ -982,7 +982,7 @@ func TestReadingAnAssetProvesWhoIsAllowedToReadIt(t *testing.T) {
 func TestReadingSomethingInsideAnObjectNamesTheObject(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	it := &TaskItem{ID: theChild, Asset: theOther, Name: "a script"}
 
 	wait := aside(t, func() ([]byte, error) {
@@ -1031,7 +1031,7 @@ func TestANumberInTheContentsFileIsReadAsHexFirst(t *testing.T) {
 // permission mask that is a rename that quietly takes the rights away.
 func TestRenamingInsideAnObjectSendsTheWholeItemBack(t *testing.T) {
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	it := TaskItem{
 		ID: theChild, Asset: theOther, Name: "a script", Desc: "does something",
 		Type: "lsltext", InvType: "lsltext", Flags: 1, Created: 1700000000,
@@ -1294,7 +1294,7 @@ func TestFetchFromObjectWaitsForTheItemItBecame(t *testing.T) {
 		return []*Item{old, fetched}
 	})
 
-	o := &Object{ID: thePrim, Local: 77, Name: "lantern"}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77, Name: "lantern"})
 	inside := TaskItem{ID: theTaskItem, Name: "a notecard"}
 	wait := aside(t, func() (*Item, error) {
 		return w.FetchFromObject(context.Background(), o, inside, aFolder, 0)
@@ -1327,7 +1327,7 @@ func TestFetchFromObjectSaysWhenNothingArrives(t *testing.T) {
 	w, f := newFakeSession(t)
 	f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 
-	o := &Object{ID: thePrim, Local: 77, Name: "lantern"}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77, Name: "lantern"})
 	_, err := w.FetchFromObject(context.Background(), o,
 		TaskItem{ID: theTaskItem, Name: "a notecard"}, aFolder, 3*time.Second)
 	if !errors.Is(err, ErrTimeout) {
@@ -1340,7 +1340,7 @@ func TestFetchFromObjectSaysWhenNothingArrives(t *testing.T) {
 func TestFetchFromObjectWantsAFolder(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	if _, err := w.FetchFromObject(context.Background(), o, TaskItem{ID: theTaskItem}, msg.UUID{}, time.Second); err == nil {
 		t.Error("fetched into no folder")
 	}

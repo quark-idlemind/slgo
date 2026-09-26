@@ -369,9 +369,13 @@ func (w *Session) NewScript(ctx context.Context, name, source string) (*Item, *U
 // An object keeps every copy it is given and renames the newcomer, so
 // putting the same item in twice leaves "thing" and "thing 1".
 func (w *Session) PutInObject(ctx context.Context, o *Object, it *Item) error {
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 	m := &msg.UpdateTaskInventory{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
-	m.UpdateData.LocalID = o.Local
+	m.UpdateData.LocalID = local
 	d := &m.InventoryData
 	d.ItemID, d.FolderID = it.ID, it.ParentID
 	d.CreatorID, d.OwnerID, d.GroupID = it.CreatorID, it.OwnerID, it.GroupID
@@ -388,9 +392,13 @@ func (w *Session) PutInObject(ctx context.Context, o *Object, it *Item) error {
 
 // RemoveFromObject deletes an item from inside an object.
 func (w *Session) RemoveFromObject(ctx context.Context, o *Object, item msg.UUID) error {
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 	m := &msg.RemoveTaskInventory{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
-	m.InventoryData.LocalID = o.Local
+	m.InventoryData.LocalID = local
 	m.InventoryData.ItemID = item
 	return w.Send(ctx, m)
 }
@@ -425,11 +433,15 @@ func (w *Session) FetchFromObject(ctx context.Context, o *Object, it TaskItem, f
 	for _, b := range before {
 		had[b.ID] = true
 	}
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return nil, err
+	}
 
 	m := &msg.MoveTaskInventory{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.AgentData.FolderID = folder
-	m.InventoryData.LocalID = o.Local
+	m.InventoryData.LocalID = local
 	m.InventoryData.ItemID = it.ID
 	if err := w.Send(ctx, m); err != nil {
 		return nil, err
@@ -486,15 +498,19 @@ func (w *Session) TaskInventory(ctx context.Context, o *Object) ([]TaskItem, err
 	delete(w.taskSeen, o.ID)
 	w.mu.Unlock()
 
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return nil, err
+	}
 	req := &msg.RequestTaskInventory{}
 	req.AgentData.AgentID, req.AgentData.SessionID = w.agentBlock()
-	req.InventoryData.LocalID = o.Local
+	req.InventoryData.LocalID = local
 	if err := w.Send(ctx, req); err != nil {
 		return nil, err
 	}
 
 	var filename string
-	err := w.await(ctx, 20*time.Second, "the inventory of "+o.String(), func() bool {
+	err = w.await(ctx, 20*time.Second, "the inventory of "+o.String(), func() bool {
 		if !w.taskSeen[o.ID] {
 			return false
 		}
@@ -668,9 +684,13 @@ func (w *Session) RenameInObject(ctx context.Context, o *Object, it TaskItem, na
 	if name == "" {
 		return fmt.Errorf("sl: a name is needed")
 	}
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
 	m := &msg.UpdateTaskInventory{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
-	m.UpdateData.LocalID = o.Local
+	m.UpdateData.LocalID = local
 	m.UpdateData.Key = 0 // 0 selects the object's inventory
 
 	d := &m.InventoryData

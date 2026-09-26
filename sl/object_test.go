@@ -148,7 +148,7 @@ func TestRezRefusesWhatItCouldNotConfirm(t *testing.T) {
 // to report that it was still called "Object".
 func TestSetNameReadsTheNameBack(t *testing.T) {
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	// What it was called before, which must not be read back as the
 	// new name.
@@ -180,7 +180,7 @@ func TestSetNameReadsTheNameBack(t *testing.T) {
 // looking for something that does not exist.
 func TestSetNameSaysWhenTheNameDidNotTake(t *testing.T) {
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	wait := asideErr(t, func() error { return w.SetName(context.Background(), o, "workbench") })
 	waitSent[*msg.RequestObjectPropertiesFamily](t, f)
@@ -203,7 +203,7 @@ func TestSetNameNeedsBothMessagesToGoOut(t *testing.T) {
 	t.Run("the rename never went", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.FailSends(errors.New("the circuit is gone"))
-		err := w.SetName(context.Background(), &Object{ID: thePrim, Local: 77}, "workbench")
+		err := w.SetName(context.Background(), foundHere(w, &Object{ID: thePrim, Local: 77}), "workbench")
 		if err == nil {
 			t.Error("SetName reported success though nothing was sent")
 		}
@@ -221,7 +221,7 @@ func TestSetNameNeedsBothMessagesToGoOut(t *testing.T) {
 		}
 		f.mu.Unlock()
 
-		err := w.SetName(context.Background(), &Object{ID: thePrim, Local: 77}, "workbench")
+		err := w.SetName(context.Background(), foundHere(w, &Object{ID: thePrim, Local: 77}), "workbench")
 		if err == nil {
 			t.Error("SetName reported success though it never asked what the name was")
 		}
@@ -245,7 +245,7 @@ func TestSetNameStopsWhenTheCallerGivesUp(t *testing.T) {
 	cancel()
 
 	start := time.Now()
-	err := w.SetName(ctx, &Object{ID: thePrim, Local: 77}, "workbench")
+	err := w.SetName(ctx, foundHere(w, &Object{ID: thePrim, Local: 77}), "workbench")
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("SetName = %v, want the context's reason", err)
 	}
@@ -285,7 +285,7 @@ func propertiesOf(ids ...msg.UUID) *msg.ObjectProperties {
 // the request -- it has to be picked out by which object it is about.
 func TestPropertiesSelectsAndWaits(t *testing.T) {
 	w, f := newFakeSession(t)
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 
 	// A timeout of zero asks for the default, which is not reached
 	// here.
@@ -331,11 +331,11 @@ func TestPropertiesSelectsAndWaits(t *testing.T) {
 // end saying it timed out rather than that the object has no
 // permissions.
 func TestPropertiesGivesUpRatherThanHangs(t *testing.T) {
-	o := &Object{ID: thePrim, Local: 77}
+	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 
 	t.Run("nothing answered", func(t *testing.T) {
 		w, _ := newFakeSession(t)
-		_, err := w.Properties(context.Background(), o, 50*time.Millisecond)
+		_, err := w.Properties(context.Background(), oAt(w), 50*time.Millisecond)
 		if !errors.Is(err, ErrTimeout) {
 			t.Errorf("Properties = %v, want a timeout", err)
 		}
@@ -345,7 +345,7 @@ func TestPropertiesGivesUpRatherThanHangs(t *testing.T) {
 		w, _ := newFakeSession(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if _, err := w.Properties(ctx, o, 30*time.Second); !errors.Is(err, context.Canceled) {
+		if _, err := w.Properties(ctx, oAt(w), 30*time.Second); !errors.Is(err, context.Canceled) {
 			t.Errorf("Properties = %v, want the context's reason", err)
 		}
 	})
@@ -353,7 +353,7 @@ func TestPropertiesGivesUpRatherThanHangs(t *testing.T) {
 	t.Run("the selection never went", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.FailSends(errors.New("the circuit is gone"))
-		if _, err := w.Properties(context.Background(), o, 30*time.Second); err == nil {
+		if _, err := w.Properties(context.Background(), oAt(w), 30*time.Second); err == nil {
 			t.Error("Properties waited for a reply to a selection that was not sent")
 		}
 	})
@@ -365,7 +365,7 @@ func TestPropertiesGivesUpRatherThanHangs(t *testing.T) {
 func TestSelectNamesEveryObjectAtOnce(t *testing.T) {
 	w, f := newFakeSession(t)
 	err := w.Select(context.Background(),
-		&Object{ID: thePrim, Local: 1}, &Object{ID: theChild, Local: 2})
+		foundHere(w, &Object{ID: thePrim, Local: 1}), foundHere(w, &Object{ID: theChild, Local: 2}))
 	if err != nil {
 		t.Fatalf("Select: %v", err)
 	}
@@ -387,8 +387,8 @@ func TestLinkWaitsForTheChildrenToNameTheRoot(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 
-	root := &Object{ID: thePrim, Local: 1}
-	child := &Object{ID: theChild, Local: 2}
+	root := foundHere(w, &Object{ID: thePrim, Local: 1})
+	child := foundHere(w, &Object{ID: theChild, Local: 2})
 	wait := asideErr(t, func() error { return w.Link(context.Background(), root, child) })
 
 	sel := waitSent[*msg.ObjectSelect](t, f)
@@ -419,12 +419,12 @@ func TestLinkWaitsForTheChildrenToNameTheRoot(t *testing.T) {
 // the simulator having agreed would leave a build that looks linked
 // here and is not linked there.
 func TestLinkRefusesWhatItCannotDo(t *testing.T) {
-	root := &Object{ID: thePrim, Local: 1}
-	child := &Object{ID: theChild, Local: 2}
+	rootAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 1}) }
+	childAt := func(w *Session) *Object { return foundHere(w, &Object{ID: theChild, Local: 2}) }
 
 	t.Run("nothing to link", func(t *testing.T) {
 		w, f := newFakeSession(t)
-		if err := w.Link(context.Background(), root); err == nil {
+		if err := w.Link(context.Background(), rootAt(w)); err == nil {
 			t.Error("Link joined an object to nothing")
 		}
 		if got := f.Sent(); len(got) != 0 {
@@ -435,7 +435,7 @@ func TestLinkRefusesWhatItCannotDo(t *testing.T) {
 	t.Run("the selection never went", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.FailSends(errors.New("the circuit is gone"))
-		if err := w.Link(context.Background(), root, child); err == nil {
+		if err := w.Link(context.Background(), rootAt(w), childAt(w)); err == nil {
 			t.Error("Link went ahead without a selection")
 		}
 	})
@@ -443,7 +443,7 @@ func TestLinkRefusesWhatItCannotDo(t *testing.T) {
 	t.Run("the caller gave up while the selection settled", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		ctx, cancel := context.WithCancel(context.Background())
-		wait := asideErr(t, func() error { return w.Link(ctx, root, child) })
+		wait := asideErr(t, func() error { return w.Link(ctx, rootAt(w), childAt(w)) })
 		waitSent[*msg.ObjectSelect](t, f)
 		cancel()
 		if err := wait(); !errors.Is(err, context.Canceled) {
@@ -465,7 +465,7 @@ func TestLinkRefusesWhatItCannotDo(t *testing.T) {
 		}
 		f.mu.Unlock()
 
-		if err := w.Link(context.Background(), root, child); err == nil {
+		if err := w.Link(context.Background(), rootAt(w), childAt(w)); err == nil {
 			t.Error("Link waited for a link that was not sent")
 		}
 	})
@@ -484,8 +484,8 @@ func TestUnlinkSendsThePrimsBeingFreedAndWaitsForThemToSaySo(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
 
-	child := &Object{ID: theChild, Local: 2}
-	other := &Object{ID: theOther, Local: 3}
+	child := foundHere(w, &Object{ID: theChild, Local: 2})
+	other := foundHere(w, &Object{ID: theOther, Local: 3})
 
 	// Not asideErr: what this has to watch is the call NOT returning,
 	// and a wait for the answer cannot say that.
@@ -537,7 +537,7 @@ func TestUnlinkSendsThePrimsBeingFreedAndWaitsForThemToSaySo(t *testing.T) {
 // without the simulator having agreed would have somebody take a
 // linkset apart, be told it came apart, and find it whole.
 func TestUnlinkRefusesWhatItCannotDo(t *testing.T) {
-	child := &Object{ID: theChild, Local: 2}
+	childAt := func(w *Session) *Object { return foundHere(w, &Object{ID: theChild, Local: 2}) }
 
 	t.Run("nothing to take apart", func(t *testing.T) {
 		w, f := newFakeSession(t)
@@ -552,7 +552,7 @@ func TestUnlinkRefusesWhatItCannotDo(t *testing.T) {
 	t.Run("the selection never went", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.FailSends(errors.New("the circuit is gone"))
-		if err := w.Unlink(context.Background(), child); err == nil {
+		if err := w.Unlink(context.Background(), childAt(w)); err == nil {
 			t.Error("Unlink went ahead without a selection")
 		}
 		if got := sentOf[*msg.ObjectDelink](f); len(got) != 0 {
@@ -564,7 +564,7 @@ func TestUnlinkRefusesWhatItCannotDo(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
 		ctx, cancel := context.WithCancel(context.Background())
-		wait := asideErr(t, func() error { return w.Unlink(ctx, child) })
+		wait := asideErr(t, func() error { return w.Unlink(ctx, childAt(w)) })
 		waitSent[*msg.ObjectDelink](t, f)
 		cancel()
 		if err := wait(); !errors.Is(err, context.Canceled) {
@@ -605,7 +605,7 @@ func TestTakeWaitsForTheItemToTurnUpInInventory(t *testing.T) {
 		return []*Item{old, taken}
 	})
 
-	o := &Object{ID: thePrim, Local: 77, Name: "workbench"}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77, Name: "workbench"})
 	wait := aside(t, func() (*Item, error) {
 		return w.Take(context.Background(), o, aFolder, 0)
 	})
@@ -651,7 +651,7 @@ func TestTakeGivesUpWhenNothingArrives(t *testing.T) {
 	w, f := newFakeSession(t)
 	f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 
-	o := &Object{ID: thePrim, Local: 77, Name: "workbench"}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77, Name: "workbench"})
 	wait := aside(t, func() (*Item, error) {
 		return w.Take(context.Background(), o, aFolder, 3*time.Second)
 	})
@@ -697,7 +697,7 @@ func TestTakeWithNoNameAsksWhatTheObjectIsCalled(t *testing.T) {
 		return []*Item{old, unrelated, taken}
 	})
 
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	wait := aside(t, func() (*Item, error) {
 		return w.Take(context.Background(), o, aFolder, 0)
 	})
@@ -745,7 +745,7 @@ func TestTakeWithNoNameRefusesWhenTheNameCannotBeLearned(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 
-		_, err := w.Take(context.Background(), &Object{ID: thePrim, Local: 77}, aFolder, time.Second)
+		_, err := w.Take(context.Background(), foundHere(w, &Object{ID: thePrim, Local: 77}), aFolder, time.Second)
 		if !errors.Is(err, ErrTimeout) {
 			t.Errorf("Take = %v, want the name's timeout", err)
 		}
@@ -763,7 +763,7 @@ func TestTakeWithNoNameRefusesWhenTheNameCannotBeLearned(t *testing.T) {
 		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 		f.objects = []*Seen{{Object: Object{ID: thePrim, Local: 77, Name: "probe"}, PCode: pcodePrim}}
 
-		_, err := w.TakeCopy(context.Background(), &Object{ID: thePrim, Local: 77}, aFolder, time.Second)
+		_, err := w.TakeCopy(context.Background(), foundHere(w, &Object{ID: thePrim, Local: 77}), aFolder, time.Second)
 		if err == nil || strings.Contains(err.Error(), "not copied") {
 			t.Errorf("TakeCopy = %v, want it to say the name could not be learned", err)
 		}
@@ -792,7 +792,7 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 		}
 		f.mu.Unlock()
 
-		_, err := w.Take(context.Background(), &Object{Local: 77, Name: "workbench"}, aFolder, 30*time.Second)
+		_, err := w.Take(context.Background(), foundHere(w, &Object{Local: 77, Name: "workbench"}), aFolder, 30*time.Second)
 		if err == nil {
 			t.Error("Take waited for an item to arrive from a derez that was not sent")
 		}
@@ -803,7 +803,7 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 		w, _ := newFakeSession(t)
 		// No inventory capability at all, which is what a session
 		// attached without one looks like.
-		_, err := w.Take(context.Background(), &Object{ID: thePrim, Local: 77}, aFolder, time.Second)
+		_, err := w.Take(context.Background(), foundHere(w, &Object{ID: thePrim, Local: 77}), aFolder, time.Second)
 		if err == nil {
 			t.Error("Take read a folder that is not there")
 		}
@@ -814,7 +814,7 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 		f.FailSends(errors.New("the circuit is gone"))
-		if _, err := w.Take(context.Background(), &Object{Local: 77, Name: "workbench"}, aFolder, time.Second); err == nil {
+		if _, err := w.Take(context.Background(), foundHere(w, &Object{Local: 77, Name: "workbench"}), aFolder, time.Second); err == nil {
 			t.Error("Take went ahead without a selection")
 		}
 	})
@@ -825,7 +825,7 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 		ctx, cancel := context.WithCancel(context.Background())
 		wait := aside(t, func() (*Item, error) {
-			return w.Take(ctx, &Object{Local: 77, Name: "workbench"}, aFolder, 30*time.Second)
+			return w.Take(ctx, foundHere(w, &Object{Local: 77, Name: "workbench"}), aFolder, 30*time.Second)
 		})
 		waitSent[*msg.ObjectSelect](t, f)
 		cancel()
@@ -840,7 +840,7 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 		f.ServeInventory(t, func(msg.UUID) []*Item { return nil })
 		ctx, cancel := context.WithCancel(context.Background())
 		wait := aside(t, func() (*Item, error) {
-			return w.Take(ctx, &Object{Local: 77, Name: "workbench"}, aFolder, 30*time.Second)
+			return w.Take(ctx, foundHere(w, &Object{Local: 77, Name: "workbench"}), aFolder, 30*time.Second)
 		})
 		waitSent[*msg.DeRezObject](t, f)
 		cancel()
@@ -858,7 +858,7 @@ func TestDeleteSendsItToTheTrash(t *testing.T) {
 	w, f := newFakeSession(t)
 
 	trash := msg.MustParseUUID("1ad37e57-7e57-c0de-4b44-9217348fe328")
-	o := &Object{ID: thePrim, Local: 77}
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	if err := w.Delete(context.Background(), o, trash); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -878,12 +878,12 @@ func TestDeleteSendsItToTheTrash(t *testing.T) {
 // the same reason -- a delete reported as done that was not leaves the
 // caller believing the region is tidier than it is.
 func TestDeleteReportsWhatDidNotHappen(t *testing.T) {
-	o := &Object{ID: thePrim, Local: 77}
+	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 
 	t.Run("the selection never went", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.FailSends(errors.New("the circuit is gone"))
-		if err := w.Delete(context.Background(), o, msg.UUID{1}); err == nil {
+		if err := w.Delete(context.Background(), oAt(w), msg.UUID{1}); err == nil {
 			t.Error("Delete reported success though nothing was sent")
 		}
 	})
@@ -891,7 +891,7 @@ func TestDeleteReportsWhatDidNotHappen(t *testing.T) {
 	t.Run("the caller gave up while the selection settled", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		ctx, cancel := context.WithCancel(context.Background())
-		wait := asideErr(t, func() error { return w.Delete(ctx, o, msg.UUID{1}) })
+		wait := asideErr(t, func() error { return w.Delete(ctx, oAt(w), msg.UUID{1}) })
 		waitSent[*msg.ObjectSelect](t, f)
 		cancel()
 		if err := wait(); !errors.Is(err, context.Canceled) {
@@ -909,7 +909,7 @@ func TestDeleteReportsWhatDidNotHappen(t *testing.T) {
 			}
 		}
 		f.mu.Unlock()
-		if err := w.Delete(context.Background(), o, msg.UUID{1}); err == nil {
+		if err := w.Delete(context.Background(), oAt(w), msg.UUID{1}); err == nil {
 			t.Error("Delete reported success though the derez was not sent")
 		}
 	})

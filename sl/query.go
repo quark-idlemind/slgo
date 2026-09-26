@@ -259,13 +259,26 @@ func (w *Session) Known(ctx context.Context) (int, error) {
 
 // fetch asks whoever holds the session for its picture of the region.
 //
+// Every object that comes back is marked with the visit it was found in,
+// taken before asking: an answer that crosses a region change is then
+// marked with the visit it may have come from, and is looked up again
+// rather than trusted.  Each is a copy, so the mark is never written
+// into something the backend is still holding.
+//
 // The order is settled here rather than left to the backend, so that
 // the two answer alike: a map has no order, and one of them iterates a
 // map to build the list.
 func (w *Session) fetch(ctx context.Context, named, id string) ([]*Seen, error) {
-	out, err := w.b.Objects(ctx, named, id)
+	v := w.here(ctx)
+	got, err := w.b.Objects(ctx, named, id)
 	if err != nil {
 		return nil, err
+	}
+	out := make([]*Seen, len(got))
+	for i, s := range got {
+		c := *s
+		c.from = v
+		out[i] = &c
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Local < out[j].Local })
 	return out, nil
@@ -376,7 +389,9 @@ func (w *Session) selectForNames(ctx context.Context, want []msg.UUID, deadline 
 		}
 		for _, id := range want {
 			if s.ID == id {
-				locals = append(locals, s.Local)
+				if l, err := w.local(ctx, &s.Object); err == nil {
+					locals = append(locals, l)
+				}
 				break
 			}
 		}

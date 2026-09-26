@@ -8,14 +8,18 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-func aThing() *Object { return &Object{ID: thePrim, Local: 4242, Name: "a thing"} }
+// aThing is the prim the touches here are aimed at, found in the region
+// the session is in.
+func aThing(w *Session) *Object {
+	return foundHere(w, &Object{ID: thePrim, Local: 4242, Name: "a thing"})
+}
 
 // TestAClickIsAGrabAndADeGrab, in that order and nothing else: that is
 // what a viewer sends and what a script counting touch_start against
 // touch_end is entitled to see.
 func TestAClickIsAGrabAndADeGrab(t *testing.T) {
 	w, f := newFakeSession(t)
-	if err := w.Touch(context.Background(), aThing(), Touch{}); err != nil {
+	if err := w.Touch(context.Background(), aThing(w), Touch{}); err != nil {
 		t.Fatalf("Touch: %v", err)
 	}
 	sent := f.Sent()
@@ -40,7 +44,7 @@ func TestAClickIsAGrabAndADeGrab(t *testing.T) {
 // llDetectedTouchNormal gets a zero vector no viewer would ever send.
 func TestAnEmptyTouchIsTheMiddleOfFaceZero(t *testing.T) {
 	w, f := newFakeSession(t)
-	if err := w.TouchStart(context.Background(), aThing(), Touch{}); err != nil {
+	if err := w.TouchStart(context.Background(), aThing(w), Touch{}); err != nil {
 		t.Fatal(err)
 	}
 	grab := onlySent[*msg.ObjectGrab](t, f)
@@ -70,7 +74,7 @@ func TestEveryFieldReachesTheWire(t *testing.T) {
 		Binormal: msg.Vector3{Z: 1},
 		Offset:   msg.Vector3{X: 0.1, Y: 0.2, Z: 0.3},
 	}
-	if err := w.TouchStart(context.Background(), aThing(), want); err != nil {
+	if err := w.TouchStart(context.Background(), aThing(w), want); err != nil {
 		t.Fatal(err)
 	}
 	grab := onlySent[*msg.ObjectGrab](t, f)
@@ -94,7 +98,7 @@ func TestEveryFieldReachesTheWire(t *testing.T) {
 // like a continuation of this one.
 func TestAHeldTouchKeepsSendingUpdates(t *testing.T) {
 	w, f := newFakeSession(t)
-	err := w.TouchHold(context.Background(), aThing(), Touch{}, 350*time.Millisecond)
+	err := w.TouchHold(context.Background(), aThing(w), Touch{}, 350*time.Millisecond)
 	if err != nil {
 		t.Fatalf("TouchHold: %v", err)
 	}
@@ -121,7 +125,7 @@ func TestACancelledHoldStillLetsGo(t *testing.T) {
 		time.Sleep(150 * time.Millisecond)
 		cancel()
 	}()
-	if err := w.TouchHold(ctx, aThing(), Touch{}, time.Minute); err == nil {
+	if err := w.TouchHold(ctx, aThing(w), Touch{}, time.Minute); err == nil {
 		t.Error("a cancelled hold returned no error")
 	}
 	if n := len(sentOf[*msg.ObjectDeGrab](f)); n != 1 {
@@ -150,7 +154,7 @@ func TestADragVisitsEveryPointItIsGiven(t *testing.T) {
 	w, f := newFakeSession(t)
 	at := func(x float32) Touch { return Touch{Position: msg.Vector3{X: x}} }
 
-	err := w.Drag(context.Background(), aThing(), Drag{
+	err := w.Drag(context.Background(), aThing(w), Drag{
 		Points: []Touch{at(1), at(2), at(3)},
 		Move:   120 * time.Millisecond,
 		Rate:   2, // one update every 500ms: slower than the whole drag
@@ -184,7 +188,7 @@ func TestADragVisitsEveryPointItIsGiven(t *testing.T) {
 // sees it move rather than jump.
 func TestADragInterpolatesBetweenPoints(t *testing.T) {
 	w, f := newFakeSession(t)
-	err := w.Drag(context.Background(), aThing(), Drag{
+	err := w.Drag(context.Background(), aThing(w), Drag{
 		Points: []Touch{{UV: msg.Vector3{X: 0}}, {UV: msg.Vector3{X: 1}}},
 		Move:   200 * time.Millisecond,
 		Rate:   50,
@@ -208,7 +212,7 @@ func TestADragInterpolatesBetweenPoints(t *testing.T) {
 // arrives.
 func TestTheFaceDoesNotInterpolate(t *testing.T) {
 	w, f := newFakeSession(t)
-	err := w.Drag(context.Background(), aThing(), Drag{
+	err := w.Drag(context.Background(), aThing(w), Drag{
 		Points: []Touch{{Face: 2}, {Face: 3}},
 		Move:   150 * time.Millisecond,
 		Rate:   50,
@@ -235,7 +239,7 @@ func TestTheFaceDoesNotInterpolate(t *testing.T) {
 // from a long rest at the end, so the two are not one duration.
 func TestThePressAndTheDwellAreSeparate(t *testing.T) {
 	w, f := newFakeSession(t)
-	err := w.Drag(context.Background(), aThing(), Drag{
+	err := w.Drag(context.Background(), aThing(w), Drag{
 		Points: []Touch{{UV: msg.Vector3{X: 0.1}}, {UV: msg.Vector3{X: 0.9}}},
 		Press:  150 * time.Millisecond,
 		Move:   100 * time.Millisecond,
@@ -266,7 +270,7 @@ func TestThePressAndTheDwellAreSeparate(t *testing.T) {
 // TestADragNeedsSomewhereToStart.
 func TestADragNeedsSomewhereToStart(t *testing.T) {
 	w, _ := newFakeSession(t)
-	if err := w.Drag(context.Background(), aThing(), Drag{}); err == nil {
+	if err := w.Drag(context.Background(), aThing(w), Drag{}); err == nil {
 		t.Error("a drag with no points was accepted")
 	}
 }

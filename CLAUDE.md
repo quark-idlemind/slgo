@@ -238,3 +238,9 @@ same way.
 - `Session.await`, in `sl/session.go`: waits for what the session has
   been told to satisfy a predicate, checked under the session's lock,
   and quotes in its timeout any alert the simulator sent meanwhile.
+- `Session.local`, in `sl/region.go`: the local id to send for an
+  `Object`. One found in another region, or another run of this one, is
+  looked up again by its uuid, and one that is not here is refused with
+  `ErrNotHere`. A local id read straight off `o.Local` into a message
+  names whatever has that number where the avatar is now, and
+  `TestNoLocalIDIsSentStraightOffAnObject` refuses one.

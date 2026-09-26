@@ -215,10 +215,7 @@ func (w *Session) Sit(ctx context.Context, o *Object, timeout time.Duration) (*S
 	w.mu.Lock()
 	mark := len(w.alerts)
 	before := w.seatLocal()
-	target := o.Local
-	if target == 0 {
-		target = w.locals[o.ID]
-	}
+	target := w.localNow(o)
 	w.mu.Unlock()
 
 	if err := w.Send(ctx, m); err != nil {
@@ -512,6 +509,7 @@ func (w *Session) seatOn(local uint32, o *Object) *Seat {
 	seat.Local = local
 
 	w.mu.Lock()
+	seat.from = w.at
 	if w.sitOn == o.ID {
 		seat.Offset = w.sitOffset
 	}

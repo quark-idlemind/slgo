@@ -62,7 +62,7 @@ func (w *Session) Describe(ctx context.Context, o *Object, timeout time.Duration
 
 	out := &ObjectJSON{}
 	for i, s := range parts {
-		obj := &Object{ID: s.ID, Local: s.Local, Name: s.Name}
+		obj := &Object{ID: s.ID, Local: s.Local, Name: s.Name, from: s.from}
 		props, err := w.Properties(ctx, obj, 20*time.Second)
 		if err != nil {
 			// A prim that will not answer is still worth describing
@@ -223,7 +223,7 @@ func (w *Session) Apply(ctx context.Context, o *Object, oj ObjectJSON, timeout t
 	}
 
 	for i, pj := range oj.Prims {
-		part := &Object{ID: parts[i].ID, Local: parts[i].Local, Name: parts[i].Name}
+		part := &Object{ID: parts[i].ID, Local: parts[i].Local, Name: parts[i].Name, from: parts[i].from}
 		name := pj.Name
 		if i == 0 && oj.Name != "" {
 			name = oj.Name
@@ -360,10 +360,13 @@ func saysShape(p PrimJSON) bool {
 }
 
 // linkset finds an object's prims, root first.
+//
+// An object with an id is found by it and by nothing else: its local id
+// may be another region's, and would find a stranger here first.
 func linkset(all []*Seen, o *Object) ([]*Seen, error) {
 	var root *Seen
 	for _, s := range all {
-		if s.ID == o.ID || (o.Local != 0 && s.Local == o.Local) {
+		if s.ID == o.ID || (o.ID.IsZero() && o.Local != 0 && s.Local == o.Local) {
 			root = s
 			break
 		}
