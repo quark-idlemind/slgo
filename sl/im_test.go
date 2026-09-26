@@ -143,6 +143,7 @@ func TestDialogNames(t *testing.T) {
 		DialogFromTask:                 "object message",
 		DialogDoNotDisturbAutoResponse: "do not disturb auto response",
 		DialogTeleportLure:             "teleport lure",
+		DialogGroupNotice:              "group notice",
 		DialogFriendshipOffered:        "friendship offer",
 		DialogFriendshipAccepted:       "friendship accepted",
 		DialogFriendshipDeclined:       "friendship declined",

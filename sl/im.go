@@ -45,10 +45,17 @@ const (
 	// itself to a message that reached somebody set to do not disturb.
 	DialogDoNotDisturbAutoResponse = 20
 
-	DialogTeleportLure       = 22
-	DialogLureAccepted       = 23
-	DialogGodlikeLure        = 25
-	DialogTeleportRequest    = 26
+	DialogTeleportLure    = 22
+	DialogLureAccepted    = 23
+	DialogGodlikeLure     = 25
+	DialogTeleportRequest = 26
+
+	// DialogGroupNotice is a notice posted to a group; see notice.go.
+	// The other two answer the item one carries.
+	DialogGroupNotice                  = 32
+	DialogGroupNoticeInventoryAccepted = 33
+	DialogGroupNoticeInventoryDeclined = 34
+
 	DialogFriendshipOffered  = 38
 	DialogFriendshipAccepted = 39
 	DialogFriendshipDeclined = 40
@@ -681,7 +688,13 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 	// invite.go); a script's message has its owner's id and the
 	// object's name.  Learning either pair files a wrong name under
 	// that id, and every name printed for it afterwards is wrong.
-	if b.Dialog != DialogGroupInvitation && b.Dialog != DialogFromTask {
+	learn := b.Dialog != DialogGroupInvitation && b.Dialog != DialogFromTask
+	// A group notice may carry the group's id with the poster's name,
+	// and one whose bucket does not name the group cannot be told apart.
+	if n, ok := GroupNoticeFrom(im); ok && (n.Group.IsZero() || n.Group == im.From) {
+		learn = false
+	}
+	if learn {
 		w.learn(im.From, im.FromName)
 	}
 
@@ -809,6 +822,12 @@ func DialogName(d uint8) string {
 		return "godlike teleport"
 	case DialogTeleportRequest:
 		return "teleport request"
+	case DialogGroupNotice:
+		return "group notice"
+	case DialogGroupNoticeInventoryAccepted:
+		return "group notice item accepted"
+	case DialogGroupNoticeInventoryDeclined:
+		return "group notice item declined"
 	case DialogFriendshipOffered:
 		return "friendship offer"
 	case DialogFriendshipAccepted:
