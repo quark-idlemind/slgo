@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,7 +51,11 @@ func newAIS() *aisServer {
 	}
 }
 
+// folder sets what a folder holds.  Called again, it changes it, which
+// is how a test moves or deletes something between two reads.
 func (a *aisServer) folder(id, name string, parent string, kids []string, items []string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.names[id] = name
 	a.tree[id] = kids
 	a.items[id] = items
@@ -104,60 +110,69 @@ func (a *aisServer) handler() http.Handler {
 			return
 		}
 
+		depth, _ := strconv.Atoi(r.URL.Query().Get("depth"))
+
 		a.mu.Lock()
-		kids := a.tree[id]
-		items := a.items[id]
-		name := a.names[id]
 		parent := a.parents[id]
 		if parent == "" {
 			parent = uid(0)
 		}
-		a.mu.Unlock()
-
 		var b strings.Builder
 		b.WriteString(`<?xml version="1.0" ?><llsd><map>`)
 		fmt.Fprintf(&b, `<key>category_id</key><string>%s</string>`, id)
 		fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string>`, parent)
-		fmt.Fprintf(&b, `<key>name</key><string>%s</string>`, name)
+		fmt.Fprintf(&b, `<key>name</key><string>%s</string>`, a.names[id])
 		b.WriteString(`<key>type_default</key><integer>-1</integer>`)
 		b.WriteString(`<key>version</key><integer>3</integer>`)
-		b.WriteString(`<key>_embedded</key><map><key>categories</key><map>`)
-		for _, k := range kids {
-			fmt.Fprintf(&b, `<key>%s</key><map>`, k)
-			fmt.Fprintf(&b, `<key>category_id</key><string>%s</string>`, k)
-			fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string>`, id)
-			fmt.Fprintf(&b, `<key>name</key><string>%s</string>`, a.names[k])
-			b.WriteString(`<key>type_default</key><integer>-1</integer>`)
-			b.WriteString(`<key>version</key><integer>1</integer>`)
-			b.WriteString(`<key>_links</key><map><key>self</key><map><key>href</key><uri>/category/x</uri></map></map>`)
-			b.WriteString(`</map>`)
-		}
-		b.WriteString(`</map><key>items</key><map>`)
-		for _, it := range items {
-			fmt.Fprintf(&b, `<key>%s</key><map>`, it)
-			fmt.Fprintf(&b, `<key>item_id</key><string>%s</string>`, it)
-			fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string>`, id)
-			fmt.Fprintf(&b, `<key>asset_id</key><string>%s</string>`, uid(999))
-			fmt.Fprintf(&b, `<key>name</key><string>item %s</string>`, it[len(it)-3:])
-			b.WriteString(`<key>desc</key><string></string>`)
-			b.WriteString(`<key>type</key><integer>7</integer>`)
-			b.WriteString(`<key>inv_type</key><integer>7</integer>`)
-			b.WriteString(`<key>flags</key><integer>0</integer>`)
-			b.WriteString(`<key>created_at</key><integer>1265521621</integer>`)
-			b.WriteString(`<key>permissions</key><map>`)
-			fmt.Fprintf(&b, `<key>creator_id</key><string>%s</string>`, uid(777))
-			fmt.Fprintf(&b, `<key>owner_id</key><string>%s</string>`, uid(778))
-			b.WriteString(`<key>base_mask</key><integer>2147483647</integer>`)
-			b.WriteString(`<key>next_owner_mask</key><integer>532480</integer>`)
-			b.WriteString(`</map>`)
-			b.WriteString(`<key>sale_info</key><map><key>sale_type</key><integer>0</integer><key>sale_price</key><integer>10</integer></map>`)
-			b.WriteString(`</map>`)
-		}
-		b.WriteString(`</map><key>links</key><map/></map></map></llsd>`)
+		a.embedded(&b, id, 0, depth)
+		a.mu.Unlock()
+		b.WriteString(`</map></llsd>`)
 
 		w.Header().Set("Content-Type", "application/llsd+xml")
 		fmt.Fprint(w, b.String())
 	})
+}
+
+// embedded writes what a folder holds, nesting what its folders hold
+// down to depth, as AIS answers a request with ?depth=.  The caller
+// holds a.mu.
+func (a *aisServer) embedded(b *strings.Builder, id string, level, depth int) {
+	b.WriteString(`<key>_embedded</key><map><key>categories</key><map>`)
+	for _, k := range a.tree[id] {
+		fmt.Fprintf(b, `<key>%s</key><map>`, k)
+		fmt.Fprintf(b, `<key>category_id</key><string>%s</string>`, k)
+		fmt.Fprintf(b, `<key>parent_id</key><string>%s</string>`, id)
+		fmt.Fprintf(b, `<key>name</key><string>%s</string>`, a.names[k])
+		b.WriteString(`<key>type_default</key><integer>-1</integer>`)
+		b.WriteString(`<key>version</key><integer>1</integer>`)
+		b.WriteString(`<key>_links</key><map><key>self</key><map><key>href</key><uri>/category/x</uri></map></map>`)
+		if level < depth {
+			a.embedded(b, k, level+1, depth)
+		}
+		b.WriteString(`</map>`)
+	}
+	b.WriteString(`</map><key>items</key><map>`)
+	for _, it := range a.items[id] {
+		fmt.Fprintf(b, `<key>%s</key><map>`, it)
+		fmt.Fprintf(b, `<key>item_id</key><string>%s</string>`, it)
+		fmt.Fprintf(b, `<key>parent_id</key><string>%s</string>`, id)
+		fmt.Fprintf(b, `<key>asset_id</key><string>%s</string>`, uid(999))
+		fmt.Fprintf(b, `<key>name</key><string>item %s</string>`, it[len(it)-3:])
+		b.WriteString(`<key>desc</key><string></string>`)
+		b.WriteString(`<key>type</key><integer>7</integer>`)
+		b.WriteString(`<key>inv_type</key><integer>7</integer>`)
+		b.WriteString(`<key>flags</key><integer>0</integer>`)
+		b.WriteString(`<key>created_at</key><integer>1265521621</integer>`)
+		b.WriteString(`<key>permissions</key><map>`)
+		fmt.Fprintf(b, `<key>creator_id</key><string>%s</string>`, uid(777))
+		fmt.Fprintf(b, `<key>owner_id</key><string>%s</string>`, uid(778))
+		b.WriteString(`<key>base_mask</key><integer>2147483647</integer>`)
+		b.WriteString(`<key>next_owner_mask</key><integer>532480</integer>`)
+		b.WriteString(`</map>`)
+		b.WriteString(`<key>sale_info</key><map><key>sale_type</key><integer>0</integer><key>sale_price</key><integer>10</integer></map>`)
+		b.WriteString(`</map>`)
+	}
+	b.WriteString(`</map><key>links</key><map/></map>`)
 }
 
 // invSession makes a Agent with only the HTTP parts wired up, which
@@ -540,6 +555,289 @@ func TestFetchingTheSameFolderTwiceUpdatesRatherThanDuplicates(t *testing.T) {
 	}
 	if got := s.Inventory.Contents(msg.MustParseUUID(root)); len(got) != 2 {
 		t.Errorf("the folder lists %d items", len(got))
+	}
+}
+
+// holds is what a folder lists, child folders and items alike, by id in
+// order.
+func holds(inv *Inventory, id string) []string {
+	var out []string
+	for _, f := range inv.Children(msg.MustParseUUID(id)) {
+		out = append(out, f.ID.String())
+	}
+	for _, i := range inv.Contents(msg.MustParseUUID(id)) {
+		out = append(out, i.ID.String())
+	}
+	slices.Sort(out)
+	return out
+}
+
+func wantHolds(t *testing.T, inv *Inventory, id, name string, want ...string) {
+	t.Helper()
+	if got := holds(inv, id); !slices.Equal(got, want) {
+		t.Errorf("%s holds %v, want %v", name, got, want)
+	}
+}
+
+// TestReReadingAfterAnItemMoved: an item read again with a new parent is
+// listed under that one and not the old, without the old folder being
+// read again -- the viewer moves it the same way.
+func TestReReadingAfterAnItemMoved(t *testing.T) {
+	a := newAIS()
+	root, from, to, thing := uid(0), uid(1), uid(2), uid(100)
+	a.folder(root, "My Inventory", "", []string{from, to}, nil)
+	a.folder(from, "From", root, nil, []string{thing})
+	a.folder(to, "To", root, nil, nil)
+
+	hs := httptest.NewServer(a.handler())
+	defer hs.Close()
+	ctx := context.Background()
+
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	if err := s.FetchInventory(ctx, FetchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	wantHolds(t, s.Inventory, from, "the first folder", thing)
+
+	a.folder(from, "From", root, nil, nil)
+	a.folder(to, "To", root, nil, []string{thing})
+
+	if err := s.FetchFolder(ctx, msg.MustParseUUID(to)); err != nil {
+		t.Fatal(err)
+	}
+	wantHolds(t, s.Inventory, from, "the folder it left")
+	wantHolds(t, s.Inventory, to, "the folder it went to", thing)
+	if it, ok := s.Inventory.Item(msg.MustParseUUID(thing)); !ok || it.ParentID.String() != to {
+		t.Errorf("the item's record = %+v", it)
+	}
+
+	// Reading the whole tree again comes to the same.
+	if err := s.FetchInventory(ctx, FetchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	wantHolds(t, s.Inventory, from, "the folder it left")
+	wantHolds(t, s.Inventory, to, "the folder it went to", thing)
+	if _, items := s.Inventory.Counts(); items != 1 {
+		t.Errorf("%d items, want 1", items)
+	}
+}
+
+// TestReReadingAfterAFolderMoved: the same for a folder, which takes
+// what is inside it along.  Reading the folder it left afterwards does
+// not lose it: it is no longer listed there to be lost.
+func TestReReadingAfterAFolderMoved(t *testing.T) {
+	a := newAIS()
+	root, from, to, moved, inside := uid(0), uid(1), uid(2), uid(3), uid(100)
+	a.folder(root, "My Inventory", "", []string{from, to}, nil)
+	a.folder(from, "From", root, []string{moved}, nil)
+	a.folder(to, "To", root, nil, nil)
+	a.folder(moved, "Moved", from, nil, []string{inside})
+
+	hs := httptest.NewServer(a.handler())
+	defer hs.Close()
+	ctx := context.Background()
+
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	if err := s.FetchInventory(ctx, FetchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	a.folder(from, "From", root, nil, nil)
+	a.folder(to, "To", root, []string{moved}, nil)
+	a.folder(moved, "Moved", to, nil, []string{inside})
+
+	for _, id := range []string{to, from} {
+		if err := s.FetchFolder(ctx, msg.MustParseUUID(id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wantHolds(t, s.Inventory, from, "the folder it left")
+	wantHolds(t, s.Inventory, to, "the folder it went to", moved)
+	wantHolds(t, s.Inventory, moved, "the folder that moved", inside)
+	if got := s.Inventory.Path(msg.MustParseUUID(moved)); got != "My Inventory/To/Moved" {
+		t.Errorf("path = %q", got)
+	}
+
+	// And a whole reading, in whatever order the folders answer.
+	if err := s.FetchInventory(ctx, FetchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	wantHolds(t, s.Inventory, from, "the folder it left")
+	wantHolds(t, s.Inventory, to, "the folder it went to", moved)
+	wantHolds(t, s.Inventory, moved, "the folder that moved", inside)
+	if folders, items := s.Inventory.Counts(); folders != 4 || items != 1 {
+		t.Errorf("%d folders and %d items, want 4 and 1", folders, items)
+	}
+}
+
+// TestReReadingAfterAnItemWasDeleted: a folder read whole again no longer
+// lists an item that has gone from it, and the item is forgotten.
+func TestReReadingAfterAnItemWasDeleted(t *testing.T) {
+	a := newAIS()
+	root, kept, gone := uid(0), uid(10), uid(11)
+	a.folder(root, "My Inventory", "", nil, []string{kept, gone})
+
+	hs := httptest.NewServer(a.handler())
+	defer hs.Close()
+	ctx := context.Background()
+
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	if err := s.FetchFolder(ctx, msg.MustParseUUID(root)); err != nil {
+		t.Fatal(err)
+	}
+	a.folder(root, "My Inventory", "", nil, []string{kept})
+	if err := s.FetchFolder(ctx, msg.MustParseUUID(root)); err != nil {
+		t.Fatal(err)
+	}
+
+	wantHolds(t, s.Inventory, root, "the folder", kept)
+	if _, ok := s.Inventory.Item(msg.MustParseUUID(gone)); ok {
+		t.Error("the deleted item is still known")
+	}
+	if _, items := s.Inventory.Counts(); items != 1 {
+		t.Errorf("%d items, want 1", items)
+	}
+}
+
+// TestReReadingAfterAFolderWasDeleted: the same for a folder, which
+// takes everything under it with it and leaves its siblings alone.
+func TestReReadingAfterAFolderWasDeleted(t *testing.T) {
+	a := newAIS()
+	root, gone, deeper, kept := uid(0), uid(1), uid(2), uid(3)
+	a.folder(root, "My Inventory", "", []string{gone, kept}, nil)
+	a.folder(gone, "Gone", root, []string{deeper}, []string{uid(100)})
+	a.folder(deeper, "Deeper", gone, nil, []string{uid(101)})
+	a.folder(kept, "Kept", root, nil, []string{uid(102)})
+
+	hs := httptest.NewServer(a.handler())
+	defer hs.Close()
+	ctx := context.Background()
+
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	if err := s.FetchInventory(ctx, FetchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	a.folder(root, "My Inventory", "", []string{kept}, nil)
+	if err := s.FetchFolder(ctx, msg.MustParseUUID(root)); err != nil {
+		t.Fatal(err)
+	}
+
+	wantHolds(t, s.Inventory, root, "the root", kept)
+	wantHolds(t, s.Inventory, kept, "the folder beside it", uid(102))
+	for _, id := range []string{gone, deeper} {
+		if _, ok := s.Inventory.Folder(msg.MustParseUUID(id)); ok {
+			t.Errorf("folder %s is still known", id)
+		}
+		wantHolds(t, s.Inventory, id, "a folder that went")
+	}
+	for _, id := range []string{uid(100), uid(101)} {
+		if _, ok := s.Inventory.Item(msg.MustParseUUID(id)); ok {
+			t.Errorf("item %s, which was inside it, is still known", id)
+		}
+	}
+	if folders, items := s.Inventory.Counts(); folders != 2 || items != 1 {
+		t.Errorf("%d folders and %d items, want 2 and 1", folders, items)
+	}
+}
+
+// TestADeeperReadingIsWholeDownToItsDepth: a reply to ?depth=1 carries
+// all of each child folder, so what has gone from one goes here too; it
+// carries nothing of the folders below those, so what is known of them
+// stays until they are read.
+func TestADeeperReadingIsWholeDownToItsDepth(t *testing.T) {
+	a := newAIS()
+	root, kid, grandkid := uid(0), uid(1), uid(2)
+	a.folder(root, "My Inventory", "", []string{kid}, nil)
+	a.folder(kid, "Kid", root, []string{grandkid}, []string{uid(100), uid(101)})
+	a.folder(grandkid, "Grandkid", kid, nil, []string{uid(102), uid(103)})
+
+	hs := httptest.NewServer(a.handler())
+	defer hs.Close()
+	ctx := context.Background()
+
+	s := invSession(hs.URL, msg.MustParseUUID(root))
+	if err := s.FetchInventory(ctx, FetchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	a.folder(kid, "Kid", root, []string{grandkid}, []string{uid(100)})
+	a.folder(grandkid, "Grandkid", kid, nil, []string{uid(102)})
+
+	if err := FetchFolderDepth(ctx, s, s.Inventory, msg.MustParseUUID(root), 1); err != nil {
+		t.Fatal(err)
+	}
+	wantHolds(t, s.Inventory, kid, "the child", grandkid, uid(100))
+	wantHolds(t, s.Inventory, grandkid, "the grandchild, not read", uid(102), uid(103))
+
+	if err := FetchFolderDepth(ctx, s, s.Inventory, msg.MustParseUUID(root), 2); err != nil {
+		t.Fatal(err)
+	}
+	wantHolds(t, s.Inventory, grandkid, "the grandchild, read", uid(102))
+}
+
+// TestAPartOfAFolderIsNotTakenForAllOfIt: only a listing that is plainly
+// the whole of a folder loses anything from it.  The viewer takes a
+// folder's contents as known only when AIS sends categories, items and
+// links all three, within the depth that was asked for.
+func TestAPartOfAFolderIsNotTakenForAllOfIt(t *testing.T) {
+	root, kid, thing, inside := uid(0), uid(1), uid(100), uid(101)
+	a := newAIS()
+	a.folder(root, "My Inventory", "", []string{kid}, []string{thing})
+	a.folder(kid, "Kid", root, nil, []string{inside})
+	full := httptest.NewServer(a.handler())
+	defer full.Close()
+	ctx := context.Background()
+
+	self := func(id, parent string) string {
+		return fmt.Sprintf(`<key>category_id</key><string>%s</string>`+
+			`<key>parent_id</key><string>%s</string>`+
+			`<key>name</key><string>My Inventory</string>`, id, parent)
+	}
+	emptyKid := fmt.Sprintf(`<key>%s</key><map><key>category_id</key><string>%s</string>`+
+		`<key>parent_id</key><string>%s</string><key>name</key><string>Kid</string>`+
+		`<key>_embedded</key><map><key>categories</key><map/><key>items</key><map/><key>links</key><map/></map>`+
+		`</map>`, kid, kid, root)
+	plainKid := fmt.Sprintf(`<key>%s</key><map><key>category_id</key><string>%s</string>`+
+		`<key>parent_id</key><string>%s</string><key>name</key><string>Kid</string></map>`, kid, kid, root)
+
+	for _, c := range []struct {
+		name string
+		body string
+	}{
+		{"no links", self(root, root) + `<key>_embedded</key><map><key>categories</key><map>` + plainKid +
+			`</map><key>items</key><map/></map>`},
+		{"no items", self(root, root) + `<key>_embedded</key><map><key>categories</key><map>` + plainKid +
+			`</map><key>links</key><map/></map>`},
+		{"no categories", self(root, root) + `<key>_embedded</key><map><key>items</key><map/><key>links</key><map/></map>`},
+		{"a child's contents below the depth asked for", self(root, root) +
+			`<key>_embedded</key><map><key>categories</key><map>` + emptyKid +
+			fmt.Sprintf(`</map><key>items</key><map><key>%s</key><map><key>item_id</key><string>%s</string>`+
+				`<key>parent_id</key><string>%s</string><key>name</key><string>item 100</string></map></map>`, thing, thing, root) +
+			`<key>links</key><map/></map>`},
+		{"a reply naming another folder", self(uid(5), uid(6)) +
+			`<key>_embedded</key><map><key>categories</key><map/><key>items</key><map/><key>links</key><map/></map>`},
+		{"a reply naming no folder", `<key>name</key><string>My Inventory</string>` +
+			`<key>_embedded</key><map><key>categories</key><map/><key>items</key><map/><key>links</key><map/></map>`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			inv := NewInventory(msg.MustParseUUID(root))
+			if err := FetchInventory(ctx, invSession(full.URL, msg.MustParseUUID(root)), inv, FetchOptions{}); err != nil {
+				t.Fatal(err)
+			}
+
+			part := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, `<llsd><map>`+c.body+`</map></llsd>`)
+			}))
+			defer part.Close()
+			if err := FetchFolder(ctx, invSession(part.URL, msg.MustParseUUID(root)), inv, msg.MustParseUUID(root)); err != nil {
+				t.Fatal(err)
+			}
+
+			wantHolds(t, inv, root, "the root", kid, thing)
+			wantHolds(t, inv, kid, "the child", inside)
+			if _, items := inv.Counts(); items != 2 {
+				t.Errorf("%d items, want 2", items)
+			}
+		})
 	}
 }
 
