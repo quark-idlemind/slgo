@@ -90,12 +90,9 @@ type Conn struct {
 	agent string
 
 	// dropped counts what this connection threw away because nobody was
-	// reading fast enough, and OnDrop says what each one was.
-	//
-	// It used to do neither.  A chat line lost here looked exactly like a
-	// line the script never said, which for a benchmark is a number that
-	// is quietly wrong rather than a run that failed -- and that is the
-	// one thing a measurement must not do.
+	// reading fast enough, and OnDrop says what each one was, so that a
+	// line lost here can be told from a line never said.
+	// Why: doc/client.md#counting-what-is-dropped
 	dropped atomic.Uint64
 	onDrop  func(what string)
 
@@ -296,14 +293,12 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 //
 // The basename of the running binary, so slsh is "slsh" and slbotd is
 // "slbotd" with nothing to remember and no way for the two to disagree.
-// Every client used to say "slgo", which made the name useless for the
-// one thing it is for: slgod's own "in use by" message read "slgo,
-// slgo" when two different programs were attached.
 //
 // It is not a credential and proves nothing.  The handshake is over the
 // shared secret and is bound to the TLS session; this is a label on the
 // far end of an already-proved connection, for a person reading a
 // sentence about it.
+// Why: doc/client.md#the-name-a-client-gives-slgod
 func Name() string {
 	if len(os.Args) == 0 {
 		return "slgo"
@@ -372,14 +367,14 @@ func login(ctx context.Context, cc *grpc.ClientConn, addr string, binding func()
 //
 // It does not close them itself when there is a recvLoop, because
 // recvLoop is the only thing that sends on them and closing a channel
-// under its sender is a race at best and a panic at worst -- which is
-// what this used to be, on the one path every client takes to hang up.
-// So Close shuts the transport down instead, which makes recvLoop's
-// Recv fail, and waits for it to close them on the way out.
+// under its sender is a race at best and a panic at worst.  So Close
+// shuts the transport down instead, which makes recvLoop's Recv fail,
+// and waits for it to close them on the way out.
 //
 // With no recvLoop there is no sender and nothing to wait for, and
 // Close does it here: a connection that never attached must still
 // leave anybody ranging over Messages with an end to range to.
+// Why: doc/client.md#closing-while-the-relay-runs
 func (c *Conn) Close() error {
 	c.finish(nil)
 	err := c.cc.Close()
@@ -538,12 +533,7 @@ func (c *Conn) attach(ctx context.Context, agentName string, weak bool, subscrib
 	// recvLoop about to start and waits for it, or gets here first and
 	// is refused -- and never decides there is no sender just as one
 	// begins.
-	//
-	// No test reaches the refusal, and none can through this package's
-	// own doors: Close shuts the transport down, so an attach that got
-	// this far -- stream opened, first packet read -- ran entirely
-	// before it.  What is left is the window between that read and this
-	// lock, which is exactly what the guard is for.
+	// Why: doc/client.md#closing-while-the-relay-runs
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -669,10 +659,9 @@ func (c *Conn) deliver(m *pb.InboundMessage) {
 	select {
 	case c.messages <- out:
 	default:
-		// A client that stops reading loses messages.  Counted,
-		// because the alternative is what it was: a chat line that
-		// never arrives and no way for anybody to know one went
-		// missing.
+		// A client that stops reading loses messages, and each is
+		// counted.
+		// Why: doc/client.md#counting-what-is-dropped
 		c.dropped.Add(1)
 		c.noteDrop("message " + m.Name)
 	}
