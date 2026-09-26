@@ -89,7 +89,9 @@ type asking struct {
 // set rather than waiting for objects that do not exist.
 //
 // agent asks for them on one avatar; empty takes them from wherever they
-// are free, which may be more than one.
+// are free, which may be more than one.  An avatar the daemon does not
+// host comes back at once with Why set; one it hosts that is logged out
+// is waited for.
 //
 // A caller that gives up through ctx need do nothing more: the daemon is
 // not told, and what it grants for the request later is given back.

@@ -47,7 +47,8 @@ A request is for a COUNT. It is answered all of them or none, out of
 whichever avatars have places free — twelve wanted on a daemon holding
 three avatars may come back as eight of one and four of another, and the
 answer says which avatar each place belongs to. A caller that minds names
-one, and then it is that avatar or a wait.
+one, and then it is that avatar or a wait -- or a refusal, when the
+daemon does not host it.
 
 `Slots`, `RenewSlots` and `ReleaseSlots` ride on the client's STREAM
 rather than being calls of their own, for the reason a lock does and more
@@ -128,6 +129,14 @@ giving it back puts nothing into the pool. Once the last old place has
 been given back or has run out, the new ones go in, and a request that
 was waiting for them is woken.
 
+A request naming an avatar the daemon does not host at all is refused at
+once, with `no avatar called "NAME" is hosted here`, and a try is given
+the same answer. That includes a profile the daemon could start and has
+not. One whose `Host` is still logging it in is waited for, as a
+logged-out one is. A request already waiting when its avatar leaves is
+not woken by the leaving: it waits on for the name to be hosted again,
+and is refused the next time something wakes it if it has not been.
+
 A session that drops and is logged back in by the daemon is none of
 these. It keeps its places, and they are handed out as usual while it is
 reconnecting: the daemon still holds the old connection until the new
@@ -135,10 +144,12 @@ one is up. That is read from the code, not watched.
 
 Until 2026-09-26 a request that met a logged-out avatar's places threw
 them away for the life of the daemon, and hosting the avatar again did
-not bring them back. That was found by reading the code. The behaviour
-above was built then and has not been watched on the grid; the tests in
-`server/slots_test.go` check it against a fake login server and
-simulator, and `internal/slots/slots_test.go` checks the pool's half.
+not bring them back; and a request naming an avatar the daemon did not
+host, with no bound on its wait, waited for ever. Both were found by
+reading the code. The behaviour above was built then and has not been
+watched on the grid; the tests in `server/slots_test.go` check it
+against a fake login server and simulator, and
+`internal/slots/slots_test.go` checks the pool's half.
 
 ## All of them or none
 

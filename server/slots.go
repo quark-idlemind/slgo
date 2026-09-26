@@ -285,12 +285,23 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 		// was holding when this client attached.
 		sp.sync()
 
+		// An avatar the daemon does not host has no places and none are
+		// coming, so it is refused rather than waited for.  One that is
+		// logged out, or still being logged in, is waited for: hosting
+		// it gives it places.
+		only, most := req.GetAgent(), sp.most(req.GetAgent())
+		if only != "" && most == 0 {
+			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{},
+				fmt.Sprintf("no avatar called %q is hosted here", only)))
+			return
+		}
+
 		// More than there could ever be is refused rather than waited
 		// for: waiting for objects that do not exist is waiting for
 		// ever, and the daemon is the only thing that knows how many
 		// there are.  The pool cannot say -- a place away being tidied
 		// is not in it at all -- and would simply never fill.
-		if most := sp.most(req.GetAgent()); want > most {
+		if want > most {
 			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, fmt.Sprintf(
 				"%d objects were asked for and %s %d",
 				want, hasOrHave(req.GetAgent()), most)))
@@ -335,12 +346,17 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 }
 
 // most is how many places there could ever be: one avatar's worth when
-// one was named, and every avatar's otherwise.
+// one was named and the daemon holds it -- logged out, and still being
+// logged in, count -- none when it does not, and every hosted avatar's
+// otherwise.
 func (sp *slotPool) most(agent string) int {
-	if agent != "" {
+	if sp.srv == nil {
 		return SlotsPerAgent
 	}
-	if sp.srv == nil {
+	if agent != "" {
+		if !sp.srv.holds(agent) {
+			return 0
+		}
 		return SlotsPerAgent
 	}
 	return SlotsPerAgent * len(sp.srv.hosted())
