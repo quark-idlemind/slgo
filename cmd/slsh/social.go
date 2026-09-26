@@ -339,6 +339,8 @@ func (sh *Shell) heard(m *sl.IM) {
 		// joins depends on the fee, which the listing has and a line
 		// of notice has no room for.
 		sh.noticef("%s invites you into a group -- waiting lists it, and what joining costs", name)
+	case m.Dialog == sl.DialogGroupNotice:
+		sh.heardNotice(m)
 	case m.Dialog == sl.DialogTypingStart, m.Dialog == sl.DialogTypingStop:
 		// A line per keystroke is not worth showing.
 	default:

@@ -81,6 +81,9 @@ type Shell struct {
 	numbers map[string]int
 	nextNum int
 
+	// notices is the group notices heard lately; see notice.go.
+	notices noticeBoard
+
 	// entry is the multi-line answer being typed, if one is.
 	entry *entry
 
@@ -948,7 +951,7 @@ func commandNames() []string {
 
 func init() {
 	commands = map[string]*command{}
-	for _, set := range []map[string]*command{inventoryCommands, textureCommands, objectFileCommands, carryCommands, wearCommands, linkCommands, insideCommands, waitingCommands, worldCommands, groupCommands, maturityCommands, socialCommands, objectCommands, postureCommands, walkCommands, sessionCommands, viewerCommands, setCommands, manCommands, askCommandTable} {
+	for _, set := range []map[string]*command{inventoryCommands, textureCommands, objectFileCommands, carryCommands, wearCommands, linkCommands, insideCommands, waitingCommands, noticeCommands, worldCommands, groupCommands, maturityCommands, socialCommands, objectCommands, postureCommands, walkCommands, sessionCommands, viewerCommands, setCommands, manCommands, askCommandTable} {
 		for n, c := range set {
 			commands[n] = c
 		}
