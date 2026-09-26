@@ -89,3 +89,5 @@ __pycache__/
 # handbook/bundle.py writes the one-file build here by default, and a
 # single page's build as NAME-bundle.html; they are published, not kept.
 /handbook/*-bundle.html
+/S
+/G
