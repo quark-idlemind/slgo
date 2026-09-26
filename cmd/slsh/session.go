@@ -83,6 +83,10 @@ func cmdStatus(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		fmt.Fprintf(out, "  placements  %s\n", strings.Join(counts, ", "))
 	}
 
+	if st.Undecodable > 0 || st.Padded > 0 {
+		fmt.Fprintf(out, "  decoding    %d undecodable, %d read past the end\n", st.Undecodable, st.Padded)
+	}
+
 	if len(st.Unhandled) > 0 {
 		keys := make([]string, 0, len(st.Unhandled))
 		for k := range st.Unhandled {

@@ -171,7 +171,8 @@ func (f *fakeSim) send(m msg.Message, flags uint8) {
 }
 
 // sendRaw puts a message number and body on the wire, so a test can
-// send something the template does not describe.
+// send something the template does not describe.  With FlagZerocoded
+// the number and body are zero coded, as a simulator codes them.
 func (f *fakeSim) sendRaw(id msg.ID, body []byte, flags uint8) {
 	f.mu.Lock()
 	peer := f.peer
@@ -182,8 +183,12 @@ func (f *fakeSim) sendRaw(id msg.ID, body []byte, flags uint8) {
 		return
 	}
 	out := msg.AppendHeader(nil, &msg.Header{Flags: flags, Sequence: seq})
-	out = msg.AppendID(out, id)
-	out = append(out, body...)
+	payload := append(msg.AppendID(nil, id), body...)
+	if flags&msg.FlagZerocoded != 0 {
+		out = msg.ZeroCollapse(out, payload)
+	} else {
+		out = append(out, payload...)
+	}
 	f.conn.WriteToUDP(out, peer)
 }
 

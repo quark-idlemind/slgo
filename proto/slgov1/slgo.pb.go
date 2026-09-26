@@ -2760,8 +2760,15 @@ type StatusResponse struct {
 	// width it is sent, the ones it does not read as well.  It is here to
 	// show which forms the simulator really sends.
 	PlacementWidths map[uint32]uint64 `protobuf:"bytes,14,rep,name=placement_widths,json=placementWidths,proto3" json:"placement_widths,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// How many packets decoded only by reading past their end: a
+	// zerocoded message whose last fields were read as zeros, which the
+	// simulator's zero coder is known to cause, or whose Variable field
+	// said it was longer than the packet and was cut at its end, which
+	// is not known to happen.  Undecodable, above, counts the packets
+	// that did not decode at all.
+	Padded        uint64 `protobuf:"varint,15,opt,name=padded,proto3" json:"padded,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StatusResponse) Reset() {
@@ -2890,6 +2897,13 @@ func (x *StatusResponse) GetPlacementWidths() map[uint32]uint64 {
 		return x.PlacementWidths
 	}
 	return nil
+}
+
+func (x *StatusResponse) GetPadded() uint64 {
+	if x != nil {
+		return x.Padded
+	}
+	return 0
 }
 
 // ViewerEndpoint is slgod's own login server, and whether a viewer has
@@ -6143,7 +6157,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x12ListAgentsResponse\x12*\n" +
 	"\x06agents\x18\x01 \x03(\v2\x12.slgo.v1.AgentInfoR\x06agents\"%\n" +
 	"\rStatusRequest\x12\x14\n" +
-	"\x05agent\x18\x01 \x01(\tR\x05agent\"\xc1\x05\n" +
+	"\x05agent\x18\x01 \x01(\tR\x05agent\"\xd9\x05\n" +
 	"\x0eStatusResponse\x12(\n" +
 	"\x05agent\x18\x01 \x01(\v2\x12.slgo.v1.AgentInfoR\x05agent\x12\x1d\n" +
 	"\n" +
@@ -6163,7 +6177,8 @@ const file_slgo_proto_rawDesc = "" +
 	"\aclients\x18\v \x01(\x05R\aclients\x12D\n" +
 	"\tunhandled\x18\f \x03(\v2&.slgo.v1.StatusResponse.UnhandledEntryR\tunhandled\x12/\n" +
 	"\x06viewer\x18\r \x01(\v2\x17.slgo.v1.ViewerEndpointR\x06viewer\x12W\n" +
-	"\x10placement_widths\x18\x0e \x03(\v2,.slgo.v1.StatusResponse.PlacementWidthsEntryR\x0fplacementWidths\x1a<\n" +
+	"\x10placement_widths\x18\x0e \x03(\v2,.slgo.v1.StatusResponse.PlacementWidthsEntryR\x0fplacementWidths\x12\x16\n" +
+	"\x06padded\x18\x0f \x01(\x04R\x06padded\x1a<\n" +
 	"\x0eUnhandledEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x04R\x05value:\x028\x01\x1aB\n" +

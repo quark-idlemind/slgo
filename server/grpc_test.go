@@ -166,6 +166,50 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	}
 }
 
+// TestStatusCountsWhatDidNotDecodeWhole: the receiver's count of
+// packets read past their end, and of packets that would not decode,
+// reach a client.  An ObjectUpdate, zerocoded in the template, short by
+// five bytes is read past its end; a ChatFromSimulator, which is not,
+// short by three is undecodable.
+func TestStatusCountsWhatDidNotDecodeWhole(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+
+	st, err := r.srv.Status(ctx, &pb.StatusRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.GetPadded() != 0 || st.GetUndecodable() != 0 {
+		t.Fatalf("padded %d, undecodable %d before anything short was sent", st.GetPadded(), st.GetUndecodable())
+	}
+
+	upd := &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{
+		ID:     4243,
+		FullID: msg.MustParseUUID("167a7e57-7e57-c0de-7584-28483c593dbc"),
+		PCode:  9,
+	}}}
+	body, err := upd.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.sim.sendRaw(msg.IDOf(upd), body[:len(body)-5], msg.FlagZerocoded)
+
+	chat := &msg.ChatFromSimulator{}
+	chat.ChatData.Message = []byte("cut short\x00")
+	if body, err = chat.Encode(); err != nil {
+		t.Fatal(err)
+	}
+	r.sim.sendRaw(msg.IDOf(chat), body[:len(body)-3], 0)
+
+	waitFor(t, 5*time.Second, "both packets to be counted", func() bool {
+		st, err = r.srv.Status(ctx, &pb.StatusRequest{})
+		return err == nil && st.GetPadded()+st.GetUndecodable() >= 2
+	})
+	if st.GetPadded() != 1 || st.GetUndecodable() != 1 {
+		t.Errorf("padded %d, undecodable %d; want one of each", st.GetPadded(), st.GetUndecodable())
+	}
+}
+
 // TestARelayEncodesWhatItWasNotGivenTheBytesOf: a session kept without
 // KeepBody hands over the decoded message and no bytes, and the relay
 // has to produce the bytes itself -- a client is promised the body of

@@ -31,8 +31,7 @@ message, zerocoded or not:
   holds there.
 
 `Unmarshal` (`msg/codec.go`) does the same for a zerocoded message,
-with two differences. A message that is not zerocoded has no zeros to
-have lost, so a short read in one is an error.
+with two differences:
 
 - A width that is partly there keeps the bytes that are, and reads the
   rest as zeros. This and the viewer differ only when the bytes that
@@ -47,9 +46,15 @@ have lost, so a short read in one is an error.
 A length prefix that runs off the end leaves nothing behind it to
 take, so that field comes out empty, as the viewer's length 0 does.
 
-`Stats.Padded` counts the packets that were read past the end either
-way, once each. Whether the grid ever sends a payload cut short is not
-known; that count is where one would show.
+A message that is not zerocoded has no zeros to have lost, so a short
+read in one is an error. Which is which is the template's `Zerocoded`,
+not the flag on the packet the message came in.
+
+`Stats.Padded` counts the packets that were read past the end, padded
+or cut, once each. Whether the grid ever sends a payload cut short is not
+known; that count is where one would show. slgod hands it to a client
+as `StatusResponse.padded`, beside `undecodable`, and `slsh status`
+prints both on its `decoding` line once either is not nought.
 
 ## Zero expansion
 

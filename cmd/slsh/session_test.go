@@ -73,6 +73,35 @@ func TestStatusCountsPlacementsByWidth(t *testing.T) {
 	}
 }
 
+// TestStatusCountsWhatDidNotDecodeWhole: packets that would not decode,
+// and packets that decoded only by reading past their end, share a
+// line, printed when either is not nought.
+func TestStatusCountsWhatDidNotDecodeWhole(t *testing.T) {
+	x, d := newDaemonShell(t)
+	for _, c := range []struct {
+		undecodable, padded uint64
+		want                string
+	}{
+		{2, 17, "decoding    2 undecodable, 17 read past the end\n"},
+		{0, 5, "decoding    0 undecodable, 5 read past the end\n"},
+		{3, 0, "decoding    3 undecodable, 0 read past the end\n"},
+	} {
+		d.status = &pb.StatusResponse{
+			Agent:       &pb.AgentInfo{Name: "fake"},
+			Undecodable: c.undecodable,
+			Padded:      c.padded,
+		}
+		if got := x.do(t, "status"); !strings.Contains(got, c.want) {
+			t.Errorf("status should say %q:\n%s", c.want, got)
+		}
+	}
+
+	d.status = &pb.StatusResponse{Agent: &pb.AgentInfo{Name: "fake"}}
+	if got := x.do(t, "status"); strings.Contains(got, "decoding") {
+		t.Errorf("nothing counted should print no line:\n%s", got)
+	}
+}
+
 // TestStatusPutsTheCommonestUnhandledMessageFirst.
 //
 // "no handler for" names the messages this build does not understand,
