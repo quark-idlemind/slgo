@@ -470,7 +470,7 @@ func (v *viewerHost) find(first, last string) *viewer.Handover {
 	// and the token the capabilities are gated on is minted.  Looking
 	// a session up is now free and tells the asker nothing.
 	hand.Admit = func() error {
-		c, err := v.circuitFor(profile, h)
+		c, err := v.circuitFor(profile)
 		if err != nil {
 			return fmt.Errorf("no circuit for %s: %w", name, err)
 		}
@@ -586,20 +586,35 @@ func (v *viewerHost) hostedNamed(name string) (string, *server.Hosted) {
 // login response and nothing else needs it: a session nobody watches
 // never opens one.  Kept afterwards, because a viewer that is restarted
 // logs in again and there is no reason to move the port under it.
-func (v *viewerHost) circuitFor(profile string, h *server.Hosted) (*viewer.Circuit, error) {
+//
+// Being kept, it may outlive the session it was opened for: a profile
+// logged out and hosted again is a new Hosted.  So the session is looked
+// up by profile each time it is wanted, and is nil while nothing is
+// hosted under that name.
+func (v *viewerHost) circuitFor(profile string) (*viewer.Circuit, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
 	if c, ok := v.circuits.Load(profile); ok {
 		return c.(*viewer.Circuit), nil
 	}
-	c, err := viewer.Listen(v.host, h.Agent, v.census, v.trace, v.logf)
+	session := func() *agent.Agent {
+		if h, ok := v.srv.Agent(profile); ok {
+			return h.Agent()
+		}
+		return nil
+	}
+	c, err := viewer.Listen(v.host, session, v.census, v.trace, v.logf)
 	if err != nil {
 		return nil, err
 	}
 	// What the viewer sends reaches the session down this circuit, past
 	// the server, so the server is told of it here.
-	c.OnForward(func(m msg.Message) { h.ViewerSent(msg.IDOf(m)) })
+	c.OnForward(func(m msg.Message) {
+		if h, ok := v.srv.Agent(profile); ok {
+			h.ViewerSent(msg.IDOf(m))
+		}
+	})
 	c.Run(v.ctx)
 	v.circuits.Store(profile, c)
 	return c, nil

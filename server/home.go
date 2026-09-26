@@ -120,6 +120,11 @@ package server
 // What the GRID said is another matter, and is kept: the hour of asking
 // and an access refusal both outlive a reconnect, for the reasons in
 // the section above.
+//
+// A viewer still on the session is the exception: a reconnect is the
+// grid's doing and does not hand the wheel back.  So before each attempt
+// the loop asks the viewer endpoint, and one that says a viewer is on
+// stops it for the rest of that session, as the other stops do.
 
 import (
 	"bytes"
@@ -385,6 +390,10 @@ func (h *Hosted) homeward(ctx context.Context, id uint64, pace homePace) {
 	var said string
 	since := pace.now()
 	for attempt := 0; ; attempt++ {
+		if h.viewerOn != nil && h.viewerOn() {
+			h.logf("not asking to go home: a viewer is on this session, and a person at a viewer has the wheel")
+			return
+		}
 		answer, err := h.askForHome(ctx, pace.answer)
 		switch {
 		case ctx.Err() != nil:

@@ -351,6 +351,15 @@ logins with `start = home` in them, so the same question is being asked
 again by the same means. What the grid has said is kept across a
 reconnect, as above, and forgotten on a restart.
 
+A viewer still on the session is the exception. A reconnect is the
+grid's doing and does not hand the wheel back, so while `slgod` counts
+a viewer as on the session the loop does not ask at all, and says so
+with a line beginning
+`not asking to go home: a viewer is on this session`. It counts one as
+on from the viewer's joining until `slgod` restarts, through reconnects
+and fresh logins of the same profile alike: it does not notice a viewer
+quitting (see `man viewer`).
+
 Profiles that say anything else are left alone. `start = last` means
 where the avatar was, and dragging that avatar home would be the daemon
 overruling the profile rather than honouring it.

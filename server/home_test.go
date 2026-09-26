@@ -39,6 +39,13 @@ func quickHoming(t *testing.T) {
 // location a test wants to try.
 func homeRig(t *testing.T, start string) (*Hosted, *fakeSim, context.CancelFunc) {
 	t.Helper()
+	_, h, sim, cancel := homeServer(t, start)
+	return h, sim, cancel
+}
+
+// homeServer is homeRig with the server the session is hosted on.
+func homeServer(t *testing.T, start string) (*Server, *Hosted, *fakeSim, context.CancelFunc) {
+	t.Helper()
 	sim := newSim(t)
 	t.Cleanup(sim.close)
 
@@ -68,7 +75,7 @@ func homeRig(t *testing.T, start string) (*Hosted, *fakeSim, context.CancelFunc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return h, sim, cancel
+	return srv, h, sim, cancel
 }
 
 // refuse makes the fake sim answer every request to go home with the
@@ -309,6 +316,36 @@ func TestAViewerBeingHandedTheSessionStopsIt(t *testing.T) {
 	}
 	if got := log.said("no longer trying to get home: a viewer was handed this session"); len(got) != 1 {
 		t.Errorf("said %q; want one line saying a viewer took the session", log.all())
+	}
+}
+
+// TestAReconnectWithAViewerOnDoesNotGoHome: a reconnect is the grid's
+// doing, and does not hand the wheel back to the daemon.  The person at
+// the viewer that was handed the session is still there, and a loop that
+// started again would teleport the avatar out from under them.
+func TestAReconnectWithAViewerOnDoesNotGoHome(t *testing.T) {
+	quickHoming(t)
+	listenSlowly(t)
+	srv, h, sim, _ := homeServer(t, "home")
+	log := listen(h)
+	refuse(t, sim, agent.KeyNoHost)
+
+	waitFor(t, 5*time.Second, "the loop to be running", func() bool { return asked(sim) >= 1 })
+	srv.SetViewer(&fakeViewer{attached: true})
+	h.ViewerAttached()
+	waitFor(t, 5*time.Second, "the loop to stop", func() bool { return !homing(h) })
+
+	was := asked(sim)
+	reconnectNow(t, h)
+	waitFor(t, 5*time.Second, "the new session's loop to find the viewer", func() bool {
+		return len(log.said("not asking to go home: a viewer is on this session")) == 1
+	})
+	time.Sleep(10 * HomeRetry)
+	if n := asked(sim) - was; n != 0 {
+		t.Errorf("asked %d times after reconnecting under a viewer", n)
+	}
+	if homing(h) {
+		t.Error("the loop is still running under a viewer")
 	}
 }
 

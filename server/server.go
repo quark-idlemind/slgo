@@ -158,6 +158,10 @@ type Hosted struct {
 	// home, kept across reconnects.  Guarded by mu.  See home.go.
 	homeTried homeTried
 
+	// viewerOn reports whether the daemon's viewer endpoint says a
+	// viewer is on this session.  Nil is false.  See home.go.
+	viewerOn func() bool
+
 	// seats is where this avatar's seat is remembered, and seating
 	// cancels the loop that restores and watches it.  Both nil when
 	// nothing is remembering.  See seat.go.
@@ -280,7 +284,7 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	}
 
 	h := &Hosted{Name: name, login: login, clients: map[*Client]bool{}, seats: s.Seats(),
-		offers: newOfferLog(time.Now())}
+		offers: newOfferLog(time.Now()), viewerOn: func() bool { return s.viewerAttached(name) }}
 
 	// Keeping the undecoded body is what lets the relay pass on a
 	// message it does not understand.
@@ -641,7 +645,7 @@ func (s *Server) Add(name string, a *agent.Agent) (*Hosted, error) {
 	}
 	s.ranked++
 	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}, rank: s.ranked, seats: s.seats,
-		offers: newOfferLog(time.Now())}
+		offers: newOfferLog(time.Now()), viewerOn: func() bool { return s.viewerAttached(name) }}
 	s.agents[name] = h
 	return h, nil
 }

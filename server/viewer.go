@@ -100,6 +100,15 @@ func (s *Server) viewerFor(profile string) *pb.ViewerEndpoint {
 	return &pb.ViewerEndpoint{LoginUri: v.LoginURI(), Attached: v.Attached(profile)}
 }
 
+// viewerAttached reports whether the viewer endpoint says a viewer is on
+// this profile's session.  False when there is no endpoint.
+func (s *Server) viewerAttached(profile string) bool {
+	s.mu.RLock()
+	v := s.viewer
+	s.mu.RUnlock()
+	return v != nil && v.Attached(profile)
+}
+
 // ViewerCredential mints a password a viewer may log in with once.
 //
 // The plaintext crosses the wire to the client that asked and is not
