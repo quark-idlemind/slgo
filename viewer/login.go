@@ -63,18 +63,14 @@ type Handover struct {
 
 	// Admit is called once the password has matched and before the
 	// response is composed, and is what opens the circuit and settles
-	// SimIP, SimPort and Seed.
-	//
-	// It is separate from finding the session because it must not
-	// happen for a login that is about to be refused.  The circuit
-	// used to be opened while the handover was being looked up, which
-	// is before the password has been compared -- so naming an avatar
-	// this daemon holds was enough to open its UDP socket, and the
-	// socket outlives the attempt.  A wrong password now costs the
-	// asker a refusal and nothing else.
+	// SimIP, SimPort and Seed.  It is separate from finding the
+	// session because it must not happen for a login that is about to
+	// be refused: a wrong password costs the asker a refusal and
+	// nothing else, where an open socket would outlive the attempt.
 	//
 	// Nil means the three fields are already filled in, which is what
 	// a test that composes a handover by hand wants.
+	// Why: doc/handover.md#the-login
 	Admit func() error
 
 	// SimIP and SimPort are where the viewer should send its UDP:
@@ -180,16 +176,16 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if hand == nil || byProfile|byOneTime != 1 {
 		// One answer for all of it: no session by that name, a
 		// session with no viewer_password, and a wrong password for
-		// one that could be handed over.  They used to be two
-		// sentences, and the difference between them said, to anybody
-		// who could reach this port and cared to type a wrong
-		// password, that the avatar named was logged in through this
+		// one that could be handed over.  Any difference would tell
+		// anybody who can reach this port, and cares to type a wrong
+		// password, that the avatar named is logged in through this
 		// daemon right now and could be taken.  The name is not a
 		// secret on the grid; that is.
 		//
 		// The log keeps the distinction, because the person reading
 		// it is the one running the daemon, and a mistyped password
 		// and a profile that was never set up want different fixes.
+		// Why: doc/handover.md#the-login
 		if hand == nil {
 			h.logf("viewer login: no session for %s %s", first, last)
 		} else {
@@ -306,12 +302,12 @@ func (h *loginHandler) fault(w http.ResponseWriter, code int64, message string) 
 // LoginURI is the address to give a viewer, in the form its grid list
 // wants.
 //
-// https, because that is the only thing this endpoint speaks.  A bare
-// address used to become http, which was right while there was a plain
-// channel and is now a URL nothing answers on: Go's TLS server replies
-// to a plaintext request with 400 and a viewer reports it as an
-// unreachable grid.  An address that already carries a scheme is left
-// as it is, so a caller that has one keeps it.
+// A bare address becomes https, because that is the only thing this
+// endpoint speaks: Go's TLS server replies to a plaintext request with
+// 400, and a viewer reports it as an unreachable grid.  An address that
+// already carries a scheme is left as it is, so a caller that has one
+// keeps it.
+// Why: doc/handover.md#the-login
 func LoginURI(addr string) string {
 	if !strings.Contains(addr, "//") {
 		addr = "https://" + addr

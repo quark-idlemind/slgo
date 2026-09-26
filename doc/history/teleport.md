@@ -418,9 +418,9 @@ viewer's own message says only that something was invalid.
 A teleport **within** the region, with the viewer attached, was followed
 by the viewer exactly as intended -- it moved to (12, 128, 22) and drew
 the new spot. Absorbing `TeleportStart` costs a viewer the
-progress bar of its own within-region teleport, and the trace prices
-that: `TeleportStart` and `TeleportLocal` arrived **twenty microseconds
-apart**, so the tunnel is entered and left in one burst.
+progress bar of its own within-region teleport, and the trace, on Agni,
+prices that: `TeleportStart` and `TeleportLocal` arrived **twenty
+microseconds apart**, so the tunnel is entered and left in one burst.
 
 ### Stage 7 -- walking over the border (done, unverified)
 

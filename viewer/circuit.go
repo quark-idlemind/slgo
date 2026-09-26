@@ -55,11 +55,8 @@ type Circuit struct {
 
 	// session is looked up rather than held, because a grid session
 	// is replaced when it has to be re-established and a viewer
-	// circuit outlives that.  Holding the pointer meant that after a
-	// reconnect the circuit went on talking to a dead session: every
-	// forward failed with "sender is not running" and the viewer sat
-	// waiting for a region handshake that was being composed from a
-	// session that had ended.
+	// circuit outlives that.
+	// Why: doc/handover.md#the-session-is-looked-up-not-held
 	session func() *agent.Agent
 
 	send *msg.Sender
@@ -212,32 +209,15 @@ func (c *Circuit) OnForward(f func(msg.Message)) {
 
 // admit decides whether a datagram is this circuit's viewer talking.
 //
-// The circuit still follows the address rather than pinning the first
-// one, because a viewer that is restarted comes back on a new port:
-// pinning meant the circuit went on sending to the socket of a viewer
-// that had quit, and the new one waited for a handshake that was being
-// delivered to nobody.  What has changed is the price of being followed.
-//
-// A new address is adopted only by opening with a UseCircuitCode
-// carrying this session's own circuit code and session id -- which is
-// what a viewer sends first and what a simulator itself demands before
-// it will talk to anybody.  Anything else from an address that has not
-// done that is dropped unread and counted.  It used to be enough to
-// send one datagram from anywhere: from then on everything the
-// simulator said went to the new address, and anything the new address
-// said was forwarded to the simulator as the avatar.
-//
-// Note what is NOT the check.  The circuit code and session id are in
-// the login response, so a viewer that was handed the session knows
-// them; they are the proof that this is that viewer, not a secret in
-// their own right.  What keeps a stranger out is that they were never
-// given the response -- which is the login endpoint's decision, now
-// carried this far instead of stopping at the door.
-//
-// A packet that arrives before any of it can be read -- one that would
-// not decode -- cannot be from a peer we have admitted unless it came
-// from the admitted address, so it is judged by address alone and
-// dropped if that is unknown.
+// One from the admitted address is.  A new address is adopted only by
+// opening with a UseCircuitCode carrying this session's own circuit code
+// and session id, which is what a viewer sends first; anything else from
+// it, a packet that would not decode included, is dropped unread and
+// counted.  The address is followed rather than pinned because a
+// restarted viewer comes back on a new port.  The ids prove this is the
+// viewer the login response went to and are not a secret: what keeps a
+// stranger out is never having been given that response.
+// Why: doc/handover.md#who-may-talk-on-the-circuit
 func (c *Circuit) admit(p *msg.Packet) bool {
 	ua, ok := p.Addr.(*net.UDPAddr)
 	if !ok {
@@ -272,16 +252,13 @@ func (c *Circuit) ownCircuit(m *msg.UseCircuitCode) bool {
 }
 
 // refuse counts a datagram from an address that has not opened a
-// circuit, and says so the first time and then rarely.
+// circuit, and logs the first and then every thousandth.
 //
-// Rarely because the whole point of the refusal is that the sender is
-// not co-operating: something that floods the port would otherwise
-// fill the log with one line per datagram, which is a second way to be
-// harmed by it.  Neither the address nor anything it sent is trusted
-// enough to print more than once in a while, and nothing about this
-// session's own ids is printed at all -- a refusal that quoted the
-// circuit code it wanted would be a good deal more useful to the
-// sender than to the operator.
+// Rarely, because a sender that floods the port would otherwise fill the
+// log with a line per datagram, a second way to be harmed by it; and
+// with nothing of this session's own ids, because a refusal that quoted
+// the circuit code it wanted would help the sender more than the
+// operator.
 func (c *Circuit) refuse(ua *net.UDPAddr) {
 	n := c.refused.Add(1)
 	if n == 1 || n%1000 == 0 {
@@ -315,45 +292,18 @@ func (c *Circuit) notePeer(ua *net.UDPAddr) {
 // forgetTheLastViewer drops what belonged to the viewer that has gone,
 // and nothing else.
 //
-// The sequence numbers are the whole reason this exists.  A viewer
-// numbers its own packets from 1, so a second one opens with
-// UseCircuitCode at 1 and CompleteAgentMovement at 2 -- numbers the
-// first viewer used, and still in the dispatcher's ring of the last
-// 4096.  Both were dropped as retransmissions before ever reaching
-// fromViewer, which is the only thing that replays the region and
-// answers the movement request, while the peer was noticed anyway
-// because the tap that noticed it then ran ahead of the duplicate check.
-// The daemon logged a viewer appearing and then said nothing, and the
-// viewer sat at STATE_AGENT_WAIT with a grey world until slgod was
-// restarted.
+// A viewer numbers its packets from 1, so the dispatcher forgets the
+// sequence numbers it has seen, or a new viewer's UseCircuitCode and
+// CompleteAgentMovement would be dropped as the last one's
+// retransmissions.  The sender forgets what it was retransmitting, or a
+// LogoutReply the last viewer never acknowledged would log the new one
+// out.  The session and its own circuit are the daemon's, and what is
+// queued for the viewer and c.pending describe the region, so they are
+// kept.
 //
-// Measured on Agni, from two daemon traces, which is why it looked
-// intermittent rather than certain.  Where re-attaching failed the first
-// viewer had sent 326 traced packets, so 1 and 2 were still in the ring.
-// Where it succeeded the first viewer had sent 3777 traced packets and
-// about fifty minutes of acknowledgements and pings the trace does not
-// record, which is enough for the ring to have wrapped past them.
-//
-// Both halves run here because both are the departed viewer's.  Anything
-// still awaiting acknowledgement was addressed to a socket that has
-// closed, and the LogoutReply case is the one that bites: a viewer that
-// quits sends LogoutRequest, and the reply it never acknowledged would
-// be retransmitted to its replacement and log that one out on arrival.
-//
-// What is not touched is as deliberate.  This is the same circuit and
-// the same grid session: the session's own circuit to the simulator, its
-// sequence numbers, and everything it has learned about the region
-// belong to the daemon rather than to whoever is looking at it, and the
-// simulator messages already queued for the viewer are the region's
-// current state, which the new viewer wants as much as the old one did.
-// The appearances in c.pending are the same: describeRegion refills them
-// from the session, and anything left over describes an avatar standing
-// in this region either way.  The receiver has nothing of its own to
-// forget -- it carries no state at all from one datagram to the next.
-//
-// Called from notePeer, which runs on the dispatch goroutine from admit,
-// the circuit's gate.  That is what makes Dispatcher.Forget safe: it
-// writes fields no lock protects, on the one goroutine that owns them.
+// Called from notePeer, on the dispatch goroutine, which is the one
+// goroutine Dispatcher.Forget is safe on.
+// Why: doc/handover.md#a-second-viewer-on-the-same-circuit
 func (c *Circuit) forgetTheLastViewer() {
 	c.disp.Forget()
 	// A sender that has stopped has nothing left in flight, so there is
@@ -422,33 +372,14 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 
 	// ---- absorbed: a teleport out of this region ----
 	//
-	// A viewer's teleport is refused rather than followed, and what
-	// forwarding one would now do is not what
-	// doc/history/viewer-frontend.md said until this stage.  That
-	// sentence -- the agent goes to a simulator slgod is not connected
-	// to and the session ends -- was written when nothing in the daemon
-	// read TeleportFinish, and the daemon follows a teleport now.  So
-	// the session does not end, and what happens instead is harder to
-	// see and worse to be in: the request is granted, slgod moves the
-	// circuit to the new simulator, and the viewer is told none of it,
-	// because TeleportFinish is withheld from its event queue.  It goes
-	// on drawing a region the avatar has left, pushing a camera around
-	// it that the new simulator is deciding what to stream from, and
-	// taking object updates whose local ids are the new region's
-	// numbering laid over the old region's.  Nothing anywhere reports
-	// an error.  A session that ends at least says so.
-	//
-	// Following properly is a second circuit on a second port and a
-	// rewritten TeleportFinish -- doc/history/teleport.md's other
-	// option, which is deliberately not built.  So these are absorbed
-	// the way UseCircuitCode and LogoutRequest are, and the person is
-	// told: a control that does nothing and says nothing is
-	// indistinguishable from a viewer that has stopped working.
-	//
-	// StartLure is deliberately not among them and goes on being
-	// forwarded.  Offering somebody else a teleport to where this
-	// avatar is standing moves this avatar nowhere, and it is a thing a
-	// viewer does far better than a shell does.
+	// Forwarded, one would move the session and the viewer would be
+	// told none of it -- TeleportFinish is withheld from its event
+	// queue -- so it would go on drawing a region the avatar has left.
+	// Following it there is not built, so these are absorbed and the
+	// person is told why (refuseTeleport).  StartLure is not among
+	// them and is forwarded: offering somebody a teleport to where
+	// this avatar stands moves this avatar nowhere.
+	// Why: doc/handover.md#a-teleport-asked-for-at-the-viewer
 
 	case "TeleportLocationRequest":
 		// The map, a SLurl, and "teleport here" off the double-click
@@ -560,16 +491,13 @@ func (c *Circuit) forward(p *msg.Packet) {
 // rather than a refusal: the login endpoint is what decides who may
 // attach, and by here the answer is already yes.
 //
-// What it says is which of the two did not match, and not what either
-// should have been.  The session's own circuit code and session id are,
-// with the agent id the log names everywhere, the whole of what
-// UseCircuitCode needs to open a circuit to the real simulator as this
-// avatar -- and a mismatch is something any sender can provoke, so a
-// line that wrote them out would be a way to have the daemon copy the
-// credentials into a file for whoever can read it.  The claimed session
-// id is cut to its first characters, which is enough to see whether two
-// claims came from the same place; see package redact, whose switch
-// puts every value back for a debugging run.
+// It says which of the two did not match, never what either should have
+// been: with the agent id, which the log names everywhere, they are all
+// UseCircuitCode needs to open a circuit as this avatar, and any sender
+// can provoke a mismatch, so writing them out would copy the credentials
+// into the log.  The claimed session id is cut to its first characters,
+// enough to tell two claims apart; package redact's switch puts every
+// value back for a debugging run.
 func (c *Circuit) checkCircuit(p *msg.Packet) {
 	m, ok := p.Message.(*msg.UseCircuitCode)
 	if !ok {
@@ -646,32 +574,16 @@ func (c *Circuit) refuseTeleport() {
 // else now.
 //
 // Another client moves this session -- slsh tp, or a lure accepted from
-// slsh waiting -- and the viewer is no part of that conversation.  In
-// an ordinary session the viewer is the client that asked, so the
-// protocol has nothing that says "you have been moved" to one that did
-// not.
-//
-// What a viewer does about that was measured on 2026-08-16 with
-// Firestorm attached, and it is not what this said when it was written.
-// It does not go on drawing the region left behind: within a second of
-// the move it put up "You have been logged out of slgod.  You were sent
-// to an invalid region." and sent a LogoutRequest.  That request is
-// absorbed like any other (see fromViewer), so the grid session stayed
-// up and the viewer dropped off it -- which is the outcome refusing was
-// for, arrived at by the viewer's own judgement rather than by this
-// telling it anything.
-//
-// The alert is still worth sending and is delivered before that
-// happens: it names the region and says what to do, where the viewer's
-// own message says only that something was invalid.  A person reading
-// the two together knows what became of their avatar.
-//
-// Telling is all this does.  Replaying the new region to a viewer that
-// believes it is in the old one is "follow", which is deferred, so the
-// person gets the one thing that is true and can be acted on.  A viewer
-// that never joined is not told: there is nobody at the other end, and
-// a circuit exists from the first login whether anything attached or
-// not.
+// slsh waiting -- and in an ordinary session the viewer is the client
+// that asked, so the protocol has nothing that says "you have been
+// moved" to one that did not.  Firestorm, measured, decides within a
+// second that it was sent to an invalid region and sends a
+// LogoutRequest, which fromViewer absorbs; this alert arrives first,
+// and names the region and what to do.  Replaying the new region to the
+// viewer is "follow", which is not built.  A viewer that never joined
+// is not told: a circuit exists from the first login whether anything
+// attached or not.
+// Why: doc/history/teleport.md#stage-6----a-viewer-attached-while-it-happens-done
 func (c *Circuit) RegionChanged(name string) {
 	if !c.Joined() {
 		return
@@ -686,24 +598,21 @@ func (c *Circuit) RegionChanged(name string) {
 	c.logf("viewer: the avatar moved to %s under an attached viewer; it was told to attach again", where)
 }
 
-// tell says something to the person, in the one place a viewer will
-// always draw it.
+// tell says something to the person, as an AgentAlertMessage with
+// Modal set, which a viewer always draws.
 //
-// AgentAlertMessage with Modal set, rather than a line of chat.  What
-// there is to say here is always about a control that did nothing or a
-// window that is now a lie, and the person's next move depends on
-// having read it.  Nearby chat is the wrong place for that: the window
-// can be closed, collapsed or scrolled past, its toasts can be turned
-// off in the preferences, and a line in it reads as something somebody
-// in the region said.  A modal alert is the simulator addressing this
-// avatar by id, and a viewer draws it in front of the world with a
-// button on it.
+// Not a line of chat: what is said here is about a control that did
+// nothing or a window that is now a lie, and the person's next move
+// depends on having read it.  Nearby chat can be closed, collapsed or
+// scrolled past, its toasts turned off in the preferences, and a line in
+// it reads as something somebody in the region said; a modal alert is
+// the simulator addressing this avatar by id, in front of the world with
+// a button on it.
 //
-// Sent from whichever goroutine noticed, including the grid session's
-// dispatch goroutine by way of RegionChanged.  That is one message onto
-// the sender's buffered channel, served by a goroutine that does
-// nothing but write UDP, which is as close to not blocking there as
-// this side gets.
+// It may run on the grid session's dispatch goroutine, by way of
+// RegionChanged.  It puts one message on the sender's buffered channel,
+// served by a goroutine that does nothing but write UDP, which is as
+// close to not blocking there as this side gets.
 func (c *Circuit) tell(text string) {
 	a := c.session()
 	if a == nil {
@@ -811,15 +720,13 @@ func (c *Circuit) describeRegion() {
 	}
 
 	// And whatever was said to the person while there was nothing to
-	// show it on.  These are the messages a viewer exists to answer,
-	// and until now they went into the daemon and stopped there: an
-	// offered teleport arrived four minutes before the viewer did and
-	// was never seen.
-	//
-	// Sent last here, after the handshake and the land -- though still
-	// ahead of the AgentMovementComplete that fromViewer sends once this
-	// returns -- because a viewer showing an invitation before it has
-	// drawn anything is a dialogue over a grey screen.
+	// show it on: the messages a viewer exists to answer, which the
+	// session keeps for it (agent.Offers).  Sent last here, after the
+	// handshake and the land -- though still ahead of the
+	// AgentMovementComplete that fromViewer sends once this returns --
+	// because a viewer showing an invitation before it has drawn
+	// anything is a dialogue over a grey screen.
+	// Why: doc/handover.md#what-was-said-while-nobody-was-attached
 	if waiting := a.Offers().Take(); len(waiting) > 0 {
 		for _, m := range waiting {
 			c.toViewer(m, msg.FlagReliable)
@@ -837,7 +744,8 @@ const pcodeAvatar = 47
 // The order is the whole difficulty.  A viewer that receives an
 // appearance for an avatar it has not heard of has nowhere to put it: it
 // looks the avatar up by id, finds nothing, drops the message and says
-// so in its log, and nothing ever asks again.  Meanwhile the avatars
+// so in its log (process_avatar_appearance, llviewermessage.cpp:5410),
+// and nothing ever asks again.  Meanwhile the avatars
 // themselves only come back because Redescribe asked for them, seconds
 // after this viewer joined and in whatever order the simulator answers.
 //
@@ -973,33 +881,22 @@ func (c *Circuit) FromSim(p *msg.Packet) {
 		return
 
 	case "TeleportStart", "TeleportProgress":
-		// Mostly about something the viewer did not ask for.  Its
-		// own teleports out of this region are refused in
-		// fromViewer, so a start on this circuit is another
-		// client's -- slsh tp, or a lure accepted somewhere else --
-		// or the start of the viewer's own teleport within the
-		// region, which is the cost set out below.
-		//
 		// Handed over, TeleportStart puts a viewer in the teleport
 		// tunnel: the world torn down, a progress bar, and no way
 		// out except TeleportFinish, TeleportLocal or
-		// TeleportFailed.  TeleportFinish is withheld from the
-		// event queue (withheldEvents) precisely because it is the
-		// dangerous one, so a viewer sent the start would sit in the
-		// tunnel over a teleport it did not ask for and could not
-		// have stopped.  TeleportProgress is the same message with a
-		// caption on it and goes the same way.
+		// TeleportFailed.  TeleportFinish is withheld
+		// (withheldEvents), so a viewer sent the start of a move
+		// another client asked for -- slsh tp, or a lure accepted
+		// somewhere else -- would sit in the tunnel over a teleport
+		// it could not have stopped.  Its own teleports out of the
+		// region never start: fromViewer refuses them.
+		// TeleportProgress is the same message with a caption on it.
 		//
-		// What absorbing them costs is the progress bar of a
-		// WITHIN-region teleport, which is the viewer's own and is
-		// forwarded -- and that cost was measured on Agni rather
-		// than guessed at.  A local teleport IS announced with a
-		// start: the simulator sent TeleportStart and TeleportLocal
-		// twenty microseconds apart, in the same burst.  So the
-		// viewer is put in the tunnel and taken straight out of it
-		// again by the message it is really waiting for, and
-		// absorbing the start costs it those twenty microseconds of
-		// progress bar.
+		// The cost is the progress bar of the viewer's own teleport
+		// within the region, which is forwarded, and it is small:
+		// the simulator sends the TeleportLocal that ends it in the
+		// same burst as the start.
+		// Why: doc/history/teleport.md#stage-6----a-viewer-attached-while-it-happens-done
 		c.record(FromSim, p, Absorbed)
 		return
 
