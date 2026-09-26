@@ -439,11 +439,11 @@ func (d *Dispatcher) duplicate(seq uint32) bool {
 // sequence number really is a retransmission.
 //
 // Safe from the dispatch goroutine and nowhere else, which means from a
-// tap, an inline handler or the relay hook.  d.seen and the ring are
+// gate, a tap, an inline handler or the relay hook.  d.seen and the ring are
 // written by duplicate alone and carry no lock, and that is deliberate:
 // they are touched for every packet that arrives, so a mutex there would
 // be paid by every session to buy something one caller needs once in its
-// life.  Called from a tap this runs between two dispatches, on the very
+// life.  Called from a gate or a tap this runs between two dispatches, on the very
 // goroutine that owns those fields, so the single-writer property is kept
 // rather than defended.
 func (d *Dispatcher) Forget() {
