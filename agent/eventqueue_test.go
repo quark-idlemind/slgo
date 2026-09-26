@@ -31,6 +31,15 @@ func (e *eqServer) push(name string, body map[string]any) {
 	e.mu.Unlock()
 }
 
+// pushTogether queues events to come back in one body, in this order.
+// push cannot promise that: a poll may take the first before the second
+// is queued.
+func (e *eqServer) pushTogether(events ...[2]any) {
+	e.mu.Lock()
+	e.pending = append(e.pending, events...)
+	e.mu.Unlock()
+}
+
 func (e *eqServer) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var buf bytes.Buffer
@@ -298,7 +307,7 @@ func TestTheQueueIsWhereGroupMembershipArrives(t *testing.T) {
 	}
 
 	var seen []string
-	id, n := a.deliver(body, func(name string, _ []byte) { seen = append(seen, name) })
+	id, n := a.deliver(context.Background(), body, func(name string, _ []byte) { seen = append(seen, name) })
 	if n != 2 || len(seen) != 2 {
 		t.Errorf("delivered %d events, handler saw %v", n, seen)
 	}
@@ -309,6 +318,91 @@ func TestTheQueueIsWhereGroupMembershipArrives(t *testing.T) {
 	gs := a.Groups()
 	if len(gs) != 1 || gs[0].ID != aGroup || gs[0].Name != "Builders" || gs[0].Powers != 0x101 {
 		t.Errorf("Groups = %+v", gs)
+	}
+}
+
+// TestWhatFollowsAMoveInTheSameBodyIsTheRegionLefts: one poll's answer
+// can hold several events, and a move followed from one of them is over
+// before the next is looked at.  Those behind it were said by the region
+// left, so its parcel must not become the one underfoot in the region
+// arrived at, nor its neighbours be dialled from there.  The avatar's own
+// news is kept, and a client is told all of it, as before: a parcel or a
+// script's state may be the answer to something it asked.
+func TestWhatFollowsAMoveInTheSameBodyIsTheRegionLefts(t *testing.T) {
+	for _, move := range []struct {
+		name string
+		to   func(*fakeRegion) map[string]any
+	}{
+		{"TeleportFinish", teleportFinishTo},
+		{"CrossedRegion", crossedRegionTo},
+	} {
+		t.Run(move.name, func(t *testing.T) {
+			relayed := make(chan string, 16)
+			a, from, to := twoRegions(t, Options{
+				Neighbours: true,
+				OnEvent: func(name string, _ []byte) {
+					select {
+					case relayed <- name:
+					default:
+					}
+				},
+			})
+			sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
+
+			from.eq.pushTogether(
+				[2]any{move.name, move.to(to)},
+				[2]any{"ParcelProperties", aParcel("Thrushmoor", 5, 3)},
+				[2]any{"EnableSimulator", enableSimulator(handle, sim.addr())},
+				[2]any{"AgentGroupDataUpdate", map[string]any{
+					"GroupData": []any{map[string]any{
+						"GroupID":     aGroup.String(),
+						"GroupName":   "Builders",
+						"GroupPowers": int64(0x101),
+					}},
+				}},
+				[2]any{"ScriptRunningReply", map[string]any{
+					"Script": []any{map[string]any{
+						"ObjectID": "d22b7e57-7e57-c0de-0e4e-000000000001",
+						"ItemID":   "d22b7e57-7e57-c0de-0e4e-000000000002",
+						"Running":  true,
+					}},
+				}},
+				[2]any{"ChatterBoxInvitation", map[string]any{
+					"session_id": aGroup.String(),
+					"instantmessage": map[string]any{
+						"message_params": map[string]any{"message": "evening"},
+					},
+				}},
+			)
+
+			// Each event is applied before it is relayed, so once the
+			// last is relayed the whole body has been applied.
+			want := []string{move.name, "ParcelProperties", "EnableSimulator",
+				"AgentGroupDataUpdate", "ScriptRunningReply", "ChatterBoxInvitation"}
+			for i, w := range want {
+				select {
+				case got := <-relayed:
+					if got != w {
+						t.Fatalf("relayed %q at %d, want %q", got, i, w)
+					}
+				case <-time.After(10 * time.Second):
+					t.Fatalf("relayed %d of %v", i, want)
+				}
+			}
+
+			if got := a.RegionName(); got != to.sim.regionNm {
+				t.Fatalf("region = %q, want %q: the move was not followed", got, to.sim.regionNm)
+			}
+			if p := a.Parcel(); p != nil {
+				t.Errorf("the parcel underfoot is %q, which the region left described", p.Name)
+			}
+			if got := a.Neighbours(); len(got) != 0 {
+				t.Errorf("Neighbours = %+v: the region left's neighbour was opened", got)
+			}
+			if gs := a.Groups(); len(gs) != 1 || gs[0].ID != aGroup {
+				t.Errorf("Groups = %+v: the avatar's own news was not kept", gs)
+			}
+		})
 	}
 }
 
@@ -348,7 +442,7 @@ func TestTheQueueIgnoresWhatItCannotUse(t *testing.T) {
 		{"a group update whose body is not a map", notAGroupUpdate, 1},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if _, n := a.deliver(c.body, nil); n != c.want {
+			if _, n := a.deliver(context.Background(), c.body, nil); n != c.want {
 				t.Errorf("delivered %d, want %d", n, c.want)
 			}
 		})

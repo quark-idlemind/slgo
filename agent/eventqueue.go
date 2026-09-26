@@ -173,7 +173,7 @@ func (a *Agent) runEventQueue(ctx context.Context, fn EventHandler) {
 
 		case status == http.StatusOK:
 			fails = 0
-			id, n := a.deliver(reply, fn)
+			id, n := a.deliver(ctx, reply, fn)
 			if n == 0 {
 				a.eq.timeouts.Add(1)
 			}
@@ -224,8 +224,8 @@ func (a *Agent) eventWait(ctx context.Context, fails int) bool {
 }
 
 // deliver hands each event to the handler and returns the id to
-// acknowledge next time.
-func (a *Agent) deliver(body []byte, fn EventHandler) (any, int) {
+// acknowledge next time.  ctx is the poll's, which a move cancels.
+func (a *Agent) deliver(ctx context.Context, body []byte, fn EventHandler) (any, int) {
 	v, err := llsd.Decode(bytes.NewReader(body))
 	if err != nil {
 		a.eq.errors.Add(1)
@@ -260,7 +260,12 @@ func (a *Agent) deliver(body []byte, fn EventHandler) (any, int) {
 		// anything else sees it. A relay hands events to whichever
 		// client is attached, and a client may be attached late, or
 		// never -- so state the session owns cannot be learned there.
-		a.noteEvent(name, em["body"])
+		//
+		// An event earlier in this body may have moved the avatar and
+		// cancelled ctx.  What follows it is the region left's, and is
+		// still relayed but applied only where it is the avatar's own.
+		// Why: doc/history/teleport.md#what-follows-a-move-in-the-same-body
+		a.noteEvent(ctx, name, em["body"])
 		if fn != nil {
 			fn(name, out)
 		}
@@ -325,14 +330,30 @@ func (a *Agent) closeEventQueue(url string, ack any) {
 // Only what belongs to the session goes here. Everything else is the
 // clients' business and is passed through untouched.
 //
+// What belongs to the avatar is applied whichever region said it.  What
+// belongs to the region is applied only while ctx, the poll's, stands:
+// a move cancels it, and an event behind a TeleportFinish or a
+// CrossedRegion in the same body describes the region just left -- its
+// parcel, its neighbours.  deliver still relays such an event, since a
+// client may have asked for it.
+//
 // Every arm runs inline, on the goroutine that polls the queue and hands
 // events on, so a client is never told something about this session
 // before the session itself has acted on it.  For the two that move the
 // avatar that is not a nicety: see noteTeleportFinish.
-func (a *Agent) noteEvent(name string, body any) {
+func (a *Agent) noteEvent(ctx context.Context, name string, body any) {
+	// The avatar's own.
 	switch name {
 	case "AgentGroupDataUpdate":
 		a.noteGroups(body)
+		return
+	}
+
+	// The region's.
+	if ctx.Err() != nil {
+		return
+	}
+	switch name {
 	case "TeleportFinish":
 		a.noteTeleportFinish(body)
 	case "CrossedRegion":

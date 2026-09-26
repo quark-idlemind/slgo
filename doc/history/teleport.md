@@ -703,6 +703,32 @@ grid has been seen to send it on either road, let alone both, so this is
 written down rather than guarded against. The same shape does not arise
 for a teleport, where one goroutine delivers the queue serially.
 
+### What follows a move in the same body
+
+The queue answers a poll with a body that can hold several events, and
+`deliver` applies each one before it relays it. Following a
+`TeleportFinish` or a `CrossedRegion` is the whole of a move, done
+inline: when it returns the avatar is in the new region and the old
+poll's context has been cancelled. Anything behind it in the same body
+was said by the region left. Applied as it used to be, a
+`ParcelProperties` there became the parcel underfoot in the region
+arrived at, just after `enterRegion` had forgotten the old one, and an
+`EnableSimulator` opened a circuit to a neighbour of the region left.
+
+Measured on Agni on 2026-09-26: in six teleports, `TeleportFinish` came
+alone in its body every time. So this has not been seen happening, and
+crossings were not measured.
+
+The guard is cheap, so it is there anyway. Once the poll's context is
+cancelled, the rest of the body is still relayed to clients, but the
+session applies only what belongs to the avatar, which today is
+`AgentGroupDataUpdate`. The rest is relayed rather than dropped because
+a client may be waiting for it: `ParcelProperties` answers the request
+`askParcel` sent with its own sequence id (`sl/parcel.go`), and
+`ScriptRunningReply` answers a request matched on the object's and the
+item's ids (`sl/session.go`). Either is the right answer to what was
+asked, though the avatar has moved since.
+
 ### Not about teleport
 
 Two things found while working on this that belong nowhere else yet.
