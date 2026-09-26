@@ -92,6 +92,32 @@ func TestATeleportThatWasRefusedSaysSo(t *testing.T) {
 	}
 }
 
+// TestTeleportLocalStopsWhenTheCallerGivesUp: arrival is read off the
+// presence, which answers whatever the context, as Direct's does.  So
+// only the wait can notice the caller giving up, and it has to, rather
+// than report a silent refusal at the end of the minute.
+func TestTeleportLocalStopsWhenTheCallerGivesUp(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.mu.Lock()
+	f.presence.RegionHandle = 1099511628032
+	f.afterPresence = func() {
+		if sentLocked[*msg.TeleportLocationRequest](f) {
+			cancel()
+		}
+	}
+	f.mu.Unlock()
+
+	_, err := whenCancelled(t, ctx, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, w.TeleportLocal(ctx, msg.Vector3{X: 20, Y: 20, Z: 25}, time.Minute)
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("TeleportLocal = %v, want the caller's cancel", err)
+	}
+}
+
 // TestATeleportNeedsToKnowWhichRegionItIsIn: the request names the
 // region by handle, and a session that has not been told one would ask
 // to be moved inside region zero.

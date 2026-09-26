@@ -48,6 +48,10 @@ const (
 // The id is chosen HERE rather than by the simulator, which is how the
 // protocol works: the message carries the id the folder is to have. That
 // is also what makes it confirmable, since we know what to look for.
+//
+// A caller that gives up while this waits gets ctx.Err(), and the id as
+// well if the folder turned out to have been made, so that it can be
+// deleted again.
 func (w *Session) CreateFolder(ctx context.Context, parent msg.UUID, name string) (msg.UUID, error) {
 	if name == "" {
 		return msg.UUID{}, fmt.Errorf("sl: a folder needs a name")
@@ -73,19 +77,19 @@ func (w *Session) CreateFolder(ctx context.Context, parent msg.UUID, name string
 	}
 
 	// Confirm by looking. Nothing answers this message.
-	deadline := time.Now().Add(20 * time.Second)
-	for {
+	look := func(ctx context.Context) (bool, error) {
 		inv, err := w.Inventory(ctx)
-		if err == nil {
-			if _, ok := inv.Folder(id); ok {
-				return id, nil
-			}
+		if err != nil {
+			return false, err
 		}
-		if time.Now().After(deadline) {
-			return msg.UUID{}, fmt.Errorf("sl: folder %q was asked for but never appeared: %w", name, ErrTimeout)
-		}
-		time.Sleep(time.Second)
+		_, ok := inv.Folder(id)
+		return ok, nil
 	}
+	err := poll(ctx, 20*time.Second, time.Second, fmt.Sprintf("folder %q to appear", name), look)
+	if err != nil && !lastLook(ctx, look) {
+		return msg.UUID{}, err
+	}
+	return id, err
 }
 
 // DeleteItem removes an inventory item, permanently.
@@ -114,6 +118,9 @@ func (w *Session) DeleteItem(ctx context.Context, item msg.UUID) error {
 // An empty name means the same name as the original, which inside one
 // folder gives two items a person cannot tell apart; it is allowed
 // because the protocol allows it, but naming the copy is better.
+//
+// A caller that gives up while this waits gets ctx.Err(), and the copy
+// as well if it turned out to have been made.
 func (w *Session) CopyItem(ctx context.Context, item, folder msg.UUID, name string, timeout time.Duration) (*Item, error) {
 	if timeout == 0 {
 		timeout = 30 * time.Second
@@ -145,26 +152,26 @@ func (w *Session) CopyItem(ctx context.Context, item, folder msg.UUID, name stri
 
 	// Read it back rather than believe the send: nothing in this file
 	// reports success on the strength of no error.
-	deadline := time.Now().Add(timeout)
-	for {
+	var copied *Item
+	look := func(ctx context.Context) (bool, error) {
 		items, err := w.FolderItems(ctx, folder)
-		if err == nil {
-			for _, it := range items {
-				if had[it.ID] {
-					continue
-				}
-				if name == "" || it.Name == name {
-					copied := it
-					return copied, nil
-				}
+		if err != nil {
+			return false, err
+		}
+		for _, it := range items {
+			if !had[it.ID] && (name == "" || it.Name == name) {
+				copied = it
+				return true, nil
 			}
 		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("sl: the copy of %s never appeared "+
-				"(a no-copy item cannot be duplicated): %w", item, ErrTimeout)
-		}
-		time.Sleep(time.Second)
+		return false, nil
 	}
+	err = poll(ctx, timeout, time.Second, fmt.Sprintf("the copy of %s to appear, "+
+		"which it never does for a no-copy item", item), look)
+	if err != nil && !lastLook(ctx, look) {
+		return nil, err
+	}
+	return copied, err
 }
 
 // FolderTrash is the preferred type the grid gives the trash.
@@ -305,18 +312,24 @@ func (w *Session) SetItem(ctx context.Context, item msg.UUID, name, desc string,
 			(next == nil || got.NextOwnerMask == want.NextOwnerMask)
 	}
 
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		time.Sleep(time.Second)
-		if inv, err := w.Inventory(ctx); err == nil {
-			if got, ok := inv.Item(item); ok && arrived(got) {
-				return got, nil
+	var got *Item
+	err = poll(ctx, 15*time.Second, time.Second, fmt.Sprintf("%s to change", item),
+		func(ctx context.Context) (bool, error) {
+			inv, err := w.Inventory(ctx)
+			if err != nil {
+				return false, err
 			}
-		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("sl: %s did not change: %w", item, ErrTimeout)
-		}
+			it, ok := inv.Item(item)
+			if !ok || !arrived(it) {
+				return false, nil
+			}
+			got = it
+			return true, nil
+		})
+	if err != nil {
+		return nil, err
 	}
+	return got, nil
 }
 
 // SetObjectPermissions sets one who-mask on a rezzed object to an exact
@@ -362,6 +375,9 @@ func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8
 //     Beside the avatar something usually is, so it appears to work;
 //     aimed at open sky the request is dropped with no object and no
 //     complaint.
+//
+// A caller that gives up while this waits gets ctx.Err(), and the
+// object as well if it turned out to be standing there already.
 func (w *Session) RezFromInventory(ctx context.Context, it *Item, at msg.Vector3, group msg.UUID, timeout time.Duration) (*Object, error) {
 	if it == nil {
 		return nil, fmt.Errorf("sl: nothing to rez")
@@ -409,32 +425,35 @@ func (w *Session) RezFromInventory(ctx context.Context, it *Item, at msg.Vector3
 	// which reported the object that had gone as the object that had
 	// arrived.  Where it is was known before it existed, and is the one
 	// thing about it that cannot be stale.
-	deadline := time.Now().Add(timeout)
-	for {
+	var made *Object
+	look := func(ctx context.Context) (bool, error) {
 		all, err := w.AllObjects(ctx, 10*time.Second)
-		if err == nil {
-			var best *Seen
-			for _, s := range all {
-				if before[s.Local] || s.Parent != 0 || s.Owner != w.Me() {
-					continue
-				}
-				if distance(s.Position, at) > rezRadius {
-					continue
-				}
-				if best == nil || distance(s.Position, at) < distance(best.Position, at) {
-					best = s
-				}
+		if err != nil {
+			return false, err
+		}
+		var best *Seen
+		for _, s := range all {
+			if before[s.Local] || s.Parent != 0 || s.Owner != w.Me() {
+				continue
 			}
-			if best != nil {
-				return &best.Object, nil
+			if distance(s.Position, at) > rezRadius {
+				continue
+			}
+			if best == nil || distance(s.Position, at) < distance(best.Position, at) {
+				best = s
 			}
 		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("sl: %q was asked for at %v and nothing appeared there: %w",
-				it.Name, at, ErrTimeout)
+		if best == nil {
+			return false, nil
 		}
-		time.Sleep(time.Second)
+		made = &best.Object
+		return true, nil
 	}
+	err = poll(ctx, timeout, time.Second, fmt.Sprintf("%q to appear at %v", it.Name, at), look)
+	if err != nil && !lastLook(ctx, look) {
+		return nil, err
+	}
+	return made, err
 }
 
 // rezRadius is how far from the asked-for spot a new object may be and
@@ -528,17 +547,12 @@ func (w *Session) ActivateGroup(ctx context.Context, group msg.UUID, timeout tim
 		return err
 	}
 
-	deadline := time.Now().Add(timeout)
-	for {
-		if got, err := w.ActiveGroup(ctx); err == nil && got == group {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("sl: group %s never became active, "+
-				"which usually means this avatar is not a member: %w", group, ErrTimeout)
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
+	return poll(ctx, timeout, 500*time.Millisecond, fmt.Sprintf("group %s to become active; "+
+		"one that never does usually means this avatar is not a member", group),
+		func(ctx context.Context) (bool, error) {
+			got, err := w.ActiveGroup(ctx)
+			return err == nil && got == group, err
+		})
 }
 
 // itemCRC is the checksum the simulator expects alongside an inventory

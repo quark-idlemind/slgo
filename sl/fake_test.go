@@ -122,6 +122,13 @@ type fakeBackend struct {
 	presence    *Presence
 	presenceErr error
 
+	// afterPresence and afterObjects, when set, are called with the
+	// lock held once each answer has been made.  A region that changes
+	// between one look and the next is staged from here, where no look
+	// can be half way through.
+	afterPresence func()
+	afterObjects  func()
+
 	region      *Region
 	land        *Land
 	landErr     error
@@ -622,6 +629,17 @@ func sentOf[T msg.Message](f *fakeBackend) []T {
 	return out
 }
 
+// sentLocked is whether a message of one kind has gone out, for a hook
+// that runs with the fake's lock already held; see afterObjects.
+func sentLocked[T msg.Message](f *fakeBackend) bool {
+	for _, s := range f.sent {
+		if _, ok := s.Msg.(T); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // onlySent is sentOf insisting on exactly one.  Most calls send one
 // message, and a test that saw two was watching something else happen.
 func onlySent[T msg.Message](t *testing.T, f *fakeBackend) T {
@@ -795,6 +813,9 @@ func (f *fakeBackend) Presence(ctx context.Context, drawDistance float32) (*Pres
 		f.presence.DrawDistance = drawDistance
 	}
 	p := *f.presence
+	if f.afterPresence != nil {
+		f.afterPresence()
+	}
 	return &p, nil
 }
 
@@ -815,6 +836,9 @@ func (f *fakeBackend) Objects(ctx context.Context, named, id string) ([]*Seen, e
 			continue
 		}
 		out = append(out, o)
+	}
+	if f.afterObjects != nil {
+		f.afterObjects()
 	}
 	return out, nil
 }

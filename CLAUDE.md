@@ -221,3 +221,20 @@ A comment that says something the code no longer does is worse than
 none, because a reader believes it, and a model believes it more readily
 than a person does. So a change that makes a comment untrue fixes the
 comment in the same change.
+
+## Shared helpers
+
+Some waits are easy to get wrong and are written once. Use these rather
+than a loop of your own, and add a line here when another is shared the
+same way.
+
+- `poll`, in `sl/session.go`: asks a read -- AIS, the backend -- until
+  it holds, returning `ctx.Err()` at once when the caller gives up and
+  `ErrTimeout` at the deadline. A loop of read, `time.Sleep`, go round
+  cannot hear a cancel, and `TestNothingInThisPackageSleeps` refuses
+  one anywhere in `sl`; a plain pause is `Session.Settle`. A call that
+  asked for something to be made follows a cancelled poll with
+  `lastLook`, beside it, and hands back what that finds.
+- `Session.await`, in `sl/session.go`: waits for what the session has
+  been told to satisfy a predicate, checked under the session's lock,
+  and quotes in its timeout any alert the simulator sent meanwhile.
