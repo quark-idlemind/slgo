@@ -197,6 +197,40 @@ func TestZeroExpandTruncated(t *testing.T) {
 	}
 }
 
+// TestZeroExpandStopsAtMaxPacketSize: a body expands to at most the
+// viewer's buffer, and one byte more is refused, whether that byte is
+// the end of a run or a byte of its own.  Why: doc/wire.md#zero-expansion
+func TestZeroExpandStopsAtMaxPacketSize(t *testing.T) {
+	full := bytes.Repeat([]byte{0}, MaxPacketSize)
+	got, err := ZeroExpand(nil, ZeroCollapse(nil, full))
+	if err != nil || len(got) != MaxPacketSize {
+		t.Fatalf("%d zeros expanded to %d bytes, %v", MaxPacketSize, len(got), err)
+	}
+	// The ceiling is on what is appended, not on dst.
+	got, err = ZeroExpand([]byte{9, 9, 9}, ZeroCollapse(nil, full))
+	if err != nil || len(got) != 3+MaxPacketSize {
+		t.Fatalf("after three bytes, %d zeros expanded to %d bytes, %v", MaxPacketSize, len(got), err)
+	}
+
+	over := map[string][]byte{
+		"a run one too long":      append(bytes.Repeat([]byte{0}, MaxPacketSize), 0),
+		"a byte after a full run": append(bytes.Repeat([]byte{0}, MaxPacketSize), 7),
+		"no zeros at all":         bytes.Repeat([]byte{7}, MaxPacketSize+1),
+	}
+	for what, body := range over {
+		if got, err := ZeroExpand(nil, ZeroCollapse(nil, body)); err == nil {
+			t.Errorf("%s: expanded to %d bytes", what, len(got))
+		}
+	}
+
+	// 257 bytes: a zero, 255 counts of 256, and 255 -- 65,535 zeros.
+	bomb := append([]byte{0}, bytes.Repeat([]byte{0}, 255)...)
+	bomb = append(bomb, 255)
+	if got, err := ZeroExpand(nil, bomb); err == nil {
+		t.Errorf("%d bytes expanded to %d", len(bomb), len(got))
+	}
+}
+
 // TestWholePacket assembles and takes apart a packet the way a client
 // would, exercising header, acks, zero coding, framing and body.
 func TestWholePacket(t *testing.T) {

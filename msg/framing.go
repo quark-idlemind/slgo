@@ -84,10 +84,18 @@ func SplitAcks(body []byte) ([]byte, []uint32, error) {
 // A zero byte is followed by a count.  A count of zero means 256 zeros
 // and that another count byte follows, so a run is 256*k + c where k is
 // the number of zero count bytes and c the first non-zero one.
+//
+// A body that would expand to more than MaxPacketSize bytes is an
+// error, and the packet is not to be read: the viewer stops there too.
+// Why: doc/wire.md#zero-expansion
 func ZeroExpand(dst, src []byte) ([]byte, error) {
+	limit := len(dst) + MaxPacketSize
 	for i := 0; i < len(src); i++ {
 		c := src[i]
 		if c != 0 {
+			if len(dst) >= limit {
+				return nil, errExpandsTooFar
+			}
 			dst = append(dst, c)
 			continue
 		}
@@ -104,12 +112,17 @@ func ZeroExpand(dst, src []byte) ([]byte, error) {
 			}
 			run += 256
 		}
+		if len(dst)+run > limit {
+			return nil, errExpandsTooFar
+		}
 		for ; run > 0; run-- {
 			dst = append(dst, 0)
 		}
 	}
 	return dst, nil
 }
+
+var errExpandsTooFar = fmt.Errorf("msg: zero coded body expands past %d bytes", MaxPacketSize)
 
 // ZeroCollapse applies zero coding, appending to dst.
 //

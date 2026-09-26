@@ -756,6 +756,26 @@ func TestReceiveCutsAPayloadThatRunsPastTheEnd(t *testing.T) {
 	}
 }
 
+// TestReceiveRefusesABodyThatExpandsPastMaxPacketSize: a message that
+// would decode, but only from more than the viewer's buffer holds, is
+// a failure.  Why: doc/wire.md#zero-expansion
+func TestReceiveRefusesABodyThatExpandsPastMaxPacketSize(t *testing.T) {
+	m := &ImprovedInstantMessage{}
+	m.MessageBlock.BinaryBucket = make([]byte, MaxPacketSize)
+	raw := packet(t, FlagZerocoded, 7, m)
+	if len(raw) > 200 {
+		t.Fatalf("the packet is %d bytes; it should be mostly one run", len(raw))
+	}
+
+	got, st := collect(t, newFakeConn(raw))
+	if got[0].Message != nil || got[0].Err == nil {
+		t.Errorf("a %d byte packet expanding past %d decoded: %v", len(raw), MaxPacketSize, got[0].Err)
+	}
+	if st.Failed != 1 {
+		t.Errorf("stats %+v; want one failed", st)
+	}
+}
+
 // sameMessage compares by what goes on the wire, which is the equality
 // that matters and the one that does not care whether an empty field
 // decoded as nil or as zero length.

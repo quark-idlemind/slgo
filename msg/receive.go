@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
-// MaxPacketSize is the largest datagram we will read.  It matches
-// NET_BUFFER_SIZE in the C client.
+// MaxPacketSize is the largest datagram we will read, and the most a
+// zero coded body may expand to.  It matches NET_BUFFER_SIZE in the C
+// client.
 const MaxPacketSize = 0x2000
 
 // ErrUnknownMessage is reported for a message number that is not in the

@@ -302,7 +302,9 @@ not zerocoded has no zeros to have lost, so a truncated field in one is
 an error here, whereas `decodeData` logs `logRanOffEndOfPacket` and
 substitutes zeros. Matching them would buy interoperability on
 malformed packets at the cost of turning a real bug into silent zeros,
-so this errors instead.
+so this errors instead. And a zerocoded body that would expand past
+8,192 bytes, `MaxPacketSize`, is refused before it is read; the
+viewer stops expanding there too.
 
 Any other short read is an error, and the error names the message,
 block and field. Nothing in this package calls `panic`, `os.Exit` or
@@ -488,8 +490,8 @@ not by itself mean the subset was checked.
   `q_PacketAck.c` and `q_CompletePingCheck.c`
 - the `AgentUpdate` size cross-check against the C allocation
 - message number framing for all 483, and the shape of each priority class
-- packet header, appended acks, zero coding round trip and the C's
-  extended 256-zero run form
+- packet header, appended acks, zero coding round trip, the C's
+  extended 256-zero run form, and the ceiling on what a body expands to
 - the two forgiveness rules, what a zerocoded message's short tail
   reads as, and that ordinary truncation still errors
 - generator parse errors: 40 malformed templates, each expected to fail

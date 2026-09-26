@@ -1,7 +1,8 @@
 # When a message's bytes do not add up
 
-What `msg` does with a packet that ends before its message does, and
-where that follows the viewer and where it does not.
+What `msg` does with a packet that ends before its message does, or
+that expands to more than a packet can hold, and where that follows
+the viewer and where it does not.
 
 The viewer's side is read from Firestorm's source, not measured. Line
 numbers are in `indra/llmessage/lltemplatemessagereader.cpp` unless
@@ -49,3 +50,19 @@ take, so that field comes out empty, as the viewer's length 0 does.
 `Stats.Padded` counts the packets that were read past the end either
 way, once each. Whether the grid ever sends a payload cut short is not
 known; that count is where one would show.
+
+## Zero expansion
+
+The viewer expands a zerocoded packet in `zeroCodeExpand`
+(`message.cpp:2840`) into a buffer of `MAX_BUFFER_SIZE`, which is
+`NET_BUFFER_SIZE`, 8,192 bytes (`message.h:124`, `net.h:33`). A packet
+that would expand past it is reported as `MX_WROTE_PAST_BUFFER_SIZE`
+(`message.cpp:2882-2918`) and not read as sent. That buffer holds the
+six byte packet header as well as the body (`message.cpp:2869-2873`).
+
+`ZeroExpand` (`msg/framing.go`) refuses a body that would expand past
+`MaxPacketSize`, the same 8,192 bytes, counted over the body alone. The
+receiver counts such a packet in `Stats.Failed` and delivers it with
+its error. Before this it had no ceiling: a count byte of zero stands
+for 256 zeros, so 257 bytes could expand to 65,535, and a whole
+datagram to about two megabytes.
