@@ -133,17 +133,18 @@ func (a *Agent) WaitCaps(ctx context.Context) (Caps, error) {
 // there is nowhere else to work it out from.  Account.SeedCapability is
 // the region this session LOGGED IN to and stays that for the rest of
 // the session; the seed of every region after the first arrives inside
-// a TeleportFinish that only this package reads, and moveTo was handed
-// it, used it and dropped it.  Anything above wanting to hand a viewer
-// or a client this region's capabilities could only guess, and the
-// guess is right until the first teleport and wrong afterwards -- which
-// is the worst shape a bug can have.
+// a TeleportFinish or a CrossedRegion that only this package reads, and
+// is handed to moveTo and nowhere else.  Anything above wanting to hand
+// a viewer or a client this region's capabilities could only guess, and
+// the guess is right until the first teleport and wrong afterwards --
+// which is the worst shape a bug can have.
 //
 // Empty means there is no seed for the region we are in: a login
-// response that carried none, or a move whose TeleportFinish named a
-// seed that was not a URL.  SkipCaps does not empty it -- that says not
-// to fetch the set, not that there is nowhere to fetch it from -- so a
-// session that skipped them still says where they would have come from.
+// response that carried none, or a move whose TeleportFinish or
+// CrossedRegion named a seed that was not a URL.  SkipCaps does not
+// empty it -- that says not to fetch the set, not that there is nowhere
+// to fetch it from -- so a session that skipped them still says where
+// they would have come from.
 // What is never returned is the login seed after a move: a URL into a
 // region the avatar has left is worse than none.
 func (a *Agent) Seed() string {

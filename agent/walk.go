@@ -71,14 +71,11 @@ import (
 // told -- measured, a Face read back a second later was within five
 // degrees of what was sent.
 //
-// Nor is the simulator's own autopilot used.  The viewer's "Go here"
-// (handle_go_to, in llviewermenu.cpp) sends GenericMessage "autopilot"
-// with a place in global metres, and the simulator does still act on it:
-// measured once on Agni, 2026-09-24, the avatar set off about 0.8
-// seconds after it was sent and came to rest 2.1 metres past a place 1.7
-// metres away.  It says nothing about how it is going, cannot be told to
-// stop by anything here, and stops where it likes, which are the three
-// things a walk asked for over slgod's API has to do.
+// Nor is the simulator's own autopilot used, the GenericMessage
+// "autopilot" the viewer's "Go here" sends.  It says nothing about how
+// it is going, cannot be told to stop by anything here, and stops where
+// it likes.
+// Why: doc/walk.md#the-simulators-own-autopilot
 //
 // Nothing here avoids anything.  The walk is a straight line, and what
 // is in the way -- a wall, a tree, another avatar -- is the client's to
@@ -138,37 +135,19 @@ var (
 
 // Stopping where asked.
 //
-// An avatar does not stop where the flag is let go of.  Measured on
-// Agni, 2026-09-24, on a flat platform, from the position this package
-// had for the avatar at the moment it let go to where the avatar came to
-// rest: about 0.9 metres walking, at the 3.2 metres a second the
-// simulator reports for a walk, and about 1.4 metres running, at 5.1.
-// Both are about 0.28 seconds of going on at full speed -- the round trip
-// to the simulator, the simulator's own slowing down and the terse
-// update steered by being a moment old, all together; which of them is
-// the larger was not measured.  Let go of with the target half a metre
-// ahead, as the first version of this did, the avatar came to rest 0.7
-// to 1.0 metres past it.  Neither the STOP flag nor holding AT_POS alone
-// for the last two metres, as the viewer's autopilot does, made a
-// difference that could be seen, in one try of each over the same stretch
-// of floor.
-//
-// So the flag is let go of stopLead ahead of where the avatar is going
-// to be, at the speed the simulator last said it was going (see aimFor
-// for how far short of the target that is aimed), and the walk is only
-// called over once the avatar has stopped -- below settledSpeed, or
-// settleTime after letting go, whichever is first -- and been found
-// close enough.  Measured the same day with this in place, over six
-// metres: four walks came to rest 0.01 to 0.02 metres from the target,
-// and two runs 0.09 and 0.10.
+// An avatar does not stop where the flag is let go of: it goes on at
+// full speed for about 0.28 seconds, walking or running.  So the flag is
+// let go of stopLead ahead of where the avatar is going to be, at the
+// speed the simulator last said it was going (see aimFor for how far
+// short of the target that is aimed), and the walk is only called over
+// once the avatar has stopped -- below settledSpeed, or settleTime after
+// letting go, whichever is first -- and been found close enough.
 //
 // One that stopped too far off walks again, up to maxStops times in
 // all; it then ends Cancelled, "overshot".  A walk from a standstill
-// cannot be made short: the same day, holding the flag for a single
-// tenth of a second moved the avatar 0.97 metres, and an update carrying
-// the flag followed at once by one without it moved it about a tenth of
-// a metre, but in directions that did not follow the facing it had just
-// been given.  So nothing here tries to step finer than a walk.
+// cannot be made much shorter than a metre and still go the way the
+// avatar faces, so nothing here tries to step finer than a walk.
+// Why: doc/walk.md#stopping-where-asked
 var (
 	stopLead     = 300 * time.Millisecond
 	settleTime   = 1500 * time.Millisecond
@@ -418,13 +397,10 @@ func (a *Agent) setDrive(flags uint32, body msg.Quaternion) {
 // by the velocity it said it had for as long ago as it said it, up to
 // deadReckoning.  The simulator does not send a terse update for every
 // step of a walk: it sends one when the motion stops being what the last
-// one predicted, which is what a viewer's own extrapolation assumes.
-// Measured on Agni, 2026-09-24: updates for an avatar walking in a
-// straight line at 3.2 metres a second arrived every tenth to fifth of a
-// second, and then none at all for a whole second, over which the
-// position read without reckoning stood still while the avatar walked
-// three metres past the place it was being steered to.  A wall stopping
-// the avatar changes its motion, and that is sent.
+// one predicted, which is what a viewer's own extrapolation assumes, and
+// a second can pass with none while the avatar walks on.  A wall
+// stopping the avatar changes its motion, and that is sent.
+// Why: doc/walk.md#reckoned-forward
 func (a *Agent) Placement() (pos, vel msg.Vector3, rot msg.Quaternion, exact bool) {
 	if a.Account != nil {
 		if own, ok := a.Objects().Get(a.Account.AgentID); ok && own.Parent == 0 {
@@ -831,13 +807,9 @@ func (a *Agent) brake(ctx context.Context, w *walk) error {
 // soon -- the presence loop's is up to a second away, and an avatar that
 // missed its stop walks for that second.  The facing is kept: an avatar
 // that walked north and stopped is left facing north, rather than turned
-// back to the east that an update with no rotation in it means.
-//
-// Measured on Agni, 2026-09-24: with the flag let go of by an update
-// carrying STOP and by one carrying nothing, an avatar walking at 3.2
-// metres a second came to rest about a metre further on either way, so
-// the STOP is the viewer's habit kept rather than something shown to
-// matter.
+// back to the east that an update with no rotation in it means.  The
+// STOP is the viewer's habit kept rather than something shown to matter.
+// Why: doc/walk.md#the-stop-flag
 func (a *Agent) stopLocked(ctx context.Context) error {
 	_, body := a.drive()
 	a.setDrive(0, body)

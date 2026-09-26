@@ -31,11 +31,9 @@ type Agent struct {
 	Send *msg.Sender
 	Disp *msg.Dispatcher
 
-	// sock is the connection those three were built over.  It was an
-	// exported *net.UDPConn until the circuit had to be able to move:
-	// a teleport dials another simulator and stores it here, and the
-	// sender, the receiver and everyone holding them go on as they
-	// were.  Nothing outside this package ever used the field.
+	// sock is the connection those three were built over.  A teleport
+	// dials another simulator and stores it here, and the sender, the
+	// receiver and everyone holding them go on as they were.
 	sock *socket
 
 	// Inventory is this agent's folder tree.  It belongs to the
@@ -239,19 +237,15 @@ type Agent struct {
 // The region's id and name come in RegionHandshake and its handle and
 // the avatar's place in it in AgentMovementComplete, and the session is
 // not in the new region until it has both.  The simulator sends them in
-// that order, and UDP does not deliver them in it: a trace on Agni
-// caught the handshake, seq=1, arriving 985ms behind the movement,
-// seq=2.  A session that took each as it came spent that second at the
-// new position, with the new handle, under the old region's name -- so
-// a teleport's read-back named the region it had left, and so did the
-// notice that the region had changed.  In the ordinary order it was the
-// other way about, the new name around the old position, for as long as
-// the movement took to follow.
+// that order, and UDP does not deliver them in it.  A session that took
+// each as it came would, until the other arrived, name one region and
+// place the avatar in the other.
 //
 // So during a move neither is taken on its own.  Each is held here
 // until the other comes, and then the region, its handle and the
 // position become the session's together, in publishArrival, under the
 // one lock anything reading them takes.
+// Why: doc/history/teleport.md#open-questions
 type arrival struct {
 	// named says the handshake has come, and region is what it said.
 	named  bool
@@ -389,13 +383,15 @@ type Options struct {
 	// the profile's name on the front.
 	//
 	// It is not a trace and not an error channel: what belongs here
-	// is what nothing else would ever say.  Today that is the child
-	// circuits opening and closing, which a client can now list --
-	// see Neighbours -- but only as they stand: a circuit that opened
-	// and closed between two of a client's questions was never there
-	// as far as the listing is concerned, and this is where it went.
-	// So is a DisableSimulator from the region the avatar is in, which
-	// a viewer would end the session over and this session does not.
+	// is what nothing else would ever say.  Today that is a packet
+	// dropped because the session was not keeping up, and the backlog
+	// of packets as it climbs.  It is the child circuits opening and
+	// closing, which a client can list -- see Neighbours -- but only
+	// as they stand: a circuit that opened and closed between two of a
+	// client's questions was never there as far as the listing is
+	// concerned, and this is where it went.  And it is a
+	// DisableSimulator from the region the avatar is in, which a
+	// viewer would end the session over and this session does not.
 	Log func(format string, v ...any)
 
 	// Idle ends the session when nothing has arrived from the
@@ -694,9 +690,10 @@ func (a *Agent) release() {
 	a.dropNeighbours("the session ended")
 }
 
-// register installs the handlers the circuit itself needs.  All of them
+// register installs the handlers the circuit itself needs.  All but two
 // are Inline: they are trivial, and running them in order keeps the
-// handshake deterministic.
+// handshake deterministic.  The two are CrossedRegion's and
+// EnableSimulator's, and followCrossings and followNeighbours say why.
 func (a *Agent) register() {
 	// A store of its own until the handshake says which region this
 	// is.  Objects can be described before that arrives, and they are
@@ -725,7 +722,10 @@ func (a *Agent) register() {
 	// "groups" is not among the ones this server honours -- so asking
 	// there gets a missing field, which reads exactly like belonging to
 	// none. The simulator volunteers the real list moments after the
-	// handshake and again whenever it changes.
+	// handshake and again whenever it changes -- on the event queue,
+	// where noteGroups reads it, and not on the circuit when it was
+	// looked for there.  This is the circuit's road, for a grid that
+	// sends it that way.
 	a.Disp.MustHandle("AgentGroupDataUpdate", func(p *msg.Packet) {
 		m := p.Message.(*msg.AgentGroupDataUpdate)
 		gs := make([]Group, 0, len(m.GroupData))
@@ -861,21 +861,17 @@ func (a *Agent) register() {
 		// The height is one byte of four metre steps, so it stops at
 		// 1020 and says nothing at all about an avatar above that: 255
 		// means "higher than this can say", not "at 1020".  Taking it
-		// literally puts the camera a kilometre below an avatar on a
-		// skybox, and everything the region then describes is judged
-		// against a place the avatar is not -- the objects around it,
-		// and the other avatars standing beside it, arrive already out
-		// of range and are dropped.  Nothing describes them twice, so
-		// the session never recovers.
-		//
-		// Measured: three avatars at about 2001m were all reported at
-		// exactly 1020, and none of them could see any of the others,
-		// nor its own avatar.
+		// literally would put the camera a kilometre below an avatar on
+		// a skybox, and everything the region then describes would be
+		// judged against a place the avatar is not: the objects around
+		// it would arrive already out of range, and nothing describes
+		// them twice.
 		//
 		// So a saturated height is no height.  The last one from a
 		// message that carries it in full -- AgentMovementComplete, or
 		// a teleport -- is kept instead, which is where the avatar was
 		// when something last said properly.
+		// Why: doc/objects.md#a-saturated-height
 		a.mu.Lock()
 		if a.entering != nil {
 			// The new region's, and the avatar is not yet there as
@@ -1218,7 +1214,7 @@ func (a *Agent) seated(at msg.Vector3) msg.Vector3 {
 	return at
 }
 
-// ChannelVersion is the simulator'a build string.
+// ChannelVersion is the simulator's build string.
 func (a *Agent) ChannelVersion() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -1257,7 +1253,7 @@ func (a *Agent) Logout(ctx context.Context, timeout time.Duration) error {
 	return err
 }
 
-// Close stops the session'a goroutines and the socket without telling
+// Close stops the session's goroutines and the socket without telling
 // the simulator anything, and returns once the goroutines have.
 //
 // A session that ended on its own -- kicked, silent, a move that failed

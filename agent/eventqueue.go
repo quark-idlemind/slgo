@@ -139,7 +139,9 @@ func (a *Agent) runEventQueue(ctx context.Context, fn EventHandler) {
 
 	// Every way out of this loop tells the simulator we are
 	// finished, including a poll cancelled in flight -- which is the
-	// usual way it ends, and was the one path that used to skip it.
+	// usual way it ends, and was the one path that used to skip it --
+	// once there is something to acknowledge: a queue that never
+	// answered is left to the simulator's own timeout.
 	defer func() { a.closeEventQueue(url, ack) }()
 
 	for {
@@ -308,7 +310,8 @@ func (a *Agent) postEventQueue(ctx context.Context, url string, body []byte) (in
 }
 
 // closeEventQueue tells the simulator we are finished, so it does not
-// hold a poll open for a session that has gone.
+// hold a poll open for a session that has gone.  Nothing is sent before
+// the first reply, since there is no id to acknowledge yet.
 func (a *Agent) closeEventQueue(url string, ack any) {
 	if ack == nil {
 		return

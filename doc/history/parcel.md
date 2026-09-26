@@ -248,7 +248,10 @@ both, edit terrain off, damage off, search listing off -- every
 checkbox agreed with what `parcel` printed. That is what says the word
 is read most significant byte first; the other reading is a parcel
 nobody may fly over. The prim counts were checked the same way and
-agreed to the prim.
+agreed to the prim. In the word itself, fly, other scripts, landmarks,
+group scripts, group build and group object entry are set, and
+terraform, damage, building by everyone, object entry by everyone and
+the search listing are clear.
 
 It also caught two bits this code had wrong. 29 is voice chat and 30 is
 the estate's voice channel, where they had been written as 28 and 29,

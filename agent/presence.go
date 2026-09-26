@@ -19,8 +19,8 @@ import (
 // It lives here rather than in a client for the reason the circuit
 // does: it has to keep being sent, and a client that stopped would
 // silently take object streaming with it.  A client that wants to move
-// the camera sets it through Agent.Look; the default is a fixed view
-// from wherever the avatar arrived.
+// the camera sets it through Agent.SetLook; the default looks east from
+// wherever the avatar is, and setCenter keeps it there.
 
 // DefaultDrawDistance is the Far value sent when none is set.
 const DefaultDrawDistance = 128
@@ -96,16 +96,11 @@ func (a *Agent) setCenter(at msg.Vector3) {
 //
 // At once, whenever the camera moves, and not only on the trim tick.
 // A store shared by several agents keeps what ANY of them can see, and
-// an agent that has not said where it is looking has no say -- so an
-// agent joining a store the others were already trimming was invisible
-// to them until its own first tick, up to TrimInterval later.  One of
-// them trimming in that window, from a camera somewhere else, threw
-// away everything around the newcomer, its own attachments included,
-// and the region describes each object once.  Measured on Agni: an
-// avatar logged in last of four, the other three thousands of metres
-// above it, came up with every attachment the simulator had restored
-// missing from the store for good -- and only what was put on after
-// its first tick was ever described.
+// an agent that has not said where it is looking has no say: another
+// agent trimming before this one had, from a camera somewhere else,
+// would throw away everything around it, its own attachments included,
+// and the region describes each object once.
+// Why: doc/objects.md#the-camera-as-soon-as-it-moves
 func (a *Agent) lookFrom() {
 	if a.Account == nil {
 		return

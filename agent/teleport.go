@@ -18,12 +18,10 @@ import (
 // over a border is told the same thing by a different message, which is
 // crossing.go, and the reading of the fields below is shared with it.
 //
-// Reading it is the whole of the work here, and stage 0 measured what
-// not reading it costs: the event was relayed to clients and nobody in
-// the daemon looked at it, so for fifty seconds the region left behind
-// went on answering pings and describing objects, then sent one
-// DisableSimulator, and the idle watchdog gave up 116 seconds after the
-// avatar had gone somewhere else.
+// Reading it is the whole of the work here: a session that does not is
+// left on a circuit to a region the avatar has gone from, which looks
+// healthy until that region lets go and the watchdog ends the session.
+// Why: doc/history/teleport.md#what-exists-today
 //
 // One measured body, from Agni, 298ms after a request that took this
 // avatar from Pelmar Reach to Sandbox Goguen, and on the event queue
@@ -108,10 +106,10 @@ func teleportDestination(body any) (addr *net.UDPAddr, seed string, handle uint6
 // an event body.
 //
 // Every shape it expects was measured in the TeleportFinish above.
-// CrossedRegion's block is read by this same function, on the strength
-// of that measurement rather than one of its own; crossingDestination
-// says so where it asks for it, and says what it costs if the two ever
-// turn out to differ.
+// CrossedRegion's block is read by this same function: that was
+// inferred from the TeleportFinish first, and a captured CrossedRegion
+// has since agreed with it; crossingDestination says so where it asks
+// for it.
 func destination(info map[string]any) (addr *net.UDPAddr, seed string, handle uint64) {
 	if info == nil {
 		return nil, "", 0
@@ -175,9 +173,9 @@ func usableSeed(seed string) string {
 // declares a single one: TeleportFinish.Info is Single and still came
 // back as Info[0] on every measurement.  So the array is the shape to
 // expect, and a bare map is taken as well, because a grid that sent one
-// would otherwise read as an event that never arrived at all.  Taking
-// both is what lets CrossedRegion, whose blocks are Single as well and
-// have never been seen, be read by the same function.
+// would otherwise read as an event that never arrived at all.
+// CrossedRegion's blocks are Single in the template too, and came back
+// as arrays in the one body captured.
 func eventBlock(body any, name string) map[string]any {
 	m := llsd.Map(body)
 	if m == nil {

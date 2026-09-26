@@ -81,8 +81,7 @@ type Object struct {
 	AttachItem  msg.UUID
 
 	// First and Last are when the simulator first and last said
-	// anything about this object.  Last is what an age based sweep
-	// would work from, if one turns out to be needed.
+	// anything about this object.  Last is what Trim ages an orphan by.
 	First time.Time
 	Last  time.Time
 
@@ -100,15 +99,10 @@ type Object struct {
 // rather than growing without bound -- but it is a record of what has
 // been heard, not a query against the region.
 //
-// It did not always forget what it had heard.  Measured before Trim
-// was written: raising the draw distance from 128 to 256 metres took
-// the count from 195 to 217, and dropping it to 32 left it at 193 --
-// the store kept everything the far view had brought in.  Those
-// numbers are what it did then, and are left here because they turn up
-// elsewhere and would otherwise read as current.  Trim now drops what
-// is out of range, and the agent calls it every TrimInterval, so a
-// store does shrink when the camera pulls in -- a little behind the
-// camera rather than with it.
+// Trim drops what is out of range, and the agent calls it every
+// TrimInterval, so a store shrinks when the camera pulls in -- a little
+// behind the camera rather than with it.
+// Why: doc/objects.md#before-trim
 //
 // A store can be shared by several agents in the same region -- see
 // Cache -- which is what viewers is for: what to keep is decided by
@@ -282,14 +276,10 @@ const TrimMargin = 32
 // before it is dropped for it.
 //
 // Out of range is judged against cameras, and a camera can be wrong for
-// a moment.  At login the camera is put on the avatar before anything
-// has said where the avatar is, so for a second or so it looks out from
-// the region's corner; everything described in that second -- and the
-// region describes the most in the seconds after arriving -- was judged
-// from there and thrown away, and the region describes each object
-// once.  Measured on Agni: an avatar sitting on a chair whose
-// description arrived in that window stayed "sitting on something not
-// described here" for as long as the session lasted.
+// a moment: at login it is put on the avatar before anything has said
+// where the avatar is, and for a second or so it looks out from the
+// region's corner -- in the seconds when the region describes the most,
+// and it describes each object once.
 //
 // So an object out of range is noticed first and dropped only if it is
 // still out of range this long afterwards.  Coming back into anybody's
@@ -297,6 +287,7 @@ const TrimMargin = 32
 // decision is always made on a camera read at least one tick after the
 // one that put it on notice.  The cost is holding a little of the view
 // just left for half a minute longer.
+// Why: doc/objects.md#out-of-range-for-a-while
 const OutOfRangeGrace = 2 * TrimInterval
 
 // orphanGrace is how long a child is kept after the last word about it,
@@ -322,8 +313,10 @@ const orphanGrace = time.Minute
 //
 // A child's position is relative to its root, so children are judged
 // by where their root is and go with it.  An orphan whose root never
-// turned up goes once it is old enough to be sure the root is not
-// coming.
+// turned up goes once the region has said nothing about it for
+// orphanGrace, and what hangs off an avatar whose seat is not known
+// stays with the avatar.
+//
 // Everyone watching the store gets a say: an object is kept if it is
 // within ANY viewpoint's draw distance.  A store shared by three
 // avatars in three corners of a region holds what all three can see,
@@ -346,17 +339,14 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 	for _, v := range o.byID {
 		byLocal[v.Local] = v
 	}
-	//
+
 	// A walk that breaks off above a person is not an orphan.  A seated
 	// avatar's parent is its seat, and a seat is a prim like any other,
-	// so the walk carries on up into it -- and when the seat had not
-	// been described, every attachment the avatar wore used to count as
-	// an orphan and go a minute later.  The person is kept whatever
-	// happens (see pcodeAvatar), so what it wears is kept with it until
-	// the seat turns up and there is somewhere to judge them from.
-	// Measured on Agni: an avatar sitting on a chair nothing had
-	// described, all ten attachments described at 19:39 and none of
-	// them by 20:00, with the avatar never having moved.
+	// so the walk carries on up into it, and the seat may not have been
+	// described.  The person is kept whatever happens (see pcodeAvatar),
+	// so what it wears is kept with it until the seat turns up and there
+	// is somewhere to judge them from.
+	// Why: doc/objects.md#what-a-seated-avatar-wears
 	anchor := func(v *Object) (at msg.Vector3, known, onPerson bool) {
 		for up := 0; up < 8; up++ {
 			if up > 0 && v.PCode == pcodeAvatar {
@@ -377,7 +367,7 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 	n := 0
 	for id, v := range o.byID {
 		if v.PCode == pcodeAvatar {
-			// See update: people are kept whatever the distance.
+			// See pcodeAvatar: people are kept whatever the distance.
 			continue
 		}
 		at, known, onPerson := anchor(v)
@@ -387,16 +377,12 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 		if !known {
 			// An orphan: nothing here says where it is.  It goes once
 			// the region has stopped mentioning it, which is the only
-			// evidence available that it is no longer worth keeping.
-			//
-			// Since it was FIRST heard was the wrong clock.  A region
-			// goes on describing a prim whose root it never describes
-			// to us, and this is an unjudgeable update, so it is taken
-			// back in as soon as it is dropped: measured on a live
-			// region, one such prim was deleted and re-created every
-			// minute for hours, losing its name each time and costing
-			// a fresh name lookup to get it back.  A thing the
-			// simulator keeps talking about is a thing that is there.
+			// evidence available that it is no longer worth keeping,
+			// and not a time after it was first heard: a region goes on
+			// describing a prim whose root it never describes to us,
+			// and a thing the simulator keeps talking about is a thing
+			// that is there.
+			// Why: doc/objects.md#orphans
 			if time.Since(v.Last) > orphanGrace {
 				delete(o.byID, id)
 				n++
@@ -442,16 +428,10 @@ func dist2(a, b msg.Vector3) float32 {
 // same platform, in conversation, and the session will not know it is
 // there.
 //
-// Measured on Agni.  Quark logged in at ground level while two others
-// stood on a skybox 1977m up; each session threw the others away as
-// out of range at that moment, and after Quark teleported up to join
-// them, all three were within six metres and none could see any of the
-// others.  Logging in already beside them worked perfectly, which is
-// what made it look like a viewer problem.
-//
 // The cost of the exception is a few hundred bytes per person in the
 // region, which is nothing against the cost of not knowing who is
 // standing next to you.
+// Why: doc/objects.md#people-are-kept-whatever-the-distance
 const pcodeAvatar = 47
 
 // update records what an ObjectUpdate said, and whether it is about
@@ -632,8 +612,9 @@ func (o *Objects) worthDescribing(at msg.Vector3, camera msg.Vector3, far float3
 // A root's position is a place; a child's is an offset from its root,
 // and an attachment's is an offset from the avatar wearing it.  So the
 // answer is found by walking up until something with no parent is
-// reached -- an avatar has none, which is what makes an attachment
-// judged by where its wearer is standing.
+// reached -- a standing avatar has none, which is what makes an
+// attachment judged by where its wearer is standing, and a seated one's
+// parent is its seat, which the walk goes on up into.
 //
 // Not found means the chain leaves the store before the top, and the
 // caller cannot say where this is at all.  It is a different answer
@@ -653,18 +634,18 @@ func (o *Objects) anchorLocked(local uint32) (msg.Vector3, bool) {
 	return msg.Vector3{}, false
 }
 
-// byLocal is one object by the local id the region numbers it with.
-//
-// It is a scan, for the reason kill is: the store is keyed by full id,
-// because that is the only name an object keeps, and the messages that
-// refer to one by local id alone are rare enough that a second index
-// would cost more to maintain than it saved.
 // ByLocal is byLocal, exported for the one caller outside this package
 // that has a local id and nothing else: a seated avatar names its seat
 // by local id and by nothing else, so answering "what is it sitting on"
 // means turning one into an object.  See server/seat.go.
 func (o *Objects) ByLocal(local uint32) (*Object, bool) { return o.byLocal(local) }
 
+// byLocal is one object by the local id the region numbers it with.
+//
+// It is a scan, for the reason kill is: the store is keyed by full id,
+// because that is the only name an object keeps, and the messages that
+// refer to one by local id alone are rare enough that a second index
+// would cost more to maintain than it saved.
 func (o *Objects) byLocal(local uint32) (*Object, bool) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -765,15 +746,8 @@ var objectImage = (&msg.ObjectImage{}).MsgInfo().ID
 // object at once, and the region does NOT describe the result.  Nothing
 // arrives to correct the appearance held here, so what is held goes on
 // describing the object as it was before the change -- for as long as
-// the session lasts.
-//
-// Measured on a live region, on a box of six faces: every face
-// coloured red, and forty seconds later the reading had not moved --
-// it still described the box as it had been before the red.  Worse,
-// the next change starts from that reading, since a client must send
-// every face and so reads the appearance first: colouring every face
-// blue and then face 0 white left face 0 white and the other five back
-// at the red they had been before the blue.
+// the session lasts -- and the next change, which a client makes by
+// reading every face and sending them all back, starts from it.
 //
 // So the appearance is forgotten rather than corrected.  Correcting it
 // means asking the region to describe the object again, which is a
@@ -785,6 +759,7 @@ var objectImage = (&msg.ObjectImage{}).MsgInfo().ID
 // reply of any kind -- so "it may not have worked" is not a state that
 // can be told from "it worked", and the only cache that is honest
 // about both is no cache.
+// Why: doc/objects.md#an-appearance-after-objectimage
 func (o *Objects) sent(p *msg.Packet) {
 	if p == nil || p.Message == nil || p.ID != objectImage {
 		return
@@ -938,18 +913,10 @@ func (a *Agent) trackObjects() {
 	// viewer with a disk cache checks each CRC against what it stored
 	// last visit and asks only for what it is missing.  This client has
 	// no cache, so every one of them is a miss and every one has to be
-	// asked for.
-	//
-	// Ignoring it costs almost everything that was in the region before
-	// we arrived, while leaving freshly rezzed objects working
-	// perfectly -- those arrive as full ObjectUpdates.  That asymmetry
-	// is why it went unnoticed: every experiment written here rezzes
-	// the object it works on.  Pointed at a prim that was already
-	// there, the session could not see it at all.
-	//
-	// It is also why counting unhandled MESSAGES made this look
-	// trivial.  ObjectData is a variable block, so the whole region can
-	// arrive in one packet, and one packet is what the count showed.
+	// asked for.  Ignoring it costs almost everything that was in the
+	// region before we arrived, while leaving freshly rezzed objects
+	// working perfectly -- those arrive as full ObjectUpdates.
+	// Why: doc/objects.md#what-the-region-believes-we-already-hold
 	a.Disp.MustHandle("ObjectUpdateCached", func(p *msg.Packet) {
 		m := p.Message.(*msg.ObjectUpdateCached)
 		ids := make([]uint32, len(m.ObjectData))
@@ -1120,9 +1087,9 @@ func (a *Agent) Redescribe() int {
 //
 // It gives up when the chain runs out of described objects rather than
 // guessing at the missing link, since a wrong answer here is a position
-// somebody would act on.  Eight steps for the reason anchorLocked has
-// eight: a linkset that deep is a loop, and a loop must not be walked
-// for ever.
+// somebody would act on.  Eight steps at most, as in anchorLocked and
+// Trim: a chain that deep is a loop, and a loop must not be walked for
+// ever.
 func (o *Objects) worldPlacement(local uint32) (msg.Vector3, msg.Quaternion, bool) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()

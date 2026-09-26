@@ -15,29 +15,16 @@ import (
 // move, and this file is teleport.go's sibling down to the shapes it
 // reads the fields in.
 //
-// **It arrives only for a client holding a child circuit**, and that was
-// measured both ways.  A viewer keeps circuits to the simulators around
-// it, answering the EnableSimulator each one is offered through, and a
-// crossing is seamless precisely because the region over the border was
-// already talking to it.  slgod connects to one simulator at a time by
-// choice (c1e9d11), and while it did the border was a wall: an avatar
-// walked at Pelmar Reach's west edge, stopped dead at x=0, and stayed
-// there for twelve seconds; from the other side he was pinned at x=255
-// for twenty-four.  No CrossedRegion, either time.  Take the offer up
-// -- one UDP socket, UseCircuitCode with this session's own three ids,
-// and an answer to the handshake -- and the same walk crosses in two
-// seconds, with the message arriving on the event queue exactly once.
-// See doc/history/neighbours.md, which is the plan for holding those
-// circuits properly; until it is built the handler below is reached
-// only by a client that opened one by hand.
+// **It arrives only for a client holding a child circuit** to the
+// region over the border: without one the border is a wall, and the
+// message never comes.  Options.Neighbours holds those circuits; see
+// neighbour.go.
+// Why: doc/history/neighbours.md#stage-0----take-one-offer-up-by-hand-done
 //
-// **The shapes were inferred and then confirmed.**  Stage 7 read this
-// message with the reader written for a measured TeleportFinish, on the
-// grounds that the two describe the same thing, and marked every field
-// as a guess.  A real body has since been captured and agrees with all
-// of them -- see agniCrossedRegion in the test beside this file.  What
-// the template settles rather than the wire is the block: the
-// destination is in RegionData, where Info is the arrival position.
+// The destination is in RegionData, where Info is the arrival position;
+// the template settles that, and the fields inside it are read as a
+// TeleportFinish's are.  A captured body agrees with every field --
+// agniCrossedRegion, in the test beside this file.
 //
 // A crossing this way is still a pause rather than the seamless thing a
 // viewer gives you: moveTo dials the new simulator afresh even when a
@@ -67,17 +54,18 @@ func (a *Agent) noteCrossedRegion(body any) {
 // TeleportFinish's destination is there would find two vectors and no
 // address at all.
 //
-// Everything else is inference.  The fields inside RegionData are read
-// with the reader written for the measured TeleportFinish -- handle and
-// address as LLSD binary, port as an integer, seed as a string -- on the
-// grounds that the two messages describe the same thing and the template
-// declares their fields with the same types.  Nobody has seen the bytes.
-// If the inference is wrong the failure is contained: destination
+// The fields inside RegionData are read with the reader written for the
+// measured TeleportFinish -- handle and address as LLSD binary, port as
+// an integer, seed as a string.  That was inferred first, on the grounds
+// that the two messages describe the same thing and the template
+// declares their fields with the same types, and a captured body has
+// since agreed with every field: agniCrossedRegion, in the test beside
+// this file.  A shape nobody expected still fails closed: destination
 // refuses an address it cannot build out of four bytes and a port in
-// range, so a shape nobody expected reads as a body with no destination
-// in it, and a body with no destination in it is one to do nothing
-// about.  What that costs is a crossing not followed, which is where
-// this daemon stood before this file existed.
+// range, so it reads as a body with no destination in it, and a body
+// with no destination in it is one to do nothing about.  What that
+// costs is a crossing not followed, which is where this daemon stood
+// before this file existed.
 func crossingDestination(body any) (addr *net.UDPAddr, seed string, handle uint64) {
 	return destination(eventBlock(body, "RegionData"))
 }
@@ -85,20 +73,22 @@ func crossingDestination(body any) (addr *net.UDPAddr, seed string, handle uint6
 // followCrossings acts on a CrossedRegion that arrives on the circuit.
 //
 // The template marks the message UDPBlackListed, which says it belongs
-// on the event queue, and stage 6 made the point that a deprecation flag
-// is a promise a grid need not keep.  Reading both roads costs one
-// handler; reading one and guessing wrong costs an avatar that has
-// walked into a region this session is not connected to.
+// on the event queue, and stage 6 of doc/history/teleport.md made the
+// point that a deprecation flag is a promise a grid need not keep.
+// Reading both roads costs one handler; reading one and guessing wrong
+// costs an avatar that has walked into a region this session is not
+// connected to.
 //
-// It is deliberately NOT Inline, and it is the only handler in this
-// package that has a reason to say so.  A move waits for the new
-// simulator's AgentMovementComplete, which is delivered by the handler
-// registered for it -- inline, on the dispatch goroutine.  Run inline,
-// this would be that goroutine, so the arrival it is waiting for could
-// not be dispatched until it returned: the move would wait out its
-// timeout and end the session, every time, for a crossing that was
-// working perfectly.  That is not a reading of the dispatcher -- it was
-// tried, and the circuit test below timed out on exactly that.
+// It is deliberately NOT Inline, like EnableSimulator's in
+// followNeighbours, and for a reason of its own.  A move waits for the
+// new simulator's AgentMovementComplete, which is delivered by the
+// handler registered for it -- inline, on the dispatch goroutine.  Run
+// inline, this would be that goroutine, so the arrival it is waiting for
+// could not be dispatched until it returned: the move would wait out its
+// timeout and end the session, every time.  It was tried, and
+// TestACrossedRegionOnTheCircuitIsFollowedTheSameWay timed out on
+// exactly that.
+// Why: doc/history/teleport.md#stage-7----walking-over-the-border-done-unverified
 func (a *Agent) followCrossings() {
 	a.Disp.MustHandle("CrossedRegion", func(p *msg.Packet) {
 		m, ok := p.Message.(*msg.CrossedRegion)

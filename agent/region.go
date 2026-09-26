@@ -75,7 +75,7 @@ type regionState struct {
 	// handshake is the message as it arrived.
 	//
 	// Region above is what this package needs and is not what a
-	// viewer needs: regionFromHandshake keeps twelve fields of a
+	// viewer needs: regionFromHandshake keeps fourteen fields of a
 	// message that has thirty odd, and among the ones it drops are
 	// the eight terrain texture ids and the eight height and range
 	// floats -- precisely what decides whether the ground has
