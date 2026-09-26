@@ -222,7 +222,7 @@ func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 	return &pb.LogoutResponse{}, nil
 }
 
-// clientNames is who is attached, for an error a person can act on.
+// clientNames is every client attached, described for a person.
 //
 // The names are the ones clients authenticated under, so the answer is
 // "slbench and slsh" rather than a count -- which is the difference

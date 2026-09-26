@@ -42,8 +42,9 @@
 // A message this build has never heard of still arrives, with its
 // number and its undecoded bytes: Decode returns nil for it rather than
 // an error, and the body is there to look at.  That is deliberate --
-// the server relays what it does not understand, so a client can handle
-// a message added to the protocol after the server was built.
+// the server relays what it does not understand to a client subscribed
+// to "*", so a client can handle a message added to the protocol after
+// the server was built.
 //
 // Sending goes the other way, and fills its own identity blocks: the
 // server relays bytes and does not fill anything in.
@@ -89,12 +90,9 @@ type Conn struct {
 	agent string
 
 	// dropped counts what this connection threw away because nobody was
-	// reading fast enough, and OnDrop says what each one was.
-	//
-	// It used to do neither.  A chat line lost here looked exactly like a
-	// line the script never said, which for a benchmark is a number that
-	// is quietly wrong rather than a run that failed -- and that is the
-	// one thing a measurement must not do.
+	// reading fast enough, and OnDrop says what each one was, so that a
+	// line lost here can be told from a line never said.
+	// Why: doc/client.md#counting-what-is-dropped
 	dropped atomic.Uint64
 	onDrop  func(what string)
 
@@ -134,26 +132,26 @@ type Conn struct {
 
 	// relaying says recvLoop is running, and closed says Close has
 	// been. Both are under mu, and the pair is what decides who closes
-	// the four channels above; see closeRelay.
+	// the five channels above; see closeRelay.
 	relaying bool
 	closed   bool
 
 	// sendMu makes sends on stream one at a time.  See sendPacket.
 	sendMu sync.Mutex
 
-	// locks is what this connection has asked slgod for exclusive use
-	// of.  See lock.go.
+	// locks is the requests for a lock still waiting for slgod's
+	// answer.  See lock.go.
 	locks locking
 
-	// grants is what this connection has asked slgod for out of the
-	// shared objects.  See slots.go.
+	// grants is the requests for shared objects still waiting for
+	// slgod's answer, and those given up on.  See slots.go.
 	grants granting
 
 	closeOnce sync.Once
 	done      chan struct{}
 	err       atomic.Value
 
-	// relayOnce guards the close of the four relay channels, and
+	// relayOnce guards the close of the five relay channels, and
 	// relayDone is closed with them so that Close can wait.
 	relayOnce sync.Once
 	relayDone chan struct{}
@@ -240,9 +238,8 @@ func (e *Event) Decode() (map[string]any, error) {
 	return llsd.Map(v), nil
 }
 
-// Dial connects to a server without opening a stream.  Use Attach to
-// start receiving messages.
-// Dial connects to slgod over TLS and authenticates both ways.
+// Dial connects to slgod over TLS and authenticates both ways.  It opens
+// no stream: Attach starts the messages.
 //
 // One connection, used for the handshake and everything after, because
 // the connection is what the handshake proves. The certificate is not
@@ -296,14 +293,12 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 //
 // The basename of the running binary, so slsh is "slsh" and slbotd is
 // "slbotd" with nothing to remember and no way for the two to disagree.
-// Every client used to say "slgo", which made the name useless for the
-// one thing it is for: slgod's own "in use by" message read "slgo,
-// slgo" when two different programs were attached.
 //
 // It is not a credential and proves nothing.  The handshake is over the
 // shared secret and is bound to the TLS session; this is a label on the
 // far end of an already-proved connection, for a person reading a
 // sentence about it.
+// Why: doc/client.md#the-name-a-client-gives-slgod
 func Name() string {
 	if len(os.Args) == 0 {
 		return "slgo"
@@ -372,14 +367,14 @@ func login(ctx context.Context, cc *grpc.ClientConn, addr string, binding func()
 //
 // It does not close them itself when there is a recvLoop, because
 // recvLoop is the only thing that sends on them and closing a channel
-// under its sender is a race at best and a panic at worst -- which is
-// what this used to be, on the one path every client takes to hang up.
-// So Close shuts the transport down instead, which makes recvLoop's
-// Recv fail, and waits for it to close them on the way out.
+// under its sender is a race at best and a panic at worst.  So Close
+// shuts the transport down instead, which makes recvLoop's Recv fail,
+// and waits for it to close them on the way out.
 //
 // With no recvLoop there is no sender and nothing to wait for, and
 // Close does it here: a connection that never attached must still
 // leave anybody ranging over Messages with an end to range to.
+// Why: doc/client.md#closing-while-the-relay-runs
 func (c *Conn) Close() error {
 	c.finish(nil)
 	err := c.cc.Close()
@@ -406,7 +401,7 @@ func (c *Conn) finish(err error) {
 	})
 }
 
-// closeRelay closes the three channels the server's packets arrive on.
+// closeRelay closes the five channels the server's packets arrive on.
 //
 // Only recvLoop may call this while one is running.  See Close.
 func (c *Conn) closeRelay() {
@@ -420,7 +415,7 @@ func (c *Conn) closeRelay() {
 	})
 }
 
-// Done is closed when the stream ends.
+// Done is closed when the stream ends or the connection is closed.
 func (c *Conn) Done() <-chan struct{} { return c.done }
 
 // Err reports why it ended.
@@ -538,12 +533,7 @@ func (c *Conn) attach(ctx context.Context, agentName string, weak bool, subscrib
 	// recvLoop about to start and waits for it, or gets here first and
 	// is refused -- and never decides there is no sender just as one
 	// begins.
-	//
-	// No test reaches the refusal, and none can through this package's
-	// own doors: Close shuts the transport down, so an attach that got
-	// this far -- stream opened, first packet read -- ran entirely
-	// before it.  What is left is the window between that read and this
-	// lock, which is exactly what the guard is for.
+	// Why: doc/client.md#closing-while-the-relay-runs
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -618,8 +608,8 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 				// with it the messages, the events and the
 				// answers to locks -- so the buffer is what
 				// stands between the two, and these arrive one
-				// to a teleport where a message arrives one to a
-				// packet.
+				// to a teleport, crossing or reconnect where a
+				// message arrives one to a packet.
 				select {
 				case c.regions <- &RegionChange{
 					Region: b.Notice.GetRegion(),
@@ -647,8 +637,8 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 
 // deliver hands one relayed message to whoever reads Messages.
 //
-// Only recvLoop calls it; see closeRelay for why nothing else may send
-// on the channel.
+// Only recvLoop calls it; see Close for why nothing else may send on
+// the channel.
 func (c *Conn) deliver(m *pb.InboundMessage) {
 	out := &Message{
 		ID:         msg.ID(m.Id),
@@ -669,10 +659,9 @@ func (c *Conn) deliver(m *pb.InboundMessage) {
 	select {
 	case c.messages <- out:
 	default:
-		// A client that stops reading loses messages.  Counted,
-		// because the alternative is what it was: a chat line that
-		// never arrives and no way for anybody to know one went
-		// missing.
+		// A client that stops reading loses messages, and each is
+		// counted.
+		// Why: doc/client.md#counting-what-is-dropped
 		c.dropped.Add(1)
 		c.noteDrop("message " + m.Name)
 	}
@@ -745,7 +734,8 @@ func (c *Conn) SendRaw(ctx context.Context, id msg.ID, body []byte, reliable boo
 // sendPacket puts one frame on an attach stream, and every send on one
 // goes through it.  gRPC allows only one send at a time on a stream, and
 // this connection sends from its callers, from their waits for locks and
-// places, and from the receive loop giving back grants.
+// places, and from the goroutines the receive loop starts to give grants
+// back.
 func (c *Conn) sendPacket(stream pb.Grid_StreamClient, p *pb.ClientPacket) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
@@ -784,19 +774,6 @@ func (c *Conn) ViewerCredential(ctx context.Context) (*pb.ViewerCredentialRespon
 	return c.grid.ViewerCredential(ctx, &pb.ViewerCredentialRequest{Agent: name})
 }
 
-// ---------------------------------------------------------- capabilities
-
-// A Conn is an agent.CapDoer, so anything written against capabilities
-// runs unchanged on either side of the link.
-//
-// This is the return on making the server a gateway rather than a
-// participant.  agent.FetchInventory takes a CapDoer: give it an Agent
-// and it makes the HTTPS requests itself, give it a Conn and the server
-// makes them on its behalf.  The inventory code does not know which,
-// and the server does not know what inventory is.
-var _ agent.CapDoer = (*Conn)(nil)
-
-// HasCap reports whether the attached agent offered a capability.
 // Presence reads where the avatar is and what it can see.  A draw
 // distance above zero sets it; zero leaves it alone.
 //
@@ -854,7 +831,6 @@ func (c *Conn) NoteFriend(ctx context.Context, id msg.UUID, online bool) error {
 	return err
 }
 
-// Region asks what the simulator said about itself.
 // Host asks the daemon to bring a session up.
 //
 // Safe to repeat: one already hosted comes back with Already set rather
@@ -867,9 +843,10 @@ func (c *Conn) Host(ctx context.Context, name string, force bool) (*pb.HostRespo
 
 // Logout puts a session down and keeps it down.
 //
-// It is refused while clients are attached unless force is set, and the
-// refusal names them: a benchmark mid-run has a script installed and a
-// reading half taken, and losing that should be a decision.
+// Unless force is set, it is refused while a client that attached with
+// Attach rather than AttachWeak is using the session, and the refusal
+// names them: a benchmark mid-run has a script installed and a reading
+// half taken, and losing that should be a decision.
 func (c *Conn) Logout(ctx context.Context, name string, force bool) (*pb.LogoutResponse, error) {
 	r, err := c.grid.Logout(ctx, &pb.LogoutRequest{Agent: name, Force: force})
 	if err == nil {
@@ -887,6 +864,8 @@ func (c *Conn) Logout(ctx context.Context, name string, force bool) (*pb.LogoutR
 	return r, err
 }
 
+// Region asks what the simulator said about itself in the handshake,
+// which happens once, before any client is listening.
 func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
 	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agent})
 }
@@ -904,7 +883,8 @@ func (c *Conn) Land(ctx context.Context) (*pb.LandInfo, error) {
 
 // Ground is the height of the land in the region the avatar is in: the
 // highest it comes in a rectangle, which for a point is the height
-// there.  Known is false where the land under it has not all arrived.
+// there.  Known is false where the land under it has not all arrived,
+// or where the rectangle reaches outside the region.
 //
 // It goes to the server for the reason Land does: the heightmap is sent
 // once, when the avatar arrives, and never again for the asking.
@@ -1038,6 +1018,19 @@ func (c *Conn) Flush(ctx context.Context) (int, error) {
 	return int(r.Forgotten), nil
 }
 
+// ---------------------------------------------------------- capabilities
+
+// A Conn is an agent.CapDoer, so anything written against capabilities
+// runs unchanged on either side of the link.
+//
+// This is the return on making the server a gateway rather than a
+// participant.  agent.FetchInventory takes a CapDoer: give it an Agent
+// and it makes the HTTPS requests itself, give it a Conn and the server
+// makes them on its behalf.  The inventory code does not know which,
+// and the server does not know what inventory is.
+var _ agent.CapDoer = (*Conn)(nil)
+
+// HasCap reports whether the attached agent offered a capability.
 func (c *Conn) HasCap(name string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -1076,8 +1069,9 @@ func (c *Conn) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapRespons
 	return &agent.CapResponse{Status: int(resp.Status), Body: resp.Body}, nil
 }
 
-// Dropped is how many messages, events and notices this connection has
-// thrown away because nobody was reading them fast enough.
+// Dropped is how many messages, events, notices, region changes and
+// handled offers this connection has thrown away because nobody was
+// reading them fast enough.
 //
 // Anything but zero means something was missed, and what was missed is
 // gone: there is no way to ask for it again.  It is worth looking at

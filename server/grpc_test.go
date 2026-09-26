@@ -238,7 +238,8 @@ func TestARelayEncodesWhatItWasNotGivenTheBytesOf(t *testing.T) {
 
 	// One that will not encode is dropped rather than relayed empty: a
 	// client cannot tell "no body" from "a body of nothing", and the
-	// acknowledgement has already gone, so there is nothing to fail.
+	// acknowledgement does not wait on the relay, so there is nothing to
+	// fail.
 	tooLong := &msg.ChatFromSimulator{}
 	tooLong.ChatData.FromName = make([]byte, 300) // longer than its length prefix
 	h.relay(&msg.Packet{ID: msg.IDOf(tooLong), Message: tooLong})
@@ -597,8 +598,8 @@ func TestSubscriptionsAreNamesInTwoMaps(t *testing.T) {
 		t.Error(`removing "*" left everything subscribed`)
 	}
 
-	// A name this build's template has never heard of is ignored
-	// rather than refused: the client may know something we do not.
+	// A name this build's template has never heard of is kept rather
+	// than refused, as the name of an event queue event.
 	if got := c.setSubs(&pb.Subscribe{Set: []string{"NoSuchMessageAnywhere"}}); len(got) != 1 {
 		t.Errorf("an unknown name was refused: %v", got)
 	}

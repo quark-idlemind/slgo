@@ -38,7 +38,7 @@ var ErrXferAborted = errors.New("client: transfer aborted")
 // Xfers reassembles files arriving over the xfer protocol.
 //
 // A client makes one, feeds it every SendXferPacket and AbortXfer it
-// receives, and asks it for a file by id.
+// receives, and asks it for a file by name.
 type Xfers struct {
 	c Sender
 
@@ -212,8 +212,8 @@ func (x *Xfers) Fetch(ctx context.Context, agentID, sessionID msg.UUID,
 	}
 }
 
-// xferLength reads the length prefix on a transfer's first packet, for
-// callers that want to check it.
+// xferLength reads the length prefix on a transfer's first packet.
+// Only a test calls it: packet drops the prefix without reading it.
 func xferLength(first []byte) (uint32, bool) {
 	if len(first) < 4 {
 		return 0, false

@@ -22,7 +22,7 @@ var _ pb.GridServer = (*Server)(nil)
 // streamDepth is how far a client may fall behind before frames are
 // dropped.  Dropping is deliberate: a slow client must not be able to
 // stall the circuit that feeds it, and a lost relay costs nothing on
-// the grid because the acknowledgement has already gone.
+// the grid because the acknowledgement does not wait on the relay.
 const streamDepth = 1024
 
 // controlDepth is how many answers to its requests -- for a lock or for
@@ -119,8 +119,9 @@ func (c *Client) wantsEvent(name string) bool {
 }
 
 // setSubs applies a subscription change.  A name this build's template
-// does not have is ignored rather than refused: the client may know
-// something we do not, and the number it wants will still relay.
+// does not have is kept rather than refused, as the name of an event
+// queue event; a message the template lacks has no name to ask for it
+// by, and reaches only a client that asked for everything.
 func (c *Client) setSubs(s *pb.Subscribe) []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -210,10 +211,11 @@ func jam() error {
 
 // relay hands a packet to every client that asked for it.
 //
-// It runs on the agent's dispatch goroutine and does no work beyond
-// choosing recipients and handing over.  Acknowledgement has already
-// happened by this point and does not depend on any of it, which is
-// what makes "no client attached" mean "acknowledged and dropped".
+// It runs as the dispatcher's tap, on the agent's dispatch goroutine,
+// and does no work beyond choosing recipients and handing over.  The
+// dispatcher queues the acknowledgement once the tap returns, whatever
+// the tap did, which is what makes "no client attached" mean
+// "acknowledged and dropped".
 func (h *Hosted) relay(p *msg.Packet) {
 	if p.Message == nil && p.Body == nil {
 		return // acknowledgements only
@@ -279,9 +281,9 @@ func (h *Hosted) relay(p *msg.Packet) {
 	h.relayed.Add(1)
 }
 
-// ElsewhereClient stands in when the client that sent a message did not
-// say what it was called.  See echo: what matters is that the field is
-// not empty, because empty means the grid.
+// ElsewhereClient stands in when there is no name at all for the client
+// that sent a message.  See echo: what matters is that the field is not
+// empty, because empty means the grid.
 const ElsewhereClient = "another client"
 
 // echo hands a message one client sent to the OTHER clients of the same
@@ -325,13 +327,9 @@ func (h *Hosted) echo(from *Client, sentBy string, id msg.ID, body []byte) {
 	// reading this has to be able to make; a nameless sender must not
 	// be able to make an echo look like something the simulator said.
 	//
-	// It is often this rather than a name, because every client in this
-	// tree authenticates as "slgo" -- the name is carried through the
-	// handshake and nothing has ever had a reason to vary it.  Which
-	// client said something would be worth knowing (h.clientNames has
-	// the same problem, and reports "slgo, slgo" for two clients), but
-	// that is a change to how clients name themselves rather than to
-	// this.
+	// A connection Serve accepted always has a description, if only "an
+	// unnamed client" (describeClient), so this is for a call made
+	// without one.
 	if sentBy == "" {
 		sentBy = ElsewhereClient
 	}
@@ -635,7 +633,8 @@ func teleportRequest(id msg.ID) bool {
 
 func (s *Server) ListAgents(ctx context.Context, _ *pb.ListAgentsRequest) (*pb.ListAgentsResponse, error) {
 	// Oldest first, not alphabetical: the order IS information.  The
-	// first is the default -- what a client that names no agent gets.
+	// first that is not stopped is the default -- what a client that
+	// names no agent gets.
 	//
 	// It used to be advice as well, for a client looking for an avatar
 	// with objects free.  Nothing looks that way now: the pool answers
@@ -1122,8 +1121,11 @@ func (s *Server) lookup(name string) (*Hosted, error) {
 	return h, nil
 }
 
-// clientName is what this connection proved it was, or "" when the
-// server runs without authentication.
+// clientName describes the client on this connection for a person, as
+// describeClient does: the name it logged in under, with its pid and
+// address where known, or "an unnamed client" when it gave none, which
+// is always the case without authentication.  "" only for a call with no
+// connection state, which Serve always gives one.
 func clientName(ctx context.Context) string {
 	if c, ok := connFrom(ctx); ok {
 		name, _ := c.ok()

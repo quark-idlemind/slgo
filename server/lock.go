@@ -21,11 +21,10 @@ package server
 //
 // # What it is for
 //
-// slrun and slbench run their scripts in one attached object, and
-// a benchmark carries its base reading in that object's LINKSET DATA,
-// which belongs to the object and not to the script.  Two runs at once
-// would each divide by the other's numbers.  Labelling the output would
-// not help: the clash is over the data, not over who said what.
+// Whatever two programs on one avatar must not both do; a name means
+// nothing here.  No program in this tree takes one now: slrun and
+// slbench, which locked the object they ran scripts in, take places
+// from the pool in slots.go instead.
 
 import (
 	"fmt"
@@ -55,8 +54,8 @@ type waiter struct {
 // lockSet returns this agent's locks, making the set on first use.
 //
 // On demand rather than in a constructor because Hosted is built in
-// three places, one of them a test, and a lock set that has to be
-// remembered at each of them is a nil pointer waiting for the fourth.
+// more than one place, tests among them, and a lock set that has to be
+// remembered at each of them is a nil pointer waiting for the next.
 func (h *Hosted) lockSet() *locks {
 	h.mu.Lock()
 	defer h.mu.Unlock()

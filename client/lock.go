@@ -15,7 +15,8 @@ import (
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
-// locking is the state of the locks this connection has asked for.
+// locking is the requests for a lock waiting for their answers, by
+// name, oldest first.
 type locking struct {
 	mu      sync.Mutex
 	waiting map[string][]chan *pb.Locked
@@ -33,8 +34,10 @@ func (c *Conn) Lock(ctx context.Context, name string) error {
 		return err
 	}
 	if !held {
-		// A waiting lock only answers when it has been given, so this
-		// is not a case that should arise.
+		// A waiting lock only answers when it has been given.  But
+		// answers are matched by name, oldest waiter first, so a
+		// TryLock of the same name on this connection meanwhile can
+		// have its "not held" handed to this wait.
 		return fmt.Errorf("client: waiting for the %q lock came back without it", name)
 	}
 	return nil
