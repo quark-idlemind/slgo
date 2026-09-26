@@ -867,21 +867,17 @@ func (a *Agent) register() {
 		// The height is one byte of four metre steps, so it stops at
 		// 1020 and says nothing at all about an avatar above that: 255
 		// means "higher than this can say", not "at 1020".  Taking it
-		// literally puts the camera a kilometre below an avatar on a
-		// skybox, and everything the region then describes is judged
-		// against a place the avatar is not -- the objects around it,
-		// and the other avatars standing beside it, arrive already out
-		// of range and are dropped.  Nothing describes them twice, so
-		// the session never recovers.
-		//
-		// Measured: three avatars at about 2001m were all reported at
-		// exactly 1020, and none of them could see any of the others,
-		// nor its own avatar.
+		// literally would put the camera a kilometre below an avatar on
+		// a skybox, and everything the region then describes would be
+		// judged against a place the avatar is not: the objects around
+		// it would arrive already out of range, and nothing describes
+		// them twice.
 		//
 		// So a saturated height is no height.  The last one from a
 		// message that carries it in full -- AgentMovementComplete, or
 		// a teleport -- is kept instead, which is where the avatar was
 		// when something last said properly.
+		// Why: doc/objects.md#a-saturated-height
 		a.mu.Lock()
 		if a.entering != nil {
 			// The new region's, and the avatar is not yet there as
