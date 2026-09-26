@@ -167,24 +167,13 @@ func listAudience(cfg Config) Audience {
 // other, and makes the conversation end.  An avatar chat-bot names, which
 // another program's model drives, is bounded the same way.
 //
-// A flat refusal was the first answer here and it was the wrong one.
-// Two of these talking is not a malfunction -- what actually happened
-// was a dull but perfectly ordinary conversation -- and an operator who
-// wants them not to has a way to say so now, by writing the name with a
-// "!" in front of it.  What is wrong with it is only that it does not
-// stop: a reply from one is an ordinary remark to the other, neither is
-// answering ITSELF, and neither will ever be the one to get bored.
-//
-// So it is bounded rather than banned.  They may say a few things to
-// each other and then one of them stops answering, which is what ends
-// it -- there is no other end available, since the far side is as
-// tireless as this one.
-//
-// Measured before there was any bound: with "chat = *" on three
-// avatars, ONE message typed by hand from one of them to another ran to
-// 26 exchanges in ninety seconds on the live grid, and was still going
-// when it was stopped by hand.  Starting it took a person; stopping it
-// was never going to happen on its own.
+// Bounded rather than banned: two of them talking is not a malfunction,
+// and "!" in the chat list is there for an operator who wants it not to
+// happen.  What is wrong is that it does not stop -- neither side will
+// ever be the one to get bored -- so once they have said limit things
+// to each other, one of them stops answering, which is the only end
+// available.
+// Why: doc/slbotd.md#two-models-talking-to-each-other
 //
 // The count is Approach.Recent: what the two have said since they last
 // rested for chat-own-rest, or everything ever said when that is zero,

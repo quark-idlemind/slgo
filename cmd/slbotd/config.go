@@ -859,19 +859,10 @@ func expandHome(path string) string {
 // ChatProblem says why chat is not on, when the file plainly meant it
 // to be, and is empty when there is nothing wrong.
 //
-// Half a chat configuration is almost certainly an unfinished one, and
-// it used to be fatal.  That was wrong, and it was wrong in the way
-// that matters for a daemon meant to run for weeks: attending avatars
-// and taking commands is what slbotd is FOR, chat is something bolted
-// on beside it, and a missing line in the bolted-on part took the whole
-// thing down on the next restart.  slgod has had the right answer to
-// this all along -- a profile it cannot read is logged and the others
-// are served -- and this is the same rule.
-//
-// So it is said, loudly, every time the daemon starts and again
-// whenever anybody asks; and the avatars are attended.  Silence was
-// never the alternative: a setting that does nothing and says nothing
-// is the fault this used to be trying to prevent.
+// A problem turns chat off and nothing else: it is said loudly at every
+// start and by --check, and the avatars are attended, because chat is
+// beside what slbotd is for and must not take it down.
+// Why: doc/slbotd.md#half-a-chat-configuration
 func (c *Config) ChatProblem() string {
 	switch {
 	case len(c.Chat) > 0 && c.LLMURL == "":

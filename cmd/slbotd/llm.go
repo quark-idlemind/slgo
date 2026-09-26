@@ -11,28 +11,13 @@ package main
 // this daemon talks to llama-server rather than to whatever is
 // convenient.
 //
-// # What was measured, and on what
+// # What it costs
 //
-// Against llama-server b11056 on this machine, Qwen2.5-0.5B-Instruct
-// Q4_K_M, four slots of 2048 tokens, on an Intel i9 with no gpu
-// offload:
-//
-//	a 1442 token prompt, cold          5.0 s   (288 tokens/second)
-//	saving those 1457 tokens          13.1 ms  (17,927,560 bytes)
-//	restoring them into another slot   5.4 ms
-//	the next turn, warm                0.53 s  (1442 of 1461 cached)
-//
-// So restoring costs about five milliseconds and saves about five
-// seconds, and the cost of carrying a conversation is the disk it sits
-// on rather than the time to pick it up.  That measurement is what the
-// design above rests on; it was taken rather than assumed, and it is
-// the one to repeat on the machine this ends up running on.
-//
-// The kv cache is 12,304 bytes a token for that model, which is
-// 2 * 24 layers * 2 kv heads * 64 head dim * 2 bytes plus a header.
-// The shape matters more than the size of the model: grouped query
-// attention decides it, so a three billion parameter model with two kv
-// heads costs less per token than a smaller one with eight.
+// Restoring a conversation's kv cache was measured at milliseconds,
+// against seconds to prefill it, so the cost of carrying a conversation
+// is the disk it sits on.  How much disk is decided by the model's
+// shape -- grouped query attention -- more than by its size.
+// Why: doc/slbotd.md#keeping-the-kv-cache
 //
 // # What the server does not check
 //
