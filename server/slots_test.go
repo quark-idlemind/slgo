@@ -137,6 +137,65 @@ func TestSlotsWaitTheirTurn(t *testing.T) {
 	}
 }
 
+// TestABoundedWaitIsAnsweredWhenItRunsOut: a wait with wait_seconds is
+// answered "not free" after that long rather than left queued, and
+// holds nothing afterwards -- places that come free later are not
+// granted to a client that has stopped waiting for them.
+func TestABoundedWaitIsAnsweredWhenItRunsOut(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	a := r.dial(t)
+	defer a.Close()
+
+	ctx := context.Background()
+	held, err := a.Slots(ctx, SlotsPerAgent, time.Minute, "")
+	if err != nil || !held.Held() {
+		t.Fatalf("Slots: %v %v", held, err)
+	}
+
+	sp := r.srv.slotsOf()
+	c := &Client{ctl: make(chan *pb.ServerPacket, 4), jammed: make(chan struct{})}
+	start := time.Now()
+	asked := make(chan struct{})
+	go func() {
+		defer close(asked)
+		sp.ask(ctx, c, &pb.Slots{Want: 4, WaitSeconds: 1, Request: 5})
+	}()
+
+	select {
+	case p := <-c.ctl:
+		took := time.Since(start)
+		g := p.GetGranted()
+		if g.GetRequest() != 5 || g.GetGrant() != "" || g.GetWhy() == "" {
+			t.Errorf("the wait was answered %v, want request 5 refused with a reason", p)
+		}
+		if took < time.Second || took > 3*time.Second {
+			t.Errorf("answered after %v, want about a second", took)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a wait of one second was still queued after five")
+	}
+	select {
+	case <-asked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the request went on waiting after it was answered")
+	}
+
+	if err := a.ReleaseSlots(held.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	all, err := a.TrySlots(ctx, SlotsPerAgent, time.Minute, "")
+	if err != nil || !all.Held() {
+		t.Errorf("after the wait ran out, the places given back were not all free: %v %v", all, err)
+	}
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	for _, g := range sp.grants {
+		if g.who == c {
+			t.Errorf("a client that stopped waiting holds %s", g.token)
+		}
+	}
+}
+
 // TestAStreamThatEndsGivesItsPlacesBack: the lease is the stream, which
 // is the reason any of this lives on the stream rather than in an RPC.
 // A client that exited, crashed or was unplugged said nothing about it,

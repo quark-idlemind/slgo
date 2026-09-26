@@ -14,6 +14,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -54,6 +55,11 @@ type Grant struct {
 // Held is whether anything was granted.
 func (g *Grant) Held() bool { return g != nil && g.ID != "" }
 
+// ErrStillBusy is a wait for places that ran out before they came free.
+// It is the same whether the daemon said so or this side stopped
+// waiting first.
+var ErrStillBusy = errors.New("client: the places were still busy when the wait ran out")
+
 // granting is the state of what this connection has asked for.
 type granting struct {
 	mu      sync.Mutex
@@ -88,15 +94,25 @@ type asking struct {
 // A caller that gives up through ctx need do nothing more: the daemon is
 // not told, and what it grants for the request later is given back.
 func (c *Conn) Slots(ctx context.Context, n int, timeout time.Duration, agent string) (*Grant, error) {
-	return c.askSlots(ctx, n, timeout, agent, false)
+	return c.askSlots(ctx, n, timeout, 0, agent, false)
+}
+
+// SlotsWithin is Slots giving up when the places have not come free
+// within wait, with ErrStillBusy.  A wait of zero is Slots.
+//
+// The wait goes to the daemon in whole seconds, a fraction counted as a
+// whole one, and this side stops waiting at the same deadline in case
+// the daemon is older than the field and waits on.
+func (c *Conn) SlotsWithin(ctx context.Context, n int, timeout, wait time.Duration, agent string) (*Grant, error) {
+	return c.askSlots(ctx, n, timeout, wait, agent, false)
 }
 
 // TrySlots asks for n places and comes back at once either way.
 func (c *Conn) TrySlots(ctx context.Context, n int, timeout time.Duration, agent string) (*Grant, error) {
-	return c.askSlots(ctx, n, timeout, agent, true)
+	return c.askSlots(ctx, n, timeout, 0, agent, true)
 }
 
-func (c *Conn) askSlots(ctx context.Context, n int, timeout time.Duration, agent string, try bool) (*Grant, error) {
+func (c *Conn) askSlots(ctx context.Context, n int, timeout, wait time.Duration, agent string, try bool) (*Grant, error) {
 	if n < 1 {
 		return nil, fmt.Errorf("client: a request for %d objects", n)
 	}
@@ -104,15 +120,19 @@ func (c *Conn) askSlots(ctx context.Context, n int, timeout time.Duration, agent
 	if stream == nil {
 		return nil, fmt.Errorf("client: not connected")
 	}
+	var secs uint32
+	if wait > 0 && !try {
+		secs = uint32((wait + time.Second - 1) / time.Second)
+	}
 
 	// Registered before asking, so an answer cannot arrive first.
 	w := c.grants.await(true)
 	return c.ask(ctx, stream, w, &pb.ClientPacket{Body: &pb.ClientPacket_Slots{
 		Slots: &pb.Slots{
 			Want: uint32(n), Seconds: uint32(timeout / time.Second),
-			Try: try, Agent: agent, Request: w.id,
+			Try: try, Agent: agent, Request: w.id, WaitSeconds: secs,
 		},
-	}})
+	}}, time.Duration(secs)*time.Second)
 }
 
 // Renew puts a grant's clock back, for work that cannot say in advance
@@ -125,7 +145,7 @@ func (c *Conn) RenewSlots(ctx context.Context, id string, timeout time.Duration)
 	w := c.grants.await(false)
 	return c.ask(ctx, stream, w, &pb.ClientPacket{Body: &pb.ClientPacket_RenewSlots{
 		RenewSlots: &pb.RenewSlots{Grant: id, Seconds: uint32(timeout / time.Second), Request: w.id},
-	}})
+	}}, 0)
 }
 
 // ReleaseSlots gives a grant back.
@@ -147,17 +167,37 @@ func (c *Conn) ReleaseSlots(id string, clean bool) error {
 	}})
 }
 
-// ask sends a request and waits for the answer to it.
+// ask sends a request and waits for the answer to it, for no longer
+// than within when that is not zero.
 //
 // A caller that stops waiting leaves a grant nobody will use, which
 // holds the places until it runs out or this stream ends.  So one that
 // arrives for it, or had just arrived, goes straight back.
-func (c *Conn) ask(ctx context.Context, stream pb.Grid_StreamClient, w *asking, p *pb.ClientPacket) (*Grant, error) {
+func (c *Conn) ask(ctx context.Context, stream pb.Grid_StreamClient, w *asking, p *pb.ClientPacket, within time.Duration) (*Grant, error) {
+	var (
+		lapsed   <-chan time.Time
+		deadline time.Time
+	)
+	if within > 0 {
+		deadline = time.Now().Add(within)
+		t := time.NewTimer(within)
+		defer t.Stop()
+		lapsed = t.C
+	}
 	err := c.sendPacket(stream, p)
 	if err == nil {
 		select {
 		case got := <-w.reply:
-			return grantOf(got), nil
+			g := grantOf(got)
+			// A refusal once the deadline has passed is the daemon's
+			// word that the wait ran out: it started its clock after
+			// this one, so it cannot say so any sooner.
+			if within > 0 && !g.Held() && !time.Now().Before(deadline) {
+				return nil, ErrStillBusy
+			}
+			return g, nil
+		case <-lapsed:
+			err = ErrStillBusy
 		case <-c.Done():
 			err = c.Err()
 		case <-ctx.Done():

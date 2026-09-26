@@ -109,6 +109,98 @@ func TestAGrantForAWaitGivenUpOnIsGivenBackNotClean(t *testing.T) {
 	}
 }
 
+// TestABoundedWaitGivesUpOnADaemonThatWaitsOn: a daemon older than
+// wait_seconds never answers while nothing is free, so this side keeps
+// the same deadline.  The wait goes over in whole seconds, and the
+// deadline is the one the daemon was told.  What the daemon grants after
+// that is given back, not clean, as for any wait given up on.
+func TestABoundedWaitGivesUpOnADaemonThatWaitsOn(t *testing.T) {
+	t.Parallel()
+	d, conn := attachFake(t)
+
+	start := time.Now()
+	done := make(chan error, 1)
+	go func() {
+		_, err := conn.SlotsWithin(context.Background(), 4, time.Minute, 300*time.Millisecond, "")
+		done <- err
+	}()
+	ask := waitForSlots(t, d)
+	if ask.GetWaitSeconds() != 1 {
+		t.Errorf("a wait of 300ms went to the daemon as %d seconds, want 1", ask.GetWaitSeconds())
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrStillBusy) {
+			t.Fatalf("SlotsWithin = %v, want ErrStillBusy", err)
+		}
+		if took := time.Since(start); took < time.Second {
+			t.Errorf("gave up after %v, before the second the daemon was told", took)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a bounded wait on a daemon that never answers did not give up")
+	}
+
+	d.relay <- grantFor(ask.Request, "g8", "")
+	rel := waitForRelease(t, d)
+	if rel.GetGrant() != "g8" {
+		t.Errorf("gave back %q, want the late grant g8", rel.GetGrant())
+	}
+	if rel.GetClean() {
+		t.Error("a grant nobody used was given back as clean")
+	}
+}
+
+// TestARefusalOnceTheWaitIsUpIsTheWaitRunningOut: the daemon says a
+// bounded wait ran out no sooner than this side's own deadline, so the
+// two can be there together.  Whichever is read first, the caller is
+// told the same thing -- which a select that chose between them at
+// random would not do.
+func TestARefusalOnceTheWaitIsUpIsTheWaitRunningOut(t *testing.T) {
+	t.Parallel()
+	_, conn := attachFake(t)
+	stream := conn.streamOrErr()
+
+	for i := 0; i < 50; i++ {
+		w := conn.grants.await(true)
+		conn.grants.deliver(grantFor(w.id, "", "4 objects were still not free after 1s").GetGranted())
+		_, err := conn.ask(context.Background(), stream, w, &pb.ClientPacket{Body: &pb.ClientPacket_Slots{
+			Slots: &pb.Slots{Want: 4, WaitSeconds: 1, Request: w.id},
+		}}, time.Nanosecond)
+		if !errors.Is(err, ErrStillBusy) {
+			t.Fatalf("the daemon's own answer that the wait ran out came back as %v, want ErrStillBusy", err)
+		}
+	}
+}
+
+// TestARefusalBeforeTheWaitIsUpSaysWhy: a daemon refuses a bounded wait
+// early only for a reason of its own, such as more objects than it has,
+// and that is said in its words rather than as the wait running out.
+func TestARefusalBeforeTheWaitIsUpSaysWhy(t *testing.T) {
+	t.Parallel()
+	d, conn := attachFake(t)
+
+	got := make(chan grantResult, 1)
+	go func() {
+		g, err := conn.SlotsWithin(context.Background(), 40, time.Minute, time.Minute, "")
+		got <- grantResult{g, err}
+	}()
+	ask := waitForSlots(t, d)
+	const why = "40 objects were asked for and this daemon's avatars have 12"
+	d.relay <- grantFor(ask.Request, "", why)
+
+	select {
+	case r := <-got:
+		if r.err != nil {
+			t.Fatalf("SlotsWithin = %v, want the daemon's refusal", r.err)
+		}
+		if r.g.Held() || r.g.Why != why {
+			t.Errorf("SlotsWithin = %+v, want nothing held and why %q", r.g, why)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the refusal never reached the caller")
+	}
+}
+
 // TestALateAnswerToARenewalIsNotGivenBack: a renewal's answer names a
 // grant its caller still holds and is using, so giving that back would
 // hand the caller's objects to somebody else in the middle of a run.

@@ -529,6 +529,12 @@ func (h *Hosted) Slots(ctx context.Context, n int, timeout time.Duration, agent 
 	return h.conn.Slots(ctx, n, timeout, agent)
 }
 
+// SlotsWithin is Slots giving up with client.ErrStillBusy when the
+// objects have not come free within wait.
+func (h *Hosted) SlotsWithin(ctx context.Context, n int, timeout, wait time.Duration, agent string) (*client.Grant, error) {
+	return h.conn.SlotsWithin(ctx, n, timeout, wait, agent)
+}
+
 // TrySlots asks and comes back at once either way.
 func (h *Hosted) TrySlots(ctx context.Context, n int, timeout time.Duration, agent string) (*client.Grant, error) {
 	return h.conn.TrySlots(ctx, n, timeout, agent)

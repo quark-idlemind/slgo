@@ -34,6 +34,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -110,7 +111,7 @@ func (a *Auto) Release() {
 // session cannot, and does not need to: one process, one avatar, nothing
 // to contend with.
 type granter interface {
-	Slots(ctx context.Context, n int, timeout time.Duration, agent string) (*client.Grant, error)
+	SlotsWithin(ctx context.Context, n int, timeout, wait time.Duration, agent string) (*client.Grant, error)
 	TrySlots(ctx context.Context, n int, timeout time.Duration, agent string) (*client.Grant, error)
 	ReleaseSlots(id string, clean bool) error
 }
@@ -195,13 +196,12 @@ func grantOn(ctx context.Context, o Options, asked *sl.Session, g granter, n int
 		err error
 	)
 	if wait {
-		got, err = g.Slots(ctx, n, autoTimeout, agent)
+		got, err = g.SlotsWithin(ctx, n, autoTimeout, o.Wait, agent)
 	} else {
 		got, err = g.TrySlots(ctx, n, autoTimeout, agent)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("asking for objects: %w\n"+
-			"        (an slgod older than the pool does not answer; --rez avoids it)", err)
+		return nil, askFailed(err)
 	}
 	if !got.Held() {
 		return nil, fmt.Errorf("%s", why(got, n, agent))
@@ -265,15 +265,25 @@ func spreadOn(ctx context.Context, o Options, s *sl.Session, n int) ([]*Auto, er
 		return []*Auto{a}, nil
 	}
 
-	got, err := g.Slots(ctx, n, autoTimeout, "")
+	got, err := g.SlotsWithin(ctx, n, autoTimeout, o.Wait, "")
 	if err != nil {
-		return nil, fmt.Errorf("asking for objects: %w\n"+
-			"        (an slgod older than the pool does not answer; --rez avoids it)", err)
+		return nil, askFailed(err)
 	}
 	if !got.Held() {
 		return nil, fmt.Errorf("%s", why(got, n, ""))
 	}
 	return wearGrant(ctx, o, s, g, got)
+}
+
+// askFailed says what went wrong asking for places.  A bounded wait
+// that ran out is client.ErrStillBusy, for the caller to put in its own
+// words; anything else is most likely a daemon too old to answer.
+func askFailed(err error) error {
+	if errors.Is(err, client.ErrStillBusy) {
+		return err
+	}
+	return fmt.Errorf("asking for objects: %w\n"+
+		"        (an slgod older than the pool does not answer; --rez avoids it)", err)
 }
 
 // why says what a refusal came to, in the daemon's words when it gave

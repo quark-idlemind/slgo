@@ -43,6 +43,11 @@ type Options struct {
 	// Channel is what the login tells the grid this program is.
 	Channel string
 
+	// Wait bounds how long UseAutoAnywhere and UseAutoSpread queue for
+	// objects when none are free, after which they give up with
+	// client.ErrStillBusy.  Zero waits as long as it takes.
+	Wait time.Duration
+
 	// In and Out are where credentials are asked for, when a direct
 	// login needs something that is not on disk.  Zero values are
 	// standard input and output.

@@ -74,6 +74,17 @@ request anyway once places come free. The client gives that grant
 straight back, and not clean: nothing ran in the objects, and clean would
 wipe out the mark the last holder left on them.
 
+A wait can be bounded. `Slots.wait_seconds` says for how long; zero
+waits as long as it takes. When it runs out with the places still not
+free, the daemon answers with a why and nothing granted, and stops
+waiting. The client keeps the same deadline, counted from before it
+asked, for a daemon older than the field that would wait on. Its clock
+starts first, so it will usually give up a moment before the daemon's
+answer arrives: what the daemon grants in that moment goes back as
+above, and a refusal that arrives once the deadline has passed is taken
+as the daemon's answer. Either way the caller is given
+`client.ErrStillBusy`, which is what `slrun --wait` reports.
+
 Answers are never dropped. The daemon's queue to each client drops
 relayed traffic when the client falls behind, which costs nothing on the
 grid; a grant dropped there would leave the client waiting for places
@@ -93,8 +104,9 @@ every kind of send at once against a fake daemon.
 
 None of this section was watched on the grid. It is how the code was
 built on 2026-09-26, and the tests in `client/slots_test.go`,
-`client/send_test.go` and `server/slots_test.go` check it against a fake
-daemon and a fake stream.
+`client/send_test.go`, `server/slots_test.go` and, for `--wait`,
+`cmd/slrun/daemon_test.go` check it against a fake daemon and a fake
+stream.
 
 ## All of them or none
 
