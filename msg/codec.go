@@ -350,28 +350,25 @@ func encodeField(w *buf, v reflect.Value, f *fieldPlan) error {
 // time the protocol grows.
 //
 // A zerocoded message that runs off its end is read as though the rest
-// were zeros, because on the grid that is what the rest is.  The
+// were zeros, because on the grid that is what the rest is: the
 // simulator's zero coder leaves off the tail of a trailing run of
 // zeros now and then, and the viewer has always read past the end of a
 // packet as zeros (LLTemplateMessageReader::decodeData, "default to
-// 0s").  Measured on Agni: every failure over two and a half minutes
-// on three avatars was a zerocoded ObjectUpdate short by exactly 5 or
-// exactly 37 bytes, all of them decoding once given that many zeros.
-// Refusing them threw away whole packets of object descriptions -- one
-// was a seat, which the rest of the store then could not place.
+// 0s").
 //
 // Zeros stand in only for a width the template fixes.  A Variable
 // field whose length prefix runs off the end is empty, as in the
 // viewer, and one whose payload runs past the end is cut at the last
 // byte there is, never padded: a length of 65,535 with three bytes
 // behind it decodes as those three.  The viewer does not check the
-// payload at all.  Why: doc/wire.md#past-the-end
+// payload at all.
 //
 // Any other short read is an error.  A message that is not zerocoded
 // has no zeros to have lost, so running off its end is a real fault,
 // and one worth seeing: it is what a wrong template looks like.  Which
 // messages are zerocoded is the template's Zerocoded, not the flag on
 // the packet a message came in.
+// Why: doc/wire.md#past-the-end
 func Unmarshal(b []byte, m Message) error {
 	_, err := unmarshal(b, m)
 	return err

@@ -15,7 +15,8 @@ and a half minutes on three avatars was a zerocoded `ObjectUpdate`
 short by exactly 5 or exactly 37 bytes, and every one of them decoded
 once given that many zeros back. The simulator's zero coder now and
 then leaves off the tail of a packet's final run of zeros. Refusing
-those packets threw away every object they described.
+those packets threw away every object they described; one was a seat,
+which the rest of the store then could not place.
 
 The viewer reads a message in `decodeData` (536), and for every
 message, zerocoded or not:

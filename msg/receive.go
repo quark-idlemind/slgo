@@ -290,11 +290,8 @@ func (r *Receiver) Run(ctx context.Context) error {
 			continue
 		}
 
-		// The backlog before this packet goes in, kept at its highest.
-		// A drop count that reads zero says only that the queue never
-		// quite overflowed; this says how close it came, which is the
-		// difference between "there is room" and "there was room that
-		// time".
+		// The backlog before this packet goes in, kept at its highest:
+		// see Stats.Peak.
 		if n := uint64(len(r.ch)); n > r.peak.Load() {
 			r.peak.Store(n)
 			if r.onPeak != nil {

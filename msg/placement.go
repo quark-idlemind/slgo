@@ -114,15 +114,9 @@ type Terse struct {
 	AngularVel   Vector3
 }
 
-// DecodeTerse reads the packed blob in ImprovedTerseObjectUpdate.
-//
-// The layout was read off real blobs rather than assumed, and the
-// assumption was wrong: the position is three plain floats, not the
-// quantised pair of bytes per axis that everything after it uses.
-// Decoding it as quantised gave positions that looked like positions
-// -- in range, stable, changing plausibly -- while being nowhere near
-// where the objects actually were, which is the kind of wrong that
-// does not announce itself.
+// DecodeTerse reads the packed blob in ImprovedTerseObjectUpdate.  The
+// position is three plain floats, not the sixteen bit fractions
+// everything after it is:
 //
 //	0  local id, four bytes
 //	4  state
@@ -135,6 +129,7 @@ type Terse struct {
 //	   angular velocity, three
 //
 // Forty-four bytes for a prim, sixty for an avatar.
+// Why: doc/placement.md#its-position-is-floats
 func DecodeTerse(b []byte) (*Terse, error) {
 	if len(b) < 6 {
 		return nil, fmt.Errorf("msg: terse update is %d bytes, too short for a header", len(b))
@@ -180,15 +175,12 @@ func DecodeTerse(b []byte) (*Terse, error) {
 	}
 	t.Velocity = rd3(-128, 128)
 	t.Acceleration = rd3(-64, 64)
-	// All four components are on the wire here, and the fourth is not
-	// only there to be thrown away.  The simulator does not keep W
-	// positive, and q and -q are the same rotation, so keeping X, Y and
-	// Z as they came and recovering W as positive -- which is what
-	// Quaternion does -- turns a -q into the mirror image of q: a yaw
-	// of plus a quarter turn read as minus one.  Measured on Agni,
-	// 2026-09-24, an avatar walking north read as facing south on some
-	// walks and not on others.  PackQuaternion normalises and puts the
-	// sign where Quaternion expects it.
+	// All four components are sent, and the simulator does not keep W
+	// positive: keeping X, Y and Z and recovering W as positive, as
+	// Quaternion does, would read a -q as the mirror image of q.
+	// PackQuaternion normalises and puts the sign where Quaternion
+	// expects it.
+	// Why: doc/placement.md#its-rotations-sign
 	t.Rotation = PackQuaternion(
 		u16f(b[i:], -1, 1),
 		u16f(b[i+2:], -1, 1),

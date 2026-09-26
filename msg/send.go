@@ -269,11 +269,8 @@ func (s *Sender) Run(ctx context.Context) error {
 		ctx = context.Background()
 	}
 
-	// Disarmed until an acknowledgement is waiting.
-	//
-	// No draining after Stop.  Go 1.23 took the one-element buffer off
-	// a timer's channel, so a stopped timer has nothing left in it to
-	// receive and the drain that used to be here could never run.
+	// Disarmed until an acknowledgement is waiting.  No drain after
+	// Stop: since Go 1.23 a stopped timer's channel has nothing in it.
 	flush := time.NewTimer(time.Hour)
 	flush.Stop()
 	defer flush.Stop()
