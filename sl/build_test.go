@@ -772,6 +772,56 @@ func TestFindingOursStopsWhenTheCallerGivesUp(t *testing.T) {
 	}
 }
 
+// TestBuildHandsBackARezGivenUpOn: a caller that gives up while the rez
+// is being looked for may have a prim standing by then.  One more look
+// finds it, and it is handed back with the cancel so that the caller
+// can clear it away; see TestRezFromInventoryStopsWhenTheCallerGivesUp
+// for how the two cases are staged.
+func TestBuildHandsBackARezGivenUpOn(t *testing.T) {
+	at := msg.Vector3{X: 128, Y: 128, Z: 25}
+	for _, tc := range []struct {
+		name string
+		made bool
+	}{
+		{"before anything was made", false},
+		{"as the prim was made", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			looked := false
+			f.mu.Lock()
+			f.afterObjects = func() {
+				if looked || !sentLocked[*msg.ObjectAdd](f) {
+					return
+				}
+				looked = true
+				if tc.made {
+					f.objects = append(f.objects, ours(thePrim, 81, msg.Vector3{X: 128, Y: 128, Z: 25.25}))
+				}
+				cancel()
+			}
+			f.mu.Unlock()
+
+			b, err := whenCancelled(t, ctx, func(ctx context.Context) (*Built, error) {
+				return w.Build(ctx, []Prim{{Position: at}})
+			})
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("Build = %v, want the caller's cancel", err)
+			}
+			switch {
+			case tc.made && (b == nil || len(b.Parts) != 1 || b.Root.ID != thePrim || b.Root.Local != 81):
+				t.Errorf("Build handed back %+v, want the prim that was made", b)
+			case !tc.made && b != nil:
+				t.Errorf("Build handed back %+v, and nothing was made", b)
+			}
+		})
+	}
+}
+
 // TestFindingOursTimesOutSayingWhyItCouldNotLook: a list that never
 // comes back is a timeout, and the timeout quotes the last failure
 // rather than the first, or a list that never worked would read as a

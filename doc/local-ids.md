@@ -60,7 +60,9 @@ When a call needs the local id:
 4. If the answer is marked with a visit that is already over -- the
    avatar moved while it was being looked up, or the backend could not
    name the region -- it is looked up once more. A second such answer
-   is refused with `sl.ErrNotHere`, as in 3.
+   is refused with `sl.ErrNotHere` too, and the error says which it
+   was: the avatar changed region while the object was being looked
+   up, or the backend has not said which region the avatar is in.
 
 An `Object` built by hand, like the `&sl.Object{ID: id}` that `slsh`'s
 `sit` makes from a uuid, has no visit, so a call that sends its local id

@@ -263,6 +263,9 @@ func TestALocalIDIsTheRegionsItCameFrom(t *testing.T) {
 			if !errors.Is(err, ErrNotHere) {
 				t.Errorf("%s = %v, want ErrNotHere", c.name, err)
 			}
+			if err == nil || !strings.Contains(err.Error(), "or is beyond the draw distance") {
+				t.Errorf("%s = %v, want it to say the prim may be out of sight", c.name, err)
+			}
 			if got := f.Sent(); len(got) != 0 {
 				t.Errorf("%s sent %s for a prim that is not here", c.name, f.describe())
 			}
@@ -382,6 +385,9 @@ func TestALookupThatCrossesAMoveIsNotSent(t *testing.T) {
 		if !errors.Is(err, ErrNotHere) {
 			t.Errorf("Place = %v, want ErrNotHere", err)
 		}
+		if err == nil || !strings.Contains(err.Error(), "changed region while it was being looked up") {
+			t.Errorf("Place = %v, want it to say the avatar moved during the lookup", err)
+		}
 		if got := f.Sent(); len(got) != 0 {
 			t.Errorf("sent %s with a number from a visit already over", f.describe())
 		}
@@ -405,6 +411,9 @@ func TestALookupThatCrossesAMoveIsNotSent(t *testing.T) {
 		err := w.Place(context.Background(), o, msg.Vector3{X: 1}, msg.Quaternion{}, msg.Vector3{X: 1, Y: 1, Z: 1})
 		if !errors.Is(err, ErrNotHere) {
 			t.Errorf("Place = %v, want ErrNotHere", err)
+		}
+		if err == nil || !strings.Contains(err.Error(), "has not said which region") {
+			t.Errorf("Place = %v, want it to say the region was not named", err)
 		}
 		if got := f.Sent(); len(got) != 0 {
 			t.Errorf("sent %s from a region that was never named", f.describe())
