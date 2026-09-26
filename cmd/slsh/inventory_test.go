@@ -609,6 +609,55 @@ func TestMvNeedsAFolderOrAPlainName(t *testing.T) {
 	}
 }
 
+// TestMvRenamesOnlyToANameNoFolderHas: a destination two folders share,
+// or one a folder has in another case, is refused the way cd refuses
+// it, and nothing moves or is renamed.  A name no folder has in any
+// case is still a rename.
+func TestMvRenamesOnlyToANameNoFolderHas(t *testing.T) {
+	x := newTestShell(t)
+	first := msg.MustParseUUID("b6577e57-7e57-c0de-e464-a5adbba4c37c")
+	second := msg.MustParseUUID("b68a7e57-7e57-c0de-7e5e-912ed2b463d5")
+	x.grid.mu.Lock()
+	x.grid.inv.Dirs = append(x.grid.inv.Dirs,
+		&invDir{ID: first, Name: "Probe", Type: -1},
+		&invDir{ID: second, Name: "Probe", Type: -1},
+	)
+	x.grid.mu.Unlock()
+
+	got := x.do(t, "mv readme Probe")
+	if !strings.Contains(got, `2 folders here are called "Probe"`) ||
+		!strings.Contains(got, first.String()) || !strings.Contains(got, second.String()) {
+		t.Errorf("mv onto two folders of one name printed %q", got)
+	}
+	if got := x.do(t, "mv readme objects"); got != "slsh: mv: no folder \"objects\" here; did you mean \"Objects\"?\n" {
+		t.Errorf("mv onto a case variant of a folder printed %q", got)
+	}
+	for _, line := range []string{"mv Scripts objects", "mv readme objects/notes"} {
+		if got := x.do(t, line); !strings.Contains(got, `did you mean "Objects"?`) {
+			t.Errorf("%q printed %q", line, got)
+		}
+	}
+	if sent := x.grid.Sent(); len(sent) != 0 {
+		t.Errorf("a refused mv sent %d messages, the first %T", len(sent), sent[0])
+	}
+	got = x.do(t, "ls")
+	for _, want := range []string{"/readme\n", "/Scripts\n", "/Objects\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("after the refusals the root should still list %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "/objects\n") || strings.Count(got, "/Probe\n") != 2 {
+		t.Errorf("a refused mv renamed something:\n%s", got)
+	}
+
+	if got := x.do(t, "mv readme notes"); got != "" {
+		t.Errorf("renaming to a name no folder has printed %q", got)
+	}
+	if got := x.do(t, "ls"); !strings.Contains(got, "/notes\n") || strings.Contains(got, "/readme\n") {
+		t.Errorf("the item should have been renamed:\n%s", got)
+	}
+}
+
 // stock puts a run of items of one name in the root, which is the
 // situation --remove-all-copies exists for: a folder may hold a dozen
 // things wearing the same name, and a path names the first of them.
