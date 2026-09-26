@@ -65,20 +65,31 @@ func TestPermMaskRefusesNonsense(t *testing.T) {
 	}
 }
 
-// TestPermWords says a mask back in words, so what was set is legible
-// to somebody who does not know the letters.
-func TestPermWords(t *testing.T) {
-	for _, c := range []struct {
-		mask uint32
-		want string
-	}{
-		{0, "nothing"},
-		{sl.PermCopy, "copy"},
-		{sl.PermCopy | sl.PermTransfer, "copy, transfer"},
-		{sl.PermAll, "copy, modify, transfer, move"},
-	} {
-		if got := permWords(c.mask); got != c.want {
-			t.Errorf("permWords(%#x) = %q, want %q", c.mask, got, c.want)
+// TestPermsSaysOnlyWhatTheRegionConfirmed.
+//
+// Nothing answers a permission change, so perms reads the masks back
+// and prints a line for each one that reads as asked.  The permission
+// rules never give everyone modify, so that request comes back as an
+// error saying what everyone may do, and no line claims otherwise.
+func TestPermsSaysOnlyWhatTheRegionConfirmed(t *testing.T) {
+	t.Parallel()
+	x := newTestShell(t)
+	standing(x, aPrim(aChair, 11, "lantern", 0))
+	x.grid.AnswerPermissions(t, func(who uint8, mask uint32) uint32 {
+		if who == sl.WhoEveryone {
+			mask &^= sl.PermModify
 		}
+		return mask
+	})
+
+	got := x.do(t, "perms --group cm --everyone cm lantern")
+	if !strings.Contains(got, "the group may now copy, modify") {
+		t.Errorf("perms did not say what it confirmed:\n%s", got)
+	}
+	if strings.Contains(got, "everyone may now") {
+		t.Errorf("perms claimed a change the region did not make:\n%s", got)
+	}
+	if !strings.Contains(got, "it allows copy") {
+		t.Errorf("perms did not say what everyone may do instead:\n%s", got)
 	}
 }

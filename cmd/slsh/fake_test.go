@@ -133,8 +133,11 @@ type fakeGrid struct {
 	// inv is the inventory tree, served over the capability rather
 	// than answered from here: everything that reads inventory goes
 	// through AIS, so a fake that short-circuited it would be testing
-	// a path the shell does not take.
-	inv *invDir
+	// a path the shell does not take.  The UDP moves change it too, as
+	// they change the grid's, unless ignoreMoves makes this the grid
+	// that takes a move into Trash and does nothing; see moveLocked.
+	inv         *invDir
+	ignoreMoves bool
 
 	// caps maps a capability name to the base URL serving it, and
 	// lockedBy is who TryLock should say holds one rather than handing
@@ -553,6 +556,39 @@ func removeItem(d *invDir, id msg.UUID) bool {
 		}
 	}
 	return false
+}
+
+// moveLocked applies a move to the tree, as the grid does, so that the
+// read-back that follows one finds it; a move of something the tree does
+// not hold, or into a folder it does not have, changes nothing.  With mu
+// held.
+func (f *fakeGrid) moveLocked(m msg.Message) {
+	if f.ignoreMoves {
+		return
+	}
+	switch v := m.(type) {
+	case *msg.MoveInventoryItem:
+		for _, d := range v.InventoryData {
+			it, to := findItem(f.inv, d.ItemID), findDir(f.inv, d.FolderID)
+			if it == nil || to == nil {
+				continue
+			}
+			removeItem(f.inv, d.ItemID)
+			if name := strings.TrimSuffix(string(d.NewName), "\x00"); name != "" {
+				it.Name = name
+			}
+			to.Items = append(to.Items, it)
+		}
+	case *msg.MoveInventoryFolder:
+		for _, d := range v.InventoryData {
+			dir, to := findDir(f.inv, d.FolderID), findDir(f.inv, d.ParentID)
+			if dir == nil || to == nil || findDir(dir, d.ParentID) != nil {
+				continue
+			}
+			removeDir(f.inv, d.FolderID)
+			to.Dirs = append(to.Dirs, dir)
+		}
+	}
 }
 
 // removeDir is removeItem for a folder, which takes what is inside it
@@ -1228,6 +1264,69 @@ func (f *fakeGrid) AnswerLinking(t *testing.T) {
 	}
 }
 
+// AnswerPermissions makes the fake keep an object's permission masks
+// the way a simulator does: each ObjectPermissions turns bits on or off
+// and grant says what the mask becomes, and every selection is answered
+// with the masks in full, which is where they are read back from.  The
+// masks start as a fresh prim's: everything for the base, the owner and
+// the next owner, and nothing for the group or everyone.
+func (f *fakeGrid) AnswerPermissions(t *testing.T, grant func(who uint8, mask uint32) uint32) {
+	masks := map[uint8]uint32{sl.WhoBase: sl.PermAll, sl.WhoOwner: sl.PermAll, sl.WhoNextOwner: sl.PermAll}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		switch r := m.(type) {
+		case *msg.ObjectPermissions:
+			for _, d := range r.ObjectData {
+				mask := masks[d.Field]
+				if d.Set == 1 {
+					mask |= d.Mask
+				} else {
+					mask &^= d.Mask
+				}
+				masks[d.Field] = grant(d.Field, mask)
+			}
+		case *msg.ObjectSelect:
+			reply := &msg.ObjectProperties{}
+			for _, d := range r.ObjectData {
+				f.mu.Lock()
+				var id msg.UUID
+				for _, o := range f.objects {
+					if o.Local == d.ObjectLocalID {
+						id = o.ID
+					}
+				}
+				f.mu.Unlock()
+				reply.ObjectData = append(reply.ObjectData, msg.ObjectProperties_ObjectData{
+					ObjectID: id, OwnerID: testMe, CreatorID: testMe,
+					BaseMask: masks[sl.WhoBase], OwnerMask: masks[sl.WhoOwner],
+					GroupMask: masks[sl.WhoGroup], EveryoneMask: masks[sl.WhoEveryone],
+					NextOwnerMask: masks[sl.WhoNextOwner],
+				})
+			}
+			f.Relay(t, reply)
+		}
+	}
+}
+
+// AnswerDeletes makes the fake kill every object a derez names, which is
+// how a region says a delete happened: a KillObject naming its local id.
+func (f *fakeGrid) AnswerDeletes(t *testing.T) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		d, ok := m.(*msg.DeRezObject)
+		if !ok {
+			return
+		}
+		k := &msg.KillObject{}
+		for _, o := range d.ObjectData {
+			k.ObjectData = append(k.ObjectData, msg.KillObject_ObjectData{ID: o.ObjectLocalID})
+		}
+		f.Relay(t, k)
+	}
+}
+
 // AnswerPosture makes the fake sit the avatar down and stand it up
 // again, in the three ways a simulator does it.
 //
@@ -1643,6 +1742,7 @@ func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error
 	err, onSend := f.sendErr, f.onSend
 	if err == nil {
 		f.sent = append(f.sent, m)
+		f.moveLocked(m)
 	}
 	f.mu.Unlock()
 	if err != nil {

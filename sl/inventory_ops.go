@@ -2,7 +2,9 @@ package sl
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/quark-idlemind/slgo/llsd"
@@ -13,13 +15,18 @@ import (
 
 // Inventory operations that change something, as opposed to reading it.
 //
-// They split across two transports for reasons that are the simulator's
-// and not ours. Creating and editing go over UDP, which is what the
-// viewer does and what works. Deleting goes over AIS, because the UDP
-// path for it is accepted and ignored -- a move into Trash returns
-// nothing, changes nothing, and reports success if you believe the lack
-// of an error. Nothing here believes that: every one of these reads back
-// what it did before saying it did it.
+// They go over two transports.  Making a folder, copying an item,
+// moving an item or a folder, rezzing an item, activating a group and
+// setting an object's permissions are UDP messages, as the viewer sends
+// them, and nothing answers any of them: each is read back -- inventory
+// listed over AIS, the region or the object asked -- until what was
+// asked for shows, and is an error if it never does.  GiveToAvatar is
+// the exception, since what it makes is an offer somebody else answers.
+//
+// Deleting and emptying, renaming a folder, and changing an item's name,
+// description or next-owner mask go over AIS, which answers each request
+// and says when it refuses one.  SetItem reads its change back as well.
+// Why: doc/readbacks.md
 
 // Permission bits, as Second Life packs them.
 const (
@@ -33,6 +40,29 @@ const (
 	PermAll = PermTransfer | PermModify | PermCopy | PermMove
 )
 
+// PermWords says which of PermAll's bits a mask has, in words -- "copy,
+// modify, transfer, move" in that order -- or "nothing".
+func PermWords(mask uint32) string {
+	var have []string
+	for _, p := range []struct {
+		bit  uint32
+		word string
+	}{
+		{PermCopy, "copy"},
+		{PermModify, "modify"},
+		{PermTransfer, "transfer"},
+		{PermMove, "move"},
+	} {
+		if mask&p.bit != 0 {
+			have = append(have, p.word)
+		}
+	}
+	if len(have) == 0 {
+		return "nothing"
+	}
+	return strings.Join(have, ", ")
+}
+
 // Who a permission mask applies to, for SetObjectPermissions. These are
 // the viewer's PermissionChangeType values.
 const (
@@ -42,6 +72,19 @@ const (
 	WhoEveryone  = 0x08
 	WhoNextOwner = 0x10
 )
+
+// whoMasks is each who-value SetObjectPermissions takes: what it is
+// called, and which of an object's masks it reads back as.
+var whoMasks = map[uint8]struct {
+	name string
+	of   func(*Properties) uint32
+}{
+	WhoBase:      {"base", func(p *Properties) uint32 { return p.BaseMask }},
+	WhoOwner:     {"owner", func(p *Properties) uint32 { return p.OwnerMask }},
+	WhoGroup:     {"group", func(p *Properties) uint32 { return p.GroupMask }},
+	WhoEveryone:  {"everyone", func(p *Properties) uint32 { return p.EveryoneMask }},
+	WhoNextOwner: {"next owner", func(p *Properties) uint32 { return p.NextOwnerMask }},
+}
 
 // CreateFolder makes a folder inside another and returns its id.
 //
@@ -333,12 +376,24 @@ func (w *Session) SetItem(ctx context.Context, item msg.UUID, name, desc string,
 }
 
 // SetObjectPermissions sets one who-mask on a rezzed object to an exact
-// value.
+// value, and returns once the object's properties say it holds.
 //
 // It takes two messages, because the protocol turns bits on or off and
 // does not assign: sending only the "on" half leaves a bit the caller
-// cleared still set.
+// cleared still set.  Only the bits in PermAll are set or compared.
+//
+// Nothing answers either message, so the object's properties are read
+// until the mask holds what was sent, for up to fifteen seconds.  A mask
+// that never reads as asked is an error wrapping ErrTimeout that says
+// what it allows instead, which is what a request the permission rules
+// narrow comes back as: the viewer's copy of them grants nothing beyond
+// the base mask, and never modify to everyone.
+// Why: doc/readbacks.md#object-permissions
 func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8, mask uint32) error {
+	field, ok := whoMasks[who]
+	if !ok {
+		return fmt.Errorf("sl: %#x names no permission mask", who)
+	}
 	on := mask & PermAll
 	off := PermAll &^ on
 	local, err := w.local(ctx, o)
@@ -361,7 +416,27 @@ func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8
 	if err := send(1, on); err != nil {
 		return err
 	}
-	return send(0, off)
+	if err := send(0, off); err != nil {
+		return err
+	}
+
+	// Read until it holds: a single read can overtake the write.
+	var reads uint32
+	var read bool
+	err = poll(ctx, 15*time.Second, time.Second,
+		fmt.Sprintf("the %s mask of %s to allow %s", field.name, o, PermWords(on)),
+		func(ctx context.Context) (bool, error) {
+			p, err := w.Properties(ctx, o, 5*time.Second)
+			if err != nil {
+				return false, err
+			}
+			reads, read = field.of(p)&PermAll, true
+			return reads == on, nil
+		})
+	if read && errors.Is(err, ErrTimeout) {
+		return fmt.Errorf("%w; it allows %s", err, PermWords(reads))
+	}
+	return err
 }
 
 // RezFromInventory puts an inventory object into the world at a given
@@ -604,24 +679,22 @@ func uuidCRC(u msg.UUID) uint32 {
 	return sum
 }
 
-// MoveItem puts an item in a different folder, and renames it on the
-// way if a name is given.
+// MoveItem puts an item in a different folder, renaming it on the way if
+// a name is given, and returns once the folder lists it there.
 //
-// Over UDP, which is what a viewer still does.  The AIS route refuses
-// outright: PATCHing an item with a new parent_id answers 400 and says
-// so in as many words --
+// Over UDP, as the viewer moves one: AIS refuses to change an item's
+// parent.  The message carries a new name, so moving and renaming is one
+// message rather than two, and an empty name leaves the name alone.
 //
-//	Cannot change parent_id.  Use MOVE method.
-//
-// -- which is a better error than most, and was worth the round trip to
-// read.  This package believed the other way round until the grid said
-// otherwise, so the belief is written down here now rather than in a
-// comment that turned out to be wrong.
-//
-// The rename comes free: the message carries a new name, so moving and
-// renaming in one is one round trip rather than two.  An empty name
-// leaves the name alone.
+// Nothing answers the message, and a move into Trash is accepted and
+// ignored, so the destination is listed until the item is in it -- under
+// the new name, if one was given -- for up to fifteen seconds.  One that
+// never arrives is an error wrapping ErrTimeout.
+// Why: doc/readbacks.md#moves
 func (w *Session) MoveItem(ctx context.Context, item, folder msg.UUID, newName ...string) error {
+	if folder.IsZero() {
+		return fmt.Errorf("sl: a move needs a folder to go in")
+	}
 	var name string
 	if len(newName) > 0 {
 		name = newName[0]
@@ -632,15 +705,53 @@ func (w *Session) MoveItem(ctx context.Context, item, folder msg.UUID, newName .
 	m.InventoryData = []msg.MoveInventoryItem_InventoryData{{
 		ItemID: item, FolderID: folder, NewName: append([]byte(name), 0),
 	}}
-	return w.Send(ctx, m)
+	if err := w.Send(ctx, m); err != nil {
+		return err
+	}
+	return w.arrives(ctx, folder, item, false, name)
+}
+
+// moveFor bounds the wait for a move to show in its destination.
+const moveFor = 15 * time.Second
+
+// arrives lists folder until id is in it -- a folder or an item as
+// isFolder says, and under name unless name is empty -- which is how a
+// move is confirmed.
+func (w *Session) arrives(ctx context.Context, folder, id msg.UUID, isFolder bool, name string) error {
+	what := fmt.Sprintf("%s in %s", id, folder)
+	if name != "" {
+		what += fmt.Sprintf(" as %q", name)
+	}
+	var there bool   // listed, whatever it was called
+	var named string // what it was called
+	err := poll(ctx, moveFor, time.Second, what, func(ctx context.Context) (bool, error) {
+		es, err := w.ListFolder(ctx, folder, 0)
+		if err != nil {
+			return false, err
+		}
+		there = false
+		for _, e := range es {
+			if e.ID == id && e.Folder == isFolder {
+				there, named = true, e.Name
+				return name == "" || e.Name == name, nil
+			}
+		}
+		return false, nil
+	})
+	if !errors.Is(err, ErrTimeout) {
+		return err
+	}
+	if there {
+		return fmt.Errorf("sl: a move was asked for and arrived named %q: %w", named, err)
+	}
+	return fmt.Errorf("sl: a move was asked for and never arrived: %w", err)
 }
 
 // RenameFolder changes a folder's name.
 //
-// Over AIS, which is the opposite of the item path and worth saying
-// why: the refusal there was specifically about parent_id, not about
-// PATCH, so a category takes a new name this way and the viewer
-// prefers it too.  Moving is the part AIS will not do.
+// Over AIS, unlike a move: the refusal that keeps moves on UDP was about
+// parent_id, not about PATCH, so a category takes a new name this way
+// and the viewer prefers it too.
 //
 // A system folder -- Objects, Notecards, Trash, anything with a
 // preferred type -- is another matter: the viewer refuses to ask at
@@ -668,16 +779,24 @@ func (w *Session) RenameFolder(ctx context.Context, folder msg.UUID, name string
 	return err
 }
 
-// MoveFolder puts a folder inside another one.
+// MoveFolder puts a folder inside another one, and returns once the
+// parent lists it there.
 //
-// Over UDP, for the same reason MoveItem is: AIS refuses to change a
-// parent.  A system folder cannot be moved either.
+// Over UDP, and read back, for the same reasons MoveItem is.  A system
+// folder cannot be moved either.
+// Why: doc/readbacks.md#moves
 func (w *Session) MoveFolder(ctx context.Context, folder, parent msg.UUID) error {
+	if parent.IsZero() {
+		return fmt.Errorf("sl: a move needs a folder to go in")
+	}
 	m := &msg.MoveInventoryFolder{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.AgentData.Stamp = false
 	m.InventoryData = []msg.MoveInventoryFolder_InventoryData{{
 		FolderID: folder, ParentID: parent,
 	}}
-	return w.Send(ctx, m)
+	if err := w.Send(ctx, m); err != nil {
+		return err
+	}
+	return w.arrives(ctx, parent, folder, true, "")
 }

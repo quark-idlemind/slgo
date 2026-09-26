@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"sync"
@@ -732,6 +733,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 
 	t.Run("some bits on and the rest off", func(t *testing.T) {
 		w, f := newFakeSession(t)
+		answerMasks(t, f, thePrim, 0, granted)
 		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoNextOwner, PermCopy); err != nil {
 			t.Fatalf("SetObjectPermissions: %v", err)
 		}
@@ -754,6 +756,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 
 	t.Run("everything on leaves nothing to clear", func(t *testing.T) {
 		w, f := newFakeSession(t)
+		answerMasks(t, f, thePrim, 0, granted)
 		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoOwner, PermAll); err != nil {
 			t.Fatalf("SetObjectPermissions: %v", err)
 		}
@@ -764,6 +767,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 
 	t.Run("everything off leaves nothing to set", func(t *testing.T) {
 		w, f := newFakeSession(t)
+		answerMasks(t, f, thePrim, 0, granted)
 		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoEveryone, 0); err != nil {
 			t.Fatalf("SetObjectPermissions: %v", err)
 		}
@@ -780,6 +784,163 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 			t.Error("SetObjectPermissions reported permissions it never sent")
 		}
 	})
+}
+
+// answerMasks plays the simulator's side of a permission change: an
+// object's masks, changed by each ObjectPermissions into what grant makes
+// of them, and sent in full each time the object is selected.  A nil
+// grant is a simulator that ignores the change.  The first stale
+// selections are answered with the masks as they were before any change,
+// which is a read overtaking the write.
+func answerMasks(t *testing.T, f *fakeBackend, id msg.UUID, stale int, grant func(who uint8, mask uint32) uint32) {
+	t.Helper()
+	before := map[uint8]uint32{WhoBase: PermAll, WhoOwner: PermAll, WhoNextOwner: PermAll}
+	masks := maps.Clone(before)
+	selects := 0
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		switch q := m.(type) {
+		case *msg.ObjectPermissions:
+			for _, d := range q.ObjectData {
+				if grant == nil {
+					continue
+				}
+				mask := masks[d.Field]
+				if d.Set == 1 {
+					mask |= d.Mask
+				} else {
+					mask &^= d.Mask
+				}
+				masks[d.Field] = grant(d.Field, mask)
+			}
+		case *msg.ObjectSelect:
+			selects++
+			now := masks
+			if selects <= stale {
+				now = before
+			}
+			p := propertiesOf(id)
+			d := &p.ObjectData[0]
+			d.BaseMask, d.OwnerMask, d.GroupMask = now[WhoBase], now[WhoOwner], now[WhoGroup]
+			d.EveryoneMask, d.NextOwnerMask = now[WhoEveryone], now[WhoNextOwner]
+			f.Relay(t, p)
+		}
+	}
+}
+
+// granted is a simulator that grants whatever it is asked.
+func granted(_ uint8, mask uint32) uint32 { return mask }
+
+// TestPermissionsAreReadBackUntilTheyHold: nothing answers
+// ObjectPermissions, and a read straight after a write can overtake it
+// -- measured for descriptions -- so a mask that still reads as it was
+// is asked about again rather than reported.
+func TestPermissionsAreReadBackUntilTheyHold(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	answerMasks(t, f, thePrim, 1, granted)
+
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+	if err := w.SetObjectPermissions(context.Background(), o, WhoEveryone, PermCopy); err != nil {
+		t.Fatalf("SetObjectPermissions: %v", err)
+	}
+	if n := len(sentOf[*msg.ObjectSelect](f)); n != 2 {
+		t.Errorf("the masks were read %d times, want twice: once overtaken, once as set", n)
+	}
+}
+
+// TestPermissionsTheRegionDoesNotGrantAreNotReported: the permission
+// rules narrow what they will not grant -- modify for everyone is never
+// granted -- and a mask that never reads as asked is an error that says
+// what it allows, not a report of what was asked for.
+func TestPermissionsTheRegionDoesNotGrantAreNotReported(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name   string
+		grant  func(uint8, uint32) uint32
+		allows string
+	}{
+		{"narrowed", func(who uint8, mask uint32) uint32 {
+			if who == WhoEveryone {
+				mask &^= PermModify
+			}
+			return mask
+		}, "it allows copy"},
+		{"ignored", nil, "it allows nothing"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			answerMasks(t, f, thePrim, 0, c.grant)
+
+			o := foundHere(w, &Object{ID: thePrim, Local: 77})
+			err := w.SetObjectPermissions(context.Background(), o, WhoEveryone, PermCopy|PermModify)
+			if !errors.Is(err, ErrTimeout) {
+				t.Fatalf("SetObjectPermissions = %v, want a timeout", err)
+			}
+			if !strings.Contains(err.Error(), c.allows) || !strings.Contains(err.Error(), "copy, modify") {
+				t.Errorf("SetObjectPermissions = %v, want what was asked for and %q", err, c.allows)
+			}
+		})
+	}
+}
+
+// TestPermissionsStopWhenTheCallerGivesUp: given up on while the masks
+// are being read back, it says so at once rather than fifteen seconds
+// later that they never changed.
+func TestPermissionsStopWhenTheCallerGivesUp(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.mu.Lock()
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.ObjectSelect); ok {
+			cancel()
+		}
+	}
+	f.mu.Unlock()
+
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+	_, err := whenCancelled(t, ctx, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, w.SetObjectPermissions(ctx, o, WhoEveryone, PermCopy)
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("SetObjectPermissions = %v, want the caller's cancel", err)
+	}
+}
+
+// TestPermissionsForNobodyAreRefused: a who-value that names no mask has
+// no mask to read back, so nothing is sent for it.
+func TestPermissionsForNobodyAreRefused(t *testing.T) {
+	w, f := newFakeSession(t)
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+	if err := w.SetObjectPermissions(context.Background(), o, WhoOwner|WhoGroup, PermCopy); err == nil {
+		t.Error("SetObjectPermissions took two masks at once")
+	}
+	if got := f.Sent(); len(got) != 0 {
+		t.Errorf("sent %s for a mask nobody has", f.describe())
+	}
+}
+
+// TestPermWordsSaysAMaskInWords, so that what was set is legible to
+// somebody who does not know the letters.
+func TestPermWordsSaysAMaskInWords(t *testing.T) {
+	for _, c := range []struct {
+		mask uint32
+		want string
+	}{
+		{0, "nothing"},
+		{PermCopy, "copy"},
+		{PermCopy | PermTransfer, "copy, transfer"},
+		{PermAll, "copy, modify, transfer, move"},
+		{0x7ffffff0 &^ PermAll, "nothing"},
+	} {
+		if got := PermWords(c.mask); got != c.want {
+			t.Errorf("PermWords(%#x) = %q, want %q", c.mask, got, c.want)
+		}
+	}
 }
 
 // seenAt is an object the region has described, already named so that
@@ -1148,12 +1309,58 @@ func TestAUUIDIsFoldedBackToFront(t *testing.T) {
 	}
 }
 
+// applyMoves serves an inventory in which every move that went out has
+// happened, as a simulator that takes them: each item and folder a move
+// named is listed in the last folder it was sent to, under the last name
+// it was given, and the item keeps the name "workbench" until then.
+func applyMoves(t *testing.T, f *fakeBackend) {
+	t.Helper()
+	f.ServeInventoryTree(t, func(folder msg.UUID) ([]*Folder, []*Item) {
+		items := map[msg.UUID]*Item{}
+		parents := map[msg.UUID]msg.UUID{}
+		for _, s := range f.Sent() {
+			switch m := s.Msg.(type) {
+			case *msg.MoveInventoryItem:
+				for _, d := range m.InventoryData {
+					it, ok := items[d.ItemID]
+					if !ok {
+						it = anItem(d.ItemID, "workbench")
+						items[d.ItemID] = it
+					}
+					it.ParentID = d.FolderID
+					if name := trimNul(d.NewName); name != "" {
+						it.Name = name
+					}
+				}
+			case *msg.MoveInventoryFolder:
+				for _, d := range m.InventoryData {
+					parents[d.FolderID] = d.ParentID
+				}
+			}
+		}
+		var fs []*Folder
+		for id, parent := range parents {
+			if parent == folder {
+				fs = append(fs, &Folder{ID: id, ParentID: parent, Name: "a folder", Type: -1})
+			}
+		}
+		var is []*Item
+		for _, it := range items {
+			if it.ParentID == folder {
+				is = append(is, it)
+			}
+		}
+		return fs, is
+	})
+}
+
 // TestMovingAnItemGoesOverUDPAndMayRenameOnTheWay: AIS answers a change
 // of parent_id with "Cannot change parent_id.  Use MOVE method", so this
 // is the viewer's message -- which carries a new name, making a move and
 // a rename one round trip.
 func TestMovingAnItemGoesOverUDPAndMayRenameOnTheWay(t *testing.T) {
 	w, f := newFakeSession(t)
+	applyMoves(t, f)
 
 	if err := w.MoveItem(context.Background(), theChild, aFolder); err != nil {
 		t.Fatalf("MoveItem: %v", err)
@@ -1218,6 +1425,7 @@ func TestRenamingAFolderGoesOverAIS(t *testing.T) {
 // parent, whatever is being moved.
 func TestMovingAFolderGoesOverUDPForTheSameReason(t *testing.T) {
 	w, f := newFakeSession(t)
+	applyMoves(t, f)
 	if err := w.MoveFolder(context.Background(), aFolder, testInvRoot); err != nil {
 		t.Fatalf("MoveFolder: %v", err)
 	}
@@ -1228,5 +1436,87 @@ func TestMovingAFolderGoesOverUDPForTheSameReason(t *testing.T) {
 	d := m.InventoryData[0]
 	if d.FolderID != aFolder || d.ParentID != testInvRoot {
 		t.Errorf("moved %s into %s", d.FolderID, d.ParentID)
+	}
+}
+
+// TestAMoveIsListedWhereItWentBeforeItIsReported: nothing answers a
+// move, and one into Trash is accepted and ignored, so a move is done
+// when the destination lists it and not when the message has gone.
+// One the grid ignores is an error saying it never arrived; one that
+// arrives without the name it was given is an error saying what it is
+// called.
+func TestAMoveIsListedWhereItWentBeforeItIsReported(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name string
+		move func(context.Context, *Session) error
+		want string
+	}{
+		{"an item the grid ignores", func(ctx context.Context, w *Session) error {
+			return w.MoveItem(ctx, theChild, aFolder)
+		}, "never arrived"},
+		{"a folder the grid ignores", func(ctx context.Context, w *Session) error {
+			return w.MoveFolder(ctx, aFolder, testInvRoot)
+		}, "never arrived"},
+		{"a rename the grid ignores", func(ctx context.Context, w *Session) error {
+			return w.MoveItem(ctx, theChild, aFolder, "renamed")
+		}, `arrived named "workbench"`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			// The item is in the destination already, under its old
+			// name, only where the question is the name.
+			f.ServeInventory(t, func(folder msg.UUID) []*Item {
+				if strings.Contains(c.name, "rename") && folder == aFolder {
+					return []*Item{anItem(theChild, "workbench")}
+				}
+				return nil
+			})
+
+			err := c.move(context.Background(), w)
+			if !errors.Is(err, ErrTimeout) {
+				t.Fatalf("the move = %v, want a timeout", err)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("the move = %v, want it to say %q", err, c.want)
+			}
+		})
+	}
+}
+
+// TestAMoveStopsWhenTheCallerGivesUp: given up on while the destination
+// is being listed, it says so at once rather than fifteen seconds later
+// that nothing arrived.
+func TestAMoveStopsWhenTheCallerGivesUp(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f.ServeInventory(t, func(msg.UUID) []*Item {
+		cancel()
+		return nil
+	})
+
+	_, err := whenCancelled(t, ctx, func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, w.MoveItem(ctx, theChild, aFolder)
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("MoveItem = %v, want the caller's cancel", err)
+	}
+}
+
+// TestAMoveNeedsSomewhereToGo: there is no folder to list for a zero
+// id, so nothing is sent for one.
+func TestAMoveNeedsSomewhereToGo(t *testing.T) {
+	w, f := newFakeSession(t)
+	if err := w.MoveItem(context.Background(), theChild, msg.UUID{}); err == nil {
+		t.Error("MoveItem moved an item into no folder")
+	}
+	if err := w.MoveFolder(context.Background(), aFolder, msg.UUID{}); err == nil {
+		t.Error("MoveFolder moved a folder into no folder")
+	}
+	if got := f.Sent(); len(got) != 0 {
+		t.Errorf("sent %s for a move with nowhere to go", f.describe())
 	}
 }

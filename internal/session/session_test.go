@@ -1660,7 +1660,8 @@ func TestATidyUpThatFailsSaysWhatIsStillThere(t *testing.T) {
 
 // confirmRez plays the simulator's side of a rez and of the rename that
 // follows it: the region describes something new, answers the question
-// of whose it is, and then answers what it is called.
+// of whose it is, and then answers what it is called.  A delete of it is
+// answered too, with the KillObject that says it has gone.
 //
 // It is driven off what the session sends rather than relayed from the
 // test goroutine, because RunIn does not return until all of it has
@@ -1700,6 +1701,12 @@ func confirmRez(t *testing.T, f *fakeGrid) {
 			reply.ObjectData.OwnerID = testMe
 			reply.ObjectData.Name = append([]byte(name), 0)
 			go f.relay(t, reply)
+		case *msg.DeRezObject:
+			kill := &msg.KillObject{}
+			for _, d := range v.ObjectData {
+				kill.ObjectData = append(kill.ObjectData, msg.KillObject_ObjectData{ID: d.ObjectLocalID})
+			}
+			go f.relay(t, kill)
 		}
 	}
 	f.mu.Unlock()

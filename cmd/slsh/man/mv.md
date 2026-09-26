@@ -24,6 +24,14 @@ until the item has its new name, for up to fifteen seconds, and one
 that never does is an error rather than reported done.  The viewer
 renames nothing the avatar may not modify.
 
+## A move is read back
+
+Nothing answers a move, so the folder it goes into is listed until
+the thing moved is there, for up to fifteen seconds, and one that
+never arrives is an error rather than reported done.  A move into
+Trash is one of those: the grid takes it and does nothing.  `rm` is
+what throws something away.
+
 ## What decides between moving and renaming
 
 The destination.  If it names a folder, this is a move and the name

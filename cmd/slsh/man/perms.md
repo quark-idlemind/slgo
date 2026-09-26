@@ -59,13 +59,20 @@ Each flag says what that group may do afterwards, in full.  A letter
 left out is a letter turned off, so asking for modify alone on
 something that could be copied has taken copying away.
 
-## Nothing here confirms it
+## What is printed was read back
 
-The request goes out and nothing answers it, so the line printed is
-what was asked for rather than what the region did.  Where that
-matters -- a parcel or an object that will not have its permissions
-changed refuses in silence -- `dump` is the way to look: the masks are
-among what it writes out for each prim.
+Nothing answers a permission change, so after each one the object's
+masks are read back, for up to fifteen seconds, and the line is
+printed only once the mask reads as asked.  One that never does is an
+error saying what the mask allows instead, and the lines printed
+before it are the changes that were made.
+
+That is also what a request the permission rules narrow comes back
+as, since they narrow rather than refuse.  In the viewer's copy of the
+rules nobody is given more than the base allows, everyone is never
+given modify, and a next owner who may not copy may always transfer --
+so by those rules `perms --next m` comes back as an error saying the
+next owner may transfer as well.
 
 ## Examples
 

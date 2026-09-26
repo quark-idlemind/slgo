@@ -273,7 +273,7 @@ func cmdPerms(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		if err := sh.s.SetObjectPermissions(ctx, obj, s.who, mask); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "%s may now %s\n", s.named, permWords(mask))
+		fmt.Fprintf(out, "%s may now %s\n", s.named, sl.PermWords(mask))
 	}
 	return nil
 }
@@ -303,27 +303,4 @@ func permMask(text string) (uint32, error) {
 		}
 	}
 	return mask, nil
-}
-
-// permWords says a mask back in words, so that what was set is legible
-// without knowing the letters.
-func permWords(mask uint32) string {
-	var have []string
-	for _, p := range []struct {
-		bit  uint32
-		word string
-	}{
-		{sl.PermCopy, "copy"},
-		{sl.PermModify, "modify"},
-		{sl.PermTransfer, "transfer"},
-		{sl.PermMove, "move"},
-	} {
-		if mask&p.bit != 0 {
-			have = append(have, p.word)
-		}
-	}
-	if len(have) == 0 {
-		return "nothing"
-	}
-	return strings.Join(have, ", ")
 }
