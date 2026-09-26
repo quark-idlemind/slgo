@@ -726,6 +726,103 @@ func TestFindingOursGivesUpOnAPrimAnywhereElse(t *testing.T) {
 	}
 }
 
+// TestFindingOursLooksAgainAfterAFailedLook: the ObjectAdd has gone by
+// the time the region is looked at, so a list that fails once is not
+// the end of the rez.  Giving up on it left a prim the simulator may
+// have made standing there, neither handed back nor deleted.
+func TestFindingOursLooksAgainAfterAFailedLook(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	at := msg.Vector3{X: 128, Y: 128, Z: 25}
+	f.objects = []*Seen{ours(thePrim, 81, msg.Vector3{X: 128, Y: 128, Z: 25.25})}
+	f.objectsErrs = []error{errors.New("the daemon is not answering")}
+
+	o, err := w.findOurs(context.Background(), nil, at, msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}, 20*time.Second)
+	if err != nil {
+		t.Fatalf("findOurs: %v", err)
+	}
+	if o.ID != thePrim {
+		t.Errorf("found %s", o)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.objectsErrs) != 0 {
+		t.Error("the look that fails was never made")
+	}
+}
+
+// TestFindingOursStopsWhenTheCallerGivesUp: a list that keeps failing
+// is looked at again until the deadline, but a caller that gives up is
+// told so at once, with its own cancel.
+func TestFindingOursStopsWhenTheCallerGivesUp(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.objectsErr = errors.New("the daemon is not answering")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// In the pause after the first look.
+	time.AfterFunc(100*time.Millisecond, cancel)
+
+	_, err := whenCancelled(t, ctx, func(ctx context.Context) (*Object, error) {
+		return w.findOurs(ctx, nil, msg.Vector3{X: 128, Y: 128, Z: 25},
+			msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}, time.Minute)
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("findOurs = %v, want the caller's cancel", err)
+	}
+}
+
+// TestFindingOursTimesOutSayingWhyItCouldNotLook: a list that never
+// comes back is a timeout, and the timeout quotes the last failure
+// rather than the first, or a list that never worked would read as a
+// prim that never appeared.
+func TestFindingOursTimesOutSayingWhyItCouldNotLook(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.objectsErrs = []error{errors.New("the first look failed")}
+	f.objectsErr = errors.New("the daemon is not answering")
+
+	_, err := w.findOurs(context.Background(), nil, msg.Vector3{X: 128, Y: 128, Z: 25},
+		msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}, 600*time.Millisecond)
+	if !errors.Is(err, ErrTimeout) {
+		t.Fatalf("findOurs = %v, want a timeout", err)
+	}
+	if !strings.Contains(err.Error(), "the daemon is not answering") ||
+		strings.Contains(err.Error(), "the first look failed") {
+		t.Errorf("findOurs = %v, want it to quote the last look's failure", err)
+	}
+}
+
+// TestFindingOursAsksAgainWhoseAPrimIs: a family request that could not
+// be sent was never asked, so the next look asks it.
+func TestFindingOursAsksAgainWhoseAPrimIs(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	unknown := ours(thePrim, 81, msg.Vector3{X: 128, Y: 128, Z: 25.25})
+	unknown.Owner = msg.UUID{}
+	f.objects = []*Seen{unknown}
+	f.FailSends(errors.New("the circuit is gone"))
+	looked := countLookups(f)
+
+	wait := aside(t, func() (*Object, error) {
+		return w.findOurs(context.Background(), nil, msg.Vector3{X: 128, Y: 128, Z: 25},
+			msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}, 20*time.Second)
+	})
+	// Two looks, so the first one's send has been tried and failed.
+	waitFor(t, "a second look", func() bool { return looked() >= 2 })
+	f.FailSends(nil)
+	waitSent[*msg.RequestObjectPropertiesFamily](t, f)
+	f.Relay(t, familyReply(thePrim, testAgentID, "Object"))
+
+	o, err := wait()
+	if err != nil {
+		t.Fatalf("findOurs: %v", err)
+	}
+	if o.ID != thePrim {
+		t.Errorf("found %s", o)
+	}
+}
+
 // TestFindingOursAsksWithoutHoldingTheLock: a family request is a send,
 // and a send can wait on the daemon.  Holding the session's lock over it
 // stops the reader goroutine handling anything until it returns.

@@ -336,6 +336,10 @@ func landedAt(p, at msg.Vector3) bool {
 // else's prim by mistake fails later in ways that look like something
 // else.  An owner nobody has heard is asked for, once, and never with
 // the session's lock held.
+//
+// It waits through poll: a look that fails is made again until the
+// timeout, which names the last failure, and a cancel ends the wait at
+// once.
 // Why: doc/rez.md#how-a-rez-is-recognised
 func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, at, scale msg.Vector3, timeout time.Duration) (*Object, error) {
 	w.mu.Lock()
@@ -344,11 +348,11 @@ func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, at, scal
 
 	centre := at.Z + scale.Z/2
 	asked := map[msg.UUID]bool{}
-	deadline := time.Now().Add(timeout)
-	for {
+	var made *Object
+	look := func(ctx context.Context) (bool, error) {
 		all, err := w.fetch(ctx, "", "")
 		if err != nil {
-			return nil, err
+			return false, err
 		}
 		var near []*Seen
 		for _, s := range all {
@@ -382,29 +386,34 @@ func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, at, scal
 			if owner.IsZero() {
 				unknown = true
 				if !asked[s.ID] {
-					asked[s.ID] = true
 					toAsk = append(toAsk, s.ID)
 				}
 			}
 		}
 		w.mu.Unlock()
 
+		// Marked asked only once the request went, so that a send
+		// that failed is tried again at the next look.
 		for _, id := range toAsk {
 			if err := w.Send(ctx, w.familyRequest(id)); err != nil {
-				return nil, err
+				return false, err
 			}
+			asked[id] = true
 		}
-		if found != nil {
-			return &Object{ID: found.ID, Local: found.Local, from: found.from}, nil
+		if found == nil {
+			return false, nil
 		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("%w: a prim of ours to appear at %v (after %s)%s",
-				ErrTimeout, at, timeout, w.alertsSince(mark))
-		}
-		if err := w.Settle(ctx, rezPoll); err != nil {
-			return nil, err
-		}
+		made = &Object{ID: found.ID, Local: found.Local, from: found.from}
+		return true, nil
 	}
+	err := poll(ctx, timeout, rezPoll, fmt.Sprintf("a prim of ours to appear at %v", at), look)
+	if errors.Is(err, ErrTimeout) {
+		return nil, fmt.Errorf("%w%s", err, w.alertsSince(mark))
+	}
+	if err != nil {
+		return nil, err
+	}
+	return made, nil
 }
 
 func appendVector(b []byte, v msg.Vector3) []byte {
