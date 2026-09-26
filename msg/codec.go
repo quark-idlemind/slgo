@@ -360,6 +360,13 @@ func encodeField(w *buf, v reflect.Value, f *fieldPlan) error {
 // Refusing them threw away whole packets of object descriptions -- one
 // was a seat, which the rest of the store then could not place.
 //
+// Zeros stand in only for a width the template fixes.  A Variable
+// field whose length prefix runs off the end is empty, as in the
+// viewer, and one whose payload runs past the end is cut at the last
+// byte there is, never padded: a length of 65,535 with three bytes
+// behind it decodes as those three.  The viewer does not check the
+// payload at all.  Why: doc/wire.md#past-the-end
+//
 // Any other short read is an error.  A message that is not zerocoded
 // has no zeros to have lost, so running off its end is a real fault,
 // and one worth seeing: it is what a wrong template looks like.
@@ -368,8 +375,9 @@ func Unmarshal(b []byte, m Message) error {
 	return err
 }
 
-// unmarshal is Unmarshal, also saying whether the tail had to be
-// supplied, so that the receiver can count how often.
+// unmarshal is Unmarshal, also saying whether it read past the end,
+// padding a width or cutting a payload, so that the receiver can count
+// how often.
 func unmarshal(b []byte, m Message) (padded bool, err error) {
 	v := reflect.ValueOf(m)
 	if v.Kind() != reflect.Pointer || v.IsNil() {
@@ -570,13 +578,15 @@ func decodeField(r *cur, v reflect.Value, f *fieldPlan) error {
 			}
 			n = int(x)
 		}
-		s, err := r.take(n)
+		// A prefix that ran off the end leaves nothing to cut, so
+		// the field is empty: the viewer's length 0.
+		s, err := r.cut(n)
 		if err != nil {
 			return err
 		}
 		// Copy: the caller should not end up aliasing the
 		// receive buffer.
-		out := make([]byte, n)
+		out := make([]byte, len(s))
 		copy(out, s)
 		v.SetBytes(out)
 	default:

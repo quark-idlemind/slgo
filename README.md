@@ -288,12 +288,21 @@ Both rules turn out to match `LLTemplateMessageReader` exactly: at the
 packet boundary it sets a Variable block's `repeat_number = 0` rather
 than failing.
 
-Where this package is *stricter* than Linden Lab: a truncated
-fixed-size field is an error here, whereas `decodeData` logs
-`logRanOffEndOfPacket` and substitutes zeros. Matching them would buy
-interoperability on malformed packets at the cost of turning a real
-bug into silent zeros, so this errors instead. Worth revisiting if a
-message the grid genuinely sends ever trips it.
+A zerocoded message that runs off its end is read as `decodeData`
+reads one, because the grid's zero coder sometimes leaves off the tail
+of a final run of zeros: a fixed-size field past the end reads as
+zeros, and a `Variable` field whose length prefix is past the end is
+empty. One thing is not copied: a `Variable` payload that runs past
+the end is cut at the last byte there is, where the viewer reads on
+past it. The receiver counts these packets in `Stats.Padded`, and
+`doc/wire.md` says what was measured and what the viewer does.
+
+Where this package is *stricter* than Linden Lab: a message that is
+not zerocoded has no zeros to have lost, so a truncated field in one is
+an error here, whereas `decodeData` logs `logRanOffEndOfPacket` and
+substitutes zeros. Matching them would buy interoperability on
+malformed packets at the cost of turning a real bug into silent zeros,
+so this errors instead.
 
 Any other short read is an error, and the error names the message,
 block and field. Nothing in this package calls `panic`, `os.Exit` or
@@ -481,7 +490,8 @@ not by itself mean the subset was checked.
 - message number framing for all 483, and the shape of each priority class
 - packet header, appended acks, zero coding round trip and the C's
   extended 256-zero run form
-- the two forgiveness rules, and that ordinary truncation still errors
+- the two forgiveness rules, what a zerocoded message's short tail
+  reads as, and that ordinary truncation still errors
 - generator parse errors: 40 malformed templates, each expected to fail
   with a specific message
 
