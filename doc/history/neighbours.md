@@ -339,8 +339,23 @@ now has both:
 
 Neither has been seen on the grid; both follow the viewer.
 
-Not yet checked on the grid: a teleport away and back within ten
-seconds, with the circuits still up on the return.
+Checked on Agni on 2026-09-26, after the change, with `slgod
+-neighbours` and one avatar:
+
+- Login opened three child circuits. After 120 seconds with the avatar
+  standing still, all three were still held, and each had gone on
+  hearing from its simulator at between two and five packets a second,
+  so the silence timeout came nowhere near.
+- The avatar teleported to a Linden sandbox and back, six seconds
+  apart. On the return the three children from before were still held
+  and still counting packets. The sandbox had offered its own three
+  neighbours on arrival, and those were held too, six in all.
+- Fifty seconds after the avatar left the sandbox, a `DisableSimulator`
+  came on each of the sandbox's three children, within a second of one
+  another, and each was closed. The region's own three stayed.
+
+This was one round trip. It is the case that failed before: a quick
+return, with the circuits still up.
 
 ### Stage 3 -- the crossing, by promotion
 
