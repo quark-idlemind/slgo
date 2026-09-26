@@ -1,11 +1,18 @@
 package sl
 
 import (
+	"bytes"
 	"context"
 	"image"
 	"image/color"
+	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/mububoki/jpeg2000/j2k"
 
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -166,6 +173,94 @@ func TestLevelsForSmallTextures(t *testing.T) {
 	} {
 		if got := levelsFor(c.w, c.h); got != c.want {
 			t.Errorf("levelsFor(%d, %d) = %d, want %d", c.w, c.h, got, c.want)
+		}
+	}
+}
+
+// claims is a codestream that is all header: the SOC and SIZ codestream
+// writes, finished with three 8-bit components, then EOC.  One tile
+// covers the image, so reading the header costs the same whatever size
+// it claims, and a decoder that believes it allocates for that size.
+func claims(w, h int) []byte {
+	b := slices.Clip(codestream(w, h)[:40])
+	b = append(b, 0x00, 0x03)
+	for range 3 {
+		b = append(b, 0x07, 0x01, 0x01) // 8 bits, unsigned, not subsampled
+	}
+	return append(b, 0xff, 0xd9)
+}
+
+// allocated is how many bytes f allocates, averaged over n calls so
+// that whatever else the process does meanwhile is lost in the average.
+func allocated(n int, f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for range n {
+		f()
+	}
+	runtime.ReadMemStats(&after)
+	return (after.TotalAlloc - before.TotalAlloc) / uint64(n)
+}
+
+// TestAnOversizedTextureIsRefusedBeforeItIsDecoded: the decoder sizes
+// its buffers from the header, and a header claiming 60000x60000 is
+// tens of gigabytes of planes.  So the size is read first and anything
+// over the viewer's own limit is refused, quickly and without the
+// allocation.  A second SIZ is what the decoder believes, so it is what
+// the check believes too.
+func TestAnOversizedTextureIsRefusedBeforeItIsDecoded(t *testing.T) {
+	small, huge := claims(64, 64), claims(60000, 60000)
+	for _, c := range []struct {
+		what string
+		b    []byte
+	}{
+		{"a header claiming 60000x60000", huge},
+		{"one side over the limit", claims(MaxDecodeSize+1, 8)},
+		{"the other side over the limit", claims(8, MaxDecodeSize+1)},
+		{"a second SIZ claiming 60000x60000", append(slices.Clip(small[:len(small)-2]), huge[2:]...)},
+	} {
+		start := time.Now()
+		_, err := DecodeTexture(c.b)
+		if took := time.Since(start); took > time.Second {
+			t.Errorf("%s: took %v to refuse", c.what, took)
+		}
+		if err == nil || !strings.Contains(err.Error(), strconv.Itoa(MaxDecodeSize)) {
+			t.Errorf("%s: error = %v, want it refused at %d a side", c.what, err, MaxDecodeSize)
+			continue
+		}
+		if n := allocated(100, func() { DecodeTexture(c.b) }); n > 64<<10 {
+			t.Errorf("%s: refusing it allocated %d bytes", c.what, n)
+		}
+	}
+}
+
+// TestAnyShapeDecodes: the grid's rules are for what is sent to it, and
+// a codestream from anywhere else -- a file on disk, a texture uploaded
+// by some other client -- decodes whatever its shape, up to the limit.
+// The upload check still refuses what the grid would.
+func TestAnyShapeDecodes(t *testing.T) {
+	for _, c := range []struct {
+		w, h    int
+		uploads bool
+	}{
+		{300, 200, false},          // not a power of two
+		{MaxDecodeSize, 4, false},  // wider than the grid takes
+		{MaxTextureSize, 64, true}, // as wide as it takes
+	} {
+		var b bytes.Buffer
+		if err := j2k.Encode(&b, picture(c.w, c.h)); err != nil {
+			t.Fatalf("%dx%d: encoding: %v", c.w, c.h, err)
+		}
+		if _, _, err := TextureDims(b.Bytes()); (err == nil) != c.uploads {
+			t.Errorf("%dx%d: the upload check says %v", c.w, c.h, err)
+		}
+		m, err := DecodeTexture(b.Bytes())
+		if err != nil {
+			t.Errorf("%dx%d: %v", c.w, c.h, err)
+			continue
+		}
+		if got := m.Bounds(); got != image.Rect(0, 0, c.w, c.h) {
+			t.Errorf("%dx%d: decoded %v", c.w, c.h, got)
 		}
 	}
 }

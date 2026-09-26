@@ -1579,6 +1579,21 @@ of two is refused, naming the size it would have to be. Resizing is a
 separate call, because it is two decisions and neither is this
 package's to make.
 
+`DecodeTexture` is liberal where `EncodeTexture` is strict: any shape
+decodes, power of two or not, up to `MaxDecodeSize` -- 4096 -- on each
+side. That is the viewer's own `MAX_IMAGE_SIZE`
+(`indra/llimage/llimage.h:56`), and by its source the viewer marks a
+larger texture missing rather than draw it
+(`newview/llviewertexture.cpp:1318`). It is not the grid's upload limit
+of 2048, so a texture from a client that ignored that rule still
+decodes, and so would a larger one if Linden Lab raised the limit. There
+is a limit at all because the codec sizes its buffers from the
+codestream's header and sets no bound of its own; by its source, a
+header claiming 60000×60000 would have it try for tens of gigabytes. So
+the size is read first, by the codec's own `DecodeConfig` -- the header
+the decoder would have believed, a second SIZ marker included -- and
+anything larger is refused before anything is allocated for the image.
+
 ## Resizing to a size the grid takes
 
     img = sl.Resize(img, sl.ResizeOptions{
