@@ -20,10 +20,12 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -634,6 +636,86 @@ func TestAttachingSaysWhichSessionItGot(t *testing.T) {
 	}
 	if len(conn.Caps()) != 2 {
 		t.Errorf("Caps = %v", conn.Caps())
+	}
+}
+
+// TestEveryCallNamesTheSessionTheAttachGot: an attach with no name takes
+// the daemon's default, and every call afterwards names the session the
+// Attached frame said it got.  Asking again by the empty name reached
+// whichever session was the default by then -- another avatar entirely,
+// once the first had been logged out -- while the stream stayed where it
+// was.
+func TestEveryCallNamesTheSessionTheAttachGot(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		what   string
+		ask    string // the name attached with
+		answer string // the name the Attached frame gives
+		want   string // the name every call must carry
+	}{
+		{"an empty name takes what the daemon resolved", "", "quark", "quark"},
+		// A daemon that names nothing leaves nothing better than what
+		// was asked for.
+		{"a frame with no name keeps the one asked for", "quark", "", "quark"},
+	} {
+		t.Run(tc.what, func(t *testing.T) {
+			var mu sync.Mutex
+			var asked []string
+			record := grpc.UnaryInterceptor(func(ctx context.Context, req any,
+				info *grpc.UnaryServerInfo, next grpc.UnaryHandler) (any, error) {
+				if r, ok := req.(interface{ GetAgent() string }); ok {
+					mu.Lock()
+					asked = append(asked, fmt.Sprintf("%s asked for %q", info.FullMethod, r.GetAgent()))
+					mu.Unlock()
+				}
+				return next(ctx, req)
+			})
+			d := newFakeDaemon()
+			d.info.Name = tc.answer
+			d.status = &pb.StatusResponse{Agent: d.info}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			conn, err := Dial(ctx, d.serve(t, record), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				t.Fatalf("Dial: %v", err)
+			}
+			t.Cleanup(func() { conn.Close() })
+			if _, err := conn.Attach(ctx, tc.ask); err != nil {
+				t.Fatalf("Attach: %v", err)
+			}
+
+			// Whether each is answered does not matter here, and most
+			// are not: this daemon implements few of them.  What each
+			// ASKED for is the point.
+			conn.Status(ctx)
+			conn.ViewerCredential(ctx)
+			conn.Presence(ctx, 0)
+			conn.Attachments(ctx, "")
+			conn.Objects(ctx, "", "")
+			conn.Friends(ctx)
+			conn.NoteFriend(ctx, theOther, true)
+			conn.Region(ctx)
+			conn.Land(ctx)
+			conn.Neighbours(ctx, nil)
+			conn.Control(ctx, 0)
+			conn.Flush(ctx)
+			conn.DoCap(ctx, agent.CapRequest{Cap: "SimulatorFeatures"})
+			conn.Handled(ctx, "an offer", "", false)
+			conn.Face(ctx, nil, 0)
+			conn.Halt(ctx)
+			conn.Posture(ctx)
+
+			mu.Lock()
+			defer mu.Unlock()
+			if len(asked) < 17 {
+				t.Errorf("%d calls reached the daemon, want 17: %v", len(asked), asked)
+			}
+			for _, a := range asked {
+				if !strings.HasSuffix(a, fmt.Sprintf("asked for %q", tc.want)) {
+					t.Errorf("%s, want %q", a, tc.want)
+				}
+			}
+		})
 	}
 }
 

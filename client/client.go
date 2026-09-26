@@ -486,6 +486,14 @@ func (c *Conn) Handled(ctx context.Context, offer, how string, undo bool) (*pb.H
 // Attach opens the packet stream against one of the server's agents and
 // subscribes to the named messages.  "*" means everything; naming
 // nothing means nothing is relayed until Subscribe says otherwise.
+//
+// An empty name takes the daemon's default, and every call made on this
+// connection afterwards names the session that was chosen: the default
+// moving later does not move this connection with it.
+//
+// The stream outlives a session that drops and is re-established under
+// it.  It ends, with codes.FailedPrecondition and the daemon's reason,
+// when the session is stopped for good or no longer hosted.
 func (c *Conn) Attach(ctx context.Context, agentName string, subscribe ...string) (*pb.AgentInfo, error) {
 	return c.attach(ctx, agentName, false, subscribe)
 }
@@ -538,7 +546,14 @@ func (c *Conn) attach(ctx context.Context, agentName string, weak bool, subscrib
 		c.mu.Unlock()
 		return nil, fmt.Errorf("client: this connection is closed")
 	}
-	c.agent = agentName
+	// The name the daemon resolved, rather than the one asked for.  An
+	// empty name took the default, and the calls after this have to
+	// reach the session this stream is on, not whichever is the default
+	// by the time they are made.
+	c.agent = att.Agent.GetName()
+	if c.agent == "" {
+		c.agent = agentName
+	}
 	c.stream = stream
 	c.info = att.Agent
 	c.caps = make(map[string]bool, len(att.Agent.GetCaps()))
