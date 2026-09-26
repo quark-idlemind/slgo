@@ -680,7 +680,9 @@ type Slots struct {
 	// common with each other -- a benchmark compares its readings, and
 	// four objects spread over three avatars may be in three regions --
 	// and for a caller that named an avatar and meant it.  Empty is
-	// anywhere.
+	// anywhere.  A name the daemon does not host, or an avatar that is
+	// logged out, is refused at once; one it is still logging in is waited
+	// for.
 	Agent string `protobuf:"bytes,4,opt,name=agent,proto3" json:"agent,omitempty"`
 	// Request is the client's own number for this ask, which the answer
 	// carries back in SlotsGranted.request.  Answers do not come back in

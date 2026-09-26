@@ -12,6 +12,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -643,5 +646,294 @@ func TestAGrantSettledAsItsStreamEndsIsNotKept(t *testing.T) {
 		}
 	default:
 		t.Fatal("the next request was not answered")
+	}
+}
+
+// asker is a client known only to the pool, for the tests that ask it
+// directly: its answers wait on ctl for the test to read.
+func asker() *Client {
+	return &Client{ctl: make(chan *pb.ServerPacket, 4), jammed: make(chan struct{})}
+}
+
+// answerTo is the next answer an asker was given.
+func answerTo(t *testing.T, c *Client, within time.Duration) *pb.SlotsGranted {
+	t.Helper()
+	select {
+	case p := <-c.ctl:
+		return p.GetGranted()
+	case <-time.After(within):
+		t.Fatalf("no answer within %v", within)
+		return nil
+	}
+}
+
+// hostedOnDemand is a daemon that has brought "example" up the way Host
+// does, so that it can be logged out and forced back up: a forced Host
+// replaces the Hosted with a new one under the same name.
+func hostedOnDemand(t *testing.T) (*Server, context.Context) {
+	t.Helper()
+	sim := newSim(t)
+	t.Cleanup(sim.close)
+	var logins atomic.Int64
+	srv := startable(t, loginServer(t, sim, &logins, nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	srv.SetBase(ctx, nil, nil)
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	return srv, ctx
+}
+
+// TestALoggedOutAvatarKeepsItsPlaces: a logged-out avatar comes back
+// only when somebody hosts it again on purpose, so a request naming it
+// is refused at once, a try or not, and says why.  Asking for places
+// meanwhile -- which the anywhere search does of every avatar in turn --
+// passes them over rather than throwing them away, and once a forced
+// Host has it back it has all twelve and no more.
+func TestALoggedOutAvatarKeepsItsPlaces(t *testing.T) {
+	srv, ctx := hostedOnDemand(t)
+	sp := srv.slotsOf()
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, try := range []bool{true, false} {
+		c := asker()
+		sp.ask(ctx, c, &pb.Slots{Want: 1, Try: try, Agent: "example", WaitSeconds: 30, Request: uint64(i + 1)})
+		g := answerTo(t, c, 5*time.Second)
+		if want := `"example" is logged out`; g.GetGrant() != "" || g.GetWhy() != want {
+			t.Errorf("a request (try %v) naming a logged-out avatar was answered %v, want %q", try, g, want)
+		}
+	}
+	anyone := asker()
+	sp.ask(ctx, anyone, &pb.Slots{Want: 1, Try: true, Request: 3})
+	if g := answerTo(t, anyone, 5*time.Second); g.GetGrant() != "" {
+		t.Errorf("a place on a logged-out avatar was granted: %v", g.GetHeld())
+	}
+
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example", Force: true}); err != nil {
+		t.Fatalf("forcing it back up: %v", err)
+	}
+	all := asker()
+	sp.ask(ctx, all, &pb.Slots{Want: SlotsPerAgent, Try: true, Agent: "example", Request: 4})
+	if g := answerTo(t, all, 5*time.Second); g.GetGrant() == "" || len(g.GetHeld()) != SlotsPerAgent {
+		t.Fatalf("once it was back, a request for all its places got %d (%s), want %d",
+			len(g.GetHeld()), g.GetWhy(), SlotsPerAgent)
+	}
+	more := asker()
+	sp.ask(ctx, more, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: 5})
+	if g := answerTo(t, more, 5*time.Second); g.GetGrant() != "" {
+		t.Errorf("a thirteenth place came out of one avatar: %v", g.GetHeld())
+	}
+}
+
+// TestAWaiterOnAnAvatarThatLogsOutIsRefused: a request already waiting
+// for an avatar's places is not left waiting for one that has just
+// logged out, which will not come back on its own.  It is refused then,
+// with the reason a request made afterwards would get.
+func TestAWaiterOnAnAvatarThatLogsOutIsRefused(t *testing.T) {
+	srv, ctx := hostedOnDemand(t)
+	sp := srv.slotsOf()
+
+	holder := asker()
+	sp.ask(ctx, holder, &pb.Slots{Want: SlotsPerAgent, Try: true, Agent: "example", Request: 1})
+	if g := answerTo(t, holder, 5*time.Second); g.GetGrant() == "" {
+		t.Fatalf("all its places would not go to one client: %s", g.GetWhy())
+	}
+
+	waiter := asker()
+	go sp.ask(ctx, waiter, &pb.Slots{Want: 1, Agent: "example", WaitSeconds: 30, Request: 2})
+	time.Sleep(200 * time.Millisecond) // the wait is on the daemon
+	select {
+	case p := <-waiter.ctl:
+		t.Fatalf("a request for places somebody holds was answered at once: %v", p)
+	default:
+	}
+
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	g := answerTo(t, waiter, 5*time.Second)
+	if want := `"example" is logged out`; g.GetGrant() != "" || g.GetWhy() != want || g.GetRequest() != 2 {
+		t.Errorf("the waiting request was answered %v, want request 2 refused with %q", g, want)
+	}
+}
+
+// TestAPlaceHeldAcrossItsAvatarLeavingIsNotGrantedTwice: a forced Host
+// replaces the avatar under the same name, and its new places stand for
+// the same objects as the old.  So while a client still holds old ones
+// the name is given no new ones; the old grant renews and goes back as
+// ever, putting nothing back; and then the new places go to whoever was
+// waiting for them.
+func TestAPlaceHeldAcrossItsAvatarLeavingIsNotGrantedTwice(t *testing.T) {
+	srv, ctx := hostedOnDemand(t)
+	sp := srv.slotsOf()
+
+	holder := asker()
+	sp.ask(ctx, holder, &pb.Slots{Want: 4, Try: true, Agent: "example", Request: 1})
+	held := answerTo(t, holder, 5*time.Second)
+	if held.GetGrant() == "" {
+		t.Fatalf("four places would not go to one client: %s", held.GetWhy())
+	}
+	holds := map[uint32]bool{}
+	for _, p := range held.GetHeld() {
+		holds[p.GetSlot()] = true
+	}
+
+	if _, err := srv.Logout(ctx, &pb.LogoutRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.Host(ctx, &pb.HostRequest{Agent: "example", Force: true}); err != nil {
+		t.Fatalf("forcing it back up: %v", err)
+	}
+
+	// Whatever can be had of the name while the old grant is out.
+	var got []*pb.SlotHeld
+	for i := 0; i <= SlotsPerAgent; i++ {
+		c := asker()
+		sp.ask(ctx, c, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: uint64(10 + i)})
+		g := answerTo(t, c, 5*time.Second)
+		if g.GetGrant() == "" {
+			break
+		}
+		got = append(got, g.GetHeld()...)
+	}
+	for _, p := range got {
+		if holds[p.GetSlot()] {
+			t.Errorf("slot %d was granted while a client held it from before its avatar left", p.GetSlot())
+		}
+	}
+	if len(got) != 0 {
+		t.Fatalf("the name was given %d places while a grant on its old ones was out", len(got))
+	}
+
+	waiter := asker()
+	go sp.ask(ctx, waiter, &pb.Slots{Want: SlotsPerAgent, Agent: "example", WaitSeconds: 30, Request: 2})
+	time.Sleep(200 * time.Millisecond) // the wait is on the daemon
+	select {
+	case p := <-waiter.ctl:
+		t.Fatalf("a request was answered while the old grant was out: %v", p)
+	default:
+	}
+
+	// Still the holder's to renew, and to give back -- twice, even.
+	sp.renew(holder, &pb.RenewSlots{Grant: held.GetGrant(), Seconds: 60, Request: 3})
+	if g := answerTo(t, holder, 5*time.Second); g.GetGrant() != held.GetGrant() {
+		t.Errorf("renewing the old grant was answered %q (%s), want %q",
+			g.GetGrant(), g.GetWhy(), held.GetGrant())
+	}
+	sp.release(holder, held.GetGrant(), true)
+	sp.release(holder, held.GetGrant(), true)
+
+	g := answerTo(t, waiter, 10*time.Second)
+	if g.GetGrant() == "" || len(g.GetHeld()) != SlotsPerAgent {
+		t.Fatalf("once the old grant was back, the waiting request got %d places (%s), want %d",
+			len(g.GetHeld()), g.GetWhy(), SlotsPerAgent)
+	}
+	seen := map[uint32]bool{}
+	for _, p := range g.GetHeld() {
+		if p.GetAgent() != "example" || seen[p.GetSlot()] {
+			t.Errorf("the waiting request was given %v", g.GetHeld())
+			break
+		}
+		seen[p.GetSlot()] = true
+	}
+	more := asker()
+	sp.ask(ctx, more, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: 4})
+	if g := answerTo(t, more, 5*time.Second); g.GetGrant() != "" {
+		t.Errorf("a place given back after its avatar left came back beside the new ones: %v", g.GetHeld())
+	}
+}
+
+// TestPlacesOnAnAvatarNotHostedAreRefusedAtOnce: an avatar the daemon
+// does not host has no places and none are coming, so a request naming
+// it is answered at once rather than left waiting for ever -- a wait, a
+// try, and a profile the daemon could start but has not.
+func TestPlacesOnAnAvatarNotHostedAreRefusedAtOnce(t *testing.T) {
+	r := newSession(t, agent.Caps{})
+	r.srv.SetProfiles(func() []string { return []string{"example", "other"} }, nil)
+	sp := r.srv.slotsOf()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for i, req := range []*pb.Slots{
+		{Want: 1, Agent: "nobody"},
+		{Want: 1, Agent: "nobody", Try: true},
+		{Want: 1, Agent: "other"},
+	} {
+		req.Request = uint64(i + 1)
+		c := asker()
+		go sp.ask(ctx, c, req)
+		g := answerTo(t, c, 5*time.Second)
+		want := fmt.Sprintf("no avatar called %q is hosted here", req.GetAgent())
+		if g.GetGrant() != "" || g.GetWhy() != want || g.GetRequest() != req.GetRequest() {
+			t.Errorf("%v was answered %v, want request %d refused with %q", req, g, req.GetRequest(), want)
+		}
+	}
+
+	// The one that is hosted is still served.
+	c := asker()
+	sp.ask(ctx, c, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: 9})
+	if g := answerTo(t, c, 5*time.Second); g.GetGrant() == "" {
+		t.Errorf("a place on the hosted avatar was refused: %s", g.GetWhy())
+	}
+}
+
+// TestARequestMadeWhileItsAvatarLogsInWaitsForIt: Host holds the name
+// while it logs in, and a request naming it then is somebody who asked a
+// moment early.  It waits, and is given the places when the avatar
+// arrives, rather than being told the name is unknown.
+func TestARequestMadeWhileItsAvatarLogsInWaitsForIt(t *testing.T) {
+	sim := newSim(t)
+	t.Cleanup(sim.close)
+	var logins atomic.Int64
+	inner := loginServer(t, sim, &logins, nil)
+	gate := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-gate
+		inner.Config.Handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(slow.Close)
+	t.Cleanup(func() {
+		select {
+		case <-gate:
+		default:
+			close(gate)
+		}
+	})
+	srv := startable(t, slow)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	srv.SetBase(ctx, nil, nil)
+	sp := srv.slotsOf()
+
+	hosted := make(chan error, 1)
+	go func() {
+		_, err := srv.Host(ctx, &pb.HostRequest{Agent: "example"})
+		hosted <- err
+	}()
+	waitFor(t, 5*time.Second, "the login to hold the name", func() bool {
+		_, ok := srv.holding("example")
+		return ok
+	})
+
+	waiter := asker()
+	go sp.ask(ctx, waiter, &pb.Slots{Want: SlotsPerAgent, Agent: "example", WaitSeconds: 30, Request: 1})
+	time.Sleep(200 * time.Millisecond) // the wait is on the daemon
+	select {
+	case p := <-waiter.ctl:
+		t.Fatalf("a request made while its avatar was logging in was answered at once: %v", p)
+	default:
+	}
+
+	close(gate)
+	if err := <-hosted; err != nil {
+		t.Fatalf("Host: %v", err)
+	}
+	g := answerTo(t, waiter, 10*time.Second)
+	if g.GetGrant() == "" || len(g.GetHeld()) != SlotsPerAgent {
+		t.Fatalf("once it had logged in, the waiting request got %d places (%s), want %d",
+			len(g.GetHeld()), g.GetWhy(), SlotsPerAgent)
 	}
 }

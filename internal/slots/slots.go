@@ -27,8 +27,9 @@
 // hold them while waiting for the rest, which is the deadlock, or give
 // them back, which is what this does for it.  A request that cannot be
 // served takes nothing and comes back with a channel to wait on, closed
-// when something has been given back or added -- so a caller learns when
-// it is worth asking again rather than polling.
+// when something has been given back or added, or a slot taken out while
+// in use has finally gone -- so a caller learns when it is worth asking
+// again rather than polling.
 //
 // What that leaves is starvation: a caller wanting twelve can in
 // principle be stepped over for ever by a stream of callers wanting one.
@@ -159,8 +160,9 @@ func (s Slot) ID() ID { return s.id }
 // A Response is the answer to a request.
 //
 // Filled says which of the two it is.  When it was not filled, Wait is
-// closed once something has been given back or added, and asking again
-// then is worth the trip.
+// closed once something has been given back or added, or a slot taken
+// out while in use has gone -- which is when its owner can put another
+// in its place -- and asking again then is worth the trip.
 type Response struct {
 	// ID names this grant, and is what Return and Renew take.
 	ID ID
@@ -184,13 +186,15 @@ func (r Response) Filled() bool { return r.Wait == nil }
 // A Pool hands out slots.  Nothing works until Run is called.
 type Pool struct {
 	// Present, when set, is asked whether the thing a slot stands for is
-	// still there, just before the slot is handed out.  A slot it
-	// refuses is dropped from the pool rather than granted.
+	// there now, just before the slot is handed out.  A slot it refuses
+	// is passed over, as one a match refuses is, and stays in the pool:
+	// it may be there by the next request.  One that is gone for good is
+	// taken out with Remove.
 	//
 	// It is here because the pool cannot know: an object is worn by an
-	// avatar on a grid, and it can be taken off, deleted, or left behind
-	// by a logout between one grant and the next.  It is called from the
-	// pool's own goroutine and must not call back into the pool.
+	// avatar on a grid, and the avatar can be logged out when the slot's
+	// turn comes.  It is called from the pool's own goroutine and must
+	// not call back into the pool.
 	Present func(data any) bool
 
 	req  chan any
@@ -307,12 +311,25 @@ func (p *Pool) Add(slots ...*Slot) error {
 //
 // One that is granted at the time is marked and taken out when it comes
 // back, rather than pulled from under whoever is using it -- which is
-// what an avatar logging out looks like: its objects are gone, and the
-// run that had them will find that out from its own session.
+// what an avatar leaving the daemon looks like: its objects are gone, and
+// the run that had them will find that out from its own session.  An
+// owner that means to put something in its place asks Held when it has
+// gone.
 func (p *Pool) Remove(slots ...*Slot) error {
 	r := removeReq{slots: slots, done: make(chan struct{})}
 	_, err := ask(p, r, r.done)
 	return err
+}
+
+// Held says which of these slots a grant has now.  A grant that has run
+// out is taken back first, as it is for a request.
+//
+// It is for an owner replacing slots it removed: the new ones stand for
+// the same things, and handing one out while the old one is still held
+// would be one thing in two callers' hands.
+func (p *Pool) Held(slots ...*Slot) ([]*Slot, error) {
+	r := heldReq{slots: slots, reply: make(chan []*Slot, 1)}
+	return ask(p, r, r.reply)
 }
 
 // Cleaned puts a slot back after its Clean has made it fit to be used
@@ -403,6 +420,10 @@ type (
 		slots []*Slot
 		done  chan struct{}
 	}
+	heldReq struct {
+		slots []*Slot
+		reply chan []*Slot
+	}
 	cleanedReq struct {
 		slot *Slot
 		done chan struct{}
@@ -464,6 +485,12 @@ func (p *Pool) Run() {
 			}
 			close(req.done)
 
+		case heldReq:
+			if p.reclaim(now) {
+				p.wakeWaiters()
+			}
+			req.reply <- p.held(req.slots)
+
 		case expiryReq:
 			if p.reclaim(now) {
 				p.wakeWaiters()
@@ -514,7 +541,7 @@ func (p *Pool) get(now time.Time, req getReq) Response {
 	return r
 }
 
-// take finds n slots that are free and still there, or nothing.
+// take finds n slots that are free and there now, or nothing.
 //
 // Oldest first, which is the order they were added: the caller of a pool
 // holding several avatars' objects gets the first avatar's before the
@@ -538,17 +565,17 @@ func (p *Pool) take(n int, match func(any) bool) []*Slot {
 			continue
 		}
 		if p.Present != nil && !p.Present(s.Data) {
-			// Gone since it was added -- taken off, deleted, or left
-			// behind by a logout.  Dropped rather than handed out, and
-			// not put back below.
-			s.removed = true
+			// Not there just now -- its avatar is logged out.  Passed
+			// over and kept, like one match refused: it may be back by
+			// the next request, and one gone for good is Remove's.
+			passed = append(passed, s)
 			continue
 		}
 		got = append(got, s)
 	}
 
-	// Everything up to seen has been decided: granted, passed over, or
-	// dropped.  The rest is untouched and keeps its order.
+	// Everything up to seen has been decided: granted or passed over.
+	// The rest is untouched and keeps its order.
 	rest := append([]*Slot{}, p.free[seen:]...)
 	if len(got) < n {
 		// Not enough.  What was collected is still free, and so is what
@@ -640,35 +667,36 @@ func (p *Pool) give(id ID) {
 	p.sayWhenToWake()
 }
 
-// release lets go of slots nobody has any more, and says whether any of
-// them reached the free list.
+// release lets go of slots nobody has any more, and says whether there
+// is anything new for a caller to be woken about: a slot that reached the
+// free list, or one taken out of the pool that has now gone.
 //
-// Some do not: one taken out of the pool while it was in use goes now,
-// and one with tidying to do goes to be tidied and arrives later.  What
-// this answers is whether there is anything new for a caller to be woken
-// about -- waking somebody to look at a pool that has not changed is a
+// One with tidying to do goes to be tidied and arrives later, and is not
+// news yet -- waking somebody to look at a pool that has not changed is a
 // round trip for nothing.
 func (p *Pool) release(slots []*Slot) bool {
-	freed := false
+	news := false
 	for _, s := range slots {
 		switch {
 		case s.removed:
 			// Taken out of the pool while it was in use.  This is where
-			// that finally happens.
+			// that finally happens, and its owner may be waiting for it
+			// to put another in its place; see Held.
+			news = true
 		case s.Clean != nil:
 			// Out of the pool until its own tidying puts it back.
 			go s.Clean(s)
 		default:
 			if p.insert(s) {
-				freed = true
+				news = true
 			}
 		}
 	}
-	return freed
+	return news
 }
 
-// reclaim takes back every grant whose time is up, and says whether it
-// took anything.
+// reclaim takes back every grant whose time is up, and says whether
+// that is news for a waiter, as release does.
 func (p *Pool) reclaim(now time.Time) bool {
 	took := false
 	for id, l := range p.assigned {
@@ -681,6 +709,23 @@ func (p *Pool) reclaim(now time.Time) bool {
 		}
 	}
 	return took
+}
+
+// held is which of slots a grant has.
+func (p *Pool) held(slots []*Slot) []*Slot {
+	want := make(map[*Slot]bool, len(slots))
+	for _, s := range slots {
+		want[s] = true
+	}
+	var out []*Slot
+	for _, l := range p.assigned {
+		for _, s := range l.slots {
+			if want[s] {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }
 
 // waiter is the channel a request that could not be served waits on.

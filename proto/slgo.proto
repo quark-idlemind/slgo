@@ -405,7 +405,9 @@ message Slots {
   // common with each other -- a benchmark compares its readings, and
   // four objects spread over three avatars may be in three regions --
   // and for a caller that named an avatar and meant it.  Empty is
-  // anywhere.
+  // anywhere.  A name the daemon does not host, or an avatar that is
+  // logged out, is refused at once; one it is still logging in is waited
+  // for.
   string agent = 4;
 
   // Request is the client's own number for this ask, which the answer

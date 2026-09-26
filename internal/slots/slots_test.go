@@ -457,9 +457,140 @@ func TestASlotThatWentAwayIsNotHandedOut(t *testing.T) {
 	}
 }
 
-// TestASlotTakenOutWhileInUseGoesWhenItComesBack: an avatar logging out
-// takes its objects with it, and the run holding them will find that out
-// from its own session.  Pulling them from under it here would not help
+// TestASlotThatIsNotThereForNowIsKept: an avatar that is logged out has
+// not gone for good -- hosting it again brings it back wearing the same
+// things -- so a slot Present refuses is passed over and kept, and is
+// handed out, in its place in the order, once it is there again.
+func TestASlotThatIsNotThereForNowIsKept(t *testing.T) {
+	p, _ := stopped(t)
+	var (
+		mu   sync.Mutex
+		away = true
+	)
+	p.Present = func(data any) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return data.(int) != 1 || !away
+	}
+	go p.Run()
+
+	if err := p.Add(&Slot{Data: 1}, &Slot{Data: 2}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if r := get(t, p, 2); r.Filled() {
+		t.Errorf("two slots came out while one of them was away: %v", which(r))
+	}
+	held := get(t, p, 1)
+	if !held.Filled() || !which(held)[2] {
+		t.Fatalf("the slot that was there could not be had: %v", which(held))
+	}
+	if err := p.Return(held.ID); err != nil {
+		t.Fatalf("Return: %v", err)
+	}
+
+	mu.Lock()
+	away = false
+	mu.Unlock()
+	if r := get(t, p, 1); !r.Filled() || !which(r)[1] {
+		t.Errorf("got %v once slot 1 was back, want slot 1, the oldest", which(r))
+	}
+}
+
+// TestHeldSaysWhichSlotsAGrantHas: an owner putting new slots in place of
+// ones it removed has to know when the old ones have gone, or the same
+// object would be in two callers' hands.  A grant that has run out holds
+// nothing, whether or not an ExpiryCheck has noticed yet.
+func TestHeldSaysWhichSlotsAGrantHas(t *testing.T) {
+	p, c := stopped(t)
+	go p.Run()
+
+	one, two, three := &Slot{Data: 1}, &Slot{Data: 2}, &Slot{Data: 3}
+	if err := p.Add(one, two, three); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	first, second := get(t, p, 1), get(t, p, 1)
+	if !first.Filled() || !second.Filled() {
+		t.Fatal("two callers could not have one slot each")
+	}
+	if err := p.Remove(one, two, three); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+
+	held := func() map[int]bool {
+		t.Helper()
+		got, err := p.Held(one, two, three)
+		if err != nil {
+			t.Fatalf("Held: %v", err)
+		}
+		out := map[int]bool{}
+		for _, s := range got {
+			out[s.Data.(int)] = true
+		}
+		return out
+	}
+	if got := held(); len(got) != 2 || !got[1] || !got[2] {
+		t.Errorf("Held = %v with slots 1 and 2 granted, want 1 and 2", got)
+	}
+	if err := p.Return(first.ID); err != nil {
+		t.Fatalf("Return: %v", err)
+	}
+	if got := held(); len(got) != 1 || !got[2] {
+		t.Errorf("Held = %v once slot 1 was given back, want 2", got)
+	}
+	c.pass(time.Minute + grace + time.Second)
+	if got := held(); len(got) != 0 {
+		t.Errorf("Held = %v once the last grant had run out, want nothing", got)
+	}
+}
+
+// TestAWaiterIsWokenWhenARemovedSlotHasGone: nothing reaches the free
+// list, but the owner may have been waiting for exactly this to put a
+// new slot in the old one's place, and a caller waiting for that has to
+// ask again to find it.  By either road: given back, or run out.
+func TestAWaiterIsWokenWhenARemovedSlotHasGone(t *testing.T) {
+	for _, road := range []string{"given back", "run out"} {
+		t.Run(road, func(t *testing.T) {
+			p, c := stopped(t)
+			go p.Run()
+
+			s := &Slot{Data: 1}
+			if err := p.Add(s); err != nil {
+				t.Fatalf("Add: %v", err)
+			}
+			held := get(t, p, 1)
+			short := get(t, p, 1)
+			if !held.Filled() || short.Filled() {
+				t.Fatal("one slot did not go to exactly one of two callers")
+			}
+			if err := p.Remove(s); err != nil {
+				t.Fatalf("Remove: %v", err)
+			}
+
+			if road == "given back" {
+				if err := p.Return(held.ID); err != nil {
+					t.Fatalf("Return: %v", err)
+				}
+			} else {
+				c.pass(time.Minute + grace + time.Second)
+				if err := p.ExpiryCheck(); err != nil {
+					t.Fatalf("ExpiryCheck: %v", err)
+				}
+			}
+			select {
+			case <-short.Wait:
+			case <-time.After(2 * time.Second):
+				t.Fatal("the waiter was not woken when the removed slot finally went")
+			}
+			if r := get(t, p, 1); r.Filled() {
+				t.Errorf("a removed slot came back: %v", which(r))
+			}
+		})
+	}
+}
+
+// TestASlotTakenOutWhileInUseGoesWhenItComesBack: an avatar leaving the
+// daemon takes its objects with it, and the run holding them will find
+// that out from its own session.  Pulling them from under it here would not help
 // it and would let somebody else have an object that is not there.
 func TestASlotTakenOutWhileInUseGoesWhenItComesBack(t *testing.T) {
 	p, _ := stopped(t)
@@ -511,10 +642,11 @@ func TestSlotsAreHandedOutOldestFirst(t *testing.T) {
 	}
 }
 
-// TestARemovedSlotAddedAgainIsANewSlot: an avatar that logged out and
-// back in wears the same items, and the objects they made are new ones
-// with new keys.  Treating that as the same slot would mean a Return
-// from before the logout putting an object back that no longer exists.
+// TestARemovedSlotAddedAgainIsANewSlot: an avatar that left the daemon
+// and was hosted again wears the same items, and the objects they made
+// are new ones with new keys.  Treating that as the same slot would mean
+// a Return from before it left putting an object back that no longer
+// exists.
 func TestARemovedSlotAddedAgainIsANewSlot(t *testing.T) {
 	p, _ := stopped(t)
 	go p.Run()
@@ -629,9 +761,9 @@ func TestTheDefaultDeadlineIsUsedWhenNobodySays(t *testing.T) {
 }
 
 // TestASlotTakenOutWhileInUseGoesWhenItsGrantRunsOut: the same as
-// returning it, by the other road.  An avatar logs out and the run
-// holding its objects wedges rather than tidying up, and the slot must
-// not come back into a pool where the object it stands for is gone.
+// returning it, by the other road.  An avatar leaves the daemon and the
+// run holding its objects wedges rather than tidying up, and the slot
+// must not come back into a pool where the object it stands for is gone.
 func TestASlotTakenOutWhileInUseGoesWhenItsGrantRunsOut(t *testing.T) {
 	p, c := stopped(t)
 	go p.Run()
@@ -709,8 +841,8 @@ func TestWhatComesBackGoesBackWhereItWas(t *testing.T) {
 	}
 }
 
-// TestASlotRemovedWhileNobodyHasItGoesAtOnce: an avatar logging out
-// while its objects are idle.  There is nobody to wait for, so the slot
+// TestASlotRemovedWhileNobodyHasItGoesAtOnce: an avatar leaving the
+// daemon while its objects are idle.  There is nobody to wait for, so the slot
 // goes now -- and the ones around it keep their order.
 func TestASlotRemovedWhileNobodyHasItGoesAtOnce(t *testing.T) {
 	p, _ := stopped(t)
@@ -984,8 +1116,8 @@ func TestAWaiterIsWokenWhenTheTidyingIsDoneAndNotBefore(t *testing.T) {
 	}
 }
 
-// TestASlotRemovedWhileBeingTidiedDoesNotComeBack: an avatar that logged
-// out while its object was being tidied.  The tidying finishes and hands
+// TestASlotRemovedWhileBeingTidiedDoesNotComeBack: an avatar that left
+// the daemon while its object was being tidied.  The tidying finishes and hands
 // the slot back, and the pool refuses it: what it stands for is not the
 // pool's any more.
 func TestASlotRemovedWhileBeingTidiedDoesNotComeBack(t *testing.T) {

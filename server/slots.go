@@ -91,7 +91,15 @@ type slotPool struct {
 	mu     sync.Mutex
 	next   uint64
 	grants map[string]*grant
-	added  map[string]bool // agents whose places are in the pool
+
+	// placing is held while an avatar's places go into the pool or come
+	// out, so that the two cannot cross: a removal between an add's
+	// deciding and its doing would leave the places in.  It guards added
+	// and leaving.  It is held across calls to the pool, whose Present
+	// takes the server's lock, so it is never taken with that lock held.
+	placing sync.Mutex
+	added   map[string][]*slots.Slot // each hosted avatar's places
+	leaving map[string][]*slots.Slot // places taken out with their avatar, maybe still granted
 }
 
 // slotsOf returns the daemon's pool, starting it on first use.
@@ -110,14 +118,19 @@ func (s *Server) slotsOf() *slotPool {
 
 func newSlotPool(s *Server) *slotPool {
 	sp := &slotPool{
-		srv:    s,
-		pool:   slots.New(),
-		grants: map[string]*grant{},
-		added:  map[string]bool{},
+		srv:     s,
+		pool:    slots.New(),
+		grants:  map[string]*grant{},
+		added:   map[string][]*slots.Slot{},
+		leaving: map[string][]*slots.Slot{},
 	}
-	// A place is only worth handing out if the avatar it belongs to is
-	// still here and up.  An avatar that has gone is a grant the client
-	// cannot use, and it would find that out in the middle of a run.
+	// A place is only worth handing out while its avatar is here and up:
+	// one that is not is a grant the client cannot use, and it would find
+	// that out in the middle of a run.  A place whose avatar is logged
+	// out is passed over and left in the pool; one whose avatar has left
+	// the daemon, as a forced Host makes it before logging in again, is
+	// taken out by removeAgent.
+	// Why: doc/slots.md#when-an-avatar-is-logged-out-or-leaves
 	sp.pool.Present = func(data any) bool {
 		w, ok := data.(*where)
 		if !ok {
@@ -165,34 +178,49 @@ func (sp *slotPool) expire() {
 // sync makes sure every avatar the daemon holds has its places in the
 // pool.
 //
-// Asked rather than told, because a Hosted comes into being in more than
-// one way -- StartAgent, and a test that builds one directly -- and a
-// pool that had to be notified at each of them is a pool with no places
-// in it the day somebody adds a third way.  It is a map lookup per
-// avatar, on a path that is about to go to the grid.
+// Asked on every request rather than only told, because a Hosted comes
+// into being in more than one way -- StartAgent, and a test that builds
+// one directly -- and a pool that had to be notified at each of them is
+// a pool with no places in it the day somebody adds a third way.  It is
+// a map lookup per avatar, on a path that is about to go to the grid.
+// Hosting an avatar tells it as well, so that a request already waiting
+// for that avatar hears of its places.
 func (sp *slotPool) sync() {
 	if sp.srv == nil {
 		return
 	}
+	sp.placing.Lock()
+	defer sp.placing.Unlock()
+	// The old places of an avatar that left, once no grant has them,
+	// are forgotten, and the name can be given new ones.
+	for name, old := range sp.leaving {
+		still, err := sp.pool.Held(old...)
+		switch {
+		case err != nil:
+		case len(still) == 0:
+			delete(sp.leaving, name)
+		default:
+			sp.leaving[name] = still
+		}
+	}
+	// Listed under placing, so that an avatar removed meanwhile is not
+	// given its places back.
 	for _, name := range sp.srv.hosted() {
 		sp.addAgent(name)
 	}
 }
 
-// addAgent puts an avatar's places into the pool.
+// addAgent puts an avatar's places into the pool.  placing is held.
 //
-// Once per avatar: a session that drops and comes back is the same
-// avatar wearing the same things, and the places do not change with it.
-// What changes is whether they can be used, which Present answers.
+// Once while it is hosted: a session that drops and comes back is the
+// same avatar wearing the same things, and whether they can be used is
+// Present's to answer.  A name hosted again after it left is given new
+// places, but not while any of the old ones is still granted, since the
+// two would stand for the same objects.
 func (sp *slotPool) addAgent(name string) {
-	sp.mu.Lock()
-	if sp.added[name] {
-		sp.mu.Unlock()
+	if sp.added[name] != nil || len(sp.leaving[name]) > 0 {
 		return
 	}
-	sp.added[name] = true
-	sp.mu.Unlock()
-
 	list := make([]*slots.Slot, 0, SlotsPerAgent)
 	for i := 0; i < SlotsPerAgent; i++ {
 		// Dirty to begin with: whatever was in these objects when the
@@ -200,7 +228,27 @@ func (sp *slotPool) addAgent(name string) {
 		// running by the last one is exactly what dirty means.
 		list = append(list, &slots.Slot{Data: &where{agent: name, slot: i, dirty: true}})
 	}
+	sp.added[name] = list
 	sp.pool.Add(list...)
+}
+
+// removeAgent takes an avatar's places out of the pool, when it has left
+// the daemon.
+//
+// A place granted at the time stays with its holder until it is given
+// back or runs out, and the pool drops it then.  The holder renews and
+// gives back as ever, and giving back puts nothing in.  Until the last
+// has gone, the name is given no new places; see addAgent.
+func (sp *slotPool) removeAgent(name string) {
+	sp.placing.Lock()
+	defer sp.placing.Unlock()
+	list := sp.added[name]
+	if list == nil {
+		return
+	}
+	delete(sp.added, name)
+	sp.pool.Remove(list...)
+	sp.leaving[name] = append(sp.leaving[name], list...)
 }
 
 // ask answers a client asking for places.
@@ -236,6 +284,14 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 		// Whatever the daemon is holding now, which may be more than it
 		// was holding when this client attached.
 		sp.sync()
+
+		// A named avatar that is not hosted here, or is logged out, has
+		// no places to wait for.
+		why, ended := sp.named(req.GetAgent())
+		if why != "" {
+			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, why))
+			return
+		}
 
 		// More than there could ever be is refused rather than waited
 		// for: waiting for objects that do not exist is waiting for
@@ -276,6 +332,9 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 		// blocking nobody.
 		select {
 		case <-r.Wait:
+		case <-ended:
+			// The avatar named was logged out, thrown off or removed,
+			// and asking again says so.
 		case <-lapsed:
 			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{},
 				fmt.Sprintf("%d objects were still not free after %v", want, wait)))
@@ -286,8 +345,38 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 	}
 }
 
+// named says why a request naming agent is refused at once, or "" when
+// it may wait; and then what closes when that avatar is finished with,
+// so that a request waiting for it is refused at that moment.
+//
+// A name the daemon does not hold has no places, and a logged-out avatar
+// comes back only when somebody hosts it again on purpose, so neither is
+// waited for.  A name that Host is still logging in is: it has no Hosted
+// yet, and so nothing to watch, and arriving wakes the request.
+// Why: doc/slots.md#when-an-avatar-is-logged-out-or-leaves
+func (sp *slotPool) named(agent string) (why string, ended <-chan struct{}) {
+	if agent == "" || sp.srv == nil {
+		return "", nil
+	}
+	h, ok := sp.srv.holding(agent)
+	switch {
+	case !ok:
+		return fmt.Sprintf("no avatar called %q is hosted here", agent), nil
+	case h == nil:
+		return "", nil
+	case h.Stopped():
+		why := fmt.Sprintf("%q is logged out", agent)
+		if down := h.Down(); down != "" && down != "logged out" {
+			why += " (" + down + ")"
+		}
+		return why, nil
+	}
+	return "", h.ended()
+}
+
 // most is how many places there could ever be: one avatar's worth when
-// one was named, and every avatar's otherwise.
+// one was named, and every hosted avatar's otherwise -- a logged-out one
+// included, whose places are passed over until it is hosted again.
 func (sp *slotPool) most(agent string) int {
 	if agent != "" {
 		return SlotsPerAgent
