@@ -159,8 +159,9 @@ func run() error {
 	// nothing whatsoever.  Watched happening -- a script sleeping sixty
 	// seconds, an interrupt, and slrun carried on to the end of it.
 	//
-	// What it does now is stop handing out scripts and cancel the ones
-	// in flight, and then the deferred cleanup gives the objects back.
+	// What it does now is end a wait for somewhere to run, stop handing
+	// out scripts and cancel the ones in flight, and then the deferred
+	// cleanup gives the objects back.
 	// The cleanup does not run on this context: session.RunIn builds a
 	// fresh one to delete a rezzed prim with, saying "the run's may well
 	// be why we are here", which is exactly this.
@@ -354,7 +355,7 @@ func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src s
 				want = n
 			}
 		}
-		r, err := openBackend(flags.Backend, want, n > 1 || flags.Rez)
+		r, err := openBackend(ctx, flags.Backend, want, n > 1 || flags.Rez)
 		if err != nil {
 			return nil, 0, nil, err
 		}

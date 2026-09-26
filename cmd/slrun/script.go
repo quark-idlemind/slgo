@@ -86,12 +86,16 @@ type remote struct {
 // objects to hold, and a backend that grants fewer than were asked for is
 // taken at its word -- the scripts share what there is.
 //
+// ctx is the run's, and an interrupt ends the asking: the health check,
+// and the wait for a lease while every group is busy.  It does not end a
+// lease once granted; see lease.
+//
 // Insecure, and deliberately: the contract carries no credentials and the
 // backends it is for are a simulator or a viewer daemon on this machine
 // or a trusted one.  A backend that wants authentication puts something
 // in front of it; inventing a scheme here would be inventing one nobody
 // else implements.
-func openBackend(addr string, want int, hold bool) (*remote, error) {
+func openBackend(ctx context.Context, addr string, want int, hold bool) (*remote, error) {
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("dialling the backend at %s: %w", addr, err)
@@ -99,9 +103,12 @@ func openBackend(addr string, want int, hold bool) (*remote, error) {
 	r := &remote{c: scriptv1.NewRunnerClient(conn)}
 	r.shut = append(r.shut, func() { conn.Close() })
 
-	h, err := r.c.Health(context.Background(), &scriptv1.HealthRequest{})
+	h, err := r.c.Health(ctx, &scriptv1.HealthRequest{})
 	if err != nil {
 		r.Close()
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("%w while asking the backend what it is", errInterrupted)
+		}
 		return nil, fmt.Errorf("asking the backend what it is: %w", err)
 	}
 	if !h.GetReady() {
@@ -119,7 +126,7 @@ func openBackend(addr string, want int, hold bool) (*remote, error) {
 		r.targets = []string{""}
 		return r, nil
 	}
-	if err := r.lease(want); err != nil {
+	if err := r.lease(ctx, want); err != nil {
 		r.Close()
 		return nil, err
 	}
@@ -129,23 +136,38 @@ func openBackend(addr string, want int, hold bool) (*remote, error) {
 // places is how many scripts can run at once.
 func (r *remote) places() int { return len(r.targets) }
 
-// lease holds n objects until this process ends.
-func (r *remote) lease(n int) error {
+// lease holds n objects until Close.
+//
+// The stream is the lease, and it runs on a context of its own so that
+// the objects go back when Close says and not when ctx ends.  ctx is
+// linked to it only while queued -- an interrupt there gives up the
+// place in the queue -- and the link is cut the moment the grant
+// arrives.
+func (r *remote) lease(ctx context.Context, n int) error {
 	if n < 1 {
 		n = 1
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := r.c.Lease(ctx, &scriptv1.LeaseRequest{
+	held, cancel := context.WithCancel(context.Background())
+	unlink := context.AfterFunc(ctx, cancel)
+	stream, err := r.c.Lease(held, &scriptv1.LeaseRequest{
 		Targets: int32(n), Agent: flags.Agent, Who: "slrun",
 	})
 	if err != nil {
+		unlink()
 		cancel()
+		if ctx.Err() != nil {
+			return fmt.Errorf("%w while waiting for a free group", errInterrupted)
+		}
 		return fmt.Errorf("asking for somewhere to run: %w", err)
 	}
 	for {
 		ev, err := stream.Recv()
 		if err != nil {
+			unlink()
 			cancel()
+			if ctx.Err() != nil {
+				return fmt.Errorf("%w while waiting for a free group", errInterrupted)
+			}
 			return fmt.Errorf("waiting for somewhere to run: %w", err)
 		}
 		if q := ev.GetQueued(); q != nil {
@@ -157,6 +179,12 @@ func (r *remote) lease(n int) error {
 		g := ev.GetGranted()
 		if g == nil {
 			continue
+		}
+		// Held from here until Close.  A false from unlink is an interrupt
+		// that came with the grant and has already begun giving it back.
+		if !unlink() {
+			cancel()
+			return fmt.Errorf("%w while waiting for a free group", errInterrupted)
 		}
 		if len(g.GetTargets()) == 0 {
 			cancel()

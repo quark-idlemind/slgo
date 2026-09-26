@@ -15,9 +15,12 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -75,6 +78,60 @@ func heldGroups(t *testing.T, c scriptv1.RunnerClient) int {
 		}
 	}
 	return n
+}
+
+// holdTheGroup takes the backend's one group, as another caller would,
+// so that slrun has to queue, and answers with how to give it back.
+func holdTheGroup(t *testing.T, c scriptv1.RunnerClient) (release func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	stream, err := c.Lease(ctx, &scriptv1.LeaseRequest{Who: "somebody else"})
+	if err != nil {
+		t.Fatalf("taking the group first: %v", err)
+	}
+	if ev, err := stream.Recv(); err != nil || ev.GetGranted() == nil {
+		t.Fatalf("taking the group first: %v, %v", ev, err)
+	}
+	return cancel
+}
+
+// waiting is how many callers the backend has queued, or -1 when it
+// will not say.
+func waiting(c scriptv1.RunnerClient) int {
+	p, err := c.Pool(context.Background(), &scriptv1.PoolRequest{})
+	if err != nil {
+		return -1
+	}
+	return int(p.GetWaiting())
+}
+
+// until waits a couple of seconds for something the backend does after
+// the caller has gone, such as taking it out of the queue.
+func until(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
+		if ok() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("%s did not happen within 2s", what)
+}
+
+// letGoAfter gives the group back if the run is still going after d, so
+// that a run which does not stop fails the test rather than hanging it.
+// Close the answer when the run is over.
+func letGoAfter(d time.Duration, release func()) chan struct{} {
+	over := make(chan struct{})
+	go func() {
+		select {
+		case <-over:
+		case <-time.After(d):
+			release()
+		}
+	}()
+	return over
 }
 
 // TestABackendPrintsWhatTheScriptSaidAndNotTheSentinel: the contract
@@ -363,4 +420,98 @@ func TestScriptsThroughABackendRunAtOnceAndInDifferentObjects(t *testing.T) {
 			t.Errorf("%s said nothing:\n%s", src.path, got)
 		}
 	}
+}
+
+// TestAnInterruptWhileQueuedGivesUpThePlace: ^C while every group is
+// busy.  The wait for a lease ran on a context of its own, so the
+// interrupt reached nothing and slrun stayed queued until the group came
+// free.  SIGTERM ends the same context, so it is the same case.
+//
+// The harness is TestInterruptingARunSaysSoOnceAndFails's, a real SIGINT
+// to this process, raised once the backend says slrun is queued -- the
+// moment it is certainly listening for one.  A run that did not hear it
+// is given the group after a few seconds, so that it fails rather than
+// hangs.
+func TestAnInterruptWhileQueuedGivesUpThePlace(t *testing.T) {
+	reset(t)
+	addr, c := backendAt(t)
+	release := holdTheGroup(t, c)
+	commandLine(t, "--backend", addr, script(t, speaks), script(t, speaks))
+
+	// A second handler, so that a signal arriving after run has put the
+	// default back is not the end of the test binary.
+	stray := make(chan os.Signal, 1)
+	signal.Notify(stray, syscall.SIGINT)
+	defer signal.Stop(stray)
+
+	over := letGoAfter(5*time.Second, release)
+	sent := make(chan time.Time, 1)
+	go func() {
+		for waiting(c) < 1 {
+			select {
+			case <-over:
+				return
+			case <-time.After(time.Millisecond):
+			}
+		}
+		sent <- time.Now()
+		syscall.Kill(os.Getpid(), syscall.SIGINT)
+	}()
+
+	var err error
+	out, errOut := bothOf(t, func() { err = run() })
+	ended := time.Now()
+	close(over)
+
+	var at time.Time
+	select {
+	case at = <-sent:
+	default:
+		t.Fatalf("run ended before it was queued: %v\n%s", err, errOut)
+	}
+	if took := ended.Sub(at); took > 2*time.Second {
+		t.Errorf("slrun went on for %v after the interrupt", took)
+	}
+	if !errors.Is(err, errInterrupted) {
+		t.Errorf("run = %v, want errInterrupted", err)
+	}
+	if out != "" {
+		t.Errorf("a run interrupted before it had anywhere to run printed:\n%s", out)
+	}
+	if strings.Contains(errOut, "context canceled") {
+		t.Errorf("the cancellation was reported as an error:\n%s", errOut)
+	}
+
+	// The place is gone: the queue empties, and the group given back is
+	// then held by nobody.  A waiter left in the queue would be handed it.
+	until(t, "the queue emptying", func() bool { return waiting(c) == 0 })
+	release()
+	until(t, "the group coming free", func() bool { return heldGroups(t, c) == 0 })
+}
+
+// TestAGrantedLeaseIsHeldUntilCloseAndNotUntilTheInterrupt: the run's
+// context is linked to the lease only while queued.  Once granted, the
+// objects go back when Close says, and not when the context ends.
+func TestAGrantedLeaseIsHeldUntilCloseAndNotUntilTheInterrupt(t *testing.T) {
+	reset(t)
+	addr, c := backendAt(t)
+	flags.Backend = addr
+
+	ctx, cancel := context.WithCancel(context.Background())
+	_, _, done, err := somewhereToRun(ctx, 2)
+	if err != nil {
+		cancel()
+		t.Fatalf("somewhere to run: %v", err)
+	}
+	cancel()
+	// Longer than a lease on ctx would take to go back.
+	for deadline := time.Now().Add(200 * time.Millisecond); time.Now().Before(deadline); {
+		if n := heldGroups(t, c); n != 1 {
+			done()
+			t.Fatalf("%d groups held once the context ended, want the lease until Close", n)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	done()
+	until(t, "the group coming free", func() bool { return heldGroups(t, c) == 0 })
 }
