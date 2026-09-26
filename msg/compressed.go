@@ -21,7 +21,9 @@ import (
 // prim never showed up in the ObjectUpdate that had been captured for
 // it.
 
-// Flags in the compressed blob, from the viewer's llviewerobject.h.
+// Flags in the compressed blob, as the viewer tests them in
+// LLViewerObject::processUpdateMessage, where they are bare numbers
+// (llviewerobject.cpp:1823-1955).
 const (
 	compScratchpad      = 0x01
 	compTree            = 0x02
@@ -37,9 +39,11 @@ const (
 
 // Compressed is one object out of an ObjectUpdateCompressed.
 //
-// The fields that are only there when a flag says so are pointers or
-// slices, so "absent" and "zero" are different: an object with no text
-// is not an object whose text is empty.
+// Most of the fields that are only there when a flag says so are
+// pointers or slices, so "absent" and "zero" are different: an object
+// with no parent is not one whose parent is local id 0.  Text, MediaURL
+// and NameValues are strings, empty when absent; Flags says which were
+// sent.
 type Compressed struct {
 	FullID   UUID
 	LocalID  uint32
@@ -207,9 +211,9 @@ func DecodeCompressed(b []byte) (*Compressed, error) {
 	// Reading it in the familiar order costs a byte's alignment on
 	// everything from PathBegin on, and the result still looks like a
 	// prim: a plain box came back as a cylinder with a skew, which is
-	// how this was found.  So the fields are listed one to a line and
-	// in the order the bytes arrive, rather than in the order the
-	// struct happens to declare them.
+	// how this was found.  So the fields are read in the order the
+	// bytes arrive, rather than in the order the struct happens to
+	// declare them.
 	c.Shape.PathCurve = r.u8()
 	c.Shape.PathBegin, c.Shape.PathEnd = r.u16(), r.u16()
 	c.Shape.PathScaleX, c.Shape.PathScaleY = r.u8(), r.u8()

@@ -369,7 +369,9 @@ func encodeField(w *buf, v reflect.Value, f *fieldPlan) error {
 //
 // Any other short read is an error.  A message that is not zerocoded
 // has no zeros to have lost, so running off its end is a real fault,
-// and one worth seeing: it is what a wrong template looks like.
+// and one worth seeing: it is what a wrong template looks like.  Which
+// messages are zerocoded is the template's Zerocoded, not the flag on
+// the packet a message came in.
 func Unmarshal(b []byte, m Message) error {
 	_, err := unmarshal(b, m)
 	return err

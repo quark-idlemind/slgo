@@ -14,8 +14,8 @@ type Handler func(*Packet)
 // handler, and does the acknowledgement bookkeeping in between.
 //
 // Handlers run in their own goroutine, throttled by a counting
-// semaphore: at most Concurrency of them are in flight, and the
-// dispatch loop blocks rather than spawning past that.  A stall
+// semaphore: at most the number given to WithConcurrency are in flight,
+// and the dispatch loop blocks rather than spawning past that.  A stall
 // therefore backs up into the receive channel and then into the kernel,
 // which is honest for UDP -- bounded concurrency does not remove
 // backpressure, it just stops the goroutine count being the thing that
@@ -23,8 +23,8 @@ type Handler func(*Packet)
 //
 // Since handlers run concurrently, arrival order is not preserved.
 // That is usually fine and sometimes not: TransferInfo carries the size
-// that TransferPacket assembles against, and RegionHandshake, the
-// teleport sequence and inventory descent are all order sensitive.
+// that TransferPacket assembles against, and RegionHandshake and the
+// teleport sequence are order sensitive.
 // Register those with Inline and they run on the dispatch goroutine, in
 // order, at the cost of blocking it.
 type Dispatcher struct {
@@ -293,8 +293,9 @@ func (d *Dispatcher) one(ctx context.Context, p *Packet) {
 		d.tap(p)
 	}
 
-	// Acknowledgement bookkeeping comes first and happens for every
-	// packet, including duplicates and ones that failed to decode.
+	// Acknowledgement bookkeeping comes before routing and happens for
+	// every packet the gate lets through, including duplicates and ones
+	// that failed to decode.
 	// A duplicate arrived precisely because our previous
 	// acknowledgement did not get through, so it needs another.
 	consumed := false

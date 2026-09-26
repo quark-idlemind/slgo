@@ -93,8 +93,8 @@ func u16f(b []byte, lo, hi float32) float32 {
 //
 // This is the message the simulator sends most: everything that is
 // moving, several times a second.  It carries no identity beyond the
-// local id and no appearance at all -- only where something is and
-// where it is going, quantised to sixteen bits over the region.
+// local id and no appearance at all -- only where something is, in
+// floats, and where it is going, in sixteen bit fractions of a range.
 type Terse struct {
 	LocalID uint32
 	State   uint8

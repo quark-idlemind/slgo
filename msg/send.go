@@ -8,8 +8,10 @@ import (
 	"time"
 )
 
-// MaxDatagram is the largest packet we will build.  Acknowledgements
-// are only attached to an outgoing packet while it stays under this.
+// MaxDatagram is the size acknowledgements keep an outgoing packet
+// under: they are attached to it only while it stays within this.  A
+// message with no room left under it, or already over it, goes out as
+// it stands with none.
 const MaxDatagram = 1200
 
 // maxAcksPerPacket is the limit of the one byte count, both on the tail
@@ -45,9 +47,9 @@ type SendStats struct {
 // Acknowledgements travel on their own channel so they never queue
 // behind a large message.  When a message goes out, whatever
 // acknowledgements have accumulated ride along on its tail; if none
-// goes out before AckDelay expires they are flushed as a batched
-// PacketAck.  That is the whole reason for the split: acks want to be
-// cheap and prompt, and messages want to be ordered.
+// goes out before the ack delay (WithAckDelay) expires they are flushed
+// as a batched PacketAck.  That is the whole reason for the split: acks
+// want to be cheap and prompt, and messages want to be ordered.
 type Sender struct {
 	conn PacketWriter
 	tap  Handler
@@ -111,7 +113,6 @@ func WithRetransmit(rto time.Duration, tries int) SenderOption {
 	return func(s *Sender) { s.rto, s.maxTries = rto, tries }
 }
 
-// WithSendBuffer sets the outbound channel capacity.  Default 128.
 // WithSendTap calls fn for every message this sender puts on the wire
 // for the first time, with the header it went out under, so a caller can
 // record the sequence number it was given.
@@ -130,6 +131,7 @@ func WithSendTap(fn Handler) SenderOption {
 	return func(s *Sender) { s.tap = fn }
 }
 
+// WithSendBuffer sets the outbound channel capacity.  Default 128.
 func WithSendBuffer(n int) SenderOption {
 	return func(s *Sender) { s.out = make(chan *outbound, n) }
 }
