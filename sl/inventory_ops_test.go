@@ -734,7 +734,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 	t.Run("some bits on and the rest off", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		answerMasks(t, f, thePrim, 0, granted)
-		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoNextOwner, PermCopy); err != nil {
+		if _, err := w.SetObjectPermissions(context.Background(), prim(w), WhoNextOwner, PermCopy); err != nil {
 			t.Fatalf("SetObjectPermissions: %v", err)
 		}
 		got := sentOf[*msg.ObjectPermissions](f)
@@ -757,7 +757,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 	t.Run("everything on leaves nothing to clear", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		answerMasks(t, f, thePrim, 0, granted)
-		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoOwner, PermAll); err != nil {
+		if _, err := w.SetObjectPermissions(context.Background(), prim(w), WhoOwner, PermAll); err != nil {
 			t.Fatalf("SetObjectPermissions: %v", err)
 		}
 		if got := sentOf[*msg.ObjectPermissions](f); len(got) != 1 {
@@ -768,7 +768,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 	t.Run("everything off leaves nothing to set", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		answerMasks(t, f, thePrim, 0, granted)
-		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoEveryone, 0); err != nil {
+		if _, err := w.SetObjectPermissions(context.Background(), prim(w), WhoEveryone, 0); err != nil {
 			t.Fatalf("SetObjectPermissions: %v", err)
 		}
 		got := sentOf[*msg.ObjectPermissions](f)
@@ -780,7 +780,7 @@ func TestPermissionsTakeTwoMessagesBecauseTheProtocolCannotAssign(t *testing.T) 
 	t.Run("the first message never went", func(t *testing.T) {
 		w, f := newFakeSession(t)
 		f.FailSends(errors.New("the circuit is gone"))
-		if err := w.SetObjectPermissions(context.Background(), prim(w), WhoOwner, PermCopy); err == nil {
+		if _, err := w.SetObjectPermissions(context.Background(), prim(w), WhoOwner, PermCopy); err == nil {
 			t.Error("SetObjectPermissions reported permissions it never sent")
 		}
 	})
@@ -832,6 +832,21 @@ func answerMasks(t *testing.T, f *fakeBackend, id msg.UUID, stale int, grant fun
 // granted is a simulator that grants whatever it is asked.
 func granted(_ uint8, mask uint32) uint32 { return mask }
 
+// byTheRules is a simulator that applies the viewer's permission rules
+// to an object whose base and owner masks are full: everyone is never
+// given modify, and a next owner without copy is given transfer.
+func byTheRules(who uint8, mask uint32) uint32 {
+	switch who {
+	case WhoEveryone:
+		mask &^= PermModify
+	case WhoNextOwner:
+		if mask&PermCopy == 0 {
+			mask |= PermTransfer
+		}
+	}
+	return mask
+}
+
 // TestPermissionsAreReadBackUntilTheyHold: nothing answers
 // ObjectPermissions, and a read straight after a write can overtake it
 // -- measured for descriptions -- so a mask that still reads as it was
@@ -842,7 +857,7 @@ func TestPermissionsAreReadBackUntilTheyHold(t *testing.T) {
 	answerMasks(t, f, thePrim, 1, granted)
 
 	o := foundHere(w, &Object{ID: thePrim, Local: 77})
-	if err := w.SetObjectPermissions(context.Background(), o, WhoEveryone, PermCopy); err != nil {
+	if _, err := w.SetObjectPermissions(context.Background(), o, WhoEveryone, PermCopy); err != nil {
 		t.Fatalf("SetObjectPermissions: %v", err)
 	}
 	if n := len(sentOf[*msg.ObjectSelect](f)); n != 2 {
@@ -850,23 +865,55 @@ func TestPermissionsAreReadBackUntilTheyHold(t *testing.T) {
 	}
 }
 
-// TestPermissionsTheRegionDoesNotGrantAreNotReported: the permission
-// rules narrow what they will not grant -- modify for everyone is never
-// granted -- and a mask that never reads as asked is an error that says
-// what it allows, not a report of what was asked for.
-func TestPermissionsTheRegionDoesNotGrantAreNotReported(t *testing.T) {
+// TestPermissionsTheRulesAdjustAreConfirmedAsAdjusted: the permission
+// rules adjust a request rather than refuse it, so a mask that reads as
+// the rules make what was sent has landed, and what it now allows is
+// what is handed back -- a next owner asked to modify may transfer too.
+func TestPermissionsTheRulesAdjustAreConfirmedAsAdjusted(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name       string
+		who        uint8
+		asked, now uint32
+	}{
+		{"a next owner without copy", WhoNextOwner, PermModify, PermModify | PermTransfer},
+		{"everyone asked to modify", WhoEveryone, PermCopy | PermModify, PermCopy},
+		{"a group given what was asked", WhoGroup, PermCopy | PermMove, PermCopy | PermMove},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			answerMasks(t, f, thePrim, 0, byTheRules)
+
+			o := foundHere(w, &Object{ID: thePrim, Local: 77})
+			got, err := w.SetObjectPermissions(context.Background(), o, c.who, c.asked)
+			if err != nil {
+				t.Fatalf("SetObjectPermissions: %v", err)
+			}
+			if got != c.now {
+				t.Errorf("SetObjectPermissions = %s, want %s", PermWords(got), PermWords(c.now))
+			}
+		})
+	}
+}
+
+// TestPermissionsTheRulesDoNotExplainAreNotReported: a mask that never
+// reads as the rules make what was sent -- changed some other way, or
+// not changed at all -- is an error that says what it allows, not a
+// report of what was asked for.
+func TestPermissionsTheRulesDoNotExplainAreNotReported(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
 		name   string
 		grant  func(uint8, uint32) uint32
 		allows string
 	}{
-		{"narrowed", func(who uint8, mask uint32) uint32 {
-			if who == WhoEveryone {
-				mask &^= PermModify
+		{"narrowed otherwise", func(who uint8, mask uint32) uint32 {
+			if who == WhoGroup {
+				mask &^= PermCopy
 			}
 			return mask
-		}, "it allows copy"},
+		}, "it allows modify"},
 		{"ignored", nil, "it allows nothing"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -875,14 +922,48 @@ func TestPermissionsTheRegionDoesNotGrantAreNotReported(t *testing.T) {
 			answerMasks(t, f, thePrim, 0, c.grant)
 
 			o := foundHere(w, &Object{ID: thePrim, Local: 77})
-			err := w.SetObjectPermissions(context.Background(), o, WhoEveryone, PermCopy|PermModify)
+			_, err := w.SetObjectPermissions(context.Background(), o, WhoGroup, PermCopy|PermModify)
 			if !errors.Is(err, ErrTimeout) {
 				t.Fatalf("SetObjectPermissions = %v, want a timeout", err)
 			}
-			if !strings.Contains(err.Error(), c.allows) || !strings.Contains(err.Error(), "copy, modify") {
-				t.Errorf("SetObjectPermissions = %v, want what was asked for and %q", err, c.allows)
+			if !strings.Contains(err.Error(), c.allows) || !strings.Contains(err.Error(), "make what was sent copy, modify") {
+				t.Errorf("SetObjectPermissions = %v, want what the rules make of it and %q", err, c.allows)
 			}
 		})
+	}
+}
+
+// TestTheExpectedMaskIsTheViewersRules: what the rules make of a mask
+// sent, from the viewer's llpermissions.cpp, and the two bits the source
+// leaves unsettled going uncompared.
+func TestTheExpectedMaskIsTheViewersRules(t *testing.T) {
+	const noTransfer = PermCopy | PermModify | PermMove
+	for _, c := range []struct {
+		name        string
+		who         uint8
+		sent        uint32
+		base, owner uint32
+		want        uint32
+		uncompared  uint32
+	}{
+		{"an owner within the base", WhoOwner, PermAll, noTransfer, PermAll, noTransfer, 0},
+		{"a group within the owner", WhoGroup, PermCopy | PermModify, PermAll, PermCopy, PermCopy, 0},
+		{"everyone never modifies", WhoEveryone, PermAll, PermAll, PermAll, PermAll &^ PermModify, 0},
+		{"everyone's copy with no transfer in the base", WhoEveryone, PermCopy, noTransfer, noTransfer, 0, PermCopy},
+		{"a group's copy with no transfer in the base", WhoGroup, PermCopy | PermMove, noTransfer, noTransfer, PermMove, PermCopy},
+		{"a next owner who may copy", WhoNextOwner, PermCopy, PermAll, PermAll, PermCopy, PermMove},
+		{"a next owner who may not copy transfers", WhoNextOwner, PermModify, PermAll, PermAll, PermModify | PermTransfer, PermMove},
+		{"a next owner given nothing transfers", WhoNextOwner, 0, PermAll, PermAll, PermTransfer, PermMove},
+		{"a next owner within the base", WhoNextOwner, PermModify, noTransfer, noTransfer, PermModify, PermMove},
+		{"a next owner left with nothing", WhoNextOwner, PermModify, PermMove, PermMove, 0, 0},
+		{"a base as sent", WhoBase, PermCopy, PermAll, PermAll, PermCopy, 0},
+	} {
+		p := &Properties{BaseMask: c.base, OwnerMask: c.owner}
+		want, compared := expectMask(c.who, c.sent, p)
+		if want != c.want || compared != PermAll&^c.uncompared {
+			t.Errorf("%s: expected %s comparing %s, want %s comparing %s", c.name,
+				PermWords(want), PermWords(compared), PermWords(c.want), PermWords(PermAll&^c.uncompared))
+		}
 	}
 }
 
@@ -904,7 +985,8 @@ func TestPermissionsStopWhenTheCallerGivesUp(t *testing.T) {
 
 	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	_, err := whenCancelled(t, ctx, func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, w.SetObjectPermissions(ctx, o, WhoEveryone, PermCopy)
+		_, err := w.SetObjectPermissions(ctx, o, WhoEveryone, PermCopy)
+		return struct{}{}, err
 	})
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("SetObjectPermissions = %v, want the caller's cancel", err)
@@ -916,7 +998,7 @@ func TestPermissionsStopWhenTheCallerGivesUp(t *testing.T) {
 func TestPermissionsForNobodyAreRefused(t *testing.T) {
 	w, f := newFakeSession(t)
 	o := foundHere(w, &Object{ID: thePrim, Local: 77})
-	if err := w.SetObjectPermissions(context.Background(), o, WhoOwner|WhoGroup, PermCopy); err == nil {
+	if _, err := w.SetObjectPermissions(context.Background(), o, WhoOwner|WhoGroup, PermCopy); err == nil {
 		t.Error("SetObjectPermissions took two masks at once")
 	}
 	if got := f.Sent(); len(got) != 0 {

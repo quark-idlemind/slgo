@@ -65,31 +65,58 @@ func TestPermMaskRefusesNonsense(t *testing.T) {
 	}
 }
 
-// TestPermsSaysOnlyWhatTheRegionConfirmed.
+// TestPermsSaysWhatTheMaskNowAllows.
 //
-// Nothing answers a permission change, so perms reads the masks back
-// and prints a line for each one that reads as asked.  The permission
-// rules never give everyone modify, so that request comes back as an
-// error saying what everyone may do, and no line claims otherwise.
-func TestPermsSaysOnlyWhatTheRegionConfirmed(t *testing.T) {
-	t.Parallel()
+// Nothing answers a permission change, so perms reads the mask back and
+// prints what it now allows.  The permission rules adjust a request
+// rather than refuse it -- a next owner who may not copy may always
+// transfer, and everyone is never given modify -- so that is what is
+// printed, and not the letters that were typed.
+func TestPermsSaysWhatTheMaskNowAllows(t *testing.T) {
 	x := newTestShell(t)
 	standing(x, aPrim(aChair, 11, "lantern", 0))
 	x.grid.AnswerPermissions(t, func(who uint8, mask uint32) uint32 {
-		if who == sl.WhoEveryone {
+		switch who {
+		case sl.WhoEveryone:
 			mask &^= sl.PermModify
+		case sl.WhoNextOwner:
+			if mask&sl.PermCopy == 0 {
+				mask |= sl.PermTransfer
+			}
 		}
 		return mask
 	})
 
-	got := x.do(t, "perms --group cm --everyone cm lantern")
-	if !strings.Contains(got, "the group may now copy, modify") {
+	if got := x.do(t, "perms --next m lantern"); got != "the next owner may now modify, transfer\n" {
+		t.Errorf("perms --next m printed %q", got)
+	}
+	if got := x.do(t, "perms --everyone cm lantern"); got != "everyone may now copy\n" {
+		t.Errorf("perms --everyone cm printed %q", got)
+	}
+}
+
+// TestPermsSaysWhenAChangeDidNotLand: a mask that never reads as the
+// rules make what was sent is an error saying what it allows, and no
+// line claims otherwise.  What was confirmed before it is still said.
+func TestPermsSaysWhenAChangeDidNotLand(t *testing.T) {
+	t.Parallel()
+	x := newTestShell(t)
+	standing(x, aPrim(aChair, 11, "lantern", 0))
+	x.grid.AnswerPermissions(t, func(who uint8, mask uint32) uint32 {
+		if who == sl.WhoGroup {
+			mask &^= sl.PermCopy
+		}
+		return mask
+	})
+
+	got := x.do(t, "perms --owner all --group cm lantern")
+	if !strings.Contains(got, "the owner may now copy, modify, transfer, move") {
 		t.Errorf("perms did not say what it confirmed:\n%s", got)
 	}
-	if strings.Contains(got, "everyone may now") {
-		t.Errorf("perms claimed a change the region did not make:\n%s", got)
+	if strings.Contains(got, "the group may now") {
+		t.Errorf("perms claimed a change that did not land:\n%s", got)
 	}
-	if !strings.Contains(got, "it allows copy") {
-		t.Errorf("perms did not say what everyone may do instead:\n%s", got)
+	if !strings.Contains(got, "it allows modify") {
+		t.Errorf("perms did not say what the group may do instead:\n%s", got)
 	}
 }

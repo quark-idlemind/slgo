@@ -76,8 +76,10 @@ show over AIS has not been measured; fifteen seconds is the bound
 
 Nothing answers `ObjectPermissions`. The masks come back in
 `ObjectProperties`, which the region sends for a selected object, so
-`SetObjectPermissions` selects the object and reads its properties
-until the mask it set reads as sent, for up to fifteen seconds.
+`SetObjectPermissions` selects the object and reads its properties, for
+up to fifteen seconds, until the mask it set reads as the permission
+rules make what was sent. It returns what the mask then allows, and
+`slsh perms` prints that.
 
 It reads more than once because a read straight after a write can
 overtake it. That was measured for descriptions: building one prim and
@@ -85,18 +87,47 @@ reading its properties at once reported an empty description (see
 `SetDescription` in `sl/build.go`). It has not been seen for
 permissions, and is inferred to be possible for the same reason.
 
-A mask may never read as sent, because the permission rules narrow a
-request rather than refuse it. The viewer's copy of the rules
-(`llinventory/llpermissions.cpp`, `LLPermissions::fix`, `:155-173`)
-keeps the owner's mask within the base, the group's and everyone's
-within the owner's, and the next owner's within the base; never gives
-everyone modify; and, where the base has no transfer, gives neither the
-group nor everyone copy. Setting the next owner's mask
-(`setNextOwnerBits`, `:446-475`) turns transfer on whenever copy is
-off. The simulator's own code is not public, and that it applies the
-same rules is inferred. A request they narrow is reported as an error
-saying what the mask allows, not as done, and `slsh perms` prints a
-line only for a mask that read back as asked.
+What it waits for is not what was sent, because the permission rules
+adjust a request rather than refuse it, and an adjusted mask is a
+change that landed. The rules used are the viewer's copy of them, in
+`llinventory/llpermissions.cpp`, and `expectMask` (`sl/inventory_ops.go`)
+applies them to the bits sent and the object's masks as read:
+
+- `fix` (`:155-173`) keeps the owner's mask within the base, the
+  group's and everyone's within the owner's, and the next owner's
+  within the base; never gives everyone modify; and, where the base has
+  no transfer and the object is not group-owned, takes copy from the
+  group and everyone.
+- `setNextOwnerBits` (`:446-475`) gives transfer to a next owner who
+  may not copy, before `fix`.
+- `setBaseBits` (`:328-351`) lets only the system change a base mask,
+  so a base mask is expected as sent, and a change to one does not land.
+
+So `perms --next m` is confirmed when the next owner may modify and
+transfer, and prints that; `perms --everyone cm` is confirmed when
+everyone may copy.
+
+Two bits the source does not settle are left out of the comparison,
+and the mask read back is returned whatever they are:
+
+- Copy for the group and everyone, when the base has no transfer. `fix`
+  takes it unless the object is group-owned, and whether an object is
+  group-owned is not something `ObjectProperties` says plainly: the
+  viewer infers it from a null owner (`fixOwnership`, `:192-202`), and
+  what a group-owned object's properties carry as its owner has not
+  been looked at here.
+- Move for a next owner who is given anything. `fixFairUse`
+  (`:178-190`) adds it to a next-owner mask that is not empty, and the
+  viewer applies that to every set of masks it reads
+  (`initMasks`, `:68-79`); where the simulator applies it the source
+  does not show.
+
+That the simulator applies these rules to an object's masks is
+inferred: its code is not public, and the viewer itself calls these
+setters only for inventory items (`newview/llfloaterproperties.cpp:788-821`,
+`newview/llsidepaneliteminfo.cpp:1058-1084`). A mask that never reads as they make what was
+sent is an error saying what it allows, wrapping `sl.ErrTimeout`, and
+`slsh perms` prints no line for it.
 
 ## Deletes
 

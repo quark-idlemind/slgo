@@ -270,10 +270,13 @@ func cmdPerms(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		if err != nil {
 			return fmt.Errorf("%s: %w", s.flag, err)
 		}
-		if err := sh.s.SetObjectPermissions(ctx, obj, s.who, mask); err != nil {
+		// What the mask was read back as, which the permission rules
+		// may have adjusted from what was typed.
+		got, err := sh.s.SetObjectPermissions(ctx, obj, s.who, mask)
+		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "%s may now %s\n", s.named, sl.PermWords(mask))
+		fmt.Fprintf(out, "%s may now %s\n", s.named, sl.PermWords(got))
 	}
 	return nil
 }

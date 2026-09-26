@@ -197,7 +197,8 @@ var sendsLocal = []struct {
 		return w.RenameInObject(ctx, a, TaskItem{ID: theOther, Name: "a note", SaleType: "not"}, "a letter", time.Minute)
 	}},
 	{"SetObjectPermissions", func(ctx context.Context, w *Session, a, _ *Object) error {
-		return w.SetObjectPermissions(ctx, a, WhoEveryone, PermCopy)
+		_, err := w.SetObjectPermissions(ctx, a, WhoEveryone, PermCopy)
+		return err
 	}},
 	{"SetShape", func(ctx context.Context, w *Session, a, _ *Object) error {
 		return w.SetShape(ctx, a, Shape{Type: "box"})

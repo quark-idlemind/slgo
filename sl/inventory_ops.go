@@ -376,29 +376,32 @@ func (w *Session) SetItem(ctx context.Context, item msg.UUID, name, desc string,
 }
 
 // SetObjectPermissions sets one who-mask on a rezzed object to an exact
-// value, and returns once the object's properties say it holds.
+// value, and returns what the mask allows once the object's properties
+// say the change has landed.
 //
 // It takes two messages, because the protocol turns bits on or off and
 // does not assign: sending only the "on" half leaves a bit the caller
 // cleared still set.  Only the bits in PermAll are set or compared.
 //
 // Nothing answers either message, so the object's properties are read
-// until the mask holds what was sent, for up to fifteen seconds.  A mask
-// that never reads as asked is an error wrapping ErrTimeout that says
-// what it allows instead, which is what a request the permission rules
-// narrow comes back as: the viewer's copy of them grants nothing beyond
-// the base mask, and never modify to everyone.
+// for up to fifteen seconds until the mask is what the permission rules
+// make of what was sent.  The rules adjust rather than refuse -- a next
+// owner who may not copy may always transfer, and everyone is never
+// given modify -- so what is returned may differ from what was asked
+// for, and is what the mask now allows.  A mask that never reads as the
+// rules would make it is an error wrapping ErrTimeout that says what it
+// allows instead.
 // Why: doc/readbacks.md#object-permissions
-func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8, mask uint32) error {
+func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8, mask uint32) (uint32, error) {
 	field, ok := whoMasks[who]
 	if !ok {
-		return fmt.Errorf("sl: %#x names no permission mask", who)
+		return 0, fmt.Errorf("sl: %#x names no permission mask", who)
 	}
 	on := mask & PermAll
 	off := PermAll &^ on
 	local, err := w.local(ctx, o)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	send := func(set uint8, bits uint32) error {
@@ -414,29 +417,80 @@ func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8
 		return w.Send(ctx, m)
 	}
 	if err := send(1, on); err != nil {
-		return err
+		return 0, err
 	}
 	if err := send(0, off); err != nil {
-		return err
+		return 0, err
 	}
 
 	// Read until it holds: a single read can overtake the write.
-	var reads uint32
+	var got, want uint32
 	var read bool
 	err = poll(ctx, 15*time.Second, time.Second,
-		fmt.Sprintf("the %s mask of %s to allow %s", field.name, o, PermWords(on)),
+		fmt.Sprintf("the %s mask of %s to take %s", field.name, o, PermWords(on)),
 		func(ctx context.Context) (bool, error) {
 			p, err := w.Properties(ctx, o, 5*time.Second)
 			if err != nil {
 				return false, err
 			}
-			reads, read = field.of(p)&PermAll, true
-			return reads == on, nil
+			var compared uint32
+			want, compared = expectMask(who, on, p)
+			got, read = field.of(p)&PermAll, true
+			return got&compared == want, nil
 		})
-	if read && errors.Is(err, ErrTimeout) {
-		return fmt.Errorf("%w; it allows %s", err, PermWords(reads))
+	if err != nil {
+		if read && errors.Is(err, ErrTimeout) {
+			return 0, fmt.Errorf("%w; it allows %s, and the permission rules make what was sent %s",
+				err, PermWords(got), PermWords(want))
+		}
+		return 0, err
 	}
-	return err
+	return got, nil
+}
+
+// expectMask is what the permission rules make of the bits sent for
+// who, given the object's masks as they read now, and which of PermAll's
+// bits the rules settle; only those are compared.
+//
+// The rules are the viewer's copy of them, llinventory/llpermissions.cpp:
+// fix (:155-173) keeps the owner's mask within the base, the group's and
+// everyone's within the owner's and the next owner's within the base,
+// never gives everyone modify, and takes copy from the group and
+// everyone when the base has no transfer; setNextOwnerBits (:446-475)
+// gives transfer to a next owner without copy; and setBaseBits
+// (:328-351) lets only the system change a base mask, so one is expected
+// as sent.  Two bits the source does not settle are not compared: copy
+// for the group and everyone when the base has no transfer, since fix
+// leaves it to a group-owned object and ObjectProperties does not say
+// plainly whether this is one; and move for a next owner, which
+// fixFairUse (:178-190) adds to one that is not empty, at points the
+// source does not show being the simulator's.
+// Why: doc/readbacks.md#object-permissions
+func expectMask(who uint8, sent uint32, p *Properties) (want, compared uint32) {
+	base, owner := p.BaseMask&PermAll, p.OwnerMask&PermAll
+	want, compared = sent&PermAll, uint32(PermAll)
+	switch who {
+	case WhoOwner:
+		want &= base
+	case WhoGroup, WhoEveryone:
+		want &= owner
+		if who == WhoEveryone {
+			want &^= PermModify
+		}
+		if base&PermTransfer == 0 {
+			compared &^= PermCopy
+		}
+	case WhoNextOwner:
+		want &= base
+		if want&PermCopy == 0 {
+			want |= PermTransfer
+		}
+		want &= base
+		if want != 0 {
+			compared &^= PermMove
+		}
+	}
+	return want & compared, compared
 }
 
 // RezFromInventory puts an inventory object into the world at a given

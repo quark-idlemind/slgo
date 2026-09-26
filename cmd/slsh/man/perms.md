@@ -62,17 +62,18 @@ something that could be copied has taken copying away.
 ## What is printed was read back
 
 Nothing answers a permission change, so after each one the object's
-masks are read back, for up to fifteen seconds, and the line is
-printed only once the mask reads as asked.  One that never does is an
-error saying what the mask allows instead, and the lines printed
-before it are the changes that were made.
+masks are read back, for up to fifteen seconds, and the line printed
+is what the mask then allows.  That need not be the letters typed.
+The permission rules adjust a request rather than refuse it, and in
+the viewer's copy of them nobody is given more than the base allows,
+everyone is never given modify, and a next owner who may not copy may
+always transfer.  So `perms --next m lantern` prints
 
-That is also what a request the permission rules narrow comes back
-as, since they narrow rather than refuse.  In the viewer's copy of the
-rules nobody is given more than the base allows, everyone is never
-given modify, and a next owner who may not copy may always transfer --
-so by those rules `perms --next m` comes back as an error saying the
-next owner may transfer as well.
+    the next owner may now modify, transfer
+
+A mask that never reads as those rules make the request is an error
+saying what it allows instead, and no line is printed for it; the
+lines printed before it are the changes that were made.
 
 ## Examples
 

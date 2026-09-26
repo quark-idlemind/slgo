@@ -1639,8 +1639,10 @@ prints too</span></pre>
           <code>c</code>opy, <code>m</code>odify, <code>t</code>ransfer,
           mo<code>v</code>e. It answers in that order whatever order the flags
           were typed in, and at least one of them has to be. Each line is
-          printed once the object's mask has been read back as asked; one
-          that never reads that way is an error saying what it allows.
+          what the object's mask was read back as, which the permission
+          rules may have adjusted from the letters typed: a next owner who
+          may not copy may always transfer, and everyone is never given
+          modify. A mask that never lands is an error saying what it allows.
           <code>texture</code> sets what a face looks like, or with no flags
           says what it looks like now.
         </p>
