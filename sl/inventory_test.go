@@ -1026,10 +1026,16 @@ func TestANumberInTheContentsFileIsReadAsHexFirst(t *testing.T) {
 	}
 }
 
+// renamedTo is theContentsFile after its one item has been renamed.
+func renamedTo(name string) string {
+	return strings.Replace(theContentsFile, "name\ta script|", "name\t"+name+"|", 1)
+}
+
 // TestRenamingInsideAnObjectSendsTheWholeItemBack: the message carries
 // the whole item, so anything not put back goes to zero -- and for a
 // permission mask that is a rename that quietly takes the rights away.
 func TestRenamingInsideAnObjectSendsTheWholeItemBack(t *testing.T) {
+	t.Parallel()
 	w, f := newFakeSession(t)
 	o := foundHere(w, &Object{ID: thePrim, Local: 77})
 	it := TaskItem{
@@ -1038,13 +1044,18 @@ func TestRenamingInsideAnObjectSendsTheWholeItemBack(t *testing.T) {
 		CreatorID: testAgentID, OwnerID: testAgentID,
 		BaseMask: PermAll, OwnerMask: PermAll, GroupMask: PermCopy,
 		EveryoneMask: PermMove, NextOwnerMask: PermTransfer,
-		SaleType: "not", SalePrice: 5,
+		SaleType: "copy", SalePrice: 5,
 	}
 
-	if err := w.RenameInObject(context.Background(), o, it, ""); err == nil {
+	if err := w.RenameInObject(context.Background(), o, it, "", 0); err == nil {
 		t.Error("RenameInObject renamed something to nothing")
 	}
-	if err := w.RenameInObject(context.Background(), o, it, "renamed"); err != nil {
+	wait := asideErr(t, func() error {
+		return w.RenameInObject(context.Background(), o, it, "renamed", 0)
+	})
+	waitSent[*msg.UpdateTaskInventory](t, f)
+	answerContents(t, f, thePrim, renamedTo("renamed"))
+	if err := wait(); err != nil {
 		t.Fatalf("RenameInObject: %v", err)
 	}
 
@@ -1071,19 +1082,120 @@ func TestRenamingInsideAnObjectSendsTheWholeItemBack(t *testing.T) {
 	if d.Type != 10 || d.InvType != 10 {
 		t.Errorf("type went out as %d/%d, want lsltext both", d.Type, d.InvType)
 	}
-	if d.CreationDate != 1700000000 || d.SalePrice != 5 || d.Flags != 1 {
-		t.Errorf("dates and sale came back as %+v", d)
+	// "copy" is 2.  Sent as 0 it is "not for sale", and the price
+	// beside it is for nothing.
+	if d.SaleType != 2 || d.SalePrice != 5 {
+		t.Errorf("the sale went out as type %d at %d, want a copy at 5", d.SaleType, d.SalePrice)
+	}
+	if d.CreationDate != 1700000000 || d.Flags != 1 {
+		t.Errorf("date and flags came back as %+v", d)
 	}
 
 	// An item whose inv_type the file did not give falls back to its
 	// type rather than going out as zero, which is a texture.
 	f.Forget()
 	it.InvType = ""
-	if err := w.RenameInObject(context.Background(), o, it, "renamed"); err != nil {
+	wait = asideErr(t, func() error {
+		return w.RenameInObject(context.Background(), o, it, "renamed", 0)
+	})
+	waitSent[*msg.UpdateTaskInventory](t, f)
+	answerContents(t, f, thePrim, renamedTo("renamed"))
+	if err := wait(); err != nil {
 		t.Fatalf("RenameInObject: %v", err)
 	}
 	if got := onlySent[*msg.UpdateTaskInventory](t, f).InventoryData.InvType; got != 10 {
 		t.Errorf("inv type with nothing to go on = %d, want the asset type", got)
+	}
+}
+
+// TestSaleTypeWordsAreTheViewersNumbers: the contents file says "copy"
+// where the message wants 2.  A word that is none of the four is
+// refused, not read as 0 the way the viewer reads it: 0 is "not for
+// sale", and sending it takes an item off sale.
+func TestSaleTypeWordsAreTheViewersNumbers(t *testing.T) {
+	for word, n := range map[string]uint8{"not": 0, "orig": 1, "copy": 2, "cntn": 3} {
+		got, err := saleTypeNumber(word)
+		if err != nil || got != n {
+			t.Errorf("saleTypeNumber(%q) = %d, %v; want %d", word, got, err, n)
+		}
+	}
+	for _, word := range []string{"", "Copy", "original", "for sale", "2"} {
+		if got, err := saleTypeNumber(word); err == nil {
+			t.Errorf("saleTypeNumber(%q) = %d, want it refused", word, got)
+		}
+	}
+}
+
+// TestRenamingInsideAnObjectRefusesASaleTypeItCannotSendBack: a rename
+// sends the sale type too, and one with no number would go out as 0 and
+// take the item off sale.  So it is refused, and nothing goes out.
+func TestRenamingInsideAnObjectRefusesASaleTypeItCannotSendBack(t *testing.T) {
+	w, f := newFakeSession(t)
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+	for _, word := range []string{"", "for sale"} {
+		it := parseTaskInventory([]byte(theContentsFile))[0]
+		it.SaleType, it.SalePrice = word, 5
+		err := w.RenameInObject(context.Background(), o, it, "renamed", time.Second)
+		if err == nil || !strings.Contains(err.Error(), "sale type") {
+			t.Errorf("sale type %q: RenameInObject = %v, want it refused", word, err)
+		}
+	}
+	if got := sentOf[*msg.UpdateTaskInventory](f); len(got) != 0 {
+		t.Errorf("%d renames went out with a sale type that has no number", len(got))
+	}
+}
+
+// TestARenameInsideAnObjectThatDidNotTakeIsAFailure: nothing answers
+// UpdateTaskInventory, so from the send a rename the simulator did not
+// make looks like one it did.  Only the contents say which, and they say
+// it of the item that was renamed: something else in there already
+// called by the new name is not the rename having taken.
+func TestARenameInsideAnObjectThatDidNotTakeIsAFailure(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+	it := parseTaskInventory([]byte(theContentsFile))[0]
+
+	// One nanosecond, so the first look is the last: the giving up is
+	// what is under test, and the real default is fifteen seconds.
+	wait := asideErr(t, func() error {
+		return w.RenameInObject(context.Background(), o, it, "renamed", 1)
+	})
+	waitSent[*msg.UpdateTaskInventory](t, f)
+	answerContents(t, f, thePrim, theContentsFile+`	inv_item	0
+	{
+		item_id	`+theTaskItem.String()+`
+		type	notecard
+		inv_type	notecard
+		name	renamed|
+	}
+`)
+	err := wait()
+	if !errors.Is(err, ErrTimeout) {
+		t.Fatalf("RenameInObject = %v, want a timeout", err)
+	}
+	if !strings.Contains(err.Error(), "may not modify") {
+		t.Errorf("RenameInObject = %v, want it to name the usual cause", err)
+	}
+}
+
+// TestARenameInsideAnObjectIsLookedForAgain: a look that comes before
+// the simulator has made the change is not the verdict.
+func TestARenameInsideAnObjectIsLookedForAgain(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+	it := parseTaskInventory([]byte(theContentsFile))[0]
+
+	wait := asideErr(t, func() error {
+		return w.RenameInObject(context.Background(), o, it, "renamed", 0)
+	})
+	waitSent[*msg.UpdateTaskInventory](t, f)
+	c := objectHolding(f, thePrim)
+	c.answer(t, theContentsFile)
+	c.answer(t, renamedTo("renamed"))
+	if err := wait(); err != nil {
+		t.Fatalf("RenameInObject: %v", err)
 	}
 }
 

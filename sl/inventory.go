@@ -52,6 +52,9 @@ type TaskItem struct {
 	EveryoneMask  uint32
 	NextOwnerMask uint32
 
+	// SaleType is the contents file's word for it: not, orig, copy or
+	// cntn.  RenameInObject sends it back as the number the word stands
+	// for.
 	SaleType  string
 	SalePrice int32
 }
@@ -679,10 +682,28 @@ func hexOrDec(s string) uint64 {
 //
 // The whole item goes back, not just the name, because that is what the
 // message carries -- anything left out is set to zero, which for a
-// permission mask means taking the rights away.
-func (w *Session) RenameInObject(ctx context.Context, o *Object, it TaskItem, name string) error {
+// permission mask means taking the rights away and for the sale type
+// means taking it off sale.  So it is the item as TaskInventory or
+// FindInObject read it, and one whose sale type is not a word the
+// contents file uses is refused before anything is sent.
+//
+// Nothing answers the message, so the contents are read back until the
+// item, found by its id, carries the new name.  One that has not by the
+// timeout (0 means fifteen seconds) is ErrTimeout; the viewer offers no
+// rename of an item the avatar may not modify
+// (llpanelobjectinventory.cpp:298-323).  The id is the one it had: the
+// viewer, renaming, keeps its own copy of the contents under the same id
+// and expects the simulator's to agree (llviewerobject.cpp:2831-2877).
+func (w *Session) RenameInObject(ctx context.Context, o *Object, it TaskItem, name string, timeout time.Duration) error {
 	if name == "" {
 		return fmt.Errorf("sl: a name is needed")
+	}
+	sale, err := saleTypeNumber(it.SaleType)
+	if err != nil {
+		return fmt.Errorf("sl: renaming %q in %s: %w", it.Name, o, err)
+	}
+	if timeout == 0 {
+		timeout = 15 * time.Second
 	}
 	local, err := w.local(ctx, o)
 	if err != nil {
@@ -702,10 +723,41 @@ func (w *Session) RenameInObject(ctx context.Context, o *Object, it TaskItem, na
 	d.Type, d.InvType = assetTypeNumber(it.Type), assetTypeNumber(firstNonEmptyStr(it.InvType, it.Type))
 	d.Flags = it.Flags
 	d.CreationDate = int32(it.Created)
-	d.SalePrice = it.SalePrice
+	d.SaleType, d.SalePrice = sale, it.SalePrice
 	d.Name = append([]byte(name), 0)
 	d.Description = append([]byte(it.Desc), 0)
-	return w.Send(ctx, m)
+	if err := w.Send(ctx, m); err != nil {
+		return err
+	}
+
+	return poll(ctx, timeout, time.Second, fmt.Sprintf("%q in %s to be called %q; "+
+		"the viewer renames nothing the avatar may not modify", it.Name, o, name),
+		func(ctx context.Context) (bool, error) {
+			items, err := w.TaskInventory(ctx, o)
+			if err != nil {
+				return false, err
+			}
+			for _, now := range items {
+				if now.ID == it.ID {
+					return now.Name == name, nil
+				}
+			}
+			return false, nil
+		})
+}
+
+// saleTypeNumber turns the contents file's word for a sale type back
+// into the number the protocol wants, which is the word's place in the
+// viewer's FOR_SALE_NAMES (llsaleinfo.cpp:43-49).  The viewer reads a
+// word it does not know as "not for sale"; this refuses one, because
+// sending that back would take something off sale.
+func saleTypeNumber(word string) (uint8, error) {
+	for n, known := range []string{"not", "orig", "copy", "cntn"} {
+		if word == known {
+			return uint8(n), nil
+		}
+	}
+	return 0, fmt.Errorf("the sale type %q is none of not, orig, copy and cntn", word)
 }
 
 // assetTypeNumber turns the word the contents file uses back into the

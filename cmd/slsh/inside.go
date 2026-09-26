@@ -239,7 +239,7 @@ func (sh *Shell) renameInside(ctx context.Context, out io.Writer, what string, f
 	if err != nil {
 		return err
 	}
-	if err := sh.s.RenameInObject(ctx, o, *it, to); err != nil {
+	if err := sh.s.RenameInObject(ctx, o, *it, to, 0); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "%q in %s is now %q\n", from, o.Name, to)

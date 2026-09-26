@@ -1488,6 +1488,17 @@ func (f *fakeGrid) AnswerInside(t *testing.T, task msg.UUID, held ...*heldItem) 
 			}
 			f.mu.Unlock()
 
+		case *msg.UpdateTaskInventory:
+			// A rename, which is all mv --in sends: the item under its
+			// own id takes the name, and the next read says so.
+			mu.Lock()
+			for _, h := range held {
+				if h.ID == r.InventoryData.ItemID {
+					h.Name = strings.TrimRight(string(r.InventoryData.Name), "\x00")
+				}
+			}
+			mu.Unlock()
+
 		case *msg.SetScriptRunning:
 			mu.Lock()
 			for _, h := range held {
@@ -1571,7 +1582,9 @@ func xferPacket(id uint64, seq uint32, last bool, data []byte) *msg.SendXferPack
 // taskInventoryFile is the contents file for an object: the nested
 // braces sl.TaskInventory parses, with only the fields anything here
 // reads filled in.  A name ends with a bar, which is how the format
-// marks the end of a value that may have spaces in it.
+// marks the end of a value that may have spaces in it.  The sale info
+// is there because a rename sends it back, and refuses an item whose
+// file did not give it.
 func taskInventoryFile(task msg.UUID, held []*heldItem) []byte {
 	var b strings.Builder
 	for _, h := range held {
@@ -1589,6 +1602,9 @@ func taskInventoryFile(task msg.UUID, held []*heldItem) []byte {
 		fmt.Fprintf(&b, "\t\tpermissions 0\n\t\t{\n")
 		fmt.Fprintf(&b, "\t\t\towner_mask\t%08x\n", h.ownerMask())
 		fmt.Fprintf(&b, "\t\t\teveryone_mask\t%08x\n", h.EveryoneMask)
+		fmt.Fprintf(&b, "\t\t}\n")
+		fmt.Fprintf(&b, "\t\tsale_info\t0\n\t\t{\n")
+		fmt.Fprintf(&b, "\t\t\tsale_type\tnot\n\t\t\tsale_price\t10\n")
 		fmt.Fprintf(&b, "\t\t}\n")
 		fmt.Fprintf(&b, "\t}\n")
 	}
