@@ -46,8 +46,8 @@ const agniTeleportFinish = `<llsd><map><key>Info</key><array><map>` +
 // The address is what has teeth.  203.0.113.11 is the four bytes
 // cb 00 71 0b in the order they arrived; read as a big endian integer
 // and formatted it would be 3405803787, and read as a little endian one
-// it would be 203.0.113.13 -- somebody else's address entirely, dialled
-// forever.  Neither mistake can show up anywhere but on a live grid,
+// it would be the same four bytes backwards -- somebody else's address
+// entirely, dialled forever.  Neither mistake can show up anywhere but on a live grid,
 // which is why the fixture is a measurement.
 func TestTheDestinationIsReadFromTheBytesTheGridSent(t *testing.T) {
 	addr, seed, handle := teleportDestination(decodeLLSD(t, agniTeleportFinish))
