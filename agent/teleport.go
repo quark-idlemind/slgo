@@ -18,12 +18,10 @@ import (
 // over a border is told the same thing by a different message, which is
 // crossing.go, and the reading of the fields below is shared with it.
 //
-// Reading it is the whole of the work here, and stage 0 measured what
-// not reading it costs: the event was relayed to clients and nobody in
-// the daemon looked at it, so for fifty seconds the region left behind
-// went on answering pings and describing objects, then sent one
-// DisableSimulator, and the idle watchdog gave up 116 seconds after the
-// avatar had gone somewhere else.
+// Reading it is the whole of the work here: a session that does not is
+// left on a circuit to a region the avatar has gone from, which looks
+// healthy until that region lets go and the watchdog ends the session.
+// Why: doc/history/teleport.md#what-exists-today
 //
 // One measured body, from Agni, 298ms after a request that took this
 // avatar from Pelmar Reach to Sandbox Goguen, and on the event queue

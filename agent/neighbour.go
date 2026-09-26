@@ -23,14 +23,10 @@ import (
 // speaks for a place; the root speaks for the avatar.
 //
 // **A simulator will not hand an avatar over the border to a client
-// that holds none of these**, and it was measured both ways.  With no
-// child circuit an avatar walked at Pelmar Reach's west edge, stopped
-// dead at x=0 and stayed there twelve seconds, and was pinned at x=255
-// for twenty-four from the other side; with one open to Pelmar Mill the
-// same walk was over the border in two seconds, and CrossedRegion
-// arrived on the event queue exactly once, where crossing.go was
-// already waiting for it.  See doc/history/neighbours.md, which is the
-// plan this is stages one and two of.
+// that holds none of these.**  With one open, CrossedRegion arrives on
+// the event queue, where crossing.go takes it.  This is stages one and
+// two of the plan in doc/history/neighbours.md.
+// Why: doc/history/neighbours.md#stage-0----take-one-offer-up-by-hand-done
 //
 // **Off unless asked for, and asked for per avatar.**  Neighbours cost
 // a socket, a share of the bandwidth and the simulator's attention,
@@ -67,17 +63,15 @@ import (
 // Why: doc/history/neighbours.md#kept-across-a-move
 //
 // **What is deliberately not handled here.**  A neighbour describes
-// itself fully and unprompted -- in thirty seconds one sent 59
-// ObjectUpdate, 51 LayerData, 40 ObjectUpdateCached, 21
-// CoarseLocationUpdate and 17 ImprovedTerseObjectUpdate -- and none of
-// it is kept.  Terrain and objects from a neighbour are stage 4 of the
-// plan, and wiring them to the Cache here would be wrong twice over:
-// the store is keyed by the region uuid this avatar is IN, and local
-// ids are each region's own numbering, so a neighbour's updates put
-// through the root's store would describe this region with another
-// one's objects.  Everything about the avatar -- AgentMovementComplete,
-// KickUser, CrossedRegion -- must stay unhandled on a child for the
-// other half of the same rule: a child that answered
+// itself fully and unprompted -- stage 0 counted what one sent in thirty
+// seconds -- and none of it is kept.  Terrain and objects from a
+// neighbour are stage 4 of the plan, and wiring them to the Cache here
+// would be wrong twice over: the store is keyed by the region uuid this
+// avatar is IN, and local ids are each region's own numbering, so a
+// neighbour's updates put through the root's store would describe this
+// region with another one's objects.  Everything about the avatar --
+// AgentMovementComplete, KickUser, CrossedRegion -- must stay unhandled
+// on a child for the other half of the same rule: a child that answered
 // AgentMovementComplete would move this session's idea of where the
 // avatar is to a region it is not in, and one that acted on KickUser
 // would end the session on a neighbour's say-so.

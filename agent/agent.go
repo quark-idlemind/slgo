@@ -31,11 +31,9 @@ type Agent struct {
 	Send *msg.Sender
 	Disp *msg.Dispatcher
 
-	// sock is the connection those three were built over.  It was an
-	// exported *net.UDPConn until the circuit had to be able to move:
-	// a teleport dials another simulator and stores it here, and the
-	// sender, the receiver and everyone holding them go on as they
-	// were.  Nothing outside this package ever used the field.
+	// sock is the connection those three were built over.  A teleport
+	// dials another simulator and stores it here, and the sender, the
+	// receiver and everyone holding them go on as they were.
 	sock *socket
 
 	// Inventory is this agent's folder tree.  It belongs to the
@@ -239,19 +237,15 @@ type Agent struct {
 // The region's id and name come in RegionHandshake and its handle and
 // the avatar's place in it in AgentMovementComplete, and the session is
 // not in the new region until it has both.  The simulator sends them in
-// that order, and UDP does not deliver them in it: a trace on Agni
-// caught the handshake, seq=1, arriving 985ms behind the movement,
-// seq=2.  A session that took each as it came spent that second at the
-// new position, with the new handle, under the old region's name -- so
-// a teleport's read-back named the region it had left, and so did the
-// notice that the region had changed.  In the ordinary order it was the
-// other way about, the new name around the old position, for as long as
-// the movement took to follow.
+// that order, and UDP does not deliver them in it.  A session that took
+// each as it came would, until the other arrived, name one region and
+// place the avatar in the other.
 //
 // So during a move neither is taken on its own.  Each is held here
 // until the other comes, and then the region, its handle and the
 // position become the session's together, in publishArrival, under the
 // one lock anything reading them takes.
+// Why: doc/history/teleport.md#open-questions
 type arrival struct {
 	// named says the handshake has come, and region is what it said.
 	named  bool
