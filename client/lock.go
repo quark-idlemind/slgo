@@ -15,7 +15,8 @@ import (
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
-// locking is the state of the locks this connection has asked for.
+// locking is the requests for a lock waiting for their answers, by
+// name, oldest first.
 type locking struct {
 	mu      sync.Mutex
 	waiting map[string][]chan *pb.Locked

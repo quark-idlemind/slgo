@@ -137,8 +137,8 @@ func (c *Conn) askSlots(ctx context.Context, n int, timeout, wait time.Duration,
 	}}, time.Duration(secs)*time.Second)
 }
 
-// Renew puts a grant's clock back, for work that cannot say in advance
-// how long it will take.
+// RenewSlots puts a grant's clock back, for work that cannot say in
+// advance how long it will take.
 func (c *Conn) RenewSlots(ctx context.Context, id string, timeout time.Duration) (*Grant, error) {
 	stream := c.streamOrErr()
 	if stream == nil {
