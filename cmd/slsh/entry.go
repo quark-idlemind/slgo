@@ -76,16 +76,19 @@ func (sh *Shell) collect(d sl.Dialog, what string, n int) {
 
 // typed takes a line while a text box answer is being collected.
 func (sh *Shell) typed(ctx context.Context, line string) {
+	// Every line means itself, including one that is a full stop.
+	// Appended under the lock, since the prompt counts them and is
+	// redrawn from the printer's goroutine too.
 	sh.mu.Lock()
 	e := sh.entry
+	if e != nil {
+		e.lines = append(e.lines, line)
+	}
 	sh.mu.Unlock()
 	if e == nil {
 		sh.setMode(modeCommand)
 		return
 	}
-
-	// Every line means itself, including one that is a full stop.
-	e.lines = append(e.lines, line)
 	sh.prompt()
 }
 
@@ -100,11 +103,10 @@ func (sh *Shell) finish(ctx context.Context) {
 	line := sh.term.Take()
 	sh.term.Echo()
 	sh.mu.Lock()
-	e := sh.entry
-	sh.mu.Unlock()
-	if e != nil && line != "" {
+	if e := sh.entry; e != nil && line != "" {
 		e.lines = append(e.lines, line)
 	}
+	sh.mu.Unlock()
 	sh.submit(ctx)
 }
 

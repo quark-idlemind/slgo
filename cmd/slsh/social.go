@@ -209,12 +209,18 @@ func (sh *Shell) watch(ctx context.Context) {
 	// own and prints its own line as well -- see cmdTP for why both are
 	// wanted.
 	regions := sh.s.RegionChanges(0)
-	// An offer another client of this avatar has dealt with, which is
-	// gone from waiting as of now.  Said, because a number a person was
-	// about to type has just stopped meaning anything, and "there is no
-	// 3" a moment later would be the first they heard of it.
+	// An offer another client of this avatar has dealt with, or a dialog
+	// or a permission request nobody answered in time, which is gone
+	// from waiting as of now.  Said, because a number a person was about
+	// to type has just stopped meaning anything, and "there is no 3" a
+	// moment later would be the first they heard of it.
+	//
+	// Every notice that changes what is waiting redraws the prompt, whose
+	// count would otherwise be stale until the next command.  A prompt
+	// set while a command runs is not drawn until it returns.
 	sh.s.OnHandled = func(h sl.Handled) {
 		sh.noticef("%s -- it is no longer waiting", h)
+		sh.prompt()
 	}
 	sh.s.OnDialog = func(d sl.Dialog) {
 		// A text box carries a sentinel where its buttons would be, and
@@ -222,10 +228,11 @@ func (sh *Shell) watch(ctx context.Context) {
 		if d.IsTextBox() {
 			sh.noticef("%s asks: %q -- waiting lists it, answer N TEXT replies",
 				d.ObjectName, d.Message)
-			return
+		} else {
+			sh.noticef("%s asks: %q %v -- waiting lists it, answer N picks one",
+				d.ObjectName, d.Message, d.Buttons)
 		}
-		sh.noticef("%s asks: %q %v -- waiting lists it, answer N picks one",
-			d.ObjectName, d.Message, d.Buttons)
+		sh.prompt()
 	}
 
 	for {
@@ -259,12 +266,16 @@ func (sh *Shell) watch(ctx context.Context) {
 				return
 			}
 			sh.heard(m)
+			// It may have been an offer, which is one more thing
+			// waiting.
+			sh.prompt()
 		case q, ok := <-perms:
 			if !ok {
 				return
 			}
 			sh.noticef("%s wants %s -- waiting lists it, answer N grants it",
 				q.ObjectName, q.Wants)
+			sh.prompt()
 		case c, ok := <-regions:
 			if !ok {
 				return

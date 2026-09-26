@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -95,6 +96,12 @@ type Shell struct {
 	quit  chan struct{}
 	once  sync.Once
 	depth int // how deep the sourcing goes, to stop a file sourcing itself
+
+	// promptGen numbers each prompt as it is worked out, and
+	// promptDrawn is the last one drawn, under promptMu.  See prompt.
+	promptGen   atomic.Uint64
+	promptMu    sync.Mutex
+	promptDrawn uint64
 }
 
 // person is somebody a listing showed.
@@ -400,7 +407,28 @@ func (sh *Shell) setMode(mode int) {
 
 // prompt says where the next line will go, which is the only thing
 // standing between a command and a remark said out loud.
+//
+// It is redrawn from the printer's goroutine and the session's as well
+// as this one, when what is waiting changes, so two can be under way at
+// once.  Each takes a number as it starts, and one that finishes after a
+// later one has drawn is dropped: a prompt read before a change of mode
+// must not land on top of the one read after it.  Nothing is held while
+// it is worked out, since counting what is waiting can call back into
+// prompt through OnHandled.
 func (sh *Shell) prompt() {
+	gen := sh.promptGen.Add(1)
+	p := sh.promptText()
+	sh.promptMu.Lock()
+	defer sh.promptMu.Unlock()
+	if gen < sh.promptDrawn {
+		return
+	}
+	sh.promptDrawn = gen
+	sh.term.SetPrompt(p)
+}
+
+// promptText is what prompt draws.
+func (sh *Shell) promptText() string {
 	// What is waiting goes in front of everything, in both modes: a
 	// teleport offered while somebody is mid-conversation is exactly
 	// when it is easiest to miss, and a dialog nobody answers expires.
@@ -415,14 +443,12 @@ func (sh *Shell) prompt() {
 			n = len(sh.entry.lines)
 		}
 		sh.mu.Unlock()
-		sh.term.SetPrompt(fmt.Sprintf("%d text> ", n+1))
-		return
+		return fmt.Sprintf("%d text> ", n+1)
 	}
 	if sh.chatting() {
-		sh.term.SetPrompt(mark + sh.talk.Current().Label() + "> ")
-		return
+		return mark + sh.talk.Current().Label() + "> "
 	}
-	sh.term.SetPrompt(mark + sh.Pwd() + "$ ")
+	return mark + sh.Pwd() + "$ "
 }
 
 // Pwd is the working directory as a path.
