@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -64,11 +65,22 @@ type Item struct {
 
 // Inventory is an agent's folder tree.  Every method is safe to call
 // while a fetch is running.
+//
+// Fetching into one that already holds something brings it up to date.
+// A folder or item that arrives again is listed under the parent it
+// names now, so one that has moved leaves the folder it was in.  And a
+// folder whose whole contents are read -- by FetchInventory, FetchFolder,
+// or FetchFolderDepth down to the depth asked for -- no longer lists
+// what has gone from it, and what has gone is forgotten: a folder, with
+// everything under it.
 type Inventory struct {
-	mu       sync.RWMutex
-	root     msg.UUID
-	folders  map[msg.UUID]*Folder
-	items    map[msg.UUID]*Item
+	mu      sync.RWMutex
+	root    msg.UUID
+	folders map[msg.UUID]*Folder
+	items   map[msg.UUID]*Item
+
+	// Each folder and item is listed once, under the parent its record
+	// names; a folder that names itself as its parent is not listed.
 	children map[msg.UUID][]msg.UUID // folder -> child folders
 	contents map[msg.UUID][]msg.UUID // folder -> items
 }
@@ -201,31 +213,92 @@ func (inv *Inventory) Walk(fn func(f *Folder, depth int) bool) {
 	descend(inv.root, 1)
 }
 
-// addFolder records a folder, reporting whether it was new.
-func (inv *Inventory) addFolder(f *Folder) bool {
-	inv.mu.Lock()
-	defer inv.mu.Unlock()
-	if _, seen := inv.folders[f.ID]; seen {
-		inv.folders[f.ID] = f
-		return false
-	}
+// putFolder records a folder and lists it under its parent, taking it
+// out of the folder it was listed in if that has changed, as the viewer
+// does (llinventorymodel.cpp:1832-1846).  The caller holds mu.
+func (inv *Inventory) putFolder(f *Folder) {
+	old, seen := inv.folders[f.ID]
 	inv.folders[f.ID] = f
+	if seen {
+		if old.ParentID == f.ParentID {
+			return
+		}
+		unlist(inv.children, old.ParentID, f.ID)
+	}
 	if f.ParentID != f.ID {
 		inv.children[f.ParentID] = append(inv.children[f.ParentID], f.ID)
 	}
-	return true
 }
 
-func (inv *Inventory) addItem(i *Item) bool {
-	inv.mu.Lock()
-	defer inv.mu.Unlock()
-	if _, seen := inv.items[i.ID]; seen {
-		inv.items[i.ID] = i
-		return false
-	}
+// putItem is putFolder for an item (llinventorymodel.cpp:1642-1660).
+func (inv *Inventory) putItem(i *Item) {
+	old, seen := inv.items[i.ID]
 	inv.items[i.ID] = i
+	if seen {
+		if old.ParentID == i.ParentID {
+			return
+		}
+		unlist(inv.contents, old.ParentID, i.ID)
+	}
 	inv.contents[i.ParentID] = append(inv.contents[i.ParentID], i.ID)
-	return true
+}
+
+// keepOnly takes out of a folder every child folder and item it lists
+// that is not in listed, which is what a full reading of it found.
+// Each is listed nowhere else, so its record goes too.  The caller
+// holds mu.
+func (inv *Inventory) keepOnly(folder msg.UUID, listed map[msg.UUID]bool) {
+	for _, id := range slices.Clone(inv.children[folder]) {
+		if !listed[id] {
+			inv.dropFolder(id)
+		}
+	}
+	for _, id := range slices.Clone(inv.contents[folder]) {
+		if !listed[id] {
+			inv.dropItem(id)
+		}
+	}
+}
+
+// dropFolder forgets a folder and everything listed under it.  The
+// caller holds mu.
+func (inv *Inventory) dropFolder(id msg.UUID) {
+	f, ok := inv.folders[id]
+	if !ok {
+		return
+	}
+	delete(inv.folders, id)
+	unlist(inv.children, f.ParentID, id)
+	kids, items := inv.children[id], inv.contents[id]
+	delete(inv.children, id)
+	delete(inv.contents, id)
+	for _, k := range kids {
+		inv.dropFolder(k)
+	}
+	for _, i := range items {
+		inv.dropItem(i)
+	}
+}
+
+// dropItem forgets an item.  The caller holds mu.
+func (inv *Inventory) dropItem(id msg.UUID) {
+	if it, ok := inv.items[id]; ok {
+		delete(inv.items, id)
+		unlist(inv.contents, it.ParentID, id)
+	}
+}
+
+// unlist takes id out of what index holds under parent.
+func unlist(index map[msg.UUID][]msg.UUID, parent, id msg.UUID) {
+	l := index[parent]
+	if i := slices.Index(l, id); i >= 0 {
+		l = slices.Delete(l, i, i+1)
+	}
+	if len(l) == 0 {
+		delete(index, parent)
+		return
+	}
+	index[parent] = l
 }
 
 // FetchOptions tune an inventory fetch.
@@ -271,7 +344,8 @@ func FetchFolder(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID) er
 //
 // The simulator caps how deep it will go and says so by answering with
 // less than was asked for; nothing here treats that as an error, since
-// a short answer is still an answer.
+// a short answer is still an answer.  A folder whose contents it does
+// not carry in full keeps what was known of them.
 func FetchFolderDepth(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID, depth int) error {
 	if !d.HasCap(InventoryCap) {
 		return fmt.Errorf("agent: no %s capability", InventoryCap)
@@ -425,31 +499,49 @@ func fetchDepth(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUID, dep
 		return nil, fmt.Errorf("agent: inventory %s: reply was %T, wanted a map", id, v)
 	}
 
+	return inv.take(id, m, depth), nil
+}
+
+// take records a reply to a request for a folder's children at a depth,
+// returning the child folders found.  It holds the lock throughout, so
+// nothing reads a reply half recorded, and a folder's listing is set
+// against the tree as it is.
+func (inv *Inventory) take(id msg.UUID, m map[string]any, depth int) []msg.UUID {
+	inv.mu.Lock()
+	defer inv.mu.Unlock()
+
 	// The folder describes itself at the top level.  There is no key to
 	// fall back on here -- this is the body of the reply, not an entry
-	// in a map -- so one that does not name itself is passed over.
-	if self := folderFrom(m); !self.ID.IsZero() {
-		inv.addFolder(self)
+	// in a map -- so one that does not name itself is passed over, and
+	// what it holds is not taken as all that the folder asked for holds.
+	self := folderFrom(m)
+	if !self.ID.IsZero() {
+		inv.putFolder(self)
 	}
-
-	kids := absorb(inv, llsd.Map(m["_embedded"]))
-	return kids, nil
+	folder := id
+	if self.ID != id {
+		folder = msg.UUID{}
+	}
+	return absorb(inv, folder, llsd.Map(m["_embedded"]), 0, depth)
 }
 
 // absorb records what an _embedded map holds and returns the child
-// folders found at this level.
+// folders found at this level.  The map is what folder holds, level
+// folders below the one a request at depth asked for; a zero folder is
+// one the reply did not name.  The caller holds inv.mu.
 //
 // It recurses, which is the whole point of asking for a depth: a reply
 // to depth=2 nests each child category's own _embedded inside it, and
 // reading only the outer one throws away everything the extra round
 // trip was avoided for.  The request costs the same either way; the
 // difference is only whether the answer is kept.
-func absorb(inv *Inventory, emb map[string]any) []msg.UUID {
+func absorb(inv *Inventory, folder msg.UUID, emb map[string]any, level, depth int) []msg.UUID {
 	if emb == nil {
 		return nil
 	}
 
 	var kids []msg.UUID
+	listed := map[msg.UUID]bool{}
 	for cid, cv := range llsd.Map(emb["categories"]) {
 		cm := llsd.Map(cv)
 		if cm == nil {
@@ -464,11 +556,12 @@ func absorb(inv *Inventory, emb map[string]any) []msg.UUID {
 		if f.ID.IsZero() {
 			continue
 		}
-		inv.addFolder(f)
+		inv.putFolder(f)
 		kids = append(kids, f.ID)
+		listed[f.ID] = true
 
 		// Whatever came down with it, however deep.
-		absorb(inv, llsd.Map(cm["_embedded"]))
+		absorb(inv, f.ID, llsd.Map(cm["_embedded"]), level+1, depth)
 	}
 
 	// Items and links are the same thing to us: a link is an item
@@ -490,10 +583,32 @@ func absorb(inv *Inventory, emb map[string]any) []msg.UUID {
 				continue
 			}
 			it.IsLink = key == "links"
-			inv.addItem(it)
+			inv.putItem(it)
+			listed[it.ID] = true
 		}
 	}
+
+	if !folder.IsZero() && whole(emb, level, depth) {
+		inv.keepOnly(folder, listed)
+	}
 	return kids
+}
+
+// whole reports whether an _embedded map is everything its folder
+// holds: it is within the depth asked for, and carries categories,
+// items and links all three.  Anything less is a part, and what was
+// known of the folder stays.  The viewer takes a folder's contents as
+// known on the same two conditions (llaisapi.cpp:1423-1426, 1500-1510).
+func whole(emb map[string]any, level, depth int) bool {
+	if level > depth {
+		return false
+	}
+	for _, key := range []string{"categories", "items", "links"} {
+		if llsd.Map(emb[key]) == nil {
+			return false
+		}
+	}
+	return true
 }
 
 // folderFrom reads one category, whether or not it names itself.
