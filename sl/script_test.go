@@ -803,22 +803,43 @@ func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
 
 // TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory: the copy
 // in the avatar's inventory is only the way in, and is deleted when the
-// way in fails as it is when it succeeds.
+// way in fails as it is when it succeeds -- after the copy was sent into
+// the object as well as before.
 func TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory(t *testing.T) {
 	t.Parallel()
 	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 	gone := errors.New("the circuit is gone")
+	sent := func(t *testing.T, f *fakeBackend, _ *contents) { waitSent[*msg.UpdateTaskInventory](t, f) }
 
 	for _, c := range []struct {
 		name  string
 		stage func(t *testing.T, f *fakeBackend)
+		// after plays what follows the item being made; patience is the
+		// caller's, when it gives up.
+		after    func(t *testing.T, f *fakeBackend, held *contents)
+		patience time.Duration
 	}{
 		// No upload capability: the item is made and its source is not
 		// saved to it.
-		{"the source could not be saved", func(*testing.T, *fakeBackend) {}},
-		{"the copy never went in", func(t *testing.T, f *fakeBackend) {
+		{name: "the source could not be saved", stage: func(*testing.T, *fakeBackend) {}},
+		{name: "the copy never went in", stage: func(t *testing.T, f *fakeBackend) {
 			serveUpload(t, f, "UpdateScriptAgent", compiles)
 			failSendsAfter[*msg.CreateInventoryItem](f, gone)
+		}},
+		// The settle after a copy is six seconds, so a caller with less
+		// patience than that gives up inside it.
+		{name: "the caller gave up while it settled", stage: func(t *testing.T, f *fakeBackend) {
+			serveUpload(t, f, "UpdateScriptAgent", compiles)
+		}, after: sent, patience: 1500 * time.Millisecond},
+		{name: "the object could not be read again", stage: func(t *testing.T, f *fakeBackend) {
+			serveUpload(t, f, "UpdateScriptAgent", compiles)
+			failSendsAfter[*msg.UpdateTaskInventory](f, gone)
+		}, after: sent},
+		{name: "the copy never turned up", stage: func(t *testing.T, f *fakeBackend) {
+			serveUpload(t, f, "UpdateScriptAgent", compiles)
+		}, after: func(t *testing.T, f *fakeBackend, held *contents) {
+			sent(t, f, held)
+			held.answer(t, "")
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -831,14 +852,28 @@ func TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory(t *testing.T) {
 				rw.WriteHeader(http.StatusOK)
 			})
 
+			ctx := context.Background()
+			if c.patience != 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, c.patience)
+				defer cancel()
+			}
 			wait := aside(t, func() (*Result, error) {
-				return w.Run(context.Background(), Script{In: oAt(w), Name: "a script"})
+				return w.Run(ctx, Script{In: oAt(w), Name: "a script"})
 			})
-			objectHolding(f, thePrim).answer(t, "")
+			held := objectHolding(f, thePrim)
+			held.answer(t, "")
 			m := waitSent[*msg.CreateInventoryItem](t, f)
 			relayCreated(t, f, m.InventoryBlock.CallbackID)
-			if _, err := wait(); err == nil {
+			if c.after != nil {
+				c.after(t, f, held)
+			}
+			_, err := wait()
+			if err == nil {
 				t.Fatal("Run went on without the script in the object")
+			}
+			if c.patience != 0 && !errors.Is(err, context.DeadlineExceeded) {
+				t.Errorf("Run = %v, want the context's reason", err)
 			}
 
 			select {
@@ -1032,6 +1067,49 @@ func TestAScriptCanFaultAfterSayingItHadFinished(t *testing.T) {
 	}
 	if res.Fault == nil || res.Fault.Reason != "" {
 		t.Errorf("fault = %+v, want one that never said why", res.Fault)
+	}
+}
+
+// TestGivingUpDuringAFaultIsStillGivingUp: a caller that cancels while
+// the run waits for a fault's reason gets the context's error, as it
+// does anywhere else in the wait, and the result so far with the fault
+// in it.  The pause puts the cancel inside the grace, as above.
+func TestGivingUpDuringAFaultIsStillGivingUp(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	wait := aside(t, func() (*Result, error) {
+		return w.Run(ctx, Script{
+			In: foundHere(w, &Object{ID: thePrim, Local: 77}), Name: "a script",
+			Source: "default {}", Done: "FINISHED", Timeout: time.Minute,
+		})
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+	<-up.body
+
+	f.Relay(t, objectSaid(thePrim, ChatDebug,
+		"Test HUD [script:a script] Script run-time error"))
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	res, err := wait()
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Run = %v, want the context's reason", err)
+	}
+	if res == nil {
+		t.Fatal("a run given up on during a fault came back with no result")
+	}
+	if res.Fault == nil || res.Fault.Script != "a script" || res.Fault.Reason != "" {
+		t.Errorf("fault = %+v, want the one heard, with no reason yet", res.Fault)
+	}
+	if !res.Contains("Script run-time error") || res.Finished {
+		t.Errorf("Run = %+v, want the header heard and the run unfinished", res)
+	}
+	if res.Elapsed >= faultGrace {
+		t.Errorf("the run waited %s after being given up on", res.Elapsed)
 	}
 }
 

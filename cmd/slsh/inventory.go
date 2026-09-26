@@ -1095,14 +1095,22 @@ func cmdMv(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 		return err
 	}
 
-	// A destination that names a folder is a move; anything else is a
-	// rename in place.  Both are one message for an item, which is
-	// why moving and renaming at once is possible at all.
-	if _, id, err := sh.resolveDir(ctx, args[1]); err == nil {
+	// A destination that names a folder is a move, and one that no
+	// folder is called, in any case, is a rename in place.  Both are
+	// one message for an item, which is why moving and renaming at
+	// once is possible at all.  Two folders of the name, or one in
+	// another case, is refused as the lookup refused it: a rename
+	// there would be a guess at what was meant.
+	_, id, err := sh.resolveDir(ctx, args[1])
+	if err == nil {
 		if e.Folder {
 			return sh.s.MoveFolder(ctx, e.ID, id)
 		}
 		return sh.s.MoveItem(ctx, e.ID, id)
+	}
+	var ne *sl.NameError
+	if !errors.As(err, &ne) || len(ne.IDs) > 0 || len(ne.Near) > 0 {
+		return err
 	}
 
 	dest := sl.SplitPath(args[1])
