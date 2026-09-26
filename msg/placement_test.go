@@ -45,10 +45,73 @@ func TestDecodeTerse(t *testing.T) {
 		t.Errorf("Position = %v, want about {65.75 220.84 19.94}", d.Position)
 	}
 
-	// Everything not moving is the midpoint of its range, which is
-	// what 0x7fff means.
-	if d.Velocity.X > 0.01 || d.Velocity.X < -0.01 {
-		t.Errorf("Velocity.X = %v, want about zero", d.Velocity.X)
+	// Everything not moving is sent as 0x7fff, half a step below the
+	// midpoint of its range, and read as the viewer reads it: exactly
+	// zero, since it is within a step of zero.
+	for name, v := range map[string]Vector3{
+		"velocity": d.Velocity, "acceleration": d.Acceleration, "angular velocity": d.AngularVel,
+	} {
+		if v != (Vector3{}) {
+			t.Errorf("%s = %v, want zero", name, v)
+		}
+	}
+}
+
+// TestATerseUpdateReadsItsRangesAsTheViewerDoes: velocity is a fraction
+// of plus or minus 128, and acceleration and angular velocity of plus or
+// minus 64 (llviewerobject.cpp:1755-1778).  Reading all three over 128
+// doubled every acceleration and every spin.
+func TestATerseUpdateReadsItsRangesAsTheViewerDoes(t *testing.T) {
+	w := &blobWriter{}
+	w.u32(7)
+	w.u8(0)
+	w.u8(0)
+	w.f32(10)
+	w.f32(20)
+	w.f32(30)
+	vec := func(x, y, z uint16) { w.u16(x); w.u16(y); w.u16(z) }
+	vec(65535, 0, 32767)     // velocity
+	vec(65535, 0, 32767)     // acceleration
+	vec(32767, 32767, 32767) // rotation X, Y, Z
+	w.u16(65535)             // and W
+	vec(65535, 0, 32767)     // angular velocity
+
+	d, err := DecodeTerse(w.b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (Vector3{128, -128, 0}); d.Velocity != want {
+		t.Errorf("velocity = %v, want %v", d.Velocity, want)
+	}
+	if want := (Vector3{64, -64, 0}); d.Acceleration != want {
+		t.Errorf("acceleration = %v, want %v", d.Acceleration, want)
+	}
+	if want := (Vector3{64, -64, 0}); d.AngularVel != want {
+		t.Errorf("angular velocity = %v, want %v", d.AngularVel, want)
+	}
+}
+
+// TestASixteenBitFractionNearZeroIsZero: the viewer's U16_to_F32
+// (llquantize.h:72-85) reads anything within one step of zero as zero,
+// and a step away from it as what it is.
+func TestASixteenBitFractionNearZeroIsZero(t *testing.T) {
+	step := float32(256) / 65535
+	for _, c := range []struct {
+		raw  uint16
+		want float32
+	}{
+		{32767, 0}, // half a step below
+		{32768, 0}, // half a step above
+		{32769, -128 + 256*float32(32769)/65535},
+		{32766, -128 + 256*float32(32766)/65535},
+	} {
+		got := u16f([]byte{byte(c.raw), byte(c.raw >> 8)}, -128, 128)
+		if c.want == 0 && got != 0 {
+			t.Errorf("%d over plus or minus 128 = %v, want exactly zero", c.raw, got)
+		}
+		if c.want != 0 && (got-c.want > 1e-4 || c.want-got > 1e-4 || (got > -step && got < step)) {
+			t.Errorf("%d over plus or minus 128 = %v, want %v", c.raw, got, c.want)
+		}
 	}
 }
 

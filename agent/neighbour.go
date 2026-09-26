@@ -339,7 +339,8 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 	// circuit to it would be a second one to the simulator already on
 	// the other end of the root's, which is what crossTo refuses for
 	// the same reason -- and here it is also how a stale offer reads
-	// after a crossing into the region that made it.
+	// after a crossing into the region that made it.  Asked again
+	// before the insert below.
 	if handle == a.RegionHandle() {
 		return
 	}
@@ -474,6 +475,16 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 	// move the avatar into the neighbour.
 	if err := c.send.SendReliable(ctx, a.useCircuitCode()); err != nil {
 		a.logf("neighbour %s at %s: UseCircuitCode: %v", gridSquare(handle), addr, err)
+		c.close()
+		return
+	}
+
+	// Asked again, under the lock: the avatar may have moved into this
+	// region since the check at the top, and the move's dropNeighbours
+	// may already have run, leaving nothing to close this circuit.
+	// Taking a.mu under neighMu is safe because nothing takes neighMu
+	// while holding a.mu.
+	if handle == a.RegionHandle() {
 		c.close()
 		return
 	}

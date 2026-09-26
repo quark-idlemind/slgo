@@ -227,3 +227,51 @@ func TestNoToATeleportRequestSettlesItForEveryClient(t *testing.T) {
 		t.Errorf("the daemon was told %q", got)
 	}
 }
+
+// TestThePromptCountFollowsWhatArrivesAndWhatGoes: the count at the
+// prompt is what tells somebody mid-conversation that something wants
+// an answer, and it was worked out only after a command.  A dialog, a
+// permission request and an offer each put it up as they are announced,
+// on whichever goroutine announces them, and an offer answered in
+// another client takes it down again.
+func TestThePromptCountFollowsWhatArrivesAndWhatGoes(t *testing.T) {
+	x, k := newKeptShell(t, &sl.OfferRecord{Since: time.Now(), Limit: 100})
+	watching(t, x)
+	x.prompt()
+
+	becomes := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			x.term.mu.Lock()
+			got := x.term.prompt
+			x.term.mu.Unlock()
+			if got == want {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the prompt is %q, want %q", got, want)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	becomes("/$ ")
+
+	x.grid.Relay(t, dialogFrom("a lamp", "pick one", -4242, "Yes", "No"))
+	becomes("(1) /$ ")
+	x.grid.Relay(t, asking("a lamp", sl.PermissionAttach))
+	becomes("(2) /$ ")
+	select {
+	case k.msgs <- kept(t, "lure:9", time.Now(), false, luring(testLurer)):
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing read the relay")
+	}
+	becomes("(3) /$ ")
+
+	select {
+	case k.notices <- &sl.Handled{Key: "lure:9", How: "accepted", By: "slbotd", At: time.Now()}:
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing read the notices")
+	}
+	becomes("(2) /$ ")
+}

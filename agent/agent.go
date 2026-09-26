@@ -106,7 +106,8 @@ type Agent struct {
 
 	// asked remembers which local ids were recently asked about, so
 	// that something moving on the edge of the draw distance is not
-	// asked for several times a second.  See askAgain.
+	// asked for several times a second.  Forgotten on entering another
+	// region.  See askAgain.
 	askedMu sync.Mutex
 	asked   map[uint32]time.Time
 
@@ -182,7 +183,9 @@ type Agent struct {
 	// one, by grid handle, and refused are the offers turned down for
 	// being past MaxNeighbours -- kept only so that one is logged
 	// once rather than every time it is offered again.  Both are nil
-	// while neighbours are off; see neighbour.go.
+	// while neighbours are off; see neighbour.go.  openNeighbour
+	// reads the handle under neighMu, so mu may be taken inside
+	// neighMu and never neighMu inside mu.
 	neighMu    sync.Mutex
 	neighbours map[uint64]*child
 	refused    map[uint64]bool

@@ -73,9 +73,18 @@ func placeQuat(b []byte) Quaternion {
 	return Quaternion{X: lef32(b[0:4]), Y: lef32(b[4:8]), Z: lef32(b[8:12])}
 }
 
+// u16f reads a sixteen bit fraction of lo..hi as the viewer's U16_to_F32
+// does (llmath/llquantize.h:72-85), including its one adjustment: a
+// value within one step of zero is exactly zero.  Zero falls between two
+// steps of a span centred on it, so without that a thing at rest reads
+// as moving a few millimetres a second.
 func u16f(b []byte, lo, hi float32) float32 {
-	v := float32(binary.LittleEndian.Uint16(b)) / 65535
-	return lo + (hi-lo)*v
+	span := hi - lo
+	v := lo + span*(float32(binary.LittleEndian.Uint16(b))/65535)
+	if step := span / 65535; v > -step && v < step {
+		return 0
+	}
+	return v
 }
 
 func u8f(b uint8, lo, hi float32) float32 {
@@ -157,12 +166,11 @@ func DecodeTerse(b []byte) (*Terse, error) {
 	t.Position = Vector3{X: lef32(b[i:]), Y: lef32(b[i+4:]), Z: lef32(b[i+8:])}
 	i += 12
 
-	// The rest are sixteen bit fractions of a range.  Rotation runs
-	// from minus one to one and all four components are sent here,
-	// unlike the three float form elsewhere.  The span used for
-	// velocity and acceleration has only ever been seen holding the
-	// midpoint, so the value below is the conventional one rather than
-	// something this package has confirmed.
+	// The rest are sixteen bit fractions of a range, the viewer's
+	// ranges (llviewerobject.cpp:1755-1778): velocity over plus or minus
+	// 128, acceleration and angular velocity over plus or minus 64, and
+	// rotation over plus or minus one, with all four components sent
+	// here, unlike the three float form elsewhere.
 	rd3 := func(lo, hi float32) Vector3 {
 		v := Vector3{
 			X: u16f(b[i:], lo, hi),
@@ -172,9 +180,8 @@ func DecodeTerse(b []byte) (*Terse, error) {
 		i += 6
 		return v
 	}
-	const velMax = 128.0
-	t.Velocity = rd3(-velMax, velMax)
-	t.Acceleration = rd3(-velMax, velMax)
+	t.Velocity = rd3(-128, 128)
+	t.Acceleration = rd3(-64, 64)
 	// All four components are on the wire here, and the fourth is not
 	// only there to be thrown away.  The simulator does not keep W
 	// positive, and q and -q are the same rotation, so keeping X, Y and
@@ -191,6 +198,6 @@ func DecodeTerse(b []byte) (*Terse, error) {
 		u16f(b[i+6:], -1, 1),
 	)
 	i += 8
-	t.AngularVel = rd3(-velMax, velMax)
+	t.AngularVel = rd3(-64, 64)
 	return t, nil
 }

@@ -516,8 +516,14 @@ func TestNewScriptCreatesTheItemBeforeSavingToIt(t *testing.T) {
 		relayCreated(t, f, m.InventoryBlock.CallbackID)
 		// No upload capability, so the item exists and the source did
 		// not get to it, which is not a script.
-		if _, err := wait(); err == nil {
+		it, err := wait()
+		if err == nil {
 			t.Error("NewScript reported a script whose source was never saved")
+		}
+		// But the item is in inventory, and the caller is the only one
+		// who can tidy it away.
+		if it == nil || it.ID != theChild {
+			t.Errorf("NewScript = %+v, want the item it made", it)
 		}
 	})
 }

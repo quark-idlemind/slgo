@@ -230,6 +230,12 @@ func (r *Receiver) Stats() Stats {
 // Cancellation unblocks a read in progress if the connection supports
 // SetReadDeadline, which *net.UDPConn does.  Otherwise close the
 // connection to stop it.  A cancelled Run returns nil.
+//
+// A Receiver is used once.  Run closes C as it returns, so calling it a
+// second time panics.  While it runs it owns the connection's read
+// deadline: cancelling sets one in the past and nothing clears it, so a
+// connection read from again after a cancelled Run has to have its
+// deadline cleared first.
 func (r *Receiver) Run(ctx context.Context) error {
 	defer close(r.ch)
 

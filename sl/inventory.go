@@ -348,6 +348,10 @@ func (w *Session) SaveNotecard(ctx context.Context, item msg.UUID, text string) 
 }
 
 // NewScript creates a script in inventory and saves source to it.
+//
+// When the item was made and the source could not be saved, the item is
+// returned with the error: it is in inventory, and only the caller knows
+// whether to delete it or save to it again.
 func (w *Session) NewScript(ctx context.Context, name, source string) (*Item, *UploadResult, error) {
 	it, err := w.CreateItem(ctx, name, "created by slgo", int8(AssetLSLText), int8(AssetLSLText))
 	if err != nil {
@@ -355,7 +359,7 @@ func (w *Session) NewScript(ctx context.Context, name, source string) (*Item, *U
 	}
 	res, err := w.SaveScript(ctx, it.ID, source)
 	if err != nil {
-		return nil, nil, err
+		return it, nil, err
 	}
 	return it, res, nil
 }

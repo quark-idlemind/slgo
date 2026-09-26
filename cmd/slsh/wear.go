@@ -569,16 +569,26 @@ func cmdDetach(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	// Out of the folder as well as off the avatar, whether or not the
 	// region has caught up: the request went, and a link left behind
 	// would put the thing back on at the next login.
-	line := fmt.Sprintf("%s is no longer worn on %s", name, sl.AttachPointName(a.Point))
+	var left string
+	var leftErr error
 	if _, err := sh.s.ForgetWorn(ctx, a.Item); err != nil {
-		line += fmt.Sprintf("; its link is still in the Current Outfit folder, so it will "+
-			"come back at the next login: %v", err)
+		left, leftErr = "its link is still in the Current Outfit folder, so it will "+
+			"come back at the next login", err
 	} else if err := sh.s.UpdateAppearance(ctx); err != nil {
-		line += fmt.Sprintf("; the appearance was not rebaked, so the simulator's list "+
-			"of what is worn still shows it: %v", err)
+		left, leftErr = "the appearance was not rebaked, so the simulator's list "+
+			"of what is worn still shows it", err
 	}
 	if waited != nil {
+		// Without the "no longer worn" half, which the wait did not
+		// confirm, but not without what was left behind.
+		if leftErr != nil {
+			return errors.Join(waited, fmt.Errorf("%s: %s: %w", name, left, leftErr))
+		}
 		return waited
+	}
+	line := fmt.Sprintf("%s is no longer worn on %s", name, sl.AttachPointName(a.Point))
+	if leftErr != nil {
+		line += fmt.Sprintf("; %s: %v", left, leftErr)
 	}
 	fmt.Fprintln(out, line)
 	return nil

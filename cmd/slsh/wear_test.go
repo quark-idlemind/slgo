@@ -538,6 +538,45 @@ func TestDetachingSaysWhenTheRegionNeverAgrees(t *testing.T) {
 	}
 }
 
+// TestADetachNobodyConfirmedStillSaysWhatWasLeftBehind: when the region
+// never agrees and the link could not be taken out of the Current Outfit
+// folder either, both are said.  The link is what puts the thing back on
+// at the next login, and an error that carried only the wait would leave
+// that to be found then.  Nor is the thing said to be no longer worn,
+// which nothing confirmed.
+func TestADetachNobodyConfirmedStillSaysWhatWasLeftBehind(t *testing.T) {
+	x := newTestShell(t)
+	wearThings(x, &sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
+		AttachItem: testLamp, AttachPoint: 1})
+
+	// The region ignores the request, and inventory has stopped
+	// answering by the time the link is to be taken out.
+	x.grid.mu.Lock()
+	x.grid.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.DetachAttachmentIntoInv); !ok {
+			return
+		}
+		x.grid.mu.Lock()
+		defer x.grid.mu.Unlock()
+		x.grid.capErr = errors.New("the capability went away")
+	}
+	x.grid.mu.Unlock()
+
+	got := x.do(t, "detach -w 1 a lamp")
+	for _, want := range []string{
+		"still lists it as worn",
+		"a lamp: its link is still in the Current Outfit folder",
+		"the capability went away",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("detach printed %q, want it to say %q", got, want)
+		}
+	}
+	if strings.Contains(got, "no longer worn") {
+		t.Errorf("detach printed %q, which says it came off though nothing confirmed it", got)
+	}
+}
+
 // TestDetachingANameWornTwiceAsksWhichOne: two items of one name can
 // both be on, and taking off whichever came back first would be a coin
 // toss the person cannot see being flipped.

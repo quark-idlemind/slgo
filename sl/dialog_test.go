@@ -3,7 +3,9 @@ package sl
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -222,5 +224,119 @@ func TestAnsweringRefusesAButtonThatIsNotThere(t *testing.T) {
 	}
 	if got := f.Sent(); len(got) != 0 {
 		t.Errorf("a reply went out for a button that does not exist: %s", f.describe())
+	}
+}
+
+// TestADialogWhoseAnswerNeverWentIsStillWaiting: forgotten only after
+// the send, the same shape a permission request keeps.  A dialog whose
+// answer never left is one the script is still waiting on.
+func TestADialogWhoseAnswerNeverWentIsStillWaiting(t *testing.T) {
+	w := &Session{}
+	down := errors.New("the circuit is down")
+	w.sendFn = func(msg.Message) error { return down }
+	w.dialog(testScriptDialog())
+	d := w.Dialogs()[0]
+
+	if err := w.Answer(context.Background(), d, "Yes"); !errors.Is(err, down) {
+		t.Fatalf("Answer = %v, want the send's failure", err)
+	}
+	if n := len(w.Dialogs()); n != 1 {
+		t.Fatalf("a dialog whose answer never went out was forgotten: %d left", n)
+	}
+
+	w.sendFn = func(msg.Message) error { return nil }
+	if err := w.Answer(context.Background(), d, "Yes"); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(w.Dialogs()); n != 0 {
+		t.Errorf("an answered dialog is still waiting: %d", n)
+	}
+}
+
+// handledSink collects what a session hands OnHandled.
+type handledSink struct {
+	mu   sync.Mutex
+	told []Handled
+}
+
+func (h *handledSink) on(w *Session) {
+	w.mu.Lock()
+	w.OnHandled = func(x Handled) {
+		h.mu.Lock()
+		h.told = append(h.told, x)
+		h.mu.Unlock()
+	}
+	w.mu.Unlock()
+}
+
+func (h *handledSink) take() []Handled {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := h.told
+	h.told = nil
+	return out
+}
+
+// TestAnUnansweredDialogIsForgottenAfterAnHour: a dialog cannot be
+// declined and is often never answered, so one is forgotten after
+// UnansweredFor -- when the next arrives, or when the list is read --
+// and whoever counts what is waiting is told.
+func TestAnUnansweredDialogIsForgottenAfterAnHour(t *testing.T) {
+	w := &Session{}
+	var told handledSink
+	told.on(w)
+	age := func(i int) {
+		w.mu.Lock()
+		w.dialogs[i].At = time.Now().Add(-UnansweredFor - time.Minute)
+		w.mu.Unlock()
+	}
+
+	w.dialog(testScriptDialog())
+	age(0)
+	w.dialog(testScriptDialog())
+	if ds := w.Dialogs(); len(ds) != 1 || time.Since(ds[0].At) > time.Minute {
+		t.Fatalf("Dialogs = %+v, want only the one that has just arrived", ds)
+	}
+	got := told.take()
+	if len(got) != 1 {
+		t.Fatalf("told %+v, want the one forgotten", got)
+	}
+	if want := "the dialog from Test Object was forgotten after 1h unanswered by this session"; got[0].String() != want {
+		t.Errorf("told %q, want %q", got[0], want)
+	}
+
+	// And when nothing new comes, on reading.
+	age(0)
+	if ds := w.Dialogs(); len(ds) != 0 {
+		t.Errorf("Dialogs = %+v, want the overdue one forgotten", ds)
+	}
+	if got := told.take(); len(got) != 1 {
+		t.Errorf("told %+v, want the one forgotten on reading", got)
+	}
+}
+
+// TestNoMoreThanMaxUnansweredDialogsAreKept: a script that puts up a
+// dialog a second would fill the list inside the hour, so the oldest
+// gives way to the newest, and is said to.
+func TestNoMoreThanMaxUnansweredDialogsAreKept(t *testing.T) {
+	w := &Session{}
+	var told handledSink
+	told.on(w)
+
+	for i := range MaxUnanswered + 1 {
+		m := testScriptDialog()
+		m.Data.Message = []byte(fmt.Sprintf("dialog %d\x00", i))
+		w.dialog(m)
+	}
+	ds := w.Dialogs()
+	if len(ds) != MaxUnanswered {
+		t.Fatalf("kept %d dialogs, want %d", len(ds), MaxUnanswered)
+	}
+	if ds[0].Message != "dialog 1" || ds[len(ds)-1].Message != fmt.Sprintf("dialog %d", MaxUnanswered) {
+		t.Errorf("kept %q to %q, want the oldest gone", ds[0].Message, ds[len(ds)-1].Message)
+	}
+	got := told.take()
+	if len(got) != 1 || !strings.Contains(got[0].String(), "dropped as the oldest of more than 32 waiting") {
+		t.Errorf("told %+v, want the oldest dropped", got)
 	}
 }

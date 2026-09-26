@@ -175,7 +175,8 @@ type Session struct {
 	parcelFns []func(*agent.Parcel)
 	dwellFns  []func(local int32, id msg.UUID, dwell float32)
 
-	// Permission requests seen, answered or not, in arrival order.
+	// Permission requests waiting for an answer, in arrival order.
+	// See waiting.go for how long one is kept.
 	asked []*Permission
 
 	// Who is who: names learned or asked for, the questions still
@@ -205,7 +206,8 @@ type Session struct {
 
 	// Dialogs a script has put up, in arrival order.  Kept rather
 	// than only delivered, because a dialog that appears the instant
-	// a script starts would otherwise be a race nobody can win.
+	// a script starts would otherwise be a race nobody can win.  See
+	// waiting.go for how long one is kept.
 	dialogs []Dialog
 
 	// syntax is the LSL the region implements, which is half a
@@ -224,6 +226,12 @@ type Session struct {
 	// holding is dealt with somewhere else -- by another client of
 	// the same avatar, which the daemon says -- and has been dropped.
 	// Not for the ones this session deals with itself.  See offers.go.
+	//
+	// It is also called when a dialog or a permission request is
+	// dropped unanswered, for its age or to make room: see
+	// UnansweredFor and MaxUnanswered.  Such a Handled has no Key and
+	// is By "this session", and it may be called from Dialogs, Asked or
+	// WaitDialog on the caller's goroutine, without the session's lock.
 	OnHandled func(Handled)
 
 	// record is what slgod said about the offers it keeps, and nil

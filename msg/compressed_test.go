@@ -187,6 +187,11 @@ func TestDecodeCompressedEverything(t *testing.T) {
 	if c.TextColor != [4]uint8{1, 2, 3, 4} {
 		t.Errorf("text colour = %v", c.TextColor)
 	}
+	// The alpha is sent subtracted from 255, and TextColor keeps it as
+	// sent so that the two message forms agree.
+	if got := c.TextRGBA(); got != [4]uint8{1, 2, 3, 251} {
+		t.Errorf("text colour the right way up = %v", got)
+	}
 	if c.MediaURL != "http://example.invalid/" {
 		t.Errorf("media url = %q", c.MediaURL)
 	}
@@ -325,5 +330,18 @@ func TestF32AtStopsAtTheEnd(t *testing.T) {
 	}
 	if got := f32at(b, 4); got != 0 {
 		t.Errorf("f32at past the end = %v, want 0", got)
+	}
+}
+
+// TestAFullUpdatesTextColourIsFlippedTheSameWay: the full ObjectUpdate
+// sends the alpha subtracted from 255 as the compressed one does, and
+// opaque text arrives as a zero.
+func TestAFullUpdatesTextColourIsFlippedTheSameWay(t *testing.T) {
+	d := &ObjectUpdate_ObjectData{TextColor: [4]byte{255, 128, 0, 0}}
+	if got := d.TextRGBA(); got != [4]byte{255, 128, 0, 255} {
+		t.Errorf("text colour the right way up = %v, want opaque", got)
+	}
+	if d.TextColor != [4]byte{255, 128, 0, 0} {
+		t.Errorf("TextRGBA changed the bytes it read: %v", d.TextColor)
 	}
 }

@@ -440,7 +440,35 @@ func TestAnOfferForTheRegionTheAvatarIsInIsNotTakenUp(t *testing.T) {
 	}
 }
 
-// TestAnOfferOnTheCircuitIsTakenUpToo: the template marks
+// TestAnOfferOvertakenByAMoveIntoItsRegionIsNotKept: the check on the
+// handle is made before the lock, and the avatar can move into the
+// offered region, and the move drop the neighbours, while the offer
+// waits for it.  What was dialled is closed rather than listed.
+func TestAnOfferOvertakenByAMoveIntoItsRegionIsNotKept(t *testing.T) {
+	a, _, _, sim, handle := neighbourly(t)
+
+	a.neighMu.Lock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		a.openNeighbour(handle, sim.addr())
+	}()
+	// Long enough for the offer to be past the first check and waiting
+	// on the lock; if it is not, the first check refuses it and the
+	// test passes for the wrong reason rather than failing.
+	time.Sleep(100 * time.Millisecond)
+	a.mu.Lock()
+	a.here.Handle = handle
+	a.mu.Unlock()
+	a.neighMu.Unlock()
+	<-done
+
+	if got := a.Neighbours(); len(got) != 0 {
+		t.Errorf("Neighbours = %+v, want none: the offer names the region the avatar is in", got)
+	}
+}
+
+// TestAnOfferOnTheCircuitIsTakenUpToo:the template marks
 // EnableSimulator UDPBlackListed and all 57 of stage 0's arrived on the
 // event queue, but a deprecation flag is a promise a grid need not keep
 // -- crossing.go reads both roads for that reason and this follows it.
