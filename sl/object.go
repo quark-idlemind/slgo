@@ -36,6 +36,7 @@ type RezOptions struct {
 }
 
 // Rez creates a single prim and returns it, having confirmed we own it.
+// It is made in the avatar's active group, as a viewer makes one.
 //
 // Build does this and more; this is the short way to get one prim when
 // none of the rest is wanted.

@@ -68,7 +68,8 @@ const (
 // one, with the first prim as the root.
 //
 // One prim or many goes through the same call: a single prim is
-// returned as it is, with nothing to link.
+// returned as it is, with nothing to link.  Every prim is made in the
+// avatar's active group, as a viewer makes one.
 //
 // Each prim is rezzed and confirmed before the next, rather than
 // rezzing them all and sorting out afterwards which is which.  Objects
@@ -254,6 +255,14 @@ func distance(a, b msg.Vector3) float32 {
 // rezAt is Rez with the scale and rotation given, and is what Build
 // uses.
 func (w *Session) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quaternion, shape ...Shape) (*Object, error) {
+	// In the avatar's active group, as a viewer rezzes: land that runs
+	// only its group's scripts does not run one in a prim of no group.
+	// Why: doc/rez.md#the-group-a-prim-is-made-in
+	group, err := w.ActiveGroup(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// What the region held before, from the backend: this session has
 	// only heard what was relayed since it attached.
 	before, err := w.localIDs(ctx)
@@ -263,6 +272,7 @@ func (w *Session) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quat
 
 	m := &msg.ObjectAdd{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.AgentData.GroupID = group
 	d := &m.ObjectData
 	d.PCode, d.Material, d.AddFlags = 9, 3, 2
 

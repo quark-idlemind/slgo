@@ -764,6 +764,50 @@ func TestFindingOursAsksWithoutHoldingTheLock(t *testing.T) {
 	}
 }
 
+// TestRezIsMadeInTheActiveGroup: a viewer rezzes in the avatar's
+// active group.  A prim of no group on land that runs only its group's
+// scripts holds a script the simulator reports running and that never
+// runs.
+func TestRezIsMadeInTheActiveGroup(t *testing.T) {
+	t.Parallel()
+	group := msg.MustParseUUID("80f37e57-7e57-c0de-682d-3aa3f92b7cc4")
+
+	t.Run("the group is sent", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		f.mu.Lock()
+		f.presence.ActiveGroup = group
+		f.mu.Unlock()
+
+		wait := aside(t, func() (*Built, error) {
+			return w.Build(context.Background(), []Prim{{Position: msg.Vector3{X: 128, Y: 128, Z: 25}}})
+		})
+		confirmRez(t, f, thePrim, 77, 1)
+		if _, err := wait(); err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		if got := onlySent[*msg.ObjectAdd](t, f).AgentData.GroupID; got != group {
+			t.Errorf("rezzed in group %s, want the active group %s", got, group)
+		}
+	})
+
+	t.Run("the group cannot be learned", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		f.mu.Lock()
+		f.presenceErr = errors.New("nobody knows where we are")
+		f.mu.Unlock()
+		_, err := w.rezAt(context.Background(), msg.Vector3{X: 128, Y: 128, Z: 25},
+			msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}, msg.Quaternion{})
+		if err == nil {
+			t.Error("rezAt went ahead without knowing the group to rez in")
+		}
+		if got := sentOf[*msg.ObjectAdd](f); len(got) != 0 {
+			t.Errorf("a prim was rezzed in no group: %s", f.describe())
+		}
+	})
+}
+
 // TestSetDescriptionStopsWhenTheCallerGivesUp: the same promise SetName
 // makes, in the other twenty second loop in this package.
 //

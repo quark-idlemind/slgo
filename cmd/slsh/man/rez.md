@@ -51,6 +51,14 @@ here, so `--at` moves the whole thing without the file having to be
 edited: the root lands on the point given, and every other prim keeps
 the vector from the root that the file gave it.
 
+## The group it belongs to
+
+Every prim is made in the group the avatar is acting as, which is what
+a viewer does, so `group` decides it.  That matters for more than
+whether the land lets it build: on land that runs only its group's
+scripts, a script in a prim of no group was seen reported as running
+and never run.
+
 ## What is made, and what is not
 
 Only the scripts in a description are made.  The rest of what a file
@@ -72,6 +80,6 @@ Build one here rather than at the position the file records:
 
     rez --at 128,128,25 probe.json
 
-See also: `dump`, `reform`, `place` for putting an inventory object
-into the world, `link` and `unlink`, and `take` for bringing what was
-built in.
+See also: `dump`, `reform`, `group`, `place` for putting an inventory
+object into the world, `link` and `unlink`, and `take` for bringing
+what was built in.

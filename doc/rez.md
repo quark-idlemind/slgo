@@ -3,7 +3,8 @@
 `Build` and `Rez` in `sl` both make a prim through `rezAt`
 (`sl/build.go`), which sends an `ObjectAdd` and then has to find the
 prim in the region: nothing in reply names the prim that was made.
-`findOurs` finds it by where it stands. This is what that rests on.
+`findOurs` finds it by where it stands. This is what that rests on,
+and why the prim is made in the avatar's active group.
 
 ## Where a new prim lands
 
@@ -60,3 +61,17 @@ its `KillObject` was processed (4efc3c1, in `RezFromInventory`, which
 has matched by position since). And it returned the avatar, which is
 owned by us and was new to the session when a build followed a login
 closely (fc26d52).
+
+## The group a prim is made in
+
+Measured on Agni on 2026-09-26: on a parcel that runs only group
+scripts, a script in a prim that had no group, within 50 m of the
+ground, never executed, though the simulator reported it running.
+
+`rezAt` sets `GroupID` in the `ObjectAdd` to the avatar's active group,
+as a viewer does. Firestorm's `LLToolPlacer` sends
+`FSCommon::getGroupForRezzing()` (`newview/lltoolplacer.cpp:319`),
+which is `gAgent.getGroupID()`, or the land's group under the
+`RezUnderLandGroup` setting (`newview/fscommon.cpp:505-522`). slgo does
+not follow that setting: the active group is the one `group` shows and
+sets.
