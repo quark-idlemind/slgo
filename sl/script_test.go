@@ -801,6 +801,58 @@ func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
 	})
 }
 
+// TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory: the copy
+// in the avatar's inventory is only the way in, and is deleted when the
+// way in fails as it is when it succeeds.
+func TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory(t *testing.T) {
+	t.Parallel()
+	o := &Object{ID: thePrim, Local: 77}
+	gone := errors.New("the circuit is gone")
+
+	for _, c := range []struct {
+		name  string
+		stage func(t *testing.T, f *fakeBackend)
+	}{
+		// No upload capability: the item is made and its source is not
+		// saved to it.
+		{"the source could not be saved", func(*testing.T, *fakeBackend) {}},
+		{"the copy never went in", func(t *testing.T, f *fakeBackend) {
+			serveUpload(t, f, "UpdateScriptAgent", compiles)
+			failSendsAfter[*msg.CreateInventoryItem](f, gone)
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			c.stage(t, f)
+			deleted := make(chan string, 4)
+			f.ServeCap(t, "InventoryAPIv3", func(rw http.ResponseWriter, r *http.Request) {
+				deleted <- r.Method + " " + r.URL.Path
+				rw.WriteHeader(http.StatusOK)
+			})
+
+			wait := aside(t, func() (*Result, error) {
+				return w.Run(context.Background(), Script{In: o, Name: "a script"})
+			})
+			objectHolding(f, thePrim).answer(t, "")
+			m := waitSent[*msg.CreateInventoryItem](t, f)
+			relayCreated(t, f, m.InventoryBlock.CallbackID)
+			if _, err := wait(); err == nil {
+				t.Fatal("Run went on without the script in the object")
+			}
+
+			select {
+			case got := <-deleted:
+				if want := "DELETE /item/" + theChild.String(); got != want {
+					t.Errorf("asked %q, want %q", got, want)
+				}
+			default:
+				t.Error("the copy in inventory was left behind")
+			}
+		})
+	}
+}
+
 // TestInstallScriptStopsAtTheSameStepsForTheSameReasons: it is Run's
 // first half without the listening, so the ways it can stop are the same
 // ones -- and a caller of this is usually installing something another

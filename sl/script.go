@@ -210,10 +210,15 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	}
 	if task == nil {
 		it, _, err := w.NewScript(ctx, s.Name, s.Source)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			err = w.PutInObject(ctx, s.In, it)
 		}
-		if err := w.PutInObject(ctx, s.In, it); err != nil {
+		if err != nil {
+			// The copy in inventory was only the way in, and is not
+			// left behind when the way in failed either.
+			if it != nil {
+				err = errors.Join(err, w.dropScriptCopy(ctx, it, s.Name))
+			}
 			return nil, err
 		}
 		if err := w.Settle(ctx, 6*time.Second); err != nil {
@@ -341,6 +346,18 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	res.Lines = col.collected()
 	res.Elapsed = time.Since(start)
 	return res, nil
+}
+
+// dropScriptCopy deletes the inventory copy of a script that did not get
+// into its object.  On a context of its own, since a run that failed
+// because its caller gave up has a cancelled one.
+func (w *Session) dropScriptCopy(ctx context.Context, it *Item, name string) error {
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := w.DeleteItem(dctx, it.ID); err != nil {
+		return fmt.Errorf("sl: the copy of %q in inventory could not be deleted: %w", name, err)
+	}
+	return nil
 }
 
 // earlierAnswer bounds the wait for an object to say whether an earlier
