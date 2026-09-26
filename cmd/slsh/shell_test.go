@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 // TestParseSplitsAndRedirects is the whole of the command line syntax.
@@ -208,6 +209,100 @@ func TestRedirectionToSomewhereUnwritableIsReported(t *testing.T) {
 	}
 	if got := x.out.String(); !strings.Contains(got, "no such") {
 		t.Errorf("the failure should reach the terminal, got %q", got)
+	}
+}
+
+// TestSplitRedirectLooksOnlyAtWholeArguments.
+//
+// These are words the calling shell has already split, so the only
+// thing looked for is an argument that is > or >> and nothing else;
+// after that the rules and refusals are parse's.  Each is also written
+// back as the transcript writes it, and parse has to read that line as
+// the same words.
+func TestSplitRedirectLooksOnlyAtWholeArguments(t *testing.T) {
+	for _, c := range []struct {
+		args   []string
+		words  []string
+		file   string
+		append bool
+		bad    string
+	}{
+		{args: []string{"rm", "Old Stuff"}, words: []string{"rm", "Old Stuff"}},
+		{args: []string{"cp", "Old Hat", "New Hat"}, words: []string{"cp", "Old Hat", "New Hat"}},
+		{args: []string{"cat", "Notes > old"}, words: []string{"cat", "Notes > old"}},
+		{args: []string{"cat", ">old"}, words: []string{"cat", ">old"}},
+		{args: []string{"say", "it's"}, words: []string{"say", "it's"}},
+		{args: []string{"say", `a "b"`}, words: []string{"say", `a "b"`}},
+		{args: []string{"say", `it's "b"`}, words: []string{"say", `it's "b"`}},
+		{args: []string{"say", `"'`}, words: []string{"say", `"'`}},
+		{args: []string{"say", ""}, words: []string{"say", ""}},
+		{args: []string{"say", "a\tb"}, words: []string{"say", "a\tb"}},
+		{args: []string{"ls", "a\\/b"}, words: []string{"ls", "a\\/b"}},
+
+		{args: []string{"ls", "-l", ">", "list.txt"}, words: []string{"ls", "-l"}, file: "list.txt"},
+		{args: []string{"ls", ">>", "list.txt"}, words: []string{"ls"}, file: "list.txt", append: true},
+		{args: []string{"ls", ">", "a list"}, words: []string{"ls"}, file: "a list"},
+		{args: []string{">", "list", "ls"}, words: []string{"ls"}, file: "list"},
+
+		{args: []string{"ls", ">", "a", ">", "b"}, bad: "only one redirection"},
+		{args: []string{"ls", ">", "a", ">>", "b"}, bad: "only one redirection"},
+		{args: []string{"ls", ">", ">", "b"}, bad: "only one redirection"},
+		{args: []string{"ls", ">"}, bad: "no file after >"},
+		{args: []string{"ls", ">>"}, bad: "no file after >"},
+	} {
+		words, file, appending, err := splitRedirect(c.args)
+		line := quoteWords(c.args)
+		pWords, pFile, pAppending, pErr := parse(line)
+
+		if c.bad != "" {
+			if err == nil || !strings.Contains(err.Error(), c.bad) {
+				t.Errorf("%q: want a refusal mentioning %q, got %v", c.args, c.bad, err)
+			}
+			if pErr == nil || pErr.Error() != err.Error() {
+				t.Errorf("%q: parse(%s) refused with %v, not %v", c.args, line, pErr, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%q: %v", c.args, err)
+			continue
+		}
+		if strings.Join(words, "\x00") != strings.Join(c.words, "\x00") ||
+			file != c.file || appending != c.append {
+			t.Errorf("%q: words %q > %q append=%v, want %q > %q %v",
+				c.args, words, file, appending, c.words, c.file, c.append)
+		}
+		if pErr != nil || strings.Join(pWords, "\x00") != strings.Join(words, "\x00") ||
+			pFile != file || pAppending != appending {
+			t.Errorf("%q: the transcript's %s reads back as %q > %q append=%v, %v",
+				c.args, line, pWords, pFile, pAppending, pErr)
+		}
+	}
+}
+
+// TestDoWordsRemovesTheOneNameItWasGiven.
+//
+// rm deletes each path as it resolves it, so a name split in two
+// deletes whatever the first half names before the second half fails.
+func TestDoWordsRemovesTheOneNameItWasGiven(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.mu.Lock()
+	x.grid.inv.Dirs = append(x.grid.inv.Dirs, &invDir{
+		ID: msg.MustParseUUID("fe2b7e57-7e57-c0de-f4fa-5d5311cdbf2c"), Name: "Old"})
+	x.grid.inv.Items = append(x.grid.inv.Items, &invItem{
+		ID: msg.MustParseUUID("fe747e57-7e57-c0de-c038-b5baebcd0e85"), Name: "Old Stuff",
+		Type: int(sl.AssetNotecard), Created: 1754000300})
+	x.grid.mu.Unlock()
+
+	if err := x.DoWords(context.Background(), []string{"rm", "Old Stuff"}); err != nil {
+		t.Fatalf("rm: %v\n%s", err, x.out.String())
+	}
+	listed := x.do(t, "ls")
+	if strings.Contains(listed, "/Old Stuff") {
+		t.Errorf("Old Stuff should be gone:\n%s", listed)
+	}
+	if !strings.Contains("\n"+listed, "\n/Old\n") {
+		t.Errorf("the folder Old should still be there:\n%s", listed)
 	}
 }
 

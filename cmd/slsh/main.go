@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -53,13 +52,21 @@ type opts struct {
 	Version bool   `getopt:"--version         say which build this is, and exit"`
 }
 
+// errReported ends a one-shot run whose command failed.  The shell
+// said why when it happened, so main exits 1 without saying it again.
+// It is returned rather than exited on so that run's deferred calls
+// happen first: for --direct, one of them is the logout.
+var errReported = errors.New("already reported")
+
 func main() {
 	if err := run(); err != nil {
 		// Made visible, since the error that ends a session can carry
 		// the grid's own words -- a kick's reason is the simulator's
 		// text, passed on as it came -- and this is written to the
 		// terminal after the shell has let go of it.  See Term.Print.
-		fmt.Fprintf(os.Stderr, "slsh: %s\n", visible(err.Error()))
+		if !errors.Is(err, errReported) {
+			fmt.Fprintf(os.Stderr, "slsh: %s\n", visible(err.Error()))
+		}
 		os.Exit(1)
 	}
 }
@@ -173,13 +180,21 @@ func run() error {
 		case o.Command != "":
 			err = sh.Do(ctx, o.Command)
 		case o.File != "":
-			err = sh.Source(ctx, o.File)
+			// A failed line is reported where it failed; a file that
+			// will not open is not, and goes back to main to say.
+			if err = sh.Source(ctx, o.File); err != nil && !errors.Is(err, errStopped) {
+				return err
+			}
+		case len(args) == 1:
+			// One argument is a line, as -c takes one: slsh "ls > list".
+			err = sh.Do(ctx, args[0])
 		default:
-			err = sh.Do(ctx, strings.Join(args, " "))
+			// Several are words the calling shell has already split,
+			// so a quoted name with a space in it stays one name.
+			err = sh.DoWords(ctx, args)
 		}
 		if err != nil {
-			// Already reported where it happened.
-			os.Exit(1)
+			return errReported
 		}
 		return nil
 	}

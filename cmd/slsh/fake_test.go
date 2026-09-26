@@ -1928,9 +1928,11 @@ type fakeDaemon struct {
 
 	// auth answers the login handshake, for a daemon that is dialled
 	// rather than handed a connection, and relay is what to push down
-	// the stream once one is open.
+	// the stream once one is open.  ended hears each stream that ends,
+	// which is a client letting go of its session.
 	auth  *auth.Server
 	relay chan *pb.ServerPacket
+	ended chan struct{}
 
 	// hangUp ends the stream as soon as it is attached, which is a
 	// daemon going away under a client that is watching it, and
@@ -1957,6 +1959,12 @@ type fakeDaemon struct {
 }
 
 func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.ServerPacket]) error {
+	defer func() {
+		select {
+		case d.ended <- struct{}{}:
+		default:
+		}
+	}()
 	first, err := s.Recv()
 	if err != nil {
 		return err
@@ -2136,6 +2144,7 @@ func newAuthDaemon(t *testing.T) (*fakeDaemon, string) {
 			InventoryRoot: testRoot.String(),
 		},
 		relay: make(chan *pb.ServerPacket, 8),
+		ended: make(chan struct{}, 8),
 	}
 
 	creds, err := auth.ServerTLS()

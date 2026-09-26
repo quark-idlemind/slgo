@@ -438,15 +438,29 @@ func (sh *Shell) Do(ctx context.Context, line string) error {
 	if line == "" || strings.HasPrefix(line, "#") {
 		return nil
 	}
+	return sh.do(ctx, line, func() ([]string, string, bool, error) { return parse(line) })
+}
 
+// DoWords runs a command that is already split into words, as slsh's
+// own arguments are by the shell that started it.  Nothing in a word
+// is looked at again: the one redirection is an argument that is
+// exactly > or >>, and the file is the argument after it.
+func (sh *Shell) DoWords(ctx context.Context, args []string) error {
+	return sh.do(ctx, quoteWords(args), func() ([]string, string, bool, error) { return splitRedirect(args) })
+}
+
+// do is the rest of Do and DoWords: line is what the transcript says
+// was run, and split finds the words and the redirection in it.
+func (sh *Shell) do(ctx context.Context, line string, split func() ([]string, string, bool, error)) error {
 	// Every command run goes through here -- one typed at the prompt,
-	// one given to -c, and every line of a file being sourced -- which
-	// is why the transcript takes it here and not at the keyboard.
-	// Written before it runs, so that a command that hung or took the
-	// shell down with it is still in the file that says what happened.
+	// one given to -c or left on slsh's command line, and every line of
+	// a file being sourced -- which is why the transcript takes it here
+	// and not at the keyboard.  Written before it runs, so that a
+	// command that hung or took the shell down with it is still in the
+	// file that says what happened.
 	sh.log.line("$ " + line)
 
-	words, redirect, appending, err := parse(line)
+	words, redirect, appending, err := split()
 	if err != nil {
 		sh.errorf("%v", err)
 		return err
@@ -786,6 +800,53 @@ func parseQuoted(line string) (words []string, quotedWords []bool, redirect stri
 		return nil, nil, "", false, fmt.Errorf("no file after >")
 	}
 	return words, quotedWords, redirect, appending, nil
+}
+
+// splitRedirect is parse for words that are already split: an argument
+// that is exactly > or >> is a redirection and the next is its file,
+// under parse's rules and with its errors.  A > inside a word is part
+// of the word.
+func splitRedirect(args []string) (words []string, redirect string, appending bool, err error) {
+	isRedirect := func(a string) bool { return a == ">" || a == ">>" }
+	for i := 0; i < len(args); i++ {
+		if !isRedirect(args[i]) {
+			words = append(words, args[i])
+			continue
+		}
+		if redirect != "" {
+			return nil, "", false, fmt.Errorf("only one redirection per line")
+		}
+		if i+1 == len(args) {
+			return nil, "", false, fmt.Errorf("no file after >")
+		}
+		if isRedirect(args[i+1]) {
+			return nil, "", false, fmt.Errorf("only one redirection per line")
+		}
+		redirect, appending = args[i+1], args[i] == ">>"
+		i++
+	}
+	return words, redirect, appending, nil
+}
+
+// quoteWords writes words back as a line that parse splits into the
+// same words and the same redirection, for the transcript.
+func quoteWords(args []string) string {
+	q := make([]string, len(args))
+	for i, a := range args {
+		switch {
+		case a == ">" || a == ">>":
+			q[i] = a
+		case a == "":
+			q[i] = `""`
+		case strings.Contains(a, `"`) && strings.Contains(a, "'"):
+			// quoteWord leaves this one bare.  parse joins quoted
+			// pieces, so each " goes in single quotes of its own.
+			q[i] = `"` + strings.ReplaceAll(a, `"`, `"'"'"`) + `"`
+		default:
+			q[i] = quoteWord(a)
+		}
+	}
+	return strings.Join(q, " ")
 }
 
 // ---------------------------------------------------------------- commands
