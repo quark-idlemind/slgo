@@ -123,12 +123,12 @@ func TestDecodeTerseTruncated(t *testing.T) {
 	}
 }
 
-// The ObjectUpdate placement blob comes in five lengths and the length
+// The ObjectUpdate placement blob comes in four widths and the width
 // is the only thing that says which layout it is.  Sixty bytes are
-// plain floats; thirty-two and sixteen are integers quantised over the
-// region, so the same blob read as the wrong width gives a position
-// that is in range and stable and wrong -- exactly the failure the
-// terse decoder above was written against.
+// plain floats; thirty-two are sixteen bit fractions of ranges, so the
+// same blob read as the wrong width gives a position that is in range
+// and stable and wrong -- exactly the failure the terse decoder above
+// was written against.
 
 // placeFloats lays out the sixty byte form: position, velocity,
 // acceleration, rotation and angular velocity, twelve bytes each.
@@ -150,44 +150,37 @@ func quant16(v, lo, hi float32) uint16 {
 	return uint16((v - lo) / (hi - lo) * 65535)
 }
 
-func quant8(v, lo, hi float32) uint8 {
-	return uint8((v - lo) / (hi - lo) * 255)
-}
+// The viewer's ranges for the thirty-two byte form's position
+// (llviewerobject.cpp:1649-1651), written out here rather than taken
+// from the constants that read them: X and Y from half a region below
+// to half a region above, Z from a region's width below the ground to
+// the highest an object may be on Second Life.
+const (
+	placeXYLo, placeXYHi = -128, 384
+	placeZLo, placeZHi   = -256, 4096
+)
 
 // place16 lays out the thirty-two byte form: position, velocity and
 // acceleration six bytes each, rotation eight, angular velocity six.
-func place16(pos Vector3, rot Quaternion) []byte {
-	const lo, hi = -128, 384 // half a region either side of it
+// The rotation is all four components, as they were given.
+func place16(pos Vector3, qx, qy, qz, qw float32) []byte {
 	w := &blobWriter{}
-	w.u16(quant16(pos.X, lo, hi))
-	w.u16(quant16(pos.Y, lo, hi))
-	w.u16(quant16(pos.Z, lo, hi))
+	w.u16(quant16(pos.X, placeXYLo, placeXYHi))
+	w.u16(quant16(pos.Y, placeXYLo, placeXYHi))
+	w.u16(quant16(pos.Z, placeZLo, placeZHi))
 	w.raw(make([]byte, 12)) // velocity and acceleration
-	w.u16(quant16(rot.X, -1, 1))
-	w.u16(quant16(rot.Y, -1, 1))
-	w.u16(quant16(rot.Z, -1, 1))
-	w.raw(make([]byte, 8)) // the fourth rotation component and angular velocity
-	return w.b
-}
-
-// place8 lays out the sixteen byte form, the coarsest there is.
-func place8(pos Vector3, rot Quaternion) []byte {
-	const lo, hi = -128, 384
-	w := &blobWriter{}
-	w.u8(quant8(pos.X, lo, hi))
-	w.u8(quant8(pos.Y, lo, hi))
-	w.u8(quant8(pos.Z, lo, hi))
-	w.raw(make([]byte, 6)) // velocity and acceleration
-	w.u8(quant8(rot.X, -1, 1))
-	w.u8(quant8(rot.Y, -1, 1))
-	w.u8(quant8(rot.Z, -1, 1))
-	w.raw(make([]byte, 4))
+	w.u16(quant16(qx, -1, 1))
+	w.u16(quant16(qy, -1, 1))
+	w.u16(quant16(qz, -1, 1))
+	w.u16(quant16(qw, -1, 1))
+	w.raw(make([]byte, 6)) // angular velocity
 	return w.b
 }
 
 func TestDecodePlacement(t *testing.T) {
 	pos := Vector3{128.5, 64.25, 25.75}
 	rot := Quaternion{0.5, -0.25, 0.125}
+	q16 := place16(pos, rot.X, rot.Y, rot.Z, rot.W())
 
 	// An avatar's blob is sixteen bytes longer because it begins with
 	// a collision plane, and that is all that distinguishes it.
@@ -196,15 +189,15 @@ func TestDecodePlacement(t *testing.T) {
 	cases := []struct {
 		what string
 		b    []byte
-		tol  float32
+		// How far a position and a rotation may be out.  The sixteen
+		// bit form's coarsest axis is Z, one part in 65535 of 4352
+		// metres, which is a little under seven centimetres.
+		pos, rot float32
 	}{
-		{"floats", placeFloats(pos, rot), 0.001},
-		{"an avatar's floats", append(append([]byte(nil), plane...), placeFloats(pos, rot)...), 0.001},
-		{"sixteen bit", place16(pos, rot), 0.02},
-		{"an avatar's sixteen bit", append(append([]byte(nil), plane...), place16(pos, rot)...), 0.02},
-		// One part in 255 over a 512 metre span is two metres, which
-		// is what the coarsest form is worth.
-		{"eight bit", place8(pos, rot), 2.1},
+		{"floats", placeFloats(pos, rot), 0.001, 0.00001},
+		{"an avatar's floats", append(append([]byte(nil), plane...), placeFloats(pos, rot)...), 0.001, 0.00001},
+		{"sixteen bit", q16, 0.07, 0.0001},
+		{"an avatar's sixteen bit", append(append([]byte(nil), plane...), q16...), 0.07, 0.0001},
 	}
 	for _, c := range cases {
 		p, q, ok := DecodePlacement(c.b)
@@ -217,22 +210,75 @@ func TestDecodePlacement(t *testing.T) {
 				t.Errorf("%s: %s = %v, want %v within %v", c.what, name, got, want, tol)
 			}
 		}
-		near("position X", p.X, pos.X, c.tol)
-		near("position Y", p.Y, pos.Y, c.tol)
-		near("position Z", p.Z, pos.Z, c.tol)
-		// The rotation runs over a span of two rather than 512, so
-		// its error is smaller by the same factor.
-		near("rotation X", q.X, rot.X, c.tol/256)
-		near("rotation Y", q.Y, rot.Y, c.tol/256)
-		near("rotation Z", q.Z, rot.Z, c.tol/256)
+		near("position X", p.X, pos.X, c.pos)
+		near("position Y", p.Y, pos.Y, c.pos)
+		near("position Z", p.Z, pos.Z, c.pos)
+		near("rotation X", q.X, rot.X, c.rot)
+		near("rotation Y", q.Y, rot.Y, c.rot)
+		near("rotation Z", q.Z, rot.Z, c.rot)
 	}
 }
 
-// TestDecodePlacementUnknownWidth: a length that is none of the five is
+// TestASixteenBitRotationSentNegatedIsTheSameRotation: the thirty-two
+// byte form carries all four components of the rotation, as the terse
+// form does, and the same holds of it: q and -q are one rotation, and
+// only W says which was sent.  Reading three and recovering W as
+// positive turns a -q into the mirror image of q.
+func TestASixteenBitRotationSentNegatedIsTheSameRotation(t *testing.T) {
+	// A quarter turn anticlockwise about the vertical, (0, 0, sin 45,
+	// cos 45), sent as its negative.
+	s := float32(0.70710677)
+	b := place16(Vector3{128, 128, 25}, 0, 0, -s, -s)
+	for _, c := range []struct {
+		what string
+		b    []byte
+	}{
+		{"a prim", b},
+		{"an avatar", append(make([]byte, 16), b...)},
+	} {
+		_, q, ok := DecodePlacement(c.b)
+		if !ok {
+			t.Fatalf("%s: %d bytes were not recognised", c.what, len(c.b))
+		}
+		near := func(got, want float32) bool { return got > want-0.001 && got < want+0.001 }
+		if !near(q.Z, s) || !near(q.W(), s) || !near(q.X, 0) || !near(q.Y, 0) {
+			t.Errorf("%s: rotation = %+v with W %v, want Z and W both about %v", c.what, q, q.W(), s)
+		}
+	}
+}
+
+// TestASixteenBitHeightRunsTo4096Metres: the thirty-two byte
+// form's Z runs from a region's width below the ground to 4096 metres,
+// the viewer's range (llviewerobject.cpp:1651), and not over the span X
+// and Y use.  Over theirs, anything above 384 metres could not be said.
+func TestASixteenBitHeightRunsTo4096Metres(t *testing.T) {
+	quantum := float32(placeZHi-placeZLo) / 65535
+	for _, z := range []float32{4000, 25.75, -200} {
+		p, _, ok := DecodePlacement(place16(Vector3{128, 128, z}, 0, 0, 0, 1))
+		if !ok {
+			t.Fatal("thirty-two bytes were not recognised")
+		}
+		if p.Z-z > quantum || z-p.Z > quantum {
+			t.Errorf("Z %v decoded as %v, want within %v", z, p.Z, quantum)
+		}
+	}
+}
+
+// TestASixteenByteBlobIsNotRead: there is no sixteen byte form.  The
+// viewer reads no such width, so a layout for one would be a guess,
+// and a guess puts the object somewhere plausible and wrong.
+func TestASixteenByteBlobIsNotRead(t *testing.T) {
+	b := []byte{0x80, 0x80, 0x10, 0, 0, 0, 0, 0, 0, 0x80, 0x80, 0xc0, 0, 0, 0, 0}
+	if p, q, ok := DecodePlacement(b); ok {
+		t.Errorf("sixteen bytes decoded to %v %v", p, q)
+	}
+}
+
+// TestDecodePlacementUnknownWidth: a length that is none of the four is
 // a layout this build does not know, and guessing at one would put the
 // object somewhere plausible and wrong.
 func TestDecodePlacementUnknownWidth(t *testing.T) {
-	for _, n := range []int{0, 1, 15, 17, 31, 33, 44, 59, 61, 77} {
+	for _, n := range []int{0, 1, 15, 16, 17, 31, 33, 44, 59, 61, 77} {
 		if p, q, ok := DecodePlacement(make([]byte, n)); ok {
 			t.Errorf("%d bytes decoded to %v %v", n, p, q)
 		}
