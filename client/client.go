@@ -138,6 +138,9 @@ type Conn struct {
 	relaying bool
 	closed   bool
 
+	// sendMu makes sends on stream one at a time.  See sendPacket.
+	sendMu sync.Mutex
+
 	// locks is what this connection has asked slgod for exclusive use
 	// of.  See lock.go.
 	locks locking
@@ -515,7 +518,7 @@ func (c *Conn) attach(ctx context.Context, agentName string, weak bool, subscrib
 	if err != nil {
 		return nil, err
 	}
-	if err := stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_Attach{
+	if err := c.sendPacket(stream, &pb.ClientPacket{Body: &pb.ClientPacket_Attach{
 		Attach: &pb.Attach{Agent: agentName, Subscribe: subscribe, Weak: weak},
 	}}); err != nil {
 		return nil, err
@@ -628,7 +631,11 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 				}
 			}
 		case *pb.ServerPacket_Granted:
-			c.grants.deliver(b.Granted)
+			// Given back off this loop: a send can wait on flow
+			// control, and this loop is how everything else arrives.
+			if late := c.grants.deliver(b.Granted); late != "" {
+				go c.giveBack(late)
+			}
 		case *pb.ServerPacket_Locked:
 			// Never dropped: somebody is waiting on this, and losing
 			// it would leave them waiting for a lock they have been
@@ -705,7 +712,7 @@ func (c *Conn) sub(s *pb.Subscribe) error {
 	if stream == nil {
 		return errors.New("client: not attached")
 	}
-	return stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_Subscribe{Subscribe: s}})
+	return c.sendPacket(stream, &pb.ClientPacket{Body: &pb.ClientPacket_Subscribe{Subscribe: s}})
 }
 
 // Send puts a message on the circuit.  The server assigns the sequence
@@ -729,10 +736,20 @@ func (c *Conn) SendRaw(ctx context.Context, id msg.ID, body []byte, reliable boo
 	// On a stream when there is one, so ordering with everything
 	// else the client is sending is preserved.
 	if stream != nil {
-		return stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_Message{Message: out}})
+		return c.sendPacket(stream, &pb.ClientPacket{Body: &pb.ClientPacket_Message{Message: out}})
 	}
 	_, err := c.grid.Send(ctx, &pb.SendRequest{Agent: name, Message: out})
 	return err
+}
+
+// sendPacket puts one frame on an attach stream, and every send on one
+// goes through it.  gRPC allows only one send at a time on a stream, and
+// this connection sends from its callers, from their waits for locks and
+// places, and from the receive loop giving back grants.
+func (c *Conn) sendPacket(stream pb.Grid_StreamClient, p *pb.ClientPacket) error {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	return stream.Send(p)
 }
 
 // ListAgents asks what the server hosts.

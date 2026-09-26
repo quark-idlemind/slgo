@@ -711,11 +711,11 @@ func TestALockNeedsAName(t *testing.T) {
 	r := newRig(t, agent.Caps{})
 	h, _ := r.srv.Agent("example")
 
-	c := &Client{host: h, out: make(chan *pb.ServerPacket, 4)}
+	c := &Client{host: h, ctl: make(chan *pb.ServerPacket, 4), jammed: make(chan struct{})}
 	c.lock(context.Background(), h, &pb.Lock{})
 
 	select {
-	case p := <-c.out:
+	case p := <-c.ctl:
 		l := p.GetLocked()
 		if l.GetHeld() || !strings.Contains(l.GetHolder(), "needs a name") {
 			t.Errorf("answer = %+v; want a refusal that says why", l)

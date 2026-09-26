@@ -60,7 +60,7 @@ func (c *Conn) lock(ctx context.Context, name string, try bool) (bool, string, e
 	c.locks.await(name, reply)
 	defer c.locks.stopAwaiting(name, reply)
 
-	if err := stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_Lock{
+	if err := c.sendPacket(stream, &pb.ClientPacket{Body: &pb.ClientPacket_Lock{
 		Lock: &pb.Lock{Name: name, Try: try},
 	}}); err != nil {
 		return false, "", err
@@ -74,7 +74,7 @@ func (c *Conn) lock(ctx context.Context, name string, try bool) (bool, string, e
 	case <-ctx.Done():
 		// Giving up on a wait has to be said, or slgod hands the lock
 		// to somebody who is no longer listening for it.
-		_ = stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_Unlock{
+		_ = c.sendPacket(stream, &pb.ClientPacket{Body: &pb.ClientPacket_Unlock{
 			Unlock: &pb.Unlock{Name: name},
 		}})
 		return false, "", ctx.Err()
@@ -87,7 +87,7 @@ func (c *Conn) Unlock(name string) error {
 	if stream == nil {
 		return fmt.Errorf("client: not connected")
 	}
-	return stream.Send(&pb.ClientPacket{Body: &pb.ClientPacket_Unlock{
+	return c.sendPacket(stream, &pb.ClientPacket{Body: &pb.ClientPacket_Unlock{
 		Unlock: &pb.Unlock{Name: name},
 	}})
 }

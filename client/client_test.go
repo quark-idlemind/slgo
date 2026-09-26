@@ -76,6 +76,9 @@ type fakeDaemon struct {
 	// old to know what a lock is, which is a wait rather than a refusal.
 	locked func(*pb.Lock) *pb.Locked
 
+	// slotted answers a request for places the same way.
+	slotted func(*pb.Slots) *pb.SlotsGranted
+
 	// auth is the server's half of the handshake, for a daemon that is
 	// dialled rather than handed an open connection, and the three
 	// fields after it are the ways that exchange goes wrong.
@@ -244,6 +247,9 @@ func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Serve
 				if d.locked != nil {
 					s.Send(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{Locked: d.locked(l)}})
 				}
+			}
+			if sl := p.GetSlots(); sl != nil && d.slotted != nil {
+				s.Send(&pb.ServerPacket{Body: &pb.ServerPacket_Granted{Granted: d.slotted(sl)}})
 			}
 		}
 	}()

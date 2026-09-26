@@ -160,3 +160,40 @@ func TestLockIsGivenUpWhenTheWaiterLeaves(t *testing.T) {
 		t.Error("the lock went to the client that had given up")
 	}
 }
+
+// TestALockAskedForAsItsStreamEndsIsNotHeld: a request can be handled
+// just after the end of its stream gave back every lock the client
+// held.  Taken then, the lock would be held by nobody, for good.  The
+// order is made here by asking for a client whose stream has already
+// ended, which is what the late request sees.
+func TestALockAskedForAsItsStreamEndsIsNotHeld(t *testing.T) {
+	t.Parallel()
+	l := newLocks()
+	gone := &Client{}
+	gone.closed.Store(true)
+	l.releaseAll(gone)
+
+	if ok, _ := l.acquire("the workbench", gone); ok {
+		t.Error("a client whose stream had ended was given a lock")
+	}
+	select {
+	case <-l.queue("the bench", gone):
+		t.Error("a client whose stream had ended was handed a free lock by waiting")
+	default:
+	}
+
+	// Behind a holder that then lets go.
+	holder := &Client{}
+	if ok, _ := l.acquire("the shelf", holder); !ok {
+		t.Fatal("a free lock was refused")
+	}
+	l.queue("the shelf", gone)
+	l.giveUp("the shelf", holder)
+
+	next := &Client{}
+	for _, name := range []string{"the workbench", "the bench", "the shelf"} {
+		if ok, by := l.acquire(name, next); !ok {
+			t.Errorf("%s is held (by the client that had gone: %v)", name, by == gone)
+		}
+	}
+}
