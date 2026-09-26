@@ -91,6 +91,7 @@ var flags = struct {
 	Clear   bool            `getopt:"--clear          empty every script out of the objects before running, for when something else is talking in them"`
 	Done    string          `getopt:"--done=TEXT       the text that means the script has finished"`
 	Timeout time.Duration   `getopt:"--timeout=DUR     how long to wait for it"`
+	Wait    time.Duration   `getopt:"--wait=DUR        with --backend, how long to wait for a free group when every one is busy; as long as it takes by default"`
 	Keep    bool            `getopt:"--keep            leave the rezzed object behind"`
 	V       options.Counter `getopt:"-v                say more: once for the script name in front of every line, twice for which avatars the objects came from"`
 	Help    bool            `getopt:"--help -h         show this message"`
@@ -355,7 +356,9 @@ func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src s
 				want = n
 			}
 		}
-		r, err := openBackend(ctx, flags.Backend, want, n > 1 || flags.Rez)
+		// --wait holds a lease even for one script: a lease request is the
+		// only one that carries a bound on the queue.
+		r, err := openBackend(ctx, flags.Backend, want, n > 1 || flags.Rez || flags.Wait > 0)
 		if err != nil {
 			return nil, 0, nil, err
 		}
@@ -363,6 +366,12 @@ func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src s
 			r.places(), r.Close, nil
 	}
 
+	if flags.Wait != 0 {
+		// Refused rather than ignored, as --object is with --backend: what
+		// the daemon's pool is asked carries no bound on the wait.
+		return nil, 0, nil, fmt.Errorf("--wait bounds the queue for a script.v1 " +
+			"backend's objects, and goes with --backend")
+	}
 	opts := session.Options{
 		Addr: flags.Addr, Agent: flags.Agent, Direct: flags.Direct,
 		First: flags.First, Last: flags.Last, Start: flags.Start,

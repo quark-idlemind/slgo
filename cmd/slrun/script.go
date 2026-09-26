@@ -28,8 +28,10 @@ package main
 //     runs, and gives it back.  It holds nothing while a person reads the
 //     output, and it is the whole of what a single script needs.
 //
-// The first is taken when there is more than one script to run or when
-// --rez asks for a place of slrun's own; otherwise the second.
+// The first is taken when there is more than one script to run, when
+// --rez asks for a place of slrun's own, or when --wait bounds the wait
+// for a free group, which only a lease request can carry; otherwise the
+// second.
 //
 // One target is the default even with scripts enough for four, where the
 // grid path takes the whole group.  A group is four because this program
@@ -57,7 +59,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/proto/scriptv1"
 )
@@ -142,7 +146,8 @@ func (r *remote) places() int { return len(r.targets) }
 // the objects go back when Close says and not when ctx ends.  ctx is
 // linked to it only while queued -- an interrupt there gives up the
 // place in the queue -- and the link is cut the moment the grant
-// arrives.
+// arrives.  --wait goes to the backend as wait_seconds, and it is the
+// backend that gives up.
 func (r *remote) lease(ctx context.Context, n int) error {
 	if n < 1 {
 		n = 1
@@ -151,6 +156,7 @@ func (r *remote) lease(ctx context.Context, n int) error {
 	unlink := context.AfterFunc(ctx, cancel)
 	stream, err := r.c.Lease(held, &scriptv1.LeaseRequest{
 		Targets: int32(n), Agent: flags.Agent, Who: "slrun",
+		WaitSeconds: seconds(flags.Wait),
 	})
 	if err != nil {
 		unlink()
@@ -165,8 +171,11 @@ func (r *remote) lease(ctx context.Context, n int) error {
 		if err != nil {
 			unlink()
 			cancel()
-			if ctx.Err() != nil {
+			switch {
+			case ctx.Err() != nil:
 				return fmt.Errorf("%w while waiting for a free group", errInterrupted)
+			case flags.Wait > 0 && status.Code(err) == codes.DeadlineExceeded:
+				return fmt.Errorf("every group was still busy when --wait %v ran out", flags.Wait)
 			}
 			return fmt.Errorf("waiting for somewhere to run: %w", err)
 		}
@@ -206,10 +215,11 @@ func (r *remote) lease(ctx context.Context, n int) error {
 	}
 }
 
-// seconds is the timeout as the contract counts it.  Whole seconds is the
-// grid's unit and is right for one; the rounding up is so that a caller
-// asking for less than a second gets the shortest run the contract can
-// express rather than the backend's default.
+// seconds is --timeout or --wait as the contract counts it.  Whole
+// seconds is the grid's unit and is right for one; the rounding up is so
+// that a caller asking for less than a second gets the shortest the
+// contract can express rather than what zero means there -- the
+// backend's default timeout, or a wait with no limit.
 func seconds(d time.Duration) int64 {
 	if d <= 0 {
 		return 0

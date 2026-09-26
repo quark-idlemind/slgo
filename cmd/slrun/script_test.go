@@ -16,6 +16,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -46,7 +47,13 @@ const speaks = `default {
 // a client for asking what it is holding.
 func backendAt(t *testing.T) (string, scriptv1.RunnerClient) {
 	t.Helper()
-	s := scripttest.New(scripttest.Options{})
+	return backendWith(t, scripttest.Options{})
+}
+
+// backendWith is backendAt with options of the test's own.
+func backendWith(t *testing.T, opt scripttest.Options) (string, scriptv1.RunnerClient) {
+	t.Helper()
+	s := scripttest.New(opt)
 	addr, err := s.Listen("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("serving a backend: %v", err)
@@ -514,4 +521,58 @@ func TestAGrantedLeaseIsHeldUntilCloseAndNotUntilTheInterrupt(t *testing.T) {
 	}
 	done()
 	until(t, "the group coming free", func() bool { return heldGroups(t, c) == 0 })
+}
+
+// TestWaitGivesUpOnABusyBackendAndSaysSo: --wait goes to the backend as
+// the lease request's wait_seconds, and the backend gives up.  One script
+// is tried as well as two, because one alone runs "anywhere", which
+// carries no bound, and so takes a lease when --wait is set.
+//
+// A second of the contract is a tenth of one here, so --wait 2s is two
+// tenths.  A run that is not bounded at all is given the group after a
+// few seconds, and succeeds, which is the failure.
+func TestWaitGivesUpOnABusyBackendAndSaysSo(t *testing.T) {
+	for _, n := range []int{1, 2} {
+		t.Run(fmt.Sprintf("%d scripts", n), func(t *testing.T) {
+			reset(t)
+			addr, c := backendWith(t, scripttest.Options{Second: 100 * time.Millisecond})
+			release := holdTheGroup(t, c)
+			args := []string{"--backend", addr, "--wait", "2s"}
+			for i := 0; i < n; i++ {
+				args = append(args, script(t, speaks))
+			}
+			commandLine(t, args...)
+
+			over := letGoAfter(5*time.Second, release)
+			start := time.Now()
+			var err error
+			out, _ := bothOf(t, func() { err = run() })
+			took := time.Since(start)
+			close(over)
+
+			if err == nil {
+				t.Fatalf("--wait 2s waited %v, until the group came free, and ran:\n%s", took, out)
+			}
+			if !strings.Contains(err.Error(), "--wait 2s") {
+				t.Errorf("run = %v, want it to say --wait ran out", err)
+			}
+			if took < 200*time.Millisecond {
+				t.Errorf("gave up after %v, before the wait was up", took)
+			}
+			until(t, "the queue emptying", func() bool { return waiting(c) == 0 })
+		})
+	}
+}
+
+// TestWaitWithoutABackendIsRefused: what the daemon's pool is asked
+// carries no bound on the wait, so --wait there would be a flag quietly
+// ignored.  Nothing is dialled: the refusal comes first.
+func TestWaitWithoutABackendIsRefused(t *testing.T) {
+	reset(t)
+	flags.Addr = "127.0.0.1:1"
+	flags.Wait = time.Second
+	_, _, _, err := somewhereToRun(context.Background(), 1)
+	if err == nil || !strings.Contains(err.Error(), "--wait") {
+		t.Errorf("--wait without --backend = %v, want it refused", err)
+	}
 }

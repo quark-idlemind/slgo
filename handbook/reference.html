@@ -105,6 +105,7 @@
           <tbody>
             <tr><td><code>--addr</code>, <code>-a</code>/<code>--agent</code>, <code>--direct</code></td><td class="what">As slsh. They do not read slsh's <code>addr</code> setting: without <code>--addr</code> they ask sl-host, then use <code>localhost:7807</code>.</td></tr>
             <tr><td><code>--backend HOST:PORT</code></td><td class="what">Talk to a <code>script.v1</code> gRPC service instead of Second Life, over an unauthenticated, unencrypted connection.</td></tr>
+            <tr><td><code>--wait DUR</code></td><td class="what">slrun, with <code>--backend</code>: the longest to wait for a free group when every one is busy, such as <code>30s</code>. The backend then gives up and the run fails. Default: as long as it takes. Ctrl-C or SIGTERM while waiting gives up the place in the queue.</td></tr>
           </tbody>
         </table></div>
       </section>
