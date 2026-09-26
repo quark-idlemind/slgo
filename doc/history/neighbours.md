@@ -417,9 +417,18 @@ kept pushing for twelve seconds before calling itself blocked.
   avatar had been away long enough for the old ones to be disabled --
   the same walk west crossed in 4.7 seconds. So the land lets the
   avatar over, and slgo's child circuits can carry it; the ones opened
-  at login cannot. Stage 2 crossed on a child opened at login on
-  2026-08-16. Whether slgo changed how it opens the login-time children
-  since then, or the grid changed its timing at login, is not known.
+  at login cannot -- or rather, not after what those three runs did
+  next.
+- **The trigger is a teleport within the region after login.** Logged
+  in on the ground at x=12 and walking west straight away, the avatar
+  crossed in 5.1 seconds on the child opened at login. Logged in on
+  the ground at x=40 and teleported within the region to x=12 first,
+  it was held at the line for twelve seconds, as the three runs above
+  had been (each began with a login in the region and a teleport within
+  it to x=12). A login inside a Linden sandbox crossed in 4.5 seconds.
+  So a child opened at login carries a crossing until the avatar
+  teleports within the region, and a child opened on a teleport arrival
+  still carries one after it. Why is not yet known.
 
 ### Stage 3 -- the crossing, by promotion
 
