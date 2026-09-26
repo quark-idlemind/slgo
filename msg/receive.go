@@ -11,7 +11,7 @@ import (
 
 // MaxPacketSize is the largest datagram we will read, and the most a
 // zero coded body may expand to.  It matches NET_BUFFER_SIZE in the C
-// client.
+// client and in the viewer (llmessage/net.h:33).
 const MaxPacketSize = 0x2000
 
 // ErrUnknownMessage is reported for a message number that is not in the
@@ -30,11 +30,16 @@ type PacketSource interface {
 // Exactly one of three things is true of a delivered Packet:
 //
 //	Message != nil                 it decoded
-//	Err != nil                     it did not, and Body holds the bytes
+//	Err != nil                     it did not
 //	Message == nil && Err == nil    it carried only acknowledgements
 //
-// Acks is filled in regardless, so a packet that failed to decode still
-// releases whatever it was acknowledging.
+// A packet that did not decode carries its message's bytes in Body when
+// its message number could be read: an unknown number, or a body that
+// would not decode.  One whose acknowledgements, zero coding or number
+// were bad has none.
+//
+// Acks is filled in whether or not the message decoded, so a packet
+// that failed to decode still releases whatever it was acknowledging.
 type Packet struct {
 	Addr    net.Addr
 	At      time.Time
@@ -52,7 +57,7 @@ type Stats struct {
 	Bytes   uint64 // bytes read
 	Runts   uint64 // too short to hold a header
 	Unknown uint64 // message number not in the template
-	Failed  uint64 // header, ack, zero coding or body decode failures
+	Failed  uint64 // ack, zero coding, message number or body decode failures
 	Padded  uint64 // decoded past the end: a width read as zeros, or a Variable field cut short
 	Dropped uint64 // discarded because the channel was full
 
@@ -72,8 +77,8 @@ type Stats struct {
 // puts them on a channel.
 //
 // It does not acknowledge anything and does not track sequence numbers:
-// Header.Reliable and Header.Sequence are handed to the caller so the
-// session layer above can do that.
+// Header.Reliable and Header.Sequence are handed to the caller so that
+// a Dispatcher can do that.
 type Receiver struct {
 	conn   PacketSource
 	ch     chan *Packet
@@ -101,20 +106,20 @@ type ReceiverOption func(*Receiver)
 
 // DefaultBuffer is how many packets a Receiver holds for its consumer.
 //
-// Generous on purpose.  What is on the other end of this channel is one
-// goroutine that dispatches a packet and runs every handler for it
-// before taking the next, so anything slow in a handler stops the socket
-// being read -- and 256 packets is a fraction of a second of a busy
-// region.  Sized to ride out a consumer that stalls for seconds rather
-// than milliseconds.
+// Generous on purpose.  What is on the other end of this channel is a
+// Dispatcher, one goroutine that runs Inline handlers itself and waits
+// for a free slot before starting any other, so anything slow in a
+// handler stops the socket being read -- and 256 packets, the old
+// default, is a fraction of a second of a busy region.  Sized to ride
+// out a consumer that stalls for seconds rather than milliseconds.
 //
 // The cost is memory, and it is worth being plain about it: the channel
 // itself is a pointer apiece, but the packets it holds are not freed
 // until they are taken, so a full one is this many packets of decoded
 // message.  Most are small; the worst case is this times MaxPacketSize,
-// which is tens of megabytes, and a machine hosting a grid session can
-// afford that far more easily than it can afford a measurement that
-// silently read nothing.
+// which is 128 MiB, and a machine hosting a grid session can afford
+// that far more easily than it can afford a measurement that silently
+// read nothing.
 const DefaultBuffer = 16384
 
 // WithBuffer sets the channel capacity.  The default is DefaultBuffer.
@@ -285,11 +290,8 @@ func (r *Receiver) Run(ctx context.Context) error {
 			continue
 		}
 
-		// The backlog before this packet goes in, kept at its highest.
-		// A drop count that reads zero says only that the queue never
-		// quite overflowed; this says how close it came, which is the
-		// difference between "there is room" and "there was room that
-		// time".
+		// The backlog before this packet goes in, kept at its highest:
+		// see Stats.Peak.
 		if n := uint64(len(r.ch)); n > r.peak.Load() {
 			r.peak.Store(n)
 			if r.onPeak != nil {

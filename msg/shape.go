@@ -2,8 +2,8 @@ package msg
 
 // A prim's form, as the protocol carries it.
 //
-// Four messages carry exactly these eighteen fields under four sets of
-// names -- ObjectAdd to rez a prim, ObjectShape to change one,
+// Four messages carry exactly these eighteen fields, each in a block of
+// its own -- ObjectAdd to rez a prim, ObjectShape to change one,
 // ObjectUpdate to describe one, and the compressed update to describe
 // one more cheaply -- so the fields live here once and each message
 // converts.
