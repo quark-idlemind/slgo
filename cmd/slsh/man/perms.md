@@ -59,13 +59,21 @@ Each flag says what that group may do afterwards, in full.  A letter
 left out is a letter turned off, so asking for modify alone on
 something that could be copied has taken copying away.
 
-## Nothing here confirms it
+## What is printed was read back
 
-The request goes out and nothing answers it, so the line printed is
-what was asked for rather than what the region did.  Where that
-matters -- a parcel or an object that will not have its permissions
-changed refuses in silence -- `dump` is the way to look: the masks are
-among what it writes out for each prim.
+Nothing answers a permission change, so after each one the object's
+masks are read back, for up to fifteen seconds, and the line printed
+is what the mask then allows.  That need not be the letters typed.
+The permission rules adjust a request rather than refuse it, and in
+the viewer's copy of them nobody is given more than the base allows,
+everyone is never given modify, and a next owner who may not copy may
+always transfer.  So `perms --next m lantern` prints
+
+    the next owner may now modify, transfer
+
+A mask that never reads as those rules make the request is an error
+saying what it allows instead, and no line is printed for it; the
+lines printed before it are the changes that were made.
 
 ## Examples
 

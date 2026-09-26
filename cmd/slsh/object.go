@@ -158,8 +158,8 @@ func cmdRez(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		if built != nil && !o.Keep {
 			// Half a build is worse than none: it leaves prims
 			// standing that nobody asked for and nothing owns.
-			for _, p := range built.Parts {
-				_ = sh.s.Delete(context.WithoutCancel(ctx), p, msg.UUID{})
+			if left := removeBuilt(context.WithoutCancel(ctx), sh.s, built); left != "" {
+				return fmt.Errorf("%w (removing what was built: %s; -k keeps it)", err, left)
 			}
 			return fmt.Errorf("%w (what was built has been removed; -k keeps it)", err)
 		}
@@ -167,6 +167,27 @@ func cmdRez(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	}
 	fmt.Fprintf(out, "%s: %d prims, %s\n", built.Root.Name, len(built.Parts), built.Root.ID)
 	return nil
+}
+
+// removeBuilt deletes what a build made and says what the region did not
+// confirm gone, or nothing if it confirmed all of it.
+//
+// A prim linked to the root is not sent: it goes with the root, and the
+// viewer deletes by sending only roots (llselectmgr.cpp:4432-4437).  One
+// sent after its root had gone would be waited for and never confirmed.
+func removeBuilt(ctx context.Context, s *sl.Session, b *sl.Built) string {
+	var left []string
+	for _, p := range b.Parts {
+		if p != b.Root {
+			if parent, ok := s.Parent(p); ok && parent == b.Root.Local {
+				continue
+			}
+		}
+		if err := s.Delete(ctx, p, msg.UUID{}); err != nil {
+			left = append(left, err.Error())
+		}
+	}
+	return strings.Join(left, "; ")
 }
 
 type reformFlags struct {

@@ -500,7 +500,19 @@ func (w *Session) derezToInventory(ctx context.Context, o *Object, folder msg.UU
 	return nil, true, fmt.Errorf("%w: %s to appear in inventory as %q after taking it", ErrTimeout, o, name)
 }
 
-// Delete sends an object to the trash.
+// deleteFor bounds the wait for the region to say a deleted object has
+// gone.
+const deleteFor = 10 * time.Second
+
+// Delete sends an object to the trash, and returns once the region says
+// it has gone.
+//
+// Nothing answers the derez itself.  What says the object has gone is
+// the KillObject the region sends for it, and one that does not come
+// within ten seconds is an error wrapping ErrTimeout: the delete was
+// asked for and not confirmed, and the object may still be there.
+// Deleting a root takes its linkset with it, as it does in the viewer.
+// Why: doc/readbacks.md#deletes
 func (w *Session) Delete(ctx context.Context, o *Object, trash msg.UUID) error {
 	if err := w.Select(ctx, o); err != nil {
 		return err
@@ -512,6 +524,15 @@ func (w *Session) Delete(ctx context.Context, o *Object, trash msg.UUID) error {
 	if err != nil {
 		return err
 	}
+
+	// Only a kill heard after this derez, in this visit, confirms it: one
+	// heard before was not an answer to it, and another region's kill of
+	// the same number is of something else.
+	w.mu.Lock()
+	delete(w.killed, local)
+	visit := w.at.n
+	w.mu.Unlock()
+
 	m := &msg.DeRezObject{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.AgentBlock.Destination = derezTrash
@@ -519,7 +540,17 @@ func (w *Session) Delete(ctx context.Context, o *Object, trash msg.UUID) error {
 	m.AgentBlock.TransactionID = randomUUID()
 	m.AgentBlock.PacketCount, m.AgentBlock.PacketNumber = 1, 0
 	m.ObjectData = []msg.DeRezObject_ObjectData{{ObjectLocalID: local}}
-	return w.Send(ctx, m)
+	if err := w.Send(ctx, m); err != nil {
+		return err
+	}
+
+	err = w.await(ctx, deleteFor, "the region to say it has gone", func() bool {
+		return w.at.n == visit && w.killed[local]
+	})
+	if errors.Is(err, ErrTimeout) {
+		return fmt.Errorf("sl: deleting %s was asked for, not confirmed: %w", o, err)
+	}
+	return err
 }
 
 func randomUUID() msg.UUID {

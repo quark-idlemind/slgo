@@ -10,6 +10,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -373,7 +374,12 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 		if err == nil {
 			err = s.Delete(ctx, obj, trash)
 		}
-		if err != nil {
+		switch {
+		case errors.Is(err, sl.ErrTimeout):
+			// Asked for and not confirmed, which is not the same as
+			// refused: it may have gone all the same.
+			fmt.Fprintf(os.Stderr, "%s may still be there: %v\n", obj, err)
+		case err != nil:
 			fmt.Fprintf(os.Stderr, "%s is still there: %v\n", obj, err)
 		}
 	}, nil

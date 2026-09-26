@@ -92,9 +92,10 @@ func TestNewPutsItWhereTheWorkingFolderIs(t *testing.T) {
 	nest := msg.MustParseUUID("ab6c7e57-7e57-c0de-e0ce-9f8b1da5cee8")
 	x.grid.inv.Dirs[0].Dirs = append(x.grid.inv.Dirs[0].Dirs, &invDir{ID: nest, Name: "nest"})
 
-	// The grid confirms the item, which is what CreateItem waits for,
-	// and the move that follows is the message these checks read: it
-	// carries the folder the shell resolved.
+	// The grid makes the item at the root and confirms it, which is
+	// what CreateItem waits for, and the move that follows is the
+	// message these checks read: it carries the folder the shell
+	// resolved, and is read back from there.
 	made := msg.MustParseUUID("e1c87e57-7e57-c0de-3ad9-0cdb6c24e8f4")
 	x.grid.mu.Lock()
 	x.grid.onSend = func(m msg.Message) {
@@ -102,6 +103,11 @@ func TestNewPutsItWhereTheWorkingFolderIs(t *testing.T) {
 		if !ok {
 			return
 		}
+		x.grid.mu.Lock()
+		if findItem(x.grid.inv, made) == nil {
+			x.grid.inv.Items = append(x.grid.inv.Items, &invItem{ID: made, Name: "note", Type: int(sl.AssetNotecard)})
+		}
+		x.grid.mu.Unlock()
 		x.grid.Relay(t, &msg.UpdateCreateInventoryItem{
 			InventoryData: []msg.UpdateCreateInventoryItem_InventoryData{{
 				CallbackID: c.InventoryBlock.CallbackID,

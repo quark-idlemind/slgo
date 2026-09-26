@@ -608,7 +608,10 @@ is what you want</span>
           terminal rather than to a file, so a redirect catches the result and
           not the flicker. Nothing here goes to the trash on its way out:
           <code>rm</code> deletes at once, and what is in the trash is what a
-          viewer put there. <code>emptytrash</code> throws that away,
+          viewer put there. Nor does <code>mv</code> put anything there: the
+          grid takes a move into the trash and does nothing with it, and
+          <code>mv</code>, which reads every move back, says it never
+          arrived. <code>emptytrash</code> throws away what the trash holds,
           permanently, and finds the trash by what it is rather than what it is
           called — so it works on an account whose viewer named it something
           else.
@@ -1635,7 +1638,11 @@ prints too</span></pre>
           next owner may do with a rezzed object, in letters:
           <code>c</code>opy, <code>m</code>odify, <code>t</code>ransfer,
           mo<code>v</code>e. It answers in that order whatever order the flags
-          were typed in, and at least one of them has to be.
+          were typed in, and at least one of them has to be. Each line is
+          what the object's mask was read back as, which the permission
+          rules may have adjusted from the letters typed: a next owner who
+          may not copy may always transfer, and everyone is never given
+          modify. A mask that never lands is an error saying what it allows.
           <code>texture</code> sets what a face looks like, or with no flags
           says what it looks like now.
         </p>

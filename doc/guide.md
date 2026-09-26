@@ -1083,7 +1083,8 @@ inventory, and that copy is deleted once the object has its own.  A
 says to leave it; a `slrun` killed outright leaves it in the world.
 
 Anything that could not be tidied away is said on standard error, and
-does not fail the run.
+does not fail the run. So is a `--rez` prim whose going the region did
+not confirm within ten seconds: it may still be standing.
 
 ### Options
 

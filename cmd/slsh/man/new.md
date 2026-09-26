@@ -11,6 +11,10 @@ id.
 Both kinds cost nothing.  Uploading a texture costs L$; this does
 not.
 
+The item is made and then moved to the folder the path names, and the
+move is read back: one that never shows there is an error, and the
+item is left wherever the grid made it.
+
 A script made with no source is given a skeleton -- an empty default
 state -- because a script with none at all is a compile error the
 moment anything runs it.  A script that did not compile says so and

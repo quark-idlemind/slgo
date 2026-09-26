@@ -850,12 +850,32 @@ func TestTakeReportsWhatDidNotHappen(t *testing.T) {
 	})
 }
 
+// answerDeletes plays the simulator's side of a delete: every object a
+// derez names is killed, in a KillObject naming its local id.
+func answerDeletes(t *testing.T, f *fakeBackend) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		d, ok := m.(*msg.DeRezObject)
+		if !ok {
+			return
+		}
+		k := &msg.KillObject{}
+		for _, o := range d.ObjectData {
+			k.ObjectData = append(k.ObjectData, msg.KillObject_ObjectData{ID: o.ObjectLocalID})
+		}
+		f.Relay(t, k)
+	}
+}
+
 // TestDeleteSendsItToTheTrash: deleting is a derez to a different
 // destination, and the selection has to settle first for the same
 // reason a link does.
 func TestDeleteSendsItToTheTrash(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
+	answerDeletes(t, f)
 
 	trash := msg.MustParseUUID("1ad37e57-7e57-c0de-4b44-9217348fe328")
 	o := foundHere(w, &Object{ID: thePrim, Local: 77})
@@ -911,6 +931,70 @@ func TestDeleteReportsWhatDidNotHappen(t *testing.T) {
 		f.mu.Unlock()
 		if err := w.Delete(context.Background(), oAt(w), msg.UUID{1}); err == nil {
 			t.Error("Delete reported success though the derez was not sent")
+		}
+	})
+}
+
+// TestADeleteIsNotReportedUntilTheRegionSaysItHasGone: nothing answers
+// a derez, and the KillObject the region sends for the object is the
+// only word that it went.  One that never comes is a delete asked for and
+// not confirmed.  A kill heard before the derez is not an answer to it,
+// and neither is one from the region the avatar has moved to, where the
+// same local id is some other object.
+func TestADeleteIsNotReportedUntilTheRegionSaysItHasGone(t *testing.T) {
+	t.Parallel()
+	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
+	kill77 := &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: 77}}}
+
+	t.Run("killed", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		answerDeletes(t, f)
+		if err := w.Delete(context.Background(), oAt(w), msg.UUID{1}); err != nil {
+			t.Errorf("Delete = %v, though the region said it had gone", err)
+		}
+	})
+
+	t.Run("killed before the delete and not after", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		o := oAt(w)
+		f.Relay(t, kill77)
+		err := w.Delete(context.Background(), o, msg.UUID{1})
+		if !errors.Is(err, ErrTimeout) || !strings.Contains(err.Error(), "not confirmed") {
+			t.Errorf("Delete = %v, want it asked for and not confirmed", err)
+		}
+	})
+
+	t.Run("killed in the next region", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		wait := asideErr(t, func() error { return w.Delete(context.Background(), oAt(w), msg.UUID{1}) })
+		waitSent[*msg.DeRezObject](t, f)
+		moveTo(t, f, elsewhere)
+		f.Relay(t, kill77)
+		if err := wait(); !errors.Is(err, ErrTimeout) {
+			t.Errorf("Delete = %v, want it not confirmed by another region's object", err)
+		}
+	})
+
+	t.Run("the caller gave up waiting for the kill", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		f.mu.Lock()
+		f.onSend = func(m msg.Message) {
+			if _, ok := m.(*msg.DeRezObject); ok {
+				cancel()
+			}
+		}
+		f.mu.Unlock()
+		_, err := whenCancelled(t, ctx, func(ctx context.Context) (struct{}, error) {
+			return struct{}{}, w.Delete(ctx, oAt(w), msg.UUID{1})
+		})
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("Delete = %v, want the caller's cancel", err)
 		}
 	})
 }

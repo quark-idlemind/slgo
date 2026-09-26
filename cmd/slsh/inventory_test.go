@@ -527,20 +527,41 @@ func TestMvMovesOrRenamesDependingOnTheDestination(t *testing.T) {
 		t.Errorf("the item went to %v, want Objects", moved.InventoryData[0].FolderID)
 	}
 
-	// A folder into a folder, which is a different message.
-	if got := x.do(t, "mv Scripts Objects"); got != "" {
-		t.Errorf("mv of a folder printed %q", got)
-	}
-	if _, ok := x.grid.Sent()[1].(*msg.MoveInventoryFolder); !ok {
-		t.Errorf("moving a folder sent %T", x.grid.Sent()[1])
-	}
-
 	// A plain name renames the folder where it is.
 	if got := x.do(t, "mv Scripts Snippets"); got != "" {
 		t.Errorf("renaming a folder printed %q", got)
 	}
 	if got := x.do(t, "ls"); !strings.Contains(got, "/Snippets") {
 		t.Errorf("the folder should have the new name:\n%s", got)
+	}
+
+	// A folder into a folder, which is a different message.
+	if got := x.do(t, "mv Snippets Objects"); got != "" {
+		t.Errorf("mv of a folder printed %q", got)
+	}
+	if _, ok := x.grid.Sent()[1].(*msg.MoveInventoryFolder); !ok {
+		t.Errorf("moving a folder sent %T", x.grid.Sent()[1])
+	}
+	if got := x.do(t, "ls -r"); !strings.Contains(got, "/Objects/Snippets") || !strings.Contains(got, "/Objects/readme") {
+		t.Errorf("both should be in Objects now:\n%s", got)
+	}
+}
+
+// TestMvSaysWhenAMoveNeverArrives.
+//
+// Nothing answers a move, and the grid accepts one into Trash and
+// ignores it, so mv reads the destination back and a move that never
+// shows there is an error rather than silence.
+func TestMvSaysWhenAMoveNeverArrives(t *testing.T) {
+	t.Parallel()
+	x := newTestShell(t)
+
+	x.grid.mu.Lock()
+	x.grid.ignoreMoves = true
+	x.grid.mu.Unlock()
+
+	if got := x.do(t, "mv readme Trash"); !strings.Contains(got, "never arrived") {
+		t.Errorf("a move the grid ignored printed %q", got)
 	}
 }
 
