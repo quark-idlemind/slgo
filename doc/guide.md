@@ -1045,7 +1045,8 @@ something already owned asks the land nothing.
 The objects are held by `slgod` for as long as the program holds its
 connection, so a run that crashes or is killed gives them back at once;
 there is nothing to clean up and no stale lock to break. Use `--rez` to
-take a prim of your own and not queue at all.
+take a prim of your own and not queue at all, or `--wait` to queue for no
+longer than it says.
 
 There is a timeout underneath that, for the case the connection does not
 cover: a client that wedged without dying. A grant is asked for thirty
@@ -1138,7 +1139,7 @@ not confirm within ten seconds: it may still be standing.
 | `--first NAME`, `--last NAME` | the avatar's name, for `--direct` |
 | `--start WHERE` | where to arrive, for `--direct`: `last` (the default), `home`, or a region name |
 | `--backend HOST:PORT` | run the scripts through a `script.v1` backend there -- a simulator, or a viewer daemon -- instead of in Second Life |
-| `--wait DUR` | with `--backend`, the longest to wait for a free group when every one is busy, after which the run fails; as long as it takes by default. The unit is required. ^C while waiting gives up the place in the queue |
+| `--wait DUR` | the longest to wait for somewhere to run when every object is busy -- the shared `auto` objects through `slgod`, or a group of a `--backend`'s -- after which the run fails; as long as it takes by default. The unit is required, and it counts in whole seconds. ^C while waiting gives up the place in the queue |
 | `--version` | say which build this is, and exit |
 
 ---

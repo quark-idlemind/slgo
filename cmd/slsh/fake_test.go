@@ -1877,11 +1877,11 @@ func (f *fakeGrid) TryLock(ctx context.Context, name string) (bool, string, erro
 	return true, "", nil
 }
 
-// Slots, TrySlots and ReleaseSlots are the shared objects, which the
-// daemon hands out a number at a time.  lockedBy stands in for somebody
+// SlotsWithin, TrySlots and ReleaseSlots are the shared objects, which
+// the daemon hands out a number at a time.  lockedBy stands in for somebody
 // else having them, as it does for a lock: what is being checked is that
 // a command which must not run while they are in use finds them in use.
-func (f *fakeGrid) Slots(ctx context.Context, n int, d time.Duration, agent string) (*client.Grant, error) {
+func (f *fakeGrid) SlotsWithin(ctx context.Context, n int, d, wait time.Duration, agent string) (*client.Grant, error) {
 	return f.slots(n)
 }
 

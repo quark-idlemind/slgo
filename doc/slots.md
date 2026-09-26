@@ -83,7 +83,7 @@ starts first, so it will usually give up a moment before the daemon's
 answer arrives: what the daemon grants in that moment goes back as
 above, and a refusal that arrives once the deadline has passed is taken
 as the daemon's answer. Either way the caller is given
-`client.ErrStillBusy`.
+`client.ErrStillBusy`, which is what `slrun --wait` reports.
 
 Answers are never dropped. The daemon's queue to each client drops
 relayed traffic when the client falls behind, which costs nothing on the
@@ -104,8 +104,9 @@ every kind of send at once against a fake daemon.
 
 None of this section was watched on the grid. It is how the code was
 built on 2026-09-26, and the tests in `client/slots_test.go`,
-`client/send_test.go` and `server/slots_test.go` check it against a fake
-daemon and a fake stream.
+`client/send_test.go`, `server/slots_test.go` and, for `--wait`,
+`cmd/slrun/daemon_test.go` check it against a fake daemon and a fake
+stream.
 
 ## All of them or none
 

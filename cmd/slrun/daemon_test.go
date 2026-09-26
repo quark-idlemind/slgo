@@ -174,11 +174,33 @@ type fakeDaemon struct {
 	// what it was given.
 	grants int
 
+	// busy is how it answers for objects while somebody else has them.
+	busy busyness
+
 	// sendMu is because a stream has two writers -- the relay pump and
 	// the answers to what the client asked -- and a gRPC stream may not
 	// be sent on by two goroutines at once.
 	sendMu sync.Mutex
 }
+
+// busyness is how a fake daemon answers for objects.
+type busyness int
+
+const (
+	// notBusy hands the one object over without argument.
+	notBusy busyness = iota
+
+	// boundsWaits has it somebody else's until freeAfter, and gives up a
+	// bounded wait before then as slgod does.
+	boundsWaits
+
+	// olderThanWaits has it somebody else's until freeAfter, and is
+	// older than wait_seconds: it waits on whatever the request says.
+	olderThanWaits
+)
+
+// freeAfter is when a busy daemon's object comes free.
+const freeAfter = 5 * time.Second
 
 // newFakeDaemon starts one and answers with the grid behind it and the
 // address to dial.
@@ -188,6 +210,12 @@ type fakeDaemon struct {
 // and the developer running this has a real one there with a live daemon
 // behind it.
 func newFakeDaemon(t *testing.T) (*fakeGrid, string) {
+	t.Helper()
+	return newBusyDaemon(t, notBusy)
+}
+
+// newBusyDaemon is newFakeDaemon answering for objects as busy says.
+func newBusyDaemon(t *testing.T, busy busyness) (*fakeGrid, string) {
 	t.Helper()
 
 	const secret = "a shared secret for a test"
@@ -238,7 +266,7 @@ func newFakeDaemon(t *testing.T) (*fakeGrid, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := &fakeDaemon{grid: f, auth: a}
+	d := &fakeDaemon{grid: f, auth: a, busy: busy}
 
 	creds, err := auth.ServerTLS()
 	if err != nil {
@@ -319,6 +347,10 @@ func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Serve
 		return err
 	}
 
+	// Nothing is sent once Stream has returned: what is still answering
+	// hears done and stops first.
+	var answering sync.WaitGroup
+	defer answering.Wait()
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
@@ -362,6 +394,15 @@ func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Serve
 				Locked: &pb.Locked{Name: l.Name, Held: true},
 			}})
 
+		case p.GetSlots() != nil && d.busy != notBusy:
+			// On a goroutine of its own, as slgod's waits are, so that
+			// this loop goes on reading.
+			answering.Add(1)
+			go func() {
+				defer answering.Done()
+				d.whileBusy(s, p.GetSlots(), done)
+			}()
+
 		case p.GetSlots() != nil:
 			// One object, which is what this grid has, and it is handed
 			// over without argument for the same reason a lock is:
@@ -390,6 +431,30 @@ func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Serve
 				},
 			}})
 		}
+	}
+}
+
+// whileBusy answers a request for the object while somebody else has
+// it: at the end of its wait_seconds when the daemon reads the field and
+// that comes first, and otherwise with the object once it comes free.
+func (d *fakeDaemon) whileBusy(s grpc.BidiStreamingServer[pb.ClientPacket, pb.ServerPacket], req *pb.Slots, done <-chan struct{}) {
+	g := &pb.SlotsGranted{Request: req.GetRequest()}
+	after := freeAfter
+	wait := time.Duration(req.GetWaitSeconds()) * time.Second
+	if d.busy == boundsWaits && wait > 0 && wait < freeAfter {
+		after = wait
+		g.Why = fmt.Sprintf("%d objects were still not free after %v", req.GetWant(), wait)
+	} else {
+		g.Grant = "g-freed"
+		g.Held = []*pb.SlotHeld{{Agent: "quark", Slot: 0}}
+		g.Expires = time.Now().Add(time.Hour).Unix()
+	}
+	t := time.NewTimer(after)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		d.send(s, &pb.ServerPacket{Body: &pb.ServerPacket_Granted{Granted: g}})
+	case <-done:
 	}
 }
 
@@ -669,6 +734,45 @@ func TestAFailedScriptIsAFailedRunWhateverElseSucceeded(t *testing.T) {
 	}
 	if !strings.Contains(out, "ERROR : Syntax error") {
 		t.Errorf("what Second Life said was not printed:\n%s", out)
+	}
+}
+
+// TestWaitGivesUpOnABusyDaemonAndSaysSo: --wait goes to slgod as the
+// request's wait_seconds.  A daemon that reads it gives up and says so;
+// one older than the field waits on, and slrun stops waiting at the same
+// deadline.  Either way the run fails naming --wait, in the same words.
+//
+// The object comes free after five seconds, and a run with no bound
+// takes it then and succeeds, which is the failure.
+func TestWaitGivesUpOnABusyDaemonAndSaysSo(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		busy busyness
+	}{
+		{"a daemon that bounds the wait", boundsWaits},
+		{"a daemon older than the field", olderThanWaits},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reset(t)
+			f, addr := newBusyDaemon(t, tc.busy)
+			f.says = []string{"hello from the shared object"}
+			commandLine(t, "--addr", addr, "--wait", "1s", script(t, "default {}"))
+
+			start := time.Now()
+			var err error
+			out, _ := bothOf(t, func() { err = run() })
+			took := time.Since(start)
+
+			if err == nil {
+				t.Fatalf("--wait 1s waited %v, until the object came free, and ran:\n%s", took, out)
+			}
+			if want := "every object was still busy when --wait 1s ran out"; err.Error() != want {
+				t.Errorf("run = %q, want %q", err, want)
+			}
+			if took < time.Second {
+				t.Errorf("gave up after %v, before the wait was up", took)
+			}
+		})
 	}
 }
 

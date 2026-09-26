@@ -563,16 +563,3 @@ func TestWaitGivesUpOnABusyBackendAndSaysSo(t *testing.T) {
 		})
 	}
 }
-
-// TestWaitWithoutABackendIsRefused: what the daemon's pool is asked
-// carries no bound on the wait, so --wait there would be a flag quietly
-// ignored.  Nothing is dialled: the refusal comes first.
-func TestWaitWithoutABackendIsRefused(t *testing.T) {
-	reset(t)
-	flags.Addr = "127.0.0.1:1"
-	flags.Wait = time.Second
-	_, _, _, err := somewhereToRun(context.Background(), 1)
-	if err == nil || !strings.Contains(err.Error(), "--wait") {
-		t.Errorf("--wait without --backend = %v, want it refused", err)
-	}
-}

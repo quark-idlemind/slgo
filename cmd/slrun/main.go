@@ -71,6 +71,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/sl"
@@ -91,7 +92,7 @@ var flags = struct {
 	Clear   bool            `getopt:"--clear          empty every script out of the objects before running, for when something else is talking in them"`
 	Done    string          `getopt:"--done=TEXT       the text that means the script has finished"`
 	Timeout time.Duration   `getopt:"--timeout=DUR     how long to wait for it"`
-	Wait    time.Duration   `getopt:"--wait=DUR        with --backend, how long to wait for a free group when every one is busy; as long as it takes by default"`
+	Wait    time.Duration   `getopt:"--wait=DUR        how long to wait for somewhere to run when every object is busy; as long as it takes by default"`
 	Keep    bool            `getopt:"--keep            leave the rezzed object behind"`
 	V       options.Counter `getopt:"-v                say more: once for the script name in front of every line, twice for which avatars the objects came from"`
 	Help    bool            `getopt:"--help -h         show this message"`
@@ -366,16 +367,13 @@ func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src s
 			r.places(), r.Close, nil
 	}
 
-	if flags.Wait != 0 {
-		// Refused rather than ignored, as --object is with --backend: what
-		// the daemon's pool is asked carries no bound on the wait.
-		return nil, 0, nil, fmt.Errorf("--wait bounds the queue for a script.v1 " +
-			"backend's objects, and goes with --backend")
-	}
 	opts := session.Options{
 		Addr: flags.Addr, Agent: flags.Agent, Direct: flags.Direct,
 		First: flags.First, Last: flags.Last, Start: flags.Start,
 		Channel: "slrun",
+		// In whole seconds as a backend is sent it, so that --wait
+		// means the same on both.
+		Wait: time.Duration(seconds(flags.Wait)) * time.Second,
 	}
 	ps, cleanup, err := runIn(ctx, opts, n)
 	if err != nil {
@@ -683,6 +681,9 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 		want = n
 	}
 	as, err := session.UseAutoSpread(ctx, o, want)
+	if errors.Is(err, client.ErrStillBusy) {
+		return nil, nil, fmt.Errorf("every object was still busy when --wait %v ran out", flags.Wait)
+	}
 	if err != nil {
 		return nil, nil, err
 	}

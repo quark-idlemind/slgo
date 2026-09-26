@@ -97,7 +97,7 @@ const SlotsPerAgentForTest = 12
 
 func (g *grantingGrid) Sessions(context.Context) ([]string, error) { return g.names, nil }
 
-func (g *grantingGrid) Slots(ctx context.Context, n int, d time.Duration, agent string) (*client.Grant, error) {
+func (g *grantingGrid) SlotsWithin(ctx context.Context, n int, d, wait time.Duration, agent string) (*client.Grant, error) {
 	return g.grant(n, agent, false)
 }
 
