@@ -10,19 +10,25 @@ and why the prim is made in the avatar's active group.
 
 Measured on Agni on 2026-09-25 and 2026-09-26, with `rezAt` as it
 stands: an `ObjectAdd` with `BypassRaycast = 1`, and `RayStart` and
-`RayEnd` both the point asked for. The prims were unrotated 0.5 m
-cubes, asked for at 4,002 m, just above the ground, and 43 m and 3 m
-under the ground.
+`RayEnd` both the point asked for. Every prim was an unrotated 0.5 m
+cube; 56 were rezzed and deleted.
 
-- X and Y came back as exactly the float32 of the values asked for,
-  bit for bit.
-- Z came back as exactly float32(the Z asked for) + 0.25, half the
-  height, added in float32, bit for bit, at every height from 45 m to
-  4,004 m. The simulator puts the prim's **bottom** on the point asked
-  for, not its centre.
-- A point under the ground was raised until the box's bottom rested on
-  the ground: on gentle slopes, the ground under the box's centre.
-- The first report of the new prim was always a full `ObjectUpdate`
+- 12 were asked for at about 4,002 m, and 12 just above the ground, at
+  about 43.6 m to 45.9 m. Each came back with X and Y as asked and Z
+  exactly 0.25 higher, to the millimetre the probe printed.
+- 8 more, 4 near 4,004 m and 4 near 45 m, were asked for with X, Y and
+  Z given to seven decimals, and compared bit for bit. X and Y came
+  back as the float32 of the values asked for, and Z as
+  float32(the Z asked for) + 0.25, added in float32. So the simulator
+  keeps a requested point as the float32 it was sent as, and puts the
+  prim's **bottom** on it, not its centre. The only loss is float32's
+  own spacing: about 0.24 mm near 4,004 m.
+- 24 were asked for under the ground, 12 about 43 m under it and 12 at
+  z = -3.17. X and Y came back as asked, and each was raised until its
+  bottom rested on the ground. Both depths gave the same height at each
+  point, and on that gentle slope it was the ground under the box's
+  centre.
+- The first report of every new prim was a full `ObjectUpdate`
   carrying its position in full floats (the 60-byte form), and it was
   already the position the prim settled at.
 
