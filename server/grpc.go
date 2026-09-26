@@ -583,18 +583,11 @@ func sendMessage(ctx context.Context, h *Hosted, c *Client, sentBy string, m *pb
 		return status.Error(codes.InvalidArgument, "message needs an id or a name")
 	}
 
-	// A client moving the avatar takes the wheel: whatever the daemon
-	// was trying to do about where this avatar should be stops here,
-	// on the REQUEST rather than on an arrival, so that a teleport
-	// which is refused stops it too.  See home.go.
-	if teleportRequest(id) {
-		h.stopHoming("a client teleported this avatar")
-	}
-	// And a client setting a new home makes whatever the grid said about
-	// getting to the old one beside the point.  See home.go.
-	if id == msg.IDOf(&msg.SetStartLocationRequest{}) {
-		h.forgetHome()
-	}
+	// A client moving the avatar takes the wheel, and a client setting
+	// a new home makes what the grid said about the old one beside the
+	// point.  A viewer's messages do not come this way; see
+	// Hosted.ViewerSent.
+	h.noteRequest(id, "a client")
 
 	raw := msg.NewRaw(id, m.Body)
 	var err error
@@ -615,11 +608,14 @@ func sendMessage(ctx context.Context, h *Hosted, c *Client, sentBy string, m *pb
 	return nil
 }
 
-// teleportRequest is whether a message a client sent is it asking for
-// the avatar to be somewhere else.
+// teleportRequest is whether a message a client or a viewer sent is it
+// asking for the avatar to be somewhere else.
 //
 // The three the shell can send: a position or a region, a landmark --
 // which is also how it goes home -- and accepting somebody's offer.
+// And TeleportRequest, a position in a region named by its id, which
+// the viewer circuit passes on when that region is this one.
+//
 // Sitting is not here.  A sit moves the avatar up to ten metres and is
 // not somebody saying where it should be; treating it as one would stop
 // the daemon getting an avatar home because it sat on a chair on the
@@ -628,7 +624,8 @@ func teleportRequest(id msg.ID) bool {
 	switch id {
 	case msg.IDOf(&msg.TeleportLocationRequest{}),
 		msg.IDOf(&msg.TeleportLandmarkRequest{}),
-		msg.IDOf(&msg.TeleportLureRequest{}):
+		msg.IDOf(&msg.TeleportLureRequest{}),
+		msg.IDOf(&msg.TeleportRequest{}):
 		return true
 	}
 	return false

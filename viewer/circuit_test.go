@@ -310,6 +310,47 @@ func TestLogoutFromTheViewerLeavesTheSessionUp(t *testing.T) {
 	sim.never(t, "LogoutRequest")
 }
 
+// TestAViewerThatLogsOutIsNoLongerJoined: a viewer quitting sends
+// LogoutRequest, and after it nobody is on the circuit.  Counting that
+// viewer as still there was a status that said a viewer had the session
+// when none had, and a daemon holding off from getting the avatar home
+// for a person who had gone.  The next viewer to join is counted again.
+func TestAViewerThatLogsOutIsNoLongerJoined(t *testing.T) {
+	sim, _, c, first, census := handedOver(t)
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+
+	first.connect(testCircuitCode)
+	first.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+	if !c.Joined() {
+		t.Fatal("the viewer is not joined after the handshake")
+	}
+
+	first.send(&msg.LogoutRequest{}, msg.FlagReliable)
+	first.waitSeen(t, "LogoutReply", 5*time.Second)
+	deadline := time.Now().Add(5 * time.Second)
+	for c.Joined() {
+		if time.Now().After(deadline) {
+			t.Fatal("a viewer that logged out is still joined")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	// Nobody is there to be told the avatar moved.
+	c.RegionChanged("Sandbox Goguen")
+	if n := sentToViewer(census, "AgentAlertMessage"); n != 0 {
+		t.Errorf("a viewer that had logged out was told %d times", n)
+	}
+	first.close()
+
+	second := newFakeViewer(t, c.Addr())
+	defer second.close()
+	go second.run()
+	second.connect(testCircuitCode)
+	second.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+	if !c.Joined() {
+		t.Error("the next viewer to join is not counted")
+	}
+}
+
 // TestOrdinaryMessagesReachTheGrid: absorbing the handshake must not
 // turn into absorbing everything.
 func TestOrdinaryMessagesReachTheGrid(t *testing.T) {
@@ -981,6 +1022,73 @@ func TestATeleportInsideThisRegionIsStillForwarded(t *testing.T) {
 	}
 	if n := sentToViewer(census, "AgentAlertMessage"); n != 0 {
 		t.Error("the person was told a teleport was refused when it was not")
+	}
+}
+
+// TestWhatIsPassedOnIsTold: a viewer's messages reach the session down
+// this circuit and through nothing else of the daemon's, so the daemon
+// hears of a viewer's teleport or its new home from OnForward or not at
+// all -- and would go on trying to take the avatar home under the
+// person at the viewer.  What the circuit absorbs never reaches the
+// grid, and is not told.
+func TestWhatIsPassedOnIsTold(t *testing.T) {
+	sim, a, c, v, _ := handedOver(t)
+
+	var mu sync.Mutex
+	var told []string
+	c.OnForward(func(m msg.Message) {
+		mu.Lock()
+		defer mu.Unlock()
+		told = append(told, m.MsgInfo().Name)
+	})
+	count := func(name string) int {
+		mu.Lock()
+		defer mu.Unlock()
+		n := 0
+		for _, got := range told {
+			if got == name {
+				n++
+			}
+		}
+		return n
+	}
+
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+	deadline := time.Now().Add(5 * time.Second)
+	for a.RegionHandle() != thisRegion {
+		if time.Now().After(deadline) {
+			t.Fatalf("the session's handle is %#x, want the one the simulator gave", a.RegionHandle())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Absorbed: somewhere else, and a landmark, which could be anywhere.
+	away := &msg.TeleportLocationRequest{}
+	away.Info.RegionHandle = elsewhere
+	v.send(away, msg.FlagReliable)
+	v.send(&msg.TeleportLandmarkRequest{}, msg.FlagReliable)
+	v.waitSeen(t, "AgentAlertMessage", 5*time.Second)
+
+	// Passed on: a spot in this region, and a new home.
+	here := &msg.TeleportLocationRequest{}
+	here.Info.RegionHandle = thisRegion
+	here.Info.Position = msg.Vector3{X: 12, Y: 240, Z: 27}
+	v.send(here, msg.FlagReliable)
+	v.send(&msg.SetStartLocationRequest{}, msg.FlagReliable)
+	sim.waitSeen(t, "SetStartLocationRequest", 5*time.Second)
+
+	for name, want := range map[string]int{
+		"TeleportLocationRequest": 1,
+		"SetStartLocationRequest": 1,
+		"TeleportLandmarkRequest": 0,
+		"UseCircuitCode":          0,
+		"CompleteAgentMovement":   0,
+	} {
+		if got := count(name); got != want {
+			t.Errorf("%s was told %d times, want %d", name, got, want)
+		}
 	}
 }
 

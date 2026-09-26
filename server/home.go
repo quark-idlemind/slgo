@@ -63,8 +63,9 @@ package server
 // the avatar or the region changes by asking.  So that refusal stops
 // the loop at once, with one line naming the key and the grid's
 // sentence, and it is remembered: a reconnect does not ask again.  What
-// clears it is a client setting a new home, since the refusal was about
-// the old one, or the daemon restarting.
+// clears it is a new home being set through this daemon (see
+// forgetHome), since the refusal was about the old one, or the daemon
+// restarting.
 //
 // Anything else -- no_host, which is a region that is down, or silence,
 // or a key nobody here has seen -- is asked about once a minute for an
@@ -100,10 +101,17 @@ package server
 // itself, with nothing on the screen to say why.
 //
 // So any teleport a CLIENT asks for stops the loop for the rest of the
-// session -- see sendMessage, which is the one place every client
-// message goes through.  It stops on the request rather than on an
-// arrival, so a teleport that is refused stops it too: the person meant
-// to be somewhere else, and finding out they cannot is their business.
+// session, and so does one asked for at a viewer.  They arrive by two
+// roads: a client's messages through sendMessage, and a viewer's down
+// its own circuit straight to the session, with the circuit telling
+// ViewerSent of each one it passes on.  It stops on the request rather
+// than on an arrival, so a teleport that is refused stops it too: the
+// person meant to be somewhere else, and finding out they cannot is
+// their business.
+//
+// A viewer being handed the session stops it as well, before the viewer
+// has asked for anything: a person at a viewer has the wheel.  See
+// ViewerAttached.
 //
 // A reconnect starts it again, and that is deliberate.  A reconnect is
 // a fresh login with "start = home" in it, so the same question is
@@ -112,6 +120,11 @@ package server
 // What the GRID said is another matter, and is kept: the hour of asking
 // and an access refusal both outlive a reconnect, for the reasons in
 // the section above.
+//
+// A viewer still on the session is the exception: a reconnect is the
+// grid's doing and does not hand the wheel back.  So before each attempt
+// the loop asks the viewer endpoint, and one that says a viewer is on
+// stops it for the rest of that session, as the other stops do.
 
 import (
 	"bytes"
@@ -304,9 +317,12 @@ func (h *Hosted) refusedHome(id uint64, r agent.Refusal) {
 }
 
 // forgetHome forgets everything the grid has said about getting home,
-// because home is somewhere else now: a client has set it.  A refusal
-// of the old home says nothing about the new one, and the next login
-// asks the question afresh.
+// because home is somewhere else now: a client or a viewer has sent
+// SetStartLocationRequest.  A refusal of the old home says nothing
+// about the new one, and the next login asks the question afresh.
+//
+// A viewer that sets home through the HomeLocation capability instead
+// talks to the grid directly and is not seen here.
 func (h *Hosted) forgetHome() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -330,6 +346,21 @@ func (h *Hosted) stopHoming(why string) {
 	}
 	cancel()
 	h.logf("no longer trying to get home: %s", why)
+}
+
+// noteRequest is what a message somebody else sent means for getting
+// home: a teleport stops the loop, and a new home forgets what the grid
+// said about the old one.  who is "a client" or "a viewer", for the log.
+//
+// On the REQUEST rather than on an arrival, so that a teleport which is
+// refused stops it too.  See the head of this file.
+func (h *Hosted) noteRequest(id msg.ID, who string) {
+	if teleportRequest(id) {
+		h.stopHoming(who + " teleported this avatar")
+	}
+	if id == msg.IDOf(&msg.SetStartLocationRequest{}) {
+		h.forgetHome()
+	}
 }
 
 // homeward asks to go home until it does, until something stops it, or
@@ -359,6 +390,10 @@ func (h *Hosted) homeward(ctx context.Context, id uint64, pace homePace) {
 	var said string
 	since := pace.now()
 	for attempt := 0; ; attempt++ {
+		if h.viewerOn != nil && h.viewerOn() {
+			h.logf("not asking to go home: a viewer is on this session, and a person at a viewer has the wheel")
+			return
+		}
 		answer, err := h.askForHome(ctx, pace.answer)
 		switch {
 		case ctx.Err() != nil:
@@ -466,10 +501,10 @@ func (h *Hosted) askForHome(ctx context.Context, wait time.Duration) (homeAnswer
 // sees whether this loop asked for it or not.
 //
 // Nothing in the protocol says which request an answer belongs to, so
-// an answer provoked by a client's teleport is indistinguishable from
-// an answer to ours -- which is harmless here and is why the loop stops
-// on a client's REQUEST rather than trying to tell the answers apart.
-// See the head of this file.
+// an answer provoked by a client's or a viewer's teleport is
+// indistinguishable from an answer to ours -- which is why the loop
+// stops on their REQUEST, before any answer, rather than trying to tell
+// the answers apart.  See the head of this file.
 func (h *Hosted) noteTeleportAnswer(answer homeAnswer) {
 	h.mu.RLock()
 	waiting := h.homeAnswers

@@ -13,9 +13,11 @@ none says so in words, and names the flag it would have to be
 restarted with, rather than printing an empty address nobody could
 tell from a working one.
 
-Whether a viewer is there is only half known: one that takes the
-session announces itself, one that quits says nothing, so that line
-is the last thing that happened rather than what is happening now.
+Whether a viewer is there is mostly known: one that takes the session
+announces itself, and one that logs out, as quitting a viewer does,
+is no longer counted.  One that goes without logging out -- a crash,
+a lost connection -- says nothing, and is shown as there until
+another viewer takes the session or slgod restarts.
 
 ## Options
 

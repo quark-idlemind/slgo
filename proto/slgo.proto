@@ -909,10 +909,12 @@ message ViewerEndpoint {
   // Attached is whether a viewer has finished the handshake on this
   // agent's circuit.
   //
-  // The daemon's own answer, and one-sided: a viewer that quits sends
-  // nothing to say so, so this stays true until the next one appears.
-  // It is therefore "a viewer has taken this session" rather than "a
-  // viewer is at the keyboard".
+  // The daemon's own answer, and one-sided: a viewer that logs out, as
+  // quitting one does, is no longer counted, but one that goes without
+  // logging out -- a crash, a lost connection -- sends nothing to say so,
+  // and this stays true until the next one appears.  It is therefore "a
+  // viewer has taken this session" rather than "a viewer is at the
+  // keyboard".
   bool attached = 2;
 }
 

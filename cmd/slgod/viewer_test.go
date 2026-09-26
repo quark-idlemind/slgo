@@ -33,8 +33,11 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/llsd"
+	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/server"
 	"github.com/quark-idlemind/slgo/viewer"
+
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // mintingHost is a viewer host with nothing behind it but a profile
@@ -847,4 +850,212 @@ func TestARefusedViewerLoginSaysNothingAndOpensNothing(t *testing.T) {
 	if _, ok := handable.circuits.Load("example"); !ok {
 		t.Error("an accepted login opened no circuit, so the checks above prove nothing")
 	}
+}
+
+// A viewer and the daemon's own attempts to get the avatar home.
+//
+// A profile with "start = home" keeps asking to go home until it gets
+// there, and stops when somebody else takes the wheel.  A viewer takes
+// it through this endpoint and moves the avatar down its own circuit,
+// neither of which the server sees unless slgod tells it; these are the
+// two places it does.
+
+// homingRig is a login server and a daemon's server in front of a
+// simulator that puts the avatar in the region with this handle.
+type homingRig struct {
+	srv   *server.Server
+	ctx   context.Context
+	login agent.Login
+}
+
+func newHomingRig(t *testing.T, handle uint64) *homingRig {
+	t.Helper()
+	sim := newSim(t)
+	sim.mu.Lock()
+	sim.handle = handle
+	sim.mu.Unlock()
+	hs := loginServer(t, sim)
+
+	srv := server.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		stop, done := context.WithTimeout(context.Background(), 10*time.Second)
+		defer done()
+		srv.Close(stop)
+		cancel()
+	})
+	return &homingRig{srv: srv, ctx: ctx,
+		login: agent.Login{First: "Example", Last: "Resident", Password: "secret", URL: hs.URL, Start: "home"}}
+}
+
+// host brings up a session that starts at home, and captures what it
+// says.  Its first attempt to go home is five seconds off, so the loop
+// is still running when a test acts on it.
+func (r *homingRig) host(t *testing.T) (*server.Hosted, *logCapture) {
+	t.Helper()
+	h, err := r.srv.StartAgent(r.ctx, "example", r.login, agent.Options{Idle: -1})
+	if err != nil {
+		t.Fatalf("hosting a session: %v", err)
+	}
+	said := &logCapture{}
+	h.Log = func(format string, v ...any) { fmt.Fprintf(said, format+"\n", v...) }
+	return h, said
+}
+
+// inRegion waits for a session to know the region it is in.
+func inRegion(t *testing.T, a *agent.Agent, handle uint64) {
+	t.Helper()
+	waitFor(t, 5*time.Second, "the session to know which region it is in", func() bool {
+		return a.RegionHandle() == handle
+	})
+}
+
+// viewerSends is a viewer on a circuit: the claim that admits it, made
+// with this session's ids, and then these messages, numbered from seq.
+func viewerSends(t *testing.T, conn *net.UDPConn, a *agent.Agent, seq uint32, ms ...msg.Message) {
+	t.Helper()
+	claim := &msg.UseCircuitCode{}
+	claim.CircuitCode.Code = a.Account.CircuitCode
+	claim.CircuitCode.SessionID = a.Account.SessionID
+	claim.CircuitCode.ID = a.Account.AgentID
+	for i, m := range append([]msg.Message{claim}, ms...) {
+		body, err := m.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := msg.AppendHeader(nil, &msg.Header{Sequence: seq + uint32(i)})
+		out = msg.AppendID(out, msg.IDOf(m))
+		if _, err := conn.Write(append(out, body...)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// teleportTo is a teleport to a spot in the region with this handle.
+func teleportTo(handle uint64) *msg.TeleportLocationRequest {
+	tp := &msg.TeleportLocationRequest{}
+	tp.Info.RegionHandle = handle
+	tp.Info.Position = msg.Vector3{X: 12, Y: 240, Z: 27}
+	return tp
+}
+
+// TestAViewerLoginStopsTheDaemonTakingTheAvatarHome: a person at a
+// viewer has the wheel from the moment the session is handed over, and
+// a daemon that went on asking to go home would teleport the avatar out
+// from under them.
+func TestAViewerLoginStopsTheDaemonTakingTheAvatarHome(t *testing.T) {
+	r := newHomingRig(t, 0)
+	_, said := r.host(t)
+	_, url := viewerLoginTo(t, r.ctx, r.srv, "viewer-secret")
+
+	if got := viewerLogin(t, url, "Example", "Resident", "viewer-secret"); !strings.Contains(got, "<name>sim_port</name>") {
+		t.Fatalf("the viewer login was refused:\n%s", got)
+	}
+	if !strings.Contains(said.String(), "no longer trying to get home: a viewer was handed this session") {
+		t.Errorf("handing the session to a viewer did not stop the daemon taking it home; it said:\n%s", said)
+	}
+}
+
+// TestAViewerTeleportOnItsCircuitStopsTheDaemonTakingTheAvatarHome: a
+// viewer's teleport inside the region goes down the circuit this daemon
+// opened for it, straight to the session.  The circuit is opened here
+// without a login, so that it is the teleport that stops the loop and
+// not the handover.
+func TestAViewerTeleportOnItsCircuitStopsTheDaemonTakingTheAvatarHome(t *testing.T) {
+	here := msg.RegionHandle(3, 5)
+	r := newHomingRig(t, here)
+	h, said := r.host(t)
+	vh, _ := viewerLoginTo(t, r.ctx, r.srv, "viewer-secret")
+
+	a := h.Agent()
+	inRegion(t, a, here)
+	c, err := vh.circuitFor("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialUDP("udp", nil, c.Addr())
+	if err != nil {
+		t.Skipf("no loopback UDP: %v", err)
+	}
+	defer conn.Close()
+	viewerSends(t, conn, a, 1, teleportTo(here))
+
+	waitFor(t, 5*time.Second, "the daemon to stop taking the avatar home", func() bool {
+		return strings.Contains(said.String(), "no longer trying to get home: a viewer teleported this avatar")
+	})
+}
+
+// TestAViewerCircuitReachesAProfileHostedAgain: a circuit is kept for
+// its profile, and a profile logged out and hosted again is a new
+// session.  A circuit holding the first went on passing the viewer's
+// messages to a session that had gone, and its teleports to a homing
+// loop that was not the one running.  While nothing is hosted under the
+// name there is no session to admit a viewer to.
+func TestAViewerCircuitReachesAProfileHostedAgain(t *testing.T) {
+	here := msg.RegionHandle(3, 5)
+	r := newHomingRig(t, here)
+	first, _ := r.host(t)
+	vh, _ := viewerLoginTo(t, r.ctx, r.srv, "viewer-secret")
+
+	inRegion(t, first.Agent(), here)
+	c, err := vh.circuitFor("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialUDP("udp", nil, c.Addr())
+	if err != nil {
+		t.Skipf("no loopback UDP: %v", err)
+	}
+	defer conn.Close()
+
+	if _, err := r.srv.Logout(r.ctx, &pb.LogoutRequest{Agent: "example", Force: true}); err != nil {
+		t.Fatalf("logging the first session out: %v", err)
+	}
+	r.srv.Remove("example")
+	viewerSends(t, conn, first.Agent(), 1)
+	waitFor(t, 5*time.Second, "a claim on a profile nothing is hosted under to be refused", func() bool {
+		return c.Refused() >= 1
+	})
+
+	second, said := r.host(t)
+	a := second.Agent()
+	inRegion(t, a, here)
+	viewerSends(t, conn, a, 2, teleportTo(here))
+
+	waitFor(t, 5*time.Second, "the new session to stop taking the avatar home", func() bool {
+		return strings.Contains(said.String(), "no longer trying to get home: a viewer teleported this avatar")
+	})
+}
+
+// TestAViewerThatLogsOutIsNotReportedAttached: the status a client reads,
+// and the daemon's own question before it asks to go home, both come from
+// Attached.  A viewer that logged out has left, and saying it still had
+// the session held the daemon off for somebody who was gone.
+func TestAViewerThatLogsOutIsNotReportedAttached(t *testing.T) {
+	r := newHomingRig(t, 0)
+	h, _ := r.host(t)
+	vh, _ := viewerLoginTo(t, r.ctx, r.srv, "viewer-secret")
+	r.srv.SetViewer(vh)
+	attached := func() bool {
+		st, err := r.srv.Status(r.ctx, &pb.StatusRequest{Agent: "example"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st.GetViewer().GetAttached()
+	}
+
+	c, err := vh.circuitFor("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialUDP("udp", nil, c.Addr())
+	if err != nil {
+		t.Skipf("no loopback UDP: %v", err)
+	}
+	defer conn.Close()
+
+	viewerSends(t, conn, h.Agent(), 1, &msg.CompleteAgentMovement{})
+	waitFor(t, 5*time.Second, "the viewer to be reported attached", attached)
+	viewerSends(t, conn, h.Agent(), 3, &msg.LogoutRequest{})
+	waitFor(t, 5*time.Second, "the viewer to be reported gone", func() bool { return !attached() })
 }

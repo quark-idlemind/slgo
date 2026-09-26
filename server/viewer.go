@@ -1,7 +1,8 @@
 package server
 
-// The viewer login endpoint: where it is, whether anybody is on it, and
-// the one-off password that lets somebody in.
+// The viewer login endpoint: where it is, whether anybody is on it, the
+// one-off password that lets somebody in, and what the session has to
+// hear of a viewer that is on it.
 //
 // # Why the server answers for something it does not own
 //
@@ -41,6 +42,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
@@ -98,6 +100,15 @@ func (s *Server) viewerFor(profile string) *pb.ViewerEndpoint {
 	return &pb.ViewerEndpoint{LoginUri: v.LoginURI(), Attached: v.Attached(profile)}
 }
 
+// viewerAttached reports whether the viewer endpoint says a viewer is on
+// this profile's session.  False when there is no endpoint.
+func (s *Server) viewerAttached(profile string) bool {
+	s.mu.RLock()
+	v := s.viewer
+	s.mu.RUnlock()
+	return v != nil && v.Attached(profile)
+}
+
 // ViewerCredential mints a password a viewer may log in with once.
 //
 // The plaintext crosses the wire to the client that asked and is not
@@ -135,4 +146,21 @@ func (s *Server) ViewerCredential(ctx context.Context, req *pb.ViewerCredentialR
 		Password:      pass,
 		ExpirySeconds: int32(life / time.Second),
 	}, nil
+}
+
+// ViewerAttached tells the session that a viewer has been handed it.
+// A person at a viewer has the wheel, so the daemon stops trying to get
+// the avatar home, as it does when a client teleports.  See home.go.
+func (h *Hosted) ViewerAttached() {
+	h.stopHoming("a viewer was handed this session")
+}
+
+// ViewerSent tells the session of a message a viewer on it has sent,
+// as the viewer circuit passes it on to the simulator.
+//
+// A viewer's messages go down its own circuit straight to the session
+// and not through sendMessage, so this is the only way the daemon hears
+// of a teleport or a new home asked for at a viewer.  See home.go.
+func (h *Hosted) ViewerSent(id msg.ID) {
+	h.noteRequest(id, "a viewer")
 }
