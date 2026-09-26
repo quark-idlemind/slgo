@@ -5675,8 +5675,10 @@ func (x *NeighboursResponse) GetNeighbours() []*NeighbourInfo {
 	return nil
 }
 
-// NeighbourInfo is one region beside the one the avatar is in and what
-// the session has of it.
+// NeighbourInfo is one region the session holds a circuit to and what it
+// has of it: a region beside the one the avatar is in, or beside one it
+// has left, since a circuit is kept across a move until the simulator
+// lets it go.
 type NeighbourInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Handle is the region's place on the grid, which the square is

@@ -47,9 +47,17 @@ corner between them -- and the far two followed.  Height does not
 decide it: that second position was 2001 metres up, and the middle was
 measured both at 2001 and at ground level.
 
-The set changes as the avatar moves.  The circuits belong to the
-region the avatar is in, so a teleport to another region or a crossing
-throws them away; a teleport within the region leaves them alone.
+The set changes as the avatar moves, and not all at once.  A circuit
+is kept until the simulator at the other end says it has let the
+avatar go, as a viewer keeps one, so after a teleport the listing can
+still hold the regions around the one left, beside the new region's
+own as they are offered.  That is what makes coming back work:
+measured on Agni on 2026-09-26, a region returned to within about ten
+seconds of leaving it offered none of its neighbours again, and a
+session that had let them go came back holding none.  A move closes
+only the circuit to the region moved into, which is where the avatar
+now stands.  At the limit of eight, a circuit to a region that is not
+beside this one is let go to make room for a new offer.
 
 ## The listing
 

@@ -29,7 +29,9 @@ type Neighbours struct {
 	// middle of a 256-metre one is offered all four edges.
 	On bool
 
-	// Held is one entry per circuit, in grid handle order.
+	// Held is one entry per circuit, in grid handle order.  A circuit
+	// is kept across a move until its simulator lets it go, so after a
+	// teleport this can hold regions around the one left.
 	Held []Neighbour
 }
 

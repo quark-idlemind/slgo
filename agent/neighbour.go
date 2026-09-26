@@ -43,13 +43,25 @@ import (
 // is opened, and the one handler that is registered either way returns
 // on its first line.
 //
-// **Two handlers and no more.**  A child answers RegionHandshake and
-// StartPingCheck and counts everything else.  Both are measured
-// necessities rather than politeness: the handshake came back in about
-// a second and came back TWICE, a retransmission with nothing else
-// changed, so the answer has to be idempotent; and five StartPingCheck
-// arrived in thirty seconds, so a child that did not answer them would
-// be dropped like any other circuit.
+// **Three handlers and no more.**  A child answers RegionHandshake and
+// StartPingCheck, closes itself on DisableSimulator, and counts
+// everything else.  The first two are measured necessities rather than
+// politeness: the handshake came back in about a second and came back
+// TWICE, a retransmission with nothing else changed, so the answer has
+// to be idempotent; and five StartPingCheck arrived in thirty seconds,
+// so a child that did not answer them would be dropped like any other
+// circuit.
+//
+// **A child is kept until its simulator lets it go**, as a viewer keeps
+// one: across a teleport, across a crossing, for as long as the session
+// and the option last.  DisableSimulator on the child's own circuit is
+// what closes it.  A region the avatar came back to within seconds of
+// leaving offered none of its neighbours again, measured, so a session
+// that let its children go on every move came back holding none.  A move
+// closes only the child to the region moved into (neighboursAfterMove),
+// and the cap closes the ones that are no longer beside the avatar's
+// region (MaxNeighbours).
+// Why: doc/history/neighbours.md#kept-across-a-move
 //
 // **What is deliberately not handled here.**  A neighbour describes
 // itself fully and unprompted -- in thirty seconds one sent 59
@@ -73,10 +85,16 @@ import (
 // ring and so the whole of what this stage ever wants.  It is a cap
 // rather than an expectation: the offers arrive from the simulator and
 // nothing in a daemon should open sockets at a stranger's pace.
+//
+// Children outlive a move, so the ring around the region left can still
+// be held when the new region's offers arrive.  An offer that finds the
+// cap reached closes a child whose region does not touch the avatar's
+// to make room, and is turned down only when every child held is a
+// neighbour.
 const MaxNeighbours = 8
 
-// A Neighbour is one region beside this one and what this session has
-// of it.
+// A Neighbour is one region beside this one, or beside one the avatar
+// has left, and what this session has of it.
 //
 // Every field of it crosses to a client, which is what slsh's
 // neighbours prints; no viewer sees a neighbour, and what a viewer may
@@ -177,8 +195,9 @@ func (a *Agent) SetNeighbours(on bool) {
 // Neighbours is the regions this session holds a circuit to, in grid
 // handle order.
 //
-// Empty unless the session is holding them -- see NeighboursOn -- and
-// empty again after a move: see dropNeighbours.
+// Empty unless the session is holding them -- see NeighboursOn.  They
+// are kept across a move until each one's simulator lets it go, so
+// after a teleport this can still list regions around the one left.
 func (a *Agent) Neighbours() []Neighbour {
 	a.neighMu.Lock()
 	out := make([]Neighbour, 0, len(a.neighbours))
@@ -377,13 +396,24 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 	// A neighbour already held is the offer being repeated, which is
 	// what happens until it is taken up.  The address is not compared:
 	// a region that moved to another host between two offers would go
-	// on being talked to at the old one until the next move drops it,
-	// and nothing has ever measured one moving.  Redialling on a
-	// changed address is the wrong trade without that -- it would hand
-	// anything that could forge an offer a way to make this session
-	// drop a working circuit.
+	// on being talked to at the old one, which would send no
+	// DisableSimulator once gone, until the session ends or the option
+	// is turned off.  Nothing has ever measured one moving, and
+	// redialling on a changed address is the wrong trade without that
+	// -- it would hand anything that could forge an offer a way to make
+	// this session drop a working circuit.
 	if _, held := a.neighbours[handle]; held {
 		return
+	}
+	if len(a.neighbours) >= MaxNeighbours {
+		// Room is made out of a child kept from before a move whose
+		// region does not touch this one, before anything is refused.
+		if stray := a.strayNeighbour(); stray != nil {
+			delete(a.neighbours, stray.handle)
+			stray.close()
+			a.logf("neighbour %s at %s: circuit closed to make room, its region is not beside this one",
+				gridSquare(stray.handle), stray.addr)
+		}
 	}
 	if len(a.neighbours) >= MaxNeighbours {
 		// Once per neighbour, not once per offer.  An offer that
@@ -457,6 +487,16 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		_ = c.send.Send(ctx, reply)
 	}, msg.Inline())
 
+	// And the simulator letting the child go, the one thing from the
+	// grid that closes one.  The message has no body: the circuit it
+	// came on names the region, as the viewer reads it off the sender
+	// (newview/llworld.cpp:1715).  It is not UDPBlackListed, and the one
+	// event queue this session polls is the root's, so this circuit is
+	// the only road it can come by.
+	c.disp.MustHandle("DisableSimulator", func(*msg.Packet) {
+		a.dropNeighbour(c, "the simulator disabled it")
+	}, msg.Inline())
+
 	if !a.spawnChild(func() { _ = c.send.Run(ctx) }) ||
 		!a.spawnChild(func() { _ = c.recv.Run(ctx) }) ||
 		!a.spawnChild(func() { _ = c.disp.Run(ctx, c.recv.C()) }) {
@@ -480,8 +520,9 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 	}
 
 	// Asked again, under the lock: the avatar may have moved into this
-	// region since the check at the top, and the move's dropNeighbours
-	// may already have run, leaving nothing to close this circuit.
+	// region since the check at the top, and the move's
+	// neighboursAfterMove may already have run, leaving nothing to close
+	// this circuit.
 	// Taking a.mu under neighMu is safe because nothing takes neighMu
 	// while holding a.mu.
 	if handle == a.RegionHandle() {
@@ -522,19 +563,11 @@ func (a *Agent) spawnChild(fn func()) bool {
 
 // dropNeighbours closes every child circuit and says why.
 //
-// A move is the caller that matters.  After it the avatar is somewhere
-// else and the regions around it are somebody else's neighbours: the
-// circuits held are to the regions that surrounded the one it left, and
-// one of them, on a crossing, is the region it has just moved INTO --
-// which would otherwise sit in the map as a second circuit to the
-// simulator the root is now talking to.  The new region makes its own
-// offers within seconds of the avatar arriving, so what this costs is a
-// few seconds with no neighbours rather than anything lasting.
-//
-// Promoting a child to root instead of dropping it -- crossing on the
-// circuit that is already open, which is what would make a crossing
-// seamless rather than merely possible -- is stage 3 of
-// doc/history/neighbours.md and is deliberately not done here.
+// Its callers are the session ending and neighbours being turned off.
+// Not a move: a simulator does not offer again a child agent it still
+// counts as connected, and closing the socket tells it nothing, so the
+// neighbours of a region the avatar came back to soon after were never
+// offered again.  See neighboursAfterMove.
 func (a *Agent) dropNeighbours(why string) {
 	a.neighMu.Lock()
 	held := a.neighbours
@@ -552,6 +585,67 @@ func (a *Agent) dropNeighbours(why string) {
 		c.close()
 		a.logf("neighbour %s at %s: circuit closed, %s", gridSquare(c.handle), c.addr, why)
 	}
+}
+
+// dropNeighbour closes one child circuit and says why, if it is still
+// the one held for its region; one already dropped or replaced is left
+// alone.
+func (a *Agent) dropNeighbour(c *child, why string) {
+	if c == nil {
+		return
+	}
+	a.neighMu.Lock()
+	held := a.neighbours[c.handle] == c
+	if held {
+		delete(a.neighbours, c.handle)
+	}
+	a.neighMu.Unlock()
+	if held {
+		c.close()
+		a.logf("neighbour %s at %s: circuit closed, %s", gridSquare(c.handle), c.addr, why)
+	}
+}
+
+// neighboursAfterMove is what a move does to the child circuits: the one
+// to the region the avatar has just arrived in is closed, and the rest
+// are kept until their simulators disable them.
+//
+// That one would otherwise be a second circuit to the simulator the root
+// now talks to.  Promoting it to root instead -- crossing on the circuit
+// already open, as the viewer does -- is stage 3 of
+// doc/history/neighbours.md and is not done here.
+func (a *Agent) neighboursAfterMove() {
+	here := a.RegionHandle()
+	a.neighMu.Lock()
+	c := a.neighbours[here]
+	// An offer turned down at the cap is logged once per stay in a
+	// region rather than once per session.
+	a.refused = nil
+	a.neighMu.Unlock()
+	a.dropNeighbour(c, "the avatar moved into its region")
+}
+
+// strayNeighbour is a child whose region does not touch the one the
+// avatar is in, the lowest handle first, or nil when every child held is
+// a neighbour.  The caller holds neighMu.
+func (a *Agent) strayNeighbour() *child {
+	here := a.RegionHandle()
+	var stray *child
+	for h, c := range a.neighbours {
+		if !adjacent(h, here) && (stray == nil || h < stray.handle) {
+			stray = c
+		}
+	}
+	return stray
+}
+
+// adjacent reports whether two regions touch, across an edge or a
+// corner.
+func adjacent(a, b uint64) bool {
+	ax, ay := msg.GridCoords(a)
+	bx, by := msg.GridCoords(b)
+	near := func(p, q uint32) bool { return p <= q+1 && q <= p+1 }
+	return a != b && near(ax, bx) && near(ay, by)
 }
 
 // close ends a child's goroutines and gives its socket back.

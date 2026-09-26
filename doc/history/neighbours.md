@@ -250,13 +250,85 @@ Three things it showed that stage 0 could not:
   within a second.
 - **A teleport drops them the same way**, and from the skybox at 2001m
   in the middle of the region **none is offered at all**: a simulator
-  introduces what is near, and nothing is near the middle.
+  introduces what is near, and nothing is near the middle. (Dropping
+  them on a move was undone on 2026-09-26: see
+  [Kept across a move](#kept-across-a-move).)
 - **`EstablishAgentCommunication` follows the circuit here too**, which
   is now three runs saying it.
 
 What is still true after this stage: a crossing costs a fresh dial,
 because `moveTo` does not know the circuit it wants is already open.
 That is stage 3.
+
+### Kept across a move
+
+Measured on Agni on 2026-09-26, with `slgod -neighbours` and one avatar
+making three round trips by teleport between a region and a Linden
+sandbox. At login, and on the first arrival in the sandbox, the
+simulator offered three neighbours each time and three child circuits
+opened. **On all five arrivals after that** -- each within about ten
+seconds of the avatar last leaving that region -- **no
+`EnableSimulator` came at all**, and no child circuit opened.
+`EstablishAgentCommunication` still came for each neighbour.
+
+At the time every move dropped every child by closing its socket, and
+told the simulator nothing. Inferred, not measured: the neighbours'
+simulators still counted those child agents as connected, and a
+simulator does not offer a child it believes it already has. Stage 0 of
+`doc/history/teleport.md` measured the region left behind keeping its
+circuit about fifty seconds before sending `DisableSimulator`; how long
+a neighbour keeps a child was not measured. So the reason the code gave
+for dropping them -- that the new region makes its own offers within
+seconds -- holds for a region the avatar has not just left, and is false
+for one it comes back to soon: that avatar held no child circuit, and,
+going by stage 0, a walk to a border would have met the wall this plan
+began with.
+
+The viewer never lets a child go of its own accord while its simulator
+is still there. Firestorm adds a region on `EnableSimulator`
+(`newview/llworld.cpp:1584`) and removes one only on a
+`DisableSimulator` from that region's simulator
+(`llworld.cpp:1715`), on an `EnableSimulator` that replaces a stale
+entry for the same handle (`LLWorld::addRegion`, `llworld.cpp:520-559`),
+or at logout (`LLWorld::resetClass`, `llworld.cpp:132`). It sends
+nothing to say it has let a circuit go, and applies
+`EstablishAgentCommunication` only to a region it already holds.
+
+So slgo now does what the viewer does:
+
+- **A child is kept across a move**, and closed when `DisableSimulator`
+  arrives on its own circuit. The message has no body; the circuit is
+  what names the region, as the viewer reads it off the sender. The
+  template does not mark it `UDPBlackListed`. The viewer would also
+  take one off an event queue -- any templated message is dispatched
+  from one with the queue's region as the sender
+  (`newview/lleventpoll.cpp:103-128`, `llmessage/message.cpp:113-137`),
+  and each region it holds gets its own poll once its seed has given it
+  an `EventQueueGet` (`newview/llviewerregion.cpp:3643`) -- but slgo
+  polls only the root's, so a child's own circuit is the only road one
+  can reach it by.
+- **A move closes the child to the region moved into**, which would
+  otherwise be a second circuit to the root's simulator. Promoting it
+  instead is stage 3.
+- **The root circuit to the region left is closed on a move**, as it
+  was.
+- **At the cap of eight**, an offer first closes a child whose region
+  does not touch the avatar's, the lowest handle first, and is turned
+  down only when all eight are neighbours.
+- Turning neighbours off, and the session ending, still close every
+  child.
+
+What the viewer does and slgo does not: its message layer drops a
+circuit that has had no ping for 100 seconds
+(`llmessage/llcircuit.cpp:1065`, the figure from
+`newview/llstartup.cpp:916`), and a later `EnableSimulator` for that
+handle replaces the dead region (`llworld.cpp:520-559`). A child here
+whose simulator goes away without a `DisableSimulator` is held until the
+session ends, neighbours are turned off, or the cap closes it to make
+room once it is no longer beside the avatar.
+
+Not yet checked on the grid: a teleport away and back within ten
+seconds, with the circuits still up on the return.
 
 ### Stage 3 -- the crossing, by promotion
 
