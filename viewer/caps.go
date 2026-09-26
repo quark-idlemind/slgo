@@ -338,7 +338,9 @@ func (q *EventQueue) unhold() {
 // It asks the simulator the same question, on the session's behalf, and
 // hands back the answer with one entry changed: EventQueueGet points
 // here.  Everything else is the simulator's own URL, so a viewer fetches
-// textures, meshes and inventory straight from the grid.
+// textures, meshes and inventory straight from the grid.  A simulator
+// answer that is not a 2xx, or that cannot be read and rewritten, is a
+// 502 to the viewer, and nothing of it is passed on.
 //
 // Proxied rather than enumerated because the set grows.  A capability
 // this build has never heard of is one a viewer may still need, and
@@ -386,6 +388,8 @@ func (s *Seed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/llsd+xml")
+	// llsd.Decode reads only XML.
+	req.Header.Set("Accept", "application/llsd+xml")
 	resp, err := client.Do(req)
 	if err != nil {
 		err = redact.Error(err)
@@ -394,13 +398,27 @@ func (s *Seed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		logf("viewer: asking the simulator for capabilities: it answered %s", resp.Status)
+		http.Error(w, "the simulator answered the seed request "+resp.Status, http.StatusBadGateway)
+		return
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 
-	out, n := s.rewrite(body)
+	out, n, err := s.rewrite(body)
+	if err != nil {
+		// The viewer is told nothing of the error, and the log is
+		// given it with any URL cut: a decoder's complaint can quote
+		// the body it choked on, and the body holds the simulator's
+		// own queue.
+		logf("viewer: the simulator's capabilities could not be handed on: %s", redact.Text(err.Error()))
+		http.Error(w, "the simulator's answer to the seed request could not be read", http.StatusBadGateway)
+		return
+	}
 	logf("viewer: handed on %d capabilities, with %s pointed here", n, "EventQueueGet")
 	w.Header().Set("Content-Type", "application/llsd+xml")
 	_, _ = w.Write(out)
@@ -438,24 +456,28 @@ func (s *Seed) client() *http.Client {
 
 // rewrite replaces the event queue's URL and leaves everything else
 // exactly as the simulator gave it.
-func (s *Seed) rewrite(body []byte) ([]byte, int) {
+//
+// An answer it cannot read and rewrite is an error, and is never passed
+// on as it came.  A viewer asks a seed that failed again, up to 30 times
+// (Firestorm, indra/newview/llviewerregion.cpp:106 and 355-370), so
+// failing closed costs a retry; failing open could hand it the
+// simulator's own queue, and a viewer polling that takes the session's
+// events.
+func (s *Seed) rewrite(body []byte) ([]byte, int, error) {
 	v, err := llsd.Decode(bytes.NewReader(body))
 	if err != nil {
-		// Unreadable, so pass it on rather than lose it.  A viewer
-		// given the simulator's own queue is a bug; a viewer given
-		// nothing at all cannot start.
-		return body, 0
+		return nil, 0, err
 	}
 	m := llsd.Map(v)
 	if m == nil {
-		return body, 0
+		return nil, 0, errors.New("the answer is not a map")
 	}
 	if _, ok := m["EventQueueGet"]; ok {
 		m["EventQueueGet"] = s.EventQueue
 	}
 	out, err := llsd.Encode(m)
 	if err != nil {
-		return body, len(m)
+		return nil, 0, err
 	}
-	return out, len(m)
+	return out, len(m), nil
 }

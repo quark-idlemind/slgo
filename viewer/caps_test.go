@@ -1,7 +1,7 @@
 package viewer
 
 import (
-	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -48,6 +48,9 @@ func TestSeedChangesOnlyTheEventQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("the seed answered %s", resp.Status)
+	}
 	v, err := llsd.Decode(resp.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -69,26 +72,109 @@ func TestSeedChangesOnlyTheEventQueue(t *testing.T) {
 	}
 }
 
-// TestSeedPassesOnWhatItCannotRead: a viewer given nothing cannot start,
-// so an unreadable answer is handed over rather than lost.
-func TestSeedPassesOnWhatItCannotRead(t *testing.T) {
+// TestSeedAsksForLLSD: llsd.Decode reads only XML, so the simulator is
+// told that is the answer wanted, as every other capability request in
+// the tree tells it.
+func TestSeedAsksForLLSD(t *testing.T) {
+	accept := make(chan string, 1)
 	real := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("this is not llsd"))
+		accept <- r.Header.Get("Accept")
+		w.Write(encode(t, map[string]any{"EventQueueGet": "https://sim.invalid/cap/events"}))
 	}))
 	defer real.Close()
 
 	s := httptest.NewServer(&Seed{Real: real.URL, EventQueue: "x", Logf: func(string, ...any) {}})
 	defer s.Close()
 
-	resp, err := http.Post(s.URL, "application/llsd+xml", nil)
+	resp, err := http.Post(s.URL, "application/llsd+xml", strings.NewReader("<llsd><array/></llsd>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	select {
+	case got := <-accept:
+		if got != "application/llsd+xml" {
+			t.Errorf("the seed was asked with Accept %q, want application/llsd+xml", got)
+		}
+	default:
+		t.Error("the simulator was never asked")
+	}
+}
+
+// askSeed asks a Seed in front of a simulator answering with status and
+// body, and returns the viewer's status, its body and what was logged.
+func askSeed(t *testing.T, status int, body string) (int, string, string) {
+	t.Helper()
+	real := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		w.WriteHeader(status)
+		w.Write([]byte(body))
+	}))
+	defer real.Close()
+
+	var log syncBuffer
+	s := httptest.NewServer(&Seed{
+		Real:       real.URL,
+		EventQueue: "http://slgod.invalid/cap/x/event",
+		Logf:       func(f string, a ...any) { fmt.Fprintf(&log, f+"\n", a...) },
+	})
+	defer s.Close()
+
+	resp, err := http.Post(s.URL, "application/llsd+xml", strings.NewReader("<llsd><array/></llsd>"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	body := new(bytes.Buffer)
-	body.ReadFrom(resp.Body)
-	if body.String() != "this is not llsd" {
-		t.Errorf("body = %q, want it passed through", body.String())
+	got, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(got), log.String()
+}
+
+// TestSeedFailsClosedOnWhatItCannotRead: an answer that cannot be
+// rewritten may still hold the simulator's own queue, and a viewer
+// polling that takes the session's events.  So it is a 502, which a
+// viewer retries, and none of it reaches the viewer or the log.
+func TestSeedFailsClosedOnWhatItCannotRead(t *testing.T) {
+	const queue = "https://sim.invalid/cap/events"
+	for name, body := range map[string]string{
+		"cut short": `<llsd><map><key>EventQueueGet</key><string>` + queue + `</string>` +
+			`<key>GetTexture</key><string>https://sim.invalid/cap/texture</str`,
+		"not llsd":  `{"EventQueueGet": "` + queue + `"}`,
+		"not a map": `<llsd><array><string>` + queue + `</string></array></llsd>`,
+		"empty":     ``,
+	} {
+		t.Run(name, func(t *testing.T) {
+			status, got, log := askSeed(t, http.StatusOK, body)
+			if status != http.StatusBadGateway {
+				t.Errorf("an unreadable answer gave the viewer %d, want %d", status, http.StatusBadGateway)
+			}
+			if strings.Contains(got, "/cap/") {
+				t.Errorf("the viewer was handed some of the simulator's answer:\n%s", got)
+			}
+			if strings.Contains(log, "/cap/") {
+				t.Errorf("the log was handed some of the simulator's answer:\n%s", log)
+			}
+		})
+	}
+}
+
+// TestSeedFailsClosedOnAFailedAnswer: an answer that is not a 2xx is a
+// failure however readable its body, and the viewer is told so rather
+// than handed the body as if it were capabilities.
+func TestSeedFailsClosedOnAFailedAnswer(t *testing.T) {
+	body := string(encode(t, map[string]any{
+		"EventQueueGet": "https://sim.invalid/cap/events",
+		"GetTexture":    "https://sim.invalid/cap/texture",
+	}))
+	for _, code := range []int{http.StatusNotFound, 499, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			status, got, _ := askSeed(t, code, body)
+			if status != http.StatusBadGateway {
+				t.Errorf("a simulator answering %d gave the viewer %d, want %d", code, status, http.StatusBadGateway)
+			}
+			if strings.Contains(got, "/cap/") || strings.Contains(got, "slgod.invalid") {
+				t.Errorf("the viewer was handed the failed answer as capabilities:\n%s", got)
+			}
+		})
 	}
 }
 
