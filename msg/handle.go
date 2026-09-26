@@ -4,7 +4,7 @@ package msg
 // it by.
 //
 // The grid is squares of 256 metres.  A region's grid coordinates --
-// (43648, 43648), the pair the map speaks in -- are the square it occupies;
+// (995, 997), the pair the map speaks in -- are the square it occupies;
 // its handle is the south-west corner of that square in metres, the x in
 // the top half of a U64 and the y in the bottom (llregionhandle.h:34 and
 // :136, to_region_handle over grid_to_region_handle).  The two are one
@@ -16,9 +16,9 @@ package msg
 // on the wire, and because agent needs it as much as sl does: the handle
 // is how a region is named in a message, not something a client made up.
 //
-// Confirmed against Agni: the map places Pelmar Reach at (43648, 43648) and
-// the session reports its handle as 47991483540340736, which is what
-// RegionHandle gives for that pair.
+// Confirmed against Agni: the map places Sandbox Goguen at (995, 997),
+// and the teleports there carried its handle as 1094014069892352, which
+// is what RegionHandle gives for that pair.  See doc/history/teleport.md.
 
 // regionWidth is how many metres a region is across, which is what
 // separates the two spellings (indra_constants.h:38,

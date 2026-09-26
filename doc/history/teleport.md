@@ -476,11 +476,12 @@ Linden Homes region, this avatar's home, and a skybox two kilometres up.
 **Vortera is not a region on Agni.** `MapNameRequest` for "Vorter"
 returns Vorterhaven Sands, Vorterra Cove and Vortero Flats and nothing
 else. **Vortaro** does exist, at (43584, 43712), handle
-`47921114796179456`, moderate -- it is next door to Pelmar Reach's (1054,
-992) and is probably the name meant. The destination stage 0 actually
-teleported to and returned from is **Sandbox Goguen**, (995, 997),
-handle `1094014069892352`, general, which is proven to accept this
-avatar. Use Vortaro if it accepts us; keep Goguen as the one known to.
+`47921114796179456`, moderate -- it is next door to Pelmar Reach's
+(43648, 43648) and is probably the name meant. The destination stage 0
+actually teleported to and returned from is **Sandbox Goguen**,
+(995, 997), handle `1094014069892352`, general, which is proven to
+accept this avatar. Use Vortaro if it accepts us; keep Goguen as the
+one known to.
 
 Between them they exercise the awkward cases:
 

@@ -1,0 +1,18 @@
+# Real grid squares this repository may use, and where each was observed.
+#
+# Every other square in the tree is invented, and says so: both
+# coordinates have the high byte 0xAA, 43520 to 43775 in decimal (see
+# CLAUDE.md), or both are below 16, a placeholder nobody could take for
+# a region.  tools/check-identities refuses any other square it finds in
+# a handle -- RegionHandle(x, y), a decimal handle, the handle's bytes --
+# so a real square can only come in by being written down here, with
+# where it was seen beside it.
+#
+# Only Linden Lab's own public sandboxes belong here: nobody lives in
+# one.  Never a region somebody lives in, or one beside it -- a square
+# names a place as surely as its name does.
+#
+# One per line: x, a tab, y, a tab, the region's name, a tab, where it
+# was observed.
+
+995	997	Sandbox Goguen	Agni, the teleport measurements of 2026-08-16: doc/history/teleport.md

@@ -76,14 +76,14 @@ func TestFindingARegionAsksTheMapAndReadsThePositionOutOfTheReply(t *testing.T) 
 		t.Fatalf("FindRegions gave %d regions, want the one: %+v", len(got), got)
 	}
 	r := got[0]
-	if r.Name != "Pelmar Reach" || r.X != 1054 || r.Y != 992 || r.Access != AccessModerate {
+	if r.Name != "Pelmar Reach" || r.X != 43648 || r.Y != 43648 || r.Access != AccessModerate {
 		t.Errorf("the map answered %+v", r)
 	}
-	// The handle is what stage 0 read off the live session for this
-	// region, so this is the arithmetic checked against the grid rather
-	// than against itself.
+	// The handle is written out rather than worked out, so that this is
+	// not the arithmetic checked against itself; msg/handle_test.go is
+	// where it is checked against a square the grid answered with.
 	if r.Handle != 47991483540340736 {
-		t.Errorf("handle = %d, want the 47991483540340736 the session reports", r.Handle)
+		t.Errorf("handle = %d, want 47991483540340736", r.Handle)
 	}
 
 	m := onlySent[*msg.MapNameRequest](t, f)
@@ -110,7 +110,7 @@ func TestAPrefixMatchesSeveralRegionsAndAllOfThemComeBack(t *testing.T) {
 	answerMap(t, f, []msg.MapBlockReply_Data{
 		mapBlock("Pelmar Reach Two", 43649, 43648, AccessGeneral),
 		mapBlock("Pelmar Reach", 43648, 43648, AccessModerate),
-		mapBlock("Pelmarwood", 900, 1000, AccessAdult),
+		mapBlock("Pelmarwood", 43760, 43760, AccessAdult),
 		endOfList("pelm"),
 	})
 
@@ -165,10 +165,10 @@ func TestAnAnswerThatArrivesInSeveralPacketsIsOneList(t *testing.T) {
 
 	var first, second []msg.MapBlockReply_Data
 	for i := 0; i < 26; i++ {
-		first = append(first, mapBlock("Sandbox "+string(rune('A'+i)), uint16(1000+i), 1000, AccessGeneral))
+		first = append(first, mapBlock("Sandbox "+string(rune('A'+i)), uint16(43520+i), 43520, AccessGeneral))
 	}
 	for i := 0; i < 8; i++ {
-		second = append(second, mapBlock("Sandbox "+string(rune('a'+i)), uint16(1100+i), 1000, AccessGeneral))
+		second = append(second, mapBlock("Sandbox "+string(rune('a'+i)), uint16(43620+i), 43520, AccessGeneral))
 	}
 	second = append(second, endOfList("Sandbox"))
 	answerMap(t, f, first, second)

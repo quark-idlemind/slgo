@@ -128,7 +128,7 @@ func destination(info map[string]any) (addr *net.UDPAddr, seed string, handle ui
 	// SimIP is binary and is NOT a number.  The measured "ywBxCw==" is
 	// the four bytes cb 00 71 0b, which is 203.0.113.11 in network
 	// order; read as an integer and formatted it would come out
-	// backwards or as a nine-digit number, and either would be a bug
+	// backwards or as a ten-digit number, and either would be a bug
 	// that only shows on a live grid.  So the bytes are used as bytes,
 	// and a value that is not four of them is refused rather than
 	// padded into an address that would be three quarters right.

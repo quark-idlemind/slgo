@@ -58,8 +58,8 @@ calls itself, the square it occupies on the grid, the address of the
 simulator, and how many packets have arrived on the circuit.
 
     neighbours are on, 2 circuits held
-    Example Landing                   43647, 43648   203.0.113.9:13009  412 heard
-    Example Shallows                  43648, 43647   203.0.113.28:13006 87 heard
+    Example Landing                  43647, 43648 203.0.113.9:13009  412 heard
+    Example Shallows                 43648, 43647 203.0.113.28:13006 87 heard
 
 The handle is not in the line, where `regions` prints it, because
 nothing is addressed by a neighbour's handle: a border is walked over

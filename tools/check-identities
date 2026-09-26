@@ -204,6 +204,105 @@ UUID
 	exit 1
 fi
 
+# A region's grid square is one map lookup from its name, so a square is
+# marked the way a uuid is: both coordinates of an invented one have the
+# high byte 0xAA, 43520 to 43775.  A placeholder has both below 16.  A real
+# one is a Linden sandbox's and is written down, with where it was seen, in
+# tools/known-squares.  This needs no list either.  It reads the square out
+# of each form a handle is written in: RegionHandle(x, y), the decimal
+# handle, the handle in hex -- a constant, or its eight bytes spaced or
+# not, or as a Go byte list -- and the eight bytes as LLSD's base64.  A bare
+# (x, y) is not looked for; too many pairs of numbers are something else.
+knownsq=$root/tools/known-squares
+squares=$(perl -MMIME::Base64 -e '
+	my %known;
+	if (open my $k, "<", shift @ARGV) {
+		while (<$k>) {
+			next if /^\s*(#|$)/;
+			my ($x, $y) = split /\s+/;
+			$known{"$x,$y"} = 1;
+		}
+	}
+	sub ok {
+		my ($x, $y) = @_;
+		return 1 if $x >> 8 == 0xaa && $y >> 8 == 0xaa;
+		return 1 if $x < 16 && $y < 16;
+		return $known{"$x,$y"};
+	}
+	# The square a handle names, or nothing if it is not shaped like one:
+	# each half a whole number of 256-metre regions, and each coordinate
+	# at least one and inside the sixteen bits the map gives it.
+	sub square {
+		my ($hi, $lo) = @_;
+		return if $hi % 256 || $lo % 256;
+		my ($x, $y) = ($hi / 256, $lo / 256);
+		return if $x < 1 || $y < 1 || $x > 0xffff || $y > 0xffff;
+		return ($x, $y);
+	}
+	sub halves { my $h = shift; return ($h >> 32, $h & 0xffffffff) }
+	for my $f (@ARGV) {
+		next if $f =~ m{/tools/known-squares$};
+		open my $in, "<", $f or next;
+		while (my $line = <$in>) {
+			my @sq;
+			while ($line =~ /RegionHandle\(\s*(\d+)\s*,\s*(\d+)\s*\)/g) {
+				push @sq, ["RegionHandle($1, $2)", $1, $2];
+			}
+			# The smallest handle, (1, 1), has thirteen digits and
+			# the largest, (65535, 65535), seventeen.
+			while ($line =~ /(?<![\w.])(\d{13,17})(?![\w]|\.\d)/g) {
+				my $n = $1;
+				push @sq, [$n, square(halves($n))];
+			}
+			while ($line =~ /(?<![\w])(0[xX]0*([0-9a-fA-F]{11,14}))(?![\w])/g) {
+				my $n = $1;
+				push @sq, [$n, square(halves(hex $2))];
+			}
+			while ($line =~ /(?<![0-9a-fA-FxX])(?=((?:[0-9a-fA-F]{2}[ :]?){7}[0-9a-fA-F]{2})(?![0-9a-fA-F]))/g) {
+				my $s = $1;
+				(my $h = $s) =~ s/[ :]//g;
+				push @sq, [$s, square(hex substr($h, 0, 8), hex substr($h, 8, 8))]
+					if $h =~ /^00.{4}0000.{4}00$/;
+			}
+			while ($line =~ /(?=((?:0[xX][0-9a-fA-F]{1,2}\s*,\s*){7}0[xX][0-9a-fA-F]{1,2})(?![0-9a-fA-F]))/g) {
+				my $s = $1;
+				my @b = map { hex } $s =~ /0[xX]([0-9a-fA-F]{1,2})/g;
+				push @sq, ["{$s}", square(($b[0] << 24 | $b[1] << 16 | $b[2] << 8 | $b[3]),
+					($b[4] << 24 | $b[5] << 16 | $b[6] << 8 | $b[7]))]
+					if !$b[0] && !$b[3] && !$b[4] && !$b[7];
+			}
+			while ($line =~ /(?<![A-Za-z0-9+\/])([A-Za-z0-9+\/]{11}=)(?![A-Za-z0-9+\/=])/g) {
+				my $s = $1;
+				push @sq, [$s, square(unpack "N2", decode_base64($s))];
+			}
+			for (@sq) {
+				my ($what, $x, $y) = @$_;
+				next unless defined $y;
+				print "$f:$.: $what is square ($x, $y)\n" unless ok($x, $y);
+			}
+		}
+	}
+' "$knownsq" $text)
+if [ -n "$squares" ]; then
+	echo "check-identities: these grid squares are neither marked as invented nor known:"
+	echo
+	printf '%s\n' "$squares" | sed "s|^$root/||" | while IFS= read -r hit; do
+		printf '  %s\n' "$hit"
+	done
+	cat <<'SQUARE'
+
+An invented square says so: both coordinates have the high byte 0xAA, 43520
+to 43775 in decimal.  When it replaces a real one, a region and its
+neighbours move together, and every form -- the pair, RegionHandle(x, y), the
+decimal handle, its bytes -- is worked out again from the invented square
+rather than edited by hand.  A placeholder has both coordinates below 16.  A
+real square of one of Linden Lab's public sandboxes goes in
+tools/known-squares with where it was observed.  CLAUDE.md has the whole of
+it.
+SQUARE
+	exit 1
+fi
+
 found=0
 # Read the list, skipping comments and blank lines.  A uuid is also looked for
 # by its first eight characters, because the documentation elides them that way
