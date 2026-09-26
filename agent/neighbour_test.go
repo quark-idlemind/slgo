@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"runtime"
@@ -588,6 +589,50 @@ func TestClosingTheSessionClosesTheChildrenAndLeavesNoGoroutineBehind(t *testing
 	waitFor(t, "the goroutine count to come back to where it was", func() bool {
 		return runtime.NumGoroutine() <= before
 	})
+}
+
+// TestAKickGivesBackEverySocketWithoutAClose: slgod keeps a kicked
+// session so that it can say why it ended, and nothing calls Close on
+// it.  So the session's own end closes its sockets, the root circuit's
+// and each neighbour's, and a Close made later still returns as one
+// does.
+func TestAKickGivesBackEverySocketWithoutAClose(t *testing.T) {
+	a, from, _, sim, handle := neighbourly(t)
+	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
+	waitFor(t, "the neighbour to be held", func() bool { return len(a.Neighbours()) == 1 })
+
+	root := a.sock.conn.Load()
+	a.neighMu.Lock()
+	child := a.neighbours[handle].sock.conn.Load()
+	a.neighMu.Unlock()
+
+	kick := &msg.KickUser{}
+	kick.UserInfo.Reason = []byte("ended by the test\x00")
+	from.sim.send(kick, msg.FlagReliable)
+
+	select {
+	case <-a.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the kick did not end the session")
+	}
+	var k *Kicked
+	if !errors.As(a.Err(), &k) {
+		t.Fatalf("Err = %v, want the kick", a.Err())
+	}
+
+	waitFor(t, "the root circuit's socket to be closed", func() bool { return givenBack(root) })
+	waitFor(t, "the neighbour's socket to be closed", func() bool { return givenBack(child) })
+	if got := a.Neighbours(); len(got) != 0 {
+		t.Errorf("Neighbours = %+v after the session was kicked", got)
+	}
+
+	closed := make(chan struct{})
+	go func() { a.Close(); close(closed) }()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close after a kick did not return")
+	}
 }
 
 // TestAnOfferArrivingAsTheSessionEndsIsRefused: opening a child spawns

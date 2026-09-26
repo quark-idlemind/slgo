@@ -280,6 +280,63 @@ func TestASimulatorThatNeverCompletesTheMovementEndsTheSession(t *testing.T) {
 	}
 }
 
+// TestAMoveThatFailsClosesTheSocketItDialled: a failed move ends the
+// session, and slgod replaces a session that ended without closing it.
+// The move closes the connection it replaced itself; the one it dialled
+// is closed by the session ending.
+func TestAMoveThatFailsClosesTheSocketItDialled(t *testing.T) {
+	t.Parallel()
+
+	a, _, to := twoRegions(t, Options{SkipCaps: true, Timeout: 500 * time.Millisecond})
+	to.sim.mu.Lock()
+	to.sim.noMovement = true
+	to.sim.mu.Unlock()
+
+	before := a.sock.conn.Load()
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err == nil {
+		t.Fatal("a simulator that never answered was taken for a successful move")
+	}
+	fresh := a.sock.conn.Load()
+	if fresh == before {
+		t.Fatal("the move never put its connection under the session")
+	}
+	waitFor(t, "the connection the move dialled to be closed", func() bool { return givenBack(fresh) })
+	waitFor(t, "the connection it replaced to be closed", func() bool { return givenBack(before) })
+}
+
+// TestAClosedSocketTakesNoOtherConnection: a session can end between a
+// move asking whether it has and the move's swap.  A connection put
+// under a socket that was closed would be one nothing ever closes, so it
+// is refused and left to the caller, and a second Close is no error.
+func TestAClosedSocketTakesNoOtherConnection(t *testing.T) {
+	loopback := func() *net.UDPConn {
+		c, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+		if err != nil {
+			t.Skipf("no loopback UDP: %v", err)
+		}
+		t.Cleanup(func() { c.Close() })
+		return c
+	}
+	first, second := loopback(), loopback()
+
+	s := newSocket(first)
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+	if old, ok := s.swap(second); ok || old != nil {
+		t.Errorf("swap on a closed socket = %v, %v; want nil, false", old, ok)
+	}
+	if s.conn.Load() != first {
+		t.Error("a closed socket took the connection it was offered")
+	}
+	if givenBack(second) {
+		t.Error("the refused connection was closed; that is the caller's to do")
+	}
+	if err := s.Close(); err != nil {
+		t.Errorf("a second Close = %v", err)
+	}
+}
+
 // TestADialThatFailsLeavesTheSessionWhereItWas: the dial is first
 // because it is the one failure that changes nothing.
 func TestADialThatFailsLeavesTheSessionWhereItWas(t *testing.T) {

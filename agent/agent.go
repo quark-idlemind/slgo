@@ -633,6 +633,10 @@ func (a *Agent) logf(format string, v ...any) {
 	a.opts.Log(format, v...)
 }
 
+// fail ends the session for a reason of its own: a kick, the watchdog,
+// a failed move, or a goroutine's error.  It is Close without the wait,
+// because it usually runs inside one of the goroutines Close waits for;
+// it cancels them and gives the sockets back, and they end on their own.
 func (a *Agent) fail(err error) {
 	if err != nil {
 		a.errOnce.Do(func() { a.err.Store(err) })
@@ -641,6 +645,17 @@ func (a *Agent) fail(err error) {
 	if a.cancel != nil {
 		a.cancel()
 	}
+	a.release()
+}
+
+// release closes the root circuit's socket and every child circuit's,
+// and waits for nothing.  It comes after the cancel, so that a receiver
+// is on its way out before the read it is blocked in fails, and a second
+// call finds nothing left to close.  Never call it holding neighMu,
+// which dropNeighbours takes.
+func (a *Agent) release() {
+	a.sock.Close()
+	a.dropNeighbours("the session ended")
 }
 
 // register installs the handlers the circuit itself needs.  All of them
@@ -1174,17 +1189,16 @@ func (a *Agent) Logout(ctx context.Context, timeout time.Duration) error {
 }
 
 // Close stops the session'a goroutines and the socket without telling
-// the simulator anything.
+// the simulator anything, and returns once the goroutines have.
+//
+// A session that ended on its own -- kicked, silent, a move that failed
+// -- has already given its sockets back, and Close on it only waits.
 func (a *Agent) Close() {
 	a.doneOnce.Do(func() { close(a.done); a.leaveRegion() })
 	if a.cancel != nil {
 		a.cancel()
 	}
-	a.sock.Close()
-	// The children's goroutines are in the group below and the cancel
-	// above has already told them to stop; what this adds is their
-	// sockets, which nothing else would ever close.
-	a.dropNeighbours("the session ended")
+	a.release()
 	a.wg.Wait()
 }
 
