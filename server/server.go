@@ -707,8 +707,10 @@ func (s *Server) Agent(name string) (*Hosted, bool) {
 }
 
 // Ranked lists the hosted sessions oldest first, which is the order a
-// client should prefer them in: the first is the default, and a client
-// that cannot be satisfied by one tries the next.
+// client should prefer them in, and a client that cannot be satisfied
+// by one tries the next.  The default is the first that is not stopped:
+// a logout or a removal gives up a session's place, but a session the
+// grid ended keeps it, and Default passes over it.
 func (s *Server) Ranked() []*Hosted {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -718,8 +720,8 @@ func (s *Server) Ranked() []*Hosted {
 			out = append(out, h)
 		}
 	}
-	// Rank 0 means "gave up its place" -- a session that was stopped --
-	// and must sort LAST rather than first, which is where a plain
+	// Rank 0 means "gave up its place" -- a session logged out or
+	// removed -- and must sort LAST rather than first, which is where a plain
 	// numeric compare would put it.  It is still listed; it is simply
 	// not at the head of a list whose head means "the default".
 	sort.Slice(out, func(i, j int) bool {
