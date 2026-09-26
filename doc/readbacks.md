@@ -122,10 +122,25 @@ and the mask read back is returned whatever they are:
   (`initMasks`, `:68-79`); where the simulator applies it the source
   does not show.
 
-That the simulator applies these rules to an object's masks is
-inferred: its code is not public, and the viewer itself calls these
-setters only for inventory items (`newview/llfloaterproperties.cpp:788-821`,
-`newview/llsidepaneliteminfo.cpp:1058-1084`). A mask that never reads as they make what was
+The viewer itself calls these setters only for inventory items
+(`newview/llfloaterproperties.cpp:788-821`,
+`newview/llsidepaneliteminfo.cpp:1058-1084`), so whether the simulator
+applies the same rules to an object's masks was measured. On Agni on
+2026-09-26, on one prim:
+
+| Asked for | Read back |
+|---|---|
+| next owner: modify | modify, transfer |
+| everyone: copy and modify | copy |
+| group: copy and move | copy, move |
+| next owner: copy, modify, transfer | copy, modify, transfer |
+
+Each read back within 0.2 s. The first two are the rules at work. The
+last shows no move added to a next owner who was given something, so
+where `fixFairUse` applies, if anywhere, was not seen here. The two
+bits above are still not compared.
+
+A mask that never reads as they make what was
 sent is an error saying what it allows, wrapping `sl.ErrTimeout`, and
 `slsh perms` prints no line for it.
 
