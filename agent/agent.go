@@ -736,7 +736,7 @@ func (a *Agent) register() {
 	// does it is far too late: a region sends its heightmap in the
 	// first seconds after the avatar arrives and will not send it
 	// again for the asking.  The cost of always keeping it is about
-	// forty kilobytes.
+	// forty kilobytes of bodies and 256 of heights decoded from them.
 	a.Disp.MustHandle("LayerData", func(p *msg.Packet) {
 		if m, ok := p.Message.(*msg.LayerData); ok {
 			a.terrain.note(m)

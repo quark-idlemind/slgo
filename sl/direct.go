@@ -345,6 +345,12 @@ func (d *Direct) Land(ctx context.Context) (*Land, error) {
 	return out, nil
 }
 
+// Ground reads the terrain this process's own agent decoded.
+func (d *Direct) Ground(ctx context.Context, west, south, east, north float32) (float32, bool, error) {
+	h, known := d.a.Terrain().Highest(west, south, east, north)
+	return h, known, nil
+}
+
 func (d *Direct) Region(ctx context.Context) (*Region, bool, error) {
 	r, known := d.a.Region()
 	return &Region{

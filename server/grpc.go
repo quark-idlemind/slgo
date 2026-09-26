@@ -911,6 +911,17 @@ func (s *Server) Land(ctx context.Context, req *pb.LandRequest) (*pb.LandInfo, e
 	return out, nil
 }
 
+// Ground answers the height of the land, from the terrain the session
+// decoded as it arrived.  A point is a rectangle with no area.
+func (s *Server) Ground(ctx context.Context, req *pb.GroundRequest) (*pb.GroundResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	height, known := h.Agent().Terrain().Highest(req.West, req.South, req.East, req.North)
+	return &pb.GroundResponse{Known: known, Height: height}, nil
+}
+
 // Neighbours answers what circuits this session holds to the regions
 // around it, and turns them on or off when asked to.
 //

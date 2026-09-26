@@ -103,6 +103,15 @@ service Grid {
   // the wait.
   rpc Land(LandRequest) returns (LandInfo);
 
+  // Ground is the height of the land: at a point, or the highest it
+  // comes anywhere in a rectangle.
+  //
+  // Held by the server for the reason Land is.  The heightmap arrives
+  // once, in the first seconds after the avatar does, and a region sends
+  // it again to nobody who asks; the server decodes it as it comes, as a
+  // viewer does, and answers from that.
+  rpc Ground(GroundRequest) returns (GroundResponse);
+
   // Neighbours reads the circuits held to the regions AROUND that one,
   // and can turn them on and off.
   //
@@ -1412,6 +1421,29 @@ message LandInfo {
   // reading may not be trusted.
   bytes overlay = 4;
   uint32 overlay_quarters = 5;
+}
+
+message GroundRequest {
+  string agent = 1;
+
+  // The rectangle asked about, in metres from the region's south west
+  // corner.  A point is a rectangle with no area: west equal to east
+  // and south to north.
+  float west = 2;
+  float south = 3;
+  float east = 4;
+  float north = 5;
+}
+
+message GroundResponse {
+  // Known is false where any of the land under the rectangle has not
+  // arrived, or the rectangle reaches outside the region, and height is
+  // then zero.
+  bool known = 1;
+
+  // Height is the ground at the point, or the highest it comes in the
+  // rectangle, in metres.
+  float height = 2;
 }
 
 message NeighboursRequest {
