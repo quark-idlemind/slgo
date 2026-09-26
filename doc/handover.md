@@ -121,6 +121,102 @@ Offering somebody else a teleport to where this avatar is standing moves
 this avatar nowhere, and it is a thing a viewer does far better than a
 shell does.
 
+## What a viewer is not given
+
+The session stays the only reader of the simulator's event queue and
+hands a copy to the viewer's (`EventQueue`). A few events are left out
+of the copy (`withheldEvents`). Each is held with the reason it is
+held, because the daemon says that reason out loud once per kind and a
+sentence kept somewhere else would end up describing the wrong one.
+
+`EstablishAgentCommunication` is the simulator introducing a neighbour
+region: its UDP address and its seed capability, so that a viewer can
+open a child connection and draw what is over the border. Handed to a
+viewer, that is exactly what it does -- and the connection it opens is
+direct, using this session's own agent and session ids, to a simulator
+that has never heard of slgod. The handover stops being a handover:
+part of the session is then in the daemon and part of it is in the
+viewer, and nothing can see both.
+
+So it is withheld, and the cost is plain rather than hidden: the viewer
+draws this region and nothing beyond it. Neighbouring regions are void.
+slgod can hold the child connections itself (`agent.Options.Neighbours`,
+off by default), but making them work in the viewer means offering it
+slgod's own port for each, and that is not built
+([doc/history/neighbours.md](history/neighbours.md#stage-7----a-viewer-that-can-see-across-the-border)).
+
+`EnableSimulator` is the other half of that introduction and was relayed
+for as long as the front end had existed, which made the paragraph above
+half true at best. It carries a neighbour's handle, IP and port and no
+capability of any kind -- and a capability is not what opening a circuit
+takes. `UseCircuitCode`'s whole content is the circuit code, the session
+id and the agent id, and a viewer holding this session already has all
+three: they are in the login response it was replayed, and
+`Circuit.checkCircuit` exists precisely because the viewer sends them
+back on attaching. So an address is the only thing it was missing, and
+this message is an address. The seed in `EstablishAgentCommunication`
+buys the neighbour's HTTP capabilities; the UDP circuit, which is where
+the object updates arrive and where anything a viewer might send as this
+agent would go, needs none of it. The reference viewer does exactly this
+on receiving one -- enables the circuit and sends `UseCircuitCode` to
+the address it names (`process_enable_simulator`,
+`llworld.cpp:1584-1652`) -- which is a reading of published viewer
+source rather than something measured here, and the withholding does not
+rest on it: the message plus what the viewer already holds is
+sufficient on its own.
+
+A neighbour circuit is worse than the one `EstablishAgentCommunication`
+would open, not better. Every absorb in the package -- the logout that
+would end the grid session, the teleports, the circuit claim -- is
+enforced on the one circuit slgod owns, and a circuit the viewer opened
+itself is under none of it.
+
+Withheld, then, and it is the older hole rather than one the teleport
+work made: it had been relayed since the front end existed, and the
+capture taken in teleport's stage 0 has three of them arriving every few
+seconds. What it costs is that a viewer no longer creates the
+neighbouring regions at all, so anything it was managing to draw across
+a border stops -- which is the sentence above finally becoming true
+rather than a new restriction.
+
+`TeleportFinish` is the same failure arriving by a different road, and
+it opened when the daemon learned to follow a teleport. It carries the
+new simulator's address and its seed capability, and it does not need a
+viewer to have asked for anything: `slsh tp` moves the session, the
+simulator puts a `TeleportFinish` on the queue, slgod fans it out, and a
+viewer handed it opens a circuit straight to the real simulator with
+this session's agent id, session id and circuit code. Half the session
+would then be in the daemon and half in the viewer, with each one's
+sequence numbers meaningless to the other, and nothing anywhere able to
+see both. So it is withheld as well, and `Circuit.FromSim` absorbs it on
+the circuit in case a grid ever sends it there.
+
+`CrossedRegion` is that message for an avatar that walked, and it is
+held on the same terms. It names a simulator and carries its seed,
+nobody asked for it at all, and slgod acts on one itself when it arrives
+(`agent/crossing.go`) -- so a viewer given it would be a second thing
+following the same crossing, by its own circuit, with these ids.
+Withheld on the queue and absorbed in `Circuit.FromSim`, both roads.
+Agni sends it on the queue, to a session holding a child circuit to the
+region over the border; without one the border is a wall and it never
+comes.
+
+`TeleportFailed` is not withheld, and it is the one of these that can be
+let through. It carries no address and no invitation to connect
+anywhere: it is a reason string and, in a viewer, the message that
+clears any teleport state and puts up a notice. Nothing it can do is
+worse than the truth it carries, and if a `TeleportStart` ever does
+reach a viewer past the arm that absorbs it, this is the message that
+gets the viewer out of the tunnel again. Withholding it would buy
+tidiness and cost the only safety net there is.
+
+`TeleportStart` and `TeleportProgress` arrive on the circuit rather than
+the queue, and are absorbed in `Circuit.FromSim`.
+
+The measurements behind these are in stages 6 and 7 of
+[doc/history/teleport.md](history/teleport.md) and in
+[doc/history/neighbours.md](history/neighbours.md).
+
 ## What was said while nobody was attached
 
 The messages a viewer exists to answer -- an offered teleport, and the
