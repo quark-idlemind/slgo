@@ -112,7 +112,7 @@ func TestResponseRoundTrips(t *testing.T) {
 		"agent_id":            "876e7e57-7e57-c0de-8597-66b760a8cb5f",
 		"sim_port":            int64(13003),
 		"seconds_since_epoch": int64(1_755_000_000),
-		"region_x":            int64(256000),
+		"region_x":            int64(11141120),
 		"seed_capability":     "https://example.invalid/cap/abc",
 		"loginpage":           nil,
 		"gestures": []any{

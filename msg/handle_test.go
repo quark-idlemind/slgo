@@ -2,18 +2,17 @@ package msg
 
 import "testing"
 
-// The pairs below were read off Agni rather than computed here: the
-// coordinates are what the map answered with and the handles are what
-// the session and the teleport requests carried.  A test that worked
-// both numbers out of the same expression would agree with itself
-// however the expression was wrong.
+// The pair below was read off Agni rather than computed here: the
+// coordinates are what the map answered with and the handle is what the
+// teleports carried.  A test that worked both numbers out of the same
+// expression would agree with itself however the expression was wrong.
+// It is the only one because a Linden sandbox's square is the only kind
+// kept real here; every other square is invented, so was computed.
 var handles = []struct {
 	name string
 	x, y uint32
 	want uint64
 }{
-	{"Pelmar Reach", 43648, 43648, 47991483540340736},
-	{"Vortaro", 43584, 43712, 47921114796179456},
 	{"Sandbox Goguen", 995, 997, 1094014069892352},
 }
 

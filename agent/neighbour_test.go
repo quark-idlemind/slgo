@@ -512,7 +512,7 @@ func TestNoMoreThanTheCapAreOpened(t *testing.T) {
 	// than one.
 	var over *fakeSim
 	for i := range MaxNeighbours + 1 {
-		sim, handle := aNeighbour(t, fmt.Sprintf("neighbour %d", i), uint32(1040+i), 992)
+		sim, handle := aNeighbour(t, fmt.Sprintf("neighbour %d", i), uint32(43634+i), 43648)
 		from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
 		if i == MaxNeighbours {
 			over = sim
@@ -575,7 +575,7 @@ func TestClosingTheSessionClosesTheChildrenAndLeavesNoGoroutineBehind(t *testing
 	before := runtime.NumGoroutine()
 
 	for i := range 3 {
-		sim, handle := aNeighbour(t, fmt.Sprintf("neighbour %d", i), uint32(1050+i), 992)
+		sim, handle := aNeighbour(t, fmt.Sprintf("neighbour %d", i), uint32(43644+i), 43648)
 		from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
 	}
 	waitFor(t, "the circuits to open", func() bool { return len(a.Neighbours()) == 3 })

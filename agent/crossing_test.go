@@ -156,9 +156,9 @@ func TestACrossedRegionNobodyCanReadIsNotActedOn(t *testing.T) {
 // arrival position -- 254.8, 128.0, 21.6, which is a stride the far side
 // of a border at x=0.
 //
-// What is not the grid's: the two uuids are made up and the seed's host
-// and capability id are invented.  Everything read here is the measured
-// value.
+// What is not the grid's: the two uuids, the seed's host and capability
+// id, the address and the square the handle names are invented.  The
+// rest is the measured value, and every shape is the measured shape.
 const agniCrossedRegion = `<llsd><map>` +
 	`<key>AgentData</key><array><map>` +
 	`<key>AgentID</key><string>45d57e57-7e57-c0de-d221-6ffd8a188ce4</string>` +
@@ -199,7 +199,7 @@ func TestTheCrossingIsReadFromTheBytesTheGridSent(t *testing.T) {
 	if handle != 47990384028712960 {
 		t.Errorf("handle = %d, want 47990384028712960", handle)
 	}
-	if x, y := msg.GridCoords(handle); x != 1053 || y != 992 {
+	if x, y := msg.GridCoords(handle); x != 43647 || y != 43648 {
 		t.Errorf("the handle is grid square (%d, %d), want (43647, 43648)", x, y)
 	}
 	if !strings.HasSuffix(seed, "d8ad7e57-7e57-c0de-c3e4-64514ffb79e0") {

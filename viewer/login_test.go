@@ -27,7 +27,7 @@ func storedResponse() map[string]any {
 		"seed_capability":  "https://simhost.invalid/cap/real",
 		"first_name":       `"Taren"`,
 		"last_name":        "Holt",
-		"region_x":         int64(256000),
+		"region_x":         int64(11141120),
 		"udp_blacklist":    "EnableSimulator,TeleportFinish",
 		"agent_access_max": "A",
 		"inventory-skeleton": []any{

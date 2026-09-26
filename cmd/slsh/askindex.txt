@@ -449,7 +449,7 @@ neighbours	neighbours	line		neighbours [on|off]\nthe circuits held to the region
 neighbours:intro	neighbours	intro		Says whether this avatar holds a circuit to the regions beside the one\nit is standing in, and lists what it holds.  With `on` or `off` it\nchanges that first and then says the state it ended up in.\n\nThe circuits are what a border crossing needs.  A simulator will not\nhand an avatar over the edge of a region to a client that holds no\ncircuit to the region on the other side -- it does not refuse, it\nsimply does not do it -- so with neighbours off the avatar walks to the\nborder and stops there.  With a circuit open, the same walk is over the\nborder in a couple of seconds.
 neighbours:section:Why it is off unless somebody asks	neighbours	section	Why it is off unless somebody asks	Each neighbour costs a socket and a share of the traffic, for as long\nas it is held, and the number of them is however many regions surround\nthis one -- up to eight on the open grid.  That is a price worth paying\nfor an avatar somebody is walking about with, and a waste for one\nrunning a benchmark in a single region, which is why this is a property\nof an avatar and not of the daemon holding it.\n\nOff drops what is held rather than merely refusing the next offer.\nNothing is listed after it: one line says they are off.\n\nA word that is neither `on` nor `off` is a usage error, and the session\nis left as it was.
 neighbours:section:On, with nothing held, is the ordinary state	neighbours	section	On, with nothing held, is the ordinary state	Turning them on asks for nothing and opens nothing.  The simulator\noffers a neighbour of its own accord and repeats the offer for as long\nas it goes untaken, so the circuits arrive by themselves; the way to\nsee them is to run `neighbours` again.\n\nThey take their time, and they do not arrive together.  Measured on\nAgni on 2026-08-23, timed from turning them on: the first circuit\nopened between twenty and sixty seconds later, and more followed over\nthe minute after that -- at one position three opened together and two\nmore forty seconds behind them.  An empty listing in the first few\nseconds is the offer not having come round yet.\n\nBeing away from a border is not what empties it.  Standing in the\nexact middle of a 256-metre region, 128 metres from all four edges,\nfour circuits were held: one across each edge, and none across a\ncorner.  Twenty-eight metres in from the west edge and seventy-two\nfrom the south, the near three came first -- those two edges and the\ncorner between them -- and the far two followed.  Height does not\ndecide it: that second position was 2001 metres up, and the middle was\nmeasured both at 2001 and at ground level.\n\nThe set changes as the avatar moves.  The circuits belong to the\nregion the avatar is in, so a teleport to another region or a crossing\nthrows them away; a teleport within the region leaves them alone.
-neighbours:section:The listing	neighbours	section	The listing	One region to a line, in the shape `regions` prints: what the region\ncalls itself, the square it occupies on the grid, the address of the\nsimulator, and how many packets have arrived on the circuit.\n\n    neighbours are on, 2 circuits held\n    Example Landing                   43647, 43648   203.0.113.9:13009  412 heard\n    Example Shallows                  43648, 43647   203.0.113.28:13006 87 heard\n\nThe handle is not in the line, where `regions` prints it, because\nnothing is addressed by a neighbour's handle: a border is walked over\nrather than typed at.\n\nA name arrives in the region's handshake, so a line that says\n`(no handshake yet)` is a circuit that has not been sent one.  It does\nnot follow that the offer came to nothing.  On 2026-08-23, three of\nthe five simulators around one region sent no handshake through four\nopenings each, while the packet count beside them climbed into double\nfigures -- and the same three had answered on an earlier day, so it is\nthe simulator's mood rather than the circuit's health.  The count is\nwhat says a circuit is alive; the name only says the simulator\nintroduced itself.\n\nThe count is what the neighbour has said, counted and dropped.  Nothing\nthis shell can ask about lives in another region: what is over the\nborder is not in `objects`, not in `who` and not in the object cache.\nThe count is there to say the circuit is alive.
+neighbours:section:The listing	neighbours	section	The listing	One region to a line, in the shape `regions` prints: what the region\ncalls itself, the square it occupies on the grid, the address of the\nsimulator, and how many packets have arrived on the circuit.\n\n    neighbours are on, 2 circuits held\n    Example Landing                  43647, 43648 203.0.113.9:13009  412 heard\n    Example Shallows                 43648, 43647 203.0.113.28:13006 87 heard\n\nThe handle is not in the line, where `regions` prints it, because\nnothing is addressed by a neighbour's handle: a border is walked over\nrather than typed at.\n\nA name arrives in the region's handshake, so a line that says\n`(no handshake yet)` is a circuit that has not been sent one.  It does\nnot follow that the offer came to nothing.  On 2026-08-23, three of\nthe five simulators around one region sent no handshake through four\nopenings each, while the packet count beside them climbed into double\nfigures -- and the same three had answered on an earlier day, so it is\nthe simulator's mood rather than the circuit's health.  The count is\nwhat says a circuit is alive; the name only says the simulator\nintroduced itself.\n\nThe count is what the neighbour has said, counted and dropped.  Nothing\nthis shell can ask about lives in another region: what is over the\nborder is not in `objects`, not in `who` and not in the object cache.\nThe count is there to say the circuit is alive.
 neighbours:example:1	neighbours	example	The listing	neighbours are on, 2 circuits held
 neighbours:section:It belongs to the session, not to this shell	neighbours	section	It belongs to the session, not to this shell	Turning neighbours on turns them on for the avatar, in whatever is\nholding the session, and it stays on after this shell exits.  Another\nclient attached to the same daemon sees the same answer and can change\nit too.  Quitting does not put it back.\n\nA profile can start an avatar with them on, which is the right place\nfor one that is always driven by a person:\n\n    neighbours = yes\n\nin the profile under ~/.config/slgo.  The profile spells it `yes`; this\ncommand spells it `on`.  slgod's `-neighbours` flag is what profiles\nthat say nothing get, and a profile that says either wins over the\nflag.
 neighbours:example:2	neighbours	example	It belongs to the session, not to this shell	neighbours = yes
@@ -881,7 +881,7 @@ worn:section:What this can and cannot see	worn	section	What this can and cannot 
 worn:section:Examples	worn	section	Examples	    worn\n    worn -l auto\n    detach lantern\n\nSee also: `wear`, `detach`, `objects` for the same things as the region\nsees them, and `auto` for the worn objects the benchmarks use.
 worn:example:2	worn	example	Examples	worn -l auto
 worn:example:3	worn	example	Examples	detach lantern
-words 1868
+words 1866
 --all	364,450
 --alpha	731,9
 --args	638,4
@@ -1003,8 +1003,6 @@ words 1868
 1020	787,72
 1024	550
 1024x1024	543
-1053	449
-1054	449
 10s	828
 113	449*2
 11434	241,1
@@ -1071,6 +1069,8 @@ words 1868
 412	449
 4242	635,1
 43	349
+43647	449*2
+43648	449*2
 44	173,122,49,431*2,1
 45	761
 45s	241
@@ -1109,8 +1109,6 @@ words 1868
 900	550
 900m	821
 980	589
-991	449
-992	449
 9c02d47	172
 a4c67e57	332
 abandon	65,506,128
