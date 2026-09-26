@@ -223,6 +223,15 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 			return ok && w.agent == only
 		}
 	}
+	// A bounded wait gives up with an answer saying so.  A try never
+	// reaches the select, so it needs no clock.
+	var lapsed <-chan time.Time
+	wait := time.Duration(req.GetWaitSeconds()) * time.Second
+	if wait > 0 && !req.GetTry() {
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		lapsed = t.C
+	}
 	for {
 		// Whatever the daemon is holding now, which may be more than it
 		// was holding when this client attached.
@@ -267,6 +276,10 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 		// blocking nobody.
 		select {
 		case <-r.Wait:
+		case <-lapsed:
+			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{},
+				fmt.Sprintf("%d objects were still not free after %v", want, wait)))
+			return
 		case <-ctx.Done():
 			return
 		}

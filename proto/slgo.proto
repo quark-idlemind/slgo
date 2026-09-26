@@ -414,6 +414,12 @@ message Slots {
   // -- so a client with more than one ask out matches them by this.
   // Zero is a client older than the field.
   uint64 request = 5;
+
+  // WaitSeconds bounds the wait.  Zero waits as long as it takes; any
+  // other number gives up after that many seconds with an answer saying
+  // so, why set and nothing granted.  A try is answered at once
+  // whatever this says.
+  uint32 wait_seconds = 6;
 }
 
 // RenewSlots puts a grant's clock back, for work that cannot say in

@@ -687,7 +687,12 @@ type Slots struct {
 	// the order they were asked for -- a wait ends when places come free
 	// -- so a client with more than one ask out matches them by this.
 	// Zero is a client older than the field.
-	Request       uint64 `protobuf:"varint,5,opt,name=request,proto3" json:"request,omitempty"`
+	Request uint64 `protobuf:"varint,5,opt,name=request,proto3" json:"request,omitempty"`
+	// WaitSeconds bounds the wait.  Zero waits as long as it takes; any
+	// other number gives up after that many seconds with an answer saying
+	// so, why set and nothing granted.  A try is answered at once
+	// whatever this says.
+	WaitSeconds   uint32 `protobuf:"varint,6,opt,name=wait_seconds,json=waitSeconds,proto3" json:"wait_seconds,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -753,6 +758,13 @@ func (x *Slots) GetAgent() string {
 func (x *Slots) GetRequest() uint64 {
 	if x != nil {
 		return x.Request
+	}
+	return 0
+}
+
+func (x *Slots) GetWaitSeconds() uint32 {
+	if x != nil {
+		return x.WaitSeconds
 	}
 	return 0
 }
@@ -6146,13 +6158,14 @@ const file_slgo_proto_rawDesc = "" +
 	"\vrenew_slots\x18\a \x01(\v2\x13.slgo.v1.RenewSlotsH\x00R\n" +
 	"renewSlots\x12<\n" +
 	"\rrelease_slots\x18\b \x01(\v2\x15.slgo.v1.ReleaseSlotsH\x00R\freleaseSlotsB\x06\n" +
-	"\x04body\"w\n" +
+	"\x04body\"\x9a\x01\n" +
 	"\x05Slots\x12\x12\n" +
 	"\x04want\x18\x01 \x01(\rR\x04want\x12\x18\n" +
 	"\aseconds\x18\x02 \x01(\rR\aseconds\x12\x10\n" +
 	"\x03try\x18\x03 \x01(\bR\x03try\x12\x14\n" +
 	"\x05agent\x18\x04 \x01(\tR\x05agent\x12\x18\n" +
-	"\arequest\x18\x05 \x01(\x04R\arequest\"V\n" +
+	"\arequest\x18\x05 \x01(\x04R\arequest\x12!\n" +
+	"\fwait_seconds\x18\x06 \x01(\rR\vwaitSeconds\"V\n" +
 	"\n" +
 	"RenewSlots\x12\x14\n" +
 	"\x05grant\x18\x01 \x01(\tR\x05grant\x12\x18\n" +
