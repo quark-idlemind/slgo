@@ -65,6 +65,7 @@ import (
 	"github.com/quark-idlemind/slgo/auth"
 	"google.golang.org/grpc/credentials"
 	"io"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -104,6 +105,14 @@ type Conn struct {
 	mu   sync.RWMutex
 	info *pb.AgentInfo
 	caps map[string]bool
+
+	// moves counts the region changes heard on the stream -- a teleport,
+	// a crossing, a session re-established -- and capsAt is the count
+	// info and caps were read at.  While they differ the two describe a
+	// session or a region the avatar has left, and HasCap and Caps ask
+	// again first.  refreshMu keeps that to one ask at a time.
+	moves, capsAt uint64
+	refreshMu     sync.Mutex
 
 	stream   pb.Grid_StreamClient
 	messages chan *Message
@@ -547,11 +556,7 @@ func (c *Conn) attach(ctx context.Context, agentName string, weak bool, subscrib
 	}
 	c.agent = name
 	c.stream = stream
-	c.info = att.Agent
-	c.caps = make(map[string]bool, len(att.Agent.GetCaps()))
-	for _, n := range att.Agent.GetCaps() {
-		c.caps[n] = true
-	}
+	c.keepInfoLocked(att.Agent, c.moves)
 	c.offers = att.GetOffers()
 	c.relaying = true
 	c.mu.Unlock()
@@ -592,6 +597,14 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 				c.noteDrop("event " + e.Name)
 			}
 		case *pb.ServerPacket_Notice:
+			if b.Notice.GetKind() == pb.AgentEvent_REGION_CHANGED {
+				// Before the notice goes anywhere, so that nobody
+				// told of the change is answered from the list of
+				// before it.
+				c.mu.Lock()
+				c.moves++
+				c.mu.Unlock()
+			}
 			select {
 			case c.notices <- b.Notice:
 			default:
@@ -666,11 +679,73 @@ func (c *Conn) deliver(m *pb.InboundMessage) {
 	}
 }
 
-// Info is what the server said about the attached agent.
+// Info is what the server said about the attached agent: at attach,
+// or at the last Refresh.
 func (c *Conn) Info() *pb.AgentInfo {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.info
+}
+
+// Refresh asks the daemon who the attached agent is now, and keeps the
+// answer as Info and the capability list.
+//
+// A session re-established under this connection has a new session id
+// and new capabilities, and a teleport or crossing new capabilities;
+// each arrives as a region change, after which HasCap and Caps call
+// this themselves.  See also DoCap.
+func (c *Conn) Refresh(ctx context.Context) (*pb.AgentInfo, error) {
+	c.mu.RLock()
+	moves := c.moves
+	c.mu.RUnlock()
+	st, err := c.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+	a := st.GetAgent()
+	if a == nil {
+		return nil, fmt.Errorf("client: the daemon said nothing about %s", c.agentName())
+	}
+	c.mu.Lock()
+	// Not over an answer asked for after a later change.
+	if moves >= c.capsAt {
+		c.keepInfoLocked(a, moves)
+	}
+	c.mu.Unlock()
+	return a, nil
+}
+
+// keepInfoLocked takes what the daemon said about the agent, as of the
+// region change counted as moves.  An answer asked for before a later
+// change leaves the list marked for asking again.
+func (c *Conn) keepInfoLocked(a *pb.AgentInfo, moves uint64) {
+	c.info = a
+	c.caps = make(map[string]bool, len(a.GetCaps()))
+	for _, n := range a.GetCaps() {
+		c.caps[n] = true
+	}
+	c.capsAt = moves
+}
+
+// capsRefreshWait bounds the ask HasCap and Caps make after a region
+// change, which have no context of their own.
+const capsRefreshWait = 10 * time.Second
+
+// freshen asks again when a region change has come since the list was
+// read.  A failed ask keeps the old list, still marked, so the next use
+// tries again.
+func (c *Conn) freshen() {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	c.mu.RLock()
+	stale := c.capsAt != c.moves
+	c.mu.RUnlock()
+	if !stale {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), capsRefreshWait)
+	defer cancel()
+	c.Refresh(ctx)
 }
 
 // Subscribe replaces the set of messages relayed to this stream.
@@ -1027,15 +1102,18 @@ func (c *Conn) Flush(ctx context.Context) (int, error) {
 // and the server does not know what inventory is.
 var _ agent.CapDoer = (*Conn)(nil)
 
-// HasCap reports whether the attached agent offered a capability.
+// HasCap reports whether the attached agent offers a capability.  After
+// a region change the daemon is asked again first; see Refresh.
 func (c *Conn) HasCap(name string) bool {
+	c.freshen()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.caps[name]
 }
 
-// Caps lists them.
+// Caps lists them, asking again first as HasCap does.
 func (c *Conn) Caps() []string {
+	c.freshen()
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	out := make([]string, 0, len(c.caps))
@@ -1046,7 +1124,32 @@ func (c *Conn) Caps() []string {
 }
 
 // DoCap makes a capability request through the server.
+//
+// A named capability answered 404 "cap not found" is taken for one
+// looked up in a session or region that has since been replaced, which
+// is when that answer has been seen.  The agent is asked about again,
+// and the request made once more; what that answers is what is
+// returned.  A request to a URL is not made again, since its URL would
+// be the same.
+// Why: doc/client.md#capabilities-after-the-session-changes
 func (c *Conn) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
+	resp, err := c.doCap(ctx, r)
+	if err != nil || r.URL != "" || !capNotFound(resp) {
+		return resp, err
+	}
+	if _, err := c.Refresh(ctx); err != nil {
+		return resp, nil
+	}
+	return c.doCap(ctx, r)
+}
+
+// capNotFound is the grid's answer to a capability URL it does not know.
+func capNotFound(r *agent.CapResponse) bool {
+	return r.Status == http.StatusNotFound &&
+		bytes.Contains(bytes.ToLower(r.Body), []byte("cap not found"))
+}
+
+func (c *Conn) doCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
 	name := c.agentName()
 
 	resp, err := c.grid.Cap(ctx, &pb.CapRequest{
