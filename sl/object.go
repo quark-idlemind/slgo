@@ -40,7 +40,8 @@ type Object struct {
 
 // ErrNotHere is an object that is not in the region the avatar is in
 // now, as far as that region has described it, so there is no local id
-// to send for it.
+// to send for it.  A lookup that cannot settle which region it answered
+// for is refused with it too, and says so in its own words.
 var ErrNotHere = errors.New("not in this region")
 
 func (o Object) String() string {
@@ -57,7 +58,9 @@ type RezOptions struct {
 }
 
 // Rez creates a single prim and returns it, having confirmed we own it.
-// It is made in the avatar's active group, as a viewer makes one.
+// It is made in the avatar's active group, as a viewer makes one.  A
+// caller that gives up is handed the prim with its error if one last
+// look finds it.
 //
 // Build does this and more; this is the short way to get one prim when
 // none of the rest is wanted.

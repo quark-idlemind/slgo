@@ -147,8 +147,11 @@ type fakeBackend struct {
 	neighbours    Neighbours
 	neighboursErr error
 
-	objects    []*Seen
-	objectsErr error
+	// objectsErrs are answered first, one to an ask, and objectsErr
+	// after them to every ask.
+	objects     []*Seen
+	objectsErrs []error
+	objectsErr  error
 
 	friends    []Friend
 	friendsErr error
@@ -842,6 +845,11 @@ func (f *fakeBackend) Presence(ctx context.Context, drawDistance float32) (*Pres
 func (f *fakeBackend) Objects(ctx context.Context, named, id string) ([]*Seen, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if len(f.objectsErrs) > 0 {
+		err := f.objectsErrs[0]
+		f.objectsErrs = f.objectsErrs[1:]
+		return nil, err
+	}
 	if f.objectsErr != nil {
 		return nil, f.objectsErr
 	}

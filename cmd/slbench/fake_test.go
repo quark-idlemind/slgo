@@ -51,6 +51,11 @@ var (
 	testMe        = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
 	testSessionID = msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")
 	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-245c-d6b83f1a8b6d")
+
+	// testRegion names the region the fake is in.  sl sends a local id
+	// found by looking an object up only while the region it was found
+	// in is named and still the avatar's.
+	testRegion = msg.MustParseUUID("a4fd7e57-7e57-c0de-559f-7a9b7da6044a")
 )
 
 // fakeObject is one prim: what it is called, what it holds, and the
@@ -555,7 +560,7 @@ func (f *fakeGrid) Ground(ctx context.Context, west, south, east, north float32)
 }
 
 func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
-	return &sl.Region{Name: "Test Region"}, true, nil
+	return &sl.Region{ID: testRegion, Name: "Test Region"}, true, nil
 }
 
 func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {

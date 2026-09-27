@@ -709,6 +709,50 @@ func TestEnsureAttachedPutsOnWhatIsInInventory(t *testing.T) {
 	}
 }
 
+// TestEnsureAttachedClearsAwayARezGivenUpOn: a caller that gives up
+// while the prim is being looked for may have one standing by then, and
+// Rez hands it back.  Nobody else holds its id, so it is deleted into
+// the trash before the cancel is returned.
+func TestEnsureAttachedClearsAwayARezGivenUpOn(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	trash := msg.MustParseUUID("1ad37e57-7e57-c0de-4b44-9217348fe328")
+	f.ServeInventoryTree(t, func(id msg.UUID) ([]*Folder, []*Item) {
+		if id == testInvRoot {
+			return []*Folder{{ID: trash, ParentID: testInvRoot, Name: "Trash", Type: FolderTrash}}, nil
+		}
+		return nil, nil
+	})
+	answerDeletes(t, f)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// The prim appears as the first look after the rez is answered, so
+	// only the last look sees it.
+	looked := false
+	f.mu.Lock()
+	f.afterObjects = func() {
+		if looked || !sentLocked[*msg.ObjectAdd](f) {
+			return
+		}
+		looked = true
+		f.objects = append(f.objects, ours(thePrim, 81, msg.Vector3{X: 129.5, Y: 128, Z: 25.75}))
+		cancel()
+	}
+	f.mu.Unlock()
+
+	_, err := whenCancelled(t, ctx, func(ctx context.Context) (*Attached, error) {
+		return w.EnsureAttached(ctx, aFolder, "workbench", HUDCenter1)
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("EnsureAttached = %v, want the caller's cancel", err)
+	}
+	d := sentOf[*msg.DeRezObject](f)
+	if len(d) != 1 || d[0].ObjectData[0].ObjectLocalID != 81 || d[0].AgentBlock.DestinationID != trash {
+		t.Errorf("sent %s; want the prim that was made deleted into the trash", f.describe())
+	}
+}
+
 // TestEnsureAttachedSaysWhichStepFailed: it is four calls deep by the
 // end, and "sl: timed out" on its own would say nothing about which of
 // them the caller has to look at.

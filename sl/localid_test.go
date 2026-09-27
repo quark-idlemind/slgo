@@ -263,6 +263,9 @@ func TestALocalIDIsTheRegionsItCameFrom(t *testing.T) {
 			if !errors.Is(err, ErrNotHere) {
 				t.Errorf("%s = %v, want ErrNotHere", c.name, err)
 			}
+			if err == nil || !strings.Contains(err.Error(), "or is beyond the draw distance") {
+				t.Errorf("%s = %v, want it to say the prim may be out of sight", c.name, err)
+			}
 			if got := f.Sent(); len(got) != 0 {
 				t.Errorf("%s sent %s for a prim that is not here", c.name, f.describe())
 			}
@@ -311,6 +314,114 @@ func TestAReEstablishedSessionLooksObjectsUpAgain(t *testing.T) {
 	if n := looked(); n != 1 {
 		t.Errorf("the object was looked up %d times, want once", n)
 	}
+}
+
+// further is a third region, for an avatar that moves again during a
+// lookup.
+var further = msg.MustParseUUID("9c077e57-7e57-c0de-b075-ceb07fcba67d")
+
+// movesDuringLookups stages the avatar changing region while the
+// backend answers each of the first n lookups from now on: the answer
+// is the region it is leaving, and the session has heard of the move
+// before the answer is back.  It returns the count of lookups.
+func movesDuringLookups(t *testing.T, f *fakeBackend, n int) func() int {
+	t.Helper()
+	looked := 0
+	f.mu.Lock()
+	f.afterObjects = func() {
+		looked++
+		if looked > n {
+			return
+		}
+		// Every move is a new visit, so going back and forth between
+		// two regions is as good as a new one each time.
+		next := further
+		if looked%2 == 0 {
+			next = elsewhere
+		}
+		f.region = &Region{ID: next, Name: "Example Region", Handle: 1}
+		f.objects = []*Seen{named(thePrim, 2000+uint32(looked))}
+		f.RelayRegion(t, "Example Region", 1)
+	}
+	f.mu.Unlock()
+	return func() int {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return looked
+	}
+}
+
+// TestALookupThatCrossesAMoveIsNotSent: the avatar moved while the
+// object was being looked up, so the number found is the region's it
+// left.  It is looked up once more, and a second answer from a visit
+// already over is refused like a prim that is not here.
+func TestALookupThatCrossesAMoveIsNotSent(t *testing.T) {
+	t.Run("once", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.objects = []*Seen{named(thePrim, 77)}
+		o := findHere(t, w, thePrim)
+		moveTo(t, f, elsewhere, named(thePrim, 1077))
+
+		looked := movesDuringLookups(t, f, 1)
+		if err := w.Place(context.Background(), o, msg.Vector3{X: 1}, msg.Quaternion{}, msg.Vector3{X: 1, Y: 1, Z: 1}); err != nil {
+			t.Fatalf("Place: %v", err)
+		}
+		if got := localsSent(f); len(got) != 1 || got[0] != 2001 {
+			t.Errorf("sent %v, want 2001, the number where the avatar is now", got)
+		}
+		if n := looked(); n != 2 {
+			t.Errorf("the object was looked up %d times, want twice", n)
+		}
+	})
+
+	t.Run("every time", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.objects = []*Seen{named(thePrim, 77)}
+		o := findHere(t, w, thePrim)
+		moveTo(t, f, elsewhere, named(thePrim, 1077))
+
+		looked := movesDuringLookups(t, f, 3)
+		err := w.Place(context.Background(), o, msg.Vector3{X: 1}, msg.Quaternion{}, msg.Vector3{X: 1, Y: 1, Z: 1})
+		if !errors.Is(err, ErrNotHere) {
+			t.Errorf("Place = %v, want ErrNotHere", err)
+		}
+		if err == nil || !strings.Contains(err.Error(), "changed region while it was being looked up") {
+			t.Errorf("Place = %v, want it to say the avatar moved during the lookup", err)
+		}
+		if got := f.Sent(); len(got) != 0 {
+			t.Errorf("sent %s with a number from a visit already over", f.describe())
+		}
+		if n := looked(); n != 2 {
+			t.Errorf("the object was looked up %d times, want twice", n)
+		}
+	})
+
+	// here leaves a visit's region unnamed when the backend cannot say
+	// it, and a stamp of no region is not trusted.
+	t.Run("the region not yet named", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.objects = []*Seen{named(thePrim, 77)}
+		o := findHere(t, w, thePrim)
+		moveTo(t, f, elsewhere, named(thePrim, 1077))
+		f.mu.Lock()
+		f.regionKnown = false
+		f.mu.Unlock()
+
+		looked := countLookups(f)
+		err := w.Place(context.Background(), o, msg.Vector3{X: 1}, msg.Quaternion{}, msg.Vector3{X: 1, Y: 1, Z: 1})
+		if !errors.Is(err, ErrNotHere) {
+			t.Errorf("Place = %v, want ErrNotHere", err)
+		}
+		if err == nil || !strings.Contains(err.Error(), "has not said which region") {
+			t.Errorf("Place = %v, want it to say the region was not named", err)
+		}
+		if got := f.Sent(); len(got) != 0 {
+			t.Errorf("sent %s from a region that was never named", f.describe())
+		}
+		if n := looked(); n != 2 {
+			t.Errorf("the object was looked up %d times, want twice", n)
+		}
+	})
 }
 
 // TestAnObjectBuiltByHandIsLookedUp: nothing says which region its

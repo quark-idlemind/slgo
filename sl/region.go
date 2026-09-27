@@ -281,8 +281,11 @@ func (w *Session) current(v visit) bool {
 //
 // It is o's own if o was found in the visit the avatar is on now.
 // Otherwise o is looked up by its id in the region the avatar is in,
-// and what that region calls it is written back into o and sent; one
-// the region has not described is refused with ErrNotHere.
+// and what that region calls it is written back into o and sent.  An
+// answer from a visit that is already over -- the avatar moved during
+// the lookup, or the region could not be named -- is looked up once
+// more.  One the region has not described, or a second stale answer,
+// is refused with ErrNotHere, saying which it was.
 // Why: doc/local-ids.md
 func (w *Session) local(ctx context.Context, o *Object) (uint32, error) {
 	if o == nil {
@@ -298,22 +301,50 @@ func (w *Session) local(ctx context.Context, o *Object) (uint32, error) {
 		return 0, fmt.Errorf("sl: local id %d may belong to another region, "+
 			"and there is no object id to look it up by", o.Local)
 	}
-	found, err := w.fetch(ctx, "", o.ID.String())
-	if err != nil {
-		return 0, err
-	}
-	for _, s := range found {
-		if s.ID == o.ID && s.Local != 0 {
-			o.Local, o.from = s.Local, s.from
-			return o.Local, nil
-		}
-	}
 	who := o.ID.String()
 	if o.Name != "" {
 		who = fmt.Sprintf("%q %s", o.Name, o.ID)
 	}
-	return 0, fmt.Errorf("sl: %s is %w, or is beyond the draw distance", who, ErrNotHere)
+	for try := 1; ; try++ {
+		found, err := w.fetch(ctx, "", o.ID.String())
+		if err != nil {
+			return 0, err
+		}
+		var s *Seen
+		for _, c := range found {
+			if c.ID == o.ID && c.Local != 0 {
+				s = c
+				break
+			}
+		}
+		if s == nil {
+			return 0, fmt.Errorf("sl: %s is %w, or is beyond the draw distance", who, ErrNotHere)
+		}
+		w.mu.Lock()
+		ok, moved := w.current(s.from), s.from.n != w.at.n
+		w.mu.Unlock()
+		if ok {
+			o.Local, o.from = s.Local, s.from
+			return o.Local, nil
+		}
+		if try == 2 {
+			if moved {
+				return 0, notHere("sl: no local id for " + who +
+					": the avatar changed region while it was being looked up")
+			}
+			return 0, notHere("sl: no local id for " + who +
+				": the backend has not said which region the avatar is in")
+		}
+	}
 }
+
+// notHere is ErrNotHere for a lookup that could not say which region
+// it answered for, in words of its own: "not in this region" may be
+// untrue of it.
+type notHere string
+
+func (e notHere) Error() string { return string(e) }
+func (e notHere) Unwrap() error { return ErrNotHere }
 
 // localNow is o's local id in the visit the avatar is on, as far as the
 // session knows without asking: o's own if it is current, or else what

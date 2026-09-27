@@ -61,6 +61,17 @@ of objects, not from what this session has been relayed: a client that
 attached a minute ago has been relayed almost nothing, and everything
 it had not heard of would look new.
 
+The list is looked at every 250 ms for up to 15 s, through `poll`. A
+look that fails is made again, and the timeout names the last failure.
+A caller that gives up is told so at once, after one more look on a
+context the cancel does not reach (`lastLook`). A prim that look finds
+passes the same rules, so it is confirmed, and `Build` returns it with
+the error so that the caller can clear it away, as `slsh`'s `rez` does.
+`Rez` hands it back the same way, and the two callers that rez a prim
+for their own use, the object `slrun` runs in and the one
+`EnsureAttached` makes to wear, delete it into the trash before
+returning the error.
+
 Recognising a rez by novelty alone went wrong twice before this. It
 reported an object that had just been taken, whose entry lingered until
 its `KillObject` was processed (4efc3c1, in `RezFromInventory`, which

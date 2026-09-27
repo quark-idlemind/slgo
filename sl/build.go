@@ -83,9 +83,11 @@ const (
 // error: every prim that was rezzed, the one that failed among them if
 // it got as far as existing, unlinked if the link was not reached.
 // They are standing in the region, and clearing them away is the
-// caller's to decide.  A nil Built means nothing was made that this
-// call knows of -- a rez that was never confirmed may still have made a
-// prim, but nothing says which one it is.
+// caller's to decide.  A rez the caller gave up on is looked for once
+// more, and a prim found then is confirmed and among them.  A nil Built
+// means nothing was made that this call knows of -- a rez that was
+// never confirmed may still have made a prim, but nothing says which
+// one it is.
 func (w *Session) Build(ctx context.Context, prims []Prim) (*Built, error) {
 	if len(prims) == 0 {
 		return nil, fmt.Errorf("sl: Build needs at least one prim")
@@ -136,7 +138,8 @@ func (w *Session) Build(ctx context.Context, prims []Prim) (*Built, error) {
 // buildOne rezzes a prim and makes it match its description.
 //
 // Once the rez is confirmed the prim exists, so a later step failing
-// returns it with the error rather than losing its ids.
+// returns it with the error rather than losing its ids, and so does a
+// rez given up on that the last look found.
 func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 	size := p.Size
 	if size == (msg.Vector3{}) {
@@ -145,7 +148,7 @@ func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 
 	o, err := w.rezAt(ctx, p.Position, size, p.Rotation, p.Shape)
 	if err != nil {
-		return nil, err
+		return o, err
 	}
 
 	// Say where it goes rather than trusting where it landed.  The
@@ -336,6 +339,12 @@ func landedAt(p, at msg.Vector3) bool {
 // else's prim by mistake fails later in ways that look like something
 // else.  An owner nobody has heard is asked for, once, and never with
 // the session's lock held.
+//
+// It waits through poll: a look that fails is made again until the
+// timeout, which names the last failure, and a cancel ends the wait at
+// once.  A cancel is followed by lastLook, and a prim of ours that it
+// finds is returned with the caller's error, so that it can be cleared
+// away.
 // Why: doc/rez.md#how-a-rez-is-recognised
 func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, at, scale msg.Vector3, timeout time.Duration) (*Object, error) {
 	w.mu.Lock()
@@ -344,11 +353,11 @@ func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, at, scal
 
 	centre := at.Z + scale.Z/2
 	asked := map[msg.UUID]bool{}
-	deadline := time.Now().Add(timeout)
-	for {
+	var made *Object
+	look := func(ctx context.Context) (bool, error) {
 		all, err := w.fetch(ctx, "", "")
 		if err != nil {
-			return nil, err
+			return false, err
 		}
 		var near []*Seen
 		for _, s := range all {
@@ -382,29 +391,34 @@ func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, at, scal
 			if owner.IsZero() {
 				unknown = true
 				if !asked[s.ID] {
-					asked[s.ID] = true
 					toAsk = append(toAsk, s.ID)
 				}
 			}
 		}
 		w.mu.Unlock()
 
+		// Marked asked only once the request went, so that a send
+		// that failed is tried again at the next look.
 		for _, id := range toAsk {
 			if err := w.Send(ctx, w.familyRequest(id)); err != nil {
-				return nil, err
+				return false, err
 			}
+			asked[id] = true
 		}
-		if found != nil {
-			return &Object{ID: found.ID, Local: found.Local, from: found.from}, nil
+		if found == nil {
+			return false, nil
 		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("%w: a prim of ours to appear at %v (after %s)%s",
-				ErrTimeout, at, timeout, w.alertsSince(mark))
-		}
-		if err := w.Settle(ctx, rezPoll); err != nil {
-			return nil, err
-		}
+		made = &Object{ID: found.ID, Local: found.Local, from: found.from}
+		return true, nil
 	}
+	err := poll(ctx, timeout, rezPoll, fmt.Sprintf("a prim of ours to appear at %v", at), look)
+	if err != nil && !lastLook(ctx, look) {
+		if errors.Is(err, ErrTimeout) {
+			return nil, fmt.Errorf("%w%s", err, w.alertsSince(mark))
+		}
+		return nil, err
+	}
+	return made, err
 }
 
 func appendVector(b []byte, v msg.Vector3) []byte {
