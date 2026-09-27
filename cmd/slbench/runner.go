@@ -160,6 +160,7 @@ func (r *runner) Compile(src string) (*compilation, error) {
 	if err != nil {
 		return nil, err
 	}
+	spentCompiles++
 	return &compilation{OK: up.Compiled, Errors: up.Errors, Elapsed: time.Since(start)}, nil
 }
 

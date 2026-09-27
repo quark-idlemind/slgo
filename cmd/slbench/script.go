@@ -320,6 +320,7 @@ func (r *scriptRunner) Compile(src string) (*compilation, error) {
 	if err != nil {
 		return nil, err
 	}
+	spentCompiles++
 	return &compilation{OK: ok, Errors: errs, Elapsed: time.Since(start)}, nil
 }
 

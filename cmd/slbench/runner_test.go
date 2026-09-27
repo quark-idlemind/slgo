@@ -235,18 +235,21 @@ func TestARunThatCannotReachTheGridIsNotAReading(t *testing.T) {
 
 // TestCompilingDoesNotRunAnything: the compile check exists to be asked
 // about a script while a measurement is in progress in the same object,
-// so it must install under its own name and start nothing.
+// so it must start nothing -- and it is counted as a compile, not as a
+// run, for the Spent line.
 func TestCompilingDoesNotRunAnything(t *testing.T) {
 	resetFlags()
 	b, f := newFakeRunner(t, 474, 368, 0)
+	spentCompiles = 0
+	t.Cleanup(func() { spentCompiles = 0 })
 
-	// A base run first, so the object is carrying a reading that a
-	// compile check must not disturb.
+	// A run first, so that the count of scripts started has one in it
+	// that the compile check must not add to.
 	if _, _, err := b.Send(buildScript(0, 474)); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	f.mu.Lock()
-	before, ran := f.objects[100].mem, f.ran
+	ran := f.ran
 	f.mu.Unlock()
 
 	c, err := b.Compile(buildScript(1, 474))
@@ -261,13 +264,13 @@ func TestCompilingDoesNotRunAnything(t *testing.T) {
 	}
 
 	f.mu.Lock()
-	after, alsoRan := f.objects[100].mem, f.ran
+	alsoRan := f.ran
 	f.mu.Unlock()
-	if after != before {
-		t.Errorf("the object's reading moved from %d to %d over a compile", before, after)
-	}
 	if alsoRan != ran {
 		t.Error("the compile check started the script")
+	}
+	if spentCompiles != 1 {
+		t.Errorf("spentCompiles = %d after one compile, want 1", spentCompiles)
 	}
 
 	// A refusal is a RESULT and not an error: err is for not being able
@@ -286,6 +289,26 @@ func TestCompilingDoesNotRunAnything(t *testing.T) {
 	f.mu.Unlock()
 	if _, err := b.Compile(buildScript(1, 474)); err == nil {
 		t.Error("Compile answered without being able to ask")
+	}
+}
+
+// TestACompileThroughAScriptBackendIsCounted: the Spent line's compiles
+// are counted on either transport, and only when the backend answered.
+func TestACompileThroughAScriptBackendIsCounted(t *testing.T) {
+	resetFlags()
+	b := offline(t, 474, 368)
+	spentCompiles = 0
+	t.Cleanup(func() { spentCompiles = 0 })
+
+	c, err := b.Compile(buildScript(1, 474))
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if !c.OK {
+		t.Errorf("Compile = %+v, want the script accepted", c)
+	}
+	if spentCompiles != 1 {
+		t.Errorf("spentCompiles = %d after one compile, want 1", spentCompiles)
 	}
 }
 

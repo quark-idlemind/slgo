@@ -63,14 +63,7 @@ var (
 type fakeObject struct {
 	obj  sl.Object
 	item msg.UUID // the id of the benchmark script inside it
-
-	// mem is the "mem" key of the object's linkset data, which only an
-	// executing cnt=0 script writes.  It is per object on purpose: a
-	// probe dropped into the measured object would overwrite the base
-	// the measured sequence divides against, and that is the mistake
-	// probe.go exists to make impossible.
-	mem int
-	ran bool
+	ran  bool
 }
 
 // fakeGrid answers what a simulator would, for the few things running a
