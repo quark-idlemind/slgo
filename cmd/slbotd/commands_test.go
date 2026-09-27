@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -416,6 +417,45 @@ func TestAListingEntryBecomesAWholeItem(t *testing.T) {
 	}
 	if it.SalePrice != e.SalePrice || it.SaleType != e.SaleType {
 		t.Errorf("the sale terms were lost: %+v", it)
+	}
+}
+
+// Every field of an Item comes out of the Entry set, but the one an
+// Entry has no field for.  Each Entry field is given a value of its own,
+// so a field left behind -- the flags were, and they carry the slot a
+// wearable goes in -- comes out zero.
+func TestAListingEntryLeavesNothingOfItselfBehind(t *testing.T) {
+	var e sl.Entry
+	v := reflect.ValueOf(&e).Elem()
+	for i := range v.NumField() {
+		f := v.Field(i)
+		switch f.Kind() {
+		case reflect.Bool:
+			f.SetBool(true)
+		case reflect.Int, reflect.Int64:
+			f.SetInt(int64(i + 1))
+		case reflect.Uint32:
+			f.SetUint(uint64(i + 1))
+		case reflect.String:
+			f.SetString(v.Type().Field(i).Name)
+		case reflect.Array:
+			f.Index(0).SetUint(uint64(i + 1))
+		default:
+			t.Fatalf("Entry.%s is a %s, which this test does not fill", v.Type().Field(i).Name, f.Kind())
+		}
+	}
+
+	// GroupID is what an Entry does not carry.
+	notInAnEntry := map[string]bool{"GroupID": true}
+	it := reflect.ValueOf(itemOf(e)).Elem()
+	for i := range it.NumField() {
+		name := it.Type().Field(i).Name
+		if it.Field(i).IsZero() && !notInAnEntry[name] {
+			t.Errorf("Item.%s came out zero from an Entry with every field set", name)
+		}
+	}
+	if got := itemOf(e).Flags; got != e.Flags {
+		t.Errorf("Flags = %#x, want %#x", got, e.Flags)
 	}
 }
 
