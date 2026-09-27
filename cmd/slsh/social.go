@@ -231,10 +231,10 @@ func (sh *Shell) watch(ctx context.Context) {
 		// printing that at somebody is showing them the plumbing.
 		if d.IsTextBox() {
 			sh.noticef("%s asks: %q -- waiting lists it, answer N TEXT replies",
-				d.ObjectName, d.Message)
+				sl.SenderObject.Label(d.ObjectName), d.Message)
 		} else {
 			sh.noticef("%s asks: %q %v -- waiting lists it, answer N picks one",
-				d.ObjectName, d.Message, d.Buttons)
+				sl.SenderObject.Label(d.ObjectName), d.Message, d.Buttons)
 		}
 		sh.prompt()
 	}
@@ -264,7 +264,7 @@ func (sh *Shell) watch(ctx context.Context) {
 				}
 				continue
 			}
-			sh.printf("%s < [Local] %s: %s", stamp(), l.From, l.Text)
+			sh.printf("%s < [Local] %s: %s", stamp(), l.Sender().Label(l.From), l.Text)
 		case m, ok := <-ims:
 			if !ok {
 				return
@@ -278,7 +278,7 @@ func (sh *Shell) watch(ctx context.Context) {
 				return
 			}
 			sh.noticef("%s wants %s -- waiting lists it, answer N grants it",
-				q.ObjectName, q.Wants)
+				sl.SenderObject.Label(q.ObjectName), q.Wants)
 			sh.prompt()
 		case c, ok := <-regions:
 			if !ok {
@@ -294,11 +294,22 @@ func (sh *Shell) watch(ctx context.Context) {
 	}
 }
 
+// heard prints one instant message.  Whatever sent it is named through
+// Sender.Label, so an object, a group or the grid is never printed as
+// though a person had said it.
+// Why: doc/im-senders.md#labelling-a-sender
 func (sh *Shell) heard(m *sl.IM) {
 	name := m.FromName
-	if name == "" {
+	switch {
+	case name != "":
+	case m.Dialog == sl.DialogFromTask:
+		// The object's key: never its owner's name, which is somebody
+		// else.
+		name = sh.s.NameOr(m.ID)
+	default:
 		name = sh.s.NameOr(m.From)
 	}
+	who := m.Sender().Label(name)
 	switch {
 	case m.Mine:
 		// This avatar wrote it, through another client of the same
@@ -330,25 +341,21 @@ func (sh *Shell) heard(m *sl.IM) {
 	case m.Dialog == sl.DialogFromTask:
 		// A script's message.  The name is the object's and From its
 		// owner, who did not write it, so it opens no conversation.
-		obj := m.FromName
-		if obj == "" {
-			obj = sh.s.NameOr(m.ID)
-		}
-		sh.printf("%s < [Object] %s: %s", stamp(), obj, m.Text)
+		sh.printf("%s < %s: %s", stamp(), who, m.Text)
 	case m.Dialog == sl.DialogFriendshipOffered:
 		sh.noticef("%s offers friendship -- accept %s, or decline %s",
-			name, firstWord(name), firstWord(name))
+			who, firstWord(name), firstWord(name))
 	case m.Dialog == sl.DialogGroupInvitation:
 		// Deliberately not "answer N joins": whether a bare answer
 		// joins depends on the fee, which the listing has and a line
 		// of notice has no room for.
-		sh.noticef("%s invites you into a group -- waiting lists it, and what joining costs", name)
+		sh.noticef("%s invites you into a group -- waiting lists it, and what joining costs", who)
 	case m.Dialog == sl.DialogGroupNotice:
 		sh.heardNotice(m)
 	case m.Dialog == sl.DialogTypingStart, m.Dialog == sl.DialogTypingStop:
 		// A line per keystroke is not worth showing.
 	default:
-		sh.noticef("%s from %s: %s", sl.DialogName(m.Dialog), name, m.Text)
+		sh.noticef("%s from %s: %s", sl.DialogName(m.Dialog), who, m.Text)
 	}
 }
 

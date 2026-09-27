@@ -201,7 +201,7 @@ func grantOn(ctx context.Context, o Options, asked *sl.Session, g granter, n int
 		got, err = g.TrySlots(ctx, n, autoTimeout, agent)
 	}
 	if err != nil {
-		return nil, askFailed(err)
+		return nil, askFailed(ctx, err)
 	}
 	if !got.Held() {
 		return nil, fmt.Errorf("%s", why(got, n, agent))
@@ -267,7 +267,7 @@ func spreadOn(ctx context.Context, o Options, s *sl.Session, n int) ([]*Auto, er
 
 	got, err := g.SlotsWithin(ctx, n, autoTimeout, o.Wait, "")
 	if err != nil {
-		return nil, askFailed(err)
+		return nil, askFailed(ctx, err)
 	}
 	if !got.Held() {
 		return nil, fmt.Errorf("%s", why(got, n, ""))
@@ -276,10 +276,11 @@ func spreadOn(ctx context.Context, o Options, s *sl.Session, n int) ([]*Auto, er
 }
 
 // askFailed says what went wrong asking for places.  A bounded wait
-// that ran out is client.ErrStillBusy, for the caller to put in its own
-// words; anything else is most likely a daemon too old to answer.
-func askFailed(err error) error {
-	if errors.Is(err, client.ErrStillBusy) {
+// that ran out is client.ErrStillBusy, and a wait the caller gave up on
+// is ctx's own error, for the caller to put in its own words; anything
+// else is most likely a daemon too old to answer.
+func askFailed(ctx context.Context, err error) error {
+	if errors.Is(err, client.ErrStillBusy) || ctx.Err() != nil {
 		return err
 	}
 	return fmt.Errorf("asking for objects: %w\n"+

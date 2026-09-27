@@ -1763,9 +1763,10 @@ A message from an object -- a script's `llInstantMessage` -- is never
 obeyed and never answered, whatever it says it is. It carries whatever
 name the object was given and its owner's id, so an object named after
 somebody trusted, or one a trusted person owns, would pass on either.
-The log says `ignored an instant message from the object ...`. What the
-grid puts in those two fields was measured, and is in
-[im-senders.md](im-senders.md).
+The log says `ignored an instant message from [Object] ...`, and any
+other name in the log that is not a person's is labelled `[Object]`,
+`[Group]` or `[Grid]` the same way. What the grid puts in those two
+fields was measured, and is in [im-senders.md](im-senders.md).
 
 ### Talking back
 

@@ -54,6 +54,10 @@ object otherwise keeps every copy it is given and renames the
 newcomer, so a command that added would leave two scripts of nearly
 one name both running.
 
+A script the object does not hold yet goes in by way of a copy in
+inventory, which is deleted once the object has its own, or when
+putting it in fails.  A copy that could not be deleted is said.
+
 A notecard cannot be made inside an object at all.  Asking for one
 with `--in` is refused rather than quietly made in inventory
 instead.  A notecard is made with a plain `new` and put in with

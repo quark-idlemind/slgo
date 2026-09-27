@@ -176,7 +176,7 @@ func (sh *Shell) heardNotice(m *sl.IM) {
 	if !ok {
 		return
 	}
-	k, fresh := sh.notices.add(n, sh.noticeFrom(n), sh.noticeKeep())
+	k, fresh := sh.notices.add(n, m.Sender().Label(sh.noticeFrom(n)), sh.noticeKeep())
 	if !fresh {
 		return
 	}

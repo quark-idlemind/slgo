@@ -263,3 +263,9 @@ here when another is shared the same way.
   attached to, read under `mu`, which `attach` writes it under.
   `TestTheAgentIsReadOnlyUnderTheLock` refuses a read of `c.agent`
   anywhere else in `client`.
+- `Sender.Label`, in `sl/sender.go`: a name as a line prints it, with
+  what it names in front -- `[Object]`, `[Group]`, `[Grid]` -- and a
+  person's bare; the kind comes from `IM.Sender` or `Line.Sender`. An
+  object's name can be anybody's, so slsh and slbotd print no sender
+  any other way. `TestNoObjectNameIsPrintedBare` refuses an
+  `ObjectName` used outside `Label` in `sl`, slsh or slbotd.

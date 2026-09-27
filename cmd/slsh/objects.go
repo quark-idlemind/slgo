@@ -784,8 +784,8 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 // the daemon's rule (Server.defaultLocked) is "the first session I hold
 // that was not deliberately stopped" and the two halves of that are
 // both readable here: the listing arrives in the daemon's own order,
-// held sessions first in the order they came up, a logged-out one at
-// the end of that group, and only a held session is ever HOSTED or
+// held sessions first in the order they came up, a stopped one at the
+// end of that group, and only a held session is ever HOSTED or
 // CONNECTING.  CONFIGURED and FAILED are profiles the daemon holds no
 // session for at all, so they can no more be the default than a name it
 // has never heard of.

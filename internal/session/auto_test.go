@@ -10,6 +10,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -416,5 +417,22 @@ func TestOnlyAHostedSessionKnowsWhoElseThereIs(t *testing.T) {
 	s, _ := newFakeSession(t)
 	if _, err := sessionNames(context.Background(), s); err == nil {
 		t.Error("a direct session was asked who else the daemon holds")
+	}
+}
+
+// TestAWaitGivenUpOnIsNotBlamedOnTheDaemon: a caller that gave up is
+// handed its own context's error, which it can call an interrupt; only
+// an ask that failed by itself suggests a daemon too old to answer.
+func TestAWaitGivenUpOnIsNotBlamedOnTheDaemon(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := askFailed(ctx, ctx.Err()); err != context.Canceled {
+		t.Errorf("a cancelled wait came back as %q, want the cancellation itself", err)
+	}
+	failed := errors.New("the stream ended")
+	if err := askFailed(context.Background(), failed); !errors.Is(err, failed) ||
+		!strings.Contains(err.Error(), "older than the pool") {
+		t.Errorf("an ask that failed by itself came back as %q", err)
 	}
 }

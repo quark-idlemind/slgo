@@ -139,6 +139,7 @@ func (b *fakeBackend) Send(ctx context.Context, m msg.Message, reliable bool) er
 	}
 	chat := &msg.ChatFromSimulator{}
 	chat.ChatData.SourceID = harnessOther
+	chat.ChatData.SourceType = sl.SourceAgent
 	chat.ChatData.ChatType = 1
 	chat.ChatData.FromName = append([]byte("A\x1b]0;x\x07Body"), 0)
 	chat.ChatData.Message = append([]byte("gone\x1b[2J\x1b[Hthe screen\rover it\nsecond line"), 0)

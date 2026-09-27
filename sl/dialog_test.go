@@ -301,7 +301,7 @@ func TestAnUnansweredDialogIsForgottenAfterAnHour(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("told %+v, want the one forgotten", got)
 	}
-	if want := "the dialog from Test Object was forgotten after 1h unanswered by this session"; got[0].String() != want {
+	if want := "the dialog from [Object] Test Object was forgotten after 1h unanswered by this session"; got[0].String() != want {
 		t.Errorf("told %q, want %q", got[0], want)
 	}
 

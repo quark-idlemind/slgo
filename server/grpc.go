@@ -70,11 +70,14 @@ type Client struct {
 // being read: a client that is queued still sends and receives, and
 // blocking the reader here would stop relaying its grid traffic while
 // it waited.
+//
+// Every answer carries the request's number back, so a client with a try
+// and a wait out for one name tells them apart.
 func (c *Client) lock(ctx context.Context, h *Hosted, req *pb.Lock) {
-	name := req.GetName()
+	name, request := req.GetName(), req.GetRequest()
 	if name == "" {
 		c.answer(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
-			Locked: &pb.Locked{Held: false, Holder: "a lock needs a name"},
+			Locked: &pb.Locked{Held: false, Holder: "a lock needs a name", Request: request},
 		}})
 		return
 	}
@@ -82,7 +85,7 @@ func (c *Client) lock(ctx context.Context, h *Hosted, req *pb.Lock) {
 	if req.GetTry() {
 		ok, holder := h.lockSet().acquire(name, c)
 		c.answer(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
-			Locked: &pb.Locked{Name: name, Held: ok, Holder: holderName(holder)},
+			Locked: &pb.Locked{Name: name, Held: ok, Holder: holderName(holder), Request: request},
 		}})
 		return
 	}
@@ -92,7 +95,7 @@ func (c *Client) lock(ctx context.Context, h *Hosted, req *pb.Lock) {
 		select {
 		case <-ready:
 			c.answer(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{
-				Locked: &pb.Locked{Name: name, Held: true},
+				Locked: &pb.Locked{Name: name, Held: true, Request: request},
 			}})
 		case <-ctx.Done():
 			// Gone before its turn came.  Leaving it in the queue
@@ -633,8 +636,8 @@ func teleportRequest(id msg.ID) bool {
 
 func (s *Server) ListAgents(ctx context.Context, _ *pb.ListAgentsRequest) (*pb.ListAgentsResponse, error) {
 	// Oldest first, not alphabetical: the order IS information.  The
-	// first that is not stopped is the default -- what a client that
-	// names no agent gets.
+	// first is the default -- what a client that names no agent gets --
+	// unless every session has stopped.
 	//
 	// It used to be advice as well, for a client looking for an avatar
 	// with objects free.  Nothing looks that way now: the pool answers

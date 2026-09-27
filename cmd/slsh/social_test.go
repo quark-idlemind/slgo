@@ -196,6 +196,7 @@ func TestWhatIsHeardIsPrintedWhateverModeIsInForce(t *testing.T) {
 
 	m := &msg.ChatFromSimulator{}
 	m.ChatData.SourceID = testSomebody
+	m.ChatData.SourceType = sl.SourceAgent
 	m.ChatData.FromName = append([]byte("Some Body"), 0)
 	m.ChatData.Message = append([]byte("hello there"), 0)
 	x.grid.Relay(t, m)
@@ -233,6 +234,7 @@ func TestWhatIsHeardIsShownRatherThanObeyed(t *testing.T) {
 
 	m := &msg.ChatFromSimulator{}
 	m.ChatData.SourceID = testSomebody
+	m.ChatData.SourceType = sl.SourceAgent
 	m.ChatData.FromName = append([]byte("Some\x1b]0;a title\x07Body"), 0)
 	m.ChatData.Message = append([]byte("hello\x1b[2J\x1b[H\x1b]52;c;aGk=\x07\r\nsecond line\rover it"), 0)
 	x.grid.Relay(t, m)
@@ -333,6 +335,94 @@ func TestAnObjectsMessageIsShownAsAnObjects(t *testing.T) {
 	}
 }
 
+// TestNothingButAPersonIsPrintedAsOne: every dialog an instant message
+// can carry, sent by an object, a group or the grid under a person's
+// name, is printed with the name labelled as what sent it.  A kind
+// printed with the name bare fails here, whichever it is.
+// Why: doc/im-senders.md#labelling-a-sender
+func TestNothingButAPersonIsPrintedAsOne(t *testing.T) {
+	x := newTestShell(t)
+	const name = "A Friend"
+	region := msg.MustParseUUID("36fa7e57-7e57-c0de-9e3a-f16236c34d10")
+	labelled := 0
+	for d := 0; d < 256; d++ {
+		for _, how := range []struct {
+			what string
+			set  func(*sl.IM)
+		}{
+			{"as it came", func(*sl.IM) {}},
+			{"as a group", func(m *sl.IM) { m.Group = true }},
+			{"with no sender", func(m *sl.IM) { m.From = msg.UUID{} }},
+		} {
+			m := &sl.IM{
+				From: testSomebody, FromName: name, Dialog: uint8(d), ID: testLamp,
+				Region: region, Text: "a remark",
+			}
+			how.set(m)
+			x.out.Reset()
+			x.heard(m)
+			k := m.Sender()
+			if k == sl.SenderPerson {
+				continue
+			}
+			for _, line := range strings.Split(x.out.String(), "\n") {
+				if !strings.Contains(line, name) {
+					continue
+				}
+				labelled++
+				if !strings.Contains(line, k.Label(name)) {
+					t.Errorf("dialog %d, %s: %q names %s without saying it is not a person",
+						d, how.what, line, name)
+				}
+			}
+		}
+	}
+	if labelled == 0 {
+		t.Fatal("nothing labelled was printed, so this checked nothing")
+	}
+
+	// The ones seen on the grid, whose name is the object's.
+	for d, want := range map[uint8]string{
+		sl.DialogFromTask:             "< [Object] A Friend: a remark",
+		sl.DialogTaskInventoryOffered: "* object inventory offer from [Object] A Friend: a remark",
+		sl.DialogFromTaskAsAlert:      "* object alert from [Object] A Friend: a remark",
+	} {
+		x.out.Reset()
+		x.heard(&sl.IM{From: testSomebody, FromName: name, Dialog: d, ID: testLamp, Region: region, Text: "a remark"})
+		if got := x.out.String(); !strings.Contains(got, want) {
+			t.Errorf("dialog %d printed %q, want %q", d, got, want)
+		}
+	}
+}
+
+// TestChatSaysWhatSpoke: an object in local chat can be called anything,
+// a person's name included, and the simulator's own lines are neither.
+func TestChatSaysWhatSpoke(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	for _, c := range []struct {
+		kind uint8
+		name string
+		text string
+		want string
+	}{
+		{sl.SourceAgent, "Some Body", "said by a person", "< [Local] Some Body: said by a person"},
+		{sl.SourceObject, "Some Body", "said by an object", "< [Local] [Object] Some Body: said by an object"},
+		{sl.SourceSystem, "Second Life", "said by the grid", "< [Local] [Grid] Second Life: said by the grid"},
+	} {
+		m := &msg.ChatFromSimulator{}
+		m.ChatData.SourceID = testSomebody
+		m.ChatData.SourceType = c.kind
+		m.ChatData.FromName = append([]byte(c.name), 0)
+		m.ChatData.Message = append([]byte(c.text), 0)
+		x.grid.Relay(t, m)
+		if got := waits(t, x, c.text); !strings.Contains(got, c.want) {
+			t.Errorf("chat printed:\n%s\nwant %q", got, c.want)
+		}
+	}
+}
+
 // TestADoNotDisturbReplyIsShownAsOne: the far viewer sent it by itself,
 // so it is said to be that rather than shown as the person talking.
 func TestADoNotDisturbReplyIsShownAsOne(t *testing.T) {
@@ -422,6 +512,9 @@ func TestAScriptAskingForSomethingSaysHowToAnswerIt(t *testing.T) {
 	x.grid.Relay(t, d)
 
 	got := waits(t, x, "a lamp asks")
+	if !strings.Contains(got, "* [Object] a lamp asks") {
+		t.Errorf("the notice should say the lamp is an object:\n%s", got)
+	}
 	if !strings.Contains(got, "waiting") || !strings.Contains(got, "answer") {
 		t.Errorf("the notice should name the commands that answer it:\n%s", got)
 	}
@@ -441,8 +534,12 @@ func TestAScriptAskingForSomethingSaysHowToAnswerIt(t *testing.T) {
 	// and no such command has ever existed.  A test that checks the
 	// advice is spelled the same way it was written down does not check
 	// that the advice works.
-	if got := waits(t, x, "a lamp wants"); !strings.Contains(got, "answer") {
+	got = waits(t, x, "a lamp wants")
+	if !strings.Contains(got, "answer") {
 		t.Errorf("a permission request should say how to grant it:\n%s", got)
+	}
+	if !strings.Contains(got, "* [Object] a lamp wants") {
+		t.Errorf("the request should say the lamp is an object:\n%s", got)
 	}
 	for _, name := range []string{"waiting", "answer", "no", "ignore"} {
 		if _, ok := commands[name]; !ok {

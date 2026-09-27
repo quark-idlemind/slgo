@@ -780,7 +780,7 @@ chat    = *</pre></div>
             <ul>
               <li><code>not answering X: not in the chat list</code>: adjust the <code>chat</code> lines.</li>
               <li><code>too busy talking to answer X</code>: raise <code>chat-jobs</code>, or llama-server's <code>-np</code>.</li>
-              <li><code>ignored an instant message from the object "X", owned by Y</code>: a script sent it with <code>llInstantMessage</code>. slbotd never answers or obeys an object, whatever it is called.</li>
+              <li><code>ignored an instant message from [Object] X, owned by Y</code>: a script sent it with <code>llInstantMessage</code>. slbotd never answers or obeys an object, whatever it is called. A name that is not a person's is always labelled in the log: <code>[Object]</code>, <code>[Group]</code> or <code>[Grid]</code>.</li>
               <li><code>not answering X: that is builder, which this daemon drives as well, and they have said 8 things to each other already, and will not until they have said nothing for 30m0s</code>: two of the daemon's own avatars, or one and a <code>chat-bot</code> ("which another program's model drives"), reached <code>chat-own</code>.</li>
             </ul>
             <p>A reply can also just be slow. slbotd waits as if reading and typing: with the defaults, a long reply takes minutes.</p>

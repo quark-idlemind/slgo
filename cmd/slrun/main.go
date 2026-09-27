@@ -681,10 +681,12 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 		want = n
 	}
 	as, err := session.UseAutoSpread(ctx, o, want)
-	if errors.Is(err, client.ErrStillBusy) {
+	switch {
+	case errors.Is(err, client.ErrStillBusy):
 		return nil, nil, fmt.Errorf("every object was still busy when --wait %v ran out", flags.Wait)
-	}
-	if err != nil {
+	case err != nil && ctx.Err() != nil:
+		return nil, nil, fmt.Errorf("%w while waiting for objects", errInterrupted)
+	case err != nil:
 		return nil, nil, err
 	}
 

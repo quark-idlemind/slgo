@@ -1788,7 +1788,12 @@ the next owner may now copy, modify, transfer</span>
           A message from an object, sent by a script's
           <code>llInstantMessage</code>, opens no conversation. It is printed
           as <code>&lt; [Object] NAME: TEXT</code>, where NAME is whatever the
-          object is called and can be anybody's name.
+          object is called and can be anybody's name. Every name that is not
+          a person's is labelled that way: an object speaking in local chat is
+          <code>&lt; [Local] [Object] NAME: TEXT</code>, a script's dialog or
+          request is from <code>[Object] NAME</code>, and what a group or the
+          grid itself sends is from <code>[Group] NAME</code> or
+          <code>[Grid] NAME</code>.
         </p>
 
         <p>
@@ -1855,12 +1860,12 @@ the next owner may now copy, modify, transfer</span>
 
         <div class="term">
           <pre><span class="p">(2) /$</span> <span class="k">waiting</span>
-<span class="o">1  dialog      a lantern "on or off?"
+<span class="o">1  dialog      [Object] a lantern "on or off?"
                 1 on, 2 off
 2  teleport    Another Resident teleport: "Come and see this!"
                 answer (takes it, and waits for the arrival), no, ignore</span>
 <span class="p">(2) /$</span> <span class="k">answer 1 on</span>
-<span class="o">pressed "on" on a lantern</span>
+<span class="o">pressed "on" on [Object] a lantern</span>
 <span class="p">(1) /$</span> <span class="k">ignore 2</span>
 <span class="o">2 is still waiting, and no longer counted; waiting -a lists it</span></pre>
         </div>
@@ -1895,12 +1900,12 @@ the next owner may now copy, modify, transfer</span>
 
         <div class="term">
           <pre><span class="p">(1) /$</span> <span class="k">answer 1</span>
-<span class="o">a sign asks: your name?
+<span class="o">[Object] a sign asks: your name?
 type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
 <span class="p">1 text&gt;</span> <span class="k">Example Resident</span>
 <span class="p">2 text&gt;</span> <span class="k">of no fixed abode</span>
 <span class="c">&lt;^D&gt;</span>
-<span class="o">told a sign 2 lines</span></pre>
+<span class="o">told [Object] a sign 2 lines</span></pre>
         </div>
 
         <p>

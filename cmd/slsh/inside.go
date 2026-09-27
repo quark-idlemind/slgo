@@ -511,9 +511,14 @@ func (sh *Shell) newInside(ctx context.Context, out io.Writer, o newFlags, names
 		for _, e := range res.Errors {
 			fmt.Fprintf(out, "  %s\n", e)
 		}
-		return nil
+	} else {
+		fmt.Fprintf(out, "%s is in %s and running\n", name, obj.Name)
 	}
-	fmt.Fprintf(out, "%s is in %s and running\n", name, obj.Name)
+	if res != nil {
+		for _, w := range res.Warnings {
+			fmt.Fprintf(out, "%s\n", w)
+		}
+	}
 	return nil
 }
 

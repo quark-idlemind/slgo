@@ -67,7 +67,7 @@ has answered leaves the listing after an hour, and no more than 32 of
 each are listed: when another arrives, the oldest goes.  A line says so
 when one goes:
 
-    12:03:04 * the dialog from Example Box was forgotten after 1h unanswered by this session -- it is no longer waiting
+    12:03:04 * the dialog from [Object] Example Box was forgotten after 1h unanswered by this session -- it is no longer waiting
 
 That answers nothing.  The script that asked for permission is still
 waiting for an answer, and a dialog expires where it was raised.

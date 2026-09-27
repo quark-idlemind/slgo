@@ -468,3 +468,47 @@ func TestKickedSessionStaysDown(t *testing.T) {
 		t.Errorf("the stream ended with %v, and an attach is refused with %v", watching.Err(), refused)
 	}
 }
+
+// TestASessionTheGridEndedGivesUpItsPlace: a session thrown off by the
+// grid is stopped as a logout is, and gives up its place as a logout
+// does.  Kept at the head of Ranked, it would lead a listing whose head
+// means "the default" while Default passed over it.
+func TestASessionTheGridEndedGivesUpItsPlace(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+	var logins atomic.Int64
+	hs := loginServer(t, sim, &logins, nil)
+
+	srv := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h, err := srv.StartAgent(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	helper, err := srv.Add("helper", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := srv.Ranked(); len(r) != 2 || r[0] != h {
+		t.Fatal("the session hosted first is not at the head, so this tests nothing")
+	}
+
+	kick := &msg.KickUser{}
+	kick.UserInfo.Reason = []byte("You have been logged out because you logged in from another location.\x00")
+	sim.send(kick, msg.FlagReliable)
+	waitFor(t, 5*time.Second, "the session to stop", h.Stopped)
+
+	var order []string
+	for _, x := range srv.Ranked() {
+		order = append(order, x.Name)
+	}
+	if len(order) != 2 || order[0] != "helper" || order[1] != "example" {
+		t.Errorf("Ranked() = %v, want [helper example]: the session the grid ended kept its place", order)
+	}
+	if d, ok := srv.Default(); !ok || d != helper {
+		t.Errorf("Default() = %v, %v; want helper, the head of Ranked", d, ok)
+	}
+}
