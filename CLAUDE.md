@@ -269,3 +269,10 @@ here when another is shared the same way.
   object's name can be anybody's, so slsh and slbotd print no sender
   any other way. `TestNoObjectNameIsPrintedBare` refuses an
   `ObjectName` used outside `Label` in `sl`, slsh or slbotd.
+- `WatchSilence`, in `agent/agent.go` (`watchSilence` inside the
+  package): calls a function once when a circuit has heard nothing for
+  longer than a timeout, by a last-heard time it is given, looking a
+  quarter of the timeout at a time and at most once a second. The
+  root circuit's watchdog, each child circuit's and slgod's watch on an
+  attached viewer run on it, the last two on the viewer's own circuit
+  timeout of 100 seconds.

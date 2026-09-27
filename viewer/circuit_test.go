@@ -196,8 +196,8 @@ func (s *simStub) sendLand(body string) {
 
 // handedOver stands up a session against simStub and a viewer circuit
 // in front of it, which is the arrangement slgod has when a viewer
-// attaches.
-func handedOver(t *testing.T) (*simStub, *agent.Agent, *Circuit, *fakeViewer, *Census) {
+// attaches.  Each of before is given the circuit before it runs.
+func handedOver(t *testing.T, before ...func(*Circuit)) (*simStub, *agent.Agent, *Circuit, *fakeViewer, *Census) {
 	t.Helper()
 	sim := newSimStub(t)
 
@@ -225,6 +225,9 @@ func handedOver(t *testing.T) (*simStub, *agent.Agent, *Circuit, *fakeViewer, *C
 	c, err := Listen("127.0.0.1", func() *agent.Agent { return a }, census, nil, func(string, ...any) {})
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, f := range before {
+		f(c)
 	}
 	c.Run(ctx)
 	t.Cleanup(c.Close)
@@ -348,6 +351,64 @@ func TestAViewerThatLogsOutIsNoLongerJoined(t *testing.T) {
 	second.waitSeen(t, "AgentMovementComplete", 5*time.Second)
 	if !c.Joined() {
 		t.Error("the next viewer to join is not counted")
+	}
+}
+
+// TestAViewerThatGoesSilentIsNoLongerJoined: a viewer that crashes, or
+// loses its connection, sends no LogoutRequest; it sends nothing at all.
+// Counted as joined, it kept status saying a viewer was on and held off
+// taking the avatar home, until another viewer took the circuit or slgod
+// restarted.  One silent for the timeout is taken as gone, as a logout
+// would take it; one that goes on talking is not.
+func TestAViewerThatGoesSilentIsNoLongerJoined(t *testing.T) {
+	var mu sync.Mutex
+	var logged []string
+	sim, _, c, v, census := handedOver(t, func(c *Circuit) {
+		c.silence = time.Second
+		c.logf = func(format string, args ...any) {
+			mu.Lock()
+			defer mu.Unlock()
+			logged = append(logged, fmt.Sprintf(format, args...))
+		}
+	})
+	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
+	v.connect(testCircuitCode)
+	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
+
+	// Talking, for well over the timeout, it stays.
+	for until := time.Now().Add(2500 * time.Millisecond); time.Now().Before(until); {
+		v.send(&msg.StartPingCheck{}, 0)
+		time.Sleep(100 * time.Millisecond)
+		if !c.Joined() {
+			t.Fatal("a viewer that was talking was taken as gone")
+		}
+	}
+
+	// Silent, it goes.
+	deadline := time.Now().Add(5 * time.Second)
+	for c.Joined() {
+		if time.Now().After(deadline) {
+			t.Fatal("a viewer silent for longer than the timeout is still joined")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// Said just after, so waited for too.
+	for {
+		mu.Lock()
+		said := strings.Join(logged, "\n")
+		mu.Unlock()
+		if strings.Contains(said, "nothing heard from the viewer") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the log does not say why the viewer was let go:\n%s", said)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// As a logout leaves it: nobody there to be told the avatar moved.
+	c.RegionChanged("Sandbox Goguen")
+	if n := sentToViewer(census, "AgentAlertMessage"); n != 0 {
+		t.Errorf("a viewer taken as gone was told %d times", n)
 	}
 }
 

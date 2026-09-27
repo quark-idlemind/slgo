@@ -16,7 +16,8 @@ tell from a working one.
 Whether a viewer is there is mostly known: one that takes the session
 announces itself, and one that logs out, as quitting a viewer does,
 is no longer counted.  One that goes without logging out -- a crash,
-a lost connection -- says nothing, and is shown as there until
+a lost connection -- says nothing, and is shown as there until it has
+been silent for 100 seconds, the viewer's own circuit timeout, or
 another viewer takes the session or slgod restarts.
 
 ## Options

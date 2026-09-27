@@ -90,6 +90,37 @@ dispatch goroutine from `admit`, the circuit's gate. That is what makes
 `Dispatcher.Forget` safe: it writes fields no lock protects, on the one
 goroutine that owns them.
 
+## A viewer that goes silent
+
+A viewer that quits sends `LogoutRequest`, and the circuit stops
+counting it as joined. One that crashes, or whose machine loses the
+network, sends nothing at all, and it used to count as joined until
+another viewer took the circuit or slgod restarted. Everything that
+asks whether a viewer is on was told yes for all that time: `slsh
+viewer` and `status` said one was attached, the daemon held off taking
+the avatar home at a reconnect, and a region change was announced to
+nobody.
+
+So a joined viewer that has sent nothing for `SilenceTimeout` is taken
+as gone, exactly as a logout takes it (`Circuit.leave`, the one path
+both use), and the log says why. The figure is the viewer's own: its
+circuit timeout is 100 seconds (`newview/llstartup.cpp:916`), which is
+how long a viewer gives a simulator before calling the circuit dead,
+and `agent.NeighbourTimeout` uses it for a child circuit on the same
+reasoning. A viewer that is there is never that quiet -- it sends an
+`AgentUpdate` several times a second -- so nothing live is let go. Any
+datagram from the admitted address counts as hearing from it,
+acknowledgements included.
+
+The watch is the session's own silence watchdog, `agent.WatchSilence`,
+pointed at the time the circuit last heard its viewer. It starts at each
+join and ends at the silence, so a circuit with nobody on it is not
+watched; it looks a quarter of the timeout at a time, so a crashed
+viewer is let go between 100 and 125 seconds after its last word. None
+of this has been watched with a real viewer crashing; it is how the
+code behaves, and the test for it uses a fake viewer and a one-second
+timeout.
+
 ## A teleport asked for at the viewer
 
 A viewer's teleport out of the region is refused rather than followed,

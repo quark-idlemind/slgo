@@ -357,9 +357,9 @@ a viewer as on the session the loop does not ask at all, and says so
 with a line beginning
 `not asking to go home: a viewer is on this session`. A viewer counts
 as on from when it joins until it logs out, which quitting one does.
-A viewer that crashes sends nothing and goes on counting, through
-reconnects and fresh logins of the same profile alike, until another
-viewer takes the session or `slgod` restarts.
+A viewer that crashes sends nothing, and counts until it has been
+silent for 100 seconds, the viewer's own circuit timeout, or until
+another viewer takes the session or `slgod` restarts.
 
 Profiles that say anything else are left alone. `start = last` means
 where the avatar was, and dragging that avatar home would be the daemon
