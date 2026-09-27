@@ -254,6 +254,20 @@ talking after it has finished, and neither program that shares these
 objects writes one: both say their piece from `state_entry` and fall
 silent.
 
+The cost is the one measured under [Where it breaks](#where-it-breaks):
+thirty scripts behind a clearing were about ninety uploads, and failed
+every run, where thirty on their own ran clean. So `--clear` is a
+certain two thirds of the upload budget spent on a hazard nobody here
+has yet seen, and what it is for is the day somebody DOES see foreign
+lines in their output.
+
+An object that will not come clean is dropped from the run rather than
+ending it. It used to end the whole run, and thirty scripts went nowhere
+because one object out of thirty would not answer -- which is a worse
+answer than running twenty-nine. What is left is narrower and still
+true: the caller does not know what is in that object, so it does not
+listen to it.
+
 ## What was measured
 
 Thirty three-second scripts, three avatars wearing twelve objects each,
