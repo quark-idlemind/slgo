@@ -27,8 +27,7 @@ type Hosted struct {
 
 	// mu guards info, which is not what it was at attach time: the
 	// daemon may re-establish the session under this client, and
-	// Refresh is how the new identity gets here.  See issue 009 and
-	// the Backend interface.
+	// Refresh is how the new identity gets here.  See Backend.Info.
 	mu   sync.RWMutex
 	info *Info
 
@@ -56,11 +55,12 @@ var (
 
 // Attach connects to a slgod and attaches to one of its sessions.
 //
-// An empty name takes the daemon's default: of the sessions it holds,
-// the one it has held longest.  Which one that was is in the returned
-// info, and a client that did not name a session should say so, since
-// the default depends on the daemon's history and nothing on disk
-// records it.
+// An empty name takes the session SLGO_AGENT names (see AgentName), and
+// failing that the daemon's default: of the sessions it holds and has
+// not stopped, the one it has held longest.  Which one that was is in
+// the returned info, and a client that did not name a session should
+// say so, since the default depends on the daemon's history and nothing
+// on disk records it.
 func Attach(ctx context.Context, addr, name string, subscribe ...string) (*Hosted, error) {
 	return attach(ctx, addr, name, false, subscribe)
 }
@@ -125,10 +125,10 @@ func AttachConn(ctx context.Context, conn *client.Conn, name string, subscribe .
 func attachConn(ctx context.Context, conn *client.Conn, name string, weak bool, subscribe []string) (*Hosted, error) {
 	name = AgentName(name)
 	// An empty name is passed THROUGH rather than resolved here.  The
-	// daemon picks -- the session it has held longest -- and the
-	// Attached frame says which, so every client agrees about what "none
-	// named" means and a client too old to know the rule cannot disagree
-	// with one that does.
+	// daemon picks -- the session it has held longest, of those not
+	// stopped -- and the Attached frame says which, so every client
+	// agrees about what "none named" means and a client too old to know
+	// the rule cannot disagree with one that does.
 	if len(subscribe) == 0 {
 		subscribe = Subscriptions
 	}

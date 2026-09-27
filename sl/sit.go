@@ -368,32 +368,19 @@ func (w *Session) Stand(ctx context.Context, timeout time.Duration) error {
 //
 // # Where the answer comes from
 //
-// An avatar sitting on something is PARENTED to it, and the parent is
-// in the region's description of the objects in it.  So the question is
-// answered by looking this avatar up among them and reading what it
-// says its parent is -- and then looking that local id up in the same
-// listing to name it.
+// The agent's posture, where the backend can say it: the agent has seen
+// every reparenting and every animation since login, where this session
+// has seen only what arrived after it attached.  A seat's local id is
+// then named by looking it up among the region's objects.
 //
-// It used to be answered from what this session had been told instead,
-// which was right for a client that was connected when the sit
-// happened and wrong for every other one.  A freshly attached client
-// has been told nothing: an avatar is described when it arrives and
-// when it moves, and one sitting still since before we attached has
-// done neither.  So a shell that attached a minute ago reported an
-// avatar that had been sitting for an hour as standing, with no way to
-// tell that from the truth.
-//
-// # The ground half is still only as good as what we heard
-//
-// A ground sit is not a parent -- there is nothing to be parented to --
-// and what says it is happening is the animation.  This session is told
-// about animations only while it holds that subscription, which it does
-// only while one of the calls above is waiting.  So a ground sit this
-// session performed is reported, and one performed by a viewer or by
-// another client while this session was not listening is not, and reads
-// as standing.  Nothing here can close that gap without paying for the
-// animations of every avatar in range for ever; the daemon already
-// knows the answer, and asking it is a question for another day.
+// A backend that cannot say leaves this session's own account.  An
+// avatar sitting on something is PARENTED to it, and the parent is in
+// the region's description of the objects in it, which is read when
+// this session was told nothing: an avatar sitting still since before
+// it attached has not been described to it.  A ground sit is not a
+// parent, and what says it is happening is the animation, which this
+// session hears only while a sit or a stand holds that subscription --
+// so there a ground sit it did not perform reads as standing.
 func (w *Session) Seat(ctx context.Context) (*Seat, error) {
 	w.mu.Lock()
 	local := w.seatLocal()

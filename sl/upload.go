@@ -27,7 +27,7 @@ import (
 )
 
 // UploadCost is what Second Life charges for a file upload, and what
-// Upload names when the caller says nothing.
+// UploadFee names for anything but a texture over LargeTextureArea.
 //
 // It is a constant here and a setting there.  The grid publishes the
 // real price in its economy data, which this package does not read, so
@@ -67,9 +67,10 @@ type Upload struct {
 	Group     uint32
 	Everyone  uint32
 
-	// Cost is what the caller expects to pay, and zero means
-	// UploadCost.  It is sent, not merely believed: naming a figure
-	// the simulator disagrees with is refused.
+	// Cost is what the caller expects to pay, and zero means UploadFee
+	// for the texture's size -- UploadCost for anything that is not a
+	// texture.  It is sent, not merely believed: naming a figure the
+	// simulator disagrees with is refused.
 	Cost int
 }
 

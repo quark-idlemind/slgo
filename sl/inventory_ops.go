@@ -277,13 +277,13 @@ func (w *Session) aisDelete(ctx context.Context, kind string, id msg.UUID) error
 	return err
 }
 
-// SetItem changes an item's name, description or permissions.
+// SetItem changes an item's name, description or next-owner mask.
 //
 // An empty name or description leaves that field alone; a nil mask
-// leaves the permissions alone. The item is read back afterwards and
-// returned, because Second Life narrows what it will not grant -- you
-// cannot hand out more than the base mask allows -- so what was asked
-// for and what now holds are different questions.
+// leaves the next owner's permissions alone. The item is read back
+// afterwards and returned, because Second Life narrows what it will not
+// grant -- you cannot hand out more than the base mask allows -- so what
+// was asked for and what now holds are different questions.
 func (w *Session) SetItem(ctx context.Context, item msg.UUID, name, desc string, next *uint32) (*Item, error) {
 	inv, err := w.Inventory(ctx)
 	if err != nil {
@@ -689,7 +689,8 @@ func (w *Session) ActivateGroup(ctx context.Context, group msg.UUID, timeout tim
 }
 
 // itemCRC is the checksum the simulator expects alongside an inventory
-// item, in UpdateInventoryItem and RezObject.
+// item, which RezObject carries.  UpdateInventoryItem carries one too,
+// and is not sent: see SetItem.
 //
 // It is not optional and it is not a CRC.  Sent as zero, an update is
 // accepted and silently does nothing: the rename returns no error, the

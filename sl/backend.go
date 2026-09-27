@@ -35,8 +35,8 @@ type Message = client.Message
 // The queue carries what the circuit no longer does.  A message the
 // template marks UDPDeprecated is not gone: the simulator sends it here
 // instead, under its own name and with its blocks as LLSD, and it may
-// carry fields the template never had.  ScriptRunningReply is the one
-// this package reads; see Session.event.
+// carry fields the template never had.  The ones this package reads are
+// in eventHandlers; see Session.event.
 //
 // Not "Event", which this package already uses for one of the handlers
 // an LSL state declares (see Syntax).  The two have nothing to do with

@@ -62,7 +62,7 @@ package sl
 // ScriptRunning both sift their answers by an id the reply carries;
 // MapBlockReply carries AgentData.AgentID, which is this avatar in every
 // reply this session will ever see, and the blocks.  And the daemon
-// relays by message number alone (Client.wants, server/grpc.go:86), so
+// relays by message number alone (Client.wants, in server/grpc.go), so
 // blocks one attached client asked for reach every client subscribed to
 // them.
 //

@@ -24,7 +24,7 @@ import (
 )
 
 // Instant message dialogs, from the viewer's EInstantMessage.  These
-// are the ones this package acts on; the rest arrive with their number
+// are the ones this package names; the rest arrive with their number
 // intact and nothing happens.
 const (
 	DialogMessage           = 0
@@ -96,8 +96,8 @@ type IM struct {
 
 	// ID is what the message carried in its id field, which means
 	// different things per dialog: the conversation for a private
-	// message, the transaction for a friendship offer, the folder
-	// for an inventory offer, the object for DialogFromTask.
+	// message, the transaction for a friendship or an inventory offer
+	// (llimprocessing.cpp:1616), the object for DialogFromTask.
 	ID msg.UUID
 
 	// Group is set when it came from a group rather than a person.

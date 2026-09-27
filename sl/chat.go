@@ -352,17 +352,10 @@ type chatSub struct {
 	dropped atomic.Uint64
 }
 
-// chatCmd adds or removes a subscription.
-//
-// Both go through the goroutine that reads the relay, so that
-// goroutine is the only one that ever touches a subscription's
-// channel.  It is the only writer and the only closer, which is what
-// makes closing safe: with any other arrangement a close can land
-// between a sender deciding to send and sending.
 // chatCmd is work to run on the reader goroutine.
 //
-// Every subscription -- chat, permissions, instant messages, friendship
-// offers -- is added and removed this way, so that the reader stays the
+// Every subscription -- chat, permissions, instant messages, region
+// changes -- is added and removed this way, so that the reader stays the
 // only thing that ever touches a subscription's channel: the only
 // writer and the only closer.  Closing from anywhere else races with a
 // send no matter how it is locked.
@@ -586,15 +579,17 @@ func (w *Session) SayAs(ctx context.Context, text string, channel int32, chatTyp
 // since both travel in that one field.
 const MaxDialogReply = 254
 
-// sayNegative speaks on a negative channel, which ChatFromViewer from
-// this client does not manage.
+// sayNegative speaks on a negative channel, which ChatFromViewer does
+// not carry.
 //
-// The message that does manage it is ScriptDialogReply, which needs no
-// dialog to have been opened: the simulator checks only that the object
-// id names something real, and delivers the text to whatever is
-// listening.  A viewer does the same thing for its own purposes --
-// Firestorm reports collisions to scripts this way, on a channel from
-// its settings, with no dialog anywhere.
+// The message that does is ScriptDialogReply, which needs no dialog to
+// have been opened: the simulator checks only that the object id names
+// something real, and delivers the text to whatever is listening.  It
+// is what the viewer sends for chat on a negative channel, with its own
+// id as the object -- "Hack: ChatFromViewer doesn't allow negative
+// channels" (llfloaterimnearbychat.cpp:939-965; Firestorm's own path is
+// fsnearbychathub.cpp:77-99) -- and Firestorm reports collisions to
+// scripts the same way, on a channel from its settings.
 //
 // Measured against a script listening on -4242: the text arrives
 // verbatim, the script sees this avatar as the speaker exactly as it
@@ -603,9 +598,8 @@ const MaxDialogReply = 254
 // came back.  So this is a say, not a shout and not a region-wide
 // backdoor.
 //
-// When the ChatFromViewer path is fixed this should become a fallback
-// rather than the only route, since it costs a length limit the real
-// one does not have.
+// It costs the length limit of a button label, MaxDialogReply, which
+// ChatFromViewer does not have.
 func (w *Session) sayNegative(ctx context.Context, text string, channel int32) error {
 	if len(text) > MaxDialogReply {
 		return fmt.Errorf("sl: %d bytes is too long for channel %d; "+

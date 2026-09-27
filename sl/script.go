@@ -45,8 +45,8 @@ type Script struct {
 	// transcript is no good.
 	OnLine func(Line)
 
-	// Running sets whether the script is started.  The zero value
-	// starts it, which is what running a script means.
+	// NotRunning installs the script without starting it.  The zero
+	// value starts it, which is what running a script means.
 	NotRunning bool
 
 	// KeepRunning leaves the script running after the run.

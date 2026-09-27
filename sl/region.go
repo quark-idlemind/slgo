@@ -201,10 +201,10 @@ func (w *Session) regionChanged(c *RegionChange) {
 //     caller's window rather than the region's.
 //   - the subscriptions and the waiters: chatSubs, imSubs, permSubs,
 //     regionSubs, the pickers, and the propsFns, mapFns, teleportFns,
-//     profileFns and scriptFns beside them.  These are not state at
-//     all, they are callers waiting, and the teleport that caused this
-//     is very probably one of them.  Emptying them would strand every
-//     one.
+//     profileFns, scriptFns, parcelFns and dwellFns beside them.  These
+//     are not state at all, they are callers waiting, and the teleport
+//     that caused this is very probably one of them.  Emptying them
+//     would strand every one.
 //   - syntax: the LSL a region implements, which looks per-region and
 //     is not.  It is a property of the grid's server build, half a
 //     megabyte over a capability, and it changes when Linden Lab

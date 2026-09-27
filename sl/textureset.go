@@ -240,9 +240,9 @@ func (w *Session) SetFaces(ctx context.Context, o *Object, faces []Face) error {
 // Faces is what each face of an object looks like now: its texture,
 // tint, tiling, and the rest.
 //
-// The number of faces is what the object update said the prim has,
-// since the blob does not say -- a face that never differed from the
-// default leaves no trace in it.
+// The number of faces is worked out from the shape the object update
+// gave (see facesOf), since the blob does not say -- a face that never
+// differed from the default leaves no trace in it.
 //
 // A prim nothing has described the appearance of is asked about before
 // it is answered for, because that is the state a change leaves
@@ -356,10 +356,9 @@ func (w *Session) describeAgain(ctx context.Context, seen *Seen) (*Seen, error) 
 // replaces all of it.  face is which one, or AllFaces for every face
 // at once; change is given the face to modify.
 //
-// The count of faces is what the object update said, which is the
-// number the prim really has -- a client cannot work it out from the
-// blob, since faces that never differed from the default leave no
-// trace in it.
+// The count of faces is Faces's, worked out from the prim's shape -- a
+// client cannot read it off the blob, since faces that never differed
+// from the default leave no trace in it.
 //
 // # What it reads, and what that costs
 //

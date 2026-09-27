@@ -185,7 +185,7 @@ func (w *Session) Touch(ctx context.Context, o *Object, t Touch) error {
 //
 // It is NOT how many touch events the script sees.  That is the
 // simulator's business and nothing a client does changes it; see
-// Drag.Rate for the measurement.
+// TouchEventRate for the measurement.
 const TouchRate = 45
 
 // TouchEventRate is how often a script's touch event actually fires

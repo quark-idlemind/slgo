@@ -11,11 +11,11 @@ package sl
 // saying so (llavatarpropertiesprocessor.cpp:118-131).
 //
 // That road is shut here.  slgod does not ask the seed capability for
-// AgentProfile -- it is not in agent.DefaultCaps (agent/caps.go:17-49)
-// -- so there is no URL to fetch, and opening one is a piece of work of
-// its own: another capability to request, another body to parse, and an
-// answer whose shape nothing here has measured.  A profile that arrives
-// over three template messages needs none of that.
+// AgentProfile -- it is not in agent.DefaultCaps -- so there is no URL
+// to fetch, and opening one is a piece of work of its own: another
+// capability to request, another body to parse, and an answer whose
+// shape nothing here has measured.  A profile that arrives over three
+// template messages needs none of that.
 //
 // So this takes the road the same viewer still takes for
 // APT_PROPERTIES_LEGACY, which is an AvatarPropertiesRequest carrying
@@ -212,7 +212,7 @@ type Profile struct {
 	// Flags is the bitfield above, kept whole.  Only payment is read out
 	// of it here: the online bit is not passed on, because the viewer
 	// itself only shows online status for a friend who has granted the
-	// right to see it (llpanelprofile.cpp:1146-1153), and this shell
+	// right to see it (llpanelprofile.cpp:1146-1153), and OnlineFriends
 	// already answers "who is online" from the friends list, which is
 	// the answer that is actually true.
 	Flags uint32

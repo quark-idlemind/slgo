@@ -321,9 +321,9 @@ func orID(name string, id msg.UUID) string {
 	return id.String()
 }
 
-// keepable says whether an offer that has just been read should be kept
-// as waiting, and settles the bookkeeping either way.  Called with mu
-// held, from the reader.
+// keepableLocked says whether an offer that has just been read should be
+// kept as waiting, and settles the bookkeeping either way.  Called with
+// mu held, from the reader.
 //
 // No, for a live one the keeper has already said was dealt with: the
 // notice overtook it.  Yes, and the notice forgotten, for one out of

@@ -66,8 +66,8 @@ type Session struct {
 	//
 	// It changes because a daemon can re-establish the grid session
 	// under an attached client: same avatar, new session id.  Sending
-	// the old one is sending into silence.  See issue 009, Refresh,
-	// and refreshIdentity below.
+	// the old one is sending into silence.  See Backend.Refresh and
+	// refreshIdentity below.
 	ident atomic.Pointer[Info]
 
 	// me and invRoot do not change.  The avatar is the same avatar
@@ -235,8 +235,10 @@ type Session struct {
 	// It is also called when a dialog or a permission request is
 	// dropped unanswered, for its age or to make room: see
 	// UnansweredFor and MaxUnanswered.  Such a Handled has no Key and
-	// is By "this session", and it may be called from Dialogs, Asked or
-	// WaitDialog on the caller's goroutine, without the session's lock.
+	// is By "this session", and it may be called on the reader
+	// goroutine as another arrives, or from Dialogs, Asked or
+	// WaitDialog on the caller's, without the session's lock either
+	// way.
 	OnHandled func(Handled)
 
 	// record is what slgod said about the offers it keeps, and nil
@@ -255,9 +257,10 @@ type Session struct {
 
 // Dial attaches to a session slgod is holding.
 //
-// An empty name takes the only session the daemon has.  For a session
-// this process holds instead, see LoginDirect; everything after that
-// call is the same either way.
+// An empty name takes the one SLGO_AGENT names, and failing that the
+// daemon's default; see Attach.  For a session this process holds
+// instead, see LoginDirect; everything after that call is the same
+// either way.
 func Dial(ctx context.Context, addr, agentName string) (*Session, error) {
 	return dial(ctx, addr, agentName, false)
 }
@@ -427,9 +430,9 @@ func (w *Session) agentBlock() (msg.UUID, msg.UUID) {
 // Called when the region changes, because a re-established session
 // arrives as a region change -- the daemon says so in the detail, and
 // this does not read the detail: matching on the words would be one
-// more thing to be wrong about when they change, which is issues/006.
-// An ordinary teleport gets the same identity back, with the new
-// region's name and capabilities.
+// more thing to be wrong about when they change.  An ordinary teleport
+// gets the same identity back, with the new region's name and
+// capabilities.
 //
 // It runs OFF the reader goroutine.  Anything that waits on the daemon
 // -- or, direct, on the new region's capabilities -- from there stops
@@ -779,12 +782,12 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 
 	// This avatar's own animation list, and nobody else's.  The message
 	// arrives for every avatar in range and keeping the crowd's would be
-	// keeping a list that grows with the region; agent.Posture makes the
-	// same choice and says more about it.  The list is replaced rather
-	// than merged, because the message is the whole of it every time and
-	// an animation that has stopped is simply absent from the next one
-	// -- which is the only way standing up from a ground sit is ever
-	// heard about.
+	// keeping a list that grows with the region; the agent's animations,
+	// in agent/posture.go, make the same choice and say more about it.
+	// The list is replaced rather than merged, because the message is the
+	// whole of it every time and an animation that has stopped is simply
+	// absent from the next one -- which is the only way standing up from
+	// a ground sit is ever heard about.
 	case *msg.AvatarAnimation:
 		if t.Sender.ID == w.me {
 			ids := make([]msg.UUID, 0, len(t.AnimationList))
