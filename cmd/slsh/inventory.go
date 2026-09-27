@@ -105,7 +105,7 @@ var inventoryCommands = map[string]*command{
 		params:   "[PATH]",
 		flags:    func() any { return new(lsOptions) },
 		brief:    "list a folder, or what a path names; -l for detail, -t newest first",
-		keywords: "list show folder contents inventory directory items what have browse",
+		keywords: "list show folder contents inventory directory items what have browse recently inside subfolders",
 		man:      "ls",
 		run:      cmdLs,
 	},

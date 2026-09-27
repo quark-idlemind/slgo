@@ -93,6 +93,14 @@ func TestAskEvalQuestionsAreWellFormed(t *testing.T) {
 			t.Errorf("%s:%d: asked already on line %d", askEvalFile, q.Line, prev)
 		}
 		seen[q.Question] = q.Line
+		// The command word is put back by howQuestion.  A line that
+		// already starts with it is asked twice.
+		if strings.HasPrefix(strings.ToLower(q.Question), "how ") || strings.EqualFold(q.Question, "how") {
+			t.Errorf("%s:%d: %q starts with how; that word is the command, and it is put back", askEvalFile, q.Line, q.Question)
+		}
+		if asked := howQuestion(strings.Fields(q.Question)); !strings.HasPrefix(asked, "how ") {
+			t.Errorf("%s:%d: asked %q", askEvalFile, q.Line, asked)
+		}
 		if !q.answerable() {
 			unanswerable++
 			if len(q.Flags) > 0 {
@@ -158,12 +166,12 @@ func askEvalFlagArg(cmd, fl string) string {
 // askRecallFloor is what TestAskEvalRetrieval holds the index to, as
 // fractions of the answerable questions whose command is in the first
 // 1, 3 and 8 the index returns.  When this set was written the index
-// scored 49, 57 and 63 of its 67 answerable questions (0.731, 0.851,
-// 0.940); the floors are each a question below that, so that a change
+// scored 80, 94 and 100 of its 103 answerable questions (0.777, 0.913,
+// 0.971); the floors are each a question below that, so that a change
 // that loses one answer passes and a change that loses two fails.
 // When the index gets better, raise them; the test logs the measured
 // numbers.
-var askRecallFloor = [3]float64{0.71, 0.83, 0.92}
+var askRecallFloor = [3]float64{0.76, 0.90, 0.96}
 
 // TestAskEvalRetrieval runs every answerable question through askSearch
 // and measures how often the command that answers it comes back in the
@@ -181,7 +189,10 @@ func TestAskEvalRetrieval(t *testing.T) {
 			continue
 		}
 		n++
-		got, err := askSearch(q.Question)
+		// The command's own word is the start of every question.  The
+		// file holds the rest of the line, and howQuestion puts "how"
+		// back, which is what both the index and the model are asked.
+		got, err := askSearch(howQuestion(strings.Fields(q.Question)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -202,7 +213,7 @@ func TestAskEvalRetrieval(t *testing.T) {
 		}
 		if rank < 0 || rank >= 3 {
 			t.Logf("miss@3 %s:%d %q wants %s, rank %d; first eight %s",
-				askEvalFile, q.Line, q.Question, strings.Join(q.Want, "|"), rank+1, strings.Join(top, " "))
+				askEvalFile, q.Line, howQuestion(strings.Fields(q.Question)), strings.Join(q.Want, "|"), rank+1, strings.Join(top, " "))
 		}
 	}
 	if n == 0 {

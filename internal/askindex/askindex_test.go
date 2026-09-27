@@ -63,6 +63,27 @@ func TestStemMeets(t *testing.T) {
 	}
 }
 
+// "sitting" has to find sit, and it has to count for less than the
+// word sit typed.  A plural is not that case.
+func TestShortIngStemWeighsLessInAQuestion(t *testing.T) {
+	sitting := tokenWeights("the box sitting on the floor")
+	if sitting["sit"] != stemCommandWeight {
+		t.Errorf("sitting weighs %v, want %v", sitting["sit"], stemCommandWeight)
+	}
+	if tokenWeights("sit down")["sit"] != 1 {
+		t.Errorf("sit typed should count in full")
+	}
+	if tokenWeights("sit there sitting")["sit"] != 1 {
+		t.Errorf("a typed sit beside sitting should count in full")
+	}
+	if tokenWeights("homes")["hom"] != 1 {
+		t.Errorf("a plural should count in full, got %v", tokenWeights("homes")["hom"])
+	}
+	if got := Tokens("Sitting, rezzed"); !reflect.DeepEqual(got, []string{"sit", "rez"}) {
+		t.Errorf("the stem itself is unchanged: %q", got)
+	}
+}
+
 func TestStopword(t *testing.T) {
 	for _, w := range []string{"the", "How", "my", "I"} {
 		if !Stopword(w) {

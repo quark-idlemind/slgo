@@ -216,11 +216,7 @@ var kindWeight = map[string]float64{
 // Search scores every document against a question and returns those that
 // matched anything, best first.  Equal scores keep index order.
 func (ix *Index) Search(question string, hints ...Hint) []Hit {
-	weights := map[string]float64{}
-	asked := Tokens(question)
-	for _, t := range asked {
-		weights[t] = 1
-	}
+	asked, weights := scanTokens(question)
 	have := map[string]bool{}
 	for _, t := range asked {
 		have[t] = true

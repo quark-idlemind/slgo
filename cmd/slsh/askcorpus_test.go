@@ -161,66 +161,89 @@ type askQuestion struct {
 
 var askQuestions = []askQuestion{
 	// The two the plan asked for by name.
-	{"see the contents of a script in one of my attachments", "cat", 3},
-	{"set my home landmark", "landmark", 3},
+	{"do I see the contents of a script in one of my attachments", "cat", 3},
+	{"do I set my home landmark", "landmark", 3},
 
-	{"who is near me", "who", 3},
-	{"give an object to a friend", "give", 3},
-	{"how do I teleport to another region", "tp", 3},
-	{"take me home", "tp", 3},
-	{"pick an object up off the ground into my inventory", "take", 3},
-	{"put an object from my inventory back into the world", "place", 3},
-	{"delete an item from my inventory", "rm", 3},
-	{"rename a folder", "mv", 3},
-	{"make a new folder", "mkdir", 3},
-	{"download a texture as a png", "get", 3},
-	{"upload a photo as a texture", "put", 3},
-	{"accept a friendship request", "accept", 3},
-	{"ask somebody to be my friend", "offer", 3},
-	{"send a private message to someone", "im", 3},
-	{"say something in local chat", "say", 3},
-	{"search for a person by name", "lookup", 3},
-	{"which of my friends are online", "friends", 3},
-	{"what am I wearing", "worn", 3},
-	{"take off my hat", "detach", 3},
-	{"put on a jacket from my inventory", "wear", 3},
-	{"who owns the land I am standing on", "parcel", 3},
-	{"invite someone to join my group", "invite", 3},
-	{"change my active group", "group", 3},
-	{"sit on a chair", "sit", 3},
-	{"stand up", "stand", 3},
-	{"start a script running in an object", "start", 3},
-	{"put a script inside an object", "drop", 3},
-	{"copy a notecard out of an object into my inventory", "fetch", 3},
-	{"write a file from my computer into a notecard", "save", 3},
-	{"create a new notecard", "new", 3},
-	{"empty the trash", "emptytrash", 3},
-	{"list the objects around me", "objects", 3},
-	{"find an item in my inventory by name", "find", 3},
-	{"where am I", "where", 3},
-	{"click on an object", "touch", 3},
-	{"offer somebody a teleport to where I am", "lure", 3},
-	{"link several prims together", "link", 3},
-	{"change the colour of one face of an object", "texture", 3},
-	{"let other people copy my object", "perms", 3},
-	{"log another avatar in", "login", 3},
-	{"change a setting", "set", 3},
-	{"run the commands in a file", "source", 3},
-	{"look up an LSL function", "lsl", 3},
-	{"draw a map of the avatars nearby", "map", 3},
-	{"refuse a teleport somebody offered me", "no", 3},
-	{"press a button on a dialog", "answer", 3},
-	{"read somebody's profile", "profile", 3},
-	{"move an object to a new position", "move", 3},
-	{"save an object as a json file", "dump", 3},
-	{"build an object from a json file", "rez", 3},
-	{"change my maturity rating to adult", "maturity", 3},
-	{"walk across the border into the next region", "neighbours", 3},
-	{"open a real viewer on this avatar", "viewer", 3},
-	{"what is waiting for me to answer", "waiting", 3},
-	{"walk over to that spot", "walk", 3},
-	{"turn to face somebody", "face", 3},
-	{"stop walking", "halt", 3},
+	{"do I see who is near me", "who", 3},
+	{"do I give an object to a friend", "give", 3},
+	{"do I teleport to another region", "tp", 3},
+	{"do I get home", "tp", 3},
+	{"do I pick an object up off the ground into my inventory", "take", 3},
+	{"do I put an object from my inventory back into the world", "place", 3},
+	{"do I delete an item from my inventory", "rm", 3},
+	{"do I rename a folder", "mv", 3},
+	{"do I make a new folder", "mkdir", 3},
+	{"do I download a texture as a png", "get", 3},
+	{"do I upload a photo as a texture", "put", 3},
+	{"do I accept a friendship request", "accept", 3},
+	{"do I ask somebody to be my friend", "offer", 3},
+	{"do I send a private message to someone", "im", 3},
+	{"do I say something in local chat", "say", 3},
+	{"do I search for a person by name", "lookup", 3},
+	{"do I find which of my friends are online", "friends", 3},
+	{"do I find what I am wearing", "worn", 3},
+	{"do I take off my hat", "detach", 3},
+	{"do I put on a jacket from my inventory", "wear", 3},
+	{"do I find who owns the land I am standing on", "parcel", 3},
+	{"do I invite someone to join my group", "invite", 3},
+	{"do I change my active group", "group", 3},
+	{"do I sit on a chair", "sit", 3},
+	{"do I stand up", "stand", 3},
+	{"do I start a script running in an object", "start", 3},
+	{"do I put a script inside an object", "drop", 3},
+	{"do I copy a notecard out of an object into my inventory", "fetch", 3},
+	{"do I write a file from my computer into a notecard", "save", 3},
+	{"do I create a new notecard", "new", 3},
+	{"do I empty the trash", "emptytrash", 3},
+	{"do I list the objects around me", "objects", 3},
+	{"do I find an item in my inventory by name", "find", 3},
+	{"do I find where I am", "where", 3},
+	{"do I click on an object", "touch", 3},
+	{"do I offer somebody a teleport to where I am", "lure", 3},
+	{"do I link several prims together", "link", 3},
+	{"do I change the colour of one face of an object", "texture", 3},
+	{"do I let other people copy my object", "perms", 3},
+	{"do I log another avatar in", "login", 3},
+	{"do I change a setting", "set", 3},
+	{"do I run the commands in a file", "source", 3},
+	{"do I look up an LSL function", "lsl", 3},
+	{"do I draw a map of the avatars nearby", "map", 3},
+	{"do I refuse a teleport somebody offered me", "no", 3},
+	{"do I press a button on a dialog", "answer", 3},
+	{"do I read somebody's profile", "profile", 3},
+	{"do I move an object to a new position", "move", 3},
+	{"do I save an object as a json file", "dump", 3},
+	{"do I build an object from a json file", "rez", 3},
+	{"do I change my maturity rating to adult", "maturity", 3},
+	{"do I walk across the border into the next region", "neighbours", 3},
+	{"do I open a real viewer on this avatar", "viewer", 3},
+	{"do I find what is waiting for me to answer", "waiting", 3},
+	{"do I walk over to that spot", "walk", 3},
+	{"do I turn to face somebody", "face", 3},
+	{"do I stop walking", "halt", 3},
+
+	// A viewer's words, including the questions the measured set used
+	// to miss: "sitting" must not be the sit command, the newest
+	// items must not be the get command, a UUID is a key, and
+	// "come over" is a lure.
+	{"do I send an IM to somebody", "im", 3},
+	{"do I accept a teleport offer", "answer", 8},
+	{"do I read my group notices", "notice", 3},
+	{"do I see who shows up on the minimap", "map", 3},
+	{"do I find what sim I am in", "where", 3},
+	{"do I find a sim on the world map", "regions", 3},
+	{"do I show the contents of that object", "ls", 3},
+	{"do I attach a HUD from my inventory", "wear", 3},
+	{"do I set home to where I am standing", "landmark", 3},
+	{"do I find what is inside that box sitting on the floor", "ls", 8},
+	{"do I find which items I got most recently", "ls", 8},
+	{"do I find the uuid of an avatar whose name I know", "lookup", 8},
+	{"do I tell my friend where I am so they can come over", "lure", 3},
+	{"do I take a copy of an object and leave it standing", "take", 3},
+	{"do I accept an inventory offer", "accept", 3},
+	{"do I see who is on the radar", "map", 3},
+	{"do I find out whether I am allowed to build on this land", "parcel", 3},
+	{"do I find what group title I am using", "group", 3},
 }
 
 // TestAskRetrieval asks the embedded index each question and checks
@@ -237,7 +260,9 @@ func TestAskRetrieval(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range askQuestions {
-		got := ix.SearchCommands(c.q)
+		// What was typed starts with the command's own word.
+		asked := howQuestion(strings.Fields(c.q))
+		got := ix.SearchCommands(asked)
 		rank := -1
 		var top []string
 		for i, h := range got {
@@ -248,10 +273,10 @@ func TestAskRetrieval(t *testing.T) {
 				top = append(top, fmt.Sprintf("%s %.1f", h.Command, h.Score))
 			}
 		}
-		t.Logf("%-55q %d  %s", c.q, rank+1, strings.Join(top[:min(3, len(top))], ", "))
+		t.Logf("%-55q %d  %s", asked, rank+1, strings.Join(top[:min(3, len(top))], ", "))
 		if rank < 0 || rank >= c.top {
 			t.Errorf("%q: %s is at %d, wanted in the first %d; the first eight are %s",
-				c.q, c.want, rank+1, c.top, strings.Join(top, ", "))
+				asked, c.want, rank+1, c.top, strings.Join(top, ", "))
 		}
 	}
 }
@@ -270,6 +295,9 @@ func TestAskQuestionsAreStrict(t *testing.T) {
 		}
 		if _, ok := commands[c.want]; !ok {
 			t.Errorf("%q expects %q, which is no command", c.q, c.want)
+		}
+		if strings.HasPrefix(strings.ToLower(c.q), "how ") {
+			t.Errorf("%q starts with how; the command puts that word back", c.q)
 		}
 	}
 	if strict < 12 {

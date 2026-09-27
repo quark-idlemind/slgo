@@ -332,7 +332,7 @@ look:example:1	look	example		look
 look:example:2	look	example		objects  195 described so far
 look:section:The count of objects is a count of what has been heard	look	section	The count of objects is a count of what has been heard	The last line is how many objects this session has been told about, and\nthat is not how many are in the region.\n\nThe simulator describes what is near the camera and nothing else, so an\nobject beyond the draw distance is not merely unnamed here, it is\nunknown.  The count grows as the avatar moves about, and it falls\nagain as things drift out of range -- about half a minute after they\ngo, since something out of range is kept that long in case the camera\nit was judged by was the moment's wrong one.  Read it as what the session is\nholding now rather than as a census.
 look:section:Examples	look	section	Examples	    look\n\nSee also: `where`, `who`, `objects`, `regions` for the same question\nasked about somewhere else on the grid, `caps` and `features` for what\nthis simulator offers a client, and `lsl` for the language it\nimplements.
-lookup	lookup	line		lookup [-l] TEXT\nsearch the grid for people by part of a name; -l for the keys\nhelp groups: people\nkeywords: search find person people avatar name username key resident
+lookup	lookup	line		lookup [-l] TEXT\nsearch the grid for people by part of a name; -l for the keys\nhelp groups: people\nkeywords: search find person people avatar name username key uuid resident
 lookup:intro	lookup	intro		lookup searches the whole grid for people by part of a name.  `who`\nasks who is standing in this region and `friends` asks who is on the\nfriend list; this one reaches somebody who is nowhere near and has\nnever been mentioned here.\n\n    lookup example\n\nThe argument is whatever part of a name is remembered, joined with\nspaces.  A username typed with a dot -- `example.resident` -- is\nsearched as a name.  What comes back is a numbered listing in name\norder, with the display name in a second column where it differs from\nthe name.\n\nNo key is printed unless `-l` asks for one.  The search knows the key\nof everybody it found and hands it to whatever the number is typed at,\nso most of the time the key is machinery rather than an answer -- and\na hundred of them down the page would bury the names they belong to.
 lookup:example:1	lookup	example		lookup example
 lookup:option:-l	lookup	option	-l	The key as well as the name, between the name and the display name.\n\n    lookup -l example\n     1  Example Resident                  a4c67e57-...  Exemplary\n\nIt is the one handle that does not change.  A display name is today's,\na name is shared in part by everybody the search turned up, and every\ncommand here that takes a person takes a key instead -- so a key is\nwhat to write down, paste into something else, or put in a script that\ncannot type a number at a listing.\n\nThe columns before it are fixed width, so the key lands in the same\nplace on every row and can be cut out of a listing.  The display name\ncomes last because it is the one field with no width at all.\n\nThe listing is what the next command means by a number.  `lookup` then\n`profile 3` is the ordinary way round, and the same number works for\nanything else that takes a person.
@@ -343,7 +343,7 @@ lookup:section:Examples	lookup	section	Examples	Find somebody by as much of the 
 lookup:example:3	lookup	example	Examples	lookup example res
 lookup:example:4	lookup	example	Examples	profile 1
 lookup:example:5	lookup	example	Examples	lookup -l example res
-ls	ls	line		ls [-Llrt] [--in OBJECT] [PATH]\nlist a folder, or what a path names; -l for detail, -t newest first\nhelp groups: inventory\nkeywords: list show folder contents inventory directory items what have browse
+ls	ls	line		ls [-Llrt] [--in OBJECT] [PATH]\nlist a folder, or what a path names; -l for detail, -t newest first\nhelp groups: inventory\nkeywords: list show folder contents inventory directory items what have browse recently inside subfolders
 ls:intro	ls	intro		`ls` lists a folder.  With no path it lists the folder the shell is\nin; with one it lists that folder instead, relative to here unless\nthe path starts from the root.\n\n    ls -l Objects\n\nA path that is not a folder lists what it names.  A name can mean\nseveral things, and this is how to see them.\n\nBy default it prints one bare path per line.  A listing written to a\nfile is then a list of paths, which can be edited into commands and\nrun.
 ls:example:1	ls	example		ls -l Objects
 ls:option:-l	ls	option	-l	The columns: kind, when it was acquired, id and path.  Without it,\none bare path per line.
@@ -373,7 +373,7 @@ lsl:section:The form meant for a program	lsl	section	The form meant for a progra
 lsl:section:What it costs to ask	lsl	section	What it costs to ask	The whole language is about half a megabyte, so it is fetched once\nand kept.  Asking again costs one small request for the id that says\nwhether it has changed, and, where it has not, nothing else.  Kept\nby the session, which means for as long as this shell is running and\nno longer: a fresh slsh pays for the document again.  A script that\nwants the language more than once is a script to run in one shell,\nwhich is what `.` is for.
 lsl:section:Examples	lsl	section	Examples	    lsl llSetLinkPrimitiveParams\n    lsl -m -f > functions\n\nSee also: `features`, where that id comes from, and `caps` for\nwhether the capability behind all this was granted at all.
 lsl:example:2	lsl	example	Examples	lsl -m -f > functions
-lure	lure	line		lure [-a] WHO [TEXT]\noffer somebody a teleport here, or --ask to be brought to them\nhelp groups: people\nkeywords: offer teleport bring summon invite somebody here to me teleport request
+lure	lure	line		lure [-a] WHO [TEXT]\noffer somebody a teleport here, or --ask to be brought to them\nhelp groups: people\nkeywords: offer teleport bring summon invite somebody here to me teleport request come over
 lure:intro	lure	intro		`lure` offers somebody a teleport to where this avatar is standing.  It\nis what a viewer's menu calls Offer Teleport; the grid's own word for\nit is a lure, which is what `waiting` already says when one arrives\nhere.\n\n    lure Example Resident\n    lure Example Resident come and look at the dock\n\nWho is named by a name, by a key, or by the number beside a name in the\nlast listing of people, exactly as `im` and `offer` name somebody.\nAnything after the name is the note that goes with it.
 lure:example:1	lure	example		lure Example Resident
 lure:example:2	lure	example		lure Example Resident come and look at the dock
@@ -450,7 +450,7 @@ mv:section:Examples	mv	section	Examples	    mv probe Objects/lanterns\n    mv pr
 mv:example:3	mv	example	Examples	mv probe "probe, the second"
 mv:example:4	mv	example	Examples	mv --in lantern hello.lsl greeter
 mv:section:A link is not followed	mv	section	A link is not followed	A link is an inventory entry in its own right, and `mv` acts on the\nentry.  Renaming or moving a link renames or moves the link.  An item\nmay have links to it from several outfits, and following one here\nwould reach past all of them to the item they share.\n\nSee also: `cp`, `mkdir`, `rm`, `ls`, and `drop` for putting an\ninventory item inside an object in the first place.
-neighbours	neighbours	line		neighbours [on|off]\nthe circuits held to the regions around this one, which walking over a border needs\nhelp groups: region\nkeywords: neighbors border crossing adjacent regions circuits walk cross region edge
+neighbours	neighbours	line		neighbours [on|off]\nthe circuits held to the regions around this one, which walking over a border needs\nhelp groups: region\nkeywords: neighbors border crossing adjacent regions circuits walk cross region edge sim
 neighbours:intro	neighbours	intro		Says whether this avatar holds a circuit to the regions beside the one\nit is standing in, and lists what it holds.  With `on` or `off` it\nchanges that first and then says the state it ended up in.\n\nThe circuits are what a border crossing needs.  A simulator will not\nhand an avatar over the edge of a region to a client that holds no\ncircuit to the region on the other side -- it does not refuse, it\nsimply does not do it -- so with neighbours off the avatar walks to the\nborder and stops there.  With a circuit open, the same walk is over the\nborder in a couple of seconds.
 neighbours:section:Why it is off unless somebody asks	neighbours	section	Why it is off unless somebody asks	Each neighbour costs a socket and a share of the traffic, for as long\nas it is held, and the number of them is however many regions surround\nthis one -- up to eight on the open grid.  That is a price worth paying\nfor an avatar somebody is walking about with, and a waste for one\nrunning a benchmark in a single region, which is why this is a property\nof an avatar and not of the daemon holding it.\n\nOff drops what is held rather than merely refusing the next offer.\nNothing is listed after it: one line says they are off.\n\nA word that is neither `on` nor `off` is a usage error, and the session\nis left as it was.
 neighbours:section:On, with nothing held, is the ordinary state	neighbours	section	On, with nothing held, is the ordinary state	Turning them on asks for nothing and opens nothing.  The simulator\noffers a neighbour of its own accord and repeats the offer for as long\nas it goes untaken, so the circuits arrive by themselves; the way to\nsee them is to run `neighbours` again.\n\nThey take their time, and they do not arrive together.  Measured on\nAgni on 2026-08-23, timed from turning them on: the first circuit\nopened between twenty and sixty seconds later, and more followed over\nthe minute after that -- at one position three opened together and two\nmore forty seconds behind them.  An empty listing in the first few\nseconds is the offer not having come round yet.\n\nBeing away from a border is not what empties it.  Standing in the\nexact middle of a 256-metre region, 128 metres from all four edges,\nfour circuits were held: one across each edge, and none across a\ncorner.  Twenty-eight metres in from the west edge and seventy-two\nfrom the south, the near three came first -- those two edges and the\ncorner between them -- and the far two followed.  Height does not\ndecide it: that second position was 2001 metres up, and the middle was\nmeasured both at 2001 and at ground level.\n\nThe set changes as the avatar moves, and not all at once.  A circuit\nis kept until the simulator at the other end says it has let the\navatar go, or has been silent for a hundred seconds, as a viewer keeps\none, so after a teleport the listing can still hold the regions around\nthe one left, beside the new region's own as they are offered.  That\nis what makes coming back work: measured on Agni on 2026-09-26, a\nregion returned to within about ten seconds of leaving it offered none\nof its neighbours again, and a session that had let them go came back\nholding none.  A move closes only the circuit to the region moved\ninto, which is where the avatar now stands.  At the limit of eight, a\ncircuit to a region that is not beside this one is let go to make room\nfor a new offer.
@@ -876,7 +876,7 @@ wear:example:2	wear	example	Clothing and body parts	wear Clothing/a blue shirt
 wear:section:The Current Outfit folder	wear	section	The Current Outfit folder	Everything this command does to a wearable happens in that folder, and\n`ls -L "/Current Outfit"` is how to read it: one line per worn thing,\nclothing and attachments alike, with the links followed.\n\nAttachments go in it too.  An object put on here is linked into the\nfolder, and taken out of it by `detach`, so that what is worn now is\nwhat `dress` and `slbotd` put back after the next login.  A viewer\nwrites the folder for both kinds in the same way.\n\nEvery change to the folder is followed by a request to rebake the\navatar, as a viewer makes one.  For clothing that is what makes the\nchange visible.  For an attachment it is what brings the simulator's\nown list of what is attached up to date -- the list `worn` and `dress`\ncheck against.  A rebake that fails does not undo the wearing, and is\nreported on the same line.
 wear:section:Examples	wear	section	Examples	Put a HUD on wherever it asks to go:\n\n    wear Objects/badge\n\nPut one on a named point, over whatever is there:\n\n    wear --replace --at "HUD bottom right" Objects/meter\n\nSee also: `detach`, `worn` for what is on and where, and `place` for\nputting an inventory object into the world instead of onto the avatar.
 wear:example:3	wear	example	Examples	wear --replace --at "HUD bottom right" Objects/meter
-where	where	line		where\nthe region and position this avatar is at\nhelp groups: region\nkeywords: location position coordinates current region am sitting
+where	where	line		where\nthe region and position this avatar is at\nhelp groups: region\nkeywords: location position coordinates current region sim
 where:intro	where	intro		The region, the position in it, what the avatar is sitting on if it is\nsitting on anything, and which group it is acting as.\n\n    where\n    Testville at 33, 73, 1000\n    sitting on "a bench" 45557e57-... (local 8360)\n    acting as group Example Builders (d8467e57-...)\n\nThe position is in the region's own metres, to the metre -- the same\nnumbers `tp` and `move` take, and the same numbers `place --at` takes.
 where:example:1	where	example		where
 where:section:How exact it is	where	section	How exact it is	Exact on arriving in a region and after a teleport.  While the avatar\nwalks, x and y stay good to the metre and the height is in steps of\nabout four metres.\n\nAbove 1020 metres the height stops updating.  The printed Z is then\nwhere the avatar was put -- the arrival or the last teleport -- and not\nwhere it has settled or fallen since.  `landmark --make` is the way to\nread a height up there; x and y stay good the whole time.
@@ -1418,7 +1418,7 @@ colon	783
 color	400,122,229*2,8
 colour	361,38,1*11,3*2,119*2,146,4,79
 column	12,40,15,49,57*3,1*4,22,5,9,2,98,23,2,11,1*4,5*3,1,30*2,6,9*5,98,12*3,40,99,14,48,6,13,163,4,2
-com	12,19*2,34*2,1*2,26,1,7,10,12,7,31,2,25,9,18,46,12,5,15,5,13,8,4,11,2,3,23,10,3,2,1*2,1,2,18,18,37*2,52,3,21,31,23,18,4,22,34,2*2,3*3,33,7,18,3,6*2,5,2,9,17,38,12,4,20,1,21,25,4*2,2,3,1*2
+com	12,19*2,34*2,1*2,26,1,7,10,12,7,31,2,25,9,18,46,12,5,15,5,13,8,4,11,2,3,23,10,2,1,2,1*2,1,2,18,18,37*2,52,3,21,31,23,18,4,22,34,2*2,3*3,33,7,18,3,6*2,5,2,9,17,38,12,4,20,1,21,25,4*2,2,3,1*2
 combin	301
 comfortably	402
 comma	369,175,69,175
@@ -1847,7 +1847,7 @@ infohub	297*2
 information	326,223,5
 input	588*2,78
 insert	109
-insid	44*2,1,3,61*2,1,2,1,26,21,19,91,85,67,3,17*3,7,9,7,2,2*2,20,5*2,28*2,86,14,5*2,17,12,49,1,17,1,9,51,21*2,15,1,25
+insid	44*2,1,3,61*2,1,2,1,26,21,19,91,73,12,67,3,17*3,7,9,7,2,2*2,20,5*2,28*2,86,14,5*2,17,12,49,1,17,1,9,51,21*2,15,1,25
 insist	544
 inspect	196
 install	417,1,177,16
@@ -2139,7 +2139,7 @@ outliv	52,64,85,9,210,128,99,246
 output	45,23,563,34,24,3,91
 outright	22,114,526,142
 outsid	174,173,53,387,8,1,1,1,1,52*2
-over	1,15,25,22,5*2,12,20,4,26,1,85,137,25,1,20,51,1*2,2,1*2,2,223,131,13*2,1,8,8,11*2,1,10,12
+over	1,15,25,22,5*2,12,20,4,26,1,85,137,20,5,1,20,51,1*2,2,1*2,2,223,131,13*2,1,8,8,11*2,1,10,12
 overhead	884
 overlay	522*3
 overridden	662
@@ -2285,7 +2285,7 @@ rebak	92,781*2
 rebuild	122,749
 receiv	0*2,259,11,27,210
 recent	477,359
-recently	431
+recently	343,88
 recognis	52,64,85,9,338,99
 reconnect	14,1
 reconnection	15,702
@@ -2436,12 +2436,12 @@ sign	214,93,1,1,8,120,1,108,1,50*4,1*2,1*2,62,77,29,2,15*2,1,1
 silenc	52,64,85,9,62,20*2,22,115,119,48,51,35,51,2,71,56
 silent	138,154,161
 silently	101,562,142
-sim	600
+sim	450,150,276
 simply	40,43,368,57,114,127
 simulator	25,12,1,2*2,1*2,1,58*2,3*3,1*2,2,11,26,9*3,1,2,7,50,57*2,1*2,4,17,3*2,3,8,21,1,3,1,29*2,1*3,44,14*2,32,2*2,1*4,41,30,35,115,4*2,2,1,14*2,19*2,3,1,63*2,17,7,1,40,26,21*4
 sinc	1,3*2,27,21,14,1,1,12,7,4,1,9,9,6,33,13,12,27,2,7,18,6,25,1,12,33,13,12,17,6,16,12,23,15,10,15,31,28,6,12,27,5,2,34,22,3,27,6,2,12*3,45,22,5,50,11,13,20,9*2,5,18,20,1*2,6,7*2
 singl	100,27,101,14,60,150,154,43,7,127,33,4,7*2
-sit	12,89,48,320,205*4,1*5,1,1,1,1*5,1*2,2*6,1,2*6,1,1,8,1*2,2,1*3,2*2,47,103,25,1*3,3*10,16,1
+sit	12,89,48,320,205*4,1*5,1,1,1,1*5,1*2,2*6,1,2*6,1,1,8,1*2,2,1*3,2*2,47,103,26*3,3*10,16,1
 situation	14
 six	679,19,11*2,39,18*2,87
 sixteen	396,2*2
@@ -2532,7 +2532,7 @@ stricter	684
 stroll	840
 struck	827
 styl	242
-subfolder	630
+subfolder	343,287
 subject	477,1,2,1
 subscrib	859,3
 substr	178
@@ -2698,7 +2698,7 @@ user	827
 usernam	260*2,10,62,1,220
 usual	74,218,360,229
 usually	27,13,174,3,79,106,15,84,21,3,17,69,80,63,12,28,93
-uuid	45*2,11*2,16,14,1,23*3,7,43,3,28,1,4,1*2,14,80,1*4,18,43*2,76*3,11,2*2,51,35,13,1,49,31,5,47,32,26,1*3,3,15*2,4,15,45,50,1
+uuid	45*2,11*2,16,14,1,23*3,7,43,3,28,1,4,1*2,14,80,1*4,18,22,21*2,76*3,11,2*2,51,35,13,1,49,31,5,47,32,26,1*3,3,15*2,4,15,45,50,1
 uv	770,4,10,1
 v1	242
 valid	615
