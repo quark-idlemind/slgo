@@ -1018,7 +1018,7 @@ func init() {
 		man: "source",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
-			args, done, err := subOptions(".", &flags, out, args)
+			args, done, err := subOptions(typedAs(ctx, "."), &flags, out, args)
 			if err != nil || done {
 				return err
 			}

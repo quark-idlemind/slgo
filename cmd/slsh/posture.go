@@ -172,7 +172,7 @@ func cmdSit(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 // sl.controlUntil for the sequence that measured it.
 func cmdStand(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o postureFlags
-	rest, done, err := subOptions("stand", &o, out, args)
+	rest, done, err := subOptions(typedAs(ctx, "stand"), &o, out, args)
 	if err != nil || done {
 		return err
 	}

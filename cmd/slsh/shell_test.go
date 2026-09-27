@@ -481,6 +481,13 @@ func TestQuitAndExitAreTheSameCommand(t *testing.T) {
 		!strings.Contains(got, `"man exit"`) || strings.Contains(got, "quit") {
 		t.Errorf("exit --help printed %q", got)
 	}
+	// The same for the other commands known by two names.
+	for _, c := range []struct{ typed, other string }{{"unsit", "stand"}, {"source", "."}} {
+		if got := x.do(t, c.typed+" --help"); !strings.Contains(got, "Usage: "+c.typed) ||
+			strings.Contains(got, "Usage: "+c.other+" ") {
+			t.Errorf("%s --help printed %q", c.typed, got)
+		}
+	}
 	select {
 	case <-x.quit:
 		t.Error("--help should not have left the shell")
