@@ -394,7 +394,6 @@ func throwAway(ctx context.Context, s *sl.Session, obj *sl.Object) error {
 func sayWhenDropped(s *sl.Session) {
 	type dropper interface {
 		OnDrop(func(what string))
-		Dropped() uint64
 	}
 	d, ok := s.Backend().(dropper)
 	if !ok {

@@ -1134,14 +1134,14 @@ not confirm within ten seconds: it may still be standing.
 
 | | |
 |---|---|
-| `--object NAME` | run in this object instead of the shared `auto` one |
+| `--object NAME` | run in this object instead of the shared `auto` objects |
 | `--rez` | rez a throwaway prim for this run, and do not queue |
 | `--keep` | leave a rezzed prim behind |
 | `--done TEXT` | the text that means "finished" (default `DONE`); matched as a substring |
 | `--timeout DUR` | how long to wait for it (default `1m0s`); a bare number is refused -- the unit is required |
 | `--script NAME` | what to call the script inside the object (default `slrun`, which is the name a fault is reported under) |
 | `--jobs N`, `-j N` | how many scripts to run at once, one per object; four by default, `1` runs them in the order they were named |
-| `--clear` | empty every script out of the objects before running |
+| `--clear` | empty the scripts out of the objects the daemon says were not left clean, before running |
 | `-v` | put the script name in front of every line, even with one script |
 | `-vv` | and say which avatars the objects came from, when `--agent` did not |
 | `--agent NAME`, `-a` | which avatar; the daemon's default otherwise |
