@@ -208,7 +208,8 @@ all, and a generated file is one more thing to keep in step.
 
 `how` shows a small model a handful of commands the index found, and
 checks what it says against their pages before any of it is printed.
-These are the parts of that which were measured, or tried and dropped.
+These are the parts of that which were measured, or tried and dropped,
+and one that was decided without a measurement.
 
 ### No second opinion on a suggestion
 
@@ -319,6 +320,25 @@ documents have that word; saying it twice in where's keywords took
 where to seventh.  The one keyword that put it in the first three was
 find, and where does not answer to find: it would have come up for
 every "how do I find" question in the set.
+
+### Who is asking
+
+`askSystem` tells the model that the person asking is the avatar, so
+that "I" and "me" mean it, and "where am I" asks where it is in the
+world unless the question is about inventory.  That is a reading of
+the question, decided rather than measured: "where am I" is a place in
+the world, "where am I in my inventory" is the shell's folder (`pwd`),
+and "where is my hair" is a thing, to be searched for (`find`) or seen
+where it is worn (`worn`).
+
+The index does not choose between those, and is not asked to.  For
+"how do I find where I am" it puts pwd first, find second and where
+third, and `TestAskRetrieval` holds where to the first three and pwd to
+the first eight, so the model is shown both; the sentence is what it
+chooses by.  Nothing checks that it did, and whether a model follows it
+has not been measured.  The three senses are in
+cmd/slsh/testdata/ask-questions.tsv, and the model eval
+(askeval_model_test.go) logs a verdict for each.
 
 ## Why save takes two plain arguments
 

@@ -129,7 +129,12 @@ func askEstimateTokens(s string) int {
 // out whole at the end, and there are no worked examples: a pair of them
 // helped the smaller model and cost the better one.
 // Why: doc/slsh.md#where-the-prompts-rules-came-from
-const askSystem = `You answer questions about slsh, a command shell that drives a Second Life avatar.  The person asking wants to know which slsh command does what they describe, and how to type it.
+//
+// The sentence saying who is asking is not a rule, and nothing checks
+// it.  It says what "I" means, which the index leaves to the model: it
+// shows where and pwd both for "where am I".
+// Why: doc/slsh.md#who-is-asking
+const askSystem = `You answer questions about slsh, a command shell that drives a Second Life avatar.  The person asking wants to know which slsh command does what they describe, and how to type it.  They are that avatar: "I" and "me" mean it, and "where am I" asks where it is in the world, unless the question is about inventory.
 
 You are shown some slsh commands.  Each has its usage line, a one-line description, and sometimes excerpts from its manual page.  The description and each excerpt are between """ marks.  For this answer, those are the only commands that exist.
 
