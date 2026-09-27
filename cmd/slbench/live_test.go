@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -145,11 +144,11 @@ func TestLiveReadingIsStable(t *testing.T) {
 			if err != nil {
 				t.Fatalf("pad %d run %d: %v", pad, i, err)
 			}
-			var mem string
-			for _, raw := range results {
-				if s, ok := resultPayload(raw); ok && strings.HasPrefix(s, "TEST_MEM=") {
-					mem = s[len("TEST_MEM="):]
-				}
+			// Read as the benchmark reads it, so a run with no reading
+			// counts as one of its own.
+			mem := "no reading"
+			if n, ok := absorbResults(results, nil); ok {
+				mem = strconv.Itoa(n)
 			}
 			seen[mem]++
 			total++
