@@ -155,8 +155,8 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	if e.Folder {
 		return fmt.Errorf("%s is a folder; place takes one object", args[0])
 	}
-	// The item and not the entry: RezFromInventory sends every field of
-	// the item, its group among them, and an entry has no group.
+	// The item as its folder holds it now: RezFromInventory sends every
+	// field of it, its group among them, as the item's own.
 	it, err := sh.itemAt(ctx, e)
 	if err != nil {
 		return err
