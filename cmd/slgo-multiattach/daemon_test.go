@@ -25,8 +25,7 @@ package main
 // three.
 //
 // What cannot be reached is every log.Fatal in the file: they call
-// os.Exit and would take the test binary with them.  They are listed in
-// coverage-notes/last-commands.md instead.
+// os.Exit and would take the test binary with them.
 
 import (
 	"context"

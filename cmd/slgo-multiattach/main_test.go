@@ -6,8 +6,7 @@ package main
 // What the program does is one straight line: attach a second object to a
 // point that already holds one, and count what is there afterwards.  The
 // line itself needs a daemon to dial, an inventory to copy an item in and
-// an avatar to wear it, and none of those can be stood in for here --
-// which is said in coverage-notes/commands.md rather than worked around.
+// an avatar to wear it, and none of those can be stood in for here.
 //
 // What CAN be reached is the two functions that line is built out of:
 // where a taken object lands, and what is on one attachment point.  Both

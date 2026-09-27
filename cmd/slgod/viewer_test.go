@@ -158,7 +158,7 @@ func TestAnExpiredPasswordIsNotOffered(t *testing.T) {
 	if _, _, err := v.Mint("example"); err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
-	// Wound back rather than waited out: a test that slept a minute
+	// Wound back rather than waited out: a test that slept five minutes
 	// would be a test nobody runs.
 	v.credMu.Lock()
 	v.creds["example"].expiry = time.Now().Add(-time.Second)
@@ -198,9 +198,9 @@ func TestAProfileWithNoViewerPasswordCannotBeMintedFor(t *testing.T) {
 }
 
 // TestAMintedPasswordIsNeverLogged: it reaches a viewer's argv, which
-// is bad enough; a copy in the daemon's log would outlive the minute
-// that makes the first acceptable, and slgod's log is written to a
-// terminal somebody may be sharing.
+// is bad enough; a copy in the daemon's log would outlive the five
+// minutes it is good for, and slgod's log is written to a terminal
+// somebody may be sharing.
 func TestAMintedPasswordIsNeverLogged(t *testing.T) {
 	v, said := mintingHost(t, "$1$00157e577e57c0de028f000000000000")
 
@@ -398,7 +398,8 @@ func servedSeed(t *testing.T, seed string) (*server.Server, *viewerHost, string,
 // inventory, its textures and its uploads from somewhere else.  The
 // agent is asked instead, because the agent is the only thing that
 // knows: every region after the first names its seed inside a
-// TeleportFinish that nothing above that package reads.
+// TeleportFinish or a CrossedRegion that nothing above that package
+// reads.
 //
 // The divergence is made the other way round here, because a session
 // with a fake simulator has no event queue and so cannot be teleported
