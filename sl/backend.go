@@ -65,16 +65,10 @@ type Info struct {
 
 	// Region is where the avatar was when this was last read, which is
 	// at attach and again whenever the session is told the avatar has
-	// moved.
-	//
-	// It used to say here that it was the attach-time region and was
-	// never revised, and that a field which quietly changed under a
-	// caller would be worse than one that plainly does not.  The
-	// argument was sound and the conclusion was not: SessionID is in
-	// this struct too, and a SessionID that plainly does not change is
-	// a session that plainly cannot send (issue 009).  So the whole
-	// struct is replaced on a region change rather than edited, and
-	// Info hands back the current one.
+	// moved.  The whole struct is replaced then rather than edited,
+	// since SessionID may have changed with it, and Info hands back the
+	// current one.
+	// Why: doc/identity.md#a-session-id-that-plainly-cannot-send
 	//
 	// It is still a snapshot and not a subscription.  An avatar that
 	// teleported a moment ago may not have been asked about yet, so
@@ -127,14 +121,11 @@ type Backend interface {
 	// Info is who this session is: the avatar, the session, the
 	// capability URLs.
 	//
-	// It DOES change.  It used to say here that it did not, and that
-	// was the whole of issue 009: a daemon may re-establish the grid
-	// session under an attached client -- same avatar, new session id,
-	// new circuit code, new capabilities -- and a client that goes on
-	// sending the old session id is sending into nothing.  The
-	// simulator discards it in silence; there is no error and no
-	// notice, and receiving carries on working, which is what made it
-	// take fourteen hours to notice.
+	// It DOES change.  A daemon may re-establish the grid session under
+	// an attached client -- same avatar, new session id, new circuit
+	// code, new capabilities -- and the simulator discards the old
+	// session id in silence, while receiving carries on working.
+	// Why: doc/identity.md#a-session-id-that-plainly-cannot-send
 	Info() *Info
 
 	// Refresh asks again and hands back what is true now: the region
