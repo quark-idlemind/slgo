@@ -97,13 +97,19 @@ type compressedObject struct {
 	parent   *uint32
 	text     string
 	texture  []byte
+
+	// state is the State byte, and nameValues the name-values, which
+	// together say what a worn object is worn from and where.
+	state      uint8
+	nameValues string
 }
 
 // Flags from the viewer's llviewerobject.h, repeated here so the bytes
 // are not laid out from the same constants that read them.
 const (
-	hasText   = 0x04
-	hasParent = 0x20
+	hasText       = 0x04
+	hasParent     = 0x20
+	hasNameValues = 0x100
 )
 
 func (c compressedObject) bytes() []byte {
@@ -114,12 +120,15 @@ func (c compressedObject) bytes() []byte {
 	if c.text != "" {
 		flags |= hasText
 	}
+	if c.nameValues != "" {
+		flags |= hasNameValues
+	}
 
 	w := &blob{}
 	w.uuid(c.id)
 	w.u32(c.local)
 	w.u8(c.pcode)
-	w.u8(0)           // State
+	w.u8(c.state)
 	w.u32(0xdeadbeef) // CRC
 	w.u8(3)           // Material
 	w.u8(0)           // ClickAction
@@ -140,6 +149,9 @@ func (c compressedObject) bytes() []byte {
 		w.u8(0)
 	}
 	w.u8(0) // no extra parameters
+	if c.nameValues != "" {
+		w.cstr(c.nameValues)
+	}
 
 	// The shape: eighteen fields whose widths are as easy to get wrong
 	// as anything optional, and everything after them moves if they are.
@@ -400,6 +412,42 @@ func TestAWornObjectRemembersTheItemItCameFrom(t *testing.T) {
 
 	worn := a.Objects().Attachments()
 	if len(worn) != 1 || worn[0].ID != aPrim {
+		t.Errorf("Attachments = %v", worn)
+	}
+}
+
+// TestACompressedUpdateSaysWhatIsWornToo: the name-values, and the
+// AttachItemID among them, come in a compressed update as well as a full
+// one, and the viewer reads them from both (llviewerobject.cpp:1466-1470
+// and 1955-1961).
+func TestACompressedUpdateSaysWhatIsWornToo(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	a.SetLook(Look{Far: 128})
+
+	wearer := uint32(10)
+	m := &msg.ObjectUpdateCompressed{}
+	m.ObjectData = []msg.ObjectUpdateCompressed_ObjectData{{
+		Data: compressedObject{
+			id: aPrim, local: 11, pcode: 9, parent: &wearer,
+			state:      0x32, // point 35, with its nibbles swapped
+			nameValues: "AttachItemID STRING RW SV " + anItem.String() + "\n",
+		}.bytes(),
+	}}
+	feed(t, a, m)
+
+	got, ok := a.Objects().Get(aPrim)
+	if !ok {
+		t.Fatal("not remembered")
+	}
+	if got.AttachItem != anItem {
+		t.Errorf("item = %v, want %v", got.AttachItem, anItem)
+	}
+	if got.AttachPoint != 35 {
+		t.Errorf("attach point = %d, want 35", got.AttachPoint)
+	}
+	if worn := a.Objects().Attachments(); len(worn) != 1 || worn[0].ID != aPrim {
 		t.Errorf("Attachments = %v", worn)
 	}
 }

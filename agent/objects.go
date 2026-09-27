@@ -74,8 +74,9 @@ type Object struct {
 	// itself is rezzed afresh -- with a new id -- every time it is put
 	// on, and again every time the avatar logs in, so anything that
 	// wants to find the same attachment twice has to look for the item
-	// it came from.  Both are read from the ObjectUpdate that describes
-	// an attachment, which is sent when it goes on and again at login;
+	// it came from.  Both are read from the update, full or compressed,
+	// that describes an attachment, which is sent when it goes on and
+	// again at login;
 	// a program that connected afterwards never heard it, which is why
 	// it is worth remembering here.
 	AttachPoint int
@@ -571,6 +572,13 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	// Every update says what the text is now, and one without any has
 	// none: the viewer clears it (llviewerobject.cpp:1865-1895).
 	v.Text = c.Text
+	// Name-values come this way too, and the viewer reads them from
+	// either kind of update (llviewerobject.cpp:1466-1470 and
+	// 1955-1961), so an AttachItemID here says this is worn as it does
+	// in a full one.
+	if item, ok := attachItem([]byte(c.NameValues)); ok {
+		v.AttachItem, v.AttachPoint = item, attachPoint(c.State)
+	}
 }
 
 // judgedLocked records what an update's range check found: in range
