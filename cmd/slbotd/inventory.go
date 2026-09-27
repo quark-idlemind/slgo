@@ -665,9 +665,11 @@ func folderAt(ctx context.Context, s *sl.Session, path string) (msg.UUID, error)
 // A listing and an item are the same thing said twice: an Entry is what
 // AIS listed and an Item is what a message carries, and the fields that
 // matter to a rez or a wear -- the permissions, the flags, the folder
-// -- are in both.  Filled out in full rather than in part because a rez
-// sends every one of them and an item that lost its masks on the way
-// through would be rezzed with permissions nobody asked for.
+// -- are in both.  Every field an Entry carries is copied, because a rez
+// or a wear sends them all as the item's own: an item that lost its
+// masks on the way through would be rezzed with permissions nobody
+// asked for.  The group is the one field of an Item that an Entry does
+// not carry, and goes as zero.
 func itemOf(e sl.Entry) *sl.Item {
 	return &sl.Item{
 		ID:            e.ID,
@@ -677,6 +679,7 @@ func itemOf(e sl.Entry) *sl.Item {
 		Desc:          e.Desc,
 		Type:          e.Type,
 		InvType:       e.InvType,
+		Flags:         e.Flags,
 		Created:       e.Created,
 		CreatorID:     e.Creator,
 		OwnerID:       e.Owner,

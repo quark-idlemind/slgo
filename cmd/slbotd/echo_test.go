@@ -44,7 +44,7 @@ func TestAnAvatarDoesNotAnswerItself(t *testing.T) {
 	// A conversation already under way, so nothing is skipped for want
 	// of one.
 	store := d.chat.Store()
-	conv := store.Load("example", testSender, "Trusted Resident")
+	conv := loaded(t, store, "example", testSender, "Trusted Resident")
 	conv.Add("user", "evening", time.Now())
 	conv.Add("assistant", "evening yourself", time.Now())
 	if err := store.Save(conv); err != nil {
@@ -85,7 +85,7 @@ func TestWhatWasSaidElsewhereIsRemembered(t *testing.T) {
 	defer serving(t, b)()
 
 	store := d.chat.Store()
-	conv := store.Load("example", testSender, "Trusted Resident")
+	conv := loaded(t, store, "example", testSender, "Trusted Resident")
 	conv.Add("user", "can you hold three coils?", time.Now())
 	conv.Add("assistant", "aye", time.Now())
 	if err := store.Save(conv); err != nil {
@@ -138,7 +138,7 @@ func TestOnlyConversationIsRememberedFromElsewhere(t *testing.T) {
 	defer serving(t, b)()
 
 	store := d.chat.Store()
-	conv := store.Load("example", testSender, "Trusted Resident")
+	conv := loaded(t, store, "example", testSender, "Trusted Resident")
 	conv.Add("user", "evening", time.Now())
 	conv.Add("assistant", "evening", time.Now())
 	if err := store.Save(conv); err != nil {
@@ -166,7 +166,7 @@ func TestARemarkFromElsewhereIsNotLostToAReplyInFlight(t *testing.T) {
 	withChat(t, d, f, Anyone)
 
 	store := d.chat.Store()
-	conv := store.Load("example", testSender, "Trusted Resident")
+	conv := loaded(t, store, "example", testSender, "Trusted Resident")
 	conv.Add("user", "evening", time.Now())
 	conv.Add("assistant", "evening", time.Now())
 	if err := store.Save(conv); err != nil {

@@ -74,7 +74,7 @@ func TestThePauseIsSentButNotRemembered(t *testing.T) {
 	d.cfg.ChatGap = time.Hour
 	d.chat.cfg = d.cfg
 
-	conv := d.chat.Store().Load("example", someone, someoneName)
+	conv := loaded(t, d.chat.Store(), "example", someone, someoneName)
 	conv.Add("user", "Is the north berth free?", time.Now().Add(-3*24*time.Hour))
 	conv.Add("assistant", "It is, for now.", time.Now().Add(-3*24*time.Hour))
 	if err := d.chat.Store().Save(conv); err != nil {
@@ -97,7 +97,7 @@ func TestThePauseIsSentButNotRemembered(t *testing.T) {
 	}
 
 	// And the record is clean.
-	again := d.chat.Store().Load("example", someone, someoneName)
+	again := loaded(t, d.chat.Store(), "example", someone, someoneName)
 	for _, turn := range again.Turns {
 		if strings.Contains(turn.Text, "It has been") {
 			t.Errorf("the hint was stored as something said: %q", turn.Text)
@@ -116,7 +116,7 @@ func TestAShortPauseSaysNothing(t *testing.T) {
 	d.cfg.ChatGap = time.Hour
 	d.chat.cfg = d.cfg
 
-	conv := d.chat.Store().Load("example", someone, someoneName)
+	conv := loaded(t, d.chat.Store(), "example", someone, someoneName)
 	conv.Add("user", "still here?", time.Now().Add(-2*time.Minute))
 	conv.Add("assistant", "aye", time.Now().Add(-2*time.Minute))
 	if err := d.chat.Store().Save(conv); err != nil {

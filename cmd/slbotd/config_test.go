@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -237,9 +239,26 @@ func TestAReadableDirectoryIsRefused(t *testing.T) {
 // on one would hold nobody and trust nobody, and would look exactly
 // like one that was working.
 func TestAMissingFileIsAnError(t *testing.T) {
-	_, err := LoadConfig(filepath.Join(t.TempDir(), "not-there.conf"))
+	// A private directory, so that what is refused is the file's being
+	// missing and not the directory's mode.
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadConfig(filepath.Join(dir, "not-there.conf"))
 	if err == nil {
 		t.Fatal("a missing configuration was accepted")
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("err = %q, want the file's being missing", err)
+	}
+	// And it says where to find out what goes in one, which is not the
+	// file that is missing.
+	if !strings.Contains(err.Error(), "doc/guide.md") {
+		t.Errorf("err = %q, want it to say where the documentation is", err)
+	}
+	if strings.Contains(err.Error(), "see "+ConfigName) {
+		t.Errorf("err = %q sends the reader to the file that is not there", err)
 	}
 }
 

@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -93,6 +96,136 @@ func TestAConversationInsideItsBudgetIsLeftAlone(t *testing.T) {
 
 // ------------------------------------------------------------- the store
 
+// loaded is Store.Load for a test that expects nothing to be set aside.
+func loaded(t *testing.T, store *Store, avatar string, with msg.UUID, name string) *Conversation {
+	t.Helper()
+	c, err := store.Load(avatar, with, name)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	return c
+}
+
+// A conversation file that will not parse is kept, beside where it was
+// and under a name that says so, with the mode it had, and the
+// conversation begins again; the error says where it went.
+func TestAnUnparsableConversationIsSetAsideAndBegunAgain(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	who := msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
+	path := store.path("example", who.String())
+	if err := writeFile(path, "not json at all"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := store.Load("example", who, "Somebody Else")
+	if c == nil || len(c.Turns) != 0 || c.WithName != "Somebody Else" {
+		t.Fatalf("came back as %+v, want an empty conversation", c)
+	}
+	if err == nil || !strings.Contains(err.Error(), "would not parse") {
+		t.Fatalf("err = %v, want one saying the file would not parse", err)
+	}
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("the unparsable file is still where it was: %v", err)
+	}
+	aside, _ := filepath.Glob(path + ".unreadable-*")
+	if len(aside) != 1 {
+		t.Fatalf("set aside as %v, want one file", aside)
+	}
+	if !strings.Contains(err.Error(), aside[0]) {
+		t.Errorf("the error does not say where it went: %v", err)
+	}
+	if b, _ := os.ReadFile(aside[0]); string(b) != "not json at all" {
+		t.Errorf("what was kept reads %q", b)
+	}
+	if fi, err := os.Stat(aside[0]); err != nil || fi.Mode().Perm() != 0o640 {
+		t.Errorf("kept with mode %v (%v), want 0640", fi.Mode().Perm(), err)
+	}
+	// A conversation begun again is an ordinary one from then on.
+	if again, err := store.Load("example", who, ""); err != nil || len(again.Turns) != 0 {
+		t.Errorf("the next load: %+v, %v", again, err)
+	}
+	// And the listing is of conversations, not of what was set aside.
+	if got := store.List("example"); len(got) != 0 {
+		t.Errorf("listed %d conversations", len(got))
+	}
+}
+
+// Setting aside never writes over a file already set aside, even one
+// from the same second.
+func TestSettingAsideTwiceInOneSecondKeepsBoth(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.json")
+	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
+	var got []string
+	for _, text := range []string{"first", "second"} {
+		if err := writeFile(path, text); err != nil {
+			t.Fatal(err)
+		}
+		aside, err := setAside(path, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, aside)
+	}
+	if got[0] == got[1] {
+		t.Fatalf("both set aside as %s", got[0])
+	}
+	for i, want := range []string{"first", "second"} {
+		if b, _ := os.ReadFile(got[i]); string(b) != want {
+			t.Errorf("%s reads %q, want %q", got[i], b, want)
+		}
+	}
+	if want := path + ".unreadable-20260926T120000Z"; got[0] != want {
+		t.Errorf("set aside as %s, want %s", got[0], want)
+	}
+}
+
+// The daemon side: a conversation set aside is logged, and kept among
+// the avatar's troubles, rather than dropped without a word.
+func TestAConversationSetAsideIsLogged(t *testing.T) {
+	d, _, _ := newTestDaemon(t)
+	f := newFakeLLM(t)
+	withChat(t, d, f, Anyone)
+	var logged []string
+	var mu sync.Mutex
+	d.chat.logf = func(format string, args ...any) {
+		mu.Lock()
+		defer mu.Unlock()
+		logged = append(logged, fmt.Sprintf(format, args...))
+	}
+
+	var troubles []string
+	d.chat.troubled = func(avatar, text string) {
+		mu.Lock()
+		defer mu.Unlock()
+		troubles = append(troubles, avatar+": "+text)
+	}
+
+	store := d.chat.Store()
+	if err := writeFile(store.path("example", testSender.String()), "{"); err != nil {
+		t.Fatal(err)
+	}
+	d.chat.Remember("example", testSender, "Trusted Resident", "hello")
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(logged) != 1 || !strings.Contains(logged[0], "would not parse") ||
+		!strings.Contains(logged[0], ".unreadable-") {
+		t.Errorf("logged %q, want the file set aside named", logged)
+	}
+	if len(troubles) != 1 || !strings.HasPrefix(troubles[0], "example: ") {
+		t.Errorf("troubles %q, want the one", troubles)
+	}
+}
+
 func TestAConversationSurvivesBeingWrittenDown(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
@@ -100,7 +233,7 @@ func TestAConversationSurvivesBeingWrittenDown(t *testing.T) {
 	}
 	who := msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
 
-	c := store.Load("example", who, "Somebody Else")
+	c := loaded(t, store, "example", who, "Somebody Else")
 	if len(c.Turns) != 0 {
 		t.Fatal("a conversation that never happened came back with turns in it")
 	}
@@ -111,7 +244,7 @@ func TestAConversationSurvivesBeingWrittenDown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	back := store.Load("example", who, "")
+	back := loaded(t, store, "example", who, "")
 	if len(back.Turns) != 2 || back.Turns[1].Text != "evening" {
 		t.Errorf("came back as %+v", back.Turns)
 	}
@@ -120,7 +253,7 @@ func TestAConversationSurvivesBeingWrittenDown(t *testing.T) {
 	}
 	// The name is refreshed from what the message carried, since people
 	// rename themselves and the record should not go stale.
-	if again := store.Load("example", who, "New Name"); again.WithName != "New Name" {
+	if again := loaded(t, store, "example", who, "New Name"); again.WithName != "New Name" {
 		t.Errorf("WithName = %q", again.WithName)
 	}
 }
@@ -134,7 +267,7 @@ func TestAnUnreadableConversationIsSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 	good := msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
-	c := store.Load("example", good, "Somebody Else")
+	c := loaded(t, store, "example", good, "Somebody Else")
 	c.Add("user", "hello", time.Now())
 	if err := store.Save(c); err != nil {
 		t.Fatal(err)
@@ -153,7 +286,7 @@ func TestForgettingRemovesTheConversation(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
 	who := msg.MustParseUUID("19d17e57-7e57-c0de-11be-a4325a5080a2")
-	c := store.Load("example", who, "Somebody Else")
+	c := loaded(t, store, "example", who, "Somebody Else")
 	c.Add("user", "hello", time.Now())
 	if err := store.Save(c); err != nil {
 		t.Fatal(err)

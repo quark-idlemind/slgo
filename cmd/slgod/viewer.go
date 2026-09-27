@@ -194,6 +194,37 @@ func (v *viewerHost) relayFor(profile string) func(*msg.Packet) {
 	}
 }
 
+// hasCircuit reports whether a viewer circuit has been opened for this
+// profile.  A nil host has none.
+func (v *viewerHost) hasCircuit(profile string) bool {
+	if v == nil {
+		return false
+	}
+	_, ok := v.circuits.Load(profile)
+	return ok
+}
+
+// simTap records, for -trace, each packet the simulator sends a session,
+// once.
+//
+// A session with a viewer circuit has each message recorded by the
+// circuit, which is offered it by the relay and records what became of
+// it -- forwarded, absorbed, dropped, or held for a viewer not yet
+// joined.  So the tap records only for a session without one, where
+// nothing is forwarded: from the tap, the wire as it really was,
+// retransmissions included, since the tap runs ahead of duplicate
+// suppression.  With a circuit the retransmissions go unrecorded, as the
+// relay never sees them.
+func simTap(profile string, v *viewerHost, census *viewer.Census, trace *viewer.Trace) msg.Handler {
+	return func(p *msg.Packet) {
+		if v.hasCircuit(profile) {
+			return
+		}
+		census.Record(viewer.MessageName(p), viewer.FromSim, p.At, viewer.NoViewer)
+		trace.Write(viewer.FromSim, p, viewer.NoViewer)
+	}
+}
+
 // serve starts the login endpoint and returns a function that stops it.
 //
 // It is TLS or it does not run.  There used to be a plain HTTP path

@@ -63,7 +63,8 @@ type Object struct {
 	// update for plenty of objects that never get a compressed one.
 	TextureEntry []byte
 
-	// Text is the floating text above the object, when it has any.
+	// Text is the floating text above the object, when it has any, as
+	// the last compressed update said it.
 	Text string
 
 	// AttachPoint is where a worn object is attached, and zero when it
@@ -527,8 +528,8 @@ func (o *Objects) Attachments() []*Object {
 
 // compressed records what a compressed update said.
 //
-// It carries things a full update does not -- the owner, the floating
-// text -- so this fills in what nothing else would.
+// The owner and the floating text are taken from here and nowhere else:
+// update reads neither out of a full one.
 func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance float32) {
 	parent := uint32(0)
 	if c.ParentID != nil {
@@ -560,9 +561,9 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	if len(c.TextureEntry) > 0 {
 		v.TextureEntry = c.TextureEntry
 	}
-	if c.Text != "" {
-		v.Text = c.Text
-	}
+	// Every update says what the text is now, and one without any has
+	// none: the viewer clears it (llviewerobject.cpp:1865-1895).
+	v.Text = c.Text
 }
 
 // judgedLocked records what an update's range check found: in range

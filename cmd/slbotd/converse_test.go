@@ -186,7 +186,7 @@ func TestAnUnloadableContextStillAnswers(t *testing.T) {
 	// A conversation that already has a state file recorded, as one
 	// would after a restart.
 	store := d.chat.Store()
-	conv := store.Load("example", testSender, "Trusted Resident")
+	conv := loaded(t, store, "example", testSender, "Trusted Resident")
 	conv.Add("user", "hello", time.Now())
 	conv.Add("assistant", "evening", time.Now())
 	props, err := d.chat.Model(t.Context())
@@ -216,7 +216,7 @@ func TestAStaleFingerprintIsNotRestored(t *testing.T) {
 	withChat(t, d, f, Anyone)
 
 	store := d.chat.Store()
-	conv := store.Load("example", testSender, "Trusted Resident")
+	conv := loaded(t, store, "example", testSender, "Trusted Resident")
 	conv.Add("user", "hello", time.Now())
 	conv.Add("assistant", "evening", time.Now())
 	conv.State, conv.By = conv.stateName(), "a fingerprint from another model"

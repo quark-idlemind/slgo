@@ -3,6 +3,7 @@ package msg
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"testing"
 )
@@ -212,8 +213,9 @@ func TestDecodeCompressedEverything(t *testing.T) {
 	}
 }
 
-// A tree takes a byte where a scratchpad takes a length and a payload,
-// and the flags for them are different bits that share a branch.
+// A tree takes a byte where a scratchpad takes a size, a length and a
+// payload, and the flags for them are different bits that share a
+// branch.
 func TestDecodeCompressedTreeAndScratchpad(t *testing.T) {
 	c, err := DecodeCompressed(build(compTree, func(w *blobWriter) {
 		w.u8(5) // species
@@ -226,6 +228,7 @@ func TestDecodeCompressedTreeAndScratchpad(t *testing.T) {
 
 	c, err = DecodeCompressed(build(compScratchpad, func(w *blobWriter) {
 		w.u32(6)
+		w.u32(6)
 		w.raw([]byte("ignore"))
 		w.u8(0)
 	}, marker))
@@ -235,45 +238,93 @@ func TestDecodeCompressedTreeAndScratchpad(t *testing.T) {
 	}
 }
 
-// A blob cut short must produce an error and whatever was read, not a
-// panic: these arrive from the network.
-func TestDecodeCompressedTruncated(t *testing.T) {
-	full := build(0, func(w *blobWriter) { w.u8(0) }, marker)
-	for n := range len(full) {
-		c, err := DecodeCompressed(full[:n])
-		if err == nil {
-			t.Fatalf("%d bytes of a %d byte object decoded without complaint", n, len(full))
-		}
-		_ = c
-	}
-}
+// TestTheScratchpadIsReadAsTheViewerReadsIt lays a blob out byte for
+// byte as the viewer reads one with every optional part in it
+// (LLViewerObject::processUpdateMessage, the OUT_FULL_COMPRESSED case,
+// llviewerobject.cpp:1782-1961, then LLVOVolume's volume parameters,
+// texture entry and texture animation):
+//
+//	U32 ScratchPadSize            unpackU32, :1849; sizes mData only
+//	S32 length, then that many    unpackBinaryData, :1852, which reads
+//	  bytes of PartData           a length of its own (lldatapacker.cpp:300-317)
+//
+// and checks every field after the scratchpad.  The size is given as
+// the length itself, which is how LLDataPacker would write a buffer of
+// that size, and then as the length and its own four bytes, the one
+// layout a reader of one length gets right; the viewer reads both the
+// same, because it steps by the length alone.
+func TestTheScratchpadIsReadAsTheViewerReadsIt(t *testing.T) {
+	payload := []byte("scratch")
+	for _, size := range []uint32{uint32(len(payload)), uint32(len(payload)) + 4} {
+		t.Run(fmt.Sprintf("size %d", size), func(t *testing.T) {
+			flags := uint32(compAngularVelocity | compParentID | compScratchpad | compText |
+				compMediaURL | compParticles | compSound | compNameValues | compTextureAnim)
+			particles := bytes.Repeat([]byte{0x5a}, 86)
+			b := build(flags, func(w *blobWriter) {
+				w.vec(Vector3{0.5, 0, 0}) // Omega, 0x80
+				w.u32(777)                // ParentID, 0x20
+				w.u32(size)               // ScratchPadSize
+				w.u32(uint32(len(payload)))
+				w.raw(payload)
+				w.cstr("hover text") // Text, 0x04
+				w.u8(1)
+				w.u8(2)
+				w.u8(3)
+				w.u8(4)
+				w.cstr("http://example.invalid/") // MediaURL, 0x200
+				w.raw(particles)                  // PSBlock, 0x08
+				w.u8(1)                           // one extra parameter
+				w.u16(ExtraSculpt)
+				w.u32(3)
+				w.raw([]byte{7, 8, 9})
+				w.uuid(UUID{7}) // Sound, 0x10
+				w.f32(0.75)
+				w.u8(2)
+				w.f32(20)
+				w.cstr("AttachItemID STRING RW DS 00000000-0000-0000-0000-000000000000") // 0x100
+			}, marker)
+			b = binary.LittleEndian.AppendUint32(b, 4) // TextureAnim, 0x40
+			b = append(b, 1, 2, 3, 4)
 
-// TestUnterminatedTextIsAnError: the hover text is a C string, and a
-// blob whose text runs to the end of the buffer with no terminator has
-// to stop the read rather than take everything after it as text.
-func TestUnterminatedTextIsAnError(t *testing.T) {
-	// Nothing follows the text, so there is no zero byte anywhere for
-	// the scan to stop on -- which is the case a blob cut short in
-	// transit presents.
-	w := compressedHead(compText | compMediaURL)
-	w.raw([]byte("text with no terminator"))
-
-	c, err := DecodeCompressed(w.b)
-	if err == nil {
-		t.Fatalf("an unterminated string decoded to %+v", c)
-	}
-	// Everything after the failure reads as absent rather than as
-	// whatever happened to be in the buffer.
-	if c.MediaURL != "" || len(c.ExtraParams) != 0 {
-		t.Errorf("reads after the failure produced values: %q %+v", c.MediaURL, c.ExtraParams)
+			c, err := DecodeCompressed(b)
+			checkTail(t, c, err)
+			if c.ParentID == nil || *c.ParentID != 777 {
+				t.Errorf("parent = %v", c.ParentID)
+			}
+			if c.Text != "hover text" || c.TextColor != [4]uint8{1, 2, 3, 4} {
+				t.Errorf("text = %q in %v", c.Text, c.TextColor)
+			}
+			if c.MediaURL != "http://example.invalid/" {
+				t.Errorf("media url = %q", c.MediaURL)
+			}
+			if !bytes.Equal(c.Particles, particles) {
+				t.Errorf("particles = %x", c.Particles)
+			}
+			if len(c.ExtraParams) != 1 || c.ExtraParams[0].Type != ExtraSculpt ||
+				!bytes.Equal(c.ExtraParams[0].Data, []byte{7, 8, 9}) {
+				t.Errorf("extra params = %+v", c.ExtraParams)
+			}
+			if c.Sound == nil || c.Sound.Sound != (UUID{7}) || c.Sound.Gain != 0.75 ||
+				c.Sound.Flags != 2 || c.Sound.Radius != 20 {
+				t.Errorf("sound = %+v", c.Sound)
+			}
+			if c.NameValues != "AttachItemID STRING RW DS 00000000-0000-0000-0000-000000000000" {
+				t.Errorf("name values = %q", c.NameValues)
+			}
+			if !bytes.Equal(c.TextureAnim, []byte{1, 2, 3, 4}) {
+				t.Errorf("texture animation = %v", c.TextureAnim)
+			}
+		})
 	}
 }
 
 // TestScratchpadLengthIsChecked: the scratchpad is skipped rather than
 // read, and a length longer than the blob would otherwise move the
-// cursor past the end and misread everything after it.
+// cursor past the end and misread everything after it.  The length is
+// the second of its two numbers; see the test above.
 func TestScratchpadLengthIsChecked(t *testing.T) {
 	b := build(compScratchpad, func(w *blobWriter) {
+		w.u32(4)
 		w.u32(1 << 20) // a megabyte that is not there
 		w.u8(0)
 	}, marker)

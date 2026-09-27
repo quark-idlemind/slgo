@@ -144,29 +144,26 @@ func cmdTP(ctx context.Context, r *req, out io.Writer, args []string) error {
 // teleportTarget reads a region name and a position out of what was
 // typed.  Either may be missing; a position with no region is a move
 // inside this one, and a region with no position is the middle of it,
-// which is what a viewer's map does.
+// which is what a viewer's map does.  A position typed is always a
+// target, the middle of the region included.
 func teleportTarget(args []string) (region string, at msg.Vector3, err error) {
+	// The middle of the region, at ground level, which is where a
+	// teleport with no position is sent anyway.
+	at = msg.Vector3{X: 128, Y: 128, Z: 25}
 	n := len(args)
-	if n >= 3 && allNumbers(args[n-3:]) {
-		x, _ := strconv.ParseFloat(args[n-3], 32)
-		y, _ := strconv.ParseFloat(args[n-2], 32)
-		z, _ := strconv.ParseFloat(args[n-1], 32)
-		at = msg.Vector3{X: float32(x), Y: float32(y), Z: float32(z)}
+	given := n >= 3 && allNumbers(args[n-3:])
+	if given {
+		at = msg.Vector3{X: number(args[n-3]), Y: number(args[n-2]), Z: number(args[n-1])}
 		args = args[:n-3]
-	} else {
-		// The middle of the region, at ground level, which is where a
-		// teleport with no position is sent anyway.
-		at = msg.Vector3{X: 128, Y: 128, Z: 25}
 	}
-	if len(args) == 0 {
-		if at == (msg.Vector3{X: 128, Y: 128, Z: 25}) {
-			return "", at, fmt.Errorf("nothing to teleport to")
-		}
-		return "", at, nil
+	if len(args) == 0 && !given {
+		return "", at, fmt.Errorf("nothing to teleport to")
 	}
 	return strings.Join(args, " "), at, nil
 }
 
+// allNumbers is whether every word is a number, a trailing comma
+// allowed, so that a position copied as "128, 64, 25" reads as one.
 func allNumbers(ss []string) bool {
 	for _, s := range ss {
 		if _, err := strconv.ParseFloat(strings.TrimSuffix(s, ","), 64); err != nil {
@@ -174,6 +171,12 @@ func allNumbers(ss []string) bool {
 		}
 	}
 	return true
+}
+
+// number is one word allNumbers accepted, as a coordinate.
+func number(s string) float32 {
+	f, _ := strconv.ParseFloat(strings.TrimSuffix(s, ","), 32)
+	return float32(f)
 }
 
 // regionNamed finds the one region a name means, and refuses the name

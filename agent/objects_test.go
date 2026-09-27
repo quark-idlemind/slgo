@@ -516,8 +516,8 @@ func TestACompressedUpdateCarriesWhatAFullOneDoesNot(t *testing.T) {
 }
 
 // TestACompressedUpdateWithNothingNewLeavesWhatIsKnown: an object with no
-// owner, no text and no appearance in the blob must not blank out what an
-// earlier update supplied.  Absent and empty are different here.
+// owner and no appearance in the blob must not blank out what an earlier
+// update supplied.  Absent and empty are different here.
 func TestACompressedUpdateWithNothingNewLeavesWhatIsKnown(t *testing.T) {
 	t.Parallel()
 
@@ -532,8 +532,31 @@ func TestACompressedUpdateWithNothingNewLeavesWhatIsKnown(t *testing.T) {
 	}), msg.Vector3{}, 0)
 
 	got, _ := o.Get(aPrim)
-	if got.Owner != anOwner || got.Text != someText || len(got.TextureEntry) != 1 {
+	if got.Owner != anOwner || len(got.TextureEntry) != 1 {
 		t.Errorf("a quiet update erased what was known: %+v", got)
+	}
+}
+
+// TestACompressedUpdateWithoutTextClearsIt: the floating text is not an
+// absent-means-unchanged part.  An update without the text flag is an
+// object with no text, and the viewer takes the text down
+// (llviewerobject.cpp:1865-1895).
+func TestACompressedUpdateWithoutTextClearsIt(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	o.compressed(decodeCompressed(t, compressedObject{
+		id: aPrim, local: 1, pcode: 9, text: someText,
+	}), msg.Vector3{}, 0)
+	if got, _ := o.Get(aPrim); got.Text != someText {
+		t.Fatalf("text = %q, want %q", got.Text, someText)
+	}
+
+	o.compressed(decodeCompressed(t, compressedObject{
+		id: aPrim, local: 1, pcode: 9,
+	}), msg.Vector3{}, 0)
+	if got, _ := o.Get(aPrim); got.Text != "" {
+		t.Errorf("text = %q after an update with none, want it gone", got.Text)
 	}
 }
 
