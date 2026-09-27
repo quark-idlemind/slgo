@@ -2,101 +2,38 @@ package sl
 
 // Sitting down, and getting up again.
 //
-// # A sit is one message, not two
+// An object sit is one message, AgentRequestSit.  The viewer's AgentSit
+// after it does nothing -- the simulator has reparented the avatar by
+// then -- so nothing here sends it.
+// Why: doc/history/sit.md#agentrequestsit-is-the-whole-request
 //
-// Every account of the protocol lists AgentRequestSit and then AgentSit,
-// and a viewer does send both.  Measured on Agni, the first is the whole
-// request and the second does nothing:
-//
-//	0.000  AgentRequestSit -->
-//	0.106  <-- AvatarSitResponse   autopilot=true pos=<-0.59, 0, 0.55>
-//	0.123  <-- ObjectUpdate  me  parent=83600601
-//	6.007  AgentSit -->
-//	       (nothing at all)
-//
-// The avatar was seated 123 milliseconds after asking and six seconds
-// before the message that supposedly seats it.  AgentSit is what a
-// viewer sends when its OWN autopilot has finished walking the avatar
-// over; the simulator has already reparented by then.  So nothing here
-// sends it.
-//
-// # The answer is a reparenting
-//
-// AvatarSitResponse carries where the seat is, and the ObjectUpdate that
-// follows is the fact: this avatar's own update comes back with ParentID
-// set to the seat's local id, and a position that is now an offset from
-// the object rather than a place in the region.  That is what Sit waits
-// for.  It is what the simulator itself believes, it arrives whether or
-// not the response did, and this package already keeps parents for
-// everything else it hears about.
-//
-// A sit also MOVES the avatar, up to about ten metres, over whatever is
-// in the way -- a box seven metres off seated the avatar as readily as
-// one half a metre away, and standing up left it six metres from where
-// it started.  There is no walk on the wire; the autopilot flag in the
-// response is an instruction to the viewer to animate a journey it has
-// already missed.  So a caller that knew where the avatar was should
+// The answer is a reparenting: this avatar's own ObjectUpdate comes back
+// with ParentID set to the seat's local id, and a position that is now
+// an offset from the object.  That is what Sit waits for.  It is what
+// the simulator itself believes, it arrives whether or not the
+// AvatarSitResponse did, and this package already keeps parents for
+// everything else it hears about.  A sit also MOVES the avatar, up to
+// about ten metres, so a caller that knew where the avatar was should
 // treat that as stale.
 //
-// # A refusal is an AlertMessage, and it arrives at once
+// A refusal is an AlertMessage, in about a tenth of a second, and
+// ErrSitRefused carries its text as it came.  So a sit has three
+// outcomes: seated, refused in the grid's own words, and heard nothing
+// before the timeout -- which is not a refusal, because the request may
+// have taken effect unseen.  AlertMessage is a general channel, so an
+// unrelated alert inside the window is read as the answer; the
+// reparenting is checked first, so the mistake that can make is a
+// spurious refusal and never a false success.
+// Why: doc/history/sit.md#a-refusal-is-an-alertmessage-and-it-arrives-at-once
 //
-//	sit on an object eleven metres away
-//	  0.109  Alert "No room to sit here, try another spot."
-//
-//	sit on a uuid that is not an object at all
-//	  0.090  Alert "Try moving closer.  Can't sit on object because
-//	                it is not in the same region as you."
-//
-// Both in about a tenth of a second, both ending in a NUL byte that has
-// to be trimmed.  ErrSitRefused carries the text as it came: the second
-// one is misleading -- the id was not in another region, it was not an
-// object at all -- but it is the only detail somebody could act on, and
-// a client that translated it into "no such object here" would have
-// thrown that away.
-//
-// So a sit has three outcomes and they are three different things:
-// seated, refused in the grid's own words, and heard nothing at all
-// before the timeout.  The last is not a refusal and must not read like
-// one, because the request may well have taken effect unseen.
-//
-// A caution about the middle one.  AlertMessage is a general channel and
-// something else may be alerting while a sit is in flight -- a script
-// somewhere, an estate message, anything.  An alert that arrives inside
-// the window is treated as the answer, which is right nearly always and
-// wrong occasionally.  It is arranged so that the wrongness is a
-// spurious refusal rather than a false success: the reparenting is
-// checked first, so an alert can only be believed when nothing else has
-// happened.
-//
-// # The ground is a different mechanism entirely
-//
-// There is no message for it.  It is a control flag on AgentUpdate --
-// AGENT_CONTROL_SIT_ON_GROUND -- and standing is another,
-// AGENT_CONTROL_STAND_UP.  Both are edge triggered: one update carrying
-// the flag was enough, and the session's own presence update a second
-// later, carrying no flags, undid neither.  The update itself is built
-// by whoever owns the camera, which is never a client; see
-// Backend.Control and agent.Control.
-//
-// Edge triggered does not mean once is enough, which cost a live run to
-// find out: a flag that arrives while the avatar is still settling into
-// the last thing it was told to do is dropped without a word.  So these
-// calls hold the flag the way a viewer holds a key rather than sending
-// it and hoping; see controlUntil, which is where the measurement is.
-//
-// A ground sit then produces NO reply and NO reparenting:
-//
-//	0.009  AgentUpdate SIT_ON_GROUND -->
-//	0.144  <-- AvatarAnimation  1a2bd58e-...  (sit on ground)
-//
-// The animation list is the whole of the evidence, which is why these
-// calls borrow a subscription to it; see borrowAnimations for what that
-// costs and why it is given back.  Standing up is the same flag
-// business, and from an object sit it also un-parents: 126 milliseconds,
-// parent back to zero, absolute position again.
-//
-// See doc/history/sit.md, where all of this was written down as it was
-// measured.
+// The ground is a control flag on AgentUpdate, AGENT_CONTROL_SIT_ON_GROUND,
+// and standing is another, AGENT_CONTROL_STAND_UP; the update is built
+// by whoever owns the camera, which is never a client (Backend.Control,
+// agent.Control).  A ground sit produces no reply and no reparenting,
+// only the animation list, which is why these calls borrow a
+// subscription to it (borrowAnimations) and hold the flag until it
+// takes (controlUntil).  Standing from an object sit also un-parents.
+// Why: doc/history/sit.md#sitting-on-the-ground-is-a-different-mechanism-entirely
 
 import (
 	"context"
@@ -550,44 +487,16 @@ const resendControl = 500 * time.Millisecond
 // controlUntil sends a control flag, and keeps sending it until the
 // simulator does what it means or the wait runs out.
 //
-// # Once is not enough, measured
-//
-// The flag is edge triggered -- one update carrying it did it, every
-// time it was measured in isolation -- and that made a single send look
-// sufficient.  It is not, and the case that shows it took a while to
-// find:
-//
-//	sit on an object          seated,   101ms
-//	stand                     stood,    101ms
-//	sit on the ground         seated,   101ms
-//	stand                     IGNORED, and the avatar was still
-//	                          sitting twenty-three seconds later
-//
-// Each step went out as the one before was confirmed, so the last flag
-// left about a tenth of a second after the ground sit landed.  The trace
-// says slgod sent it: ControlFlags 65536, on the wire, acknowledged.
-// The simulator dropped it.  Leaving three seconds before the last step
-// -- and changing nothing else -- makes the same sequence work every
-// time.
-//
-// What the sequence has that a ground sit and a stand on their own do
-// not is the stand before it.  The reading that fits: the animation
-// saying the ground sit has begun is not the same as the avatar having
-// finished sitting down, and an avatar that was mid-way through standing
-// up off an object when it was told to sit takes longer to get there.  A
-// stand that arrives inside that window is swallowed.
-//
-// So this does what a viewer does, which is the part the one-shot got
-// wrong: a viewer does not send a stand, it HOLDS the key, and an update
-// carrying the flag goes out every frame until the avatar is up.  Half a
-// second apart rather than every frame is enough to turn a swallowed
-// flag into a wait nobody notices, and resending is free -- an edge
-// triggered flag that has already been obeyed asks for something that
-// has already happened.
-//
-// It also settles the other race for nothing: a borrowed subscription
-// that had not been applied when the first flag went out will be there
-// for the second.
+// The flag is edge triggered, and once is still not enough: a stand
+// sent a tenth of a second after a ground sit landed, itself straight
+// after a stand off an object, was dropped by the simulator and the
+// avatar stayed seated.  So this does what a viewer does, which is to
+// HOLD the key: an update carrying the flag every resendControl until
+// the avatar has done it.  Resending is free, since a flag already
+// obeyed asks for something that has already happened, and it settles
+// the borrowed subscription's race for nothing: one not yet applied for
+// the first flag is there for the second.
+// Why: doc/history/sit.md#stage-2-went-to-the-grid-and-the-grid-had-one-more-thing-to-say
 func (w *Session) controlUntil(ctx context.Context, flags uint32, timeout time.Duration,
 	what string, ok func() bool) error {
 
@@ -615,39 +524,21 @@ const animationRelay = "AvatarAnimation"
 // borrowAnimations takes out the AvatarAnimation subscription for the
 // length of one command and hands back the way to give it up.
 //
-// # Why it is borrowed rather than kept
+// Borrowed rather than kept: it arrives for every avatar in range, in
+// full, about every three seconds, and keeping it in Subscriptions would
+// charge that to slrun and slbench for ever for something neither
+// reads.  Given back for real: Watcher.Unwatch subtracts from the set
+// the daemon holds for this stream, the count here stops two
+// overlapping commands taking it from each other, and a session that
+// named AvatarAnimation when it attached keeps it regardless (see
+// Hosted.Unwatch).  A backend that is not a Watcher relays everything
+// already, so there is nothing to take out and nothing to give back.
 //
-// AvatarAnimation is the only evidence a ground sit or a stand from one
-// ever produced, and it is expensive to keep: it arrives for every
-// avatar in range, in full, about every three seconds.  Putting it in
-// Subscriptions would charge that to slrun and slbench for ever,
-// for something neither of them will ever read -- the same objection
-// that made neighbouring circuits an option rather than a default.
-//
-// It really is given back.  A subscription is a set held per client
-// stream in the daemon, and Watcher.Unwatch subtracts from it, so the
-// cost stops when the command does rather than merely appearing to; and
-// two commands overlapping do not take it from each other, because the
-// count is what decides, not the last one to finish.  A session that
-// named AvatarAnimation itself when it attached keeps it regardless --
-// see Hosted.Unwatch.  A backend that is not a Watcher relays everything
-// already, which is what a direct session does, so there is nothing to
-// take out and nothing to give back.
-//
-// # The one race, and why it heals
-//
-// Watch travels on the client's stream and the daemon reads that stream
-// in order, so a name asked for here is in force before anything sent
-// afterwards ON THE STREAM.  A ground sit is not sent on the stream: it
-// is Control, a unary call the daemon may take up on another goroutine,
-// so in principle the flag could go out and the animation come back
-// before the subscription had been applied.
-//
-// What makes that survivable is the resending.  The list is sent in
-// full about every three seconds whether anything changed or not, so a
-// subscription that arrived a moment late still hears the sit -- one
-// resend later, well inside DefaultSitTimeout.  Losing the race costs a
-// wait, not an answer.
+// Watch is in force before anything sent afterwards on the stream, and
+// Control is not sent on the stream, so the first flag could in
+// principle beat the subscription.  The list is resent in full about
+// every three seconds, so losing that race costs a wait, not an answer.
+// Why: doc/history/sit.md#the-subscription-question
 func (w *Session) borrowAnimations() (give func(), err error) {
 	b, ok := w.b.(Watcher)
 	if !ok {
