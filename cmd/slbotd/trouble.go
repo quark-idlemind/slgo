@@ -10,11 +10,10 @@ package main
 // from in-world there has been no way to tell the two apart.
 //
 // It is deliberately a method and not a filter over the log.  Deciding
-// which lines are failures by matching their words is the mistake
-// issues/006 already records, and chatf's own comment says what it
-// costs: a filter for one shape of sentence silently swallowed another.
-// So a failure is a call to errf, written as such at the site, and
-// everything else is logf as before.
+// which lines are failures by matching their words has the cost chatf's
+// own comment names: a filter for one shape of sentence silently
+// swallowed another.  So a failure is a call to errf, written as such at
+// the site, and everything else is logf as before.
 //
 // In memory and bounded.  What it answers is "what has gone wrong with
 // you lately", which is a question about the last few things rather

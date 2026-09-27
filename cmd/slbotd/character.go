@@ -6,7 +6,7 @@ package main
 // character, worn with everybody, which is where this started and still
 // what most avatars want.  A directory is a character that knows who it
 // is talking to: "default" in it is what everybody gets, and a file
-// named for one person is added to it when that person is the one
+// named for one person is used instead when that person is the one
 // speaking.
 //
 // One file is chosen and not two: the person's if there is one, the
@@ -18,20 +18,10 @@ package main
 //
 //	You have known this one for years.  They helped build the dock.
 //
-// Composition belongs to the file rather than to this code.  Joining
-// two files here in a fixed order can only ever say one thing -- the
-// character, then the person -- and the useful arrangements are not all
-// that shape: the shared part often wants to come LAST, nearest the
-// conversation, where a model weighs hardest; two people may share a
-// third file that is neither of those; and a paragraph several
-// characters have in common should be written once.  An include says
-// all of them and a rule here says one.
-//
-// What it costs is that a person's file can forget the character and
-// nothing will say so -- an avatar that is suddenly nobody, quietly.
-// That is the price of the file deciding, and --check assembles every
-// character so the answer is at least visible before anybody is logged
-// in.
+// So a person's file that does not include the default gets no default
+// character, and nothing says so at the time; --check assembles every
+// character so that it is at least visible before anybody is logged in.
+// Why: doc/slbotd.md#a-character-composes-itself
 //
 // Nothing here is held in memory.  The files are read on the turn they
 // are used, so adding a character for somebody, or editing one it
@@ -161,8 +151,9 @@ func includePath(line string) (string, bool) {
 	return p, true
 }
 
-// characterFiles picks the two files a person is owed from a directory:
-// the default, and their own if there is one.  Either may be empty.
+// characterFiles finds the two files that may be a person's character
+// in a directory: the default, and their own if there is one.  Either
+// may be empty.
 //
 // The directory is listed rather than guessed at, so that one rule
 // covers every way somebody might have spelt the name.  Guessing means

@@ -105,9 +105,9 @@ type daemon struct {
 	mu   sync.Mutex
 	bots map[string]*bot
 
-	// order is the avatars as the configuration named them.  It decides
-	// which is listed first and which "as" resolves a bare name to, and
-	// a map has no order to offer.
+	// order is the avatars as the configuration named them, for Bots
+	// and so for everything that goes through them in turn.  A map has
+	// no order to offer.
 	order []string
 }
 
@@ -412,11 +412,12 @@ func (d *daemon) noteTrouble(avatar, text string) {
 }
 
 // sinceSeen is how long it has been since this person last said
-// anything to this avatar, and whether they ever have.
+// anything to this avatar, and whether they have said anything since
+// the daemon started.  It records now as the latest.
 //
-// Recording the time is the caller's business, once it has decided the
-// remark is one worth counting: a typing notification is not somebody
-// speaking, and treating it as such would mean nobody was ever away.
+// So it is called only for a remark worth counting: a typing
+// notification is not somebody speaking, and treating it as such would
+// mean nobody was ever away.
 func (b *bot) sinceSeen(who msg.UUID, now time.Time) (time.Duration, bool) {
 	b.seenMu.Lock()
 	defer b.seenMu.Unlock()
@@ -690,15 +691,11 @@ func (d *daemon) agentLines(ctx context.Context) ([]agentLine, error) {
 // awaitRelease waits until an avatar stopped on purpose is started
 // again, or until the daemon is told to try anyway.
 //
-// It polls rather than being pushed to, and that is deliberate.  An
-// attendant with no session has no stream to be told anything on --
-// slgod's notices travel to the clients attached to an agent, and this
-// one is attached to nothing -- so being "informed" would mean a new
-// daemon-wide event channel.  A read every half minute achieves the
-// same thing, costs one small call, and is self-healing in the two
-// ways a stream is not: it works when this daemon started AFTER the
-// logout, with no event to have missed, and it needs no reconnecting
-// when slgod itself restarts.
+// It polls, every HeldRecheck: an attendant with no session has no
+// stream to be told anything on, and a read also works when this daemon
+// started after the logout, and needs no reconnecting when slgod
+// restarts.
+// Why: doc/slbotd.md#waiting-for-a-stopped-avatar
 //
 // Waking early is still possible: ":host NAME" pokes it, so somebody
 // who does not want to wait need not.

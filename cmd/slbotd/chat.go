@@ -14,9 +14,10 @@ package main
 // asymmetry.  Losing the text loses the conversation; losing the cache
 // costs a few seconds of prefill.
 //
-// Measured (see llm.go for the conditions): restoring a 1457 token
-// conversation took 5.4 ms and saved 5.0 s of prompt processing.  That
-// is the whole argument for doing this at all.
+// Restoring a kept cache was measured at milliseconds, where prefilling
+// the same conversation took seconds, and that is the whole argument for
+// doing this at all.
+// Why: doc/slbotd.md#keeping-the-kv-cache
 //
 // # Why a slot is pinned
 //
@@ -28,7 +29,7 @@ package main
 // least recently when there are more conversations than slots, and the
 // displaced conversation is picked up again from its state file.  That
 // is the "swap the context per conversation" this was built for, and
-// it costs the five milliseconds above.
+// it costs those milliseconds.
 //
 // # Remembering more than fits
 //
@@ -82,24 +83,12 @@ import (
 // backstory for the model's attention, and the backstory is the part
 // somebody wrote.
 //
-// The third sentence is the price of the gap hint working at all, and
-// it was measured rather than assumed.  Given the elapsed time and
-// nothing else, this model class mentioned it in NONE of thirty
-// replies -- three placements, ten each.  Asked outright how long it
-// had been it answered from the hint, so the number IS reaching it and
-// it simply will not volunteer it.
-//
-// With this sentence in front, about half of twenty-five replies
-// remarked on a three-day absence in their own words ("Three days,
-// that's a while"), and three different wordings of the instruction
-// did not differ enough to choose between.  Half, not all: this is an
-// improvement on inventing a duration, not a guarantee, and about one
-// reply in twenty-five contradicted the hint outright.  A better model
-// is the fix for that, not a longer sentence here.
-//
-// It is conditional by its own wording, so it costs nothing on the
-// turns where no gap is offered -- which is most of them, since
-// nothing is sent below ChatGap.
+// The third sentence is the price of the gap hint working at all:
+// without it the model was measured never to mention the elapsed time,
+// and with it about half the time.  It is conditional by its own
+// wording, so it costs nothing on the turns where no gap is offered --
+// which is most of them, since nothing is sent below ChatGap.
+// Why: doc/slbotd.md#the-sentence-that-makes-a-pause-show
 const Medium = "You are speaking through instant messages in a virtual world. " +
 	"Reply in a few sentences at most, in character, as speech rather than prose. " +
 	"If you are told how long it has been since they last wrote, remark on it."
@@ -149,7 +138,7 @@ type Conversation struct {
 	Compacted int `json:"compacted,omitempty"`
 
 	// Tokens is what the server counted the last prompt at.  Measured
-	// rather than estimated, and it is what drives the trimming: a
+	// rather than estimated, and it is what decides when to compact: a
 	// budget checked against a guess at the tokeniser is a budget that
 	// is wrong in whichever direction the guess leans.
 	Tokens int `json:"tokens,omitempty"`
@@ -674,7 +663,7 @@ func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, 
 
 	// Whether this turn is about to rewrite the conversation, which
 	// decides whether restoring the old context is worth anything: it
-	// would be thrown away by the compaction two lines later.
+	// would be thrown away by the compaction just below.
 	folding := c.shouldCompact(conv)
 	if !mine && !folding {
 		c.place(ctx, conv, slot, fingerprint)
@@ -708,11 +697,9 @@ func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, 
 	conv.Add("assistant", answer.Text, now)
 	conv.Tokens = answer.Prompt
 
-	// Saved before trimming.  The cache holds the prompt that was just
-	// processed, and that is the one worth keeping: llama-server
-	// matches whatever prefix the next prompt shares with it and
-	// reprocesses the rest, so a trim costs the tail of the cache
-	// rather than making the file wrong.
+	// The cache holds the prompt that was just processed, and that is
+	// the one worth keeping: llama-server matches whatever prefix the
+	// next prompt shares with it and reprocesses the rest.
 	if n, err := c.llm.SaveSlot(ctx, slot, conv.stateName()); err != nil {
 		// Not fatal, and not even unusual: a server started without
 		// --slot-save-path refuses every one of these.  The
@@ -832,30 +819,10 @@ func (c *Chatter) Model(ctx context.Context) (*Props, error) { return c.ready(ct
 // why an avatar's character cannot be lost to compaction: there is no
 // path through this file on which the two meet.
 //
-// # Why it asks for three labelled lines
-//
-// Because asking in prose does not work, at any size worth running.
-// The first version of this said "write a brief note, in the third
-// person, of what has passed between them" and it was measured against
-// both models to hand: the 0.5B answered with fragments of the
-// transcript separated by rules, and the 3B answered by copying the
-// exchange back verbatim.  Neither summarised anything, and the name
-// the person had given -- the single most useful fact in the
-// conversation -- was lost by both.
-//
-// Three labelled lines with a rule for the empty case work on the 3B
-// first time and keep exactly what is worth keeping.  Measured on the
-// same exchange:
-//
-//	THEM: Quark, chandlery, upriver
-//	TOPICS: tide, berth, rope
-//	OWED: Hold three coils of rope until Thursday
-//
-// And they survive being folded again, which is the property the whole
-// thing rests on: fed that note plus four more turns, the next fold
-// kept the name, the trade and the promise, and added the new topics
-// to the middle line.  A prose note has nothing to hold on to and
-// drifts; a labelled one has three places to put things and keeps them.
+// Three labelled lines, because a note asked for in prose summarised
+// nothing and lost the person's name, and a labelled one keeps it and
+// survives being folded again.
+// Why: doc/slbotd.md#why-the-note-is-three-labelled-lines
 //
 // The fields are what somebody means when they say an avatar remembers
 // them: who they are, what has been talked about, and what was agreed.

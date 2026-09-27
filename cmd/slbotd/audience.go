@@ -4,18 +4,10 @@ package main
 //
 // This is a function and not a lookup at the call site, deliberately.
 // The list in the configuration is the FIRST answer to the question
-// rather than the last one: whether to answer somebody is the kind of
-// decision that will want to weigh who they are, what they said, how
-// often they have said it today, whether this avatar is in the middle
-// of something, and whether the region is one to be talking in at all.
-// Every one of those wants to arrive here, at one decision with one
-// place to change it, rather than as another condition bolted onto the
-// message handler -- which is where such conditions go when there is no
-// obvious place for them, and where they are impossible to find
-// afterwards.
-//
-// So the message handler asks one question and gets one answer, and
-// what is behind it can grow without anything above it moving.
+// rather than the last one, and whatever else comes to weigh on it
+// arrives here, at one decision with one place to change it, rather
+// than as another condition bolted onto the message handler.
+// Why: doc/slbotd.md#who-an-avatar-answers-is-one-decision
 
 import (
 	"context"
@@ -164,31 +156,22 @@ func listAudience(cfg Config) Audience {
 }
 
 // ownAvatarsBounded lets two avatars this daemon drives talk to each
-// other, and makes the conversation end.
+// other, and makes the conversation end.  An avatar chat-bot names, which
+// another program's model drives, is bounded the same way.
 //
-// A flat refusal was the first answer here and it was the wrong one.
-// Two of these talking is not a malfunction -- what actually happened
-// was a dull but perfectly ordinary conversation -- and an operator who
-// wants them not to has a way to say so now, by writing the name with a
-// "!" in front of it.  What is wrong with it is only that it does not
-// stop: a reply from one is an ordinary remark to the other, neither is
-// answering ITSELF, and neither will ever be the one to get bored.
+// Bounded rather than banned: two of them talking is not a malfunction,
+// and "!" in the chat list is there for an operator who wants it not to
+// happen.  What is wrong is that it does not stop -- neither side will
+// ever be the one to get bored -- so once they have said limit things
+// to each other, one of them stops answering, which is the only end
+// available.
+// Why: doc/slbotd.md#two-models-talking-to-each-other
 //
-// So it is bounded rather than banned.  They may say a few things to
-// each other and then one of them stops answering, which is what ends
-// it -- there is no other end available, since the far side is as
-// tireless as this one.
-//
-// Measured before there was any bound: with "chat = *" on three
-// avatars, ONE message typed by hand from one of them to another ran to
-// 26 exchanges in ninety seconds on the live grid, and was still going
-// when it was stopped by hand.  Starting it took a person; stopping it
-// was never going to happen on its own.
-//
-// The count is of everything ever said in that conversation, folded
-// turns included.  Counting what is still held word for word would
-// reset the bound at every compaction, which is to say it would bound
-// nothing at all.
+// The count is Approach.Recent: what the two have said since they last
+// rested for chat-own-rest, or everything ever said when that is zero,
+// folded turns included either way.  Counting what is still held word
+// for word would reset the bound at every compaction, which is to say it
+// would bound nothing at all.
 func ownAvatarsBounded(d *daemon, limit int, next Audience) Audience {
 	return func(ctx context.Context, a *Approach) Verdict {
 		who, ours := d.AvatarFor(a.From)
