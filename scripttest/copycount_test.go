@@ -7,16 +7,16 @@ package scripttest_test
 // a block boundary, probe upward for a copy count whose memory delta
 // registers, estimate how many copies fit in the memory a script has,
 // back off when the answer is too big -- is arithmetic on readings, and
-// until now the only way to exercise it offline was --test, which
-// answers ABOVE the transport and so tests none of it.
+// when this was written the only way to exercise it offline was --test,
+// which then answered ABOVE the transport and so tested none of it.
+// --test is served by this backend now.
 //
 // The search below is a small reimplementation rather than slbench's
 // own code, on purpose.  Sharing the code would prove only that it
 // agrees with itself; writing it again against nothing but the gRPC
 // contract is what shows the contract carries what a measurement needs:
-// a lease held for the whole benchmark, an object that keeps its base
-// reading between runs, a compiler that refuses, and a fault that can be
-// told to be an out-of-memory one.
+// a lease held for the whole benchmark, a compiler that refuses, and a
+// fault that can be told to be an out-of-memory one.
 //
 // Every run here is a real Run call over a real stream.  The numbers are
 // the model's and mean nothing about Second Life; what is being checked
@@ -42,10 +42,6 @@ const (
 	minpad    = 5
 )
 
-// results is what a run reported, in the labels the benchmark script
-// uses.  A cnt=0 script reports BASE_MEM and a cnt>0 script reports
-// TEST_MEM and SIZE -- the asymmetry is the harness's and the search
-// depends on it.
 // results is one reading and what this search makes of it.
 //
 // The script says the reading and nothing else; size is worked out here,
@@ -85,9 +81,7 @@ type bench struct {
 func newBench(t *testing.T, o scripttest.Options) (*bench, func()) {
 	t.Helper()
 	_, c := serve(t, overAPipe, o)
-	// One lease for the whole benchmark, because the base reading
-	// travels from the cnt=0 script to the cnt>0 ones inside the object.
-	// A second caller in there would be read as our own base.
+	// One lease for the whole benchmark.
 	g, done := lease(t, c, &scriptv1.LeaseRequest{Who: "slbench copy-count"})
 	return &bench{
 		t: t, c: c, target: g.GetTargets()[0].GetId(),

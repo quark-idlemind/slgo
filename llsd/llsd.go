@@ -1,16 +1,5 @@
-package llsd
-
-import (
-	"bytes"
-	"encoding/base64"
-	"encoding/xml"
-	"fmt"
-	"io"
-	"strconv"
-	"strings"
-)
-
-// Package llsd decodes and encodes LLSD in its XML form,, decoded to plain Go values:
+// Package llsd decodes and encodes LLSD in its XML form, decoded to
+// plain Go values:
 //
 //	<map>              map[string]any
 //	<array>            []any
@@ -32,6 +21,17 @@ import (
 // arrived as, and encoding cannot be: a service that wants a uuid
 // refuses the same characters sent as a string.  Encode a UUID for
 // those.
+package llsd
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/xml"
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
+)
 
 // UUID is an id that encodes as <uuid> rather than <string>.
 //

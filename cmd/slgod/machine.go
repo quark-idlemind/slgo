@@ -4,8 +4,9 @@ package main
 // from the network card's address, and "id0", from the first disk's
 // serial number.  A viewer reads both off the hardware and sends the
 // md5 of each, so what travels is a pair of digests -- the hashing
-// happens in agent.Login, and what is kept here is the address itself,
-// which is the readable half and the one worth being able to check.
+// happens in package agent as it logs in, and what is kept here is the
+// address itself, which is the readable half and the one worth being
+// able to check.
 //
 // slgod has no hardware to read -- and reading this host's would hand
 // Linden Lab an identifier that follows the operator to every other
@@ -31,7 +32,7 @@ import (
 
 // machineID is the computer slgod claims to be.
 type machineID struct {
-	MAC string // 02:xx:xx:xx:xx:xx, hashed before it is sent
+	MAC string // xx:xx:xx:xx:xx:xx, hashed before it is sent
 	ID0 string // 32 hex digits, the shape a viewer's serial digest has
 }
 
@@ -72,9 +73,8 @@ func machineConfigDir() (string, error) {
 // The directory has to exist and be private already, 0700 like the
 // profile directory: it holds credentials, and one made here on the
 // strength of a typing slip would only hold nobody's.  The shared
-// secret is not in it.  That is one file for the whole lab, and a
-// daemon that looked for it here would be one its clients could not
-// reach.
+// secret stays where it is, one file for the whole lab; a file called
+// secret put in this directory is this daemon's own (see secretPath).
 func useConfigDir(dir string) error {
 	abs, err := filepath.Abs(dir)
 	if err != nil {

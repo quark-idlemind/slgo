@@ -5,8 +5,11 @@
 //
 //	client -> server   (empty)
 //	server -> client   SCHAL, 16 random bytes
-//	client -> server   CCHAL, HMAC(secret, SCHAL || "CLIENT")
-//	server -> client   HMAC(secret, CCHAL || "SERVER"), and a session token
+//	client -> server   CCHAL, HMAC(secret, SCHAL || "CLIENT" || binding)
+//	server -> client   HMAC(secret, CCHAL || "SERVER" || binding)
+//
+// The binding is keying material exported from the TLS session; see
+// Proof.  Success authenticates the connection, and there is no token.
 //
 // The secret never crosses the wire in either direction, and each
 // challenge is random, single-use and short-lived, so a captured proof
@@ -117,7 +120,9 @@ type pending struct {
 	expires   time.Time
 }
 
-// Server issues challenges, answers them, and tracks sessions.
+// Server issues challenges and answers them.  It keeps each challenge,
+// and the name of the client it was issued to, until it is answered or
+// expires.
 type Server struct {
 	secret string
 
@@ -174,7 +179,7 @@ func (s *Server) Begin(client string) ([]byte, error) {
 }
 
 // Answer checks the client's proof and, if it holds, returns the
-// server's own proof and a session token.
+// server's own proof and the client's name, as Begin was given it.
 //
 // The matching challenge is found by trying each outstanding one. The
 // wire carries no identifier -- the protocol is the client's proof and

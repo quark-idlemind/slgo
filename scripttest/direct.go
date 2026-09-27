@@ -5,16 +5,9 @@ package scripttest
 // scriptv1.RunnerClient is an interface and so is
 // grpc.ServerStreamingClient, so a caller can be handed something that
 // answers the contract without a transport in the middle.  What that
-// buys is the per-run cost, and the per-run cost is the whole reason
-// this file exists: measured by BenchmarkARunReachedEachWay, one run of
-// the offline model costs about 100us over Pipe and about 5us here.
-// Almost all of the difference is goroutine hand-off -- a run streams
-// seven messages and each one is a wake-up on the other side -- and a
-// profile of slbench's tests before this change spent 73% of the run
-// in pthread_cond_signal, pthread_cond_wait and findRunnable.  That is
-// worth paying where a run is the thing being tested and not worth
-// paying 440,000 times where the runs are how a sweep gets to its
-// arithmetic.
+// saves is the per-run cost, nearly all of it goroutine hand-off: each
+// message a run streams is a wake-up on the other side.
+// Why: doc/scripttest.md#why-direct-exists
 //
 // # What it does not do, and why Pipe stays
 //
@@ -128,10 +121,10 @@ func (d direct) Lease(ctx context.Context, in *scriptv1.LeaseRequest, _ ...grpc.
 // Run runs the whole script and hands the events back afterwards.
 //
 // The alternative -- a goroutine and a channel, as Lease has -- is most
-// of what the 100us a run over the pipe costs, and nothing in this
-// repository needs a run's events while the run is still going: the one
-// caller that prints lines as they arrive is slrun, whose test for
-// that (TestALineThroughABackendIsPrintedBeforeTheRunHasEnded) drives it
+// of what a run over the pipe costs, and nothing in this repository
+// needs a run's events while the run is still going: the one caller
+// that prints lines as they arrive is slrun, whose test for that
+// (TestALineThroughABackendIsPrintedBeforeTheRunHasEnded) drives it
 // through --backend over a real listener, which is the transport a
 // person typing --backend actually gets.  slbench reads a run's whole
 // transcript and then does arithmetic on it.
