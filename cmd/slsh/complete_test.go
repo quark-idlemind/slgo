@@ -1,6 +1,6 @@
 package main
 
-// Tab completion, in command mode only.
+// Tab completion, at a command and while a typed answer is entered.
 //
 // The first word is a command and everything after it is an inventory
 // path, which is the whole rule.  It is worth testing because the
@@ -17,35 +17,66 @@ import (
 	"github.com/quark-idlemind/slgo/sl"
 )
 
-// TestLastWordDividesTheLineAtTheWordUnderTheCursor.
+// TestWordAtDividesTheLineAtTheWordUnderTheCursor.  A | in the line
+// is the cursor, and a line without one has it at the end.
 //
 // The quoted rows are the ones that matter.  A space inside quotes
 // belongs to the word, and the word comes back unquoted, because what
 // is being completed is the NAME -- the quotes are only how a name with
 // a space in it gets past the parser.
-func TestLastWordDividesTheLineAtTheWordUnderTheCursor(t *testing.T) {
-	for _, c := range []struct{ line, head, word string }{
-		{"", "", ""},
-		{"fea", "", "fea"},
-		{"cd Obj", "cd ", "Obj"},
-		{"cd ", "cd ", ""},
-		{"ls -l\tObj", "ls -l\t", "Obj"},
+func TestWordAtDividesTheLineAtTheWordUnderTheCursor(t *testing.T) {
+	for _, c := range []struct{ line, head, word, tail string }{
+		{"", "", "", ""},
+		{"fea", "", "fea", ""},
+		{"cd Obj", "cd ", "Obj", ""},
+		{"cd ", "cd ", "", ""},
+		{"ls -l\tObj", "ls -l\t", "Obj", ""},
 
 		// A quote opened and not closed: the head keeps it, so what
 		// goes back replaces it rather than nesting inside it.
-		{`cd "Current Ou`, "cd ", "Current Ou"},
-		{`cd 'Current Ou`, "cd ", "Current Ou"},
+		{`cd "Current Ou`, "cd ", "Current Ou", ""},
+		{`cd 'Current Ou`, "cd ", "Current Ou", ""},
 		// And closed, which is what a previous tab will have left.
-		{`cd "Current Outfit/"`, "cd ", "Current Outfit/"},
+		{`cd "Current Outfit/"`, "cd ", "Current Outfit/", ""},
 		// A quoted word is one word however many spaces are in it.
-		{`ls -l "My Outfits/A Sunday`, "ls -l ", "My Outfits/A Sunday"},
+		{`ls -l "My Outfits/A Sunday`, "ls -l ", "My Outfits/A Sunday", ""},
 		// Quoting part of a word is the parser's rule too.
-		{`cd "Current Outfit"/Sen`, "cd ", "Current Outfit/Sen"},
+		{`cd "Current Outfit"/Sen`, "cd ", "Current Outfit/Sen", ""},
+
+		// The word under the cursor, not the last one, and all of it.
+		{"fea| Objects", "", "fea", " Objects"},
+		{"cp Obj|ects/a Scripts", "cp ", "Objects/a", " Scripts"},
+		{"cp |Objects Scripts", "cp ", "Objects", " Scripts"},
+		{"cp | Scripts", "cp ", "", " Scripts"},
+		{`cp "Current O|utfit/a" b`, "cp ", "Current Outfit/a", " b"},
 	} {
-		head, word := lastWord(c.line)
-		if head != c.head || word != c.word {
-			t.Errorf("lastWord(%q) = %q, %q; want %q, %q", c.line, head, word, c.head, c.word)
+		before, after, _ := strings.Cut(c.line, "|")
+		head, word, tail := wordAt(before, after)
+		if head != c.head || word != c.word || tail != c.tail {
+			t.Errorf("wordAt(%q) = %q, %q, %q; want %q, %q, %q",
+				c.line, head, word, tail, c.head, c.word, c.tail)
 		}
+	}
+}
+
+// TestCompletionIsOfTheWordUnderTheCursor: a tab with more of the line
+// after it completes where the cursor is, leaves the rest alone, and
+// puts the cursor after what it filled in.
+func TestCompletionIsOfTheWordUnderTheCursor(t *testing.T) {
+	ctx := context.Background()
+	x := newTestShell(t)
+	sep := string(sl.PathSeparator)
+
+	x.term.SetSplit("featu", " Objects")
+	x.complete(ctx)
+	if before, after := x.term.Split(); before != "features" || after != " Objects" {
+		t.Errorf("a command before the cursor completed to %q|%q", before, after)
+	}
+
+	x.term.SetSplit("cp Ob", "j Scripts")
+	x.complete(ctx)
+	if before, after := x.term.Split(); before != "cp Objects"+sep || after != " Scripts" {
+		t.Errorf("a path under the cursor completed to %q|%q", before, after)
 	}
 }
 

@@ -888,7 +888,8 @@ func TestEnterInChatDoesNotEchoTheLine(t *testing.T) {
 }
 
 // TestTabIsTwoThingsInTwoModes: completion where there are commands to
-// complete, conversations where there are not.
+// complete, conversations where there are not.  A typed answer takes
+// completion.
 func TestTabIsTwoThingsInTwoModes(t *testing.T) {
 	ctx := context.Background()
 	x := newTestShell(t)
@@ -904,6 +905,14 @@ func TestTabIsTwoThingsInTwoModes(t *testing.T) {
 	x.key(ctx, '\t')
 	if got := x.term.Line(); got != "featu" {
 		t.Errorf("tab in chat mode edited the line: %q", got)
+	}
+
+	// A typed answer is not chat, and completes.
+	x.setMode(modeText)
+	x.term.SetLine("featu")
+	x.key(ctx, '\t')
+	if got := x.term.Line(); got != "features" {
+		t.Errorf("tab while typing an answer gave %q", got)
 	}
 }
 
