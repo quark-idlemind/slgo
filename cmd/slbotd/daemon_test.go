@@ -22,7 +22,8 @@ import (
 // wrong means a daemon fighting a person for their own avatar, which is
 // the fault the deliberate logout exists to prevent.
 
-// fakeSlgod stands in for the daemon's two calls to slgod.
+// fakeSlgod stands in for host and attach, two of the daemon's calls to
+// slgod.
 type fakeSlgod struct {
 	mu sync.Mutex
 
@@ -109,8 +110,8 @@ func TestASessionThatEndsIsAskedForAgain(t *testing.T) {
 }
 
 // A deliberate logout stops the asking.  Without this the attendant
-// would ask every minute for ever, and would undo the one thing the
-// logout was for.
+// would go on asking for ever, and would undo the one thing the logout
+// was for.
 func TestADeliberateLogoutStopsTheAsking(t *testing.T) {
 	_, b, f := withFakeSlgod(t)
 	f.deliber = true

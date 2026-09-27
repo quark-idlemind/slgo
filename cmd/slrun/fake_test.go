@@ -68,8 +68,8 @@ type fakeGrid struct {
 
 	// seen is what the region says is in range, which for the object a
 	// script runs in is the whole of what a caller has to go on.  It
-	// starts as the one object and is added to by a test that needs an
-	// ATTACHMENT rather than a prim -- the shared auto object is worn,
+	// starts as the one object, and a test that needs an ATTACHMENT
+	// rather than a prim makes it one -- the shared auto object is worn,
 	// and is found by the inventory item it was worn from.
 	seen []*sl.Seen
 

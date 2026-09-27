@@ -34,7 +34,7 @@ func echoed(to msg.UUID, text string) *sl.IM {
 	}
 }
 
-// The test this whole branch exists for.
+// The test this whole file exists for.
 func TestAnAvatarDoesNotAnswerItself(t *testing.T) {
 	d, b, grid := newTestDaemon(t)
 	f := newFakeLLM(t)

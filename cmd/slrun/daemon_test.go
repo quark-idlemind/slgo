@@ -23,7 +23,7 @@ package main
 //
 // What cannot be reached is main's failure half: it ends in os.Exit,
 // which would take the test binary with it, so the message it prints
-// first cannot be reached either.  See coverage-notes/last-commands.md.
+// first cannot be reached either.
 
 import (
 	"bytes"
@@ -161,9 +161,10 @@ func xmlText(s string) string {
 // fakeDaemon is an slgod holding one session, with fake_test.go's grid
 // behind it.
 //
-// It answers nothing itself.  Every question is passed to the grid and
-// every answer translated, which is what slgod does: the daemon holds
-// the circuit and has no idea what any of the traffic means.
+// It answers nothing about the grid itself.  Every question is passed
+// to the grid and every answer translated, which is what slgod does: the
+// daemon holds the circuit and has no idea what any of the traffic
+// means.
 type fakeDaemon struct {
 	pb.UnimplementedGridServer
 
@@ -326,13 +327,8 @@ func (d *fakeDaemon) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Login
 }
 
 // Stream is the relay, which is the only way a line a script said can
-// reach the program that started it.
-//
-// The pump stops when the client hangs up, which is why the grid is only
-// ever made to talk while a run is waiting for it: a client closes the
-// channels its own receiving goroutine sends on, so a line arriving
-// while it closes is a panic on send to a closed channel.  See
-// coverage-notes/last-commands.md.
+// reach the program that started it.  The pump stops when the client
+// hangs up.
 func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.ServerPacket]) error {
 	first, err := s.Recv()
 	if err != nil {
@@ -586,9 +582,10 @@ func read(t *testing.T, path string) string {
 // finding it costs a lookup, and the script inside it already exists,
 // which is the eight seconds installing one into an empty object takes.
 //
-// Which avatar it ran as goes to standard error when nobody named one,
-// because the daemon's default depends on its own history and nothing on
-// disk records it: a reader who did not say cannot otherwise tell.
+// Which avatar it ran as goes to standard error under -vv when nobody
+// named one, because the daemon's default depends on its own history and
+// nothing on disk records it: a reader who did not say cannot otherwise
+// tell.
 func TestTheSharedObjectIsTakenAndSaidToHaveBeen(t *testing.T) {
 	reset(t)
 	f, addr := newFakeDaemon(t)
