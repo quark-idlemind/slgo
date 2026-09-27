@@ -285,16 +285,11 @@ func main() {
 		if login.ID0 == "" {
 			login.ID0 = mach.ID0
 		}
-		// Asked for always, not when a viewer turns up.  A viewer is
-		// handed a session that is already running, and the login
-		// server answered that session's one question hours earlier;
-		// a block not requested then cannot be requested now, and
-		// the viewer would come up missing it with no way to say so.
-		//
-		// It is close to free.  Measured on Aditi: 2.84s against
-		// 2.93s for a plain login, which is noise, for eleven more
-		// top-level blocks -- most of the bulk being the Library
-		// skeleton, which is the same for every avatar.
+		// Asked for always, not when a viewer turns up: a viewer is
+		// handed a session that is already running, and a block not
+		// requested at its login cannot be requested later.  It
+		// costs next to nothing.
+		// Why: doc/handover.md#the-login-options-every-session-asks-for
 		login.Options = append(login.Options, agent.ViewerOptions...)
 
 		opts := agent.Options{
@@ -310,14 +305,9 @@ func main() {
 			},
 			// Off unless asked for: a border crossing needs
 			// these circuits, and a daemon that only ever
-			// acts where its avatar stands does not.  The
-			// profile has the last word and the flag is what
-			// a profile with no opinion gets, because this
-			// is a property of an avatar rather than of the
-			// process -- one daemon holds an avatar somebody
-			// walks about with and another that runs
-			// benchmarks in one region.  Either can be
-			// turned over afterwards; see
+			// acts where its avatar stands does not.  Who
+			// decides is holdNeighbours; either way it can
+			// be turned over afterwards, see
 			// agent.SetNeighbours and slsh's neighbours.
 			Neighbours: holdNeighbours(login, *neighbours),
 			// So that a child circuit opening and closing is
