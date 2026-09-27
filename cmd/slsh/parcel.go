@@ -524,8 +524,8 @@ type parcelDraw struct {
 // parcelDraws decides a mark for each parcel.
 //
 // The letters and the colours turn over at different rates -- 52 and 12
-// -- so two parcels share a mark only after 624 of them, where a region
-// holds dozens.  Neighbouring parcels differ in both.
+// -- so two parcels are drawn alike only after 156 of them, where a
+// region holds dozens.  Neighbouring parcels differ in both.
 //
 // Linden's protected land is the exception, and it is drawn as ground
 // rather than as a parcel: blank for the roads and waterways a region

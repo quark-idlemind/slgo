@@ -70,8 +70,8 @@ var postureCommands = map[string]*command{
 // One struct for both, since they ask the same question of the
 // simulator and wait for it the same way.  The wait covers the answer
 // and not the name lookup in front of it: that is the region
-// describing itself, which touch and take give thirty seconds and no
-// flag at all.
+// describing itself, which gets thirty seconds and no flag, as it does
+// for touch.
 type postureFlags struct {
 	Wait int  `getopt:"--wait -w=SECONDS  how long to wait for the simulator to answer [15]"`
 	Help bool `getopt:"--help -h          show what this command takes"`
@@ -123,12 +123,12 @@ func cmdSit(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return sh.sayPosition(ctx, out)
 	}
 
-	// Resolved the way touch, take and dump resolve one, by sharing
-	// their resolver rather than by having a second: a uuid is taken as
-	// itself, a name is looked up among what the region has described,
-	// and a word that names two things is refused with both ids rather
-	// than guessed at.  Guessing is worse here than it is for touch,
-	// since the wrong guess moves the avatar.
+	// Resolved by objectNamed, which take and dump share and whose
+	// rules touch's seenNamed follows, rather than by a resolver of its
+	// own: a uuid is taken as itself, a name is looked up among what the
+	// region has described, and a word that names two things is refused
+	// with both ids rather than guessed at.  Guessing is worse here than
+	// it is for touch, since the wrong guess moves the avatar.
 	//
 	// The zero is that resolver's own default of thirty seconds for the
 	// region to describe itself, which is a different question from

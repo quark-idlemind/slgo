@@ -141,9 +141,10 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	// are the seat's doing and the line saying so is what explains
 	// them.  The same shape "sit" prints, since it is the same fact.
 	//
-	// Nothing when standing, and it costs nothing then either: the
-	// answer comes from what this session was already told and only
-	// reaches the region when there is a seat to name.
+	// Nothing when standing, and it costs little then either: the
+	// agent's own posture says whether the avatar is sitting, and the
+	// listing that names the seat is read only when there is one.
+	// Neither asks the region anything.
 	//
 	// A failure is printed rather than returned.  Where the avatar is
 	// standing is the answer to "where", and losing it because the
@@ -232,7 +233,7 @@ type regionsOptions struct {
 // what the map answers with is a position, a maturity rating and a
 // handle, because the rest of the block -- how many people are there,
 // what the region allows, where the water is -- came back zero for every
-// region on every run (see sl.FindRegions).
+// region on every run (see the head of sl/worldmap.go).
 //
 // Plural, because the search is by prefix and a listing is what comes
 // back: "Sandbox" finds thirty-three regions and none of them is called
@@ -458,11 +459,11 @@ type wornOptions struct {
 //     never have been told, since an attachment is announced when it
 //     goes on and at login and never again.
 //   - a thing the region describes that the folder does not hold.
-//     Anything attached from this shell is one of those, because wear
-//     does not write the folder for objects -- so it is on the avatar
-//     now and will not come back at the next login.
+//     Anything put on by something that did not write the folder is one
+//     of those -- wear here writes it, and says so when it cannot -- so
+//     it is on the avatar now and will not come back at the next login.
 //
-// This used to list only the first of those sources and call the result
+// This used to list only the region's description and call the result
 // what was worn.  It was not: an avatar wearing a skin, a shape and
 // four clothing layers showed none of them, and the answer read as a
 // complete one.
@@ -1008,8 +1009,9 @@ func namesWanted(wearers map[uint32]wearer, all []*sl.Seen) []msg.UUID {
 // worn, and the prims of theirs whose root is not here.
 //
 // id and named are what --owner is matched against.  The heading is not:
-// it reads "(owner not known)" for things nobody has answered about, and
-// a pattern for a person's name should not start matching those.
+// it reads "(owner not known)" where no owner is known, and the owner's
+// id shortened in brackets where nobody has answered for the name, and a
+// pattern for a person's name should not start matching those.
 type owned struct {
 	id      msg.UUID
 	named   string

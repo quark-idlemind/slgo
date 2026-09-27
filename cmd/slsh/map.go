@@ -250,11 +250,11 @@ type mapOptions struct {
 // metres centred on this avatar.
 //
 // Nothing here is numbered, and the last listing is deliberately left
-// alone: "im 2" still means the second line of whatever who or friends
-// printed.  A picture cannot be numbered usefully -- two people in one
-// cell are one character -- and quietly replacing the numbering with
-// one that has no numbers in it would break the command somebody typed
-// next.
+// alone: "im 2" still means the second line of whatever who, friends
+// or lookup last printed.  A picture cannot be numbered usefully -- two
+// people in one cell are one character -- and quietly replacing the
+// numbering with one that has no numbers in it would break the command
+// somebody typed next.
 func cmdMap(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o mapOptions
 	args, done, err := subOptions("map", &o, out, args)
