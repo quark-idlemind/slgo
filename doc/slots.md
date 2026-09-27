@@ -188,7 +188,8 @@ A grant runs out. That is a backstop for a client that wedges without
 dying: connected, so its stream says it is alive, and never going to give
 anything back. `RenewSlots` is for work that cannot say in advance how
 long it will take, which is any benchmark whose search finishes when it
-converges.
+converges. Nothing in this tree calls it yet: slrun and slbench ask for
+thirty minutes and do not renew.
 
 The pool holds a grant a little longer than the holder was told — a
 private grace — so that a deadline is not a cliff. A caller that reads

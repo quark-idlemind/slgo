@@ -1058,9 +1058,12 @@ longer than it says.
 
 There is a timeout underneath that, for the case the connection does not
 cover: a client that wedged without dying. A grant is asked for thirty
-minutes and renewed by work that outlives it, which is long because what
-it guards against is a program that has stopped rather than one that is
-merely slow.
+minutes, which is long because what it guards against is a program that
+has stopped rather than one that is merely slow. Nothing renews it. A run
+that goes on longer loses its places a few seconds after the thirty
+minutes are up: the daemon may hand them to the next program that asks,
+and nothing stops the two of them running scripts in the same objects
+(see [slots.md](slots.md#leases-and-what-they-are-not-for)).
 
 ### What can go wrong
 
