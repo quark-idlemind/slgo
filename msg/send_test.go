@@ -724,10 +724,9 @@ func TestSendStopsWhenARetransmissionCannotGoOut(t *testing.T) {
 	}
 }
 
-// TestSendWithoutARunGoroutineDoesNotBlockForever guards the check that
-// comes before the queue: with Run already stopped the message has
-// nowhere to go, and the buffered channel would otherwise accept it and
-// say nothing.
+// TestSendAfterRunStopped guards the check that comes before the queue:
+// with Run already stopped the message has nowhere to go, and the
+// buffered channel would otherwise accept it and say nothing.
 func TestSendAfterRunStopped(t *testing.T) {
 	c := newCapture()
 	s := NewSender(c)

@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// fill puts deterministic non-zero data into every field of a message,
-// reading the same struct tags the codec does.
+// fillMessage puts deterministic non-zero data into every field of a
+// message, reading the same struct tags the codec does.
 func fillMessage(t *testing.T, m Message, r *rand.Rand) {
 	t.Helper()
 	v := reflect.ValueOf(m).Elem()
@@ -300,8 +300,8 @@ func TestVariableTwoBytePrefix(t *testing.T) {
 	}
 }
 
-// TestIPPortIsNetworkOrder guards the one field type whose byte order
-// differs from every other integer in the protocol.
+// TestIPPortIsNetworkOrder guards the one integer field type whose byte
+// order differs from every other integer in a message body.
 func TestIPPortIsNetworkOrder(t *testing.T) {
 	m := &OpenCircuit{}
 	m.CircuitInfo.IP = IPAddr{10, 0, 0, 1}
