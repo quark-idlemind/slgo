@@ -142,9 +142,10 @@ func unquoteWord(s string) string {
 // Typing carries on after the closing quote perfectly well, since the
 // parser joins adjacent pieces: "Current Outfit/"Sen is one word.
 //
-// A name holding both kinds of quote cannot be written as one word in
-// this syntax at all.  It is offered unquoted rather than mangled; it
-// is also not typeable by hand, which is what ids are for.
+// A name holding both kinds of quote is offered unquoted rather than
+// mangled.  It can be written as one word only in pieces, each " in
+// single quotes of its own, as quoteWords writes it; ids are for names
+// like that.
 func quoteWord(s string) string {
 	if !strings.ContainsAny(s, " \t\"'><") {
 		return s

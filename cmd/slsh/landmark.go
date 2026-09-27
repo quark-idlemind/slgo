@@ -11,10 +11,11 @@ package main
 // to them.  Home is here too, both halves of it: going there, and
 // choosing where it is.
 //
-// The four things it can do to the world are one message each, and they
-// are sl's: Session.Landmark fetches the asset and parses it,
+// The things it can do to the world are one message each, and they are
+// sl's: Session.Landmark fetches the asset and parses it,
 // Session.MakeLandmark is a create with two type numbers on it,
-// Session.GoTo is TeleportLandmarkRequest, and Session.SetHome is
+// Session.GoTo is TeleportLandmarkRequest, Session.GoHome is the same
+// message with the null id in it, and Session.SetHome is
 // SetStartLocationRequest -- which is not a landmark at all and is here
 // because home is, and because splitting the two halves of home across
 // two commands is how somebody comes to look for one of them under the
@@ -25,41 +26,19 @@ package main
 // The measurements behind all of it are in doc/history/landmark.md,
 // taken on Agni on 2026-08-18.
 //
-// # Why going somewhere is a word and not a letter
+// Going somewhere is never the bare form: "landmark NAME" says where it
+// goes and "landmark --go NAME" goes there, and none of the four verbs
+// has a letter, so that reading a landmark and moving an avatar are
+// never one typo apart.  --set-home, whose damage a teleport does not
+// undo, carries the word "set", has no letter and takes no name.
 //
-// If going somewhere were the bare form, then reading a landmark and
-// being somewhere else afterwards would be one typo apart -- so it is
-// not the bare form: "landmark NAME" says where it goes and
-// "landmark --go NAME" goes there.  For the same reason none of the four verbs has a short
-// letter.  -g beside -m is exactly the typo that the whole word is
-// there to prevent, and the only cost of spelling it out is four
-// characters on a line that moves an avatar across the grid.
-//
-// --set-home is the sharp end of the same argument.  It is the one verb
-// whose damage a teleport does not undo -- an avatar sent to the wrong
-// place walks back, and an account whose home was quietly rewritten
-// finds out weeks later, somewhere it did not mean to log in -- so it
-// carries the word "set", it has no letter, and it takes no name.
-//
-// # Why a name means something in inventory and nothing else
-//
-// An inventory item has an ITEM id and an ASSET id and the grid takes
-// only the second: measured, the item id and a uuid that is nothing at
-// all are both answered with perfect silence, waited out to twelve
-// seconds.  There is no error to catch and nothing to report.
-//
-// So this command never hands the grid a uuid a person typed.  A name
-// is looked up in what this avatar KEEPS -- inventory less the trash,
-// see landmarksHeld -- and the asset id comes out of the listing,
-// which is the one place the two ids are told apart correctly.  A uuid
-// typed here is looked up in that same listing -- as an item id or as an
-// asset id, since a person pasting one from "ls -l" has the first -- and
-// a uuid that names nothing there is refused rather than sent.  Reading
-// an unknown uuid would in fact work, because the fetch either parses as
-// a landmark or does not; but the same uuid handed to --go is either an
-// asset id or an item id and nothing distinguishes them but a wait that
-// never ends, so the two forms would differ in a way nobody could
-// predict from the outside.  One rule: a landmark is something you have.
+// A name is looked up in what this avatar KEEPS -- inventory less the
+// trash, see landmarksHeld -- and the asset id comes out of the
+// listing.  A uuid typed here is looked up in that same listing, as an
+// item id or an asset id, and one that names nothing there is refused
+// rather than sent: the grid takes only the asset id, and answers the
+// item id, or a uuid that is nothing at all, with silence.
+// Why: doc/slsh.md#naming-a-landmark-and-going-to-one
 
 import (
 	"context"
@@ -76,17 +55,12 @@ import (
 
 // landmarkOptions is what landmark was asked for.
 //
-// The four verbs are exclusive and each is a whole word: see the file
-// comment for why none of them has a letter.  --wait is tp's flag with
-// tp's meaning, because it is the same waiting for the same kind of
-// arrival, and a teleport this shell asked for should not have two
-// different budgets depending on which command asked.
-//
-// --set-home is the one that changes something and does not move
-// anybody, and it is spelled with the word "set" in it for that reason:
-// --home beside a --home that meant "make this home" is one keystroke
-// between going somewhere and rewriting where this account starts, and
-// the second of those is not undone by teleporting back.
+// The four verbs are exclusive and each is a whole word, --set-home with
+// "set" in it beside the --home that goes: see the file comment.
+// --wait is tp's flag with tp's meaning, because it is the same waiting
+// for the same kind of arrival, and a teleport this shell asked for
+// should not have two different budgets depending on which command
+// asked.
 type landmarkOptions struct {
 	Make    bool `getopt:"--make    make a landmark of where this avatar is standing, called NAME"`
 	Go      bool `getopt:"--go      go to the landmark NAME names"`

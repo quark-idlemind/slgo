@@ -41,7 +41,7 @@ type Config struct {
 	// which is what lets sl-host be asked -- see internal/slhost.
 	Addr   string
 	Agent  string // the profile: hosted by slgod, or on disk for --direct
-	Prefix rune   // the key that starts a command
+	Prefix rune   // the key that leaves chat mode for the command prompt
 
 	// Direct is set when this process holds the session itself,
 	// which is worth saying out loud: quitting logs the avatar out.
@@ -178,81 +178,18 @@ func DefaultConfig() Config {
 // viewerDefaults is how to start a real viewer on this kind of machine,
 // point it at slgod, and tell whether one is already up.
 //
-// # Why the OpenSim build and not the one already installed
+// On macOS that is the OpenSim build of Firestorm, since the build for
+// Second Life cannot be pointed at a private grid at all; --grid with a
+// nickname that has to be added to that viewer's own grid list once by
+// hand, since --loginuri does nothing; open(1), which hands the launch
+// off, returns at once and brings the viewer to the front; and a match
+// on the bundle path, since the process is called plain "Firestorm"
+// whichever build it came from.
 //
-// This is the trap, and it is worth the paragraph.  A Firestorm built
-// for Second Life CANNOT be pointed at a private grid at all.  That
-// flavour compiles LLGridManager from llviewernetwork.cpp, whose
-// grid-file block -- the one that would read the viewer's own
-// grids.user.xml -- is compiled out (llviewernetwork.cpp:149-201,
-// "#if 0 <FS:AW disabled for meeting havok sublicense requirements/>"),
-// so the only grids it has are the two it hardcodes.  Driven live, the
-// SL build at /Applications/Firestorm-Releasex64.app logged
-//
-//	WARNING #GridManager# llviewernetwork.cpp(214) initialize :
-//	Unknown grid 'slgod'
-//
-// and then llviewernetwork.cpp:244, "Default grid to
-// util.agni.lindenlab.com" -- an Agni login screen, with nothing on it
-// to suggest why.  Somebody who reaches for the viewer they already
-// have gets exactly that, which is why the default names the other one.
-//
-// The OpenSim flavour compiles fsgridhandler.cpp instead, which does
-// read grids.user.xml, and it is at ~/Applications/Firestorm-OpenSim.app
-// here.  "open -a Firestorm-OpenSim" resolves it by name; both the bare
-// name and the full path were tried live and both attached.
-//
-// # Why the grid is a NICKNAME and a setting of its own
-//
-// --grid takes a nickname out of the viewer's own grid list, not a URL.
-// Passing the login URI where the nickname goes was tried on the chance
-// that the auto-add path would take it, and did not work: "Unknown grid
-// 'http://127.0.0.1:9000/'", then Agni again.  --loginuri, which would
-// be the obvious flag, is read into CmdLineLoginURI
-// (app_settings/cmd_line.xml:201-208) and then never looked at by
-// anything but its own unit tests.
-//
-// So the grid has to exist in the viewer BEFORE any of this works:
-// Preferences -> OpenSim, add the login URI that "viewer" prints, and
-// give it the nickname this setting names.  That is a one-off piece of
-// local setup, which is exactly the sort of thing that belongs in a
-// setting rather than buried in a command template where nobody would
-// find it.
-//
-// # Why macOS goes through open(1)
-//
-// A macOS application is a bundle, not an executable: the binary here
-// is Firestorm-OpenSim.app/Contents/MacOS/Firestorm, and running it
-// directly is not the same as launching the app.  "open -a" is the
-// supported way and is what the recovery script on this machine already
-// uses (~/bin/sl-restart, which launches with open -a "$APP" --args
-// --autologin), so it is copied from there.
-//
-// It also brings the viewer to the FRONT, which is deliberate and is
-// what was asked for: open activates the application it launches unless
-// -g is given (man open), and somebody who has just typed "viewer
-// --launch" wants to be looking at it.
-//
-// open returns as soon as the launch has been handed off rather than
-// waiting for the application to exit -- that is what -W is for, and it
-// is not passed -- so the prompt comes back at once.
-//
-// # Why the running check is a process match
-//
-// It has to answer before the viewer has a window, a port or a session,
-// and a process is the only thing it has by then.  The pattern is the
-// bundle path rather than the process name because the process is
-// called plain "Firestorm" whichever build it came from -- which is
-// also why it must follow the app setting, since the two flavours are
-// told apart only by their bundles.  sl-restart reaps orphans with the
-// same shape of pattern (pkill -f "Firestorm-Releasex64.app/Contents").
-//
-// # Why an unknown platform gets nothing
-//
-// Guessing a binary name would produce a command that fails somewhere
-// inside a viewer's own startup, or worse, starts the wrong program.
-// Empty means "viewer --launch" says nobody has told it what to run,
-// which is a sentence somebody can act on.
+// Anywhere else it is nothing.  A guessed binary name could fail inside
+// a viewer's own startup, or start the wrong program, and empty makes
+// "viewer --launch" say that nobody has told it what to run.
+// Why: doc/slsh.md#starting-a-viewer-from-slsh
 func viewerDefaults(goos string) (app, grid, launch, running string) {
 	switch goos {
 	case "darwin":
@@ -266,15 +203,7 @@ func viewerDefaults(goos string) (app, grid, launch, running string) {
 // setting is one thing somebody can set: what it is called, what it is
 // for, and the two halves of reading and writing it.
 //
-// # Why a table and not a switch
-//
-// Every setting used to be in three places at once -- a field of
-// Config, a case in the reader's switch, and a line of DefaultConfig --
-// and adding one meant remembering all three.  A name misspelled in the
-// switch was caught nowhere: the file would refuse it as unknown, which
-// reads as the person having typed it wrongly.
-//
-// So there is one row per setting and everything works from it: the
+// There is one row per setting and everything works from it: the
 // reader looks a key up here, "set" lists these and nothing else, and
 // the file writer is handed one of these rows.  A setting added here
 // can be written in the file, listed, and changed, with no other edit.
@@ -283,6 +212,7 @@ func viewerDefaults(goos string) (app, grid, launch, running string) {
 // check has always been for: a misspelled setting that silently did
 // nothing is a shell that comes up looking right and behaves as though
 // the line were not there.
+// Why: doc/slsh.md#one-table-of-settings
 type setting struct {
 	name string
 
@@ -299,9 +229,8 @@ type setting struct {
 	// session was attached with it, or the terminal was put in raw mode
 	// with it.  A flag may have overridden the file for this run as
 	// well, so applying one of these now would mean two different
-	// things depending on how slsh was started.  See startupNote for
-	// what is said about it, which is said in the listing and again
-	// when one is changed.
+	// things depending on how slsh was started.  The listing marks one
+	// "at startup only", and changing one prints startupNote.
 	startup bool
 
 	// show is the value as the file would write it, and parse is the
@@ -318,8 +247,8 @@ type setting struct {
 const startupNote = "this shell keeps the old value; the new one is for the next slsh"
 
 // settings is every setting there is, written in the order they belong
-// in -- the shell's own, then the viewer's, then the map's, and within
-// each the order somebody meets them in.
+// in -- the shell's own, then the viewer's, then the map's, then how's,
+// and within each the order somebody meets them in.
 //
 // They are LISTED alphabetically, which is not the same thing and is
 // deliberate; see sortedSettings.
@@ -689,8 +618,8 @@ func LoadConfig() (Config, error) {
 // # Why this is not SaveProfile
 //
 // agent.SaveProfile rewrites a profile wholesale out of the struct,
-// which is right there: a profile is written by "login" and read by
-// programs.  A settings file is different in the one way that matters
+// which is right there: what it writes is made from a Login and read
+// by programs.  A settings file is different in the one way that matters
 // -- it is hand-edited -- and the comments in it are somebody's notes
 // about why a viewer needs that particular grid nickname, or which
 // address was tried and did not answer.  Rewriting the file from the

@@ -3,17 +3,11 @@ package main
 // A transcript of the session: what was heard, what was said, and every
 // command that was run.
 //
-// It is written here rather than in slgod because this is where the
-// three of them exist at once.  The daemon relays messages as undecoded
-// bytes and says so in as many words -- "it does not decode message
-// bodies, hold an inventory, understand chat, or know what a script is"
-// (server/server.go) -- and it never sees a command line at all, since
-// parsing one and running it is the whole of what slsh does.  What the
-// daemon could log is packets; what a person wants is what they saw.
-//
-// The price is stated so nobody has to discover it: an avatar nobody is
-// attached to writes nothing.  slgod stays logged in and keeps hearing,
-// and none of that reaches a file until a shell is there to hear it.
+// It is written here rather than in slgod, because this is where the
+// three of them exist at once: the daemon relays undecoded messages and
+// never sees a command line.  So an avatar nobody is attached to writes
+// nothing; what slgod hears meanwhile reaches no file.
+// Why: doc/slsh.md#why-slsh-writes-the-transcript
 //
 // # One line, one write
 //

@@ -72,6 +72,19 @@ The fifteen seconds is not a measurement. How long a move takes to
 show over AIS has not been measured; fifteen seconds is the bound
 `SetItem` already used for the same kind of read.
 
+### Moving an object in the region
+
+`sl.Place`, which sets a rezzed object's position, rotation and scale,
+is fire and forget -- the simulator answers with an `ObjectUpdate`
+whenever it gets round to it -- so an immediate re-read returns the
+position the object had BEFORE the move and reports it with total
+confidence. Observed: "place-probe is at 33.0, 73.0, 1000.2" for an
+object that was by then at 36, 78, 1002. A stale answer is worse than
+none, because nothing about it looks wrong.
+
+So slsh's `move` waits for the object to have moved, rather than
+reading it back once.
+
 ## Object permissions
 
 Nothing answers `ObjectPermissions`. The masks come back in

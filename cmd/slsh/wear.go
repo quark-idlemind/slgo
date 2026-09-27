@@ -4,197 +4,30 @@ package main
 //
 //	wear    attach an inventory object
 //	detach  take a worn one off
+//	dress   put on what the Current Outfit folder names and is not on
 //
-// These finish what "worn" started.  Listing the attachments has been
-// possible since there was a shell, and changing them has been possible
-// in the sl package for just as long -- slbench has been hanging HUDs
-// on an avatar with Wear and TakeOff all along -- so the only thing
-// missing was a way to ask for it from the prompt.
+// wear takes an inventory path, following a link to its item, and
+// detach takes a name matched against what is worn: what it sends is
+// the id of the item an attachment was worn from, which the region's
+// answer carries.  A key typed at detach is looked for as the item or
+// as the worn object, whose key is new at every attach and every login;
+// the item is what goes on the wire.
+// Why: doc/slsh.md#what-wear-and-detach-are-called-and-what-they-take
 //
-// # Why the argument is not the same on both sides
+// wear adds rather than replaces.  The point travels in one byte with
+// 0x80, ATTACHMENT_ADD (indra_constants.h:193), laid over it, and this
+// command lays it on unless --replace is given -- not sl.Wear, whose
+// other callers pass the byte they mean.  A bare wear sends 0x80 alone:
+// add, wherever the object itself says (attachWhereItSays).  Adding
+// makes it possible to wear one item twice, and wear refuses to, since
+// two attachments from one item agree in every field detach could name
+// one by.  What a --replace displaced is confirmed afterwards rather
+// than predicted, because a replace takes off one attachment and not
+// the point's worth.
+// Why: doc/slsh.md#why-wear-adds-rather-than-replaces
 //
-// wear names something in inventory and detach names something worn,
-// and those are different places even when they hold the same word.  So
-// wear takes a path, the way place does, and looks the item up; detach
-// takes a name and matches it against what is actually on, because the
-// thing it has to send is the id of the item an attachment was worn
-// from and that is what the region's answer carries.
-//
-// It could have gone the other way -- detach resolving a path to an item
-// and sending that id without ever asking what is worn.  It would work,
-// and it would be silent about the case that matters: a name that is in
-// inventory and not on the avatar would be detached with every
-// appearance of success and nothing would happen.  Asking first costs
-// one call and turns that into a sentence.
-//
-// # Why the object's key is not what detach takes
-//
-// A worn object is rezzed afresh, with a key nobody has seen before,
-// every time it goes on and again at every login, so its key is worth
-// nothing the moment it comes off.  The inventory item does not change.
-// A key typed at detach is therefore looked for as either -- both are
-// in the answer already, so neither costs anything -- but the item is
-// what goes on the wire.
-//
-// # Wearing adds rather than replaces
-//
-// A point can hold more than one attachment, and which of the two
-// happens is the request's to say: the point travels in one byte with
-// 0x80, ATTACHMENT_ADD (indra_constants.h:193), laid over it, and the
-// viewer lays it there exactly that way -- "if (attachment.mAdd)
-// attachment_pt |= ATTACHMENT_ADD" (llattachmentsmgr.cpp:247-249).  So
-// the difference between the viewer's Add and its Wear is one bit, and
-// the choice of which is the default is entirely ours.
-//
-// This command replaced, and now it adds.  What settled it was measured
-// on Agni, in Pelmar Reach: holt was wearing "auto 11" on HUD bottom
-// right, and
-//
-//	wear Objects/auto 3
-//
-// with no --at at all put auto 3 on HUD bottom right and took auto 11
-// off.  Nothing was said about auto 11 by anybody -- not by the command,
-// which printed its one line about auto 3, and not by the region.  It
-// simply stopped being worn.
-//
-// That silence is the argument.  The person most likely to type wear is
-// already dressed; the point an object asks for is one they did not
-// choose and usually do not know until the answer names it; and so the
-// replacing default put the loss of something they were wearing behind a
-// command that reads as purely additive.  A wrong add is visible and
-// costs a detach.  A wrong replace is invisible and costs whatever was
-// there.  Between two defaults, the one to have is the one whose mistake
-// can be seen.
-//
-// --replace is the old behaviour, kept because putting a thing where
-// another thing is really is sometimes what is meant -- and it now names
-// what it displaced instead of leaving that to be found out.
-//
-// The point laid under the bit may be 0, which is a value here rather
-// than a missing one (see attachWhereItSays).  "Add, wherever the object
-// itself says" is therefore the single byte 0x80, and that is what a
-// bare wear sends.
-//
-// # Where the add bit is laid on
-//
-// On the way past, in this command, rather than by anything in sl.
-// sl.Wear takes the AttachmentPt byte and sends it, and that byte is
-// the point with the bit over it: the protocol has one field for both,
-// so a caller able to pass 0x85 can already say everything the message
-// can express.  A second way of saying it in sl -- a flag, an options
-// struct -- would be an argument nobody but this command ever varies,
-// and it would sit two files from the --replace that decides it.
-//
-// The other half of that is what it leaves alone.  sl.Wear's other
-// callers, EnsureAttached and Worn, pass a bare point and are untouched
-// by any of this; they take a HUD off and put it straight back on for
-// slbench, and a default that had quietly started adding would leave
-// a second copy behind on every run.
-//
-// # The same item twice
-//
-// Adding makes it possible to wear one inventory item twice, and wear
-// refuses to.  An attachment is known here by the item it came from --
-// the session keys its map that way (w.attach in sl/attach.go) and the
-// object's own id is freshly minted at every attach and every login --
-// so two attachments from one item are two rows agreeing in every field
-// a person could name one by.  detach would find both, refuse as
-// ambiguous, and advise telling them apart by the item id that "worn -l"
-// prints, which is precisely the thing they share.  That is a state this
-// shell can create and cannot then unpick, so it is not created: the
-// refusal names the point it is already on, and names --replace and
-// detach as the two ways on from there.
-//
-// The viewer declines the same thing more quietly, by dropping the
-// request where a person cannot see it -- "ATT duplicate attachment
-// request, ignoring" (llinventorybridge.cpp:8144-8149).
-//
-// # An outfit folder holds links, and a link's id is not an item's
-//
-// Everything under My Outfits is a link.  It carries the same name as
-// the thing it points at, and a listing tells the two apart only by the
-// word "link" in the type column -- so the path a person reads the name
-// off, when they are looking at an outfit they want back, names a link
-// almost every time.
-//
-// The id on a link is its own, and its "asset" is not an asset: it is
-// the ITEM id of what it points at, delivered as linked_id where an
-// item carries asset_id.  Sending a link's own id in
-// RezSingleAttachmentFromInv sends the simulator an id it has no object
-// for, and the simulator answers an id it does not recognise with
-// silence rather than with a refusal.  So the whole of what the person
-// sees is the forty second wait running out and then "the simulator
-// never reported it as worn" -- true in every clause and about nothing
-// that was wrong.
-//
-// So wear follows one, which is what the viewer does with the same
-// click.  linkTarget does the following, and refuses the two cases
-// where there is nothing to follow to: a link whose item is no longer
-// in inventory, since a link outlives what it pointed at, and a link to
-// another link, which the viewer also declines rather than choosing how
-// far to go.
-//
-// # Naming what came off, and confirming it
-//
-// wear asks what is worn before it sends, which is the same question the
-// refusal above needs answered, so that read is paid for either way.
-// The last line then says what a --replace displaced: "X is worn on
-// chest; Y came off".
-//
-// That clause was first written as a prediction -- whatever was on the
-// point beforehand -- on the reasoning that the region had been asked to
-// replace and had answered by putting the new attachment on that point.
-// It is wrong, and it is wrong in exactly the case this change created,
-// because before today a point never held two.  Measured on Agni, as
-// holt, with auto 11 and auto 3 both on HUD bottom right:
-//
-//	wear --replace --at "HUD bottom right" Objects/auto 4
-//	auto 4 is worn on HUD bottom right; auto 11 and auto 3 came off
-//
-// and afterwards the point held auto 3 and auto 4.  A replace displaces
-// ONE attachment, not the point's worth of them, so the prediction named
-// something that was still on.
-//
-// So it is confirmed instead: what was on that point before, is not worn
-// now, and is not the thing just put on.  That is one more read and not
-// the polling loop detach needs -- detach polls because nothing else
-// will ever tell it, whereas here sl.Wear has already waited for the
-// region to describe the new attachment, so the answer is sitting there
-// for the asking.
-//
-// Both ways of coming up empty say nothing rather than inventing a
-// reassurance.  If the difference is empty -- nothing was displaced, or
-// the region has not caught up with the fact yet -- the line is the bare
-// one; the failure that leaves is a person not being told about
-// something that did come off, which is where they were before this
-// clause existed, rather than being told a thing that is untrue.  And a
-// read that fails prints the line without the clause: the wear worked,
-// and it is the report that could not be finished.
-//
-// # Why detach waits and TakeOff does not
-//
-// Nothing replies to a detach.  sl.TakeOff puts the message on the wire
-// and returns, and what says the thing came off is the object no longer
-// being among what is worn -- which happens some time later.  Live, that
-// gap is visible: a "worn" run straight after a detach still listed the
-// attachment on the point it had just been taken off, and only the run
-// after that showed it gone.
-//
-// So cmdDetach polls until the region agrees, and sl.TakeOff is left as
-// it was.  Its callers there, Worn and EnsureAttached, take a thing off
-// in order to put it straight back on and do their own settling; making
-// TakeOff wait would slow both of them for a confirmation they throw
-// away.  What is at stake is this command's last line -- "is no longer
-// worn" is a claim the SHELL makes, and the shell is what should have
-// established it before printing it.
-//
-// # Why the names are wear and detach
-//
-// They are the viewer's words, from the menu somebody will have used
-// before they came here.  "attach" and "remove" were the alternative and
-// were worse in both halves: attach is what the protocol calls it rather
-// than what a person does, and remove sits one letter from rm, which
-// deletes things.
+// Nothing replies to a detach, so cmdDetach polls until the region
+// stops listing the attachment; sl.TakeOff does not wait.
 
 import (
 	"context"
@@ -296,6 +129,7 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	path := strings.Join(args, " ")
 	// thingAt and not entryAt: the id is going to the grid as the thing
 	// to put on, so a link is followed to what it points at.
+	// Why: doc/slsh.md#a-links-id-is-not-the-items
 	e, err := sh.thingAt(ctx, path)
 	if err != nil {
 		return err
@@ -309,9 +143,8 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if sl.IsWearable(sl.AssetType(e.Type)) {
 		return sh.wearWearable(ctx, out, e, o.Replace)
 	}
-	// The item rather than the entry: what goes over the wire is the
-	// name, the description and every permission mask, and an entry
-	// carries none of them.
+	// The item rather than the entry, since sl.Wear takes an item and
+	// sends its name, description, flags and permission masks.
 	it, err := sh.itemAt(ctx, e)
 	if err != nil {
 		return err
@@ -330,6 +163,7 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	// refused, or reporting a replace with the same silence about what
 	// came off that the flag exists to end.  The read AFTER the wear is
 	// the one that may fail quietly -- by then the wear has happened.
+	// Why: doc/slsh.md#why-wear-will-not-put-one-item-on-twice
 	before, err := sh.s.WornObjects(ctx)
 	if err != nil {
 		return err
@@ -345,8 +179,8 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	}
 
 	// The byte the message carries, which is the point with the add bit
-	// over it -- see the head of this file for why it is composed here
-	// and not inside sl.Wear.
+	// over it, composed here and not inside sl.Wear.
+	// Why: doc/slsh.md#why-wear-adds-rather-than-replaces
 	send := point
 	if !o.Replace {
 		send |= sl.AttachAdd
@@ -398,13 +232,12 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 // the one from the region's answer rather than the one requested, since
 // with no --at nothing here knows it until then.  Gone, because a
 // replace takes off one attachment and leaves any others where they are;
-// that was measured, and the measurement is at the head of this file.
-// And not the item just worn: a replace of something already on that
-// point takes the old copy off and puts a new one on, so which of the
-// two the region has got round to describing when this asks decides
-// whether the item looks worn -- an ordering nothing here controls, and
-// "X is worn on chest; X came off" is a sentence arguing with itself
-// whichever way it falls out.
+// that was measured.  And not the item just worn: a replace of something
+// already on that point takes the old copy off and puts a new one on, so
+// which of the two the region has got round to describing when this asks
+// decides whether the item looks worn -- an ordering nothing here
+// controls, and "X is worn on chest; X came off" is a sentence arguing
+// with itself whichever way it falls out.
 //
 // Only a replacing wear displaces anything, which is why the caller asks
 // only for one.  An add landing on an occupied point leaves what is
@@ -419,6 +252,7 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 // costs a walk of inventory.  A name that is not there falls back to the
 // item's id, the way detach's does: an id is poor but it is true, and it
 // is what "worn -l" prints.
+// Why: doc/slsh.md#naming-what-a-replace-took-off
 func cameOff(ctx context.Context, sh *Shell, before []*sl.Attached, point int, item msg.UUID) string {
 	now, err := sh.s.WornObjects(ctx)
 	if err != nil {
@@ -707,13 +541,14 @@ func (sh *Shell) detachFromOutfit(ctx context.Context, out io.Writer, want strin
 //
 // A detach is answered by nothing at all, so the only evidence it worked
 // is the object's absence from what is worn, and that arrives some time
-// after the request -- see the head of this file for the measurement.
-// Printing the sentence without waiting is the mistake TeleportLocal's
-// doc comment was written about: a caller told a thing happened, when
-// what actually happened was that the request went out.
+// after the request.  Printing the sentence without waiting is the
+// mistake TeleportLocal's doc comment was written about: a caller told a
+// thing happened, when what actually happened was that the request went
+// out.
 //
 // A failure here is not a failure to detach.  It is not knowing, and the
 // message says so: the request went, and the region has not agreed.
+// Why: doc/slsh.md#why-detach-waits-and-takeoff-does-not
 func (sh *Shell) waitOff(ctx context.Context, item msg.UUID, name string, seconds int) error {
 	if seconds <= 0 {
 		seconds = 15
@@ -775,8 +610,9 @@ func wornFrom(worn []*sl.Attached, item msg.UUID) (*sl.Attached, bool) {
 // sl.PickNamedFunc: exactly, in the case it has, and a name that is worn
 // twice is refused with the item ids, which settle it.
 func findWorn(ctx context.Context, sh *Shell, worn []*sl.Attached, want string) (*sl.Attached, string, error) {
-	// Nothing is named until something has to be: a key given for a key
-	// is answered without reading inventory at all.
+	// Nothing is named until something has to be: a key is matched
+	// without reading inventory, which is read only to name what it
+	// matched.
 	if id, err := msg.ParseUUID(strings.TrimSpace(want)); err == nil {
 		for _, a := range worn {
 			if a.Item == id || a.Object.ID == id {

@@ -1,29 +1,12 @@
 package main
 
-// The settings, from inside the shell.
+// The settings, from inside the shell: "set" lists them, shows one, or
+// changes one.
 //
-// Everything slsh can be told lived in one hand-edited file and nowhere
-// else: to find out what could be set you read the head of config.go,
-// and to change one you left the shell, opened an editor, and started
-// again.  A person who has just been drawn a map that is the wrong
-// shape for their font should be able to say so where they are.
-//
-// # Why it is called set
-//
-// Because that is the word a shell user reaches for, and because bare
-// "set" listing everything is exactly what a shell's set does.  The
-// obvious objection is that a shell's set is about variables and this
-// one is not, and it comes to nothing here: slsh has no variables for
-// it to be confused with, and if it ever does, they will be the thing
-// somebody types "set" expecting to see.
-//
-// # What it writes
-//
-// The file, every time, because a setting that lasted until the shell
-// was closed would be a setting somebody had to type again after every
-// crash and every reboot -- and the whole complaint was about having to
-// say the same thing twice.  See saveSetting for what it does to the
-// rest of the file, which is nothing.
+// A change is written to the file every time, not only to this shell,
+// so that it outlasts a crash or a reboot; saveSetting changes that one
+// line and nothing else in the file.
+// Why: doc/slsh.md#settings-from-inside-the-shell
 
 import (
 	"context"
@@ -87,15 +70,9 @@ func cmdSet(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 
 	// "auto" belongs to one setting, and typing it at any other is
 	// refused here, in the command, rather than left to a row of the
-	// table.  A table where any row might turn out to have a magic word
-	// in it is a table nobody can predict: the only way to find out
-	// whether "set addr auto" measured something or set the address to
-	// the word "auto" would be to type it and look afterwards.  So
-	// there is exactly one row the word means anything for, it is named
-	// here, and everywhere else it is an error with that name in it.
-	// The price is a viewer_grid that cannot be called "auto", which is
-	// a nickname nobody has, against a rule that can be stated in one
-	// line and holds for every setting there will ever be.
+	// table, so that no row can turn out to have a magic word in it.
+	// The price is a viewer_grid that cannot be called "auto".
+	// Why: doc/slsh.md#auto-means-something-for-one-setting
 	var note string
 	if strings.EqualFold(strings.TrimSpace(value), autoWord) {
 		if s.name != autoSetting {
@@ -161,39 +138,29 @@ const (
 	autoSetting = "map_ratio"
 )
 
-// autoNote is what "auto" says after it has worked.
-//
-// It says the number is a starting point, because it is one: what the
-// terminal reports is the cell it hands the font, which is not always
-// the shape the letters look.  On the machine this was written on the
-// terminal said 18:10 and 18:9 drew the squarer picture.  So the last
-// word is a square region looked at, which takes one line and one look
-// -- and somebody who has just been given a number is exactly who is
-// in a position to try it.
+// autoNote is what "auto" says after it has worked: that the number is
+// a starting point, since what the terminal reports is the cell it
+// hands the font, which is not always the shape the letters look, and
+// that a square region looked at is the last word.
+// Why: doc/slsh.md#what-auto-measures
 const autoNote = "what the terminal reports is where to start, not the answer:\n" +
 	"draw a region with \"map --region\" and tweak until a square one looks square"
 
 // measureCellRatio asks the terminal how big a character cell is and
 // writes the answer the way map_ratio is written.
 //
-// # The numbers are the ones reported, and are not reduced
+// It goes through ParseCellRatio like everything else, so that what is
+// written is a value the file can be read back with.  A terminal that
+// reports its cells in the pixels of a very dense screen can name
+// numbers outside what map_ratio takes, and the honest end of that is a
+// refusal here, with the pixels in it, rather than a settings file that
+// will not load tomorrow morning.
 //
-// 18:10 and 9:5 are the same ratio and are not the same starting point.
-// The reported number is where somebody begins, not where they end --
-// see autoNote -- and the person who measured this went from a reported
-// 18:10 to 18:9 by changing one digit.  Reduced to 9:5 that same tweak
-// is a sum to do first and a bigger step to take, for nothing gained:
-// the picture is drawn from the shape of the ratio and not from the
-// size of its numbers, so carrying the reported ones costs nothing at
-// all.
-//
-// # Why it goes through ParseCellRatio like everything else
-//
-// So that what is written is a value the file can be read back with.
-// A terminal that reports its cells in the pixels of a very dense
-// screen can name numbers outside what map_ratio takes, and the honest
-// end of that is a refusal here, with the pixels in it, rather than a
-// settings file that will not load tomorrow morning.
+// The numbers are the ones reported, and are not reduced: 18:10 stays
+// 18:10 rather than becoming 9:5, since it is where somebody starts
+// tweaking from, and the picture is drawn from the shape of the ratio
+// and not from the size of its numbers.
+// Why: doc/slsh.md#what-auto-measures
 func measureCellRatio(t *Term) (string, error) {
 	if t.Plain() {
 		// "slsh -c", "slsh -f" and a piped session all land here.  There

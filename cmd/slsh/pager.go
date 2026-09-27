@@ -76,7 +76,7 @@ type pager struct {
 	msg   string
 	mode  rune // 0, or '/' or '?' while typing a search
 	buf   []rune
-	shown int // lines written out so far, so that none is written twice
+	shown int // how far down has been written; a step on writes none twice
 }
 
 func newPager(text string, rows int) *pager {

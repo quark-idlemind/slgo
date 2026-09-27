@@ -5,40 +5,17 @@ package main
 //
 //	take   the world into inventory
 //	place  inventory into the world
-//	perms  what the next owner, the group or everyone may do
+//	perms  what the owner, the next owner, the group or everyone may do
 //
 // These were slinv's, in the days when a separate daemon owned the
 // session; the operations themselves have been in the sl package all
 // along and only wanted a way to be asked for.
 //
-// # Why the pair is take and place
-//
-// "rez" is what everyone calls this, and it is already the command that
-// builds an object from a JSON file.  One word cannot mean both "make
-// what this file describes" and "put back what I took": the first
-// invents an object and the second restores one, and a person who mixed
-// them up would be told their file was not valid JSON.  That has not
-// changed and is not going to.
-//
-// What did change is that "place" became free.  It used to be the
-// command that repositioned something already rezzed, and that is now
-// "move", which is the plainer word for shifting a thing that is
-// already there and leaves "place" to mean what it sounds like: putting
-// a thing into the world.  So the pair is take and place, and each of
-// them says which direction it goes in.
-//
-// # The names these two used to have
-//
-// This command was called "bring", and nothing answers to that now.  A
-// script that says it stops with an unknown command, which is loud,
-// immediate and costs a re-run, so there is no alias for it: an alias
-// would keep the word in circulation, and the word being a poor
-// description of the act is the whole reason for the rename.
-//
-// "place" is the half worth being careful about, because it did not
-// disappear -- it changed meaning, and both meanings are spelt the same
-// way.  See the argument count in cmdPlace for what that costs and what
-// is done about it.
+// place is not rez, which builds an object from a JSON file.  It was
+// called bring, which answers to nothing now, and "place" used to be
+// what move is, so cmdPlace counts its arguments rather than reading
+// the first.
+// Why: doc/slsh.md#why-the-pair-is-take-and-place
 
 import (
 	"context"
@@ -176,8 +153,8 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	if e.Folder {
 		return fmt.Errorf("%s is a folder; place takes one object", args[0])
 	}
-	// An Entry says where a thing sits; RezFromInventory wants the item
-	// itself, with its asset and permissions on it.
+	// The item and not the entry: RezFromInventory sends every field of
+	// the item, its group among them, and an entry has no group.
 	it, err := sh.itemAt(ctx, e)
 	if err != nil {
 		return err
