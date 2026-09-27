@@ -45,6 +45,16 @@ package askindex
 // answers.  Plurals and a final e stay at a full weight.  Documents are
 // indexed at full weight either way; only the question is scaled.
 //
+// # Find, asking to learn something
+//
+// "find" followed by a question word or by "out" -- "find where I am",
+// "find out whether" -- asks to learn a thing, not to search for one,
+// and it counts for less in a question too (see learnVerbWeight).
+// Counted in full it is the heaviest word in "how do I find where I
+// am", and puts the find command, and the commands that have find in
+// their keywords, above the one that answers.  "find an item by name"
+// is left at a full weight.
+//
 // # Stopwords
 //
 // A short list of the words every question has in it and no page is
@@ -66,6 +76,12 @@ import (
 // "sit" said sit.
 const stemCommandWeight = 0.25
 
+// learnVerbWeight is how much a question counts "find" when a question
+// word or "out" follows it.  See the note above.  A quarter, and not
+// nothing: "find where my hair is" is still asking for the find command.
+// Why: doc/slsh.md#find-asking-to-learn-something
+const learnVerbWeight = 0.25
+
 // Tokens is the words of s, in order, as the index keeps them: lower
 // case, stemmed, stopwords and single letters dropped, a long flag both
 // whole and in parts.  The same word may appear more than once.
@@ -76,8 +92,9 @@ func Tokens(s string) []string {
 
 // tokenWeights is Tokens, and how much each distinct word counts for in
 // a question.  A word typed as itself counts 1.  A short -ing or -ed
-// stem counts stemCommandWeight, unless the same word was also typed
-// at full weight ("sit" beside "sitting").
+// stem counts stemCommandWeight, and "find" asking to learn something
+// learnVerbWeight, unless the same word was also typed at full weight
+// ("sit" beside "sitting").
 func tokenWeights(s string) map[string]float64 {
 	_, w := scanTokens(s)
 	return w
@@ -108,7 +125,7 @@ func scanTokens(s string) ([]string, map[string]float64) {
 				out = append(out, "--"+name)
 				weights["--"+name] = 1
 				for _, part := range strings.Split(name, "-") {
-					out = appendWord(out, weights, part)
+					out = appendWord(out, weights, part, false)
 				}
 				i = j + len([]rune(name))
 				continue
@@ -129,22 +146,27 @@ func scanTokens(s string) ([]string, map[string]float64) {
 		for j < len(rs) && isWordRune(rs[j]) {
 			j++
 		}
-		out = appendWord(out, weights, string(rs[i:j]))
+		w := string(rs[i:j])
+		out = appendWord(out, weights, w, asksToLearn(w, rs[j:]))
 		i = j
 	}
 	return out, weights
 }
 
 // appendWord adds one plain word, if it is one worth keeping, and
-// records the weight it counts for in a question.
-func appendWord(out []string, weights map[string]float64, w string) []string {
+// records the weight it counts for in a question.  learning is whether
+// it is "find" asking to learn something (asksToLearn).
+func appendWord(out []string, weights map[string]float64, w string, learning bool) []string {
 	if len([]rune(w)) < 2 || stopwords[w] {
 		return out
 	}
 	stemmed, weak := stemWeak(w)
 	wt := 1.0
-	if weak {
+	switch {
+	case weak:
 		wt = stemCommandWeight
+	case learning:
+		wt = learnVerbWeight
 	}
 	if weights[stemmed] < wt {
 		weights[stemmed] = wt
@@ -153,6 +175,30 @@ func appendWord(out []string, weights map[string]float64, w string) []string {
 }
 
 func isWordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
+
+// asksToLearn is whether w, with rest after it, is "find" followed by a
+// question word or "out".  See learnVerbWeight.
+func asksToLearn(w string, rest []rune) bool {
+	if w != "find" {
+		return false
+	}
+	i := 0
+	for i < len(rest) && !isWordRune(rest[i]) {
+		i++
+	}
+	j := i
+	for j < len(rest) && isWordRune(rest[j]) {
+		j++
+	}
+	return learnFollowers[string(rest[i:j])]
+}
+
+// learnFollowers are the words after "find" that make it ask to learn
+// something rather than to search.
+var learnFollowers = map[string]bool{
+	"out": true, "what": true, "where": true, "which": true, "who": true, "whose": true,
+	"when": true, "why": true, "how": true, "whether": true, "if": true,
+}
 
 // stopwords are dropped from documents and questions alike.  See the
 // head of this file for why the list is short, and why it holds no

@@ -166,12 +166,12 @@ func askEvalFlagArg(cmd, fl string) string {
 // askRecallFloor is what TestAskEvalRetrieval holds the index to, as
 // fractions of the answerable questions whose command is in the first
 // 1, 3 and 8 the index returns.  When this set was written the index
-// scored 80, 94 and 100 of its 103 answerable questions (0.777, 0.913,
-// 0.971); the floors are each a question below that, so that a change
+// scored 82, 98 and 104 of its 105 answerable questions (0.781, 0.933,
+// 0.990); the floors are each a question below that, so that a change
 // that loses one answer passes and a change that loses two fails.
 // When the index gets better, raise them; the test logs the measured
 // numbers.
-var askRecallFloor = [3]float64{0.76, 0.90, 0.96}
+var askRecallFloor = [3]float64{0.77, 0.92, 0.98}
 
 // TestAskEvalRetrieval runs every answerable question through askSearch
 // and measures how often the command that answers it comes back in the

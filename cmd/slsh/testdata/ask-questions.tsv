@@ -128,6 +128,8 @@ do I walk over to someone	walk
 do I turn to face an avatar	face
 do I stop walking	halt
 do I find where I am	where
+do I find where I am in my inventory	pwd
+do I find where my hair is	find worn
 do I find what sim I am in	where
 do I find a sim on the world map	regions
 do I see who shows up on the minimap	map who

@@ -283,6 +283,43 @@ and nothing printed it; what it did was give the model a sentence to
 write before it had chosen anything -- and the instructions supplied
 the sentence, "slsh has no command for that", ready to copy.
 
+### Find, asking to learn something
+
+The questions `how` is evaluated by are written as what follows the
+word how.  Of the 132 in cmd/slsh/testdata/ask-questions.tsv when this
+was measured, 21 started "how do I find", and in 19 of those a
+question word or "out" came next: "how do I find where I am", "how do
+I find what I am wearing".  There find is a verb of learning.  Counted
+in full it was the heaviest word in each -- it is the find command's
+name, and regions and lookup have it in their keywords -- and those
+commands came above the one that answered.  The tokenizer now counts a
+find that a question word or "out" follows at a quarter
+(`learnVerbWeight`).  Measured with `TestAskRetrieval` and
+`TestAskEvalRetrieval` on 2026-09-26, before and after:
+
+    question                                  wants  before  after
+    how do I find what I am wearing           worn   4th     3rd
+    how do I find where I am                  where  10th    3rd
+    how do I find what is inside that box     ls     9th     7th
+      sitting on the floor
+
+On the 103 answerable questions the eval had then, the right command
+was in the first 1, 3 and 8 for 80, 94 and 100 of them before, and
+81, 96 and 102 after.  Counting such a find at nothing scored 82, 96
+and 103, and at a half 80, 96 and 102.  A quarter and not nothing
+because of "how do I find where my hair is", which is asking for the
+find command after all: counted in full find is first for it, at a
+quarter third, and at nothing fifth.
+
+Keywords alone were tried first, and could not do it.  Taking the
+second find out of regions' line (its brief already says find) put
+worn third, and where stayed tenth.  In that question where's line
+has only the word where to be found by, and 242 of the index's 901
+documents have that word; saying it twice in where's keywords took
+where to seventh.  The one keyword that put it in the first three was
+find, and where does not answer to find: it would have come up for
+every "how do I find" question in the set.
+
 ## Why save takes two plain arguments
 
 `save` writes a local file into a notecard or a script.  Reading an item

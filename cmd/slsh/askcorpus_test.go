@@ -198,6 +198,12 @@ var askQuestions = []askQuestion{
 	{"do I list the objects around me", "objects", 3},
 	{"do I find an item in my inventory by name", "find", 3},
 	{"do I find where I am", "where", 3},
+	// "where am I" is the avatar's place, but it could be the shell's
+	// folder, and the model is shown both to choose from.  Said about
+	// inventory it is the folder, and said about a thing it is a search.
+	{"do I find where I am", "pwd", 8},
+	{"do I find where I am in my inventory", "pwd", 3},
+	{"do I find where my hair is", "find", 3},
 	{"do I click on an object", "touch", 3},
 	{"do I offer somebody a teleport to where I am", "lure", 3},
 	{"do I link several prims together", "link", 3},

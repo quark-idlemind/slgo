@@ -84,6 +84,35 @@ func TestShortIngStemWeighsLessInAQuestion(t *testing.T) {
 	}
 }
 
+// "find" before a question word or "out" asks to learn something, and
+// counts for less; "find" before a thing to look for is the search, and
+// counts in full.
+func TestFindAskingToLearnWeighsLess(t *testing.T) {
+	for _, q := range []string{
+		"how do I find where I am",
+		"how do I find what I am wearing",
+		"how do I find out whether I can build here",
+		"How do I Find which folder I am in?",
+	} {
+		if got := tokenWeights(q)["find"]; got != learnVerbWeight {
+			t.Errorf("%q: find weighs %v, want %v", q, got, learnVerbWeight)
+		}
+	}
+	for _, q := range []string{
+		"how do I find an item by name",
+		"how do I find a sim on the map",
+		"find",
+		"find what I can, then find a lamp",
+	} {
+		if got := tokenWeights(q)["find"]; got != 1 {
+			t.Errorf("%q: find weighs %v, want 1", q, got)
+		}
+	}
+	if got := Tokens("how do I find where I am"); !reflect.DeepEqual(got, []string{"find", "wher"}) {
+		t.Errorf("the words themselves are unchanged: %q", got)
+	}
+}
+
 func TestStopword(t *testing.T) {
 	for _, w := range []string{"the", "How", "my", "I"} {
 		if !Stopword(w) {
