@@ -972,6 +972,36 @@ func TestEveryAutoObjectIsACopyOfTheFirst(t *testing.T) {
 	}
 }
 
+// TestTwoFirstAutoObjectsAreRefused: every copy is made from the item
+// called auto, and two of them is two different things either could be
+// a copy of.  One name has to be one thing, so it is refused with both
+// ids, and nothing is copied.
+func TestTwoFirstAutoObjectsAreRefused(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(1)
+	answerCopies(f)
+	other := autoItemID(50)
+	f.mu.Lock()
+	dir := findDir(f.inv, testObjects)
+	dir.Items = append(dir.Items, &invItem{ID: other, Name: AutoObject, Type: int(sl.AssetObject)})
+	f.mu.Unlock()
+
+	err := EnsureAutoItems(context.Background(), s, testObjects, 4)
+	var ne *sl.NameError
+	if !errors.As(err, &ne) || len(ne.IDs) != 2 {
+		t.Fatalf("EnsureAutoItems = %v, want both items called %q refused", err, AutoObject)
+	}
+	for _, id := range []msg.UUID{autoItemID(0), other} {
+		if !strings.Contains(err.Error(), id.String()) {
+			t.Errorf("the refusal does not name %s: %v", id, err)
+		}
+	}
+	if got := len(f.Sent()); got != 0 {
+		t.Errorf("%d messages went out, want nothing copied", got)
+	}
+}
+
 // TestOneAutoObjectNeedsNothingCopied: an account that has never had one
 // and only wants one is left to EnsureAttached, which will build it the
 // slow way -- there is nothing here to copy from and nothing to do.
