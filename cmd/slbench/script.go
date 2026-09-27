@@ -150,18 +150,11 @@ func openScript(ctx context.Context, c scriptv1.RunnerClient, targets int, agent
 		return nil, fmt.Errorf("the %s backend is not ready to run anything: %s",
 			h.GetBackend(), h.GetWhy())
 	}
+	// PersistentTargets is not asked for: the script says its one reading
+	// and the base is kept here, so an object that forgets everything
+	// between runs measures the same.
+	// Why: doc/scripttest.md#a-benchmark-script-says-one-number
 	caps := h.GetCapabilities()
-	if !caps.GetPersistentTargets() {
-		// The base reading travels from the cnt=0 script to the cnt>0
-		// ones through whatever the object keeps between runs.  A backend
-		// that keeps nothing would divide every reading against a zero
-		// and report the whole of the script's memory as the code's --
-		// plausible numbers, and wrong.  Refuse rather than measure.
-		return nil, fmt.Errorf("the %s backend does not keep what a script leaves in an "+
-			"object between runs, and a benchmark's base reading travels that way",
-			h.GetBackend())
-	}
-
 	r := &scriptRunner{
 		c: c, grid: caps.GetGrid(), compileOnly: caps.GetCompileOnly(),
 	}

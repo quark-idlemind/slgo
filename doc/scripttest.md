@@ -112,7 +112,10 @@ session and a list of objects, because carrying the base between scripts
 through the measured object made that one object special, and one avatar
 enough. With one number said and the arithmetic done in slbench, a
 reading is a reading wherever it was taken, and a benchmark asks for N
-places to run scripts, exactly as slrun does.
+places to run scripts, exactly as slrun does. Nor does it need an object
+that remembers anything: slbench no longer refuses a script.v1 backend
+without `persistent_targets`, since nothing it measures is left in the
+object between runs.
 
 ## slbench's --test is a backend
 
