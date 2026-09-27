@@ -790,7 +790,8 @@ func TestOneObjectIsOnePlaceAndJobsCannotConjureMore(t *testing.T) {
 // avatar honoured exactly, so its pool is the ceiling and it is known
 // without asking anybody.  Past the end of it there is nothing to round
 // down to that would not be a speed-up somebody counted on and did not
-// get, so it is refused, with the number and how to make more.
+// get, so it is refused, with the number and the way to more: leaving
+// the avatar unnamed, since no avatar can be set up with more.
 //
 // Unnamed, the ceiling is every avatar the daemon holds, and the
 // refusal comes from where that count is rather than from here.
@@ -804,8 +805,10 @@ func TestMoreJobsThanTheNamedAvatarHasIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("--jobs past the pool was taken, from a daemon that is not there")
 	}
-	if !strings.Contains(err.Error(), "slsh auto") {
-		t.Errorf("--jobs %d = %v, want it to say how more objects are made",
+	if !strings.Contains(err.Error(), "leave out --agent") ||
+		strings.Contains(err.Error(), "slsh auto") {
+		t.Errorf("--jobs %d = %v, want it to say to leave out --agent, "+
+			"and not to set up more than one avatar can hold",
 			flags.Jobs, err)
 	}
 
@@ -815,7 +818,7 @@ func TestMoreJobsThanTheNamedAvatarHasIsRefused(t *testing.T) {
 	reset(t)
 	flags.Jobs = session.AutoPool() + 1
 	_, _, err = runIn(context.Background(), opts, flags.Jobs)
-	if err != nil && strings.Contains(err.Error(), "slsh auto") {
+	if err != nil && strings.Contains(err.Error(), "leave out --agent") {
 		t.Errorf("--jobs %d was refused without asking how many avatars there are: %v",
 			flags.Jobs, err)
 	}

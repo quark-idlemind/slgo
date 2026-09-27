@@ -620,9 +620,9 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 	// ceiling is every avatar the daemon holds and the refusal comes
 	// from there, where the count is.
 	if most := session.AutoPool(); flags.Agent != "" && flags.Jobs > most {
-		return nil, nil, fmt.Errorf("--jobs %d wants %d objects and %s "+
-			"has %d; \"slsh auto -n %d\" is what makes more",
-			flags.Jobs, flags.Jobs, flags.Agent, most, flags.Jobs)
+		return nil, nil, fmt.Errorf("--jobs %d wants %d objects and one "+
+			"avatar holds at most %d; leave out --agent to take them from "+
+			"more than one", flags.Jobs, flags.Jobs, most)
 	}
 
 	// As many objects as there are scripts to run at once, taken all

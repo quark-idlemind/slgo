@@ -969,9 +969,10 @@ rather than waited for:
 
 Waiting, when it happens, is silent: the daemon holds nothing while it
 waits and the client has nothing to report but that it has not returned.
-Naming an avatar is the exception -- an avatar that has too few is known
-to be too few before anybody is asked, so `slrun` says so and names the
-remedy (`slsh auto -n 12`).
+Naming an avatar is the exception -- more than twelve, the most one
+avatar can hold, is known to be too many before anybody is asked, so
+`slrun` says so and suggests leaving out `--agent`, which lets the
+objects come from more than one avatar.
 
 An object that has never run a script from `slrun` is slower the
 first time: creating the script item costs about eight seconds where
