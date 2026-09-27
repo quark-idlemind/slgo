@@ -57,6 +57,12 @@ When a call needs the local id:
    `Object` and sent, so the next call needs no lookup.
 3. If the region has not described that uuid, the call is refused with
    `sl.ErrNotHere` and nothing is sent. The old number is never sent.
+4. If the answer is marked with a visit that is already over -- the
+   avatar moved while it was being looked up, or the backend could not
+   name the region -- it is looked up once more. A second such answer
+   is refused with `sl.ErrNotHere` too, and the error says which it
+   was: the avatar changed region while the object was being looked
+   up, or the backend has not said which region the avatar is in.
 
 An `Object` built by hand, like the `&sl.Object{ID: id}` that `slsh`'s
 `sit` makes from a uuid, has no visit, so a call that sends its local id
@@ -77,3 +83,8 @@ used in that moment still sends its old number to the new region. That
 window is the notice's latency, and nothing here can shorten it without
 the daemon marking what it says about objects with the region it is
 about, which it does not.
+
+Step 4 does not close it either. `Session.local` no longer hands out an
+id it can already tell is stale, one whose lookup crossed a move the
+session had heard of by the time the answer came back; a move it has
+not heard of yet still looks like no move at all.

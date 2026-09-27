@@ -614,7 +614,7 @@ rez	rez	line		rez [-k] [--at X,Y,Z] FILE\nbuild the object a JSON file describes
 rez:intro	rez	intro		`rez` builds the object a JSON file describes: the prims are made and\nlinked, named and described, and the scripts named in the file are\ninstalled in them.  `dump` is the other direction, and the file each of\nthem reads is the same file.\n\n    rez lantern.json\n\nThe argument is the path of a file describing exactly one object.  A\nfile with several in it is refused rather than built one after another,\nsince what should stand where would then be the file's business and not\nthe command's.  What is built is left standing: an object being built\nis usually about to be looked at, so nothing takes it into inventory.
 rez:example:1	rez	example		rez lantern.json
 rez:option:--at X,Y,Z	rez	option	--at X,Y,Z	Where the root lands; every other prim keeps the vector from the root\nthat the file gave it.  Without it, the positions the file records.\n\nThree numbers with commas between them and no spaces.  Two are refused\nwith a message naming all three.  `place`'s `--at` is the other way\nround: it takes two or three, and fills in a zero for the Z it was not\ngiven, so a pair of numbers that `place` accepts without a word is a\nusage error here.
-rez:option:-k, --keep	rez	option	-k, --keep	Leave what was built standing even if a script will not compile.\nWithout it, a failure removes what it made and says it has: half a\nbuild is prims standing in the region that nobody asked for.  This is\nfor the case where the wreckage is the interesting part.\n\nRemoving a prim is waiting for the region to say it has gone, for up\nto ten seconds.  A prim the region does not say that of may still be\nstanding, and the error names it.\n\nWhat it cannot remove is a prim whose making the region never\nconfirmed, since nothing says which prim that is.  The error then says\nthe prim did not appear.
+rez:option:-k, --keep	rez	option	-k, --keep	Leave what was built standing even if a script will not compile.\nWithout it, a failure removes what it made and says it has: half a\nbuild is prims standing in the region that nobody asked for.  This is\nfor the case where the wreckage is the interesting part.\n\nRemoving a prim is waiting for the region to say it has gone, for up\nto ten seconds.  A prim the region does not say that of may still be\nstanding, and the error names it.\n\nWhat it cannot remove is a prim whose making the region never\nconfirmed, since nothing says which prim that is.  The error then says\nthe prim did not appear.  A rez that is interrupted while the prim is\nbeing looked for is looked for once more, and a prim found then is\nremoved with the rest.
 rez:section:This is not what everyone means by rezzing	rez	section	This is not what everyone means by rezzing	`Rez` is the word everybody uses for putting an inventory object into\nthe world, and that is `place`.  One word cannot mean both "make what\nthis file describes" and "put back what I took": the first invents an\nobject and the second restores one, and somebody who mixed them up\nwould be told their object was not valid JSON.
 rez:section:Where it lands	rez	section	Where it lands	The file says where each prim goes, in region coordinates.  A file\nwritten for another region names coordinates that land somewhere else\nhere, so `--at` moves the whole thing without the file having to be\nedited: the root lands on the point given, and every other prim keeps\nthe vector from the root that the file gave it.
 rez:section:The group it belongs to	rez	section	The group it belongs to	Every prim is made in the group the avatar is acting as, which is what\na viewer does, so `group` decides it.  That matters for more than\nwhether the land lets it build: on land that runs only its group's\nscripts, a script in a prim of no group was seen reported as running\nand never run.
@@ -1709,7 +1709,7 @@ form	22,61,39*2,65,8,47,35,11,3,78,50*3,10,51,23,153,59,3*3,76
 format	118,243,205,26,5
 forty	166,235,52,280
 forward	22,366*3
-found	1,73,64,36,32,32*2,39,16,40,5,9,549
+found	1,73,64,36,32,32*2,39,16,40,5,9,267,282
 four	173*2,6,5,93*3,7,64,4,41,60*2,1,75*2,2*3,19,270*2,8,21,22,8
 fragment	605*2
 fram	596
@@ -1855,7 +1855,7 @@ instant	62,1,4,189,10,3,1,24,84,2,369*2
 instead	4,10,31,11,12,48,6,33,5,13,23,111,17,11,9,6,28,33,33*2,25,6,9,9,28,17,24,4,99,20,7,79,24,21,4,42,7,5
 intend	31
 interest	614
-interrupt	65,523*3,264
+interrupt	65,523*3,26,238
 intersection	782
 introduc	454
 invent	615,282
@@ -1959,7 +1959,7 @@ logout	12,4,296,1,2,2,1*4,1,5*2,1,95,166,4,239
 long	89,17,15,44,77,46,16,9,17,40,12*2,1,69,1,15,13,1,1,53,58,9,1,1,59,17,1,1,2,12,11,3,9,6,11,42,14,12,13,30,13,30
 longer	22,69,1,278,18,242,174,20,12,1
 longest	206,53,242
-look	7,1,6,13,4,9*2,1,11,7,28,5,8,13,3,7,19,15,9*2,4*2,1,8*2,17,5,9,4,1,11*2,12,9,6,13,6,1,4,15,15,19,1,1,3,22,21,2,1,21*4,8,11,2,1,9,29,32,7,6,5,17,17,2,4,2,10,6,16,2,12,5*2,5,2,3,17,19,19*2,16,2,7,26*2,18,1,2,13*3,1,13*2,1*2,1,27,15,1,6,16,3*2,27,7,13,2,4,9
+look	7,1,6,13,4,9*2,1,11,7,28,5,8,13,3,7,19,15,9*2,4*2,1,8*2,17,5,9,4,1,11*2,12,9,6,13,6,1,4,15,15,19,1,1,3,22,21,2,1,21*4,8,11,2,1,9,29,32,7,6,5,17,17,2,4,2,10,6,16,2,12,5*2,5,2,3,3*2,14,19,19*2,16,2,7,26*2,18,1,2,13*3,1,13*2,1*2,1,27,15,1,6,16,3*2,27,7,13,2,4,9
 lookup	184,4,22,47,3,3,12,16,5,36,1*2,1,1*2,1,3*2,1,2,62,101,51*2,1,191,57,81,2
 loop	369,320
 los	140,182,417,80,8
@@ -2035,7 +2035,7 @@ money	18,7,249,558
 monitor	858
 month	297
 mood	454
-mor	5,17,2,7,32,29,9*2,1,1,59,25,10,17,1,11,33,78*4,1,32,28*2,1*2,3,14,37*2,69,16,4,8,3,36,6,22,9,58,5,2,27,1,19,11,17,13,3,1,11,10*2,32
+mor	5,17,2,7,32,29,9*2,1,1,59,25,10,17,1,11,33,78*4,1,32,28*2,1*2,3,14,37*2,69,16,4,8,3,36,6,19,3,9,58,5,2,27,1,19,11,17,13,3,1,11,10*2,32
 morn	795
 most	66,34,4,18,100,111,4,83,74,66,91,13,102,70
 mostly	824
@@ -2110,7 +2110,7 @@ older	419*2,417,2
 oldest	11,1,337,3,1,127,141,4,2,1*2,1*2,3,2,202
 ollama	242*4
 omit	40,551,1
-onc	27*2,3,1*2,3,66,1,1,1,1,6,116,3*2,9,19,58,7,48*2,47*2,3,24,9,31,25,39,38,10,26,40,37,12,8,46,1,17,21,2*3,21,1,9
+onc	27*2,3,1*2,3,66,1,1,1,1,6,116,3*2,9,19,58,7,48*2,47*2,3,24,9,31,25,39,38,10,18,8,40,37,12,8,46,1,17,21,2*3,21,1,9
 one	1*4,4*3,3,4*2,2,2*2,1,1*4,4,3,6*7,4,5*5,1*3,3,1*6,7*4,2,2*3,1*2,6*2,2*2,1*4,1,1*4,1*2,3*3,6*2,1,1*2,4,8*3,8*6,1*5,5*2,1,3*6,2,1,3*2,2,2,2,5,2*2,7,3*2,4,6,4*4,7*3,2*2,4,7*3,1*3,4,8*2,2,13,2*5,3*2,4*3,2*3,2*3,3*3,1,4,3,1*2,3*3,5,2,6,5,6*4,3,1,2,1*5,5,1,3,3*2,2,1,1,1*9,7*3,6*2,1,1*6,2*3,1,1*2,1*2,1,3,1*5,3*3,2*2,3,3*3,1*2,4*4,4,5*2,3,3*2,2*2,3,6*2,2,1*3,2,3*3,1*7,2*3,6,6,1,1*2,1*2,4,7,1*3,1*3,2,3*3,5,4,2*2,1*2,3,1*4,1,1,4,1,6*4,2*2,3*2,2*2,1,4*5,2,11*2,1*2,1*3,5,1,1,1*3,1*5,1*3,2,7*2,6*2,5,1*3,2,1*3,2*3,1,2*3,1,6*2,3,2*3,6*3,2,2*2,3*2,2*2,1*2,4*2,4*2,3*3,2,5*2,2,7,4*3,2,1*3,3,2,3*5,1*2,2,4,21,2,3*2,2,1,3*2,3,1*2,1*3,4*3,3,1,1,2*3,3*2,4*2,3,1,3,2,1,1*2,1*2,1*5,1,1,1,8,2*3,3*2,3,1,1,2,1*3,1*2,2,1*3,2,3*3,1,2*4,1*2,1*5,2,7,4*4,5*4,5,2,1,1,3,3*2,7,3*2,1,1*2,8,5*2,4*4,2,3*6,2,1,4*2,6*2,2*3,1*2,3*2,2,11*5,1*3,1*3,15,1*2,4,1,6*2,1*2,4,5*3,1*3,1*2,1,1*2,1*2,6,1*3,3*2,1*8,3,1*6,3*4,1*3,4*2,3*2,1*3,1*3,14,1*2,1,6,3,4,2,1,1*4,1*4,2*2,1,6*2,2,4,2,3*2,2*2,1,1,2*3
 onlin	183*2,1*2,2*2,1,151
 onlooker	827
@@ -2224,7 +2224,7 @@ press	18,48*2,94,106,322,161,21*2,8,6,2
 prevent	101,176
 previous	388*2,507
 pric	452,108*2,13
-prim	109,8,1,2,2*7,92*2,87,4,1,49,134*2,3,2*6,20,1,80*9,1*3,1,13,1,2,1*6,2*2,1*2,1,61,54,33*4,1,3,12,33*3,4*7,1*6,1
+prim	109,8,1,2,2*7,92*2,87,4,1,49,134*2,3,2*6,20,1,80*9,1*3,1,13,1,2,1*8,2*2,1*2,1,61,54,33*4,1,3,12,33*3,4*7,1*6,1
 print	12,15,4*2,2,5,2,1,3*2,1*3,11,11*2,1,6,10,6*2,20,16*2,1,2*2,10,4,10*2,2*4,5,11*2,2,11,12,9,11,21,1*2,19,12,1*2,2,5,13*5,1,1*2,2,3*3,8,1,6,11,4,6,11,9*2,8*2,5,17*2,3,2*3,13,3*2,6,1,5*2,1,2*4,1,2,2,5,15,10*2,9,15,2,4,6,4*2,21,23*5,12*3,4,1,10,14,4,3*3,18,1,19,2*2,2,21*2,12,1,1,2,10,7,3,16,16,1,1,1,13,5,1,9,1,17*3,17,5,7*2,9*2,1*3,1,1,12,1,4,2,1,1,21,2,7,1*2,9*3,11,1,6,1,7,1*2,1*2
 printabl	425,158
 printf	666
@@ -2311,7 +2311,7 @@ relocat	428,11
 remain	691*2
 remark	66,1*2,2,188,392,3
 remember	66,148,75,24,5,15,6,81,12,62,27,134,41,43
-remov	4,82,203,80,226*2,19*3,7*2,5,1,1*3,2,2*2,3,1,91,22
+remov	4,82,203,80,226*2,19*4,7*2,5,1,1*3,2,2*2,3,1,91,22
 removal	631,60
 renam	4,53,55,26,22,133,62,69,5,10*2,1,2*4,2*8,1,4*2,20,52,106
 render	327*2
@@ -2332,7 +2332,7 @@ resiz	560,10
 resolv	203*2
 respond	17
 respons	416,3*3
-rest	31,14,27,38,20,27,3,46,6,10,35,2,7,31,42,14,8,37,3,15,13,61,11,7,1,13,73*2,1*2,22,23,15,28,7,15,18,43,13,2,37,1,16,5,10,2
+rest	31,14,27,38,20,27,3,46,6,10,35,2,7,31,42,14,8,37,3,15,13,61,11,7,1,13,73*2,1*2,18,4,23,15,28,7,15,18,43,13,2,37,1,16,5,10,2
 restart	420,404*2,3
 restor	97,3*2,1*2,514
 result	179,452,134
@@ -2343,7 +2343,7 @@ return	27,39*2,2,198,95,8*2,84,100,35,111
 reus	469
 reveal	554
 rewritten	277
-rez	44,1,3,24,34,3,1,8,4,1,30,3,3,1,54*2,4,8,31,1,2*2,1,1,1,87,5,73*2,14,25,2,20,33,6,13,1,2,4,44,3*2,2,13,1*2,1,3*2,4*2,1,7,78,1,17,1,8,1*2,160,2
+rez	44,1,3,24,34,3,1,8,4,1,30,3,3,1,54*2,4,8,31,1,2*2,1,1,1,87,5,73*2,14,25,2,20,33,6,13,1,2,4,44,3*2,2,13,1*2,1,2,1*2,4*2,1,7,78,1,17,1,8,1*2,160,2
 rid	136
 right	14,64,23,86,19,5*2,36,12,43,1,4,94,48,7,72,32,79,229*3,6,1,18
 risk	101
@@ -2746,7 +2746,7 @@ whenever	217
 wher	4,1*2,9*2,11,2*2,14,16,6,3,6,8,7,13,10*3,12,8,23,2,5,7,3,1,3*2,29,3,15,1*2,7,5*3,1,3,4,6,9,9,6,4,1*3,7,3*2,2,1*2,1,1,1,1*3,3*8,1,29*2,4,2,5*2,9*2,6,8*2,9,1,3,3,21,1,2,4,1,10*2,3,5,5*2,3*3,1,1,1,1,1,3*2,13,1,4,5,4,8,15,5,20*2,7,3,17,2,6*2,4*2,1,23*2,4,2,2,10*4,5,5,2,3,2,1,2*2,3,22,8,3,11*2,2*3,1*3,9*2,1,3*4,6,8,5*5,3,10,4,3*2,1,8,1,5,2*3,1*2,2,1*3,1,6,2,1,16,1*2,8,8,6*2,6*3,5*3,7*3,1,2*2,1*3,10,3,1,3,1,8,5*2,8,2,1,2*2,5,7,2,1,5,2,1,1,1*2,3,2*2,4,2,1,2
 wherever	54,46,96,61,20*2,9,107,51,19,193,138,74*2,6
 whichever	63,4,162*2,13,24,31,52,20,134,83,75,146,28
-whil	1,26,7,32,18,19*2,150,17*2,26,17,8,133,49,21,62,2*2,43,34,17,17*2,1,48,33,13,12,13,1,59,1,16,1
+whil	1,26,7,32,18,19*2,150,17*2,26,17,8,133,49,21,62,2*2,26,17,34,17,17*2,1,48,33,13,12,13,1,59,1,16,1
 whit	400,366*2
 who	0,6,2,19,35*2,6,11,4,1,66*2,33*2,1,2,2,14,1,7,4,20,22,1*2,3,1,1,1,2,1,9,52,4,2*4,4,1,1,34,1,6,1,11,1,6*3,2,3,2,48,21,3,2,9*2,4,3,1,3,1,3,6,4,1,10,4*2,9,1,10,1*3,3,3,59,133*2,1*6,1,55*2,22,5,5,4,13*2,28,1*2,1*3,1,1,2*4
 whoever	1*2,79*2,106,17,19,31,4,2,1,3,6,41,3,9,152,1,15,14,4,45,96,156,45*2,36,1

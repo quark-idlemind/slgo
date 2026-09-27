@@ -217,7 +217,9 @@ type Backend interface {
 	SimAttachments(ctx context.Context, avatar msg.UUID) (*SimAttachments, error)
 
 	// Region is what the simulator said in the handshake, and
-	// whether it has arrived at all.
+	// whether it has arrived at all.  Its ID marks what is found in
+	// the region, and until it is named no local id looked up there
+	// is sent; see doc/local-ids.md.
 	Region(ctx context.Context) (*Region, bool, error)
 
 	// Land is what the session was told about the ground under the

@@ -37,7 +37,9 @@ standing, and the error names it.
 
 What it cannot remove is a prim whose making the region never
 confirmed, since nothing says which prim that is.  The error then says
-the prim did not appear.
+the prim did not appear.  A rez that is interrupted while the prim is
+being looked for is looked for once more, and a prim found then is
+removed with the rest.
 
 ## This is not what everyone means by rezzing
 
