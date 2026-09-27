@@ -575,7 +575,10 @@ func (w *Session) onScriptRunning(fn func(object, item msg.UUID, running bool)) 
 // This is the second half. The source is uploaded through
 // UpdateScriptTask, which compiles it inside the object and starts it,
 // and is the same call Run makes -- which is why running a script always
-// worked while installing a listener never did.
+// worked while installing a listener never did.  It goes up as Run's
+// does, with a newline in front (see leadingNewline): the compiler's
+// line numbers are one higher than offsets into source, and an upload
+// that reached the compiler empty is sent again, once.
 //
 // Reusing the name replaces that script rather than adding another: an
 // object keeps every copy it is given and renames the newcomer.
@@ -624,12 +627,7 @@ func (w *Session) InstallScript(ctx context.Context, o *Object, name, source str
 		}
 	}
 
-	up, err := w.upload(ctx, "UpdateScriptTask", map[string]any{
-		"item_id":           task.ID.String(),
-		"task_id":           o.ID.String(),
-		"is_script_running": running,
-		"target":            "mono",
-	}, []byte(source))
+	up, err := w.install(ctx, task.ID, o.ID, source, running)
 	if err != nil {
 		return nil, errors.Join(err, leftover)
 	}
