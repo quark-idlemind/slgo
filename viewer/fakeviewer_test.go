@@ -152,10 +152,10 @@ func (v *fakeViewer) waitSeen(t *testing.T, name string, timeout time.Duration) 
 // ordinary receive and dispatch machinery, and the recording wired to
 // the relay hook.
 //
-// There is no handover logic here on purpose.  Stage 1 is about proving
-// the record is trustworthy before anything depends on it, so this
-// endpoint forwards nothing and decides nothing -- it only writes down
-// what arrived.
+// There is no handover logic here on purpose.  Stage 1 of
+// doc/history/viewer-frontend.md was about proving the record is
+// trustworthy before anything depended on it, so this endpoint forwards
+// nothing and decides nothing -- it only writes down what arrived.
 type endpoint struct {
 	conn   *net.UDPConn
 	census *Census
@@ -255,8 +255,8 @@ func waitRecorded(t *testing.T, c *Census, name string, dir Direction, timeout t
 
 // TestFakeViewerHandshakeIsRecorded drives the viewer half of a
 // handshake over a real socket and checks the record shows it.  This is
-// stage 1's verification: nothing is relayed and nothing renders, but
-// what crossed is written down.
+// the verification of stage 1 of doc/history/viewer-frontend.md: nothing
+// is relayed and nothing renders, but what crossed is written down.
 func TestFakeViewerHandshakeIsRecorded(t *testing.T) {
 	census := NewCensus()
 	trace := NewTrace(nil, nil, false) // exercised separately below

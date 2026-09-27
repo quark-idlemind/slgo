@@ -400,8 +400,8 @@ func TestEventsAreCopied(t *testing.T) {
 }
 
 // TestANeighbouringSimulatorsAddressIsNeverGivenToAViewer: the hole
-// that has been open for as long as this front end has existed, and the
-// one that needed nothing to happen to reach it -- an ordinary region
+// that was open for as long as this front end had existed, and the one
+// that needed nothing to happen to reach it -- an ordinary region
 // introduces its neighbours several times a minute.
 //
 // EnableSimulator carries a handle, an IP and a port and no capability,

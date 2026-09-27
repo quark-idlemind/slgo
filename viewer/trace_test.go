@@ -116,8 +116,8 @@ func TestCensusCountsWhatWasNotForwarded(t *testing.T) {
 }
 
 // TestEveryDispositionIsOneSomethingRecords: a disposition nothing
-// records is a column the census never fills, which a reader takes for
-// a check that runs.  Each one declared is passed to a call somewhere
+// records is one the census never shows, which a reader takes for a
+// check that runs.  Each one declared is passed to a call somewhere
 // outside this file, in this package or in cmd/slgod, which are what
 // record them.
 func TestEveryDispositionIsOneSomethingRecords(t *testing.T) {
@@ -308,9 +308,10 @@ type brokenError struct{}
 
 func (*brokenError) Error() string { return "broken" }
 
-// TestConcurrentWriters is not decoration: the two circuits have their
-// own dispatch goroutines and both write to the same census and the same
-// trace, so this is the ordinary case rather than an edge one.  Run
+// TestConcurrentWriters is not decoration: the two circuits' dispatch
+// goroutines, their send goroutines and the pump all write to the same
+// census and the same trace, so this is the ordinary case rather than an
+// edge one.  Run
 // under -race, it is the only thing that actually checks the claim.
 func TestConcurrentWriters(t *testing.T) {
 	const writers, each = 8, 200
