@@ -90,21 +90,10 @@ const (
 	// session, or a ping this side answers itself.
 	Absorbed
 
-	// WrongWay is for a message travelling in a direction it has no
-	// business travelling, per doc/messages.txt.  Nothing records it
-	// yet: the relay checks no direction, and forwards whatever it
-	// does not absorb.
-	WrongWay
-
 	// NoViewer means there was nowhere to forward it: no viewer had
 	// joined, which is ordinary while slgod runs on its own, or, for
 	// a message from the viewer, there was no session to give it to.
 	NoViewer
-
-	// Unclassified is for a message nothing said what to do with.
-	// Nothing records it yet either: there is no classification
-	// table, and fromViewer forwards what it does not name.
-	Unclassified
 
 	// Dropped means there was somewhere to send it and no room to
 	// queue it -- a viewer not keeping up with the simulator.  It is
@@ -119,12 +108,8 @@ func (d Disposition) String() string {
 		return "forwarded"
 	case Absorbed:
 		return "absorbed"
-	case WrongWay:
-		return "wrong direction"
 	case NoViewer:
 		return "no viewer attached"
-	case Unclassified:
-		return "unclassified"
 	case Dropped:
 		return "dropped, viewer behind"
 	}
@@ -132,7 +117,7 @@ func (d Disposition) String() string {
 }
 
 // dispositions is every Disposition, in report order.
-var dispositions = []Disposition{Forwarded, Absorbed, WrongWay, NoViewer, Unclassified, Dropped}
+var dispositions = []Disposition{Forwarded, Absorbed, NoViewer, Dropped}
 
 // Count is what the census knows about one message in one direction.
 type Count struct {

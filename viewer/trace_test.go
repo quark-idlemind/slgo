@@ -2,6 +2,10 @@ package viewer
 
 import (
 	"bytes"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -93,22 +97,94 @@ func TestCensusSeparatesDirections(t *testing.T) {
 	}
 }
 
-// TestCensusCountsWrongWay: a message classified into the wrong
-// direction is the mistake this whole stage is built to catch, so it has
-// to show up as its own disposition rather than as a silent absence.
-func TestCensusCountsWrongWay(t *testing.T) {
+// TestCensusCountsWhatWasNotForwarded: a message the relay did not pass
+// on shows up under what became of it, rather than as a silent absence.
+func TestCensusCountsWhatWasNotForwarded(t *testing.T) {
 	c := NewCensus()
 	now := time.Now()
-	c.Record("ChatFromViewer", ToViewer, now, WrongWay)
-	c.Record("ChatFromViewer", ToViewer, now, WrongWay)
+	c.Record("ObjectUpdate", FromSim, now, Dropped)
+	c.Record("ObjectUpdate", FromSim, now, Dropped)
 
 	rep := c.Report()
-	if !strings.Contains(rep, "wrong direction 2") {
-		t.Errorf("report should name the misclassification:\n%s", rep)
+	if !strings.Contains(rep, "dropped, viewer behind 2") {
+		t.Errorf("report should say what became of them:\n%s", rep)
 	}
 	rows := c.Counts()
-	if len(rows) != 1 || rows[0].By[WrongWay] != 2 {
+	if len(rows) != 1 || rows[0].By[Dropped] != 2 {
 		t.Errorf("rows = %+v", rows)
+	}
+}
+
+// TestEveryDispositionIsOneSomethingRecords: a disposition nothing
+// records is a column the census never fills, which a reader takes for
+// a check that runs.  Each one declared is passed to a call somewhere
+// outside this file, in this package or in cmd/slgod, which are what
+// record them.
+func TestEveryDispositionIsOneSomethingRecords(t *testing.T) {
+	fset := token.NewFileSet()
+	parse := func(file string) *ast.File {
+		t.Helper()
+		f, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+
+	// Every constant in the block whose first is a Disposition.
+	var declared []string
+	for _, decl := range parse("trace.go").Decls {
+		g, ok := decl.(*ast.GenDecl)
+		if !ok || g.Tok != token.CONST || len(g.Specs) == 0 {
+			continue
+		}
+		if typ, ok := g.Specs[0].(*ast.ValueSpec).Type.(*ast.Ident); !ok || typ.Name != "Disposition" {
+			continue
+		}
+		for _, spec := range g.Specs {
+			for _, name := range spec.(*ast.ValueSpec).Names {
+				declared = append(declared, name.Name)
+			}
+		}
+	}
+	if len(declared) != len(dispositions) {
+		t.Errorf("%d dispositions are declared, %v, and the report lists %d", len(declared), declared, len(dispositions))
+	}
+
+	// What is passed to a call: Dropped here, viewer.Dropped in slgod.
+	passed := map[string]bool{}
+	for _, pattern := range []string{"*.go", "../cmd/slgod/*.go"} {
+		files, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, file := range files {
+			if strings.HasSuffix(file, "_test.go") || file == "trace.go" {
+				continue
+			}
+			ast.Inspect(parse(file), func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				for _, arg := range call.Args {
+					switch a := arg.(type) {
+					case *ast.Ident:
+						passed[a.Name] = true
+					case *ast.SelectorExpr:
+						if pkg, ok := a.X.(*ast.Ident); ok && pkg.Name == "viewer" {
+							passed[a.Sel.Name] = true
+						}
+					}
+				}
+				return true
+			})
+		}
+	}
+	for _, name := range declared {
+		if !passed[name] {
+			t.Errorf("nothing records %s", name)
+		}
 	}
 }
 
