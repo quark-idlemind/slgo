@@ -7,8 +7,7 @@ package scripttest
 // block arithmetic, the copy count, the backing off when a script is
 // refused -- is arithmetic on those readings.  So a backend that can
 // answer the readings can drive the whole program, and that is what this
-// is: the same staircase slbench's --test model uses, in a form a
-// gRPC backend can serve.
+// is: the model slbench's --test answers from, served as a gRPC backend.
 //
 // The model is deliberately a MODEL.  It says nothing about what Second
 // Life would report; what it buys is that a caller's control flow can be
@@ -25,8 +24,8 @@ import (
 // Memory is what cnt copies of the code under test cost, as a function
 // of the copy count and the padding.
 //
-// The fields are slbench's testInfo, which is where they were worked
-// out and where the reasoning for each of them lives:
+// slbench's --test sets Pad, CodeSize, Marginal and Limit.  The reasoning
+// for each field is here:
 //
 //   - Pad is the padding the zero-copy script needs to sit exactly on a
 //     block boundary.  Everything else is measured from there.
@@ -40,20 +39,21 @@ import (
 //     test written against it to the same assumption.
 //   - Drift adds one byte every Drift copies, for a construct whose
 //     per-copy cost is not quite constant.  Live, 32 of one construct
-//     cost 11008 bytes and 16 cost 5516, which is 343.25 each; copy mode
-//     has a guard for exactly that, and a model without drift can never
-//     fire it.
+//     cost 11008 bytes and 16 cost 5516, which is 343.25 each.  slbench's
+//     copy mode had a guard for exactly that, which a model without
+//     drift could never fire; copy mode has since gone, and nothing in
+//     this repository sets Drift now.
 //   - Limit is where the model refuses the script, standing in for the
 //     compiler refusing one that is too large.
 //
-// Collide has no counterpart in testInfo and is here because the live
-// behaviour has two size limits rather than one: above Collide the
-// script compiles and then runs out of memory, above Limit the compiler
-// will not take it at all.  Measured on Agni 2026-08-03, 256 copies of
-// the reference shape compiled and then collided stack with heap, and
-// 512 were refused outright.  A caller that backs off differently for
-// the two -- slbench's runShrink does -- cannot be tested against a
-// model that only has one.
+// Collide is here because the live behaviour has two size limits rather
+// than one: above Collide the script compiles and then runs out of
+// memory, above Limit the compiler will not take it at all.  Measured on
+// Agni 2026-08-03, 256 copies of the reference shape compiled and then
+// collided stack with heap, and 512 were refused outright.  A caller that
+// treats the two differently -- slbench's backend reports one as a
+// compile error and the other as a fault out of memory -- cannot be
+// tested against a model that only has one.
 type Memory struct {
 	Pad      int
 	CodeSize int
@@ -77,8 +77,8 @@ type Memory struct {
 	Block  int
 }
 
-// The model's defaults, which are slbench's constants.  5412 is a
-// value that has been seen live, 512 is the block llGetUsedMemory
+// The model's defaults, which are what slbench's --test runs with.  5412
+// is a value that has been seen live, 512 is the block llGetUsedMemory
 // reports in, and 64KB is what a Mono script has -- so a caller that
 // names none of them gets a staircase whose refusal falls roughly where
 // the live one does.
@@ -139,8 +139,6 @@ func (m Memory) refuses(cnt, pad int) (string, bool) {
 		return "", false
 	}
 	if r := m.Reading(cnt, pad); r > f.Limit {
-		// Worded like slbench's own model message, so a person reading
-		// a failing test sees the same sentence either side of the seam.
 		return fmt.Sprintf("model: %d copies at pad %d would use %d bytes, over the %d-byte limit",
 			cnt, pad, r, f.Limit), true
 	}

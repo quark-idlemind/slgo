@@ -10,10 +10,11 @@
 // It answers the contract in full and offline: a pool of objects with
 // leases and a queue, a compiler that has opinions, and a script that
 // says something.  What it says is worked out from the source, by the
-// same staircase slbench's --test model uses (see Memory), so a
-// benchmark run against this backend has to come out with the numbers
-// the model says -- and a search that reads the staircase wrongly fails
-// here rather than after twenty minutes of grid time.
+// staircase in Memory -- which is also the model slbench's --test
+// answers from -- so a benchmark run against this backend has to come
+// out with the numbers the model says, and a search that reads the
+// staircase wrongly fails here rather than after twenty minutes of grid
+// time.
 //
 // # What it is not
 //
@@ -89,9 +90,7 @@ type Options struct {
 	Agents []string
 
 	// Groups is how many groups each avatar has and GroupSize how many
-	// objects are in one.  The defaults are one group of four, four
-	// being what slbench takes at once: one object to measure in and
-	// three to take readings in.
+	// objects are in one.  The defaults are one group of four.
 	Groups    int
 	GroupSize int
 
@@ -342,8 +341,8 @@ func (s *Server) Pipe() (*grpc.ClientConn, error) {
 
 // Listen serves the backend on a real address, for a person who wants to
 // point a program at it -- "127.0.0.1:0" and read back the port.  Tests
-// in this repository use Pipe; this is for driving a caller that takes
-// an address on its command line.
+// of the contract use Pipe; this is for driving a caller that takes an
+// address on its command line, as slrun's tests of --backend do.
 func (s *Server) Listen(addr string) (net.Addr, error) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
