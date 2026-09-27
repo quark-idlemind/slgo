@@ -11,10 +11,11 @@ package main
 // to them.  Home is here too, both halves of it: going there, and
 // choosing where it is.
 //
-// The four things it can do to the world are one message each, and they
-// are sl's: Session.Landmark fetches the asset and parses it,
+// The things it can do to the world are one message each, and they are
+// sl's: Session.Landmark fetches the asset and parses it,
 // Session.MakeLandmark is a create with two type numbers on it,
-// Session.GoTo is TeleportLandmarkRequest, and Session.SetHome is
+// Session.GoTo is TeleportLandmarkRequest, Session.GoHome is the same
+// message with the null id in it, and Session.SetHome is
 // SetStartLocationRequest -- which is not a landmark at all and is here
 // because home is, and because splitting the two halves of home across
 // two commands is how somebody comes to look for one of them under the

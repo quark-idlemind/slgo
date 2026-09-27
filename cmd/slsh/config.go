@@ -41,7 +41,7 @@ type Config struct {
 	// which is what lets sl-host be asked -- see internal/slhost.
 	Addr   string
 	Agent  string // the profile: hosted by slgod, or on disk for --direct
-	Prefix rune   // the key that starts a command
+	Prefix rune   // the key that leaves chat mode for the command prompt
 
 	// Direct is set when this process holds the session itself,
 	// which is worth saying out loud: quitting logs the avatar out.
@@ -299,9 +299,8 @@ type setting struct {
 	// session was attached with it, or the terminal was put in raw mode
 	// with it.  A flag may have overridden the file for this run as
 	// well, so applying one of these now would mean two different
-	// things depending on how slsh was started.  See startupNote for
-	// what is said about it, which is said in the listing and again
-	// when one is changed.
+	// things depending on how slsh was started.  The listing marks one
+	// "at startup only", and changing one prints startupNote.
 	startup bool
 
 	// show is the value as the file would write it, and parse is the
@@ -318,8 +317,8 @@ type setting struct {
 const startupNote = "this shell keeps the old value; the new one is for the next slsh"
 
 // settings is every setting there is, written in the order they belong
-// in -- the shell's own, then the viewer's, then the map's, and within
-// each the order somebody meets them in.
+// in -- the shell's own, then the viewer's, then the map's, then how's,
+// and within each the order somebody meets them in.
 //
 // They are LISTED alphabetically, which is not the same thing and is
 // deliberate; see sortedSettings.
@@ -689,8 +688,8 @@ func LoadConfig() (Config, error) {
 // # Why this is not SaveProfile
 //
 // agent.SaveProfile rewrites a profile wholesale out of the struct,
-// which is right there: a profile is written by "login" and read by
-// programs.  A settings file is different in the one way that matters
+// which is right there: what it writes is made from a Login and read
+// by programs.  A settings file is different in the one way that matters
 // -- it is hand-edited -- and the comments in it are somebody's notes
 // about why a viewer needs that particular grid nickname, or which
 // address was tried and did not answer.  Rewriting the file from the

@@ -33,7 +33,7 @@ package main
 // # The password
 //
 // A profile stores viewer_password as a "$1$" md5 digest
-// (agent/profile.go:216), so nothing on this side can produce a
+// (agent.Login.ViewerPassword), so nothing on this side can produce a
 // plaintext that a viewer would hash into a match: the shell cannot
 // know a password it could type in.  So the daemon mints one -- random,
 // good for a single login, and short lived -- and it is passed straight
@@ -56,7 +56,7 @@ package main
 // account's own grid password --
 // would put the real credential into a viewer's saved settings for a
 // login that never leaves this machine, which is the road
-// cmd/slgod/viewer.go:157 explains is closed.
+// agent.Login.ViewerPassword explains is closed.
 //
 // Nothing here prints, logs or keeps the password.  The command it
 // would run is printed with the password struck out, because a launch
