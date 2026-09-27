@@ -77,12 +77,10 @@ type askExcerpt struct {
 
 // askAnswer is the reply asked for, as the schema below describes it.
 //
-// There is no free-text answer in it.  There was one, and nothing
-// printed it; what it did was give the model a sentence to write before
-// it had chosen anything -- and the instructions supplied the sentence,
-// "slsh has no command for that", ready to copy.  See askSchema.  A
-// reply that still carries one (an old prompt, a server that ignores
-// the schema) has it ignored.
+// There is no free-text answer in it: a sentence written before the
+// choice is one the model then agrees with.  A reply that still carries
+// one (an old prompt, a server that ignores the schema) has it ignored.
+// Why: doc/slsh.md#the-order-the-reply-is-written-in
 type askAnswer struct {
 	Found       bool            `json:"found"`
 	Suggestions []askSuggestion `json:"suggestions"`
@@ -125,19 +123,12 @@ func askEstimateTokens(s string) int {
 // printed, and one that does not has them thrown away.  The asking is
 // only so that less is thrown away.
 //
-// Three rules came from reading what the checks threw away (the eval's
-// per-question log, 2026-09-23, qwen3.5:4b and qwen3.5:2b): placeholders
-// for numbers ("--glow N"), which getopt refuses, where the usage line
-// had taught the model to write N; usage lines copied whole, brackets
-// and all; and quotes run on from one text into the next.  Saying so,
-// with the texts fenced (askUser), took the 4B from 73% right to 79%
-// and the 2B from 52% to 72%.
-//
-// The reply for "not found" is written out whole at the end.  A full
-// pair of worked examples, one found and one not, was measured too: it
-// kept the 2B from suggesting anything for a question nothing answers,
-// but cost the 4B three points of right and gave it wrong suggestions it
-// had not made without them, and the 4B is the better model.
+// Three rules -- a number where a flag takes one, nothing copied from
+// the usage line's [ ] or |, and a quote from one fenced text -- came
+// from what the checks threw away.  The reply for "not found" is written
+// out whole at the end, and there are no worked examples: a pair of them
+// helped the smaller model and cost the better one.
+// Why: doc/slsh.md#where-the-prompts-rules-came-from
 const askSystem = `You answer questions about slsh, a command shell that drives a Second Life avatar.  The person asking wants to know which slsh command does what they describe, and how to type it.
 
 You are shown some slsh commands.  Each has its usage line, a one-line description, and sometimes excerpts from its manual page.  The description and each excerpt are between """ marks.  For this answer, those are the only commands that exist.
@@ -182,13 +173,9 @@ func askMessages(question string, cands []askCandidate) ([]llm.Message, []askCan
 //
 // The brief is fenced the same way, on lines of its own, and the label
 // over an excerpt says "manual" and its heading, and no more.  Both are
-// for the quote.
-// With the brief on its "description:" line and each excerpt under
-// "from its manual, Options:", the smaller models quoted across the
-// joins -- "put on everything the Current Outfit folder names that is
-// not on from its manual" -- which checkQuote rightly refuses, since no
-// page says it; a quote has to come from one fenced text, and the
-// instructions now say which texts those are.
+// for the quote: a quote has to come from one fenced text, and the
+// smaller models ran quotes on across the longer labels this had before.
+// Why: doc/slsh.md#where-the-prompts-rules-came-from
 func askUser(question string, cands []askCandidate) string {
 	var b strings.Builder
 	b.WriteString("Commands:\n")
@@ -265,22 +252,9 @@ func askFit(question string, in []askCandidate, budget int) []askCandidate {
 // writes them in the order the grammar makes it, and what it writes
 // first it has decided by the time it writes the rest.  found is first
 // and is a bare boolean: the decision, with nothing to say before it.
-// Two other orders were measured and are not this one (2026-09-23,
-// Ollama, qwen3.5:4b and qwen3.5:2b with reasoning_effort none, the 82
-// questions of testdata/ask-questions.tsv):
-//
-//   - The map's own order, which is alphabetical and put a free-text
-//     "answer" first.  The model wrote its prose before choosing, and
-//     on questions a shown command did answer it often wrote "slsh has
-//     no command for that" -- the sentence the instructions offered --
-//     and then chose to agree with itself.
-//   - found last, after the suggestions.  More answers came through, but
-//     so did suggestions for questions nothing answers (not-found fell
-//     from 100% to 93% on the 4B and to 80% on the 2B), even when found
-//     was false and the suggestions were thrown away for it.
-//
-// Found first with the answer dropped kept not-found at 100% on both
-// and took the 4B's wrong kept suggestions from 7% of questions to 2%.
+// Two other orders were measured and did worse: alphabetical, and found
+// last.
+// Why: doc/slsh.md#the-order-the-reply-is-written-in
 func askSchema(cands []askCandidate) *llm.Schema {
 	command := map[string]any{"type": "string"}
 	if len(cands) > 0 {

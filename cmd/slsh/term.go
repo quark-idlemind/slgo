@@ -323,12 +323,10 @@ func (t *Term) decode(raw <-chan byte) {
 			// "6;18;10" -- in front of that.
 			//
 			// Reading to the end matters as much for the sequences
-			// nothing here answers to as for the ones it does.  This
-			// used to stop at the third byte and give up on anything it
-			// did not recognise, which left the REST of the sequence in
-			// the stream to be decoded as ordinary keys: a report of
-			// the cell size, ESC [ 6 ; 18 ; 10 t, typed ";18;10t" at
-			// the prompt, and a bracketed paste typed "00~".
+			// nothing here answers to as for the ones it does: whatever
+			// of a sequence is left in the stream is decoded as
+			// ordinary keys.
+			// Why: doc/slsh.md#reading-an-escape-sequence-to-its-end
 			var params []byte
 			var final byte
 			if b2 == 'O' {

@@ -33,17 +33,13 @@ package main
 //
 // # No second opinion
 //
-// A second, short question for each suggestion that passed the checks
-// -- "does this command do what they asked? yes or no" -- was tried as
-// a guard against a real command offered for something it does not do.
-// It said no to nearly everything: asked whether pwd, "print the current
-// inventory folder", tells somebody which folder they are in, qwen3.5:4b
-// said no, and when asked for a reason first, said that pwd is a Unix
-// command.  On the eval (2026-09-23, qwen3.5:4b and qwen3.5:2b) it cut
-// the questions answered right by half or more, so it is not here.
-// What guards against such a suggestion is the model's own found, asked
-// for first (askSchema), and honoured: suggestions written beside
-// found=false are dropped (askToCheck).
+// A suggestion that passed the checks is not put back to the model to
+// ask whether it does what was asked; that was tried, and it cut the
+// questions answered right by half or more.  What guards against a real
+// command offered for something it does not do is the model's own
+// found, asked for first (askSchema), and honoured: suggestions written
+// beside found=false are dropped (askToCheck).
+// Why: doc/slsh.md#no-second-opinion-on-a-suggestion
 
 import (
 	"bufio"

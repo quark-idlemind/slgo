@@ -7,8 +7,8 @@ package main
 // question -- why does wear add rather than replace, why does place
 // take exactly one argument, what does a group invitation with a fee
 // need typed at it -- because the answers are paragraphs and getopt's
-// output is a column of flags.  Those answers exist: they are in the
-// file comments, argued out and measured live.  Before this, meeting
+// output is a column of flags.  Those answers existed, in the file
+// comments, argued out and measured live, and before this, meeting
 // them meant reading the source.
 //
 // So a command names a man page as well as carrying a brief, and
@@ -18,45 +18,24 @@ package main
 //
 // A page never repeats the two things that are already derived.  man
 // prints the name and brief as its heading and the usage line under it,
-// both composed the same way help composes them (options.go),
-// so a page that wrote either one out again would be another copy of
-// the thing this series has just finished reducing to one.
+// both composed the same way help composes them (options.go).
 //
-// The flags are not one of those two.  They were left out at first, on
-// the grounds that --help already had them, and what that bought was a
-// reference somebody had to leave in order to find out what a flag did.
-// So a page with flags lists them under Options, a paragraph each,
-// saying the part getopt's column has no room for; the column stays the
-// quick answer and is still the only answer for a command whose one flag
-// is --help.  What a page adds beyond that is the reasoning, the traps
-// and the worked examples.
+// The flags are not one of those two.  A page with flags lists them
+// under Options, a paragraph each, saying the part getopt's column has
+// no room for; the column stays the quick answer and is still the only
+// answer for a command whose one flag is --help.  What a page adds
+// beyond that is the reasoning, the traps and the worked examples.
+// Why: doc/slsh.md#what-a-man-page-repeats-and-what-it-does-not
 //
 // # Where a page lives
 //
-// In cmd/slsh/man, one file per command, named after it, embedded
-// into the binary.  A page is prose and is written and read as prose;
-// as a Go string constant it was prose being edited inside a quoting
-// construct, where a stray backtick is a compile error and no editor
-// wraps or spell-checks a paragraph.
-//
-// NAME.md, and nothing else.  There was a second form, NAME.txt, laid
-// out by a reader in this file: it had no mark available but capitals,
-// so every heading was shouted and a flag name in one came out as
-// "--REPLACE".  Markdown can send bold, so a heading keeps the case it
-// was written in, and once every page had been rewritten the text form
-// was 75 files saying the same thing in a worse hand.
-//
-// The whole directory is embedded rather than a pattern like "man/*.md",
-// because a pattern is a thing a file can silently fall outside of and a
-// directory is not.  The page still ends up inside the binary either way,
-// which is the property worth keeping: a shell that is installed cannot
-// have lost its documentation on the way.
-//
-// A generator writing the pages back out as Go source was the other
-// answer -- msg/messages_gen.go is done that way -- and buys nothing
-// here.  That generator exists because the message template is somebody
-// else's file in somebody else's format; these are ours, in no format at
-// all, and a generated file is one more thing to keep in step.
+// In cmd/slsh/man, one markdown file per command, NAME.md, embedded
+// into the binary: a page is prose, written and read as prose, and a
+// shell that is installed cannot have lost its documentation on the
+// way.  The whole directory is embedded rather than a pattern like
+// "man/*.md", because a pattern is a thing a file can silently fall
+// outside of and a directory is not.
+// Why: doc/slsh.md#why-a-man-page-is-a-markdown-file
 //
 // The command's man field names the page rather than holding it.  Naming
 // is what lets two names share one command -- quit and exit are one
@@ -70,8 +49,7 @@ package main
 // terminal, a "## " line is a heading and comes out in the case it was
 // written, an indented block is an example and is printed exactly as it
 // stands, and a table is drawn.  A heading longer than the width wraps
-// like anything else, which the text form never did -- it had no way to
-// and left the line long.
+// like anything else.
 //
 // The house rule of two spaces after a full stop is held across the
 // join between two lines of one paragraph as well as inside a line;
