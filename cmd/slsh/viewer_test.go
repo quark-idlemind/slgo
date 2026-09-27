@@ -15,6 +15,8 @@ package main
 import (
 	"context"
 	"errors"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -190,6 +192,12 @@ func TestALaunchWithNothingToRunSaysSo(t *testing.T) {
 	got := x.do(t, "viewer --launch")
 	if !strings.Contains(got, "viewer_launch") {
 		t.Errorf("the refusal should name the setting that fixes it:\n%s", got)
+	}
+	// The placeholders it names are the ones the default line uses.
+	_, _, launch, _ := viewerDefaults("darwin")
+	named := regexp.MustCompile(`\{[a-z]+\}`)
+	if said, want := named.FindAllString(got, -1), named.FindAllString(launch, -1); !slices.Equal(said, want) {
+		t.Errorf("the refusal names %v, and the default line uses %v", said, want)
 	}
 	if d.credentials != 0 {
 		t.Errorf("a launch that could not happen still minted %d credentials", d.credentials)

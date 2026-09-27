@@ -111,7 +111,7 @@ func launchViewer(ctx context.Context, sh *Shell, out io.Writer, conn *client.Co
 	if sh.cfg.ViewerLaunch == "" {
 		return fmt.Errorf("nothing here knows how to start a viewer on %s; "+
 			"put a \"viewer_launch = ...\" line in slsh's config (~/.config/slsh/config) "+
-			"with {app} {uri} {first} {last} {password} where those belong", runtime.GOOS)
+			"with {app} {grid} {first} {last} {password} where those belong", runtime.GOOS)
 	}
 
 	// Before minting: a credential made for a launch that cannot
