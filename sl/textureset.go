@@ -365,13 +365,10 @@ func (w *Session) describeAgain(ctx context.Context, seen *Seen) (*Seen, error) 
 // The region does not describe an appearance when it is changed, so
 // the session forgets the one it held as the change went out -- see
 // agent.Objects.sent -- and the read here asks the region for it
-// again.  Measured on a live region: the answer came back in 100 to
-// 200ms, and two changes in a row then composed, every face red
-// followed by face 2 green leaving five red faces and a green one.
-// Without the asking they did not: the red was gone from all six.
-// The composing was watched with a build that asked on every read
-// rather than only on a forgotten one; the request that goes out and
-// the answer that comes back are the same either way.
+// again.  That costs a round trip -- see describeAgainFor -- and it is
+// what lets two changes in a row compose rather than the second undo
+// the first.
+// Why: doc/objects.md#an-appearance-after-objectimage
 //
 // A caller changing several faces should still send them together with
 // SetFaces, which is the whole appearance in one message and asks the

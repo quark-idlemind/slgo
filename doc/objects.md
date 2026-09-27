@@ -117,3 +117,13 @@ face blue and then face 0 white left face 0 white and the other five
 back at the red they had been before the blue. So the store forgets an
 appearance it has seen changed, rather than keeping one it knows is
 wrong.
+
+`sl.SetFace` then asks the region for the appearance again, with the
+request a viewer sends for a cache miss, before it builds the change.
+Measured on a live region: the answer came back in 100 to 200ms, and
+two changes in a row then composed, every face red followed by face 2
+green leaving five red faces and a green one. Without the asking they
+did not: the red was gone from all six. The composing was watched with
+a build that asked on every read rather than only on a forgotten one;
+the request that goes out and the answer that comes back are the same
+either way.
