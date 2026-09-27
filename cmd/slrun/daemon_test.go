@@ -451,6 +451,12 @@ func (d *fakeDaemon) whileBusy(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Se
 	}
 	t := time.NewTimer(after)
 	defer t.Stop()
+	d.grid.mu.Lock()
+	hook := d.grid.onAsk
+	d.grid.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 	select {
 	case <-t.C:
 		d.send(s, &pb.ServerPacket{Body: &pb.ServerPacket_Granted{Granted: g}})
@@ -638,6 +644,32 @@ func TestInterruptingARunSaysSoOnceAndFails(t *testing.T) {
 	for _, said := range []string{out, errOut} {
 		if strings.Contains(said, "context canceled") {
 			t.Errorf("the cancellation was reported as a script error:\n%s", said)
+		}
+	}
+}
+
+// TestInterruptingAWaitForObjectsSaysInterrupted: ^C while every object
+// is busy and slrun is waiting for slgod.  The wait ends with the run's
+// own cancellation, which is an interrupt, as it is on the backend path
+// -- not a daemon too old to answer, which is what it was reported as.
+func TestInterruptingAWaitForObjectsSaysInterrupted(t *testing.T) {
+	reset(t)
+	f, addr := newBusyDaemon(t, boundsWaits)
+	f.onAsk = func() { syscall.Kill(os.Getpid(), syscall.SIGINT) }
+	commandLine(t, "--addr", addr, script(t, "default {}"))
+
+	var err error
+	out, errOut := bothOf(t, func() { err = run() })
+
+	if !errors.Is(err, errInterrupted) {
+		t.Fatalf("run = %v, want errInterrupted", err)
+	}
+	if want := "interrupted while waiting for objects"; err.Error() != want {
+		t.Errorf("run = %q, want %q", err, want)
+	}
+	for _, said := range []string{err.Error(), out, errOut} {
+		if strings.Contains(said, "context canceled") || strings.Contains(said, "older than the pool") {
+			t.Errorf("the interrupt was reported as something else:\n%s", said)
 		}
 	}
 }
