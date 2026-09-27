@@ -1,0 +1,25 @@
+package sl
+
+import (
+	"testing"
+	"time"
+)
+
+// TestTheReadBackBoundsAreTheSessionsOptions: each is its default until
+// it is set, and setting one leaves the others at theirs.
+func TestTheReadBackBoundsAreTheSessionsOptions(t *testing.T) {
+	w, _ := newFakeSession(t)
+	if w.moveWait() != 15*time.Second || w.permissionsWait() != 15*time.Second || w.deleteWait() != 10*time.Second {
+		t.Errorf("the defaults are %v, %v and %v; want 15s, 15s and 10s",
+			w.moveWait(), w.permissionsWait(), w.deleteWait())
+	}
+	w.SetOptions(Options{MoveTimeout: 2 * time.Second})
+	if w.moveWait() != 2*time.Second || w.permissionsWait() != DefaultPermissionsTimeout ||
+		w.deleteWait() != DefaultDeleteTimeout {
+		t.Errorf("with MoveTimeout set, the bounds are %v, %v and %v",
+			w.moveWait(), w.permissionsWait(), w.deleteWait())
+	}
+	if got := w.Options(); got != (Options{MoveTimeout: 2 * time.Second}) {
+		t.Errorf("Options = %+v, want what was set", got)
+	}
+}

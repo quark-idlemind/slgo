@@ -70,6 +70,9 @@ type Session struct {
 	// refreshIdentity below.
 	ident atomic.Pointer[Info]
 
+	// opts is what SetOptions last set, or nil for every default.
+	opts atomic.Pointer[Options]
+
 	// me and invRoot do not change.  The avatar is the same avatar
 	// however often its session is rebuilt, and the inventory root
 	// belongs to the account rather than to the session, so both are

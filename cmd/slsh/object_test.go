@@ -51,6 +51,7 @@ func TestAFailedBuildIsTakenAwayByItsRoots(t *testing.T) {
 func TestAFailedBuildSaysWhatItCouldNotConfirmGone(t *testing.T) {
 	t.Parallel()
 	x := newTestShell(t)
+	shortReadBacks(x)
 	standing(x, aPrim(aChair, 11, "chair", 0))
 
 	chair := &sl.Object{ID: aChair, Local: 11}

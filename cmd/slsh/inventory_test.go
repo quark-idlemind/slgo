@@ -555,6 +555,7 @@ func TestMvMovesOrRenamesDependingOnTheDestination(t *testing.T) {
 func TestMvSaysWhenAMoveNeverArrives(t *testing.T) {
 	t.Parallel()
 	x := newTestShell(t)
+	shortReadBacks(x)
 
 	x.grid.mu.Lock()
 	x.grid.ignoreMoves = true

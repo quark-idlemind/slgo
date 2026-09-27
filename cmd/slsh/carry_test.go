@@ -147,6 +147,7 @@ func TestPermsSaysWhatTheMaskNowAllows(t *testing.T) {
 func TestPermsSaysWhenAChangeDidNotLand(t *testing.T) {
 	t.Parallel()
 	x := newTestShell(t)
+	shortReadBacks(x)
 	standing(x, aPrim(aChair, 11, "lantern", 0))
 	x.grid.AnswerPermissions(t, func(who uint8, mask uint32) uint32 {
 		if who == sl.WhoGroup {
