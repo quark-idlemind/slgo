@@ -54,10 +54,11 @@ edited, and nothing is sent until it is entered.
 
 The escape key is what leaves, and slsh takes a key of its own if
 escape is awkward on a particular terminal: `slsh --escape=^G` for one
-run, or `set escape ^G` to have it remembered.  Escape is read when the
-shell starts, so a setting changed at the prompt is the next shell's
-escape key and not this one's -- `set escape` says so, and says which
-key is in force.
+run, or `set escape ^G` to have it remembered.  Enter and tab are
+refused, since chat already takes both for itself.  Escape is read
+when the shell starts, so a setting changed at the prompt is the next
+shell's escape key and not this one's -- `set escape` says so, and
+says which key is in force.
 
 ## Everything heard is printed in either mode
 

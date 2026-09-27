@@ -742,10 +742,28 @@ func saveSetting(s setting, value string) (string, error) {
 //
 //	ESC  escape  ^[      the escape key, the default
 //	^G   C-g     ctrl-g  a control character
-//	TAB  ^I              tab, though it already cycles sessions
 //	!    ~               an ordinary character, if you never type it
 //	0x07 7               a number, for anything not named above
+//
+// Enter and TAB are refused however they are spelled: Shell.key takes
+// both before it looks for the escape key, so either would leave chat
+// with no way out.
 func ParseKey(s string) (rune, error) {
+	r, err := keyNamed(s)
+	if err != nil {
+		return 0, err
+	}
+	switch r {
+	case '\r', '\n':
+		return 0, fmt.Errorf("%q would leave no way to send a message", s)
+	case '\t':
+		return 0, fmt.Errorf("%q already moves between conversations, so it would never leave chat", s)
+	}
+	return r, nil
+}
+
+// keyNamed is ParseKey without the refusals.
+func keyNamed(s string) (rune, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, fmt.Errorf("no key given")
@@ -754,12 +772,12 @@ func ParseKey(s string) (rune, error) {
 	switch strings.ToLower(s) {
 	case "esc", "escape", "^[", "\\e":
 		return 27, nil
-	case "tab", "^i", "\\t":
-		return 9, nil
+	case "tab", "\\t":
+		return '\t', nil
 	case "space":
 		return ' ', nil
-	case "enter", "return", "^m":
-		return 0, fmt.Errorf("%q would leave no way to send a message", s)
+	case "enter", "return":
+		return '\r', nil
 	}
 
 	// ^X and its spellings, for a control character.
@@ -802,8 +820,6 @@ func KeyName(r rune) string {
 	switch {
 	case r == 27:
 		return "ESC"
-	case r == 9:
-		return "TAB"
 	case r == ' ':
 		return "SPACE"
 	case r < 32:

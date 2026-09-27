@@ -66,7 +66,7 @@ chat	chat	line		chat [WHO]\nenter chat mode; with WHO, in an instant message ses
 chat:intro	chat	intro		chat turns the keyboard over to talking.  Command mode is the outer\none, because a shell is wanted for listing and moving things far more\noften than for conversation, and this is the way in; the escape key is\nthe way back out.\n\n    chat\n\nWith nobody named it enters chat mode on whichever conversation is\ncurrent.  With somebody named -- a name, a key, or a number from the\nlast listing -- it opens the conversation with that person first and\nswitches to it, which is the same thing `im` does when there is nothing\nto say.  Everything after `chat` is the name, not a message.  Naming\nsomebody opens a conversation; `im` with words after the name sends\none.\n\nThe prompt is where the next line will go: `Local` for the region's\nopen chat, or somebody's name for an instant message to them.  A count\nin brackets may stand in front of it, as in `(2) Local>`, and that half\nbelongs to `waiting` rather than to the conversation: it is how many\nthings are waiting for an answer, and it stands in front of the command\nprompt in the same way.
 chat:example:1	chat	example		chat
 chat:section:A half-typed line is put aside, not lost	chat	section	A half-typed line is put aside, not lost	Leaving a mode puts the line being typed aside and brings back the line\nthat was put aside on the way in, so an interrupted sentence is still\nthere afterwards.  Nothing is sent or run by the switch.\n\nThere is one place to put a line rather than one for each mode, and the\nmulti-line answer a text box takes uses it too, so a sentence left half\ntyped in chat can come back at the `1 text>` prompt.  It comes back on\nthe line to be edited, and nothing is sent until it is entered.
-chat:section:What the keys do here	chat	section	What the keys do here	Tab moves to the next conversation, rather than completing a word as it\ndoes at a command prompt, and it does nothing at all while something is\nhalf typed -- moving then would send the line somewhere nobody meant.\nCtrl-C on an empty line returns to command mode rather than leaving the\nshell.\n\nUp and down walk what has been said, which is a history of its own: a\ncommand is never offered at a chat prompt, where it would be said out\nloud rather than run, and a remark is never offered at a command one.\nA line of nothing, a repeat of the line before it, and a line abandoned\nrather than entered are left out.  A line the grid refused is kept,\nsince that is the one most wanted back.\n\nThe history belongs to the shell rather than to the conversation, and\nthat is what makes a line said in the wrong place recoverable: tab to\nthe conversation it was meant for, press up until it comes back, and\npress return to send it there.  What comes back lands on the line to be\nedited, and nothing is sent until it is entered.\n\nThe escape key is what leaves, and slsh takes a key of its own if\nescape is awkward on a particular terminal: `slsh --escape=^G` for one\nrun, or `set escape ^G` to have it remembered.  Escape is read when the\nshell starts, so a setting changed at the prompt is the next shell's\nescape key and not this one's -- `set escape` says so, and says which\nkey is in force.
+chat:section:What the keys do here	chat	section	What the keys do here	Tab moves to the next conversation, rather than completing a word as it\ndoes at a command prompt, and it does nothing at all while something is\nhalf typed -- moving then would send the line somewhere nobody meant.\nCtrl-C on an empty line returns to command mode rather than leaving the\nshell.\n\nUp and down walk what has been said, which is a history of its own: a\ncommand is never offered at a chat prompt, where it would be said out\nloud rather than run, and a remark is never offered at a command one.\nA line of nothing, a repeat of the line before it, and a line abandoned\nrather than entered are left out.  A line the grid refused is kept,\nsince that is the one most wanted back.\n\nThe history belongs to the shell rather than to the conversation, and\nthat is what makes a line said in the wrong place recoverable: tab to\nthe conversation it was meant for, press up until it comes back, and\npress return to send it there.  What comes back lands on the line to be\nedited, and nothing is sent until it is entered.\n\nThe escape key is what leaves, and slsh takes a key of its own if\nescape is awkward on a particular terminal: `slsh --escape=^G` for one\nrun, or `set escape ^G` to have it remembered.  Enter and tab are\nrefused, since chat already takes both for itself.  Escape is read\nwhen the shell starts, so a setting changed at the prompt is the next\nshell's escape key and not this one's -- `set escape` says so, and\nsays which key is in force.
 chat:section:Everything heard is printed in either mode	chat	section	Everything heard is printed in either mode	Arriving chat has nothing to do with what the keyboard is for, so\nremarks, instant messages and notices are printed above whatever is\nbeing typed whichever mode is in force.  Time-stamped, and then one\ncharacter that says which kind of line it is: `<` for heard, `>` for\nsaid, and `*` for a notice.  The first two are the pair that has to be\ntold apart, since a remark and a reply read the same in a column; the\nthird is the shell speaking rather than anybody in the world.
 chat:section:Control characters are shown, not obeyed	chat	section	Control characters are shown, not obeyed	What is heard is somebody else's text, and a terminal acts on the\nescape sequences in whatever it is sent: they can clear the screen,\nwrite over the line that says who spoke, set the window title, or put\nsomething on the clipboard.  So slsh shows every control character in\ncaret notation instead of sending it -- ESC is `^[`, BEL `^G`, DEL\n`^?` -- with `M-` in front for the eight-bit ones, `M-^[` for U+009B.\nThe same goes for everything else the grid names and slsh prints:\navatars, objects, parcels, groups, inventory, the prompt when it names\nsomebody, and the transcript.\n\nA newline is still a line break and a tab still a tab.  A carriage\nreturn on its own would put the cursor back over the start of the\nline, so it is shown as `^M`; one immediately before a newline is\ntaken with it as the one line break it was meant as.\n\nOutput redirected to a file is the one thing left as it arrived, since\na file is what a name is copied out of to be typed back in, and `^[`\ntyped back is not the name.  Such a file is data rather than a screen:\nread it with `less`, which shows control characters rather than\nsending them, and not with `cat`, which sends them.
 chat:section:Examples	chat	section	Examples	Enter chat mode and talk to the room:\n\n    chat\n\nEnter it already talking to somebody:\n\n    chat Example Resident\n\nSee also: `talk` for the conversations tab moves between, `im` for one\nmessage without leaving command mode, and `say` for one remark out\nloud.
@@ -1199,7 +1199,7 @@ along	84,222,202,96,178,5,12*2,81
 alongsid	8,30,473,294,60,4
 alpha	92,659*2,9,111
 alphabetical	12
-already	6,8,40,15,3,11,18,2,1,2,6,62,40,77,3,16*2,2,6,29,8,46,15*2,1,2,3,7,2,13,19*2,82,15*2,19,13,26,22,1,3,17,1,17,30*2,2,1,16*2,71,10,18,1*2,7,30,5
+already	6,8,40,12,3,3,11,18,2,1,2,6,62,40,77,3,16*2,2,6,29,8,46,15*2,1,2,3,7,2,13,19*2,82,15*2,19,13,26,22,1,3,17,1,17,30*2,2,1,16*2,71,10,18,1*2,7,30,5
 alter	765
 although	45,310,465
 altogether	795
@@ -1312,7 +1312,7 @@ boot	101
 border	450*2,1*3,2,1*2,4,352,41
 born	549*2,1
 bot	11,298
-both	1,24,62*2,4,22,9,95,9,2*2,44*2,20,2*2,3,102,17*3,1,2*2,5,29,10,6,39,2,12*2,38,7,29,19,14,33,4,18,12,103,4,3*2,56,6,2,3,20
+both	1,24,41,21*2,4,22,9,95,9,2*2,44*2,20,2*2,3,102,17*3,1,2*2,5,29,10,6,39,2,12*2,38,7,29,19,14,33,4,18,12,103,4,3*2,56,6,2,3,20
 bottom	544,330,1
 bought	522
 bound	106
@@ -1384,7 +1384,7 @@ chang	41,12*2,1,12,47,30,10*2,64,17,78,23,35,27,3,3,13*3,1,2,10,2,20,2,3,25,43,5
 channel	648*2,1,2*3,1*5,1,29,33
 character	67,1*3,325,5,5,1,21,59,35,64,81,1,1,83,138
 charg	25*2,249,286
-chat	62*3,1*5,1,1,1,1,2*3,1,172*2,4,11*2,6*2,139,186*2,60*2,1*4,2,1*2,1,12,3,77*2,1*3,2*2,1*3,1,136
+chat	62*3,1*5,1,1,1*2,1,2*3,1,172*2,4,11*2,6*2,139,186*2,60*2,1*4,2,1*2,1,12,3,77*2,1*3,2*2,1*3,1,136
 chatfromsimulator	859*2,1,3
 check	139,98,1*2,34*2,25,16*2,247,106,116*2,91
 chest	100,1*2,768
@@ -1615,7 +1615,7 @@ end	12*3,2,1,7*2,5,25,22,27,15,33,4,21,21,2,4,2,3,4,11,1*3,2,29,16,1,1,18,1,2,6,
 energy	361*2,8
 engineer	270,1
 enough	31,357,156,62,43,100,97
-enter	53,4,5,1,2,1*2,3*2,188,131*3,362
+enter	53,4,5,1,2,1*3,3*2,188,131*3,362
 entirely	586,105,57
 entry	78*2,34,27*2,17,23,50*2,188,32*2,190*2,107,3
 equal	661
@@ -1869,7 +1869,7 @@ inviter	270
 involv	297
 ir	233
 item	0*2,1*11,3,1*2,2,11*2,27*4,7*2,4,15*2,1*3,2*6,4*2,1,1*6,3,3,1*3,3*2,11*2,5,3*2,1*6,2*5,4*3,19,24*2,1*6,2*4,2,2*2,1,3,3,1*2,5,13,4*2,1,4*2,1*2,1*7,2,1*3,4*2,16,51,15*6,2,2,2,9,36,4*2,5,1*3,1,1*2,84,1,2*2,7*3,13,1*4,12,3,2,5,22,1*2,1,30,3,6*2,14,1,58*2,6,1*3,1,1*4,9*3,2*7,2,4*2,86*6,7,9,67,16,4,29,1,4*5,1,22*2,1,1*3,1*3
-itself	12,88,3*2,4,14,9,6,17,2,5,5,2,29,9,9,14,2,30,32,12,1*2,8,1,8,1,4*2,34,27,18,23,25*2,4,64,3,11,50,8,14,22,34,20,7,24,5,8,9,12,45,16,8,6*2,22,13,9*2,26,3
+itself	12,54,34,3*2,4,14,9,6,17,2,5,5,2,29,9,9,14,2,30,32,12,1*2,8,1,8,1,4*2,34,27,18,23,25*2,4,64,3,11,50,8,14,22,34,20,7,24,5,8,9,12,45,16,8,6*2,22,13,9*2,26,3
 j2c	195,2,363
 jacket	871
 job	129
@@ -2299,7 +2299,7 @@ redraw	524
 reduc	666
 referenc	360
 reform	118,4,1*2,2,466,1*2,1,4*2,2,20,148
-refus	1,4,1,8,4*2,4,2,1,6,3,11*3,7,4,1*2,9,6,7*2,1*3,7,3,2,18*2,6,13*2,20*2,4,3,4,2*2,22,8,5,4,2*2,7,4,3,1,10,9,2,3*2,17,1*2,6,6*2,16,2,2*2,2*2,2,1*2,1,7*2,7,1*3,8,1,31*2,28,16,13,7*2,5,2,5*3,2,11,2*4,7,1,17,5,1*2,26,3,6,10,9,9,4*2,2,1,3,12,19,16,11,1,4,2,8,7*2,1,1,11,6,2,2,10,2,3*2,13*2,3*3,2,7,42,15,14,3,6,8,4,11,1,9*2,2,1,1,12,7,1,9,4,10*2,8,2,7,2*3,11
+refus	1,4,1,8,4*2,4,2,1,6,3,11*3,7,4,1*2,9*2,6,7*2,1*3,7,3,2,18*2,6,13*2,20*2,4,3,4,2*2,22,8,5,4,2*2,7,4,3,1,10,9,2,3*2,17,1*2,6,6*2,16,2,2*2,2*2,2,1*2,1,7*2,7,1*3,8,1,31*2,28,16,13,7*2,5,2,5*3,2,11,2*4,7,1,17,5,1*2,26,3,6,10,9,9,4*2,2,1,3,12,19,16,11,1,4,2,8,7*2,1,1,11,6,2,2,10,2,3*2,13*2,3*3,2,7,42,15,14,3,6,8,4,11,1,9*2,2,1,1,12,7,1,9,4,10*2,8,2,7,2*3,11
 refusal	1,21,30,5*2,17,9,1,3,5,24,37,9,4,29,6,2,7,4*2,39,7,32,2,2,16,1*3,7,1,6,93,9,46,56,11,6,12*2,44,25,12,6,16,3,16*2,51,71,2*2,1,20,43,11,14
 regard	1,37,115,64,144,129,304,97
 region	14*2,13*5,11,2,1*4,4*3,18,11,12,1,2,1,1*2,6,4*2,2*2,1*2,2,3,1,2,5,1,3,1*2,20,1,9,1*5,3*3,1,2,1,5,1*2,22,15,8,10,9,1,29,5,11,1,12*3,1,1*5,6*4,1,3,1*2,2,2,20*3,1*4,3,1,2,5,1,53*2,1,2,2,1*2,1,2,1*2,3*2,1*2,1,3*2,7*4,2,1,8,1*4,8,5,8*4,1*3,1*2,1*6,1*7,4*3,10,21*3,1,5,9,10*2,1*5,3*2,1*3,3*4,1*3,2*3,1,2,1*2,7,5,3*2,9,3,35,1,2,1,1,4*4,1*5,1,2,1,1*3,1*7,1*4,1,1,4*4,2*2,36,14*4,8,8*2,2*2,11,10,1,9,2*3,3,3,9,1*4,2,2,1,12,1,1,13*2,1*3,4,1,5,7,4*5,1*4,6*4,1*12,1*3,1*3,1*3,1*13,3,2*4,1*5,1*3,1,1,1,1*3,5,3,2,12,8*2,1*3,10*4,14,1,3,2,5*3,1*2,2,1,2*3,1*3,1*2,2,4,3*3,4*3,1
@@ -2440,7 +2440,7 @@ silently	101,562,142
 sim	600
 simply	40,43,368,57,114,127
 simulator	25,12,1,2*2,1*2,1,58*2,3*3,1*2,2,11,26,9*3,1,2,7,50,57*2,1*2,4,17,3*2,3,8,21,1,3,1,29*2,1*3,44,14*2,32,2*2,1*4,41,30,35,115,4*2,2,1,14*2,19*2,3,1,30,33*2,17,7,1,40,26,21*4
-sinc	1,3*2,27,21,14,1,1,12,7,4,1,9,9,6,33,13,12,27,2,7,18,6,25,1,12,33,13,12,17,6,16,12,23,15,10,15,31,28,6,12,27,5,2,34,22,3,27,6,2,12*3,45,22,5,50,11,13,20,9*2,5,18,20,1*3,6,7*2
+sinc	1,3*2,27,21,14*2,1,1,12,7,4,1,9,9,6,33,13,12,27,2,7,18,6,25,1,12,33,13,12,17,6,16,12,23,15,10,15,31,28,6,12,27,5,2,34,22,3,27,6,2,12*3,45,22,5,50,11,13,20,9*2,5,18,20,1*3,6,7*2
 singl	100,27,101,14,60,150,154,43,7,127,33,4,7*2
 sit	12,89,48,320,205*4,1*5,1,1,1,1*5,1*2,2*6,1,2*6,1,1,8,1*2,2,1*3,2*2,47,103,25,1*3,3*12,16,1
 situation	14
@@ -2560,10 +2560,10 @@ switch	62,1,2,146,500*2,34,4
 symmetry	312
 syntax	153*2,207
 system	92,779,20
-tab	66*2,2*2,1,91,87*2,10,111,1*2,377,2,1*2
+tab	66*3,2*2,1,91,87*2,10,111,1*2,377,2,1*2
 tag	211
 tail	665,54
-tak	1*3,4,7,12,1*2,6,3,20*2,2,1,8,1,14,6*2,1,5*3,14,4*3,6,6,14,4,3,17*2,2,5,4,2*3,49,6,2,8*2,4*2,6,2,3,7,26,1,5*2,6,7,2,6,5,6,11*3,4*3,11,2,1*3,2,14,29,6,2,16*2,7,3*2,2,3,6,10,14,11,2,10*3,7,11,10,1,10,2,8*2,2,1*3,3,3,2,3*4,26*3,7,4,2,14,5,2,6,8,3,1,8,2,8,12,1*2,1,3*3,2,14,2,8,8,6,13,5*2,6,2*3,1*8,1,1*2,1,2*4,1,1*5,1,5,2,31,36,1*3,3,1,1,2*2,1*2,3,1,4*2,20,14,3,1,1*4,6*2,4,3,2,7
+tak	1*3,4,7,12,1*2,6,3,20*2,2,1,8,1*2,14,6*2,1,5*3,14,4*3,6,6,14,4,3,17*2,2,5,4,2*3,49,6,2,8*2,4*2,6,2,3,7,26,1,5*2,6,7,2,6,5,6,11*3,4*3,11,2,1*3,2,14,29,6,2,16*2,7,3*2,2,3,6,10,14,11,2,10*3,7,11,10,1,10,2,8*2,2,1*3,3,3,2,3*4,26*3,7,4,2,14,5,2,6,8,3,1,8,2,8,12,1*2,1,3*3,2,14,2,8,8,6,13,5*2,6,2*3,1*8,1,1*2,1,2*4,1,1*5,1,5,2,31,36,1*3,3,1,1,2*2,1*2,3,1,4*2,20,14,3,1,1*4,6*2,4,3,2,7
 taken	5,13*3,9,25,16,23,19,6,27,58,2,7,50,6,6,17,5,3,21,93,18,3,53,16,3,33,11,48,51,16,19,2,27,17,5,5,1,85,27,17,5
 talk	62,1,6*3,145,12,37*2,279,110,1,92,1*2,1,1,1,1,131,7
 tall	398*2,266,2
