@@ -81,6 +81,30 @@ func offline(t *testing.T, crossing, codeSize int) *modelled {
 	})
 }
 
+// TestABackendThatKeepsNothingIsMeasured: the script says the one number
+// a reading is and the base is kept here, so a backend whose objects
+// forget everything between runs is leased and measures what one that
+// remembers does.
+func TestABackendThatKeepsNothingIsMeasured(t *testing.T) {
+	b := offlineWith(t, scripttest.Options{
+		Memory:        scripttest.Memory{Pad: 474, CodeSize: 368},
+		NoPersistence: true,
+	})
+	var r Results
+	if err := runScript(b, 0, 474, &r); err != nil {
+		t.Fatalf("base run: %v", err)
+	}
+	if err := runScript(b, 1, 474, &r); err != nil {
+		t.Fatalf("one-copy run: %v", err)
+	}
+	if want := b.mem.Reading(0, 474); r.Base != want {
+		t.Errorf("Base = %d, want %d", r.Base, want)
+	}
+	if want := b.mem.Reading(1, 474); r.Test != want {
+		t.Errorf("Test = %d, want %d", r.Test, want)
+	}
+}
+
 // offlineWith is offline for a case that has more to say about the model
 // than its crossing and its size -- a limit, a marginal cost, a reading that
 // comes back wrong once.

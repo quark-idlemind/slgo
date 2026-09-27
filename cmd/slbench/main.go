@@ -1475,11 +1475,12 @@ func main() {
 	}
 }
 
-// spentCompiles counts the scripts sent to SL's compiler and never started.
-// Nothing in a benchmark sends one now -- Compile is asked only by the live
-// tests -- so it stays at nought.  It is kept apart from spentRuns because the
-// two are asked for different reasons, not because they cost different
-// amounts: measured, they cost nearly the same (TestLiveCompileIsNotRunning).
+// spentCompiles counts the scripts a backend's Compile had compiled and did
+// not start.  Nothing in a benchmark asks for one now -- only the live tests
+// do -- so a benchmark's Spent line says nought.  It is kept apart from
+// spentRuns because the two are asked for different reasons, not because they
+// cost different amounts: measured, they cost nearly the same
+// (TestLiveCompileIsNotRunning).
 var spentCompiles int
 
 // resultPayload returns the text following "RESULT:" in a message, and whether

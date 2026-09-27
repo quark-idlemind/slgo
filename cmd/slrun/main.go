@@ -86,12 +86,12 @@ var flags = struct {
 	First   string          `getopt:"--first=NAME      the avatar's first name, for --direct"`
 	Last    string          `getopt:"--last=NAME       the avatar's last name, for --direct"`
 	Start   string          `getopt:"--start=WHERE     where to arrive: last, home, or a region, for --direct"`
-	Object  string          `getopt:"--object=NAME     run in an object of this name, instead of the shared one"`
+	Object  string          `getopt:"--object=NAME     run in an object of this name, instead of the worn auto objects"`
 	Backend string          `getopt:"--backend=HOST:PORT run scripts through a script.v1 backend there -- a simulator or a viewer daemon -- instead of in Second Life"`
-	Rez     bool            `getopt:"--rez             rez a throwaway prim instead of using the shared auto object"`
+	Rez     bool            `getopt:"--rez             rez a throwaway prim instead of using the worn auto objects"`
 	Script  string          `getopt:"--script=NAME     what to call the script inside the object"`
 	Jobs    int             `getopt:"--jobs=N -j       how many scripts to run at once, one per object; 4 by default, 1 runs them in order"`
-	Clear   bool            `getopt:"--clear          empty every script out of the objects before running, for when something else is talking in them"`
+	Clear   bool            `getopt:"--clear          empty the scripts out of the objects the daemon says were not left clean, before running, for when something else is talking in them"`
 	Done    string          `getopt:"--done=TEXT       the text that means the script has finished"`
 	Timeout time.Duration   `getopt:"--timeout=DUR     how long to wait for it"`
 	Wait    time.Duration   `getopt:"--wait=DUR        how long to wait for somewhere to run when every object is busy; as long as it takes by default"`
@@ -620,9 +620,9 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 	// ceiling is every avatar the daemon holds and the refusal comes
 	// from there, where the count is.
 	if most := session.AutoPool(); flags.Agent != "" && flags.Jobs > most {
-		return nil, nil, fmt.Errorf("--jobs %d wants %d objects and %s "+
-			"has %d; \"slsh auto -n %d\" is what makes more",
-			flags.Jobs, flags.Jobs, flags.Agent, most, flags.Jobs)
+		return nil, nil, fmt.Errorf("--jobs %d wants %d objects and one "+
+			"avatar holds at most %d; leave out --agent to take them from "+
+			"more than one", flags.Jobs, flags.Jobs, most)
 	}
 
 	// As many objects as there are scripts to run at once, taken all

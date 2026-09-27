@@ -43,6 +43,17 @@ type grantingGrid struct {
 	asked    []string // "agent:n:try", in order
 	released []string
 	nextID   int
+
+	// anyAgent grants from every avatar even when one was named, and
+	// noPlaces grants with no places in it: neither is what the daemon
+	// does, and a caller has to survive both.
+	anyAgent, noPlaces bool
+
+	// refuse is a daemon too old to answer for places at all.
+	refuse error
+
+	// sentAtAsk is how many messages the session had sent at each ask.
+	sentAtAsk []int
 }
 
 func newGranting(t *testing.T, names ...string) (*sl.Session, *grantingGrid) {
@@ -119,9 +130,13 @@ func (g *grantingGrid) grant(n int, agent string, try bool) (*client.Grant, erro
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.asked = append(g.asked, fmt.Sprintf("%s:%d:%v", agent, n, try))
+	g.sentAtAsk = append(g.sentAtAsk, len(g.fakeGrid.Sent()))
+	if g.refuse != nil {
+		return nil, g.refuse
+	}
 
 	from := g.names
-	if agent != "" {
+	if agent != "" && !g.anyAgent {
 		from = []string{agent}
 	}
 	var places []client.Place
@@ -136,6 +151,9 @@ func (g *grantingGrid) grant(n int, agent string, try bool) (*client.Grant, erro
 		return &client.Grant{Why: fmt.Sprintf("only %d free", len(places))}, nil
 	}
 	g.nextID++
+	if g.noPlaces {
+		places = nil
+	}
 	return &client.Grant{
 		ID:      fmt.Sprintf("g%d", g.nextID),
 		Places:  places,
@@ -306,6 +324,59 @@ func TestOneGrantIsGivenBackOnce(t *testing.T) {
 	}
 	if got := g.gaveBack(); len(got) != 1 {
 		t.Errorf("the grant was given back %d times: %v", len(got), got)
+	}
+}
+
+// TestAGrantThatIsNotOneAvatarsLeavesNothingOpen: a request that named
+// one avatar and came back spread over several is refused, and with it
+// go the grant and the sessions opened for the others.  The asking
+// session stays open, being the caller's.  One that came back with no
+// places at all says that.
+func TestAGrantThatIsNotOneAvatarsLeavesNothingOpen(t *testing.T) {
+	s, g := newGranting(t, "quark", "example")
+	g.free["quark"] = 2
+	g.free["example"] = 4
+	g.anyAgent = true
+
+	var dialled []*sl.Session
+	inner := dialFor
+	dialFor = func(ctx context.Context, o Options) (*sl.Session, error) {
+		s2, err := inner(ctx, o)
+		if err == nil {
+			dialled = append(dialled, s2)
+		}
+		return s2, err
+	}
+	t.Cleanup(func() { dialFor = inner })
+
+	_, err := useAutoOn(context.Background(), Options{Agent: "quark"}, s, 6)
+	if err == nil || !strings.Contains(err.Error(), "2 avatars") {
+		t.Fatalf("a grant over two avatars for one = %v, want it refused", err)
+	}
+	if got := g.gaveBack(); len(got) != 1 {
+		t.Errorf("the grant was given back %d times: %v", len(got), got)
+	}
+	if len(dialled) == 0 {
+		t.Fatal("no session was opened for the other avatar")
+	}
+	for _, s2 := range dialled {
+		select {
+		case <-s2.Backend().(*grantingGrid).done:
+		default:
+			t.Errorf("the session opened for %s was left open", s2.Info().Name)
+		}
+	}
+	select {
+	case <-g.done:
+		t.Error("the asking session was closed under its caller")
+	default:
+	}
+
+	g.anyAgent, g.noPlaces = false, true
+	_, err = useAutoOn(context.Background(), Options{Agent: "quark"}, s, 2)
+	if err == nil || strings.Contains(err.Error(), "0 avatars") ||
+		!strings.Contains(err.Error(), "no places") {
+		t.Errorf("a grant with no places = %v, want it to say so", err)
 	}
 }
 

@@ -204,9 +204,9 @@ type Capabilities struct {
 	// which is what a benchmark searching for a size limit turns on.
 	OutOfMemory bool `protobuf:"varint,4,opt,name=out_of_memory,json=outOfMemory,proto3" json:"out_of_memory,omitempty"`
 	// PersistentTargets says an object keeps what a script left in it
-	// between runs of the same lease.  A benchmark that carries its base
-	// reading from one run to the next needs this; without it, every run
-	// starts from nothing.
+	// between runs of the same lease.  A caller that carries state from
+	// one run to the next in the object needs this; without it, every run
+	// starts from nothing.  slbench does not: its script says one number.
 	PersistentTargets bool `protobuf:"varint,5,opt,name=persistent_targets,json=persistentTargets,proto3" json:"persistent_targets,omitempty"`
 	// Agents says targets belong to named avatars, so LeaseRequest.agent
 	// means something.  A simulator has no avatars and ignores it.

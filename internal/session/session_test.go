@@ -5,7 +5,7 @@ package session
 // Everything here is a function of a *sl.Session, and a session is a
 // function of an sl.Backend -- so a fake backend is the difference
 // between testing this package and testing its arithmetic.  Without one
-// a test can reach AutoName and the lock names and nothing else, which
+// a test can reach AutoName and nothing else, which
 // is why the whole of it was only ever exercised by slbench against a
 // live avatar.
 //
@@ -90,8 +90,8 @@ type invItem struct {
 // fakeGrid is an sl.Backend with nothing behind it.
 //
 // Every field is read under the lock, so a test may change an answer
-// while the session is running -- a lock that becomes free, an item that
-// appears -- without racing the session's reader goroutine.
+// while the session is running -- an item that appears, a send that
+// starts failing -- without racing the session's reader goroutine.
 type fakeGrid struct {
 	mu sync.Mutex
 
@@ -116,21 +116,6 @@ type fakeGrid struct {
 	afterObjects func()
 
 	presenceErr, objectsErr, sendErr, capErr error
-
-	// busy is who holds a lock, by name, lockErr is a daemon too old to
-	// know what a lock is at all, and waitErr is one that goes away
-	// while somebody is queued on it.
-	busy    map[string]string
-	lockErr error
-	waitErr error
-
-	// waited is every lock that was queued on rather than tried, which
-	// is how a test tells "took a free one" from "waited its turn".
-	waited []string
-
-	// onLock is called at the moment a queued Lock is about to be
-	// granted, with nothing held.  See Lock.
-	onLock func(name string)
 
 	// inv is the inventory tree, served over the capability rather than
 	// answered from here: everything that reads inventory goes through
@@ -163,7 +148,6 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 		},
 		msgs:  make(chan *sl.Message),
 		done:  make(chan struct{}),
-		busy:  map[string]string{},
 		reads: map[msg.UUID]int{},
 		caps:  map[string]string{},
 		presence: &sl.Presence{
@@ -440,66 +424,12 @@ func (f *fakeGrid) Friends(ctx context.Context) ([]sl.Friend, error) { return ni
 
 func (f *fakeGrid) NoteFriend(ctx context.Context, id msg.UUID, online bool) error { return nil }
 
-// Lock is the queueing form and is granted at once: what a test wants
-// from it is which name was waited for, since waiting rather than
-// trying is the decision this package makes.
-//
-// onLock is called before the lock is granted and with nothing held, so
-// that a test can look at what the caller was holding at the moment it
-// decided to wait -- which is the one thing that cannot be seen
-// afterwards, because by then it has either given up or been served.
-func (f *fakeGrid) Lock(ctx context.Context, name string) error {
-	f.mu.Lock()
-	lockErr, waitErr, hook := f.lockErr, f.waitErr, f.onLock
-	f.mu.Unlock()
-	if lockErr != nil {
-		return lockErr
-	}
-	if waitErr != nil {
-		return waitErr
-	}
-	if hook != nil {
-		hook(name)
-	}
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.waited = append(f.waited, name)
-	f.busy[name] = "us"
-	return nil
-}
-
-func (f *fakeGrid) Unlock(name string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	delete(f.busy, name)
-	return nil
-}
-
-// TryLock takes a lock, and takes one this caller already holds AGAIN --
-// which is what the daemon does, and is worth copying rather than
-// tidying.  server/lock.go's acquire says it in as many words: a client
-// that asks twice still holds it once.  A fake that refused instead
-// would hide the one bug this can cause, which is a caller taking a
-// group it already has and being handed the same objects a second time.
+// Lock, Unlock and TryLock are an sl.Backend's, and nothing in this
+// package takes a lock: the daemon hands out places instead.
+func (f *fakeGrid) Lock(ctx context.Context, name string) error { return nil }
+func (f *fakeGrid) Unlock(name string) error                    { return nil }
 func (f *fakeGrid) TryLock(ctx context.Context, name string) (bool, string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.lockErr != nil {
-		return false, "", f.lockErr
-	}
-	if by := f.busy[name]; by != "" && by != "us" {
-		return false, by, nil
-	}
-	f.busy[name] = "us"
 	return true, "", nil
-}
-
-// Waited is every lock that was queued on rather than tried.
-func (f *fakeGrid) Waited() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]string(nil), f.waited...)
 }
 
 func (f *fakeGrid) HasCap(name string) bool {
@@ -574,8 +504,8 @@ func (l *listsSessions) Sessions(context.Context) ([]string, error) { return l.n
 // It has to be dialled rather than handed a connection, so it does the
 // whole handshake: TLS, and a challenge each way over a secret in a home
 // directory the test owns.  Everything else it answers is the least a
-// session needs to get as far as taking a lock and finding its objects
-// already worn -- which is the state this package is usually in.
+// session needs to get as far as finding its objects already worn --
+// which is the state this package is usually in.
 type fakeDaemon struct {
 	pb.UnimplementedGridServer
 
@@ -586,11 +516,6 @@ type fakeDaemon struct {
 	// agents is who it is holding, in its own order, and info describes
 	// one of them by name.
 	agents []string
-
-	// locked answers a lock request for one avatar.  It has to answer
-	// SOMETHING: a lock that is not answered is one the client waits on,
-	// and the wait is a quarter of an hour.
-	locked func(agent string, l *pb.Lock) *pb.Locked
 
 	// refuseAttach names avatars this daemon will not attach to, which
 	// is a session it is not holding.
@@ -603,7 +528,7 @@ type fakeDaemon struct {
 	capFail bool
 
 	// objects is what every session says is worn, keyed by nothing: the
-	// avatars here are interchangeable except for their locks.
+	// avatars here are interchangeable.
 	objects []*pb.ObjectInfo
 }
 
@@ -653,9 +578,6 @@ func newFakeDaemon(t *testing.T) (*fakeDaemon, string) {
 		auth:         a,
 		agents:       []string{"quark"},
 		refuseAttach: map[string]bool{},
-		locked: func(_ string, l *pb.Lock) *pb.Locked {
-			return &pb.Locked{Name: l.Name, Held: true}
-		},
 	}
 	d.serveInventory(t)
 
@@ -677,8 +599,8 @@ func newFakeDaemon(t *testing.T) (*fakeDaemon, string) {
 
 // serveInventory gives the daemon an Objects folder holding a full set
 // of auto items, all of them worn.  That is the state an avatar that has
-// been set up is in, and it is what makes taking a group cost nothing
-// but the lock.
+// been set up is in, and it is what makes taking objects cost nothing
+// but the asking.
 func (d *fakeDaemon) serveInventory(t *testing.T) {
 	t.Helper()
 	root := &invDir{
@@ -709,44 +631,6 @@ func (d *fakeDaemon) serveInventory(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 	d.cap = s.URL
-}
-
-// busy makes every group on one avatar taken, which is what sends a
-// caller on to the next avatar.
-func (d *fakeDaemon) busy(names ...string) {
-	taken := map[string]bool{}
-	for _, n := range names {
-		taken[n] = true
-	}
-	// Busy until somebody queues for a place and is handed it, which is
-	// the holder giving it back: from then on the pool is free.  Without
-	// that the avatar is busy for ever, and a caller that waits and then
-	// looks again -- which is what taking objects one at a time has to
-	// do -- would go round for ever being refused.
-	var (
-		mu    sync.Mutex
-		given bool
-	)
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.locked = func(who string, l *pb.Lock) *pb.Locked {
-		mu.Lock()
-		defer mu.Unlock()
-		slot := strings.HasPrefix(l.Name, AutoLock+"/slot/")
-		if !l.Try && slot {
-			given = true
-		}
-		// Only the OBJECTS are taken.  The allocation lock is held for
-		// as long as it takes somebody to choose and is never held
-		// across a wait, so a fake that kept it for ever would be a
-		// daemon no caller could ever get an answer out of.
-		if taken[who] && l.Try && slot && !given {
-			return &pb.Locked{Name: l.Name, Held: false, Holder: "somebody else"}
-		}
-		// A wait is answered by handing it over, since queueing is what
-		// this is meant to end up doing.
-		return &pb.Locked{Name: l.Name, Held: true}
-	}
 }
 
 func (d *fakeDaemon) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
@@ -793,20 +677,10 @@ func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Serve
 		return err
 	}
 
+	// Held open until the client goes: nothing it sends needs an answer.
 	for {
-		p, err := s.Recv()
-		if err != nil {
+		if _, err := s.Recv(); err != nil {
 			return nil
-		}
-		l := p.GetLock()
-		if l == nil {
-			continue
-		}
-		d.mu.Lock()
-		answer := d.locked
-		d.mu.Unlock()
-		if got := answer(who.Name, l); got != nil {
-			s.Send(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{Locked: got}})
 		}
 	}
 }
@@ -1098,6 +972,36 @@ func TestEveryAutoObjectIsACopyOfTheFirst(t *testing.T) {
 	}
 }
 
+// TestTwoFirstAutoObjectsAreRefused: every copy is made from the item
+// called auto, and two of them is two different things either could be
+// a copy of.  One name has to be one thing, so it is refused with both
+// ids, and nothing is copied.
+func TestTwoFirstAutoObjectsAreRefused(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.stock(1)
+	answerCopies(f)
+	other := autoItemID(50)
+	f.mu.Lock()
+	dir := findDir(f.inv, testObjects)
+	dir.Items = append(dir.Items, &invItem{ID: other, Name: AutoObject, Type: int(sl.AssetObject)})
+	f.mu.Unlock()
+
+	err := EnsureAutoItems(context.Background(), s, testObjects, 4)
+	var ne *sl.NameError
+	if !errors.As(err, &ne) || len(ne.IDs) != 2 {
+		t.Fatalf("EnsureAutoItems = %v, want both items called %q refused", err, AutoObject)
+	}
+	for _, id := range []msg.UUID{autoItemID(0), other} {
+		if !strings.Contains(err.Error(), id.String()) {
+			t.Errorf("the refusal does not name %s: %v", id, err)
+		}
+	}
+	if got := len(f.Sent()); got != 0 {
+		t.Errorf("%d messages went out, want nothing copied", got)
+	}
+}
+
 // TestOneAutoObjectNeedsNothingCopied: an account that has never had one
 // and only wants one is left to EnsureAttached, which will build it the
 // slow way -- there is nothing here to copy from and nothing to do.
@@ -1273,14 +1177,15 @@ func answerCopies(f *fakeGrid) {
 
 // ------------------------------------------------------------- setup
 
-// TestSetupTakesEveryGroupBeforeMovingAnything: wearing an item that
+// TestSetupTakesEveryPlaceBeforeMovingAnything: wearing an item that
 // cannot be found worn takes it off and puts it back on, and a run whose
-// object went away reports nothing useful about why -- so this refuses
-// outright rather than working around a place in use.
-func TestSetupTakesEveryGroupBeforeMovingAnything(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.stock(len(AutoPoints))
+// object went away reports nothing useful about why -- so setup takes
+// the avatar's whole pool, without waiting, before it copies or wears
+// anything, and gives it back afterwards marked as not left clean.
+func TestSetupTakesEveryPlaceBeforeMovingAnything(t *testing.T) {
+	s, g := newGranting(t, "quark")
+	g.fakeGrid.stock(1)
+	answerCopies(g.fakeGrid)
 
 	objs, err := SetupAuto(context.Background(), s, 4)
 	if err != nil {
@@ -1289,12 +1194,18 @@ func TestSetupTakesEveryGroupBeforeMovingAnything(t *testing.T) {
 	if len(objs) != 4 {
 		t.Fatalf("SetupAuto made %d objects ready", len(objs))
 	}
-	// And it gave every one of them back: holding them afterwards would
-	// leave the avatar unusable until the program exited.
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if len(f.busy) != 0 {
-		t.Errorf("setup is still holding %v", f.busy)
+	want := fmt.Sprintf("quark:%d:true", AutoPool())
+	if got := g.askedFor(); len(got) != 1 || got[0] != want {
+		t.Errorf("setup asked for %v, want [%s]: the whole pool, tried", got, want)
+	}
+	if len(g.sentAtAsk) != 1 || g.sentAtAsk[0] != 0 {
+		t.Errorf("messages sent before the pool was asked for: %v", g.sentAtAsk)
+	}
+	if len(g.fakeGrid.Sent()) == 0 {
+		t.Error("setup copied nothing, so the order it did things in says nothing")
+	}
+	if got := g.gaveBack(); len(got) != 1 || got[0] != "g1:false" {
+		t.Errorf("setup gave back %v, want the one grant, not clean", got)
 	}
 }
 
@@ -1420,20 +1331,21 @@ func TestSetupNeedsToKnowWhereObjectsGo(t *testing.T) {
 	}
 }
 
-// TestSetupWithADaemonTooOldToLock: the lock is what makes several runs
-// at once safe, so one that cannot be asked for is not something to
-// carry on without -- two benchmarks would quietly share an object and
-// both report plausible numbers.
-func TestSetupWithADaemonTooOldToLock(t *testing.T) {
-	t.Parallel()
-	s, f := newFakeSession(t)
-	f.mu.Lock()
-	f.lockErr = fmt.Errorf("unknown method")
-	f.mu.Unlock()
+// TestSetupWithADaemonTooOldToGrant: the pool is what makes several
+// runs at once safe, so a daemon that cannot be asked for it is not
+// something to carry on without -- two benchmarks would quietly share an
+// object and both report plausible numbers.
+func TestSetupWithADaemonTooOldToGrant(t *testing.T) {
+	s, g := newGranting(t, "quark")
+	g.refuse = fmt.Errorf("unknown method")
 
 	_, err := SetupAuto(context.Background(), s, 1)
-	if err == nil || !strings.Contains(err.Error(), AutoObject) {
-		t.Errorf("SetupAuto = %v, want it to say what it was asking for", err)
+	if err == nil || !strings.Contains(err.Error(), "asking for the "+AutoObject+" objects") ||
+		!strings.Contains(err.Error(), "unknown method") {
+		t.Errorf("SetupAuto = %v, want it to say what it was asking for and why it failed", err)
+	}
+	if sent := g.fakeGrid.Sent(); len(sent) != 0 {
+		t.Errorf("setup went on to send %d messages", len(sent))
 	}
 }
 

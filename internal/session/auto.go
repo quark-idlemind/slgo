@@ -212,11 +212,22 @@ func grantOn(ctx context.Context, o Options, asked *sl.Session, g granter, n int
 		return nil, err
 	}
 	if len(as) != 1 {
-		// Asked for one avatar and given several, which the daemon does
-		// not do.  Better to say so than to hand back half of it.
+		// Asked for one avatar and given several, or none, which the
+		// daemon does not do.  Better to say so than to hand back half
+		// of it.  The sessions opened for the others go with the grant;
+		// the asking one is the caller's, and may be asked again.
 		release(g, got, false)
+		for _, a := range as {
+			if a.Session != asked {
+				a.Session.Close()
+			}
+		}
+		if len(as) == 0 {
+			return nil, fmt.Errorf("the daemon granted %d objects on %s "+
+				"and named no places for them", n, agent)
+		}
 		return nil, fmt.Errorf("the daemon spread %d objects over %d avatars "+
-			"for a request that named one", n, len(as))
+			"for a request that named %s", n, len(as), agent)
 	}
 	return as[0], nil
 }

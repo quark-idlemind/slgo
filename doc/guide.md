@@ -969,9 +969,10 @@ rather than waited for:
 
 Waiting, when it happens, is silent: the daemon holds nothing while it
 waits and the client has nothing to report but that it has not returned.
-Naming an avatar is the exception -- an avatar that has too few is known
-to be too few before anybody is asked, so `slrun` says so and names the
-remedy (`slsh auto -n 12`).
+Naming an avatar is the exception -- more than twelve, the most one
+avatar can hold, is known to be too many before anybody is asked, so
+`slrun` says so and suggests leaving out `--agent`, which lets the
+objects come from more than one avatar.
 
 An object that has never run a script from `slrun` is slower the
 first time: creating the script item costs about eight seconds where
@@ -1057,9 +1058,12 @@ longer than it says.
 
 There is a timeout underneath that, for the case the connection does not
 cover: a client that wedged without dying. A grant is asked for thirty
-minutes and renewed by work that outlives it, which is long because what
-it guards against is a program that has stopped rather than one that is
-merely slow.
+minutes, which is long because what it guards against is a program that
+has stopped rather than one that is merely slow. Nothing renews it. A run
+that goes on longer loses its places a few seconds after the thirty
+minutes are up: the daemon may hand them to the next program that asks,
+and nothing stops the two of them running scripts in the same objects
+(see [slots.md](slots.md#leases-and-what-they-are-not-for)).
 
 ### What can go wrong
 
@@ -1130,14 +1134,14 @@ not confirm within ten seconds: it may still be standing.
 
 | | |
 |---|---|
-| `--object NAME` | run in this object instead of the shared `auto` one |
+| `--object NAME` | run in this object instead of the shared `auto` objects |
 | `--rez` | rez a throwaway prim for this run, and do not queue |
 | `--keep` | leave a rezzed prim behind |
 | `--done TEXT` | the text that means "finished" (default `DONE`); matched as a substring |
 | `--timeout DUR` | how long to wait for it (default `1m0s`); a bare number is refused -- the unit is required |
 | `--script NAME` | what to call the script inside the object (default `slrun`, which is the name a fault is reported under) |
 | `--jobs N`, `-j N` | how many scripts to run at once, one per object; four by default, `1` runs them in the order they were named |
-| `--clear` | empty every script out of the objects before running |
+| `--clear` | empty the scripts out of the objects the daemon says were not left clean, before running |
 | `-v` | put the script name in front of every line, even with one script |
 | `-vv` | and say which avatars the objects came from, when `--agent` did not |
 | `--agent NAME`, `-a` | which avatar; the daemon's default otherwise |
