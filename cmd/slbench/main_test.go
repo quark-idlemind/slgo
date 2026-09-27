@@ -14,10 +14,8 @@ import (
 	"github.com/quark-idlemind/slgo/sl"
 )
 
-// The one behavioural difference from the original: slbench/bench returned
-// only RESULT: lines, with the marker already stripped. slrun/bench returns
-// EVERYTHING a script says, so this program strips the marker and skips
-// anything that is not a labelled measurement.
+// A backend hands back EVERYTHING a script says, so this program strips the
+// RESULT: marker and skips anything that is not a labelled measurement.
 func TestResultPayload(t *testing.T) {
 	for _, tc := range []struct {
 		in   string
@@ -354,9 +352,8 @@ var flagDefaults = flags
 // In this process rather than as a subprocess because that is the only
 // way what is measured is this program rather than a copy of its argument
 // handling, and under --test because that is what makes a benchmark
-// answerable without a grid: runScript answers from the model above the
-// transport, so nothing here logs in, dials anything or reads the
-// padding cache.
+// answerable without a grid: the model is a backend in this process, so
+// nothing here logs in, dials anything or reads the padding cache.
 //
 // os.Exit is the one thing a run cannot survive, so the paths that end in
 // errf are not driven from here.  They are argument checks, and what they
@@ -496,7 +493,7 @@ func TestTheProgramPrintsWhatABenchmarkMeasured(t *testing.T) {
 // program at something else that runs LSL -- the simulator, a viewer
 // daemon -- and the whole of the benchmark above the transport is
 // unchanged by that.  So the answer has to be the answer, whether the
-// contract was reached over a pipe in this process or over a socket.
+// contract was reached in this process or over a socket.
 //
 // It goes through main rather than through openBackend, because what is
 // being checked is the flag: the dial, the lease and the timeout are what
@@ -831,11 +828,10 @@ func stdoutOf(t *testing.T, fn func()) string {
 // ------------------------------------------------- somewhere to run
 
 // TestGettingSomewhereToRunFailsBeforeAnythingIsMeasured: every benchmark
-// starts by getting a session and an object, and there are two ways of
-// doing it -- a named object or the shared auto pool.  Neither can be
-// reached without a daemon, so what is checked here is the half that can:
-// a failure comes back as an error rather than as a benchmark that runs
-// against nothing.
+// on the grid starts by getting sessions and objects from the shared auto
+// pool.  That cannot be reached without a daemon, so what is checked here
+// is the half that can: a failure comes back as an error rather than as a
+// benchmark that runs against nothing.
 func TestGettingSomewhereToRunFailsBeforeAnythingIsMeasured(t *testing.T) {
 	// A home of the test's own.  Attaching to slgod reads a shared secret
 	// out of one, and the developer running this has a real one with a

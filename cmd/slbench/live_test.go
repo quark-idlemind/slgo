@@ -18,8 +18,9 @@ import (
 // in rather than rezzing one.
 //
 // What they are for is the one thing the offline model cannot express: SL's own
-// compiler.  The model has no compiler and no size limit, so every claim about
-// what Second Life will and will not accept has to be made here or not at all.
+// compiler.  The model has no compiler, only a limit it is given, so every
+// claim about what Second Life will and will not accept has to be made here or
+// not at all.
 //
 // The timings recorded in the comments below were measured through slrund and a
 // viewer, which is not this transport.  They are kept as the questions they
@@ -53,7 +54,7 @@ func liveBench(t *testing.T) *runner {
 	return b
 }
 
-// TestLiveCompileIsNotRunning is the first pass at A9's measurement, kept
+// TestLiveCompileIsNotRunning is the first pass at a measurement, kept
 // because it is the figure two later corrections were about: what a compile
 // costs against what a run costs, for the same script.
 //
@@ -110,14 +111,15 @@ func TestLiveCompileIsNotRunning(t *testing.T) {
 // So the question is how often llGetUsedMemory answers differently for a FIXED
 // script.  It is asked at four pads, not one: 602 is where the two runs
 // disagreed, 618 is the crossing they were arguing about, and 473/474 are the
-// base padding and the pad the runs are taken at -- the reading every published
-// Size is anchored to.  A fault at any of them moves an answer.
+// base padding, which the runs are taken at and every published Size is
+// anchored to, and the crossing above it.  A fault at any of them moves an
+// answer.
 //
 // It is a frequency measurement, so it reports the distribution whatever it
 // finds; a pad that answered two different things is the failure.  N is
-// SLGO_STABLE_N (default 10).  Set SLRUN_SLOT_OBJECT=Worn to run in the
-// permanent slot, which is what makes 40 runs affordable -- an item that
-// already exists is updated in 1.2s instead of created in 8.3s (A13).
+// SLGO_STABLE_N (default 10).  Every run after the first updates the item
+// the first made, which is what makes 40 runs affordable -- an item that
+// already exists is updated in 1.2s instead of created in 8.3s.
 func TestLiveReadingIsStable(t *testing.T) {
 	b := liveBench(t)
 	flags.Code = "foo_CNT(){llDie();}"

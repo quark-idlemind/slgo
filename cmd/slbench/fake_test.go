@@ -3,11 +3,11 @@ package main
 // A grid that runs benchmark scripts and is not there.
 //
 // The measurement machinery has always been testable offline -- that is
-// what --test is for -- but --test answers ABOVE the transport, so
-// runner.go, the part that actually gets a script into Second Life and
-// reads back what it said, was reached only by a live test with SLGO_LIVE
-// set.  That is the half of this program that has to talk three protocols
-// at once, and it was the half nothing checked.
+// what --test is for -- but --test is a script.v1 backend and never
+// reaches runner.go, the part that actually gets a script into Second
+// Life and reads back what it said, so that was reached only by a live
+// test with SLGO_LIVE set.  That is the half of this program that has to
+// talk three protocols at once, and it was the half nothing checked.
 //
 // fakeGrid is an sl.Backend that plays all three.  The object's contents
 // arrive over xfer, the compile is an http upload to a capability served
@@ -58,8 +58,8 @@ var (
 	testRegion = msg.MustParseUUID("a4fd7e57-7e57-c0de-559f-7a9b7da6044a")
 )
 
-// fakeObject is one prim: what it is called, what it holds, and the
-// linkset data a benchmark carries its base reading in.
+// fakeObject is one prim: what it is called, the benchmark script it
+// holds, and whether that has run.
 type fakeObject struct {
 	obj  sl.Object
 	item msg.UUID // the id of the benchmark script inside it
@@ -108,12 +108,11 @@ type fakeGrid struct {
 	commentary string
 
 	// refuseOver and faultOver are Second Life's two size limits, as copy
-	// counts.  They are not the same limit and the difference is what
-	// runShrink turns on: above faultOver the script compiles and then
-	// collides stack with heap the moment it runs, and above refuseOver
-	// the compiler will not take it at all.  Measured live 2026-08-03,
-	// 256 copies of the reference shape compiled and then collided, and
-	// 512 were refused outright.  Zero means no limit.
+	// counts.  They are not the same limit: above faultOver the script
+	// compiles and then collides stack with heap the moment it runs, and
+	// above refuseOver the compiler will not take it at all.  Measured
+	// live 2026-08-03, 256 copies of the reference shape compiled and
+	// then collided, and 512 were refused outright.  Zero means no limit.
 	refuseOver, faultOver int
 
 	// sendErr is a circuit that has gone away, and capErr a capability

@@ -33,10 +33,10 @@ import (
 // inside the old one.
 //
 // So Memory.Pad is the CROSSING pad, and the padding slbench names -- what
-// Padding: prints, what --ipad takes and what --check-ipad confirms -- is one
+// Padding: prints and what --ipad takes and is confirmed against -- is one
 // less.  The tests below spell that out as `crossing` rather than `pad` to
-// keep the two apart, because getting them confused is precisely the bug A11
-// fixed against live SL.
+// keep the two apart, because getting them confused was a real bug, found
+// against live SL.
 //
 // The anchor case is the live Agni reference, measured 2026-08-03 with
 // --code 'foo_CNT(){llDie();}': Padding: 473, Size: 368, and the base script
@@ -111,10 +111,11 @@ func TestABackendThatKeepsNothingIsMeasured(t *testing.T) {
 //
 // One object unless a case asks for more, and that is deliberate: with spare
 // objects the search quarters its range instead of bisecting it, and the
-// pads it reads move.  The A12 cases below name the pad their bad reading
-// arrives at, so they would be asserting nothing at all against a search
-// that no longer goes there.  What a search does with spares is measured
-// against the grid transport in probe_test.go and against this one in
+// pads it reads move.  The cases below that replay a reading one block out
+// name the pad their bad reading arrives at, so they would be asserting
+// nothing at all against a search that no longer goes there.  What a
+// search does with spares is measured against the grid transport in
+// probe_test.go and against this one in
 // TestASearchThroughTheModelUsesTheSpareObjects.
 func offlineWith(t *testing.T, o scripttest.Options) *modelled {
 	t.Helper()
@@ -139,8 +140,7 @@ func offlineWith(t *testing.T, o scripttest.Options) *modelled {
 	// Everything a benchmark accumulates as it goes, put back to what a
 	// fresh process would have.  The run cache is keyed on {count, pad}
 	// only, so a reading taken under one model would be served to the
-	// next; and the verdict on one copy is about the code under test,
-	// which the next case changes.
+	// next.
 	reset := func() {
 		flags.IPad = 0
 		// The second search is a thing a case asks for, not something
@@ -311,8 +311,8 @@ func TestFindPaddingFindsTheLastPadInside(t *testing.T) {
 	}
 }
 
-// TestBasePaddingNamesTheLastPadInside is A11's rule stated as a test: a
-// padding is the largest pad that still fits inside its block, so one more byte
+// TestBasePaddingNamesTheLastPadInside is what a padding is, stated as a
+// test: the largest pad that still fits inside its block, so one more byte
 // crosses.  basePadding must return crossing-1, never the crossing itself.
 func TestBasePaddingNamesTheLastPadInside(t *testing.T) {
 	for _, tc := range modelCases {
@@ -327,9 +327,9 @@ func TestBasePaddingNamesTheLastPadInside(t *testing.T) {
 	}
 }
 
-// TestBasePaddingTakesIPadOnTrust is A1's rule: a supplied --ipad is an
-// assertion the caller already measured, used exactly as given, with no search
-// and no audit unless --check-ipad asks for one.
+// TestBasePaddingTakesIPadOnTrust: a supplied --ipad is used exactly as
+// given, with no search -- only the two readings that confirm it -- so a
+// padding a block above the one a search would find comes back as named.
 func TestBasePaddingTakesIPadOnTrust(t *testing.T) {
 	b := offline(t, 474, 368)
 	flags.IPad = 985
@@ -341,7 +341,7 @@ func TestBasePaddingTakesIPadOnTrust(t *testing.T) {
 
 // TestOneModeReportsTheCodeSize is the whole point of oneMode: hand it a model
 // whose code costs codeSize bytes and it has to say so, and it has to name the
-// padding by A11's convention while doing it.
+// padding as the last pad inside the block, not the crossing, while doing it.
 func TestOneModeReportsTheCodeSize(t *testing.T) {
 	for _, tc := range append(append([]struct {
 		name     string
@@ -401,7 +401,7 @@ func TestACopyRunDividesByTheBaseRunBeforeIt(t *testing.T) {
 	b := offline(t, crossing, codeSize)
 
 	var r Results
-	mustRun(b, 0, crossing, &r) // the base run, at runPad
+	mustRun(b, 0, crossing, &r) // the base run
 	base := r.Base
 	mustRun(b, cnt, crossing, &r)
 	if want := float64(r.Test-base) / cnt; r.Size != want {
@@ -497,9 +497,10 @@ func TestRefusedRunIsNotCached(t *testing.T) {
 	}
 }
 
-// The A12 tests.  A padding search is a chain of comparisons between readings of
-// llGetUsedMemory, and on 2026-08-03 one of those readings came back exactly one
-// block high.  These drive the same event through the model.
+// A reading one block out.  A padding search is a chain of comparisons between
+// readings of llGetUsedMemory, and on 2026-08-03 one of those readings came back
+// exactly one block high.  These drive the same event through the model.
+// Why: doc/scripttest.md#a-reading-one-block-high
 //
 // The live fault has been seen ONCE, in one reading, and 45 later asks at that
 // pad all agreed with each other (TestLiveReadingIsStable, 10 runs at each of
@@ -605,8 +606,8 @@ func TestOneModeSurvivesAMisreadBase(t *testing.T) {
 // an upload, a compile, an execution and a wait, so this is the only unit
 // that matters.
 //
-// A benchmark searches three times at the default --extra=4 -- the base
-// script, the one-copy script and the five-copy one -- and each search
+// A benchmark searches three times at --extra=4 -- the base script, the
+// one-copy script and the five-copy one -- and each search
 // ends by re-reading three things: the pad that crossed, the base, and
 // the pad below.  Nine runs, on a benchmark that spends about four
 // dozen, and one ROUND per search because the three do not depend on
@@ -615,7 +616,7 @@ func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
 	flags.Paranoid = true
 	b := offline(t, 474, 368)
 	// After offlineWith, which puts --extra back to nought: this is
-	// about what a benchmark at the DEFAULTS spends.
+	// about what a benchmark with a second search spends.
 	flags.Extra = 4
 	t.Cleanup(func() { flags.Paranoid, flags.Extra = false, 4 })
 	spentRuns, spentRereads = 0, 0
@@ -639,12 +640,10 @@ func TestConfirmationCostsAHandfulOfRuns(t *testing.T) {
 // three Run calls in three leased objects rather than one in the measured
 // one.  The answer must not depend on which of those happened.
 //
-// The trap it guards is probe.go's reason for existing.  A cnt>0 script
-// divides against the base reading its own object holds, and a spare holds
-// none, so everything but the memory reading it reports is arithmetic on a
-// zero -- and the model's objects behave that way too, which is what makes
-// this reachable without a grid.  A reading allowed out of a spare into the
-// run cache would report a size out by a whole block.
+// What makes it hold is probe.go's premise: the script says its own
+// memory and nothing else, and the base is kept here, so a reading taken
+// in a spare means what one in the measured object does.
+// Why: doc/scripttest.md#a-benchmark-script-says-one-number
 func TestASearchThroughTheModelUsesTheSpareObjects(t *testing.T) {
 	b := offlineWith(t, scripttest.Options{
 		Memory:    scripttest.Memory{Pad: 474, CodeSize: 368},
@@ -686,7 +685,7 @@ func confirmAt(t *testing.T, b *modelled, pad, low, first int) (crossing, int, s
 }
 
 // TestAConfirmedCrossingIsAPairOfReadingsAndTheBaseTheyAreAgainst: this
-// is the whole of A12.  A padding search is a chain of comparisons
+// is the whole of --paranoid.  A padding search is a chain of comparisons
 // against readings of llGetUsedMemory, and on 2026-08-03 one of those
 // came back exactly one block high -- which from inside the search looks
 // precisely like the memory having grown, the event it exists to find.
@@ -827,11 +826,11 @@ var affineCases = []struct {
 	{"an extra copy dearer than the first", 300, 22, 44},
 }
 
-// TestOneModeMeasuresTheFirstCopy is the other half of the same fact: -1
-// mode uses one copy, so what it reports is what one costs outright --
-// the absolute cost, not the marginal one.  The two modes answer
-// different questions and a construct that pays something once is where
-// that stops being a technicality.
+// TestOneModeMeasuresTheFirstCopy is the other half of the same fact:
+// oneMode uses one copy, so the Size it reports is what one costs
+// outright -- the absolute cost, not the marginal one, which is what
+// --extra reports.  The two answer different questions and a construct
+// that pays something once is where that stops being a technicality.
 func TestOneModeMeasuresTheFirstCopy(t *testing.T) {
 	for _, tc := range affineCases {
 		t.Run(tc.name, func(t *testing.T) {

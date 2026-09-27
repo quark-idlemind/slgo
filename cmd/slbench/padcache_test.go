@@ -7,15 +7,15 @@ import (
 	"testing"
 )
 
-// reset puts the flags back to a known state, since they are package
+// resetFlags puts the flags back to a known state, since they are package
 // level and every test here renders a script from them.
 func resetFlags() {
 	flags.Code, flags.Statement = "integer gCNT;", ""
 	flags.Preamble, flags.Postamble = "", ""
 	flags.Params, flags.Locals, flags.Globals = nil, nil, nil
-	// Everything a benchmark's shape and cost is decided by, back to
-	// what the flag block starts with.  They are package level and a
-	// test that left one set would change what the next one leases.
+	// Everything a benchmark's shape and cost is decided by, back to a
+	// known state.  They are package level and a test that left one set
+	// would change what the next one leases.
 	flags.Extra, flags.Parts, searchesAtOnce = 4, 8, 1
 }
 

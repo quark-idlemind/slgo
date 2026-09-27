@@ -4,16 +4,15 @@ package main
 //
 // What the runner has to provide is small -- run a script and return its
 // lines, ask whether a script compiles, and tell the two kinds of refusal
-// apart -- and every one of those is a decision a benchmark acts on.  A
-// compile refusal means try a smaller script; a Stack-Heap Collision may
-// mean the reading IS the limit being looked for; a script that said
-// nothing is neither.  Confusing any two of them produces a plausible
-// number rather than a failure, which is why they are separated here and
-// not in the code that reads them.
+// apart -- and each of those is a different answer.  A compile refusal
+// means the script was not taken; a Stack-Heap Collision means it was,
+// and ran out of memory; a script that said nothing is neither.  Confusing
+// any two of them names the wrong cause, which is why they are separated
+// here and not in the code that reads them.
 //
 // Everything runs against fake_test.go.  See there for what stands in for
 // the three protocols a run needs.  Nothing here runs in parallel: the
-// flags, the run cache and the compiler's verdict are all package level,
+// flags, the run cache and the counters are all package level,
 // which is what a program with one benchmark to run wants and what makes
 // two tests at once two tests sharing a benchmark.
 
@@ -136,8 +135,8 @@ func TestAScriptSecondLifeWillNotCompileComesBackAsARefusal(t *testing.T) {
 
 // TestARunTimeErrorBeatsTheSilenceItCaused: a script that crashed was
 // never going to say DONE, so reporting the timeout rather than the crash
-// loses the one detail a caller acts on -- and a Stack-Heap Collision is
-// the detail the copy search turns on.
+// loses the one detail a caller acts on: whether the script ran out of
+// memory.
 func TestARunTimeErrorBeatsTheSilenceItCaused(t *testing.T) {
 	resetFlags()
 	b, f := newFakeRunner(t, 474, 368, 0)
@@ -159,8 +158,8 @@ func TestARunTimeErrorBeatsTheSilenceItCaused(t *testing.T) {
 		t.Errorf("the fault does not say what happened: %v", re)
 	}
 
-	// Another kind of fault is not a size limit, and treating it as one
-	// would halve the copy count for ever without ever succeeding.
+	// Another kind of fault is not a size limit, and must not be taken
+	// for one.
 	//
 	// Sent through the same path rather than built by hand: what used to
 	// be asserted here was that a runtimeError classified its own reason,
@@ -211,9 +210,9 @@ func TestAScriptThatSaysNothingIsATimeoutAndNotAFault(t *testing.T) {
 	}
 }
 
-// TestARunThatCannotReachTheGridIsNotAReading: everything above this
-// treats an error as something to retry smaller, so a circuit that has
-// gone away must not arrive looking like a script that was too big.
+// TestARunThatCannotReachTheGridIsNotAReading: a circuit that has gone
+// away says nothing about the script, so it must not arrive looking like
+// one that was refused or one that crashed.
 func TestARunThatCannotReachTheGridIsNotAReading(t *testing.T) {
 	resetFlags()
 	b, f := newFakeRunner(t, 474, 368, 0)
@@ -329,14 +328,14 @@ func TestClosingUndoesWhateverGettingTheObjectTook(t *testing.T) {
 		t.Error("Close did not undo what getting the object took")
 	}
 
-	// A runner that took nothing to set up closes just the session.
+	// A runner that took nothing to set up has nothing to undo.
 	b2, _ := newFakeRunner(t, 474, 368, 0)
 	if err := b2.Close(); err != nil {
 		t.Errorf("Close: %v", err)
 	}
 }
 
-// ------------------------------------------ what a refusal means
+// ---------------------------------------------------- what -vvv shows
 
 // recovered runs fn and answers with what it panicked with, if anything.
 func recovered(fn func()) (p any) {
@@ -345,9 +344,9 @@ func recovered(fn func()) (p any) {
 	return nil
 }
 
-// TestShowPrintsTheScriptAndTheCommentary: -v is how a person watches a
-// benchmark work, and what they need to see is the source that was sent
-// and the INFO lines the harness says about it.
+// TestShowPrintsTheScriptAndTheCommentary: -vvv is how a person watches
+// a benchmark work, and what they need to see is the source that was
+// sent and the INFO lines the script said.
 func TestShowPrintsTheScriptAndTheCommentary(t *testing.T) {
 	resetFlags()
 	b, f := newFakeRunner(t, 474, 368, 0)
