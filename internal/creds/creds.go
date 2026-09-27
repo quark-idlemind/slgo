@@ -1,5 +1,3 @@
-package creds
-
 // Package creds works out who to log in as, when a program is doing
 // the logging in itself rather than attaching to slgod.
 //
@@ -8,6 +6,7 @@ package creds
 // or found by the avatar's name.  Whatever is still missing is asked
 // for, and the password is asked for without echo, because a terminal
 // that shows it puts it in the scrollback of whoever walks past.
+package creds
 
 import (
 	"bufio"
@@ -24,8 +23,9 @@ import (
 // disk, and what the person at the keyboard can be asked.
 //
 // Order matters and is the order of least surprise: an explicitly named
-// profile wins, then a profile whose names match the ones given, then
-// what is typed in.  A password already stored is used as it stands --
+// profile wins, then a profile whose names match the ones given -- or,
+// with nothing named at all, the only profile there is -- then what is
+// typed in.  A password already stored is used as it stands --
 // it is the "$1$" digest, which is the only form that ever goes over
 // the wire anyway.
 func Resolve(in *os.File, out io.Writer, profile, first, last, start string) (agent.Login, error) {
