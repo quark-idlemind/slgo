@@ -129,9 +129,9 @@ message Capabilities {
   bool out_of_memory = 4;
 
   // PersistentTargets says an object keeps what a script left in it
-  // between runs of the same lease.  A benchmark that carries its base
-  // reading from one run to the next needs this; without it, every run
-  // starts from nothing.
+  // between runs of the same lease.  A caller that carries state from
+  // one run to the next in the object needs this; without it, every run
+  // starts from nothing.  slbench does not: its script says one number.
   bool persistent_targets = 5;
 
   // Agents says targets belong to named avatars, so LeaseRequest.agent
