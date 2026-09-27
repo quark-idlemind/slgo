@@ -441,6 +441,60 @@ kept pushing for twelve seconds before calling itself blocked.
   every time, with or without it. Whether a real viewer is held after
   a teleport within the region was not tried.
 
+### Open: the crossing after a teleport within the region
+
+Parked on 2026-09-27 for a machine that can run a viewer. What is
+established is in the section above: a teleport within the region
+breaks the next walk over a border on the child circuits slgo holds,
+reliably after a jump of 87 metres. A walk to the same spot always
+crosses, and so does a return within seconds of leaving. The one
+question left is whether a real viewer is held the same way.
+
+**The experiment.** Pick a border that admits the avatar on both
+sides. Two Linden sandboxes side by side do best, since nobody can
+refuse entry there; Sandbox Goguen and Sandbox Newcomb, west of it,
+were used for the sandbox runs above. Then, from a fresh login:
+
+1. With Firestorm alone, no slgod, log in about 90 metres from the
+   west border, and teleport within the region, by double-click or
+   the map, to about 12 metres from it. Walk west, holding the arrow
+   key, for fifteen seconds. Note whether the avatar crosses, and how
+   long it takes. Do it three times, and three more times walking to
+   the same spot instead of teleporting, as the control.
+2. With slgo, do the same from the same spots: `slgod -neighbours`,
+   then `slsh tp X Y Z` and `walk`. `walk` refuses a point outside
+   the region and gives up after two seconds of no progress, so the
+   runs above used a scratch build, not committed, with two changes to
+   `agent/walk.go` through `go build -overlay`: `inRegion` widened to
+   -16..272, and `DefaultStallTime` raised to twelve seconds. Then a
+   `walk -- -5 Y` walks west over the border.
+
+**What the answer decides.**
+
+- If Firestorm is held too, it is the grid, and slgo is doing what a
+  viewer does. Write that up here, and close this.
+- If Firestorm crosses and slgo does not, capture what each sends
+  after the teleport within the region and before the crossing, and
+  compare them. For slgo, `slgod -trace` records every packet on
+  every circuit. For Firestorm, use its own message logging, or a
+  viewer attached through slgod, whose circuit slgod records under
+  `-trace` as well. The things to compare first: the `AgentUpdate`s
+  sent to the root after `TeleportLocal` (camera centre, draw
+  distance, flags), anything sent on a child circuit, and seed and
+  event-queue requests made to the neighbour.
+
+**What was already tried and did not hold.** The instrumented build
+and the two candidate fixes are on the branch `fix-login-children`,
+which is local to the machine that took these measurements and was
+not pushed. Commit 2d4ebca logs what each circuit hears around a
+teleport within the region; 9962ef2 asks a neighbour's seed on each
+`EstablishAgentCommunication`; e87f089 polls the neighbour's own event
+queue; 10c3336 and d70e029 were tried and reverted. Neither kept
+fix made the crossing reliable.
+
+A measurement written here follows `CLAUDE.md`: a Linden sandbox may
+be named, and any other region, parcel or avatar may not.
+
 ### Stage 3 -- the crossing, by promotion
 
 Stage 0 crossed without this, because `moveTo` dialled the new simulator
