@@ -5,8 +5,8 @@ package main
 // run is one long function of decisions taken before there is anything
 // to test against: which settings win, which way to connect, and
 // whether this is a shell or a single command.  The decisions that do
-// not need a grid are all here.  What is not is the connecting itself
-// and everything after it -- see coverage-notes/slsh-shell.md.
+// not need a grid are all here, and so are whole runs through a fake
+// daemon.  Logging in with --direct is not.
 //
 // One thing shapes the whole file: options.RegisterAndParse registers
 // into getopt's package-level set, so a second call in one process is a

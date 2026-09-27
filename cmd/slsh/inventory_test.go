@@ -569,8 +569,7 @@ func TestMvSaysWhenAMoveNeverArrives(t *testing.T) {
 // TestMvRenamesAnItemAndReadsItBack.
 //
 // Renaming an item is the AIS path, which answers and is then checked
-// by reading the item again -- so this waits the second the read-back
-// costs rather than believing the request.
+// by reading the item again rather than by believing the request.
 func TestMvRenamesAnItemAndReadsItBack(t *testing.T) {
 	t.Parallel()
 	x := newTestShell(t)
@@ -945,7 +944,7 @@ func TestFindLooksFromHereDown(t *testing.T) {
 	if got, want := x.do(t, "find lamp"), "/Objects/a lamp\n"; got != want {
 		t.Errorf("find printed %q, want %q", got, want)
 	}
-	// The match ignores case, as everything at this prompt does.
+	// The match ignores case.
 	if got := x.do(t, "find LAMP"); got != "/Objects/a lamp\n" {
 		t.Errorf("find should ignore case, got %q", got)
 	}
@@ -1026,7 +1025,7 @@ func TestFindAndLsPrintTheSameColumns(t *testing.T) {
 // same thing -- so ls -l prints the id beside the path, and every
 // command that takes a path takes one of those instead.  It is looked
 // for here first because that is nearly always where it is, and then
-// anywhere below the root.
+// four levels down from the root.
 func TestAnIdNamesOneThingWhereverItIs(t *testing.T) {
 	x := newTestShell(t)
 	serveAsset(t, x, "the script", false)
@@ -1035,7 +1034,7 @@ func TestAnIdNamesOneThingWhereverItIs(t *testing.T) {
 	if got, want := x.do(t, "cat "+testNote.String()), "the script\n"; got != want {
 		t.Errorf("cat by id printed %q, want %q", got, want)
 	}
-	// And two folders down, which costs the whole tree to find.
+	// And two folders down, which costs a listing from the root to find.
 	if got, want := x.do(t, "cat "+testProbe.String()), "the script\n"; got != want {
 		t.Errorf("cat by an id further down printed %q, want %q", got, want)
 	}

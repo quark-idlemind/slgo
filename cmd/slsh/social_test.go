@@ -494,8 +494,8 @@ func TestAnArrivalNobodyAskedForIsPrinted(t *testing.T) {
 // TestAScriptAskingForSomethingSaysHowToAnswerIt.
 //
 // A dialog and a permission request both wait for an answer that has
-// to be typed, and neither says how on its own -- so the notice
-// carries the command, channel and all.
+// to be typed, and neither says how on its own -- so the notice names
+// the commands that answer it.
 func TestAScriptAskingForSomethingSaysHowToAnswerIt(t *testing.T) {
 	x := newTestShell(t)
 	watching(t, x)
@@ -552,12 +552,8 @@ func TestAScriptAskingForSomethingSaysHowToAnswerIt(t *testing.T) {
 //
 // A shell whose connection has gone must not be left with a goroutine
 // waiting on channels nobody will ever put anything on.  It waits on
-// three of them and any one closing is enough, which is as well: only
-// the chat one ever gets there.  A goroutine parked in a select is
-// woken by whichever channel closes FIRST rather than choosing between
-// them afterwards, and the session closes the chat subscriptions before
-// the permission ones -- so the permission arm never wins the race, and
-// the instant message arm is never closed at all.
+// four of them, and any one closing is enough; the session closes them
+// all.
 func TestTheChatPrinterStopsWhenTheSessionDoes(t *testing.T) {
 	x := newTestShell(t)
 	done := make(chan struct{})
@@ -582,7 +578,7 @@ func TestTheChatPrinterStopsWhenTheSessionDoes(t *testing.T) {
 // This one did not.  sl.Session.closeChat closed the chat and
 // permission maps and left imSubs alone, so a subscriber waited for
 // ever on a session that had gone.  The shell survived it only because
-// it waits on all three at once and the other two closed -- anything
+// it waited on all three at once and the other two closed -- anything
 // waiting on IMs alone hung, and the arm of the printer's select that
 // handles the closure was unreachable.
 func TestTheIMSubscriptionEndsWithTheSession(t *testing.T) {
@@ -1040,9 +1036,9 @@ func TestAKeyTheGridHasNeverHeardOfIsASentenceAndNotAFailure(t *testing.T) {
 
 // searching makes the grid's name search answer with these people.
 //
-// It is the only way a shell that has just started can turn a name into
-// a key: the session's own cache holds whoever has been mentioned, and
-// in "slsh -c" nothing has been mentioned yet.
+// It is how a shell that has just started turns the name of somebody
+// who is not here into a key: the session's own cache holds whoever has
+// been mentioned, and in "slsh -c" nothing has been mentioned yet.
 func searching(t *testing.T, x *testShell, people ...sl.Found) {
 	t.Helper()
 	x.grid.ServeCap(t, sl.PickerCap, func(w http.ResponseWriter, r *http.Request) {
@@ -1062,12 +1058,12 @@ func searching(t *testing.T, x *testShell, people ...sl.Found) {
 
 // TestProfileFindsANameOnlyTheGridKnows.
 //
-// The session's name cache holds whoever has been mentioned, so a shell
-// that has just started knows nobody -- and "slsh -c profile SOMEBODY",
-// which is how most of this shell's examples are written, would refuse a
-// name that "who" lists thirty metres away.  The search is one call and
-// answers it, so the command makes it rather than telling somebody to
-// type lookup and try again.
+// The session's name cache holds whoever has been mentioned and the
+// region whoever is standing in it, so "slsh -c profile SOMEBODY",
+// which is how most of this shell's examples are written, would refuse
+// anybody who is not here.  The search is one call and answers it, so
+// the command makes it rather than telling somebody to type lookup and
+// try again.
 func TestProfileFindsANameOnlyTheGridKnows(t *testing.T) {
 	x := newTestShell(t)
 	searching(t, x, sl.Found{ID: testSomebody, Name: "Perrick Hobb"})
@@ -2090,8 +2086,8 @@ func TestAnAmbiguousNameStaysAmbiguousRatherThanShortening(t *testing.T) {
 
 // TestGiveAndOfferReadTheNameTheSameWay.
 //
-// One helper for the three commands that take somebody and something
-// else, because the mistake is worst here: an item offered under a
+// One helper for every command that takes somebody and something else,
+// because the mistake is worst here: an item offered under a
 // mangled path is either not found at all or is a different item, and
 // the person at the other end is the right one either way.
 func TestGiveAndOfferReadTheNameTheSameWay(t *testing.T) {

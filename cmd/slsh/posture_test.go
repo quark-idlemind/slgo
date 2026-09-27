@@ -24,9 +24,9 @@ import (
 // what the seat is.
 const myLocal = 42
 
-// onTheBox is where the avatar ends up once it has been seated, seven
-// metres from where the fake stands it to begin with.  A sit really
-// does travel that far: see doc/history/sit.md.
+// onTheBox is where the avatar ends up once it has been seated, which
+// is not where the fake stands it to begin with.  A sit really does
+// carry the avatar to the seat: see doc/history/sit.md.
 var onTheBox = msg.Vector3{X: 135, Y: 72, Z: 2001}
 
 // sittingShell is a shell over a region with one thing in it to sit on,
@@ -248,8 +248,8 @@ func TestStandTakesNothingAndSitTakesOneThing(t *testing.T) {
 	if got := x.do(t, "stand up"); !strings.Contains(got, "usage: stand") {
 		t.Errorf("stand with an argument printed %q", got)
 	}
-	// The alias reports the usage of the command it is, which is what
-	// quit and exit do: there is one entry and it has one name.
+	// The alias's refusal names stand, the name usageError is given;
+	// its --help names what was typed, as exit's does.
 	if got := x.do(t, "unsit now"); !strings.Contains(got, "usage: stand") {
 		t.Errorf("unsit with an argument printed %q", got)
 	}

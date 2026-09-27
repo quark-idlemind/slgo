@@ -417,8 +417,8 @@ func TestCheckQuoteRefusesWhatIsNotThere(t *testing.T) {
 		{"landmark", "--home: Make where this avatar is standing", "not in landmark's"},
 		// Pieces that are there, in the wrong order.
 		{"landmark", "the place home is ... Make where this avatar is standing", "not in landmark's"},
-		// Nothing, and a command that is not one.
-		// A usage line that is only the name, whole as it is.
+		// A usage line that is only the name, whole as it is, and then
+		// nothing, and a command that is not one.
 		{"pwd", "pwd", "too short"},
 		{"landmark", "", "no quote"},
 		{"landmark", "  ...  ", "no quote"},

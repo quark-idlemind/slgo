@@ -409,8 +409,7 @@ func TestDressPutsBackOnWhatTheOutfitNamesAndIsNotOn(t *testing.T) {
 	wearableAt(x, shirt, "a shirt", sl.AssetClothing, sl.WearableShirt)
 	x.grid.AnswerAttach(t, hatWorn, 11, 1)
 
-	// Dressed, and then logged in again: the folder still names them
-	// and the region describes none of them.
+	// Dressed from this shell, which writes the folder.
 	x.do(t, "wear Objects/a hat")
 	x.do(t, "wear Objects/a shirt")
 	// And logged in again: the folder still names them and the region

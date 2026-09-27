@@ -1024,8 +1024,8 @@ func TestTheReadersGiveUpWhenTheTerminalCloses(t *testing.T) {
 	r.Close()
 }
 
-// TestEveryKeyTheEditorOwns is the whole of section 16 of the guide,
-// asserted rather than described.
+// TestEveryKeyTheEditorOwns is the whole of section 16, Keys, of
+// handbook/slsh-guide.html, asserted rather than described.
 //
 // The guide listed seven keys and the editor has eleven, so the four it
 // left out were four a reader would have had to find by accident. It

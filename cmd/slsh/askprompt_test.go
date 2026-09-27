@@ -9,8 +9,8 @@ import (
 	"github.com/quark-idlemind/slgo/internal/llm"
 )
 
-// askTestCandidate is a real command as phase 2 will hand it over: the
-// usage line and brief from the table, and an excerpt or two.
+// askTestCandidate is a real command as askCandidatesFrom hands it
+// over: the usage line and brief from the table, and an excerpt or two.
 func askTestCandidate(t *testing.T, name string, excerpts ...askExcerpt) askCandidate {
 	t.Helper()
 	c, ok := commands[name]
@@ -152,7 +152,7 @@ func TestTheBudgetTrimsFromTheBottomUp(t *testing.T) {
 }
 
 // The real budget holds for eight real commands with their whole pages
-// as excerpts, which is far more than phase 2 will ever pass.
+// as excerpts, which is far more than askCandidatesFrom ever passes.
 func TestEightWholePagesFitTheBudget(t *testing.T) {
 	var cands []askCandidate
 	for _, name := range []string{"landmark", "tp", "where", "ls", "find", "wear", "put", "touch"} {

@@ -198,7 +198,7 @@ func TestGroupSendsAKeyItCannotName(t *testing.T) {
 // zeros, and a listing that says "acting as no group" gives no hint
 // that this is how to get back to it -- and what comes out has to be
 // the sentence rather than the key, since a null key printed as a group
-// is the mistake where used to make with a key nobody could read.
+// is the mistake "where" used to make with a key nobody could read.
 func TestGroupClearsTheGroupInWords(t *testing.T) {
 	x := newTestShell(t)
 	joined(x, sl.Group{ID: testBuilders, Name: "Pelmar Reach Builders"})
