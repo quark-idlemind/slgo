@@ -240,8 +240,8 @@ func TestATimeoutIsNotAnErrorAndSaysTheSentinelWasNeverSeen(t *testing.T) {
 }
 
 // TestCompileOnlyInstallsTheScriptWithoutRunningIt is how a caller gets
-// a verdict without disturbing what the object holds -- no linkset data
-// written, no measurement in progress spoiled.  The sentinel is
+// a verdict without disturbing what the object holds -- nothing run in
+// it, no measurement in progress spoiled.  The sentinel is
 // unseen, because nothing ran to say it.
 func TestCompileOnlyInstallsTheScriptWithoutRunningIt(t *testing.T) {
 	bothWays(t, func(t *testing.T, r reach) {
@@ -414,10 +414,11 @@ func said(t *testing.T, tr *transcript, label string) int {
 // reference script at pad 602 read 6436 where it reads 5924 every other
 // time.  A caller's padding search is a chain of comparisons between
 // readings, so one bad reading looks precisely like the memory having
-// grown; slbench confirms a crossing by re-reading it for exactly that
-// reason.  Without a hook here the contract cannot present the event at
-// all -- it cannot be provoked live to order -- and the code written to
-// survive it is unreachable from the caller's side of the seam.
+// grown; slbench under --paranoid confirms a crossing by re-reading it
+// for exactly that reason.  Without a hook here the contract cannot
+// present the event at all -- it cannot be provoked live to order -- and
+// the code written to survive it is unreachable from the caller's side
+// of the seam.
 func TestTheSameScriptCanBeReadTwiceAndAnswerDifferently(t *testing.T) {
 	bothWays(t, func(t *testing.T, r reach) {
 		mem := scripttest.Memory{Pad: 137, CodeSize: 340}
