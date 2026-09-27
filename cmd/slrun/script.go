@@ -34,20 +34,15 @@ package main
 // second.
 //
 // One target is the default even with scripts enough for four, where the
-// grid path takes the whole group.  A group is four because this program
-// put four objects there and knows it; what a backend has is its own
-// business, and asking a one-object simulator for four would queue for
-// three that are never coming.  --jobs is how somebody who knows what is
-// behind the contract asks for more.
+// grid path takes four.  Four is the grid path's default because this
+// program set up the pool it takes them from; what a backend has is its
+// own business, and asking a one-object simulator for four would queue
+// for three that are never coming.  --jobs is how somebody who knows what
+// is behind the contract asks for more.
 //
-// # Why this is not shared with slbench's copy
-//
-// The two ask different questions of the same contract.  A benchmark
-// needs several objects at once, needs the one it measures in to keep
-// what a script left there, and turns a fault into a size limit; slrun
-// needs one object or none and prints what it hears.  The overlap is the
-// dial and a lease loop, and a package holding those two would be a
-// package whose callers each ignore half of it.
+// slbench reaches the same contract through a copy of its own of the
+// dial and the lease loop.
+// Why: doc/slrun.md#why-the-backend-path-is-not-shared-with-slbench
 
 import (
 	"context"

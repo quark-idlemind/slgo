@@ -10,11 +10,7 @@ package session
 // callers each ending up with some of what the other needs.  What
 // arrives here is a GRANT: a number of places, each an avatar and a
 // number, held until this connection gives them back or goes away.
-//
-// This did the deciding itself until now, with a lock per object and an
-// allocation lock over them and an invariant every caller had to keep.
-// It worked and it was delicate, and it could not answer the question a
-// caller actually asks.
+// Why: doc/slots.md#locks-a-group-at-a-time
 //
 // # What is left here
 //
@@ -25,12 +21,12 @@ package session
 //
 // # Why the avatar is still chosen here
 //
-// Only the caller knows whether it minds which avatar.  A benchmark
-// does: its objects are compared against one another, and two avatars
-// may be standing in different regions.  A program running a dozen
-// separate scripts does not.  So there are two doors -- UseAutoAnywhere,
-// which puts everything on one avatar, and UseAutoSpread, which does not
-// care -- and a named avatar is honoured exactly by both.
+// Only the caller knows whether it minds which avatar: two avatars may
+// be standing in different regions, and a program running a dozen
+// separate scripts does not care.  So there are two doors --
+// UseAutoAnywhere, which puts everything on one avatar, and
+// UseAutoSpread, which does not care -- and a named avatar is honoured
+// exactly by both.  slrun and slbench both go through UseAutoSpread.
 
 import (
 	"context"
@@ -57,7 +53,8 @@ var dialFor = Connect
 //
 // Long, because what it guards against is a client that wedged without
 // dying rather than one that is merely slow, and a benchmark's search
-// finishes when it converges.  Renew is there for work that outlives it.
+// finishes when it converges.  sl.Hosted.RenewSlots is there for work
+// that outlives it, though nothing here calls it.
 const autoTimeout = 30 * time.Minute
 
 // Auto is somewhere to run: a session, objects held for as long as
@@ -97,9 +94,11 @@ func (a *Auto) Where() string {
 // Release gives the objects back.  So does going away: the daemon frees
 // what a client holds when its stream ends.
 //
-// It does NOT close the session.  The session is the caller's from here
-// -- it is what the work runs on -- and closing it is that code's
-// business, done once, wherever it already closes sessions.
+// One call gives back the whole grant, however many Autos it was spread
+// over, and closes the sessions opened for it along the way: those for
+// the other avatars, and the one that asked when no work ran on it.  The
+// session that asked, when work ran on it, is left for the caller to
+// close.  Closing one of the others again does no harm.
 func (a *Auto) Release() {
 	if a.release != nil {
 		a.release()
@@ -128,7 +127,8 @@ type granter interface {
 // either hold them while waiting for the rest, which is the deadlock, or
 // give them back; the daemon gives them back for it.
 //
-// The session it returns belongs to the caller and must be closed by it.
+// The caller closes the Auto's session when it is done with it; see
+// Release for the sessions that closes first.
 func UseAutoAnywhere(ctx context.Context, o Options, n int) (*Auto, error) {
 	o.Agent = AgentName(o.Agent)
 	if n < 1 {
@@ -228,7 +228,8 @@ func grantOn(ctx context.Context, o Options, asked *sl.Session, g granter, n int
 // run at once wants twelve objects and does not care whose they are.  A
 // named avatar is honoured exactly and is one avatar.
 //
-// Each Auto has its own session, which the caller must close.
+// Each Auto has its own session, which the caller closes when it is done
+// with it; see Release for the sessions that closes first.
 func UseAutoSpread(ctx context.Context, o Options, n int) ([]*Auto, error) {
 	o.Agent = AgentName(o.Agent)
 	if n < 1 {

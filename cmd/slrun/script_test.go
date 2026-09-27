@@ -325,8 +325,8 @@ func TestAScriptABackendWillNotCompileIsAFailedRun(t *testing.T) {
 	}
 }
 
-// TestABackendIsAskedForOneObjectUnlessJobsAsksForMore: a group of auto
-// objects is four because this program put four there and knows it.
+// TestABackendIsAskedForOneObjectUnlessJobsAsksForMore: the grid path
+// takes four because this program set up the pool it takes them from.
 // What is behind the contract is somebody else's business -- it may have
 // one object -- and asking a one-object backend for four would queue for
 // three that are never coming.  So the default is one however many
