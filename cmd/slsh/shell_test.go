@@ -473,8 +473,13 @@ func TestQuitAndExitAreTheSameCommand(t *testing.T) {
 	}
 
 	x := newTestShell(t)
-	if got := x.do(t, "quit --help"); !strings.Contains(got, "quit") {
+	if got := x.do(t, "quit --help"); !strings.Contains(got, "Usage: quit") {
 		t.Errorf("quit --help printed %q", got)
+	}
+	// Each by the name typed.
+	if got := x.do(t, "exit --help"); !strings.Contains(got, "Usage: exit") ||
+		!strings.Contains(got, `"man exit"`) || strings.Contains(got, "quit") {
+		t.Errorf("exit --help printed %q", got)
 	}
 	select {
 	case <-x.quit:

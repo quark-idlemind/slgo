@@ -555,7 +555,7 @@ func (sh *Shell) run(ctx context.Context, out io.Writer, words []string) error {
 		sh.errorf("%s: no such command; try help", name)
 		return fmt.Errorf("no such command: %s", name)
 	}
-	err := c.run(ctx, sh, out, args)
+	err := c.run(context.WithValue(ctx, typedAsKey{}, name), sh, out, args)
 	switch {
 	case err == nil:
 	case errors.Is(err, errStopped):
@@ -565,6 +565,19 @@ func (sh *Shell) run(ctx context.Context, out io.Writer, words []string) error {
 		sh.errorf("%s: %v", name, err)
 	}
 	return err
+}
+
+// typedAsKey is where run keeps the name a command was typed as.
+type typedAsKey struct{}
+
+// typedAs is the name the running command was typed as, where that is
+// another name for the command called name, and otherwise name: "exit"
+// is quit, and its usage says exit.
+func typedAs(ctx context.Context, name string) string {
+	if n, ok := ctx.Value(typedAsKey{}).(string); ok && commands[n] == commands[name] {
+		return n
+	}
+	return name
 }
 
 // Source reads commands from a file, one per line.
@@ -987,7 +1000,7 @@ func init() {
 		man:      "quit",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
-			if _, done, err := subOptions("quit", &flags, out, args); err != nil || done {
+			if _, done, err := subOptions(typedAs(ctx, "quit"), &flags, out, args); err != nil || done {
 				return err
 			}
 			sh.Quit()
