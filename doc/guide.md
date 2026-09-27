@@ -731,6 +731,13 @@ A trace is worth taking before there is anything to debug: a baseline of
 what an ordinary session receives is what an unusual one has to be
 compared against, and it cannot be collected afterwards.
 
+Each packet the simulator sends is recorded once. Until a viewer has
+logged in to a session, that is the packet as it arrived, retransmissions
+included. From then on it is what the relay to the viewer was offered,
+with what became of it -- forwarded, absorbed, dropped, or held while no
+viewer is joined -- and a retransmission, which the relay never sees, is
+not recorded.
+
 The trace file is created mode 600, and one already there is narrowed to
 600 before it is emptied. That matters most with `-trace-bodies`, which
 writes every message whole: the session id is in nearly every message a
