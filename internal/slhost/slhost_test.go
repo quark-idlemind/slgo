@@ -173,8 +173,7 @@ func TestOnlyTheFirstWordIsTheHost(t *testing.T) {
 
 // TestMustAddrPassesAnAddressThrough covers what a small tool actually
 // does with it.  The other half -- a failure -- ends in os.Exit and
-// would take the test binary with it, so it is not driven from here;
-// see coverage-notes/codecs.md.
+// would take the test binary with it, so it is not driven from here.
 func TestMustAddrPassesAnAddressThrough(t *testing.T) {
 	emptyPath(t)
 

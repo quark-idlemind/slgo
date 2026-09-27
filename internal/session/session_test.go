@@ -14,8 +14,8 @@ package session
 // from httptest because inventory is AIS and not a message, and is what
 // everything taking a session is tested through.  fakeDaemon is a real
 // gRPC server on loopback, for the one call that cannot be faked at the
-// Backend level at all -- Connect, which dials, and UseAutoAnywhere,
-// which dials once per avatar it considers.
+// Backend level at all -- Connect, which dials.  UseAutoAnywhere dials
+// too, once per avatar it considers, and its tests replace dialFor.
 //
 // Neither can stand in for a grid.  What is checked is the decisions
 // this package makes, not what a simulator would have done about them.
@@ -498,8 +498,8 @@ func (l *listsSessions) Sessions(context.Context) ([]string, error) { return l.n
 
 // ------------------------------------------------------ a real daemon
 
-// fakeDaemon is a slgod with nothing behind it, on loopback, for the
-// two calls that dial.
+// fakeDaemon is a slgod with nothing behind it, on loopback, for
+// Connect, which dials.
 //
 // It has to be dialled rather than handed a connection, so it does the
 // whole handshake: TLS, and a challenge each way over a secret in a home
@@ -1090,9 +1090,9 @@ func TestASeedThatVanishedBetweenBeingMadeAndBeingFound(t *testing.T) {
 }
 
 // TestAnObjectThatCannotBeCopiedIsFewerObjectsAndNotAFailure: a no-copy
-// item simply is not answered by the grid, and the caller already copes
-// with getting fewer than it asked for -- so stopping here would turn a
-// slower benchmark into no benchmark.
+// item simply is not answered by the grid, and the wearing that follows
+// builds what is missing the slow way, or makes do with fewer -- so
+// stopping here would turn a slower benchmark into no benchmark.
 func TestAnObjectThatCannotBeCopiedIsFewerObjectsAndNotAFailure(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
@@ -1403,10 +1403,8 @@ func TestRunInANamedObjectLeavesItExactlyAsItWasFound(t *testing.T) {
 	}
 }
 
-// TestRunInAChildPrimIsRefusedRatherThanRedirected: the script would run
-// -- in the linkset's root, which is not where it was asked for -- and a
-// benchmark reading linkset data from the wrong prim reports numbers
-// that are wrong rather than missing.
+// TestRunInAChildPrimIsRefusedRatherThanRedirected: the script would
+// run, but in the linkset's root, which is not where it was asked for.
 func TestRunInAChildPrimIsRefusedRatherThanRedirected(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)

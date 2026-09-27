@@ -56,8 +56,9 @@ func TestDecodeARealFirestormLogin(t *testing.T) {
 		t.Errorf("this viewer asked for %d option blocks, want 27; if the "+
 			"capture changed, what slgo requests has to change with it", len(opts))
 	}
-	// A few that slgo does not ask for today and would have to, since
-	// what it does not request cannot be in the response it replays.
+	// A few that slgo requests because a viewer does, in
+	// agent.ViewerOptions, since what it does not request cannot be in
+	// the response it replays.
 	for _, want := range []string{"inventory-skeleton", "gestures", "global-textures", "buddy-list"} {
 		found := false
 		for _, o := range opts {

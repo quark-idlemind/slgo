@@ -609,7 +609,7 @@ func TestWearingStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 	})
 }
 
-// fourSlots is a benchmark's worth of the pool, for the tests that are
+// fourSlots is four places of the pool, for the tests that are
 // about wearing objects rather than about which places they came from.
 var fourSlots = []int{0, 1, 2, 3}
 
