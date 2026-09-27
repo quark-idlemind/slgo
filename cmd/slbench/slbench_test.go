@@ -133,7 +133,7 @@ func offlineWith(t *testing.T, o scripttest.Options) *modelled {
 }
 
 // affine is offline for a construct whose first copy costs more than the
-// ones after it, which is the whole reason copy mode measures two counts.
+// ones after it, which is the whole reason --extra measures two counts.
 func affine(t *testing.T, crossing, abs, marginal, limit int) *modelled {
 	t.Helper()
 	return offlineWith(t, scripttest.Options{Memory: scripttest.Memory{
@@ -192,9 +192,9 @@ var modelCases = []struct {
 // They are apart from modelCases because they were once the hard half:
 // -1 mode measured a copy as the distance between two block boundaries,
 // so a copy that carried itself over a boundary left a remainder rather
-// than an answer -- 1066 bytes reported as 8.  Both modes are held to
-// them now, and -1 mode is exact on them, but they stay named because a
-// size that spans a boundary is the case to break first.
+// than an answer -- 1066 bytes reported as 8.  oneMode is exact on them
+// now, but they stay named because a size that spans a boundary is the
+// case to break first.
 //
 // The alignments matter and are chosen for it: a size that is exactly a
 // block leaves nothing over, one byte more leaves one byte, and the two
@@ -315,7 +315,7 @@ func TestBasePaddingTakesIPadOnTrust(t *testing.T) {
 	}
 }
 
-// TestOneModeReportsTheCodeSize is the whole point of -1 mode: hand it a model
+// TestOneModeReportsTheCodeSize is the whole point of oneMode: hand it a model
 // whose code costs codeSize bytes and it has to say so, and it has to name the
 // padding by A11's convention while doing it.
 func TestOneModeReportsTheCodeSize(t *testing.T) {
@@ -367,12 +367,11 @@ func TestOneModeIsPaddingIndependent(t *testing.T) {
 	}
 }
 
-// TestACopyRunDividesByTheBaseRunBeforeIt pins where SIZE comes from, which
-// had the same shape of fault as the code it is used to find it in: the
-// benchmark script computes (mem - old)/count, and old is the cnt=0 reading
-// the object is holding, not any anchor the model has inside it.  Anchoring on
-// the constant put +blockSize/count on every copy-mode Size and hid the
-// linkset-data bug underneath it.
+// TestACopyRunDividesByTheBaseRunBeforeIt pins where Size comes from:
+// runScript computes (Test - Base)/count, and Base is the cnt=0 reading r is
+// holding, not any anchor the model has inside it.  Anchoring on the constant
+// once put +blockSize/count on every copy-mode Size and hid the linkset-data
+// bug underneath it.
 func TestACopyRunDividesByTheBaseRunBeforeIt(t *testing.T) {
 	const crossing, codeSize, cnt = 474, 368, 128
 	b := offline(t, crossing, codeSize)
@@ -439,11 +438,10 @@ func refusesOver(t *testing.T, crossing, codeSize, limit int) *modelled {
 	})
 }
 
-// TestCompileRefusalIsNotAStackHeapCollision keeps the two apart, because
-// conflating them is the mistake A9 named: runtimeError.StackHeap models
-// a RUN-TIME fault, and a compile-time refusal wearing that name would make a
-// limit that stopped the script from ever starting look like one it hit while
-// running.
+// TestCompileRefusalIsNotAStackHeapCollision keeps the two apart:
+// runtimeError models a RUN-TIME fault, and a compile-time refusal wearing
+// that name would make a limit that stopped the script from ever starting look
+// like one it hit while running.
 func TestCompileRefusalIsNotAStackHeapCollision(t *testing.T) {
 	b := refusesOver(t, 474, 368, 30*1024)
 
@@ -784,7 +782,7 @@ func TestOneModeIsExactEverywhere(t *testing.T) {
 // ------------------------------------------ what a copy pays only once
 
 // affineCases are constructs whose first copy costs more than the ones
-// after it, which is the whole reason copy mode measures two counts.
+// after it, which is the whole reason --extra measures two counts.
 //
 // The 1044/542 pair is the guide's live measurement: a 250-character
 // string literal is 1044 bytes for one copy and 542 for each after it,
@@ -869,7 +867,7 @@ func TestWithoutParanoidAReadingABlockOutIsBelieved(t *testing.T) {
 // difference from the one-copy script is N marginal copies and nothing
 // else -- the part a construct pays once and shares cancels.
 //
-// That is the number copy mode exists to produce, got from a script with
+// That is the number copy mode existed to produce, got from a script with
 // a handful of copies rather than one with up to 512.
 func TestExtraMeasuresWhatEachCopyAfterTheFirstCosts(t *testing.T) {
 	for _, c := range []struct{ abs, marginal, extra int }{

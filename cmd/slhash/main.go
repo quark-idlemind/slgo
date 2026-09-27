@@ -7,8 +7,8 @@
 //
 // The scheme is the grid's own: the plaintext is md5'd whole and sent
 // as "$1$" followed by the lowercase hex digits -- llloginhandler.cpp
-// md5s --login, llsecapi.cpp prepends "$1$".  It is the same form slgo
-// already mints and compares in agent/login and internal/creds, so a
+// md5s --login, llsecapi.cpp prepends "$1$".  It is the same form
+// agent.HashPassword mints and viewer's login compares against, so a
 // digest from here logs in wherever a stored viewer_password does.
 //
 // Asked for at a terminal, the password is typed with echo off, so it is

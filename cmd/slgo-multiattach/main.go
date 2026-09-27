@@ -1,13 +1,14 @@
 // Can one attachment point hold more than one object?
 //
-// The auto objects are worn one per HUD point, and there are only eight
-// HUD points, so eight is the ceiling on how many independent readings
-// can be taken at once -- unless ATTACHMENT_ADD works, in which case
+// The auto objects were worn one per HUD point, and there are only eight
+// HUD points, so eight was the ceiling on how many independent readings
+// could be taken at once -- unless ATTACHMENT_ADD works, in which case
 // the ceiling is the 38-attachment total instead.
 //
-// Nothing in this tree has ever set that bit: AttachAdd is defined and
-// unused, and Wear sets the point bare, so every attach replaces what
-// is on the point.  This finds out, rather than assuming.
+// This finds out, rather than assuming: it wears a second item on a
+// point with AttachAdd over it and counts what is on the point before
+// and after.  internal/session's AutoPoints double up on the strength of
+// what it found.
 package main
 
 import (

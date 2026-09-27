@@ -383,7 +383,13 @@ there was a pool of them; and `--check-ipad`, because an `--ipad` is
 confirmed now whether or not anyone asks -- the two readings ride in a
 round that is being spent anyway.
 
-`--parts` defaults to 8 and `--extra` to 4, both measured below.
+`--parts` defaults to 8 and `--extra` to 8, both measured below.
+
+The runs happen AT the padding, not a byte past it. An earlier version
+ran a byte past the padding, which put the base script a block up and
+needed a third reading and a count of whole blocks to take the offset
+back out again. Measured against the model, both answer the same thing
+everywhere; the one at the padding is shorter and says why it works.
 
 ## What a copy after the first costs, without a big script
 
@@ -531,7 +537,44 @@ search a failed confirmation would need. That saved 3s on the failure
 and cost 0.7s on every success, which pays only if a remembered padding
 is wrong about a quarter of the time. Eight independent searches of one
 shape returned the same answer, so it is not, and betting on the failure
-measured slower overall.
+measured slower overall. Measured live at 8 parts:
+
+| | rounds | runs | time |
+|---|---:|---:|---:|
+| cold, no cache | 14 | 50 | 21s |
+| padding holds | 8 | 27 | 12s |
+| padding holds, warmed for a failure | 8 | 35 | 12.7s |
+| padding wrong | 15 | 51 | 22s |
+| padding wrong, warmed for a failure | 13 | 51 | 19s |
+
+The failure case was left as it was, and did not need help: a
+confirmation that failed cost 15 rounds where a cold search cost 14,
+which is a fifteenth and not the third it looks like when the search is
+counted as its three rounds of narrowing rather than the seven it really
+was.
+
+### The key is the base script
+
+A remembered padding is keyed by the rendered base script, hashed, and
+nothing else.
+
+It used to need a normalisation, because the script said the title --
+`--title`, which a script can only ever have repeated back, so the round
+trip could not produce a fact -- and so the caller's own text was in the
+bytecode and part of the shape being identified. Two runs of the same
+benchmark under different titles looked like two different shapes. The
+title was blanked to a run of `t`s of the same length before hashing, on
+the grounds that a string literal costs its length rather than its text,
+which kept the LENGTH in the key for no reason at all. The script does
+not say the title any more, so two runs of one shape under two names are
+one shape, and the length is not in the key either.
+
+### A padding a block up
+
+Boundaries repeat every 512 bytes, so one shape has many paddings, and
+`--ipad` takes any of them: it has no upper bound. Live on 2026-08-03,
+`--ipad 473` and `--ipad 985` were the same shape one block apart and
+both reported `Size: 368`.
 
 ### What is not measured here
 
@@ -562,6 +605,14 @@ Asking for more objects than the daemon's avatars have between them is
 refused at once, saying so and saying how many there are, rather than
 waiting or quietly taking fewer.
 
+The line naming which avatars a benchmark ran as used to be
+unconditional, on the grounds that a benchmark attributed to the wrong
+avatar is not an error but a plausible number. A grant spans several
+avatars as a matter of course now, so it would be several lines of it,
+and with the readings agreeing across avatars it is printed only at
+`-vv`: which is not a proof, but it is enough that whose objects these
+were is a detail rather than a caveat on the answer.
+
 ## The filler, and what a jump costs
 
 The padding filler has to be able to emit any number of bytes, exactly,
@@ -581,6 +632,12 @@ terms; an odd one spends `(pad+5)/2` terms and no pair. Both come to
 `5+pad` bytes. `integer i;` backs the chain and is part of the harness,
 not the filler, so that it is a constant rather than a step at whichever
 pad it first appeared at.
+
+The filler goes in a `timer()` that nothing starts. Measured: code in an
+event that never fires counts towards `llGetUsedMemory` exactly as code
+that runs does -- padding in the timer, in `state_entry` and in a
+function all read 4388 -- and code that never runs cannot allocate,
+cannot take time, and cannot hit a limit however much of it there is.
 
 That the pair costs **exactly 5 bytes** was previously inferred. It is
 measured now, because the whole scheme rests on it: an even pad and the

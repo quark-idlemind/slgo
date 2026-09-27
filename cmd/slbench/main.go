@@ -1,27 +1,25 @@
 // Command slbench measures the memory cost of LSL constructs.
 //
-// It is the slgo build of the slrun program of the same name: same
-// measurements, same output, but scripts go into Second Life through sl rather
-// than through slrund. The measurement machinery -- the padding search, the
-// block-boundary arithmetic, the shrink-on-overflow retry -- is unchanged,
-// because it is about LSL and not about how a script reaches the grid.
+// It began as the slgo build of the slrun program of the same name, with
+// scripts going into Second Life through sl rather than through slrund. The
+// measurement machinery -- the padding search and the block-boundary
+// arithmetic -- is about LSL and not about how a script reaches the grid.
 //
 // # The transport
 //
-// One session, one object, every run: a prim is rezzed beside the avatar and
-// each script replaces the last inside it, unless --object names an object
-// already in the region. See runner.go.
+// Scripts run in objects the daemon's pool lends, as many as the search can
+// use at once and from as many avatars as it takes, each script replacing
+// the last inside its object (runner.go).  --backend runs them through a
+// script.v1 backend instead (script.go), and --test through the offline
+// model in this process (model.go); backend.go is what all three answer.
 //
-// Two things follow that are worth knowing before reading a number off this:
+// Two things are worth knowing before reading a number off this:
 //
-//   - The DONE contract is enforced HERE. Nothing on the far side decides a
-//     script has finished, so the wait for the sentinel, and the timeout on not
-//     getting one, are this program's. --timeout is that bound.
-//   - Every run of one benchmark must happen in the same object, because the
-//     base reading travels from the cnt=0 script to the cnt>0 scripts through
-//     the object's LINKSET DATA. Holding one object for the life of the process
-//     is what makes that true here; under slrund it was a promise the server
-//     made and the client had to check.
+//   - Nothing in Second Life decides a script has finished. The script says
+//     DONE, and whatever runs it waits for that sentinel, up to --timeout.
+//   - A script says one number, what llGetUsedMemory answered, and every size
+//     is arithmetic done here on two of them, so a reading means the same in
+//     whichever object it was taken. See probe.go.
 //
 // # The code under test
 //
@@ -62,7 +60,10 @@
 //	--sim                the eLSL simulator, which lives in elsl
 //	--lsl, --chatlog     the viewer slot file and chat log, from before slrund
 //	--runscript          slrund's slot transport; there is one transport now
-//	--slot, --prim       named a slot in somebody's object; --object names one
+//	--slot, --prim       named a slot in somebody's object; the pool lends objects now
+//	--object, --rez      a named object or a throwaway prim, from before the pool
+//
+// The rest, copy mode's among them, are in doc/memory.md#one-mode.
 package main
 
 import (
@@ -121,26 +122,26 @@ var flags = struct {
 	// Eight parts, which is the measured knee: 8*8*8 is 512 exactly, so
 	// three rounds of seven scripts land on the byte with no round
 	// wasted.  Sixteen parts takes the same three rounds for ten more
-	// scripts, and thirty-two saves a round and measured slower.  See
-	// doc/memory.md.
+	// scripts, and thirty-two saves a round and measured slower.
+	// Why: doc/memory.md#what---parts-buys-and-where-it-stops
 	Parts: 8,
 
 	// Eight further copies.  Code is 4-aligned, so individual copies
 	// quantise around their real cost and only a multiple of four
 	// averages it out; four is the smallest that does and eight is the
 	// smallest that is not obviously the smallest -- it halves whatever
-	// the offset is on top of that, and costs nothing in rounds.  See
-	// doc/memory.md.
+	// the offset is on top of that, and costs nothing in rounds.
+	// Why: doc/memory.md#n-should-be-a-multiple-of-4
 	Extra: 8,
 }
 
 // leaseSize is how many objects a benchmark holds.
 //
-// One to measure in and one per division of the search, which is --parts
-// of them, and three more.  The three are what lets warmTheSearch put a
-// remembered padding's confirmation and the opening of the search it may
-// need into a single round: the two readings that confirm, and the one
-// at the anchor the search starts from.
+// --parts for each search that shares a round -- its anchor and its
+// parts-1 divisions -- and three more: one to measure in, and the two
+// readings that confirm a remembered padding.  That is what lets
+// warmTheSearch put the confirmation and the opening of every search
+// into a single round.  At the defaults it is nineteen.
 //
 // Measured live, they are close to free -- fifteen scripts in a round
 // cost 1.57s against 1.50s for seven -- and they are only ever held, not
@@ -159,16 +160,15 @@ var searchesAtOnce = 1
 // openLease asks for the places a benchmark would like and settles for
 // what it can have.
 //
-// What it would like is one object to measure in, one per division of
-// each search, and three so that a remembered padding's confirmation and
-// the readings that follow it fit in one round.  None of that is
-// necessary: with fewer places the searches share rounds less, and with
-// one place there is no parallel search at all and the block is bisected
-// -- nine rounds instead of three, and the same answer.
+// What it would like is leaseSize.  None of that is necessary: with fewer
+// places the searches share rounds less, and with one place there is no
+// parallel search at all and the block is bisected -- nine rounds instead
+// of three, and the same answer.
 //
-// So it halves rather than refusing.  A benchmark that cannot have
-// nineteen objects should be slower, not impossible, and a backend that
-// grants four is a real case rather than a hypothetical one.
+// So it halves rather than refusing.  A benchmark that cannot have the
+// nineteen objects the defaults ask for should be slower, not impossible,
+// and a backend that grants four is a real case rather than a
+// hypothetical one.
 //
 // It says so when it settles for less, because the difference is large
 // enough that somebody timing a benchmark should not have to guess.
@@ -195,9 +195,9 @@ func openLease(open func(int) (backend, error)) (backend, error) {
 // The fields are scripttest's, and the reasoning for each of them lives
 // there beside the arithmetic that uses them.  What is worth saying here
 // is what the flag is FOR: the measurement machinery -- the padding
-// search, the block arithmetic, the copy count, the backing off -- is
-// about LSL and about readings, and none of it needs Second Life to be
-// exercised.  This is how it is exercised without one.
+// search and the block arithmetic -- is about LSL and about readings, and
+// none of it needs Second Life to be exercised.  This is how it is
+// exercised without one.
 //
 // It describes a model and not a place, which is why it takes no address:
 // --backend is for pointing this program at something that runs scripts
@@ -235,10 +235,9 @@ func testModel(spec string) scripttest.Memory {
 // and a file -- are one input by different routes, so naming two of them
 // is a line that means two things.
 //
-// It is a function rather than a switch inside main because every arm of
-// it ends in errf, and errf ends in os.Exit: a test that called main
-// could not survive being told it was wrong, so until this was lifted out
-// none of these sentences was ever read back by anything.
+// It is a function rather than a switch inside main so that a test can
+// read what it says: every arm ends in errf, and errf ends in os.Exit.
+//
 // piped says whether standard input is something to read rather than a
 // terminal.  It is the fourth way in, and the only one nobody types: with
 // no --code, no --statement and no file, the code comes from there.  A
@@ -349,11 +348,10 @@ const minpad = 0
 // one-copy script, and the one with --extra further copies when there is
 // one.
 //
-// In one place because two things have to agree about it -- oneMode,
-// which runs the searches, and warmTheSearch, which carries their
-// openings in the confirmation's round.  They did not, for a while:
-// --extra added a second search and the warmer went on carrying one, so
-// the second opened a round of its own.
+// In one place because oneMode, which runs the searches, and
+// warmTheSearch, which carries their openings in the confirmation's
+// round, have to agree about it: a search the warmer does not carry
+// opens a round of its own.
 func searchCounts() []int {
 	counts := []int{1}
 	if flags.Extra > 0 {
@@ -366,44 +364,14 @@ func searchCounts() []int {
 // remembered padding and the readings the benchmark will want NEXT if it
 // holds.
 //
-// It can, because -1 mode's second search is as fixed as the first: if
-// the remembered padding stands, oneMode reads the one-copy script at
-// that padding and then opens a search whose first round is
-// partPads(0, blockSize, parts) above it.  None of that depends on
-// anything not already known.
+// It can, because what follows is fixed: if the remembered padding
+// stands, oneMode opens a search at it for each of searchCounts, each
+// reading its anchor and a first round of partPads(0, blockSize, parts)
+// above it.  None of that depends on anything not already known.
 //
-// # It is a bet, and it is placed on the padding HOLDING
-//
-// The first version of this bet the other way -- it carried the opening
-// of the SEARCH a failed confirmation would need -- and measured, live
-// at 8 parts, that is a losing bet:
-//
-//	                              rounds  runs  time
-//	cold, no cache                  14     50    21s
-//	padding holds                    8     27    12s
-//	padding holds, warmed for a      8     35    12.7s
-//	  failure
-//	padding wrong                   15     51    22s
-//	padding wrong, warmed for a     13     51    19s
-//	  failure
-//
-// Three seconds saved when the padding is wrong, seven tenths spent
-// every time it is right: worth it only if a remembered padding is
-// wrong about a quarter of the time.  It is not -- eight independent
-// searches of one shape returned the same answer -- so the readings to
-// carry are the ones wanted when it holds.
-//
-// The failure case is left as it was, and does not need help: a
-// confirmation that fails costs 15 rounds where a cold search costs 14,
-// which is a fifteenth and not the third it looks like when the search
-// is counted as its three rounds of narrowing rather than the seven it
-// really is.
-//
-// # Only for -1 mode
-//
-// Copy mode calls basePadding too, and what follows it there is the
-// shrink ladder at a count nothing here can predict.  Warming would
-// send scripts nothing is going to ask for.
+// It is a bet placed on the padding HOLDING: when it does not, the
+// readings carried are wasted and the search opens a round of its own.
+// Why: doc/memory.md#confirming-a-remembered-padding
 func warmTheSearch(b backend, remembered int) {
 	parts := usableParts(b, flags.Parts)
 	if parts == 0 {
@@ -529,22 +497,22 @@ func warmPaddings(b backend, cnts []int, pad int) {
 // findPadding returns an OFFSET FROM pad, not a pad: the largest offset at
 // which cnt copies of the code under test still fit inside the 512-byte block
 // they occupy at pad.  One more byte crosses, so pad+findPadding(...)+1 is where
-// memory first grows.  Both callers want that +1 and both add it themselves --
-// which is where the one byte between the padding slbench names and the pad it
-// runs at comes from.
+// memory first grows.  Both callers use the offset as it is.
 //
 // It also returns the reading at pad, which is the bottom of the step it found.
-// The caller cannot keep that reading itself: every run overwrites r wholesale,
-// and confirming the crossing re-runs the base script, so a value read before
-// the search can be stale by the time it returns.  See oneMode.
+// The caller cannot keep that reading itself: every run of cnt copies writes
+// its reading into r, and a search whose anchor turns out to have moved is run
+// again against the corrected one, so a value read before the search can be
+// stale by the time it returns.  See oneMode.
 //
-// It costs about a dozen runs: a binary search across the block, then a linear
-// walk from where the search left off so the answer is exact to the byte, then
-// two or three more confirming the answer -- see confirmCrossing for why those
-// are worth paying for.
+// It narrows the block a round at a time with readings taken together
+// (partSearch), bisects whatever that leaves, then walks from where that left
+// off so the answer is exact to the byte, and checks the crossing against
+// every reading it took (brokenStair).  Under --paranoid it reads the crossing
+// again as well -- see confirmCrossing for why that is worth paying for.
 //
 // Every run writes r, so on return r holds the reading from the crossing run --
-// one block above the reading at pad, which is the step -1 mode measures.
+// one block above the reading at pad, which is the step oneMode measures.
 func findPadding(b backend, cnt, pad int, r *Results) (offset, base int) {
 	debugf("FindPadding\n")
 	defer debugf("FindPadding Done\n")
@@ -639,10 +607,10 @@ func partSearch(b backend, cnt, pad, base, low, high, parts int) (int, int) {
 // means it will not run at all -- two parts is the bisection, which is
 // below it and would be the same work done twice.
 //
-// It is a function of its own because the speculation in basePadding has
-// to ask the same question and get the same answer: it sends the pads a
-// search WOULD ask for before knowing whether the search will happen, and
-// a pad it guessed differently is a run spent on nothing.
+// It is a function of its own because warmTheSearch, warmPaddings and
+// searchPadding have to ask the same question and get the same answer:
+// they send the pads a search WOULD ask for before it runs, and a pad
+// guessed differently is a run spent on nothing.
 func usableParts(b backend, parts int) int {
 	if b == nil {
 		return 0
@@ -689,11 +657,11 @@ func addTo(pads []int, pad int) []int {
 	return out
 }
 
-// searchPadding is one attempt at findPadding: bisect the block, walk to the
-// exact byte, confirm.  ok is false when the confirmation found the base itself
-// to have been misread, in which case base is the corrected reading and the
-// whole search has to be redone against it -- every comparison it made was
-// against the wrong number.
+// searchPadding is one attempt at findPadding: narrow the block, walk to the
+// exact byte, check the crossing.  ok is false when a reading the search
+// relied on turned out not to hold -- the base itself, or one that does not
+// fit the staircase -- in which case base is the reading to search against
+// next and the whole search has to be redone against it.
 func searchPadding(b backend, cnt, pad int, r *Results, getBase func() int) (offset, base int, ok bool) {
 	// The anchor and the first round's divisions in ONE round.
 	//
@@ -701,12 +669,9 @@ func searchPadding(b backend, cnt, pad int, r *Results, getBase func() int) (off
 	// dividers and the reading at the anchor itself.  Without the anchor,
 	// dividers that all read the same leave the step ambiguous -- it
 	// could be below the first or above the last -- and with it, all the
-	// same means the step is in the last part.
-	//
-	// They were two rounds, the anchor read on its own before the search
-	// began, because partSearch needs the base to compare against.  It
-	// needs it to compare, not to ASK: the pads are fixed and the
-	// comparison happens once the answers are in hand.
+	// same means the step is in the last part.  partSearch needs the base
+	// to compare, not to ASK: the pads are fixed and the comparison
+	// happens once the answers are in hand.
 	if parts := usableParts(b, flags.Parts); parts > 0 {
 		want := []reading{{cnt, pad}}
 		for _, off := range partPads(0, blockSize, parts) {
@@ -811,15 +776,11 @@ const (
 // confirmCrossing re-reads the step the search is about to turn on, and says
 // whether it is still there.
 //
-// This is the whole of A12.  A padding search is a chain of comparisons against
-// readings of llGetUsedMemory, and on 2026-08-03 one of those readings came back
-// exactly one block high: the one-copy reference script at pad 602 read 6436
-// where it reads 5924 every other time it has been asked.  Nothing about that is
-// visible from inside the search.  It looks precisely like the memory having
-// grown, which is the event the search exists to find, so the search believed it
-// -- and the run cache then served the same wrong reading back for the rest of
-// the walk, so it never got a second chance.  The published Size moved 16 bytes,
-// twice, with nothing in the output to say why.
+// A padding search is a chain of comparisons against readings of
+// llGetUsedMemory, and a reading one block high looks precisely like the memory
+// having grown, which is the event the search exists to find.  It is asked
+// only under --paranoid.
+// Why: doc/scripttest.md#a-reading-one-block-high
 //
 // A crossing is a PAIR of readings, so confirming it means confirming both ends
 // and the base they are compared against:
@@ -828,9 +789,8 @@ const (
 //	pad+low    must still read differently            (outside it)
 //	pad        must still read what it read           (the base itself)
 //
-// Two or three runs, against the dozen the search already spent and the twenty
-// a benchmark spends.  What it buys is that a single bad reading costs a re-read
-// instead of an answer.
+// Two or three runs, in one round.  What it buys is that a single bad reading
+// costs a re-read instead of an answer.
 //
 // It cannot make the instrument reliable -- two identical wrong readings still
 // agree with each other -- and it is not meant to.  It turns a silent wrong
@@ -997,11 +957,11 @@ func reread(b backend, cnt, pad int, r *Results, getBase func() int) int {
 	return getBase()
 }
 
-// noticef reports something a caller reading a Size off stdout would otherwise
-// never learn: a reading that was not reproducible, and what was done about it.
+// noticef reports something a caller reading the answer off stdout would
+// otherwise never learn: a reading that was not reproducible, and what was
+// done about it.
 //
-// It is unconditional, unlike debugf.  The whole complaint in A12 is that this
-// class of event was silent, and a benchmark that had to argue with its
+// It is unconditional, unlike debugf: a benchmark that had to argue with its
 // instrument should say so whether or not anybody asked for --debug.  stderr,
 // so that a caller parsing stdout is unaffected.
 func noticef(format string, v ...any) {
@@ -1017,22 +977,19 @@ func noticef(format string, v ...any) {
 // It is a property of the benchmark's *shape* -- the harness plus --preamble,
 // --postamble and --globals -- and not of the code under test, so every
 // benchmark built on the same shape has the same base padding.  Measuring it
-// costs about a dozen live runs, which is why --ipad exists: measure it once,
-// read it off the Padding: line, and hand it to every later run of that shape.
-// That is the flag's purpose and the reason it skips the search.
+// costs a search of several rounds, which is why --ipad exists: measure it
+// once, read it off the Padding: line, and hand it to every later run of that
+// shape.  That is the flag's purpose and the reason it skips the search.
 //
-// This is the padding slbench *names*.  The pad it *runs* at is one byte
-// more; both callers add that themselves.
+// oneMode runs at this padding, not a byte past it.
 func basePadding(b backend, r *Results) int {
 	// --ipad names the padding to measure at: the caller has run this shape
 	// before, or read one out of doc/memory.md, and is telling us what it is.
 	//
 	// It is confirmed rather than taken, exactly as a remembered one is, and
-	// for the same reason: a padding wrong by k reports every Size wrong by k
-	// with nothing in the output to show it.  It used to be checked only when
-	// asked, because the check cost two live runs of its own; those two
-	// readings ride in a round that is being spent anyway now, so there is
-	// nothing left to decide and no flag for it.
+	// for the same reason: a padding wrong by k reports every size wrong by k
+	// with nothing in the output to show it.  Always: the two readings ride
+	// in a round that is being spent anyway.
 	if flags.IPad != 0 {
 		warmTheSearch(b, flags.IPad)
 		checkIPad(b, flags.IPad)
@@ -1040,9 +997,9 @@ func basePadding(b backend, r *Results) int {
 	}
 
 	// A padding already found for this base script is worth two runs to
-	// confirm and saves about a dozen.  It is confirmed rather than trusted:
+	// confirm and saves a search.  It is confirmed rather than trusted:
 	// what SL's compiler does can change, and a padding that is wrong by k
-	// reports every Size wrong by k with nothing in the output to show it.
+	// reports every size wrong by k with nothing in the output to show it.
 	//
 	// Only for readings that are Second Life's.  The file is read by every
 	// later benchmark on this account, and a model's paddings are
@@ -1145,24 +1102,19 @@ Measure somewhere else, or find the padding by leaving --ipad off.
 // expressible, to the byte, and a negative one is not -- it emits nothing
 // at all, which would measure at a padding other than the one named and
 // report it as the one named.
-//
-// It used to be less than that.  The pair was spent only when the pad was
-// odd, so 1 and 3 both came out as the bare pair and measured 5, and the
-// search had to start above them at a minpad of 5 -- which every padding
-// this program printed then carried, putting them in [5, 517) for a block
-// that is [0, 512).  Both are gone; the pair is a constant in every
-// script now, which is where a constant belongs.
+// Why: doc/memory.md#what-this-replaced
 //
 // There is deliberately no upper bound.  Boundaries repeat every blockSize
 // bytes, so one shape has many paddings and a caller may legitimately name any
-// of them: live on 2026-08-03, --ipad 473 and --ipad 985 were the same shape one
-// block apart and both reported Size: 368.
+// of them.
+// Why: doc/memory.md#a-padding-a-block-up
 func expressiblePadding(pad int) bool { return pad >= 0 }
 
-// oneMode is the whole of -1 mode: one copy of CODE, measured as the memory it
-// added rounded up to a whole block, less the part of that last block it did
-// not use.  It returns the size to report, the padding to report, and the
-// headroom left above the copy, which is printed as "Result pad:".
+// oneMode is the benchmark: one copy of CODE, measured as the memory it added
+// rounded up to a whole block, less the part of that last block it did not
+// use.  It returns the size to report, the padding to report, the headroom
+// left above the copy, which is printed as "Result pad:", and with --extra
+// what each further copy costs.
 //
 // # Why this is only three readings
 //
@@ -1176,27 +1128,22 @@ func expressiblePadding(pad int) bool { return pad >= 0 }
 //     spilling -- is exactly how much of that last block the copy did not use.
 //   - so the copy is the one less the other, to the byte, at any size.
 //
-// There is one pad in this mode and the runs happen AT it.  An earlier version
-// ran a byte past the padding, which put the base script a block up and needed
-// a third reading and a count of whole blocks to take the offset back out
-// again.  Measured against the model, both answer the same thing everywhere;
-// this one is shorter and says why it works.
+// There is one pad and the runs happen AT it, not a byte past it.
+// Why: doc/memory.md#one-mode
 //
 // It is a function rather than a block inside main so that a test can drive it
 // against the offline model and no Second Life at hand.  See slbench_test.go.
 func oneMode(b backend, r *Results) (size, padding, headroom int, marginal float64, marginalOK bool) {
 	// BASEPAD: the most filler the base script carries without spilling.
 	// This is the number Padding: reports and --ipad takes, and the runs
-	// happen at it rather than a byte past it -- there is one pad in this
-	// mode and it is the one the answer is defined against.
+	// happen at it: it is the pad the answer is defined against.
 	padding = basePadding(b, r)
 
 	// BASEMEM: where the boundary under that padding is.
 	//
-	// Into a Results of its own, not r.  Every run round-trips r through
-	// the cache and a hit assigns the WHOLE struct back, so a reading kept
-	// in r would be overwritten by the first cached run of the search
-	// below.  That has been a bug twice.
+	// Into a Results of its own, not r: every run of the base script
+	// writes its reading into r.Base, so one kept there lasts only until
+	// the next.
 	//
 	// The search that found the padding has already read this pad on its
 	// way to the crossing, so this is usually free; with --ipad, where
@@ -1234,10 +1181,9 @@ func oneMode(b backend, r *Results) (size, padding, headroom int, marginal float
 	// is the whole reason for measuring two counts rather than dividing
 	// one by its count.
 	//
-	// It is the number copy mode exists to produce, and it is got here
-	// from a script with a handful of copies in it rather than one with
-	// up to 512: measured live, installing 128 copies took 5.07s, 256
-	// took 12.70s and 512 was refused.
+	// It is the number copy mode existed to produce, got here from a
+	// script with a handful of copies in it rather than one with up to 512.
+	// Why: doc/memory.md#what-a-copy-after-the-first-costs-without-a-big-script
 	if flags.Extra > 0 {
 		var more Results
 		headroomN, testMemN := findPadding(b, 1+flags.Extra, padding, &more)
@@ -1278,7 +1224,7 @@ func main() {
 	getopt.SetParameters("[FILE]")
 
 	// --help before anything is decided, so that asking what the flags
-	// are never rezzes a prim or dials anything.
+	// are never leases an object or dials anything.
 	//
 	// It has to be a flag of its own: without one, getopt treats --help
 	// as an option it has never heard of, which prints this same usage
@@ -1302,15 +1248,9 @@ func main() {
 	}
 
 	// Everything that can refuse the line goes here, in front of the
-	// session and the lease.
+	// session and the lease, so that a line that cannot be run -- a bare
+	// "slbench" among them -- never dials slgod or leases an object.
 	//
-	// It used to come after them, so a line that could not run anyway
-	// dialled slgod, leased objects out of the avatar's pool and only
-	// then said what was wrong with it -- and a bare "slbench", which
-	// says nothing about what to measure, sat there doing all of that
-	// before complaining.  --help was moved up for this reason already;
-	// these are the same reason.  Nothing below this point is reached by
-	// a line that cannot be run.
 	// --probe asks whether scripts run at all, and measures nothing, so
 	// it is the one run with no code to be told about.
 	if !flags.Probe {
@@ -1395,15 +1335,10 @@ func main() {
 
 	// Where the scripts run.  The choice is made once, here, and nothing
 	// above backend.go knows which was made: a benchmark is arithmetic on
-	// readings, and where the readings come from is a transport.
-	//
-	// --test used to be answered ABOVE the transport -- runScript had a
-	// branch that returned the model's number without ever sending
-	// anything -- so the compile-error path, the fault path,
-	// absorbResults and the whole of the transport were reachable only
-	// with a grid at the far end.  It is a backend now, served in this
-	// process over a pipe, and the offline path runs the same code the
-	// live one does.
+	// readings, and where the readings come from is a transport.  --test
+	// is a backend like the others, reached in this process, so the
+	// offline path runs the same code the live one does.
+	// Why: doc/scripttest.md#slbenchs---test-is-a-backend
 	var b backend
 	switch {
 	case flags.Test != "" && flags.Backend != "":
@@ -1541,9 +1476,10 @@ func main() {
 }
 
 // spentCompiles counts the scripts sent to SL's compiler and never started.
-// It is kept apart from spentRuns because the two are asked for different
-// reasons, not because they cost different amounts: measured, they cost nearly
-// the same, which is the finding A9 turned on.
+// Nothing in a benchmark sends one now -- Compile is asked only by the live
+// tests -- so it stays at nought.  It is kept apart from spentRuns because the
+// two are asked for different reasons, not because they cost different
+// amounts: measured, they cost nearly the same (TestLiveCompileIsNotRunning).
 var spentCompiles int
 
 // resultPayload returns the text following "RESULT:" in a message, and whether
@@ -1558,12 +1494,11 @@ func resultPayload(s string) (string, bool) {
 	return strings.TrimSpace(s[i+len("RESULT:"):]), true
 }
 
-// Results holds the readings from the most recent run.  One of these is threaded
-// through everything and every run overwrites it WHOLESALE -- cache hits
-// included, since a hit assigns the stored struct back over it (see runScript).
-// So a reading that has to outlive the next run belongs in a local, not in a
-// field here; oneMode keeps its base memory that way, and not doing so was a
-// real bug that only showed up on a cache hit.
+// Results holds the readings from the most recent runs: Base from the last run
+// of the base script, Test and Size from the last run with copies in it, cache
+// hits included (see runScript).  So a reading that has to outlive the next run
+// of its count belongs in a local, not in a field here; oneMode keeps its base
+// memory that way.
 type Results struct {
 	Base int
 	Test int
@@ -1601,8 +1536,8 @@ var spentRereads int
 // spentRounds counts the ROUND TRIPS, which is the unit wall-clock time
 // is paid in.  A run is what a benchmark costs the grid; a round is what
 // it costs the person waiting.  They are the same number until something
-// runs in parallel: the quartering search sends three scripts at once and
-// waits for all three, and that is one round and three runs.
+// runs in parallel: a round of the part search sends parts-1 scripts at once
+// and waits for all of them, and that is one round and parts-1 runs.
 //
 // It is the number to watch when asking what --parts buys: a wider
 // search spends more runs to spend fewer rounds, and only one of those
@@ -1610,8 +1545,8 @@ var spentRereads int
 var spentRounds int
 
 // reportCost says what the benchmark spent, under --debug.  It is on stderr
-// with the rest of the debug output so that a caller parsing the Size: line
-// does not have to know about it.
+// with the rest of the debug output so that a caller parsing the answer on
+// stdout does not have to know about it.
 func reportCost() {
 	debugf("Spent %d runs (%d of them re-reads) in %d rounds, and %d compiles\n",
 		spentRuns, spentRereads, spentRounds, spentCompiles)
@@ -1627,14 +1562,16 @@ func mustRun(b backend, cnt, pad int, r *Results) {
 }
 
 // buildScript renders the benchmark: cnt copies of CODE between the preamble
-// and the postamble, then the harness, then pad bytes of filler.
+// and the postamble, then the harness with pad bytes of filler in it, then cnt
+// copies of the states.
 //
 // It is a function of (cnt, pad) and the flags and of nothing else -- no world,
-// no cache, no reading -- which is what lets the compile check ask about a
-// script without running it.  The script it renders for a given (cnt, pad) is
-// byte for byte the script runScript would send for that (cnt, pad), and it has
-// to stay that way: a compile check that answers about a different script from
-// the one that will run is worse than no check, because it is confident.
+// no cache, no reading -- which is what lets Compile be asked about a script
+// without running it, as the live tests do.  The script it renders for a given
+// (cnt, pad) is byte for byte the script runScript would send for that
+// (cnt, pad), and it has to stay that way: a compile check that answers about a
+// different script from the one that will run is worse than no check, because
+// it is confident.
 func buildScript(cnt, pad int) string {
 	var buf strings.Builder
 	if flags.Preamble != "" {
@@ -1648,15 +1585,10 @@ func buildScript(cnt, pad int) string {
 		buf.WriteString(flags.Postamble)
 		buf.WriteString("\n")
 	}
-	// A builder rather than a string appended to in the loop below.  The
-	// +i chain adds two bytes at a time, and appending to a string copies
-	// the whole of it each time, so rendering a pad of n cost n^2/4 bytes
-	// of copying -- 53 kilobytes of garbage for a middling script.  It
-	// went unnoticed while --test answered above the transport and built
-	// no script at all; the offline sweeps build 440,000 and it was the
-	// largest single thing they spent.  The bytes emitted are the same
-	// bytes, which is the only thing about this function that may not
-	// change.
+	// A builder rather than a string appended to in the loop below, which
+	// copies the whole of it for every two bytes of the +i chain.  The
+	// bytes emitted may not change.
+	// Why: doc/scripttest.md#slbenchs---test-is-a-backend
 	var pb strings.Builder
 
 	// The filler emits exactly pad bytes more than pad 0 does, for every
@@ -1671,21 +1603,13 @@ func buildScript(cnt, pad int) string {
 	// An even pad spends the 5-byte jump/label pair and pad/2 of the
 	// 2-byte terms; an odd one spends (pad+5)/2 terms and no pair.  Both
 	// come to 5+pad bytes, so pad 0 is the pair on its own and every
-	// count above it costs one byte more than the last.
+	// count above it costs one byte more than the last.  The pair is spent
+	// at pad NOUGHT so that it is a constant in every script.
+	// Why: doc/memory.md#what-this-replaced
 	//
-	// The pair being spent at pad NOUGHT is the whole of the difference
-	// from what this used to do.  It used to be spent only when the pad
-	// was odd, which made 1 and 3 cost the same 5 bytes as each other:
-	// two pads that could not be told apart, a minimum pad of 5 to keep
-	// the search above them, and every padding this program reported
-	// carrying that 5 -- a range of [5, 517) where the block is [0, 512).
-	// Moving the pair to the bottom costs the same 5 bytes in every
-	// script, where a constant belongs, and buys back both.
-	//
-	// `integer i;` is in the harness rather than here, for the same
-	// reason: it backs the chain, every script needs it, and a
-	// declaration that came and went with the pad would be a step of its
-	// own size at whichever pad it appeared.
+	// `integer i;` is in the harness rather than here: it backs the chain,
+	// every script needs it, and a declaration that came and went with the
+	// pad would be a step of its own size at whichever pad it appeared.
 	if pad >= 0 {
 		terms := pad / 2
 		if pad%2 != 0 {
@@ -1773,9 +1697,10 @@ func runScript(b backend, cnt, pad int, r *Results) error {
 	return nil
 }
 
-// absorbResults reads what the script reported into a Results.
+// absorbResults finds the reading in what the script said, and says
+// whether there was one.  r is not written.
 //
-// The runner returns EVERY line the script said, not just the RESULT:
+// A backend returns every line the script said, not just the RESULT:
 // ones, so the convention is applied here.  It belongs in the benchmark
 // and not in the transport: nothing else about running a script
 // requires a script to label its output.
@@ -1797,61 +1722,26 @@ func absorbResults(results []string, r *Results) (mem int, ok bool) {
 	return mem, ok
 }
 
-// code is the boilerplate for slbench.  It is printed with 3 positional
-// parameters:
-//  1. the number of times the CODE was repeated
-//  2. the amount of padding added
-//  3. instructions to pad the code size
-//
-// The title used to be a fourth, said by the script and read back out of
-// what it said.  A script can only ever have repeated the --title it was
-// handed, so the round trip could not produce a fact -- and it put the
-// caller's text in the bytecode, which is why baseKey had to blank it
-// before hashing a script to identify its shape.  main prints the flag.
-//
-// code is the benchmark script, and everything it does not do is
-// deliberate.
-//
-// It says ONE number: what llGetUsedMemory answered.  It used to keep
-// the base reading in the object's linkset data and divide against it in
-// LSL, which made the base a piece of WORLD state -- so the object that
-// held it was special, only a cnt=0 script that actually RAN could write
-// it, and a cache hit here left the two disagreeing.  What that cost is
-// on the record: a base one block low is 512/count on every size
-// reported, silently, for half of all shapes.  The arithmetic is
-// arithmetic; it belongs where it can be seen.
-//
-// The reading is taken FIRST, before anything is said, because building
-// the strings to say it allocates.
-//
-// Nothing else varies.  There is no count or padding in it -- the
-// program chose both and does not need telling -- so the harness is
-// byte-for-byte identical in every script, which is what a measurement
-// made by differencing two compiles wants.  The old one put both in as
-// integer literals and branched on the count, so the base script and the
-// test scripts were not quite the same program.
-//
-// The padding goes in a timer() that nothing starts.  Measured: code in
-// an event that never fires counts towards llGetUsedMemory exactly as
-// code that runs does -- padding in the timer, in state_entry and in a
-// function all read 4388 -- and code that never runs cannot allocate,
-// cannot take time, and cannot hit a limit however much of it there is.
-//
-// The count and the padding go in as a COMMENT.  Measured: 604 bytes of
-// comment moved llGetUsedMemory not at all, so the digits cost nothing
-// and the compiled harness stays byte-for-byte identical however many
-// copies or however much padding this run happens to want.  What reads
-// them is anything standing in for Second Life -- see scripttest's
-// Harness -- and anybody looking at --show.
-//
-// Printed with three positional parameters:
+// code is the benchmark script, printed with three positional parameters:
 //  1. the copy count
 //  2. the padding
 //  3. the filler that pads the code size
 //
-// It said four until this was read against the call: there was a title
-// to print once, and the parameter for it went without the sentence
-// describing it going too.
+// It says ONE number, what llGetUsedMemory answered, and the arithmetic is
+// done here where it can be seen.  The reading is taken FIRST, before
+// anything is said, because building the strings to say it allocates.
+// Why: doc/scripttest.md#a-benchmark-script-says-one-number
+//
+// The harness is byte-for-byte identical in every compiled script, which is
+// what a measurement made by differencing two compiles wants: the count and
+// the padding go in as a COMMENT, which the compiler throws away, and are
+// there for scripttest's Harness and for anybody reading the script at -vvv.
+// Why: doc/scripttest.md#the-harness-line-is-a-comment
+//
+// The padding goes in a timer() that nothing starts: code in an event that
+// never fires counts towards llGetUsedMemory as code that runs does, and it
+// cannot allocate, take time or hit a limit however much of it there is.
+// Why: doc/memory.md#the-filler-and-what-a-jump-costs
 var code = `
 // slbench cnt=%d pad=%d
 default {
@@ -1894,8 +1784,8 @@ func mkVar(s string) (string, error) {
 // runIn gets somewhere to run scripts: as many places as the search will
 // use at once, each with the session that reaches it.
 //
-// See slrun's for why the objects are worn and kept.  Running several
-// at once is this program's own reason: a padding search is a dozen
+// See slrun's runIn for why the objects are worn and kept.  Running
+// several at once is this program's own reason: a padding search is many
 // readings of one script that do not depend on each other, and N places
 // can take N of them at a time.
 func runIn(ctx context.Context, o session.Options) ([]place, func(), error) {
@@ -1908,11 +1798,11 @@ func runIn(ctx context.Context, o session.Options) ([]place, func(), error) {
 	// Naming an avatar still gets that avatar's, because UseAutoSpread
 	// takes --agent to mean it.
 	//
-	// (One thing this makes possible and nobody has measured: Second
-	// Life runs different simulator versions on different channels, so
-	// two avatars can be in regions with two LSL compilers.  Whether
-	// that moves a reading is unknown -- and the same doubt already
-	// applied between one run and the next.)
+	// Second Life runs different simulator versions on different
+	// channels, so two avatars can be in regions with two LSL compilers;
+	// measured once, their readings agreed.
+	// Why: doc/memory.md#what-is-not-measured-here
+	//
 	// As many places as the searches would like, halving until the pool
 	// can grant it; see openLease for why fewer is slower rather than
 	// fatal.  The last attempt asks for one, which every avatar has.
@@ -1940,16 +1830,10 @@ func runIn(ctx context.Context, o session.Options) ([]place, func(), error) {
 		}
 	}
 
-	// Which avatars, when nobody said, at -vv.
-	//
-	// It used to be unconditional, on the grounds that a benchmark
-	// attributed to the wrong avatar is not an error but a plausible
-	// number.  A grant now spans several avatars as a matter of course,
-	// so it is several lines of it -- and the readings turned out to
-	// agree across avatars: every row of the --parts sweep in
-	// doc/memory.md reported the same Size over one avatar, two and
-	// three.  Which is not a proof, but it is enough that whose objects
-	// these were is a detail rather than a caveat on the answer.
+	// Which avatars, when nobody said, at -vv: readings have agreed across
+	// avatars, so whose objects these were is a detail rather than a
+	// caveat on the answer.
+	// Why: doc/memory.md#what-is-not-measured-here
 	if o.Agent == "" && flags.V >= 2 {
 		for _, a := range as {
 			fmt.Fprintf(os.Stderr, "running as %s, objects %s\n", a.Agent, a.Where())

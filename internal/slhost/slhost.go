@@ -136,7 +136,7 @@ func HostFor(profile string) (string, error) {
 		return "", fmt.Errorf("cannot find the host slgod is on: %s printed nothing\n"+
 			"\t--addr HOST:PORT overrides", Command)
 	}
-	// It prints one address; anything after the first line is not it.
+	// It prints one address; anything after the first word is not it.
 	if i := strings.IndexAny(host, " \t\n"); i >= 0 {
 		host = host[:i]
 	}

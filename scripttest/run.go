@@ -146,11 +146,10 @@ func (s *Server) execute(ctx context.Context, stream grpc.ServerStreamingServer[
 	//
 	// The noise hook gets it here and nowhere else: what it stands in for
 	// is llGetUsedMemory answering wrongly, so the wrong number is what
-	// the script reports AND what it writes away as the base -- live the
-	// script has only the one number and cannot know it is wrong -- while
-	// the compiler's refusal and the collision above are unmoved, being
-	// the region's judgement about the script rather than the script's
-	// report of itself.
+	// the script reports -- live the script has only the one number and
+	// cannot know it is wrong -- while the compiler's refusal above and
+	// the collision below are unmoved, being the region's judgement about
+	// the script rather than the script's report of itself.
 	reading := mem.Reading(cnt, pad)
 	if benchmark && s.opt.Noise != nil {
 		reading = s.opt.Noise(cnt, pad, reading)
