@@ -8,22 +8,23 @@ package main
 // not the item it came from, and every operation on it wants the copy's
 // id rather than the original's.
 //
-// So the same three verbs take --in OBJECT and work there instead:
+// So the same four verbs take --in OBJECT and work there instead:
 //
 //	ls --in Box1              what the object holds
+//	cat --in Box1 notes       read one of them
 //	rm --in Box1 hello.lsl    delete one of them
 //	mv --in Box1 old new      rename one of them
 //
-// A flag rather than three more words, because these are not different
-// operations: they are listing, deleting and renaming, in a container
-// that happens to be a prim.  What is not the same is putting something
-// in, and that has its own command: "give" offers an item to a person
-// and waits for them to accept, while dropping one into your own object
-// happens at once and asks nobody.
+// A flag rather than four more words, because these are not different
+// operations: they are listing, reading, deleting and renaming, in a
+// container that happens to be a prim.  What is not the same is putting
+// something in, and that has its own command: "give" offers an item to
+// a person and nothing moves until they accept, while dropping one into
+// your own object happens at once and asks nobody.
 //
 // # Why start and stop are verbs rather than two more --in flags
 //
-// The flag works above because each of those three is an operation the
+// The flag works above because each of those four is an operation the
 // shell already has somewhere else, and --in only says which container
 // to perform it in.  Starting a script has no counterpart: a script in
 // inventory does not run and cannot be made to, because an object is the
@@ -119,9 +120,10 @@ var insideCommands = map[string]*command{
 	},
 }
 
-// insideObject resolves what --in named, and says so in the error when
-// it is not there: a mistyped object name and an empty object are very
-// different answers to "why did nothing happen".
+// insideObject resolves the object a command works inside -- what --in
+// named, or the first word of drop, fetch, start and stop -- and says so
+// in the error when it is not there: a mistyped object name and an empty
+// object are very different answers to "why did nothing happen".
 //
 // wait is seconds to let the region describe itself, and zero is the
 // thirty waitFor gives everything else that looks something up.
@@ -606,10 +608,10 @@ func (sh *Shell) setRunning(ctx context.Context, out io.Writer, args []string, r
 	for _, it := range scripts {
 		word, agreed, err := sh.changeScript(ctx, obj, it, running, o.Wait, changed)
 		if err != nil {
-			// The circuit rather than the script: nothing after this
-			// would go out either, so stopping says so once instead of
-			// once per script.  What has already been decided is
-			// printed above and stands.
+			// The circuit or the command rather than the script:
+			// nothing after this would go out either, so stopping says
+			// so once instead of once per script.  What has already
+			// been decided is printed above and stands.
 			return err
 		}
 		if !agreed {
@@ -683,10 +685,11 @@ const scriptAsk = 3 * time.Second
 // and may be between rounds -- see sl.ScriptRunning -- so treating one
 // slow answer as a verdict would turn a working start into a refusal.
 //
-// The error is for the circuit going away, which is not this script's
-// business and ends the command.  A script that will not change state is
-// not an error here: it is a word in the listing, so that the scripts
-// after it are still asked.
+// The error is for the circuit going away or the command being given up
+// on, neither of which is this script's business, and it ends the
+// command.  A script that will not change state is not an error here:
+// it is a word in the listing, so that the scripts after it are still
+// asked.
 func (sh *Shell) changeScript(ctx context.Context, o *sl.Object, it sl.TaskItem,
 	running bool, wait int, changed string) (word string, agreed bool, err error) {
 

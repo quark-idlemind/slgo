@@ -12,7 +12,7 @@ accept:section:Examples	accept	section	Examples	The only offer waiting:\n\n    a
 accept:example:3	accept	example	Examples	accept Example
 accept:example:4	accept	example	Examples	cd Objects
 agents	agents	line		agents\nthe sessions this daemon holds, oldest first; * is the default\nhelp groups: avatars\nkeywords: avatars accounts profiles bots sessions logged in running which avatar daemon list
-agents:intro	agents	intro		`agents` is the listing `login` and `logout` name something out of.\nThe first column is the profile -- the name those two take -- not the\navatar's own name beside it.\n\n    agents\n\nSessions the daemon holds come first, oldest first.  A session that\nwas stopped sits at the end of that group rather than keeping its\nplace.  Profiles the daemon knows of but is not holding follow, in\nthe order it lists them.  The order is not alphabetical.\n\nA star marks the session a command that names no avatar drives: the\nfirst one the daemon still holds.  A session this shell is attached\nto says so at the end of its line.  The two are often the same and\ndo not have to be.\n\nA shell that logged in for itself has no daemon to ask, and prints\nthe one avatar it has.
+agents:intro	agents	intro		`agents` is the listing `login` and `logout` name something out of.\nThe first column is the profile -- the name those two take -- not the\navatar's own name beside it.\n\n    agents\n\nSessions the daemon holds come first, oldest first.  A session that\nwas logged out sits at the end of that group rather than keeping its\nplace; one the grid ended keeps it.  Profiles the daemon knows of but is not holding follow, in\nthe order it lists them.  The order is not alphabetical.\n\nA star marks the session a command that names no avatar drives: the\nfirst one the daemon still holds.  A session this shell is attached\nto says so at the end of its line.  The two are often the same and\ndo not have to be.\n\nA shell that logged in for itself has no daemon to ask, and prints\nthe one avatar it has.
 agents:example:1	agents	example		agents
 agents:section:What stands where the region would	agents	section	What stands where the region would	A session that is up shows the region its avatar is in.  Anything\nelse shows its state instead, with the reason after it where there\nis one:\n\n    connecting  a login in flight, or a session being brought back\n    configured  a profile exists and nothing has asked for it\n    stopped     down and staying down; the reason says which sort\n    failed      a login was tried and refused; the detail says how\n\n`connecting` is two situations.  A login that has not finished\nreads `logging in`.  A session the daemon holds and has lost the\ncircuit to shows the error as its reason; the supervisor is already\nreconnecting, so waiting is the right thing to do about either.\n\n`stopped` is three.  `logged out` is somebody having asked here.\nAnything beginning `ended by the grid` is the avatar having been\nthrown off -- commonly because it is logged in somewhere else --\nand the grid's own words follow.  The third is an error the daemon\nwill not retry, with no phrase in front of it.\n\nConfigured, stopped and failed are what the listing is for.  Told\nonly whether a session is connected, a profile nobody has ever\nstarted and an avatar somebody logged out an hour ago look identical\n-- and the second is not a fault, it is somebody using that avatar\nin a viewer.
 agents:section:The star	agents	section	The star	The default moves only when the session it is on goes away.\nBringing another avatar up does not move it, attaching does not\nmove it, and a session that drops and is reconnected keeps its\nplace.  An avatar that has been logged out gives up its place, so\nlogging it back in puts it at the end of the queue rather than at\nthe head.\n\nA session shown as connecting keeps the star -- a reconnection never\ncost it its place, and a bare command goes to it and waits.  A\nprofile the daemon holds no session for is never starred.  When\nevery session has been stopped there is no star at all.
@@ -1611,7 +1611,7 @@ empty	54,12,69,4,78*2,25*3,47*3,80*3,36,48*2,9,1,3,35,8,13,28,38,19,11,12,35,55*
 emptytrash	135,1*2,1,3,482,17
 enabl	242,4,459
 encod	862
-end	12*2,2,1,7*2,5,25,22,27,15,33,4,21,21,2,4,2,3,4,11,1*3,2,29,16,1,1,18,1,2,6,15,5,4,1,24,2,20*2,11,8,37,26,2,22,26,7,40,35,2,1,2*3,1,1,36,3,12,6,14,1,30*2,1,24,2*2,9,11,10,22,17,18,2*2,1*3,39,2,1*5,1
+end	12*3,2,1,7*2,5,25,22,27,15,33,4,21,21,2,4,2,3,4,11,1*3,2,29,16,1,1,18,1,2,6,15,5,4,1,24,2,20*2,11,8,37,26,2,22,26,7,40,35,2,1,2*3,1,1,36,3,12,6,14,1,30*2,1,24,2*2,9,11,10,22,17,18,2*2,1*3,39,2,1*5,1
 energy	361*2,8
 engineer	270,1
 enough	31,357,156,62,43,100,97
@@ -1761,7 +1761,7 @@ great	139
 green	400*2,365*2
 greet	501
 greeter	45*3,1*2,1,2*3,61,1,3,46,1,6,13,1,172*5,1,2,90,2,22*2,2,1,155*5,4*3,1,1,1,10,1,29*2,2*2,2*2,1,5*2,2,19,1,2,3,12,1,3,2,41,1,12
-grid	4,3*2,7*2,13,10,15,5,9,2,6,42,22,15*2,31,3,8,2,4,2,7,50*4,6,6,5,14,1*4,4*2,1*3,16*2,14,4,1,1,4,1*2,23,13,7,12,5*2,1*2,1,1*2,4,6,5,1*3,2*2,1,5,18,9,2,4,5,41,1,4,6,9,24,2,2,1*2,2,5*3,22,1,3,14*2,1*3,4,1,25,16,9*4,4*2,22*3,1,66*2,45*3,1*4,11*3,4,18*10,30,1,3,9,22
+grid	4,3*2,5,2*2,13,10,15,5,9,2,6,42,22,15*2,31,3,8,2,4,2,7,50*4,6,6,5,14,1*4,4*2,1*3,16*2,14,4,1,1,4,1*2,23,13,7,12,5*2,1*2,1,1*2,4,6,5,1*3,2*2,1,5,18,9,2,4,5,41,1,4,6,9,24,2,2,1*2,2,5*3,22,1,3,14*2,1*3,4,1,25,16,9*4,4*2,22*3,1,66*2,45*3,1*4,11*3,4,18*10,30,1,3,9,22
 ground	393,4,1*3,5,50,69*2,19,133*2,1*2,1,3,12,8*3,33,1,66*2,8*2,34,12,27*4,4
 group	0,11,1,5*3,1,7*5,1,4,7,7,9,9,6,3,8,5,2,11,12,8,9,1,8,7,10*2,1,6,11,13,8,11,9*4,1*6,1,1*10,1,1*3,1*2,1*5,1,1,1,4*5,1*4,2*4,1,4,5,10,4,4,9*4,1*5,3,1*7,1,1*7,1*3,1,1*3,1,25,8,8,9,6,11,6,11,13,9,3,7,18,11,7,11,11,12,12,1,2*3,1*4,2,1,3*8,2*2,3,7,4,7,4,3,11,3*3,1*2,4*2,4,2,1,1,1*5,6,1*3,1*2,4,2*2,3,19,7,6,9,10,7*5,2,2,19,8,7,19,14,7,10,9,9,9,13,6,19,17,28,8,8,1*3,4,4,18,7,11,1*2,4*6,1,1,7
 grow	330,71,348*2
@@ -1880,7 +1880,7 @@ jpg	560,1,13,1
 json	117*2,1,2,3*2,1,1,117*3,306,43*2,1*2,1,4*3,1,1,11*2,1*2,1,3,4*2,1,147
 judg	330
 jump	361,422,4
-keep	12,3*2,42,46,9,31,12,7,12,21,43,51,8,21*2,29,22,37,13,1,9,24,16,12*2,1,4,23*3,104,1,2,48*2,1,3,21,8,3,94*2,26,7*2,9*3
+keep	12*2,3*2,42,46,9,31,12,7,12,21,43,51,8,21*2,29,22,37,13,1,9,24,16,12*2,1,4,23*3,104,1,2,48*2,1,3,21,8,3,94*2,26,7*2,9*3
 kept	66,121,143,40*2,74*2,9,27,1*2,1,13,340,1*3,44
 key	63*2,3*5,52,37*2,29,2,17*4,9*2,2,2*2,1*3,40,15,1,29,3,2*2,20,5*2,1*3,2*4,3,1,35,14*2,41*2,55*4,6,11,18,10*2,21*3,5*2,33,4,26,44,1,5,7,3,4*2,2*3,8,57*3,3,19,35,10,4*3,61*2,3,3,8*3,1*2
 keyboard	62,1,4
@@ -1953,7 +1953,7 @@ load	100,3,6,554
 local	62,1*2,460*2,117*2,8,1,16,3*2,5,6*2,67,3,79,49
 locat	170
 location	276,21,303,276
-log	11,1,2*4,1*2,16,10,59,3,80,1,86,39,1*2,3*3,1*2,3*3,1*2,2,2*2,1*4,4,93,102,64*3,78*2,1*5,50,109*4,2,1*2,1,8*2,22,1,21,15,2
+log	11,1*2,2*4,1*2,16,10,59,3,80,1,86,39,1*2,3*3,1*2,3*3,1*2,2,2*2,1*4,4,93,102,64*3,78*2,1*5,50,109*4,2,1*2,1,8*2,22,1,21,15,2
 login	7,5,2*3,2,24,50,1,9*5,3*2,84,27*2,3,55,37,1*3,1,1*2,1*3,2*2,1,1,1*4,6,3,89,1,2*6,1,64,339,1*3,3*2,1*2,8,37,8,12*3,4*2
 logout	12,4,296,1,2,2,1*4,1,5*2,1,95,166,4,239
 long	89,17,15,44,77,46,16,9,17,40,12*2,1,69,1,15,13,1,1,53,58,9,1,1,59,17,1,1,2,12,11,3,9,6,11,42,14,12,13,30,13,30
@@ -2111,7 +2111,7 @@ oldest	11,1,337,3,1,127,141,4,2,1*2,1*2,3,2,202
 ollama	242*4
 omit	40,551,1
 onc	27*2,3,1*2,3,66,1,1,1,1,6,116,3*2,9,19,58,7,48*2,47*2,3,24,9,31,25,39,38,10,18,8,40,37,12,8,46,1,17,21,2*3,21,1,9
-one	1*4,4*3,3,4*2,2,2*2,1,1*4,4,3,6*7,4,5*5,1*3,3,1*6,7*4,2,2*3,1*2,6*2,2*2,1*4,1,1*4,1*2,3*3,6*2,1,1*2,4,8*3,8*6,1*5,5*2,1,3*6,2,1,3*2,2,2,2,5,2*2,7,3*2,4,6,4*4,7*3,2*2,4,7*3,1*3,4,8*2,2,13,2*5,3*2,4*3,2*3,2*3,3*3,1,4,3,1*2,3*3,5,2,6,5,6*4,3,1,2,1*5,5,1,3,3*2,2,1,1,1*9,7*3,6*2,1,1*6,2*3,1,1*2,1*2,1,3,1*5,3*3,2*2,3,3*3,1*2,4*4,4,5*2,3,3*2,2*2,3,6*2,2,1*3,2,3*3,1*7,2*3,6,6,1,1*2,1*2,4,7,1*3,1*3,2,3*3,5,4,2*2,1*2,3,1*4,1,1,4,1,6*4,2*2,3*2,2*2,1,4*5,2,11*2,1*2,1*3,5,1,1,1*3,1*5,1*3,2,7*2,6*2,5,1*3,2,1*3,2*3,1,2*3,1,6*2,3,2*3,6*3,2,2*2,3*2,2*2,1*2,4*2,4*2,3*3,2,5*2,2,7,4*3,2,1*3,3,2,3*5,1*2,2,4,21,2,3*2,2,1,3*2,3,1*2,1*3,4*3,3,1,1,2*3,3*2,4*2,3,1,3,2,1,1*2,1*2,1*5,1,1,1,8,2*3,3*2,3,1,1,2,1*3,1*2,2,1*3,2,3*3,1,2*4,1*2,1*5,2,7,4*4,5*4,5,2,1,1,3,3*2,7,3*2,1,1*2,8,5*2,4*4,2,3*6,2,1,4*2,6*2,2*3,1*2,3*2,2,11*5,1*3,1*3,15,1*2,4,1,6*2,1*2,4,5*3,1*3,1*2,1,1*2,1*2,6,1*3,3*2,1*8,3,1*6,3*4,1*3,4*2,3*2,1*3,1*3,14,1*2,1,6,3,4,2,1,1*4,1*4,2*2,1,6,2,4,2,3*2,2*2,1,1,2*3
+one	1*4,4*3,3,4*3,2,2*2,1,1*4,4,3,6*7,4,5*5,1*3,3,1*6,7*4,2,2*3,1*2,6*2,2*2,1*4,1,1*4,1*2,3*3,6*2,1,1*2,4,8*3,8*6,1*5,5*2,1,3*6,2,1,3*2,2,2,2,5,2*2,7,3*2,4,6,4*4,7*3,2*2,4,7*3,1*3,4,8*2,2,13,2*5,3*2,4*3,2*3,2*3,3*3,1,4,3,1*2,3*3,5,2,6,5,6*4,3,1,2,1*5,5,1,3,3*2,2,1,1,1*9,7*3,6*2,1,1*6,2*3,1,1*2,1*2,1,3,1*5,3*3,2*2,3,3*3,1*2,4*4,4,5*2,3,3*2,2*2,3,6*2,2,1*3,2,3*3,1*7,2*3,6,6,1,1*2,1*2,4,7,1*3,1*3,2,3*3,5,4,2*2,1*2,3,1*4,1,1,4,1,6*4,2*2,3*2,2*2,1,4*5,2,11*2,1*2,1*3,5,1,1,1*3,1*5,1*3,2,7*2,6*2,5,1*3,2,1*3,2*3,1,2*3,1,6*2,3,2*3,6*3,2,2*2,3*2,2*2,1*2,4*2,4*2,3*3,2,5*2,2,7,4*3,2,1*3,3,2,3*5,1*2,2,4,21,2,3*2,2,1,3*2,3,1*2,1*3,4*3,3,1,1,2*3,3*2,4*2,3,1,3,2,1,1*2,1*2,1*5,1,1,1,8,2*3,3*2,3,1,1,2,1*3,1*2,2,1*3,2,3*3,1,2*4,1*2,1*5,2,7,4*4,5*4,5,2,1,1,3,3*2,7,3*2,1,1*2,8,5*2,4*4,2,3*6,2,1,4*2,6*2,2*3,1*2,3*2,2,11*5,1*3,1*3,15,1*2,4,1,6*2,1*2,4,5*3,1*3,1*2,1,1*2,1*2,6,1*3,3*2,1*8,3,1*6,3*4,1*3,4*2,3*2,1*3,1*3,14,1*2,1,6,3,4,2,1,1*4,1*4,2*2,1,6,2,4,2,3*2,2*2,1,1,2*3
 onlin	183*2,1*2,2*2,1,151
 onlooker	827
 only	1*2,4*2,3,6,1,10,6*3,2,5,14,4*2,1,15,8,4,3*2,13*2,13,3,13,24,7,2,5,2,4,1,5,7,15,2,7,4,24,15,6,1*2,6,6*3,5*2,14,1*2,1,1,3*3,17,4,2,18,1,8,1,5,2,26,2*3,13,3,1,5,11*2,3*2,23,2,9,1,27,9,3,1,10,1,5,11,1,23,3,2,3*3,1,1,12,1,1,1,25,1*2,21,1,8*2,1,20,15*2,4*2,16,2,15,7*2,12,10,5*2,5,8,48*2,15,6,4,1*2,7,10,14,11*2,6,12*2,7,4*2,2*2,1*4,3
@@ -2132,7 +2132,7 @@ original	627,100,5,3,3,2
 other	1,44*2,7,20,8,3*2,18,15*2,13,7,17,7,11,8,8,5,9,2,2,5,19*2,5,8,18,10,1,2,50,16,14,24,16*2,13,25,20,2,22*3,26*2,2,2*2,3,1,1,1,4,7,6*2,1,19*2,5*2,7,41,10,2*2,3,13*2,1,17,2,4,10,3,23,12,5,3,6,3,3,3,9,15,57,24,22,29,3,1,2,7,4
 otherwis	54,36,63,61,113,10,61,2,69,21,91,68,12*2,158,22,56
 our	155
-out	12,2*2,1,12*2,4*4,21,4,1,6,3*2,2,1,5,4,13*3,1*4,14,4,8,2,2*2,1,1,3,3,1,8,1,13,6*2,1*2,2*2,2,30,22,22,9,6*2,4,12,3,18,2*3,1*2,1*3,3,1*2,15,4*2,1*2,2,2*2,1*2,7*2,5,4,17,31,11,2,20,11,72,1,25,8,4,1*3,6*2,7,11,17,3,9,2*2,1,6,1,1,1,17,15,9,1*2,3,1,13,23,4,18,6,7,3,1*2,2,3,16,18,14,13*4,1,11,2,2,10*2,4*3,3*2,1,7,16,17,3*2,2
+out	12*2,2*2,1,12*2,4*4,21,4,1,6,3*2,2,1,5,4,13*3,1*4,14,4,8,2,2*2,1,1,3,3,1,8,1,13,6*2,1*2,2*2,2,30,22,22,9,6*2,4,12,3,18,2*3,1*2,1*3,3,1*2,15,4*2,1*2,2,2*2,1*2,7*2,5,4,17,31,11,2,20,11,72,1,25,8,4,1*3,6*2,7,11,17,3,9,2*2,1,6,1,1,1,17,15,9,1*2,3,1,13,23,4,18,6,7,3,1*2,2,3,16,18,14,13*4,1,11,2,2,10*2,4*3,3*2,1,7,16,17,3*2,2
 outer	63
 outfit	52*3,26,13,1,5*3,1,2,1,2*3,3,1*2,9*3,57,1*3,2,1,3,21*3,9*3,137*4,4,98,99*3,91,8*3,218,6,2*2,17,3*4,1*3
 outliv	52,64,85,9,210,128,99,246
@@ -2522,7 +2522,7 @@ step	75,163,602,39
 still	1,11,53,3*2,4,19,13,18,33,1,32,2,2,5,19,5,68,4*3,4*3,15,74,1,1*2,11,4,1,15,1,33,27,1,3,25*2,13*2,38,30,14,10,15,1,13,18,2,2,17,17,1,17,16,2*2,30,13,16,11,15,15*2,1*2,26*2,18,6,1,6*2,3,1*3
 stomach	868
 stood	289*2,143,164,103,40
-stop	12,2*3,1,12,89,33,72*2,1*6,30,1,37,16,7*2,4,1*2,4,79,23,5,22,19,5*2,40,7,7,21,10,5,6,18,40,14,20,2,26,8,7,3*2,1,2,5,2,4*2,1*3,1,2*2,1*3,2*2,1,7,11,13,43,36,7,3*2,1*5,2,25
+stop	14*3,1,12,89,33,72*2,1*6,30,1,37,16,7*2,4,1*2,4,79,23,5,22,19,5*2,40,7,7,21,10,5,6,18,40,14,20,2,26,8,7,3*2,1,2,5,2,4*2,1*3,1,2*2,1*3,2*2,1,7,11,13,43,36,7,3*2,1*5,2,25
 stor	195,2,375
 storey	399
 straight	112,227,488,14,9,34

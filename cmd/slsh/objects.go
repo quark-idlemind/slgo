@@ -1,8 +1,8 @@
 package main
 
-// Moving things and moving about: giving inventory away, taking what is
-// offered, duplicating an item, going somewhere, and the sessions the
-// daemon holds.
+// Moving things and moving about: giving inventory away, duplicating an
+// item, moving a rezzed object, going somewhere, the sessions the daemon
+// holds, and the objects benchmarks run in.
 
 import (
 	"context"
@@ -192,10 +192,10 @@ type tpOptions struct {
 //
 // The other end of the argument is what waiting costs.  A shell that
 // inherited the ninety would sit silent for a minute and a half over an
-// offer the grid was never going to answer, and the third failure --
-// a request answered with nothing whatever -- is exactly the one a
-// person meets when they accept a second lure while the first is still
-// under way.
+// offer the grid was never going to answer, and the third of
+// sl.Teleport's failures -- a request answered with nothing whatever --
+// is exactly the one a person meets when they accept a second lure
+// while the first is still under way.
 const shellTeleportTimeout = 30 * time.Second
 
 // tpMiddle is where a teleport with no position lands.
@@ -222,13 +222,15 @@ var tpMiddle = msg.Vector3{X: 128, Y: 128}
 //
 // # Which of the two a line means
 //
-// Three numbers and nothing else is a position here, and it stays the
-// cheap thing it has always been: no map lookup, no circuit moving under
-// the session, nothing but the request and waiting for the position to
-// agree.  Anything else is a region name, joined with spaces for the
-// reason regions joins them -- a region name has spaces in it and
-// quoting one at a prompt is a thing to have to remember -- and the last
-// three words are the position when all three are numbers.
+// Three numbers and nothing else is a position in this region's metres,
+// and one inside this region stays the cheap thing it has always been:
+// no map lookup, no circuit moving under the session, nothing but the
+// request and waiting for the position to agree.  One outside it is a
+// teleport to the region that owns it; see tpNearby.  Anything else is a
+// region name, joined with spaces for the reason regions joins them -- a
+// region name has spaces in it and quoting one at a prompt is a thing to
+// have to remember -- and the last three words are the position when all
+// three are numbers.
 //
 // So a region whose name ends in three numbers cannot be reached from
 // here.  That is written down in the man page rather than defended
@@ -847,10 +849,11 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 // the daemon's rule (Server.defaultLocked) is "the first session I hold
 // that was not deliberately stopped" and the two halves of that are
 // both readable here: the listing arrives in the daemon's own order,
-// held sessions first and stopped ones at the end of that group, and
-// only a held session is ever HOSTED or CONNECTING.  CONFIGURED and
-// FAILED are profiles the daemon holds no session for at all, so they
-// can no more be the default than a name it has never heard of.
+// held sessions first in the order they came up, a logged-out one at
+// the end of that group, and only a held session is ever HOSTED or
+// CONNECTING.  CONFIGURED and FAILED are profiles the daemon holds no
+// session for at all, so they can no more be the default than a name it
+// has never heard of.
 //
 // CONNECTING is the one that matters and it was the bug: a circuit that
 // dropped and is being rebuilt never costs a session its place, so the
@@ -897,8 +900,9 @@ func cmdLogin(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	// deliberate logout -- slbotd asks without force for exactly that
 	// reason and is exactly what should be refused.  But a person
 	// typing an avatar's name is not a daemon retrying: it is the
-	// deliberate act, and slgod's own protocol says a stopped session
-	// "comes back only when asked for by name", which is what this is.
+	// deliberate act, and slgod's own protocol says a stopped one
+	// "should not be started unless asked for by name", which is what
+	// this is.
 	//
 	// The refusal warns to check nobody is using the avatar first, and
 	// that warning survives the change because it was never about

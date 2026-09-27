@@ -5,8 +5,8 @@ avatar's own name beside it.
     agents
 
 Sessions the daemon holds come first, oldest first.  A session that
-was stopped sits at the end of that group rather than keeping its
-place.  Profiles the daemon knows of but is not holding follow, in
+was logged out sits at the end of that group rather than keeping its
+place; one the grid ended keeps it.  Profiles the daemon knows of but is not holding follow, in
 the order it lists them.  The order is not alphabetical.
 
 A star marks the session a command that names no avatar drives: the
