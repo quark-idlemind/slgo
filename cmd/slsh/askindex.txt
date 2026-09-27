@@ -239,7 +239,7 @@ how:example:1	how	example		how do I make where I am standing my home
 how:option:-i, --index	how	option	-i, --index	Answer from the index alone, without asking the model, even when one\nis set up.  Quicker, and the same answer `how` gives when there is no\nmodel to ask.
 how:option:-r, --rejected	how	option	-r, --rejected	Also list what the model suggested that the checks refused, each with\nthe reasons.  Those lines are printed quoted and under a heading that\nsays they are not commands; they are there to show what was thrown\naway, not to be typed.
 how:section:How it answers	how	section	How it answers	`how` looks the question up in an index of every command's usage\nline, description and man page, built into slsh when it was compiled,\nso it is never out of step with the commands.  The commands that\nmatch best are shown to a language model, with the parts of their\npages that matched, and it is asked which of them does what was asked.\n\nWhat the model says is then checked before any of it is printed:\n\n- the line must run a real command, with flags that command takes,\n  parsed the way the shell would parse it when typed;\n- where a command takes a word from a list slsh keeps -- a setting's\n  name for `set`, a rating for `maturity`, a group for `help` -- the\n  word must be on that list, or be the capitalised placeholder the\n  usage line writes, like NAME;\n- the quotation must be found, word for word, in that command's man\n  page, usage line or description.\n\nA suggestion that fails any of these is dropped.  If every suggestion\nwas dropped, the model is told why, once, and asked again.  Nothing\nelse the model writes is printed, because nothing checks it; only the\nlines that passed, their reasons and their quotations are.\n\nWhen nothing passes, `how` says plainly that it found no command for\nthat, and names the nearest commands with their descriptions, so you\ncan read their pages yourself.
-how:section:Without a model	how	section	Without a model	With no `how_url` set, with `--index`, or when the server does not\nanswer, `how` says which of those it is and answers from the index\nalone: the best-matching commands, each with its description and the\nexample lines from its own page.  Those are lines a person wrote in\nthe page, not guesses.\n\n    From the index alone (how_url is not set); the commands whose pages match best:\n\n    landmark -- ...\n        landmark --home\n        ...
+how:section:Without a model	how	section	Without a model	With no `how_url` set, with `--index`, or when the server does not\nanswer, refuses, or answers with something that cannot be used, `how`\nsays which of those it is and answers from the index alone: the best-matching commands, each with its description and the\nexample lines from its own page.  Those are lines a person wrote in\nthe page, not guesses.\n\n    From the index alone (how_url is not set); the commands whose pages match best:\n\n    landmark -- ...\n        landmark --home\n        ...
 how:example:2	how	example	Without a model	landmark -- ...
 how:example:3	how	example	Without a model	landmark --home
 how:section:Setting up a model	how	section	Setting up a model	Any server that speaks the OpenAI-style `/v1/chat/completions`, such\nas llama-server or Ollama, running a small model.  Five settings, set\nwith `set` like any other:\n\n    how_url        where the server is, with http:// in front; empty is no model\n    how_model      the model's name; llama-server ignores it, Ollama needs it\n    how_slot       a llama-server slot to use; empty is whichever is free\n    how_timeout    how long to wait, like 45s; empty is two minutes\n    how_extra      a JSON object added to every request\n\nFor Ollama on the same machine, with a model it has pulled:\n\n    set how_url http://127.0.0.1:11434\n    set how_model qwen3.5:4b\n\n`how_extra` is for what one model needs and another would refuse.  A\nmodel that reasons at length before it answers should be told not to.\nUnder Ollama, for Qwen3 and Qwen3.5:\n\n    set how_extra '{"reasoning_effort": "none"}'\n\nUnder llama-server, whose documentation gives this form:\n\n    set how_extra '{"chat_template_kwargs": {"enable_thinking": false}}'\n\nThe single quotes matter.  The shell takes double quotes off a word\nthe way it does anywhere else, and JSON without its double quotes is\nnot JSON, so `set` would refuse it.\n\nWhich options a model takes is the model's and the server's business,\nso nothing of the kind is built in.  The slsh guide says which models\nwere measured, and how to share a llama-server that slbotd uses.
@@ -1212,7 +1212,7 @@ amount	25*3
 animation	45,654*2,181
 announc	477*2,1,3,3*2,340,69
 another	1,5*2,9,12*2,45,3,3,5*2,1,1,2,5,9,37,5,30,32,3,1,13,4,16,11,10,1,28,1,1,28,71,24,23,4,10,2,13,36,1,2,14,34,1,54,5,12*2,35,19,9,1,7,34,13,2,35*3,4,1,11,6*2,1,18,4,8,1*3,14,1,19,9
-answer	1*3,3*2,2*3,1,1*2,9*2,1*4,1,1,1,1*4,1,1*4,1*6,1,1*2,1*4,1,2*2,9,1,11,11,2,15*2,3*2,1,3,16,1,6,2*2,4,6,7,24*2,13,7,11,4,8,5,4*2,1,4,2,6,10,1,1,4*2,2*2,2,1*2,3,11*2,4,2*2,1,5,4*3,1,2,2,1,18,4*2,8,13,9,6,4*3,1,40*2,3*3,12,5,18*3,1,2,10*3,13*2,1,11,2,19*2,11,9,6,2*3,4,1*4,1*2,1*2,1*2,10,1*2,7,9,10,2*2,3,1,1*2,31,2*2,15,2*2,1,1,22,18,6,9,1,3*3,13,2,1,2,25,1,1*2,4*2,13*3,1*2,4*2,16*2,17*2,5,11,13,9,1*3,1*2,4,6*2,4*2,7,1,3,1*4,3*5,1*4,1*5,1,21,21*2,1,6,9,1
+answer	1*3,3*2,2*3,1,1*2,9*2,1*4,1,1,1,1*4,1,1*4,1*6,1,1*2,1*4,1,2*2,9,1,11,11,2,15*2,3*2,1,3,16,1,6,2*2,4,6,7,24*2,13,7,11,4,8,5,4*2,1,4,2,6,10,1,1,4*2,2*2,2,1*3,3,11*2,4,2*2,1,5,4*3,1,2,2,1,18,4*2,8,13,9,6,4*3,1,40*2,3*3,12,5,18*3,1,2,10*3,13*2,1,11,2,19*2,11,9,6,2*3,4,1*4,1*2,1*2,1*2,10,1*2,7,9,10,2*2,3,1,1*2,31,2*2,15,2*2,1,1,22,18,6,9,1,3*3,13,2,1,2,25,1,1*2,4*2,13*3,1*2,4*2,16*2,17*2,5,11,13,9,1*3,1*2,4,6*2,4*2,7,1,3,1*4,3*5,1*4,1*5,1,21,21*2,1,6,9,1
 anticlockwis	143,5
 any	34,84,44,17,18,24,1,16*2,4*2,18,140*2,25,19,34,12,19,6,68,45,21,17,32,17,3,89,20,1,8,5,56
 anybody	67,17,78,104,3,132,15,59,54,10,11,99,47,53
@@ -1351,7 +1351,7 @@ cam	87,13,1,3,93,25,38,95,25,18,55*2,1,141,66,159,21,10,2,16*2,1,1,22
 camera	330*2,165,65,222*2
 cancel	221,45,237
 cancell	149,73,629*2,1
-cannot	31,14,7,20,18,11,15,6,16,35,1*2,27,5,4,59,3*2,19,6,8,8,22,12*2,6,40,6,5,1,20,19,21,4*2,15,6,3,16,13,26,35,13,11,7,1,29,3,15,6,17,16,5,43,45,5*2,9,20,26,5,35*3,3
+cannot	31,14,7,20,18,11,15,6,16,35,1*2,27,5,4,29,30,3*2,19,6,8,8,22,12*2,6,40,6,5,1,20,19,21,4*2,15,6,3,16,13,26,35,13,11,7,1,29,3,15,6,17,16,5,43,45,5*2,9,20,26,5,35*3,3
 cap	25,12,1*2,1,3*2,1,110,4,174,40,350
 capability	37*2,1*3,2*2,1,330,48,296,6
 capital	234
@@ -2298,7 +2298,7 @@ redraw	524
 reduc	666
 referenc	360
 reform	118,4,1*2,2,466,1*2,1,4*2,2,20,148
-refus	1,4,1,8,4*2,4,2,1,6,3,11*3,7,4,1*2,9,6,7*2,1*3,7,3,2,18*2,6,13*2,20*2,4,3,4,2*2,22,8,5,4,2*2,7,4,3,1,10,9,5*2,17,1*2,6,6*2,16,2,2*2,2*2,2,1*2,1,7*2,7,1*3,8,1,31*2,28,16,13,7*2,5,2,5*3,2,11,2*4,7,1,17,5,1*2,26,3,6,10,9,9,4*2,2,1,3,12,19,16,11,1,4,2,8,7*2,1,1,11,6,2,2,10,2,3*2,13*2,3*3,2,7,42,15,14,3,6,8,4,11,1,9*2,2,1,1,12,7,1,9,4,10*2,8,2,7,2*3,11
+refus	1,4,1,8,4*2,4,2,1,6,3,11*3,7,4,1*2,9,6,7*2,1*3,7,3,2,18*2,6,13*2,20*2,4,3,4,2*2,22,8,5,4,2*2,7,4,3,1,10,9,2,3*2,17,1*2,6,6*2,16,2,2*2,2*2,2,1*2,1,7*2,7,1*3,8,1,31*2,28,16,13,7*2,5,2,5*3,2,11,2*4,7,1,17,5,1*2,26,3,6,10,9,9,4*2,2,1,3,12,19,16,11,1,4,2,8,7*2,1,1,11,6,2,2,10,2,3*2,13*2,3*3,2,7,42,15,14,3,6,8,4,11,1,9*2,2,1,1,12,7,1,9,4,10*2,8,2,7,2*3,11
 refusal	1,21,30,5*2,17,9,1,3,5,24,37,9,4,29,6,2,7,4*2,39,7,32,2,2,16,1*3,7,1,6,93,9,46,56,11,6,12*2,44,25,12,6,16,3,16*2,51,71,2*2,1,20,43,11,14
 regard	1,37,115,64,144,129,304,97
 region	14*2,13*5,11,2,1*4,4*3,18,11,12,1,2,1,1*2,6,4*2,2*2,1*2,2,3,1,2,5,1,3,1*2,20,1,9,1*5,3*3,1,2,1,5,1*2,22,15,8,10,9,1,29,5,11,1,12*3,1,1*5,6*4,1,3,1*2,2,2,20*3,1*4,3,1,2,5,1,53*2,1,2,2,1*2,1,2,1*2,3*2,1*2,1,3*2,7*4,2,1,8,1*4,8,5,8*4,1*3,1*2,1*6,1*7,4*3,10,21*3,1,5,9,10*2,1*5,3*2,1*3,3*4,1*3,2*3,1,2,1*2,7,5,3*2,9,3,35,1,2,1,1,4*4,1*5,1,2,1,1*3,1*7,1*4,1,1,4*4,2*2,36,14*4,8,8*2,2*2,11,10,1,9,2*3,3,3,9,1*4,2,2,1,12,1,1,13*2,1*3,4,1,5,7,4*5,1*4,6*4,1*12,1*3,1*3,1*3,1*13,3,2*4,1*5,1*3,1,1,1,1*3,5,3,2,12,8*2,1*3,10*4,14,1,3,2,5*3,1*2,2,1,2*3,1*3,1*2,2,4,3*3,4*3,1
@@ -2476,7 +2476,7 @@ sold	289
 solid	760
 somebody	1,13*3,24,25*3,5*2,1,9,2,36,6,7,13,1,6,13,24,1,9,6*2,1*2,3,12,4,4*2,8,22,1,2,1*3,5*2,1*2,3,6,31,7*2,5,3,12,4,2,22,12*2,1*2,7*2,12,5,1*6,1,17,2,10,23*2,41,1,7*2,3,1*2,3,16*2,5*2,6,4,5,5,1,3*2,1*2,1,60,34,14,2,3,14,27,19,5,15,1,1,60*2,17,5,8,1*2,9,1,33,2,2
 someon	184
-someth	1,11,22*2,6,26,2,4,8,7*2,3,13,7*3,2,24,4,2,1,5,5,7*2,43,11*2,39,4,9,26,13,8*2,17,5,21*2,5,37,4,30,1,1,1,1,4,2,1,1,31,19,43,7,1,5,3,65,11,10,10*2,3,1,26,3,10,17,8,16,2,17,56,1,26*2,2,3,11,29*2,11,3*3
+someth	1,11,22*2,6,26,2,4,8,7*2,3,13,7*3,2,24,4,2,1,5,5,7*2,43,11*2,25,14,4,9,26,13,8*2,17,5,21*2,5,37,4,30,1,1,1,1,4,2,1,1,31,19,43,7,1,5,3,65,11,10,10*2,3,1,26,3,10,17,8,16,2,17,56,1,26*2,2,3,11,29*2,11,3*3
 sometim	749,50
 somewher	14,13,1,28,10,148,63*2,13*2,7*2,16,18,215,55,15,49,20,6,10,93,5,5,1,33,12,30
 soon	27
@@ -2688,7 +2688,7 @@ upload	38,114,1,39*2,271,96*2,1*2,6,8,66
 upper	868*3
 uri	828*3
 url	37,3*2,1*2,198*2,3*2,1
-us	14,73,107,16,43,60*2,8,90,104,81,66,165,53
+us	14,73,107,16,29,14,60*2,8,90,104,81,66,165,53
 usabl	40,80
 usag	129,96,13*3,145,3,66,161
 use	38,27,36,26,26*2,33,56*2,5,73,67,12,12,8,86,91,19,64,3,16,11,19,42,57,59,12

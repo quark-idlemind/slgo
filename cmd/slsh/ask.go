@@ -35,7 +35,8 @@ package main
 //
 // # Without a model
 //
-// No how_url set, --index, or a server that does not answer: the
+// No how_url set, --index, or a model that does not answer, refuses,
+// or answers with something that cannot be used (askWhyNoModel): the
 // commands the index found, each with its brief and the example lines
 // from its page, which are safe to print because a person wrote them.
 // The first line says which mode it is and why, so that an answer from

@@ -34,14 +34,14 @@ package main
 // correct this one by.  The budget is small because the models this is
 // for are small, and small models are generally reported to use a long
 // context worse than a short one well before their window is full --
-// the usual expectation, not something measured here; the eval in phase
-// 2 is where the number gets tested.  The order things are thrown away
-// in matters more than the number.  Excerpts go first, from the command the
-// index liked least upwards, since the index's ranking is the only
-// opinion there is about which of them the answer is in; then, if even
-// the bare usage lines will not fit, whole commands from the bottom.
-// The top command always stays, with as much of its first excerpt as
-// fits.
+// the usual expectation, not something measured here; the model eval
+// (askeval_model_test.go) is where the number gets tested.  The order
+// things are thrown away in matters more than the number.  Excerpts go
+// first, from the command the index liked least upwards, since the
+// index's ranking is the only opinion there is about which of them the
+// answer is in; then, if even the bare usage lines will not fit, whole
+// commands from the bottom.  The top command always stays, with as much
+// of its first excerpt as fits.
 
 import (
 	"bytes"
@@ -53,7 +53,8 @@ import (
 )
 
 // askCandidate is one command the index offered, in the words the model
-// is shown.  Phase 2 converts the index's hits into these, best first.
+// is shown.  askCandidatesFrom converts the index's hits into these,
+// best first.
 type askCandidate struct {
 	Name     string       // command name
 	Usage    string       // usage line as usageLine composes it
@@ -180,7 +181,8 @@ func askMessages(question string, cands []askCandidate) ([]llm.Message, []askCan
 // structure.
 //
 // The brief is fenced the same way, on lines of its own, and the label
-// over an excerpt says "manual" and no more.  Both are for the quote.
+// over an excerpt says "manual" and its heading, and no more.  Both are
+// for the quote.
 // With the brief on its "description:" line and each excerpt under
 // "from its manual, Options:", the smaller models quoted across the
 // joins -- "put on everything the Current Outfit folder names that is
