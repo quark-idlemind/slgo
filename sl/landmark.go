@@ -25,19 +25,19 @@ package sl
 // # The two uuids, and why one of them is dangerous
 //
 // An inventory item has an ITEM id and an ASSET id, and everything in
-// this file wants the asset one.  Measured on Agni 2026-08-18: the item
-// id sent to the grid as a landmark is answered with perfect silence --
-// no start, no progress, no refusal, waited out to twelve seconds --
-// and so is a uuid that is nothing at all.  There is nothing to catch
-// and no error to report, so the calls here name the parameter `asset`
-// and say it again in every comment.
+// this file wants the asset one.  The item id sent to the grid as a
+// landmark is answered with silence, and so is a uuid that is nothing
+// at all.  There is nothing to catch and no error to report, so the
+// calls here name the parameter `asset` and say it again in every
+// comment.
 //
 // The one wrong id that is not silent is the null one: the grid reads
-// it as HOME and the avatar goes there in about a second.  So a zero id
-// arriving at GoTo through a nil map, an unset field or an item whose
-// asset the simulator did not name would move the avatar somewhere,
-// convincingly, and call it success.  GoTo refuses it; GoHome is the
-// deliberate way to ask.
+// it as HOME and the avatar goes there.  So a zero id arriving at GoTo
+// through a nil map, an unset field or an item whose asset the
+// simulator did not name would move the avatar somewhere, convincingly,
+// and call it success.  GoTo refuses it; GoHome is the deliberate way
+// to ask.
+// Why: doc/history/landmark.md#a-wrong-id-is-silence
 
 import (
 	"context"
@@ -309,16 +309,10 @@ func (w *Session) MakeLandmark(ctx context.Context, name, desc string) (*Item, e
 // called is what to call the destination when one of those errors has
 // to be written, and it is what the CALLER calls it -- an inventory
 // name somebody typed -- because nothing the grid knows about a
-// landmark is a thing a person would recognise.  Stage 3 met the
-// alternative on Agni: a refusal that named the asset id read
-//
-//	the grid refused the teleport: the teleport to landmark
-//	0d9b7e57-...: CouldntTPCloser: "Could not teleport closer"
-//
-// which says "teleport" twice and identifies the destination by a uuid
-// nobody typed and nothing else prints.  Empty falls back to the asset
-// id, which is better than nothing and is all a caller with no name for
-// it has.
+// landmark is a thing a person would recognise, and a refusal naming
+// the asset id reads badly.  Empty falls back to the asset id, which is
+// better than nothing and is all a caller with no name for it has.
+// Why: doc/history/landmark.md#stage-3----live-on-the-grid-run
 func (w *Session) GoTo(ctx context.Context, asset msg.UUID, called string, timeout time.Duration) error {
 	if asset.IsZero() {
 		return fmt.Errorf("sl: GoTo was given the null landmark id, which the grid " +
@@ -426,48 +420,15 @@ func (w *Session) goToLandmark(ctx context.Context, asset msg.UUID,
 // not the same kind of act -- going home is a teleport, and setting it
 // changes something the account keeps until it is set again.
 //
-// # What the grid takes
-//
-// SetStartLocationRequest, carrying a LOCATION ID saying which of the
-// account's start locations is meant, the position, and the direction
-// the avatar is facing.  The region is not named: the field for it is
-// sent empty by Linden Lab's own viewer, with the comment "corrected by
-// sim", and the simulator that receives the message is the region --
-// which is the whole reason home can be set nowhere but where the
-// avatar is standing.
-//
-// There is also a HomeLocation capability, which is what a current
-// viewer uses where a region offers one; it carries the same three
-// fields as LLSD and answers with a success flag rather than with an
-// alert.  It is not used here, because it is not among the capabilities
-// this session asks the seed for -- see agent.DefaultCaps -- and adding
-// it would put a second way of doing one thing in the tree.  The UDP
-// message was answered by Agni on 2026-09-01, so there is nothing to
-// fix; if it is ever stopped, that capability is where to go.
-//
-// # What the grid says back
-//
-// An AlertMessage, and nothing else: there is no reply to this request
-// and no field anywhere that says home moved.  Both voices were
-// measured on Agni on 2026-09-01, one avatar, two parcels, minutes
-// apart:
-//
-//	Home position set.
-//	You can only set your 'Home Location' on your land or at a mainland Infohub.
-//
-// So the sentence is the whole of the answer, and the first of them is
-// the only thing that says it worked.
-//
-// # How anybody knows it worked
-//
-// By going there, which is the only check there is: nothing reads home
-// back, and the alert above is the simulator's word rather than a fact
-// anything can confirm at the time.  Done once, on Agni on 2026-09-01
-// and end to end -- home set in one region, the avatar teleported to
-// another, GoHome from there, and it arrived in the region home had
-// been set in.  That is what says the location id below is the right
-// one, and it is why nothing here reports a home that moved on the
-// strength of having sent a message.
+// Setting it is SetStartLocationRequest: which start location is meant,
+// the position and the direction faced, and no region, since the
+// simulator that receives it is the region -- so home can be set
+// nowhere but where the avatar is standing.  The HomeLocation
+// capability a current viewer prefers is not among those this session
+// asks the seed for (agent.DefaultCaps), and the message is answered.
+// The answer is an AlertMessage and nothing else, and the only check
+// that home moved is going there.
+// Why: doc/home.md
 
 // StartLocationHome is the start location that is home.
 //
