@@ -31,9 +31,9 @@ on a channel of its own, and saying something there is how a shell
 drives one: the object hears the text with this avatar named as the
 speaker, exactly as it would hear a remark made out loud.
 
-A negative channel is the usual choice for a script, because a viewer
-has no way to speak on one, so nothing a passer-by types can set the
-script off by accident.
+A negative channel is the usual choice for a script.  It is not out of
+anybody's reach: a viewer speaks on one the way slsh does, as a script
+dialog reply, so a script listening there hears whoever types to it.
 
 The reach is chat's reach either way.  A negative channel is a private
 word rather than a region-wide one: heard nearby, not heard a hundred

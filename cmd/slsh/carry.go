@@ -19,9 +19,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
@@ -153,8 +155,8 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	if e.Folder {
 		return fmt.Errorf("%s is a folder; place takes one object", args[0])
 	}
-	// The item and not the entry: RezFromInventory sends every field of
-	// the item, its group among them, and an entry has no group.
+	// The item as its folder holds it now: RezFromInventory sends every
+	// field of it, its group among them, as the item's own.
 	it, err := sh.itemAt(ctx, e)
 	if err != nil {
 		return err
@@ -176,10 +178,29 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	// with no group named is refused with a complaint about the land.
 	obj, err := sh.s.RezFromInventory(ctx, it, at, where.ActiveGroup, 0)
 	if err != nil {
+		if obj != nil {
+			// Given up on, and made all the same: nobody else has its id.
+			if derr := dropRezzed(ctx, sh.s, obj); derr != nil {
+				err = errors.Join(err, fmt.Errorf("%s, which was rezzed for it, is still there: %w", obj, derr))
+			}
+		}
 		return err
 	}
 	fmt.Fprintf(out, "%s is at %.0f, %.0f, %.0f\n", obj, at.X, at.Y, at.Z)
 	return nil
+}
+
+// dropRezzed deletes a prim a command rezzed and is not handing back,
+// into the trash as a viewer's delete goes.  On a context of its own,
+// bounded, since a command given up on has a cancelled one.
+func dropRezzed(ctx context.Context, s *sl.Session, o *sl.Object) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	trash, err := s.TrashFolder(ctx)
+	if err == nil {
+		err = s.Delete(ctx, o, trash)
+	}
+	return err
 }
 
 // beside is a metre EAST of the avatar, near enough to reach and clear

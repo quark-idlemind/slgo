@@ -66,7 +66,7 @@ chat	chat	line		chat [WHO]\nenter chat mode; with WHO, in an instant message ses
 chat:intro	chat	intro		chat turns the keyboard over to talking.  Command mode is the outer\none, because a shell is wanted for listing and moving things far more\noften than for conversation, and this is the way in; the escape key is\nthe way back out.\n\n    chat\n\nWith nobody named it enters chat mode on whichever conversation is\ncurrent.  With somebody named -- a name, a key, or a number from the\nlast listing -- it opens the conversation with that person first and\nswitches to it, which is the same thing `im` does when there is nothing\nto say.  Everything after `chat` is the name, not a message.  Naming\nsomebody opens a conversation; `im` with words after the name sends\none.\n\nThe prompt is where the next line will go: `Local` for the region's\nopen chat, or somebody's name for an instant message to them.  A count\nin brackets may stand in front of it, as in `(2) Local>`, and that half\nbelongs to `waiting` rather than to the conversation: it is how many\nthings are waiting for an answer, and it stands in front of the command\nprompt in the same way.
 chat:example:1	chat	example		chat
 chat:section:A half-typed line is put aside, not lost	chat	section	A half-typed line is put aside, not lost	Leaving a mode puts the line being typed aside and brings back the line\nthat was put aside on the way in, so an interrupted sentence is still\nthere afterwards.  Nothing is sent or run by the switch.\n\nThere is one place to put a line rather than one for each mode, and the\nmulti-line answer a text box takes uses it too, so a sentence left half\ntyped in chat can come back at the `1 text>` prompt.  It comes back on\nthe line to be edited, and nothing is sent until it is entered.
-chat:section:What the keys do here	chat	section	What the keys do here	Tab moves to the next conversation, rather than completing a word as it\ndoes at a command prompt, and it does nothing at all while something is\nhalf typed -- moving then would send the line somewhere nobody meant.\nCtrl-C on an empty line returns to command mode rather than leaving the\nshell.\n\nUp and down walk what has been said, which is a history of its own: a\ncommand is never offered at a chat prompt, where it would be said out\nloud rather than run, and a remark is never offered at a command one.\nA line of nothing, a repeat of the line before it, and a line abandoned\nrather than entered are left out.  A line the grid refused is kept,\nsince that is the one most wanted back.\n\nThe history belongs to the shell rather than to the conversation, and\nthat is what makes a line said in the wrong place recoverable: tab to\nthe conversation it was meant for, press up until it comes back, and\npress return to send it there.  What comes back lands on the line to be\nedited, and nothing is sent until it is entered.\n\nThe escape key is what leaves, and slsh takes a key of its own if\nescape is awkward on a particular terminal: `slsh --escape=^G` for one\nrun, or `set escape ^G` to have it remembered.  Escape is read when the\nshell starts, so a setting changed at the prompt is the next shell's\nescape key and not this one's -- `set escape` says so, and says which\nkey is in force.
+chat:section:What the keys do here	chat	section	What the keys do here	Tab moves to the next conversation, rather than completing a word as it\ndoes at a command prompt, and it does nothing at all while something is\nhalf typed -- moving then would send the line somewhere nobody meant.\nCtrl-C on an empty line returns to command mode rather than leaving the\nshell.\n\nUp and down walk what has been said, which is a history of its own: a\ncommand is never offered at a chat prompt, where it would be said out\nloud rather than run, and a remark is never offered at a command one.\nA line of nothing, a repeat of the line before it, and a line abandoned\nrather than entered are left out.  A line the grid refused is kept,\nsince that is the one most wanted back.\n\nThe history belongs to the shell rather than to the conversation, and\nthat is what makes a line said in the wrong place recoverable: tab to\nthe conversation it was meant for, press up until it comes back, and\npress return to send it there.  What comes back lands on the line to be\nedited, and nothing is sent until it is entered.\n\nThe escape key is what leaves, and slsh takes a key of its own if\nescape is awkward on a particular terminal: `slsh --escape=^G` for one\nrun, or `set escape ^G` to have it remembered.  Enter and tab are\nrefused, since chat already takes both for itself.  Escape is read\nwhen the shell starts, so a setting changed at the prompt is the next\nshell's escape key and not this one's -- `set escape` says so, and\nsays which key is in force.
 chat:section:Everything heard is printed in either mode	chat	section	Everything heard is printed in either mode	Arriving chat has nothing to do with what the keyboard is for, so\nremarks, instant messages and notices are printed above whatever is\nbeing typed whichever mode is in force.  Time-stamped, and then one\ncharacter that says which kind of line it is: `<` for heard, `>` for\nsaid, and `*` for a notice.  The first two are the pair that has to be\ntold apart, since a remark and a reply read the same in a column; the\nthird is the shell speaking rather than anybody in the world.
 chat:section:Control characters are shown, not obeyed	chat	section	Control characters are shown, not obeyed	What is heard is somebody else's text, and a terminal acts on the\nescape sequences in whatever it is sent: they can clear the screen,\nwrite over the line that says who spoke, set the window title, or put\nsomething on the clipboard.  So slsh shows every control character in\ncaret notation instead of sending it -- ESC is `^[`, BEL `^G`, DEL\n`^?` -- with `M-` in front for the eight-bit ones, `M-^[` for U+009B.\nThe same goes for everything else the grid names and slsh prints:\navatars, objects, parcels, groups, inventory, the prompt when it names\nsomebody, and the transcript.\n\nA newline is still a line break and a tab still a tab.  A carriage\nreturn on its own would put the cursor back over the start of the\nline, so it is shown as `^M`; one immediately before a newline is\ntaken with it as the one line break it was meant as.\n\nOutput redirected to a file is the one thing left as it arrived, since\na file is what a name is copied out of to be typed back in, and `^[`\ntyped back is not the name.  Such a file is data rather than a screen:\nread it with `less`, which shows control characters rather than\nsending them, and not with `cat`, which sends them.
 chat:section:Examples	chat	section	Examples	Enter chat mode and talk to the room:\n\n    chat\n\nEnter it already talking to somebody:\n\n    chat Example Resident\n\nSee also: `talk` for the conversations tab moves between, `im` for one\nmessage without leaving command mode, and `say` for one remark out\nloud.
@@ -542,7 +542,7 @@ perms:section:What is printed was read back	perms	section	What is printed was re
 perms:section:Examples	perms	section	Examples	Let anybody who gets it copy and modify it, but not pass it on:\n\n    perms --next cm lantern\n\nTake everything back from everyone but the owner:\n\n    perms --group none --everyone none lantern\n\nSee also: `take` and `place`, `give` for handing an item to somebody,\nand `dump` for reading back what an object's masks actually are.
 perms:example:2	perms	example	Examples	perms --group none --everyone none lantern
 place	place	line		place [--at X,Y,Z] PATH|UUID\nput an inventory object into the world, which is what take undoes\nhelp groups: region\nkeywords: rez put out down object from inventory world ground put back set down
-place:intro	place	intro		`place` takes one object out of inventory and puts it into the\nworld.  It is what take undoes: take brings a rezzed object in, place\nputs one back out, and between them an object can be picked up and set\ndown again.\n\n    place Objects/probe\n\nThe argument is an inventory path, relative to the folder the shell is\nin, or the uuid of an item.  A folder is refused: `place` puts out one\nobject, not the contents of a folder.\n\nThe active group matters more than it looks.  A parcel usually grants\n"create objects" to a group rather than to a person, so an avatar with\nthe wrong group active is refused by the land even where it plainly has\npermission, and the refusal talks about the land rather than about the\ngroup.  `group` says which is active, and sets it.
+place:intro	place	intro		`place` takes one object out of inventory and puts it into the\nworld.  It is what take undoes: take brings a rezzed object in, place\nputs one back out, and between them an object can be picked up and set\ndown again.\n\n    place Objects/probe\n\nThe argument is an inventory path, relative to the folder the shell is\nin, or the uuid of an item.  A folder is refused: `place` puts out one\nobject, not the contents of a folder.\n\nThe active group matters more than it looks.  A parcel usually grants\n"create objects" to a group rather than to a person, so an avatar with\nthe wrong group active is refused by the land even where it plainly has\npermission, and the refusal talks about the land rather than about the\ngroup.  `group` says which is active, and sets it.\n\nA `place` interrupted while it waits for the object to appear, which\nthen turns up all the same, puts it in the trash rather than leaving it\nstanding with nothing holding on to it.
 place:example:1	place	example		place Objects/probe
 place:option:--at X,Y,Z	place	option	--at X,Y,Z	Where to put it, in this region.  Without it, a metre east of the\navatar: the avatar's own position with one metre added to X, near\nenough to hand for something that is about to be looked at.  East and\nnot in front -- nothing here asks which way the avatar is facing, so a\nthing put down behind somebody goes down east of them all the same.\n\nTwo or three numbers with commas between them and no spaces.  A pair\nis accepted rather than refused, and the Z that was not given is zero,\nwhich is the bottom of the region and not the height the avatar is\nstanding at.  `rez`'s `--at` is spelt the same and insists on three.
 place:section:One object, and only one	place	section	One object, and only one	`place` takes exactly one argument, and a name with a space in it has\nto be quoted.  Extra words are not a position: `place probe 10 20 30`\nis refused rather than treated as a move.  Moving something already in\nthe world is `move`.
@@ -614,7 +614,7 @@ rez	rez	line		rez [-k] [--at X,Y,Z] FILE\nbuild the object a JSON file describes
 rez:intro	rez	intro		`rez` builds the object a JSON file describes: the prims are made and\nlinked, named and described, and the scripts named in the file are\ninstalled in them.  `dump` is the other direction, and the file each of\nthem reads is the same file.\n\n    rez lantern.json\n\nThe argument is the path of a file describing exactly one object.  A\nfile with several in it is refused rather than built one after another,\nsince what should stand where would then be the file's business and not\nthe command's.  What is built is left standing: an object being built\nis usually about to be looked at, so nothing takes it into inventory.
 rez:example:1	rez	example		rez lantern.json
 rez:option:--at X,Y,Z	rez	option	--at X,Y,Z	Where the root lands; every other prim keeps the vector from the root\nthat the file gave it.  Without it, the positions the file records.\n\nThree numbers with commas between them and no spaces.  Two are refused\nwith a message naming all three.  `place`'s `--at` is the other way\nround: it takes two or three, and fills in a zero for the Z it was not\ngiven, so a pair of numbers that `place` accepts without a word is a\nusage error here.
-rez:option:-k, --keep	rez	option	-k, --keep	Leave what was built standing even if a script will not compile.\nWithout it, a failure removes what it made and says it has: half a\nbuild is prims standing in the region that nobody asked for.  This is\nfor the case where the wreckage is the interesting part.\n\nRemoving a prim is waiting for the region to say it has gone, for up\nto ten seconds.  A prim the region does not say that of may still be\nstanding, and the error names it.\n\nWhat it cannot remove is a prim whose making the region never\nconfirmed, since nothing says which prim that is.  The error then says\nthe prim did not appear.  A rez that is interrupted while the prim is\nbeing looked for is looked for once more, and a prim found then is\nremoved with the rest.
+rez:option:-k, --keep	rez	option	-k, --keep	Leave what was built standing even if a script will not compile.\nWithout it, a failure removes what it made, into the trash, and says it\nhas: half a build is prims standing in the region that nobody asked\nfor.  This is\nfor the case where the wreckage is the interesting part.\n\nRemoving a prim is waiting for the region to say it has gone, for up\nto ten seconds.  A prim the region does not say that of may still be\nstanding, and the error names it.\n\nWhat it cannot remove is a prim whose making the region never\nconfirmed, since nothing says which prim that is.  The error then says\nthe prim did not appear.  A rez that is interrupted while the prim is\nbeing looked for is looked for once more, and a prim found then is\nremoved with the rest.
 rez:section:This is not what everyone means by rezzing	rez	section	This is not what everyone means by rezzing	`Rez` is the word everybody uses for putting an inventory object into\nthe world, and that is `place`.  One word cannot mean both "make what\nthis file describes" and "put back what I took": the first invents an\nobject and the second restores one, and somebody who mixed them up\nwould be told their object was not valid JSON.
 rez:section:Where it lands	rez	section	Where it lands	The file says where each prim goes, in region coordinates.  A file\nwritten for another region names coordinates that land somewhere else\nhere, so `--at` moves the whole thing without the file having to be\nedited: the root lands on the point given, and every other prim keeps\nthe vector from the root that the file gave it.
 rez:section:The group it belongs to	rez	section	The group it belongs to	Every prim is made in the group the avatar is acting as, which is what\na viewer does, so `group` decides it.  That matters for more than\nwhether the land lets it build: on land that runs only its group's\nscripts, a script in a prim of no group was seen reported as running\nand never run.
@@ -652,7 +652,7 @@ say	say	line		say [-c CHANNEL] TEXT ...\nsay one line without leaving command mo
 say:intro	say	intro		say puts one line into open chat without leaving command mode.  `chat`\nis for a conversation, and this is for the single remark somebody wants\nto make in the middle of doing something else.\n\n    say the gate is open\n\nEverything after the flags is what is said, joined with spaces, so\nnothing needs quoting except a word the shell would otherwise take for\nsomething of its own.  It goes out at ordinary speaking volume and is\nheard by whoever is near enough, and the line is printed back marked\nwith where it went -- `Local` for open chat, `channel N` for any other\n-- since nothing else on the screen would show for it.\n\nNothing says whether anybody heard it.  Chat is not acknowledged by\nanything, so a line that went out is the whole of what can be reported,\nand a line the circuit refused is not printed as though it had been\nsaid.
 say:example:1	say	example		say the gate is open
 say:option:-c CHANNEL	say	option	-c CHANNEL	The channel to say it on.  Without it, open chat -- channel zero.  A\nnegative one reaches scripts and carries at most 254 bytes, refused\nrather than truncated.
-say:section:The channel is what a script listens on	say	section	The channel is what a script listens on	Open chat is channel zero and is where people talk.  A script listens\non a channel of its own, and saying something there is how a shell\ndrives one: the object hears the text with this avatar named as the\nspeaker, exactly as it would hear a remark made out loud.\n\nA negative channel is the usual choice for a script, because a viewer\nhas no way to speak on one, so nothing a passer-by types can set the\nscript off by accident.\n\nThe reach is chat's reach either way.  A negative channel is a private\nword rather than a region-wide one: heard nearby, not heard a hundred\nmetres up.
+say:section:The channel is what a script listens on	say	section	The channel is what a script listens on	Open chat is channel zero and is where people talk.  A script listens\non a channel of its own, and saying something there is how a shell\ndrives one: the object hears the text with this avatar named as the\nspeaker, exactly as it would hear a remark made out loud.\n\nA negative channel is the usual choice for a script.  It is not out of\nanybody's reach: a viewer speaks on one the way slsh does, as a script\ndialog reply, so a script listening there hears whoever types to it.\n\nThe reach is chat's reach either way.  A negative channel is a private\nword rather than a region-wide one: heard nearby, not heard a hundred\nmetres up.
 say:section:Examples	say	section	Examples	Say something out loud:\n\n    say the gate is open\n\nStart a script that is listening on a channel of its own:\n\n    say -c -4242 start\n\nSee also: `chat` and `im` for talking to one person rather than to the\nroom, `waiting` for what a script puts up when it wants an answer back,\nand `touch` for the other way of setting one off.
 say:example:2	say	example	Examples	say -c -4242 start
 set	set	line		set [NAME [VALUE]]\nthe settings and their values; "set NAME VALUE" changes one and remembers it\nhelp groups: shell\nkeywords: settings preferences configuration option config change setting value
@@ -665,7 +665,7 @@ set:section:It writes the file, and does nothing else to it	set	section	It write
 set:section:Some of it cannot take until slsh is started again	set	section	Some of it cannot take until slsh is started again	Three settings are used before there is a prompt to type `set` at:\nthe address, because the session was attached through it; the\nprofile, because it says which avatar this is; and the escape key,\nbecause the terminal was already in raw mode reading for it.  A flag\nmay have overridden the file for this run as well.\n\nThey are written to the file all the same, and both the listing and\nthe answer to a change say so outright.  The listing ends their line\nwith `at startup only`, and changing one prints the sentence about\nthe next slsh under it.  The three are `addr`, `agent` and `escape`,\nand they are the only three.\n\nEverything else takes at once.  `set map_ratio 2:1` and then `map`\ndraws the new shape.
 set:section:Where the settings come from and what beats what	set	section	Where the settings come from and what beats what	A flag on the slsh command line beats the file, and the file beats\nthe defaults.  So a shell started with `--escape ^G` is running with\n`^G` whatever the file says, which is the other half of why the\nthree above are left for the next run.\n\nThe names are the names in the file, and the file has always taken\nanother spelling of some of them -- `server` for `addr`, `profile`\nfor `agent`, `prefix` or `prefix_key` for `escape`.  Those still\nload, and `set` answers to them as well: `set server` prints the\nsetting under the name `addr`.\n\nA value a setting will not take is refused, with the setting named,\nand neither the shell nor the file is touched.  The same refusal\nhappens when the file is read at startup, where it stops slsh coming\nup rather than leaving somebody with a setting that silently does\nnothing.
 set:section:What there is	set	section	What there is	`set` is the listing, and it is the one place they are all written\ndown, so this page does not copy it.  They fall into these:\n\n    addr, agent, escape             slsh itself\n    log, log_dir                    the transcript\n    viewer_*                        what "viewer --launch" starts\n    map_*                           how "map" draws its picture\n    notice_keep                     how long "notice" keeps one\n\nThe map's are the ones most worth knowing about, because the picture\nis drawn to the shape of the font it is being read in: `map_ratio`\nis how tall a character cell is against how wide, height first, and\n`7:3` is a measurement of one font rather than a fact about all of\nthem.  See `man map`, which says what each of the map's five does.
-set:section:The transcript	set	section	The transcript	`log` is on to begin with, and what it keeps is what you saw: every\ncommand you ran, everything each one printed, everything heard and\neverything said.  One file per avatar, named after the avatar --\n`example-resident.log` -- in `$XDG_DATA_HOME/slgo`, or\n`~/.local/share/slgo` where that is not set.  `log_dir` puts it\nsomewhere else; empty is the default place.\n\n    2026-08-26 15:56:29 $ where\n    2026-08-26 15:56:29   Testville at 33, 70, 2001\n    2026-08-26 15:56:33 < [IM Example Resident] are you still at the build\n    2026-08-26 15:56:41 > [IM Example Resident] on my way\n\nA command is written down before it runs, so a command that hung is\nin the file that says what happened.  `set log off` stops it, and\nleaves the file where it is.\n\nControl characters are written the way the screen showed them, `^[`\nfor ESC and so on -- see `man chat` -- so that reading the file with\n`cat` or `tail` later does not hand a stranger's escape sequences to\nthat terminal instead.\n\nTwo things are deliberately not in it.  Output that was redirected --\n`ls > listing` -- is a listing you did not see, so the command is\nrecorded and the listing is not; it is in the file you sent it to. A\nman page read at a terminal goes through the pager rather than to the\nscreen a line at a time, and is not recorded either.\n\nWhat no shell can record is what happened while none was running.\nslgod stays logged in and goes on hearing, but a transcript is what\nsomebody saw, and there is nobody there to see it.
+set:section:The transcript	set	section	The transcript	`log` is on to begin with, and what it keeps is what you saw: every\ncommand you ran, everything each one printed, everything heard and\neverything said.  One file per avatar, named after the avatar --\n`example-resident.log` -- in `$XDG_DATA_HOME/slgo`, or\n`~/.local/share/slgo` where that is not set.  `log_dir` puts it\nsomewhere else; empty is the default place.\n\n    2026-08-26 15:56:29 $ where\n    2026-08-26 15:56:29   Testville at 33, 70, 2001\n    2026-08-26 15:56:33 < [IM Example Resident] are you still at the build\n    2026-08-26 15:56:41 > [IM Example Resident] on my way\n\nA command is written down before it runs, so a command that hung is\nin the file that says what happened.  `set log off` stops it at once,\nand leaves the file where it is; `set log_dir` moves it at once to a\nfile in the new place.\n\nControl characters are written the way the screen showed them, `^[`\nfor ESC and so on -- see `man chat` -- so that reading the file with\n`cat` or `tail` later does not hand a stranger's escape sequences to\nthat terminal instead.\n\nTwo things are deliberately not in it.  Output that was redirected --\n`ls > listing` -- is a listing you did not see, so the command is\nrecorded and the listing is not; it is in the file you sent it to. A\nman page read at a terminal goes through the pager rather than to the\nscreen a line at a time, and is not recorded either.\n\nWhat no shell can record is what happened while none was running.\nslgod stays logged in and goes on hearing, but a transcript is what\nsomebody saw, and there is nobody there to see it.
 set:section:Measuring the font	set	section	Measuring the font	Some terminals will say, and slsh will ask them:\n\n    set map_ratio auto\n\nThat asks for the size of one character cell in pixels, and writes\nback whatever comes.  The numbers written are the ones reported, not\nreduced -- `18:10` rather than the `9:5` that means the same shape\n-- because the file is where the tweaking happens next and `18:9` is\none digit away from `18:10` in a way it is not away from `9:5`.\n\nWhat the terminal reports is the cell it hands the font, which is\nnot always the shape the letters look.  Take what `auto` writes as\nwhere to start, draw a region with `map --region`, and change the\nratio until a square region looks square -- that is the only test\nthat matters.\n\n`auto` needs a terminal to ask.  It is refused where there is none\n-- `slsh -c`, `slsh -f`, and a session with its input coming from a\npipe -- and refused again, naming what it tried, by a terminal that\nwill not answer.  Both of those refusals mean measuring it by hand,\nwhich is the same question sent the same way:\n\n    printf '\\033[16t'\n\nThe answer comes back as ESC [ 6 ; HEIGHT ; WIDTH t -- so `6;18;10`\nis a cell eighteen pixels tall and ten wide, and `18:10` is the\nratio to try.  A terminal that answers nothing at all to that is one\nthat does not know the question, and then it is by eye: start from\n`2:1`, draw a region, and go from there.\n\n`map_ratio` is the only setting that takes `auto`, and every other\none takes its value as it stands.  A word that might mean "work it\nout" in any row would be a word to check the meaning of in every\nrow.
 set:example:5	set	example	Measuring the font	set map_ratio auto
 set:section:Examples	set	section	Examples	    set\n    set map_span\n    set map_ratio 2:1\n    set map_ratio auto\n    set map_friend_colour bright cyan\n\nThe last of these cannot take until the next slsh, and says so:\n\n    set addr lab.local:7807\n    addr = lab.local:7807\n    written to /home/somebody/.config/slsh/config\n    this shell keeps the old value; the new one is for the next slsh\n\nSee also: `map` for what the map settings do to the picture,\n`viewer` for what the viewer settings start, and `chat` for the key\nthe escape setting names.
@@ -841,7 +841,7 @@ waiting:section:Another shell, or slbotd, on the same avatar	waiting	section	Ano
 waiting:section:Examples	waiting	section	Examples	    waiting\n    waiting -a\n\nSee also: `answer`, `no`, `ignore`, `offers` for the older way to the\nfriendship and inventory offers, which appear here too, and `tp` for\ngoing somewhere without waiting to be invited.
 waiting:example:2	waiting	example	Examples	waiting -a
 walk	walk	line		walk [-pr] [-t D] [-w METRES] X Y [Z] | NAME\nwalk the avatar to a place in this region, or up to somebody or something\nhelp groups: region\nkeywords: walk go move run step over there approach come closer goto head towards stroll
-walk:intro	walk	intro		`walk` walks the avatar in a straight line to a place in this region,\nand waits for it to get there.  The place is two numbers, X and Y, in\nthe region's own metres, or a name: somebody nearby, or an object.\n\n    walk 128 64\n    walk 128 64 25\n    walk Example\n    walk lantern\n\nA third number is accepted and ignored.  The ground decides the height;\na walk does not climb or fly.\n\nA name is tried against the people in the region first, by the start of\nany part of it, the way `who` lists them; then against objects, by the\nwhole name.  A name that fits two people, or two objects, is refused\nwith what it matched rather than guessed at.  Walking to a name stops a\nmetre and a half short unless `--within` says otherwise, since half a\nmetre from somebody's middle is walking into them.\n\nWhat comes back is where the avatar came to rest, to the centimetre, and\nhow far that is from where it was sent:\n\n    arrived at 84.78, 173.40, 4001.20, 0.08 m from 84.70, 173.40, in 900ms
+walk:intro	walk	intro		`walk` walks the avatar in a straight line to a place in this region,\nand waits for it to get there.  The place is two numbers, X and Y, in\nthe region's own metres, or a name: somebody nearby, or an object.\n\n    walk 128 64\n    walk 128 64 25\n    walk Example\n    walk lantern\n\nA third number is accepted and ignored.  The ground decides the height;\na walk does not climb or fly.\n\nA name is tried against the people in the region first, the way `im`\ntakes one: somebody's whole name, in any case, and otherwise the start\nof any part of it; then against objects, by the whole name.  A name\nthat fits two people, or two objects, is refused with what it matched\nrather than guessed at.  Walking to a name stops a\nmetre and a half short unless `--within` says otherwise, since half a\nmetre from somebody's middle is walking into them.\n\nWhat comes back is where the avatar came to rest, to the centimetre, and\nhow far that is from where it was sent:\n\n    arrived at 84.78, 173.40, 4001.20, 0.08 m from 84.70, 173.40, in 900ms
 walk:example:1	walk	example		walk 128 64
 walk:example:2	walk	example		walk 128 64 25
 walk:example:3	walk	example		walk Example
@@ -1148,7 +1148,7 @@ absolutely	596*2
 accept	0*2,1*4,1,1,1*2,3*2,1*3,1,8,1*2,9*2,1,52*2,4,26,93,2*2,5,64,38,68,49,56,16,2,2*2,3,2,1*2,2,31,69,13,122,62,22,5,4
 access	290,36,1*6,83,6,1,2*3
 accessory	865
-accident	80,344,228
+accident	80,344
 accord	453
 account	11,266,9,7,4*2,1,11,8,94,5*6,1*4,2*5,1,89,41,4*3,6*2,228,6,42
 accumulat	130
@@ -1190,7 +1190,7 @@ alias	385
 align	368,1
 alik	178,262,164,25,137*2,107
 aliv	454*2
-all	15,9,3,11,7,11,10,8,4,22,1,11,6,4,7,1,6,38,9,22,1,19*2,1,3*2,1,2,27,1,9,23,5,17,21,12,20,4*2,7,2,6*2,7,6,1*2,49,4*2,10*2,6,53*2,7,2*2,13,42,10*2,1,10,6,8,5,1,1*4,1,1,2*2,3,1,3,22,1,2*2,2,16,10,1,13,14,13*2,5,2,8,1,16,1,22,11,7,2,11*3,1,7,1*2,6,18,7,12,9,4,11,2*3
+all	15,9,3,11,7,11,10,8,4,22,1,11,6,4,7,1,6,38,9,22,1,19*2,1,3*2,1,2,27,1,9,23,5,17,21,12,20,4*2,7,2,6*2,7,6,1*2,49,4*2,10*2,6,53*2,7,2*2,11,2,42,10*2,1,10,6,8,5,1,1*4,1,1,2*2,3,1,3,22,1,2*2,2,16,10,1,13,14,13*2,5,2,8,1,16,1,22,11,7,2,11*3,1,7,1*2,6,18,7,12,9,4,11,2*3
 allow	37,50,66,3,58,58,20,124,1*2,111,10*3,67,2,128,161
 allowanc	514,1
 almost	52,64,85,9,338,12,87
@@ -1199,7 +1199,7 @@ along	84,222,202,96,178,5,12*2,81
 alongsid	8,30,473,294,60,4
 alpha	92,659*2,9,111
 alphabetical	12
-already	6,8,40,15,3,11,18,2,1,2,6,62,40,77,3,16*2,2,6,29,8,46,15*2,1,2,3,7,2,13,19*2,82,15*2,19,13,26,22,1,3,17,1,17,30*2,2,1,16*2,71,10,18,1*2,7,30,5
+already	6,8,40,12,3,3,11,18,2,1,2,6,62,40,77,3,16*2,2,6,29,8,46,15*2,1,2,3,7,2,13,19*2,82,15*2,19,13,26,22,1,3,17,1,17,30*2,2,1,16*2,71,10,18,1*2,7,30,5
 alter	765
 although	45,310,465
 altogether	795
@@ -1214,15 +1214,15 @@ announc	477*2,1,3,3*2,340,69
 another	1,5*2,9,12*2,45,3,3,5*2,1,1,2,5,9,37,5,30,32,3,1,13,4,16,11,10,1,28,1,1,28,71,24,23,4,10,2,13,36,1,2,14,34,1,54,5,12*2,35,19,9,1,7,34,13,2,35*3,4,1,11,6*2,1,18,4,8,1*3,14,1,19,9
 answer	1*3,3*2,2*3,1,1*2,9*2,1*4,1,1,1,1*4,1,1*4,1*6,1,1*2,1*4,1,2*2,9,1,11,11,2,15*2,3*2,1,3,16,1,6,2*2,4,6,7,24*2,13,7,11,4,8,5,4*2,1,4,2,6,10,1,1,4*2,2*2,2,1*3,3,11*2,4,2*2,1,5,4*3,1,2,2,1,18,4*2,8,13,9,6,4*3,1,40*2,3*3,12,5,18*3,1,2,10*3,13*2,1,11,2,19*2,11,9,6,2*3,4,1*4,1*2,1*2,1*2,10,1*2,7,9,10,2*2,3,1,1*2,31,2*2,15,2*2,1,1,22,18,6,9,1,3*3,13,2,1,2,25,1,1*2,4*2,13*3,1*2,4*2,16*2,17*2,5,11,13,9,1*3,1*2,4,6*2,4*2,7,1,3,1*4,3*5,1*4,1*5,1,21,21*2,1,6,9,1
 anticlockwis	143,5
-any	34,84,44,17,18,24,1,16*2,4*2,18,140*2,25,19,34,12,19,6,68,45,21,17,32,17,3,89,20,1,8,5,56
-anybody	67,17,78,104,3,132,15,59,54,10,11,99,47,53
+any	34,84,44,17,18,24,1,16*2,4*2,18,140*2,25,19,34,12,19,6,68,45,21,17,32,17,3,89,20,1,8,5*2,56
+anybody	67,17,78,104,3,132,15,59,54,10,11,99,3,44,53
 anyon	229
 anyth	4,2,8*2,8,2,10,46,3,18,2,10,30,35,14,11,57,6,6,5,12,5,19,22,34*2,5,26,16,1,25,21,38,3,5,44,7,28,8*3,26,5,17,5,30,3,7,17,5,7,2,7,11,11,3,2,11,1,22,16,16,16,10,5,26,14,5
 anyway	222,38,34,19,266,140,129
 anywher	127,51,64,24,31,56,66,429,6
 apart	52,15,23,26,57,28,9,67*2,15,2,3*3,55*2,65,105*2,26,80,19,9,127,32*2,1*2,3,1,74,1
 app	656,4,168
-appear	56,18,92,63,41,252,92,105,1,7,6,13,3,56,22,11,24,25
+appear	56,18,92,63,41,252,20,72,105,1,7,6,13,3,56,22,11,24,25
 appearanc	97,654,14*2,1*2,105,23
 append	377,284
 application	828*2
@@ -1268,7 +1268,7 @@ bas	417,121,333
 batch	127,561
 beat	1,662*3
 becam	269,406
-becaus	14,17*2,9,23,24,14,12,9,5,2,55,19,2,11,22,21*2,11,2,19,11,11,5,17,34,29,3,53,9,2,2,27,7,28,17,7,42,9,14,34,10*3,2,2,40,5,22,2,13,1,17,28,10,1,22,9,33,2,9*2,11,2,4
+becaus	14,17*2,9,23,24,14,12,9,5,2,55,19,2,11,22,21*2,11,2,19,11,11,5,17,34,29,3,53,9,2,2,27,7,28,17,7,42,9,14,44*3,2,2,40,5,22,2,13,1,17,28,10,1,22,9,33,2,9*2,11,2,4
 becom	212,5,75,10,265*2,125,79,64
 befor	6,19,2,7,32,2,22,1,12,9,27*2,26,32,15,26,4,24,6*2,18,20,3*2,5,17,3,43,7,12,22,7,2,1,77*3,13,14,2,22*2,26,10*3,65,1,3,14,3*2,14,2,21*2,2,1,5,10,1,1,9,1,16,1*2,12,2,3,12,10,16,7,8*5,1,14,29,7,7
 beforehand	74,32
@@ -1312,7 +1312,7 @@ boot	101
 border	450*2,1*3,2,1*2,4,352,41
 born	549*2,1
 bot	11,298
-both	1,24,62*2,4,22,9,95,9,2*2,44*2,20,2*2,3,102,17*3,1,2*2,5,29,10,6,39,2,12*2,38,7,29,19,14,33,4,18,12,103,4,3*2,56,6,2,3,20
+both	1,24,41,21*2,4,22,9,95,9,2*2,44*2,20,2*2,3,102,17*3,1,2*2,5,29,10,6,39,2,12*2,38,7,29,19,14,33,4,18,12,103,4,3*2,56,6,2,3,20
 bottom	544,330,1
 bought	522
 bound	106
@@ -1361,7 +1361,7 @@ carefully	112,313
 caret	68
 carriag	68
 carry	22,19,11,64,22,35,1,27,9,4,58*4,5,12,2,6*2,25*2,25,14,17,3,7,14,14,3*3,103,13,13,6,25,16,1,51,4,40,58*2,16,29,12,22,33,19
-cas	1*2,37,7*2,12*3,1,22,7*2,5,12,49,7*2,18,25,14,43,30,4*2,12,7,17,23*2,2*2,6,55,26,2*4,46,65,31,18*2,10,13,1,1*2,12,130,23,10,64,23
+cas	1*2,37,7*2,12*3,1,22,7*2,5,12,49,7*2,18,25,14,43,30,4*2,12,7,17,23*2,2*2,6,55,26,2*4,46,65,31,18*2,10,13,1,1*2,12,130,23,10,37,27,23
 cast	782
 casually	318
 cat	44,1*4,1,1,2*4,1,1,1,4,12,99,13,21,152,2,1,114,171,6,18
@@ -1384,7 +1384,7 @@ chang	41,12*2,1,12,47,30,10*2,64,17,78,23,35,27,3,3,13*3,1,2,10,2,20,2,3,25,43,5
 channel	648*2,1,2*3,1*5,1,29,33
 character	67,1*3,325,5,5,1,21,59,35,64,81,1,1,83,138
 charg	25*2,249,286
-chat	62*3,1*5,1,1,1,1,2*3,1,172*2,4,11*2,6*2,139,186*2,60*2,1*4,2,1*2,1,12,3,77*2,1*3,2*2,1*3,1,136
+chat	62*3,1*5,1,1,1*2,1,2*3,1,172*2,4,11*2,6*2,139,186*2,60*2,1*4,2,1*2,1,12,3,77*2,1*3,2*2,1*3,1,136
 chatfromsimulator	859*2,1,3
 check	139,98,1*2,34*2,25,16*2,247,106,116*2,91
 chest	100,1*2,768
@@ -1531,7 +1531,7 @@ destroy	293,328
 detach	35,51,1*4,1,2,1*2,1*2,1,1*3,1,1,5*2,1,1,4,762,1*2,1,2,1,19,1,1,1,2*2,2
 detail	14,329,39,16,19
 diagram	570
-dialog	17,1*2,235,17,108,3,93,1*2,36,294,26*2,1*2,4*5
+dialog	17,1*2,235,17,108,3,93,1*2,36,141,153,26*2,1*2,4*5
 differ	57,96,7,142,31,20,2,6,55,28,109,253,62
 differenc	83,17,153,44,16,48,56,58,114
 different	41,46,119,12,66,10,19*2,9,197,4,31,2,177,33,39,63
@@ -1539,7 +1539,7 @@ differently	153,264,77,14
 digest	827
 digit	666
 dimension	573
-dir	661,3,1
+dir	661,3,1*2
 direct	256,330,250
 direction	116,26,7,43,105,91,4,1,167,51,95,18,9*2,44
 directly	139,280
@@ -1615,7 +1615,7 @@ end	12*3,2,1,7*2,5,25,22,27,15,33,4,21,21,2,4,2,3,4,11,1*3,2,29,16,1,1,18,1,2,6,
 energy	361*2,8
 engineer	270,1
 enough	31,357,156,62,43,100,97
-enter	53,4,5,1,2,1*2,3*2,188,131*3,362
+enter	53,4,5,1,2,1*3,3*2,188,131*3,362
 entirely	586,105,57
 entry	78*2,34,27*2,17,23,50*2,188,32*2,190*2,107,3
 equal	661
@@ -1677,7 +1677,7 @@ field	101,169,27,38,17*2,17*4,8,42,131,4*2,43*2,10*2,112,87,64
 fifteen	89,353,1,95,14,51,2,76,1,15,3,8,18
 fifty	560*3,239,2
 figur	25,429,106*2
-fil	17,7*5,4,1,15,1,23*3,49*2,1*3,2*2,2*4,1,3*2,1*2,2,1*3,61*2,3*2,1,2*2,50*3,47,50,43,1,12,3,41,18,4,56,26,6,5*2,1*2,2,4,13,10*3,1,1*3,1*5,3*6,1*7,1*3,13*3,1*7,2*2,2,1*4,2*2,1*2,12,9*3,1*2,2,13*2,3,2*9,1*2,1*7,2*5,1,22*4,1,2*4,1*4,1
+fil	17,7*5,4,1,15,1,23*3,49*2,1*3,2*2,2*4,1,3*2,1*2,2,1*3,61*2,3*2,1,2*2,50*3,47,50,43,1,12,3,41,18,4,56,26,6,5*2,1*2,2,4,13,10*3,1,1*3,1*5,3*6,1*7,1*3,13*3,1*7,2*2,2,1*4,2*2,1*2,12,9*3,1*2,2,13*2,3,2*9,1*2,1*7,2*6,1,22*4,1,2*4,1*4,1
 fill	422,86,88,17,107
 filter	559*2,7,4*2,1*2,3,2
 finally	711
@@ -1788,7 +1788,7 @@ head	15,85,42,1*2,5,1,88,81,178,193,26,5*2,120,28,26
 header	719
 headless	214,203,464
 health	454,260
-hear	419,233*2,13,17,17
+hear	419,233*3,13,17,17
 heard	67*2,1,22,65,111,48,16,124*2,23*2,1,75,2,94*2,3*2,13,81,113,21*2,17*2
 heart	574,2
 height	326,1,71,1*2,4,50,91,25,95,2,133*5,1,2,5*4,34,38*3
@@ -1805,7 +1805,7 @@ hint	247*2
 history	66*2
 hit	773
 hol	720
-hold	11,1*3,2,1,25,12,35,13,1,15,6,16,29,7*2,27,2,7,67,12,3,26,5,7,17*2,3*2,5,87,2,7*3,1,1*2,3,11,2,79,35,3*2,4,37,14,6,59,6,7*2,5*2,6,35,13,58,57
+hold	11,1*3,2,1,25,12,35,13,1,15,6,16,29,7*2,27,2,7,67,12,3,26,5,7,17*2,3*2,5,87,2,7*3,1,1*2,3,11,2,73,6,35,3*2,4,37,14,6,59,6,7*2,5*2,6,35,13,58,57
 hollow	596,170
 hom	234*4,1,4,2,7,28*6,1*8,5,1,1*2,2*2,1*3,1*2,2,2*2,4*6,1*19,1*4,283,80,4,3,119*3,1*4,2,4*17,16*2
 honest	353
@@ -1827,7 +1827,7 @@ idl	717*2
 idlemind	270*4
 ids	45,12,33,84,118*2,1,5,49,6*2,2*2,69*2,20*2,151,33,13,249
 ignor	28,56*2,94,64,10,1*5,1,16,110,17,78*5,104,25,134,23,1,26,16,27,1,2*3,4,3
-im	63*2,6,115,4,2,13,53,1*2,1,1*2,1*3,1,1,1*2,1,2,73,35,7,23,97,3,49,100,12*2,83*3,1*2,1,136,2*2,1
+im	63*2,6,115,4,2,13,53,1*2,1,1*2,1*3,1,1,1*2,1,2,73,35,7,23,97,3,49,100,12*2,83*3,1*2,1,91,45,2*2,1
 imag	191,279,89*2,88,104
 immediately	68
 impl	42,111,178,29,1
@@ -1855,7 +1855,7 @@ instant	62,1,4,189,10,3,1,24,84,2,369*3
 instead	4,10,31,11,12,48,6,33,5,13,23,111,17,11,9,6,28,33,33*2,25,6,9,9,28,17,24,4,99,20,7,79,24,21,4,42,7,5
 intend	31
 interest	614
-interrupt	65,523*3,26,238
+interrupt	65,477,46*3,26,238
 intersection	782
 introduc	454
 invent	615,282
@@ -1869,7 +1869,7 @@ inviter	270
 involv	297
 ir	233
 item	0*2,1*11,3,1*2,2,11*2,27*4,7*2,4,15*2,1*3,2*6,4*2,1,1*6,3,3,1*3,3*2,11*2,5,3*2,1*6,2*5,4*3,19,24*2,1*6,2*4,2,2*2,1,3,3,1*2,5,13,4*2,1,4*2,1*2,1*7,2,1*3,4*2,16,51,15*6,2,2,2,9,36,4*2,5,1*3,1,1*2,84,1,2*2,7*3,13,1*4,12,3,2,5,22,1*2,1,30,3,6*2,14,1,58*2,6,1*3,1,1*4,9*3,2*7,2,4*2,86*6,7,9,67,16,4,29,1,4*5,1,22*2,1,1*3,1*3
-itself	12,88,3*2,4,14,9,6,17,2,5,5,2,29,9,9,14,2,30,32,12,1*2,8,1,8,1,4*2,34,27,18,23,25*2,4,64,3,11,50,8,14,22,34,20,7,24,5,8,9,12,45,16,8,6*2,22,13,9*2,26,3
+itself	12,54,34,3*2,4,14,9,6,17,2,5,5,2,29,9,9,14,2,30,32,12,1*2,8,1,8,1,4*2,34,27,18,23,25*2,4,64,3,11,50,8,14,22,34,20,7,24,5,8,9,12,45,16,8,6*2,22,13,9*2,26,3
 j2c	195,2,363
 jacket	871
 job	129
@@ -1917,7 +1917,7 @@ layout	522
 lead	54,371,154,4,200,16*2
 learn	419
 least	259,270
-leav	65,1*2,3,3*2,11,1,8,20,1,23,28,42,6,40,71,32,14,19*2,16,15,34,16,6,26,28,56*2,1,2*3,1,6,1*2,1,10,7,14,11,5,4,1,14,2,27,3,24,13,3,5,8,17*2,2,52,1,12,3,1,1,15,16,12
+leav	65,1*2,3,3*2,11,1,8,20,1,23,28,42,6,40,71,32,14,19*2,16,15,34,16,6,26,28,13,43*2,1,2*3,1,6,1*2,1,10,7,14,11,5,4,1,14,2,27,3,24,13,3,5,8,17*2,2,52,1,12,3,1,1,15,16,12
 left	6,21,14,24,1,2,23,31,5,3,1,116*2,6,37,2,1,9,1,4,13,1,16,50,17,48,1,10,12,3,59,23,29,2,1,4,15,50,2,12,4,12,7*2,21,41,3,1,35,7*2,14*3,12,3,14,1,1,17*2,18,11
 leg	302*2,1*2,4*2
 legal	560
@@ -1936,8 +1936,8 @@ lin	12,10*2,2,3,18,18,2*6,1*8,1,1*4,4,20,18,10,6,1*3,2*2,1,25*2,5,13*2,11,22*2,6
 linden	273,143,3,103,32,6
 link	52*8,26*5,13*3,1,24*8,57*3,1*9,2,25*8,9*8,82*2,9,1*2,1,2*2,1*2,1*2,1,39*9,30,72*5,99*8,47*3,16,8,20*5,2,6*8,168,1*2,3*2,1,1,50,2*2,20*2
 linkset	117,1,183,5,1*2,187,102,83,54,82,1,3*3,1,1
-list	1,3,2,1,4,1*2,2,4*4,7,6,2,5*3,2*2,1*3,4,7,5*2,6*2,27,13*6,1*2,8*3,4,11*3,12,16,18,1*4,9,1*6,2*2,1*2,1,8,5,2*3,7,1,1*2,4*2,1*5,1,7,1*2,3*4,8,1*2,10,3,2*3,4*3,3*2,6,3,1*2,2*3,5*3,15*3,1*2,1,8,16*3,15*2,2*3,2*3,1,1*2,4*2,1*6,3*4,1*2,2,2*2,1*6,1,1,1,5,2,1,1,1,1*2,1,1,5,7*2,1,1,2*4,8,7,3,1*2,2,18,19,1*2,7,1,1*2,1,1,20*2,3,2,1,3*5,5,1*2,2,2*5,2*3,5,2,1,1*2,2,1*3,1*3,1,8,4*4,26,2,3*2,3,15,24,9,1,1,1,11,10,13,6,15*2,2,1*3,24*3,4,16,2,4,5*3,4,3,1*3,1,4,12,1,2*8,1*2,55*2,2,14*3,8*2,4*2,2*2,1*2,1*6,1*2,4,32*2,7,3,1*2,2*3,1,4*4,2,1*7,2,1*2
-listen	652*2,1,46,18
+list	1,3,2,1,4,1*2,2,4*4,7,6,2,5*3,2*2,1*3,4,7,5*2,6*2,27,13*6,1*2,8*3,4,11*3,12,16,18,1*4,9,1*6,2*2,1*2,1,8,5,2*3,7,1,1*2,4*2,1*5,1,7,1*2,3*4,8,1*2,10,3,2*3,4*3,3*2,6,3,1*2,2*3,5*3,15*3,1*2,1,8,16*3,15*2,2*3,2*3,1,1*2,4*2,1*6,3*4,1*2,2,2*2,1*6,1,1,1,5,2,1,1,1,1*2,1,1,5,7*2,1,1,2*4,8,7,3,1*2,2,18,19,1*2,7,1,1*2,1,1,20*2,3,2,1,3*5,5,1*2,2,2*5,2*3,5,2,1,1*2,2,1*3,1*3,1,8,4*4,26,2,3*2,3,15,24,9,1,1,1,11,10,13,6,15*2,2,1*3,24*3,4,16,2,4,5*3,4,3,1*3,1,4,12,1,2*8,1*2,55*2,2,14*3,8*2,4*2,2*2,1*2,1*6,1*2,36*2,7,3,1*2,2*3,1,4*4,2,1*7,2,1*2
+listen	652*3,1,46,18
 listener	709,19
 littl	337,1,508
 liv	349,105
@@ -1954,7 +1954,7 @@ load	100,3,6,554
 local	62,1*2,460*2,117*2,8,1,16,3*2,5,6*2,67,3*3,79,49
 locat	170
 location	276,21,303,276
-log	11,1*2,2*4,1*2,16,10,59,3,80,1,86,39,1*2,3*3,1*2,3*3,1*2,2,2*2,1*4,4,93,102,64*3,78*2,1*5,50,109*4,2,1*2,1,8*2,22,1,21,15,2
+log	11,1*2,2*4,1*2,16,10,59,3,80,1,86,39,1*2,3*3,1*2,3*3,1*2,2,2*2,1*4,4,93,102,64*3,78*2,1*6,50,109*4,2,1*2,1,8*2,22,1,21,15,2
 login	7,5,2*3,2,24,50,1,9*5,3*2,84,27*2,3,55,37,1*3,1,1*2,1*3,2*2,1,1,1*4,6,3,89,1,2*6,1,64,339,1*3,3*2,1*2,8,37,8,12*3,4*2
 logout	12,4,296,1,2,2,1*4,1,5*2,1,95,166,4,239
 long	89,17,15,44,77,46,16,9,17,40,12*2,1,69,1,15,13,1,1,53,58,9,1,1,59,17,1,1,2,12,11,3,9,6,11,42,14,12,13,30,13,30
@@ -2041,13 +2041,13 @@ morn	795
 most	66,34,4,18,100,111,4,83,74,66,91,13,102,70
 mostly	824
 mous	771,11
-mov	7,8*3,12*2,4,4,6,22,3*2,3,73,1,6,10,3*4,2,3,2,36,17,55*2,10,1,5*2,4,21,12,22,36,40*2,1*7,1,1,1*2,4,1*3,1,1*2,1*2,2,1*4,1*6,1,4*2,4*3,10*2,15,12*2,7,18,7,6*2,1,2,14*3,3,48*4,1,19,6,57*2,1,4,1,16,32,6,1*2,4,2,2,22,8,1,2,2,1,2,1*2,1*2,6,5*3,1,1*2,1,1,2*2,5*2,22,8,11*2,3,8,15,5
+mov	7,8*3,12*2,4,4,6,22,3*2,3,73,1,6,10,3*4,2,3,2,36,17,55*2,10,1,5*2,4,21,12,22,36,40*2,1*7,1,1,1*2,4,1*3,1,1*2,1*2,2,1*4,1*6,1,4*2,4*3,10*2,15,12*2,7,18,7,6*2,1,2,14*3,3,48*4,1,19,6,43,14*2,1,4,1,16,32,6,1*2,4,2,2,22,8,1,2,2,1,2,1*2,1*2,6,5*3,1,1*2,1,1,2*2,5*2,22,8,11*2,3,8,15,5
 movement	596
 mr	514
 much	31,175,11,42,80,58,1*2,5,112,365,16
 multi	22,43,523
 mv	57,15*3,3,2,1,62,153,5,55,2,69,2,13,1*2,1,3*3,1,1*3,1,1,1,190
-nam	0,1*14,4*2,7*4,5,1,7*2,1,1,1,3*2,7*3,2*4,1,4*6,7*4,2,2*6,1*8,1,5*7,5*4,3*2,1*3,7,1*7,6*2,1*9,3,2*2,5,1,2,1*2,2*2,1*2,6*3,2*2,4*4,1,1*2,4,1,15,4,1,10*2,2*4,4,1*8,10*2,1,2*5,1*2,4*2,1*3,5,2,8,2*2,1*2,4*4,2*9,3*3,4*4,1,1*4,2,2,1*2,9*2,2,1*9,9*3,4,5*2,10*6,2*11,1*10,1,1,4*4,4*2,2*2,1,2,1,1*6,7,1*2,1,1,2,1,1*3,1*2,1*5,1*8,4,3,1*5,3*3,1,1*3,2,1*5,2,1,1,3*2,1*6,3*2,1,1,4,5*2,1*7,2*6,2*4,1*10,1*3,4,1*2,3*2,2,1*2,2,1*13,2*5,6*3,5*2,3*4,5*5,7,1*2,1*2,2*3,1*2,14*4,1*3,2,13,1,2,3,2*3,1*3,3,1*10,2,8,3*6,2*9,10*2,4,5*3,4,1,1*2,9,6*6,1,5*4,3*3,1*4,1*2,1,5*6,3*3,1,3,3,4,4,3*2,1,5,1*7,16,1*2,2*4,2*3,3*6,6*2,1*2,2*3,8,4,3,6*3,3*4,5,1,4*2,1,3*3,1*3,3*8,2*5,5*2,2,1,2,2*2,3,1,2*2,1,1*2,1*3,1*7,2*3,11*4,6*4,5,3*2,1*2,2,1,2*3,2*4,2,1,2,6*2,1,7,2*5,5,7*2,10*4,3,2,4,5,4*3,4,4,1*5,5*4,1,1,8,1*13,2,1*2,18*3,1*2,12*2,4,1*3,6*5,1*3,4*4,5*8,4*3,1*2,1*2,5*2,1*3,3*5,1*6,4,3,1,12,1*5,17*2,1*3,3,4,2*3,1,1*2,4,7*2,3*2,2*2,1*3,4*3,2,1,1*2,1*5,1
+nam	0,1*14,4*2,7*4,5,1,7*2,1,1,1,3*2,7*3,2*4,1,4*6,7*4,2,2*6,1*8,1,5*7,5*4,3*2,1*3,7,1*7,6*2,1*9,3,2*2,5,1,2,1*2,2*2,1*2,6*3,2*2,4*4,1,1*2,4,1,15,4,1,10*2,2*4,4,1*8,10*2,1,2*5,1*2,4*2,1*3,5,2,8,2*2,1*2,4*4,2*9,3*3,4*4,1,1*4,2,2,1*2,9*2,2,1*9,9*3,4,5*2,10*6,2*11,1*10,1,1,4*4,4*2,2*2,1,2,1,1*6,7,1*2,1,1,2,1,1*3,1*2,1*5,1*8,4,3,1*5,3*3,1,1*3,2,1*5,2,1,1,3*2,1*6,3*2,1,1,4,5*2,1*7,2*6,2*4,1*10,1*3,4,1*2,3*2,2,1*2,2,1*13,2*5,6*3,5*2,3*4,5*5,7,1*2,1*2,2*3,1*2,14*4,1*3,2,13,1,2,3,2*3,1*3,3,1*10,2,8,3*6,2*9,10*2,4,5*3,4,1,1*2,9,6*6,1,5*4,3*3,1*4,1*2,1,5*6,3*3,1,3,3,4,4,3*2,1,5,1*7,16,1*2,2*4,2*3,3*6,6*2,1*2,2*3,8,4,3,6*3,3*4,5,1,4*2,1,3*3,1*3,3*8,2*5,5*2,2,1,2,2*2,3,1,2*2,1,1*2,1*3,1*7,2*3,11*4,6*4,5,3*2,1*2,2,1,2*3,2*4,2,1,2,6*2,1,7,2*5,5,7*2,10*4,3,2,4,5,4*3,4,4,1*5,5*4,1,1,8,1*13,2,1*2,18*3,1*2,12*2,4,1*3,6*5,1*3,4*4,5*8,4*3,1*2,1*2,5*2,1*3,3*5,1*6,4,3,1,12,1*6,17*2,1*3,3,4,2*3,1,1*2,4,7*2,3*2,2*2,1*3,4*3,2,1,1*2,1*5,1
 nameless	896
 narrow	184
 narrower	31,259,107,321
@@ -2066,7 +2066,7 @@ neighbour	429,21,1,1,1*3,1*3,1,1*3,1,1*3,1,1,1,147,202
 neither	1,56,26,9,9,3,124,1,31,6,8,14,65,28,36,2,5,20,8,134*2,2,75,19,14,10,162
 network	196,518
 never	15*2,51*2,8*2,16,2,11,35,15,7,6*2,48,3,11,10,22,9*2,23,1,20,1,4,9,6,36*2,12,7,12,17*2,2,23,1,20,6,6,8*2,39,16*2,17,40,6,13,3,13,52*2,29*2,22,5,27,40,11,3,1,31,8,10,2,9,13,1*2,3*2
-new	41*2,11,19,1*2,32,9,3,44,6,26,102,75,52,1,7,13,11*2,9*2,1*3,1,5,1*4,1,1,1,101,67,2,1,3,9,6,6,14,29,1,5,1,12,3,33,39,90
+new	41*2,11,19,1*2,32,9,3,44,6,26,102,75,52,1,7,13,11*2,9*2,1*3,1,5,1*4,1,1,1,101,67,2,1,3,9,6,3,3,14,29,1,5,1,12,3,33,39,90
 newcomer	112,357
 newer	629
 newest	343,6,3,1,268,3,3,1*2,1*2,3,1
@@ -2076,17 +2076,17 @@ ngroup	270,1
 nicknam	828*3
 night	505,1
 nin	782,12,103
-no	1,11*2,2,1*2,3*2,4,3,3,3,21,1,1,2,1*2,15*2,2*2,5,4,1*2,7,1,11,13,6,5*2,2,7,2,1*3,10,29*2,9,9,1,4,5*2,4,2,2,2,1,17*2,2,2,1,3,11*3,13*2,3,1*4,1,6*3,9,1*2,2*4,2*2,1*4,2*3,2*2,1*3,1,12,3*2,1*2,4,5,10,2,9,5,1*4,2,9,7,1*3,1,7,4*4,1,1*2,2,1,11,2*2,1*4,16*3,1,2,3,7,13,2*2,7,3*2,9,2,2,7,1*7,1,4,10,18,7,3,1,3*3,7,9,6,4,7,24,2,5,10,5,3*2,1,2,6,4,9,1,2*2,1*2,13,4,5,13,17*4,1,6*3,10,7,3*2,1*2,1*3,9,4,4*2,1,4,15*2,1*2,2*2,11,20,1,5,6*2,1,4,5,1,1*5,1*2,2,10,5*2,3,5*2,4*2,1,1,10,2*2,8,1,12*2,13,3,4*2,2,2,2*2
+no	1,11*2,2,1*2,3*2,4,3,3,3,21,1,1,2,1*2,15*2,2*2,5,4,1*2,7,1,11,13,6,5*2,2,7,2,1*3,10,29*2,9,9,1,4,5*2,4,2,2,2,1,17*2,2,2,1,3,11*3,13*2,3,1*4,1,6*3,9,1*2,2*4,2*2,1*4,2*3,2*2,1*3,1,12,3*2,1*2,4,5,10,2,9,5,1*4,2,9,7,1*3,1,7,4*4,1,1*2,2,1,11,2*2,1*4,16*3,1,2,3,7,13,2*2,7,3*2,9,2,2,7,1*7,1,4,10,18,7,3,1,3*3,7,9,6,4,7,24,2,5,10,5,3*2,1,2,6,4,9,1,2*2,1*2,13,4,18,17*4,1,6*3,10,7,3*2,1*2,1*3,9,4,4*2,1,4,15*2,1*2,2*2,11,20,1,5,6*2,1,4,5,1,1*5,1*2,2,10,5*2,3,5*2,4*2,1,1,10,2*2,8,1,12*2,13,3,4*2,2,2,2*2
 nobody	14,14,17,18,3,17,17,10,74,19,2*2,9*2,2*2,37,4,2,1*2,13,23,17,25,61*2,5,1*2,88,10,5,30,17,46,13,27,24,84,61,14,4,8*2,30,18,13
 non	31,72,108,1,4,1,1,2,22,3,28,4,176*3,10,17,49,2,8*2,1*2,10,4*2,50,25,36,1,40,18,28,11,31,5,10,15,12,23,22
 nor	104,124,1,45,107,71,175,17,19,19,154,32
 normal	770,7,5
 north	22,1,125,253,203,200
 northward	401
-not	1*3,6,5*4,2*3,1*2,3,6*4,1*4,2*2,1,1,2,3*2,6*3,5*7,3,4*2,4*3,1,1,5,2,1,2*3,4,2*2,4,5*3,4,3*3,1*2,1*2,1,4,1,2*4,3*3,1*6,6*4,2,1,3,6*3,4*2,1*2,3,6,2*2,17,1,4*2,2*3,2,2,7,1,4*3,1*3,8*3,1,4*2,3,1*3,1,4,4,3,1,1,2,2*2,3*4,5*2,4,3,5,3*2,2*3,3*2,5,6*6,7*3,6*2,3*2,1*4,2*6,1,4*4,12,1*2,1,1*3,1*5,1*3,3*5,8,1,3,1*2,2,1,1,4*3,4*2,5*2,3*2,5,2*2,1*3,6,3,1*2,4,1*4,2,6*3,7,1*2,1,4,3*4,9,1,11*2,3,4*3,6,5*3,1*2,2*7,1*3,2,7*3,2,1*2,10,2*3,5,2*3,1,1*6,1*6,2*2,1,6*3,4,2*3,1,1,10*2,3,1*2,5,4,1*2,1*2,5*4,2,2,4*2,6,6,1*3,1,1,5,2,6,1*2,1,3,2*3,1,3,2*2,2,1,1*3,1,5*3,12,1,8,5,3,6*4,1*3,8,1,2,4,2,1*3,1*2,3*5,9*2,1*2,1*3,1*2,1,8,2*2,1,1,1*4,1,2,2*2,3,9*6,2,1,1*6,1*5,13*2,3*2,7,2*2,7*2,1*2,7*3,3*4,2*4,4*2,3*3,1*3,1*2,3,1,3,1*6,5*6,5*3,1,1,8*3,1*5,1,16*2,7,8,1*2,6,6*2,1*2,4*3,5*2,2*2,1*2,1,1,7,8,3,1*2,4,2*2,2*5,5,10,1,7,2,1*3,6,1*2,1,1*4,2,6,1*3,2,2*2,2,1,1,3*2,2*7,1*7,1,1*5,1*3
+not	1*3,6,5*4,2*3,1*2,3,6*4,1*4,2*2,1,1,2,3*2,6*3,5*7,3,4*2,4*3,1,1,5,2,1,2*3,4,2*2,4,5*3,4,3*3,1*2,1*2,1,4,1,2*4,3*3,1*6,6*4,2,1,3,6*3,4*2,1*2,3,6,2*2,17,1,4*2,2*3,2,2,7,1,4*3,1*3,8*3,1,4*2,3,1*3,1,4,4,3,1,1,2,2*2,3*4,5*2,4,3,5,3*2,2*3,3*2,5,6*6,7*3,6*2,3*2,1*4,2*6,1,4*4,12,1*2,1,1*3,1*5,1*3,3*5,8,1,3,1*2,2,1,1,4*3,4*2,5*2,3*2,5,2*2,1*3,6,3,1*2,4,1*4,2,6*3,7,1*2,1,4,3*4,9,1,11*2,3,4*3,6,5*3,1*2,2*7,1*3,2,7*3,2,1*2,10,2*3,5,2*3,1,1*6,1*6,2*2,1,6*3,4,2*3,1,1,10*2,3,1*2,5,4,1*2,1*2,5*4,2,2,4*2,6,6,1*3,1,1,5,2,6,1*2,1,3,2*3,1,3,2*2,2,1,1*3,1,5*3,12,1,8,5,3,6*4,1*3,8,1,2,4,2,1*3,1*2,3*5,9*2,1*2,1*3,1*2,1,8,2*2,1,1,1*4,1,2,2*2,3*2,9*6,2,1,1*6,1*5,13*2,3*2,7,2*2,7*2,1*2,7*3,3*4,2*4,4*2,3*3,1*3,1*2,3,1,3,1*6,5*6,5*3,1,1,8*3,1*5,1,16*2,7,8,1*2,6,6*2,1*2,4*3,5*2,2*2,1*2,1,1,7,8,3,1*2,4,2*2,2*5,5,10,1,7,2,1*3,6,1*2,1,1*4,2,6,1*3,2,2*2,2,1,1,3*2,2*7,1*7,1,1*5,1*3
 notation	68
 notecard	44*2,1*6,4,1,7*6,1,51,4,1,1,44,1*2,7*2,1,11,22,7,1,143*2,92*4,18*2,1*2,1,1*3,1,3*2,1*2,1,37,66,44*3,4,1,9,8*2,1*3,1,3,61
-noth	1,3,2,1*2,7,4,4*2,3,2,4*6,3,6*3,1,4,9,2*3,1,6,2*2,1*3,1,5,2*2,6*2,3*2,1,3*2,3,1,1,8,1*2,3*3,6,2,1*3,9,5,2,7,3*3,16,1,4,2,4,8*2,5*4,5,21*2,7,2*2,3*2,5*2,12,4*3,4,11*2,4,3*2,5,1*3,3*3,1,3,1,3,10,2*2,3*2,1*3,4*2,8,5,2,6*2,4,1,4,3,7*2,1,1,8*2,6*2,8*2,8*3,1,7,3*2,1,7*2,5,7,2,14,3*2,3,2,5*3,13*3,1*2,1*2,8,1*3,1*3,2,7,12*3,8,2,9,1*2,6,2,5*3,1,12,1*2,7,9,6,6,3,2,5*3,12,2,8,7,6,1*3,8,7,3,4,4,5,1,15,6*3,3,4,5*2,2,3,8,1,4,10,7,3*2,10,2*2,4,2,1,1,1*3,8*2,5,6,7,2*3,1*4,17,16,1,5,6*2,1,4*2,8,1,11*2,5*2,2,1*3,1,4,3,1*3,14,1,8,3,7,11*2,11,2*2,1*4,1*2,2*2
+noth	1,3,2,1*2,7,4,4*2,3,2,4*6,3,6*3,1,4,9,2*3,1,6,2*2,1*3,1,5,2*2,6*2,3*2,1,3*2,3,1,1,8,1*2,3*3,6,2,1*3,9,5,2,7,3*3,16,1,4,2,4,8*2,5*4,5,21*2,7,2*2,3*2,5*2,12,4*3,4,11*2,4,3*2,5,1*3,3*3,1,3,1,3,10,2*2,3*2,1*3,4*2,8,5,2,6*2,4,1,4,3,7*2,1,1,8*2,6*2,8*2,8*3,1,7,3*2,1,7*2,5,7,2,14,3*2,3,2,5*3,13*3,1*2,1*2,8,1*3,1*3,2,7,12*3,8,2,9,1*2,6,2,5*3,1,12,1*2,7,9,4,2,6,3,2,5*3,12,2,8,7,6,1*3,8,7,3,4,4,5,1,15,6*3,7,5*2,2,3,8,1,4,10,7,3*2,10,2*2,4,2,1,1,1*3,8*2,5,6,7,2*3,1*4,17,16,1,5,6*2,1,4*2,8,1,11*2,5*2,2,1*3,1,4,3,1*3,14,1,8,3,7,11*2,11,2*2,1*4,1*2,2*2
 notic	45,22*2,138,105,167*4,1*6,1,1,1*5,1*2,1*3,1*5,1,1*3,1,1,15,21,140*2,85*3,56
 notification	831
 now	41,62,150,36,17,7,17,73,28,22,22,46*2,11,1,1,4,58,79,4,19,13,6,2,9,21,3,13,1,39,15*2,15,27,11,20
@@ -2096,13 +2096,13 @@ nther	270
 null	292,4
 number	1,3,13,1*5,4*2,2*2,7*2,32,21,55,4,12,29*3,19*3,54,3*3,6*2,11,12,3,6,7,28*2,2*3,17,22,24*2,1,5*4,2,10,1,2*2,10,23,23,3*2,2*3,1,2*3,18,3*2,11,8*2,21,6,3*2,7,35*2,11*2,7*2,53,51*2,3,28*4,18,8,8*2,1*2,5*3,11,9*5,24*2,3*5,6*2,20,1*2,6*2,9*2,7,2*3
 obey	68,363
-object	4*3,4,2,8*2,12*2,1*7,2*2,1*3,1,5,4*3,1*6,3*2,4*2,2,1,4,9,4,2,1,2,9*2,1*3,4,3,2,7,1,5*3,1*6,2*6,1*4,3*2,1*2,1*3,5,4,1,2,13,13,3*3,1*7,2*4,2,1,2*2,6*2,1*2,22*2,5,1,1,1,4,2,16,16,11,37,11*3,1*3,3*2,1*2,1*2,20*2,2,1*3,1,12,1,1,2*2,3*3,5*4,1*2,70,1,1*3,1*9,3*4,1,2,2*2,2,1,1,1*8,2*3,1,1,3,5*2,8*2,3,2*3,1,1*6,20*3,1*3,1,1,2*2,1,2*3,1,1,9*2,20,1*5,6,1,2,1,2*2,1*6,1,2,1*2,1,1*2,31,12*2,1*2,3,2*2,13*2,1*3,4*3,3,1,2,6*6,12,5*2,3,5,22,1*3,2,1,1,3,2*3,1,14,6*3,1*7,2,1,2*5,1*2,3,3*5,5*3,1*5,2,1*2,1*3,2,2*2,1*11,2*3,1,1,1*4,1*3,1*5,1,1,1,6*8,3,13*5,1*2,1*2,3*2,1*4,2,3,6*3,2,21,5,5,1*3,3*3,1*5,1*2,15,5*3,24,1*2,1,1*2,2,1*2,2,1*3,1,6,1,2,4,2,1*2,2*3,1*3,1*3,1*2,2*2
+object	4*3,4,2,8*2,12*2,1*7,2*2,1*3,1,5,4*3,1*6,3*2,4*2,2,1,4,9,4,2,1,2,9*2,1*3,4,3,2,7,1,5*3,1*6,2*6,1*4,3*2,1*2,1*3,5,4,1,2,13,13,3*3,1*7,2*4,2,1,2*2,6*2,1*2,22*2,5,1,1,1,4,2,16,16,11,37,11*3,1*3,3*2,1*2,1*2,20*2,2,1*3,1,12,1,1,2*2,3*3,5*4,1*2,70,1,1*3,1*9,3*4,1,2,2*2,2,1,1,1*8,2*3,1,1,3,5*2,8*2,3,2*3,1,1*6,20*3,1*3,1,1,2*2,1,2*3,1,1,9*2,20,1*5,6,1,2,1,2*2,1*7,1,2,1*2,1,1*2,31,12*2,1*2,3,2*2,13*2,1*3,4*3,3,1,2,6*6,12,5*2,3,5,22,1*3,2,1,1,3,2*3,1,14,6*3,1*7,2,1,2*5,1*2,3,3*5,5*3,1*5,2,1*2,1*3,2,2*2,1*11,2*3,1,1,1*4,1*3,1*5,1,1,1,6*8,3,13*5,1*2,1*2,3*2,1*4,2,3,6*3,2,21,5,5,1*3,3*3,1*5,1*2,15,5*3,24,1*2,1,1*2,2,1*2,2,1*3,1,6,1,2,4,2,1*2,2*3,1*3,1*3,1*2,2*2
 objectupdat	718,141,4,1
 obscurely	314
 obstacl	850
 occupy	454,147
 ocean	417*5
-off	14,1,12,59*2,1,2,2,1*4,1,8,141,6,2,16,47*2,4,44,89,1*2,1*4,6,3,22,54,115,1,12,14,40,4,10,55*2,7,4,69,1*3,2*4,9,13,1*2,3*2
+off	14,1,12,59*2,1,2,2,1*4,1,8,141,6,2,16,47*2,4,44,89,1*2,1*4,6,3,22,54,116,12,14,40,4,10,55*2,7,4,69,1*3,2*4,9,13,1*2,3*2
 offer	0*2,1*9,3,1,1*2,1,1*3,10*2,4,5*3,1*2,12,26*2,13,1*5,3*4,1*3,8,18*2,74,4*2,14*2,1*3,2*5,1,4*2,63,2*2,56,8,34*2,1*3,3*3,1*2,2,1*2,35,28,8,1*6,1,20,26*2,1*5,1,1*3,1,1*7,1,1*3,1*4,1*3,1,1*4,1,41,195,57,5*2,21*2,1*3,4*3,1*2,1*2,33,15
 offset	122,372,257,6
 often	12,51,49,110,44,72,156,326,61
@@ -2111,8 +2111,8 @@ older	419*2,417,2
 oldest	11,1,337,3,1,127,141,4,2,1*2,1*2,3,2,202
 ollama	242*4
 omit	40,551,1
-onc	27*2,3,1*2,3,66,1,1,1,1,6,116,3*2,9,19,58,7,48*2,47*2,3,24,9,16,15,25,39,38,10,18,8,40,37,12,8,46,1,17,21,2*3,21,1,9
-one	1*4,4*3,3,4*2,2,2*2,1,1*4,4,3,6*7,4,5*5,1*3,3,1*6,7*4,2,2*3,1*2,6*2,2*2,1*4,1,1*4,1*2,3*3,6*2,1,1*2,4,8*3,8*6,1*5,5*2,1,3*6,2,1,3*2,2,2,2,5,2*2,7,3*2,4,6,4*4,7*3,2*2,4,7*3,1*3,4,8*2,2,13,2*5,3*2,4*3,2*3,2*3,3*3,1,4,3,1*2,3*3,5,2,6,5,6*4,3,1,2,1*5,5,1,3,3*2,2,1,1,1*9,7*3,6*2,1,1*6,2*3,1,1*2,1*2,1,3,1*5,3*3,2*2,3,3*3,1*2,4*4,4,5*2,3,3*2,2*2,3,6*2,2,1*3,2,3*3,1*7,2*3,6,6,1,1*2,1*2,4,7,1*3,1*3,2,3*3,5,4,2*2,1*2,3,1*4,1,1,4,1,6*4,2*2,3*2,2*2,1,4*5,2,11*2,1*2,1*3,5,1,1,1*3,1*5,1*3,2,7*2,6*2,5,1*3,2,1*3,2*3,1,2*3,1,6*2,3,2*3,6*3,2,2*2,3*2,2*2,1*2,4*2,4*2,3*3,2,5*2,2,7,4*3,2,1*3,3,2,3*5,1*2,2,4,21,2,3*2,2,1,3*2,3,1*2,1*3,4*3,3,1,1,2*3,3*2,4*2,3,1,3,2,1,1*2,1*2,1*5,1,1,1,8,2*3,3*2,3,1,1,2,1*3,1*2,2,1*3,2,3*3,1,2*4,1*2,1*5,2,7,4*4,5*4,5,2,1,1,3,3*2,7,3*2,1,1*2,8,5*2,4*4,2,3*6,2,1,4*2,6*2,2*3,1*2,3*2,2,11*5,1*3,1*3,15,1*2,4,1,6*2,1*2,4,5*3,1*3,1*2,1,1*2,1*2,6,1*3,3*2,1*8,3,1*6,3*4,1*3,4*2,3*2,1*3,1*3,14,1*2,1,6,3,4,2,1,1*4,1*4,2*2,1,6,2,4,2,3*2,2*2,1,1,2*3
+onc	27*2,3,1*2,3,66,1,1,1,1,6,116,3*2,9,19,58,7,48*2,47*2,3,24,9,16,15,25,39,38,10,18,8,40,3*2,34,12,8,46,1,17,21,2*3,21,1,9
+one	1*4,4*3,3,4*2,2,2*2,1,1*4,4,3,6*7,4,5*5,1*3,3,1*6,7*4,2,2*3,1*2,6*2,2*2,1*4,1,1*4,1*2,3*3,6*2,1,1*2,4,8*3,8*6,1*5,5*2,1,3*6,2,1,3*2,2,2,2,5,2*2,7,3*2,4,6,4*4,7*3,2*2,4,7*3,1*3,4,8*2,2,13,2*5,3*2,4*3,2*3,2*3,3*3,1,4,3,1*2,3*3,5,2,6,5,6*4,3,1,2,1*5,5,1,3,3*2,2,1,1,1*9,7*3,6*2,1,1*6,2*3,1,1*2,1*2,1,3,1*5,3*3,2*2,3,3*3,1*2,4*4,4,5*2,3,3*2,2*2,3,6*2,2,1*3,2,3*3,1*7,2*3,6,6,1,1*2,1*2,4,7,1*3,1*3,2,3*3,5,4,2*2,1*2,3,1*4,1,1,4,1,6*4,2*2,3*2,2*2,1,4*5,2,11*2,1*2,1*3,5,1,1,1*3,1*5,1*3,2,7*2,6*2,5,1*3,2,1*3,2*3,1,2*3,1,6*2,3,2*3,6*3,2,2*2,3*2,2*2,1*2,4*2,4*2,3*3,2,5*2,2,7,4*3,2,1*3,3,2,3*5,1*2,2,4,21,2,3*2,2,1,3*2,3,1*2,1*3,4*3,3,1,1,2*3,3*2,4*2,3,1,3,2,1,1*2,1*2,1*5,1,1,1,8,2*3,3*2,3,1,1,2,1*3,1*2,2,1*3,2,3*3,1,2*4,1*2,1*5,2,7,4*4,5*4,5,2,1,1,3,3*2,7,3*2,1,1*2,8,5*2,4*4,2,3*6,2,1,4*2,6*2,2*3,1*2,3*2,2,11*5,1*3,1*3,15,1*2,4,1,6*2,1*2,4,5*3,1*3,1*2,1,1*2,1*2,6,1*3,3*2,1*8,3,1*6,3*4,1*3,4*2,3*2,1*3,1*3,4,10,1*2,1,6,3,4,2,1,1*4,1*4,2*2,1,6,2,4,2,3*2,2*2,1,1,2*3
 onlin	183*2,1*2,2*2,1,151
 onlooker	827
 only	1*2,4*2,3,6,1,10,6*3,2,5,14,4*2,1,15,8,4,3*2,13*2,13,3,13,24,7,2,5,2,4,1,5,7,15,2,7,4,24,15,6,1*2,6,6*3,5*2,14,1*2,1,1,3*3,17,4,2,18,1,8,1,5,2,26,2*3,13,3,1,5,11*2,3*2,23,2,9,1,27,9,3,1,10,1,5,11,1,23,3,2,3*3,1,1,12,1,1,1,25,1*2,21,1,8*2,1,20,15*2,4*2,16,2,15,7*2,12,10,5*2,5,8,48*2,15,6,4,1*2,7,10,14,11*2,6,12*2,7,4*2,2*2,1*4,3
@@ -2131,9 +2131,9 @@ organiz	439
 orientation	560
 original	627,100,5,3,3,2
 other	1,44*2,7,20,8,3*2,18,15*2,13,7,17,7,11,8,8,5,9,2,2,5,19*2,5,8,18,10,1,2,50,16,14,24,16*2,13,25,20,2,22*3,26*2,2,2*2,3,1,1,1,4,7,6*2,1,19*2,5*2,7,41,10,2*2,3,13*2,1,17,2,4,10,3,23,12,5,3,6,3,3,3,9,15,57,24,22,29,3,1,2,7,4
-otherwis	54,36,63,61,113,10,61,2,69,21,91,68,12*2,158,22,56
+otherwis	54,36,63,61,113,10,61,2,69,21,91,68,12*2,158,22*2,56
 our	155
-out	12*2,2*2,1,12*2,4*4,21,4,1,6,3*2,2,1,5,4,13*3,1*4,14,4,8,2,2*2,1,1,3,3,1,8,1,13,6*2,1*2,2*2,2,30,22,22,9,6*2,4,12,3,18,2*3,1*2,1*3,3,1*2,15,4*2,1*2,2,2*2,1*2,7*2,5,4,17,31,11,2,20,11,72,1,25,8,4,1*3,6*2,7,11,17,3,9,2*2,1,6,1,1,1,17,15,9,1*2,3,1,13,23,4,18,6,7,3,1*2,2,3,16,18,14,13*4,1,11,2,2,10*2,4*3,3*2,1,7,16,17,3*2,2
+out	12*2,2*2,1,12*2,4*4,21,4,1,6,3*2,2,1,5,4,13*3,1*4,14,4,8,2,2*2,1,1,3,3,1,8,1,13,6*2,1*2,2*2,2,30,22,22,9,6*2,4,12,3,18,2*3,1*2,1*3,3,1*2,15,4*2,1*2,2,2*2,1*2,7*2,5,4,17,31,11,2,20,11,72,1,25,8,4,1*3,6*2,7,11,17,3,9,2*2,1,6,1,1,1,17,15,9,1*2,3*2,1,13,23,4,18,6,7,3,1*2,2,3,16,18,14,13*4,1,11,2,2,10*2,4*3,3*2,1,7,16,17,3*2,2
 outer	63
 outfit	52*3,26,13,1,5*3,1,2,1,2*3,3,1*2,9*3,57,1*3,2,1,3,21*3,9*3,137*4,4,98,99*3,91,8*3,218,6,2*2,17,3*4,1*3
 outliv	52,64,85,9,210,128,99,246
@@ -2168,7 +2168,7 @@ part	1*6,24,6,7,7,35*2,12*3,1,7,4,1,69,29,2,33,22*2,53,5,14,1*2,2,3*2,9,41,32,55
 particular	66,90,181
 partner	549*2,1*2
 pass	238*2,181,120,161,128
-passer	534,118
+passer	534
 password	823,4*4
 past	31,47,257,94,20,118,72,80*2,69,28,37
 path	17,7,16,4,1*2,7,1*2,1*4,2*3,1*2,14,1,2,12,1,14,8,1,6,11*2,36,7*2,1*3,2*5,1,17*2,1,4,5,1,1*2,3*3,2,2*2,67,16,1*2,49*2,1*5,2*2,1,3*2,2,1*6,68,1*3,2,15,1,4*4,18,1*2,4,74,1,6,11,5,14,1*3,4*3,28,10,1,5,1*2,2,10,1,6,14,75,43,4,82,1
@@ -2197,7 +2197,7 @@ piec	103,68,351*4,1,297*5,62
 pil	629
 pip	120,280,266
 pixel	570,2,94*2
-plac	12,3*3,25,17,8,1,12,32,6,22,4,1*2,6,69,8,8,38,4*2,1*3,10,2,3,1,1,3,1*2,20,17,48*2,1,5,28,12,2*4,1*2,3,2,7,5,7,38,9,12,14*2,10,2,1*4,1,2*2,1*2,1,1,48,10,7*2,2,4,12,33,1,41,9,3*2,15,7*2,3,39,1*2,16,7,4,30,1*2,5*2,5*2,2*2,13,8,3,9*2,11*2
+plac	12,3*3,25,17,8,1,12,32,6,22,4,1*2,6,69,8,8,38,4*2,1*3,10,2,3,1,1,3,1*2,20,17,48*2,1,5,28,12,2*4,1*2,3,2,7,5,7,38,9,12,14*2,10,2,1*5,1,2*2,1*2,1,1,48,10,7*2,2,4,12,33,1*2,41,9,3*2,15,7*2,3,39,1*2,16,7,4,30,1*2,5*2,5*2,2*2,13,8,3,9*2,11*2
 placeholder	238
 plain	439,5,25,86,73,90,48,5,61
 plainly	25,181,32,22,282
@@ -2248,7 +2248,7 @@ publish	218,336
 pull	242
 purg	135,4
 purpos	129,55,134
-put	4*2,11,3,34,13*4,3*2,10,9,4,6*2,1,2*2,1,2,1,1,4*2,1*2,3,3*2,7,6,7,24,7,25,3,6*2,2,7,37,50*2,13,5,3*3,17,14,6,1,75,1,1,1,1,1,13,7,6,7*2,1,71*3,1*3,2*2,2*2,2,11,1*2,1,13*3,1,1,1,18*2,2,18*2,4,3,17,4,1*2,3*2,2,4,3,9,14,14,18*2,1,7,11,3*3,3,2,1*2,10,6,39,12,3*2,18,38*2,1,5,2*2,1*3,5,14*2
+put	4*2,11,3,34,13*4,3*2,10,9,4,6*2,1,2*2,1,2,1,1,4*2,1*2,3,3*2,7,6,7,24,7,25,3,6*2,2,7,37,50*2,13,5,3*3,17,14,6,1,75,1,1,1,1,1,13,7,6,7*2,1,71*3,1*4,2*2,2*2,2,11,1*2,1,13*3,1,1,1,18*2,2,18*2,4,3,17,4,1*2,3*2,2,4,3,9,14,14,18*2,1,7,11,3*3,3,2,1*2,10,6,39,12,3*2,18,38*2,1,5,2*2,1*3,5,14*2
 pwd	54,5,519,1*2,1,4
 quark	270*4
 question	1,39,115,29,2,17,23,7*2,1*2,4,9,50,30,4,49,13,26,82,28,21,3,2,1,48,62*2,13,208
@@ -2268,11 +2268,11 @@ ran	387,278
 rang	330*2,69,91,394
 rar	641
 rat	238,88,1*3,83*3,1*3,5*3,1*4,1,1*6,1*2,181,6,163,11
-rather	1,3,8,3,7,5,4*2,2,8,11*2,4,7,2,1*5,1,1*2,6*2,13,4,10*2,1,2,2,6*2,4*2,4,18,2,8,5,2*2,29*2,2,8,7*2,2,2,2,3*3,4*2,3*2,11,1*2,30,10,1,2,3,2,15*2,1,1,2,9,1*2,7,1,4*2,3,6,3,3,4*2,1,10,1,3,1,8*2,5,1,2*2,9,2,3,5,7,2,1*2,2,1,1,4*2,10,3*3,1,2,7*3,2,6,5*3,1,9,2*2,4,11*2,25,7,7,2,5,7,7*2,9,4*2,2,1,3*3,2*2,4*2,6*2,13,6,5,4,2,2,3,1,8,2,5,8,8,1,1,2,12,4*2,4,1,1,8,2,1,1,1,13,5,8,7,16,2,3,4,9*2,5,10*2,6,11,1,5,11,1,5,6,1,4*2,1,1,1,1,1,1,2*2,1,2*2,9,1*2,4,3,1,4,4,1,4,5,1,12*2,3,4,2*2,1,2*2,9,1*2,3,2,1,9,1*2
+rather	1,3,8,3,7,5,4*2,2,8,11*2,4,7,2,1*5,1,1*2,6*2,13,4,10*2,1,2,2,6*2,4*2,4,18,2,8,5,2*2,29*2,2,8,7*2,2,2,2,3*3,4*2,3*2,11,1*2,30,10,1,2,3,2,15*2,1,1,2,9,1*2,7,1,4*2,3,6,3,3,4*2,1,10,1,3,1,8*2,5,1,2*2,9,2,3,5,7,2,1*2,2,1,1,4*2,10,3*3,1,2,7*3,2,6,5*3,1,9,2*2,4,11*2,25,7,7,2,5,7,7*2,9,4*3,2,1,3*3,2*2,4*2,6*2,13,6,5,4,2,2,3,1,8,2,5,8,8,1,1,2,12,4*2,4,1,1,8,2,1,1,1,13,5,8,7,16,2,3,4,9*2,5,10*2,6,11,1,5,11,1,5,6,1,4*2,1,1,1,1,1,1,2*2,1,2*2,9,1*2,4,3,1,4,4,1,4,5,1,12*2,3,4,2*2,1,2*2,9,1*2,3,2,1,9,1*2
 ratio	398*3,5,156,14,88*3,1,2,2*4,1,1*2,3
 raw	127,68,2,1,2,462
 ray	782
-reach	78,6,95,24,19,7,24,4*2,9,27,4,21,15,65,2,1,48,55,11,35,51,38,5,7,1*2,27,6,16,93*3,14,19*2,27
+reach	78,6,95,24,19,7,24,4*2,9,27,4,21,15,65,2,1,48,55,11,35,51,38,5,7,1*3,27,6,16,93*3,14,19*2,27
 reachabl	1,215,122
 read	14,17,13*2,1*6,3,1,2,1,4,10,1,1,24,8*2,4,3,11,4*2,45,6,7,26,28,4,9,12,1,6*2,3,3,1,4*2,11,2,1,1,2*2,2,1*3,5,4,7*2,14,3,7*2,2,22,7,1,29,8,5,5,3*5,10*2,13,1,20,14,6,12,6,4,24,2,7*3,1,11*3,4,6*2,23,13*3,8,7,7,23,20*3,1,1,1,1*2,17,10*2,7,19*3,1*3,1,18,11,16*3,1*3,17,5*2,6,1,4*2,5,1,2*2,2*2,18,1*2,8,26,9,2,6,12,2*2
 readabl	368,238
@@ -2299,7 +2299,7 @@ redraw	524
 reduc	666
 referenc	360
 reform	118,4,1*2,2,466,1*2,1,4*2,2,20,148
-refus	1,4,1,8,4*2,4,2,1,6,3,11*3,7,4,1*2,9,6,7*2,1*3,7,3,2,18*2,6,13*2,20*2,4,3,4,2*2,22,8,5,4,2*2,7,4,3,1,10,9,2,3*2,17,1*2,6,6*2,16,2,2*2,2*2,2,1*2,1,7*2,7,1*3,8,1,31*2,28,16,13,7*2,5,2,5*3,2,11,2*4,7,1,17,5,1*2,26,3,6,10,9,9,4*2,2,1,3,12,19,16,11,1,4,2,8,7*2,1,1,11,6,2,2,10,2,3*2,13*2,3*3,2,7,42,15,14,3,6,8,4,11,1,9*2,2,1,1,12,7,1,9,4,10*2,8,2,7,2*3,11
+refus	1,4,1,8,4*2,4,2,1,6,3,11*3,7,4,1*2,9*2,6,7*2,1*3,7,3,2,18*2,6,13*2,20*2,4,3,4,2*2,22,8,5,4,2*2,7,4,3,1,10,9,2,3*2,17,1*2,6,6*2,16,2,2*2,2*2,2,1*2,1,7*2,7,1*3,8,1,31*2,28,16,13,7*2,5,2,5*3,2,11,2*4,7,1,17,5,1*2,26,3,6,10,9,9,4*2,2,1,3,12,19,16,11,1,4,2,8,7*2,1,1,11,6,2,2,10,2,3*2,13*2,3*3,2,7,42,15,14,3,6,8,4,11,1,9*2,2,1,1,12,7,1,9,4,10*2,8,2,7,2*3,11
 refusal	1,21,30,5*2,17,9,1,3,5,24,37,9,4,29,6,2,7,4*2,39,7,32,2,2,16,1*3,7,1,6,93,9,46,56,11,6,12*2,44,25,12,6,16,3,16*2,51,71,2*2,1,20,43,11,14
 regard	1,37,115,64,144,129,304,97
 region	14*2,13*5,11,2,1*4,4*3,18,11,12,1,2,1,1*2,6,4*2,2*2,1*2,2,3,1,2,5,1,3,1*2,20,1,9,1*5,3*3,1,2,1,5,1*2,22,15,8,10,9,1,29,5,11,1,12*3,1,1*5,6*4,1,3,1*2,2,2,20*3,1*4,3,1,2,5,1,53*2,1,2,2,1*2,1,2,1*2,3*2,1*2,1,3*2,7*4,2,1,8,1*4,8,5,8*4,1*3,1*2,1*6,1*7,4*3,10,21*3,1,5,9,10*2,1*5,3*2,1*3,3*4,1*3,2*3,1,2,1*2,7,5,3*2,9,3,35,1,2,1,1,4*4,1*5,1,2,1,1*3,1*7,1*4,1,1,4*4,2*2,36,14*4,8,8*2,2*2,11,10,1,9,2*3,3,3,9,1*4,2,2,1,12,1,1,13*2,1*3,4,1,5,7,4*5,1*4,6*4,1*12,1*3,1*3,1*3,1*13,3,2*4,1*5,1*3,1,1,1,1*3,5,3,2,12,8*2,1*3,10*4,14,1,3,2,5*3,1*2,2,1,2*3,1*3,1*2,2,4,3*3,4*3,1
@@ -2320,7 +2320,7 @@ renumber	886
 reorder	369
 repeat	66,239,148,28,270*2,5
 replac	34,7,51,9*3,1,10,18,67,207,65,68,103,225,4*3,1,1*4,3,1,11
-reply	17,8,15*2,27,24,75,103,28,310,104,17,79
+reply	17,8,15*2,27,24,75,103,28,310,45,59,17,79
 report	7*2,24*2,2,1*2,49,4,4*2,1,9,3,1,34,40,18,8,1,8,45,31,15,1*2,4,8,30,5,27,18,31*3,13,1,60,18,2,6,31,57,26,6,7,10*2,16,9,47,10,6,12*2,10,12,40,34*2,4,3,2,2,7*2,2
 reposition	428
 request	0,17,1,9,4,48,12,15,47,9,4,76,27,4,33,64,3,5,3*4,38*2,10,45,1*2,25,7,31*2,22,115,4,3,17,10,2*2,17*3,60,18,25,5*4,37,23
@@ -2367,7 +2367,7 @@ saf	310,109,263
 safety	139
 said	25*2,41*3,1,37,8,45,5,52,39,6,18*2,19,2,28,1,34,58,35,15,53,7,2,19,2,54,43*2,16,17,9,28,47,44,58
 sal	521
-sam	1*3,3,2,2,4,13,2,8,3,3*3,4,7,11*2,4,1,12*2,3*2,1,8,9,5,6,4,11,39,7*4,1*2,10,11,6,9,7,5,12,2,6,11*2,24*2,11,2,2*2,2*4,2*2,1,13*2,8,9*3,4,4*2,4,8*2,2,4*2,35,1,10*2,7,5,5*2,1*2,2,3,29,3,2*2,7,17,1,14,16,4,8,8,13*2,4,31,3,4*2,20,5,7,11,14,4,14,1,1,3*3,16,7,7,3,12,7*2,20*2,10,1,22,4,19,5*5,1*2,2,4,14,8,7,2*2,14,1,14,2,2,1*4,2*2,4*2,3*3,8,5,5
+sam	1*3,3,2,2,4,13,2,8,3,3*3,4,7,11*2,4,1,12*2,3*2,1,8,9,5,6,4,11,39,7*4,1*2,10,11,6,9,7,5,12,2,6,11*2,24*2,11,2,2*2,2*4,2*2,1,13*2,8,9*3,4,4*2,4,8*2,2,4*2,35,1,10*2,7,5,5*2,1*2,2,3,29,3,2*2,7,17,1,14,16,4,8,8,11,2*2,4,31,3,4*2,20,5,7,11,14,4,14,1,1,3*3,16,7,7,3,12,7*2,20*2,10,1,22,4,19,5*5,1*2,2,4,14,8,7,2*2,14,1,14,2,2,1*4,2*2,4*2,3*3,8,5,5
 sampl	781
 sat	679*2
 sav	41,4*2,7,61,4,74*2,1,84,187,7,170,1*2,1,1,1,1*2,1,1
@@ -2378,7 +2378,7 @@ scan	489
 scatter	393
 screen	41,27*2,320*6,10,85,20,19,2,125,16*2,46,37,79,1,4*2,3,51
 screenful	388*2
-script	18*2,12,1*3,7,6*2,1*6,1,3,60,1,1,2*3,1,13,32,8,12,1,1,20,13*2,39,82,18*5,1,1*3,1,4*2,1*2,9*2,61,31*3,1*4,2*2,1,1,2*4,1*2,2*2,3,33,6,1,59,5,16*5,16,3,3*2,1*2,10,12*2,1,2*2,1,1,1,5,1*4,1*2,43,9*4,1*9,3*5,1,1*7,1,11*4,1*6,3,1*4,2,19,22,10,1,1,1,48,4*2
+script	18*2,12,1*3,7,6*2,1*6,1,3,60,1,1,2*3,1,13,32,8,12,1,1,20,13*2,39,82,18*5,1,1*3,1,4*2,1*2,9*2,61,31*3,1*4,2*2,1,1,2*4,1*2,2*2,3,33,6,1,59,5,16*5,16,3,3*2,1*2,10,12*2,1,2*2,1,1,1,5,1*5,1*2,43,9*4,1*9,3*5,1,1*7,1,11*4,1*6,3,1*4,2,19,22,10,1,1,1,48,4*2
 scrollback	388
 sculpt	122
 search	1,37,132,3*3,5,1*2,1,4*2,19*2,26,4,27*7,6,25*2,41*2,1*3,2,2,1*3,1,22,27*3,101,1*2,4,10*2,46,3*4,3,44,4,2,198,87
@@ -2406,7 +2406,7 @@ serv	31,9*2,1,155,628*4
 server	152,1,86,3*8,71,350*2
 servic	37,1,62,53,718,22
 session	11*2,1*4,2*4,1*5,1,11,10*2,1*2,2*2,1*3,21,28*2,63,34,16,11*2,39,4,3*2,10*2,39,1,3*2,2,2,1*4,2*2,1,1*2,1,1,6*2,8,32,30,5*2,14,1*2,32,1,3*2,1,46,1,14,3,1,2,29,33*3,3*2,73,4,27,6*2,15*2,1*3,2*4,4,24,4,16,40,1,17,1*4,12,15,12,17*3,13,2,2
-set	30*2,1,2,1*2,32*3,2,44*2,37,6*3,79*2,2,2*2,1*2,3*9,1*2,1*2,1*2,1*2,1,1*2,4,1*3,23*3,1*5,6,1,2,1*2,1,2,7*15,1*2,71,17,12*4,1*2,1,3*4,3*2,10*4,1*2,2*2,1*2,33,28*2,1,4,36,6,1,2,4,2,4,1*2,53,57,1,2*5,1*14,1*2,1,1*2,1,1*6,1*3,1*7,1,1*2,1*2,1,1*9,1,1,1,1,1,33,40,5,43*4,16,10*2,8*2,1*2,5,34,14
+set	30*2,1,2,1*2,32*3,2,44*2,37,6*3,79*2,2,2*2,1*2,3*9,1*2,1*2,1*2,1*2,1,1*2,4,1*3,23*3,1*5,6,1,2,1*2,1,2,7*15,1*2,71,17,12*4,1*2,1,3*4,3*2,10*4,1*2,2*2,1*2,33,28*2,1,4,36,6,1,2,4,2,4,1*2,53,58,2*5,1*14,1*2,1,1*2,1,1*6,1*3,1*7,1,1*3,1*2,1,1*9,1,1,1,1,1,33,40,5,43*4,16,10*2,8*2,1*2,5,34,14
 settl	1*3,102,1,110,3,80,276,56,71,107*2,72,15*3
 seven	306,373*2,19,134,4
 seventy	453
@@ -2440,7 +2440,7 @@ silently	101,562,142
 sim	450,150,276
 simply	40,43,368,57,114,127
 simulator	25,12,1,2*2,1*2,1,58*2,3*3,1*2,2,11,26,9*3,1,2,7,50,57*2,1*2,4,17,3*2,3,8,21,1,3,1,29*2,1*3,44,14*2,32,2*2,1*4,41,30,35,115,4*2,2,1,14*2,19*2,3,1,30,33*2,17,7,1,40,26,21*4
-sinc	1,3*2,27,21,14,1,1,12,7,4,1,9,9,6,33,13,12,27,2,7,18,6,25,1,12,33,13,12,17,6,16,12,23,15,10,15,31,28,6,12,27,5,2,34,22,3,27,6,2,12*3,45,22,5,50,11,13,20,9*2,5,18,20,1*3,6,7*2
+sinc	1,3*2,27,21,14*2,1,1,12,7,4,1,9,9,6,33,13,12,27,2,7,18,6,25,1,12,33,13,12,17,6,16,12,23,15,10,15,31,28,6,12,27,5,2,34,22,3,27,6,2,12*3,45,22,5,50,11,13,20,9*2,5,18,20,1*3,6,7*2
 singl	100,27,101,14,60,150,154,43,7,127,33,4,7*2
 sit	12,89,48,320,205*4,1*5,1,1,1,1*5,1*2,2*6,1,2*6,1,1,8,1*2,2,1*3,2*2,47,103,26*3,3*12,16,1
 situation	14
@@ -2467,7 +2467,7 @@ slip	444
 slot	30,1*2,2,59,150*2,629*2,20
 slow	27,47,92,329
 slrun	31
-slsh	57,9*2,2*2,166,4*2,4,5,13,10,2*2,22,3,64,9,30*2,6,11,27,141,43,33*3,1*2,1*2,1,2*3,2*3,14,10*2
+slsh	57,9*2,2*2,166,4*2,4,5,13,10,2*2,22,3,64,9,30*2,6,11,27,141,43,24,9*3,1*2,1*2,1,2*3,2*3,14,10*2
 small	139,103,128,347*2
 smallest	771
 snapshot	247
@@ -2475,7 +2475,7 @@ sock	871
 socket	452
 sold	289
 solid	760
-somebody	1,13*3,24,25*3,5*2,1,9,2,36,6,7,13,1,6,13,24,1,9,6*2,1*2,3,12,4,4*2,8,22,1,2,1*3,5*2,1*2,3,6,31,7*2,5,3,12,4,2,22,12*2,1*2,7*2,12,5,1*6,1,17,2,10,23*2,41,1,7*2,3,1*2,3,16*2,5*2,6,4,5,5,1,3*2,1*2,1,60,34,14,2,3,14,27,19,5,15,1,1,60*2,17,5,8,1*2,9,1,33,2,2
+somebody	1,13*3,24,25*3,5*2,1,9,2,36,6,7,13,1,6,13,24,1,9,6*2,1*2,3,12,4,4*2,8,22,1,2,1*3,5*2,1*2,3,6,31,7*2,5,3,12,4,2,22,12*2,1*2,7*2,12,5,1*6,1,17,2,10,23*2,41,1,7*2,3,1*2,3,16*2,5*2,6,4,5,5,1,3*2,1*2,1,60,34,14,2,3,14,27,19,5,15,1,1,60*2,17,5,8,1*3,9,1,33,2,2
 someon	184
 someth	1,11,22*2,6,26,2,4,8,7*2,3,13,7*3,2,24,4,2,1,5,5,7*2,43,11*2,25,14,4,9,26,13,8*2,17,5,21*2,5,37,4,30,1,1,1,1,4,2,1,1,31,19,43,7,1,5,3,65,11,10,10*2,3,1,26,3,10,17,8,16,2,17,56,1,26*2,2,3,11,29*2,11,3*3
 sometim	749,50
@@ -2508,7 +2508,7 @@ squint	748
 st	770,5
 stal	153
 stamp	67,562
-stand	1,3,10,13,14,22*2,11,26,36,13,54,13,5,8*2,5*3,1,13,9,3*2,17,7,3*2,9,1,5,25,6,41,11,14,2,28,22,2*2,51,21,4,15,4,5,1,38,9,10*2,3*3,29,18,5,13*2,6,10*2,1,2*2,1*2,1,1*2,1,2,29,2*2,53,6*2,1,4*2,7,3,11,30,1,1,32,4
+stand	1,3,10,13,14,22*2,11,26,36,13,54,13,5,8*2,5*3,1,13,9,3*2,17,7,3*2,9,1,5,25,6,41,11,14,2,28,22,2*2,51,21,4,13,2,4,5,1,38,9,10*2,3*3,29,18,5,13*2,6,10*2,1,2*2,1*2,1,1*2,1,2,29,2*2,53,6*2,1,4*2,7,3,11,30,1,1,32,4
 standstill	853
 star	12,3*4,163,221*3,1,230*3,116
 start	14,8,9,23,12,2,45*3,3,14,41,8*2,55,13,12,11,3,4,13,2,17,4,1*2,30,54,19,15,24,6,5,2*2,1,13,26*2,72,1,4,14,1,3,40*2,3,6*2,1,8,1,1,2*2,2,37*2,1*4,1,2*2,3*2,1,11,6*2,9,10,22,23,10,1,18,3*2,1,1,7,1*2,5,40
@@ -2560,10 +2560,10 @@ switch	62,1,2,146,500*2,34,4
 symmetry	312
 syntax	153*2,207
 system	92,779,20
-tab	66*2,2*2,1,91,87*2,10,111,1*2,377,2,1*2
+tab	66*3,2*2,1,91,87*2,10,111,1*2,377,2,1*2
 tag	211
 tail	665,54
-tak	1*3,4,7,12,1*2,6,3,20*2,2,1,8,1,14,6*2,1,5*3,14,4*3,6,6,14,4,3,17*2,2,5,4,2*3,49,6,2,8*2,4*2,6,2,3,7,26,1,5*2,6,7,2,6,5,6,11*3,4*3,11,2,1*3,2,14,29,6,2,16*2,7,3*2,2,3,6,10,14,11,2,10*3,7,11,10,1,10,2,8*2,2,1*3,3,3,2,3*4,26*3,7,4,2,14,5,2,6,8,3,1,8,2,8,12,1*2,1,3*3,2,14,2,8,8,6,13,5*2,6,2*3,1*8,1,1*2,1,2*4,1,1*5,1,5,2,31,36,1*3,3,1,1,2*2,1*2,3,1,4*2,20,14,3,1,1*4,6*2,4,3,2,7
+tak	1*3,4,7,12,1*2,6,3,20*2,2,1,8,1*2,14,6*2,1,5*3,14,4*3,6,6,14,4,3,17*2,2,5,4,2*3,49,6,2,8*2,4*2,6,2,3,7,26,1,5*2,6,7,2,6,5,6,11*3,4*3,11,2,1*3,2,14,29,6,2,16*2,7,3*2,2,3,6,10,14,11,2,10*3,7,11,10,1,10,2,8*2,2,1*3,3,3,2,3*4,26*3,7,4,2,14,5,2,6,8,3,1,8,2,8,12,1*2,1,3*3,2,14,2,8,8,6,13,5*2,6,2*3,1*8,1,1*2,1,2*4,1,1*5,1,5,2,31,36,1*3,3,1,1,2*2,1*2,3,1,4*2,9,11,14,3,1,1*4,6*2,4,3,2,7
 taken	5,13*3,9,25,16,23,19,6,27,58,2,7,50,6,6,17,5,3,21,93,18,3,53,16,3,33,11,48,51,16,19,2,27,17,5,5,1,85,27,17,5
 talk	62,1,6*3,145,12,37*2,279,110,1,92,1*2,1,1,1,1,131,7
 tall	398*2,266,2
@@ -2623,7 +2623,7 @@ trail	425,158,205
 transcript	68,348,3,245,1*2
 transfer	202,3,323*2,3,7*2
 trap	80*2,148,155,61
-trash	135*2,1*3,2*2,1*5,1*2,1,152*7,5,145,179
+trash	135*2,1*3,2*2,1*5,1*2,1,152*7,5,145,99,72,8
 travel	205*2,330,25,36,191
 treat	305,189,51
 tree	349,501
@@ -2637,7 +2637,7 @@ truthfully	122
 try	1,13,66,137,42,1,12,41,25,15,91,222*2,16,50,3,106
 tsv	247
 tuesday	795
-turn	56,7,79*2,1,5,1*2,24,1,6,80,31,7,37,12,51,55*2,3*2,18,20,43,16,152,6*2,7,5,12,23,96
+turn	56,7,79*2,1,5,1*2,24,1,6,80,31,7,37,12,51,55*2,3*2,18,20,43,5,11,152,6*2,7,5,12,23,96
 tweak	666
 twelv	31*2,69
 twenty	103,3,287*2,9,27,24*2
@@ -2683,7 +2683,7 @@ untouch	560,101
 untypeabl	127
 unwear	86
 unwritten	386
-up	14,1*2,12,3*2,1*2,2,1*2,19*2,1,12*2,8,26,3,3,4,2,15,33,5,8,7,16,1,17*3,22,2,4,1,1,1,1,14,12,1,17,2,17*2,1*3,5,3*3,9,8,53,11,2,16,12,13,1,8,1,1,50,19,14,2,4,11,2,5*2,5,2*2,7,2,19,11,1,7,1,28,9,1,8*3,2,16*2,3,2,1,10*3,1,1,1,1*3,1,17,1,1,13*2,1*3,4,34,17,6,5,2,27*2,1,11,8,21,4,6,1
+up	14,1*2,12,3*2,1*2,2,1*2,19*2,1,12*2,8,26,3,3,4,2,15,33,5,8,7,16,1,17*3,22,2,4,1,1,1,1,14,12,1,17,2,17*2,1*3,5,3*3,9,8,53,11,2,16,12,13,1,8,1,1,50,19,14,2,4*2,11,2,5*2,5,2*2,7,2,19,11,1,7,1,28,9,1,8*3,2,16*2,3,2,1,10*3,1,1,1,1*3,1,17,1,1,13*2,1*3,4,34,17,6,5,2,27*2,1,11,8,21,4,6,1
 updat	122*2,65,404,49,59,82,82,1,15
 upload	38,114,1,39*2,271,96*2,1*2,6,8,66
 upper	868*3
@@ -2721,7 +2721,7 @@ visit	787
 voic	152,1,653
 void	369
 volum	649
-wait	0,1*2,3,1*2,3*2,6,1,2,1,7,2*2,1,3*2,32*2,11*2,5,1*2,4*3,5,2*2,3,2,7*3,1,2*4,1,1,2,11,1,43,23,22,2*2,6,4,6*2,14,10*3,1*5,2,14,1*4,5,13*3,2,2*2,6,2,4,2,6*2,1,68*2,7,41,39,6*2,1*3,11,15,6*2,1*2,1*2,2,25,16,3*2,39,9,11,39,22,6*2,1,3,2,9,1,2,2,3,4,3,15,2,5,4,46,5,5*2,1,1,10*4,1,1,2,1,4,4,13*3,1*4,1,1,1,1*6,1,1*3,1,2,11
+wait	0,1*2,3,1*2,3*2,6,1,2,1,7,2*2,1,3*2,32*2,11*2,5,1*2,4*3,5,2*2,3,2,7*3,1,2*4,1,1,2,11,1,43,23,22,2*2,6,4,6*2,14,10*3,1*5,2,14,1*4,5,13*3,2,2*2,6,2,4,2,6*2,1,68*2,7,41,39,6*2,1*3,11,15,6*2,1*2,1*2,2,25,6,10,3*2,39,9,11,39,22,6*2,1,3,2,9,1,2,2,3,4,3,15,2,5,4,46,5,5*2,1,1,10*4,1,1,2,1,4,4,13*3,1*4,1,1,1,1*6,1,1*3,1,2,11
 walk	54,2,10,77*2,6*2,1,24,47*3,1*7,2*2,5,65,53,52,18,33*2,1*2,1,2,154,191,11,30*3,1*9,1,1,1,1,1,1*3,1,2*5,1*4,1*3,1*5,1*6,1,1,1,22,1,6,10
 wall	198,1,375,3,273
 wanderer	260
@@ -2747,11 +2747,11 @@ whenever	217
 wher	4,1*2,9*2,11,2*2,14,16,6,3,6,8,7,13,10*3,12,8,23,2,5,7,3,1,3*2,29,3,15,1*2,7,5*3,1,3,4,6,9,9,6,4,1*3,7,3*2,2,1*2,1,1,1,1*3,3*8,1,29*2,4,2,5*2,9*2,6,8*2,9,1,3,3,21,1,2,4,1,10*2,3,5,5*2,3*3,1,1,1,1,1,3*2,13,1,4,5,4,8,15,5,20*2,7,3,17,2,6*2,4*2,1,23*2,4,2,2,10*4,5,5,2,3,2,1,2*2,3,22,8,3,11*2,2*3,1*3,9*2,1,3*4,6,8,5*5,3,10,4,3*2,1,8,1,5,2*3,1*2,2,1*3,1,6,2,1,16,1*2,8,8,6*2,6*3,5*3,7*3,1,2*2,1*3,10,3,1,3,1,8,5*2,8,2,1,2*2,5,7,2,1,5,2,1,1,1*2,3,2*2,4,2,1,2
 wherever	54,46,96,61,20*2,9,107,51,19,193,138,74*2,6
 whichever	63,4,162*2,13,24,31,52,20,134,83,75,146,28
-whil	1,26,7,32,18,19*2,150,17*2,26,17,8,133,49,21,62,2*2,26,17,34,17,17*2,1,48,33,13,12,13,1,59,17,1
+whil	1,26,7,32,18,19*2,150,17*2,26,17,8,133,49,21,18,44,2*2,26,17,34,17,17*2,1,48,33,13,12,13,1,59,17,1
 whit	400,366*2
-who	0,6,2,19,35*2,6,11,4,1,66*2,33*2,1,2,2,14,1,7,4,20,22,1*2,3,1,1,1,2,1,9,52,4,2*4,4,1,1,34,1,6,1,11,1,6*3,2,3,2,48,21,3,2,9*2,4,3,1,3,1,3,6,4,1,10,4*2,9,1,10,1*3,3,3,59,133*2,1*6,1,55*2,22,5,5,4,13*2,28,1*2,1*3,1,1,2*4
-whoever	1*2,79*2,106,17,19,31,4,2,1,3,6,41,3,9,152,1,15,14,4,45,96,156,45*2,30,6,1
-whol	1*4,17*2,13,3,6,1,39*2,26,6,6,11,10,35,10,2,17,14,17,14,5,7*2,6,11*2,16,1,39,4,1,1,8,23,7,11,4,1,6,6,27,52,17,3,14,4,31,36,7,1,8,2,9,10,3,20,33,11,22,4,21,6,19,29,14,8,3,22,28,10
+who	0,6,2,19,35*2,6,11,4,1,66*2,33*2,1,2,2,14,1,7,4,20,22,1*2,3,1,1,1,2,1,9,52,4,2*4,4,1,1,34,1,6,1,11,1,6*3,2,3,2,48,21,3,2,9*2,4,3,1,3,1,3,6,4,1,10,4*2,9,1,10,1*3,3,3,59,133*2,1*6,1,55*2,22,5,5,17*2,28,1*2,1*3,1,1,2*4
+whoever	1*2,79*2,106,17,19,31,4,2,1,3,6,41,3,9,152,1,15,14,4,45,96,3,153,45*2,30,6,1
+whol	1*4,17*2,13,3,6,1,39*2,26,6,6,11,10,35,10,2,17,14,17,14,5,7*2,6,11*2,16,1,39,4,1,1,8,23,7,11,4,1,6,6,27,52,17,3,14,4,31,36,7,1,8,2,9,10,3,20,33,11,22,4,21,6,19,29,14,8,3,22*2,28,10
 whom	184
 whos	27,7,4,36,36*2,2*2,10,31,7*2,79,3,18,33,14,54,22,16,20,25,19*2,31*2,2,64,44,10,4,38,50*2,18*2,9,33,28,14
 wid	291,107*4,254,12,2

@@ -314,6 +314,24 @@ func TestListingAFolderByPathWalksTheNamesDown(t *testing.T) {
 	}
 }
 
+// TestAListingCarriesTheItemsGroup: AIS gives an item's group with its
+// permissions, and a rez or a wear built from the listing sends it back.
+func TestAListingCarriesTheItemsGroup(t *testing.T) {
+	w, f := newFakeSession(t)
+	group := mustUUID("773b7e57-7e57-c0de-93f2-bb088d88f05d")
+	it := anItem(theChild, "workbench")
+	it.GroupID = group
+	f.ServeInventory(t, func(msg.UUID) []*Item { return []*Item{it} })
+
+	got, err := w.ListFolder(context.Background(), aFolder, 0)
+	if err != nil {
+		t.Fatalf("ListFolder: %v", err)
+	}
+	if len(got) != 1 || got[0].Group != group {
+		t.Errorf("listed %+v, want the item with its group %s", got, group)
+	}
+}
+
 // TestListingByIdIsForFoldersAPathCannotName: an inventory name may hold
 // a separator, and a folder called "a/b" cannot be reached by walking
 // names -- so the id form is the way in rather than a convenience.

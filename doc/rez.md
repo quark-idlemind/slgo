@@ -70,7 +70,8 @@ the error so that the caller can clear it away, as `slsh`'s `rez` does.
 `Rez` hands it back the same way, and the two callers that rez a prim
 for their own use, the object `slrun` runs in and the one
 `EnsureAttached` makes to wear, delete it into the trash before
-returning the error.
+returning the error.  `RezFromInventory` hands one back too, and
+`slsh`'s `place` deletes it into the trash in the same way.
 
 Recognising a rez by novelty alone went wrong twice before this. It
 reported an object that had just been taken, whose entry lingered until

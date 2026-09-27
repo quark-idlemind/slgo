@@ -477,6 +477,7 @@ func folderLLSDTree(folder msg.UUID, folders []*Folder, items []*Item) string {
 		fmt.Fprintf(&b, `<key>inv_type</key><integer>%d</integer>`, it.InvType)
 		fmt.Fprintf(&b, `<key>flags</key><integer>%d</integer>`, it.Flags)
 		b.WriteString(`<key>permissions</key><map>`)
+		fmt.Fprintf(&b, `<key>group_id</key><uuid>%s</uuid>`, it.GroupID)
 		fmt.Fprintf(&b, `<key>group_mask</key><integer>%d</integer>`, it.GroupMask)
 		fmt.Fprintf(&b, `<key>everyone_mask</key><integer>%d</integer>`, it.EveryoneMask)
 		fmt.Fprintf(&b, `<key>next_owner_mask</key><integer>%d</integer>`, it.NextOwnerMask)

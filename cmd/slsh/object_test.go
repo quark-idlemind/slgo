@@ -11,7 +11,7 @@ import (
 	"github.com/quark-idlemind/slgo/sl"
 )
 
-// TestAFailedBuildIsTakenAwayByItsRoots.
+// TestAFailedBuildIsTakenAwayByItsRoots, into the trash.
 //
 // A prim linked to the root goes when the root does, so only roots are
 // sent, as the viewer sends a delete.  Sent after its root had gone, a
@@ -35,6 +35,10 @@ func TestAFailedBuildIsTakenAwayByItsRoots(t *testing.T) {
 	var sent []uint32
 	for _, d := range sentOfShell[*msg.DeRezObject](x) {
 		sent = append(sent, d.ObjectData[0].ObjectLocalID)
+		// Into the trash, named as the viewer names it.
+		if d.AgentBlock.DestinationID != testTrash {
+			t.Errorf("%d was deleted into %v, not the trash", d.ObjectData[0].ObjectLocalID, d.AgentBlock.DestinationID)
+		}
 	}
 	if len(sent) != 2 || sent[0] != 11 || sent[1] != 13 {
 		t.Errorf("deleted %v, want the root 11 and the prim on its own, 13", sent)
@@ -47,6 +51,7 @@ func TestAFailedBuildIsTakenAwayByItsRoots(t *testing.T) {
 func TestAFailedBuildSaysWhatItCouldNotConfirmGone(t *testing.T) {
 	t.Parallel()
 	x := newTestShell(t)
+	shortReadBacks(x)
 	standing(x, aPrim(aChair, 11, "chair", 0))
 
 	chair := &sl.Object{ID: aChair, Local: 11}

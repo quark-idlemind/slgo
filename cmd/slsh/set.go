@@ -127,6 +127,11 @@ func cmdSet(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if note != "" {
 		fmt.Fprintf(out, "%s\n", note)
 	}
+	if !s.startup && s.apply != nil {
+		if err := s.apply(sh); err != nil {
+			return fmt.Errorf("%s: %w", s.name, err)
+		}
+	}
 	return nil
 }
 

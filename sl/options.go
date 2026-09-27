@@ -1,0 +1,61 @@
+package sl
+
+import "time"
+
+// Options are what a Session can be told after it is made.  A zero
+// field is its default, so the zero Options is every default.
+type Options struct {
+	// MoveTimeout, PermissionsTimeout and DeleteTimeout bound the
+	// reading back of a change that nothing answers, before it is
+	// reported asked for and not confirmed, wrapping ErrTimeout:
+	// MoveItem and MoveFolder list the destination until it holds what
+	// was moved, SetObjectPermissions reads the object's masks until
+	// they are what was sent, and Delete waits for the region to say
+	// the object has gone.  A test that proves one of them runs out
+	// sets it short rather than waiting it out.
+	// Why: doc/readbacks.md
+	MoveTimeout        time.Duration
+	PermissionsTimeout time.Duration
+	DeleteTimeout      time.Duration
+}
+
+// The defaults for Options.  None of them is a measurement; each is a
+// margin over what was seen.
+const (
+	DefaultMoveTimeout        = 15 * time.Second
+	DefaultPermissionsTimeout = 15 * time.Second
+	DefaultDeleteTimeout      = 10 * time.Second
+)
+
+// SetOptions replaces the session's Options.  A call already waiting
+// keeps the bound it began with.
+func (w *Session) SetOptions(o Options) { w.opts.Store(&o) }
+
+// Options is what SetOptions last set, as it was set: a field left zero
+// is still zero here, and means the default.
+func (w *Session) Options() Options {
+	if o := w.opts.Load(); o != nil {
+		return *o
+	}
+	return Options{}
+}
+
+// moveWait, permissionsWait and deleteWait are the bounds in force.
+func (w *Session) moveWait() time.Duration {
+	return orDefault(w.Options().MoveTimeout, DefaultMoveTimeout)
+}
+
+func (w *Session) permissionsWait() time.Duration {
+	return orDefault(w.Options().PermissionsTimeout, DefaultPermissionsTimeout)
+}
+
+func (w *Session) deleteWait() time.Duration {
+	return orDefault(w.Options().DeleteTimeout, DefaultDeleteTimeout)
+}
+
+func orDefault(d, def time.Duration) time.Duration {
+	if d <= 0 {
+		return def
+	}
+	return d
+}

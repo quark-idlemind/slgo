@@ -534,12 +534,47 @@ func TestInstallScriptIsTheHalfThatCompiles(t *testing.T) {
 	if got := string(<-up.asked); !strings.Contains(got, theChild.String()) {
 		t.Errorf("the capability was asked %q, want the item inside the object", got)
 	}
+	// With the newline in front that Run sends; see leadingNewline.
+	if got := string(<-up.body); got != "\ndefault {}" {
+		t.Errorf("uploaded %q", got)
+	}
 	res, err := wait()
 	if err != nil {
 		t.Fatalf("InstallScript: %v", err)
 	}
 	if !res.Compiled {
 		t.Errorf("InstallScript = %+v", res)
+	}
+}
+
+// TestInstallScriptSendsAnEmptyUploadAgain, as Run does: with the
+// newline in front, "(0, 0)" can only be an upload that arrived empty.
+func TestInstallScriptSendsAnEmptyUploadAgain(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	var tries atomic.Int32
+	serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
+		if tries.Add(1) == 1 {
+			return 200, `<llsd><map><key>state</key><string>complete</string>` +
+				`<key>compiled</key><boolean>0</boolean>` +
+				`<key>errors</key><array><string>(0, 0) : ERROR : Syntax error` +
+				`</string></array></map></llsd>`
+		}
+		return compiles()
+	})
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+
+	wait := aside(t, func() (*UploadResult, error) {
+		return w.InstallScript(context.Background(), o, "a script", "default {}", true)
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+	res, err := wait()
+	if err != nil {
+		t.Fatalf("InstallScript: %v", err)
+	}
+	if !res.Compiled || tries.Load() != 2 {
+		t.Errorf("an upload that arrived empty gave compiled %v, %q after %d uploads, want compiled after 2",
+			res.Compiled, res.Errors, tries.Load())
 	}
 }
 

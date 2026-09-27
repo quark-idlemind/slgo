@@ -473,8 +473,20 @@ func TestQuitAndExitAreTheSameCommand(t *testing.T) {
 	}
 
 	x := newTestShell(t)
-	if got := x.do(t, "quit --help"); !strings.Contains(got, "quit") {
+	if got := x.do(t, "quit --help"); !strings.Contains(got, "Usage: quit") {
 		t.Errorf("quit --help printed %q", got)
+	}
+	// Each by the name typed.
+	if got := x.do(t, "exit --help"); !strings.Contains(got, "Usage: exit") ||
+		!strings.Contains(got, `"man exit"`) || strings.Contains(got, "quit") {
+		t.Errorf("exit --help printed %q", got)
+	}
+	// The same for the other commands known by two names.
+	for _, c := range []struct{ typed, other string }{{"unsit", "stand"}, {"source", "."}} {
+		if got := x.do(t, c.typed+" --help"); !strings.Contains(got, "Usage: "+c.typed) ||
+			strings.Contains(got, "Usage: "+c.other+" ") {
+			t.Errorf("%s --help printed %q", c.typed, got)
+		}
 	}
 	select {
 	case <-x.quit:
@@ -888,7 +900,8 @@ func TestEnterInChatDoesNotEchoTheLine(t *testing.T) {
 }
 
 // TestTabIsTwoThingsInTwoModes: completion where there are commands to
-// complete, conversations where there are not.
+// complete, conversations where there are not.  A typed answer takes
+// completion.
 func TestTabIsTwoThingsInTwoModes(t *testing.T) {
 	ctx := context.Background()
 	x := newTestShell(t)
@@ -904,6 +917,14 @@ func TestTabIsTwoThingsInTwoModes(t *testing.T) {
 	x.key(ctx, '\t')
 	if got := x.term.Line(); got != "featu" {
 		t.Errorf("tab in chat mode edited the line: %q", got)
+	}
+
+	// A typed answer is not chat, and completes.
+	x.setMode(modeText)
+	x.term.SetLine("featu")
+	x.key(ctx, '\t')
+	if got := x.term.Line(); got != "features" {
+		t.Errorf("tab while typing an answer gave %q", got)
 	}
 }
 

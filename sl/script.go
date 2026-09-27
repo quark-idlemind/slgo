@@ -94,13 +94,11 @@ type Result struct {
 	Compiled bool
 	Errors   []string
 
-	// State and Message are the rest of what the capability said, which
-	// is worth keeping for the times the errors alone do not explain
-	// themselves.  "(0, 0) : ERROR : Syntax error" is the compiler's
-	// answer both to a script that is wrong at its first character and
-	// to an upload that reached it EMPTY, and telling those apart from
-	// one line of output is not possible -- so the rest of the answer is
-	// carried rather than thrown away.
+	// State and Message are the rest of what the capability said, kept
+	// for the times the errors alone do not explain themselves.  An
+	// upload that reached the compiler empty is not one of those: with
+	// the newline in front, "(0, 0) : ERROR : Syntax error" can mean
+	// nothing else, and it is sent again once (see leadingNewline).
 	State   string
 	Message string
 
@@ -575,7 +573,10 @@ func (w *Session) onScriptRunning(fn func(object, item msg.UUID, running bool)) 
 // This is the second half. The source is uploaded through
 // UpdateScriptTask, which compiles it inside the object and starts it,
 // and is the same call Run makes -- which is why running a script always
-// worked while installing a listener never did.
+// worked while installing a listener never did.  It goes up as Run's
+// does, with a newline in front (see leadingNewline): the compiler's
+// line numbers are one higher than offsets into source, and an upload
+// that reached the compiler empty is sent again, once.
 //
 // Reusing the name replaces that script rather than adding another: an
 // object keeps every copy it is given and renames the newcomer.
@@ -624,12 +625,7 @@ func (w *Session) InstallScript(ctx context.Context, o *Object, name, source str
 		}
 	}
 
-	up, err := w.upload(ctx, "UpdateScriptTask", map[string]any{
-		"item_id":           task.ID.String(),
-		"task_id":           o.ID.String(),
-		"is_script_running": running,
-		"target":            "mono",
-	}, []byte(source))
+	up, err := w.install(ctx, task.ID, o.ID, source, running)
 	if err != nil {
 		return nil, errors.Join(err, leftover)
 	}

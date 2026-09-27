@@ -47,10 +47,11 @@ type Shell struct {
 	term *Term
 	s    *sl.Session
 
-	// log is the transcript, or nil when there is none: nothing is
-	// kept when "log" is off, and a transcript that could not be
-	// opened is a shell that carries on without one.  logErr is what
-	// stopped it, said once in the banner rather than at every line.
+	// log is the transcript.  It has no file open when "log" is off,
+	// and a transcript that could not be opened is a shell that
+	// carries on without one.  logErr is what stopped it at startup,
+	// said once in the banner rather than at every line.  "set log"
+	// and "set log_dir" reopen it in place; see relog.
 	log    *transcript
 	logErr error
 
@@ -122,20 +123,30 @@ func NewShell(cfg Config, t *Term, s *sl.Session) *Shell {
 		cwdID: s.InventoryRoot(),
 		talk:  NewConversations(),
 		quit:  make(chan struct{}),
+		log:   &transcript{},
 	}
 	sh.groups.fetch = groupsOf(s)
 	if cfg.Chat {
 		sh.mode = modeChat
 	}
-	if cfg.Log {
-		// The avatar's name is what the file is called, so this waits
-		// until there is a session to ask.  A failure here is not a
-		// reason to refuse to start a shell: the session is up and
-		// working, and losing the transcript is worth saying and
-		// carrying on from.
-		sh.log, sh.logErr = openTranscript(cfg.LogDir, s.Info().AvatarName, cfg.Agent)
-	}
+	// The avatar's name is what the file is called, so this waits until
+	// there is a session to ask.  A failure here is not a reason to
+	// refuse to start a shell: the session is up and working, and losing
+	// the transcript is worth saying and carrying on from.
+	sh.logErr = sh.relog()
 	return sh
+}
+
+// relog makes the transcript what the settings say now: closed when
+// "log" is off, and otherwise opened afresh in "log_dir".
+func (sh *Shell) relog() error {
+	var n *transcript
+	var err error
+	if sh.cfg.Log {
+		n, err = openTranscript(sh.cfg.LogDir, sh.s.Info().AvatarName, sh.cfg.Agent)
+	}
+	sh.log.replace(n)
+	return err
 }
 
 // Close gives up whatever the shell holds that the process does not.
@@ -544,7 +555,7 @@ func (sh *Shell) run(ctx context.Context, out io.Writer, words []string) error {
 		sh.errorf("%s: no such command; try help", name)
 		return fmt.Errorf("no such command: %s", name)
 	}
-	err := c.run(ctx, sh, out, args)
+	err := c.run(context.WithValue(ctx, typedAsKey{}, name), sh, out, args)
 	switch {
 	case err == nil:
 	case errors.Is(err, errStopped):
@@ -554,6 +565,19 @@ func (sh *Shell) run(ctx context.Context, out io.Writer, words []string) error {
 		sh.errorf("%s: %v", name, err)
 	}
 	return err
+}
+
+// typedAsKey is where run keeps the name a command was typed as.
+type typedAsKey struct{}
+
+// typedAs is the name the running command was typed as, where that is
+// another name for the command called name, and otherwise name: "exit"
+// is quit, and its usage says exit.
+func typedAs(ctx context.Context, name string) string {
+	if n, ok := ctx.Value(typedAsKey{}).(string); ok && commands[n] == commands[name] {
+		return n
+	}
+	return name
 }
 
 // Source reads commands from a file, one per line.
@@ -976,7 +1000,7 @@ func init() {
 		man:      "quit",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
-			if _, done, err := subOptions("quit", &flags, out, args); err != nil || done {
+			if _, done, err := subOptions(typedAs(ctx, "quit"), &flags, out, args); err != nil || done {
 				return err
 			}
 			sh.Quit()
@@ -994,7 +1018,7 @@ func init() {
 		man: "source",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
-			args, done, err := subOptions(".", &flags, out, args)
+			args, done, err := subOptions(typedAs(ctx, "."), &flags, out, args)
 			if err != nil || done {
 				return err
 			}

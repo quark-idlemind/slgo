@@ -269,3 +269,9 @@ here when another is shared the same way.
   object's name can be anybody's, so slsh and slbotd print no sender
   any other way. `TestNoObjectNameIsPrintedBare` refuses an
   `ObjectName` used outside `Label` in `sl`, slsh or slbotd.
+- `sl.Options`, in `sl/options.go`, set with `Session.SetOptions`: how
+  long a move, a permission change and a delete are read back before
+  they are reported not confirmed, 15, 15 and 10 s by default. A test
+  that proves one of them runs out sets it short rather than waiting
+  the default out, as `sl`'s do and `shortReadBacks` does for
+  `cmd/slsh`'s.

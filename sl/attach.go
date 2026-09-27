@@ -427,16 +427,17 @@ func (w *Session) WornFromItem(ctx context.Context, item msg.UUID) (*Attached, b
 // but a lookup; in inventory but not on, which is a wear; and not there
 // at all, which is a rez, a take and a wear.  The last happens once in
 // the life of an account.  A rez given up on whose prim was made all
-// the same is deleted again.
+// the same is deleted again.  Several items of the name are refused, as
+// PickNamed refuses them.
 func (w *Session) EnsureAttached(ctx context.Context, folder msg.UUID, name string, point int) (*Attached, error) {
 	items, err := w.FolderItems(ctx, folder)
 	if err != nil {
 		return nil, err
 	}
-	for _, it := range items {
-		if it.Name != name {
-			continue
-		}
+	it, err := PickNamedFunc(items, name, "item", "in folder "+folder.String(), itemNamed)
+	var ne *NameError
+	switch {
+	case err == nil:
 		// Already worn is the ordinary case, and asking costs one
 		// question.  Only when it is not worn is anything disturbed:
 		// Worn takes it off and puts it back on, which is how a
@@ -446,6 +447,8 @@ func (w *Session) EnsureAttached(ctx context.Context, folder msg.UUID, name stri
 			return a, nil
 		}
 		return w.Worn(ctx, folder, name, point)
+	case !errors.As(err, &ne) || len(ne.IDs) > 1:
+		return nil, fmt.Errorf("sl: %w", err)
 	}
 
 	// Nothing of that name: build one and keep it.
@@ -468,7 +471,7 @@ func (w *Session) EnsureAttached(ctx context.Context, folder msg.UUID, name stri
 	if err := w.SetName(ctx, obj, name); err != nil {
 		return nil, fmt.Errorf("sl: naming %q: %w", name, err)
 	}
-	it, err := w.Take(ctx, obj, folder, 40*time.Second)
+	it, err = w.Take(ctx, obj, folder, 40*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("sl: taking %q into inventory: %w", name, err)
 	}
@@ -511,7 +514,8 @@ func (w *Session) TakeOff(ctx context.Context, item msg.UUID) error {
 }
 
 // Worn finds a worn object by the name of the inventory item it came
-// from, putting it back on if the simulator has not mentioned it.
+// from, putting it back on if the simulator has not mentioned it.  The
+// name has to pick out one item in folder; see FindItem.
 //
 // The re-wearing is the point.  A worn attachment is described only
 // when it is attached, and a client sees only what is relayed after it
