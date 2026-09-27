@@ -29,9 +29,12 @@ and `--oldest` exist.
 ## What is done with a name
 
 The rule is `sl.PickNamed` (`sl/pick.go`), and `sl.PickNamedFunc` for
-things whose name is read some other way. `sl`'s walk down a path uses
-it, as do `slsh`'s paths and its names inside an object, `slbotd`'s
-paths, `detach` in both and `slbotd`'s `landmark`. `slsh`'s
+things whose name is read some other way; both are `internal/pick`'s,
+which `agent` uses too. `sl`'s walk down a path uses it, and so do
+`sl.FindItem`, `sl.Folder` and `agent.Inventory.FindFolder`, with
+`sl.Worn` and `sl.EnsureAttached`, which find their item the same way.
+So do `slsh`'s paths and its names inside an object, `slbotd`'s paths,
+`detach` in both and `slbotd`'s `landmark`. `slsh`'s
 `landmark`, which also takes a whole path, and `accept` and `decline`,
 which also take the giver's name, match an item's name by the same
 rule and take their near-miss hint from `sl.AllNamedFunc`.
@@ -59,11 +62,18 @@ whose number is what answers one, since neither takes an id.
 
 Inside an object an exact name is unique, so only the near miss can
 happen there, and `rm --in` refuses `--remove-all-copies`: there is
-never more than one to remove.
+never more than one to remove. `sl.FindInObject` takes the exact match
+for the same reason, and a miss there is a nil item rather than a
+refusal, since not finding a script is how `Run` and `InstallScript`
+decide to put one in.
 
 A person's name is different. The grid ignores case in one, and so do
 `slsh` and `slbotd`, `accept`'s giver and the friendship offers
 included.
+
+`TestNoInventoryNameIsMatchedIgnoringCase`, in `sl/pick_test.go`,
+refuses a new `strings.EqualFold` on a name in `sl`, `slsh` or
+`slbotd` until it is listed there with what it matches.
 
 ## Searches
 
@@ -75,14 +85,3 @@ the whole name has matched nothing -- `slbotd`'s `landmark`, and
 whose whole name is the word in another case is not taken as a search
 result. That would be taking a case variant as if it had been typed; it
 is refused with the near-miss hint instead.
-
-## Not yet moved
-
-`sl.FindItem`, `sl.Folder` and `agent.Inventory.FindFolder` match a
-name exactly but take the first of several without a word, and
-`sl.Worn` finds an item through `FindItem`. `sl.FindInObject` takes the
-first exact match too, which inside an object is the only one.
-
-`TestNoInventoryNameIsMatchedIgnoringCase`, in `sl/pick_test.go`,
-refuses a new `strings.EqualFold` on a name in `sl`, `slsh` or
-`slbotd` until it is listed there with what it matches.
