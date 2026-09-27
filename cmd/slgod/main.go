@@ -448,21 +448,6 @@ func main() {
 		pending = append(pending, waiting{name: name, login: login, opts: opts})
 	}
 
-	// The active group, which decides whether a parcel lets this avatar
-	// build at all.
-	//
-	// A parcel usually grants "create objects" to a GROUP rather than to
-	// individuals, and a login starts with NONE active. A viewer hides
-	// this by storing the group in its settings and re-sending it every
-	// time, which makes it feel permanent; headless it is not. So an
-	// avatar that builds happily through a viewer cannot rez a thing
-	// here, and the refusal blames the land -- the wrong place to look.
-	//
-	// This belongs to the session rather than to a client: it is settled
-	// here, and every client attached to the agent shares it.  A
-	// restarted slgod is a fresh login, so it must be settled again --
-	// and so is a RECONNECT, which is why the answer is handed to the
-	// server to remember rather than sent from here.  See server/group.go.
 	if len(hosted) == 0 && len(pending) == 0 {
 		log.Fatal("no session came up; nothing to serve")
 	}
@@ -471,6 +456,13 @@ func main() {
 	// for the ones named on the command line and for any started later
 	// on request, so that a session cannot be half set up depending on
 	// how it came to exist.
+	//
+	// What it settles is the active group, which decides whether a
+	// parcel lets the avatar build at all, and which a login starts
+	// without.  It belongs to the session, and every client attached
+	// shares it; a reconnect is a fresh login, so the answer is handed
+	// to the server to remember and put back.  See server/group.go.
+	// Why: doc/daemon.md#the-active-group
 	settle := func(h *server.Hosted) {
 		name := h.Name
 		want := ""
@@ -592,8 +584,7 @@ func main() {
 		// After serve, because until it has bound the listener there
 		// is no address to tell anybody.  A server left without this
 		// answers "no viewer logins", which is the truth for a daemon
-		// started without -viewer and the answer every client here
-		// gets today.
+		// started without -viewer.
 		srv.SetViewer(viewers)
 	}
 

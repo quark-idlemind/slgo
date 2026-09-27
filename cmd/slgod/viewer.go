@@ -109,11 +109,11 @@ const viewerCredentialLife = 5 * time.Minute
 // Sixteen because that is what a viewer's login box will hold --
 // panel_login.xml:144 gives the password field max_length_chars="16" --
 // so a password that has to be typed or pasted by hand still can be.
-// The command line does not care (llloginhandler.cpp:168 md5s whatever
+// The command line does not care (llloginhandler.cpp:169 md5s whatever
 // it is given, whole), but a credential that works one way and is
 // silently truncated the other is a bad hour for somebody.  Sixteen hex
-// digits is 64 bits, from crypto/rand, for a secret that lives a minute
-// and works once.
+// digits is 64 bits, from crypto/rand, for a secret that lives five
+// minutes and works once.
 const viewerPasswordChars = 16
 
 // newViewerHost prepares the endpoint without starting it.
@@ -192,9 +192,9 @@ func (v *viewerHost) movedFor(profile string) func(string, uint64) {
 
 // relayFor is the hook a session hands its messages to.
 //
-// Nil until a viewer attaches, which is the ordinary case and has to be
-// cheap: this runs on the session's dispatch goroutine for every
-// message the region sends.
+// It does nothing until a viewer has a circuit, which is the ordinary
+// case and has to be cheap: this runs on the session's dispatch
+// goroutine for every message the region sends.
 func (v *viewerHost) relayFor(profile string) func(*msg.Packet) {
 	return func(p *msg.Packet) {
 		if c, ok := v.circuits.Load(profile); ok {
@@ -309,8 +309,8 @@ var _ server.Viewer = (*viewerHost)(nil)
 
 // LoginURI is the address to add to a viewer's grid list.
 //
-// Until now this appeared once, in the daemon's log, at startup: a
-// person attached with a shell an hour later had no way to ask.
+// The daemon's log says it once, at startup; this is for a person who
+// attaches with a shell an hour later and has to ask.
 func (v *viewerHost) LoginURI() string {
 	if v.base == "" {
 		return ""
@@ -695,13 +695,14 @@ func (v *viewerHost) serveCap(w http.ResponseWriter, r *http.Request) {
 		// by somewhere else or not at all.  The agent is asked
 		// because the agent is the only thing that knows: the seed of
 		// every region after the first arrives inside a
-		// TeleportFinish that nothing above that package reads.
+		// TeleportFinish or a CrossedRegion that nothing above that
+		// package reads.
 		seed := a.Seed()
 		if seed == "" {
-			// A session with no capabilities at all: SkipCaps, or a
-			// move whose seed would not parse.  Saying so beats
-			// proxying to an empty URL and answering a viewer with
-			// whatever that produces.
+			// No seed for the region the avatar is in: a login
+			// response that carried none, or a move whose seed was
+			// not a URL.  Saying so beats proxying to an empty URL
+			// and answering a viewer with whatever that produces.
 			http.Error(w, "this session has no capabilities to hand on", http.StatusServiceUnavailable)
 			return
 		}
