@@ -232,8 +232,8 @@ func TestARunningViewerIsRefusedRatherThanRaised(t *testing.T) {
 
 // TestALaunchRunsTheCommandAndKeepsThePasswordOutOfSight: the password
 // reaches the viewer's argv, which is bad enough; printing it as well
-// would leave it in a scrollback that outlives the minute it is good
-// for.
+// would leave it in a scrollback that outlives the five minutes it is
+// good for.
 func TestALaunchRunsTheCommandAndKeepsThePasswordOutOfSight(t *testing.T) {
 	x, d := newDaemonShell(t)
 	d.status = aViewerStatus(false)

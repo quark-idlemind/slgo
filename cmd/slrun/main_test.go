@@ -8,8 +8,8 @@ package main
 // succeeded is a benchmark or a probe that quietly measured nothing.
 //
 // The grid is fake_test.go's.  Nothing here logs in, dials anything or
-// reads a profile: what needs a login is runIn's successful half, and it
-// is named in coverage-notes/commands.md.
+// reads a profile: runIn's successful half needs a daemon, and
+// daemon_test.go is where it has one.
 //
 // Nothing runs in parallel.  The flags are package level -- one program,
 // one set of options -- so two tests at once would be two tests sharing
@@ -359,9 +359,9 @@ func TestHelpIsAnAnswerAndNotAFailure(t *testing.T) {
 }
 
 // TestGettingSomewhereToRunFailsBeforeAnythingIsSent: a script needs an
-// object to run in, and both ways of getting one go through a daemon.
-// Neither can be reached here, so what is checked is that a failure comes
-// back as an error rather than as a run against nothing.
+// object to run in, and every way of getting one goes through a daemon.
+// None is listening here, so what is checked is that a failure comes back
+// as an error rather than as a run against nothing.
 func TestGettingSomewhereToRunFailsBeforeAnythingIsSent(t *testing.T) {
 	reset(t)
 	// A home of the test's own: attaching to slgod reads a shared secret
@@ -384,9 +384,8 @@ func TestGettingSomewhereToRunFailsBeforeAnythingIsSent(t *testing.T) {
 		t.Error("runIn rezzed a prim through a daemon that is not there")
 	}
 
-	// The shared auto object is the default and goes a different way
-	// about it: it asks the daemon who it is holding before it asks for
-	// anything to run in.
+	// The shared auto objects are the default and go a different way
+	// about it, through session.UseAutoSpread.
 	flags.Rez = false
 	if _, _, err := runIn(context.Background(), opts, 1); err == nil {
 		t.Error("runIn took an auto object from a daemon that is not there")
@@ -413,9 +412,9 @@ func TestARunThatCannotStartIsStillAFailedRun(t *testing.T) {
 	}
 }
 
-// TestTheProgramLeavesQuietlyWhenThereIsNothingWrong: main is four lines
-// and all four are about the exit status, which is the only thing a
-// caller can act on -- the original always exited 0, which left a script
+// TestTheProgramLeavesQuietlyWhenThereIsNothingWrong: main turns what
+// run returned into the exit status, which is the only thing a caller
+// can act on -- the original always exited 0, which left a script
 // driving this no way to tell without scraping stdout.
 func TestTheProgramLeavesQuietlyWhenThereIsNothingWrong(t *testing.T) {
 	reset(t)
@@ -696,8 +695,9 @@ func TestOnlyCancellationIsKeptQuiet(t *testing.T) {
 
 // TestTheTagIsAColumnWhenThereAreSeveralAndJustTheNameWhenThereIsOne:
 // with several scripts running at once the tags are what the eye follows
-// down the page, so they are padded to the widest -- and with one script
-// there is no column to line up and nothing is padded.
+// down the page, so they are padded to the widest -- and with one script,
+// when -v asks for its name, there is no column to line up and nothing is
+// padded.
 func TestTheTagIsAColumnWhenThereAreSeveralAndJustTheNameWhenThereIsOne(t *testing.T) {
 	reset(t)
 	if got := tag("a.lsl"); got != "a.lsl: " {

@@ -6,8 +6,7 @@ package main
 // halves are the point: give reports an offer rather than a transfer,
 // move waits for the object to have moved instead of reading back the
 // position it had before, and cp refuses a folder outright.  All of
-// that is reachable over a fake grid; what is not is noted in
-// coverage-notes/slsh-shell.md.
+// that is reachable over a fake grid.
 
 import (
 	"context"
@@ -576,8 +575,8 @@ func lastTeleport(t *testing.T, x *testShell) *msg.TeleportLocationRequest {
 }
 
 // goguenHandle is the region the map blocks above stand for: grid square
-// (995, 997), which is the destination stage 0 measured a real teleport
-// to and back from.
+// (995, 997), which is the destination stage 0 of doc/history/teleport.md
+// measured a real teleport to and back from.
 const goguenHandle = 1094014069892352
 
 // agniRefusedTeleport is a region that would not have this avatar, as
@@ -725,10 +724,10 @@ func TestAutoCountsWhatIsWornAndSaysWhatThatBuys(t *testing.T) {
 
 // TestAutoWillNotRearrangeObjectsUnderARunningBenchmark.
 //
-// Setting up moves attachments about, and a benchmark holding a group
-// has its base readings in those objects' linkset data.  So -n takes
-// every group's lock first and gives up if any of them is busy, rather
-// than doing half the work and finding out.
+// Setting up moves attachments about, and a benchmark whose object
+// went away reports nothing useful about why.  So -n takes every place
+// the avatar has first, as one grant, and gives up if any of them is in
+// use, rather than doing half the work and finding out.
 func TestAutoWillNotRearrangeObjectsUnderARunningBenchmark(t *testing.T) {
 	x := newTestShell(t)
 	x.grid.lockedBy = "slbench"
@@ -763,8 +762,9 @@ func TestTheDaemonCommandsSayWhenThereIsNoDaemon(t *testing.T) {
 }
 
 // TestAgentsListsInTheDaemonsOrder, which is not alphabetical: oldest
-// first, and the first hosted one is what a command that names no agent
-// gets.  That order is the information.
+// first, and the first session it holds that was not deliberately
+// stopped is what a command that names no agent gets.  That order is
+// the information.
 func TestAgentsListsInTheDaemonsOrder(t *testing.T) {
 	x, d := newDaemonShell(t)
 	d.agents = []*pb.AgentInfo{

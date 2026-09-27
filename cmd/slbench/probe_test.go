@@ -87,9 +87,9 @@ func TestAProbesReadingIsAReadingLikeAnyOther(t *testing.T) {
 	}
 }
 
-// TestAskingForAPadTwiceCostsOneRun: a probe answers from whichever cache
-// holds its count, because a run is an upload, a compile, an execution
-// and a wait, and everything else this program does is free beside it.
+// TestAskingForAPadTwiceCostsOneRun: a probe answers from the run cache,
+// because a run is an upload, a compile, an execution and a wait, and
+// everything else this program does is free beside it.
 func TestAskingForAPadTwiceCostsOneRun(t *testing.T) {
 	probeReset(t)
 	b, f := newFakeRunner(t, 474, 368, 3)
@@ -113,9 +113,8 @@ func TestAskingForAPadTwiceCostsOneRun(t *testing.T) {
 
 // TestAProbeThatFailedIsRunTheOrdinaryWay: a probe swallows its error on
 // purpose, because running it again the ordinary way puts the failure in
-// front of the code that knows which failures mean try something smaller.
-// So a spare object that will not compile anything costs a run, not an
-// answer.
+// front of the code that knows what to do about it.  So a spare object
+// that will not compile anything costs a run, not an answer.
 func TestAProbeThatFailedIsRunTheOrdinaryWay(t *testing.T) {
 	probeReset(t)
 	b, f := newFakeRunner(t, 474, 368, 3)
@@ -187,9 +186,9 @@ func TestTwoPartsIsTheBisectionAndIsDeclined(t *testing.T) {
 }
 
 // TestAWholeSearchThroughTheTransport is the end this file exists for:
-// the padding search, the quartering, the probes and the confirmation,
-// run against a grid rather than against the model that sits above the
-// transport.  It has to find the same boundary either way.
+// the padding search, the quartering and the probes, run through the
+// grid transport rather than the model's.  It has to find the same
+// boundary either way.
 func TestAWholeSearchThroughTheTransport(t *testing.T) {
 	probeReset(t)
 	t.Setenv("SLGO_CONFIG_DIR", t.TempDir())

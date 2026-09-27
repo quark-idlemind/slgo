@@ -19,7 +19,7 @@ func chatterWith(set func(*Config)) *Chatter {
 	return &Chatter{cfg: cfg}
 }
 
-// The worked example from the specification: a 46 character remark read
+// The worked example at the head of pace.go: a 46 character remark read
 // at 23 characters a second is two seconds, and a 32 character answer
 // typed at 3.2 is ten more.
 func TestThePaceIsTheArithmeticItSays(t *testing.T) {

@@ -297,8 +297,8 @@ func TestTheHelpFlagIsNotInTheUsageLineButIsStillUnderIt(t *testing.T) {
 //
 // The flag has to come out of a cluster as well as on its own, and a
 // cluster with nothing left in it has to go rather than become "[-]".
-// These are the four shapes getopt produces, worked through the one
-// function that has to get them right.
+// These are the shapes getopt produces, worked through the one function
+// that has to get them right.
 func TestTakingTheHelpFlagOutLeavesTheOthersAlone(t *testing.T) {
 	for _, c := range []struct {
 		name string

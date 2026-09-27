@@ -19,8 +19,7 @@ package main
 // What cannot be reached this way is anything that ends in log.Fatal.
 // Those call os.Exit, which would take the test binary with them, so
 // the refusals -- no profiles named, no session that came up, no shared
-// secret -- are left to coverage-notes/daemon.md rather than tested
-// here.
+// secret -- are not tested here.
 
 import (
 	"context"
@@ -267,7 +266,8 @@ func (c *logCapture) String() string {
 }
 
 // waitForLog blocks until the daemon has said something matching, and
-// answers with the whole line.
+// answers with the last group of the match, or the whole match when the
+// pattern has none.
 func (d *daemon) waitForLog(t *testing.T, re *regexp.Regexp, what string) string {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
@@ -316,8 +316,9 @@ func profileDir(t *testing.T, hs *httptest.Server, names ...string) string {
 func runDaemon(t *testing.T, args ...string) *daemon {
 	t.Helper()
 
-	// Its own machine identity and its own home, so that neither the
-	// real ~/.config/slgod nor the real shared secret is touched.
+	// Its own machine identity, so that the real ~/.config/slgod is not
+	// touched.  The home, and the shared secret in it, are the caller's
+	// to redirect: writeSecret, or a HOME of the test's own.
 	t.Setenv("SLGOD_CONFIG_DIR", filepath.Join(t.TempDir(), "slgod"))
 
 	savedArgs, savedFlags := os.Args, flag.CommandLine
@@ -586,11 +587,12 @@ func TestTheDaemonWillServeWithoutAuthentication(t *testing.T) {
 	})
 	// Hung up on while the session is healthy and nothing is being
 	// relayed: a client closed while the daemon is sending to it races
-	// inside the client.  See coverage-notes/daemon.md.
+	// inside the client.
 	c.Close()
 
-	// The grid throwing a session off is the one ending the daemon does
-	// not put right, and the only account of it is the line it logs.
+	// The grid throwing a session off, for anything but a region
+	// restart, is an ending the daemon does not put right, and the only
+	// account of it is the line it logs.
 	kick := &msg.KickUser{}
 	kick.UserInfo.Reason = []byte("You have been logged out because you logged in from another location.\x00")
 	sim.send(kick, msg.FlagReliable)

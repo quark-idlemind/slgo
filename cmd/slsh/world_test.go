@@ -254,8 +254,8 @@ func serveFeatures(t *testing.T, x *testShell, body string) {
 // TestFeaturesPrintsAMapAsItsKeys.
 //
 // A feature whose value is a map -- GridServices is one -- would print
-// as a Go map literal, whose order changes between runs.  The keys,
-// sorted, are both stable and the useful half.
+// as a Go map literal, values and all.  The keys, sorted, are the
+// useful half.
 func TestFeaturesPrintsAMapAsItsKeys(t *testing.T) {
 	x := newTestShell(t)
 	serveFeatures(t, x, `<?xml version="1.0" ?><llsd><map>
@@ -633,7 +633,7 @@ func TestObjectsNamesTheOwner(t *testing.T) {
 	if !strings.Contains(got, "\n    "+child.String()) {
 		t.Errorf("a prim should be indented under its object:\n%s", got)
 	}
-	// Whoever nobody has answered for is a group of their own, last,
+	// Things no owner has been said for are a group of their own, last,
 	// and named as the open question it is rather than as an id.
 	if !strings.Contains(got, "(owner not known)") {
 		t.Errorf("an object whose owner is unknown should say so:\n%s", got)
@@ -766,8 +766,8 @@ func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
 				Handle: msg.RegionHandle(43646, 43648), Addr: "203.0.113.11:13032",
 				Name: "Pelmar Mill", Handshook: true, Heard: 412,
 			},
-			// One that was dialled and has not answered, which is
-			// what an offer that came to nothing looks like.
+			// One that was dialled and has sent no handshake yet,
+			// which is not the same as an offer that came to nothing.
 			{Handle: msg.RegionHandle(43648, 43647), Addr: "203.0.113.12:13011"},
 		},
 	}

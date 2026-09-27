@@ -291,8 +291,8 @@ func TestAStrangerIsAnsweredWhenTheFileSaysSo(t *testing.T) {
 	}
 }
 
-// A remark is a remark.  A daemon that answered one would be holding a
-// conversation it cannot hold.
+// A remark is a remark.  A daemon with no model that answered one would
+// be holding a conversation it cannot hold.
 func TestARemarkIsNotACommand(t *testing.T) {
 	_, b, f := newTestDaemon(t)
 	defer serving(t, b)()

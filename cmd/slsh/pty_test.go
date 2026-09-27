@@ -215,8 +215,8 @@ func (b *fakeBackend) TryLock(ctx context.Context, name string) (bool, string, e
 	return true, "", nil
 }
 
-// DoCap answers an inventory listing for the root and nothing else, so
-// ls and cd have something to walk.
+// DoCap answers every folder listing with the root's and nothing else,
+// so ls and cd have something to walk.
 func (b *fakeBackend) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
 	if !strings.HasPrefix(r.Path, "/category/") {
 		return &agent.CapResponse{Status: 404}, nil

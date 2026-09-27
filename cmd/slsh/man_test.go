@@ -73,8 +73,8 @@ func TestManWrittenToAFileHasNoEscapeSequences(t *testing.T) {
 //
 // A page is prose and nothing else, deliberately: it does not repeat
 // the name, the brief or the flags, because those are derived and a
-// fourth hand-kept copy of them is what this series has just finished
-// removing.  So man has to supply the heading itself, and this is what
+// page that repeated them would be a fourth hand-kept copy of them.
+// So man has to supply the heading itself, and this is what
 // keeps it doing so -- a page printed on its own would begin in the
 // middle of a sentence about a command nobody had named.
 func TestManPrintsThePageAndSaysHowTheCommandIsTyped(t *testing.T) {
@@ -96,9 +96,10 @@ func TestManPrintsThePageAndSaysHowTheCommandIsTyped(t *testing.T) {
 
 // TestManWithNoNameListsThePagesThatExist.
 //
-// Most commands have no page and will not for a while, so a listing of
-// all sixty would send most people to a page that is not there.  What
-// man knows and help does not is which ones can be asked for.
+// Every command has a page today, but one added tomorrow arrives before
+// its page does, and a listing of every command would send somebody to
+// a page that is not there.  What man knows and help does not is which
+// ones can be asked for.
 func TestManWithNoNameListsThePagesThatExist(t *testing.T) {
 	var b bytes.Buffer
 	if err := cmdMan(context.Background(), &Shell{}, &b, nil); err != nil {
@@ -129,8 +130,7 @@ func TestManWithNoNameListsThePagesThatExist(t *testing.T) {
 // TestManForACommandWithNoPageSaysWhichItIs.
 //
 // "no such thing" would read as man being broken rather than as the
-// page being unwritten, which for the next while is the commoner case
-// by six to one.  So it says so, and gives what it does have.
+// page being unwritten.  So it says so, and gives what it does have.
 func TestManForACommandWithNoPageSaysWhichItIs(t *testing.T) {
 	// A command of the test's own, because every real one has a page
 	// now.  Borrowing whichever was still unwritten made this test skip
@@ -344,8 +344,8 @@ func TestEveryManFieldNamesAPageThatIsThere(t *testing.T) {
 // TestEveryPageInTheDirectoryIsNamedBySomeCommand is the other
 // direction: a page nothing points at is prose nobody will ever be
 // shown, and it goes wrong silently -- most likely a command renamed
-// without its page, which is exactly the case this series created when
-// host became login.
+// without its page, which is exactly the case host becoming login
+// created.
 func TestEveryPageInTheDirectoryIsNamedBySomeCommand(t *testing.T) {
 	files, err := manFileNames()
 	if err != nil {

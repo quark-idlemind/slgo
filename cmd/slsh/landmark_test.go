@@ -35,7 +35,7 @@ var (
 	testDeletedAsset    = msg.MustParseUUID("ec737e57-7e57-c0de-8b1c-9ee8f88cf80b")
 )
 
-// thrushmoorAsset is a landmark asset with the bytes Agni really served:
+// thrushmoorAsset is a landmark asset in the form Agni really served:
 // a version line, a region id and three numbers, and nothing else.
 const thrushmoorAsset = "Landmark version 2\n" +
 	"region_id a8377e57-7e57-c0de-9d9c-088e2efc057b\n" +
@@ -72,9 +72,9 @@ func withLandmarks(x *testShell) {
 // twiceOver adds a second landmark of a name that is already in
 // /Landmarks, which is what making one twice does.
 //
-// Stage 3 made this pair on purpose against Agni and it is still in
-// qi's inventory: one name, one folder, two items, and nothing but the
-// ids to choose between them.
+// Stage 3 of doc/history/landmark.md made this pair on purpose against
+// Agni and it is still in qi's inventory: one name, one folder, two
+// items, and nothing but the ids to choose between them.
 func twiceOver(x *testShell, name string, id, asset msg.UUID) {
 	x.grid.mu.Lock()
 	defer x.grid.mu.Unlock()
@@ -609,7 +609,7 @@ func TestALandmarkWithNoAssetIsRefusedRatherThanSentAsHome(t *testing.T) {
 }
 
 // TestLandmarkRefusesTwoVerbsAtOnce, and the other ways of asking for
-// something that is not one of the five forms.
+// something that is not one of the six forms.
 func TestLandmarkRefusesTwoVerbsAtOnce(t *testing.T) {
 	x := newTestShell(t)
 
@@ -765,10 +765,10 @@ func TestTheTrashIsFoundByItsTypeAndNotItsName(t *testing.T) {
 
 // TestOneNameInOneFolderIsToldApartByItsIdAndNothingElse.
 //
-// Stage 3 typed the whole path of a duplicated landmark and was told to
-// say which by its whole path, which is what it had just typed.  When
-// the matching paths are equal the path is not an answer and the advice
-// must not pretend it is.
+// Stage 3 of doc/history/landmark.md typed the whole path of a
+// duplicated landmark and was told to say which by its whole path, which
+// is what it had just typed.  When the matching paths are equal the path
+// is not an answer and the advice must not pretend it is.
 func TestOneNameInOneFolderIsToldApartByItsIdAndNothingElse(t *testing.T) {
 	x := newTestShell(t)
 	withLandmarks(x)
@@ -899,9 +899,9 @@ func TestMakingASecondLandmarkOfANameSaysSo(t *testing.T) {
 // TestARefusalNamesWhatWasTypedAndNotAUuid.
 //
 // The commonest failure there is: going to a landmark the avatar is
-// already standing on.  Stage 3 saw it identify the destination by an
-// asset id nobody typed, on the line under one that had just said the
-// name.
+// already standing on.  Stage 3 of doc/history/landmark.md saw it
+// identify the destination by an asset id nobody typed, on the line
+// under one that had just said the name.
 func TestARefusalNamesWhatWasTypedAndNotAUuid(t *testing.T) {
 	x := newTestShell(t)
 	withLandmarks(x)

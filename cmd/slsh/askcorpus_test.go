@@ -81,7 +81,7 @@ func TestEveryCommandHasKeywords(t *testing.T) {
 func TestCommandNamesAreSearchable(t *testing.T) {
 	for _, n := range commandNames() {
 		if strings.Trim(n, "abcdefghijklmnopqrstuvwxyz") != "" {
-			continue // ".", which no question will say
+			continue // ".", which no question will say, and "How", which is how capitalised
 		}
 		if n == howName {
 			// The one name that is meant to be dropped.  Every question
@@ -160,7 +160,7 @@ type askQuestion struct {
 }
 
 var askQuestions = []askQuestion{
-	// The two the plan asked for by name.
+	// The two questions ask was planned around.
 	{"do I see the contents of a script in one of my attachments", "cat", 3},
 	{"do I set my home landmark", "landmark", 3},
 

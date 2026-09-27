@@ -142,8 +142,10 @@ func TestConfigReadsEverySettingAndBothSpellings(t *testing.T) {
 // prompt.  It is also what says a listing can be pasted into a file:
 // what "set" prints is what LoadConfig takes.
 func TestEverySettingCanBeWrittenDownAndReadBack(t *testing.T) {
-	// Nothing here is a default, so a setting the reader quietly
-	// ignores comes back as the default and is caught.
+	// Nothing set here is a default, so a setting the reader quietly
+	// ignores comes back as the default and is caught.  log, log_dir,
+	// notice_keep and the how_ settings are left at their defaults, so
+	// for those it is not.
 	want := DefaultConfig()
 	want.Addr = "lab.local:7807"
 	want.Agent = "somebody"

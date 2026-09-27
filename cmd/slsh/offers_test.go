@@ -107,7 +107,7 @@ func luring(txn msg.UUID) *msg.ImprovedInstantMessage {
 	return m
 }
 
-// TestWaitingListsWhatSlgodKeptFromBeforeTheShell is the issue as a
+// TestWaitingListsWhatSlgodKeptFromBeforeTheShell is the failure as a
 // person met it: two group invitations sent while no client was
 // attached, and a shell started afterwards that said "nothing waiting".
 // What the daemon kept is listed, said to be from before this shell --

@@ -2,12 +2,12 @@ package main
 
 // What is inside a rezzed object, over a grid that is not there.
 //
-// Listing inside an object is still not exercised here; renaming and
-// deleting are, at the end, for the nil the two of them used to
-// dereference.  The rest, since AnswerInside taught the fake to speak
-// an object's contents, is start and stop -- which need the contents and
-// two more messages besides, and which make a claim about the world that
-// nothing replies to.  That claim is the point of most of what follows:
+// Since AnswerInside taught the fake to speak an object's contents,
+// this covers new, rm, mv and cat inside an object and fetch out of
+// one, with ls --in exercised only in passing by the fetch tests.  Most
+// of it is start and stop, which need the contents and two more
+// messages besides, and which make a claim about the world that nothing
+// replies to.  That claim is the point of most of what follows:
 // SetScriptRunning is answered by silence, so every "started" printed
 // here has to have been established by asking, and a command that
 // printed it for having asked would pass no test in this file.

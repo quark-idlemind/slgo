@@ -415,7 +415,7 @@ func TestSourceStopsWhenTheShellIsAskedTo(t *testing.T) {
 }
 
 // TestAStoppedFileIsNotComplainedAboutTwice: where and why is already
-// on the screen, and "source: stopped" underneath it adds nothing.
+// on the screen, and ".: stopped" underneath it adds nothing.
 func TestAStoppedFileIsNotComplainedAboutTwice(t *testing.T) {
 	x := newTestShell(t)
 	path := writeScript(t, "nosuchthing\n")
@@ -584,8 +584,8 @@ func TestChatConfiguredAtStartup(t *testing.T) {
 
 // TestTheKeysThatAreNotTheLineEditors.
 //
-// Enter, tab, the prefix key and the two interrupts are the shell's
-// rather than the editor's; everything else is typing.
+// Enter, tab, up and down, the prefix key and the two interrupts are
+// the shell's rather than the editor's; everything else is typing.
 func TestTheKeysThatAreNotTheLineEditors(t *testing.T) {
 	ctx := context.Background()
 	x := newTestShell(t)

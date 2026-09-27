@@ -17,9 +17,9 @@ package main
 // inventory and the other capabilities from httptest on loopback, which
 // is what the commands actually read.
 //
-// newDaemonShell is the other half: the four commands that ask slgod
-// rather than the grid -- agents, login, logout, status -- reach it
-// through client.Conn, which is a gRPC client and cannot be faked at
+// newDaemonShell is the other half: the commands that ask slgod
+// rather than the grid -- agents, login, logout, status, viewer -- reach
+// it through client.Conn, which is a gRPC client and cannot be faked at
 // the Backend level at all.  So there is a real gRPC server, in this
 // process, on loopback, exactly as sl/hosted_test.go does it.
 
@@ -471,8 +471,8 @@ func (f *fakeGrid) inventoryRequest(r *http.Request) (string, int) {
 
 	case "PATCH":
 		// Only the name is read back out again, so only the name is
-		// applied; the rest of what AIS takes here is permissions,
-		// which nothing in this package sets.
+		// applied; the rest of what AIS takes here, a description and
+		// permissions, nothing in this package sets.
 		var name string
 		if v, err := llsd.Decode(bytes.NewReader(readAll(r))); err == nil {
 			name, _ = llsd.Map(v)["name"].(string)
@@ -780,10 +780,10 @@ func (f *fakeGrid) Controls() []uint32 {
 
 // Relay hands a message to the session as though the grid had sent it.
 //
-// Unlike the one in package sl this does not wait for the reader: the
-// only thing here that watches the relay is the chat printer, and what
-// it does lands on the terminal rather than in the session, so a test
-// waits for the line to appear instead.
+// Unlike the one in package sl this does not wait for the reader to
+// finish with it: a test here waits for what the message leads to
+// instead -- a line on the terminal, or the command that was waiting
+// for it returning.
 func (f *fakeGrid) Relay(t *testing.T, m msg.Message) {
 	t.Helper()
 	body, err := m.Encode()
@@ -802,8 +802,9 @@ func (f *fakeGrid) Relay(t *testing.T, m msg.Message) {
 //
 // The body is LLSD text rather than a struct, because an event has no
 // template and no generated type: what a test asserts against has to be
-// the shape a live grid sent.  See sl.ScriptRunning for the one captured
-// on Agni.
+// the shape a live grid sent.  See
+// doc/scripts.md#whether-a-script-is-running for the one captured on
+// Agni.
 func (f *fakeGrid) RelayEvent(t *testing.T, name, body string) {
 	t.Helper()
 	select {
@@ -1134,9 +1135,6 @@ func (f *fakeGrid) AnswerDetach(after time.Duration) {
 	}
 }
 
-// takeOff stops the fake listing the attachments worn from some items,
-// which is all that coming off looks like from outside: the object goes
-// away and the inventory item it was worn from does not.
 // attached puts a worn object into the region, parented to this
 // avatar, the way a simulator does when it rezzes one.
 func (f *fakeGrid) attached(item, object msg.UUID, local uint32, point int) {
@@ -1163,6 +1161,9 @@ func (f *fakeGrid) attached(item, object msg.UUID, local uint32, point int) {
 	})
 }
 
+// takeOff stops the fake listing the attachments worn from some items,
+// which is all that coming off looks like from outside: the object goes
+// away and the inventory item it was worn from does not.
 func (f *fakeGrid) takeOff(items ...msg.UUID) {
 	if len(items) == 0 {
 		return

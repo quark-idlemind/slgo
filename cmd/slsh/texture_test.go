@@ -143,8 +143,8 @@ func writePNG(t *testing.T, dir string, w, h int) string {
 	return path
 }
 
-// TestPutDryRunSpendsNothing.  An upload costs L$10 and cannot be
-// undone, so there has to be a way to find out what would happen --
+// TestPutDryRunSpendsNothing.  An upload costs L$10 or more and cannot
+// be undone, so there has to be a way to find out what would happen --
 // what size, how many bytes, what fee -- without it happening.
 func TestPutDryRunSpendsNothing(t *testing.T) {
 	x := newTestShell(t)
@@ -202,9 +202,8 @@ func TestPutRefusesNamesItDoesNotKnow(t *testing.T) {
 	}
 }
 
-// TestPutSendsTheCodestreamAndNames it.  The name comes from the file
-// when nothing else says otherwise, since that is what somebody
-// uploading "brick.png" expects to find in inventory.
+// TestPutSendsTheCodestream: what goes up is a codestream the grid
+// will take, at the picture's size.
 func TestPutSendsTheCodestream(t *testing.T) {
 	x := newTestShell(t)
 	up := serveShellUpload(t, x, testLamp)
@@ -395,7 +394,7 @@ func TestPutOutWritesWhatTheFilterDid(t *testing.T) {
 	}
 }
 
-// TestPutOutDecodesACodestreamToLookAt.  A .j2c goes up untouched, but
+// TestPutOutDecodesACodestream.  A .j2c goes up untouched, but
 // somebody asking for a PNG of one wants to see it, not copy it.
 func TestPutOutDecodesACodestream(t *testing.T) {
 	x := newTestShell(t)

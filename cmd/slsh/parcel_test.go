@@ -65,8 +65,8 @@ func TestParcelAsksAndSaysWhatItGot(t *testing.T) {
 		"area     2048 m²",
 		"prims    486 of 937",
 		// The flags word decoded.  Read the other way round this
-		// parcel would allow neither flying nor scripts, which is
-		// the failure this asserts against.
+		// parcel would allow neither flying nor group building, which
+		// is the failure this asserts against.
 		"allows   group build, fly",
 	} {
 		if !strings.Contains(got, want) {

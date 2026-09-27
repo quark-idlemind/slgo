@@ -379,14 +379,14 @@ func TestABareAnswerWillNotSpendMoney(t *testing.T) {
 
 // TestAFeeNobodyStatedIsNotAFeeOfZero.
 //
-// The bucket a fee arrives in is the one part of an invitation nothing
-// here has seen on the wire, and the viewer's own header describes a
-// different shape from the one its code parses.  A bucket this does
-// not recognise therefore means "the invitation did not say", and the
-// safe-looking guess -- reading it as free and joining -- is the one
-// that spends money.  It still has to be answerable, or an invitation
-// from a simulator with an older idea of the bucket could never be
-// taken up at all.
+// The bucket a fee arrives in is the one part of an invitation still
+// worth doubting: the viewer's own header describes a different shape
+// from the one its code parses, and one grid's answer does not settle
+// it.  A bucket this does not recognise therefore means "the
+// invitation did not say", and the safe-looking guess -- reading it as
+// free and joining -- is the one that spends money.  It still has to be
+// answerable, or an invitation from a simulator with an older idea of
+// the bucket could never be taken up at all.
 func TestAFeeNobodyStatedIsNotAFeeOfZero(t *testing.T) {
 	x := newTestShell(t)
 	watching(t, x)
@@ -455,8 +455,8 @@ func TestNoDeclinesAGroupInvitation(t *testing.T) {
 // the offer says who made it and whatever they typed with it, and the
 // region is not a field of the message at all.  So the arrival is read
 // back afterwards, and the line before it is said before the request
-// goes -- accepting waits for the avatar to be there, which is half a
-// second at best and has been measured at five.
+// goes -- accepting waits for the avatar to be there, and a teleport
+// has been measured taking from about a third of a second to five.
 func TestAnsweringALureFollowsTheTeleportRatherThanFiringItOff(t *testing.T) {
 	x := newTestShell(t)
 	watching(t, x)

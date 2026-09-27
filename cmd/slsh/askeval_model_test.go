@@ -23,7 +23,7 @@ package main
 //
 // Nothing here asserts a number: the point is to compare models, and
 // which model is good enough is a decision rather than a test.  What
-// fails the test is a question that could not be asked at all.
+// fails the test is a model that answered not one question.
 
 import (
 	"context"
