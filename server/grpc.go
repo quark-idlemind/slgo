@@ -667,6 +667,10 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 		return nil, err
 	}
 	a := h.Agent()
+	// The capability list, like Cap's URLs, is the new region's during a
+	// move.  Answered whatever the wait came to: a status is wanted most
+	// when something is wrong.
+	_ = newRegionsCaps(ctx, a)
 	rs := a.Recv.Stats()
 	ss := a.Send.Stats()
 	ds := a.Disp.Stats()
@@ -1058,10 +1062,16 @@ func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, 
 	if err != nil {
 		return nil, err
 	}
+	a := h.Agent()
+	// During a move the URL comes from the new region's set: the one
+	// held until it arrives addresses the simulator the avatar has left.
+	if err := newRegionsCaps(ctx, a); err != nil {
+		return nil, status.Errorf(codes.Unavailable, "%v", err)
+	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	resp, err := h.Agent().DoCap(ctx, agent.CapRequest{
+	resp, err := a.DoCap(ctx, agent.CapRequest{
 		Cap:    req.Cap,
 		Method: req.Method,
 		Path:   req.Path,
@@ -1073,6 +1083,29 @@ func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, 
 		return nil, status.Errorf(codes.Unavailable, "%v", err)
 	}
 	return &pb.CapResponse{Status: int32(resp.Status), Body: resp.Body}, nil
+}
+
+// capsWait bounds how long a request made during a move waits for the
+// new region's capabilities: as long as a move may take, which is
+// sl.DefaultTeleportTimeout's ninety seconds, and what the move's own
+// bounds come to -- thirty for the new simulator's handshake and sixty
+// for the capability fetch, by default.  The wait ends with the move,
+// so this is a backstop.
+const capsWait = 90 * time.Second
+
+// newRegionsCaps waits, while the avatar is being moved, until the
+// session's capabilities are the new region's, and answers at once when
+// no move is under way.  It fails only when capsWait or ctx ran out
+// first.  A session that has ended is not its business: what a request
+// to one does is what it did before there was a wait.
+// Why: doc/daemon.md#a-capability-asked-for-during-a-move
+func newRegionsCaps(ctx context.Context, a *agent.Agent) error {
+	ctx, cancel := context.WithTimeout(ctx, capsWait)
+	defer cancel()
+	if _, err := a.WaitCaps(ctx); err != nil && ctx.Err() != nil {
+		return fmt.Errorf("waiting for the new region's capabilities: %w", err)
+	}
+	return nil
 }
 
 func (s *Server) Send(ctx context.Context, req *pb.SendRequest) (*pb.SendResponse, error) {

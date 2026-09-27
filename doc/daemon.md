@@ -295,3 +295,40 @@ allow it. Use the land tool to see land ownership." -- which is untrue
 as it stands and unhelpful as a hint.  The land does allow it; the
 request simply arrived from nobody in particular.  Until slsh had its
 `group` command there was no way to fix that from its prompt.
+
+## A capability asked for during a move
+
+A move -- a teleport, or a walk over a border -- tells everything above
+the session that the avatar has arrived before it has asked the new
+region for its capabilities, and until that answers, the set the
+session holds is the region left's. `Server.Cap` looked a capability up
+in whatever set the session held at the moment of the request, so a
+request made in between went to a simulator the avatar had just left.
+slbotd puts an avatar's outfit back 15 seconds after it attaches, and
+slgod asks to take an avatar home 5 seconds after a login, so a restore
+and a move can meet in that window. Read from the code, that is the
+likeliest cause of the 404s "cap not found" in slbotd's log of
+2026-09-26 ([doc/client.md](client.md#capabilities-after-the-session-changes));
+it has not been watched happening.
+
+So `Cap`, and `Status` for its list of capabilities, wait for a move
+under way to finish first (`agent.WaitCaps`), as `sl.Direct.Refresh`
+does, and as Firestorm does after a teleport before it uses the new
+region's capabilities (`newview/llagent.cpp:4976-4995`). With no move
+under way nothing waits.
+
+The bound is generous on purpose: as long as a move is allowed to take,
+ninety seconds, the figure of `sl.DefaultTeleportTimeout` and what the
+move's own bounds add up to (thirty seconds for the new simulator's
+handshake and sixty for the capability fetch, by default). The wait
+ends with the move, so the bound is a backstop. A request whose wait runs out, or whose caller gives up, fails
+rather than being sent to the region left; a status answers anyway,
+with the list it has, since a status is wanted most when something is
+wrong. A move that fails ends the session, and a request to a session
+that has ended goes where it went before there was a wait.
+
+What this does not reach: a request made after a teleport was asked for
+and before the grid's `TeleportFinish` arrives, when no move has begun
+on this side and the region being left still holds the avatar; and the
+capability names an attach and the list of agents give, which are read
+without waiting.

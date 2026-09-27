@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
@@ -621,6 +623,161 @@ func TestCapProxyUnknownCapability(t *testing.T) {
 	defer c.Close()
 	if _, err := c.DoCap(context.Background(), agent.CapRequest{Cap: "Nope"}); err == nil {
 		t.Error("expected an error for a capability the agent does not have")
+	}
+}
+
+// seedServing is a region's seed capability, answering with caps once
+// release is called and saying on asked that it has been asked.
+func seedServing(t *testing.T, caps map[string]any) (seed string, asked <-chan struct{}, release func()) {
+	t.Helper()
+	hold := make(chan struct{})
+	var once sync.Once
+	release = func() { once.Do(func() { close(hold) }) }
+	heard := make(chan struct{}, 1)
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case heard <- struct{}{}:
+		default:
+		}
+		<-hold
+		body, err := llsd.Encode(caps)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		w.Write(body)
+	}))
+	// Last first: a request held here is let go before Close waits.
+	t.Cleanup(hs.Close)
+	t.Cleanup(release)
+	return hs.URL + "/seed", heard, release
+}
+
+// answering is a capability host that answers every request with said.
+func answering(t *testing.T, said string) string {
+	t.Helper()
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, said)
+	}))
+	t.Cleanup(hs.Close)
+	return hs.URL
+}
+
+// TestACapabilityAskedForDuringAMoveIsTheNewRegions: a move says the
+// avatar has arrived before it has the new region's capabilities, and a
+// request made in between was sent to the region left, as slbotd's
+// outfit restore was when slgod took an avatar home just after a login.
+// Now a request, and a status's list, wait for the new region's set;
+// with no move under way neither waits.
+func TestACapabilityAskedForDuringAMoveIsTheNewRegions(t *testing.T) {
+	left, arrived := answering(t, "the region left"), answering(t, "the region arrived in")
+	fromSeed, _, releaseFrom := seedServing(t, map[string]any{
+		"SomethingNew": left + "/cap", "OnlyWhereItWas": left + "/other"})
+	releaseFrom()
+	toSeed, asked, release := seedServing(t, map[string]any{
+		"SomethingNew": arrived + "/cap", "OnlyWhereItIs": arrived + "/other"})
+
+	from, to := newSim(t), newSim(t)
+	t.Cleanup(from.close)
+	t.Cleanup(to.close)
+	a, err := agent.Connect(context.Background(), &agent.Account{
+		AgentID:        msg.MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f"),
+		SessionID:      msg.MustParseUUID("8d1b7e57-7e57-c0de-3bf6-2277c65663be"),
+		CircuitCode:    4242,
+		SimIP:          from.addr().IP,
+		SimPort:        from.addr().Port,
+		SeedCapability: fromSeed,
+		FirstName:      "Example",
+		LastName:       "Resident",
+	}, agent.Options{Timeout: 10 * time.Second, Idle: -1})
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(a.Close)
+	srv := New()
+	h := &Hosted{Name: "example", clients: map[*Client]bool{}}
+	h.setAgent(a)
+	srv.mu.Lock()
+	srv.agents["example"] = h
+	srv.mu.Unlock()
+
+	ask := func(ctx context.Context) (string, error) {
+		resp, err := srv.Cap(ctx, &pb.CapRequest{Agent: "example", Cap: "SomethingNew"})
+		if err != nil {
+			return "", err
+		}
+		return string(resp.Body), nil
+	}
+
+	// No move: answered at once, from where the avatar is.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if got, err := ask(ctx); err != nil || got != "the region left" {
+		t.Fatalf("with no move under way the request answered %q, %v", got, err)
+	}
+
+	// A crossing, held at the new region's seed.
+	cr := &msg.CrossedRegion{}
+	copy(cr.RegionData.SimIP[:], to.addr().IP.To4())
+	cr.RegionData.SimPort = msg.IPPort(to.addr().Port)
+	cr.RegionData.RegionHandle = msg.RegionHandle(43521, 43520)
+	cr.RegionData.SeedCapability = []byte(toSeed + "\x00")
+	from.send(cr, msg.FlagReliable)
+	select {
+	case <-asked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the move never asked the new region for its capabilities")
+	}
+
+	// A caller that gives up first is told so, not handed the old URL.
+	ctx, cancel = context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	if got, err := ask(ctx); err == nil {
+		t.Errorf("a request given up on during the move answered %q", got)
+	}
+
+	type answer struct {
+		body string
+		err  error
+	}
+	capped := make(chan answer, 1)
+	go func() {
+		body, err := ask(context.Background())
+		capped <- answer{body, err}
+	}()
+	listed := make(chan []string, 1)
+	go func() {
+		st, err := srv.Status(context.Background(), &pb.StatusRequest{Agent: "example"})
+		if err != nil {
+			t.Errorf("Status: %v", err)
+		}
+		listed <- st.GetAgent().GetCaps()
+	}()
+	select {
+	case got := <-capped:
+		t.Fatalf("a request during the move answered %q, %v before the new region's capabilities came", got.body, got.err)
+	case got := <-listed:
+		t.Fatalf("a status during the move listed %v before the new region's capabilities came", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	release()
+	select {
+	case got := <-capped:
+		if got.err != nil || got.body != "the region arrived in" {
+			t.Errorf("a request during the move answered %q, %v; want the region arrived in", got.body, got.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a request during the move was never answered")
+	}
+	select {
+	case got := <-listed:
+		if !slices.Contains(got, "OnlyWhereItIs") || slices.Contains(got, "OnlyWhereItWas") {
+			t.Errorf("a status during the move listed %v; want the region arrived in's", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a status during the move was never answered")
 	}
 }
 
