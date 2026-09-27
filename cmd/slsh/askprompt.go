@@ -40,8 +40,11 @@ package main
 // first, from the command the index liked least upwards, since the
 // index's ranking is the only opinion there is about which of them the
 // answer is in; then, if even the bare usage lines will not fit, whole
-// commands from the bottom.  The top command always stays, with as much
-// of its first excerpt as fits.
+// commands from the bottom.  Within a command the last excerpt goes
+// first, so its page's opening, which leads (askWithOpening), goes last.
+// The top command always stays, with as much of its first excerpt as
+// fits: its opening, or its best match when the opening is among its
+// matches.
 
 import (
 	"bytes"
@@ -214,10 +217,10 @@ func askFit(question string, in []askCandidate, budget int) []askCandidate {
 	}
 
 	// Excerpts from the bottom up, the last excerpt of each first.  The
-	// very last excerpt left anywhere -- the top command's first -- is
-	// shortened a line at a time before it is given up, because it is
-	// the index's best guess at where the answer is and part of it is
-	// worth more than none.
+	// very last excerpt left anywhere -- the top command's first, which
+	// is its page's opening unless the opening is among its matches --
+	// is shortened a line at a time before it is given up, because it
+	// says what the command is and part of it is worth more than none.
 	for i := len(cands) - 1; i >= 0 && !fits(); i-- {
 		for len(cands[i].Excerpts) > 0 && !fits() {
 			n := len(cands[i].Excerpts) - 1

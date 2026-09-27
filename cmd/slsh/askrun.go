@@ -82,18 +82,20 @@ const (
 	askCandidateCount = 8
 
 	// askExcerptCommands is how many of those carry the index's matching
-	// excerpts, and askExcerptsEach how many excerpts each.  Every
-	// candidate also gets the page's opening when that is not already
-	// among them, and one with no matching page text gets a single
-	// passage instead.  A usage line is not a sentence the model can
-	// quote, and a decline is final.  askFit drops these passages first
-	// when the budget is spent.
+	// excerpts, and askExcerptsEach how many excerpts each.  Every other
+	// candidate, and one of those whose only match was its keyword line,
+	// gets one short passage instead (askOnePassage).  Without it the
+	// model has a usage line and a brief to quote from, and may answer
+	// "not found" for want of a sentence -- an answer askRun does not
+	// ask again.  Every candidate also gets its page's opening, first,
+	// unless it has it already (askWithOpening).
 	askExcerptCommands = 3
 	askExcerptsEach    = 3
 
-	// askPassageMax is how long that one passage may be.  The first
-	// paragraph, cut at a word if it is longer, so eight of them fit in
-	// the budget that three full excerpts already use most of.
+	// askPassageMax is how long a short passage may be, the opening
+	// included: the first paragraph, cut at a word if it is longer.
+	// Short, so that each of the eight can carry one or two beside the
+	// first three's full excerpts.
 	askPassageMax = 480
 )
 

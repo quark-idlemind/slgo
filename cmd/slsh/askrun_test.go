@@ -56,6 +56,15 @@ func TestOnePassageIsASentenceFromThePage(t *testing.T) {
 		t.Errorf("the fourth candidate has nothing to quote: %+v", cands[3].Excerpts)
 	}
 
+	// Past the three, a command found by a section of its page gets its
+	// opening and that section's first paragraph, and no more.
+	hits[3] = askindex.CommandHit{Command: "landmark", Hits: []askindex.Hit{{Doc: sec}}}
+	cands = askCandidatesFrom(hits)
+	if ex := cands[3].Excerpts; len(ex) != 2 || ex[0].Heading != "" || ex[1].Heading != "Setting home" ||
+		strings.Contains(ex[1].Text, "another paragraph") {
+		t.Errorf("the fourth candidate's excerpts: %+v", ex)
+	}
+
 	// A matching section is not a substitute for the opening: the
 	// opening is what the command is, and it comes first.
 	secHit := askindex.CommandHit{Command: "landmark", Hits: []askindex.Hit{{Doc: sec}}}
