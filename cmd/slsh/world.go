@@ -334,14 +334,11 @@ func cmdNeighbours(ctx context.Context, sh *Shell, out io.Writer, args []string)
 // it, because nothing is addressed by a neighbour's handle -- a border
 // is walked over rather than typed at.
 //
-// On with nothing held is a state worth spelling out, and it is not
-// what it was once documented as.  It was said to mean "not near a
-// border", on the belief that a simulator offers nothing to an avatar
-// in the middle of a region; measured on 2026-08-23, the middle of a
-// 256-metre region is offered all four edges.  What an empty listing
-// means is almost always "not yet": the first circuit took between
-// twenty and sixty seconds from turning them on, and the set went on
-// growing for a minute after that.  See man/neighbours.md.
+// On with nothing held is said as "not yet" rather than as not being
+// near a border: an avatar in the middle of a region is offered its
+// edges too, and the first circuit is slow to come.  See
+// man/neighbours.md.
+// Why: doc/slsh.md#neighbours-on-and-no-circuit-yet
 func printNeighbours(out io.Writer, n *sl.Neighbours) {
 	switch {
 	case !n.On:
@@ -360,13 +357,10 @@ func printNeighbours(out io.Writer, n *sl.Neighbours) {
 		switch {
 		case !c.Handshook:
 			// The name arrives in the handshake, so a circuit
-			// without one has none to print.  Seeing it twice
-			// running does NOT mean the offer came to nothing: on
-			// 2026-08-23 three of the five simulators around one
-			// region sent no handshake through four openings each
-			// while their packet counts climbed, and the same three
-			// had answered on an earlier day.  Heard is what says
-			// the circuit is alive.
+			// without one has none to print.  No handshake, even
+			// twice running, is not an offer that came to nothing;
+			// Heard is what says the circuit is alive.
+			// Why: doc/slsh.md#a-neighbour-with-no-handshake
 			name = "(no handshake yet)"
 		case name == "":
 			name = "(unnamed)"
@@ -463,10 +457,7 @@ type wornOptions struct {
 //     of those -- wear here writes it, and says so when it cannot -- so
 //     it is on the avatar now and will not come back at the next login.
 //
-// This used to list only the region's description and call the result
-// what was worn.  It was not: an avatar wearing a skin, a shape and
-// four clothing layers showed none of them, and the answer read as a
-// complete one.
+// Why: doc/slsh.md#what-worn-used-to-leave-out
 func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o wornOptions
 	rest, done, err := subOptions("worn", &o, out, args)

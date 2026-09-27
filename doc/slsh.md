@@ -670,6 +670,14 @@ it throws away.  What is at stake is the command's last line -- "is no
 longer worn" is a claim the SHELL makes, and the shell is what should
 have established it before printing it.
 
+## What worn used to leave out
+
+`worn` reads two records, the Current Outfit folder and the region's
+description of the objects around the avatar, and lists both.  It used
+to list only the region's description and call the result what was
+worn.  It was not: an avatar wearing a skin, a shape and four clothing
+layers showed none of them, and the answer read as a complete one.
+
 ## How long tp waits for another region
 
 `tp` waits thirty seconds for a teleport to another region before
@@ -811,6 +819,118 @@ landmark or does not; but the same uuid handed to `--go` is either an
 asset id or an item id and nothing distinguishes them but a wait that
 never ends, so the two forms would differ in a way nobody could predict
 from the outside. One rule: a landmark is something you have.
+
+## Where a sit leaves the avatar
+
+`sit` was the first thing in the shell that moved the avatar without a
+teleport, and it moves it a long way.  A sit is not a walk: the
+simulator picks the avatar up and puts it on the seat, over whatever is
+in the way, from as much as ten metres off -- measured on Agni, a box
+seven metres away seated the avatar as readily as one half a metre
+away, and standing up afterwards left it six metres from where it had
+been standing.  So what `sit` and `stand` print is not only what they
+did but where that left the avatar, in the same words `where` and `tp`
+say it, and the position line is the answer rather than decoration.
+
+For `stand` it is more surprising: standing does not undo the journey
+the sit made.  Measured, an avatar that walked -- was carried -- seven
+metres to a box was left six metres from where it started when it stood
+up again, so the line `stand` prints is where the avatar now is and not
+where it was before any of this began.
+
+The measurement is written up in
+[doc/history/sit.md](history/sit.md#a-sit-moves-the-avatar-and-about-ten-metres-is-the-limit).
+
+## Sitting on an object nothing has described
+
+`sit` given a uuid sits on it even when nothing in the listing of what
+the region has described has that id.  A uuid needs no listing:
+`AgentRequestSit` carries the id and the simulator resolves it.  What
+the listing is for is the local id, which `sl.Sit` uses for one thing
+only -- seeing that the avatar is already on that very object -- and
+can do without.
+
+It matters because the listing is not complete.  Measured: a chair
+plainly in world, sat on ten minutes earlier, absent from a listing of
+976 objects.  Nothing had described it since login and nothing would
+unasked -- a region describes each object once.  Why its description
+never arrived was not established; a packet thrown away as undecodable,
+which the decoder did at the time, is the likeliest reason.  Refusing to
+sit on an object whose id is right there, for want of a description of
+it, is refusing to do a thing that works.
+
+## Neighbours on, and no circuit yet
+
+`neighbours` with the circuits on and none held is a state worth
+spelling out, and it is not what it was once documented as.  It was
+said to mean "not near a border", on the belief that a simulator offers
+nothing to an avatar in the middle of a region; measured on 2026-08-23,
+the middle of a 256-metre region is offered all four edges.  What an
+empty listing means is almost always "not yet": the first circuit took
+between twenty and sixty seconds from turning them on, and the set went
+on growing for a minute after that.  See
+[cmd/slsh/man/neighbours.md](../cmd/slsh/man/neighbours.md).
+
+## A neighbour with no handshake
+
+`neighbours` prints "(no handshake yet)" for a circuit without a
+handshake, since the name arrives in the handshake and there is none to
+print.  Seeing it twice running does NOT mean the offer came to
+nothing: on 2026-08-23 three of the five simulators around one region
+sent no handshake through four openings each while their packet counts
+climbed, and the same three had answered on an earlier day.  Heard is
+what says the circuit is alive.
+
+## The colours a map is drawn in
+
+`map` picks a friend out of the picture in a colour, and `parcel --map`
+draws its parcels in them; the colours are named, in `mapColours`.
+
+A name and not an escape sequence.  Nobody should have to write
+"\x1b[32m" into a configuration file to choose a colour, and a name is
+the thing that can be checked: a misspelled name is refused where it
+was typed, where an escape sequence somebody got wrong would be written
+into the middle of the picture and arrive as rubbish among the marks.
+It is also the only spelling that survives being read back: `set`
+prints what the file would take, and an escape printed to a terminal is
+invisible.
+
+The colours are the eight a terminal has had since it was a terminal,
+and the bright half of each for the terminals that have them, written
+"bright green".  Nothing is a 256-colour index or an RGB triple: those
+are not colours every terminal has, and one that has them draws the
+eight by their own scheme anyway, which is what makes green mean green
+on somebody's own screen rather than a particular green.
+
+The foreground and not a block of colour behind the mark.  A background
+commits to one terminal's idea of paper -- a green slab is the only
+thing the eye sees on a dark terminal, and dark text on it is hard to
+read on a light one -- while coloured ink over whatever paper is
+already there is legible on both, and leaves the mark itself readable
+as the mark it is: an "o", a "^" and a count all still say what they
+said.
+
+## Drawing parcels rather than ownership
+
+`parcel --map` draws the pieces the overlay's boundaries cut the region
+into, each with its own mark, and the key under it names them.  Drawing
+the ownership instead was the first attempt and it drew nothing: every
+square of a region of Linden Homes reads "owned", so the picture was one
+character from corner to corner.  What a person wants from a map of
+parcels is which parcel is which, and that is what the overlay's
+boundaries are for.
+
+## Protected land drawn as ground
+
+`parcel --map` draws Linden's protected land as ground rather than as a
+parcel: blank for the roads and waterways a region is laid out around,
+and "." for the rez zones inside them.  It is most of a mainland region
+by area and none of it is anybody's, so giving it a letter of its own
+puts the loudest mark in the picture on the one parcel nobody is asking
+about -- and takes the eye off the homes, which are what a person is
+looking for.  It is matched by name rather than by owner because the
+name is what says which it is: "Protected Land" and "Protected Land -
+Rez zone" on Pelmar Reach, measured 2026-08-18.
 
 ## The star in agents during a reconnection
 

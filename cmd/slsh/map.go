@@ -105,32 +105,12 @@ const mapDefaultLevel = 3
 // name, and mapColourOff puts the terminal back to whatever it was
 // doing.
 //
-// # Why a name and not an escape sequence
-//
-// Nobody should have to write "\x1b[32m" into a configuration file to
-// choose a colour, and a name is the thing that can be checked: a
-// misspelled name is refused where it was typed, where an escape
-// sequence somebody got wrong would be written into the middle of the
-// picture and arrive as rubbish among the marks.  It is also the only
-// spelling that survives being read back: "set" prints what the file
-// would take, and an escape printed to a terminal is invisible.
-//
-// # Which colours
-//
-// The eight a terminal has had since it was a terminal, and the bright
-// half of each for the terminals that have them, written "bright
-// green".  Nothing here is a 256-colour index or an RGB triple: those
-// are not colours every terminal has, and one that has them draws the
-// eight by their own scheme anyway, which is what makes green mean
-// green on somebody's own screen rather than a particular green.
-//
-// The foreground and not a block of colour behind the mark.  A
-// background commits to one terminal's idea of paper -- a green slab is
-// the only thing the eye sees on a dark terminal, and dark text on it
-// is hard to read on a light one -- while coloured ink over whatever
-// paper is already there is legible on both, and leaves the mark itself
-// readable as the mark it is: an "o", a "^" and a count all still say
-// what they said.
+// A name rather than an escape sequence, so that a misspelling is
+// refused where it is typed and "set" can print it back.  The eight a
+// terminal has always had and the bright half of each, written "bright
+// green", and never a 256-colour index or an RGB triple.  Drawn as the
+// foreground of the mark, never as a block behind it.
+// Why: doc/slsh.md#the-colours-a-map-is-drawn-in
 var mapColours = map[string]string{
 	"black":          "\x1b[30m",
 	"red":            "\x1b[31m",
