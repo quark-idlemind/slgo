@@ -9,17 +9,9 @@ package main
 //
 // So the answer is collected the way ed collects one, and ended the way
 // mail does: Ctrl-D, which cannot appear in text and so needs no escape.
-//
-// It was a full stop on a line of its own first, with ed's rule for
-// escaping one -- a line of nothing but full stops losing one, so ".."
-// said "." -- and that went as soon as Ctrl-D was bound, because the
-// reason to keep it did not survive being looked at.  The argument was
-// that a file of commands cannot send Ctrl-D; but a file of commands
-// cannot type an answer either, since slsh -f hands every line to the
-// command parser and the line after "answer 1" would be run as a
-// command.  Scripted answers have --file.  So the escape rule was
-// paying for a case that does not exist, and every line now means
-// itself.
+// Every line means itself, a full stop on its own included; a script
+// answers a text box with --file.
+// Why: doc/slsh.md#why-a-typed-answer-ends-with-ctrl-d
 //
 // A line being typed is an ordinary line: every key the prompt's editor
 // owns works here, because it IS that editor -- see Term.Key for the
@@ -30,10 +22,7 @@ package main
 // text.  Ends it at the END of the line, that is: with anything in front
 // of the cursor it deletes forward, as it does at the prompt, so a
 // person who has moved left to fix a typo does not send the answer by
-// pressing it.  The full stop stays because Ctrl-D cannot be written into a
-// file of commands: slsh -f is driven a line at a time, and a rule that
-// only a keyboard can reach would leave that route with no terminator
-// at all.
+// pressing it.
 //
 // Leaving without sending is Ctrl-C, which is what it does everywhere
 // else here.

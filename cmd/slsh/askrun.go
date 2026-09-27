@@ -16,10 +16,11 @@ package main
 // A nil client is not a failure.  The index alone is most of the
 // answer -- it names the commands, and their pages have the example
 // lines -- so ask with no model configured, or with the model's server
-// down, still answers, from the candidates alone.  When the model was
-// asked and failed, askRun returns the error AND the result with its
-// candidates filled in, so that the caller can fall back without
-// searching a second time.
+// down, still answers, from the index alone.  When the model was asked
+// and failed, askRun returns the error AND the result with its
+// candidates filled in: a result beside the error is what tells the
+// caller that the index is there to fall back on, and cmdAsk searches
+// it again for the lines it prints (askPrintRetrieval).
 //
 // # The retry
 //
@@ -32,17 +33,13 @@ package main
 //
 // # No second opinion
 //
-// A second, short question for each suggestion that passed the checks
-// -- "does this command do what they asked? yes or no" -- was tried as
-// a guard against a real command offered for something it does not do.
-// It said no to nearly everything: asked whether pwd, "print the current
-// inventory folder", tells somebody which folder they are in, qwen3.5:4b
-// said no, and when asked for a reason first, said that pwd is a Unix
-// command.  On the eval (2026-09-23, qwen3.5:4b and qwen3.5:2b) it cut
-// the questions answered right by half or more, so it is not here.
-// What guards against such a suggestion is the model's own found, asked
-// for first (askSchema), and honoured: suggestions written beside
-// found=false are dropped (askToCheck).
+// A suggestion that passed the checks is not put back to the model to
+// ask whether it does what was asked; that was tried, and it cut the
+// questions answered right by half or more.  What guards against a real
+// command offered for something it does not do is the model's own
+// found, asked for first (askSchema), and honoured: suggestions written
+// beside found=false are dropped (askToCheck).
+// Why: doc/slsh.md#no-second-opinion-on-a-suggestion
 
 import (
 	"bufio"
@@ -79,9 +76,9 @@ type askResult struct {
 
 const (
 	// askCandidateCount is how many commands the model is shown before
-	// askFit trims to the budget.  Eight is the plan's number: enough
-	// that the right command is usually among them (the retrieval tests
-	// ask for top 8), few enough that a small model can read them all.
+	// askFit trims to the budget.  Eight is enough that the right
+	// command is usually among them (the retrieval tests ask for top 8),
+	// and few enough that a small model can read them all.
 	askCandidateCount = 8
 
 	// askExcerptCommands is how many of those carry excerpts from their
@@ -123,8 +120,8 @@ func newAskClient(c askConfig, extra map[string]any) *llm.Client {
 //
 // The error is the model's, or the index's.  A model error comes with
 // the result as far as it got -- the candidates at least -- so that the
-// caller can answer from those instead; an index error comes with nil,
-// since without the index there is nothing to answer from.
+// caller knows it can still answer from the index; an index error comes
+// with nil, since without the index there is nothing to answer from.
 func askRun(ctx context.Context, client *llm.Client, question string, hints []askindex.Hint) (*askResult, error) {
 	start := time.Now()
 	res := &askResult{Question: question}
@@ -208,9 +205,10 @@ func askToCheck(a askAnswer) askAnswer {
 // and starts at its flags -- "--home" where "landmark --home" was meant
 // -- when the suggestion names the command in its command field, which
 // the schema holds to the commands shown.  A "slsh " in front, the
-// shell's own name typed as if it were a command, comes off.  Nothing
-// else is touched, and the mended line goes through every check as if
-// the model had written it so.
+// shell's own name typed as if it were a command, comes off, and so does
+// what askCleanLine takes off round the line.  Nothing else is touched,
+// and the mended line goes through every check as if the model had
+// written it so.
 func askMendLine(s askSuggestion) string {
 	line := askCleanLine(s.CommandLine)
 	if rest, ok := strings.CutPrefix(line, "slsh "); ok {

@@ -50,8 +50,9 @@ type lslOptions struct {
 // wanted says which kinds to print, and whether any flag chose.
 //
 // With none given the answer depends on whether there is a word to
-// match: a bare "lsl" is the summary, and "lsl llSay" searches
-// everything, which is what it did before these flags existed.
+// match and on -m: a bare "lsl" is the summary, "lsl -m" is every kind,
+// and "lsl llSay" searches everything, which is what it did before these
+// flags existed.
 func (o *lslOptions) wanted() (functions, constants, events, types, chosen bool) {
 	if o.All {
 		return true, true, true, true, true
@@ -78,8 +79,9 @@ func cmdLSL(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		want = strings.ToLower(strings.Join(rest, " "))
 	}
 
-	// No flags and no word: the summary, as before.  A word with no
-	// flags searches everything, also as before.
+	// No kind and no word: the summary, as before, unless -m asked for
+	// the program's form, which is every kind.  A word with no kind
+	// searches everything, also as before.
 	if !chosen {
 		if want == "" && !o.Machine {
 			fmt.Fprintf(out, "version %d: %d functions, %d constants, %d events, %d types\n",

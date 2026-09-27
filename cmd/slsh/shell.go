@@ -266,7 +266,7 @@ func (sh *Shell) enter(ctx context.Context) {
 	if sh.typing() {
 		// Echoed like a command rather than swallowed like chat: what
 		// was typed is the answer, and a person needs to see it to
-		// know whether to type a full stop yet.
+		// know whether to press Ctrl-D yet.
 		sh.term.Echo()
 		answer := sh.term.Take()
 		sh.log.line("| " + answer)
@@ -686,8 +686,9 @@ func (w *termWriter) Write(p []byte) (int, error) {
 		w.say(strings.TrimSuffix(string(w.buf[:i]), "\r"))
 		w.buf = w.buf[i+1:]
 	}
-	// A write with no newline is held until one arrives; anything
-	// left over is flushed when the command ends.
+	// What is left after the last newline is printed now, as a line of
+	// its own.  Nothing holds it for the rest of the line, and nothing
+	// flushes a termWriter when the command ends.
 	if len(w.buf) > 0 {
 		w.say(string(w.buf))
 		w.buf = nil
@@ -721,8 +722,9 @@ func (w *termWriter) say(line string) {
 // has to be read to be trusted, and there are few of them.
 //
 // A writer that is not the terminal -- a file, a test's buffer -- is
-// written to as it would have been anyway.  Colour only reaches one
-// when somebody asked for it, which is Shell.colour's business.
+// written to as it would have been anyway.  Whether s has colour in it
+// is Shell.colour's business, and it says no to any writer but the
+// terminal.
 func writeOwn(out io.Writer, s string) {
 	w, ok := out.(*termWriter)
 	if !ok {
@@ -919,11 +921,10 @@ type command struct {
 	// brief is the one line help listings print beside the usage line.
 	brief string
 
-	// man is the long description, printed by "man NAME", or empty for
-	// a command that has not been written up yet.  It lives beside the
-	// command it describes rather than in one file of its own, so that
-	// changing what a command does and changing what is said about it
-	// are the same edit.  See man.go for how it is laid out.
+	// man names the long description "man NAME" prints: the page
+	// cmd/slsh/man/<man>.md, which for "." is source.  Empty for a
+	// command that has not been written up yet.  See man.go for where
+	// a page lives and how it is laid out.
 	man string
 
 	// keywords are the words somebody would use for this command who

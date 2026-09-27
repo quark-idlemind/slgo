@@ -31,17 +31,21 @@ somewhere it walked to.  A sit picks the avatar up and carries it to
 the seat from as much as ten metres off, so the coordinates on the line
 above are the seat's doing, and this is what explains them.
 
-The answer is the region's rather than this session's memory: an avatar
-sitting on something is PARENTED to it, and the parent is part of how
-the region describes the avatar.  So a shell that attached a minute ago
-gets the same answer as one that was connected when the sit happened.
-It used to get "not sitting", because an avatar sitting still since
-before we attached had never been described to us.
+The answer is the agent's rather than this session's memory: an avatar
+sitting on something is PARENTED to it, the parent is part of how the
+region describes the avatar, and the agent behind this shell has kept
+that description since it logged in.  So a shell that attached a minute
+ago gets the same answer as one that was connected when the sit
+happened.  It used to get "not sitting", because an avatar sitting
+still since before we attached had never been described to us.
 
-A sit on the GROUND is different and is reported only when this session
-performed it.  Nothing is parented in a ground sit -- there is nothing
-to be parented to -- and what says it is happening is an animation,
-which this session hears only while it is waiting on one.
+A sit on the GROUND is found the other way.  Nothing is parented in a
+ground sit -- there is nothing to be parented to -- and what says it is
+happening is an animation, which the agent has heard all along too; so
+a ground sit is reported whoever made it, this shell, a viewer or
+another client.  Only a daemon too old to be asked leaves this shell
+with what its own session heard, and then a ground sit is reported
+only when this session performed it.
 
 ## The group line
 

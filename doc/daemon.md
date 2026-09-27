@@ -280,3 +280,18 @@ that had reconnected.
 So the resolved uuid belongs to the `Hosted`, which survives
 reconnection, rather than to the agent, which does not -- and the
 supervisor reapplies it every time it puts a new session in place.
+
+### What the refusal looks like
+
+Measured on Agni, in Pelmar Reach, with two avatars a couple of metres
+apart:
+
+    hobb       Pelmar Reach at 33, 75, 2001 / acting as group 488f7e57-...
+    holt  Pelmar Reach at 31, 73, 2001
+
+Rezzing a prim as hobb worked.  As holt it failed, with the simulator
+saying "You cannot create objects here. The owner of this land does not
+allow it. Use the land tool to see land ownership." -- which is untrue
+as it stands and unhelpful as a hint.  The land does allow it; the
+request simply arrived from nobody in particular.  Until slsh had its
+`group` command there was no way to fix that from its prompt.
