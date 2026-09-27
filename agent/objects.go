@@ -64,7 +64,7 @@ type Object struct {
 	TextureEntry []byte
 
 	// Text is the floating text above the object, when it has any, as
-	// the last compressed update said it.
+	// the last update of either kind said it.
 	Text string
 
 	// AttachPoint is where a worn object is attached, and zero when it
@@ -74,8 +74,9 @@ type Object struct {
 	// itself is rezzed afresh -- with a new id -- every time it is put
 	// on, and again every time the avatar logs in, so anything that
 	// wants to find the same attachment twice has to look for the item
-	// it came from.  Both are read from the ObjectUpdate that describes
-	// an attachment, which is sent when it goes on and again at login;
+	// it came from.  Both are read from the update, full or compressed,
+	// that describes an attachment, which is sent when it goes on and
+	// again at login;
 	// a program that connected afterwards never heard it, which is why
 	// it is worth remembering here.
 	AttachPoint int
@@ -480,6 +481,13 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	if havePos {
 		v.Position, v.Rotation = pos, rot
 	}
+	// As in a compressed update, the text is what this one says and one
+	// without any has none: the viewer clears it for a Text of the
+	// terminator alone or nothing (llviewerobject.cpp:1517-1553).
+	v.Text = ""
+	if len(d.Text) > 1 {
+		v.Text = trimNul(d.Text)
+	}
 	// An AttachItemID in the NameValue is what says this is worn;
 	// State means other things on an object that is not.
 	if item, ok := attachItem(d.NameValue); ok {
@@ -528,8 +536,8 @@ func (o *Objects) Attachments() []*Object {
 
 // compressed records what a compressed update said.
 //
-// The owner and the floating text are taken from here and nowhere else:
-// update reads neither out of a full one.
+// The owner is taken from here and nowhere else: update does not read
+// one out of a full update.
 func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance float32) {
 	parent := uint32(0)
 	if c.ParentID != nil {
@@ -564,6 +572,13 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	// Every update says what the text is now, and one without any has
 	// none: the viewer clears it (llviewerobject.cpp:1865-1895).
 	v.Text = c.Text
+	// Name-values come this way too, and the viewer reads them from
+	// either kind of update (llviewerobject.cpp:1466-1470 and
+	// 1955-1961), so an AttachItemID here says this is worn as it does
+	// in a full one.
+	if item, ok := attachItem([]byte(c.NameValues)); ok {
+		v.AttachItem, v.AttachPoint = item, attachPoint(c.State)
+	}
 }
 
 // judgedLocked records what an update's range check found: in range

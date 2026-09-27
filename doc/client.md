@@ -59,7 +59,9 @@ up in the session it holds at the moment of the request, so a 404
 there means that session's own capability was unknown to the grid at
 that moment: a session the grid had already ended and slgod had not yet
 replaced, or one whose new region's capabilities had not arrived yet.
-That is read from the code, not measured. A request made again after
+That is read from the code, not measured. slgod now waits out the
+second during a move
+([doc/daemon.md](daemon.md#a-capability-asked-for-during-a-move)). A request made again after
 the replacement reaches the new session; one made while the old is
 still in place is answered 404 again, and it is the caller's own
 retrying -- slbotd's outfit passes, every 20 seconds for five minutes

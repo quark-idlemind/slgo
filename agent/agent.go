@@ -601,16 +601,25 @@ func (a *Agent) Idle() time.Duration { return time.Since(a.LastPacket()) }
 // that has died without anyone noticing is worse than one that
 // reported the failure.
 func (a *Agent) watchdog(ctx context.Context, idle time.Duration) {
-	a.watchSilence(ctx, idle, a.LastPacket, func(since time.Duration) {
+	watchSilence(ctx, a.done, idle, a.LastPacket, func(since time.Duration) {
 		a.fail(fmt.Errorf("agent: simulator silent for %s", since.Round(time.Second)))
 	})
 }
 
-// watchSilence calls silent once, and returns, when nothing has been
-// heard for longer than idle by last's account; or returns when ctx or
-// the session ends.  It looks four times per idle and at most once a
-// second.  The root's watchdog runs on it, and so does each child's.
-func (a *Agent) watchSilence(ctx context.Context, idle time.Duration, last func() time.Time, silent func(since time.Duration)) {
+// WatchSilence calls silent once, and returns, when nothing has been
+// heard for longer than idle by last's account; or returns when ctx
+// ends.  It looks four times per idle and at most once a second.
+//
+// It is the watchdog this package keeps on the root's circuit and each
+// child's, for a circuit held elsewhere: slgod's to an attached viewer.
+func WatchSilence(ctx context.Context, idle time.Duration, last func() time.Time, silent func(since time.Duration)) {
+	watchSilence(ctx, nil, idle, last, silent)
+}
+
+// watchSilence is WatchSilence, returning when done closes as well.
+// The root's watchdog runs on it with the session's done, and so does
+// each child's.
+func watchSilence(ctx context.Context, done <-chan struct{}, idle time.Duration, last func() time.Time, silent func(since time.Duration)) {
 	tick := idle / 4
 	if tick < time.Second {
 		tick = time.Second
@@ -622,7 +631,7 @@ func (a *Agent) watchSilence(ctx context.Context, idle time.Duration, last func(
 		select {
 		case <-ctx.Done():
 			return
-		case <-a.done:
+		case <-done:
 			return
 		case <-t.C:
 			if since := time.Since(last()); since > idle {

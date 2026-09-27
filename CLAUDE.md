@@ -275,3 +275,10 @@ here when another is shared the same way.
   that proves one of them runs out sets it short rather than waiting
   the default out, as `sl`'s do and `shortReadBacks` does for
   `cmd/slsh`'s.
+- `WatchSilence`, in `agent/agent.go` (`watchSilence` inside the
+  package): calls a function once when a circuit has heard nothing for
+  longer than a timeout, by a last-heard time it is given, looking a
+  quarter of the timeout at a time and at most once a second. The
+  root circuit's watchdog, each child circuit's and slgod's watch on an
+  attached viewer run on it, the last two on the viewer's own circuit
+  timeout of 100 seconds.

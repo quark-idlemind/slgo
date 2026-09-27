@@ -529,7 +529,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 	// simulator that went away without a DisableSimulator is silence.
 	timeout := a.neighbourTimeout()
 	watch := func() {
-		a.watchSilence(ctx, timeout, c.heardAt, func(since time.Duration) {
+		watchSilence(ctx, a.done, timeout, c.heardAt, func(since time.Duration) {
 			a.dropNeighbour(c, fmt.Sprintf("nothing heard for %s", since.Round(time.Second)))
 		})
 	}

@@ -37,6 +37,14 @@ const PresenceLease = 3 * time.Second
 // something late.  A stalled session is the avatar gone.
 const Backlog = 2048
 
+// SilenceTimeout is how long a joined viewer may send nothing before it
+// is taken as gone, as though it had logged out.
+//
+// It is the viewer's own circuit timeout (newview/llstartup.cpp:916),
+// the figure agent.NeighbourTimeout uses too.  A viewer that is there
+// is never that quiet: it sends an AgentUpdate several times a second.
+const SilenceTimeout = 100 * time.Second
+
 // Circuit is the viewer's half of a handed-over session: a UDP socket on
 // which slgod answers as though it were the simulator.
 //
@@ -75,6 +83,15 @@ type Circuit struct {
 	mu     sync.Mutex
 	peer   *net.UDPAddr
 	joined bool
+
+	// heard is when the admitted viewer last sent anything, as unix
+	// nanoseconds, and joins is told of each join.  See watch.
+	heard atomic.Int64
+	joins chan struct{}
+
+	// silence stands in for SilenceTimeout when set, so that a test
+	// need not wait a hundred seconds for a viewer to be found gone.
+	silence time.Duration
 
 	// forwarded is told of each message passed on to the simulator.
 	// Guarded by mu.  See OnForward.
@@ -116,7 +133,7 @@ func Listen(host string, session func() *agent.Agent, census *Census, trace *Tra
 
 	c := &Circuit{
 		conn: conn, session: session, census: census, trace: trace, logf: logf,
-		out: make(chan *msg.Packet, Backlog),
+		out: make(chan *msg.Packet, Backlog), joins: make(chan struct{}, 1),
 	}
 	c.send = msg.NewSender(c, msg.WithSendTap(func(p *msg.Packet) {
 		c.record(ToViewer, p, Forwarded)
@@ -157,11 +174,12 @@ func (c *Circuit) Write(p []byte) (int, error) {
 // Run serves the circuit until the context is cancelled.
 func (c *Circuit) Run(ctx context.Context) {
 	ctx, c.cancel = context.WithCancel(ctx)
-	c.wg.Add(4)
+	c.wg.Add(5)
 	go func() { defer c.wg.Done(); c.recv.Run(ctx) }()
 	go func() { defer c.wg.Done(); c.send.Run(ctx) }()
 	go func() { defer c.wg.Done(); c.disp.Run(ctx, c.recv.C()) }()
 	go func() { defer c.wg.Done(); c.pump(ctx) }()
+	go func() { defer c.wg.Done(); c.watch(ctx) }()
 	if a := c.session(); a != nil {
 		c.logf("viewer: listening on %s for %s", c.Addr(), a.Account.Name())
 	}
@@ -182,9 +200,9 @@ func (c *Circuit) Close() {
 }
 
 // Joined reports whether a viewer has completed the handshake and not
-// logged out since.  A viewer that goes without logging out -- a crash,
-// a lost connection -- sends nothing, and still counts until another
-// takes the circuit.
+// left since.  One that goes without logging out -- a crash, a lost
+// connection -- is taken as gone once it has sent nothing for
+// SilenceTimeout.
 func (c *Circuit) Joined() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -227,6 +245,7 @@ func (c *Circuit) admit(p *msg.Packet) bool {
 	known := c.peer != nil && c.peer.String() == ua.String()
 	c.mu.Unlock()
 	if known {
+		c.heard.Store(time.Now().UnixNano())
 		return true
 	}
 
@@ -238,6 +257,7 @@ func (c *Circuit) admit(p *msg.Packet) bool {
 		return false
 	}
 	c.notePeer(ua)
+	c.heard.Store(time.Now().UnixNano())
 	return true
 }
 
@@ -354,13 +374,7 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 		// with it.
 		c.record(FromViewer, p, Absorbed)
 		c.sendLogoutReply()
-		// That viewer has left: it is not attached any more, and what
-		// the region says has nobody to go to until the next one
-		// joins, which sets this again.
-		c.mu.Lock()
-		c.joined = false
-		c.mu.Unlock()
-		c.logf("viewer: the viewer logged out; the session stays up")
+		c.leave("the viewer logged out")
 
 	case "StartPingCheck", "CompletePingCheck":
 		// Circuit machinery, per circuit.  This side answers the
@@ -374,11 +388,12 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 	//
 	// Forwarded, one would move the session and the viewer would be
 	// told none of it -- TeleportFinish is withheld from its event
-	// queue -- so it would go on drawing a region the avatar has left.
-	// Following it there is not built, so these are absorbed and the
-	// person is told why (refuseTeleport).  StartLure is not among
-	// them and is forwarded: offering somebody a teleport to where
-	// this avatar stands moves this avatar nowhere.
+	// queue -- so it would be left behind, as a viewer is when another
+	// client moves the session (RegionChanged).  Following it there is
+	// not built, so these are absorbed and the person is told why
+	// (refuseTeleport).  StartLure is not among them and is forwarded:
+	// offering somebody a teleport to where this avatar stands moves
+	// this avatar nowhere.
 	// Why: doc/handover.md#a-teleport-asked-for-at-the-viewer
 
 	case "TeleportLocationRequest":
@@ -593,9 +608,9 @@ func (c *Circuit) RegionChanged(name string) {
 		where = "another region"
 	}
 	c.tell("The avatar has been teleported to " + where + ". " +
-		"This viewer is still drawing the region it left; " +
-		"log out and in again to follow it.")
-	c.logf("viewer: the avatar moved to %s under an attached viewer; it was told to attach again", where)
+		"This viewer cannot follow it there and will be logged out; " +
+		"log it in again to see the new region.")
+	c.logf("viewer: the avatar moved to %s under an attached viewer; it was told to log in again", where)
 }
 
 // tell says something to the person, as an AgentAlertMessage with
@@ -651,8 +666,47 @@ func (c *Circuit) sendMovementComplete() {
 	c.mu.Lock()
 	c.joined = true
 	c.mu.Unlock()
+	select {
+	case c.joins <- struct{}{}:
+	default:
+	}
 	c.logf("viewer: told the viewer it is in %s at %v",
 		a.RegionName(), m.Data.Position)
+}
+
+// leave is what a viewer leaving does, whether it logged out or went
+// silent: it is not attached any more, and what the region says has
+// nobody to go to until the next one joins, which sets joined again.
+func (c *Circuit) leave(how string) {
+	c.mu.Lock()
+	c.joined = false
+	c.mu.Unlock()
+	c.logf("viewer: %s; the session stays up", how)
+}
+
+// watch takes a joined viewer that has sent nothing for SilenceTimeout
+// as gone, as a LogoutRequest would.  It watches from each join until
+// that silence, on the watchdog the session keeps on its own circuits.
+// Why: doc/handover.md#a-viewer-that-goes-silent
+func (c *Circuit) watch(ctx context.Context) {
+	idle := c.silence
+	if idle <= 0 {
+		idle = SilenceTimeout
+	}
+	heardAt := func() time.Time { return time.Unix(0, c.heard.Load()) }
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.joins:
+		}
+		agent.WatchSilence(ctx, idle, heardAt, func(since time.Duration) {
+			if c.Joined() {
+				c.leave(fmt.Sprintf("nothing heard from the viewer for %s, so it is taken as gone",
+					since.Round(time.Second)))
+			}
+		})
+	}
 }
 
 // describeRegion tells a joining viewer what the region said when this

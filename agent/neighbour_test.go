@@ -953,6 +953,8 @@ func TestASilentChildIsDroppedAndOfferedAfresh(t *testing.T) {
 
 	waitFor(t, "the silent child to be dropped", func() bool { return len(a.Neighbours()) == 0 })
 	waitFor(t, "its socket to be given back", func() bool { return givenBack(conn) })
+	// Said after the socket is given back, so waited for too.
+	waitFor(t, "the drop to be said", func() bool { return len(said.saying("nothing heard for")) > 0 })
 	if lines := said.saying("nothing heard for"); len(lines) != 1 {
 		t.Errorf("dropping was reported as %v", said.saying("circuit closed"))
 	}

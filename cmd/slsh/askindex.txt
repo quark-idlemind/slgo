@@ -824,7 +824,7 @@ unlink:section:What the pieces are called afterwards	unlink	section	What the pie
 unlink:section:Examples	unlink	section	Examples	    unlink garden chair\n    unlink d8467e57-...\n\nSee also: `link`, `objects` and its `-c` for the prims inside an\nobject, `take`, and `dump` for writing a linkset down before disturbing\nit.
 unlink:example:2	unlink	example	Examples	unlink d8467e57-...
 viewer	viewer	line		viewer [-l]\nwhere a real viewer can take this session over, and start one\nhelp groups: avatars\nkeywords: viewer client graphics eyes see avatar login password take over
-viewer:intro	viewer	intro		`viewer` hands a running session to a real viewer: it says where the\ndaemon serves viewer logins and whether one has taken this session.\nIt is how to get eyes on an avatar the shell drives without logging\nthat avatar out and in again elsewhere.\n\n    viewer\n\nA shell that logged in for itself has no daemon serving viewer\nlogins, so there is nothing for it to hand over and it says so.\n\nServing viewer logins is not the daemon's default.  One that serves\nnone says so in words, and names the flag it would have to be\nrestarted with, rather than printing an empty address nobody could\ntell from a working one.\n\nWhether a viewer is there is mostly known: one that takes the session\nannounces itself, and one that logs out, as quitting a viewer does,\nis no longer counted.  One that goes without logging out -- a crash,\na lost connection -- says nothing, and is shown as there until\nanother viewer takes the session or slgod restarts.
+viewer:intro	viewer	intro		`viewer` hands a running session to a real viewer: it says where the\ndaemon serves viewer logins and whether one has taken this session.\nIt is how to get eyes on an avatar the shell drives without logging\nthat avatar out and in again elsewhere.\n\n    viewer\n\nA shell that logged in for itself has no daemon serving viewer\nlogins, so there is nothing for it to hand over and it says so.\n\nServing viewer logins is not the daemon's default.  One that serves\nnone says so in words, and names the flag it would have to be\nrestarted with, rather than printing an empty address nobody could\ntell from a working one.\n\nWhether a viewer is there is mostly known: one that takes the session\nannounces itself, and one that logs out, as quitting a viewer does,\nis no longer counted.  One that goes without logging out -- a crash,\na lost connection -- says nothing, and is shown as there until it has\nbeen silent for 100 seconds, the viewer's own circuit timeout, or\nanother viewer takes the session or slgod restarts.
 viewer:example:1	viewer	example		viewer
 viewer:option:-l, --launch	viewer	option	-l, --launch	Start a viewer and log it in as this avatar.  Without it, the address\nis printed and nothing is started.
 viewer:section:The password is minted, used once, and expires	viewer	section	The password is minted, used once, and expires	A profile keeps only a digest of a password, so nothing on this side\ncan know one a viewer could be told to type.  The daemon mints a\nfresh one, good for a single login and for a few minutes, and it\ngoes straight to the viewer being started.  Nothing here prints,\nlogs or keeps it; the command line is echoed with it struck out,\nsince a launch that appears to do nothing is unreadable.\n\nA profile with no `viewer_password` line in it is refused rather\nthan minted for.  That line is not one a profile has unless somebody\nput it there: it is what marks a profile as one that may be handed\nto a viewer at all.  The refusal names the line to add and says\nslgod has to be restarted after it.\n\nIt does reach that viewer's arguments, where any process this user\nowns can read them.  Single use is the answer to it: an onlooker who\ncopies the password out is racing a viewer already logging in with\nit, and loses the moment it does.  The expiry is the second line of\ndefence, and generous, because a viewer takes the better part of a\nminute to reach a login screen.
@@ -1018,7 +1018,7 @@ words 1888
 0m	327
 0x0000080018010000	272
 10	545,121*4,129*2,2,2*4,1,9*3,1,1
-100	799
+100	799,25
 1000	432,4,1,1,302,4,44,4,3,82
 1020	807,72
 1024	567
@@ -1395,7 +1395,7 @@ choic	402,226,24
 choos	4,13,277,59,49,204,265
 chos	203,347,4,87
 chosen	218,180
-circuit	14,2,22,231,181*2,1*4,2*6,1*6,1,194,65*2,1,2*3,142,3
+circuit	14,2,22,231,181*2,1*4,2*6,1*6,1,194,65*2,1,2*3,107,35,3
 circumstanc	897
 claim	197,204*2,308
 claus	643,226
@@ -2149,7 +2149,7 @@ overshot	851
 overview	225
 overwrit	641,20
 overwrot	112
-own	12,2,17,10,4,21*2,2,4,6,25*2,7,2,31,54,6,9,5,11,1,10,8,6*2,7*2,6,3,1,7,13,6*2,1,16*2,5,4,5,28,6,13,3,1,2,1*2,4,14,1,1,5,10,3*2,23,7,4*2,16,15*2,5,1,4*3,7,3,1,3,6,1,8,21,6,3*2,3,4,35,23,9,12,2,8,3,1,3*2,5*2,21,7,3,7,16,25,9,5,11,6,4,1,6,1,5,7,4*2,6*2,4,10,8,1,8,5,10,17,3,2,4,3,4,9,1
+own	12,2,17,10,4,21*2,2,4,6,25*2,7,2,31,54,6,9,5,11,1,10,8,6*2,7*2,6,3,1,7,13,6*2,1,16*2,5,4,5,28,6,13,3,1,2,1*2,4,14,1,1,5,10,3*2,23,7,4*2,16,15*2,5,1,4*3,7,3,1,3,6,1,8,21,6,3*2,3,4,35,23,9,12,2,8,3,1,3*2,5*2,21,7,3,7,16,25,9,5,11,6,4,1,6,1,5,7,4*2,6*2,4,10,5,3,1,8,5,10,17,3,2,4,3,4,9,1
 owner	162,110,17,37,1,162*2,4*2,3*2,1,2,15,14*3,4*2,3,3*2,1,15,195
 pack	606,112
 packet	454*2,260,1*2,2*2,2*7,139
@@ -2383,7 +2383,7 @@ scrollback	388
 sculpt	122
 search	1,37,132,3*3,5,1*2,1,4*2,19*2,26,4,27*7,6,25*2,41*2,1*3,2,2,1*3,1,22,27*3,101,1*2,4,10*2,46,3*4,3,44,4,2,198,87
 seat	674,5*4,3,13,3,1,152,29*3
-second	14,13*2,44,1,1,2,11,3,8,6*3,3*2,6,5,4,28,10,1,5,1,5,17,71,10,7,12*2,2,2*2,5*2,4,3,23,6,16,3,3,40,9,13,12,3,8,2,1,3,1,4,2*6,9,6*2,15,20,5*2,1,13*2,6,8*2,2,11,3*2,30,4,2,3,3,6,3*2,2,2,7,1,12,2,12,33,5,2*2,1,7,6,1,1*2,1,2,5,3,15,3,6,1,4,2,9,18,4*3,8,1,1,1,6,6*2,6,6,10,3,9,1,7,14,1,2,9,20,5,1,1,8,1
+second	14,13*2,44,1,1,2,11,3,8,6*3,3*2,6,5,4,28,10,1,5,1,5,17,71,10,7,12*2,2,2*2,5*2,4,3,23,6,16,3,3,40,9,13,12,3,8,2,1,3,1,4,2*6,9,6*2,15,20,5*2,1,13*2,6,8*2,2,11,3*2,30,4,2,3,3,6,3*2,2,2,7,1,12,2,12,33,5,2*2,1,7,6,1,1*2,1,2,5,3,15,3,6,1,4,2,9,18,4*3,8,1,1,1,6,6*2,6,6,10,3,6,3,1,7,14,1,2,9,20,5,1,1,8,1
 secondlif	377*2
 section	383
 security	290
@@ -2435,7 +2435,7 @@ shut	40
 sid	7*2,76*2,104,10,6,2*3,55,14,44,59,74,50*2,2,2,3,1,13,38*3,7*2,34,148,17,61,24
 sign	214,93,1,1,8,120,1,108,1,50*4,1*2,1*2,62,77,29,2,15*2,1,1
 silenc	52,64,85,9,62,20*2,22,115,119,48,51,35,51,2,71,56
-silent	138,154,161
+silent	138,154,161,371
 silently	101,562,142
 sim	450,150,276
 simply	40,43,368,57,114,127
@@ -2601,7 +2601,7 @@ tidy	127,1,2*5,1,1,1,1
 tiff	560
 til	756
 tim	31*2,21,2,13,24,9*2,7,5,4,6,21,12,32,14,9,37,19*2,28,39,20,30,5,34,31*2,31,25,39,12,7,5,35,40,14,4,31,24,29,7,25,18,50*2,2,10*2,18,14,2*2
-timeout	217,25,363,243,3
+timeout	217,25,363,219,24,3
 tint	759
 titl	68,143,343
 tmp	198,1
@@ -2715,7 +2715,7 @@ verify	417
 version	277,84,354
 via	317
 view	44,1,353*2,1,3*2
-viewer	14,2*2,29,47,8,1,2*2,3,30,2,11,11*2,37,17*2,56,3,20*2,20*2,2*2,9*2,3,34,13,3*2,4,35*2,1*2,2*3,23,11,22,26,23,14,12,17,50,5,30,4*3,4,4*2,4*2,31,7,13,5,12,35*2,2,9*2,37,4*3,1*9,1,1,1*7,1*9,1*3,1,2,4,15*2,17*5,3,2*2,7,14
+viewer	14,2*2,29,47,8,1,2*2,3,30,2,11,11*2,37,17*2,56,3,20*2,20*2,2*2,9*2,3,34,13,3*2,4,35*2,1*2,2*3,23,11,22,26,23,14,12,17,50,5,30,4*3,4,4*2,4*2,31,7,13,5,12,35*2,2,9*2,37,4*3,1*10,1,1,1*7,1*9,1*3,1,2,4,15*2,17*5,3,2*2,7,14
 visibl	101,158,158,452,4
 visit	787
 voic	152,1,653
