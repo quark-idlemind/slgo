@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -27,6 +30,49 @@ func TestPlaceRefusesTheLineThatUsedToMoveAnObject(t *testing.T) {
 	// far as looking the path up, and fails there or not at all.
 	if got := x.do(t, "place nosuchthing"); strings.Contains(got, "move NAME X Y Z") {
 		t.Errorf("a one-argument place was refused for its arity: %q", got)
+	}
+}
+
+// TestAPlaceGivenUpOnDeletesWhatItRezzed: a place cancelled while it
+// waits, whose object turns up all the same, deletes that object into
+// the trash rather than leaving it standing with nobody holding its id.
+func TestAPlaceGivenUpOnDeletesWhatItRezzed(t *testing.T) {
+	x := newTestShell(t)
+	placed := msg.MustParseUUID("f3a47e57-7e57-c0de-be8b-000000000031")
+	x.grid.AnswerDeletes(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	x.grid.mu.Lock()
+	answer := x.grid.onSend
+	x.grid.onSend = func(m msg.Message) {
+		answer(m)
+		if _, ok := m.(*msg.RezObject); !ok {
+			return
+		}
+		// Cancelled as the rez goes out, and described too late for
+		// the look that follows, so only the last look finds it.
+		cancel()
+		x.grid.mu.Lock()
+		x.grid.later = []*sl.Seen{{
+			Object: sl.Object{ID: placed, Local: 31, Name: "a lamp"},
+			PCode:  9, Owner: testMe, Position: msg.Vector3{X: 129, Y: 128, Z: 25},
+		}}
+		x.grid.laterAt = x.grid.objectsCalls + 2
+		x.grid.mu.Unlock()
+	}
+	x.grid.mu.Unlock()
+
+	if err := x.Do(ctx, `place "Objects/a lamp"`); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a place given up on returned %v", err)
+	}
+	var deleted []msg.DeRezObject
+	for _, d := range sentOfShell[*msg.DeRezObject](x) {
+		deleted = append(deleted, *d)
+	}
+	if len(deleted) != 1 || deleted[0].ObjectData[0].ObjectLocalID != 31 ||
+		deleted[0].AgentBlock.DestinationID != testTrash {
+		t.Errorf("deleted %+v, want the placed prim, 31, into the trash", deleted)
 	}
 }
 
