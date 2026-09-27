@@ -8,58 +8,11 @@ package main
 // why ls prints one bare path per line by default and keeps the columns
 // for ls -l.
 //
-// # save, and why it is two plain arguments
-//
-// Reading an item out has had commands for a long time -- cat prints a
-// notecard or a script, get writes a texture to disk -- and so has
-// making a new one, which is "new --from FILE PATH".  Writing a file
-// into an item that is ALREADY there had none, although the session
-// layer has done it all along: sl.SaveNotecard and sl.SaveScript were
-// reachable from "new" and from nothing at all respectively.
-//
-//	save notes.txt readme            a notecard
-//	save hello.lsl /Scripts/greeter  a script, which is compiled
-//
-// The word is the viewer's.  These are the two capabilities behind its
-// own Save button -- LLPreviewLSL::saveIfNeeded asks the region for
-// UpdateScriptAgent (llpreviewscript.cpp:2569) and
-// LLPreviewNotecard::saveIfNeeded for UpdateNotecardAgentInventory
-// (llpreviewnotecard.cpp:674) -- so "save" is what somebody who has used
-// the viewer already calls this.  "put" was not free to take: it means
-// uploading an image, which costs L$ where a notecard and a script cost
-// nothing, and one word for both would hide that.
-//
-// Two positional arguments, and not "save --from FILE PATH" -- which
-// would have matched "new --from FILE PATH" word for word, and was the
-// other real candidate.  What differs is that new can make an empty
-// notecard and save cannot write one: the file is the whole of what
-// this command does, and an option that must always be given is a
-// positional argument spelled at length.  That is the objection that
-// kept the object out of a flag in start and stop.  It is also a trap:
-// a --from that may be left off makes "save readme" a legal line that
-// empties a notecard, and nothing would have been asked for.
-//
-// So the source is first and the destination second, in cp's order, and
-// which side is which is the shell's own vocabulary rather than a
-// convention invented here.  FILE is on this machine wherever it
-// appears -- put FILE, . FILE, --from FILE -- and PATH is in inventory
-// wherever it appears -- cat PATH, rm PATH, drop OBJECT PATH.  "get -o
-// FILE PATH" reads the other way round because its subject is the thing
-// on the grid and the file is only where the copy lands; here the file
-// is the subject and the item is where it lands.
-//
-// # What save does not do
-//
-// It does not start anything, and does not touch the world.  A script
-// in inventory is not running and cannot be made to run: an object is
-// the only place a script runs at all, and putting one there is "new
-// --in OBJECT", which compiles it inside the object and starts it (see
-// sl.InstallScript).  Saving compiles too -- the capability answers
-// with the verdict -- but what it has changed is the item, and the
-// copies already inside objects are untouched.  So the output says
-// whether it compiled and says nothing whatever about running, and
-// there is no --in here: a second way into an object would be a second
-// thing to keep right.
+// save writes a local file into a notecard or a script that is already
+// there, the file first and the item second, in cp's order.  It
+// compiles a script and starts nothing: a script runs only inside an
+// object, and putting one there is "new --in OBJECT".
+// Why: doc/slsh.md#why-save-takes-two-plain-arguments
 
 import (
 	"bytes"
@@ -390,18 +343,9 @@ func (sh *Shell) thingAt(ctx context.Context, path string) (sl.Entry, error) {
 // item carries asset_id (agent/inventory.go) -- and how the viewer
 // reads one back, by looking the uuid up in inventory rather than
 // fetching it (LLViewerInventoryItem::getLinkedItem,
-// llviewerinventory.cpp:2674).
-//
-// Which matters because an outfit folder holds nothing else.  Every
-// path under /My Outfits names a link, and links are what a person has
-// in front of them when they are reading off the name of something to
-// put on.  A command that took the id it found there and sent it would
-// be sending an id the simulator has no object for, and the simulator
-// answers an id it does not know with silence rather than an error --
-// so the whole of what a person sees is their command sitting out its
-// timeout and then saying the region never agreed.  Nothing in that
-// sentence is true except the last clause, and the thing that went
-// wrong is not mentioned anywhere in it.
+// llviewerinventory.cpp:2674).  The simulator answers a link's own id
+// with silence, and every path under /My Outfits names a link.
+// Why: doc/slsh.md#a-links-id-is-not-the-items
 func (sh *Shell) linkTarget(ctx context.Context, e sl.Entry) (sl.Entry, error) {
 	if !e.IsLink {
 		return e, nil

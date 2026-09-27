@@ -283,6 +283,279 @@ and nothing printed it; what it did was give the model a sentence to
 write before it had chosen anything -- and the instructions supplied
 the sentence, "slsh has no command for that", ready to copy.
 
+## Why save takes two plain arguments
+
+`save` writes a local file into a notecard or a script.  Reading an item
+out has had commands for a long time -- `cat` prints a notecard or a
+script, `get` writes a texture to disk -- and so has making a new one,
+which is `new --from FILE PATH`.  Writing a file into an item that is
+ALREADY there had none, although the session layer has done it all
+along: `sl.SaveNotecard` and `sl.SaveScript` were reachable from `new`
+and from nothing at all respectively.
+
+    save notes.txt readme            a notecard
+    save hello.lsl /Scripts/greeter  a script, which is compiled
+
+The word is the viewer's.  These are the two capabilities behind its own
+Save button -- `LLPreviewLSL::saveIfNeeded` asks the region for
+UpdateScriptAgent (llpreviewscript.cpp:2569) and
+`LLPreviewNotecard::saveIfNeeded` for UpdateNotecardAgentInventory
+(llpreviewnotecard.cpp:674) -- so "save" is what somebody who has used
+the viewer already calls this.  "put" was not free to take: it means
+uploading an image, which costs L$ where a notecard and a script cost
+nothing, and one word for both would hide that.
+
+Two positional arguments, and not `save --from FILE PATH` -- which would
+have matched `new --from FILE PATH` word for word, and was the other
+real candidate.  What differs is that `new` can make an empty notecard
+and `save` cannot write one: the file is the whole of what this command
+does, and an option that must always be given is a positional argument
+spelled at length.  That is the objection that kept the object out of a
+flag in `start` and `stop`.  It is also a trap: a `--from` that may be
+left off makes `save readme` a legal line that empties a notecard, and
+nothing would have been asked for.
+
+So the source is first and the destination second, in `cp`'s order, and
+which side is which is the shell's own vocabulary rather than a
+convention invented here.  FILE is on this machine wherever it appears
+-- `put FILE`, `. FILE`, `--from FILE` -- and PATH is in inventory
+wherever it appears -- `cat PATH`, `rm PATH`, `drop OBJECT PATH`.
+`get -o FILE PATH` reads the other way round because its subject is the
+thing on the grid and the file is only where the copy lands; here the
+file is the subject and the item is where it lands.
+
+What `save` does not do is start anything, or touch the world.  A script
+in inventory is not running and cannot be made to run: an object is the
+only place a script runs at all, and putting one there is `new --in
+OBJECT`, which compiles it inside the object and starts it (see
+`sl.InstallScript`).  Saving compiles too -- the capability answers with
+the verdict -- but what it has changed is the item, and the copies
+already inside objects are untouched.  So the output says whether it
+compiled and says nothing whatever about running, and there is no
+`--in` here: a second way into an object would be a second thing to
+keep right.
+
+## A link's id is not the item's
+
+`linkTarget` follows an inventory link to the item it points at, for
+the commands that send an id to the grid as the thing itself.  It
+matters because an outfit folder holds nothing else.  Everything under
+My Outfits is a link.  It carries the same name as the thing it points
+at, and a listing tells the two apart only by the word "link" in the
+type column -- so the path a person reads the name off, when they are
+looking at an outfit they want back, names a link almost every time.
+Links are what a person has in front of them when they are reading off
+the name of something to put on.
+
+The id on a link is its own, and its "asset" is not an asset: it is the
+ITEM id of what it points at, delivered as linked_id where an item
+carries asset_id.  A command that took the id it found there and sent it
+would be sending an id the simulator has no object for, and the
+simulator answers an id it does not know with silence rather than an
+error -- so the whole of what a person sees is their command sitting out
+its timeout and then saying the region never agreed.  Nothing in that
+sentence is true except the last clause, and the thing that went wrong
+is not mentioned anywhere in it.
+
+For `wear`, sending a link's own id in RezSingleAttachmentFromInv sends
+the simulator an id it has no object for.  So the whole of what the
+person sees is the forty second wait running out and then a time-out
+waiting for the simulator to report it as worn -- true in every clause
+and about nothing that was wrong.
+
+So `wear` follows one, which is what the viewer does with the same
+click.  `linkTarget` does the following, and refuses the two cases where
+there is nothing to follow to: a link whose item is no longer in
+inventory, since a link outlives what it pointed at, and a link to
+another link, which the viewer also declines rather than choosing how
+far to go.
+
+## Why the pair is take and place
+
+`take` and `place` move objects between the world and inventory.
+"rez" is what everyone calls the second of these, and it is already the
+command that builds an object from a JSON file.  One word cannot mean
+both "make what this file describes" and "put back what I took": the
+first invents an object and the second restores one, and a person who
+mixed them up would be told their file was not valid JSON.  That has not
+changed and is not going to.
+
+What did change is that "place" became free.  It used to be the command
+that repositioned something already rezzed, and that is now `move`,
+which is the plainer word for shifting a thing that is already there and
+leaves "place" to mean what it sounds like: putting a thing into the
+world.  So the pair is take and place, and each of them says which
+direction it goes in.
+
+`place` was called "bring", and nothing answers to that now.  A script
+that says it stops with an unknown command, which is loud, immediate and
+costs a re-run, so there is no alias for it: an alias would keep the
+word in circulation, and the word being a poor description of the act
+is the whole reason for the rename.
+
+"place" is the half worth being careful about, because it did not
+disappear -- it changed meaning, and both meanings are spelt the same
+way.  See the argument count in `cmdPlace` for what that costs and what
+is done about it.
+
+## What wear and detach are called, and what they take
+
+`wear`, `detach` and `dress` finish what `worn` started.  Listing the
+attachments has been possible since there was a shell, and changing them
+has been possible in the sl package for just as long -- slbench has been
+hanging HUDs on an avatar with Wear and TakeOff all along -- so the only
+thing missing was a way to ask for it from the prompt.
+
+`wear` names something in inventory and `detach` names something worn,
+and those are different places even when they hold the same word.  So
+`wear` takes a path, the way `place` does, and looks the item up;
+`detach` takes a name and matches it against what is actually on,
+because the thing it has to send is the id of the item an attachment was
+worn from and that is what the region's answer carries.
+
+It could have gone the other way -- `detach` resolving a path to an item
+and sending that id without ever asking what is worn.  It would work,
+and it would be silent about the case that matters: a name that is in
+inventory and not on the avatar would be detached with every appearance
+of success and nothing would happen.  Asking first costs one call and
+turns that into a sentence.
+
+The object's key is not what `detach` takes.  A worn object is rezzed
+afresh, with a key nobody has seen before, every time it goes on and
+again at every login, so its key is worth nothing the moment it comes
+off.  The inventory item does not change.  A key typed at `detach` is
+therefore looked for as either -- both are in the answer already, so
+neither costs anything -- but the item is what goes on the wire.
+
+The names are the viewer's words, from the menu somebody will have used
+before they came here.  "attach" and "remove" were the alternative and
+were worse in both halves: attach is what the protocol calls it rather
+than what a person does, and remove sits one letter from `rm`, which
+deletes things.
+
+## Why wear adds rather than replaces
+
+A point can hold more than one attachment, and which of the two happens
+is the request's to say: the point travels in one byte with 0x80,
+ATTACHMENT_ADD (indra_constants.h:193), laid over it, and the viewer
+lays it there exactly that way -- "if (attachment.mAdd) attachment_pt
+|= ATTACHMENT_ADD" (llattachmentsmgr.cpp:247-249).  So the difference
+between the viewer's Add and its Wear is one bit, and the choice of
+which is the default is entirely ours.
+
+`wear` replaced, and now it adds.  What settled it was measured on Agni,
+in Pelmar Reach: holt was wearing "auto 11" on HUD bottom right, and
+
+    wear Objects/auto 3
+
+with no `--at` at all put auto 3 on HUD bottom right and took auto 11
+off.  Nothing was said about auto 11 by anybody -- not by the command,
+which printed its one line about auto 3, and not by the region.  It
+simply stopped being worn.
+
+That silence is the argument.  The person most likely to type `wear` is
+already dressed; the point an object asks for is one they did not choose
+and usually do not know until the answer names it; and so the replacing
+default put the loss of something they were wearing behind a command
+that reads as purely additive.  A wrong add is visible and costs a
+detach.  A wrong replace is invisible and costs whatever was there.
+Between two defaults, the one to have is the one whose mistake can be
+seen.
+
+`--replace` is the old behaviour, kept because putting a thing where
+another thing is really is sometimes what is meant -- and it now names
+what it displaced instead of leaving that to be found out.
+
+The point laid under the bit may be 0, which is a value here rather than
+a missing one (see `attachWhereItSays`).  "Add, wherever the object
+itself says" is therefore the single byte 0x80, and that is what a bare
+`wear` sends.
+
+The add bit is laid on on the way past, in this command, rather than by
+anything in sl.  `sl.Wear` takes the AttachmentPt byte and sends it, and
+that byte is the point with the bit over it: the protocol has one field
+for both, so a caller able to pass 0x85 can already say everything the
+message can express.  A second way of saying it in sl -- a flag, an
+options struct -- would be an argument nobody but this command ever
+varies, and it would sit two files from the `--replace` that decides it.
+
+The other half of that is what it leaves alone.  `sl.Wear`'s other
+callers pass the byte they mean and are untouched by any of this: the
+pool of auto objects lays the add bit on itself before handing the point
+to `EnsureAttached`, and slbotd's `wear` sends a bare point.
+
+## Why wear will not put one item on twice
+
+Adding makes it possible to wear one inventory item twice, and `wear`
+refuses to.  An attachment is known here by the item it came from -- the
+session keys its map that way (`w.attach` in sl/attach.go) and the
+object's own id is freshly minted at every attach and every login -- so
+two attachments from one item are two rows agreeing in every field a
+person could name one by.  `detach` would find both, refuse as
+ambiguous, and advise telling them apart by the item id that `worn -l`
+prints, which is precisely the thing they share.  That is a state this
+shell can create and cannot then unpick, so it is not created: the
+refusal names the point it is already on, and names `--replace` and
+`detach` as the two ways on from there.
+
+The viewer declines the same thing more quietly, by dropping the request
+where a person cannot see it -- "ATT duplicate attachment request,
+ignoring" (llinventorybridge.cpp:8144-8149).
+
+## Naming what a replace took off
+
+`wear` asks what is worn before it sends, which is the same question the
+refusal of a second copy needs answered, so that read is paid for either
+way.  The last line then says what a `--replace` displaced: "X is worn
+on chest; Y came off".
+
+That clause was first written as a prediction -- whatever was on the
+point beforehand -- on the reasoning that the region had been asked to
+replace and had answered by putting the new attachment on that point.
+It is wrong, and it is wrong in exactly the case the change to adding
+created, because before it a point never held two.  Measured on Agni,
+as holt, with auto 11 and auto 3 both on HUD bottom right:
+
+    wear --replace --at "HUD bottom right" Objects/auto 4
+    auto 4 is worn on HUD bottom right; auto 11 and auto 3 came off
+
+and afterwards the point held auto 3 and auto 4.  A replace displaces
+ONE attachment, not the point's worth of them, so the prediction named
+something that was still on.
+
+So it is confirmed instead: what was on that point before, is not worn
+now, and is not the thing just put on.  That is one more read and not
+the polling loop `detach` needs -- `detach` polls because nothing else
+will ever tell it, whereas here `sl.Wear` has already waited for the
+region to describe the new attachment, so the answer is sitting there
+for the asking.
+
+Both ways of coming up empty say nothing rather than inventing a
+reassurance.  If the difference is empty -- nothing was displaced, or
+the region has not caught up with the fact yet -- the line is the bare
+one; the failure that leaves is a person not being told about something
+that did come off, which is where they were before this clause existed,
+rather than being told a thing that is untrue.  And a read that fails
+prints the line without the clause: the wear worked, and it is the
+report that could not be finished.
+
+## Why detach waits and TakeOff does not
+
+Nothing replies to a detach.  `sl.TakeOff` puts the message on the wire
+and returns, and what says the thing came off is the object no longer
+being among what is worn -- which happens some time later.  Live, that
+gap is visible: a `worn` run straight after a `detach` still listed the
+attachment on the point it had just been taken off, and only the run
+after that showed it gone.
+
+So `cmdDetach` polls until the region agrees, and `sl.TakeOff` is left
+as it was.  Its caller there, `Worn`, which `EnsureAttached` goes
+through, takes a thing off in order to put it straight back on and does
+its own settling; making `TakeOff` wait would slow it for a confirmation
+it throws away.  What is at stake is the command's last line -- "is no
+longer worn" is a claim the SHELL makes, and the shell is what should
+have established it before printing it.
+
 ## Naming a landmark, and going to one
 
 `landmark`, in `cmd/slsh/landmark.go`, lists, reads, makes and goes to

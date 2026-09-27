@@ -1083,7 +1083,7 @@ func avatarInterests(who msg.UUID, wantTo, skills, languages string) *msg.Avatar
 // What comes off is the caller's to say for the same reason, and it is
 // said as items rather than worked out from the point.  A replacing wear
 // displaces ONE attachment however many are on the point -- measured on
-// Agni, and recorded at the head of cmd/slsh/wear.go -- so a fake that
+// Agni, and recorded in doc/slsh.md -- so a fake that
 // cleared the point would agree with a command that named everything
 // that had been there, which is the bug this argument exists to catch.
 func (f *fakeGrid) AnswerAttach(t *testing.T, id msg.UUID, local uint32, point int, off ...msg.UUID) {
