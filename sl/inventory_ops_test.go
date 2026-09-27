@@ -13,8 +13,7 @@ package sl
 // them can be reached without something to be the far end.
 //
 // Two loops are not tested for giving up, because reaching the giving up
-// costs twenty and fifteen seconds of real time: see
-// coverage-notes/sl-inventory.md.
+// costs twenty and fifteen seconds of real time.
 
 import (
 	"context"

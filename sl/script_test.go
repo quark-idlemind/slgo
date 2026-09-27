@@ -1291,10 +1291,10 @@ func TestScriptRunningBelievesAStoppedScriptToo(t *testing.T) {
 //
 // Every way this can fail has to be distinguishable from "the script is
 // stopped", because the caller prints one of them and acts on the other.
-// The reply is marked UDPDeprecated in the message template, so a region
-// that has moved it to the event queue would leave this unanswered for
-// ever -- and reporting that as a stopped script would have somebody
-// told their script is not running when nothing here can say either way.
+// A region that answers on neither the circuit nor the event queue
+// leaves this unanswered for ever -- and reporting that as a stopped
+// script would have somebody told their script is not running when
+// nothing here can say either way.
 func TestScriptRunningReportsNotKnowingRatherThanGuessing(t *testing.T) {
 	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 

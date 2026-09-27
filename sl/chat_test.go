@@ -197,8 +197,8 @@ func TestChatClosesWhenReaderStops(t *testing.T) {
 }
 
 // TestSayRoutesNegativeChannels: a negative channel goes as a script
-// dialog reply, because ChatFromViewer from this client does not carry
-// one.  A positive channel still goes as chat.
+// dialog reply, because ChatFromViewer does not carry one, and the viewer
+// sends the same.  A positive channel still goes as chat.
 func TestSayRoutesNegativeChannels(t *testing.T) {
 	w, stop := newTestSession(t)
 	defer stop()

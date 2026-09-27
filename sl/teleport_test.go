@@ -11,8 +11,8 @@ package sl
 // which is the middle of a teleport; the end of one is this session
 // answering with the region the finish named.
 //
-// The bodies below are the ones stage 0 captured on Agni, kept as they
-// arrived.
+// The bodies below are the ones stage 0 of doc/history/teleport.md
+// captured on Agni, kept as they arrived.
 
 import (
 	"context"

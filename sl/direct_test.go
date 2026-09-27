@@ -122,9 +122,9 @@ func TestTheTapDropsWhatCarriesNothing(t *testing.T) {
 }
 
 // TestTheTapRelaysANumberItCannotName: the server relays a message
-// number that is not in its template anyway, body and all, so a direct
-// session has to as well -- a client with a newer template can still
-// read it.
+// number that is not in its template to a client subscribed to "*",
+// body and all, so a direct session has to as well -- a client with a
+// newer template can still read it.
 func TestTheTapRelaysANumberItCannotName(t *testing.T) {
 	d := aDirectSession(t)
 	d.tap(&msg.Packet{ID: barrierID, Body: []byte{1, 2, 3}, At: time.Now()})

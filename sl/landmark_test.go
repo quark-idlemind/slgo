@@ -2,9 +2,10 @@ package sl
 
 // A place kept, and gone back to.
 //
-// The asset below is the one stage 0 read off Agni on 2026-08-18, kept
-// byte for byte, so that what this package parses is checked against a
-// measurement rather than against something written to match it.
+// The asset below is the one stage 0 of doc/history/landmark.md read off
+// Agni on 2026-08-18, kept byte for byte, so that what this package
+// parses is checked against a measurement rather than against something
+// written to match it.
 //
 // Everything here answers from inside onSend, on the caller's
 // goroutine, for parcel_test.go's reason: Relay fails the test when
@@ -439,7 +440,8 @@ const agniCouldNotGoCloser = `<llsd><map>` +
 // wrapper, which already says "the grid refused the teleport" -- so a
 // `what` beginning "the teleport to" says it twice, and one built from
 // the asset id names the destination by a uuid nobody typed and nothing
-// else prints.  Both were on the screen in stage 3.
+// else prints.  Both were on the screen in stage 3 of
+// doc/history/landmark.md.
 func TestARefusedGoToNamesWhatTheCallerCalledItAndSaysTeleportOnce(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)

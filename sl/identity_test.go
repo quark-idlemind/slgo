@@ -7,11 +7,12 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// issues/009.  A daemon may rebuild the grid session under a client
-// that stays attached: the same avatar, a new session id.  A client
-// that goes on sending the old one is sending into silence -- the
-// simulator discards it, nothing reports an error, and receiving keeps
-// working, which is what made it take fourteen hours to notice.
+// TestASessionRebuiltUnderneathIsSentUnderItsNewID: a daemon may rebuild
+// the grid session under a client that stays attached: the same avatar, a
+// new session id.  A client that goes on sending the old one is sending
+// into silence -- the simulator discards it, nothing reports an error,
+// and receiving keeps working, which is what made it take fourteen hours
+// to notice.
 func TestASessionRebuiltUnderneathIsSentUnderItsNewID(t *testing.T) {
 	w, f := newFakeSession(t)
 	was := w.Session()
@@ -45,8 +46,7 @@ func TestASessionRebuiltUnderneathIsSentUnderItsNewID(t *testing.T) {
 }
 
 // An ordinary teleport asks too, and the answer is the same session.
-// Telling the two apart would mean reading the words in the notice,
-// which is issues/006's mistake.
+// Telling the two apart would mean reading the words in the notice.
 func TestAnOrdinaryRegionChangeAsksAndChangesNothing(t *testing.T) {
 	w, f := newFakeSession(t)
 	was := w.Session()

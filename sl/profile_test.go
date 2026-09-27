@@ -10,7 +10,7 @@ package sl
 // caller that trusted the count would print a group that is not one; and
 // a key the grid has never heard of is answered by that empty row and
 // nothing else, so the deadline is an answer rather than a failure.  All
-// three were measured on Agni; see profile.go.
+// three were measured on Agni; see doc/profiles.md.
 
 import (
 	"context"
