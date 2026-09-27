@@ -5,97 +5,22 @@ package main
 //	viewer            where this daemon serves viewer logins, and whether one is attached
 //	viewer --launch   start a viewer and hand it the session, logged in as this agent
 //
-// # Why the address had to cross the wire at all
+// The address is read out of slgod's StatusResponse, and a daemon that
+// serves no viewer logins -- the ordinary case, since -viewer is not
+// the default -- is answered in words, with the flag that fixes it.
 //
-// slgod can serve an XMLRPC login endpoint that hands a running session
-// to a real viewer, and until now the address it serves on appeared in
-// exactly one place: a line in the daemon's log at startup
-// (cmd/slgod/viewer.go, "viewer logins at %s").  Somebody who attached
-// with a shell an hour later, or from another terminal, or after the
-// log had scrolled, could not ask.  A feature reachable only by
-// whoever started the daemon and still has the window is close to no
-// feature at all.
+// A launch logs in with a password slgod mints for it, good for a
+// single login and short lived: a profile holds only a digest
+// (agent.Login.ViewerPassword), and a viewer has to be given the
+// plaintext.  It goes on the viewer's command line, so ps shows it
+// while the viewer starts; nothing here prints, logs or keeps it, and
+// the command is printed with it struck out.
 //
-// It rides in StatusResponse rather than a call of its own because it
-// is the same kind of thing as the counters there: state the daemon
-// holds, about one agent, that a client cannot work out for itself.
-// Minting a credential is not that -- it has an effect -- so that is a
-// call of its own; see server/viewer.go.
-//
-// # Why "there is no endpoint" is an answer and not a blank
-//
-// -viewer is not the default and the daemon here runs without it, so a
-// daemon serving no viewer logins is the ORDINARY case.  Printing an
-// empty address for it would leave somebody comparing a blank field
-// against a working one with no idea which they were looking at, so it
-// is answered in words, with the flag that fixes it.
-//
-// # The password
-//
-// A profile stores viewer_password as a "$1$" md5 digest
-// (agent.Login.ViewerPassword), so nothing on this side can produce a
-// plaintext that a viewer would hash into a match: the shell cannot
-// know a password it could type in.  So the daemon mints one -- random,
-// good for a single login, and short lived -- and it is passed straight
-// to the viewer being started.
-//
-// What the viewer does with it is what makes that work at all: the
-// plaintext from --login is md5'd whole (llloginhandler.cpp:168-170)
-// and sent as "$1$" and those hex digits (llsecapi.cpp:136), which is
-// exactly the form slgod stores and compares -- so a password minted
-// here matches without either end knowing anything about the other.
-//
-// It reaches that viewer's argv, which any process this user owns can
-// read (ps).  That is the cost, it is not hidden, and being SINGLE USE
-// is what answers it: an onlooker who copies the password out of ps is
-// racing the viewer that is already logging in with it, and loses the
-// moment it does.  The expiry is the belt to that pair of braces and is
-// deliberately generous, because a viewer takes the best part of a
-// minute to reach a login screen -- see viewerCredentialLife in
-// cmd/slgod/viewer.go, where the timings are.  The alternative -- the
-// account's own grid password --
-// would put the real credential into a viewer's saved settings for a
-// login that never leaves this machine, which is the road
-// agent.Login.ViewerPassword explains is closed.
-//
-// Nothing here prints, logs or keeps the password.  The command it
-// would run is printed with the password struck out, because a launch
-// that appears to do nothing is otherwise unreadable.
-//
-// # How the viewer is told where to go, which is not --loginuri
-//
-// --loginuri is the obvious flag and it does nothing.  Firestorm reads
-// it into the CmdLineLoginURI setting (app_settings/cmd_line.xml:201-208)
-// and then never looks at it again: both grid managers take the grid
-// from CmdLineGridChoice, which is --grid (fsgridhandler.cpp:269,
-// llviewernetwork.cpp:206), and CmdLineLoginURI appears nowhere else in
-// the source but its own unit tests.  Driven live, a viewer launched
-// with --loginuri came up on whichever grid it had used last.
-//
-// What works, and was run twice against a real daemon, is a grid
-// NICKNAME out of the viewer's own list:
-//
-//	open -a Firestorm-OpenSim --args --grid slgod --login First Last PASSWORD
-//
-// which means the grid has to be added to the viewer once by hand
-// (Preferences -> OpenSim, with the login URI this command prints)
-// before any of it works.  Passing the URI where the nickname goes was
-// tried, on the chance the auto-add path would take it: "Unknown grid
-// 'http://127.0.0.1:9000/'", then Agni.  So the nickname is a setting
-// of its own, viewer_grid; see viewerDefaults for the rest, including
-// why the Firestorm most people already have cannot do this at all.
-//
-// --login itself is read and works: llloginhandler.cpp:165-183 md5s the
-// third token whole and logs in with it, setting AutoLogin as it goes,
-// so no --autologin is wanted beside it.
-//
-// # Why an already-running viewer is refused rather than launched
-//
-// "open -a" raises an application that is already running and does not
-// pass it the arguments again, so a second launch would bring
-// Firestorm to the front, log nobody in, and report success.  That is
-// the one outcome worth refusing outright: it looks exactly like it
-// worked.
+// The viewer is told where to go by --grid, a nickname out of its own
+// grid list, because Firestorm reads --loginuri and never uses it.  A
+// viewer already running is refused, because "open -a" would raise it,
+// log nobody in, and look as though it had worked.
+// Why: doc/slsh.md#starting-a-viewer-from-slsh
 
 import (
 	"bytes"

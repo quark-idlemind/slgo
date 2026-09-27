@@ -7,6 +7,41 @@ what was wrong with it.
 What a command does, for somebody typing it, is its man page, in
 `cmd/slsh/man/`; the guide to the shell is `handbook/slsh-guide.html`.
 
+## One usage line for every command
+
+`usageLine`, in `cmd/slsh/options.go`, is the one thing in slsh that
+writes the line saying how a command is typed. That line used to be
+written down three times: a string in the command table, the same words
+again in the command's own "usage:" refusal, and a third wording from
+getopt in `--help`. Three copies kept by hand, and they had already
+drifted -- perms named three of its four permission flags in the table,
+touch left its trailing points out of `--help`, and put's three forms
+appeared in one place only. A person who read one of them and typed
+what it said was sometimes wrong.
+
+So there is one composer, `usageLine`, and everything goes through it:
+the name, whatever getopt's `Set.UsageLine` makes of the option struct,
+and the parameters. A flag added to a struct appears in the help
+listing, in the refusal and in `--help` with no other edit, because none
+of those three has any words of its own to change.
+
+### Why the help flag is left out of the usage line
+
+One thing is dropped on the way through, and only one: the help flag.
+Every command has it, so it tells nobody anything about the command
+they are looking at, and it is not free -- getopt bundles the short
+flags, so a listing of the waiting group read "waiting [-ah]",
+"no [-h] N", "ignore [-h] N" down the page and pushed answer's line onto
+a second row to make room for a flag all four of them share. The foot
+of every listing already says "COMMAND --help", and `--help` itself
+still lists -h underneath the line, which is where a person looks for
+it; a usage line that leaves it out while the options under it name it
+is the ordinary shape of a Unix tool rather than a disagreement.
+
+It comes out inside the composer, in `withoutHelp`, and nowhere else.
+Doing it at the call sites would give the three places three chances to
+disagree again, which is the whole of what this arrangement is for.
+
 ## Why a typed answer ends with Ctrl-D
 
 A multi-line answer to a text box, typed after `answer N` with nothing
@@ -51,6 +86,78 @@ saw.
 The price is stated so nobody has to discover it: an avatar nobody is
 attached to writes nothing.  slgod stays logged in and keeps hearing,
 and none of that reaches a file until a shell is there to hear it.
+
+## Settings from inside the shell
+
+`set`, in `cmd/slsh/set.go`, lists slsh's settings, shows one, and
+changes one. Everything slsh can be told used to live in one
+hand-edited file and nowhere else: to find out what could be set you
+read the head of config.go, and to change one you left the shell,
+opened an editor, and started again. A person who has just been drawn a
+map that is the wrong shape for their font should be able to say so
+where they are.
+
+### Why the command is called set
+
+Because that is the word a shell user reaches for, and because bare
+"set" listing everything is exactly what a shell's set does. The
+obvious objection is that a shell's set is about variables and this one
+is not, and it comes to nothing here: slsh has no variables for it to be
+confused with, and if it ever does, they will be the thing somebody
+types "set" expecting to see.
+
+### Why a change is written to the file
+
+`set` writes the file, every time, because a setting that lasted until
+the shell was closed would be a setting somebody had to type again
+after every crash and every reboot -- and the whole complaint was about
+having to say the same thing twice. `saveSetting`, in
+`cmd/slsh/config.go`, says what it does to the rest of the file, which
+is nothing.
+
+### One table of settings
+
+`settings`, in `cmd/slsh/config.go`, has one row per setting, and the
+reader, `set` and the file writer all work from it. Every setting used
+to be in three places at once -- a field of Config, a case in the
+reader's switch, and a line of DefaultConfig -- and adding one meant
+remembering all three. A name misspelled in the switch was caught
+nowhere: the file would refuse it as unknown, which reads as the person
+having typed it wrongly.
+
+### Auto means something for one setting
+
+`cmdSet` takes "auto" for `map_ratio` and refuses it, in the command,
+for every other setting, rather than leaving it to a row of the table.
+A table where any row might turn out to have a magic word in it is a
+table nobody can predict: the only way to find out whether
+"set addr auto" measured something or set the address to the word
+"auto" would be to type it and look afterwards. So there is exactly one
+row the word means anything for, it is named in the command, and
+everywhere else it is an error with that name in it. The price is a
+`viewer_grid` that cannot be called "auto", which is a nickname nobody
+has, against a rule that can be stated in one line and holds for every
+setting there will ever be.
+
+### What auto measures
+
+`set map_ratio auto` asks the terminal how big a character cell is
+(`measureCellRatio`), and what it prints afterwards (`autoNote`) says
+the number is a starting point, because it is one: what the terminal
+reports is the cell it hands the font, which is not always the shape the
+letters look. On the machine this was written on the terminal said
+18:10 and 18:9 drew the squarer picture. So the last word is a square
+region looked at, which takes one line and one look -- and somebody who
+has just been given a number is exactly who is in a position to try it.
+
+The numbers are the ones reported, and are not reduced. 18:10 and 9:5
+are the same ratio and are not the same starting point. The reported
+number is where somebody begins, not where they end, and the person who
+measured this went from a reported 18:10 to 18:9 by changing one digit.
+Reduced to 9:5 that same tweak is a sum to do first and a bigger step
+to take, for nothing gained: the picture is drawn from the shape of the
+ratio and not from the size of its numbers, so carrying the reported
+ones costs nothing at all.
 
 ## The man pages
 
@@ -175,3 +282,207 @@ That is why `askAnswer` has no free-text answer in it.  There was one,
 and nothing printed it; what it did was give the model a sentence to
 write before it had chosen anything -- and the instructions supplied
 the sentence, "slsh has no command for that", ready to copy.
+
+## Naming a landmark, and going to one
+
+`landmark`, in `cmd/slsh/landmark.go`, lists, reads, makes and goes to
+landmarks, and goes home and sets home. The measurements behind it are
+in [doc/history/landmark.md](history/landmark.md).
+
+### Going somewhere is a word and not a letter
+
+If going somewhere were the bare form, then reading a landmark and
+being somewhere else afterwards would be one typo apart -- so it is not
+the bare form: "landmark NAME" says where it goes and
+"landmark --go NAME" goes there. For the same reason none of the four
+verbs has a short letter. -g beside -m is exactly the typo that the
+whole word is there to prevent, and the only cost of spelling it out is
+four characters on a line that moves an avatar across the grid.
+
+`--set-home` is the sharp end of the same argument. It is the one verb
+whose damage a teleport does not undo -- an avatar sent to the wrong
+place walks back, and an account whose home was quietly rewritten finds
+out weeks later, somewhere it did not mean to log in -- so it carries
+the word "set", it has no letter, and it takes no name. It is the one
+that changes something and does not move anybody: `--home` beside a
+`--home` that meant "make this home" is one keystroke between going
+somewhere and rewriting where this account starts, and the second of
+those is not undone by teleporting back.
+
+### A landmark is something the avatar holds
+
+An inventory item has an ITEM id and an ASSET id and the grid takes
+only the second: measured, the item id and a uuid that is nothing at
+all are both answered with perfect silence, waited out to twelve
+seconds ([A wrong id is silence](history/landmark.md#a-wrong-id-is-silence)).
+There is no error to catch and nothing to report.
+
+So `landmark` never hands the grid a uuid a person typed. A name is
+looked up in what this avatar KEEPS -- inventory less the trash, see
+`landmarksHeld` -- and the asset id comes out of the listing, which is
+the one place the two ids are told apart correctly. A uuid typed there
+is looked up in that same listing -- as an item id or as an asset id,
+since a person pasting one from "ls -l" has the first -- and a uuid
+that names nothing there is refused rather than sent. Reading an
+unknown uuid would in fact work, because the fetch either parses as a
+landmark or does not; but the same uuid handed to `--go` is either an
+asset id or an item id and nothing distinguishes them but a wait that
+never ends, so the two forms would differ in a way nobody could predict
+from the outside. One rule: a landmark is something you have.
+
+## Starting a viewer from slsh
+
+`viewer`, in `cmd/slsh/viewer.go`, says where slgod serves viewer
+logins and whether a viewer has the session, and `viewer --launch`
+starts a real viewer and hands it the session. `viewerDefaults`, in
+`cmd/slsh/config.go`, is what it launches with. What slgod does with
+the session once a viewer has it is [doc/handover.md](handover.md).
+
+### Why the viewer address is in a status
+
+slgod can serve an XMLRPC login endpoint that hands a running session
+to a real viewer. Until the address crossed the wire, it appeared in
+exactly one place: a line in the daemon's log at startup
+(`cmd/slgod/viewer.go`, "viewer logins at %s"). Somebody who attached
+with a shell an hour later, or from another terminal, or after the log
+had scrolled, could not ask. A feature reachable only by whoever
+started the daemon and still has the window is close to no feature at
+all.
+
+It rides in `StatusResponse` rather than a call of its own because it
+is the same kind of thing as the counters there: state the daemon
+holds, about one agent, that a client cannot work out for itself.
+Minting a credential is not that -- it has an effect -- so that is a
+call of its own; see `server/viewer.go`.
+
+### When slgod serves no viewer logins
+
+`-viewer` is not the default and the daemon here runs without it, so a
+daemon serving no viewer logins is the ORDINARY case. Printing an empty
+address for it would leave somebody comparing a blank field against a
+working one with no idea which they were looking at, so `viewer`
+answers it in words, with the flag that fixes it.
+
+### The password a launch is given
+
+A profile stores `viewer_password` as a "$1$" md5 digest
+(`agent.Login.ViewerPassword`), so nothing on slsh's side can produce a
+plaintext that a viewer would hash into a match: the shell cannot know
+a password it could type in. So the daemon mints one -- random, good
+for a single login, and short lived -- and it is passed straight to the
+viewer being started.
+
+What the viewer does with it is what makes that work at all: the
+plaintext from `--login` is md5'd whole (llloginhandler.cpp:168-170)
+and sent as "$1$" and those hex digits (llsecapi.cpp:136), which is
+exactly the form slgod stores and compares -- so a password minted by
+slgod matches without either end knowing anything about the other.
+
+It reaches that viewer's argv, which any process this user owns can
+read (ps). That is the cost, it is not hidden, and being SINGLE USE is
+what answers it: an onlooker who copies the password out of ps is
+racing the viewer that is already logging in with it, and loses the
+moment it does. The expiry is the belt to that pair of braces and is
+deliberately generous, because a viewer takes the best part of a
+minute to reach a login screen -- see `viewerCredentialLife` in
+`cmd/slgod/viewer.go`, where the timings are. The alternative -- the
+account's own grid password -- would put the real credential into a
+viewer's saved settings for a login that never leaves this machine,
+which is the road `agent.Login.ViewerPassword` explains is closed.
+
+Nothing in slsh prints, logs or keeps the password. The command it
+would run is printed with the password struck out, because a launch
+that appears to do nothing is otherwise unreadable.
+
+### Why the OpenSim build of Firestorm
+
+`viewerDefaults` names the OpenSim build of Firestorm, and not the one
+most people already have installed. This is the trap. A Firestorm
+built for Second Life CANNOT be pointed at a private grid at all. That
+flavour compiles LLGridManager from llviewernetwork.cpp, whose
+grid-file block -- the one that would read the viewer's own
+grids.user.xml -- is compiled out (llviewernetwork.cpp:149-201,
+"#if 0 <FS:AW disabled for meeting havok sublicense requirements/>"),
+so the only grids it has are the two it hardcodes. Driven live, the SL
+build at /Applications/Firestorm-Releasex64.app logged
+
+    WARNING #GridManager# llviewernetwork.cpp(214) initialize :
+    Unknown grid 'slgod'
+
+and then llviewernetwork.cpp:244, "Default grid to
+util.agni.lindenlab.com" -- an Agni login screen, with nothing on it to
+suggest why. Somebody who reaches for the viewer they already have gets
+exactly that, which is why the default names the other one.
+
+The OpenSim flavour compiles fsgridhandler.cpp instead, which does read
+grids.user.xml, and on the machine this was written on it is at
+~/Applications/Firestorm-OpenSim.app. "open -a Firestorm-OpenSim"
+resolves it by name; both the bare name and the full path were tried
+live and both attached.
+
+### The grid is a nickname out of the viewer's own list
+
+`--grid` takes a nickname out of the viewer's own grid list, not a URL.
+
+`--loginuri` is the obvious flag and it does nothing. Firestorm reads it
+into the CmdLineLoginURI setting (app_settings/cmd_line.xml:201-208)
+and then never looks at it again: both grid managers take the grid from
+CmdLineGridChoice, which is `--grid` (fsgridhandler.cpp:269,
+llviewernetwork.cpp:206), and CmdLineLoginURI appears nowhere else in
+the source but its own unit tests. Driven live, a viewer launched with
+`--loginuri` came up on whichever grid it had used last.
+
+Passing the login URI where the nickname goes was tried too, on the
+chance that the auto-add path would take it, and did not work:
+"Unknown grid 'http://127.0.0.1:9000/'", then Agni again.
+
+What works, and was run twice against a real daemon, is a grid
+NICKNAME out of the viewer's own list:
+
+    open -a Firestorm-OpenSim --args --grid slgod --login First Last PASSWORD
+
+So the grid has to exist in the viewer BEFORE any of this works:
+Preferences -> OpenSim, add the login URI that `viewer` prints, and
+give it the nickname `viewer_grid` names. That is a one-off piece of
+local setup, which is exactly the sort of thing that belongs in a
+setting rather than buried in a command template where nobody would
+find it -- which is why the nickname is a setting of its own.
+
+`--login` itself is read and works: llloginhandler.cpp:165-183 md5s the
+third token whole and logs in with it, setting AutoLogin as it goes, so
+no `--autologin` is wanted beside it.
+
+### Why macOS goes through open(1)
+
+A macOS application is a bundle, not an executable: the binary is
+Firestorm-OpenSim.app/Contents/MacOS/Firestorm, and running it directly
+is not the same as launching the app. "open -a" is the supported way
+and is what the recovery script on the machine this was written on
+already uses (~/bin/sl-restart, which launches with open -a "$APP"
+--args --autologin), so it is copied from there.
+
+It also brings the viewer to the FRONT, which is deliberate and is what
+was asked for: open activates the application it launches unless -g is
+given (man open), and somebody who has just typed "viewer --launch"
+wants to be looking at it.
+
+open returns as soon as the launch has been handed off rather than
+waiting for the application to exit -- that is what -W is for, and it
+is not passed -- so the prompt comes back at once.
+
+### A viewer that is already running
+
+`viewer --launch` refuses when a viewer is already up. "open -a" raises
+an application that is already running and does not pass it the
+arguments again, so a second launch would bring Firestorm to the front,
+log nobody in, and report success. That is the one outcome worth
+refusing outright: it looks exactly like it worked.
+
+The check, `viewer_running`, is a process match. It has to answer
+before the viewer has a window, a port or a session, and a process is
+the only thing it has by then. The pattern is the bundle path rather
+than the process name because the process is called plain "Firestorm"
+whichever build it came from -- which is also why it must follow the
+app setting, since the two flavours are told apart only by their
+bundles. sl-restart reaps orphans with the same shape of pattern
+(pkill -f "Firestorm-Releasex64.app/Contents").
