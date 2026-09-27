@@ -20,14 +20,12 @@ package main
 // contract would make every backend implement a convention only slbench
 // has.  So the transport hands back lines and sift applies the rules.
 //
-// # What crosses it that used to be guessed
+// # What crosses it rather than being guessed
 //
-// Fault.out_of_memory.  A benchmark searching for a size limit treats
-// running out of memory as the ANSWER and every other fault as a
-// failure, and this program used to tell them apart by looking for
-// "Stack-Heap" in the reason -- Second Life's wording, known to a
-// program that is not supposed to know Second Life.  The contract says
-// it outright, and each backend answers for itself.
+// Fault.out_of_memory.  Running out of memory is told from every other
+// fault by the contract saying so, and each backend answers for itself,
+// rather than by this program matching Second Life's wording.
+// Why: doc/scripttest.md#out-of-memory-is-a-fact-in-the-contract
 
 import (
 	"context"
@@ -105,8 +103,7 @@ func openBackend(addr string, targets int) (backend, error) {
 	}
 	who := "slbench"
 	// Announced, unlike the offline model: a real backend may hold
-	// several avatars' objects and chose one for us, and a reading is
-	// only comparable with another from the same avatar.
+	// several avatars' objects and chose one for us.
 	r, err := openScript(context.Background(), scriptv1.NewRunnerClient(conn), targets, flags.Agent, who, true)
 	if err != nil {
 		conn.Close()
@@ -122,10 +119,7 @@ func openBackend(addr string, targets int) (backend, error) {
 // something a benchmark can run in.
 //
 // targets is how many objects to hold: one to measure in and the rest to
-// take readings in at once.  They are granted together or not at all,
-// which is what a measurement needs -- a benchmark leaves its base
-// reading inside the measured object between runs, and a second caller
-// in the same object would read somebody else's numbers.
+// take readings in at once.  They are granted together or not at all.
 //
 // agent asks for a particular avatar's objects; empty takes the first
 // free group anywhere.  It is a parameter rather than read from the flags
@@ -134,10 +128,9 @@ func openBackend(addr string, targets int) (backend, error) {
 // request for an avatar the model has never heard of.
 //
 // announce says whether to report which avatar the objects turned out to
-// -- at -vv, like the live path's own line, and for the same reason: it
-// is a detail of how the answer was arrived at rather than the answer.
-// belong to.  Worth saying when a real backend chose for us -- a reading
-// is only comparable with another from the same avatar -- and noise when
+// belong to -- at -vv, like the live path's own line, and for the same
+// reason: it is a detail of how the answer was arrived at rather than the
+// answer.  Worth saying when a real backend chose for us, and noise when
 // the backend is the offline model, which has exactly one and made it up.
 //
 // c is a client and not a connection, because whether there is a
@@ -301,10 +294,7 @@ func (r *scriptRunner) runIn(t *scriptv1.Target, src string) (results, info []st
 // compile_only is a capability rather than a promise, and a backend
 // without it gets an error rather than a run: the caller asked for the
 // object NOT to be disturbed, and quietly running the script instead
-// would destroy the linkset data the answer is about.  Not being able to
-// ask is fatal one level up, which is the right answer -- the caller is
-// already handling a failed run and a diagnosis that cannot be obtained
-// is not one to guess at.
+// would not be what was asked.
 func (r *scriptRunner) Compile(src string) (*compilation, error) {
 	if !r.compileOnly {
 		return nil, fmt.Errorf("this backend cannot compile a script without running it, " +

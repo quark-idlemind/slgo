@@ -20,22 +20,12 @@ package main
 // Never the measured object, and never for anything but the memory
 // reading the search compares.
 //
-// The harness measures before it reads anything: the script calls
-// result(llGetUsedMemory(), ...) as its first act, so the number it
-// reports is the script's own memory and does not depend on which
-// object it ran in.  That is what makes a probe in another object mean
-// the same thing as a run in this one, for cnt>0 as much as for cnt=0.
-//
-// What DOES depend on the object is everything the script works out
-// afterwards.  A probe is a reading like any other now: the script says
-// what llGetUsedMemory answered and nothing else, so where it ran does
-// not change what the number means.
-//
-// It did.  A cnt>0 script used to divide against a base its own object
-// held in LINKSET DATA, and a spare object holds none, so a probe's size
-// and base were arithmetic on a zero and had to be kept in a cache of
-// their own that copy mode would never read.  All of that went with the
-// arithmetic.
+// The harness reads llGetUsedMemory as its first act and says that and
+// nothing else, so the number it reports is the script's own memory and
+// does not depend on which object it ran in.  That is what makes a probe
+// in another object mean the same thing as a run in this one, for cnt>0
+// as much as for cnt=0.
+// Why: doc/scripttest.md#a-benchmark-script-says-one-number
 
 import (
 	"fmt"
@@ -63,8 +53,7 @@ var probeMu sync.Mutex
 func probeBase(b backend, pads []int) []int { return probeAt(b, 0, pads) }
 
 // probeAt measures a script of a given copy count at several pads at
-// once, and returns the reading the search compares: BASE_MEM for the
-// base script, TEST_MEM for one with copies in it.
+// once, and returns the readings the search compares.
 func probeAt(b backend, cnt int, pads []int) []int {
 	want := make([]reading, len(pads))
 	for i, pad := range pads {
@@ -76,11 +65,11 @@ func probeAt(b backend, cnt int, pads []int) []int {
 // reading is one measurement a caller wants: a script of some copy count
 // at some pad.
 //
-// A round is not obliged to be all of one count.  It was, while probeAt
-// took a count and a list of pads, and that shape is what a search wants
-// -- but warmTheSearch wants a round holding the two readings that
-// confirm a remembered padding AND the one-copy readings that come next
-// if it holds, which is two counts in one round.
+// A round is not obliged to be all of one count.  probeAt's shape, a
+// count and a list of pads, is what a search wants -- but warmTheSearch
+// wants a round holding the two readings that confirm a remembered
+// padding AND the readings of the searches that come next if it holds,
+// which is more than one count in one round.
 type reading struct{ cnt, pad int }
 
 // probeReadings measures each of them, as many at a time as there are
@@ -114,14 +103,9 @@ func probeReadings(b backend, want []reading) []int {
 	return out
 }
 
-// probed answers from the cache, whatever the count.
-//
-// One cache for every reading, which it was not while a script did its
-// own arithmetic: a probe taken in a spare object had no base in that
-// object's linkset data to divide against, so its size and base were
-// arithmetic on a zero and had to be kept somewhere copy mode would
-// never look.  The script says one number now, and a reading is a
-// reading wherever it was taken.
+// probed answers from the cache, whatever the count.  One cache for every
+// reading: the script says one number, and a reading is a reading
+// wherever it was taken.
 func probed(cnt, pad int) (int, bool) {
 	probeMu.Lock()
 	defer probeMu.Unlock()

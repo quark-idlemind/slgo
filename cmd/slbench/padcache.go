@@ -12,20 +12,13 @@ package main
 // answer.  Rendering the base for two different --code values gives
 // byte-for-byte the same script.
 //
-// Finding it costs about a dozen live runs.  Recognising it costs a
-// hash, and confirming it costs two.
+// Finding it costs a search of several rounds.  Recognising it costs a
+// hash, and confirming it costs two readings in one round.
 //
 // # What the key is
 //
 // The rendered base script, hashed, and nothing else.
-//
-// It used to need a normalisation, because the script said the title and
-// so the caller's own text was part of the shape being identified: the
-// title was replaced by a run of one character of the same length, on
-// the grounds that a string literal costs its length rather than its
-// text.  The script does not say the title any more, so two runs of one
-// shape under two names are one shape, and the length is not in the key
-// either.
+// Why: doc/memory.md#the-key-is-the-base-script
 //
 // # Why a file, and why staleness is not a worry
 //
@@ -33,10 +26,9 @@ package main
 // world, so it belongs next to the other things this account keeps
 // rather than in slgod.  What SL's compiler does can change under it --
 // and the readings themselves are not perfectly repeatable, which is
-// why there is a live test in this repository about exactly that -- so
-// an entry is never trusted on sight.  It is confirmed on every use,
-// which turns twelve runs into two and corrects itself when the answer
-// has moved.
+// what TestLiveReadingIsStable measures -- so an entry is never
+// trusted on sight.  It is confirmed on every use, which turns a search
+// into two readings and corrects itself when the answer has moved.
 
 import (
 	"bufio"
@@ -59,12 +51,6 @@ type padEntry struct {
 
 // baseKey identifies the base script this benchmark will use.
 func baseKey() string {
-	// The title is not in the script any more, so there is nothing to
-	// blank before hashing it: it used to be said by the script, which
-	// put the caller's own text in the shape being identified and made
-	// two runs of the same benchmark under different titles look like
-	// two different shapes.  It was blanked to a run of 't's of the same
-	// length, which kept the LENGTH in the key for no reason at all.
 	sum := sha256.Sum256([]byte(buildScript(0, minpad)))
 	return hex.EncodeToString(sum[:16])
 }

@@ -1392,7 +1392,7 @@ the block is bisected. Same answer, slower.
 anchor it was measured against, and the pad below. One round, and off by
 default. What it guards against was seen once, live, on 2026-08-03, and
 never reproduced in 45 later asks at the pads involved. See
-[doc/memory.md](memory.md).
+[doc/scripttest.md](scripttest.md#a-reading-one-block-high).
 
 ### Checking your connection
 
