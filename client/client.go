@@ -475,9 +475,7 @@ func (c *Conn) Offers() *pb.OfferRecord {
 // answer says whether to send, and undo puts an offer back when the
 // answer could not be sent after all.
 func (c *Conn) Handled(ctx context.Context, offer, how string, undo bool) (*pb.HandledResponse, error) {
-	c.mu.RLock()
-	name := c.agent
-	c.mu.RUnlock()
+	name := c.agentName()
 	return c.grid.Handled(ctx, &pb.HandledRequest{Agent: name, Offer: offer, How: how, Undo: undo})
 }
 
@@ -543,10 +541,11 @@ func (c *Conn) attach(ctx context.Context, agentName string, weak bool, subscrib
 	// empty name took the default, and the calls after this have to
 	// reach the session this stream is on, not whichever is the default
 	// by the time they are made.
-	c.agent = att.Agent.GetName()
-	if c.agent == "" {
-		c.agent = agentName
+	name := att.Agent.GetName()
+	if name == "" {
+		name = agentName
 	}
+	c.agent = name
 	c.stream = stream
 	c.info = att.Agent
 	c.caps = make(map[string]bool, len(att.Agent.GetCaps()))
@@ -719,7 +718,7 @@ func (c *Conn) SendRaw(ctx context.Context, id msg.ID, body []byte, reliable boo
 	out := &pb.OutboundMessage{Id: uint32(id), Body: body, Reliable: reliable}
 
 	c.mu.RLock()
-	stream, name := c.stream, c.agent
+	stream := c.stream
 	c.mu.RUnlock()
 
 	// On a stream when there is one, so ordering with everything
@@ -727,7 +726,7 @@ func (c *Conn) SendRaw(ctx context.Context, id msg.ID, body []byte, reliable boo
 	if stream != nil {
 		return c.sendPacket(stream, &pb.ClientPacket{Body: &pb.ClientPacket_Message{Message: out}})
 	}
-	_, err := c.grid.Send(ctx, &pb.SendRequest{Agent: name, Message: out})
+	_, err := c.grid.Send(ctx, &pb.SendRequest{Agent: c.agentName(), Message: out})
 	return err
 }
 
@@ -753,9 +752,7 @@ func (c *Conn) ListAgents(ctx context.Context) ([]*pb.AgentInfo, error) {
 
 // Status asks about the attached agent.
 func (c *Conn) Status(ctx context.Context) (*pb.StatusResponse, error) {
-	c.mu.RLock()
-	name := c.agent
-	c.mu.RUnlock()
+	name := c.agentName()
 	return c.grid.Status(ctx, &pb.StatusRequest{Agent: name})
 }
 
@@ -768,9 +765,7 @@ func (c *Conn) Status(ctx context.Context) (*pb.StatusResponse, error) {
 // must not be logged, kept or repeated -- it is passed straight to
 // whatever is starting the viewer and then forgotten.
 func (c *Conn) ViewerCredential(ctx context.Context) (*pb.ViewerCredentialResponse, error) {
-	c.mu.RLock()
-	name := c.agent
-	c.mu.RUnlock()
+	name := c.agentName()
 	return c.grid.ViewerCredential(ctx, &pb.ViewerCredentialRequest{Agent: name})
 }
 
@@ -782,7 +777,7 @@ func (c *Conn) ViewerCredential(ctx context.Context) (*pb.ViewerCredentialRespon
 // from the camera rather than from where the avatar is.
 func (c *Conn) Presence(ctx context.Context, drawDistance float32) (*pb.PresenceResponse, error) {
 	return c.grid.Presence(ctx, &pb.PresenceRequest{
-		Agent:        c.agent,
+		Agent:        c.agentName(),
 		DrawDistance: drawDistance,
 	})
 }
@@ -790,7 +785,7 @@ func (c *Conn) Presence(ctx context.Context, drawDistance float32) (*pb.Presence
 // Attachments asks the server what the simulator last said an avatar
 // is wearing.  An empty avatar is this one.
 func (c *Conn) Attachments(ctx context.Context, avatar string) (*pb.AttachmentsResponse, error) {
-	return c.grid.Attachments(ctx, &pb.AttachmentsRequest{Agent: c.agent, Avatar: avatar})
+	return c.grid.Attachments(ctx, &pb.AttachmentsRequest{Agent: c.agentName(), Avatar: avatar})
 }
 
 // Objects asks the server what the region has said about itself.
@@ -799,7 +794,7 @@ func (c *Conn) Attachments(ctx context.Context, avatar string) (*pb.AttachmentsR
 // the avatar arrives, and a client that attaches later never hears it.
 func (c *Conn) Objects(ctx context.Context, named, id string) (*pb.ObjectsResponse, error) {
 	return c.grid.Objects(ctx, &pb.ObjectsRequest{
-		Agent: c.agent, Named: named, Id: id,
+		Agent: c.agentName(), Named: named, Id: id,
 	})
 }
 
@@ -810,7 +805,7 @@ func (c *Conn) Objects(ctx context.Context, named, id string) (*pb.ObjectsRespon
 // burst just after the handshake, so a client that attached later was
 // not there for either.
 func (c *Conn) Friends(ctx context.Context) ([]*pb.Friend, error) {
-	r, err := c.grid.Friends(ctx, &pb.FriendsRequest{Agent: c.agent})
+	r, err := c.grid.Friends(ctx, &pb.FriendsRequest{Agent: c.agentName()})
 	if err != nil {
 		return nil, err
 	}
@@ -826,7 +821,7 @@ func (c *Conn) Friends(ctx context.Context) ([]*pb.Friend, error) {
 // of what a client restart must not lose.
 func (c *Conn) NoteFriend(ctx context.Context, id msg.UUID, online bool) error {
 	_, err := c.grid.NoteFriend(ctx, &pb.NoteFriendRequest{
-		Agent: c.agent, Id: id.String(), Online: online,
+		Agent: c.agentName(), Id: id.String(), Online: online,
 	})
 	return err
 }
@@ -867,7 +862,7 @@ func (c *Conn) Logout(ctx context.Context, name string, force bool) (*pb.LogoutR
 // Region asks what the simulator said about itself in the handshake,
 // which happens once, before any client is listening.
 func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
-	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agent})
+	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agentName()})
 }
 
 // Land is what the session was told about the ground it is on: the
@@ -878,7 +873,7 @@ func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
 // for a second time at all, so a client that was not there when the
 // avatar arrived can get it here or nowhere.
 func (c *Conn) Land(ctx context.Context) (*pb.LandInfo, error) {
-	return c.grid.Land(ctx, &pb.LandRequest{Agent: c.agent})
+	return c.grid.Land(ctx, &pb.LandRequest{Agent: c.agentName()})
 }
 
 // Ground is the height of the land in the region the avatar is in: the
@@ -890,7 +885,7 @@ func (c *Conn) Land(ctx context.Context) (*pb.LandInfo, error) {
 // once, when the avatar arrives, and never again for the asking.
 func (c *Conn) Ground(ctx context.Context, west, south, east, north float32) (float32, bool, error) {
 	r, err := c.grid.Ground(ctx, &pb.GroundRequest{
-		Agent: c.agent, West: west, South: south, East: east, North: north,
+		Agent: c.agentName(), West: west, South: south, East: east, North: north,
 	})
 	if err != nil {
 		return 0, false, err
@@ -910,7 +905,7 @@ func (c *Conn) Ground(ctx context.Context, west, south, east, north float32) (fl
 // as long as they are held, and a client that owned them would take
 // them away from every other client by exiting.
 func (c *Conn) Neighbours(ctx context.Context, set *bool) (*pb.NeighboursResponse, error) {
-	return c.grid.Neighbours(ctx, &pb.NeighboursRequest{Agent: c.agent, Set: set})
+	return c.grid.Neighbours(ctx, &pb.NeighboursRequest{Agent: c.agentName(), Set: set})
 }
 
 // Control asks the server to send one AgentUpdate carrying these
@@ -928,7 +923,7 @@ func (c *Conn) Neighbours(ctx context.Context, set *bool) (*pb.NeighboursRespons
 // same shape for everything that moves an avatar; agent.ControlStandUp
 // and agent.ControlSitOnGround are the two this repository has measured.
 func (c *Conn) Control(ctx context.Context, flags uint32) error {
-	_, err := c.grid.Control(ctx, &pb.ControlRequest{Agent: c.agent, Flags: flags})
+	_, err := c.grid.Control(ctx, &pb.ControlRequest{Agent: c.agentName(), Flags: flags})
 	return err
 }
 
@@ -1002,7 +997,9 @@ func (c *Conn) Posture(ctx context.Context) (*pb.PostureResponse, error) {
 	return c.grid.Posture(ctx, &pb.PostureRequest{Agent: c.agentName()})
 }
 
-// agentName is the session this connection is attached to.
+// agentName is the session this connection is attached to, read under
+// the lock attach writes it under.  Every read of c.agent goes through
+// here, and TestTheAgentIsReadOnlyUnderTheLock refuses one anywhere else.
 func (c *Conn) agentName() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -1011,7 +1008,7 @@ func (c *Conn) agentName() string {
 
 // Flush empties the server's object cache.
 func (c *Conn) Flush(ctx context.Context) (int, error) {
-	r, err := c.grid.Flush(ctx, &pb.FlushRequest{Agent: c.agent})
+	r, err := c.grid.Flush(ctx, &pb.FlushRequest{Agent: c.agentName()})
 	if err != nil {
 		return 0, err
 	}
@@ -1050,9 +1047,7 @@ func (c *Conn) Caps() []string {
 
 // DoCap makes a capability request through the server.
 func (c *Conn) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
-	c.mu.RLock()
-	name := c.agent
-	c.mu.RUnlock()
+	name := c.agentName()
 
 	resp, err := c.grid.Cap(ctx, &pb.CapRequest{
 		Agent:       name,
