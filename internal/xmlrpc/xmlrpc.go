@@ -2,7 +2,7 @@
 // directions.
 //
 // It was written to read what a login server says, and the reason it is
-// its own package is that slgod now has to SAY it as well: a viewer
+// its own package is that slgod has to SAY it as well: a viewer
 // handed a running session speaks the ordinary login protocol at slgod,
 // which means parsing a methodCall and composing a methodResponse.
 // Duplicating a parser that took this much care to be forgiving would
@@ -26,7 +26,7 @@ import (
 // XML-RPC, decoded to plain Go values:
 //
 //	<string>          string
-//	<int> <i4>        int64
+//	<int> <i4> <i8>   int64
 //	<boolean>         bool
 //	<double>          float64
 //	<array>           []any
@@ -34,11 +34,8 @@ import (
 //	<nil> <undef>     nil
 //	anything else     string, holding whatever text was inside
 //
-// The last line is the important one.  The C client's parser called
-// err(1, "Unexpected value type got %s") on anything it did not know,
-// which is how a login response that grew <int> fields took the whole
-// program down.  An unfamiliar type here is data we keep rather than a
-// reason to stop.
+// The last line is the important one; see the package comment.  A number
+// that does not parse is kept as its text in the same way.
 
 // Fault is an XML-RPC fault returned instead of a result.
 type Fault struct {
@@ -248,9 +245,9 @@ func decodeTyped(d *xml.Decoder, start xml.StartElement) (any, error) {
 		// The absent value, which is not in the XML-RPC
 		// specification but is in most implementations of it.  It
 		// has to be told apart from the empty string, because this
-		// package now writes responses as well as reading them, and
-		// a value that came in absent has to go out absent rather
-		// than as "".
+		// package writes responses as well as reading them, and a
+		// value that came in absent has to go out absent rather than
+		// as "".
 		if err := d.Skip(); err != nil {
 			return nil, err
 		}
@@ -410,8 +407,8 @@ func decodeMember(d *xml.Decoder) (string, any, error) {
 
 // ---------------------------------------------------------------- access
 
-// Lookup walks a decoded response by key, so callers do not repeat the
-// type assertions.
+// Lookup is the value a decoded struct holds at key, and whether it holds
+// one.  String and Int beside it do the type assertions.
 func Lookup(m map[string]any, key string) (any, bool) {
 	v, ok := m[key]
 	return v, ok

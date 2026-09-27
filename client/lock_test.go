@@ -21,7 +21,7 @@ import (
 )
 
 // grants makes the daemon hand over everything asked for.
-func grants(l *pb.Lock) *pb.Locked { return &pb.Locked{Name: l.Name, Held: true} }
+func grants(l *pb.Lock) *pb.Locked { return &pb.Locked{Name: l.Name, Held: true, Request: l.Request} }
 
 // TestALockWaitedForComesBackHeld: waiting is the ordinary case, and it
 // is answered only when the lock has been given -- so an answer at all
@@ -50,7 +50,7 @@ func TestTryLockSaysWhoHasItRatherThanWaiting(t *testing.T) {
 	d, conn := dialFake(t)
 	d.locked = func(l *pb.Lock) *pb.Locked {
 		if l.Try && l.Name == "taken" {
-			return &pb.Locked{Name: l.Name, Held: false, Holder: "somebody else"}
+			return &pb.Locked{Name: l.Name, Held: false, Holder: "somebody else", Request: l.Request}
 		}
 		return grants(l)
 	}
@@ -193,10 +193,10 @@ func TestAskingForALockOnAStreamThatHasGoneIsReported(t *testing.T) {
 	}
 }
 
-// TestAnAnswerNobodyIsWaitingForIsDropped: the daemon answers a name,
-// not a request, so a late answer to a wait already given up on has
-// nowhere to go -- and blocking on the delivery would stop the receive
-// loop, which is every other message on the connection.
+// TestAnAnswerNobodyIsWaitingForIsDropped: a late answer to a wait
+// already given up on has nowhere to go -- and blocking on the delivery
+// would stop the receive loop, which is every other message on the
+// connection.
 func TestAnAnswerNobodyIsWaitingForIsDropped(t *testing.T) {
 	t.Parallel()
 	d, conn := attachFake(t)
@@ -216,41 +216,137 @@ func TestAnAnswerNobodyIsWaitingForIsDropped(t *testing.T) {
 	}
 }
 
-// TestTwoWaitsOnOneNameAreAnsweredOldestFirst: the answer names the
-// lock and nothing else, so which of several waiters it belongs to is
-// decided here -- and taking the newest would starve whoever has been
-// waiting longest.
+// TestALockAndATryLockOfOneNameEachGetTheirOwnAnswer: a try is answered
+// at once and a wait when the lock is given, so the try asked second can
+// be answered first.  Handing that answer to the oldest request for the
+// name would give the wait a "not held" and the try the lock.
+func TestALockAndATryLockOfOneNameEachGetTheirOwnAnswer(t *testing.T) {
+	t.Parallel()
+	d, conn := attachFake(t)
+	ctx := context.Background()
+
+	waiting := make(chan error, 1)
+	go func() { waiting <- conn.Lock(ctx, "the workbench") }()
+	first := waitForLock(t, d)
+
+	type tried struct {
+		held   bool
+		holder string
+		err    error
+	}
+	trying := make(chan tried, 1)
+	go func() {
+		held, holder, err := conn.TryLock(ctx, "the workbench")
+		trying <- tried{held, holder, err}
+	}()
+	second := waitForLock(t, d)
+
+	if first.GetRequest() == 0 || second.GetRequest() == 0 || first.GetRequest() == second.GetRequest() {
+		t.Fatalf("the requests were numbered %d and %d", first.GetRequest(), second.GetRequest())
+	}
+
+	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Locked{Locked: &pb.Locked{
+		Name: "the workbench", Held: false, Holder: "somebody else", Request: second.GetRequest(),
+	}}}
+	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Locked{Locked: &pb.Locked{
+		Name: "the workbench", Held: true, Request: first.GetRequest(),
+	}}}
+
+	select {
+	case r := <-trying:
+		if r.err != nil || r.held || r.holder != "somebody else" {
+			t.Errorf("TryLock = %v, %q, %v; want not held, by somebody else", r.held, r.holder, r.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("the try was never answered")
+	}
+	select {
+	case err := <-waiting:
+		if err != nil {
+			t.Errorf("Lock = %v, want the lock", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("the wait was never answered")
+	}
+}
+
+// TestAnOlderDaemonsLockAnswersGoOldestFirst: a daemon older than the
+// numbers answers with none, and the answer goes to whoever has waited
+// longest for that name, which is what every client did before there
+// were numbers.
+func TestAnOlderDaemonsLockAnswersGoOldestFirst(t *testing.T) {
+	t.Parallel()
+	d, conn := attachFake(t)
+	ctx := context.Background()
+
+	first, second := make(chan error, 1), make(chan error, 1)
+	go func() { first <- conn.Lock(ctx, "the workbench") }()
+	waitForLock(t, d)
+	go func() { second <- conn.Lock(ctx, "the workbench") }()
+	waitForLock(t, d)
+
+	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Locked{Locked: &pb.Locked{Name: "the workbench", Held: true}}}
+	select {
+	case err := <-first:
+		if err != nil {
+			t.Errorf("the first Lock = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("an answer with no number did not reach the oldest wait")
+	}
+	select {
+	case err := <-second:
+		t.Fatalf("the second Lock was answered too: %v", err)
+	default:
+	}
+
+	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Locked{Locked: &pb.Locked{Name: "the workbench", Held: true}}}
+	select {
+	case err := <-second:
+		if err != nil {
+			t.Errorf("the second Lock = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the second answer with no number went nowhere")
+	}
+}
+
+// TestTwoWaitsOnOneNameAreAnsweredOldestFirst: an answer from a daemon
+// older than request numbers names the lock and nothing else, so which
+// of several waiters it belongs to is decided here -- and taking the
+// newest would starve whoever has been waiting longest.
 func TestTwoWaitsOnOneNameAreAnsweredOldestFirst(t *testing.T) {
 	t.Parallel()
 	var l locking
 
-	first := make(chan *pb.Locked, 1)
-	second := make(chan *pb.Locked, 1)
-	l.await("the workbench", first)
-	l.await("the workbench", second)
+	first := l.await("the workbench")
+	other := l.await("the bench")
+	second := l.await("the workbench")
 
 	l.deliver(&pb.Locked{Name: "the workbench", Held: true, Holder: "the first"})
 	select {
-	case got := <-first:
+	case got := <-first.reply:
 		if got.Holder != "the first" {
 			t.Errorf("the first waiter got %+v", got)
 		}
 	default:
 		t.Fatal("the answer did not reach the waiter that asked first")
 	}
-	select {
-	case got := <-second:
-		t.Errorf("the second waiter was given %+v as well", got)
-	default:
+	for _, w := range []*lockAsk{second, other} {
+		select {
+		case got := <-w.reply:
+			t.Errorf("the wait for %q was given %+v as well", w.name, got)
+		default:
+		}
 	}
 
 	// Giving up on a wait that has already been answered finds nothing
 	// to remove, and must leave the queue alone rather than dropping
 	// whoever is now at the front of it.
-	l.stopAwaiting("the workbench", first)
+	l.stopAwaiting(first)
 	l.deliver(&pb.Locked{Name: "the workbench", Held: true, Holder: "the second"})
 	select {
-	case got := <-second:
+	case got := <-second.reply:
 		if got.Holder != "the second" {
 			t.Errorf("the second waiter got %+v", got)
 		}
@@ -259,8 +355,15 @@ func TestTwoWaitsOnOneNameAreAnsweredOldestFirst(t *testing.T) {
 	}
 
 	// An answer for a name nobody is waiting on is not an error, since
-	// the wait may have been given up on a moment earlier.
+	// the wait may have been given up on a moment earlier; nor is one
+	// for a request that has gone.
 	l.deliver(&pb.Locked{Name: "nobody asked"})
+	l.deliver(&pb.Locked{Name: "the workbench", Request: first.id})
+	select {
+	case got := <-other.reply:
+		t.Errorf("an answer for another request reached the wait for the bench: %+v", got)
+	default:
+	}
 }
 
 // waitForLock reads the next lock request off the stream, so that a

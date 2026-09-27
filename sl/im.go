@@ -56,6 +56,11 @@ const (
 	DialogGodlikeLure     = 25
 	DialogTeleportRequest = 26
 
+	// DialogGotoURL is the grid asking for a web page to be opened, the
+	// address in the bucket; a script's llLoadURL is not this but a
+	// message of its own (llimprocessing.cpp:2286-2306).
+	DialogGotoURL = 28
+
 	// DialogFromTaskAsAlert is a script's message the viewer shows as
 	// an alert.  FromName is the object's, and From is taken to be its
 	// owner as with DialogFromTask; read from the viewer's source, not
@@ -103,6 +108,12 @@ type IM struct {
 	// Group is set when it came from a group rather than a person.
 	Group bool
 
+	// Region and Position are where the message says it was sent from.
+	// An object's was measured with the region set and the position
+	// zero; one with neither may be the grid's, see Sender.
+	Region   msg.UUID
+	Position msg.Vector3
+
 	// Bucket is the message's binary bucket, undecoded, which is
 	// where an inventory offer puts the asset type and id.
 	Bucket []byte
@@ -148,11 +159,12 @@ func (m *IM) Conversation() bool { return m.Spoken() && !m.Mine }
 //
 // A script's message is not spoken: its name is the object's and its
 // From is the owner, who did not write it.  Nor is a do-not-disturb
-// auto response, which the far viewer sent by itself.
+// auto response, which the far viewer sent by itself, nor a message
+// from a group or the grid; see Sender.
 func (m *IM) Spoken() bool {
 	switch m.Dialog {
 	case DialogMessage, DialogMessageBox:
-		return !m.Group && !m.From.IsZero()
+		return m.Sender() == SenderPerson
 	}
 	return false
 }
@@ -669,6 +681,8 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 		Dialog:   b.Dialog,
 		ID:       b.ID,
 		Group:    b.FromGroup,
+		Region:   b.RegionID,
+		Position: b.Position,
 		Bucket:   b.BinaryBucket,
 	}
 	if raw != nil && raw.FromClient != "" {
@@ -844,6 +858,8 @@ func DialogName(d uint8) string {
 		return "godlike teleport"
 	case DialogTeleportRequest:
 		return "teleport request"
+	case DialogGotoURL:
+		return "web page"
 	case DialogFromTaskAsAlert:
 		return "object alert"
 	case DialogGroupNotice:

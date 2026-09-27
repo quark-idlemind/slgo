@@ -139,11 +139,12 @@ func (w waiter) recorded() bool {
 	return false
 }
 
-// what a person sees: who is asking, and what for.
+// what a person sees: who is asking, labelled when it is an object or a
+// group, and what for.
 func (w waiter) who() string {
 	switch {
 	case w.dialog != nil:
-		return w.dialog.ObjectName
+		return sl.SenderObject.Label(w.dialog.ObjectName)
 	case w.lure != nil:
 		return w.lure.Name
 	case w.asked != nil:
@@ -153,7 +154,7 @@ func (w waiter) who() string {
 	case w.friend != nil:
 		return w.friend.Name
 	case w.perm != nil:
-		return w.perm.ObjectName
+		return sl.SenderObject.Label(w.perm.ObjectName)
 	case w.invite != nil:
 		// Whoever invited, or the group itself: the invitation names a
 		// person and never the group, so an unnamed one leaves the id
@@ -161,7 +162,7 @@ func (w waiter) who() string {
 		if w.invite.By != "" {
 			return w.invite.By
 		}
-		return w.invite.Group.String()
+		return sl.SenderGroup.Label(w.invite.Group.String())
 	}
 	return ""
 }

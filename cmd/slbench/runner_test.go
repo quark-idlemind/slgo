@@ -235,8 +235,7 @@ func TestARunThatCannotReachTheGridIsNotAReading(t *testing.T) {
 
 // TestCompilingDoesNotRunAnything: the compile check exists to be asked
 // about a script while a measurement is in progress in the same object,
-// so it must install under its own name and start nothing -- otherwise
-// asking the question destroys the linkset data the answer is about.
+// so it must install under its own name and start nothing.
 func TestCompilingDoesNotRunAnything(t *testing.T) {
 	resetFlags()
 	b, f := newFakeRunner(t, 474, 368, 0)

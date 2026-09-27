@@ -2,11 +2,11 @@
 // for slsh's ask: which command does this, and which paragraph says so.
 //
 // It is a plain word index scored with BM25, and nothing cleverer, for
-// three reasons.  The documents are few (slsh has some eight hundred
-// paragraphs and lines) and written by one hand, so the vocabulary of the pages is the
-// vocabulary of the questions far more often than it would be on the
-// open web.  It has to work with no model at all, since ask must be
-// useful on a machine with no model running.  And what it hands on is
+// three reasons.  The documents are few (slsh has some nine hundred
+// paragraphs and lines) and written by one hand, so the vocabulary of
+// the pages is the vocabulary of the questions far more often than it
+// would be on the open web.  It has to work with no model at all, since
+// ask must be useful on a machine with no model running.  And what it hands on is
 // read by a small model that cannot tell a plausible wrong candidate from
 // a right one, so what matters is that the right command is somewhere
 // in the first handful -- which a word index does well -- rather than
@@ -203,7 +203,7 @@ const (
 // about something next door wins on breadth -- lure, whose page is all
 // teleports and offers, came above no for "refuse a teleport somebody
 // offered me" at 1.5 and fell below it at 2, with no other question in
-// cmd/slsh's retrieval test changing place.  An example is lowered a
+// cmd/slsh's TestAskRetrieval changing place.  An example is lowered a
 // little, since it is mostly names of made-up things and one flag.
 var kindWeight = map[string]float64{
 	KindLine:    2.0,

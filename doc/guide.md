@@ -1392,7 +1392,7 @@ the block is bisected. Same answer, slower.
 anchor it was measured against, and the pad below. One round, and off by
 default. What it guards against was seen once, live, on 2026-08-03, and
 never reproduced in 45 later asks at the pads involved. See
-[doc/memory.md](memory.md).
+[doc/scripttest.md](scripttest.md#a-reading-one-block-high).
 
 ### Checking your connection
 
@@ -1763,9 +1763,10 @@ A message from an object -- a script's `llInstantMessage` -- is never
 obeyed and never answered, whatever it says it is. It carries whatever
 name the object was given and its owner's id, so an object named after
 somebody trusted, or one a trusted person owns, would pass on either.
-The log says `ignored an instant message from the object ...`. What the
-grid puts in those two fields was measured, and is in
-[im-senders.md](im-senders.md).
+The log says `ignored an instant message from [Object] ...`, and any
+other name in the log that is not a person's is labelled `[Object]`,
+`[Group]` or `[Grid]` the same way. What the grid puts in those two
+fields was measured, and is in [im-senders.md](im-senders.md).
 
 ### Talking back
 

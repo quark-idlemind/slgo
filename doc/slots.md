@@ -70,6 +70,14 @@ older than the number answers with 0, and the client then gives each
 answer to the request that has waited longest, which is right while only
 one is out at a time.
 
+A `Lock` is numbered the same way, and the `Locked` that answers it
+carries the number back. A try is answered at once and a wait when the
+lock is given, so a `TryLock` asked while a `Lock` of the same name waits
+on the same stream is answered first; matched by name, oldest first, as
+they were before the number, the wait was handed the try's "not held"
+and the try the lock. An answer with 0 is from a daemon older than the
+number, and still goes to the oldest request for that name.
+
 A client that stops waiting does not tell the daemon, which grants the
 request anyway once places come free. The client gives that grant
 straight back, and not clean: nothing ran in the objects, and clean would
@@ -105,9 +113,9 @@ every kind of send at once against a fake daemon.
 
 None of this section was watched on the grid. It is how the code was
 built on 2026-09-26, and the tests in `client/slots_test.go`,
-`client/send_test.go`, `server/slots_test.go` and, for `--wait`,
-`cmd/slrun/daemon_test.go` check it against a fake daemon and a fake
-stream.
+`client/lock_test.go`, `client/send_test.go`, `server/slots_test.go`
+and, for `--wait`, `cmd/slrun/daemon_test.go` check it against a fake
+daemon and a fake stream.
 
 ## When an avatar is logged out, or leaves
 

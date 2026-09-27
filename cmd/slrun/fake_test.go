@@ -99,6 +99,10 @@ type fakeGrid struct {
 	// point where the program is listening for one.
 	onRun func()
 
+	// onAsk is called as a busy daemon starts waiting on a request for
+	// the object, for the same reason.
+	onAsk func()
+
 	// ran counts the scripts started, and sources keeps what was sent, so
 	// that a test can assert on the source as well as on the answer.
 	ran     int

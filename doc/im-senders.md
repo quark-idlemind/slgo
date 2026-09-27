@@ -114,17 +114,71 @@ counted it as conversation. Now:
   source, above, and not measured.
 - slbotd ignores a script's message entirely: no command, no model and
   no report of trouble. It logs
-  `ignored an instant message from the object "NAME", owned by OWNER`.
+  `ignored an instant message from [Object] NAME, owned by OWNER`, the
+  owner named from what the session already knew of that id and
+  labelled `[Group]` when the object is a group's.
 - slsh prints one as `< [Object] NAME: TEXT` and opens no
   conversation. A do-not-disturb auto response is a notice,
   `* do not disturb auto response from NAME: TEXT`.
 - `examples/greeter` does not answer one.
 
+## Labelling a sender
+
+An object's name can be anybody's, so slsh and slbotd never print one
+as though a person had said it. `sl.Sender` says what the name on a
+message names -- a person, an object, a group or the grid -- and
+`Sender.Label` is the one way either program prints a name with it:
+`[Object] NAME`, `[Group] NAME`, `[Grid] NAME`, and a person's name
+bare. The kinds are the viewer's, read from its source and not
+measured beyond dialog 19 above:
+
+- 9, 19 and 31 are an object's. 19 signed "Second Life", the name the
+  grid signs with (`SYSTEM_FROM`), and sent from no region and no
+  position is the grid's own (`llimprocessing.cpp:1739-1742`); an
+  object called that and sent from somewhere is still an object.
+- 28, a web page to open, is the grid's
+  (`llimprocessing.cpp:2289`), and so is anything else with no sender
+  id or signed "Second Life" (`llimprocessing.cpp:900`). So a message
+  signed that way is not conversation: nothing answers it and slsh opens
+  no conversation with it.
+- Anything else sent as a group (`FromGroup`) is the group's, except a
+  group invitation and a group notice, which carry the group's id with
+  the name of whoever invited or posted
+  (`llimprocessing.cpp:1341-1356`, `1477`).
+- Local chat is labelled by its source type: an avatar's is a person's,
+  an object's an object's, and the simulator's own is the grid's.
+
+What is labelled, in slsh: chat (`< [Local] [Object] NAME: TEXT`), an
+object's message, every other instant message that is not a person's
+(`* object alert from [Object] NAME: TEXT`), a group notice's poster
+when it is not a person, a script's dialog and permission request as
+they arrive, in `waiting` and in what answering one says
+(`pressed "on" on [Object] NAME`), and the line saying one was
+forgotten unanswered. A group invitation that names nobody is listed
+from `[Group]` and its id. In slbotd: everything logged about an
+instant message that is not a person's, through `whoSaid`.
+
+Checked and left as they were, because the name is a person's: a
+conversation, a friendship offer, a teleport offer or request, an
+inventory offer (dialog 4; an object's is 9), a group invitation's
+inviter and a group notice's poster, and slbotd's lists of what is
+waiting. A permission request's owner is printed as the simulator names
+it (`ObjectOwner`), which may be a group's name; the viewer prints it
+the same way, and nothing in the message says which it is. slgo shows
+no `LoadURL` and no simulator alert as they arrive.
+
+`TestNoObjectNameIsPrintedBare` in `sl` refuses an object's name used
+in `sl`, slsh or slbotd outside `Label`, and
+`TestNothingButAPersonIsPrintedAsOne` (slsh) and
+`TestNothingButAPersonIsLoggedAsOne` (slbotd) send every dialog number
+as an object, a group and the grid and refuse a line with the name
+bare.
+
 ## Why matching a name is still safe
 
 What reaches `Trusts` from a remark is a message for which
 `IM.Conversation` is true: dialog 0 or 1, with a sender id, not from a
-group, and not sent by this avatar. On dialog 0 the name is the one the
+group, not signed "Second Life", and not sent by this avatar. On dialog 0 the name is the one the
 simulator wrote, as measured above. Dialog 1 with an invented name was
 not delivered. A script's message, whose name is its object's, no
 longer gets there. An inventory offer's name, which

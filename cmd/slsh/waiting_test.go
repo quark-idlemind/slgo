@@ -91,6 +91,35 @@ func TestANumberMeansTheSameThingAfterAnAnswer(t *testing.T) {
 	}
 }
 
+// TestAnObjectAskingIsListedAsAnObject: a dialog and a permission
+// request come from an object, which can be called anything, so the
+// listing and what answering says label it as one.
+func TestAnObjectAskingIsListedAsAnObject(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	x.grid.Relay(t, dialogFrom("Some Body", "on or off?", -101, "on", "off"))
+	waits(t, x, "Some Body asks")
+	q := &msg.ScriptQuestion{}
+	q.Data.TaskID = testLamp
+	q.Data.ItemID = testProbe
+	q.Data.ObjectName = append([]byte("Some Body"), 0)
+	q.Data.ObjectOwner = append([]byte("Quark Idlemind"), 0)
+	q.Data.Questions = 2
+	x.grid.Relay(t, q)
+	waits(t, x, "Some Body wants")
+
+	got := x.do(t, "waiting")
+	for _, want := range []string{"dialog      [Object] Some Body ", "permission  [Object] Some Body "} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the listing should say %q:\n%s", want, got)
+		}
+	}
+	if got := x.do(t, "answer 1 on"); !strings.Contains(got, `pressed "on" on [Object] Some Body`) {
+		t.Errorf("answering the dialog said:\n%s", got)
+	}
+}
+
 // TestATextBoxIsNotAButton: llTextBox arrives as an ordinary dialog
 // carrying a sentinel where its buttons would be, and a person should
 // be shown a request for text rather than the plumbing.

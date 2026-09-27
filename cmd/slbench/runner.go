@@ -11,13 +11,11 @@ package main
 // # A session per object
 //
 // The objects a benchmark runs in need not belong to one avatar, so
-// each is held with the session that can reach it.  It used to be one
-// session and a list of objects, back when a benchmark carried its base
-// reading between scripts through the measured object's LINKSET DATA:
-// that made one object special, and one avatar enough.  The script
-// reports one number now and the arithmetic is done here, so a reading
-// is a reading wherever it was taken -- and what a benchmark asks for is
-// N places to run scripts, exactly as slrun does.
+// each is held with the session that can reach it.  The script reports
+// one number and the arithmetic is done here, so a reading is a reading
+// wherever it was taken -- and what a benchmark asks for is N places to
+// run scripts, exactly as slrun does.
+// Why: doc/scripttest.md#a-benchmark-script-says-one-number
 
 import (
 	"context"

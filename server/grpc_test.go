@@ -779,6 +779,33 @@ func TestALockNeedsAName(t *testing.T) {
 	}
 }
 
+// TestALockAnswerCarriesItsRequest: a client with a try and a wait out
+// for one name tells the answers apart by the number it chose, so every
+// answer -- a try's, a wait's, a refusal's -- has to carry it back.
+func TestALockAnswerCarriesItsRequest(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	h, _ := r.srv.Agent("example")
+
+	c := &Client{host: h, ctl: make(chan *pb.ServerPacket, 4), jammed: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	for _, req := range []*pb.Lock{
+		{Request: 5},
+		{Name: "the workbench", Try: true, Request: 6},
+		{Name: "the bench", Request: 7},
+	} {
+		c.lock(ctx, h, req)
+		select {
+		case p := <-c.ctl:
+			if got := p.GetLocked().GetRequest(); got != req.Request {
+				t.Errorf("the answer to %+v carried request %d", req, got)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%+v was not answered", req)
+		}
+	}
+}
+
 // TestASessionWithNoAgentDescribesItselfAnyway: a session logging in has
 // nothing to report but its name, and a client asking must get an answer
 // saying so rather than a panic or a session that looks fine.
