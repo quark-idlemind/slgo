@@ -419,9 +419,10 @@ func TestASessionStartedOnRequestIsSettledLikeTheRest(t *testing.T) {
 	}
 }
 
-// TestLogoutStaysOut is stage 6's whole point: a session told to stop
-// stays stopped, so that somebody using that avatar in a viewer is not
-// fighting the daemon for it.
+// TestLogoutStaysOut is the whole point of stage 6 of
+// doc/history/many-avatars.md: a session told to stop stays stopped, so
+// that somebody using that avatar in a viewer is not fighting the daemon
+// for it.
 func TestLogoutStaysOut(t *testing.T) {
 	sim := newSim(t)
 	defer sim.close()

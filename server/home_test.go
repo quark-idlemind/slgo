@@ -449,7 +449,7 @@ func TestAReconnectStartsItAgain(t *testing.T) {
 
 // accessBlockedEvent is a maturity refusal in the shape the event queue
 // carries a TeleportFailed.  It is written for this test and was not
-// captured: the key and the sentence are the ones sl/maturity.go quotes
+// captured: the key and the sentence are the ones doc/maturity.md quotes
 // from Agni, and the blocks are the two every measured TeleportFailed
 // has had, with only the fields read here.
 const accessBlockedEvent = `<llsd><map>` +
