@@ -8,10 +8,10 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// TestACrossedRegionOnTheQueueTakesTheSessionToTheSimulatorItNames: the
-// stage in one assertion.  The event is put on the queue the way a
-// simulator puts one there and nothing else is called, so what moves the
-// session is the session noticing.
+// TestACrossedRegionOnTheQueueTakesTheSessionToTheSimulatorItNames:
+// stage 7 of doc/history/teleport.md in one assertion.  The event is put
+// on the queue the way a simulator puts one there and nothing else is
+// called, so what moves the session is the session noticing.
 func TestACrossedRegionOnTheQueueTakesTheSessionToTheSimulatorItNames(t *testing.T) {
 	a, from, to := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
 
@@ -94,10 +94,7 @@ func TestACrossedRegionForTheRegionAlreadyOccupiedMovesNothing(t *testing.T) {
 // TestACrossedRegionNobodyCanReadIsNotActedOn: the message is the only
 // place the destination is named, so a body this cannot read leaves
 // nothing to do.  What it must not do is dial somewhere on half a body,
-// end the session, or take the poll goroutine down with it -- and this
-// one carries more weight than its teleport twin, because the shapes
-// being read here are an inference and a wrong inference arrives looking
-// exactly like these.
+// end the session, or take the poll goroutine down with it.
 func TestACrossedRegionNobodyCanReadIsNotActedOn(t *testing.T) {
 	a, from, to := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
 
@@ -148,11 +145,12 @@ func TestACrossedRegionNobodyCanReadIsNotActedOn(t *testing.T) {
 // Agni on 2026-08-16, when this avatar walked west out of Pelmar Reach and
 // into Pelmar Mill.
 //
-// Kept byte for byte.  Everything stage 7 inferred from the measured
-// TeleportFinish turned out to be right, and this is what says so: the
-// destination is in RegionData and not in Info, the handle is eight
-// binary bytes big endian, the address is four in network order, the
-// port is a plain integer and the seed is a string.  Info is the
+// Kept byte for byte.  Everything stage 7 of doc/history/teleport.md
+// inferred from the measured TeleportFinish turned out to be right, and
+// this is what says so: the destination is in RegionData and not in
+// Info, the handle is eight binary bytes big endian, the address is four
+// in network order, the port is a plain integer and the seed is a
+// string.  Info is the
 // arrival position -- 254.8, 128.0, 21.6, which is a stride the far side
 // of a border at x=0.
 //
@@ -181,8 +179,8 @@ const agniCrossedRegion = `<llsd><map>` +
 // TestTheCrossingIsReadFromTheBytesTheGridSent: the decoding, against
 // the body that was captured rather than one built here.
 //
-// This is the test stage 7 could not write, and writing it retired the
-// stage's largest caveat.  Every shape in it was carried over from a
+// This is the test stage 7 of doc/history/teleport.md could not write,
+// and writing it retired the stage's largest caveat.  Every shape in it was carried over from a
 // TeleportFinish on the strength of the two messages describing the same
 // thing, and a real CrossedRegion agrees in every field.
 func TestTheCrossingIsReadFromTheBytesTheGridSent(t *testing.T) {
@@ -210,9 +208,9 @@ func TestTheCrossingIsReadFromTheBytesTheGridSent(t *testing.T) {
 // TestACrossingIsReadFromRegionDataAndNotInfo: CrossedRegion carries
 // both blocks and they mean opposite things -- RegionData is where the
 // avatar has been sent and Info is where it will be standing when it
-// gets there.  The message template is the authority for that and it is
-// the one thing here that was not inferred, so it is worth a test of its
-// own: a reader that followed TeleportFinish's habit and went to Info
+// gets there.  The message template is the authority for that, and the
+// body captured on Agni agrees, so it is worth a test of its own: a
+// reader that followed TeleportFinish's habit and went to Info
 // would find two vectors, no address, and nothing to say about it.
 func TestACrossingIsReadFromRegionDataAndNotInfo(t *testing.T) {
 	region := newRegion(t, "over the border", msg.MustParseUUID("35517e57-7e57-c0de-220b-d980670cf2d2"))

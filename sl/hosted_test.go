@@ -315,7 +315,8 @@ func (d *fakeDaemon) Status(_ context.Context, r *pb.StatusRequest) (*pb.StatusR
 
 // TestAttachingSaysWhichSessionItGot: an empty name is passed through
 // rather than resolved here, because the daemon picks -- the session it
-// has held longest -- and the Attached frame says which.  Every client
+// has held longest that has not stopped -- and the Attached frame says
+// which.  Every client
 // has to agree about what "none named" means, and one too old to know
 // the rule must not be able to disagree with one that does.
 func TestAttachingSaysWhichSessionItGot(t *testing.T) {

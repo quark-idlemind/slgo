@@ -82,8 +82,8 @@ func authRig(t *testing.T, setup ...func(*Server)) *rig {
 
 // TestAnAuthenticatedClientIsKnownByName is what the handshake is for
 // beyond keeping strangers out: the connection remembers who proved
-// itself, so the daemon can say "slgo is using it" rather than "1
-// client".
+// itself, so the daemon can say "in use by slsh" rather than "in use by
+// 1 client".
 func TestAnAuthenticatedClientIsKnownByName(t *testing.T) {
 	r := authRig(t)
 

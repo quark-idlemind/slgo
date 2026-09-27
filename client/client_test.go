@@ -437,9 +437,10 @@ func (d *fakeDaemon) Send(context.Context, *pb.SendRequest) (*pb.SendResponse, e
 // ------------------------------------------------------------ messages
 
 // TestAMessageThisBuildHasNeverHeardOfIsStillDelivered: the server
-// relays what it does not understand, so that a client can handle a
-// message added to the protocol after the server was built.  Decoding
-// one is nil and NOT an error, and the bytes are there to look at.
+// relays what it does not understand to a client subscribed to "*", so
+// that a client can handle a message added to the protocol after the
+// server was built.  Decoding one is nil and NOT an error, and the bytes
+// are there to look at.
 func TestAMessageThisBuildHasNeverHeardOfIsStillDelivered(t *testing.T) {
 	t.Parallel()
 	unknown := msg.MakeID(msg.FreqLow, 65530)
@@ -646,7 +647,8 @@ func TestTheHandshakeSaysWhichStepFailed(t *testing.T) {
 
 // TestAttachingSaysWhichSessionItGot: an empty name is passed through
 // rather than resolved here, because the daemon picks -- the session it
-// has held longest -- and the Attached frame says which.
+// has held longest that has not stopped -- and the Attached frame says
+// which.
 func TestAttachingSaysWhichSessionItGot(t *testing.T) {
 	t.Parallel()
 	d, conn := dialFake(t)
@@ -853,8 +855,8 @@ func TestTheStreamEndingIsRememberedAsWhy(t *testing.T) {
 	}
 }
 
-// TestEverythingTheDaemonRelaysArrivesOnItsOwnChannel: three kinds of
-// thing come down one stream and they are not interchangeable -- a
+// TestEverythingTheDaemonRelaysArrivesOnItsOwnChannel: messages, events
+// and notices come down one stream and they are not interchangeable -- a
 // message is the binary encoding, an event is LLSD, and a notice is
 // about the connection rather than about the grid.
 func TestEverythingTheDaemonRelaysArrivesOnItsOwnChannel(t *testing.T) {

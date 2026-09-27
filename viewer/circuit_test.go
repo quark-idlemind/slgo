@@ -239,9 +239,10 @@ func handedOver(t *testing.T, before ...func(*Circuit)) (*simStub, *agent.Agent,
 	return sim, a, c, v, census
 }
 
-// TestViewerJoinsAnExistingSession is stage 2 in one test: the viewer
-// opens a circuit, asks to be put in the region, and is told it is
-// there -- without a single one of those messages reaching the grid.
+// TestViewerJoinsAnExistingSession is stage 2 of
+// doc/history/viewer-frontend.md in one test: the viewer opens a
+// circuit, asks to be put in the region, and is told it is there --
+// without a single one of those messages reaching the grid.
 func TestViewerJoinsAnExistingSession(t *testing.T) {
 	sim, _, c, v, census := handedOver(t)
 
@@ -488,8 +489,9 @@ func TestTheRegionIsDescribedToAJoiningViewer(t *testing.T) {
 	v.waitSeen(t, "LayerData", 5*time.Second)
 
 	// The handshake is the simulator's own message, not one rebuilt
-	// from the dozen fields this tree keeps: a reconstruction loses
-	// every terrain texture id and renders ground with nothing on it.
+	// from the fourteen fields package agent keeps: a reconstruction
+	// loses every terrain texture id and renders ground with nothing on
+	// it.
 	h := v.last(t, "RegionHandshake").(*msg.RegionHandshake)
 	if got := trimNul(string(h.RegionInfo.SimName)); got != "Dovet" {
 		t.Errorf("region name = %q", got)
@@ -1153,12 +1155,13 @@ func TestWhatIsPassedOnIsTold(t *testing.T) {
 	}
 }
 
-// TestATeleportNobodyInTheViewerAskedForDoesNotTearDownItsWorld:
-// TeleportStart is the simulator announcing a move another client asked
-// for.  Handed over it puts the viewer in its teleport tunnel, and the
-// message that would take it out again -- TeleportFinish -- is withheld
-// on purpose, so it would sit there over something it neither asked for
-// nor could stop.
+// TestATeleportNobodyInTheViewerAskedForDoesNotTearDownItsWorld: a
+// TeleportStart for a move another client asked for, handed over, puts
+// the viewer in its teleport tunnel, and the message that would take it
+// out again -- TeleportFinish -- is withheld on purpose, so it would sit
+// there over something it neither asked for nor could stop.  None is
+// handed over, not even the one that starts the viewer's own teleport
+// within the region.
 func TestATeleportNobodyInTheViewerAskedForDoesNotTearDownItsWorld(t *testing.T) {
 	sim, _, c, v, census := handedOver(t)
 	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)

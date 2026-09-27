@@ -4,7 +4,7 @@ package client
 //
 // gRPC allows a stream one sender at a time, and a connection sends from
 // every caller it has at once: messages, subscriptions, locks, places,
-// and the grants its receive loop gives back.
+// and the grants given back by the goroutines its receive loop starts.
 
 import (
 	"context"

@@ -17,8 +17,9 @@ import (
 )
 
 // goguenName goes with the goguen handle in teleport_test.go, which is
-// the one Agni answered with when stage 0 teleported there.  A region a
-// session has really been to is worth more here than a plausible one.
+// the one Agni answered with when stage 0 of doc/history/teleport.md
+// teleported there.  A region a session has really been to is worth more
+// here than a plausible one.
 const goguenName = "Sandbox Goguen"
 
 // wornObject is the attachment this avatar is wearing, and wornItem the

@@ -117,9 +117,9 @@ func TestTheLeaseIsGivenBackWhenTheCallerGoesAwayWithoutSayingAnything(t *testin
 }
 
 // TestTwoCallersQueueRatherThanShareAGroup is the one that a benchmark
-// depends on for its numbers to mean anything: a second caller in the
-// same object reads somebody else's base reading and divides against it,
-// which is a wrong answer rather than a failure.
+// depends on for its numbers to mean anything: two callers in the same
+// object overwrite each other's script and read each other's lines as
+// their own, which is a wrong answer rather than a failure.
 func TestTwoCallersQueueRatherThanShareAGroup(t *testing.T) {
 	bothWays(t, func(t *testing.T, r reach) {
 		_, c := serve(t, r, scripttest.Options{})

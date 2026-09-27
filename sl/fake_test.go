@@ -318,8 +318,9 @@ func (f *fakeBackend) RelayRaw(t *testing.T, raw *Message) {
 // The body is written as LLSD text rather than built from a struct,
 // because that is the only thing an event ever is: there is no template
 // for it and no generated type, so what a test asserts against has to be
-// the shape a live grid actually sent.  See sl.ScriptRunning for the one
-// that was captured on Agni.
+// the shape a live grid actually sent.  See
+// doc/scripts.md#whether-a-script-is-running for the one that was
+// captured on Agni.
 //
 // The barrier is Relay's, for Relay's reason: the reader takes one thing
 // at a time, whichever relay it came from, so its taking the message

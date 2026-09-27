@@ -47,9 +47,9 @@ func answerParcel(t *testing.T, f *fakeBackend, name string, local int) {
 	}
 }
 
-// TestParcelAtAsksAndIsAnswered: the ask is the whole of what stage 0
-// said was impossible, and the sequence id is what pairs the answer
-// with the question.
+// TestParcelAtAsksAndIsAnswered: the ask is the whole of what stage 0 of
+// doc/history/parcel.md said was impossible, and the sequence id is what
+// pairs the answer with the question.
 func TestParcelAtAsksAndIsAnswered(t *testing.T) {
 	w, f := newFakeSession(t)
 	answerParcel(t, f, "Thrushmoor", 5)

@@ -270,10 +270,6 @@ func TestAnItemIsNamedOnlyWhenSomethingIsWorn(t *testing.T) {
 	}
 }
 
-// TestEveryCallSaysWhichAgentItCouldNotFind: naming one that is not
-// hosted and naming none on a server holding nothing are different
-// faults, and a client that cannot tell them apart cannot say whether
-// the daemon is up or the name is a typo.
 // TestAttachmentsAreWhatTheSimulatorLastSaid: the list at the end of
 // AvatarAppearance crosses as it came, for this avatar by default and
 // for any other on request, with a pending entry kept as an empty id
@@ -340,6 +336,10 @@ func TestAttachmentsAreWhatTheSimulatorLastSaid(t *testing.T) {
 	}
 }
 
+// TestEveryCallSaysWhichAgentItCouldNotFind: naming one that is not
+// hosted and naming none on a server holding nothing are different
+// faults, and a client that cannot tell them apart cannot say whether
+// the daemon is up or the name is a typo.
 func TestEveryCallSaysWhichAgentItCouldNotFind(t *testing.T) {
 	t.Parallel()
 

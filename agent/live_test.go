@@ -15,7 +15,7 @@ import (
 // without one, so no credential ever appears on a command line or in
 // the test source:
 //
-//	SLGO_PROFILE=example go test ./client -run TestLiveLogin -v
+//	SLGO_PROFILE=example go test ./agent -run TestLiveLogin -v
 func TestLiveLogin(t *testing.T) {
 	profile := os.Getenv("SLGO_PROFILE")
 	if profile == "" {

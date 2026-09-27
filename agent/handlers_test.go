@@ -2,9 +2,9 @@ package agent
 
 // The state a session owns rather than relays.
 //
-// Everything here arrives on one message, early, and is never mentioned
-// again: the active group, the group memberships, the region's own
-// description, where the avatar is standing.  A client that attaches
+// Everything here arrives early, unasked, and is not said again for
+// anybody who missed it: the active group, the group memberships, the
+// region's own description, where the avatar is standing.  A client that attaches
 // afterwards cannot ask for any of it, which is why the session keeps
 // it -- and why a handler that drops a field leaves a hole nothing later
 // can fill.

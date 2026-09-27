@@ -450,9 +450,9 @@ func TestALineThatIsNotASetting(t *testing.T) {
 	}
 }
 
-// TestAProfileIsSavedAndReadBack: SaveProfile and LoadProfile are the
-// two halves of one format, and a setting that survives one but not the
-// other is a setting that quietly resets.
+// TestAProfileSurvivesBeingSavedAndReadBack: SaveProfile and LoadProfile
+// are the two halves of one format, and a setting that survives one but
+// not the other is a setting that quietly resets.
 func TestAProfileSurvivesBeingSavedAndReadBack(t *testing.T) {
 	tempConfig(t)
 

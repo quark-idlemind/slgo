@@ -6,10 +6,8 @@ package sl
 // the GROUP and not the avatar who invited, so an invitation filed
 // under the wrong key answers the wrong thing or nothing at all; and
 // the fee is in the binary bucket, where reading it wrong is money.
-// Neither can be checked against a live grid from here -- no avatar
-// this daemon holds has the power to invite another, so no real
-// invitation can be made to arrive -- which is exactly why the shape
-// the viewer's source describes is pinned down here instead.
+// Both are pinned down here in the shape the viewer's source describes,
+// which is the shape measured on Agni since; see doc/group-invitations.md.
 
 import (
 	"context"

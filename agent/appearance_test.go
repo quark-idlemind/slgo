@@ -50,8 +50,8 @@ func TestChangingClothesReplaces(t *testing.T) {
 	}
 }
 
-// TestAppearanceIsCopied: every block here is or holds a slice pointing
-// into the receive buffer, which is reused.
+// TestAppearanceIsCopied: every block here but Sender is or holds a
+// slice pointing into the receive buffer, which is reused.
 func TestAppearanceIsCopied(t *testing.T) {
 	var s Appearances
 	buf := []byte("original")

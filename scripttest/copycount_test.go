@@ -2,14 +2,15 @@ package scripttest_test
 
 // An slbench-shaped measurement, driven through the contract.
 //
-// This is the demonstration the backend exists for.  slbench's
-// measurement machinery -- find the pad at which the base script sits on
-// a block boundary, probe upward for a copy count whose memory delta
-// registers, estimate how many copies fit in the memory a script has,
-// back off when the answer is too big -- is arithmetic on readings, and
-// when this was written the only way to exercise it offline was --test,
-// which then answered ABOVE the transport and so tested none of it.
-// --test is served by this backend now.
+// This is the demonstration the backend exists for.  slbench's copy
+// mode -- find the pad at which the base script sits on a block
+// boundary, probe upward for a copy count whose memory delta registers,
+// estimate how many copies fit in the memory a script has, back off when
+// the answer is too big -- was arithmetic on readings, and when this was
+// written the only way to exercise it offline was --test, which then
+// answered ABOVE the transport and so tested none of it.  --test is
+// served by this backend now, and copy mode has gone from slbench
+// (doc/memory.md#one-mode).
 //
 // The search below is a small reimplementation rather than slbench's
 // own code, on purpose.  Sharing the code would prove only that it
@@ -36,7 +37,8 @@ import (
 	"github.com/quark-idlemind/slgo/scripttest"
 )
 
-// The constants the search works in, which are slbench's.
+// The constants the search works in.  blockSize is slbench's; minpad is
+// where this search starts.
 const (
 	blockSize = 512
 	minpad    = 5
@@ -197,8 +199,9 @@ func (b *bench) shrink(cnt, pad int, base int) (int, results) {
 //
 // A bisection, which is exact here because the reading only ever grows
 // with the pad.  slbench walks linearly from where its bisection left
-// off and then confirms the answer twice, because live an instrument can
-// answer differently to the same question; that is a property of
+// off, checks the crossing against every reading it took, and under
+// --paranoid reads it again, because live an instrument can answer
+// differently to the same question; that is a property of
 // llGetUsedMemory rather than of the search, and this model does not
 // have it.
 func (b *bench) padding() int {
@@ -219,9 +222,9 @@ func (b *bench) padding() int {
 	return hi
 }
 
-// copyCount is the rest of copy mode: settle the base, probe upward for
-// a count whose delta registers, estimate how many copies fit in the
-// memory a script has, and back off if that was too many.
+// copyCount is the rest of what copy mode did: settle the base, probe
+// upward for a count whose delta registers, estimate how many copies fit
+// in the memory a script has, and back off if that was too many.
 func (b *bench) copyCount(pad, max int) (cnt int, size float64) {
 	b.t.Helper()
 

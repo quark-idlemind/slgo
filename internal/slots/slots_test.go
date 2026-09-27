@@ -1179,10 +1179,9 @@ func TestASlotIsTidiedWhenItsGrantRunsOutToo(t *testing.T) {
 }
 
 // TestSlotsCanBeAskedForByWhatTheyAre: a caller whose slots have to have
-// something in common with each other -- a benchmark compares its
-// objects, so four spread over three avatars is four readings that
-// cannot be compared -- asks for the ones it can use, and all or nothing
-// applies to those.
+// something in common with each other -- the daemon is one, for a
+// request that names one avatar -- asks for the ones it can use, and all
+// or nothing applies to those.
 func TestSlotsCanBeAskedForByWhatTheyAre(t *testing.T) {
 	p, _ := stopped(t)
 	go p.Run()

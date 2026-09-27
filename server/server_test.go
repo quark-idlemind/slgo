@@ -407,8 +407,9 @@ func TestSubscriptionGates(t *testing.T) {
 }
 
 // TestRelayUnknownMessage is the property the whole design exists for:
-// the server passes on a message number it has never heard of, so a
-// client can learn new messages without the grid session restarting.
+// the server passes on a message number it has never heard of to a
+// client subscribed to "*", so a client can learn new messages without
+// the grid session restarting.
 func TestRelayUnknownMessage(t *testing.T) {
 	r := newRig(t, nil)
 	c := r.dial(t)
@@ -1493,9 +1494,10 @@ func plaintext() grpc.DialOption {
 
 // TestAClientIsToldWhereTheAvatarIsNow: a teleport invalidates nearly
 // everything a client holds -- local ids are the region's own numbering
-// and its object cache describes somewhere else -- and until this stage
-// nothing told it so.  The notice carries the name and the handle
-// together so that dropping what it has costs no round trip.
+// and its object cache describes somewhere else -- and until stage 4 of
+// doc/history/teleport.md nothing told it so.  The notice carries the
+// name and the handle together so that dropping what it has costs no
+// round trip.
 //
 // Through StartAgent rather than the rig, because the wiring is half of
 // what is being tested: the daemon learns of the move from the session
@@ -1536,7 +1538,8 @@ func TestAClientIsToldWhereTheAvatarIsNow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Sandbox Goguen's handle on Agni, which stage 0 measured.
+	// Sandbox Goguen's handle on Agni, which stage 0 of
+	// doc/history/teleport.md measured.
 	const goguen = uint64(1094014069892352)
 	sim.enterRegion("Sandbox Goguen", goguen)
 

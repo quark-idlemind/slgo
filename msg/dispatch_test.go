@@ -186,9 +186,9 @@ func TestDispatchDedupeEvicts(t *testing.T) {
 // second viewer opens with 1 and 2, the numbers the first one used, and
 // without forgetting them its handshake is thrown away as a
 // retransmission and never reaches anything that would answer it.  The
-// tap is where the change of peer is noticed and where the forgetting
-// therefore has to be safe: it runs on the dispatch goroutine, which is
-// the one that owns the fields Forget writes.
+// change of peer is noticed on the dispatch goroutine -- in a gate, or
+// as here a tap -- which is the one that owns the fields Forget writes,
+// so that is where the forgetting has to be safe.
 func TestForgetLetsAReplacementPeerStartOverAtOne(t *testing.T) {
 	var n atomic.Int64
 	var forget atomic.Bool
@@ -516,11 +516,12 @@ func TestWithConcurrencyKeepsAtLeastOne(t *testing.T) {
 }
 
 // TestRelaySkipsWhatATapWouldRepeat is the whole reason the relay hook
-// exists rather than reusing the tap.  Fed exactly the input of
-// TestTapSeesEverything, which the tap sees as 1, 2, 2, 3, the relay
-// sees 1 and 2: the retransmission is gone, because forwarding it would
-// reach the far end as a second message it could not tell from the
-// first, and the packet that would not decode is gone, because there is
+// exists rather than reusing the tap.  Fed the input of
+// TestTapSeesEverything, which the tap sees as 1, 2, 2, 3, and a packet
+// of nothing but acks, the relay sees 1 and 2: the retransmission is
+// gone, because forwarding it would reach the far end as a second
+// message it could not tell from the first, and the packet that would
+// not decode and the one with no message are gone, because there is
 // nothing there to pass on.
 func TestRelaySkipsWhatATapWouldRepeat(t *testing.T) {
 	var relayed []uint32

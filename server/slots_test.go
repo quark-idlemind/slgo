@@ -362,9 +362,9 @@ func TestMoreThanTheDaemonHasIsRefusedRatherThanWaitedFor(t *testing.T) {
 	}
 }
 
-// TestAskingForNothing: a request for no places is a caller's mistake,
-// and a grant of nothing is a grant that holds nothing and cannot be
-// given back.
+// TestAskingForNothingIsRefused: a request for no places is a caller's
+// mistake, and a grant of nothing is a grant that holds nothing and
+// cannot be given back.
 func TestAskingForNothingIsRefused(t *testing.T) {
 	r := newRig(t, agent.Caps{})
 	a := r.dial(t)
