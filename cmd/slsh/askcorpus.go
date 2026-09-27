@@ -26,9 +26,11 @@ package main
 // written by somebody who does, and says "landmark --set-home" where
 // the question says "make this my home".
 //
-// The Options section is not also a section of its own.  Its whole text
-// is the flags, each already a document, and indexing it twice would
-// make every command with flags score twice for having them.
+// The Options section is not also a section of its own.  Its text is
+// the flags, each already a document, and indexing it twice would make
+// every command with flags score twice for having them.  What comes
+// before its first flag is a section -- all of it, on notice's page,
+// which has no flags and says so there.
 //
 // An indented line is only an example when its first word is a command.
 // Pages indent what the grid printed back as well -- a listing, a
@@ -261,7 +263,7 @@ func askPageDocs(name, page string) []askindex.Doc {
 		case heading == "Options" && text == "":
 			// Each flag is already a document; see the head of this file.
 			// What is left is only what came before the first flag, and
-			// no page has any today; if one ever does, it is a section.
+			// where a page has some, it is a section, below.
 		default:
 			id := name + ":section:" + heading
 			// Two sections of one page with one heading would be two

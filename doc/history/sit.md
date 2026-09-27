@@ -411,7 +411,7 @@ region and the other sessions here are on another grid.
 - **Whether the range limit is the simulator's or the parcel's.** Seven
   metres worked and eleven did not, in one skybox, on one parcel.
 
-- **A ground sit `sl` did not perform.** `sl.Seat` reads the object sit
+- ~~**A ground sit `sl` did not perform.**~~ `sl.Seat` reads the object sit
   off the reparenting, which is relayed always, and the ground sit off
   the animation list, which is relayed only while one of the sit calls
   is holding the borrowed subscription. So a ground sit this session
@@ -420,7 +420,10 @@ region and the other sessions here are on another grid.
   daemon knows the answer -- `agent.Posture` has it, permanently and for
   nothing -- so the fix is a `Posture` RPC rather than a subscription.
   Stage 3 did not need one after all: `Sit` returns the seat and the
-  position comes from `Where`.
+  position comes from `Where`. Answered since: `sl.Seat` asks the
+  backend for the agent's posture first -- the `Posture` RPC, through
+  slgod -- and falls back to what the session heard only where the
+  backend cannot say.
 
 - **Other avatars' postures.** `AvatarAnimation` arrives for everybody
   in range, so "who is sitting" is answerable for the whole crowd at no

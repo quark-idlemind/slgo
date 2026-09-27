@@ -38,7 +38,13 @@ comments of `sl/inventory_ops.go`:
   in Trash afterwards.
 - `UpdateInventoryItem`, the viewer's message for renaming an item,
   sent with the item's fields, its checksum and a transaction id, is
-  accepted and the item does not change.
+  accepted and the item does not change. The checksum was the first
+  thing found missing: sent as zero, the update was accepted and
+  silently did nothing -- the rename returned no error, the item did
+  not change, and only reading it back afterwards showed it. That is
+  how `itemCRC` came to be written, and the read-back is what caught
+  it. `RezObject` carries the same checksum, and is the one message
+  here that sends it.
 
 ## Moves
 
@@ -71,6 +77,19 @@ that arrives under its old name is an error saying what it is called.
 The fifteen seconds is not a measurement. How long a move takes to
 show over AIS has not been measured; fifteen seconds is the bound
 `SetItem` already used for the same kind of read.
+
+### Moving an object in the region
+
+`sl.Place`, which sets a rezzed object's position, rotation and scale,
+is fire and forget -- the simulator answers with an `ObjectUpdate`
+whenever it gets round to it -- so an immediate re-read returns the
+position the object had BEFORE the move and reports it with total
+confidence. Observed: "place-probe is at 33.0, 73.0, 1000.2" for an
+object that was by then at 36, 78, 1002. A stale answer is worse than
+none, because nothing about it looks wrong.
+
+So slsh's `move` waits for the object to have moved, rather than
+reading it back once.
 
 ## Object permissions
 

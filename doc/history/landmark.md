@@ -193,6 +193,17 @@ item. Whatever AIS caches, it is not this.
 is already in, and it is the fastest form of all because it costs no
 inventory lookup: flags 32, `"sending_home"`, a quarter of a second.
 
+**A refusal that names the asset id reads badly.** Stage 3 met one on
+Agni:
+
+	the grid refused the teleport: the teleport to landmark
+	0d9b7e57-...: CouldntTPCloser: "Could not teleport closer"
+
+which says "teleport" twice and identifies the destination by a uuid
+nobody typed and nothing else prints. So `GoTo`'s errors name the
+destination by what the caller calls it -- an inventory name somebody
+typed -- and by the asset id only when the caller has no name for it.
+
 ### A landmark can be arrived at and then not stayed at
 
 The case stage 0 could not reach turned up on its own. `Ravensdon

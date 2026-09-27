@@ -2,59 +2,31 @@ package sl
 
 // Finding a region on the grid's map, by name.
 //
-// # Why a name has to be asked about at all
-//
-// A person types a name and TeleportLocationRequest takes a handle, so
-// something has to turn one into the other, and nothing local can:
-// where a region stands is a fact about the grid and not about this
-// session.  MapNameRequest is the question -- it is what the viewer
+// A person types a name and TeleportLocationRequest takes a handle, and
+// nothing local can turn one into the other: where a region stands is a
+// fact about the grid.  MapNameRequest is the question -- what the viewer
 // sends when a name is typed into the world map
 // (llworldmapmessage.cpp:79-95, sendNamedRegionRequest) -- and
 // MapBlockReply is the answer, whose blocks carry the grid coordinates
-// msg.RegionHandle packs.  Nothing here teleports; this is the lookup a
-// teleport will need, and it answers "where is that" on its own.
+// msg.RegionHandle packs.  Nothing here teleports.
 //
-// Everything below was measured on Agni, and each of the four is a way
-// the reply is not the tidy list its field names suggest.
+// The reply is not the tidy list its field names suggest, in four ways,
+// each measured on Agni:
 //
-// # It is a case-insensitive PREFIX search
-//
-// "Sandbox" comes back with thirty-three regions and none of them is
-// called Sandbox.  A name is matched from the start and without regard
-// to case, so an exact name is one row among however many others begin
-// with it -- which makes several matches the ordinary case rather than
-// the exception.  So the list is handed over whole and nothing here
-// picks from it: choosing the first row would be choosing on behalf of
-// whoever typed the name.
-//
-// # The list ends with a block that is not a region
-//
-// Every reply ends with a block of X=0, Y=0, Access=255 and a zero map
-// image, whose Name is the query lowercased with its last character
-// taken off -- "pelm rea" for "Pelmar Reach".  It is the end of the list
-// and not a place, and it is recognised here by that shape rather than
-// by rebuilding the mangled name, which is a rule about the query where
-// the shape is a rule about the block.  The viewer knows the same block
-// by the same 255 (llworldmapmessage.cpp:266-274).
-//
-// A name that matches nothing comes back as that block ALONE.  That, and
-// not an empty reply, is how the grid says there is no such region.
-//
-// # One answer can be several packets
-//
-// "Sandbox" came back as 26 blocks and then 8, with the end marker in
-// the second.  So this accumulates until the marker arrives rather than
-// until the first reply -- and still needs a deadline, because a
-// question that goes unanswered has no marker either.  A reply that does
-// come takes about 110 milliseconds.
-//
-// # Most of a block is empty
-//
-// Agents, RegionFlags and WaterHeight came back zero for every region on
-// every run, so none of them is passed on: a region reported as having
-// no water and nobody in it would be this package inventing facts out of
-// fields the grid does not fill in.  What a block really carries is the
-// position and the maturity rating.
+//   - It is a case-insensitive PREFIX search, so an exact name is one row
+//     among however many others begin with it.  The list is handed over
+//     whole: choosing a row would be choosing for whoever typed the name.
+//   - It ends with a block that is not a region -- X=0, Y=0, Access=255
+//     -- recognised here by that shape, as the viewer recognises it.  A
+//     name that matches nothing comes back as that block alone, which is
+//     how the grid says there is no such region.
+//   - One answer can be several packets, so blocks accumulate until that
+//     end marker arrives, under a deadline for a question that is never
+//     answered and so has no marker either.
+//   - Agents, RegionFlags and WaterHeight come back zero for every region
+//     and are not passed on; a block really carries the position and the
+//     maturity rating.
+// Why: doc/history/teleport.md#stage-1----a-region-name-becomes-a-handle
 //
 // # Two clients asking at once
 //
@@ -62,7 +34,7 @@ package sl
 // ScriptRunning both sift their answers by an id the reply carries;
 // MapBlockReply carries AgentData.AgentID, which is this avatar in every
 // reply this session will ever see, and the blocks.  And the daemon
-// relays by message number alone (Client.wants, server/grpc.go:86), so
+// relays by message number alone (Client.wants, in server/grpc.go), so
 // blocks one attached client asked for reach every client subscribed to
 // them.
 //

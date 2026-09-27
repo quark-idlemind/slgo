@@ -76,9 +76,10 @@ type Group struct {
 
 // Where reports the avatar's position and view.
 //
-// Position is exact after a teleport or entering a region, and to the
-// nearest metre while walking, which is all CoarseLocationUpdate
-// carries.
+// Position is exact after a teleport or entering a region, and while
+// walking is whole metres across and four up and down, which is all
+// CoarseLocationUpdate carries.  A seated avatar's is worked out from
+// its seat; see agent.Agent.Position.
 func (w *Session) Where(ctx context.Context) (*Presence, error) {
 	return w.presence(ctx, 0)
 }
@@ -89,12 +90,12 @@ func (w *Session) Where(ctx context.Context) (*Presence, error) {
 // This is the "in the world" of ObjectsNamed and AllObjects: nothing
 // beyond it is described at all, so nothing beyond it can be found.
 //
-// It works one way and slowly.  Raising it brings more in, but over
-// the following seconds rather than at once, so a raise wants a Settle
-// after it -- 128 to 256 metres took the count from 195 to 217.
-// Lowering it does not take anything away, because what has already
-// been described has already been heard: 32 metres left the count at
-// 193.  Treat it as a floor on what can be found, not a filter.
+// Neither way is at once.  Raising it brings more in over the following
+// seconds, so a raise wants a Settle after it.  Lowering it lets the
+// session drop what is then out of range, people apart, at a trim every
+// agent.TrimInterval once agent.OutOfRangeGrace has passed -- so for
+// half a minute or so what was described is still found.
+// Why: doc/objects.md#before-trim
 func (w *Session) SetDrawDistance(ctx context.Context, metres float32) (*Presence, error) {
 	if metres <= 0 {
 		return nil, fmt.Errorf("sl: draw distance must be positive, got %v", metres)
@@ -467,9 +468,9 @@ func (w *Session) Flush(ctx context.Context) (int, error) {
 	return w.b.Flush(ctx)
 }
 
-// parseUUIDOrZero reads a uuid, treating anything unreadable as none.
-// The wire carries it as a string because a zero uuid and an absent one
-// mean the same thing here: no group.
+// parseUUIDOrZero reads a uuid off the wire, where ids travel as
+// strings, treating anything unreadable as none: a zero uuid and an
+// absent one mean the same thing here -- no group, no owner.
 func parseUUIDOrZero(s string) msg.UUID {
 	id, err := msg.ParseUUID(s)
 	if err != nil {

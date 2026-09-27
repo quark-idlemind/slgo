@@ -136,7 +136,7 @@ slgod itself restarts.
 
 The simulator puts most of an avatar's attachments back by itself at
 login, but not all of them, and a viewer covers the gap; what was
-measured is in `sl/wearable.go`. slbotd did not, so every time slgod
+measured is in [doc/outfit.md](outfit.md#putting-an-outfit-back-on). slbotd did not, so every time slgod
 restarted the avatars it holds came back missing part of their outfits
 -- a head of hair, a dress -- and stayed that way until somebody
 noticed and dressed them by hand.

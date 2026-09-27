@@ -4,11 +4,10 @@ package sl
 //
 // Nothing that merely mentions a person carries their name.  An avatar
 // standing in the region arrives as an object update with a uuid and
-// nothing else; a friend coming online is a uuid; a permission request
-// names its owner but a dialog names only the object.  So a name is
-// always either something that came along with a message -- chat and
-// instant messages both carry one -- or the answer to a question asked
-// on purpose.
+// nothing else, and a friend coming online is a uuid.  So a name is
+// either something that came along with a message -- an instant message
+// carries its sender's, and is the one this learns from -- or the
+// answer to a question asked on purpose.
 //
 // Both go in the same place, and it is kept for the life of the
 // session: names do change, but not within a session, and asking twice

@@ -5,60 +5,19 @@ package main
 //	link    join objects into one, with the first as the root
 //	unlink  take a linked object apart
 //
-// Linking has been possible in the sl package since Build had to make
-// anything bigger than one prim -- sl.Link is what puts a described
-// object together -- and there has never been a way to ask for it from
-// the prompt.  Taking one apart was possible nowhere at all, so
-// sl.Unlink is new and this is the command that wanted it.
+// link takes each object as one argument, so a name with a space in it
+// is quoted; unlink names one thing and joins its arguments into one
+// name, as detach does.
 //
-// # Why link takes several names and unlink takes one
+// unlink given a root frees every prim of it, and given a child frees
+// only that prim, as the viewer's Unlink does on a linkset and under
+// Edit Linked Parts: the prims named in a delink are the ones freed.
+// See sl.Unlink.
 //
-// link names a root and everything that goes under it, so each argument
-// is one object and a name with a space in it is quoted:
-//
-//	link chair "left leg" "right leg"
-//
-// unlink names one thing, so its arguments are joined back into one name
-// the way detach's are, and "unlink a lamp" means what it looks like.
-// The two rules differ because the commands differ, and the alternative
-// -- making link quote-free by taking the root and then a list -- needs a
-// separator between the two halves that is not a space, which is a new
-// thing to remember for a command whose whole job is one sentence long.
-//
-// # What unlink does with a root, and with a child
-//
-// The whole of it comes apart when given a root, and just that prim
-// leaves when given a child.  That is the viewer's pair of behaviours --
-// clicking an object selects the linkset and Unlink frees all of it,
-// while Edit Linked Parts selects one prim and Unlink frees only that --
-// and it falls out of what a delink message is: the local ids in it are
-// the prims being FREED, so the caller says which they are.  See
-// sl.Unlink for the citation.
-//
-// Naming a child is a real thing to want and not a mistake to guard
-// against: a prim of a linkset has its own name, "objects -c" prints
-// them, and a linkset is otherwise all or nothing.
-//
-// # What happens to the name
-//
-// A linkset answers to its root's name, so "chair" is the four-prim
-// chair while the four prims are linked and is one prim afterwards.  The
-// pieces keep the names they had inside it, which for anything built by
-// hand is often "Object" for all of them, so after an unlink several
-// things in the region can answer to one word -- and objectNamed refuses
-// an ambiguous name rather than picking.  That is why unlink lists what
-// it freed with keys instead of printing a success line: the keys are
-// the only handle on the pieces that is certain to work, and the moment
-// they are wanted is the moment the object comes apart.
-//
-// # Why the report is read back rather than counted
-//
-// Both commands say what the object is now, and both work it out from
-// what the region says afterwards rather than from how many arguments
-// they were given.  Linking something that was already a linkset brings
-// its prims along, so "link a b" can make an object of seven; and a
-// person watching wants to know that.  Counting the arguments would
-// print "2 prims" and be wrong in exactly the case worth reporting.
+// The pieces keep their own names, often all "Object", so unlink lists
+// them with their keys.  Both commands report what the region says the
+// object is afterwards, since linking a linkset brings its prims along.
+// Why: doc/slsh.md#link-and-unlink
 
 import (
 	"context"

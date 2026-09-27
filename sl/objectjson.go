@@ -16,8 +16,8 @@ package sl
 // simulator has no use for. They are all optional and the simulator
 // ignores what it does not recognise:
 //
-//	prim.localid    the region handle, which is not stable and is
-//	                what most messages take
+//	prim.localid    the prim's local id in its region, which is not
+//	                stable and is what most messages take
 //	prim.text       floating text
 //	prim.perms      the object's permission masks
 //	prim.creator    who made it

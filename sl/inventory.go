@@ -278,29 +278,12 @@ func (w *Session) upload(ctx context.Context, capName string, fields map[string]
 // to be written and being told where -- and asks a second time when the
 // far end answers with a server error.
 //
-// Only this half, and only a 5xx.  The first half writes NOTHING: it
-// hands over a description and is given a URL, so asking again cannot
-// install anything twice, cannot make a second inventory item, and
-// cannot be charged for twice.  That is what makes it safe to retry
-// without knowing which capability it was for, and none of it is true of
-// the second half, where an answer that went missing may have been an
-// upload that landed.
-//
-// Measured on Agni in August 2026: slrun running thirty scripts at
-// once, with the objects cleared first, produced one or two of these per
-// run --
-//
-//	sl: UpdateScriptTask: status 500: <html> ... 'method': 'handle_request'
-//
-// -- a Python stack trace out of Linden Lab's own web service.  They
-// were all this half: the name in the error is the capability, and the
-// second half names the uploader URL instead.  So nothing had been
-// written when they happened, and a run of thirty scripts was thrown
-// away over a hiccup that could have been asked again.
-//
-// Once, and then the error stands.  A far end that is still failing a
-// second later is having more than a moment, and a program that kept
-// asking would be adding to whatever is wrong.
+// Only this half, and only a 5xx.  The first half writes NOTHING, so
+// asking again cannot install, make or charge for anything twice; an
+// answer to the second half that went missing may have been an upload
+// that landed.  Once, and then the error stands: a far end still failing
+// a moment later is having more than a moment.
+// Why: doc/scripts.md#asking-the-first-half-of-an-upload-again
 func (w *Session) describeUpload(ctx context.Context, capName string, req []byte) ([]byte, error) {
 	ask := func() ([]byte, error) {
 		return w.capDo(ctx, agent.CapRequest{

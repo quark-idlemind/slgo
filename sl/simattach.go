@@ -16,23 +16,16 @@ package sl
 // and that is the only way to tell "on, and not described yet" from
 // "not on".
 //
-// Measured on Agni, one avatar wearing ten attachments: the list held
-// six, one per body attachment, and their ids were the attached objects'
-// -- the same ids WornObjects reports -- not the inventory items'.  The
-// four HUDs were not in it, not even in the copy the avatar was sent
-// about itself.  So the list can confirm a body attachment and count
-// what is missing a description, and it can say nothing about HUDs.
-//
-// When it is sent was measured on Agni, and differs by who is being
-// told.  The avatars around one that arrives hear its list at once.
-// The avatar itself does not: one logging in was sent its own list not
-// at all in the twenty seconds before anything asked for a bake, and
-// was sent it within a second of asking.  So the way to have a list is
-// to ask for a bake, which is what a viewer does as soon as
-// the outfit folder has loaded, and again after every change to it,
-// attachments included.  The folder version it was baked from travels
-// with it, and a list whose version is not the folder's version now
-// describes an outfit that has since changed.
+// The list holds the body attachments by the attached objects' ids --
+// the same ids WornObjects reports -- and never the HUDs, so it can
+// confirm a body attachment and count what is missing a description,
+// and can say nothing about HUDs.  An avatar logging in was not sent
+// its own list until a bake was asked for, so the way to have one is to
+// ask for a bake, which a viewer does as soon as the outfit folder has
+// loaded.  The folder version it was baked from travels with it, and a
+// list whose version is not the folder's version now describes an
+// outfit that has since changed.
+// Why: doc/outfit.md#the-simulators-list
 
 import (
 	"context"

@@ -503,9 +503,10 @@ func overlayPieces(o *agent.Overlay) ([]piece, []int) {
 // the letter is what makes them possible to tell apart at all.
 //
 // Colour is the foreground of the letter and never a block behind it,
-// and the eight-and-bright names rather than a 256-colour index, both
-// for the reasons written out at mapColours.  Black and white are left
-// out of the rotation: one of them is invisible on each kind of paper.
+// and the eight-and-bright names rather than a 256-colour index, as in
+// mapColours.  Black and white are left out of the rotation: one of
+// them is invisible on each kind of paper.
+// Why: doc/slsh.md#the-colours-a-map-is-drawn-in
 const parcelMarks = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 var parcelInks = []string{
@@ -524,19 +525,15 @@ type parcelDraw struct {
 // parcelDraws decides a mark for each parcel.
 //
 // The letters and the colours turn over at different rates -- 52 and 12
-// -- so two parcels share a mark only after 624 of them, where a region
-// holds dozens.  Neighbouring parcels differ in both.
+// -- so two parcels are drawn alike only after 156 of them, where a
+// region holds dozens.  Neighbouring parcels differ in both.
 //
 // Linden's protected land is the exception, and it is drawn as ground
 // rather than as a parcel: blank for the roads and waterways a region
-// is laid out around, and "." for the rez zones inside them.  It is
-// most of a mainland region by area and none of it is anybody's, so
-// giving it a letter of its own puts the loudest mark in the picture on
-// the one parcel nobody is asking about -- and takes the eye off the
-// homes, which are what a person is looking for.  Named rather than
-// owner-matched because the name is what says which it is: "Protected
-// Land" and "Protected Land - Rez zone" on Pelmar Reach, measured
-// 2026-08-18.
+// is laid out around, and "." for the rez zones inside them, so that
+// the loudest marks are left for the homes.  It is recognised by its
+// name, not by its owner.
+// Why: doc/slsh.md#protected-land-drawn-as-ground
 func parcelDraws(named []namedPiece) []parcelDraw {
 	out := make([]parcelDraw, len(named))
 	n := 0
@@ -570,13 +567,11 @@ func protectedLand(name string) (protected, rez bool) {
 // parcelMap draws the region's parcels, in the shape "map" draws a
 // region: one character to a cell, a different one for each parcel.
 //
-// Drawing the ownership instead was the first attempt and it drew
-// nothing: every square of a region of Linden Homes reads "owned", so
-// the picture was one character from corner to corner.  What a person
-// wants from a map of parcels is which parcel is which, and that is
-// what the overlay's boundaries are for -- so the pieces they cut the
-// region into are what is drawn, each with its own mark, and the key
-// under it names them.
+// What is drawn is the pieces the overlay's boundaries cut the region
+// into, each with its own mark, and the key under it names them: which
+// parcel is which is what a map of parcels is for, and not who owns it.
+// Why: doc/slsh.md#drawing-parcels-rather-than-ownership
+//
 // Whether there is colour is decided by the caller and not discovered
 // here, for the reason mapHighlight gives: a picture that reached for
 // the terminal half way down would be a different picture depending on
