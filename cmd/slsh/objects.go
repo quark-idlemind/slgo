@@ -182,39 +182,21 @@ type tpOptions struct {
 // shellTeleportTimeout is how long this shell waits for a teleport to
 // another region before saying nothing answered.
 //
-// Thirty seconds, where sl.DefaultTeleportTimeout is ninety.  That
-// constant was set before a teleport had ever been timed; forty moves
-// between Pelmar Reach and Sandbox Goguen have since been measured at
-// 355 milliseconds to 4.95 seconds, so ninety is two orders of magnitude
-// above what it covers.  Thirty is six times the slowest move measured,
-// which leaves room for a grid having a bad day, and it is what a
-// teleport inside the region has been given all along.
-//
-// The other end of the argument is what waiting costs.  A shell that
-// inherited the ninety would sit silent for a minute and a half over an
-// offer the grid was never going to answer, and the third of
-// sl.Teleport's failures -- a request answered with nothing whatever --
-// is exactly the one a person meets when they accept a second lure
-// while the first is still under way.
+// Thirty seconds, where sl.DefaultTeleportTimeout is ninety: six times
+// the slowest teleport measured, and what a teleport inside the region
+// is given.  A request the grid never answers -- a second lure accepted
+// while the first is under way -- is then not waited on for a minute and
+// a half.
+// Why: doc/slsh.md#how-long-tp-waits-for-another-region
 const shellTeleportTimeout = 30 * time.Second
 
-// tpMiddle is where a teleport with no position lands.
+// tpMiddle is where a teleport with no position lands: the middle of the
+// region, where a viewer puts an avatar sent there from the world map.
 //
-// The middle of the region, which is 256 metres square, because that is
-// where a viewer puts an avatar that typed a name into the world map and
-// said nothing about where in it.
-//
-// The height is left at zero rather than guessed at, and zero is not
-// arbitrary: measured on Agni, the avatar arrives at whichever is higher
-// of the height asked for and the ground under the point, plus about a
-// metre -- 30 came back as 31, 60 as 61, and 0 as the ground.  So zero
-// is how a client asks for ground level without knowing where the ground
-// is, and there is no cheap way to ask that about a region this session
-// has never been to.
-//
-// What it does not promise is dry land.  A region's middle can be under
-// water, and Sandbox Goguen's is, so this arrives there submerged.  That
-// is the region rather than the default, and the man page says so.
+// The height is zero, which asks for the ground: the avatar arrives at
+// the higher of the height asked for and the ground under the point.  A
+// middle under water is arrived at under water.
+// Why: doc/slsh.md#where-tp-lands-when-no-position-is-given
 var tpMiddle = msg.Vector3{X: 128, Y: 128}
 
 // cmdTP moves the avatar: to a position in this region, or to another
@@ -242,25 +224,13 @@ var tpMiddle = msg.Vector3{X: 128, Y: 128}
 // grid's map about a region called "128 128" would answer a question
 // nobody asked and take a round trip over it.
 //
-// # Why the name is not narrowed to one region here
+// A name several regions answer to is listed and refused rather than
+// chosen; see regionNamed.
 //
-// The map's search is by prefix, so a name typed in full comes back
-// beside every longer name beginning with it and several matches are the
-// ordinary case.  See regionNamed: an exact name wins outright and
-// anything else that matched twice is listed and refused, because
-// choosing on somebody's behalf is how an avatar ends up in the wrong
-// place.
-//
-// # Why an arrival is printed twice
-//
-// The notice from the shell's watcher says the avatar is in another
-// region, and the line this prints says where it ended up.  Both are
-// wanted and they say different things: one is the session's news, which
-// arrives whoever asked for the move, and the other is this command's
-// answer to the person who typed it.  Suppressing the notice for a
-// change this command asked for would need state shared between the two,
-// and would silently swallow a second change that arrived at the same
-// moment.
+// The watcher's notice of a new region still prints beside this
+// command's own line: one is the session's news and the other is the
+// answer to the person who typed the command.
+// Why: doc/slsh.md#why-tp-says-an-arrival-twice
 func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o tpOptions
 	rest, done, err := subOptions("tp", &o, out, endOptionsAtANegativeNumber(args))
@@ -314,58 +284,30 @@ func cmdTP(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 }
 
 // wantsHome is whether what was typed is the word home and nothing
-// else.
-//
-// The bare word only, and only when it is the whole of what was said,
-// so that the region name a word could also be is reachable in the
-// forms that carry one: "tp home 128 128 25" is a region called home,
-// as it was before this existed, and so is anything with more words in
-// it.  What is out of reach is a region whose whole name is "home" gone
-// to without a position -- and, measured on Agni on 2026-09-01, there
-// is no such region: the map answers the prefix "home" with nine longer
-// names and nothing that is exactly it.
-//
-// Without regard to case, since it is this shell's word and not a name
-// the grid keeps: "Home" at a prompt is the same word, and a rule that
-// sent one of them to the map and the other to the account's home
-// position would be a difference nobody could see.
+// else, in any case.  With more words it is a region's name, as
+// "tp home 128 128 25" always was.
 //
 // It is here rather than inside teleportTarget because home is not a
 // target of the kind that function reads: it names no region this shell
 // can look up and no position it can compute, and the whole of what the
 // grid is told is that home is where to go.  See sl.GoHome.
+// Why: doc/slsh.md#tp-home-and-a-region-called-home
 func wantsHome(args []string) bool {
 	return len(args) == 1 && strings.EqualFold(args[0], "home")
 }
 
 // endOptionsAtANegativeNumber puts a "--" in front of the position,
 // when the position has a negative number in it and nothing before it
-// has ended the options already.
+// has ended the options already.  getopt would otherwise read "-10" as
+// the option -1.
 //
-// Option parsing would otherwise eat one: "-10" is the option -1 with
-// the value 0 as far as getopt is concerned, so "tp -10 128 25" answered
-// "unknown option: -1" and a position west of this region's corner could
-// not be typed at all.  A "--" says the rest are operands, which is what
-// it means everywhere; putting it there rather than making somebody
-// remember to is what keeps the obvious line working.
-//
-// In front of the LAST THREE arguments rather than the first negative
-// one, because that is where a position is in every form tp takes, and
-// because put ahead of the whole position it survives "tp --wait 60 -10
-// 128 25", where the flag and its value are parsed before it.
-//
-// Only when nothing in front of the position is an operand, which is to
-// say only when there is no region name -- the "tp X Y Z" form.  getopt
-// stops reading options at the first operand, so a negative coordinate
-// after a name was never at risk and needs no help; and a "--" put
-// there is not an end-of-options mark at all, it is a word, so it was
-// joined onto the name.  "tp Example Landing -10 128 25" was refused as
-// a region called "Example Landing --" for as long as this inserted one
-// whatever came before.
-//
-// Only when one of the three really begins with a minus, so that a
-// mistyped option is still reported as one rather than handed on as a
-// region called "-wiat".
+// In front of the last three arguments, which is where a position is in
+// every form tp takes, so that "tp --wait 60 -10 128 25" works too.  Only
+// when no region name comes first: getopt has stopped at the name, and a
+// "--" after it would be a word joined onto it.  And only when one of
+// the three begins with a minus, so that a mistyped option is still
+// reported as one.
+// Why: doc/slsh.md#a-negative-coordinate-after-tp
 func endOptionsAtANegativeNumber(args []string) []string {
 	n := len(args)
 	if n < 3 {
@@ -721,10 +663,8 @@ func positionLine(p *sl.Presence) string {
 // object as part of a round trip has to note where it stood and put it
 // back itself.
 //
-// This was "place" until the word was wanted for putting an inventory
-// object into the world, which is what "place" sounds like it means.
-// "move" says what this one does without any of that argument, since
-// the thing is already in the world and all that changes is where.
+// It was called "place" once.
+// Why: doc/slsh.md#move-and-login-and-the-words-they-replaced
 func cmdMove(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var flags helpOnly
 	rest, done, err := subOptions("move", &flags, out, args)
@@ -759,15 +699,10 @@ func cmdMove(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return err
 	}
 
-	// Wait for it to have moved, rather than read it back once.
-	//
-	// sl.Place is fire and forget -- the simulator answers with an
-	// ObjectUpdate whenever it gets round to it -- so an immediate
-	// re-read returns the position the object had BEFORE the move and
-	// reports it with total confidence.  Observed: "place-probe is at
-	// 33.0, 73.0, 1000.2" for an object that was by then at 36, 78,
-	// 1002.  A stale answer is worse than none, because nothing about
-	// it looks wrong.
+	// Wait for it to have moved, rather than read it back once: sl.Place
+	// has no reply, the update that shows the move comes when it comes,
+	// and a re-read straight away gives the position from before it.
+	// Why: doc/readbacks.md#moving-an-object-in-the-region
 	deadline := time.Now().Add(20 * time.Second)
 	for {
 		again, err := sh.s.ObjectByID(ctx, o.ID, 20*time.Second)
@@ -855,12 +790,9 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 // session for at all, so they can no more be the default than a name it
 // has never heard of.
 //
-// CONNECTING is the one that matters and it was the bug: a circuit that
-// dropped and is being rebuilt never costs a session its place, so the
-// daemon still answers with it, while a star drawn on the first HOSTED
-// row moved to the second session for as long as the reconnection took
-// -- the listing and the daemon disagreeing exactly when somebody is
-// reading the listing to find out what is going on.
+// CONNECTING counts: a circuit being rebuilt never costs a session its
+// place, so the daemon still answers with it.
+// Why: doc/slsh.md#the-star-in-agents-during-a-reconnection
 func canBeTheDefault(state pb.AgentInfo_State) bool {
 	return state == pb.AgentInfo_HOSTED || state == pb.AgentInfo_CONNECTING
 }
@@ -871,13 +803,8 @@ func canBeTheDefault(state pb.AgentInfo_State) bool {
 // arrival, a presence, a notice to whoever watches for it -- so it
 // follows from somebody asking rather than from a default.
 //
-// This was "host" until the word was measured against what a person
-// asking for it has in mind.  Hosting is what the daemon does with a
-// session once it exists, which is slgod's half of the arrangement and
-// not a thing anybody types at a prompt; what the person wants is the
-// avatar logged in, and logout was already the word for the other
-// direction.  Nothing answers to "host" now: the pair reads login and
-// logout, and a half-renamed pair would be worse than either.
+// It was called "host" once.
+// Why: doc/slsh.md#move-and-login-and-the-words-they-replaced
 func cmdLogin(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o forceOptions
 	rest, done, err := subOptions("login", &o, out, args)
@@ -1014,16 +941,10 @@ func cmdAuto(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 			have++
 		}
 	}
-	// What is worn is what can run at once, one object per script, and
-	// that is the whole of what this avatar's share buys.  It used to
-	// offer a count of benchmarks alongside, worked out from
-	// session.AutoGroupSize, and that number was wrong: a benchmark
-	// leases one object per division of each of its searches and three
-	// besides, which is nineteen at slbench's defaults and moves with
-	// --parts and --extra, and it halves that again when the pool
-	// cannot grant it.  Only slbench can say it, and it says it when it
-	// settles for less.  A figure printed here could only go stale
-	// again, which is worse than not printing one.
+	// What is worn is what can run at once, one object per script.  How
+	// many benchmarks that makes is slbench's to say, since what one
+	// leases moves with its flags, so no count of them is printed.
+	// Why: doc/slsh.md#why-auto-prints-no-count-of-benchmarks
 	fmt.Fprintf(out, "%d auto objects worn, so %d scripts at once\n", have, have)
 	if have < len(session.AutoPoints) {
 		fmt.Fprintf(out, "auto -n %d sets up the rest\n", len(session.AutoPoints))

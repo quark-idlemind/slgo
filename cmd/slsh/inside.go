@@ -22,47 +22,23 @@ package main
 // a person and nothing moves until they accept, while dropping one into
 // your own object happens at once and asks nobody.
 //
-// # Why start and stop are verbs rather than two more --in flags
-//
-// The flag works above because each of those four is an operation the
-// shell already has somewhere else, and --in only says which container
-// to perform it in.  Starting a script has no counterpart: a script in
-// inventory does not run and cannot be made to, because an object is the
-// only place a script runs at all.  So there is nothing for a flag to
-// choose between.  "run --in Box1 hello.lsl" would be a flag with one
-// legal value, which is a verb spelled at length -- and it would put the
-// object, the one argument that is never optional, behind a flag.
-//
-// So the object is an argument, in the place drop puts it:
+// start and stop take the object as their first word, the way drop
+// does, rather than --in: a script runs only inside an object, so there
+// is nothing for a flag to choose between.
 //
 //	start Box1 hello.lsl   start one script
 //	start Box1             start every script in the object
 //	stop Box1 hello.lsl
 //
-// and, as in drop, the first word is the object and everything after it
-// is one name.  An object whose name has a space in it is quoted; a
-// script whose name has one need not be.
+// As in drop, everything after the object is one name, so an object
+// whose name has a space in it is quoted and a script's need not be.
 //
-// The names are the plainest words for it.  The viewer has no verb to
-// borrow -- its script editor shows a "Running" tick box, and "running"
-// and "unrunning" are not a pair of commands -- and "run" is worse than
-// it looks, because sl.Run means putting a script in, compiling it and
-// waiting for what it says, which is a different and much longer act
-// than flipping a switch on one that is already there.
-//
-// # Why "new --in" is a flag after all
-//
-// It goes the other way round because making a script IS an operation
-// that exists in both places, and --in says which.  What differs is what
-// happens afterwards: a script made in inventory sits there, and a
-// script put into an object is compiled and started by the same call
-// that puts it there (see sl.InstallScript), so the two report different
-// things and the command says which of them it did.
-//
-// A notecard cannot be made inside an object at all -- nothing here can
-// write one into a prim -- so --in without --kind means a script, since
-// a script is the only thing it could mean, and --kind notecard with
-// --in is refused rather than quietly made in inventory instead.
+// new does take --in, because making a script is an operation in both
+// places: one put into an object is compiled and started by the same
+// call (sl.InstallScript), and the command says which it did.  Nothing
+// here can write a notecard into a prim, so --in means a script, and
+// --kind notecard with --in is refused.
+// Why: doc/slsh.md#start-stop-and-new-inside-an-object
 
 import (
 	"context"

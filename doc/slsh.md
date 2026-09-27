@@ -398,6 +398,120 @@ disappear -- it changed meaning, and both meanings are spelt the same
 way.  See the argument count in `cmdPlace` for what that costs and what
 is done about it.
 
+## move and login, and the words they replaced
+
+`move` was "place" until the word was wanted for putting an inventory
+object into the world, which is what "place" sounds like it means.
+"move" says what this one does without any of that argument, since the
+thing is already in the world and all that changes is where.
+
+`login` was "host" until the word was measured against what a person
+asking for it has in mind. Hosting is what the daemon does with a
+session once it exists, which is slgod's half of the arrangement and
+not a thing anybody types at a prompt; what the person wants is the
+avatar logged in, and logout was already the word for the other
+direction. Nothing answers to "host" now: the pair reads login and
+logout, and a half-renamed pair would be worse than either.
+
+## start, stop and new inside an object
+
+`ls`, `cat`, `rm` and `mv` take `--in OBJECT` because each of them is
+an operation the shell already has somewhere else, and `--in` only says
+which container to perform it in. Starting a script has no counterpart:
+a script in inventory does not run and cannot be made to, because an
+object is the only place a script runs at all. So there is nothing for
+a flag to choose between. `run --in Box1 hello.lsl` would be a flag
+with one legal value, which is a verb spelled at length -- and it would
+put the object, the one argument that is never optional, behind a
+flag.
+
+So the object is an argument, in the place `drop` puts it:
+
+    start Box1 hello.lsl   start one script
+    start Box1             start every script in the object
+    stop Box1 hello.lsl
+
+and, as in `drop`, the first word is the object and everything after it
+is one name. An object whose name has a space in it is quoted; a script
+whose name has one need not be.
+
+The names are the plainest words for it. The viewer has no verb to
+borrow -- its script editor shows a "Running" tick box, and "running"
+and "unrunning" are not a pair of commands -- and "run" is worse than
+it looks, because `sl.Run` means putting a script in, compiling it and
+waiting for what it says, which is a different and much longer act
+than flipping a switch on one that is already there.
+
+`new --in` goes the other way round because making a script IS an
+operation that exists in both places, and `--in` says which. What
+differs is what happens afterwards: a script made in inventory sits
+there, and a script put into an object is compiled and started by the
+same call that puts it there (`sl.InstallScript`), so the two report
+different things and the command says which of them it did.
+
+A notecard cannot be made inside an object at all -- nothing here can
+write one into a prim -- so `--in` without `--kind` means a script,
+since a script is the only thing it could mean, and `--kind notecard`
+with `--in` is refused rather than quietly made in inventory instead.
+
+## link and unlink
+
+Linking has been possible in the sl package since `Build` had to make
+anything bigger than one prim -- `sl.Link` is what puts a described
+object together -- and there had never been a way to ask for it from
+the prompt. Taking one apart was possible nowhere at all, so
+`sl.Unlink` is new and `unlink` is the command that wanted it.
+
+### Why link takes several names and unlink takes one
+
+`link` names a root and everything that goes under it, so each argument
+is one object and a name with a space in it is quoted:
+
+    link chair "left leg" "right leg"
+
+`unlink` names one thing, so its arguments are joined back into one
+name the way `detach`'s are, and `unlink a lamp` means what it looks
+like. The two rules differ because the commands differ, and the
+alternative -- making `link` quote-free by taking the root and then a
+list -- needs a separator between the two halves that is not a space,
+which is a new thing to remember for a command whose whole job is one
+sentence long.
+
+### What unlink does with a root, and with a child
+
+The whole of it comes apart when given a root, and just that prim
+leaves when given a child. That is the viewer's pair of behaviours --
+clicking an object selects the linkset and Unlink frees all of it,
+while Edit Linked Parts selects one prim and Unlink frees only that --
+and it falls out of what a delink message is: the local ids in it are
+the prims being FREED, so the caller says which they are. See
+`sl.Unlink` for the citation.
+
+Naming a child is a real thing to want and not a mistake to guard
+against: a prim of a linkset has its own name, `objects -c` prints
+them, and a linkset is otherwise all or nothing.
+
+### What happens to a linkset's name
+
+A linkset answers to its root's name, so "chair" is the four-prim chair
+while the four prims are linked and is one prim afterwards. The pieces
+keep the names they had inside it, which for anything built by hand is
+often "Object" for all of them, so after an unlink several things in
+the region can answer to one word -- and `objectNamed` refuses an
+ambiguous name rather than picking. That is why `unlink` lists what it
+freed with keys instead of printing a success line: the keys are the
+only handle on the pieces that is certain to work, and the moment they
+are wanted is the moment the object comes apart.
+
+### Why the report is read back rather than counted
+
+Both commands say what the object is now, and both work it out from
+what the region says afterwards rather than from how many arguments
+they were given. Linking something that was already a linkset brings
+its prims along, so `link a b` can make an object of seven; and a
+person watching wants to know that. Counting the arguments would print
+"2 prims" and be wrong in exactly the case worth reporting.
+
 ## What wear and detach are called, and what they take
 
 `wear`, `detach` and `dress` finish what `worn` started.  Listing the
@@ -556,6 +670,101 @@ it throws away.  What is at stake is the command's last line -- "is no
 longer worn" is a claim the SHELL makes, and the shell is what should
 have established it before printing it.
 
+## How long tp waits for another region
+
+`tp` waits thirty seconds for a teleport to another region before
+saying nothing answered, where `sl.DefaultTeleportTimeout` is ninety.
+That constant was set before a teleport had ever been timed; forty moves
+between Pelmar Reach and Sandbox Goguen have since been measured at 355
+milliseconds to 4.95 seconds, so ninety is two orders of magnitude above
+what it covers. Thirty is six times the slowest move measured, which
+leaves room for a grid having a bad day, and it is what a teleport
+inside the region has been given all along.
+
+The other end of the argument is what waiting costs. A shell that
+inherited the ninety would sit silent for a minute and a half over an
+offer the grid was never going to answer, and the third of
+`sl.Teleport`'s failures -- a request answered with nothing whatever --
+is exactly the one a person meets when they accept a second lure while
+the first is still under way.
+
+## Where tp lands when no position is given
+
+A teleport with no position lands in the middle of the region
+(`tpMiddle`), which is 256 metres square, because that is where a
+viewer puts an avatar that typed a name into the world map and said
+nothing about where in it.
+
+The height is left at zero rather than guessed at, and zero is not
+arbitrary: measured on Agni, the avatar arrives at whichever is higher
+of the height asked for and the ground under the point, plus about a
+metre -- 30 came back as 31, 60 as 61, and 0 as the ground. So zero is
+how a client asks for ground level without knowing where the ground
+is, and there is no cheap way to ask that about a region this session
+has never been to.
+
+What it does not promise is dry land. A region's middle can be under
+water, and Sandbox Goguen's is, so this arrives there submerged. That
+is the region rather than the default, and the man page says so.
+
+## tp home, and a region called home
+
+`tp` takes the word home (`wantsHome`) only bare, and only when it is
+the whole of what was said, so that the region name a word could also
+be is reachable in the forms that carry one: `tp home 128 128 25` is a
+region called home, as it was before this existed, and so is anything
+with more words in it. What is out of reach is a region whose whole
+name is "home" gone to without a position -- and, measured on Agni on
+2026-09-01, there is no such region: the map answers the prefix "home"
+with nine longer names and nothing that is exactly it.
+
+It is matched without regard to case, since it is this shell's word
+and not a name the grid keeps: "Home" at a prompt is the same word, and
+a rule that sent one of them to the map and the other to the account's
+home position would be a difference nobody could see.
+
+## A negative coordinate after tp
+
+`tp` puts a "--" in front of the position when the position has a
+negative number in it and nothing before it has ended the options
+already (`endOptionsAtANegativeNumber`). Option parsing would otherwise
+eat one: "-10" is the option -1 with the value 0 as far as getopt is
+concerned, so `tp -10 128 25` answered "unknown option: -1" and a
+position west of this region's corner could not be typed at all. A
+"--" says the rest are operands, which is what it means everywhere;
+putting it there rather than making somebody remember to is what keeps
+the obvious line working.
+
+It goes in front of the LAST THREE arguments rather than the first
+negative one, because that is where a position is in every form tp
+takes, and because put ahead of the whole position it survives
+`tp --wait 60 -10 128 25`, where the flag and its value are parsed
+before it.
+
+It goes there only when nothing in front of the position is an
+operand, which is to say only when there is no region name -- the
+`tp X Y Z` form. getopt stops reading options at the first operand, so
+a negative coordinate after a name was never at risk and needs no
+help; and a "--" put there is not an end-of-options mark at all, it is
+a word, so it was joined onto the name. `tp Example Landing -10 128 25`
+was refused as a region called "Example Landing --" for as long as this
+inserted one whatever came before.
+
+And only when one of the three really begins with a minus, so that a
+mistyped option is still reported as one rather than handed on as a
+region called "-wiat".
+
+## Why tp says an arrival twice
+
+When `tp` takes the avatar to another region, two lines say so. The
+notice from the shell's watcher says the avatar is in another region,
+and the line `tp` prints says where it ended up. Both are wanted and
+they say different things: one is the session's news, which arrives
+whoever asked for the move, and the other is this command's answer to
+the person who typed it. Suppressing the notice for a change this
+command asked for would need state shared between the two, and would
+silently swallow a second change that arrived at the same moment.
+
 ## Naming a landmark, and going to one
 
 `landmark`, in `cmd/slsh/landmark.go`, lists, reads, makes and goes to
@@ -602,6 +811,31 @@ landmark or does not; but the same uuid handed to `--go` is either an
 asset id or an item id and nothing distinguishes them but a wait that
 never ends, so the two forms would differ in a way nobody could predict
 from the outside. One rule: a landmark is something you have.
+
+## The star in agents during a reconnection
+
+`agents` stars the session that a command naming no avatar would be
+given, and a CONNECTING session can have the star as well as a HOSTED
+one (`canBeTheDefault`). CONNECTING is the one that matters and it was
+the bug: a circuit that dropped and is being rebuilt never costs a
+session its place, so the daemon still answers with it, while a star
+drawn on the first HOSTED row moved to the second session for as long
+as the reconnection took -- the listing and the daemon disagreeing
+exactly when somebody is reading the listing to find out what is going
+on.
+
+## Why auto prints no count of benchmarks
+
+`auto` reports what is worn, which is what can run at once, one object
+per script, and that is the whole of what this avatar's share buys. It
+used to offer a count of benchmarks alongside, worked out from
+`session.AutoGroupSize`, and that number was wrong: a benchmark leases
+one object per division of each of its searches and three besides,
+which is nineteen at slbench's defaults and moves with `--parts` and
+`--extra`, and it halves that again when the pool cannot grant it.
+Only slbench can say it, and it says it when it settles for less. A
+figure printed here could only go stale again, which is worse than not
+printing one.
 
 ## Starting a viewer from slsh
 
