@@ -88,20 +88,11 @@ type oneTime struct {
 
 // viewerCredentialLife is how long a minted password is good for.
 //
-// It has to cover a viewer starting up and reaching its login, and that
-// takes far longer than it sounds.  Measured on this machine, warm --
-// caches full, the viewer having just been running -- "viewer --launch"
-// at 18:51:0x reached the daemon's login endpoint at 18:51:46, and a
-// second run at 18:55:5x arrived at 18:55:54.  Forty-five to fifty
-// seconds, at best; a cold first start is slower again.  The minute
-// this began as would have expired mid-startup often enough to look
-// like a broken feature rather than a tight window, so it is five.
-//
-// The extra minutes cost little.  What carries the argument for putting
-// a password on a command line is that it works ONCE and that the
-// endpoint is on loopback -- not the clock.  An onlooker who reads it
-// out of ps races a viewer that is already logging in with it, and
-// loses as soon as it does.
+// Five minutes: it has to cover a viewer starting up and reaching its
+// login, which took forty-five to fifty seconds warm.  What makes a
+// password on a command line safe enough is that it works once and the
+// endpoint is on loopback, not the clock.
+// Why: doc/handover.md#how-long-a-minted-password-lasts
 const viewerCredentialLife = 5 * time.Minute
 
 // viewerPasswordChars is how long a minted password is.
@@ -109,11 +100,11 @@ const viewerCredentialLife = 5 * time.Minute
 // Sixteen because that is what a viewer's login box will hold --
 // panel_login.xml:144 gives the password field max_length_chars="16" --
 // so a password that has to be typed or pasted by hand still can be.
-// The command line does not care (llloginhandler.cpp:168 md5s whatever
+// The command line does not care (llloginhandler.cpp:169 md5s whatever
 // it is given, whole), but a credential that works one way and is
 // silently truncated the other is a bad hour for somebody.  Sixteen hex
-// digits is 64 bits, from crypto/rand, for a secret that lives a minute
-// and works once.
+// digits is 64 bits, from crypto/rand, for a secret that lives five
+// minutes and works once.
 const viewerPasswordChars = 16
 
 // newViewerHost prepares the endpoint without starting it.
@@ -192,14 +183,45 @@ func (v *viewerHost) movedFor(profile string) func(string, uint64) {
 
 // relayFor is the hook a session hands its messages to.
 //
-// Nil until a viewer attaches, which is the ordinary case and has to be
-// cheap: this runs on the session's dispatch goroutine for every
-// message the region sends.
+// It does nothing until a viewer has a circuit, which is the ordinary
+// case and has to be cheap: this runs on the session's dispatch
+// goroutine for every message the region sends.
 func (v *viewerHost) relayFor(profile string) func(*msg.Packet) {
 	return func(p *msg.Packet) {
 		if c, ok := v.circuits.Load(profile); ok {
 			c.(*viewer.Circuit).FromSim(p)
 		}
+	}
+}
+
+// hasCircuit reports whether a viewer circuit has been opened for this
+// profile.  A nil host has none.
+func (v *viewerHost) hasCircuit(profile string) bool {
+	if v == nil {
+		return false
+	}
+	_, ok := v.circuits.Load(profile)
+	return ok
+}
+
+// simTap records, for -trace, each packet the simulator sends a session,
+// once.
+//
+// A session with a viewer circuit has each message recorded by the
+// circuit, which is offered it by the relay and records what became of
+// it -- forwarded, absorbed, dropped, or held for a viewer not yet
+// joined.  So the tap records only for a session without one, where
+// nothing is forwarded: from the tap, the wire as it really was,
+// retransmissions included, since the tap runs ahead of duplicate
+// suppression.  With a circuit the retransmissions go unrecorded, as the
+// relay never sees them.
+func simTap(profile string, v *viewerHost, census *viewer.Census, trace *viewer.Trace) msg.Handler {
+	return func(p *msg.Packet) {
+		if v.hasCircuit(profile) {
+			return
+		}
+		census.Record(viewer.MessageName(p), viewer.FromSim, p.At, viewer.NoViewer)
+		trace.Write(viewer.FromSim, p, viewer.NoViewer)
 	}
 }
 
@@ -309,8 +331,8 @@ var _ server.Viewer = (*viewerHost)(nil)
 
 // LoginURI is the address to add to a viewer's grid list.
 //
-// Until now this appeared once, in the daemon's log, at startup: a
-// person attached with a shell an hour later had no way to ask.
+// The daemon's log says it once, at startup; this is for a person who
+// attaches with a shell an hour later and has to ask.
 func (v *viewerHost) LoginURI() string {
 	if v.base == "" {
 		return ""
@@ -415,21 +437,12 @@ func newViewerPassword() (string, error) {
 // find answers the login endpoint's question: is there a session for
 // this name, and if so, on what terms.
 //
-// A session that is mid-teleport is handed over like any other, which
-// was worth a second look and is deliberate.  Nothing here is read at
-// login time and used later: the address is slgod's own and does not
-// move, the seed is a URL back to this daemon that resolves the current
-// region when the viewer asks, and the region is described from the
-// session when the viewer completes its movement -- seconds after this,
-// and long after the 400 milliseconds a move measured on Agni.  What
-// would be left to refuse is a window nothing has been seen to fall
-// into, and the only refusal this could give is the one a wrong
-// password gets, which is deliberately the same sentence whatever went
-// wrong.  Telling a person their session has gone, fifty seconds after
-// they started a viewer, because it was busy for a moment, needs a
-// second kind of refusal carried through Lookup, Handover and the login
-// handler -- and one given only after the password has matched, or it
-// says which avatars are here.  Left undone rather than done badly.
+// A session that is mid-teleport is handed over like any other, on
+// purpose.  Nothing here is read at login time and used later -- the
+// address is slgod's own, the seed resolves the current region when the
+// viewer asks -- and the only refusal this could give is the one a
+// wrong password gets.
+// Why: doc/handover.md#a-session-in-the-middle-of-a-teleport
 func (v *viewerHost) find(first, last string) *viewer.Handover {
 	name := first + " " + last
 	profile, h := v.hostedNamed(name)
@@ -695,13 +708,14 @@ func (v *viewerHost) serveCap(w http.ResponseWriter, r *http.Request) {
 		// by somewhere else or not at all.  The agent is asked
 		// because the agent is the only thing that knows: the seed of
 		// every region after the first arrives inside a
-		// TeleportFinish that nothing above that package reads.
+		// TeleportFinish or a CrossedRegion that nothing above that
+		// package reads.
 		seed := a.Seed()
 		if seed == "" {
-			// A session with no capabilities at all: SkipCaps, or a
-			// move whose seed would not parse.  Saying so beats
-			// proxying to an empty URL and answering a viewer with
-			// whatever that produces.
+			// No seed for the region the avatar is in: a login
+			// response that carried none, or a move whose seed was
+			// not a URL.  Saying so beats proxying to an empty URL
+			// and answering a viewer with whatever that produces.
 			http.Error(w, "this session has no capabilities to hand on", http.StatusServiceUnavailable)
 			return
 		}

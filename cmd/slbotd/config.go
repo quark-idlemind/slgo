@@ -49,6 +49,11 @@ import (
 // ConfigName is what the file is called, under the profile directory.
 const ConfigName = "slbotd.conf"
 
+// configHelp is where to read what goes in the file, for somebody who
+// has none yet.
+const configHelp = `doc/guide.md, under "The configuration", says what goes in it, ` +
+	`and so does the handbook's "Adding slbotd" page`
+
 // EnvConfig names the file outright, for a second daemon on one machine
 // or for a test that must not read the operator's own.
 const EnvConfig = "SLBOTD_CONFIG"
@@ -369,7 +374,7 @@ func LoadConfig(path string) (Config, error) {
 
 	f, err := os.Open(path)
 	if err != nil {
-		return Config{}, fmt.Errorf("%w\n\tsee %s for what goes in it", err, ConfigName)
+		return Config{}, fmt.Errorf("%w\n\t%s", err, configHelp)
 	}
 	defer f.Close()
 

@@ -200,10 +200,15 @@ measured all four of these:
 - **It is a case-insensitive PREFIX search.** `"Pelm"` returns eleven
   regions; an exact name is just one row among them. A name that matches
   several is the normal case, not the exception -- `lookup`'s numbered
-  listing is the shape to follow.
+  listing is the shape to follow. `"Sandbox"` comes back with
+  thirty-three regions, and none of them is called Sandbox.
 - **Every reply ends with a sentinel block** whose `Name` is the query
-  lowercased with its last character removed, `X=Y=0` and `Access=255`.
-  It is not a region and must be dropped.
+  lowercased with its last character removed -- `"pelm rea"` for
+  `"Pelmar Reach"` -- `X=Y=0` and `Access=255`. It is not a region and
+  must be dropped. The viewer knows the same block by the same 255
+  (`llworldmapmessage.cpp:266-274`), and `sl` recognises it by that
+  shape rather than by rebuilding the mangled name, which would be a
+  rule about the query where the shape is a rule about the block.
 - **A name that matches nothing returns the sentinel and nothing else.**
   That, and not an empty reply, is how "no such region" arrives.
 - **The reply can be split across several packets** -- `"Sandbox"` came

@@ -285,16 +285,11 @@ func main() {
 		if login.ID0 == "" {
 			login.ID0 = mach.ID0
 		}
-		// Asked for always, not when a viewer turns up.  A viewer is
-		// handed a session that is already running, and the login
-		// server answered that session's one question hours earlier;
-		// a block not requested then cannot be requested now, and
-		// the viewer would come up missing it with no way to say so.
-		//
-		// It is close to free.  Measured on Aditi: 2.84s against
-		// 2.93s for a plain login, which is noise, for eleven more
-		// top-level blocks -- most of the bulk being the Library
-		// skeleton, which is the same for every avatar.
+		// Asked for always, not when a viewer turns up: a viewer is
+		// handed a session that is already running, and a block not
+		// requested at its login cannot be requested later.  It
+		// costs next to nothing.
+		// Why: doc/handover.md#the-login-options-every-session-asks-for
 		login.Options = append(login.Options, agent.ViewerOptions...)
 
 		opts := agent.Options{
@@ -310,14 +305,9 @@ func main() {
 			},
 			// Off unless asked for: a border crossing needs
 			// these circuits, and a daemon that only ever
-			// acts where its avatar stands does not.  The
-			// profile has the last word and the flag is what
-			// a profile with no opinion gets, because this
-			// is a property of an avatar rather than of the
-			// process -- one daemon holds an avatar somebody
-			// walks about with and another that runs
-			// benchmarks in one region.  Either can be
-			// turned over afterwards; see
+			// acts where its avatar stands does not.  Who
+			// decides is holdNeighbours; either way it can
+			// be turned over afterwards, see
 			// agent.SetNeighbours and slsh's neighbours.
 			Neighbours: holdNeighbours(login, *neighbours),
 			// So that a child circuit opening and closing is
@@ -350,19 +340,9 @@ func main() {
 			opts.OnRegionChange = viewers.movedFor(name)
 		}
 		if *trace != "" {
-			// The tap, so this is the wire as it really was --
-			// retransmissions included, since it runs ahead of
-			// duplicate suppression.  That is right for a
-			// transcript and worth stating, because the viewer
-			// side records from the relay instead and will not
-			// show them.
-			//
-			// Nothing is forwarded anywhere yet, so every packet
-			// is recorded as having had no viewer to go to.
-			opts.Tap = func(p *msg.Packet) {
-				census.Record(viewer.MessageName(p), viewer.FromSim, p.At, viewer.NoViewer)
-				tracer.Write(viewer.FromSim, p, viewer.NoViewer)
-			}
+			// What the simulator sent; see simTap for which side
+			// records it.
+			opts.Tap = simTap(name, viewers, census, tracer)
 			// The other half.  Without it the record answers
 			// "what arrived" and not "was it ever sent", and the
 			// second is the question a relay gets asked.
@@ -448,21 +428,6 @@ func main() {
 		pending = append(pending, waiting{name: name, login: login, opts: opts})
 	}
 
-	// The active group, which decides whether a parcel lets this avatar
-	// build at all.
-	//
-	// A parcel usually grants "create objects" to a GROUP rather than to
-	// individuals, and a login starts with NONE active. A viewer hides
-	// this by storing the group in its settings and re-sending it every
-	// time, which makes it feel permanent; headless it is not. So an
-	// avatar that builds happily through a viewer cannot rez a thing
-	// here, and the refusal blames the land -- the wrong place to look.
-	//
-	// This belongs to the session rather than to a client: it is settled
-	// here, and every client attached to the agent shares it.  A
-	// restarted slgod is a fresh login, so it must be settled again --
-	// and so is a RECONNECT, which is why the answer is handed to the
-	// server to remember rather than sent from here.  See server/group.go.
 	if len(hosted) == 0 && len(pending) == 0 {
 		log.Fatal("no session came up; nothing to serve")
 	}
@@ -471,6 +436,13 @@ func main() {
 	// for the ones named on the command line and for any started later
 	// on request, so that a session cannot be half set up depending on
 	// how it came to exist.
+	//
+	// What it settles is the active group, which decides whether a
+	// parcel lets the avatar build at all, and which a login starts
+	// without.  It belongs to the session, and every client attached
+	// shares it; a reconnect is a fresh login, so the answer is handed
+	// to the server to remember and put back.  See server/group.go.
+	// Why: doc/daemon.md#the-active-group
 	settle := func(h *server.Hosted) {
 		name := h.Name
 		want := ""
@@ -592,8 +564,7 @@ func main() {
 		// After serve, because until it has bound the listener there
 		// is no address to tell anybody.  A server left without this
 		// answers "no viewer logins", which is the truth for a daemon
-		// started without -viewer and the answer every client here
-		// gets today.
+		// started without -viewer.
 		srv.SetViewer(viewers)
 	}
 

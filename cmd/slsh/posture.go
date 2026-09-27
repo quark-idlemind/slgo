@@ -2,15 +2,12 @@ package main
 
 // Sitting down, and getting up again.
 //
-// This is the first thing in the shell that moves the avatar without a
-// teleport, and it moves it a long way.  A sit is not a walk: the
-// simulator picks the avatar up and puts it on the seat, over whatever
-// is in the way, from as much as ten metres off -- measured on Agni, a
-// box seven metres away seated the avatar as readily as one half a
-// metre away, and standing up afterwards left it six metres from where
-// it had been standing.  So what these two print is not only what they
-// did but where that left the avatar, in the same words where and tp
-// say it, and the position line is the answer rather than decoration.
+// A sit is not a walk: the simulator picks the avatar up and puts it on
+// the seat, over whatever is in the way, from as much as ten metres
+// off, and standing up does not put it back.  So what these two print
+// is not only what they did but where that left the avatar, in the same
+// words where and tp say it.
+// Why: doc/slsh.md#where-a-sit-leaves-the-avatar
 //
 // Two commands, three mechanisms.  Sitting on an object is a message,
 // AgentRequestSit, answered by this avatar's own object update coming
@@ -70,8 +67,8 @@ var postureCommands = map[string]*command{
 // One struct for both, since they ask the same question of the
 // simulator and wait for it the same way.  The wait covers the answer
 // and not the name lookup in front of it: that is the region
-// describing itself, which touch and take give thirty seconds and no
-// flag at all.
+// describing itself, which gets thirty seconds and no flag, as it does
+// for touch.
 type postureFlags struct {
 	Wait int  `getopt:"--wait -w=SECONDS  how long to wait for the simulator to answer [15]"`
 	Help bool `getopt:"--help -h          show what this command takes"`
@@ -123,12 +120,12 @@ func cmdSit(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return sh.sayPosition(ctx, out)
 	}
 
-	// Resolved the way touch, take and dump resolve one, by sharing
-	// their resolver rather than by having a second: a uuid is taken as
-	// itself, a name is looked up among what the region has described,
-	// and a word that names two things is refused with both ids rather
-	// than guessed at.  Guessing is worse here than it is for touch,
-	// since the wrong guess moves the avatar.
+	// Resolved by objectNamed, which take and dump share and whose
+	// rules touch's seenNamed follows, rather than by a resolver of its
+	// own: a uuid is taken as itself, a name is looked up among what the
+	// region has described, and a word that names two things is refused
+	// with both ids rather than guessed at.  Guessing is worse here than
+	// it is for touch, since the wrong guess moves the avatar.
 	//
 	// The zero is that resolver's own default of thirty seconds for the
 	// region to describe itself, which is a different question from
@@ -139,17 +136,9 @@ func cmdSit(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		// the SIMULATOR resolves it; what the listing is for here is
 		// the local id, which sl.Sit uses for one thing only -- seeing
 		// that the avatar is already on that very object -- and can do
-		// without.
-		//
-		// It matters because the listing is not complete.  Measured:
-		// a chair plainly in world, sat on ten minutes earlier, absent
-		// from a listing of 976 objects.  Nothing had described it
-		// since login and nothing would unasked -- a region describes
-		// each object once.  Why its description never arrived was not
-		// established; a packet thrown away as undecodable, which the
-		// decoder did at the time, is the likeliest reason.  Refusing
-		// to sit on an object whose id is right there, for want of a
-		// description of it, is refusing to do a thing that works.
+		// without.  The listing is not complete, so an id nothing has
+		// described is sat on all the same.
+		// Why: doc/slsh.md#sitting-on-an-object-nothing-has-described
 		id, bad := msg.ParseUUID(rest[0])
 		if bad != nil {
 			return err
@@ -171,12 +160,10 @@ func cmdSit(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 // on one thing at a time and the simulator knows which, so the only
 // question a person could answer here is one they should not have to.
 //
-// The position is printed for the same reason sit prints it and is
-// more surprising here: standing does not undo the journey the sit
-// made.  Measured, an avatar that walked -- was carried -- seven
-// metres to a box was left six metres from where it started when it
-// stood up again, so this line is where the avatar now is and not
-// where it was before any of this began.
+// The position is printed for the same reason sit prints it: standing
+// does not undo the journey the sit made, so this line is where the
+// avatar now is and not where it was before any of this began.
+// Why: doc/slsh.md#where-a-sit-leaves-the-avatar
 //
 // It may take a moment.  A stand is a control flag, and a flag that
 // arrives while the avatar is still settling into the last thing it

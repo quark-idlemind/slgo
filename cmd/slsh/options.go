@@ -7,43 +7,19 @@ package main
 // same thing in "slsh -c ..." as at the prompt, and clusters like -lrT
 // work without every combination being spelled out by hand.
 //
-// # Why the usage line is derived and not written down
-//
-// It used to be written down three times: a string in the command
-// table, the same words again in the command's own "usage:" refusal, and
-// a third wording from getopt in --help.  Three copies kept by hand, and
-// they had already drifted -- perms named three of its four permission
-// flags in the table, touch left its trailing points out of --help, and
-// put's three forms appeared in one place only.  A person who read one
-// of them and typed what it said was sometimes wrong.
-//
-// So there is one composer, usageLine, and everything goes through it:
-// the name, whatever getopt's Set.UsageLine makes of the option struct,
-// and the parameters.  A flag added to a struct appears in the help
-// listing, in the refusal and in --help with no other edit, because none
-// of those three has any words of its own to change.
-//
-// One thing is dropped on the way through, and only one: the help flag.
-// Every command has it, so it tells nobody anything about the command
-// they are looking at, and it is not free -- getopt bundles the short
-// flags, so a listing of the waiting group read "waiting [-ah]",
-// "no [-h] N", "ignore [-h] N" down the page and pushed answer's line
-// onto a second row to make room for a flag all four of them share.
-// The foot of every listing already says "COMMAND --help", and --help
-// itself still lists -h underneath the line, which is where a person
-// looks for it; a usage line that leaves it out while the options under
-// it name it is the ordinary shape of a Unix tool rather than a
-// disagreement.
-//
-// It comes out inside the composer, in withoutHelp, and nowhere else.
-// Doing it at the call sites would give the three places three chances
-// to disagree again, which is the whole of what this arrangement is
-// for.
+// A usage line is composed in one place, usageLine, from the name,
+// getopt's Set.UsageLine of the option struct, and the parameters.  The
+// help listing, a command's own refusal and --help all go through it,
+// so a flag added to a struct appears in all three with no other edit.
+// The help flag is dropped from it, in withoutHelp and nowhere else:
+// every command has one, the foot of every listing says "COMMAND
+// --help", and --help still lists -h under the line.
 //
 // The parameters -- the part after the flags -- stay a written string,
 // on the command, because nothing can derive them: getopt parses flags
 // and hands back the rest as words, and only the command knows whether
 // the rest is "PATH DEST" or "N [BUTTON|TEXT|L$FEE]".
+// Why: doc/slsh.md#one-usage-line-for-every-command
 
 import (
 	"fmt"

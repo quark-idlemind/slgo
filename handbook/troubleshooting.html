@@ -671,7 +671,7 @@ viewer_running = pgrep -f /opt/firestorm-os/</pre></div>
           <summary><span class="sym"><code>slbotd: open ~/.config/slgo/slbotd.conf: no such file or directory</code></span><span class="where-tag">slbotd</span></summary>
           <div class="fix">
             <h4>Why</h4>
-            <p>slbotd has no config file where it looked. The next line is <code>see slbotd.conf for what goes in it</code>. It looks at <code>-config PATH</code>, then <code>$SLBOTD_CONFIG</code>, then <code>slbotd.conf</code> in the profile directory.</p>
+            <p>slbotd has no config file where it looked. The next line says where to read what goes in one: <code>doc/guide.md</code>, under "The configuration", or <a href="quickstart-bot.html">Adding slbotd</a>. It looks at <code>-config PATH</code>, then <code>$SLBOTD_CONFIG</code>, then <code>slbotd.conf</code> in the profile directory.</p>
             <h4>Fix</h4>
             <p>Create it. The smallest useful file names one avatar and one person it takes commands from:</p>
             <div class="file"><div class="name">~/.config/slgo/slbotd.conf</div><pre>avatar  = example

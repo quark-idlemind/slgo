@@ -7,8 +7,7 @@ package scripttest
 // block arithmetic, the copy count, the backing off when a script is
 // refused -- is arithmetic on those readings.  So a backend that can
 // answer the readings can drive the whole program, and that is what this
-// is: the same staircase slbench's --test model uses, in a form a
-// gRPC backend can serve.
+// is: the model slbench's --test answers from, served as a gRPC backend.
 //
 // The model is deliberately a MODEL.  It says nothing about what Second
 // Life would report; what it buys is that a caller's control flow can be
@@ -25,35 +24,26 @@ import (
 // Memory is what cnt copies of the code under test cost, as a function
 // of the copy count and the padding.
 //
-// The fields are slbench's testInfo, which is where they were worked
-// out and where the reasoning for each of them lives:
+// slbench's --test sets Pad, CodeSize, Marginal and Limit.
 //
 //   - Pad is the padding the zero-copy script needs to sit exactly on a
 //     block boundary.  Everything else is measured from there.
 //   - CodeSize is what the FIRST copy costs outright.
 //   - Marginal is what each copy after the first costs, and is CodeSize
 //     when left at zero.  The two differ whenever a construct pays a
-//     cost once that the rest share -- measured live, a 250-character
-//     string literal is 1044 bytes for one copy and 542 for each after
-//     it, because identical literals are shared.  A model that could not
-//     express that would assert the two are equal and quietly hold every
-//     test written against it to the same assumption.
+//     cost once that the rest share, as identical string literals do.
 //   - Drift adds one byte every Drift copies, for a construct whose
-//     per-copy cost is not quite constant.  Live, 32 of one construct
-//     cost 11008 bytes and 16 cost 5516, which is 343.25 each; copy mode
-//     has a guard for exactly that, and a model without drift can never
-//     fire it.
+//     per-copy cost is not quite constant.
 //   - Limit is where the model refuses the script, standing in for the
 //     compiler refusing one that is too large.
 //
-// Collide has no counterpart in testInfo and is here because the live
-// behaviour has two size limits rather than one: above Collide the
-// script compiles and then runs out of memory, above Limit the compiler
-// will not take it at all.  Measured on Agni 2026-08-03, 256 copies of
-// the reference shape compiled and then collided stack with heap, and
-// 512 were refused outright.  A caller that backs off differently for
-// the two -- slbench's runShrink does -- cannot be tested against a
+// Collide is the other of the two size limits the live behaviour has:
+// above Collide the script compiles and then runs out of memory, above
+// Limit the compiler will not take it at all.  A caller that treats the
+// two differently -- slbench's backend reports one as a compile error
+// and the other as a fault out of memory -- cannot be tested against a
 // model that only has one.
+// Why: doc/scripttest.md#what-the-model-can-express
 type Memory struct {
 	Pad      int
 	CodeSize int
@@ -77,8 +67,8 @@ type Memory struct {
 	Block  int
 }
 
-// The model's defaults, which are slbench's constants.  5412 is a
-// value that has been seen live, 512 is the block llGetUsedMemory
+// The model's defaults, which are what slbench's --test runs with.  5412
+// is a value that has been seen live, 512 is the block llGetUsedMemory
 // reports in, and 64KB is what a Mono script has -- so a caller that
 // names none of them gets a staircase whose refusal falls roughly where
 // the live one does.
@@ -139,8 +129,6 @@ func (m Memory) refuses(cnt, pad int) (string, bool) {
 		return "", false
 	}
 	if r := m.Reading(cnt, pad); r > f.Limit {
-		// Worded like slbench's own model message, so a person reading
-		// a failing test sees the same sentence either side of the seam.
 		return fmt.Sprintf("model: %d copies at pad %d would use %d bytes, over the %d-byte limit",
 			cnt, pad, r, f.Limit), true
 	}
@@ -161,12 +149,9 @@ func (m Memory) collides(cnt, pad int) bool {
 // matches on the same line for the same reason; the convention is the
 // script's, not either fake's.
 //
-// A comment because a comment is free.  Measured: 604 bytes of it moved
-// llGetUsedMemory not at all, the compiler having thrown it away before
-// there was any bytecode to count -- so the count and the pad can be
-// carried in the script without the digits of either changing what is
-// being measured.  They used to go into the harness call as integer
-// literals, where their SIZE varied with their value.
+// A comment because the compiler throws it away before there is any
+// bytecode to count, so the digits do not change what is measured.
+// Why: doc/scripttest.md#the-harness-line-is-a-comment
 var harnessCall = regexp.MustCompile(`(?m)^// slbench cnt=(\d+) pad=(-?\d+)$`)
 
 // Harness is the copy count and padding a benchmark script announces in
@@ -186,11 +171,8 @@ func Harness(src string) (cnt, pad int, ok bool) {
 // it and a transcript that differed would be testing the parser against
 // itself.
 //
-// One number, which is the whole of what a benchmark script says now.
-// It used to keep the base reading in its object's linkset data and do
-// the arithmetic in LSL, so this had to model that too -- a per-target
-// base, and a probe in the wrong object dividing against a zero.  All of
-// it went when the arithmetic moved to where it could be seen.
+// One number, which is the whole of what a benchmark script says.
+// Why: doc/scripttest.md#a-benchmark-script-says-one-number
 func (m Memory) transcript(cnt, pad, mem int, done string) []string {
 	out := []string{"", fmt.Sprintf("RESULT:MEM=%d", mem)}
 	if done != "" {

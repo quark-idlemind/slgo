@@ -317,7 +317,7 @@ func (sh *Shell) waiters() []waiter {
 	return all
 }
 
-// ignored remembers what a person has set aside.  It is the shell's
+// setIgnored remembers what a person has set aside.  It is the shell's
 // rather than the session's: another client attached to the same avatar
 // has its own idea of what it has dealt with.
 func (sh *Shell) setIgnored(key string, yes bool) {
@@ -508,8 +508,8 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	case w.dialog != nil && w.dialog.IsTextBox():
 		if rest == "" {
 			// Nothing typed on the line means the long way: lines
-			// until a full stop, which is the only way to send more
-			// than one from a prompt that reads one at a time.
+			// until Ctrl-D, which is the only way to send more than
+			// one from a prompt that reads one at a time.
 			fmt.Fprintf(out, "%s asks: %s\n", w.who(), w.dialog.Message)
 			fmt.Fprintf(out, "type the answer; ^D ends it, ESC starts again, "+
 				"^C sends nothing\n")

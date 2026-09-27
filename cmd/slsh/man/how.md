@@ -62,8 +62,8 @@ can read their pages yourself.
 ## Without a model
 
 With no `how_url` set, with `--index`, or when the server does not
-answer, `how` says which of those it is and answers from the index
-alone: the best-matching commands, each with its description and the
+answer, refuses, or answers with something that cannot be used, `how`
+says which of those it is and answers from the index alone: the best-matching commands, each with its description and the
 example lines from its own page.  Those are lines a person wrote in
 the page, not guesses.
 

@@ -296,11 +296,10 @@ func helpAll(out io.Writer) error {
 // what it is for.
 //
 // The usage line is derived now (options.go), which made some of them
-// far longer than the hand-written strings they replaced -- perms names
-// four flags where its old line named three, and put names eight.  A
-// line that does not fit the column takes one of its own and the
-// description goes underneath, rather than pushing every description on
-// the page out to where the longest line ends.
+// far longer than the hand-written strings they replaced, perms's and
+// put's among them.  A line that does not fit the column takes one of
+// its own and the description goes underneath, rather than pushing
+// every description on the page out to where the longest line ends.
 func listCommand(out io.Writer, indent, name string, c *command) {
 	const col = 30
 	line := c.usage(name)

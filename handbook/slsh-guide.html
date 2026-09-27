@@ -277,10 +277,11 @@ For one command:       COMMAND --help, or man COMMAND
 
         <p>
           With no model — nothing set, <code>-i</code>, or a server that does
-          not answer — it says which of those it is and answers from the index
-          alone: the best-matching commands, each with its description and
-          the example lines from its own page. That needs nothing installed,
-          and is often enough.
+          not answer, refuses, or answers with something that cannot be used
+          — it says which of those it is and answers from the index alone:
+          the best-matching commands, each with its description and the
+          example lines from its own page. That needs nothing installed, and
+          is often enough.
         </p>
 
         <h3 id="how-model">Setting up a model for how</h3>
@@ -1705,11 +1706,11 @@ the next owner may now copy, modify, transfer</span>
         <h3>Inside an object</h3>
         <p>
           An object holds inventory of its own, with its own ids.
-          <code>ls</code>, <code>rm</code> and <code>mv</code> reach it with
-          <code>--in OBJECT</code>, and so does <code>new</code> — making a
-          script is an operation that exists in both places, and
-          <code>--in</code> says which. The others above
-          (<code>cat</code>, <code>save</code>) work on inventory only.
+          <code>ls</code>, <code>cat</code>, <code>rm</code> and
+          <code>mv</code> reach it with <code>--in OBJECT</code>, and so does
+          <code>new</code> — making a script is an operation that exists in
+          both places, and <code>--in</code> says which. The other one above,
+          <code>save</code>, works on inventory only.
         </p>
 
         <div class="term">

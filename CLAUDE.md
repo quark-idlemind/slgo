@@ -259,3 +259,7 @@ here when another is shared the same way.
   stream, one at a time under `sendMu`, since gRPC allows one sender per
   stream. `TestEverySendOnTheStreamIsOneAtATime` refuses a send anywhere
   else in `client`.
+- `Conn.agentName`, in `client/client.go`: the session a connection is
+  attached to, read under `mu`, which `attach` writes it under.
+  `TestTheAgentIsReadOnlyUnderTheLock` refuses a read of `c.agent`
+  anywhere else in `client`.

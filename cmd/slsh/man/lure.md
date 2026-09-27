@@ -1,6 +1,6 @@
 `lure` offers somebody a teleport to where this avatar is standing.  It
 is what a viewer's menu calls Offer Teleport; the grid's own word for
-it is a lure, which is what `waiting` already says when one arrives
+it is a lure, which is what this shell calls one when it arrives
 here.
 
     lure Example Resident

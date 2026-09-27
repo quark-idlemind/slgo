@@ -3,7 +3,7 @@ package main
 // A line editor that keeps the prompt on the bottom line while messages
 // arrive above it.
 //
-// Everything printed goes through Printf, which erases the prompt,
+// Everything printed goes through Print, which erases the prompt,
 // writes the line, and draws the prompt again underneath.  Anything
 // that writes to the terminal without doing that leaves the display
 // wrong until the next keystroke, which is why nothing else here writes
@@ -141,16 +141,19 @@ type Term struct {
 	busy bool
 
 	// plain is a terminal that is not one: a pipe, in a test or a
-	// script.  Nothing is redrawn and no key is special, because
-	// there is nobody watching and no raw mode to read them in.
+	// script.  Nothing is redrawn, because there is nobody watching,
+	// and input is read a line at a time with no escape sequence
+	// decoded, because there is no raw mode to read keys in.  Each
+	// line still reaches the shell as keys, control characters and all.
 	plain bool
 }
 
 // NewTerm puts the terminal in raw mode and starts reading it.
 //
 // Input that is not a terminal -- a pipe from a test, a script -- is
-// read a line at a time instead, with none of the editing and no
-// redrawing.  The rest of the program does not know the difference.
+// read a line at a time instead, with no escape sequences decoded and
+// no redrawing; readPlain hands each line over as keys.  The rest of
+// the program does not know the difference.
 func NewTerm(in *os.File, out io.Writer) (*Term, error) {
 	t := &Term{
 		in:     in,
@@ -320,12 +323,10 @@ func (t *Term) decode(raw <-chan byte) {
 			// "6;18;10" -- in front of that.
 			//
 			// Reading to the end matters as much for the sequences
-			// nothing here answers to as for the ones it does.  This
-			// used to stop at the third byte and give up on anything it
-			// did not recognise, which left the REST of the sequence in
-			// the stream to be decoded as ordinary keys: a report of
-			// the cell size, ESC [ 6 ; 18 ; 10 t, typed ";18;10t" at
-			// the prompt, and a bracketed paste typed "00~".
+			// nothing here answers to as for the ones it does: whatever
+			// of a sequence is left in the stream is decoded as
+			// ordinary keys.
+			// Why: doc/slsh.md#reading-an-escape-sequence-to-its-end
 			var params []byte
 			var final byte
 			if b2 == 'O' {

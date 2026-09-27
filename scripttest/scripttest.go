@@ -10,10 +10,11 @@
 // It answers the contract in full and offline: a pool of objects with
 // leases and a queue, a compiler that has opinions, and a script that
 // says something.  What it says is worked out from the source, by the
-// same staircase slbench's --test model uses (see Memory), so a
-// benchmark run against this backend has to come out with the numbers
-// the model says -- and a search that reads the staircase wrongly fails
-// here rather than after twenty minutes of grid time.
+// staircase in Memory -- which is also the model slbench's --test
+// answers from -- so a benchmark run against this backend has to come
+// out with the numbers the model says, and a search that reads the
+// staircase wrongly fails here rather than after twenty minutes of grid
+// time.
 //
 // # What it is not
 //
@@ -42,14 +43,14 @@
 // addition rather than a replacement.  It is for the caller that runs
 // scripts by the hundred thousand and is measuring something else -- the
 // offline model behind slbench --test, and the sweeps in its tests,
-// which cost 100 microseconds a run over the pipe and about 5 through
-// Direct, nearly all of the difference being goroutine hand-off for the
-// seven messages a run streams.  What it cannot do is what Pipe is for:
-// a caller cannot DIE, having no connection to lose, and a run arrives
-// when it has finished rather than as it goes, so a caller cannot cancel
-// one in reaction to what it has heard.  Those tests stay on Pipe.
-// Everything else is checked against both clients, so a divergence
-// between them fails the build rather than waiting to be noticed.
+// where a run through Direct measured about a twentieth of the cost of
+// one over the pipe (doc/scripttest.md).  What it cannot do is what
+// Pipe is for: a caller cannot DIE, having no connection to lose, and a
+// run arrives when it has finished rather than as it goes, so a caller
+// cannot cancel one in reaction to what it has heard.  Those tests stay
+// on Pipe.  Everything else is checked against both clients, so a
+// divergence between them fails the build rather than waiting to be
+// noticed.
 //
 // # Who it is for
 //
@@ -89,9 +90,7 @@ type Options struct {
 	Agents []string
 
 	// Groups is how many groups each avatar has and GroupSize how many
-	// objects are in one.  The defaults are one group of four, four
-	// being what slbench takes at once: one object to measure in and
-	// three to take readings in.
+	// objects are in one.  The defaults are one group of four.
 	Groups    int
 	GroupSize int
 
@@ -137,28 +136,16 @@ type Options struct {
 	DefaultTimeout int64
 
 	// Noise, when set, is asked what a benchmark run's reading should be
-	// and may answer something other than the truth.
-	//
-	// It is here because llGetUsedMemory really does this.  On 2026-08-03
-	// the one-copy reference script at pad 602 read 6436 bytes where it
-	// reads 5924 every other time it has been asked -- one whole block
-	// high, once, and never again in the 45 asks since.  A padding search
-	// is a chain of comparisons between readings, and a reading one block
-	// high looks exactly like the memory having grown, which is the event
-	// the search exists to find.  slbench's crossing confirmation is
-	// there to survive that, and there is no other way to write a test
-	// for it: the fault cannot be provoked to order.
+	// and may answer something other than the truth.  It stands in for
+	// llGetUsedMemory misreporting, which it has been seen to do live, by
+	// one whole block, once: slbench's crossing confirmation is there to
+	// survive that, and this is how a test provokes it.
+	// Why: doc/scripttest.md#a-reading-one-block-high
 	//
 	// It is called once per RUN and not once per reading, so a hook that
 	// lies the first time it sees a pad and tells the truth afterwards
 	// reproduces the live event exactly -- a single bad reading, which
 	// the caller's own cache then serves back for the rest of the search.
-	//
-	// This package deliberately left it out at first as speculative, and
-	// it is in now for one reason: without it the contract cannot express
-	// the one instrument fault this repository has actually seen, so the
-	// code written to survive that fault could not be reached from the
-	// caller's side of the seam at all.
 	//
 	// What it does NOT touch is the compiler's refusal or the
 	// out-of-memory collision.  Those are the region's judgements about
@@ -342,8 +329,8 @@ func (s *Server) Pipe() (*grpc.ClientConn, error) {
 
 // Listen serves the backend on a real address, for a person who wants to
 // point a program at it -- "127.0.0.1:0" and read back the port.  Tests
-// in this repository use Pipe; this is for driving a caller that takes
-// an address on its command line.
+// of the contract use Pipe; this is for driving a caller that takes an
+// address on its command line, as slrun's tests of --backend do.
 func (s *Server) Listen(addr string) (net.Addr, error) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {

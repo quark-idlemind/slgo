@@ -141,9 +141,10 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	// are the seat's doing and the line saying so is what explains
 	// them.  The same shape "sit" prints, since it is the same fact.
 	//
-	// Nothing when standing, and it costs nothing then either: the
-	// answer comes from what this session was already told and only
-	// reaches the region when there is a seat to name.
+	// Nothing when standing, and it costs little then either: the
+	// agent's own posture says whether the avatar is sitting, and the
+	// listing that names the seat is read only when there is one.
+	// Neither asks the region anything.
 	//
 	// A failure is printed rather than returned.  Where the avatar is
 	// standing is the answer to "where", and losing it because the
@@ -232,7 +233,7 @@ type regionsOptions struct {
 // what the map answers with is a position, a maturity rating and a
 // handle, because the rest of the block -- how many people are there,
 // what the region allows, where the water is -- came back zero for every
-// region on every run (see sl.FindRegions).
+// region on every run (see the head of sl/worldmap.go).
 //
 // Plural, because the search is by prefix and a listing is what comes
 // back: "Sandbox" finds thirty-three regions and none of them is called
@@ -333,14 +334,11 @@ func cmdNeighbours(ctx context.Context, sh *Shell, out io.Writer, args []string)
 // it, because nothing is addressed by a neighbour's handle -- a border
 // is walked over rather than typed at.
 //
-// On with nothing held is a state worth spelling out, and it is not
-// what it was once documented as.  It was said to mean "not near a
-// border", on the belief that a simulator offers nothing to an avatar
-// in the middle of a region; measured on 2026-08-23, the middle of a
-// 256-metre region is offered all four edges.  What an empty listing
-// means is almost always "not yet": the first circuit took between
-// twenty and sixty seconds from turning them on, and the set went on
-// growing for a minute after that.  See man/neighbours.md.
+// On with nothing held is said as "not yet" rather than as not being
+// near a border: an avatar in the middle of a region is offered its
+// edges too, and the first circuit is slow to come.  See
+// man/neighbours.md.
+// Why: doc/slsh.md#neighbours-on-and-no-circuit-yet
 func printNeighbours(out io.Writer, n *sl.Neighbours) {
 	switch {
 	case !n.On:
@@ -359,13 +357,10 @@ func printNeighbours(out io.Writer, n *sl.Neighbours) {
 		switch {
 		case !c.Handshook:
 			// The name arrives in the handshake, so a circuit
-			// without one has none to print.  Seeing it twice
-			// running does NOT mean the offer came to nothing: on
-			// 2026-08-23 three of the five simulators around one
-			// region sent no handshake through four openings each
-			// while their packet counts climbed, and the same three
-			// had answered on an earlier day.  Heard is what says
-			// the circuit is alive.
+			// without one has none to print.  No handshake, even
+			// twice running, is not an offer that came to nothing;
+			// Heard is what says the circuit is alive.
+			// Why: doc/slsh.md#a-neighbour-with-no-handshake
 			name = "(no handshake yet)"
 		case name == "":
 			name = "(unnamed)"
@@ -458,14 +453,11 @@ type wornOptions struct {
 //     never have been told, since an attachment is announced when it
 //     goes on and at login and never again.
 //   - a thing the region describes that the folder does not hold.
-//     Anything attached from this shell is one of those, because wear
-//     does not write the folder for objects -- so it is on the avatar
-//     now and will not come back at the next login.
+//     Anything put on by something that did not write the folder is one
+//     of those -- wear here writes it, and says so when it cannot -- so
+//     it is on the avatar now and will not come back at the next login.
 //
-// This used to list only the first of those sources and call the result
-// what was worn.  It was not: an avatar wearing a skin, a shape and
-// four clothing layers showed none of them, and the answer read as a
-// complete one.
+// Why: doc/slsh.md#what-worn-used-to-leave-out
 func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o wornOptions
 	rest, done, err := subOptions("worn", &o, out, args)
@@ -1008,8 +1000,9 @@ func namesWanted(wearers map[uint32]wearer, all []*sl.Seen) []msg.UUID {
 // worn, and the prims of theirs whose root is not here.
 //
 // id and named are what --owner is matched against.  The heading is not:
-// it reads "(owner not known)" for things nobody has answered about, and
-// a pattern for a person's name should not start matching those.
+// it reads "(owner not known)" where no owner is known, and the owner's
+// id shortened in brackets where nobody has answered for the name, and a
+// pattern for a person's name should not start matching those.
 type owned struct {
 	id      msg.UUID
 	named   string

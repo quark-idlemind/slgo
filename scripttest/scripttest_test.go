@@ -313,7 +313,7 @@ func TestABackendThatIsUpButNotReadyRefusesToRunAndSaysWhy(t *testing.T) {
 // come from.  It is a benchmark of the TRANSPORT and not of anything
 // this backend does: the script is the smallest one the model
 // understands, so what is being timed is a lease's worth of bookkeeping
-// and seven messages either marshalled and handed between goroutines or
+// and five messages either marshalled and handed between goroutines or
 // not.
 func BenchmarkARunReachedEachWay(b *testing.B) {
 	for _, r := range []reach{overAPipe, inProcess} {
