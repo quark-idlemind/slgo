@@ -18,21 +18,12 @@ package main
 //
 // A parcel usually grants "create objects" to a GROUP rather than to
 // individuals, so whether an avatar may build somewhere depends on
-// which group it is acting as and not on who it is.  Measured on Agni,
-// in Pelmar Reach, with two avatars a couple of metres apart:
-//
-//	hobb       Pelmar Reach at 33, 75, 2001 / acting as group 488f7e57-...
-//	holt  Pelmar Reach at 31, 73, 2001
-//
-// Rezzing a prim as hobb worked.  As holt it failed, with the
-// simulator saying "You cannot create objects here. The owner of this
-// land does not allow it. Use the land tool to see land ownership." --
-// which is untrue as it stands and unhelpful as a hint.  The land does
-// allow it; the request simply arrived from nobody in particular.  A
-// viewer remembers the active group across sessions and a headless
-// login starts with none, so this is the state of an avatar slgod
-// brings up unless its profile or -group names one or it has joined
-// only one, and until now there was no way to fix it from the prompt.
+// which group it is acting as and not on who it is, and one acting as
+// none is refused in words that blame the land.  A viewer remembers the
+// active group across sessions and a headless login starts with none,
+// so this is the state of an avatar slgod brings up unless its profile
+// or -group names one or it has joined only one.
+// Why: doc/daemon.md#what-the-refusal-looks-like
 //
 // # Why the membership list had to cross the wire first
 //

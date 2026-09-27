@@ -15,26 +15,14 @@ package main
 // can move it: there is no message for it, and Linden Lab's own viewer
 // sends people to the website.
 //
-// The distinction is invisible from a refused teleport, which is where
-// anybody meets it.  Measured on Agni on 2026-09-02, two avatars a
-// moment apart to the same public region on the adult continent -- one
-// arrived, and the other got
-//
-//	RegionTPAccessBlocked: "You aren't allowed in that Region due to
-//	your maturity Rating. You may need to validate your age and/or
-//	install the latest Viewer. ..."
-//
-// which names both causes and picks neither.  So this command exists to
-// tell them apart, and does it two ways.  A bare "maturity" prints both
-// numbers as the daemon last heard them.  And asking for adult makes
-// the grid say it: granted adult, and the preference was the problem
-// and is now fixed; granted something lower, and that is the ceiling,
-// and the rest of the job is on a web page.
-//
-// The refused avatar above was granted adult and made the same journey
-// a minute later, so the first half is measured.  The second half --
-// a grant lower than the request -- is not: neither account this has
-// run against was capped.
+// A refused teleport names both causes and picks neither, so this
+// command exists to tell them apart, and does it two ways.  A bare
+// "maturity" prints both numbers as the daemon last heard them.  And
+// asking for adult makes the grid say it: granted adult, and the
+// preference was the problem and is now fixed; granted something lower,
+// and that is the ceiling, and the rest of the job is on a web page.
+// Only the first of those has been seen.
+// Why: doc/slsh.md#the-maturity-command-and-a-refused-teleport
 //
 // # Reading it without asking
 //

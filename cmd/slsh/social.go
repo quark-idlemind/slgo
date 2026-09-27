@@ -691,53 +691,17 @@ func cmdProfile(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 }
 
 // whoOrSearch is who a command means, falling back to the grid's own
-// search when nothing here has heard the name.
+// search when nothing here has heard the name.  It is for profile,
+// which is asked about people who are often not here, and which reaches
+// nobody, so it takes more from the search than onTheGrid does for the
+// commands that reach somebody: one row, or a username typed alone.
 //
-// # Why the fallback exists
-//
-// sh.whoNear reaches whoever has been mentioned and whoever is standing
-// in the region, which is everybody a shell usually talks about and not
-// everybody there is.  Somebody on the other side of the grid has been
-// mentioned to nobody and is standing nowhere near, so
-//
-//	slsh -a qi -c "profile Perrick Hobb"
-//
-// would refuse a name that "lookup" finds at once.  A profile is exactly
-// the question one asks about somebody who is not here, so the command
-// that answers it should not be the one command that cannot find them.
-//
-// # Why it is not the search sh.who makes
-//
-// sh.who searches too, and takes less from it, because of what its
-// callers do with the answer.  Reading a profile is a public question
-// about somebody, answered by the grid to anybody who asks: nothing
-// reaches the person, nothing is spent, and guessing wrong costs a
-// wasted listing on the screen.  im, offer and give reach OUT -- a
-// message arrives, a friendship is offered, an item changes hands --
-// and a name guessed at there delivers it to a stranger, which is a
-// different kind of mistake and not one to make on somebody's behalf
-// because a search was convenient.  So they take a whole name from the
-// grid and nothing less (see onTheGrid), where this takes the one row a
-// search returned and a username typed alone as well.
-//
-// # What it does with what it finds
-//
-// One hit is the answer.  A name that matches one row exactly is that
-// row even when the search returned others, which is what chooseGroup
-// does with a group name and for the same reason: a name typed in full
-// is not an ambiguous name.
-//
-// Several are printed, as lookup's own numbered listing and through
-// lookup's own code, and the refusal after them says only that a number
-// picks one.  Naming them in the sentence instead is what this did
-// first, and one letter typed on Agni made it ninety-five names joined
-// by commas into a single line -- ending with a promise about numbers
-// that were nowhere on the screen.  A list that somebody is meant to
-// choose from has to look like a list.
-//
-// A key or a number is never searched for.  A key needs no search, and
-// a number that was not in the last listing means the listing, not
-// somebody called "3".
+// One hit is the answer, and so is a name or username that matches one
+// row exactly among several.  Otherwise several are printed as lookup's
+// numbered listing, through printFound, and refused.  A key or a number
+// is never searched for: a key needs no search, and a number that was
+// not in the last listing means the listing, not somebody called "3".
+// Why: doc/slsh.md#the-search-profile-makes
 func (sh *Shell) whoOrSearch(ctx context.Context, out io.Writer, want string) (msg.UUID, string, error) {
 	id, name, err := sh.whoNear(ctx, want)
 	if err == nil {
@@ -1145,21 +1109,10 @@ func (e *ambiguousName) Error() string {
 const maxNameWords = 2
 
 // whoAndRest is the person named at the front of a command line and
-// whatever is left of it.
-//
-// The commands that take somebody AND something else -- im, offer,
-// lure, give, invite -- cannot simply read the first word as the name,
-// because a name has two words in it and sh.who matches either half of
-// one.  Measured live, with the names changed:
-//
-//	$ slsh -c "im Example Resident hello from the guide"
-//	> [IM Example Resident] Resident hello from the guide
-//
-// "Example" resolved to Example Resident all by itself, so the last
-// name became the first word of the message.  It went to the right
-// person and said the wrong thing, and nothing on this side looked
-// amiss -- the same shape as "place probe 10 20 30", where a partial
-// match succeeding is what makes the mistake silent.
+// whatever is left of it, for the commands that take somebody AND
+// something else -- im, offer, lure, give, invite.  A name has two words
+// in it and sh.who matches either half of one, so reading the first
+// word as the name would leave the last name at the front of the rest.
 //
 // So the longest leading run that names somebody wins: "im a b c" tries
 // "a b" and then "a".  A run that names nobody is a run to try shorter,
@@ -1178,6 +1131,7 @@ const maxNameWords = 2
 // them.  The grid is asked last, run by run in the same order, and only
 // once the region has had its turn: see onTheGrid for why a search
 // answers these commands at all, and what it is allowed to answer.
+// Why: doc/slsh.md#a-name-at-the-front-of-a-line
 func (sh *Shell) whoAndRest(ctx context.Context, out io.Writer, args []string) (msg.UUID, string, []string, error) {
 	if len(args) == 0 {
 		return msg.UUID{}, "", nil, fmt.Errorf("nobody was named")
@@ -1236,34 +1190,14 @@ func (sh *Shell) who(ctx context.Context, out io.Writer, want string) (msg.UUID,
 // listing, a name the session has heard, or somebody standing in the
 // region.
 //
-// # Why the region is looked at
-//
-// The session's name cache holds whoever has been mentioned to it: a
-// listing printed, somebody who has spoken, a conversation opened.
-// Nothing evicts from it -- the daemon keeps avatars whatever the
-// distance (agent.Objects.Trim) and the cache is kept for the life of
-// the session (sl/names.go) -- but a shell that has just started has had
-// nothing mentioned to it, so "slsh -c" would refuse a name that "who"
-// would have listed a moment later.  The daemon has known that avatar
-// all along; only this process had not asked.
-//
-// So asking is the second step.  It is safe for every command that
-// resolves a person because it is not a guess: the answer is somebody
-// standing in the region, matched by the same rules the cache is matched
-// by, and a shell that lists a person under a name has to accept that
-// name back from the next command typed.
-//
-// The cost is the reason the region is asked second and not first: it is
-// a round trip to the daemon and a name resolution, so the case that
-// already works must not pay for it.
-//
-// # Why the grid is not
-//
-// Searching the grid is the third step, and it is kept out of here
-// because the two kinds of caller take different answers from it.
-// whoOrSearch, for profile, which only looks, takes a name that merely
-// resembles what was typed when it is the only one; onTheGrid, for the
-// commands that reach somebody, takes only the name itself.
+// The region is asked second, and only when what the session has heard
+// names nobody: a shell that has just started has heard of nobody, and
+// the answer is somebody standing there, matched by the same rules, so
+// it is not a guess.  Asking first would make the case that already
+// works pay a round trip.  The grid is not asked here, because its two
+// callers take different answers from it: see whoOrSearch and
+// onTheGrid.
+// Why: doc/slsh.md#asking-the-region-for-a-name
 func (sh *Shell) whoNear(ctx context.Context, want string) (msg.UUID, string, error) {
 	id, name, err := sh.whoKnown(ctx, want)
 	var unknown *unknownName
@@ -1292,47 +1226,14 @@ func (sh *Shell) whoNear(ctx context.Context, want string) (msg.UUID, string, er
 // somebody.  refusal is what the nearer places said, and what comes
 // back, with the reason added, when the grid cannot be asked.
 //
-// # Why these commands search at all
-//
-// Because the person they are for is so often not here.  Somebody
-// invited into a group is quite often being invited because they are
-// somewhere else, and a name nothing here had heard of used to be
-// refused with advice to run lookup and type the number it printed --
-// which is a thing that has to be learnt, for a line that plainly said
-// who was meant.  The search costs one round trip a run, made only on a
-// line that was about to fail.
-//
-// # Why it answers only to a whole name
-//
-// The search matches part of a name, and display names as well, so what
-// comes back is everybody the words resemble.  For profile that is fine
-// -- guessing wrong there costs a listing -- but these commands deliver
-// something to whoever the name resolves to, and a name guessed at wrong
-// hands a message, a friendship or an item to a stranger.  So a row is
-// taken only when its name IS what was typed: "First Last" in any case,
-// or the same with a dot for the space, which is how a username is
-// written.  Anything short of that is listed, numbered, and refused,
-// which is the rule the rest of the shell keeps for an ambiguous answer.
-// One row that is not the name is refused as well: it is the grid's
-// best guess, and a guess is what is being kept out.
-//
-// A bare word is never a whole name here, even where it is somebody's
-// username exactly.  The last run searched is the first word of the
-// line, whatever was meant by it, so for "im Lorn Harbour hello" with
-// nobody called Lorn Harbour, taking a username of "lorn" would send
-// "Harbour hello" to whoever holds it -- and a first name on its own is
-// the kind of word that somebody has probably registered.  The listing
-// shows that person's whole name, which is what to type.
-//
-// # What a failure is
-//
-// A search that could not be made has found nobody, never somebody: the
-// refusal the nearer places gave comes back as it was, saying why the
-// grid could not add to it.  That includes a session that was not given
-// the capability.  lookup falls back from it to the older whole-name
-// message, and this does not, because the older message has nothing but
-// a fifteen-second deadline to say that nobody answered it, and a line
-// that was going to fail should not be made to wait that long to do so.
+// These commands hand something to whoever the name resolves to, so a
+// row is taken only when its name IS what was typed: "First Last" in
+// any case, or with a dot for the space.  Anything short of that is
+// listed, numbered and refused, even when it is the only row, and a
+// bare word is never a whole name.  A search that could not be made has found
+// nobody, and there is no falling back to lookup's older message, which
+// has only a fifteen-second deadline to say that nobody answered.
+// Why: doc/slsh.md#searching-the-grid-for-somebody-to-reach
 func (sh *Shell) onTheGrid(ctx context.Context, out io.Writer, runs []string, refusal error) (int, msg.UUID, string, error) {
 	var unknown *unknownName
 	if !errors.As(refusal, &unknown) {
