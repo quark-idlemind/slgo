@@ -24,36 +24,26 @@ import (
 // Memory is what cnt copies of the code under test cost, as a function
 // of the copy count and the padding.
 //
-// slbench's --test sets Pad, CodeSize, Marginal and Limit.  The reasoning
-// for each field is here:
+// slbench's --test sets Pad, CodeSize, Marginal and Limit.
 //
 //   - Pad is the padding the zero-copy script needs to sit exactly on a
 //     block boundary.  Everything else is measured from there.
 //   - CodeSize is what the FIRST copy costs outright.
 //   - Marginal is what each copy after the first costs, and is CodeSize
 //     when left at zero.  The two differ whenever a construct pays a
-//     cost once that the rest share -- measured live, a 250-character
-//     string literal is 1044 bytes for one copy and 542 for each after
-//     it, because identical literals are shared.  A model that could not
-//     express that would assert the two are equal and quietly hold every
-//     test written against it to the same assumption.
+//     cost once that the rest share, as identical string literals do.
 //   - Drift adds one byte every Drift copies, for a construct whose
-//     per-copy cost is not quite constant.  Live, 32 of one construct
-//     cost 11008 bytes and 16 cost 5516, which is 343.25 each.  slbench's
-//     copy mode had a guard for exactly that, which a model without
-//     drift could never fire; copy mode has since gone, and nothing in
-//     this repository sets Drift now.
+//     per-copy cost is not quite constant.
 //   - Limit is where the model refuses the script, standing in for the
 //     compiler refusing one that is too large.
 //
-// Collide is here because the live behaviour has two size limits rather
-// than one: above Collide the script compiles and then runs out of
-// memory, above Limit the compiler will not take it at all.  Measured on
-// Agni 2026-08-03, 256 copies of the reference shape compiled and then
-// collided stack with heap, and 512 were refused outright.  A caller that
-// treats the two differently -- slbench's backend reports one as a
-// compile error and the other as a fault out of memory -- cannot be
-// tested against a model that only has one.
+// Collide is the other of the two size limits the live behaviour has:
+// above Collide the script compiles and then runs out of memory, above
+// Limit the compiler will not take it at all.  A caller that treats the
+// two differently -- slbench's backend reports one as a compile error
+// and the other as a fault out of memory -- cannot be tested against a
+// model that only has one.
+// Why: doc/scripttest.md#what-the-model-can-express
 type Memory struct {
 	Pad      int
 	CodeSize int
@@ -159,12 +149,9 @@ func (m Memory) collides(cnt, pad int) bool {
 // matches on the same line for the same reason; the convention is the
 // script's, not either fake's.
 //
-// A comment because a comment is free.  Measured: 604 bytes of it moved
-// llGetUsedMemory not at all, the compiler having thrown it away before
-// there was any bytecode to count -- so the count and the pad can be
-// carried in the script without the digits of either changing what is
-// being measured.  They used to go into the harness call as integer
-// literals, where their SIZE varied with their value.
+// A comment because the compiler throws it away before there is any
+// bytecode to count, so the digits do not change what is measured.
+// Why: doc/scripttest.md#the-harness-line-is-a-comment
 var harnessCall = regexp.MustCompile(`(?m)^// slbench cnt=(\d+) pad=(-?\d+)$`)
 
 // Harness is the copy count and padding a benchmark script announces in
@@ -184,11 +171,8 @@ func Harness(src string) (cnt, pad int, ok bool) {
 // it and a transcript that differed would be testing the parser against
 // itself.
 //
-// One number, which is the whole of what a benchmark script says now.
-// It used to keep the base reading in its object's linkset data and do
-// the arithmetic in LSL, so this had to model that too -- a per-target
-// base, and a probe in the wrong object dividing against a zero.  All of
-// it went when the arithmetic moved to where it could be seen.
+// One number, which is the whole of what a benchmark script says.
+// Why: doc/scripttest.md#a-benchmark-script-says-one-number
 func (m Memory) transcript(cnt, pad, mem int, done string) []string {
 	out := []string{"", fmt.Sprintf("RESULT:MEM=%d", mem)}
 	if done != "" {
