@@ -64,7 +64,7 @@ type Object struct {
 	TextureEntry []byte
 
 	// Text is the floating text above the object, when it has any, as
-	// the last compressed update said it.
+	// the last update of either kind said it.
 	Text string
 
 	// AttachPoint is where a worn object is attached, and zero when it
@@ -480,6 +480,13 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	if havePos {
 		v.Position, v.Rotation = pos, rot
 	}
+	// As in a compressed update, the text is what this one says and one
+	// without any has none: the viewer clears it for a Text of the
+	// terminator alone or nothing (llviewerobject.cpp:1517-1553).
+	v.Text = ""
+	if len(d.Text) > 1 {
+		v.Text = trimNul(d.Text)
+	}
 	// An AttachItemID in the NameValue is what says this is worn;
 	// State means other things on an object that is not.
 	if item, ok := attachItem(d.NameValue); ok {
@@ -528,8 +535,8 @@ func (o *Objects) Attachments() []*Object {
 
 // compressed records what a compressed update said.
 //
-// The owner and the floating text are taken from here and nowhere else:
-// update reads neither out of a full one.
+// The owner is taken from here and nowhere else: update does not read
+// one out of a full update.
 func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance float32) {
 	parent := uint32(0)
 	if c.ParentID != nil {

@@ -325,6 +325,49 @@ func TestAnUnreadablePlacementStillNamesTheObject(t *testing.T) {
 	}
 }
 
+// TestAFullUpdateSetsAndClearsTheText: a full update says what the
+// floating text is now, as a compressed one does.  One whose Text is the
+// terminator alone, or nothing, is an object with no text, and the
+// viewer takes it down (llviewerobject.cpp:1517-1553).
+func TestAFullUpdateSetsAndClearsTheText(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	a.SetLook(Look{Far: 128})
+	full := func(text []byte) *msg.ObjectUpdate {
+		return arriving(t, msg.ObjectUpdate_ObjectData{
+			ID: 7, FullID: aPrim, PCode: 9, Text: text,
+			ObjectData: placement(msg.Vector3{}, msg.Quaternion{}),
+		})
+	}
+
+	feed(t, a, full([]byte(someText+"\x00")))
+	got, ok := a.Objects().Get(aPrim)
+	if !ok {
+		t.Fatal("not remembered")
+	}
+	if got.Text != someText {
+		t.Fatalf("text = %q, want %q", got.Text, someText)
+	}
+
+	for _, none := range [][]byte{{0}, nil} {
+		feed(t, a, full([]byte(someText+"\x00")), full(none))
+		if got, _ := a.Objects().Get(aPrim); got.Text != "" {
+			t.Errorf("text = %q after a full update whose Text is %v, want it gone", got.Text, none)
+		}
+	}
+
+	// And a full update is the word on text a compressed one gave too.
+	o := a.Objects()
+	o.compressed(decodeCompressed(t, compressedObject{
+		id: aPrim, local: 7, pcode: 9, text: someText,
+	}), msg.Vector3{}, 0)
+	feed(t, a, full(nil))
+	if got, _ := o.Get(aPrim); got.Text != "" {
+		t.Errorf("text = %q; a full update without any left the compressed one's", got.Text)
+	}
+}
+
 // TestAWornObjectRemembersTheItemItCameFrom: an attachment is rezzed
 // afresh with a new id every time it is put on, so the inventory item is
 // the only stable name it has.  It arrives in the NameValue block of the
@@ -460,10 +503,10 @@ func TestAChildIsJudgedByWhereItsRootIs(t *testing.T) {
 	})
 }
 
-// TestACompressedUpdateCarriesWhatAFullOneDoesNot: the owner, the
-// floating text and the appearance arrive only this way.  A session that
-// ignores ObjectUpdateCompressed sees the world as it was on arrival and
-// never learns otherwise.
+// TestACompressedUpdateCarriesWhatAFullOneDoesNot: the owner arrives only
+// this way, and the floating text and the appearance this way as well as
+// in a full update.  A session that ignores ObjectUpdateCompressed sees
+// the world as it was on arrival and never learns otherwise.
 func TestACompressedUpdateCarriesWhatAFullOneDoesNot(t *testing.T) {
 	t.Parallel()
 
