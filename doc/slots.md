@@ -204,15 +204,38 @@ place an object is and refuse a write from a caller that no longer holds
 it. **Intended and not built.** Until it is, the pool is the only thing
 standing between two callers.
 
+## Every object is a copy of the first
+
+The objects after the first are made by COPYING it rather than by
+building each (`session.EnsureAutoItems`). There are two reasons, and the
+first is not an optimisation.
+
+An avatar may not be allowed to rez. A parcel grants "create objects" to
+a group, and an avatar in no group is refused — with a message blaming
+the land (see [daemon.md](daemon.md#the-active-group)). Such an avatar
+can still be given one object by somebody who can build, and from that
+one it can make all the others, because copying an item it already owns
+asks the land nothing at all.
+
+It is quicker even when rezzing is allowed. Rez, name, take is eight
+seconds and change; a copy is under two.
+
 ## What was built and thrown away
 
 ### Locks, a group at a time
 
 Before this, the clients did the deciding themselves: a lock per group of
-four objects, taken whole. Four was never a fact about the pool — it is
-what `slbench`'s search uses, three readings alongside the object being
+four objects, taken whole. Four was never a fact about the pool — it was
+what `slbench`'s search took, three readings alongside the object being
 measured — and it became the unit of everything. A caller wanting six had
 to hold eight; one wanting twelve could not be served at all.
+
+It is no longer a fact about a benchmark either. That search now cuts its
+range into `--parts` and leases whatever that comes to, so nothing
+computes from four any more. What is left of it is
+`session.AutoGroupSize`, a default chosen for being a useful width
+without being anybody's whole pool, which is what `slrun` takes when
+`--jobs` does not say.
 
 The deadlock that groups avoided is not caused by granularity. It is
 caused by callers taking objects incrementally while others do the same:
@@ -224,7 +247,9 @@ granularity at all.
 The client-side version got there by a different route: a lock per object
 and one allocation lock over them, with an invariant every caller had to
 keep — nothing may block while holding the allocation lock. That is
-deadlock free for the same reason, and it lasted a few hours before the daemon took the job over. There is
+deadlock free for the same reason, and it lasted a few hours before the
+daemon took the job over: it worked and it was delicate, and it could
+not answer the question a caller actually asks. There is
 no allocation lock now. One goroutine in the daemon owns the whole pool,
 holds no locks, and settles a request in a single pass over what is free:
 all of them or none, and a request that cannot be served takes nothing
@@ -241,10 +266,29 @@ the runs that were clean.
 ### Clearing an object before using it
 
 An object handed on may still be running the last holder's script, and
-chat carries the OBJECT a line came from and never the script's name — so
-a script still talking is a line the next run reads as its own. Clearing
-installs a do-nothing script over every script the object holds, which
-stops them: installing over a name destroys what was there, measured.
+chat carries the OBJECT a line came from and never the script's name,
+which was measured — so a script still talking is a line the next run
+reads as its own, since its collector can only filter on the object. A
+run that reports somebody else's numbers is not a failure, it is a
+plausible answer, which is the worst kind. Clearing installs a
+do-nothing script over every script the object holds, which stops them:
+installing over a name destroys what was there, measured.
+
+The script written over each is empty, rather than the scripts being
+removed. Installing a script over one of the same name destroys the one
+that was there, measured: the old script never says another word. So an
+empty script silences whatever was running and leaves the ITEM in place
+— and an item already there is what makes the next install cost about
+0.9s instead of the 8.1s creating one costs. Removing the scripts would
+be tidier and would make every later run slower.
+
+And the clearing waits to hear from it. The upload's answer says the new
+script is in; it says nothing about what the old one had already said.
+Chat arrives on the UDP path with no ordering relationship to an HTTP
+reply, so the only honest way to know the noise is over is to hear
+something come the same way after it. The empty script says a word
+nobody else could say, and the clearing is finished when that word
+arrives.
 
 It is `--clear` and off, because the cost is certain and the hazard is
 not. Installing under a name already destroys that name's script, so the
@@ -253,6 +297,20 @@ one starts. What is left is a script under a DIFFERENT name that goes on
 talking after it has finished, and neither program that shares these
 objects writes one: both say their piece from `state_entry` and fall
 silent.
+
+The cost is the one measured under [Where it breaks](#where-it-breaks):
+thirty scripts behind a clearing were about ninety uploads, and failed
+every run, where thirty on their own ran clean. So `--clear` is a
+certain two thirds of the upload budget spent on a hazard nobody here
+has yet seen, and what it is for is the day somebody DOES see foreign
+lines in their output.
+
+An object that will not come clean is dropped from the run rather than
+ending it. It used to end the whole run, and thirty scripts went nowhere
+because one object out of thirty would not answer -- which is a worse
+answer than running twenty-nine. What is left is narrower and still
+true: the caller does not know what is in that object, so it does not
+listen to it.
 
 ## What was measured
 

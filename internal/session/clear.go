@@ -2,32 +2,14 @@ package session
 
 // Stopping whatever is running in an object, before listening to it.
 //
-// # Why it has to be done at all
-//
-// Chat carries the OBJECT a line came from and never the script's name.
-// That was measured, and it is the whole reason this exists: a script
-// left running by whoever had the object last says things, and the next
-// caller's collector -- which can only filter on the object -- reads
-// them as its own output.  A run that reports somebody else's numbers is
-// not a failure, it is a plausible answer, which is the worst kind.
-//
-// # Why an empty script rather than removing them
-//
-// Installing a script over one of the same name destroys the one that
-// was there, measured: the old script never says another word.  So an
-// empty script silences whatever was running and leaves the ITEM in
-// place -- and an item already there is what makes the next install cost
-// about 0.9s instead of the 8.1s creating one costs.  Removing the
-// scripts would be tidier and would make every later run slower.
-//
-// # Why it waits to hear from it
-//
-// The upload's answer says the new script is in; it says nothing about
-// what the old one had already said.  Chat arrives on the UDP path with
-// no ordering relationship to an HTTP reply, so the only honest way to
-// know the noise is over is to hear something come the same way after
-// it.  The empty script says a word nobody else could say, and the
-// clearing is finished when that word arrives.
+// Chat carries the OBJECT a line came from and never the script's name,
+// so a script the last holder left running would be read as this
+// caller's output.  Each script is replaced by an empty one of the same
+// name, which stops the old one and leaves the item in place for the
+// next install.  The clearing is finished when the empty script's word
+// is heard: the upload's answer says nothing about chat already on its
+// way.
+// Why: doc/slots.md#clearing-an-object-before-using-it
 
 import (
 	"context"

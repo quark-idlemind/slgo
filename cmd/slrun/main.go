@@ -6,20 +6,22 @@
 //	slrun --direct --first Quark --last Idlemind a.lsl
 //
 // A script needs an object to run in, so slrun takes some: the shared
-// auto objects the avatar wears, four of them held for as long as the
-// run lasts.  --object names one object of somebody's own instead, and
-// --rez rezzes a throwaway prim beside the avatar and deletes it
-// afterwards; both of those are one object, and so one script at a time.
+// auto objects the avatars wear, held for as long as the run lasts.
+// --object names one object of somebody's own instead, and --rez rezzes
+// a throwaway prim beside the avatar and deletes it afterwards; both of
+// those are one object, and so one script at a time.
 //
-// Several scripts run at once, one to an object: four of them by
-// default, and --jobs asks for more -- as many as are free at the time,
-// from as many avatars as it takes.  They
-// finish in whatever order they finish in, so every line printed says
-// which script said it.  --jobs 1 puts them back in the order they were
-// named, which is what a set of scripts that leave things in the object
-// for one another needs.
+// Several scripts run at once, one to an object: four at a time by
+// default and never more than there are scripts, and --jobs asks for a
+// different number.  They are taken all together, waiting until that
+// many are free, from as many avatars as it takes.  They finish in
+// whatever order they finish in, so every line printed says which script
+// said it.  --jobs 1 puts them back in the order they were named, which
+// is what a set of scripts that leave things in the object for one
+// another needs.
 //
-// What is printed is what the scripts said and nothing else.
+// What is printed is what the scripts said, and what became of any that
+// failed.
 //
 // With several running at once each line carries the name of the script
 // that said it, since they arrive interleaved.  One script needs no such
@@ -153,20 +155,11 @@ func run() error {
 		srcs = append(srcs, source{path, string(data)})
 	}
 
-	// ^C stops the run.
-	//
-	// NotifyContext was already here and nothing ever looked at what it
-	// produced, which is worse than not having it: installing a handler
-	// takes away the default, so ^C went from killing slrun to doing
-	// nothing whatsoever.  Watched happening -- a script sleeping sixty
-	// seconds, an interrupt, and slrun carried on to the end of it.
-	//
-	// What it does now is end a wait for somewhere to run, stop handing
-	// out scripts and cancel the ones in flight, and then the deferred
-	// cleanup gives the objects back.
-	// The cleanup does not run on this context: session.RunIn builds a
-	// fresh one to delete a rezzed prim with, saying "the run's may well
-	// be why we are here", which is exactly this.
+	// ^C ends a wait for somewhere to run, stops handing out scripts and
+	// cancels the ones in flight, and then the deferred cleanup gives the
+	// objects back.  A rezzed prim is deleted on a context of its own
+	// (session.RunIn's cleanup), since an interrupt may be why it is going.
+	// Why: doc/slrun.md#an-interrupt-stops-the-run
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {
@@ -179,16 +172,10 @@ func run() error {
 	}()
 
 	// Every line is printed with the script it came from in front of it,
-	// so the names are lined up: with several running at once the tags
-	// are a column the eye follows down the page rather than a word at
-	// the start of each line.
-	//
-	// One script is the exception, because there is nothing to tell it
-	// apart from.  The name is then the same word on the front of every
-	// line of the only output there is, which is the shape of thing a
-	// person reads past rather than reads.  -v asks for it anyway --
-	// worth having when the output is being kept, or pasted somewhere
-	// that will not say where it came from.
+	// padded so that the names read as a column.  One script is the
+	// exception, since there is nothing to tell it apart from; -v asks
+	// for the name anyway.
+	// Why: doc/slrun.md#a-name-on-every-line-and-none-on-one-script
 	untagged = len(srcs) == 1 && flags.V < 1
 	tagWidth = 0
 	for _, src := range srcs {
@@ -287,28 +274,26 @@ feeding:
 	return true
 }
 
-// tagWidth is how much room the script names take, and say is how
-// anything is printed.
-//
-// Both are about several scripts printing at once.  A line and the lines
-// of a compiler refusal have to arrive whole and together rather than
-// spliced through somebody else's, which is one lock held for as long as
-// it takes to write them.
+// tagWidth is how much room the script names take, and untagged says to
+// print no name at all.  saying is held while a script's output is
+// written, so that a line, or the lines of a compiler refusal, arrive
+// whole rather than spliced through another script's.
 var (
 	tagWidth int
 	untagged bool
 	saying   sync.Mutex
 )
 
+// say prints to standard output under saying.
 func say(format string, args ...any) {
 	saying.Lock()
 	defer saying.Unlock()
 	fmt.Printf(format, args...)
 }
 
-// tag is a script name as it appears in front of what the script said.
-// It pads to whatever the widest name on the command line was, and to
-// its own width when nobody has said -- one script needs no column.
+// tag is a script name as it appears in front of what the script said,
+// padded to the widest name on the command line.  It is empty when
+// untagged: one script, and no -v.
 func tag(path string) string {
 	if untagged {
 		return ""
@@ -328,10 +313,11 @@ func tag(path string) string {
 // object taken from something else for nothing.
 //
 // How many places there are is answered here and not asked for, because
-// each way of getting one has a different number to give -- four of
-// four, a named object, a lease of whatever the backend granted -- and
-// the count comes back with the places so that the caller never has to
-// guess.
+// each way of getting one has a different number to give -- the auto
+// objects granted, less any that could not be worn or would not come
+// clean; one named or rezzed object; whatever the backend's lease
+// granted -- and the count comes back with the places so that the
+// caller never has to guess.
 func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src string) bool, places int, done func(), err error) {
 	if flags.Backend != "" {
 		switch {
@@ -346,10 +332,11 @@ func somewhereToRun(ctx context.Context, n int) (run func(place int, path, src s
 			return nil, 0, nil, fmt.Errorf("--keep leaves a rezzed prim behind, and a " +
 				"script.v1 backend rezzes nothing: the object it ran in is its own")
 		}
-		// One, unless somebody asked for more.  A run of auto objects is
-		// four because this program put four there; what a backend has is
-		// its own business, and asking a one-object simulator for four
-		// would queue for three that are never coming.
+		// One, unless --jobs asks for more.  Four is the grid path's
+		// default because this program set up the pool it takes them
+		// from; what a backend has is its own business, and asking a
+		// one-object simulator for four would queue for three that are
+		// never coming.
 		want := 1
 		if flags.Jobs > 1 {
 			want = flags.Jobs
@@ -405,45 +392,25 @@ type place struct {
 	dirty bool
 }
 
-// clearPlaces silences whatever the last holder left running, and does
-// nothing at all unless asked.
-//
-// The worry it answers is that chat carries the OBJECT a line came from
-// and never the script's name, so a script still talking in an object
-// this run was given is a line this run would print as its own.  That is
-// real, and it is also narrower than it sounds: installing a script over
-// one of the same name destroys what was there, measured, so the
-// previous run's script -- which is nearly always another slrun --
-// stops the moment this one starts.  What is left is a script under a
-// DIFFERENT name that goes on saying things after it has finished, and
-// neither of the two programs that share these objects writes one: both
-// say what they have to say from state_entry and fall silent.
-//
-// Against that, the cost is certain.  Measured on Agni: clearing writes
-// an empty script over every script an object holds, and the pool
-// objects hold two -- "auto -n" makes the extra objects by COPYING the
-// first, so each carries whatever that one had.  Thirty scripts meant
-// ninety uploads rather than thirty, and it was the clearing that broke:
-// thirty installs on their own ran clean, while thirty installs behind
-// sixty clears failed every time, on Second Life's own capability,
-// with 500s carrying a Python stack trace and with compile errors
-// against an empty body.
-//
-// So it is --clear, and off: a certain two thirds of the upload budget
-// spent on a hazard nobody here has yet seen.  What it is for is the day
-// somebody DOES see foreign lines in their output.
-//
-// An object that will not come clean is dropped rather than fatal.  It
-// used to end the whole run, and thirty scripts went nowhere because one
-// object out of thirty would not answer -- which is a worse answer than
-// running twenty-nine.  What is left is narrower and still true: this
-// caller does not know what is in that object, so it does not listen to
-// it.
-// clearOne is the grid work, apart from the deciding, so that what this
-// does with a failure can be tested without a fake that would have to
-// compile LSL to answer a clearing.
+// clearOne is clearPlaces' grid work, apart from the deciding, so that
+// what it does with a failure can be tested without a fake that would
+// have to compile LSL to answer a clearing.
 var clearOne = session.Clear
 
+// clearPlaces silences whatever the last holder left running in each
+// place the daemon marked dirty, and does nothing at all unless --clear
+// asked.
+//
+// Chat carries the object a line came from and never the script's name,
+// so a script still talking in one of these objects is a line this run
+// would print as its own.  It is off by default because that hazard is
+// narrow and the cost is certain: installing over a name already stops
+// that name's script, and clearing is an upload for every script an
+// object holds.
+//
+// An object that will not come clean is dropped rather than fatal: this
+// run does not know what is in it, so it does not listen to it.
+// Why: doc/slots.md#clearing-an-object-before-using-it
 func clearPlaces(ctx context.Context, places []place) ([]place, error) {
 	if !flags.Clear {
 		return places, nil
@@ -528,10 +495,11 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 	}
 	if !res.Compiled {
 		// The rest of what the capability said, when it said anything.
-		// "(0, 0) : ERROR : Syntax error" is the compiler's answer to a
-		// script wrong at its first character AND to an upload that
-		// reached it empty, so everything else in the answer is worth
-		// putting in front of whoever has to tell those apart.
+		// "(0, 0) : ERROR : Syntax error" here is an upload that reached
+		// the compiler empty even when sl asked again -- sl puts a
+		// newline in front of every script, so nothing of the caller's
+		// is on line 0 -- and the rest of the answer is the only place
+		// its reason could be.
 		if res.State != "" && res.State != "complete" {
 			say("%sthe upload came back %q\n", tag(path), res.State)
 		}
@@ -539,11 +507,9 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 			say("%s%s\n", tag(path), res.Message)
 		}
 		if len(res.Answer) > 0 {
-			// Everything the capability said, not just the fields
-			// anything here knows how to read.  It is one line, once, on
-			// a failure -- and when the failure is "(0, 0) : ERROR :
-			// Syntax error" against a script that is not wrong, it is
-			// the only place the reason could be hiding.
+			// The capability's whole answer, not just the fields
+			// anything here knows how to read: one line, cut at 400
+			// bytes, once, on a failure.
 			answer := string(res.Answer)
 			if len(answer) > 400 {
 				answer = answer[:400] + "..."
@@ -555,23 +521,14 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 }
 
 // quiet reports whether an error is the run being stopped rather than
-// anything about the script.
+// anything about the script.  ^C ends every script in flight with
+// "context canceled", and main says "interrupted" once instead.
 //
-// ^C reaches every script at once, and each of them ends by saying
-// "context canceled" under its own name -- including the ones that had
-// not started, which say it having done nothing at all.  Six scripts
-// interrupted printed six lines of it and no line saying what had
-// happened.  main says "interrupted", once, and this is what keeps the
-// six quiet.
-// Cancellation only.  A deadline that ran out is somebody's timeout
-// expiring and is news; this is the run being stopped on purpose.
-//
-// Two shapes, because a run reaches the grid through gRPC and a
-// cancelled call comes back as a status rather than as the context's own
-// error: "rpc error: code = Canceled desc = context canceled" does not
-// satisfy errors.Is against context.Canceled.  Found by the test, which
-// is the reason it drives a real interrupt through a daemon rather than
-// cancelling a context and assuming the rest.
+// Cancellation only: a deadline that ran out is somebody's timeout
+// expiring and is news.  Two shapes, because a run through slgod or a
+// backend is a gRPC call, and a cancelled one comes back as a status
+// that does not satisfy errors.Is against context.Canceled.
+// Why: doc/slrun.md#one-line-saying-interrupted
 func quiet(err error) bool {
 	return errors.Is(err, context.Canceled) || status.Code(err) == codes.Canceled
 }
@@ -620,12 +577,12 @@ func verdict(path string, compiled bool, errs []string, fault, blocked string, f
 // nothing to find, and the script inside each already exists, which is
 // the seconds that matter.  --object names one object of somebody's own,
 // and --rez goes back to a throwaway prim, which is what to use when the
-// shared group is wanted by something else and waiting will not do.
+// shared objects are wanted by something else and waiting will not do.
 //
 // Both of those are one object and so one script at a time.  That is a
 // limit and not an oversight: --object was given an object and there is
 // only the one, and rezzing a prim per job would put a heap of them
-// beside the avatar for a saving the shared group already offers.
+// beside the avatar for a saving the shared objects already offer.
 func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), error) {
 	if flags.Object != "" || flags.Rez {
 		if flags.Jobs > 1 {
@@ -696,16 +653,11 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 			places = append(places, place{a.Session, obj, a.Dirty[i]})
 		}
 	}
-	// Which avatar, when nobody said and somebody asked twice.
-	//
-	// It was unconditional, and the ordinary run of slrun is a script
-	// and its output: a line about whose objects it borrowed arrives in
-	// the middle of that, on every run, saying something that changes
-	// nothing about what the script printed.  It is the second thing
-	// -v buys rather than the first, because the name in front of the
-	// lines is about reading the output and this is about how the run
-	// was arranged.  It stays off when --agent named one, because then
-	// the answer is on the command line already.
+	// Which avatar, when nobody said and somebody asked twice: the name
+	// in front of the lines is about reading the output, and this is
+	// about how the run was arranged.  --agent naming one has put the
+	// answer on the command line already.
+	// Why: doc/slrun.md#which-avatar-the-objects-came-from
 	if o.Agent == "" && flags.V >= 2 {
 		fmt.Fprintf(os.Stderr, "running as %s\n", whose(as))
 	}
