@@ -144,10 +144,22 @@ func renderTroubles(list []Trouble, dropped int, now time.Time) string {
 		fmt.Fprintf(&b, "the last %d, and %d older ones dropped:\n", len(list), dropped)
 	}
 	for _, t := range list {
-		fmt.Fprintf(&b, "%s ago: %s\n", ago(now.Sub(t.At)), t.Text)
+		fmt.Fprintf(&b, "%s: %s\n", when(now.Sub(t.At)), t.Text)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
+
+// when is how long ago something happened, as somebody would say it:
+// "just now", or ago's words with "ago" after them.
+func when(d time.Duration) string {
+	if s := ago(d); s != justNow {
+		return s + " ago"
+	}
+	return justNow
+}
+
+// justNow is ago's word for less than a minute, which takes no "ago".
+const justNow = "just now"
 
 // ago is a duration as somebody would say it.
 //
@@ -158,7 +170,7 @@ func renderTroubles(list []Trouble, dropped int, now time.Time) string {
 func ago(d time.Duration) string {
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return justNow
 	case d < 2*time.Minute:
 		return "a minute"
 	case d < time.Hour:
