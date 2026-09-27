@@ -60,7 +60,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -339,28 +341,78 @@ func (s *Store) path(avatar, with string) string {
 
 // Load reads a conversation, or hands back an empty one.
 //
-// A file that will not parse is not an error and not a stop: it is one
-// conversation's memory, the daemon has several, and refusing to speak
-// to somebody because the record of the last time is unreadable is
-// worse than starting again.  It is logged by the caller and replaced
-// on the next save.
-func (s *Store) Load(avatar string, with msg.UUID, name string) *Conversation {
-	c := &Conversation{
+// The conversation is usable whatever the error says.  A file that will
+// not read or parse is not a stop: it is one conversation's memory, the
+// daemon has several, and refusing to speak to somebody because the
+// record of the last time is unreadable is worse than starting again.
+// So it is renamed aside for somebody to look at later -- see setAside
+// -- an empty conversation comes back, and the error says what happened
+// and where the file went, for the caller to log.
+func (s *Store) Load(avatar string, with msg.UUID, name string) (*Conversation, error) {
+	c, what, err := s.read(avatar, with, name)
+	if err == nil {
+		return c, nil
+	}
+	aside, moved := setAside(s.path(avatar, with.String()), time.Now())
+	if moved != nil {
+		return c, fmt.Errorf("the conversation with %s %s (%v), and could not be set aside: %v; begun again",
+			with, what, err, moved)
+	}
+	return c, fmt.Errorf("the conversation with %s %s (%v); kept as %s, and begun again",
+		with, what, err, aside)
+}
+
+// Peek is Load for a look that writes nothing back.  A file that will
+// not read comes back as an empty conversation and is left where it is,
+// for the next Load to set aside and report.
+func (s *Store) Peek(avatar string, with msg.UUID, name string) *Conversation {
+	c, _, _ := s.read(avatar, with, name)
+	return c
+}
+
+// read is a conversation off the disk, a new one when there is no file,
+// and a new one with the error and what it means -- "would not be read"
+// or "would not parse" -- when there is a file and it is no good.
+func (s *Store) read(avatar string, with msg.UUID, name string) (*Conversation, string, error) {
+	fresh := &Conversation{
 		Avatar: avatar, With: with.String(), WithName: name,
 		Started: time.Now(),
 	}
 	b, err := os.ReadFile(s.path(avatar, with.String()))
+	if errors.Is(err, fs.ErrNotExist) {
+		return fresh, "", nil
+	}
 	if err != nil {
-		return c
+		return fresh, "would not be read", err
 	}
 	var got Conversation
 	if err := json.Unmarshal(b, &got); err != nil {
-		return c
+		return fresh, "would not parse", err
 	}
 	if name != "" {
 		got.WithName = name
 	}
-	return &got
+	return &got, "", nil
+}
+
+// setAside renames an unreadable conversation to
+// <name>.unreadable-<UTC time> beside it, mode and all, and never over
+// another file: a second one set aside in the same second gets a
+// number on the end.  It says what the file is called now.
+func setAside(path string, now time.Time) (string, error) {
+	base := path + ".unreadable-" + now.UTC().Format("20060102T150405Z")
+	aside := base
+	for n := 2; ; n++ {
+		_, err := os.Lstat(aside)
+		if errors.Is(err, fs.ErrNotExist) {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		aside = fmt.Sprintf("%s-%d", base, n)
+	}
+	return aside, os.Rename(path, aside)
 }
 
 // Save writes it back, through a temporary file so that a crash cannot
@@ -637,6 +689,17 @@ func (c *Chatter) Backstory(avatar string, who msg.UUID, name string) string {
 	return text
 }
 
+// load is Store.Load, with a conversation set aside for being
+// unreadable logged and kept among the avatar's troubles.  Called with
+// the conversation held; see hold.
+func (c *Chatter) load(avatar string, who msg.UUID, name string) *Conversation {
+	conv, err := c.store.Load(avatar, who, name)
+	if err != nil {
+		c.errf(avatar, "%v", err)
+	}
+	return conv
+}
+
 // Reply is one turn: what this avatar says back.
 //
 // The conversation is loaded here rather than handed in, and held for
@@ -646,7 +709,7 @@ func (c *Chatter) Backstory(avatar string, who msg.UUID, name string) string {
 func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, said string) (string, error) {
 	release := c.hold(avatar + "-" + who.String())
 	defer release()
-	conv := c.store.Load(avatar, who, name)
+	conv := c.load(avatar, who, name)
 
 	props, err := c.ready(ctx)
 	if err != nil {
@@ -1008,7 +1071,7 @@ func (c *Chatter) Remember(avatar string, who msg.UUID, name, said string) bool 
 	release := c.hold(avatar + "-" + who.String())
 	defer release()
 
-	conv := c.store.Load(avatar, who, name)
+	conv := c.load(avatar, who, name)
 	if len(conv.Turns) == 0 {
 		return false
 	}

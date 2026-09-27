@@ -1939,6 +1939,11 @@ another loads cleanly and answers nonsense. So `slbotd` records a
 fingerprint of all four, plus the backstory, and refuses to restore a
 cache whose fingerprint has moved.
 
+A conversation file that will not read or parse is not thrown away.
+`slbotd` renames it to `THEIR-UUID.json.unreadable-TIME`, beside where
+it was and never over another, says so in the log and under `:errors`,
+and begins that conversation again.
+
 Measured against `llama-server` b11056, Qwen2.5-0.5B-Instruct Q4_K_M,
 four slots of 2048 tokens, on an Intel i9 with no GPU offload:
 

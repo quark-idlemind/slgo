@@ -16,7 +16,7 @@ import (
 // longConversation makes one that has outgrown its budget.
 func longConversation(t *testing.T, d *daemon, turns, tokens int) *Conversation {
 	t.Helper()
-	conv := d.chat.Store().Load("example", testSender, "Trusted Resident")
+	conv := loaded(t, d.chat.Store(), "example", testSender, "Trusted Resident")
 	now := time.Now()
 	for i := 0; i < turns/2; i++ {
 		conv.Add("user", "crate number "+strings.Repeat("x", 20), now)

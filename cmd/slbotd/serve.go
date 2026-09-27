@@ -430,7 +430,9 @@ func (b *bot) converse(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync
 		return
 	}
 	who := b.whoSaid(s, im)
-	conv := b.d.chat.Store().Load(b.name, im.From, im.FromName)
+	// A look, and no more: the reply loads it again, held, and that is
+	// where a file that will not read is set aside and reported.
+	conv := b.d.chat.Store().Peek(b.name, im.From, im.FromName)
 
 	v := b.d.audience(ctx, &Approach{
 		Avatar:     b.name,
