@@ -4,12 +4,12 @@
 // # What it is for
 //
 // Several programs share a set of objects worn by the daemon's avatars:
-// a benchmark takes four because its search compares readings taken at
-// once, and a program running scripts takes one per script it runs at
-// once.  Two of them in the same object would overwrite each other's
-// script and each other's data, so the objects have to be handed out --
-// and handed out in a way that cannot leave two callers each holding
-// some of what the other needs.
+// a benchmark takes one per reading its search takes at once, and a
+// program running scripts takes one per script it runs at once.  Two of
+// them in the same object would overwrite each other's script and each
+// other's data, so the objects have to be handed out -- and handed out
+// in a way that cannot leave two callers each holding some of what the
+// other needs.
 //
 // # Why one goroutine owns everything
 //
@@ -96,6 +96,7 @@ const DefaultTimeout = time.Minute
 // replacing a script in an object costs about 0.9s and creating one
 // about 8.1s, so a caller that starts a create with a second left is
 // past this and ought to have renewed.
+// Why: doc/slots.md#what-is-being-shared-and-why-it-needs-sharing
 const grace = 10 * time.Second
 
 // Errors a caller can act on.  A lease that is gone is not an error the
@@ -256,11 +257,10 @@ func (p *Pool) Get(n int, timeout time.Duration) (Response, error) {
 // GetWhere asks for n slots out of those match accepts.
 //
 // It is for a caller whose slots have to have something in common with
-// each other rather than merely being enough of them: a benchmark
-// compares its objects against one another, so four spread over three
-// avatars is four readings that cannot be compared.  All or nothing
-// applies to what match accepts, and the rest of the pool is neither
-// taken nor waited for.
+// each other rather than merely being enough of them -- the daemon uses
+// it for a request that names one avatar.  All or nothing applies to
+// what match accepts, and the rest of the pool is neither taken nor
+// waited for.
 //
 // match is called from the pool's goroutine and must not call back into
 // the pool.  Nil accepts everything.

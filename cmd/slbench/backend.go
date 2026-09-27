@@ -2,21 +2,17 @@ package main
 
 // What the benchmark needs of whatever runs its scripts.
 //
-// The measurement machinery -- the padding search, the block arithmetic,
-// the copy count, the backing off -- is about LSL and not about how a
-// script reaches whatever runs it.  This is the line that says so.
-// Everything above it works in readings and refusals; everything below
-// it is a transport, and there are three: a Second Life session
-// (runner.go), the script.v1 contract (script.go), and the offline model
-// reached through that same contract (--test).
+// The measurement machinery -- the padding search and the block
+// arithmetic -- is about LSL and not about how a script reaches whatever
+// runs it.  This is the line that says so.  Everything above it works in
+// readings and refusals; everything below it is a transport, and there
+// are three: a Second Life session (runner.go), the script.v1 contract
+// (script.go), and the offline model reached through that same contract
+// (--test, model.go).
 //
-// It is stated as an interface rather than left implicit because --test
-// used to answer ABOVE the transport -- runScript had a branch that
-// returned the model's number without ever calling Send -- so the
-// compile-error path, the fault path, absorbResults and the whole of
-// runner.go were reachable only with a grid at the far end.  With a seam
-// here the model is a backend like any other and the offline tests go
-// through the same code the live path does.
+// It is an interface so that the offline tests go through the same code
+// the live path does.
+// Why: doc/scripttest.md#slbenchs---test-is-a-backend
 
 import (
 	"strings"
@@ -34,9 +30,8 @@ type backend interface {
 	// to.
 	//
 	// A script that will not compile comes back as *compileError and one
-	// that faulted as *runtimeError, because a benchmark does different
-	// things about them: the first means try a smaller script, the second
-	// may mean the reading is the limit being looked for.
+	// that faulted as *runtimeError, so that a caller can tell a refusal
+	// from a crash.
 	Send(src string) (results, info []string, err error)
 
 	// SendSpare runs the script in the nth spare object, for readings
@@ -133,13 +128,11 @@ func (c *compilation) Error() string {
 // one that failed to reach the far side or that crashed while running.
 // Callers pick it out with errors.As.
 //
-// It exists because "too big" and "not valid LSL" arrive as the same
-// event and often as the same words: a 512-copy benchmark script is
-// refused with "Internal server compile error" and nothing else, no line
-// and no column.  A caller that can retry smaller needs to see that a
-// refusal happened at all; deciding WHICH refusal it was is its
-// business, and Compile is how it finds out -- ask about a script small
-// enough that size cannot be the reason.
+// "Too big" and "not valid LSL" arrive as the same event and often as the
+// same words: a 512-copy benchmark script is refused with "Internal server
+// compile error" and nothing else, no line and no column.  Deciding WHICH
+// refusal it was is the caller's business, and Compile is how to find out
+// -- ask about a script small enough that size cannot be the reason.
 type compileError struct {
 	Errors []string
 }
@@ -158,18 +151,14 @@ type runtimeError struct {
 	Detail string // e.g. "Stack-Heap Collision" (may be empty)
 
 	// OOM says the script ran out of the memory a Mono script has, so a
-	// smaller one -- fewer copies, a shorter list -- may succeed.  This
-	// is the signal a benchmark searching for a size limit turns on.
+	// smaller one -- fewer copies, a shorter list -- may succeed.
 	//
-	// A FACT and not a string to match on.  It used to be worked out here
-	// with strings.Contains(Detail, "Stack-Heap"), which meant this
-	// program knew a piece of Second Life's vocabulary that nothing else
-	// on the caller's side of the seam had any business knowing -- and
-	// which would have gone on matching, wrongly and silently, against a
-	// simulator that worded it differently.  Now each transport says so:
-	// the grid one asks sl.Fault, which is where those words are already
-	// understood, and the script.v1 one reads Fault.out_of_memory, which
-	// is in the contract for exactly this.
+	// A FACT and not a string to match on: this program does not know
+	// Second Life's wording.  Each transport says so itself: the grid one
+	// asks sl.Fault, which is where those words are understood, and the
+	// script.v1 one reads Fault.out_of_memory, which is in the contract
+	// for exactly this.
+	// Why: doc/scripttest.md#out-of-memory-is-a-fact-in-the-contract
 	OOM bool
 }
 

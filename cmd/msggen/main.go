@@ -29,23 +29,12 @@
 //
 // It is the only one of the three that describes what the grid actually
 // sends.  The other two each carry a block that Second Life never puts
-// on the wire.
-//
-// Measured rather than assumed, because a message can be wrong in a way
-// that never fails: a trailing Variable block that the sender omitted
-// decodes as empty and reports no error, so believing the template is
-// free until the day it matters.
-//
-//   - Firestorm adds Size to MapBlockReply, for OpenSim's variable-sized
-//     regions.  Asking Second Life for a region list and counting the
-//     bytes, three replies of 4, 28 and 26 regions accounted for every
-//     byte with none left over: the grid sends no Size block at all.
-//
-//   - The master template adds NewScriptInfo to RezScript, so that a new
-//     script can start from an inventory item rather than the stock one.
-//     Nothing in the viewer sends it or mentions the name, and it was
-//     added in February 2026 and changed again in March -- a field was
-//     dropped -- so it is server-side work the client has not taken up.
+// on the wire: Firestorm adds Size to MapBlockReply, for OpenSim's
+// variable-sized regions, and the master template adds NewScriptInfo to
+// RezScript.  A message can be wrong in a way that never fails -- a
+// trailing Variable block the sender omitted decodes as empty and
+// reports no error -- so this was measured rather than assumed.
+// Why: doc/wire.md#which-message-template
 //
 // Take the master template when you want to reach something newer than
 // the client, Firestorm's when you want to talk to OpenSim, and expect

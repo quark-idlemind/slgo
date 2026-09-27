@@ -6,9 +6,8 @@ package main
 // carries the object's name and key and no more, so two scripts in one
 // object are indistinguishable and two in separate objects are not.  What
 // has to hold for that to be safe is asserted here -- a probe must never
-// run in the measured object, and a cnt>0 probe's SIZE and BASE_MEM are
-// arithmetic on a zero and must never reach the run cache copy mode reads
-// Size from.
+// run in the measured object, and a probe's reading goes into the one run
+// cache like any other.
 //
 // See fake_test.go for the grid.
 
