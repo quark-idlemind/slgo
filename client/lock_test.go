@@ -72,8 +72,8 @@ func TestTryLockSaysWhoHasItRatherThanWaiting(t *testing.T) {
 
 // TestAWaitAnsweredWithoutTheLockIsNotSilentlyTaken: only TryLock is
 // entitled to come back empty handed.  A wait that did would leave the
-// caller believing it holds something it does not, and two benchmarks
-// would quietly share one object.
+// caller believing it holds something it does not, and two callers would
+// quietly share what the lock was for.
 func TestAWaitAnsweredWithoutTheLockIsNotSilentlyTaken(t *testing.T) {
 	t.Parallel()
 	d, conn := dialFake(t)
@@ -153,9 +153,7 @@ func TestGivingUpOnAWaitTellsTheDaemon(t *testing.T) {
 
 // TestAWaitEndsWhenTheDaemonDoes: a lock nobody will ever answer must
 // not outlive the connection it was asked on, or a program waiting its
-// turn waits for a daemon that has gone -- and it would wait for as long
-// as it was told to, which for a benchmark queueing on an object is a
-// quarter of an hour.
+// turn waits for a daemon that has gone, for as long as it was told to.
 func TestAWaitEndsWhenTheDaemonDoes(t *testing.T) {
 	t.Parallel()
 	d, conn := dialFake(t)
