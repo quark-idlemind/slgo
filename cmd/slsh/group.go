@@ -30,9 +30,9 @@ package main
 // which is untrue as it stands and unhelpful as a hint.  The land does
 // allow it; the request simply arrived from nobody in particular.  A
 // viewer remembers the active group across sessions and a headless
-// login starts with none, so this is the ordinary state of every avatar
-// slgod brings up, and until now there was no way to fix it from the
-// prompt.
+// login starts with none, so this is the state of an avatar slgod
+// brings up unless its profile or -group names one or it has joined
+// only one, and until now there was no way to fix it from the prompt.
 //
 // # Why the membership list had to cross the wire first
 //
@@ -50,8 +50,8 @@ package main
 //
 // Nothing asks for the list.  AgentGroupDataUpdate arrives of its own
 // accord shortly after the handshake and again whenever the membership
-// changes (agent/agent.go:420), which means an empty list is "not told
-// yet" exactly as much as it is "belongs to none" -- the point
+// changes (see agent.Agent.Groups), which means an empty list is "not
+// told yet" exactly as much as it is "belongs to none" -- the point
 // agent.WaitGroups was written around.  So the empty case says both
 // rather than picking one, and printing nothing at all would be the
 // worst of the three: silence reads as a working command that found

@@ -26,7 +26,7 @@ package main
 //
 // which names both causes and picks neither.  So this command exists to
 // tell them apart, and does it two ways.  A bare "maturity" prints both
-// numbers as the login response gave them.  And asking for adult makes
+// numbers as the daemon last heard them.  And asking for adult makes
 // the grid say it: granted adult, and the preference was the problem
 // and is now fixed; granted something lower, and that is the ceiling,
 // and the rest of the job is on a web page.

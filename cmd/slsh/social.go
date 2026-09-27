@@ -213,10 +213,11 @@ func (sh *Shell) watch(ctx context.Context) {
 	// the first notice need not wait for them.  See heardNotice.
 	sh.groups.kick()
 	// An offer another client of this avatar has dealt with, or a dialog
-	// or a permission request nobody answered in time, which is gone
-	// from waiting as of now.  Said, because a number a person was about
-	// to type has just stopped meaning anything, and "there is no 3" a
-	// moment later would be the first they heard of it.
+	// or a permission request dropped unanswered, for its age or to make
+	// room, which is gone from waiting as of now.  Said, because a
+	// number a person was about to type has just stopped meaning
+	// anything, and "there is no 3" a moment later would be the first
+	// they heard of it.
 	//
 	// Every notice that changes what is waiting redraws the prompt, whose
 	// count would otherwise be stale until the next command.  A prompt
@@ -529,12 +530,12 @@ func cmdLookup(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 // printFound prints what a name search turned up and makes it the last
 // listing, so that a number typed afterwards means one of these lines.
 //
-// This is lookup's listing, shared rather than copied: whoOrSearch shows
-// the same rows for the same reason -- somebody has to pick one of them
-// -- and two spellings of the same list would be two lists as far as
-// anybody reading the screen is concerned.  The display name is shown
-// only where it differs from the name, since a second column repeating
-// the first is a column of noise.
+// This is lookup's listing, shared rather than copied: whoOrSearch and
+// onTheGrid show the same rows for the same reason -- somebody has to
+// pick one of them -- and two spellings of the same list would be two
+// lists as far as anybody reading the screen is concerned.  The display
+// name is shown only where it differs from the name, since a second
+// column repeating the first is a column of noise.
 //
 // A full page says so.  The search answers with at most sl.LookupLimit
 // rows and nothing in the reply says how many it left behind, so one
@@ -837,11 +838,11 @@ type lureFlags struct {
 // cmdLure offers somebody a teleport.
 //
 // Named for the grid's own word, which is what the rest of this tree
-// and the shell's own listings already say -- a teleport offer arriving
-// is a "teleport lure" in `waiting`.  A viewer's menu calls it Offer
-// Teleport; `offer` here was already friendship, and two things called
-// offer that differ by a flag would be worse than one word of the
-// protocol's jargon with a page explaining it.
+// already says -- a teleport offer arriving here is announced as a
+// "teleport lure".  A viewer's menu calls it Offer Teleport; `offer`
+// here was already friendship, and two things called offer that differ
+// by a flag would be worse than one word of the protocol's jargon with
+// a page explaining it.
 func cmdLure(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o lureFlags
 	args, done, err := subOptions("lure", &o, out, args)
@@ -991,8 +992,10 @@ func cmdDecline(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 // "this command's business and I will not guess", and both callers
 // have to know the difference.  A word that names no item at all is
 // not an error: it goes on to be tried against the friendship offers,
-// which is how accept has always read its argument.  Anything else
-// that cannot be narrowed to one is.
+// which is how accept has always read its argument -- unless an item
+// offered has that name in another case, which is refused with the
+// name it has.  Anything else that cannot be narrowed to one is an
+// error too.
 //
 // Before this there was no error and both cases fell through to the
 // friendship offers -- so two items waiting and no friendship offer
@@ -1086,13 +1089,14 @@ func (sh *Shell) offer(args []string) (*sl.Offer, error) {
 
 // unknownName is a name nothing here has heard of.
 //
-// It is a type rather than a sentence because two callers have to tell
-// it from the other refusals.  who asks the region about this one and
-// about nothing else: a uuid and a number have been answered
+// It is a type rather than a sentence because its callers have to tell
+// it from the other refusals.  whoNear asks the region about this one
+// and about nothing else: a uuid and a number have been answered
 // definitively either way, and asking the region about "9" would turn
 // "there is no 9 in the last listing" into a report about somebody
 // called nine.  whoAndRest treats it as the signal to try a shorter run
-// of words -- see there.
+// of words -- see there -- and onTheGrid searches the grid for this
+// one and hands any other refusal back as it was.
 //
 // unsearched is why the grid's search, which is the last place a name
 // is looked for, could not be asked.  It is carried rather than
@@ -1143,10 +1147,10 @@ const maxNameWords = 2
 // whoAndRest is the person named at the front of a command line and
 // whatever is left of it.
 //
-// The commands that take somebody AND something else -- im, offer, give
-// -- cannot simply read the first word as the name, because a name has
-// two words in it and sh.who matches either half of one.  Measured
-// live, with the names changed:
+// The commands that take somebody AND something else -- im, offer,
+// lure, give, invite -- cannot simply read the first word as the name,
+// because a name has two words in it and sh.who matches either half of
+// one.  Measured live, with the names changed:
 //
 //	$ slsh -c "im Example Resident hello from the guide"
 //	> [IM Example Resident] Resident hello from the guide
@@ -1169,7 +1173,7 @@ const maxNameWords = 2
 // refusal naming two people with a refusal naming five.
 //
 // The region is asked once, after every run has failed against what is
-// already known, for the reason sh.who asks it at all -- and once
+// already known, for the reason whoNear asks it at all -- and once
 // rather than per run, since one answer fills the cache for all of
 // them.  The grid is asked last, run by run in the same order, and only
 // once the region has had its turn: see onTheGrid for why a search
@@ -1237,7 +1241,7 @@ func (sh *Shell) who(ctx context.Context, out io.Writer, want string) (msg.UUID,
 // The session's name cache holds whoever has been mentioned to it: a
 // listing printed, somebody who has spoken, a conversation opened.
 // Nothing evicts from it -- the daemon keeps avatars whatever the
-// distance (agent/objects.go:319) and the cache is kept for the life of
+// distance (agent.Objects.Trim) and the cache is kept for the life of
 // the session (sl/names.go) -- but a shell that has just started has had
 // nothing mentioned to it, so "slsh -c" would refuse a name that "who"
 // would have listed a moment later.  The daemon has known that avatar
@@ -1402,8 +1406,8 @@ func namedExactly(found []sl.Found, want string) []sl.Found {
 
 // whoKnown is who a name means among what this shell already has: a
 // uuid, a number from the last listing, or a name the session has
-// heard.  It asks the region nothing, which is what lets who ask it
-// once and whoAndRest ask it once for a whole line of words.
+// heard.  It asks the region nothing, which is what lets whoNear ask
+// it once and whoAndRest ask it once for a whole line of words.
 func (sh *Shell) whoKnown(ctx context.Context, want string) (msg.UUID, string, error) {
 	want = strings.TrimSpace(want)
 	if id, err := msg.ParseUUID(want); err == nil {

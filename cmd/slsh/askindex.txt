@@ -374,7 +374,7 @@ lsl:section:What it costs to ask	lsl	section	What it costs to ask	The whole lang
 lsl:section:Examples	lsl	section	Examples	    lsl llSetLinkPrimitiveParams\n    lsl -m -f > functions\n\nSee also: `features`, where that id comes from, and `caps` for\nwhether the capability behind all this was granted at all.
 lsl:example:2	lsl	example	Examples	lsl -m -f > functions
 lure	lure	line		lure [-a] WHO [TEXT]\noffer somebody a teleport here, or --ask to be brought to them\nhelp groups: people\nkeywords: offer teleport bring summon invite somebody here to me teleport request
-lure:intro	lure	intro		`lure` offers somebody a teleport to where this avatar is standing.  It\nis what a viewer's menu calls Offer Teleport; the grid's own word for\nit is a lure, which is what `waiting` already says when one arrives\nhere.\n\n    lure Example Resident\n    lure Example Resident come and look at the dock\n\nWho is named by a name, by a key, or by the number beside a name in the\nlast listing of people, exactly as `im` and `offer` name somebody.\nAnything after the name is the note that goes with it.
+lure:intro	lure	intro		`lure` offers somebody a teleport to where this avatar is standing.  It\nis what a viewer's menu calls Offer Teleport; the grid's own word for\nit is a lure, which is what this shell calls one when it arrives\nhere.\n\n    lure Example Resident\n    lure Example Resident come and look at the dock\n\nWho is named by a name, by a key, or by the number beside a name in the\nlast listing of people, exactly as `im` and `offer` name somebody.\nAnything after the name is the note that goes with it.
 lure:example:1	lure	example		lure Example Resident
 lure:example:2	lure	example		lure Example Resident come and look at the dock
 lure:section:What the other side sees	lure	section	What the other side sees	The destination is not a field of the message.  What arrives is the\nnote, and a viewer shows that as the whole of the offer -- so an offer\nwith no note arrives with nothing to say where it goes.  For that\nreason the shell appends this avatar's position to the note as a map\nlink, which is what a viewer does with its own offers:\n\n    come and look at the dock\n    https://maps.secondlife.com/secondlife/Example%20Region/128/128/25
@@ -1199,7 +1199,7 @@ along	84,222,202,96,178,5,12*2
 alongsid	8,30,473,294,60,4
 alpha	92,659*2,9,111
 alphabetical	12
-already	6,8,40,15,3,11,18,2,1,2,6,62,40,77,3,16*2,2,6,29,8,19,27,15*2,1,2,3,7,2,13,19*2,82,15*2,19,13,26,22,1,3,17,1,17,30*2,2,1,16*2,71,10,18,1*2,7,30,5
+already	6,8,40,15,3,11,18,2,1,2,6,62,40,77,3,16*2,2,6,29,8,46,15*2,1,2,3,7,2,13,19*2,82,15*2,19,13,26,22,1,3,17,1,17,30*2,2,1,16*2,71,10,18,1*2,7,30,5
 alter	765
 although	45,310,465
 altogether	795
@@ -1345,7 +1345,7 @@ cb567e57	353
 cfb57e57	174,173
 cach	153,50,57,194,50
 pelmar	297
-call	1,7,37,11*2,1,27,26,8,20*2,22,37,19,17,1,13,13,17,7,9,1*2,8,72,37,6,2,10,13,2*2,10,40,14,21,33,23,7,64,19,2,7,4,4,3,1*2,10*2,27,13,3,3,19,23*2,11,3,12,48,23
+call	1,7,37,11*2,1,27,26,8,20*2,22,37,19,17,1,13,13,17,7,9,1*2,8,72*2,37,6,2,10,13,2*2,10,40,14,21,33,23,7,64,19,2,7,4,4,3,1*2,10*2,27,13,3,3,19,23*2,11,3,12,48,23
 caller	318
 cam	87,13,1,3,93,25,38,95,25,18,55*2,1,141,66,159,21,10,2,16*2,1,1,22
 camera	330*2,165,65,222*2
@@ -2371,7 +2371,7 @@ sampl	781
 sat	679*2
 sav	41,4*2,7,61,4,74*2,1,84,187,7,170,1*2,1,1,1,1*2,1,1
 saw	270,395*2,171,23
-say	1*2,3*2,2,1*3,5,2*2,4,4,3*4,2*4,6,1,6,1,1,3*2,9,2*2,1,6,3*2,1,1,1,5*2,9*3,1,3*2,3,1*3,1*2,9,2,3,1,3,8,2,16,3,4,9,1*3,3*2,4,2*2,4,8,4,17,2,8*2,1,6*2,2,2,1*2,5*2,4,2*2,1*2,5,3,1*2,1,3,5,10,2*2,1*2,3,6*2,3,2,3,14,1*3,1,1*2,2,1*2,8,1*2,7*2,1,8,1,14*2,2,8,6*2,8,8*2,1,4,3,9,7,4,1*2,1*3,1*2,1,5,5,5*2,15,20*2,1,1,1*4,2*2,2,5,12*2,8,7,4*2,2,7,6,1*2,11,1*3,3,4,8,1,4,7,1*4,4,1,4,1*2,26,6,3,1*3,8,1,2,1,6*5,2,2,1*2,9,20*2,1*3,1,1,1,1*3,1,8*2,1,1,1,1,2,7,4*2,3,1,8,1,4,2,1,7*2,3,2,4,2*2,1*3,1,5,4,5*2,2*2,3*3,10,1*3,2,1,14*3,16,12*2,10,1*3,1*3,4,10*2,4*4,3,1*2,4*2,2,2*5,1*2,4,18,9*2,3*3,9,1,3*2,9,1*2
+say	1*2,3*2,2,1*3,5,2*2,4,4,3*4,2*4,6,1,6,1,1,3*2,9,2*2,1,6,3*2,1,1,1,5*2,9*3,1,3*2,3,1*3,1*2,9,2,3,1,3,8,2,16,3,4,9,1*3,3*2,4,2*2,4,8,4,17,2,8*2,1,6*2,2,2,1*2,5*2,4,2*2,1*2,5,3,1*2,1,3,5,10,2*2,1*2,3,6*2,3,2,3,14,1*3,1,1*2,2,1*2,8,1*2,7*2,1,8,1,14*2,2,8,6*2,8,8*2,1,7,9,7,4,1*2,1*3,1*2,1,5,5,5*2,15,20*2,1,1,1*4,2*2,2,5,12*2,8,7,4*2,2,7,6,1*2,11,1*3,3,4,8,1,4,7,1*4,4,1,4,1*2,26,6,3,1*3,8,1,2,1,6*5,2,2,1*2,9,20*2,1*3,1,1,1,1*3,1,8*2,1,1,1,1,2,7,4*2,3,1,8,1,4,2,1,7*2,3,2,4,2*2,1*3,1,5,4,5*2,2*2,3*3,10,1*3,2,1,14*3,16,12*2,10,1*3,1*3,4,10*2,4*4,3,1*2,4*2,2,2*5,1*2,4,18,9*2,3*3,9,1,3*2,9,1*2
 scal	402*2,27,167*2
 scan	489
 scatter	393
@@ -2415,7 +2415,7 @@ shallow	454,150,206,4
 shap	92,81,1,23,150*2,51,5,51,65,3*2,74*4,66,2,2*2,100*2,66,39*3,9,11
 shar	31*3,3,23,21,40,55,69,65,28,18,32,39,25,3,140,47,26,139*2,16,12
 sharper	277
-shell	4*2,2,6*2,6,9,4,14,9*2,9,3*4,1,5*2,2,9,27,12,4,1*2,33,3,8,21,11,19,3,4,4,5,4,11*2,4*2,12,1*3,3,1,16,20,4,8*3,1*3,4*2,17,26*2,7,5,38,2,18,14,2*2,1,6,20,18,2,2,4*5,1,12,20,37,2,1*3,3*2,1*5,2,1,1,32,8,19,3,3,1,5,2*2,2,3,20,1*2,3,7*2,16*2,33,1,45,1,10*2,4,15*2,8*2,4*8,1*2,15*4,7*3,7,14,6*2,11
+shell	4*2,2,6*2,6,9,4,14,9*2,9,3*4,1,5*2,2,9,27,12,4,1*2,33,3,8,21,11,19,3,4,4,5,4,11*2,4*2,12,1*3,3,1,16,20,4,8*3,1*3,4*2,17,26*2,4,3,5,38,2,18,14,2*2,1,6,20,18,2,2,4*5,1,12,20,37,2,1*3,3*2,1*5,2,1,1,32,8,19,3,3,1,5,2*2,2,3,20,1*2,3,7*2,16*2,33,1,45,1,10*2,4,15*2,8*2,4*8,1*2,15*4,7*3,7,14,6*2,11
 shift	428,1,2,166,213
 shininess	763
 shiny	751*2,12
@@ -2720,7 +2720,7 @@ visit	787
 voic	152,1,653
 void	369
 volum	649
-wait	0,1*2,3,1*2,3*2,6,1,2,1,7,2*2,1,3*2,32*2,11*2,5,1*2,4*3,5,2*2,3,2,7*3,1,2*4,1,1,2,11,1,43,23,22,2*2,6,4,6*2,14,10*3,1*5,2,14,1*4,5,13*3,2,2*2,6,2,4,2,6*2,1,61,7*2,7,41,39,6*2,1*3,11,15,6*2,1*2,1*2,2,25,16,3*2,39,9,11,39,22,6*2,1,3,2,9,1,2,2,3,4,3,15,2,5,4,46,5,5*2,1,1,10*4,1,1,2,1,4,4,13*3,1*4,1,1,1,1*6,1,1*3,1,2,11,28
+wait	0,1*2,3,1*2,3*2,6,1,2,1,7,2*2,1,3*2,32*2,11*2,5,1*2,4*3,5,2*2,3,2,7*3,1,2*4,1,1,2,11,1,43,23,22,2*2,6,4,6*2,14,10*3,1*5,2,14,1*4,5,13*3,2,2*2,6,2,4,2,6*2,1,68*2,7,41,39,6*2,1*3,11,15,6*2,1*2,1*2,2,25,16,3*2,39,9,11,39,22,6*2,1,3,2,9,1,2,2,3,4,3,15,2,5,4,46,5,5*2,1,1,10*4,1,1,2,1,4,4,13*3,1*4,1,1,1,1*6,1,1*3,1,2,11,28
 walk	54,2,10,77*2,6*2,1,24,47*3,1*7,2*2,5,65,53,52,18,33*2,1*2,1,2,154,191,11,30*3,1*9,1,1,1,1,1,1*3,1,2*5,1*4,1*3,1*5,1*6,1,1,1,22,1,6,10
 wall	198,1,375,3,273
 wanderer	260
