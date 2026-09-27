@@ -192,7 +192,7 @@ const TouchRate = 45
 // while a touch is held: 22.5 times a second, half the simulator's
 // 45 fps.
 //
-// Measured on Agni's beta grid, holding a touch on a counting script
+// Measured on Aditi, the beta grid, holding a touch on a counting script
 // while varying how fast updates were sent:
 //
 //	updates/s    1     2     5    15    30    45    90

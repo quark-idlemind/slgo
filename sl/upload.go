@@ -308,7 +308,7 @@ func checkTextureDims(w, h int) error {
 			return fmt.Errorf("%s is %d", d.name, d.v)
 		case d.v&(d.v-1) != 0:
 			return fmt.Errorf("%s %d is not a power of two, which the grid requires: "+
-				"resize %dx%d to %dx%d first, which this package will not do for you",
+				"resize %dx%d to %dx%d first; sl.Resize will, when asked",
 				d.name, d.v, w, h, TextureDim(w), TextureDim(h))
 		case d.v > MaxTextureSize:
 			return fmt.Errorf("%s %d is larger than the %d the grid allows",

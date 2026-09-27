@@ -120,7 +120,7 @@ func TestEncodingWillNotResize(t *testing.T) {
 	if err == nil {
 		t.Fatal("a 300x200 image encoded, and the grid would have refused it")
 	}
-	for _, want := range []string{"power of two", "256x128", "will not do for you"} {
+	for _, want := range []string{"power of two", "256x128", "sl.Resize"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error = %v, want it to mention %q", err, want)
 		}
