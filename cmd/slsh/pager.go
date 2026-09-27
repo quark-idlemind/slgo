@@ -77,6 +77,7 @@ type pager struct {
 	mode  rune // 0, or '/' or '?' while typing a search
 	buf   []rune
 	shown int // how far down has been written; a step on writes none twice
+	hit   int // the line the last search found, which may be below top
 }
 
 func newPager(text string, rows int) *pager {
@@ -144,7 +145,8 @@ func (p *pager) half() int {
 // search looks from the line after (or before) the top of the window
 // for a line containing q.  An empty q repeats the last query.  The
 // matching line is brought to the top, or as near as the last screen
-// allows.
+// allows.  A match left below the top by that is where the next search
+// starts from, while it is still on the screen.
 func (p *pager) search(q string, dir int) bool {
 	if q == "" {
 		q = p.query
@@ -154,9 +156,14 @@ func (p *pager) search(q string, dir int) bool {
 	if q == "" || dir == 0 || len(p.lines) == 0 {
 		return false
 	}
-	for i := p.top + dir; i >= 0 && i < len(p.lines); i += dir {
+	from := p.top
+	if p.hit > p.top && p.hit < p.top+p.view {
+		from = p.hit
+	}
+	for i := from + dir; i >= 0 && i < len(p.lines); i += dir {
 		if lineHas(p.lines[i], q) {
-			p.top = i
+			p.hit = i
+			p.top = min(i, p.maxTop())
 			return true
 		}
 	}

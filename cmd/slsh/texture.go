@@ -271,7 +271,8 @@ func helpFilters(out io.Writer) {
 	}
 
 	fmt.Fprintf(out, "\nThe filter only matters when the picture is resized at all.\n"+
-		"Nothing is resized if both sides are already powers of two.\n")
+		"Nothing is resized if both sides are already powers of two, %d or less.\n",
+		sl.MaxTextureSize)
 }
 
 // roundings are what --round takes.

@@ -113,8 +113,42 @@ func TestPagerSearchRepeatsTheLastQuery(t *testing.T) {
 	if !p.search("", 1) {
 		t.Fatal("repeat should find the next alpha")
 	}
-	if p.top != 4 {
-		t.Errorf("repeat at %d, want 4", p.top)
+	// The last alpha is on the last screen, which starts at 2.
+	if p.top != 2 || p.hit != 4 {
+		t.Errorf("repeat at top %d, hit %d, want the last screen (2) and 4", p.top, p.hit)
+	}
+}
+
+// TestPagerSearchStopsAtTheLastScreen: a match near the end brings the
+// last screenful, never less than one, and the next search goes on
+// from the match rather than finding it again.
+func TestPagerSearchStopsAtTheLastScreen(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 20; i++ {
+		if i == 17 || i == 18 {
+			b.WriteString("needle\n")
+		} else {
+			b.WriteString("hay\n")
+		}
+	}
+	p := newPager(b.String(), 6) // view 5, so the last screen starts at 15
+	if !p.search("needle", 1) {
+		t.Fatal("the first needle was missed")
+	}
+	if p.top != p.maxTop() {
+		t.Errorf("top = %d, want the last screen, %d", p.top, p.maxTop())
+	}
+	if p.status() != "(END)" {
+		t.Errorf("status = %q, want (END)", p.status())
+	}
+	if !p.search("", 1) || p.hit != 18 || p.top != p.maxTop() {
+		t.Errorf("the second needle: hit %d, top %d", p.hit, p.top)
+	}
+	if p.search("", 1) {
+		t.Errorf("a third search found line %d; there are two needles", p.hit)
+	}
+	if !p.search("", -1) || p.hit != 17 {
+		t.Errorf("searching back from the second found line %d, want 17", p.hit)
 	}
 }
 

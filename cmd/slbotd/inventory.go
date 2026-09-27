@@ -668,8 +668,7 @@ func folderAt(ctx context.Context, s *sl.Session, path string) (msg.UUID, error)
 // -- are in both.  Every field an Entry carries is copied, because a rez
 // or a wear sends them all as the item's own: an item that lost its
 // masks on the way through would be rezzed with permissions nobody
-// asked for.  The group is the one field of an Item that an Entry does
-// not carry, and goes as zero.
+// asked for.
 func itemOf(e sl.Entry) *sl.Item {
 	return &sl.Item{
 		ID:            e.ID,
@@ -683,6 +682,7 @@ func itemOf(e sl.Entry) *sl.Item {
 		Created:       e.Created,
 		CreatorID:     e.Creator,
 		OwnerID:       e.Owner,
+		GroupID:       e.Group,
 		BaseMask:      e.BaseMask,
 		OwnerMask:     e.OwnerMask,
 		GroupMask:     e.GroupMask,

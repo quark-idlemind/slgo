@@ -5,7 +5,18 @@
 # a whole, by askeval_test.go (retrieval, always) and
 # askeval_model_test.go (a model, when one is named).
 #
-# One question per line, tab-separated:
+# The person asking is driving an avatar and already knows the viewer's
+# names for things: an IM, a teleport, the minimap, a sim, an object's
+# contents, a HUD, About Land.  The questions use those names.  A
+# question slsh cannot answer is one the viewer can, looked for in the
+# pages and not found.
+#
+# One question per line, tab-separated.  The question is the words
+# after the command: somebody types "how do I find what is in this
+# folder", the line here is "do I find what is in this folder", and
+# how puts its own name back in front before asking.  With that word
+# put back, the line is an ordinary question.  A line that already
+# starts with "how" is asked as "how how ...".
 #
 #   question <TAB> commands [<TAB> flags]
 #
@@ -23,99 +34,155 @@
 # same change.
 
 # Inventory
-what is in this folder	ls
-show my inventory with the dates and ids of things	ls find	-l
-which items did I get most recently	ls	-t
-list everything in my inventory including what is in subfolders	ls	-r
-what is inside that box sitting on the floor	ls	--in
-open a notecard and read it	cat
-read the notecard that is inside a vendor	cat	--in
-copy an item so I have two of it	cp
-move an item into a different folder	mv
-I have three copies of something, delete only the newest one	rm	--newest
-which folder am I in right now	pwd
-go into my objects folder	cd
-search my whole inventory for anything called lamp	find
-make a new script in my inventory	new	--kind
-save a texture to my disk under a name I choose	get	-o
+do I find what is in this folder	ls
+do I show my inventory with the dates and ids of things	ls find	-l
+do I find which items I got most recently	ls	-t
+do I list everything in my inventory including what is in subfolders	ls	-r
+do I find what is inside that box sitting on the floor	ls	--in
+do I open a notecard and read it	cat
+do I read the notecard that is inside a vendor	cat	--in
+do I copy an item so I have two of it	cp
+do I move an item into a different folder	mv
+do I delete only the newest one when I have three copies of something	rm	--newest
+do I find which folder I am in right now	pwd
+do I go into my objects folder	cd
+do I search my whole inventory for anything called lamp	find
+do I make a new script in my inventory	new	--kind
+do I save a texture to my disk under a name I choose	get	-o
 
 # People
-show all my friends, not only the ones online	friends	-a
-what is the uuid of an avatar whose name I know	lookup	-l
-ask a friend to teleport me to them	lure	-a
-tell my friend where I am so they can come over	lure
-decline an item somebody tried to give me	decline no
-make a pending request stop being counted in my prompt without answering it	ignore
-friend requests and item offers I have not answered yet	offers waiting
-list the conversations I have open	talk
-switch into a mode where everything I type is chat	chat
-send a message on channel 7	say	-c
+do I show all my friends, not only the ones online	friends	-a
+do I find the uuid of an avatar whose name I know	lookup	-l
+do I ask a friend to teleport me to them	lure	-a
+do I tell my friend where I am so they can come over	lure
+do I decline an item somebody tried to give me	decline no
+do I make a pending request stop being counted in my prompt without answering it	ignore
+do I see the friend requests and item offers I have not answered yet	offers waiting
+do I list the conversations I have open	talk
+do I switch into a mode where everything I type is chat	chat
+do I send a message on channel 7	say	-c
 
 # Places
-go to my home location	tp landmark	--home
-remember this spot as a landmark	landmark	--make
-travel to a place I saved a landmark for	landmark tp	--go
-show every parcel in this region	parcel	-r
-draw a map of the land parcels around me	parcel map	--map
-which regions border the one I am in	neighbours
-where on the grid is a region I have never been to	regions
-what are my exact coordinates	where
-what is the maturity rating and water height of this region	look
-does this region allow mesh uploads	features
-how many attachments can an avatar wear here	features
+do I go to my home location	tp landmark	--home
+do I remember this spot as a landmark	landmark	--make
+do I travel to a place I saved a landmark for	landmark tp	--go
+do I show every parcel in this region	parcel	-r
+do I draw a map of the land parcels around me	parcel map	--map
+do I find which regions border the one I am in	neighbours
+do I find where on the grid a region I have never been to is	regions
+do I find what my exact coordinates are	where
+do I find what the maturity rating and water height of this region are	look
+do I find out whether this region allows mesh uploads	features
+many attachments can an avatar wear here	features
 
 # Objects and building
-list the objects that belong to one particular person	objects	--owner
-show the individual prims inside linked objects	objects	-c
-copy an object that is out in the world without removing it	take	--copy
-rez an item from inventory at a specific position	place	--at
-make one face of my object fullbright	texture	--fullbright
-give an object a glow	texture	--glow
-make a face half transparent	texture	--alpha
-click a particular face of a prim	touch	-f
-hold the mouse button down on an object for a few seconds	touch	-H --dwell
-make it so the next owner cannot modify what I sell them	perms	--next
-break a linked object apart into separate prims	unlink
-change a standing object so it matches a json file I edited	reform
-stop the scripts running in an object	stop
+do I list the objects that belong to one particular person	objects	--owner
+do I show the individual prims inside linked objects	objects	-c
+do I copy an object that is out in the world without removing it	take	--copy
+do I rez an item from inventory at a specific position	place	--at
+do I make one face of my object fullbright	texture	--fullbright
+do I give an object a glow	texture	--glow
+do I make a face half transparent	texture	--alpha
+do I click a particular face of a prim	touch	-f
+do I hold the mouse button down on an object for a few seconds	touch	-H --dwell
+do I make it so the next owner cannot modify what I sell them	perms	--next
+do I break a linked object apart into separate prims	unlink
+do I change a standing object so it matches a json file I edited	reform
+do I stop the scripts running in an object	stop
 
 # Wearing
-wear a hat on my left hand instead of my head	wear	--at
-swap out whatever is on that attachment point for something else	wear	--replace
-show the inventory keys of the things I have on	worn	-l
-put my whole outfit back on	dress
+do I wear a hat on my left hand instead of my head	wear	--at
+do I swap out whatever is on that attachment point for something else	wear	--replace
+do I show the inventory keys of the things I have on	worn	-l
+do I put my whole outfit back on	dress
 
 # LSL
-list all the LSL events	lsl	-e
-print only the LSL constants	lsl	-c
+do I list all the LSL events	lsl	-e
+do I print only the LSL constants	lsl	-c
 
 # The shell and the session
-what commands are there	help
-show me the manual page for a command	man help
-print a line of text	echo
-how is my connection to the simulator doing	status
-show the raw protocol messages as they come in	watch
-which capabilities did the simulator give this session	caps
-which avatars can this shell log in as	agents
-sign this avatar out	logout quit
-leave the shell	quit
-upload a picture but only show what would happen	put	-N --dry-run
-set up the worn objects that scripts get run in	auto	-n
-launch a graphical viewer logged in as this avatar	viewer	-l
+do I find what commands there are	help
+do I show the manual page for a command	man help
+do I print a line of text	echo
+is my connection to the simulator doing	status
+do I show the raw protocol messages as they come in	watch
+do I find which capabilities the simulator gave this session	caps
+do I find which avatars this shell can log in as	agents
+do I sign this avatar out	logout quit
+do I leave the shell	quit
+do I upload a picture but only show what would happen	put	-N --dry-run
+do I set up the worn objects that scripts get run in	auto	-n
+do I launch a graphical viewer logged in as this avatar	viewer	-l
+
+# The viewer's own names for things slsh does.
+do I send an IM to somebody	im
+do I say something in nearby chat	say
+do I offer a teleport to someone here	lure
+do I accept a friend request	accept
+do I look at someone's profile	profile
+do I find which friends are online	friends
+do I accept a teleport offer	answer waiting
+do I sit on the ground	sit
+do I stand up	stand
+do I walk over to someone	walk
+do I turn to face an avatar	face
+do I stop walking	halt
+do I find where I am	where
+do I find where I am in my inventory	pwd
+do I find where my hair is	find worn
+do I find what sim I am in	where
+do I find a sim on the world map	regions
+do I see who shows up on the minimap	map who
+do I find who owns the parcel I am standing on	parcel
+do I set home to where I am standing	landmark	--set-home
+do I teleport home	tp landmark
+do I show the contents of that object	ls	--in
+do I attach a HUD from my inventory	wear
+do I take off an attachment	detach
+do I put on my current outfit	dress
+do I give an inventory item to someone	give
+do I rez an object from inventory	place
+do I touch an object	touch
+do I read my group notices	notice
+do I change my active group	group
+do I invite someone to a group	invite
+do I find what I am wearing	worn
+do I empty the trash	emptytrash
+do I take a copy of an object and leave it standing	take	--copy
+do I accept an inventory offer	accept
+do I see who is on the radar	map who
+do I find out whether I am allowed to build on this land	parcel
+do I find what group title I am using	group
 
 # Things slsh cannot do.  Each was looked for in the pages.
-pay another avatar a hundred linden dollars	-
-buy the parcel I am standing on	-
-ban an annoying avatar from my land	-
-send back all the objects other people left on my parcel	-
-reset a script so it starts over from the beginning	-
-create a brand new group	-
-change my display name	-
-take a screenshot of what my avatar sees	-
-make my avatar dance	-
-upload a sound clip	-
-list only the folders in my inventory, not the items	-
-set the music stream for my parcel	-
-change the time of day so it is sunset	-
-play a gesture	-
-edit what my own profile says about me	-
+# The second list is what a viewer puts on a menu and this shell has
+# no command for.
+do I pay another avatar a hundred linden dollars	-
+do I buy the parcel I am standing on	-
+do I ban an annoying avatar from my land	-
+do I send back all the objects other people left on my parcel	-
+do I reset a script so it starts over from the beginning	-
+do I create a brand new group	-
+do I change my display name	-
+do I take a screenshot of what my avatar sees	-
+do I make my avatar dance	-
+do I upload a sound clip	-
+do I list only the folders in my inventory, not the items	-
+do I set the music stream for my parcel	-
+do I change the time of day so it is sunset	-
+do I play a gesture	-
+do I edit what my own profile says about me	-
+do I fly over to that building	-
+do I shout so the whole region can hear	-
+do I whisper to the person next to me	-
+do I mute an avatar	-
+do I block an avatar	-
+do I turn voice chat on	-
+do I switch into mouselook	-
+do I play an animation	-
+do I derender a prim	-
+do I restart the sim	-
+do I rotate an object	-
+do I buy an object that is for sale	-
+do I set my online status to busy	-
+do I leave a group	-

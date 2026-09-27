@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/quark-idlemind/slgo/internal/pick"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -156,21 +157,25 @@ func (inv *Inventory) Counts() (folders, items int) {
 	return len(inv.folders), len(inv.items)
 }
 
-// FindFolder returns the first folder with this name, searching from
-// the root breadth first.
-func (inv *Inventory) FindFolder(name string) (*Folder, bool) {
+// FindFolder is the folder called name among every folder known below
+// the root.  The name is matched exactly and has to pick out one folder,
+// as sl.PickNamed rules: several are refused with their ids, and none
+// with the names that differ only in case.  The refusal is an
+// *sl.NameError.
+func (inv *Inventory) FindFolder(name string) (*Folder, error) {
+	var all []*Folder
 	queue := []msg.UUID{inv.root}
 	for len(queue) > 0 {
 		id := queue[0]
 		queue = queue[1:]
 		for _, f := range inv.Children(id) {
-			if f.Name == name {
-				return f, true
-			}
+			all = append(all, f)
 			queue = append(queue, f.ID)
 		}
 	}
-	return nil, false
+	return pick.One(all, name, "folder", "in the inventory", func(f *Folder) (string, msg.UUID) {
+		return f.Name, f.ID
+	})
 }
 
 // Path is the slash separated path to a folder, from the root.

@@ -384,13 +384,13 @@ func (w *Session) SetItem(ctx context.Context, item msg.UUID, name, desc string,
 // cleared still set.  Only the bits in PermAll are set or compared.
 //
 // Nothing answers either message, so the object's properties are read
-// for up to fifteen seconds until the mask is what the permission rules
-// make of what was sent.  The rules adjust rather than refuse -- a next
-// owner who may not copy may always transfer, and everyone is never
-// given modify -- so what is returned may differ from what was asked
-// for, and is what the mask now allows.  A mask that never reads as the
-// rules would make it is an error wrapping ErrTimeout that says what it
-// allows instead.
+// until the mask is what the permission rules make of what was sent, for
+// up to Options.PermissionsTimeout, fifteen seconds by default.  The
+// rules adjust rather than refuse -- a next owner who may not copy may
+// always transfer, and everyone is never given modify -- so what is
+// returned may differ from what was asked for, and is what the mask now
+// allows.  A mask that never reads as the rules would make it is an
+// error wrapping ErrTimeout that says what it allows instead.
 // Why: doc/readbacks.md#object-permissions
 func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8, mask uint32) (uint32, error) {
 	field, ok := whoMasks[who]
@@ -426,7 +426,7 @@ func (w *Session) SetObjectPermissions(ctx context.Context, o *Object, who uint8
 	// Read until it holds: a single read can overtake the write.
 	var got, want uint32
 	var read bool
-	err = poll(ctx, 15*time.Second, time.Second,
+	err = poll(ctx, w.permissionsWait(), time.Second,
 		fmt.Sprintf("the %s mask of %s to take %s", field.name, o, PermWords(on)),
 		func(ctx context.Context) (bool, error) {
 			p, err := w.Properties(ctx, o, 5*time.Second)
@@ -741,8 +741,9 @@ func uuidCRC(u msg.UUID) uint32 {
 //
 // Nothing answers the message, and a move into Trash is accepted and
 // ignored, so the destination is listed until the item is in it -- under
-// the new name, if one was given -- for up to fifteen seconds.  One that
-// never arrives is an error wrapping ErrTimeout.
+// the new name, if one was given -- for up to Options.MoveTimeout,
+// fifteen seconds by default.  One that never arrives is an error
+// wrapping ErrTimeout.
 // Why: doc/readbacks.md#moves
 func (w *Session) MoveItem(ctx context.Context, item, folder msg.UUID, newName ...string) error {
 	if folder.IsZero() {
@@ -764,9 +765,6 @@ func (w *Session) MoveItem(ctx context.Context, item, folder msg.UUID, newName .
 	return w.arrives(ctx, folder, item, false, name)
 }
 
-// moveFor bounds the wait for a move to show in its destination.
-const moveFor = 15 * time.Second
-
 // arrives lists folder until id is in it -- a folder or an item as
 // isFolder says, and under name unless name is empty -- which is how a
 // move is confirmed.
@@ -777,7 +775,7 @@ func (w *Session) arrives(ctx context.Context, folder, id msg.UUID, isFolder boo
 	}
 	var there bool   // listed, whatever it was called
 	var named string // what it was called
-	err := poll(ctx, moveFor, time.Second, what, func(ctx context.Context) (bool, error) {
+	err := poll(ctx, w.moveWait(), time.Second, what, func(ctx context.Context) (bool, error) {
 		es, err := w.ListFolder(ctx, folder, 0)
 		if err != nil {
 			return false, err

@@ -312,6 +312,11 @@ func TestFiltersNeedsNoFileAndUploadsNothing(t *testing.T) {
 	if !strings.Contains(got, "a photograph") || !strings.Contains(got, "lanczos") {
 		t.Errorf("put --filters printed no guide: %q", got)
 	}
+	// A power of two over the ceiling is resized, so the guide says
+	// which powers of two are left alone.
+	if !strings.Contains(got, "powers of two, 2048 or less") {
+		t.Errorf("put --filters does not say a picture over 2048 is resized: %q", got)
+	}
 }
 
 // TestAnUnknownFilterPointsAtTheGuide rather than only listing names:

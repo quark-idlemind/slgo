@@ -124,11 +124,11 @@ func TestConfigReadsEverySettingAndBothSpellings(t *testing.T) {
 		t.Errorf("LoadConfig = %+v", c)
 	}
 
-	writeConfig(t, "addr = here:1\nagent = other\nescape = TAB\n")
+	writeConfig(t, "addr = here:1\nagent = other\nescape = ^]\n")
 	if c, err = LoadConfig(); err != nil {
 		t.Fatal(err)
 	}
-	if c.Addr != "here:1" || c.Agent != "other" || c.Prefix != 9 {
+	if c.Addr != "here:1" || c.Agent != "other" || c.Prefix != 29 {
 		t.Errorf("LoadConfig = %+v", c)
 	}
 }
@@ -478,7 +478,6 @@ func TestParseKeyTakesEverySpellingOfAKey(t *testing.T) {
 		want rune
 	}{
 		{"ESC", 27}, {"esc", 27}, {"escape", 27}, {"^[", 27}, {`\e`, 27},
-		{"TAB", 9}, {"^I", 9}, {`\t`, 9},
 		{"space", ' '},
 		{"^G", 7}, {"C-g", 7}, {"c-G", 7}, {"ctrl-g", 7}, {"CTRL-G", 7},
 		{"^@", 0}, {"^_", 31},
@@ -506,6 +505,17 @@ func TestParseKeyRefusesWhatWouldLeaveNoWayOut(t *testing.T) {
 		{"enter", "no way to send"},
 		{"return", "no way to send"},
 		{"^M", "no way to send"},
+		{"^J", "no way to send"},
+		{"13", "no way to send"},
+		// TAB moves between conversations in chat and completes a word
+		// at a command, before the escape key is looked for.
+		{"TAB", "never leave chat"},
+		{"tab", "never leave chat"},
+		{"^I", "never leave chat"},
+		{"C-i", "never leave chat"},
+		{`\t`, "never leave chat"},
+		{"9", "never leave chat"},
+		{"0x09", "never leave chat"},
 		// A control spelling of something that is not a control key.
 		{"^~", "is not a control key"},
 		{"ctrl-~", "is not a control key"},
@@ -532,7 +542,7 @@ func TestKeyNameIsParseKeyBackwards(t *testing.T) {
 		r    rune
 		want string
 	}{
-		{27, "ESC"}, {9, "TAB"}, {' ', "SPACE"}, {7, "^G"}, {1, "^A"}, {'!', "!"},
+		{27, "ESC"}, {' ', "SPACE"}, {7, "^G"}, {1, "^A"}, {'!', "!"},
 	} {
 		if got := KeyName(c.r); got != c.want {
 			t.Errorf("KeyName(%d) = %q, want %q", c.r, got, c.want)

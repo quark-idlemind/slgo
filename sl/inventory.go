@@ -59,15 +59,17 @@ type TaskItem struct {
 	SalePrice int32
 }
 
-// Folder finds a folder by name under the inventory root.
+// Folder finds a folder by name under the inventory root.  The name has
+// to pick out one folder, as PickNamed rules; the refusal is a
+// *NameError.
 func (w *Session) Folder(ctx context.Context, name string) (msg.UUID, error) {
 	inv := agent.NewInventory(w.invRoot)
 	if err := agent.FetchFolder(ctx, w.b, inv, w.invRoot); err != nil {
 		return msg.UUID{}, fmt.Errorf("sl: reading the inventory root: %w", err)
 	}
-	f, ok := inv.FindFolder(name)
-	if !ok {
-		return msg.UUID{}, fmt.Errorf("sl: no inventory folder named %q", name)
+	f, err := inv.FindFolder(name)
+	if err != nil {
+		return msg.UUID{}, fmt.Errorf("sl: %w", err)
 	}
 	return f.ID, nil
 }
@@ -88,19 +90,22 @@ func (w *Session) FolderItems(ctx context.Context, folder msg.UUID) ([]*Item, er
 	return inv.Contents(folder), nil
 }
 
-// FindItem looks for an item by name in a folder.
+// FindItem looks for an item by name in a folder.  The name has to pick
+// out one item, as PickNamed rules; the refusal is a *NameError.
 func (w *Session) FindItem(ctx context.Context, folder msg.UUID, name string) (*Item, error) {
 	items, err := w.FolderItems(ctx, folder)
 	if err != nil {
 		return nil, err
 	}
-	for _, it := range items {
-		if it.Name == name {
-			return it, nil
-		}
+	it, err := PickNamedFunc(items, name, "item", "in folder "+folder.String(), itemNamed)
+	if err != nil {
+		return nil, fmt.Errorf("sl: %w", err)
 	}
-	return nil, fmt.Errorf("sl: no item named %q in folder %s", name, folder)
+	return it, nil
 }
+
+// itemNamed is an inventory item's name and id, for PickNamedFunc.
+func itemNamed(it *Item) (string, msg.UUID) { return it.Name, it.ID }
 
 // callbackSeq numbers the items this process asks to be created, as
 // the viewer's LLInventoryCallbackManager does (llviewerinventory.cpp:

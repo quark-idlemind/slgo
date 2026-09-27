@@ -219,11 +219,13 @@ func cmdHalt(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 // region.  What comes back beside the place is the name, for a target
 // that had one.
 //
-// People are tried first, by the start of any part of their name, the
-// way who and im take them; an object is taken by the whole of its
-// name, the way touch and sit take one.  A word that fits two people,
-// or two objects, is refused rather than guessed at -- walking to the
-// wrong one is a thing somebody watching then has to explain.
+// People are tried first, the way who and im take them (sl.Find): a
+// whole name, ignoring case, over the start of any part of one, so
+// "Linnet Ewry" is Linnet Ewry beside a Linnet Ewrynn.  An object is
+// taken by the whole of its name, the way touch and sit take one.  A
+// word that fits two people, or two objects, is refused rather than
+// guessed at -- walking to the wrong one is a thing somebody watching
+// then has to explain.
 func (sh *Shell) walkTarget(ctx context.Context, name string, rest []string) (msg.Vector3, string, error) {
 	switch len(rest) {
 	case 2, 3:
@@ -247,11 +249,17 @@ func (sh *Shell) walkTarget(ctx context.Context, name string, rest []string) (ms
 	if err != nil {
 		return msg.Vector3{}, "", err
 	}
-	var found []sl.Person
+	var exact, found []sl.Person
 	for _, p := range people {
-		if nameStarts(strings.ToLower(p.Name), want) {
+		switch low := strings.ToLower(p.Name); {
+		case low == want:
+			exact = append(exact, p)
+		case nameStarts(low, want):
 			found = append(found, p)
 		}
+	}
+	if len(exact) > 0 {
+		found = exact
 	}
 	switch len(found) {
 	case 1:

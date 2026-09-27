@@ -107,6 +107,32 @@ func TestAWalkToAnObjectStopsShortOfIt(t *testing.T) {
 	}
 }
 
+// TestAWalkToAWholeNameIsNotRefusedForALongerOne: "Linnet Ewry" beside
+// a Linnet Ewrynn is Linnet Ewry, as im takes it; the start of both
+// names is still both of them.
+func TestAWalkToAWholeNameIsNotRefusedForALongerOne(t *testing.T) {
+	x, asked := walkingShell(t)
+	ewry := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000011")
+	ewrynn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-000000000012")
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: ewry, Local: 3}, PCode: pcodeAvatar,
+			Position: msg.Vector3{X: 140, Y: 128, Z: 25}},
+		{Object: sl.Object{ID: ewrynn, Local: 4}, PCode: pcodeAvatar,
+			Position: msg.Vector3{X: 100, Y: 128, Z: 25}},
+	}
+	x.grid.AnswerNames(t, map[msg.UUID]string{ewry: "Linnet Ewry", ewrynn: "Linnet Ewrynn"})
+
+	if got := x.do(t, `walk "linnet ewry"`); !strings.Contains(got, "from Linnet Ewry,") {
+		t.Errorf("walking to a whole name printed %q", got)
+	}
+	if asked.Target != (msg.Vector3{X: 140, Y: 128, Z: 25}) {
+		t.Errorf("walking to Linnet Ewry went to %v", asked.Target)
+	}
+	if got := x.do(t, "walk linnet"); !strings.Contains(got, `"linnet" is 2 people here`) {
+		t.Errorf("walking to the start of two names printed %q", got)
+	}
+}
+
 // TestAWalkThatDidNotArriveIsTheCommandFailing: a script running walks
 // has to be able to tell.
 func TestAWalkThatDidNotArriveIsTheCommandFailing(t *testing.T) {

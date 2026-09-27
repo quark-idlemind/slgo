@@ -2004,6 +2004,17 @@ func newTestShell(t *testing.T) *testShell {
 	return newTestShellOn(t, newFakeGrid(t), Config{Addr: "fake:7807", Prefix: 27})
 }
 
+// shortReadBacks has x's session give up a read-back -- a move, a
+// permission change, a delete -- at once, for a test that proves one
+// runs out rather than waiting the defaults out; see sl.Options.
+func shortReadBacks(x *testShell) {
+	x.s.SetOptions(sl.Options{
+		MoveTimeout:        time.Millisecond,
+		PermissionsTimeout: time.Millisecond,
+		DeleteTimeout:      100 * time.Millisecond,
+	})
+}
+
 func newTestShellOn(t *testing.T, b sl.Backend, cfg Config) *testShell {
 	t.Helper()
 	s, err := sl.New(b)

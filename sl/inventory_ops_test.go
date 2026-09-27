@@ -920,6 +920,7 @@ func TestPermissionsTheRulesDoNotExplainAreNotReported(t *testing.T) {
 			t.Parallel()
 			w, f := newFakeSession(t)
 			answerMasks(t, f, thePrim, 0, c.grant)
+			w.SetOptions(Options{PermissionsTimeout: time.Millisecond})
 
 			o := foundHere(w, &Object{ID: thePrim, Local: 77})
 			_, err := w.SetObjectPermissions(context.Background(), o, WhoGroup, PermCopy|PermModify)
@@ -1547,6 +1548,7 @@ func TestAMoveIsListedWhereItWentBeforeItIsReported(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			w, f := newFakeSession(t)
+			w.SetOptions(Options{MoveTimeout: time.Millisecond})
 			// The item is in the destination already, under its old
 			// name, only where the question is the name.
 			f.ServeInventory(t, func(folder msg.UUID) []*Item {

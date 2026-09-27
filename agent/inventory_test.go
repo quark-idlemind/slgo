@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/pick"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -249,8 +251,38 @@ func TestFetchInventoryTree(t *testing.T) {
 	if got := s.Inventory.Path(msg.MustParseUUID(uid(3))); got != "My Inventory/Objects/Boxes" {
 		t.Errorf("path = %q", got)
 	}
-	if f, ok := s.Inventory.FindFolder("Boxes"); !ok || f.ID.String() != uid(3) {
-		t.Errorf("FindFolder = %v %v", f, ok)
+	if f, err := s.Inventory.FindFolder("Boxes"); err != nil || f.ID.String() != uid(3) {
+		t.Errorf("FindFolder = %v %v", f, err)
+	}
+}
+
+// TestFindFolderTakesOneFolderOrRefuses: a name two folders carry is
+// refused with both ids rather than answered with the first found, and
+// a name nothing carries names what differs from it only in case.
+func TestFindFolderTakesOneFolderOrRefuses(t *testing.T) {
+	root := msg.MustParseUUID(uid(1))
+	inv := NewInventory(root)
+	inv.mu.Lock()
+	for _, f := range []*Folder{
+		{ID: msg.MustParseUUID(uid(2)), ParentID: root, Name: "Probe"},
+		{ID: msg.MustParseUUID(uid(3)), ParentID: root, Name: "Objects"},
+		{ID: msg.MustParseUUID(uid(4)), ParentID: msg.MustParseUUID(uid(3)), Name: "Probe"},
+	} {
+		inv.putFolder(f)
+	}
+	inv.mu.Unlock()
+
+	if f, err := inv.FindFolder("Objects"); err != nil || f.ID.String() != uid(3) {
+		t.Errorf("FindFolder(Objects) = %v, %v", f, err)
+	}
+	_, err := inv.FindFolder("Probe")
+	var ne *pick.NameError
+	if !errors.As(err, &ne) || len(ne.IDs) != 2 ||
+		!strings.Contains(err.Error(), uid(2)) || !strings.Contains(err.Error(), uid(4)) {
+		t.Errorf("FindFolder(Probe) = %v; want both folders' ids", err)
+	}
+	if _, err := inv.FindFolder("objects"); err == nil || !strings.Contains(err.Error(), `did you mean "Objects"?`) {
+		t.Errorf("FindFolder(objects) = %v; want the case variant offered", err)
 	}
 }
 

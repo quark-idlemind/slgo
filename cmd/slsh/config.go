@@ -238,6 +238,19 @@ type setting struct {
 	// refuses, so a bad value cannot half-apply.
 	show  func(c *Config) string
 	parse func(c *Config, value string) error
+
+	// apply, where there is one, is what a running shell does to take
+	// the new value, for a setting read once rather than each time it is
+	// wanted.  "set" calls it after the shell's Config has changed.
+	apply func(sh *Shell) error
+}
+
+// relogNow is "log" and "log_dir" taking effect at once.
+func relogNow(sh *Shell) error {
+	if err := sh.relog(); err != nil {
+		return fmt.Errorf("no transcript: %w", err)
+	}
+	return nil
 }
 
 // startupNote is what a startup-only setting says.  Written out rather
@@ -295,11 +308,13 @@ var settings = []setting{{
 		}
 		return nil
 	},
+	apply: relogNow,
 }, {
 	name:  "log_dir",
 	about: "where the transcript goes; empty is the default place",
 	show:  func(c *Config) string { return c.LogDir },
 	parse: func(c *Config, v string) error { c.LogDir = v; return nil },
+	apply: relogNow,
 }, {
 	name:  "notice_keep",
 	about: "how long a group notice is kept for \"notice\", like 15m",
@@ -727,10 +742,28 @@ func saveSetting(s setting, value string) (string, error) {
 //
 //	ESC  escape  ^[      the escape key, the default
 //	^G   C-g     ctrl-g  a control character
-//	TAB  ^I              tab, though it already cycles sessions
 //	!    ~               an ordinary character, if you never type it
 //	0x07 7               a number, for anything not named above
+//
+// Enter and TAB are refused however they are spelled: Shell.key takes
+// both before it looks for the escape key, so either would leave chat
+// with no way out.
 func ParseKey(s string) (rune, error) {
+	r, err := keyNamed(s)
+	if err != nil {
+		return 0, err
+	}
+	switch r {
+	case '\r', '\n':
+		return 0, fmt.Errorf("%q would leave no way to send a message", s)
+	case '\t':
+		return 0, fmt.Errorf("%q already moves between conversations, so it would never leave chat", s)
+	}
+	return r, nil
+}
+
+// keyNamed is ParseKey without the refusals.
+func keyNamed(s string) (rune, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, fmt.Errorf("no key given")
@@ -739,12 +772,12 @@ func ParseKey(s string) (rune, error) {
 	switch strings.ToLower(s) {
 	case "esc", "escape", "^[", "\\e":
 		return 27, nil
-	case "tab", "^i", "\\t":
-		return 9, nil
+	case "tab", "\\t":
+		return '\t', nil
 	case "space":
 		return ' ', nil
-	case "enter", "return", "^m":
-		return 0, fmt.Errorf("%q would leave no way to send a message", s)
+	case "enter", "return":
+		return '\r', nil
 	}
 
 	// ^X and its spellings, for a control character.
@@ -787,8 +820,6 @@ func KeyName(r rune) string {
 	switch {
 	case r == 27:
 		return "ESC"
-	case r == 9:
-		return "TAB"
 	case r == ' ':
 		return "SPACE"
 	case r < 32:

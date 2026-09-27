@@ -10,10 +10,11 @@ the region's own metres, or a name: somebody nearby, or an object.
 A third number is accepted and ignored.  The ground decides the height;
 a walk does not climb or fly.
 
-A name is tried against the people in the region first, by the start of
-any part of it, the way `who` lists them; then against objects, by the
-whole name.  A name that fits two people, or two objects, is refused
-with what it matched rather than guessed at.  Walking to a name stops a
+A name is tried against the people in the region first, the way `im`
+takes one: somebody's whole name, in any case, and otherwise the start
+of any part of it; then against objects, by the whole name.  A name
+that fits two people, or two objects, is refused with what it matched
+rather than guessed at.  Walking to a name stops a
 metre and a half short unless `--within` says otherwise, since half a
 metre from somebody's middle is walking into them.
 

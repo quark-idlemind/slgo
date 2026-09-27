@@ -27,8 +27,9 @@ usage error here.
 **-k, --keep**
 
 Leave what was built standing even if a script will not compile.
-Without it, a failure removes what it made and says it has: half a
-build is prims standing in the region that nobody asked for.  This is
+Without it, a failure removes what it made, into the trash, and says it
+has: half a build is prims standing in the region that nobody asked
+for.  This is
 for the case where the wreckage is the interesting part.
 
 Removing a prim is waiting for the region to say it has gone, for up

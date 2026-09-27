@@ -114,8 +114,9 @@ somewhere else; empty is the default place.
     2026-08-26 15:56:41 > [IM Example Resident] on my way
 
 A command is written down before it runs, so a command that hung is
-in the file that says what happened.  `set log off` stops it, and
-leaves the file where it is.
+in the file that says what happened.  `set log off` stops it at once,
+and leaves the file where it is; `set log_dir` moves it at once to a
+file in the new place.
 
 Control characters are written the way the screen showed them, `^[`
 for ESC and so on -- see `man chat` -- so that reading the file with

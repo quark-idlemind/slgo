@@ -2007,9 +2007,10 @@ would otherwise be a race nobody can win:
 
 Worth recording where it lands: the reply goes on whichever channel the
 script chose, and those are usually negative. Measured against a script
-listening on -4242, the reply arrived -- `HEARD [Beta] on -4242` --
-while ordinary chat from this client on a negative channel still goes
-nowhere. Until that bug is found, this is the way to reach one.
+listening on -4242, the reply arrived -- `HEARD [Beta] on -4242`.
+ChatFromViewer does not carry a negative channel, and the viewer sends
+this message instead, as `Say` does; see "Saying things on a negative
+channel" below.
 
 `Features` is one GET that answers what the region supports: whether
 mesh may be rezzed, how many attachments and groups an avatar may have,
@@ -2067,11 +2068,13 @@ has one accept button, so it is worth knowing the simulator honours it.
     w.Say(ctx, "hello", 42)      // ChatFromViewer
     w.Say(ctx, "hello", -7001)   // ScriptDialogReply
 
-ChatFromViewer from this client does not reach a negative channel --
-that bug is still open -- and ScriptDialogReply does, with no dialog
-needing to have been opened: the simulator checks only that the object
-id names something real. Firestorm uses the same trick to report
-collisions to scripts.
+ChatFromViewer does not carry a negative channel, and ScriptDialogReply
+does, with no dialog needing to have been opened: the simulator checks
+only that the object id names something real. It is what Firestorm
+sends for chat typed on a negative channel, with the avatar's own id as
+the object -- "Hack: ChatFromViewer doesn't allow negative channels"
+(`llfloaterimnearbychat.cpp:939-965`) -- and how it reports collisions
+to scripts.
 
 What it costs, measured: at most 254 bytes, since the template gives
 ButtonLabel a one byte length prefix, and no volume, so whispering or

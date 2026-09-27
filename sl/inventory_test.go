@@ -99,6 +99,62 @@ func TestFolderSaysWhichOfTheTwoThingsWentWrong(t *testing.T) {
 	})
 }
 
+// TestAFolderOrItemNameHasToMeanOneThing: Folder and FindItem pick by
+// PickNamed's rule, so two of a name are refused with their ids, and a
+// miss names what differs from it only in case; Worn and EnsureAttached
+// find the item the same way.
+func TestAFolderOrItemNameHasToMeanOneThing(t *testing.T) {
+	w, f := newFakeSession(t)
+	f.ServeInventoryTree(t, func(id msg.UUID) ([]*Folder, []*Item) {
+		if id == testInvRoot {
+			return []*Folder{
+				theObjectsFolder(),
+				{ID: theOther, ParentID: testInvRoot, Name: "Objects", Type: 8},
+				{ID: theChild, ParentID: testInvRoot, Name: "Notecards", Type: 7},
+			}, nil
+		}
+		return nil, []*Item{anItem(pickA, "workbench"), anItem(pickB, "workbench"), anItem(pickC, "Anvil")}
+	})
+	ctx := context.Background()
+
+	for _, c := range []struct {
+		what string
+		err  error
+		want []string
+	}{
+		{"Folder(Objects)", second(w.Folder(ctx, "Objects")), []string{aFolder.String(), theOther.String()}},
+		{"Folder(notecards)", second(w.Folder(ctx, "notecards")), []string{`did you mean "Notecards"?`}},
+		{"FindItem(workbench)", second(w.FindItem(ctx, aFolder, "workbench")), []string{pickA.String(), pickB.String()}},
+		{"FindItem(anvil)", second(w.FindItem(ctx, aFolder, "anvil")), []string{`did you mean "Anvil"?`}},
+		{"Worn(workbench)", second(w.Worn(ctx, aFolder, "workbench", HUDCenter1)), []string{pickA.String(), pickB.String()}},
+		{"EnsureAttached(workbench)", second(w.EnsureAttached(ctx, aFolder, "workbench", HUDCenter1)),
+			[]string{pickA.String(), pickB.String()}},
+	} {
+		var ne *NameError
+		if !errors.As(c.err, &ne) {
+			t.Errorf("%s = %v; want a *NameError", c.what, c.err)
+			continue
+		}
+		for _, want := range c.want {
+			if !strings.Contains(c.err.Error(), want) {
+				t.Errorf("%s = %v; want it to say %s", c.what, c.err, want)
+			}
+		}
+	}
+	if got, err := w.Folder(ctx, "Notecards"); err != nil || got != theChild {
+		t.Errorf("Folder(Notecards) = %s, %v", got, err)
+	}
+	if it, err := w.FindItem(ctx, aFolder, "Anvil"); err != nil || it.ID != pickC {
+		t.Errorf("FindItem(Anvil) = %v, %v", it, err)
+	}
+	if got := f.Sent(); len(got) != 0 {
+		t.Errorf("a name that picked out nothing sent something: %s", f.describe())
+	}
+}
+
+// second is the error of a call that returns something with it.
+func second[T any](_ T, err error) error { return err }
+
 // TestFindItemPassesOnAFolderThatCouldNotBeRead: a folder that answered
 // nothing is not a folder without the item in it.
 func TestFindItemPassesOnAFolderThatCouldNotBeRead(t *testing.T) {

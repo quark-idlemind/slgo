@@ -789,6 +789,24 @@ func (t *Term) SetLine(s string) {
 	t.redrawLocked()
 }
 
+// Split is what is being typed, divided at the cursor.
+func (t *Term) Split() (before, after string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return string(t.line[:t.pos]), string(t.line[t.pos:])
+}
+
+// SetSplit replaces what is being typed with before and after, putting
+// the cursor between them.
+func (t *Term) SetSplit(before, after string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	b := []rune(before)
+	t.line = append(b, []rune(after)...)
+	t.pos = len(b)
+	t.redrawLocked()
+}
+
 // Key applies one keystroke to the line being edited and reports
 // whether it was consumed.  A key this does not handle -- Enter, tab,
 // the prefix key -- is left to the caller, which is what decides what

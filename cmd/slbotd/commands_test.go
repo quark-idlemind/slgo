@@ -420,10 +420,10 @@ func TestAListingEntryBecomesAWholeItem(t *testing.T) {
 	}
 }
 
-// Every field of an Item comes out of the Entry set, but the one an
-// Entry has no field for.  Each Entry field is given a value of its own,
-// so a field left behind -- the flags were, and they carry the slot a
-// wearable goes in -- comes out zero.
+// Every field of an Item comes out of the Entry set.  Each Entry field
+// is given a value of its own, so a field left behind -- the flags were,
+// and they carry the slot a wearable goes in, and so was the group --
+// comes out zero.
 func TestAListingEntryLeavesNothingOfItselfBehind(t *testing.T) {
 	var e sl.Entry
 	v := reflect.ValueOf(&e).Elem()
@@ -445,13 +445,10 @@ func TestAListingEntryLeavesNothingOfItselfBehind(t *testing.T) {
 		}
 	}
 
-	// GroupID is what an Entry does not carry.
-	notInAnEntry := map[string]bool{"GroupID": true}
 	it := reflect.ValueOf(itemOf(e)).Elem()
 	for i := range it.NumField() {
-		name := it.Type().Field(i).Name
-		if it.Field(i).IsZero() && !notInAnEntry[name] {
-			t.Errorf("Item.%s came out zero from an Entry with every field set", name)
+		if it.Field(i).IsZero() {
+			t.Errorf("Item.%s came out zero from an Entry with every field set", it.Type().Field(i).Name)
 		}
 	}
 	if got := itemOf(e).Flags; got != e.Flags {

@@ -15,6 +15,10 @@ the wrong group active is refused by the land even where it plainly has
 permission, and the refusal talks about the land rather than about the
 group.  `group` says which is active, and sets it.
 
+A `place` interrupted while it waits for the object to appear, which
+then turns up all the same, puts it in the trash rather than leaving it
+standing with nothing holding on to it.
+
 ## Options
 
 **--at** *X,Y,Z*

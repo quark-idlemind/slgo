@@ -114,15 +114,6 @@ var manPages embed.FS
 // manDir is where the pages are, in the embedded copy and on disk.
 const manDir = "man"
 
-// manFile is the page a command's man field names.
-func manFile(page string) string {
-	file, _, err := manOpen(page)
-	if err != nil {
-		return manDir + "/" + page + ".md"
-	}
-	return file
-}
-
 // manOpen is one page's path and text.
 //
 // An error here means the field names a file that is not there, which

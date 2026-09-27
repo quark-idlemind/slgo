@@ -75,6 +75,16 @@ func TestTheInstructionsSayWhatTheChecksEnforce(t *testing.T) {
 	}
 }
 
+// The instructions say who "I" is.  The index offers where and pwd both
+// for "where am I", and this is what the model chooses between them by.
+func TestTheInstructionsSayWhoIsAsking(t *testing.T) {
+	for _, want := range []string{`They are that avatar`, `"where am I"`, `unless the question is about inventory`} {
+		if !strings.Contains(askSystem, want) {
+			t.Errorf("the instructions no longer say %q", want)
+		}
+	}
+}
+
 // Over budget, the lowest-ranked excerpts go first, then the top
 // command's first excerpt is shortened, then whole commands go from the
 // bottom, and the top command always stays.

@@ -169,13 +169,18 @@ func cmdRez(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	return nil
 }
 
-// removeBuilt deletes what a build made and says what the region did not
-// confirm gone, or nothing if it confirmed all of it.
+// removeBuilt deletes what a build made into the trash and says what the
+// region did not confirm gone, or nothing if it confirmed all of it.
 //
+// The trash is named, as the viewer names it (llselectmgr.cpp:4429-4431).
 // A prim linked to the root is not sent: it goes with the root, and the
 // viewer deletes by sending only roots (llselectmgr.cpp:4432-4437).  One
 // sent after its root had gone would be waited for and never confirmed.
 func removeBuilt(ctx context.Context, s *sl.Session, b *sl.Built) string {
+	trash, err := s.TrashFolder(ctx)
+	if err != nil {
+		return fmt.Sprintf("finding the trash: %v", err)
+	}
 	var left []string
 	for _, p := range b.Parts {
 		if p != b.Root {
@@ -183,7 +188,7 @@ func removeBuilt(ctx context.Context, s *sl.Session, b *sl.Built) string {
 				continue
 			}
 		}
-		if err := s.Delete(ctx, p, msg.UUID{}); err != nil {
+		if err := s.Delete(ctx, p, trash); err != nil {
 			left = append(left, err.Error())
 		}
 	}

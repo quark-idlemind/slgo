@@ -472,38 +472,48 @@ func (w *Session) derezToInventory(ctx context.Context, o *Object, folder msg.UU
 	return nil, true, fmt.Errorf("%w: %s to appear in inventory as %q after taking it", ErrTimeout, o, name)
 }
 
-// deleteFor bounds the wait for the region to say a deleted object has
-// gone.
-const deleteFor = 10 * time.Second
-
 // Delete sends an object to the trash, and returns once the region says
 // it has gone.
 //
 // Nothing answers the derez itself.  What says the object has gone is
 // the KillObject the region sends for it, and one that does not come
-// within ten seconds is an error wrapping ErrTimeout: the delete was
-// asked for and not confirmed, and the object may still be there.
-// Deleting a root takes its linkset with it, as it does in the viewer.
+// within Options.DeleteTimeout, ten seconds by default, is an error
+// wrapping ErrTimeout: the delete was asked for and not confirmed, and
+// the object may still be there.  An object the region has already said
+// has gone, in this visit and with nothing described under its local id
+// since, answers at once, and nothing is sent.  Deleting a root takes
+// its linkset with it, as it does in the viewer.
 // Why: doc/readbacks.md#deletes
 func (w *Session) Delete(ctx context.Context, o *Object, trash msg.UUID) error {
+	// A kill already heard for the number, in this visit and with nothing
+	// described under it since, says it has gone; the region's kill of
+	// the same number in another visit is of something else, and is
+	// forgotten when the visit ends.
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
+	w.mu.Lock()
+	gone := w.killed[local]
+	w.mu.Unlock()
+	if gone {
+		return nil
+	}
 	if err := w.Select(ctx, o); err != nil {
 		return err
 	}
 	if err := w.Settle(ctx, time.Second); err != nil {
 		return err
 	}
-	local, err := w.local(ctx, o)
-	if err != nil {
+	if local, err = w.local(ctx, o); err != nil {
 		return err
 	}
-
-	// Only a kill heard after this derez, in this visit, confirms it: one
-	// heard before was not an answer to it, and another region's kill of
-	// the same number is of something else.
 	w.mu.Lock()
-	delete(w.killed, local)
-	visit := w.at.n
+	gone, visit := w.killed[local], w.at.n
 	w.mu.Unlock()
+	if gone {
+		return nil
+	}
 
 	m := &msg.DeRezObject{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
@@ -516,7 +526,7 @@ func (w *Session) Delete(ctx context.Context, o *Object, trash msg.UUID) error {
 		return err
 	}
 
-	err = w.await(ctx, deleteFor, "the region to say it has gone", func() bool {
+	err = w.await(ctx, w.deleteWait(), "the region to say it has gone", func() bool {
 		return w.at.n == visit && w.killed[local]
 	})
 	if errors.Is(err, ErrTimeout) {

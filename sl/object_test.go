@@ -938,9 +938,10 @@ func TestDeleteReportsWhatDidNotHappen(t *testing.T) {
 // TestADeleteIsNotReportedUntilTheRegionSaysItHasGone: nothing answers
 // a derez, and the KillObject the region sends for the object is the
 // only word that it went.  One that never comes is a delete asked for and
-// not confirmed.  A kill heard before the derez is not an answer to it,
-// and neither is one from the region the avatar has moved to, where the
-// same local id is some other object.
+// not confirmed, after the session's DeleteTimeout.  An object the region
+// had said was gone before the delete answers at once, and nothing is
+// sent for it.  A kill from the region the avatar has moved to, where the
+// same local id is some other object, is no answer.
 func TestADeleteIsNotReportedUntilTheRegionSaysItHasGone(t *testing.T) {
 	t.Parallel()
 	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
@@ -955,20 +956,48 @@ func TestADeleteIsNotReportedUntilTheRegionSaysItHasGone(t *testing.T) {
 		}
 	})
 
-	t.Run("killed before the delete and not after", func(t *testing.T) {
+	t.Run("never killed", func(t *testing.T) {
+		t.Parallel()
+		w, _ := newFakeSession(t)
+		w.SetOptions(Options{DeleteTimeout: 100 * time.Millisecond})
+		start := time.Now()
+		err := w.Delete(context.Background(), oAt(w), msg.UUID{1})
+		if !errors.Is(err, ErrTimeout) || !strings.Contains(err.Error(), "not confirmed") {
+			t.Errorf("Delete = %v, want it asked for and not confirmed", err)
+		}
+		// The select's settle, and the 100 ms, not the default ten seconds.
+		if took := time.Since(start); took > 5*time.Second {
+			t.Errorf("Delete took %v to give up, with DeleteTimeout 100ms", took)
+		}
+	})
+
+	t.Run("killed before the delete", func(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
 		o := oAt(w)
 		f.Relay(t, kill77)
-		err := w.Delete(context.Background(), o, msg.UUID{1})
-		if !errors.Is(err, ErrTimeout) || !strings.Contains(err.Error(), "not confirmed") {
-			t.Errorf("Delete = %v, want it asked for and not confirmed", err)
+		waitFor(t, "the kill to be heard", func() bool {
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			return w.killed[77]
+		})
+		start := time.Now()
+		if err := w.Delete(context.Background(), o, msg.UUID{1}); err != nil {
+			t.Errorf("Delete = %v, for an object the region had said was gone", err)
+		}
+		if took := time.Since(start); took > time.Second {
+			t.Errorf("Delete took %v for an object already gone", took)
+		}
+		if got := f.Sent(); len(got) != 0 {
+			t.Errorf("sent %s for an object already gone", f.describe())
 		}
 	})
 
 	t.Run("killed in the next region", func(t *testing.T) {
 		t.Parallel()
 		w, f := newFakeSession(t)
+		// Long enough for the move and the kill to come first.
+		w.SetOptions(Options{DeleteTimeout: 2 * time.Second})
 		wait := asideErr(t, func() error { return w.Delete(context.Background(), oAt(w), msg.UUID{1}) })
 		waitSent[*msg.DeRezObject](t, f)
 		moveTo(t, f, elsewhere)

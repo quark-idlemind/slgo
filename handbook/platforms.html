@@ -150,9 +150,9 @@
             <tr><td><code>viewer_running</code></td><td data-os-side="mac"><code>pgrep -f {app}.app/Contents</code></td><td class="what" data-os-side="linux">empty, so no check is made</td></tr>
           </tbody>
         </table></div>
-        <p>On Linux, with nothing set, <code>viewer --launch</code> says so and stops, before it asks slgod for anything. Seen on Ubuntu 24.04:</p>
+        <p>On Linux, with nothing set, <code>viewer --launch</code> says so and stops, before it asks slgod for anything. Seen on Ubuntu 24.04, where it named <code>{uri}</code> in place of <code>{grid}</code>; it now names the placeholders the macOS default uses:</p>
         <div class="term" data-where="laptop" data-where-label="Linux · on your computer"><pre><span class="p">$ </span>slsh -c "viewer --launch"
-<span class="o">slsh: viewer: nothing here knows how to start a viewer on linux; put a "viewer_launch = ..." line in slsh's config (~/.config/slsh/config) with {app} {uri} {first} {last} {password} where those belong</span></pre></div>
+<span class="o">slsh: viewer: nothing here knows how to start a viewer on linux; put a "viewer_launch = ..." line in slsh's config (~/.config/slsh/config) with {app} {grid} {first} {last} {password} where those belong</span></pre></div>
         <p>So write one. The template is split into words and run directly, with no shell. The placeholders are <code>{app}</code>, <code>{grid}</code>, <code>{uri}</code>, <code>{first}</code>, <code>{last}</code> and <code>{password}</code>. Use <code>--grid {grid}</code> rather than <code>{uri}</code>, as the macOS default does: on macOS, a viewer given <code>--loginuri</code> came up on whichever grid it had used last. The line below is only a shape to adapt. <strong>No viewer has been started this way on Linux.</strong> The path is wherever you unpacked the Firestorm OpenSim build, and the flags are the ones that work on macOS.</p>
         <div class="file" data-os-side="linux"><div class="name">~/.config/slsh/config (Linux, an example to adapt; not tried)</div><pre>viewer_grid    = slgod
 viewer_launch  = /opt/firestorm-os/firestorm --grid {grid} --login {first} {last} {password}

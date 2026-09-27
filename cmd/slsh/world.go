@@ -22,7 +22,7 @@ var worldCommands = map[string]*command{
 	"where": {
 		flags:    func() any { return new(helpOnly) },
 		brief:    "the region and position this avatar is at",
-		keywords: "location position coordinates current region am sitting",
+		keywords: "location position coordinates current region sim",
 		man:      "where",
 		run:      cmdWhere,
 	},
@@ -75,7 +75,7 @@ var worldCommands = map[string]*command{
 		params:   "[on|off]",
 		flags:    func() any { return new(helpOnly) },
 		brief:    "the circuits held to the regions around this one, which walking over a border needs",
-		keywords: "neighbors border crossing adjacent regions circuits walk cross region edge",
+		keywords: "neighbors border crossing adjacent regions circuits walk cross region edge sim",
 		man:      "neighbours",
 		run:      cmdNeighbours,
 	},

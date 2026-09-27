@@ -15,6 +15,65 @@ import (
 	"github.com/quark-idlemind/slgo/internal/llm"
 )
 
+// A command found only by its keyword line still has a sentence the
+// model can quote: the page's opening, not the keywords.  A matching
+// paragraph of the page wins over that opening, and only its first
+// paragraph is kept.
+func TestOnePassageIsASentenceFromThePage(t *testing.T) {
+	line := &askindex.Doc{Command: "landmark", Kind: askindex.KindLine, Text: "home set home"}
+	if _, ok := askPassageOf(line); ok {
+		t.Error("the keyword line is not on the page, so it cannot be quoted")
+	}
+	sec := &askindex.Doc{
+		Command: "landmark", Kind: askindex.KindSection, Heading: "Setting home",
+		Text: "Make where this avatar is standing the place home is.\n\nThe rest is another paragraph.",
+	}
+	ex, ok := askOnePassage("landmark", []askindex.Hit{{Doc: line, Score: 5}, {Doc: sec, Score: 1}})
+	if !ok || ex.Heading != "Setting home" || strings.Contains(ex.Text, "another paragraph") {
+		t.Errorf("passage = %+v, ok %v", ex, ok)
+	}
+	if !strings.Contains(ex.Text, "the place home is") {
+		t.Errorf("passage dropped the paragraph: %q", ex.Text)
+	}
+
+	opening, ok := askOnePassage("landmark", []askindex.Hit{{Doc: line}})
+	if !ok || opening.Text == "" || strings.Contains(opening.Text, "home set home") {
+		t.Errorf("keyword-only match should show the opening, got %+v", opening)
+	}
+
+	// Past the three that get full excerpts, a keyword-only command
+	// still gets that one passage.
+	var hits []askindex.CommandHit
+	for _, name := range []string{"ls", "pwd", "cat", "find"} {
+		d := &askindex.Doc{Command: name, Kind: askindex.KindLine, Text: "keywords"}
+		hits = append(hits, askindex.CommandHit{Command: name, Hits: []askindex.Hit{{Doc: d}}})
+	}
+	cands := askCandidatesFrom(hits)
+	if len(cands) != 4 {
+		t.Fatalf("%d candidates", len(cands))
+	}
+	if len(cands[3].Excerpts) != 1 || cands[3].Excerpts[0].Text == "" {
+		t.Errorf("the fourth candidate has nothing to quote: %+v", cands[3].Excerpts)
+	}
+
+	// Past the three, a command found by a section of its page gets its
+	// opening and that section's first paragraph, and no more.
+	hits[3] = askindex.CommandHit{Command: "landmark", Hits: []askindex.Hit{{Doc: sec}}}
+	cands = askCandidatesFrom(hits)
+	if ex := cands[3].Excerpts; len(ex) != 2 || ex[0].Heading != "" || ex[1].Heading != "Setting home" ||
+		strings.Contains(ex[1].Text, "another paragraph") {
+		t.Errorf("the fourth candidate's excerpts: %+v", ex)
+	}
+
+	// A matching section is not a substitute for the opening: the
+	// opening is what the command is, and it comes first.
+	secHit := askindex.CommandHit{Command: "landmark", Hits: []askindex.Hit{{Doc: sec}}}
+	shown := askCandidatesFrom([]askindex.CommandHit{secHit})
+	if len(shown) != 1 || len(shown[0].Excerpts) < 2 || shown[0].Excerpts[0].Heading != "" {
+		t.Errorf("opening should lead the excerpts: %+v", shown)
+	}
+}
+
 // A suggestion the model itself says is no answer is not printed, even
 // though it passes every check: found is the model's decision, and the
 // suggestions it wrote beside it are not an answer.

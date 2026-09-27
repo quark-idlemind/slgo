@@ -63,6 +63,56 @@ func TestStemMeets(t *testing.T) {
 	}
 }
 
+// "sitting" has to find sit, and it has to count for less than the
+// word sit typed.  A plural is not that case.
+func TestShortIngStemWeighsLessInAQuestion(t *testing.T) {
+	sitting := tokenWeights("the box sitting on the floor")
+	if sitting["sit"] != stemCommandWeight {
+		t.Errorf("sitting weighs %v, want %v", sitting["sit"], stemCommandWeight)
+	}
+	if tokenWeights("sit down")["sit"] != 1 {
+		t.Errorf("sit typed should count in full")
+	}
+	if tokenWeights("sit there sitting")["sit"] != 1 {
+		t.Errorf("a typed sit beside sitting should count in full")
+	}
+	if tokenWeights("homes")["hom"] != 1 {
+		t.Errorf("a plural should count in full, got %v", tokenWeights("homes")["hom"])
+	}
+	if got := Tokens("Sitting, rezzed"); !reflect.DeepEqual(got, []string{"sit", "rez"}) {
+		t.Errorf("the stem itself is unchanged: %q", got)
+	}
+}
+
+// "find" before a question word or "out" asks to learn something, and
+// counts for less; "find" before a thing to look for is the search, and
+// counts in full.
+func TestFindAskingToLearnWeighsLess(t *testing.T) {
+	for _, q := range []string{
+		"how do I find where I am",
+		"how do I find what I am wearing",
+		"how do I find out whether I can build here",
+		"How do I Find which folder I am in?",
+	} {
+		if got := tokenWeights(q)["find"]; got != learnVerbWeight {
+			t.Errorf("%q: find weighs %v, want %v", q, got, learnVerbWeight)
+		}
+	}
+	for _, q := range []string{
+		"how do I find an item by name",
+		"how do I find a sim on the map",
+		"find",
+		"find what I can, then find a lamp",
+	} {
+		if got := tokenWeights(q)["find"]; got != 1 {
+			t.Errorf("%q: find weighs %v, want 1", q, got)
+		}
+	}
+	if got := Tokens("how do I find where I am"); !reflect.DeepEqual(got, []string{"find", "wher"}) {
+		t.Errorf("the words themselves are unchanged: %q", got)
+	}
+}
+
 func TestStopword(t *testing.T) {
 	for _, w := range []string{"the", "How", "my", "I"} {
 		if !Stopword(w) {

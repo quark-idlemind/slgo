@@ -76,7 +76,10 @@ that arrives under its old name is an error saying what it is called.
 
 The fifteen seconds is not a measurement. How long a move takes to
 show over AIS has not been measured; fifteen seconds is the bound
-`SetItem` already used for the same kind of read.
+`SetItem` already used for the same kind of read. It is the default of
+`sl.Options.MoveTimeout`, and the bounds on permission changes and
+deletes below are its neighbours there: a test that proves one runs
+out sets it short with `Session.SetOptions`, rather than waiting.
 
 ### Moving an object in the region
 
@@ -95,10 +98,10 @@ reading it back once.
 
 Nothing answers `ObjectPermissions`. The masks come back in
 `ObjectProperties`, which the region sends for a selected object, so
-`SetObjectPermissions` selects the object and reads its properties, for
-up to fifteen seconds, until the mask it set reads as the permission
-rules make what was sent. It returns what the mask then allows, and
-`slsh perms` prints that.
+`SetObjectPermissions` selects the object and reads its properties,
+for up to fifteen seconds (`Options.PermissionsTimeout`), until the
+mask it set reads as the permission rules make what was sent. It
+returns what the mask then allows, and `slsh perms` prints that.
 
 It reads more than once because a read straight after a write can
 overtake it. That was measured for descriptions: building one prim and
@@ -172,18 +175,25 @@ Measured on 2026-09-25 and 2026-09-26: all 57 deletes that probes
 checked were followed by their `KillObject`, each within about a
 second.
 
-So `Delete` waits for that kill, for up to ten seconds, which is a
-margin over what was measured and not a measurement itself. One that
+So `Delete` waits for that kill, for up to ten seconds
+(`Options.DeleteTimeout`), which is a margin over what was measured and
+not a measurement itself. One that
 does not come is an error saying the delete was asked for and not
 confirmed, wrapping `sl.ErrTimeout`: the object may still be there, or
 may have gone without this session hearing. `slrun`'s tidying up says
 the first, and `slsh rez` names what it could not confirm.
 
-Only a kill heard after the derez counts. One already recorded for the
-same local id is forgotten before the derez goes, since it was not an
-answer to it, and the wait counts nothing heard after the avatar has
-changed region, where the same number names another object (see
-[local ids](local-ids.md)).
+An object the region has already killed, in this visit and with no
+object described under its local id since, has gone, and `Delete`
+answers at once without sending anything: before this, it forgot that
+kill, sent the derez, and after ten seconds reported the delete not
+confirmed. A kill is the end of an object to the viewer too:
+`process_kill_object` (Firestorm, `newview/llviewermessage.cpp:4726-4737`)
+kills it and drops it from the region's cache and from any selection,
+so there is nothing left there to delete. Otherwise only a kill heard
+after the derez counts, and the wait counts nothing heard after the
+avatar has changed region, where the same number names another object
+(see [local ids](local-ids.md)).
 
 Deleting a root takes its linkset with it. The viewer deletes a
 selection by sending only its roots (Firestorm,
