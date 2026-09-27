@@ -28,9 +28,9 @@ import (
 	"time"
 )
 
-// transcript is an open log file.  A nil one is a shell that is not
-// logging, and every method on it does nothing, so no caller has to ask
-// whether logging is on.
+// transcript is an open log file.  A nil one, or one with no file
+// open, writes nothing, and every method on it is safe, so no caller has
+// to ask whether logging is on.
 type transcript struct {
 	mu   sync.Mutex
 	f    *os.File
@@ -133,12 +133,36 @@ func (t *transcript) line(s string) {
 }
 
 // Path is where the transcript is being written, for anything that has
-// to say so.
+// to say so, and "" when it is writing nowhere.
 func (t *transcript) Path() string {
 	if t == nil {
 		return ""
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.path
+}
+
+// replace closes the file t writes to, and from now on writes where n
+// was opened, or nowhere when n is nil.  t is changed in place because
+// every writer already handed out holds it; n is used up.
+func (t *transcript) replace(n *transcript) error {
+	var f *os.File
+	var path string
+	if n != nil {
+		n.mu.Lock()
+		f, path = n.f, n.path
+		n.f, n.path = nil, ""
+		n.mu.Unlock()
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	var err error
+	if t.f != nil {
+		err = t.f.Close()
+	}
+	t.f, t.path = f, path
+	return err
 }
 
 // Close closes the file.  Safe on a nil transcript and safe twice.
@@ -152,6 +176,6 @@ func (t *transcript) Close() error {
 		return nil
 	}
 	err := t.f.Close()
-	t.f = nil
+	t.f, t.path = nil, ""
 	return err
 }

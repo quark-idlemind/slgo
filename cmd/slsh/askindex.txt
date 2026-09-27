@@ -665,7 +665,7 @@ set:section:It writes the file, and does nothing else to it	set	section	It write
 set:section:Some of it cannot take until slsh is started again	set	section	Some of it cannot take until slsh is started again	Three settings are used before there is a prompt to type `set` at:\nthe address, because the session was attached through it; the\nprofile, because it says which avatar this is; and the escape key,\nbecause the terminal was already in raw mode reading for it.  A flag\nmay have overridden the file for this run as well.\n\nThey are written to the file all the same, and both the listing and\nthe answer to a change say so outright.  The listing ends their line\nwith `at startup only`, and changing one prints the sentence about\nthe next slsh under it.  The three are `addr`, `agent` and `escape`,\nand they are the only three.\n\nEverything else takes at once.  `set map_ratio 2:1` and then `map`\ndraws the new shape.
 set:section:Where the settings come from and what beats what	set	section	Where the settings come from and what beats what	A flag on the slsh command line beats the file, and the file beats\nthe defaults.  So a shell started with `--escape ^G` is running with\n`^G` whatever the file says, which is the other half of why the\nthree above are left for the next run.\n\nThe names are the names in the file, and the file has always taken\nanother spelling of some of them -- `server` for `addr`, `profile`\nfor `agent`, `prefix` or `prefix_key` for `escape`.  Those still\nload, and `set` answers to them as well: `set server` prints the\nsetting under the name `addr`.\n\nA value a setting will not take is refused, with the setting named,\nand neither the shell nor the file is touched.  The same refusal\nhappens when the file is read at startup, where it stops slsh coming\nup rather than leaving somebody with a setting that silently does\nnothing.
 set:section:What there is	set	section	What there is	`set` is the listing, and it is the one place they are all written\ndown, so this page does not copy it.  They fall into these:\n\n    addr, agent, escape             slsh itself\n    log, log_dir                    the transcript\n    viewer_*                        what "viewer --launch" starts\n    map_*                           how "map" draws its picture\n    notice_keep                     how long "notice" keeps one\n\nThe map's are the ones most worth knowing about, because the picture\nis drawn to the shape of the font it is being read in: `map_ratio`\nis how tall a character cell is against how wide, height first, and\n`7:3` is a measurement of one font rather than a fact about all of\nthem.  See `man map`, which says what each of the map's five does.
-set:section:The transcript	set	section	The transcript	`log` is on to begin with, and what it keeps is what you saw: every\ncommand you ran, everything each one printed, everything heard and\neverything said.  One file per avatar, named after the avatar --\n`example-resident.log` -- in `$XDG_DATA_HOME/slgo`, or\n`~/.local/share/slgo` where that is not set.  `log_dir` puts it\nsomewhere else; empty is the default place.\n\n    2026-08-26 15:56:29 $ where\n    2026-08-26 15:56:29   Testville at 33, 70, 2001\n    2026-08-26 15:56:33 < [IM Example Resident] are you still at the build\n    2026-08-26 15:56:41 > [IM Example Resident] on my way\n\nA command is written down before it runs, so a command that hung is\nin the file that says what happened.  `set log off` stops it, and\nleaves the file where it is.\n\nControl characters are written the way the screen showed them, `^[`\nfor ESC and so on -- see `man chat` -- so that reading the file with\n`cat` or `tail` later does not hand a stranger's escape sequences to\nthat terminal instead.\n\nTwo things are deliberately not in it.  Output that was redirected --\n`ls > listing` -- is a listing you did not see, so the command is\nrecorded and the listing is not; it is in the file you sent it to. A\nman page read at a terminal goes through the pager rather than to the\nscreen a line at a time, and is not recorded either.\n\nWhat no shell can record is what happened while none was running.\nslgod stays logged in and goes on hearing, but a transcript is what\nsomebody saw, and there is nobody there to see it.
+set:section:The transcript	set	section	The transcript	`log` is on to begin with, and what it keeps is what you saw: every\ncommand you ran, everything each one printed, everything heard and\neverything said.  One file per avatar, named after the avatar --\n`example-resident.log` -- in `$XDG_DATA_HOME/slgo`, or\n`~/.local/share/slgo` where that is not set.  `log_dir` puts it\nsomewhere else; empty is the default place.\n\n    2026-08-26 15:56:29 $ where\n    2026-08-26 15:56:29   Testville at 33, 70, 2001\n    2026-08-26 15:56:33 < [IM Example Resident] are you still at the build\n    2026-08-26 15:56:41 > [IM Example Resident] on my way\n\nA command is written down before it runs, so a command that hung is\nin the file that says what happened.  `set log off` stops it at once,\nand leaves the file where it is; `set log_dir` moves it at once to a\nfile in the new place.\n\nControl characters are written the way the screen showed them, `^[`\nfor ESC and so on -- see `man chat` -- so that reading the file with\n`cat` or `tail` later does not hand a stranger's escape sequences to\nthat terminal instead.\n\nTwo things are deliberately not in it.  Output that was redirected --\n`ls > listing` -- is a listing you did not see, so the command is\nrecorded and the listing is not; it is in the file you sent it to. A\nman page read at a terminal goes through the pager rather than to the\nscreen a line at a time, and is not recorded either.\n\nWhat no shell can record is what happened while none was running.\nslgod stays logged in and goes on hearing, but a transcript is what\nsomebody saw, and there is nobody there to see it.
 set:section:Measuring the font	set	section	Measuring the font	Some terminals will say, and slsh will ask them:\n\n    set map_ratio auto\n\nThat asks for the size of one character cell in pixels, and writes\nback whatever comes.  The numbers written are the ones reported, not\nreduced -- `18:10` rather than the `9:5` that means the same shape\n-- because the file is where the tweaking happens next and `18:9` is\none digit away from `18:10` in a way it is not away from `9:5`.\n\nWhat the terminal reports is the cell it hands the font, which is\nnot always the shape the letters look.  Take what `auto` writes as\nwhere to start, draw a region with `map --region`, and change the\nratio until a square region looks square -- that is the only test\nthat matters.\n\n`auto` needs a terminal to ask.  It is refused where there is none\n-- `slsh -c`, `slsh -f`, and a session with its input coming from a\npipe -- and refused again, naming what it tried, by a terminal that\nwill not answer.  Both of those refusals mean measuring it by hand,\nwhich is the same question sent the same way:\n\n    printf '\\033[16t'\n\nThe answer comes back as ESC [ 6 ; HEIGHT ; WIDTH t -- so `6;18;10`\nis a cell eighteen pixels tall and ten wide, and `18:10` is the\nratio to try.  A terminal that answers nothing at all to that is one\nthat does not know the question, and then it is by eye: start from\n`2:1`, draw a region, and go from there.\n\n`map_ratio` is the only setting that takes `auto`, and every other\none takes its value as it stands.  A word that might mean "work it\nout" in any row would be a word to check the meaning of in every\nrow.
 set:example:5	set	example	Measuring the font	set map_ratio auto
 set:section:Examples	set	section	Examples	    set\n    set map_span\n    set map_ratio 2:1\n    set map_ratio auto\n    set map_friend_colour bright cyan\n\nThe last of these cannot take until the next slsh, and says so:\n\n    set addr lab.local:7807\n    addr = lab.local:7807\n    written to /home/somebody/.config/slsh/config\n    this shell keeps the old value; the new one is for the next slsh\n\nSee also: `map` for what the map settings do to the picture,\n`viewer` for what the viewer settings start, and `chat` for the key\nthe escape setting names.
@@ -1539,7 +1539,7 @@ differently	153,264,77,14
 digest	827
 digit	666
 dimension	573
-dir	661,3,1
+dir	661,3,1*2
 direct	256,330,250
 direction	116,26,7,43,105,91,4,1,167,51,95,18,9*2,44
 directly	139,280
@@ -1677,7 +1677,7 @@ field	101,169,27,38,17*2,17*4,8,42,131,4*2,43*2,10*2,112,87,64
 fifteen	89,353,1,95,14,51,2,76,1,15,3,8,18
 fifty	560*3,239,2
 figur	25,429,106*2
-fil	17,7*5,4,1,15,1,23*3,49*2,1*3,2*2,2*4,1,3*2,1*2,2,1*3,61*2,3*2,1,2*2,50*3,47,50,43,1,12,3,41,18,4,56,26,6,5*2,1*2,2,4,13,10*3,1,1*3,1*5,3*6,1*7,1*3,13*3,1*7,2*2,2,1*4,2*2,1*2,12,9*3,1*2,2,13*2,3,2*9,1*2,1*7,2*5,1,22*4,1,2*4,1*4,1
+fil	17,7*5,4,1,15,1,23*3,49*2,1*3,2*2,2*4,1,3*2,1*2,2,1*3,61*2,3*2,1,2*2,50*3,47,50,43,1,12,3,41,18,4,56,26,6,5*2,1*2,2,4,13,10*3,1,1*3,1*5,3*6,1*7,1*3,13*3,1*7,2*2,2,1*4,2*2,1*2,12,9*3,1*2,2,13*2,3,2*9,1*2,1*7,2*6,1,22*4,1,2*4,1*4,1
 fill	422,86,88,17,107
 filter	559*2,7,4*2,1*2,3,2
 finally	711
@@ -1954,7 +1954,7 @@ load	100,3,6,554
 local	62,1*2,460*2,117*2,8,1,16,3*2,5,6*2,67,3*3,79,49
 locat	170
 location	276,21,303,276
-log	11,1*2,2*4,1*2,16,10,59,3,80,1,86,39,1*2,3*3,1*2,3*3,1*2,2,2*2,1*4,4,93,102,64*3,78*2,1*5,50,109*4,2,1*2,1,8*2,22,1,21,15,2
+log	11,1*2,2*4,1*2,16,10,59,3,80,1,86,39,1*2,3*3,1*2,3*3,1*2,2,2*2,1*4,4,93,102,64*3,78*2,1*6,50,109*4,2,1*2,1,8*2,22,1,21,15,2
 login	7,5,2*3,2,24,50,1,9*5,3*2,84,27*2,3,55,37,1*3,1,1*2,1*3,2*2,1,1,1*4,6,3,89,1,2*6,1,64,339,1*3,3*2,1*2,8,37,8,12*3,4*2
 logout	12,4,296,1,2,2,1*4,1,5*2,1,95,166,4,239
 long	89,17,15,44,77,46,16,9,17,40,12*2,1,69,1,15,13,1,1,53,58,9,1,1,59,17,1,1,2,12,11,3,9,6,11,42,14,12,13,30,13,30
@@ -2041,7 +2041,7 @@ morn	795
 most	66,34,4,18,100,111,4,83,74,66,91,13,102,70
 mostly	824
 mous	771,11
-mov	7,8*3,12*2,4,4,6,22,3*2,3,73,1,6,10,3*4,2,3,2,36,17,55*2,10,1,5*2,4,21,12,22,36,40*2,1*7,1,1,1*2,4,1*3,1,1*2,1*2,2,1*4,1*6,1,4*2,4*3,10*2,15,12*2,7,18,7,6*2,1,2,14*3,3,48*4,1,19,6,57*2,1,4,1,16,32,6,1*2,4,2,2,22,8,1,2,2,1,2,1*2,1*2,6,5*3,1,1*2,1,1,2*2,5*2,22,8,11*2,3,8,15,5
+mov	7,8*3,12*2,4,4,6,22,3*2,3,73,1,6,10,3*4,2,3,2,36,17,55*2,10,1,5*2,4,21,12,22,36,40*2,1*7,1,1,1*2,4,1*3,1,1*2,1*2,2,1*4,1*6,1,4*2,4*3,10*2,15,12*2,7,18,7,6*2,1,2,14*3,3,48*4,1,19,6,43,14*2,1,4,1,16,32,6,1*2,4,2,2,22,8,1,2,2,1,2,1*2,1*2,6,5*3,1,1*2,1,1,2*2,5*2,22,8,11*2,3,8,15,5
 movement	596
 mr	514
 much	31,175,11,42,80,58,1*2,5,112,365,16
@@ -2066,7 +2066,7 @@ neighbour	429,21,1,1,1*3,1*3,1,1*3,1,1*3,1,1,1,147,202
 neither	1,56,26,9,9,3,124,1,31,6,8,14,65,28,36,2,5,20,8,134*2,2,75,19,14,10,162
 network	196,518
 never	15*2,51*2,8*2,16,2,11,35,15,7,6*2,48,3,11,10,22,9*2,23,1,20,1,4,9,6,36*2,12,7,12,17*2,2,23,1,20,6,6,8*2,39,16*2,17,40,6,13,3,13,52*2,29*2,22,5,27,40,11,3,1,31,8,10,2,9,13,1*2,3*2
-new	41*2,11,19,1*2,32,9,3,44,6,26,102,75,52,1,7,13,11*2,9*2,1*3,1,5,1*4,1,1,1,101,67,2,1,3,9,6,6,14,29,1,5,1,12,3,33,39,90
+new	41*2,11,19,1*2,32,9,3,44,6,26,102,75,52,1,7,13,11*2,9*2,1*3,1,5,1*4,1,1,1,101,67,2,1,3,9,6,3,3,14,29,1,5,1,12,3,33,39,90
 newcomer	112,357
 newer	629
 newest	343,6,3,1,268,3,3,1*2,1*2,3,1
@@ -2111,7 +2111,7 @@ older	419*2,417,2
 oldest	11,1,337,3,1,127,141,4,2,1*2,1*2,3,2,202
 ollama	242*4
 omit	40,551,1
-onc	27*2,3,1*2,3,66,1,1,1,1,6,116,3*2,9,19,58,7,48*2,47*2,3,24,9,16,15,25,39,38,10,18,8,40,37,12,8,46,1,17,21,2*3,21,1,9
+onc	27*2,3,1*2,3,66,1,1,1,1,6,116,3*2,9,19,58,7,48*2,47*2,3,24,9,16,15,25,39,38,10,18,8,40,3*2,34,12,8,46,1,17,21,2*3,21,1,9
 one	1*4,4*3,3,4*2,2,2*2,1,1*4,4,3,6*7,4,5*5,1*3,3,1*6,7*4,2,2*3,1*2,6*2,2*2,1*4,1,1*4,1*2,3*3,6*2,1,1*2,4,8*3,8*6,1*5,5*2,1,3*6,2,1,3*2,2,2,2,5,2*2,7,3*2,4,6,4*4,7*3,2*2,4,7*3,1*3,4,8*2,2,13,2*5,3*2,4*3,2*3,2*3,3*3,1,4,3,1*2,3*3,5,2,6,5,6*4,3,1,2,1*5,5,1,3,3*2,2,1,1,1*9,7*3,6*2,1,1*6,2*3,1,1*2,1*2,1,3,1*5,3*3,2*2,3,3*3,1*2,4*4,4,5*2,3,3*2,2*2,3,6*2,2,1*3,2,3*3,1*7,2*3,6,6,1,1*2,1*2,4,7,1*3,1*3,2,3*3,5,4,2*2,1*2,3,1*4,1,1,4,1,6*4,2*2,3*2,2*2,1,4*5,2,11*2,1*2,1*3,5,1,1,1*3,1*5,1*3,2,7*2,6*2,5,1*3,2,1*3,2*3,1,2*3,1,6*2,3,2*3,6*3,2,2*2,3*2,2*2,1*2,4*2,4*2,3*3,2,5*2,2,7,4*3,2,1*3,3,2,3*5,1*2,2,4,21,2,3*2,2,1,3*2,3,1*2,1*3,4*3,3,1,1,2*3,3*2,4*2,3,1,3,2,1,1*2,1*2,1*5,1,1,1,8,2*3,3*2,3,1,1,2,1*3,1*2,2,1*3,2,3*3,1,2*4,1*2,1*5,2,7,4*4,5*4,5,2,1,1,3,3*2,7,3*2,1,1*2,8,5*2,4*4,2,3*6,2,1,4*2,6*2,2*3,1*2,3*2,2,11*5,1*3,1*3,15,1*2,4,1,6*2,1*2,4,5*3,1*3,1*2,1,1*2,1*2,6,1*3,3*2,1*8,3,1*6,3*4,1*3,4*2,3*2,1*3,1*3,14,1*2,1,6,3,4,2,1,1*4,1*4,2*2,1,6,2,4,2,3*2,2*2,1,1,2*3
 onlin	183*2,1*2,2*2,1,151
 onlooker	827
@@ -2197,7 +2197,7 @@ piec	103,68,351*4,1,297*5,62
 pil	629
 pip	120,280,266
 pixel	570,2,94*2
-plac	12,3*3,25,17,8,1,12,32,6,22,4,1*2,6,69,8,8,38,4*2,1*3,10,2,3,1,1,3,1*2,20,17,48*2,1,5,28,12,2*4,1*2,3,2,7,5,7,38,9,12,14*2,10,2,1*4,1,2*2,1*2,1,1,48,10,7*2,2,4,12,33,1,41,9,3*2,15,7*2,3,39,1*2,16,7,4,30,1*2,5*2,5*2,2*2,13,8,3,9*2,11*2
+plac	12,3*3,25,17,8,1,12,32,6,22,4,1*2,6,69,8,8,38,4*2,1*3,10,2,3,1,1,3,1*2,20,17,48*2,1,5,28,12,2*4,1*2,3,2,7,5,7,38,9,12,14*2,10,2,1*4,1,2*2,1*2,1,1,48,10,7*2,2,4,12,33,1*2,41,9,3*2,15,7*2,3,39,1*2,16,7,4,30,1*2,5*2,5*2,2*2,13,8,3,9*2,11*2
 placeholder	238
 plain	439,5,25,86,73,90,48,5,61
 plainly	25,181,32,22,282
@@ -2406,7 +2406,7 @@ serv	31,9*2,1,155,628*4
 server	152,1,86,3*8,71,350*2
 servic	37,1,62,53,718,22
 session	11*2,1*4,2*4,1*5,1,11,10*2,1*2,2*2,1*3,21,28*2,63,34,16,11*2,39,4,3*2,10*2,39,1,3*2,2,2,1*4,2*2,1,1*2,1,1,6*2,8,32,30,5*2,14,1*2,32,1,3*2,1,46,1,14,3,1,2,29,33*3,3*2,73,4,27,6*2,15*2,1*3,2*4,4,24,4,16,40,1,17,1*4,12,15,12,17*3,13,2,2
-set	30*2,1,2,1*2,32*3,2,44*2,37,6*3,79*2,2,2*2,1*2,3*9,1*2,1*2,1*2,1*2,1,1*2,4,1*3,23*3,1*5,6,1,2,1*2,1,2,7*15,1*2,71,17,12*4,1*2,1,3*4,3*2,10*4,1*2,2*2,1*2,33,28*2,1,4,36,6,1,2,4,2,4,1*2,53,57,1,2*5,1*14,1*2,1,1*2,1,1*6,1*3,1*7,1,1*2,1*2,1,1*9,1,1,1,1,1,33,40,5,43*4,16,10*2,8*2,1*2,5,34,14
+set	30*2,1,2,1*2,32*3,2,44*2,37,6*3,79*2,2,2*2,1*2,3*9,1*2,1*2,1*2,1*2,1,1*2,4,1*3,23*3,1*5,6,1,2,1*2,1,2,7*15,1*2,71,17,12*4,1*2,1,3*4,3*2,10*4,1*2,2*2,1*2,33,28*2,1,4,36,6,1,2,4,2,4,1*2,53,57,1,2*5,1*14,1*2,1,1*2,1,1*6,1*3,1*7,1,1*3,1*2,1,1*9,1,1,1,1,1,33,40,5,43*4,16,10*2,8*2,1*2,5,34,14
 settl	1*3,102,1,110,3,80,276,56,71,107*2,72,15*3
 seven	306,373*2,19,134,4
 seventy	453

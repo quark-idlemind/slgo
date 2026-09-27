@@ -238,6 +238,19 @@ type setting struct {
 	// refuses, so a bad value cannot half-apply.
 	show  func(c *Config) string
 	parse func(c *Config, value string) error
+
+	// apply, where there is one, is what a running shell does to take
+	// the new value, for a setting read once rather than each time it is
+	// wanted.  "set" calls it after the shell's Config has changed.
+	apply func(sh *Shell) error
+}
+
+// relogNow is "log" and "log_dir" taking effect at once.
+func relogNow(sh *Shell) error {
+	if err := sh.relog(); err != nil {
+		return fmt.Errorf("no transcript: %w", err)
+	}
+	return nil
 }
 
 // startupNote is what a startup-only setting says.  Written out rather
@@ -295,11 +308,13 @@ var settings = []setting{{
 		}
 		return nil
 	},
+	apply: relogNow,
 }, {
 	name:  "log_dir",
 	about: "where the transcript goes; empty is the default place",
 	show:  func(c *Config) string { return c.LogDir },
 	parse: func(c *Config, v string) error { c.LogDir = v; return nil },
+	apply: relogNow,
 }, {
 	name:  "notice_keep",
 	about: "how long a group notice is kept for \"notice\", like 15m",

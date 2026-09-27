@@ -176,6 +176,50 @@ func TestNoTranscriptWhenLoggingIsOff(t *testing.T) {
 	}
 }
 
+// TestSetLogActsAtOnce: "set log off" stops the transcript in the shell
+// it was typed in, and "set log_dir" with "set log on" starts it again
+// somewhere else, without waiting for the next slsh.
+func TestSetLogActsAtOnce(t *testing.T) {
+	t.Setenv("SLSH_CONFIG_DIR", t.TempDir())
+	x, dir := logShell(t)
+	x.noticef("before")
+	x.do(t, "set log off")
+	x.noticef("after")
+	x.do(t, "pwd")
+	got := written(t, dir)
+	if !strings.Contains(got, "before") || !strings.Contains(got, "$ set log off") {
+		t.Errorf("what came before \"set log off\" is missing:\n%s", got)
+	}
+	if strings.Contains(got, "after") || strings.Contains(got, "$ pwd") {
+		t.Errorf("\"set log off\" did not stop the transcript:\n%s", got)
+	}
+
+	other := t.TempDir()
+	x.do(t, "set log_dir "+other)
+	x.noticef("still off")
+	x.do(t, "set log on")
+	x.noticef("in the other place")
+	if got := written(t, other); !strings.Contains(got, "in the other place") || strings.Contains(got, "still off") {
+		t.Errorf("the transcript in log_dir holds:\n%s", got)
+	}
+	if got := written(t, dir); strings.Contains(got, "in the other place") {
+		t.Errorf("the old place was still written to:\n%s", got)
+	}
+
+	// A place that cannot be opened is said, and leaves no transcript.
+	blocked := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocked, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out := x.do(t, "set log_dir "+blocked); !strings.Contains(out, "no transcript") {
+		t.Errorf("a log_dir that cannot be made printed:\n%s", out)
+	}
+	x.noticef("nowhere")
+	if got := written(t, other); strings.Contains(got, "nowhere") {
+		t.Errorf("the transcript went on in the old place:\n%s", got)
+	}
+}
+
 // TestTheLogIsNamedAfterTheAvatar: one file per avatar is the whole
 // arrangement, and the name arrives from the grid -- so a name with a
 // slash in it must not decide where the file goes.
