@@ -180,7 +180,7 @@ func TestNonsenseCostsTheParcelAndNotTheQueue(t *testing.T) {
 	}
 }
 
-// overlayPackets is the four quarters of a region where every square
+// overlayPacket4 is the four quarters of a region where every square
 // says the same thing, so that which quarter is which is visible.
 func overlayPacket4(seq int, fill byte) *msg.ParcelOverlay {
 	m := &msg.ParcelOverlay{}

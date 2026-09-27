@@ -135,9 +135,9 @@ func twoRegions(t *testing.T, opts Options) (*Agent, *fakeRegion, *fakeRegion) {
 	return a, from, to
 }
 
-// TestAMoveTakesTheSessionToTheOtherSimulator: the whole of stage 2 in
-// one assertion -- the session handshakes at the new address and answers
-// with the new region afterwards.
+// TestAMoveTakesTheSessionToTheOtherSimulator: the whole of stage 2 of
+// doc/history/teleport.md in one assertion -- the session handshakes at
+// the new address and answers with the new region afterwards.
 func TestAMoveTakesTheSessionToTheOtherSimulator(t *testing.T) {
 	a, from, to := twoRegions(t, Options{})
 
@@ -172,10 +172,10 @@ func TestAMoveTakesTheSessionToTheOtherSimulator(t *testing.T) {
 	}
 }
 
-// TestTheThingsHoldingTheCircuitSurviveAMove: six places outside this
-// package hold a.Send, a.Recv or a.Disp and none of them is told a
-// teleport happened, so a move must change the socket underneath them
-// rather than replace them.
+// TestTheThingsHoldingTheCircuitSurviveAMove: the server, sl.Direct and
+// the viewer front end hold a.Send, a.Recv or a.Disp and none of them is
+// told a teleport happened, so a move must change the socket underneath
+// them rather than replace them.
 func TestTheThingsHoldingTheCircuitSurviveAMove(t *testing.T) {
 	a, from, to := twoRegions(t, Options{SkipCaps: true})
 	send, recv, disp := a.Send, a.Recv, a.Disp
@@ -590,7 +590,8 @@ func TestTheFirstArrivalOfASessionIsNotARegionChange(t *testing.T) {
 }
 
 // TestAMoveSaysWhichRegionTheAvatarIsInNow is the assertion the rest of
-// stage 4 rests on, and the one that catches the trap in it.  The two
+// stage 4 of doc/history/teleport.md rests on, and the one that catches
+// the trap in it.  The two
 // halves of the answer come from different messages -- the name from
 // RegionHandshake and the handle from the AgentMovementComplete that
 // follows it -- so a notice fired at the obvious moment carries the new

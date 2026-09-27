@@ -1,11 +1,11 @@
 package agent
 
-// Spikes for the viewer-frontend plan.  Neither of these is a test in
-// the usual sense: they ask the grid a question the protocol documents
-// do not answer, and print what it said.  They are kept because the
-// answers decide how two later stages are built, and because a
-// simulator that changes its mind about either would otherwise break
-// the relay silently.
+// Spikes for the viewer-frontend plan, doc/history/viewer-frontend.md.
+// Neither of these is a test in the usual sense: they ask the grid a
+// question the protocol documents do not answer, and print what it said.
+// They are kept because the answers decided how two later stages were
+// built, and because a simulator that changes its mind about either would
+// otherwise break the relay silently.
 //
 //	SLGO_PROFILE=holt-beta go test ./agent -run TestLiveRedescribe -v -timeout 5m
 //	SLGO_PROFILE=holt-beta go test ./agent -run TestLiveTerrain -v -timeout 5m
@@ -163,10 +163,10 @@ func dialSpike(ctx context.Context, t *testing.T, c *counter) *Agent {
 // This is the question the whole viewer-frontend design rests on.  A
 // region describes each object exactly once, so a viewer attached to a
 // session that has already been running sees nothing -- unless the
-// objects can simply be asked for again.  The existing use of this
-// message (requestCachedObjects) only ever asks for objects the
-// simulator has just said we are missing, which is a different question
-// and does not answer this one.
+// objects can simply be asked for again.  When this was written, the
+// one use of this message (requestCachedObjects) asked only for objects
+// the simulator had just said we were missing, which is a different
+// question and does not answer this one.
 //
 // The method: let the store fill, take the local ids, forget everything,
 // ask for those ids, and see what comes back.
@@ -294,12 +294,13 @@ watch:
 // TestLiveTerrain asks whether a second RegionHandshakeReply makes the
 // simulator send the land layers again.
 //
-// A region sends its heightmap once, on arrival, and slgo has never
-// looked at LayerData at all.  So a viewer attached to a running session
-// would have no ground under it -- literally the grey void.  If the
-// simulator can be asked again, the fix is one line; if not, slgod has
-// to record the raw land patches from the moment it connects and replay
-// them, which is a per-region store and a good deal more work.
+// A region sends its heightmap once, on arrival, and slgo had not looked
+// at LayerData at all when this was written.  So a viewer attached to a
+// running session would have no ground under it -- literally the grey
+// void.  If the simulator can be asked again, the fix is one line; if
+// not, slgod has to record the raw land patches from the moment it
+// connects and replay them, which is a per-region store and a good deal
+// more work.
 //
 // OpenSim answers a RegionHandshakeReply with SendLayerData.  Linden's
 // simulator is not OpenSim and does not document this either way.

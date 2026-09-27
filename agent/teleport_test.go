@@ -71,9 +71,10 @@ func TestTheDestinationIsReadFromTheBytesTheGridSent(t *testing.T) {
 }
 
 // TestATeleportFinishOnTheQueueTakesTheSessionToTheSimulatorItNames:
-// stage 3's own half, end to end.  The event is put on the queue the way
-// a simulator puts one there, and nothing else is called: the session
-// notices on its own, which is the thing that did not happen before.
+// the half of stage 3 of doc/history/teleport.md that is this package's,
+// end to end.  The event is put on the queue the way a simulator puts one
+// there, and nothing else is called: the session notices on its own,
+// which is the thing that did not happen before.
 func TestATeleportFinishOnTheQueueTakesTheSessionToTheSimulatorItNames(t *testing.T) {
 	a, from, to := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
 

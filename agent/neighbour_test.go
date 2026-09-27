@@ -19,10 +19,11 @@ import (
 // avatar is in.
 //
 // It is the ordinary fakeSim, which answers UseCircuitCode with a
-// RegionHandshake -- and that, plus the pings, is the whole of what
-// stage 0 found a real neighbour needs from us.  What it must not be
-// given is an event queue or a seed: a child has neither, and a test
-// that handed it one would be exercising the region the avatar is in.
+// RegionHandshake -- and that, plus the pings, is the whole of what stage
+// 0 of doc/history/neighbours.md found a real neighbour needs from us.
+// What it must not be given is an event queue or a seed: a child has
+// neither, and a test that handed it one would be exercising the region
+// the avatar is in.
 func aNeighbour(t *testing.T, name string, x, y uint32) (*fakeSim, uint64) {
 	t.Helper()
 	sim := newFakeSim(t)
@@ -33,9 +34,9 @@ func aNeighbour(t *testing.T, name string, x, y uint32) (*fakeSim, uint64) {
 }
 
 // enableSimulator is the body a simulator offers a neighbour in, in the
-// shapes stage 0 read: a SimulatorInfo block with the handle as LLSD
-// binary, the address as four binary bytes in network order and the
-// port as a plain integer.
+// shapes stage 0 of doc/history/neighbours.md read: a SimulatorInfo block
+// with the handle as LLSD binary, the address as four binary bytes in
+// network order and the port as a plain integer.
 //
 // Built rather than captured.  Stage 0's probe read every field of the
 // 57 offers it saw this way and dialled what came out of them, so the
@@ -283,9 +284,9 @@ func dialled(sim *fakeSim) int {
 }
 
 // TestAnOfferTakenUpOpensACircuitToTheAddressItNames: the whole of stage
-// 2 in one assertion.  Nothing is called here -- the event is put on the
-// queue the way a simulator puts one there, and the session takes it up
-// on its own.
+// 2 of doc/history/neighbours.md in one assertion.  Nothing is called
+// here -- the event is put on the queue the way a simulator puts one
+// there, and the session takes it up on its own.
 func TestAnOfferTakenUpOpensACircuitToTheAddressItNames(t *testing.T) {
 	var said logLines
 	a, from, to := twoRegions(t, Options{
@@ -332,8 +333,8 @@ func TestAnOfferTakenUpOpensACircuitToTheAddressItNames(t *testing.T) {
 	if to.saw("UseCircuitCode") {
 		t.Error("the other region was dialled by an offer that never named it")
 	}
-	// Somebody watching the daemon can see it happened, which until a
-	// later stage gives clients a listing is the only way they can.
+	// Somebody watching the daemon can see it happened, and so can a
+	// client asking for the listing.
 	if lines := said.saying("circuit open"); len(lines) != 1 {
 		t.Errorf("the daemon said %v about opening a circuit", said.saying(""))
 	}
@@ -470,10 +471,11 @@ func TestAnOfferOvertakenByAMoveIntoItsRegionIsNotKept(t *testing.T) {
 	}
 }
 
-// TestAnOfferOnTheCircuitIsTakenUpToo:the template marks
-// EnableSimulator UDPBlackListed and all 57 of stage 0's arrived on the
-// event queue, but a deprecation flag is a promise a grid need not keep
-// -- crossing.go reads both roads for that reason and this follows it.
+// TestAnOfferOnTheCircuitIsTakenUpToo: the template marks EnableSimulator
+// UDPBlackListed and all 57 of stage 0's in doc/history/neighbours.md
+// arrived on the event queue, but a deprecation flag is a promise a grid
+// need not keep -- crossing.go reads both roads for that reason and this
+// follows it.
 func TestAnOfferOnTheCircuitIsTakenUpToo(t *testing.T) {
 	a, from, _, sim, handle := neighbourly(t)
 

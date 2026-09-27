@@ -467,11 +467,11 @@ func TestAnObjectThatIsNotWornIsNotAnAttachment(t *testing.T) {
 	}
 }
 
-// TestAnUpdateBeyondTheDrawDistanceIsRefused: the simulator does not
-// describe what is out of range, so this rejects nothing most of the
-// time -- but after the avatar has moved it stops the far end of the old
-// view being taken back in by a stray update, and it forgets what is
-// already held rather than leaving it.
+// TestAnUpdateBeyondTheDrawDistanceIsPutOnNotice: the simulator does not
+// describe what is out of range, so this finds nothing most of the time
+// -- but after the avatar has moved, a stray update from the far end of
+// the old view puts what it describes on notice rather than taking it
+// back in as current, and only the whole grace out of range drops it.
 func TestAnUpdateBeyondTheDrawDistanceIsPutOnNotice(t *testing.T) {
 	t.Parallel()
 
@@ -661,8 +661,8 @@ func decodeCompressed(t *testing.T, c compressedObject) *msg.Compressed {
 	return got
 }
 
-// TestACompressedUpdateBeyondTheDrawDistanceIsRefused: the same rule as
-// for a full update, and for the same reason.
+// TestACompressedUpdateBeyondTheDrawDistanceIsPutOnNotice: the same rule
+// as for a full update, and for the same reason.
 func TestACompressedUpdateBeyondTheDrawDistanceIsPutOnNotice(t *testing.T) {
 	t.Parallel()
 
