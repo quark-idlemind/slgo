@@ -153,10 +153,10 @@ func (w *Session) Create(ctx context.Context, o ObjectJSON) (*Built, error) {
 
 // fillPrim puts a described prim's inventory into a real one.
 //
-// Only scripts and notecards can be made from a description: the rest
-// name an asset this avatar may not have, and a texture named by uuid
-// is not something a client can conjure into an object it does not
-// already own a copy of.
+// Only scripts are put in.  A notecard is passed over, content or not,
+// and the rest name an asset this avatar may not have: a texture named
+// by uuid is not something a client can conjure into an object it does
+// not already own a copy of.
 func (w *Session) fillPrim(ctx context.Context, o *Object, pj PrimJSON) error {
 	for _, it := range pj.Inventory {
 		switch it.Type {
@@ -176,8 +176,7 @@ func (w *Session) fillPrim(ctx context.Context, o *Object, pj PrimJSON) error {
 				return fmt.Errorf("%s does not compile: %s", it.Name, strings.Join(res.Errors, "; "))
 			}
 		case "notecard", "":
-			// Nothing to do without content; a notecard named and
-			// empty is not worth a round trip.
+			// Nothing here writes a notecard into a prim.
 		}
 	}
 	return nil

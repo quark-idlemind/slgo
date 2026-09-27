@@ -38,7 +38,13 @@ comments of `sl/inventory_ops.go`:
   in Trash afterwards.
 - `UpdateInventoryItem`, the viewer's message for renaming an item,
   sent with the item's fields, its checksum and a transaction id, is
-  accepted and the item does not change.
+  accepted and the item does not change. The checksum was the first
+  thing found missing: sent as zero, the update was accepted and
+  silently did nothing -- the rename returned no error, the item did
+  not change, and only reading it back afterwards showed it. That is
+  how `itemCRC` came to be written, and the read-back is what caught
+  it. `RezObject` carries the same checksum, and is the one message
+  here that sends it.
 
 ## Moves
 

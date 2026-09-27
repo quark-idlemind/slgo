@@ -36,8 +36,9 @@ type attachPointName struct {
 // same point (avatar_lad.xml, <attachment_point ... name="...">).  Body
 // points run to 30 and the HUD points carry on from there.
 //
-// Twenty-one of the fifty-five names differ, in three ways, and none of
-// the three is a slip to be tidied back into the viewer's spelling:
+// Twenty-one of the fifty-five names differ by more than case and the
+// spelling of centre, in three ways, and none of the three is a slip to
+// be tidied back into the viewer's spelling:
 //
 //   - abbreviations written out.  "R Upper Arm" is "right upper arm"
 //     here, "L Forearm" is "left lower arm", "Left Eyeball" is "left

@@ -10,20 +10,12 @@ package sl
 //
 // # The message that looks like the answer is not
 //
-// AgentIsNowWearing (Low 383) is what a viewer used to send, and
-// reading the protocol alone would make it the obvious way to do this.
-// It is dead.  The viewer that still sends it says so where it does:
-//
-//	// We no longer need this message in the current viewer, but send
-//	// it for now to maintain compatibility with release viewers.
-//	void LLAgentWearables::sendDummyAgentWearablesUpdate()
-//	  (llagentwearables.cpp:927-929)
-//
-// and what it sends is four fixed ids that mean nothing at all --
-// "4 standardized nonsense item ids (same as returned by the modified
-// sim, not that it especially matters)".  Asking a live simulator for
-// this avatar's wearables came back with exactly those four constants,
-// which is how the deadness was confirmed rather than assumed.
+// AgentIsNowWearing (Low 383), which the protocol alone makes look like
+// the way to do this, is dead: the viewer sends it only for
+// compatibility, with four fixed ids that mean nothing, and a live
+// simulator answered a question about this avatar's wearables with
+// exactly those four.
+// Why: doc/outfit.md#the-message-that-looks-like-the-answer
 //
 // # What actually wears one
 //
@@ -497,48 +489,24 @@ func (w *Session) folderVersion(ctx context.Context, folder msg.UUID) (int, erro
 // Putting an outfit back on.
 //
 // The simulator puts most of an avatar's attachments back by itself at
-// login, but not all of them.  Measured on Agni over eight logins of two
-// avatars: wherever a point held several attachments, exactly one of
-// them came back.  One avatar had three on its chest and got one of
-// them back each time -- a different one on different logins, as the
-// simulator's own attachment list confirmed before anything else was
-// put on.  The other wore twelve HUDs on the eight HUD points and got
-// eight back, one on each, the same four missing every time.  Every point with a single attachment was
-// restored every time.  So it looks as though the simulator restores
-// one attachment per point, as it did when a point could hold only
-// one; that is inferred from the pattern, not something the grid says.
-//
-// A viewer covers the gap.  Once the Current Outfit folder has loaded
-// it puts on whatever the folder names and is not on
-// (LLAppearanceMgr::updateAppearanceFromCOF), and nobody sees that
-// happen.  Nothing here did, so an avatar came back from a login
-// missing part of its outfit and stayed that way.  This is the same
+// login, but where a point held several it was measured to put back
+// only one of them.  A viewer covers the gap by putting on whatever the
+// Current Outfit folder names and is not on
+// (LLAppearanceMgr::updateAppearanceFromCOF), and this is the same
 // catching up.
+// Why: doc/outfit.md#putting-an-outfit-back-on
 //
 // # Why it adds rather than replaces
 //
-// It was written the other way round first, on the reasoning that
-// replacing is self-limiting: this cannot be sure what is already on,
-// since what says an attachment is worn is the region's description of
-// it and that description can be missing, so a restore that ADDED
-// might put a second copy of something it could not see.
-//
-// That reasoning is right about the risk and wrong about the cost.  A
-// point holds more than one attachment and an ordinary outfit uses
-// that -- a mesh body, a dress and a pair of arms all sit on the chest
-// -- so restoring with replace puts them on one after another and each
-// knocks the last one off.  Measured, and seen: an avatar restored
-// that way came back in her boots and her hair and nothing else,
-// because the dress and the arms had fought over one point.
-//
-// A duplicate is visible and costs a detach.  A garment silently lost
-// is neither.  So this adds, which is also what the viewer does down
-// the same path -- addAttachmentRequest(item, 0, add=true) from
-// userAttachMultipleAttachments, llagentwearables.cpp:1610.
-//
-// The duplicate is reported rather than prevented: after the wait,
-// anything the region describes twice is named, because that is a
-// thing to go and undo and nothing else here will mention it.
+// Several attachments on one point are an ordinary outfit, and putting
+// them on with replace makes each knock the last one off.  So this adds,
+// as the viewer does down the same path (userAttachMultipleAttachments,
+// llagentwearables.cpp:1610).  What that risks is a second copy of
+// something whose description was missing, and a duplicate is visible
+// and costs a detach where a lost garment is neither: so it is reported
+// rather than prevented -- after the wait, anything the region
+// describes twice is named, because nothing else here will mention it.
+// Why: doc/outfit.md#why-it-adds-rather-than-replaces
 //
 // # Why it asks for everything at once
 //

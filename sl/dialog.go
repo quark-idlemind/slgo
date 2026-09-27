@@ -14,9 +14,9 @@ package sl
 // And the answer goes on whichever channel the script chose, which is
 // usually negative precisely so that an avatar cannot fake it by
 // typing.  This message reaches those channels: a script listening on
-// -4242 heard "HEARD [Beta] on -4242" from a reply sent here, while
-// ordinary chat from this client on a negative channel still goes
-// nowhere.  Until that bug is found, this is the way to reach one.
+// -4242 heard "HEARD [Beta] on -4242" from a reply sent here, where
+// ChatFromViewer on a negative channel goes nowhere.  It is also what
+// the viewer sends for chat on one; see sayNegative.
 
 import (
 	"context"
