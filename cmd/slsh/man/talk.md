@@ -49,6 +49,13 @@ where NAME is whatever the object is called, which can be anybody's
 name.  Its sender is the object's owner, who did not write it, so there
 is nobody in it to answer.
 
+Every name that is not a person's is labelled the same way.  An object
+speaking in local chat is `< [Local] [Object] NAME: TEXT`, and the
+simulator's own lines are `[Grid]`.  An object's item or alert, and
+anything a group or the grid sends as an instant message, is a notice
+naming `[Object] NAME`, `[Group] NAME` or `[Grid] NAME`, and opens no
+conversation either.
+
 The names can improve, but not by themselves.  An instant message
 carries a key and sometimes no name at all, so a conversation can
 appear as the first eight characters of a key in brackets --

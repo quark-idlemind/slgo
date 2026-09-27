@@ -82,7 +82,7 @@ func (d Dialog) Button(label string) (int, bool) {
 }
 
 func (d Dialog) String() string {
-	return fmt.Sprintf("%s on channel %d: %q %v", d.ObjectName, d.Channel, d.Message, d.Buttons)
+	return fmt.Sprintf("%s on channel %d: %q %v", SenderObject.Label(d.ObjectName), d.Channel, d.Message, d.Buttons)
 }
 
 // dialog records one and tells whoever is waiting.
@@ -142,7 +142,7 @@ func (w *Session) pruneDialogsLocked(now time.Time, room int) []Handled {
 			what = "the text box from "
 		}
 		out = append(out, Handled{
-			What: what + orID(d.ObjectName, d.Object), How: how[i], By: droppedBy, At: now,
+			What: what + SenderObject.Label(orID(d.ObjectName, d.Object)), How: how[i], By: droppedBy, At: now,
 		})
 	}
 	return out
@@ -182,7 +182,7 @@ func (w *Session) WaitDialog(ctx context.Context, timeout time.Duration, match f
 // the same channel either way.
 func (w *Session) AnswerText(ctx context.Context, d Dialog, text string) error {
 	if !d.IsTextBox() {
-		return fmt.Errorf("sl: %s is a dialog with buttons, not a text box", d.ObjectName)
+		return fmt.Errorf("sl: %s is a dialog with buttons, not a text box", SenderObject.Label(d.ObjectName))
 	}
 	if len(text) > MaxDialogReply {
 		return fmt.Errorf("sl: %d bytes is too long for a text box; the limit is %d", len(text), MaxDialogReply)

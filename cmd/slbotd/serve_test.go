@@ -151,7 +151,7 @@ func TestAnObjectIsNotObeyed(t *testing.T) {
 	if b.trouble.unreported() != 1 {
 		t.Error("an object's message marked the trouble reported")
 	}
-	if n := logged.count(`ignored an instant message from the object "Trusted Resident"`); n != 4 {
+	if n := logged.count(`ignored an instant message from [Object] Trusted Resident, owned by (`); n != 4 {
 		t.Errorf("logged %d of 4 objects' messages as ignored:\n%s", n, logged)
 	}
 
@@ -166,6 +166,69 @@ func TestAnObjectIsNotObeyed(t *testing.T) {
 	}
 	if !told || !answered {
 		t.Errorf("told %v, answered %v", told, answered)
+	}
+}
+
+// TestNothingButAPersonIsLoggedAsOne: whatever dialog an instant message
+// carries, one sent by an object, a group or the grid under a person's
+// name is logged with the name labelled as what sent it.
+// Why: doc/im-senders.md#labelling-a-sender
+func TestNothingButAPersonIsLoggedAsOne(t *testing.T) {
+	d, b, _ := newTestDaemon(t)
+	logged := &logBook{}
+	d.logf = logged.logf
+	s := b.Session()
+	const name = "Trusted Resident"
+
+	var jobs sync.WaitGroup
+	defer jobs.Wait()
+	checked := 0
+	for dialog := 0; dialog < 256; dialog++ {
+		for _, how := range []struct {
+			what string
+			set  func(*sl.IM)
+		}{
+			{"as it came", func(*sl.IM) {}},
+			{"as a group", func(m *sl.IM) { m.Group = true }},
+			{"with no sender", func(m *sl.IM) { m.From = msg.UUID{} }},
+		} {
+			m := &sl.IM{From: testSender, FromName: name, Dialog: uint8(dialog), Text: "a remark"}
+			how.set(m)
+			k := m.Sender()
+			if k == sl.SenderPerson {
+				continue
+			}
+			logged.mu.Lock()
+			from := len(logged.lines)
+			logged.mu.Unlock()
+			b.arrived(context.Background(), s, m, &jobs)
+			logged.mu.Lock()
+			lines := append([]string(nil), logged.lines[from:]...)
+			logged.mu.Unlock()
+			for _, line := range lines {
+				if !strings.Contains(line, name) {
+					continue
+				}
+				checked++
+				if !strings.Contains(line, k.Label(name)) {
+					t.Errorf("dialog %d, %s: logged %q, which does not say it is not a person",
+						dialog, how.what, line)
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("nothing labelled was logged, so this checked nothing")
+	}
+	for _, want := range []string{
+		"object inventory offer from [Object] Trusted Resident: a remark",
+		"object alert from [Object] Trusted Resident: a remark",
+		"ignored an instant message from [Object] Trusted Resident, owned by (",
+		"ignored an instant message from [Object] Trusted Resident, owned by [Group] (",
+	} {
+		if logged.count(want) == 0 {
+			t.Errorf("nothing logged %q:\n%s", want, logged)
+		}
 	}
 }
 

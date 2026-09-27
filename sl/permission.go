@@ -138,7 +138,7 @@ type Permission struct {
 }
 
 func (q *Permission) String() string {
-	return fmt.Sprintf("%s (owned by %s) wants %s", q.ObjectName, q.OwnerName, q.Wants)
+	return fmt.Sprintf("%s (owned by %s) wants %s", SenderObject.Label(q.ObjectName), q.OwnerName, q.Wants)
 }
 
 // Grant answers with the bits named and no others.
@@ -277,7 +277,7 @@ func (w *Session) pruneAskedLocked(now time.Time, room int) []Handled {
 	for i, q := range drop {
 		w.forgetPermissionLocked(q)
 		out = append(out, Handled{
-			What: "the request from " + orID(q.ObjectName, q.Object) + " for " + q.Wants.String(),
+			What: "the request from " + SenderObject.Label(orID(q.ObjectName, q.Object)) + " for " + q.Wants.String(),
 			How:  how[i], By: droppedBy, At: now,
 		})
 	}

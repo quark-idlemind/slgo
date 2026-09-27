@@ -368,7 +368,7 @@ func TestAnUnansweredPermissionRequestIsForgotten(t *testing.T) {
 		t.Errorf("Asked = %d, want the overdue request forgotten", n)
 	}
 	got := told.take()
-	if want := "the request from Grabby Box for attach was forgotten after 1h unanswered by this session"; len(got) != 1 || got[0].String() != want {
+	if want := "the request from [Object] Grabby Box for attach was forgotten after 1h unanswered by this session"; len(got) != 1 || got[0].String() != want {
 		t.Errorf("told %+v, want %q", got, want)
 	}
 

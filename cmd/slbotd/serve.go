@@ -181,8 +181,7 @@ func (b *bot) arrived(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync.
 		// object was given, so it could pass for a trusted person by
 		// either.  Never a command, never talked to.
 		// Why: doc/im-senders.md
-		b.logf("ignored an instant message from the object %q, owned by %s",
-			im.FromName, s.NameOr(im.From))
+		b.logf("ignored an instant message from %s%s", b.whoSaid(s, im), ownedBy(s, im))
 		return
 	}
 
@@ -361,15 +360,34 @@ func (b *bot) take(ctx context.Context, offer *sl.InventoryOffer) {
 	b.logf("accepted %q from %s", what, who)
 }
 
-// whoSaid is the best name there is for whoever sent a message.
+// whoSaid is the best name there is for whoever sent a message,
+// labelled when it is an object, a group or the grid.
+// Why: doc/im-senders.md#labelling-a-sender
 func (b *bot) whoSaid(s *sl.Session, im *sl.IM) string {
-	if im.FromName != "" {
-		return im.FromName
+	name := im.FromName
+	switch {
+	case name != "":
+	case im.Dialog == sl.DialogFromTask:
+		name = s.NameOr(im.ID) // the object's key, never its owner's name
+	default:
+		name = s.NameOr(im.From)
 	}
-	if n := s.NameOr(im.From); n != "" {
-		return n
+	return im.Sender().Label(name)
+}
+
+// ownedBy is ", owned by OWNER" for an object's message, which carries
+// its owner's id: named only from what the session already knows, and
+// labelled a group when the object is a group's.  Empty for anything
+// else.
+func ownedBy(s *sl.Session, im *sl.IM) string {
+	if im.Sender() != sl.SenderObject {
+		return ""
 	}
-	return im.From.String()
+	owner := sl.SenderPerson
+	if im.Group {
+		owner = sl.SenderGroup
+	}
+	return ", owned by " + owner.Label(s.NameOr(im.From))
 }
 
 // say sends one short remark and logs a failure rather than reporting
