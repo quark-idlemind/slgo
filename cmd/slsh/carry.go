@@ -5,7 +5,7 @@ package main
 //
 //	take   the world into inventory
 //	place  inventory into the world
-//	perms  what the next owner, the group or everyone may do
+//	perms  what the owner, the next owner, the group or everyone may do
 //
 // These were slinv's, in the days when a separate daemon owned the
 // session; the operations themselves have been in the sl package all
@@ -176,8 +176,8 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	if e.Folder {
 		return fmt.Errorf("%s is a folder; place takes one object", args[0])
 	}
-	// An Entry says where a thing sits; RezFromInventory wants the item
-	// itself, with its asset and permissions on it.
+	// The item and not the entry: RezFromInventory sends every field of
+	// the item, its group among them, and an entry has no group.
 	it, err := sh.itemAt(ctx, e)
 	if err != nil {
 		return err

@@ -314,13 +314,13 @@ func (sh *Shell) entriesIn(ctx context.Context, path string) ([]string, []sl.Ent
 	return in, found, nil
 }
 
-// entryByID looks for an id here, then anywhere below the root, and
-// says which folder it was found in as the names that lead to it.
+// entryByID looks for an id here, then four levels down from the root,
+// and says which folder it was found in as the names that lead to it.
 //
 // Here first because that is nearly always where it is, and the whole
 // tree is a hundred requests.  The two searches know where they looked
 // in different ways: this folder is the one the shell is in, and the
-// whole-tree listing carries a path from the root, whose last name is
+// listing from the root carries each entry's path, whose last name is
 // the entry's own.
 func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, []string, error) {
 	sh.mu.Lock()
@@ -366,9 +366,10 @@ func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, []string
 // commands want entryAt, and the line between the two is the reason
 // this is not simply folded into entryAt for everybody.
 //
-// ls and find want entryAt for a third reason: a link is a thing a
-// listing should show, since the word "link" in the type column is the
-// only way anyone can tell one from what it points at.
+// ls and find do not follow a link either, for a third reason: a link
+// is a thing a listing should show, since the word "link" in the type
+// column is the only way anyone can tell one from what it points at.
+// Their -L shows what it points at in the columns, on the link's path.
 //
 // A folder comes back untouched, so a command that refuses folders can
 // go on refusing them afterwards.
@@ -507,18 +508,6 @@ func readLsOptions(out io.Writer, args []string) (lsOptions, error) {
 	return o, nil
 }
 
-// lsWhen formats the date column.
-//
-// It is the whole date: the day something was acquired and the time of
-// day as well, joined by a T rather than a space so that the column
-// stays one field and a script reading the id out of the third one goes
-// on working.  The seconds are there because they settle things -- two
-// items of one name, made a minute apart, are told apart by this column
-// and by nothing else on the line except the id, and rm --newest picks
-// between them by exactly this number.
-//
-// A folder has no date, and an empty column would move every column
-// after it, so it gets a dash.
 // longFormat is how a long listing renders its rows: whether -L was
 // asked for, and the index to follow links with.
 //
@@ -532,9 +521,9 @@ type longFormat struct {
 	// follow is -L: show what a link points at rather than the link.
 	follow bool
 
-	// byID is every entry inventory holds, for following those links.
-	// Nil when nothing in the listing is a link, and nil when the walk
-	// that would have built it failed.
+	// byID is every entry four levels down from the root, for following
+	// those links.  Nil when nothing in the listing is a link, and nil
+	// when the walk that would have built it failed.
 	byID map[msg.UUID]sl.Entry
 }
 
@@ -560,10 +549,10 @@ func (f longFormat) line(out io.Writer, e sl.Entry, full string) {
 
 // longFormatFor builds the format one listing wants.
 //
-// One whole-inventory walk for the lot, and only when the listing holds
-// a link at all.  A Current Outfit folder is a dozen or more links, and
-// a lookup apiece would be a dozen walks of the tree to answer one
-// listing.
+// One walk of inventory, four levels down from the root, for the lot,
+// and only when the listing holds a link at all.  A Current Outfit
+// folder is a dozen or more links, and a lookup apiece would be a dozen
+// walks of the tree to answer one listing.
 //
 // A walk that fails is not an error here.  What -L asks for is the kind
 // and the id; the id is on the link already, so a failed walk still
@@ -596,6 +585,18 @@ func (sh *Shell) longFormatFor(ctx context.Context, follow bool, es []sl.Entry) 
 	return f
 }
 
+// lsWhen formats the date column.
+//
+// It is the whole date: the day something was acquired and the time of
+// day as well, joined by a T rather than a space so that the column
+// stays one field and a script reading the id out of the third one goes
+// on working.  The seconds are there because they settle things -- two
+// items of one name, made a minute apart, are told apart by this column
+// and by nothing else on the line except the id, and rm --newest picks
+// between them by exactly this number.
+//
+// A folder has no date, and an empty column would move every column
+// after it, so it gets a dash.
 func lsWhen(created int64) string {
 	if created <= 0 {
 		return "-"
@@ -1235,9 +1236,6 @@ func cmdRm(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			return fmt.Errorf("--remove-all-copies does not apply inside an object: " +
 				"an object renames a second item of one name, so there is only ever one")
 		}
-		// And choosing by date could not be done anyway: sl.TaskItem
-		// carries a name, a kind and an id, and the item it was copied
-		// from kept the date.
 		if said := o.whichOne(); len(said) > 0 {
 			return fmt.Errorf("%s does not apply inside an object: what one holds has no dates on it", said[0])
 		}

@@ -4,6 +4,7 @@ package main
 //
 //	wear    attach an inventory object
 //	detach  take a worn one off
+//	dress   put on what the Current Outfit folder names and is not on
 //
 // These finish what "worn" started.  Listing the attachments has been
 // possible since there was a shell, and changing them has been possible
@@ -86,10 +87,9 @@ package main
 // and it would sit two files from the --replace that decides it.
 //
 // The other half of that is what it leaves alone.  sl.Wear's other
-// callers, EnsureAttached and Worn, pass a bare point and are untouched
-// by any of this; they take a HUD off and put it straight back on for
-// slbench, and a default that had quietly started adding would leave
-// a second copy behind on every run.
+// callers pass the byte they mean and are untouched by any of this:
+// the pool of auto objects lays the add bit on itself before handing
+// the point to EnsureAttached, and slbotd's wear sends a bare point.
 //
 // # The same item twice
 //
@@ -123,9 +123,9 @@ package main
 // RezSingleAttachmentFromInv sends the simulator an id it has no object
 // for, and the simulator answers an id it does not recognise with
 // silence rather than with a refusal.  So the whole of what the person
-// sees is the forty second wait running out and then "the simulator
-// never reported it as worn" -- true in every clause and about nothing
-// that was wrong.
+// sees is the forty second wait running out and then a time-out waiting
+// for the simulator to report it as worn -- true in every clause and
+// about nothing that was wrong.
 //
 // So wear follows one, which is what the viewer does with the same
 // click.  linkTarget does the following, and refuses the two cases
@@ -181,12 +181,12 @@ package main
 // after that showed it gone.
 //
 // So cmdDetach polls until the region agrees, and sl.TakeOff is left as
-// it was.  Its callers there, Worn and EnsureAttached, take a thing off
-// in order to put it straight back on and do their own settling; making
-// TakeOff wait would slow both of them for a confirmation they throw
-// away.  What is at stake is this command's last line -- "is no longer
-// worn" is a claim the SHELL makes, and the shell is what should have
-// established it before printing it.
+// it was.  Its caller there, Worn, which EnsureAttached goes through,
+// takes a thing off in order to put it straight back on and does its
+// own settling; making TakeOff wait would slow it for a confirmation it
+// throws away.  What is at stake is this command's last line -- "is no
+// longer worn" is a claim the SHELL makes, and the shell is what should
+// have established it before printing it.
 //
 // # Why the names are wear and detach
 //
@@ -309,9 +309,8 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if sl.IsWearable(sl.AssetType(e.Type)) {
 		return sh.wearWearable(ctx, out, e, o.Replace)
 	}
-	// The item rather than the entry: what goes over the wire is the
-	// name, the description and every permission mask, and an entry
-	// carries none of them.
+	// The item rather than the entry, since sl.Wear takes an item and
+	// sends its name, description, flags and permission masks.
 	it, err := sh.itemAt(ctx, e)
 	if err != nil {
 		return err
@@ -775,8 +774,9 @@ func wornFrom(worn []*sl.Attached, item msg.UUID) (*sl.Attached, bool) {
 // sl.PickNamedFunc: exactly, in the case it has, and a name that is worn
 // twice is refused with the item ids, which settle it.
 func findWorn(ctx context.Context, sh *Shell, worn []*sl.Attached, want string) (*sl.Attached, string, error) {
-	// Nothing is named until something has to be: a key given for a key
-	// is answered without reading inventory at all.
+	// Nothing is named until something has to be: a key is matched
+	// without reading inventory, which is read only to name what it
+	// matched.
 	if id, err := msg.ParseUUID(strings.TrimSpace(want)); err == nil {
 		for _, a := range worn {
 			if a.Item == id || a.Object.ID == id {
