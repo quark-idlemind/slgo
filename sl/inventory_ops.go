@@ -692,11 +692,9 @@ func (w *Session) ActivateGroup(ctx context.Context, group msg.UUID, timeout tim
 // item, which RezObject carries.  UpdateInventoryItem carries one too,
 // and is not sent: see SetItem.
 //
-// It is not optional and it is not a CRC.  Sent as zero, an update is
-// accepted and silently does nothing: the rename returns no error, the
-// item does not change, and only reading it back afterwards shows it.
-// That is how this came to be written -- the read-back is what caught
-// it.
+// It is not optional and it is not a CRC: an update sent with zero here
+// was accepted and silently did nothing.
+// Why: doc/readbacks.md#which-calls-go-which-way
 //
 // The fields and their order are Second Life's, not a choice.  Note what
 // is absent: the base mask and the last owner, both of which the
