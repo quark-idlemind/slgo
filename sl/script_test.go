@@ -801,15 +801,25 @@ func TestRunStopsAtWhicheverStepOfPuttingTheScriptInFailed(t *testing.T) {
 	})
 }
 
-// TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory: the copy
-// in the avatar's inventory is only the way in, and is deleted when the
-// way in fails as it is when it succeeds -- after the copy was sent into
-// the object as well as before.
-func TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory(t *testing.T) {
+// TestAScriptThatCouldNotBePutInLeavesNoCopyInInventory: the copy in the
+// avatar's inventory is only the way in, and is deleted when the way in
+// fails as it is when it succeeds -- after the copy was sent into the
+// object as well as before.  Run and InstallScript both go in that way.
+func TestAScriptThatCouldNotBePutInLeavesNoCopyInInventory(t *testing.T) {
 	t.Parallel()
 	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 	gone := errors.New("the circuit is gone")
 	sent := func(t *testing.T, f *fakeBackend, _ *contents) { waitSent[*msg.UpdateTaskInventory](t, f) }
+	callers := []struct {
+		name string
+		call func(ctx context.Context, w *Session) error
+	}{{"Run", func(ctx context.Context, w *Session) error {
+		_, err := w.Run(ctx, Script{In: oAt(w), Name: "a script"})
+		return err
+	}}, {"InstallScript", func(ctx context.Context, w *Session) error {
+		_, err := w.InstallScript(ctx, oAt(w), "a script", "default {}", true)
+		return err
+	}}}
 
 	for _, c := range []struct {
 		name  string
@@ -842,49 +852,49 @@ func TestARunThatCouldNotPutTheScriptInLeavesNoCopyInInventory(t *testing.T) {
 			held.answer(t, "")
 		}},
 	} {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			w, f := newFakeSession(t)
-			c.stage(t, f)
-			deleted := make(chan string, 4)
-			f.ServeCap(t, "InventoryAPIv3", func(rw http.ResponseWriter, r *http.Request) {
-				deleted <- r.Method + " " + r.URL.Path
-				rw.WriteHeader(http.StatusOK)
-			})
+		for _, by := range callers {
+			t.Run(by.name+"/"+c.name, func(t *testing.T) {
+				t.Parallel()
+				w, f := newFakeSession(t)
+				c.stage(t, f)
+				deleted := make(chan string, 4)
+				f.ServeCap(t, "InventoryAPIv3", func(rw http.ResponseWriter, r *http.Request) {
+					deleted <- r.Method + " " + r.URL.Path
+					rw.WriteHeader(http.StatusOK)
+				})
 
-			ctx := context.Background()
-			if c.patience != 0 {
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(ctx, c.patience)
-				defer cancel()
-			}
-			wait := aside(t, func() (*Result, error) {
-				return w.Run(ctx, Script{In: oAt(w), Name: "a script"})
-			})
-			held := objectHolding(f, thePrim)
-			held.answer(t, "")
-			m := waitSent[*msg.CreateInventoryItem](t, f)
-			relayCreated(t, f, m.InventoryBlock.CallbackID)
-			if c.after != nil {
-				c.after(t, f, held)
-			}
-			_, err := wait()
-			if err == nil {
-				t.Fatal("Run went on without the script in the object")
-			}
-			if c.patience != 0 && !errors.Is(err, context.DeadlineExceeded) {
-				t.Errorf("Run = %v, want the context's reason", err)
-			}
-
-			select {
-			case got := <-deleted:
-				if want := "DELETE /item/" + theChild.String(); got != want {
-					t.Errorf("asked %q, want %q", got, want)
+				ctx := context.Background()
+				if c.patience != 0 {
+					var cancel context.CancelFunc
+					ctx, cancel = context.WithTimeout(ctx, c.patience)
+					defer cancel()
 				}
-			default:
-				t.Error("the copy in inventory was left behind")
-			}
-		})
+				wait := asideErr(t, func() error { return by.call(ctx, w) })
+				held := objectHolding(f, thePrim)
+				held.answer(t, "")
+				m := waitSent[*msg.CreateInventoryItem](t, f)
+				relayCreated(t, f, m.InventoryBlock.CallbackID)
+				if c.after != nil {
+					c.after(t, f, held)
+				}
+				err := wait()
+				if err == nil {
+					t.Fatalf("%s went on without the script in the object", by.name)
+				}
+				if c.patience != 0 && !errors.Is(err, context.DeadlineExceeded) {
+					t.Errorf("%s = %v, want the context's reason", by.name, err)
+				}
+
+				select {
+				case got := <-deleted:
+					if want := "DELETE /item/" + theChild.String(); got != want {
+						t.Errorf("asked %q, want %q", got, want)
+					}
+				default:
+					t.Error("the copy in inventory was left behind")
+				}
+			})
+		}
 	}
 }
 
@@ -1785,5 +1795,61 @@ func TestTheCopyInInventoryIsDeletedOnceTheObjectHasItsOwn(t *testing.T) {
 	f.Relay(t, objectSaid(thePrim, ChatSay, "FINISHED"))
 	if res, err := wait(); err != nil || len(res.Warnings) != 0 {
 		t.Errorf("Run = %+v, %v", res, err)
+	}
+}
+
+// TestInstallScriptDeletesItsCopyInInventory: InstallScript goes in by
+// way of the avatar's inventory as Run does, and its copy there has done
+// its job once the object holds one.  One that cannot be deleted is said
+// without failing an install that worked.
+func TestInstallScriptDeletesItsCopyInInventory(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name   string
+		status int
+		warned bool
+	}{
+		{"deleted", http.StatusOK, false},
+		{"not deleted", http.StatusInternalServerError, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			w, f := newFakeSession(t)
+			serveUpload(t, f, "UpdateScriptAgent", compiles)
+			serveUpload(t, f, "UpdateScriptTask", compiles)
+			deleted := make(chan string, 4)
+			f.ServeCap(t, "InventoryAPIv3", func(rw http.ResponseWriter, r *http.Request) {
+				deleted <- r.Method + " " + r.URL.Path
+				rw.WriteHeader(c.status)
+			})
+
+			wait := aside(t, func() (*UploadResult, error) {
+				return w.InstallScript(context.Background(), foundHere(w, &Object{ID: thePrim, Local: 77}),
+					"a script", "default {}", true)
+			})
+			held := objectHolding(f, thePrim)
+			held.answer(t, "")
+			m := waitSent[*msg.CreateInventoryItem](t, f)
+			relayCreated(t, f, m.InventoryBlock.CallbackID)
+			waitSent[*msg.UpdateTaskInventory](t, f)
+			held.answer(t, theContentsFile)
+
+			select {
+			case got := <-deleted:
+				if want := "DELETE /item/" + theChild.String(); got != want {
+					t.Errorf("asked %q, want %q", got, want)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("the copy in inventory was never deleted")
+			}
+			res, err := wait()
+			if err != nil || !res.Compiled {
+				t.Fatalf("InstallScript = %+v, %v", res, err)
+			}
+			warned := len(res.Warnings) == 1 && strings.Contains(res.Warnings[0], "could not be deleted")
+			if warned != c.warned || len(res.Warnings) > 1 {
+				t.Errorf("warnings = %q", res.Warnings)
+			}
+		})
 	}
 }

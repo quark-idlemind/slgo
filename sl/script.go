@@ -579,6 +579,12 @@ func (w *Session) onScriptRunning(fn func(object, item msg.UUID, running bool)) 
 //
 // Reusing the name replaces that script rather than adding another: an
 // object keeps every copy it is given and renames the newcomer.
+//
+// A script not in the object yet goes in by way of a copy in the
+// avatar's inventory, which is deleted afterwards as Run deletes its
+// own, whether or not the install got any further.  A copy that could
+// not be deleted is a warning on the result, or part of the error when
+// there is no result.
 func (w *Session) InstallScript(ctx context.Context, o *Object, name, source string, running bool) (*UploadResult, error) {
 	if o == nil {
 		return nil, fmt.Errorf("sl: InstallScript needs an object")
@@ -587,35 +593,50 @@ func (w *Session) InstallScript(ctx context.Context, o *Object, name, source str
 		return nil, fmt.Errorf("sl: InstallScript needs a name")
 	}
 
+	var leftover error // deleting the copy, when that failed
 	task, err := w.FindInObject(ctx, o, name)
 	if err != nil {
 		return nil, err
 	}
 	if task == nil {
 		it, _, err := w.NewScript(ctx, name, source)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			err = w.PutInObject(ctx, o, it)
 		}
-		if err := w.PutInObject(ctx, o, it); err != nil {
+		if err != nil {
+			if it != nil {
+				err = errors.Join(err, w.dropScriptCopy(ctx, it, name))
+			}
 			return nil, err
 		}
 		if err := w.Settle(ctx, 6*time.Second); err != nil {
-			return nil, err
+			return nil, errors.Join(err, w.dropScriptCopy(ctx, it, name))
 		}
 		if task, err = w.FindInObject(ctx, o, name); err != nil {
-			return nil, err
+			return nil, errors.Join(err, w.dropScriptCopy(ctx, it, name))
 		}
 		if task == nil {
-			return nil, fmt.Errorf("sl: %q never turned up inside %s", name, o)
+			return nil, errors.Join(fmt.Errorf("sl: %q never turned up inside %s", name, o),
+				w.dropScriptCopy(ctx, it, name))
+		}
+		if err := w.DeleteItem(ctx, it.ID); err != nil {
+			leftover = fmt.Errorf("the copy of %q in inventory could not be deleted: %w", name, err)
 		}
 	}
 
-	return w.upload(ctx, "UpdateScriptTask", map[string]any{
+	up, err := w.upload(ctx, "UpdateScriptTask", map[string]any{
 		"item_id":           task.ID.String(),
 		"task_id":           o.ID.String(),
 		"is_script_running": running,
 		"target":            "mono",
 	}, []byte(source))
+	if err != nil {
+		return nil, errors.Join(err, leftover)
+	}
+	if leftover != nil {
+		up.Warnings = append(up.Warnings, leftover.Error())
+	}
+	return up, nil
 }
 
 // leadingNewline is put in front of every script this package installs,

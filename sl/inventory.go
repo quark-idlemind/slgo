@@ -215,6 +215,11 @@ type UploadResult struct {
 	// it says instead of failing: an upload with no money behind it
 	// answers 200 with a state of "error" and the reason here.
 	Message string
+
+	// Warnings is what went wrong around an install without spoiling
+	// it, as Result.Warnings is for a run: InstallScript's copy in
+	// inventory that could not be deleted.
+	Warnings []string
 }
 
 // uploadRetryWait is how long to leave it before asking a capability
