@@ -131,6 +131,12 @@ func (g *grantingGrid) grant(n int, agent string, try bool) (*client.Grant, erro
 	defer g.mu.Unlock()
 	g.asked = append(g.asked, fmt.Sprintf("%s:%d:%v", agent, n, try))
 	g.sentAtAsk = append(g.sentAtAsk, len(g.fakeGrid.Sent()))
+	select {
+	case <-g.done:
+		// A closed session cannot ask, any more than a real one can.
+		return nil, errors.New("client: not connected")
+	default:
+	}
 	if g.refuse != nil {
 		return nil, g.refuse
 	}
@@ -377,6 +383,132 @@ func TestAGrantThatIsNotOneAvatarsLeavesNothingOpen(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "0 avatars") ||
 		!strings.Contains(err.Error(), "no places") {
 		t.Errorf("a grant with no places = %v, want it to say so", err)
+	}
+}
+
+// cannotWear makes every wear on f fail, as a circuit that went away
+// does.
+func cannotWear(f *fakeGrid) {
+	f.mu.Lock()
+	f.objectsErr = fmt.Errorf("the circuit went away")
+	f.sendErr = fmt.Errorf("the circuit is gone")
+	f.mu.Unlock()
+}
+
+// dialling records the sessions opened for other avatars, and makes
+// wearing fail on those of the avatars named.
+func dialling(t *testing.T, broken ...string) *[]*sl.Session {
+	t.Helper()
+	var dialled []*sl.Session
+	inner := dialFor
+	dialFor = func(ctx context.Context, o Options) (*sl.Session, error) {
+		s2, err := inner(ctx, o)
+		if err != nil {
+			return nil, err
+		}
+		dialled = append(dialled, s2)
+		for _, name := range broken {
+			if name == o.Agent {
+				cannotWear(s2.Backend().(*grantingGrid).fakeGrid)
+			}
+		}
+		return s2, nil
+	}
+	t.Cleanup(func() { dialFor = inner })
+	return &dialled
+}
+
+// closed says whether a session made by newGranting or dialFor was
+// closed.
+func closed(s *sl.Session) bool {
+	select {
+	case <-s.Backend().(*grantingGrid).done:
+		return true
+	default:
+		return false
+	}
+}
+
+// TestAWearThatFailsLeavesTheAskingSessionToAskAgain: when the objects
+// one avatar was granted cannot be worn, the grant goes back with the
+// session opened for it, and the next avatar is asked about on the
+// asking session, which is the caller's and still open.
+func TestAWearThatFailsLeavesTheAskingSessionToAskAgain(t *testing.T) {
+	s, g := newGranting(t, "quark", "example", "spare")
+	g.free["quark"] = 0 // busy, so the first grant is another avatar's
+	dialled := dialling(t, "example")
+
+	a, err := useAutoOn(context.Background(), Options{}, s, 4)
+	if err != nil {
+		t.Fatalf("useAutoOn: %v", err)
+	}
+	if a.Agent != "spare" {
+		t.Errorf("ran on %q, want the avatar after the one that failed", a.Agent)
+	}
+	if closed(s) {
+		t.Error("the asking session was closed under its caller")
+	}
+	if got := g.gaveBack(); len(got) != 1 {
+		t.Errorf("gave back %v, want the grant that could not be worn", got)
+	}
+	for _, s2 := range *dialled {
+		if s2.Info().Name == "example" && !closed(s2) {
+			t.Error("the session opened for the avatar that failed was left open")
+		}
+	}
+}
+
+// TestAWearThatFailsEverywhereSaysWhy: with every avatar failing to wear
+// its objects, the wait on the default fails the same way, and that is
+// what the caller is told -- not that the daemon is too old to answer,
+// which is what an ask on a closed session would say.
+func TestAWearThatFailsEverywhereSaysWhy(t *testing.T) {
+	s, g := newGranting(t, "quark", "example")
+	cannotWear(g.fakeGrid)
+	dialled := dialling(t, "example")
+
+	_, err := useAutoOn(context.Background(), Options{}, s, 4)
+	if err == nil {
+		t.Fatal("objects came out of avatars that cannot wear them")
+	}
+	if !strings.Contains(err.Error(), "circuit") ||
+		strings.Contains(err.Error(), "older than the pool") {
+		t.Errorf("useAutoOn = %q, want the failure to wear", err)
+	}
+	if closed(s) {
+		t.Error("the asking session was closed under its caller")
+	}
+	if got := g.gaveBack(); len(got) != 3 {
+		t.Errorf("gave back %v, want each of three grants", got)
+	}
+	for _, s2 := range *dialled {
+		if !closed(s2) {
+			t.Errorf("the session opened for %s was left open", s2.Info().Name)
+		}
+	}
+}
+
+// TestAGrantThatCannotBeWornLeavesTheAskingSessionOpen: a grant spread
+// over two avatars, whose second cannot be worn, goes back whole with
+// the session opened for it.  The asking session is left to its caller,
+// even though the first avatar's objects were worn on it.
+func TestAGrantThatCannotBeWornLeavesTheAskingSessionOpen(t *testing.T) {
+	s, g := newGranting(t, "quark", "example")
+	g.free["quark"] = 2
+	g.free["example"] = 4
+	dialled := dialling(t, "example")
+
+	if _, err := spreadOn(context.Background(), Options{}, s, 6); err == nil {
+		t.Fatal("six objects came back with four of them unworn")
+	}
+	if closed(s) {
+		t.Error("the asking session was closed under its caller")
+	}
+	if got := g.gaveBack(); len(got) != 1 {
+		t.Errorf("the grant was given back %d times: %v", len(got), got)
+	}
+	if len(*dialled) != 1 || !closed((*dialled)[0]) {
+		t.Error("the session opened for the other avatar was left open")
 	}
 }
 

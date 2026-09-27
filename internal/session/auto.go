@@ -189,7 +189,8 @@ func useAutoOn(ctx context.Context, o Options, s *sl.Session, n int) (*Auto, err
 // The session that ASKED holds the grant, because the grant belongs to a
 // stream; the session the work runs on may be another one, when the
 // places turned out to be somebody else's.  Both are kept until the
-// caller lets go.
+// caller lets go.  On a failure the asking session is left open, being
+// the caller's, and useAutoOn asks on it again.
 func grantOn(ctx context.Context, o Options, asked *sl.Session, g granter, n int, agent string, wait bool) (*Auto, error) {
 	var (
 		got *client.Grant
@@ -315,7 +316,9 @@ func why(got *client.Grant, n int, agent string) string {
 //
 // The session that asked holds the grant.  Sessions for the other
 // avatars are opened here and closed when the grant is let go, along
-// with the asking one if the work never ran on it.
+// with the asking one if the work never ran on it.  A grant that cannot
+// be worn goes back at once with the sessions opened here, and the
+// asking one is left open: it is the caller's.
 func wearGrant(ctx context.Context, o Options, asked *sl.Session, g granter, got *client.Grant) ([]*Auto, error) {
 	byAgent := map[string][]client.Place{}
 	var order []string
@@ -345,6 +348,15 @@ func wearGrant(ctx context.Context, o Options, asked *sl.Session, g granter, got
 			}
 		})
 	}
+	// A grant that could not be worn: the asking session is not closed,
+	// whether or not objects were worn on it.
+	fail := func(name string, err error) ([]*Auto, error) {
+		release(g, got, false)
+		for _, s := range extra {
+			s.Close()
+		}
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
 
 	var out []*Auto
 	for _, name := range order {
@@ -356,11 +368,7 @@ func wearGrant(ctx context.Context, o Options, asked *sl.Session, g granter, got
 			next.Agent = name
 			s2, err := dialFor(ctx, next)
 			if err != nil {
-				give()
-				for _, a := range out {
-					a.Session.Close()
-				}
-				return nil, fmt.Errorf("%s: %w", name, err)
+				return fail(name, err)
 			}
 			extra = append(extra, s2)
 			s = s2
@@ -379,11 +387,7 @@ func wearGrant(ctx context.Context, o Options, asked *sl.Session, g granter, got
 
 		a, err := wearSlots(ctx, s, slots, dirty)
 		if err != nil {
-			give()
-			for _, done := range out {
-				done.Session.Close()
-			}
-			return nil, fmt.Errorf("%s: %w", name, err)
+			return fail(name, err)
 		}
 		a.release = give
 		out = append(out, a)
