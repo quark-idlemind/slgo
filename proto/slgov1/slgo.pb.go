@@ -908,7 +908,13 @@ type Lock struct {
 	// program that wants the lock almost always wants to get on with the
 	// work once it has it, and the alternative it would otherwise write
 	// for itself is a sleep and another ask.
-	Try           bool `protobuf:"varint,2,opt,name=try,proto3" json:"try,omitempty"`
+	Try bool `protobuf:"varint,2,opt,name=try,proto3" json:"try,omitempty"`
+	// Request is the client's own number for this ask, which the answer
+	// carries back in Locked.request.  Answers do not come back in the
+	// order they were asked for -- a try is answered at once, a wait when
+	// the lock is given -- so a client with more than one ask out for a
+	// name matches them by this.  Zero is a client older than the field.
+	Request       uint64 `protobuf:"varint,3,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -955,6 +961,13 @@ func (x *Lock) GetTry() bool {
 		return x.Try
 	}
 	return false
+}
+
+func (x *Lock) GetRequest() uint64 {
+	if x != nil {
+		return x.Request
+	}
+	return 0
 }
 
 // Unlock gives one back.  Ending the stream does the same thing.
@@ -1012,7 +1025,11 @@ type Locked struct {
 	Held  bool                   `protobuf:"varint,2,opt,name=held,proto3" json:"held,omitempty"`
 	// Who has it, when held is false and somebody else does. It is for a
 	// person to read, not to act on.
-	Holder        string `protobuf:"bytes,3,opt,name=holder,proto3" json:"holder,omitempty"`
+	Holder string `protobuf:"bytes,3,opt,name=holder,proto3" json:"holder,omitempty"`
+	// Request is the number of the Lock this answers.  Zero is a daemon
+	// older than the field, whose answers a client can only match to its
+	// asks by name, in the order they were made.
+	Request       uint64 `protobuf:"varint,4,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1066,6 +1083,13 @@ func (x *Locked) GetHolder() string {
 		return x.Holder
 	}
 	return ""
+}
+
+func (x *Locked) GetRequest() uint64 {
+	if x != nil {
+		return x.Request
+	}
+	return 0
 }
 
 // Subscribe adjusts what this stream relays.  Exactly one field is
@@ -6175,16 +6199,18 @@ const file_slgo_proto_rawDesc = "" +
 	"\arequest\x18\x03 \x01(\x04R\arequest\":\n" +
 	"\fReleaseSlots\x12\x14\n" +
 	"\x05grant\x18\x01 \x01(\tR\x05grant\x12\x14\n" +
-	"\x05clean\x18\x02 \x01(\bR\x05clean\",\n" +
+	"\x05clean\x18\x02 \x01(\bR\x05clean\"F\n" +
 	"\x04Lock\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03try\x18\x02 \x01(\bR\x03try\"\x1c\n" +
+	"\x03try\x18\x02 \x01(\bR\x03try\x12\x18\n" +
+	"\arequest\x18\x03 \x01(\x04R\arequest\"\x1c\n" +
 	"\x06Unlock\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"H\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"b\n" +
 	"\x06Locked\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04held\x18\x02 \x01(\bR\x04held\x12\x16\n" +
-	"\x06holder\x18\x03 \x01(\tR\x06holder\"a\n" +
+	"\x06holder\x18\x03 \x01(\tR\x06holder\x12\x18\n" +
+	"\arequest\x18\x04 \x01(\x04R\arequest\"a\n" +
 	"\tSubscribe\x12\x10\n" +
 	"\x03set\x18\x01 \x03(\tR\x03set\x12\x10\n" +
 	"\x03add\x18\x02 \x03(\tR\x03add\x12\x16\n" +
