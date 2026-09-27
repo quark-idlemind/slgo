@@ -621,14 +621,14 @@ func (w *Session) event(e *QueueEvent) {
 // scriptRunningEvent reads a ScriptRunningReply that came over the event
 // queue, which on Second Life is the only place it comes from.
 //
-// See ScriptRunning for the measurement and for what the body looks
-// like.  Two things about it are load bearing here.  The Script block
+// Two things about the body are load bearing here.  The Script block
 // arrives as an ARRAY of maps where the template declares a single
 // block, so it is read as one and a lone map is accepted too, since
 // which of them a grid sends is not this package's to insist on.  And
 // the maps carry fields the template has never had -- Mono, and Luau and
 // LuauLanguage, which Agni had added by August 2026 -- so only the three
 // fields wanted are read and everything else goes past unlooked at.
+// Why: doc/scripts.md#what-agni-does
 //
 // A block whose ids will not parse is passed on as zeroes rather than
 // guarded against, because zero cannot match: a question is asked about
