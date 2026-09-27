@@ -30,10 +30,7 @@ package main
 // text.  Ends it at the END of the line, that is: with anything in front
 // of the cursor it deletes forward, as it does at the prompt, so a
 // person who has moved left to fix a typo does not send the answer by
-// pressing it.  The full stop stays because Ctrl-D cannot be written into a
-// file of commands: slsh -f is driven a line at a time, and a rule that
-// only a keyboard can reach would leave that route with no terminator
-// at all.
+// pressing it.
 //
 // Leaving without sending is Ctrl-C, which is what it does everywhere
 // else here.

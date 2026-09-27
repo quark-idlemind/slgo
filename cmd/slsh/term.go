@@ -3,7 +3,7 @@ package main
 // A line editor that keeps the prompt on the bottom line while messages
 // arrive above it.
 //
-// Everything printed goes through Printf, which erases the prompt,
+// Everything printed goes through Print, which erases the prompt,
 // writes the line, and draws the prompt again underneath.  Anything
 // that writes to the terminal without doing that leaves the display
 // wrong until the next keystroke, which is why nothing else here writes
@@ -141,16 +141,19 @@ type Term struct {
 	busy bool
 
 	// plain is a terminal that is not one: a pipe, in a test or a
-	// script.  Nothing is redrawn and no key is special, because
-	// there is nobody watching and no raw mode to read them in.
+	// script.  Nothing is redrawn, because there is nobody watching,
+	// and input is read a line at a time with no escape sequence
+	// decoded, because there is no raw mode to read keys in.  Each
+	// line still reaches the shell as keys, control characters and all.
 	plain bool
 }
 
 // NewTerm puts the terminal in raw mode and starts reading it.
 //
 // Input that is not a terminal -- a pipe from a test, a script -- is
-// read a line at a time instead, with none of the editing and no
-// redrawing.  The rest of the program does not know the difference.
+// read a line at a time instead, with no escape sequences decoded and
+// no redrawing; readPlain hands each line over as keys.  The rest of
+// the program does not know the difference.
 func NewTerm(in *os.File, out io.Writer) (*Term, error) {
 	t := &Term{
 		in:     in,
