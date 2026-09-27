@@ -904,7 +904,7 @@ func TestThePoolIsAsBigAsThePointsThereAre(t *testing.T) {
 }
 
 // TestAutoPointsIsAppendOnly: a slot is identified by its INDEX -- that
-// is what a lock is taken on and what one program tells another -- so
+// is what slgod grants and what one program tells another -- so
 // reordering this list makes two versions disagree about which object
 // slot five is, and nothing anywhere detects it.
 func TestAutoPointsIsAppendOnly(t *testing.T) {
@@ -1273,10 +1273,10 @@ func answerCopies(f *fakeGrid) {
 
 // ------------------------------------------------------------- setup
 
-// TestSetupTakesEveryGroupBeforeMovingAnything: wearing something
-// replaces what is on the point, and a run whose object went away
-// reports nothing useful about why -- so this refuses outright rather
-// than working around a group that is in use.
+// TestSetupTakesEveryGroupBeforeMovingAnything: wearing an item that
+// cannot be found worn takes it off and puts it back on, and a run whose
+// object went away reports nothing useful about why -- so this refuses
+// outright rather than working around a place in use.
 func TestSetupTakesEveryGroupBeforeMovingAnything(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
@@ -1533,9 +1533,7 @@ func TestRunInSaysWhenTheNamedObjectIsNotThere(t *testing.T) {
 }
 
 // TestRunInRezzesBesideTheAvatarAndTidiesUpAfter: one rezzed here is
-// ours, so it goes in the trash afterwards -- and the same object is
-// used for every run, which is not merely tidy: a benchmark carries a
-// reading from one script to the next through the object's linkset data.
+// ours, so it goes in the trash afterwards.
 func TestRunInRezzesBesideTheAvatarAndTidiesUpAfter(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)

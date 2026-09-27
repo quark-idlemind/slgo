@@ -100,13 +100,16 @@ func Connect(ctx context.Context, o Options) (*sl.Session, error) {
 	return sl.LoginDirect(loginCtx, l)
 }
 
-// AutoObject is the object slrun and slbench run their scripts in,
-// and AutoLock is the lock that says whose turn it is.
+// AutoObject is the name of the first of the objects slrun and slbench
+// run their scripts in; AutoName names the rest.  AutoLock names a lock
+// that nothing here takes any more: slgod hands out places instead.
 //
-// One object, kept and worn, because making one costs seconds every run
-// and -- far more -- because the script inside it then already exists:
-// installing a script into an object that has never held one takes
-// about eight seconds, and replacing one that is there takes under one.
+// The objects are kept and worn, because making one costs seconds every
+// run and -- far more -- because the script inside it then already
+// exists: installing a script into an object that has never held one
+// takes about eight seconds, and replacing one that is there takes
+// under one.
+// Why: doc/slots.md#what-is-being-shared-and-why-it-needs-sharing
 const (
 	AutoObject = "auto"
 	AutoLock   = "auto"
@@ -122,8 +125,8 @@ const (
 // and puts the real ceiling at the 38-attachment total.
 //
 // THIS LIST IS APPEND-ONLY AND MUST NEVER BE REORDERED.  A slot is
-// identified by its INDEX -- that is what a lock is taken on, and what
-// one program tells another -- so moving an entry makes two versions
+// identified by its INDEX -- that is what slgod grants, and what one
+// program tells another -- so moving an entry makes two versions
 // disagree about which object slot 5 is.  Nothing detects that: two
 // benchmarks quietly share an object and both report plausible numbers.
 // Adding to the end is safe; anything else is not.
@@ -149,15 +152,10 @@ func AutoName(n int) string {
 // AutoGroupSize is a default width: how many objects to take at once
 // when the caller has not said how many it wants.
 //
-// It is not a fact about the pool and no longer one about a benchmark
-// either.  It began as what slbench's search took -- a group of four,
-// the object being measured and the readings alongside it -- but that
-// search now cuts its range into --parts and leases whatever that comes
-// to, so nothing computes from this number any more.  What is left is a
-// default chosen for being a useful width without being anybody's whole
-// pool: the pool hands out any count up to AutoPool, and a program that
-// knows its own width -- one object per script it wants going at once --
-// asks for that instead.
+// It is not a fact about the pool, which hands out any count up to
+// AutoPool; a program that knows its own width -- one object per script
+// it wants going at once -- asks for that instead.
+// Why: doc/slots.md#locks-a-group-at-a-time
 const AutoGroupSize = 4
 
 // AutoPool is how many objects one avatar's pool holds -- the ceiling on
@@ -165,22 +163,15 @@ const AutoGroupSize = 4
 func AutoPool() int { return len(AutoPoints) }
 
 // EnsureAutoItems makes sure the first n auto items exist in inventory,
-// by COPYING the first one rather than building each.
+// by COPYING the first one rather than building each.  Only the first
+// has to be built, and only if the account has never had one.
 //
-// Two reasons, and the first is not an optimisation:
-//
-//   - An avatar may not be allowed to rez.  A parcel grants "create
-//     objects" to a group, and an avatar in no group is refused -- with
-//     a message blaming the land.  Such an avatar can still be given one
-//     object by somebody who can build, and from that one it can make
-//     all the others, because copying an item it already owns asks the
-//     land nothing at all.
-//   - It is quicker even when rezzing is allowed.  Rez, name, take is
-//     eight seconds and change; a copy is under two.
-//
-// Only the first has to be built, and only if the account has never had
-// one.  Everything after it is a copy, which means every auto object is
-// the same object -- exactly what a benchmark wants.
+// Copying an item already owned asks the land nothing, so an avatar that
+// may not rez can be given one object by somebody who can and make all
+// the others from it; and a copy is quicker than rez, name and take even
+// where rezzing is allowed.  Every auto object is then the same object --
+// exactly what a benchmark wants.
+// Why: doc/slots.md#every-object-is-a-copy-of-the-first
 func EnsureAutoItems(ctx context.Context, s *sl.Session, folder msg.UUID, n int) error {
 	items, err := s.FolderItems(ctx, folder)
 	if err != nil {
@@ -220,9 +211,9 @@ func EnsureAutoItems(ctx context.Context, s *sl.Session, folder msg.UUID, n int)
 			continue
 		}
 		if _, err := s.CopyItem(ctx, seed.ID, folder, name, 60*time.Second); err != nil {
-			// Not fatal: fewer objects is slower, not wrong, and the
-			// caller already copes with getting fewer than it asked
-			// for.
+			// Not fatal, and nothing after it is tried: the wearing
+			// that follows builds a missing item the slow way, and
+			// makes do with fewer objects when it cannot.
 			fmt.Fprintf(os.Stderr, "could not make %q: %v\n", name, err)
 			return nil
 		}
@@ -233,10 +224,10 @@ func EnsureAutoItems(ctx context.Context, s *sl.Session, folder msg.UUID, n int)
 // SetupAuto makes an avatar ready for benchmarking: the items exist
 // and are worn, so that the first run of the day does not pay for it.
 //
-// It takes EVERY group first, and refuses if any is busy.  Wearing
-// things is not something to do underneath a benchmark: an attach
-// replaces what is on the point, and a run whose object went away
-// reports nothing useful about why.
+// It takes EVERY place the avatar has first, and refuses if any is busy.
+// Wearing things is not something to do underneath a benchmark: an
+// item that cannot be found worn is taken off and put back on, and a
+// run whose object went away reports nothing useful about why.
 func SetupAuto(ctx context.Context, s *sl.Session, n int) ([]*sl.Object, error) {
 	if n < 1 {
 		n = 1
@@ -327,10 +318,8 @@ func objectsFolder(ctx context.Context, s *sl.Session) (msg.UUID, error) {
 // here is ours and goes in the trash afterwards, unless keep; one whose
 // rez was given up on, and was made all the same, goes at once.
 //
-// The same object is used for every run, which is not merely tidy: a
-// benchmark carries a reading from one script to the next through the
-// object's linkset data, and that is only meaningful if the object does
-// not change underneath it.
+// The caller runs every script in the one object this returns, so a
+// script can leave something there for the next.
 func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Object, func(), error) {
 	if name != "" {
 		found, err := s.ObjectsNamed(ctx, name, 15*time.Second)
@@ -404,19 +393,16 @@ func throwAway(ctx context.Context, s *sl.Session, obj *sl.Object) error {
 	return err
 }
 
-// sayWhenDropped makes a lost message say so.
+// sayWhenDropped makes a lost message say so, on standard error, once.
 //
 // The daemon sends what a region said and this connection holds it in a
 // queue until something reads it; a queue that fills throws the rest
 // away, because the alternative is one slow reader stopping the session.
-// That is the right answer and it used to be a silent one -- a chat line
-// lost here looked exactly like a line the script never said, which for
-// a benchmark is a number that is quietly wrong rather than a run that
-// failed.
-//
-// Once, and then a count at the end of it: a queue that has overflowed
-// is usually overflowing, and a line per lost packet would bury whatever
-// the program was actually saying.
+// A chat line lost there looks exactly like one the script never said.
+// Once, because a queue that has overflowed is usually overflowing, and
+// a line per lost packet would bury whatever the program was actually
+// saying.
+// Why: doc/client.md#counting-what-is-dropped
 func sayWhenDropped(s *sl.Session) {
 	type dropper interface {
 		OnDrop(func(what string))
