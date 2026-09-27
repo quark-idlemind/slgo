@@ -210,7 +210,7 @@ type rule struct {
 	text     string // the network as it was written, for saying so
 }
 
-// for says whether the rule may answer a question about this profile.
+// isFor says whether the rule may answer a question about this profile.
 // A rule that names none answers every question; one that names some
 // answers only about those, and never a question that names nobody.
 func (r rule) isFor(profile string) bool {
