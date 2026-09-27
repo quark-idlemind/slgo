@@ -57,15 +57,8 @@
 //
 // A machine usually has more than one address: wired and wireless at once,
 // a VPN, a bridge for virtual machines.  Each rule is tried against every
-// one of them, separately.
-//
-// This was a ksh script, and that is where it broke: it collected the
-// addresses one a line and handed the lot to awk as a single -v string,
-// which awk refuses when it holds a newline -- so on any machine with two
-// addresses no rule was ever tried, and the caller was left with an empty
-// host.  The same script also required a network to be four dotted octets,
-// so "0/0" was rejected as a bad network.  Here the addresses are a list
-// from start to finish, and the short forms are read.
+// one of them, separately: the addresses are a list from start to finish.
+// Why: doc/sl-host.md#the-script-it-replaced
 //
 // # Overrides and exit status
 //
