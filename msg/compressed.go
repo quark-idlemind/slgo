@@ -176,9 +176,14 @@ func DecodeCompressed(b []byte) (*Compressed, error) {
 		t := r.u8()
 		c.Tree = &t
 	} else if c.Flags&compScratchpad != 0 {
-		// A scratchpad is a length and that many bytes, and is not
-		// used by anything current.  Skipping it correctly still
-		// matters: everything after it would be misread otherwise.
+		// A scratchpad is read as the viewer reads it: a size, then a
+		// length and that many bytes (llviewerobject.cpp:1849-1852,
+		// and unpackBinaryData in lldatapacker.cpp:292-320).  The
+		// viewer sizes its buffer by the first and reads by the
+		// second, so only the second says where the next field
+		// starts.  Nothing here uses the bytes; skipping them right
+		// is what keeps everything after them from being misread.
+		r.u32()
 		n := r.u32()
 		r.skip(int(n))
 	}

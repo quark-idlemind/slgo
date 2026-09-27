@@ -350,19 +350,9 @@ func main() {
 			opts.OnRegionChange = viewers.movedFor(name)
 		}
 		if *trace != "" {
-			// The tap, so this is the wire as it really was --
-			// retransmissions included, since it runs ahead of
-			// duplicate suppression.  That is right for a
-			// transcript and worth stating, because the viewer
-			// side records from the relay instead and will not
-			// show them.
-			//
-			// Nothing is forwarded anywhere yet, so every packet
-			// is recorded as having had no viewer to go to.
-			opts.Tap = func(p *msg.Packet) {
-				census.Record(viewer.MessageName(p), viewer.FromSim, p.At, viewer.NoViewer)
-				tracer.Write(viewer.FromSim, p, viewer.NoViewer)
-			}
+			// What the simulator sent; see simTap for which side
+			// records it.
+			opts.Tap = simTap(name, viewers, census, tracer)
 			// The other half.  Without it the record answers
 			// "what arrived" and not "was it ever sent", and the
 			// second is the question a relay gets asked.

@@ -1059,3 +1059,50 @@ func TestAViewerThatLogsOutIsNotReportedAttached(t *testing.T) {
 	viewerSends(t, conn, h.Agent(), 3, &msg.LogoutRequest{})
 	waitFor(t, 5*time.Second, "the viewer to be reported gone", func() bool { return !attached() })
 }
+
+// TestATracedPacketIsCountedOnce: with -trace, the tap records what the
+// simulator sends, and a viewer circuit records what it is offered.  A
+// session with a circuit was counted by both, once as having no viewer
+// and once as what the circuit did with it.
+func TestATracedPacketIsCountedOnce(t *testing.T) {
+	r := newHomingRig(t, 0)
+	r.host(t)
+	census := viewer.NewCensus()
+	var traced strings.Builder
+	trace := viewer.NewTrace(&traced, nil, false)
+	vh := newViewerHost(r.ctx, "127.0.0.1", r.srv,
+		func(string) string { return "" }, census, trace, func(string, ...any) {})
+	defer vh.closeAll()
+
+	// What the session does with each packet the simulator sends: the
+	// tap sees it first, then the relay.
+	tap, relay := simTap("example", vh, census, trace), vh.relayFor("example")
+	arrives := func() {
+		// A ping, which a circuit absorbs on the spot rather than
+		// queueing, so its record is made before this returns.
+		p := &msg.Packet{Message: &msg.StartPingCheck{}, At: time.Now()}
+		tap(p)
+		relay(p)
+	}
+
+	arrives()
+	if got := census.Total(); got != 1 {
+		t.Fatalf("with no circuit, counted %d times", got)
+	}
+
+	if _, err := vh.circuitFor("example"); err != nil {
+		t.Fatal(err)
+	}
+	arrives()
+	if got := census.Total(); got != 2 {
+		t.Errorf("with a circuit, counted %d times in all, want 2", got)
+	}
+	for _, c := range census.Counts() {
+		if c.Name == "StartPingCheck" && (c.By[viewer.NoViewer] != 1 || c.By[viewer.Absorbed] != 1) {
+			t.Errorf("recorded as %v, want once with no viewer and once absorbed", c.By)
+		}
+	}
+	if n := strings.Count(traced.String(), "StartPingCheck"); n != 2 {
+		t.Errorf("the trace has %d lines for two packets:\n%s", n, traced.String())
+	}
+}

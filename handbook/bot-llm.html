@@ -523,7 +523,7 @@ example-resident.txt     <span class="c"># only when Example Resident speaks; it
         <p>With <code>chat = *</code>, everyone who sends the avatar a one-to-one IM is talking to your model. Nothing in slbotd tells them that; telling them is up to you. Their words go to:</p>
         <ul>
           <li><strong>llama-server</strong>, over HTTP, with the backstory, the memory note and the kept turns. The sender's name is not added by slbotd; the model knows it only if they said it or a per-person backstory does. (Worked out from the code.)</li>
-          <li><strong>The conversation store</strong>, <code>~/.local/state/slbotd/AVATAR/THEIR-UUID.json</code>: every turn with a timestamp, and the memory note. Kept <strong>forever</strong>. Nothing expires it.</li>
+          <li><strong>The conversation store</strong>, <code>~/.local/state/slbotd/AVATAR/THEIR-UUID.json</code>: every turn with a timestamp, and the memory note. Kept <strong>forever</strong>. Nothing expires it. A file slbotd cannot read is renamed <code>THEIR-UUID.json.unreadable-TIME</code> beside it and kept as well; <code>:forget</code> does not remove those.</li>
           <li><strong>The saved caches</strong> in llama-server's <code>--slot-save-path</code>, also kept until deleted.</li>
           <li><strong>slbotd's log</strong>, unless you start it with <code>-q</code>. <code>-q</code> leaves conversation lines out; commands, decisions and connection events are still logged.</li>
           <li>Things the avatar says through another client, such as you typing in slsh, are recorded into an existing conversation too.</li>

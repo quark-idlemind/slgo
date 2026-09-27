@@ -171,3 +171,13 @@ func TestRenderingNothingSaysSo(t *testing.T) {
 		}
 	}
 }
+
+// Something that went wrong seconds ago went wrong "just now", which
+// takes no "ago" after it.
+func TestAFailureUnderAMinuteOldIsJustNow(t *testing.T) {
+	now := time.Now()
+	got := renderTroubles([]Trouble{{At: now.Add(-10 * time.Second), Text: "the sky fell in"}}, 0, now)
+	if got != "just now: the sky fell in" {
+		t.Errorf("got %q", got)
+	}
+}

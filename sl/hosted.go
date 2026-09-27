@@ -176,20 +176,18 @@ func (h *Hosted) Info() *Info {
 
 // Refresh asks the daemon who this session is now.
 //
-// Status rather than a call of its own: it already answers with the
-// current AgentInfo, and the daemon rebuilds that from the live
-// session rather than from what it said at attach time.  It asks by
-// the name the attach was answered with, so a session attached with no
-// name is asked about rather than whichever is the default by now.
+// Through the connection's own Refresh, so that its capability list,
+// which HasCap reads, is brought up to date by the same answer.  The
+// daemon builds that answer from the live session rather than from what
+// it said at attach time, and it is asked by the name the attach was
+// answered with, so a session attached with no name is asked about
+// rather than whichever is the default by now.
 func (h *Hosted) Refresh(ctx context.Context) (*Info, error) {
-	st, err := h.conn.Status(ctx)
+	a, err := h.conn.Refresh(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if st.GetAgent() == nil {
-		return nil, fmt.Errorf("sl: the daemon said nothing about this agent")
-	}
-	info := infoFromPB(st.GetAgent())
+	info := infoFromPB(a)
 	h.mu.Lock()
 	h.info = info
 	h.mu.Unlock()

@@ -71,6 +71,14 @@ type fakeDaemon struct {
 	logout   *pb.LogoutResponse
 	capResp  *pb.CapResponse
 
+	// capAnswers, when set, answers the capability requests in turn
+	// before capResp does, and capsAsked and statusAsked count what
+	// was asked; all three under askMu.
+	askMu       sync.Mutex
+	capAnswers  []*pb.CapResponse
+	capsAsked   int
+	statusAsked int
+
 	// locked answers a lock request, since whoever asked for one is
 	// waiting on the stream for it.  Answering nothing is a daemon too
 	// old to know what a lock is, which is a wait rather than a refusal.
@@ -313,6 +321,9 @@ func (d *fakeDaemon) ListAgents(context.Context, *pb.ListAgentsRequest) (*pb.Lis
 }
 
 func (d *fakeDaemon) Status(context.Context, *pb.StatusRequest) (*pb.StatusResponse, error) {
+	d.askMu.Lock()
+	d.statusAsked++
+	d.askMu.Unlock()
 	if d.fail != nil {
 		return nil, d.fail
 	}
@@ -398,7 +409,22 @@ func (d *fakeDaemon) Cap(context.Context, *pb.CapRequest) (*pb.CapResponse, erro
 	if d.fail != nil {
 		return nil, d.fail
 	}
+	d.askMu.Lock()
+	defer d.askMu.Unlock()
+	d.capsAsked++
+	if len(d.capAnswers) > 0 {
+		r := d.capAnswers[0]
+		d.capAnswers = d.capAnswers[1:]
+		return r, nil
+	}
 	return d.capResp, nil
+}
+
+// asked is how many capability requests and status requests arrived.
+func (d *fakeDaemon) asked() (caps, status int) {
+	d.askMu.Lock()
+	defer d.askMu.Unlock()
+	return d.capsAsked, d.statusAsked
 }
 
 func (d *fakeDaemon) Send(context.Context, *pb.SendRequest) (*pb.SendResponse, error) {

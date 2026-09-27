@@ -36,3 +36,31 @@ none can through the package's own doors: `Close` shuts the transport
 down, so an attach that got as far as the lock -- stream opened, first
 packet read -- ran entirely before it. What is left is the window
 between that read and the lock, which is exactly what the guard is for.
+
+## Capabilities after the session changes
+
+A `Conn` used to keep the capability list the attach answer gave it
+for as long as it was attached. But slgod re-establishes a session
+under an attached stream, and a teleport or a crossing gives the same
+session another region's capabilities; each arrives as a region change,
+and after one the list described somewhere the avatar no longer was.
+slbotd's log on 2026-09-26 had, nine times, a line of the form
+
+    cannot put the outfit back on: sl: listing <id>: agent: inventory <id>: status 404: cap not found
+
+after slgod had logged an avatar in again.
+
+So a region change now marks the list, and the next `HasCap` or `Caps`
+asks the daemon again, through `Refresh`. And a named capability
+answered 404 "cap not found" is made once more after a `Refresh`.
+
+What the list does not do is choose the URL. slgod looks a capability
+up in the session it holds at the moment of the request, so a 404
+there means that session's own capability was unknown to the grid at
+that moment: a session the grid had already ended and slgod had not yet
+replaced, or one whose new region's capabilities had not arrived yet.
+That is read from the code, not measured. A request made again after
+the replacement reaches the new session; one made while the old is
+still in place is answered 404 again, and it is the caller's own
+retrying -- slbotd's outfit passes, every 20 seconds for five minutes
+-- that outlasts it.
