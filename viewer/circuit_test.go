@@ -1194,10 +1194,10 @@ func TestATeleportNobodyInTheViewerAskedForDoesNotTearDownItsWorld(t *testing.T)
 
 // TestAViewerIsToldWhenTheAvatarIsTeleportedFromSomewhereElse: another
 // client can move this session, and the viewer is no part of that
-// conversation -- it goes on drawing a region the avatar has left while
-// the new region's objects land on top under local ids that now mean
-// something different.  Replaying the new region to it is "follow",
-// which is not built, so what is owed is a plain sentence.
+// conversation.  Firestorm, measured, took itself to have been sent to
+// an invalid region and logged out within a second.  Replaying the new
+// region to it is "follow", which is not built, so what is owed is a
+// plain sentence: that it will drop, and to log it in again.
 func TestAViewerIsToldWhenTheAvatarIsTeleportedFromSomewhereElse(t *testing.T) {
 	sim, _, c, v, census := handedOver(t)
 	sim.waitSeen(t, "CompleteAgentMovement", 5*time.Second)
@@ -1219,8 +1219,12 @@ func TestAViewerIsToldWhenTheAvatarIsTeleportedFromSomewhereElse(t *testing.T) {
 	if !strings.Contains(said, "Sandbox Goguen") {
 		t.Errorf("the notice does not say where the avatar went: %q", said)
 	}
-	if !strings.Contains(said, "log out") {
+	if !strings.Contains(said, "log it in again") {
 		t.Errorf("the notice does not say what to do about it: %q", said)
+	}
+	if strings.Contains(said, "still drawing") {
+		t.Errorf("the notice says the viewer goes on drawing the region it left, "+
+			"where Firestorm was measured logging itself out: %q", said)
 	}
 }
 

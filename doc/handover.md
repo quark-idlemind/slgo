@@ -139,6 +139,16 @@ whose local ids are the new region's numbering laid over the old
 region's. Nothing anywhere reports an error. A session that ends at
 least says so.
 
+That paragraph was reasoned, not watched. What was watched, on
+2026-08-16, was the nearest case: another client moved the session with
+Firestorm attached, and the viewer did not go on drawing the region
+left -- within a second it said it had been sent to an invalid region
+and logged itself out
+([teleport.md, stage 6](history/teleport.md#stage-6----a-viewer-attached-while-it-happens-done)).
+So the alert slgod sends on a region change (`RegionChanged`) says the
+viewer will be logged out and to log it in again. What a viewer would do
+with its own teleport forwarded has still not been watched.
+
 Following properly is a second circuit on a second port and a rewritten
 `TeleportFinish` -- the other option in
 [doc/history/teleport.md](history/teleport.md#stage-6----a-viewer-attached-while-it-happens-done),

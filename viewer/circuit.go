@@ -388,11 +388,12 @@ func (c *Circuit) fromViewer(p *msg.Packet) {
 	//
 	// Forwarded, one would move the session and the viewer would be
 	// told none of it -- TeleportFinish is withheld from its event
-	// queue -- so it would go on drawing a region the avatar has left.
-	// Following it there is not built, so these are absorbed and the
-	// person is told why (refuseTeleport).  StartLure is not among
-	// them and is forwarded: offering somebody a teleport to where
-	// this avatar stands moves this avatar nowhere.
+	// queue -- so it would be left behind, as a viewer is when another
+	// client moves the session (RegionChanged).  Following it there is
+	// not built, so these are absorbed and the person is told why
+	// (refuseTeleport).  StartLure is not among them and is forwarded:
+	// offering somebody a teleport to where this avatar stands moves
+	// this avatar nowhere.
 	// Why: doc/handover.md#a-teleport-asked-for-at-the-viewer
 
 	case "TeleportLocationRequest":
@@ -607,9 +608,9 @@ func (c *Circuit) RegionChanged(name string) {
 		where = "another region"
 	}
 	c.tell("The avatar has been teleported to " + where + ". " +
-		"This viewer is still drawing the region it left; " +
-		"log out and in again to follow it.")
-	c.logf("viewer: the avatar moved to %s under an attached viewer; it was told to attach again", where)
+		"This viewer cannot follow it there and will be logged out; " +
+		"log it in again to see the new region.")
+	c.logf("viewer: the avatar moved to %s under an attached viewer; it was told to log in again", where)
 }
 
 // tell says something to the person, as an AgentAlertMessage with
