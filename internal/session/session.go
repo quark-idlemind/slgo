@@ -101,8 +101,7 @@ func Connect(ctx context.Context, o Options) (*sl.Session, error) {
 }
 
 // AutoObject is the name of the first of the objects slrun and slbench
-// run their scripts in; AutoName names the rest.  AutoLock names a lock
-// that nothing here takes any more: slgod hands out places instead.
+// run their scripts in; AutoName names the rest.
 //
 // The objects are kept and worn, because making one costs seconds every
 // run and -- far more -- because the script inside it then already
@@ -110,10 +109,7 @@ func Connect(ctx context.Context, o Options) (*sl.Session, error) {
 // takes about eight seconds, and replacing one that is there takes
 // under one.
 // Why: doc/slots.md#what-is-being-shared-and-why-it-needs-sharing
-const (
-	AutoObject = "auto"
-	AutoLock   = "auto"
-)
+const AutoObject = "auto"
 
 // AutoPoints are where the auto objects are worn.
 //
@@ -284,14 +280,6 @@ func SetupAuto(ctx context.Context, s *sl.Session, n int) ([]*sl.Object, error) 
 		objs = append(objs, &obj)
 	}
 	return objs, nil
-}
-
-// holderOr names whoever holds a lock, when the daemon said.
-func holderOr(holder string) string {
-	if holder == "" {
-		return "something else"
-	}
-	return holder
 }
 
 // objectsFolder is where a taken object lands, and so where the auto

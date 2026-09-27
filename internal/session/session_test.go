@@ -5,7 +5,7 @@ package session
 // Everything here is a function of a *sl.Session, and a session is a
 // function of an sl.Backend -- so a fake backend is the difference
 // between testing this package and testing its arithmetic.  Without one
-// a test can reach AutoName and the lock names and nothing else, which
+// a test can reach AutoName and nothing else, which
 // is why the whole of it was only ever exercised by slbench against a
 // live avatar.
 //
@@ -574,8 +574,8 @@ func (l *listsSessions) Sessions(context.Context) ([]string, error) { return l.n
 // It has to be dialled rather than handed a connection, so it does the
 // whole handshake: TLS, and a challenge each way over a secret in a home
 // directory the test owns.  Everything else it answers is the least a
-// session needs to get as far as taking a lock and finding its objects
-// already worn -- which is the state this package is usually in.
+// session needs to get as far as finding its objects already worn --
+// which is the state this package is usually in.
 type fakeDaemon struct {
 	pb.UnimplementedGridServer
 
@@ -586,11 +586,6 @@ type fakeDaemon struct {
 	// agents is who it is holding, in its own order, and info describes
 	// one of them by name.
 	agents []string
-
-	// locked answers a lock request for one avatar.  It has to answer
-	// SOMETHING: a lock that is not answered is one the client waits on,
-	// and the wait is a quarter of an hour.
-	locked func(agent string, l *pb.Lock) *pb.Locked
 
 	// refuseAttach names avatars this daemon will not attach to, which
 	// is a session it is not holding.
@@ -603,7 +598,7 @@ type fakeDaemon struct {
 	capFail bool
 
 	// objects is what every session says is worn, keyed by nothing: the
-	// avatars here are interchangeable except for their locks.
+	// avatars here are interchangeable.
 	objects []*pb.ObjectInfo
 }
 
@@ -653,9 +648,6 @@ func newFakeDaemon(t *testing.T) (*fakeDaemon, string) {
 		auth:         a,
 		agents:       []string{"quark"},
 		refuseAttach: map[string]bool{},
-		locked: func(_ string, l *pb.Lock) *pb.Locked {
-			return &pb.Locked{Name: l.Name, Held: true}
-		},
 	}
 	d.serveInventory(t)
 
@@ -677,8 +669,8 @@ func newFakeDaemon(t *testing.T) (*fakeDaemon, string) {
 
 // serveInventory gives the daemon an Objects folder holding a full set
 // of auto items, all of them worn.  That is the state an avatar that has
-// been set up is in, and it is what makes taking a group cost nothing
-// but the lock.
+// been set up is in, and it is what makes taking objects cost nothing
+// but the asking.
 func (d *fakeDaemon) serveInventory(t *testing.T) {
 	t.Helper()
 	root := &invDir{
@@ -709,44 +701,6 @@ func (d *fakeDaemon) serveInventory(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 	d.cap = s.URL
-}
-
-// busy makes every group on one avatar taken, which is what sends a
-// caller on to the next avatar.
-func (d *fakeDaemon) busy(names ...string) {
-	taken := map[string]bool{}
-	for _, n := range names {
-		taken[n] = true
-	}
-	// Busy until somebody queues for a place and is handed it, which is
-	// the holder giving it back: from then on the pool is free.  Without
-	// that the avatar is busy for ever, and a caller that waits and then
-	// looks again -- which is what taking objects one at a time has to
-	// do -- would go round for ever being refused.
-	var (
-		mu    sync.Mutex
-		given bool
-	)
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.locked = func(who string, l *pb.Lock) *pb.Locked {
-		mu.Lock()
-		defer mu.Unlock()
-		slot := strings.HasPrefix(l.Name, AutoLock+"/slot/")
-		if !l.Try && slot {
-			given = true
-		}
-		// Only the OBJECTS are taken.  The allocation lock is held for
-		// as long as it takes somebody to choose and is never held
-		// across a wait, so a fake that kept it for ever would be a
-		// daemon no caller could ever get an answer out of.
-		if taken[who] && l.Try && slot && !given {
-			return &pb.Locked{Name: l.Name, Held: false, Holder: "somebody else"}
-		}
-		// A wait is answered by handing it over, since queueing is what
-		// this is meant to end up doing.
-		return &pb.Locked{Name: l.Name, Held: true}
-	}
 }
 
 func (d *fakeDaemon) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
@@ -793,20 +747,10 @@ func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Serve
 		return err
 	}
 
+	// Held open until the client goes: nothing it sends needs an answer.
 	for {
-		p, err := s.Recv()
-		if err != nil {
+		if _, err := s.Recv(); err != nil {
 			return nil
-		}
-		l := p.GetLock()
-		if l == nil {
-			continue
-		}
-		d.mu.Lock()
-		answer := d.locked
-		d.mu.Unlock()
-		if got := answer(who.Name, l); got != nil {
-			s.Send(&pb.ServerPacket{Body: &pb.ServerPacket_Locked{Locked: got}})
 		}
 	}
 }
