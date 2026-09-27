@@ -212,13 +212,9 @@ func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 	h.end("")
 
 	// It keeps its place in the map so that it can be reported as
-	// STOPPED rather than looking like a name nobody has heard of, but
-	// gives up its rank: coming back means coming back at the end of
-	// the queue, not reclaiming a default it used to hold.
-	s.mu.Lock()
-	h.rank = 0
-	s.mu.Unlock()
-
+	// STOPPED rather than looking like a name nobody has heard of.
+	// Being stopped gives up its place in Ranked, and coming back is a
+	// new session at the end of the queue; see login.
 	return &pb.LogoutResponse{}, nil
 }
 

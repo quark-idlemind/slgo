@@ -636,8 +636,8 @@ func teleportRequest(id msg.ID) bool {
 
 func (s *Server) ListAgents(ctx context.Context, _ *pb.ListAgentsRequest) (*pb.ListAgentsResponse, error) {
 	// Oldest first, not alphabetical: the order IS information.  The
-	// first that is not stopped is the default -- what a client that
-	// names no agent gets.
+	// first is the default -- what a client that names no agent gets --
+	// unless every session has stopped.
 	//
 	// It used to be advice as well, for a client looking for an avatar
 	// with objects free.  Nothing looks that way now: the pool answers

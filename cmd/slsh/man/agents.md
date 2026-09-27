@@ -5,9 +5,10 @@ avatar's own name beside it.
     agents
 
 Sessions the daemon holds come first, oldest first.  A session that
-was logged out sits at the end of that group rather than keeping its
-place; one the grid ended keeps it.  Profiles the daemon knows of but is not holding follow, in
-the order it lists them.  The order is not alphabetical.
+was logged out, or that the grid ended, sits at the end of that group
+rather than keeping its place.  Profiles the daemon knows of but is
+not holding follow, in the order it lists them.  The order is not
+alphabetical.
 
 A star marks the session a command that names no avatar drives: the
 first one the daemon still holds.  A session this shell is attached
@@ -50,9 +51,9 @@ in a viewer.
 The default moves only when the session it is on goes away.
 Bringing another avatar up does not move it, attaching does not
 move it, and a session that drops and is reconnected keeps its
-place.  An avatar that has been logged out gives up its place, so
-logging it back in puts it at the end of the queue rather than at
-the head.
+place.  An avatar that has been logged out, or thrown off by the
+grid, gives up its place, so logging it back in puts it at the end
+of the queue rather than at the head.
 
 A session shown as connecting keeps the star -- a reconnection never
 cost it its place, and a bare command goes to it and waits.  A
