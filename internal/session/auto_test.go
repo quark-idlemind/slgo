@@ -48,6 +48,12 @@ type grantingGrid struct {
 	// noPlaces grants with no places in it: neither is what the daemon
 	// does, and a caller has to survive both.
 	anyAgent, noPlaces bool
+
+	// refuse is a daemon too old to answer for places at all.
+	refuse error
+
+	// sentAtAsk is how many messages the session had sent at each ask.
+	sentAtAsk []int
 }
 
 func newGranting(t *testing.T, names ...string) (*sl.Session, *grantingGrid) {
@@ -124,6 +130,10 @@ func (g *grantingGrid) grant(n int, agent string, try bool) (*client.Grant, erro
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.asked = append(g.asked, fmt.Sprintf("%s:%d:%v", agent, n, try))
+	g.sentAtAsk = append(g.sentAtAsk, len(g.fakeGrid.Sent()))
+	if g.refuse != nil {
+		return nil, g.refuse
+	}
 
 	from := g.names
 	if agent != "" && !g.anyAgent {
