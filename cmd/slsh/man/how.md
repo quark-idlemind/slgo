@@ -36,8 +36,9 @@ away, not to be typed.
 `how` looks the question up in an index of every command's usage
 line, description and man page, built into slsh when it was compiled,
 so it is never out of step with the commands.  The commands that
-match best are shown to a language model, with the parts of their
-pages that matched, and it is asked which of them does what was asked.
+match best are shown to a language model, each with the opening of
+its page and some of the parts of it that matched, and it is asked
+which of them does what was asked.
 
 What the model says is then checked before any of it is printed:
 

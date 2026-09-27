@@ -81,12 +81,22 @@ const (
 	// and few enough that a small model can read them all.
 	askCandidateCount = 8
 
-	// askExcerptCommands is how many of those carry excerpts from their
-	// pages, and askExcerptsEach how many excerpts each.  Past the top
-	// few, a command's usage line and brief are enough to rule it out,
-	// and the budget is better spent on the ones likely to be right.
+	// askExcerptCommands is how many of those carry the index's matching
+	// excerpts, and askExcerptsEach how many excerpts each.  Every other
+	// candidate, and one of those whose only match was its keyword line,
+	// gets one short passage instead (askOnePassage).  Without it the
+	// model has a usage line and a brief to quote from, and may answer
+	// "not found" for want of a sentence -- an answer askRun does not
+	// ask again.  Every candidate also gets its page's opening, first,
+	// unless it has it already (askWithOpening).
 	askExcerptCommands = 3
 	askExcerptsEach    = 3
+
+	// askPassageMax is how long a short passage may be, the opening
+	// included: the first paragraph, cut at a word if it is longer.
+	// Short, so that each of the eight can carry one or two beside the
+	// first three's full excerpts.
+	askPassageMax = 480
 )
 
 // newAskClient is the client for c, or nil when no URL is set.
@@ -249,6 +259,18 @@ func askCandidatesFrom(hits []askindex.CommandHit) []askCandidate {
 		if len(out) < askExcerptCommands {
 			cand.Excerpts = askExcerptsOf(h.Hits)
 		}
+		// The matching excerpts above skip the keyword line, so a
+		// command found only by its keywords has nothing here yet.
+		// One passage gives the model a sentence it is allowed to copy.
+		if len(cand.Excerpts) == 0 {
+			if ex, ok := askOnePassage(h.Command, h.Hits); ok {
+				cand.Excerpts = []askExcerpt{ex}
+			}
+		}
+		// The opening says what the command is.  A match can be a
+		// paragraph about something beside that, and the model can
+		// only quote what it is shown.
+		cand.Excerpts = askWithOpening(h.Command, cand.Excerpts)
 		out = append(out, cand)
 	}
 	return out
@@ -260,6 +282,83 @@ func askCandidatesFrom(hits []askindex.CommandHit) []askCandidate {
 // commands' lines, so it matches nearly every question asked, and "how"
 // is never what somebody asking wanted to be told.
 func askSkip(name string) bool { return name == howName }
+
+// askWithOpening puts the page's opening first, unless the excerpts
+// already contain one.  An intro is the excerpt with no heading.
+func askWithOpening(command string, ex []askExcerpt) []askExcerpt {
+	for _, e := range ex {
+		if e.Heading == "" && strings.TrimSpace(e.Text) != "" {
+			return ex
+		}
+	}
+	opening, ok := askOnePassage(command, nil)
+	if !ok {
+		return ex
+	}
+	return append([]askExcerpt{opening}, ex...)
+}
+
+// askOnePassage is one quotable piece of a command's page: the best
+// matching paragraph, or the page's opening when the match was only
+// the keyword line (which is not on the page, and so cannot be quoted).
+func askOnePassage(command string, hits []askindex.Hit) (askExcerpt, bool) {
+	for _, h := range hits {
+		if ex, ok := askPassageOf(h.Doc); ok {
+			return ex, true
+		}
+	}
+	if ix, err := askIndex(); err == nil {
+		docs := ix.Docs()
+		for i := range docs {
+			if docs[i].Command == command && docs[i].Kind == askindex.KindIntro {
+				return askPassageOf(&docs[i])
+			}
+		}
+	}
+	return askExcerpt{}, false
+}
+
+// askPassageOf is a document as one short excerpt, or false when the
+// document is not a piece of the page.  The keyword line and the
+// examples are not: one is not written on the page, and the other is a
+// command line rather than a sentence about what the command does.
+func askPassageOf(d *askindex.Doc) (askExcerpt, bool) {
+	if d == nil {
+		return askExcerpt{}, false
+	}
+	body := askShortPassage(d.Text)
+	if body == "" {
+		return askExcerpt{}, false
+	}
+	switch d.Kind {
+	case askindex.KindOption:
+		return askExcerpt{Heading: "Options", Text: "**" + d.Heading + "**\n\n" + body}, true
+	case askindex.KindSection:
+		return askExcerpt{Heading: d.Heading, Text: body}, true
+	case askindex.KindIntro:
+		return askExcerpt{Text: body}, true
+	default:
+		return askExcerpt{}, false
+	}
+}
+
+// askShortPassage is the first paragraph of s, and no more than
+// askPassageMax bytes of that, cut at a word.  A prefix of the page is
+// still text the page contains, which is what a quotation has to be.
+func askShortPassage(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.Index(s, "\n\n"); i >= 0 {
+		s = strings.TrimSpace(s[:i])
+	}
+	if len(s) <= askPassageMax {
+		return s
+	}
+	s = s[:askPassageMax]
+	if i := strings.LastIndexByte(s, ' '); i > askPassageMax/2 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
+}
 
 // askExcerptsOf is the excerpts for one command's matching documents.
 func askExcerptsOf(hits []askindex.Hit) []askExcerpt {
