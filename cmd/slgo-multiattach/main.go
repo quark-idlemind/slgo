@@ -18,13 +18,14 @@ import (
 	"log"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
 func main() {
-	addr := flag.String("addr", "127.0.0.1:7809", "the slgod to attach to")
+	addr := flag.String("addr", "", "the slgod to attach to (sl-host's answer, or localhost:"+slhost.Port+")")
 	name := flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	point := flag.Int("point", sl.HUDBottomLeft, "the attachment point to pile onto")
 	first := flag.String("first", "auto", "item already worn there")
@@ -39,7 +40,11 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 
-	s, err := sl.Dial(ctx, *addr, *name)
+	where, err := slhost.ResolveFor(*addr, *name)
+	if err != nil {
+		log.Fatalf("where is slgod: %v", err)
+	}
+	s, err := sl.Dial(ctx, where, *name)
 	if err != nil {
 		log.Fatalf("attach: %v", err)
 	}
