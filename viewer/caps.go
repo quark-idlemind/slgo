@@ -62,6 +62,13 @@ const MaxHeldPolls = 4
 // through an XML decoder -- and held in memory while it is.
 const MaxRequestBody = 256 << 10
 
+// MaxSeedAnswer is the most of the simulator's answer to a seed request
+// that is read.  The answer is a map of capability names to URLs, and
+// Firestorm asks for about 120 names (llviewerregion.cpp:3457), so it is
+// some tens of kilobytes at most; that is inferred, not measured.  This
+// is a megabyte, and a longer answer is refused rather than held.
+const MaxSeedAnswer = 1 << 20
+
 // EventQueue holds what the session's queue produced, for one viewer to
 // collect.
 //
@@ -328,9 +335,15 @@ func (s *Seed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the simulator answered the seed request "+resp.Status, http.StatusBadGateway)
 		return
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxSeedAnswer+1))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		logf("viewer: reading the simulator's capabilities: %s", redact.Text(err.Error()))
+		http.Error(w, "the simulator's answer to the seed request could not be read", http.StatusBadGateway)
+		return
+	}
+	if len(body) > MaxSeedAnswer {
+		logf("viewer: the simulator's answer to the seed request is over %d bytes; refused", MaxSeedAnswer)
+		http.Error(w, "the simulator's answer to the seed request is larger than any seed answer", http.StatusBadGateway)
 		return
 	}
 
