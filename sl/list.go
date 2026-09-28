@@ -85,6 +85,38 @@ type Entry struct {
 // asking to reading a field.
 func (e Entry) IsFolder() bool { return e.Folder }
 
+// Item is the entry as the item the operations take: RezFromInventory,
+// Wear, PutInObject and the rest.
+//
+// A listing reads the same AIS record an item is made from, so nothing
+// needs fetching again.  Every field is copied, because those calls
+// send them all back as the item's own: a mask left behind would go out
+// as zero, which takes that permission away.
+func (e Entry) Item() *Item {
+	return &Item{
+		ID:            e.ID,
+		ParentID:      e.Parent,
+		AssetID:       e.Asset,
+		Name:          e.Name,
+		Desc:          e.Desc,
+		Type:          e.Type,
+		InvType:       e.InvType,
+		Flags:         e.Flags,
+		Created:       e.Created,
+		CreatorID:     e.Creator,
+		OwnerID:       e.Owner,
+		GroupID:       e.Group,
+		BaseMask:      e.BaseMask,
+		OwnerMask:     e.OwnerMask,
+		GroupMask:     e.GroupMask,
+		EveryoneMask:  e.EveryoneMask,
+		NextOwnerMask: e.NextOwnerMask,
+		SaleType:      e.SaleType,
+		SalePrice:     e.SalePrice,
+		IsLink:        e.IsLink,
+	}
+}
+
 func (e Entry) String() string {
 	if e.Folder {
 		return e.Path + string(PathSeparator)

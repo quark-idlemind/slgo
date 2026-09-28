@@ -369,27 +369,6 @@ func (sh *Shell) linkTarget(ctx context.Context, e sl.Entry) (sl.Entry, error) {
 	return to, nil
 }
 
-// itemAt is the whole inventory item an entry names, fetched from the
-// folder the entry was listed in.
-//
-// Matched on the id and not the name it was found by, because a folder
-// may hold a dozen items called one thing -- the case rm --newest and
-// --oldest exist for -- and a lookup by name would answer with
-// whichever of them came back first.  The entry already carries the id
-// that settles it.
-func (sh *Shell) itemAt(ctx context.Context, e sl.Entry) (*sl.Item, error) {
-	items, err := sh.s.FolderItems(ctx, e.Parent)
-	if err != nil {
-		return nil, err
-	}
-	for _, it := range items {
-		if it.ID == e.ID {
-			return it, nil
-		}
-	}
-	return nil, fmt.Errorf("%s is no longer in the folder it was listed in", e.Name)
-}
-
 func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
 	args, done, err := subOptions("cd", &o, out, args)

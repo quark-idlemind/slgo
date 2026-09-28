@@ -496,7 +496,7 @@ func cmdPlace(ctx context.Context, r *req, out io.Writer, args []string) error {
 	if err != nil {
 		group = msg.UUID{}
 	}
-	obj, err := s.RezFromInventory(ctx, itemOf(e), at, group, 60*time.Second)
+	obj, err := s.RezFromInventory(ctx, e.Item(), at, group, 60*time.Second)
 	if err != nil {
 		if obj != nil {
 			// Given up on, and made all the same.
@@ -574,7 +574,7 @@ func cmdWear(ctx context.Context, r *req, out io.Writer, args []string) error {
 		}
 		point = p
 	}
-	at, err := s.Wear(ctx, itemOf(e), point, 60*time.Second)
+	at, err := s.Wear(ctx, e.Item(), point, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -670,38 +670,4 @@ func folderAt(ctx context.Context, s *sl.Session, path string) (msg.UUID, error)
 		return msg.UUID{}, fmt.Errorf("%s is not a folder", path)
 	}
 	return e.ID, nil
-}
-
-// itemOf is a listing entry as the item the operations take.
-//
-// A listing and an item are the same thing said twice: an Entry is what
-// AIS listed and an Item is what a message carries, and the fields that
-// matter to a rez or a wear -- the permissions, the flags, the folder
-// -- are in both.  Every field an Entry carries is copied, because a rez
-// or a wear sends them all as the item's own: an item that lost its
-// masks on the way through would be rezzed with permissions nobody
-// asked for.
-func itemOf(e sl.Entry) *sl.Item {
-	return &sl.Item{
-		ID:            e.ID,
-		ParentID:      e.Parent,
-		AssetID:       e.Asset,
-		Name:          e.Name,
-		Desc:          e.Desc,
-		Type:          e.Type,
-		InvType:       e.InvType,
-		Flags:         e.Flags,
-		Created:       e.Created,
-		CreatorID:     e.Creator,
-		OwnerID:       e.Owner,
-		GroupID:       e.Group,
-		BaseMask:      e.BaseMask,
-		OwnerMask:     e.OwnerMask,
-		GroupMask:     e.GroupMask,
-		EveryoneMask:  e.EveryoneMask,
-		NextOwnerMask: e.NextOwnerMask,
-		SaleType:      e.SaleType,
-		SalePrice:     e.SalePrice,
-		IsLink:        e.IsLink,
-	}
 }

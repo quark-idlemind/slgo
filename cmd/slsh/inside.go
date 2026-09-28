@@ -251,13 +251,10 @@ func cmdDrop(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if e.Folder {
 		return fmt.Errorf("%s is a folder; drop takes one item", args[1])
 	}
-	// The item itself, not the entry: what goes over the wire is every
-	// field of it, and anything left out is set to zero -- which for a
-	// permission mask means taking the rights away.
-	it, err := sh.itemAt(ctx, e)
-	if err != nil {
-		return err
-	}
+	// The whole item: what goes over the wire is every field of it, and
+	// anything left out is set to zero -- which for a permission mask
+	// means taking the rights away.
+	it := e.Item()
 	if err := sh.s.PutInObject(ctx, obj, it); err != nil {
 		return err
 	}
