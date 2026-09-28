@@ -225,6 +225,7 @@ func TestSetRefusesAValueAndChangesNothing(t *testing.T) {
 		{"set map_friend_colour puce", "map_friend_colour: no colour called"},
 		{"set escape enter", "escape: \"enter\" would leave no way"},
 	} {
+		before := x.cfg
 		got := x.do(t, c.line)
 		if !strings.Contains(got, c.want) {
 			t.Errorf("%q should be refused with %q, got:\n%s", c.line, c.want, got)
@@ -232,9 +233,9 @@ func TestSetRefusesAValueAndChangesNothing(t *testing.T) {
 		if body := settingsFile(t); body != "" {
 			t.Errorf("%q wrote to the file anyway:\n%s", c.line, body)
 		}
-	}
-	if x.cfg != DefaultConfig() && x.cfg.MapRatio != mapDefaultRatio {
-		t.Errorf("a refused value changed the shell: %+v", x.cfg)
+		if x.cfg != before {
+			t.Errorf("%q changed the shell anyway:\n got  %+v\n want %+v", c.line, x.cfg, before)
+		}
 	}
 }
 
