@@ -203,7 +203,10 @@ func TestPutRefusesNamesItDoesNotKnow(t *testing.T) {
 }
 
 // TestPutSendsTheCodestream: what goes up is a codestream the grid
-// will take, at the picture's size.
+// will take, at the picture's size, and it is the picture.  Decoded
+// whole rather than read for its header, which is the first 24 bytes
+// and says nothing about the rest; a picture this small is stored
+// losslessly, so every pixel has to come back as it went.
 func TestPutSendsTheCodestream(t *testing.T) {
 	x := newTestShell(t)
 	up := serveShellUpload(t, x, testLamp)
@@ -213,13 +216,34 @@ func TestPutSendsTheCodestream(t *testing.T) {
 	if strings.Contains(got, "slsh:") {
 		t.Fatalf("put failed: %q", got)
 	}
-	body := <-up
+	var body []byte
+	select {
+	case body = <-up:
+	default:
+		t.Fatalf("put said %q and uploaded nothing", got)
+	}
 	w, h, err := sl.TextureDims(body)
 	if err != nil {
 		t.Fatalf("put uploaded something the grid would refuse: %v", err)
 	}
 	if w != 64 || h != 64 {
 		t.Errorf("uploaded %dx%d", w, h)
+	}
+	m, err := sl.DecodeTexture(body)
+	if err != nil {
+		t.Fatalf("what was uploaded does not decode: %v", err)
+	}
+	if b := m.Bounds(); b.Dx() != 64 || b.Dy() != 64 {
+		t.Fatalf("what was uploaded decodes to %dx%d", b.Dx(), b.Dy())
+	}
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			r, g, b, _ := m.At(m.Bounds().Min.X+x, m.Bounds().Min.Y+y).RGBA()
+			if r>>8 != uint32(x) || g>>8 != uint32(y) || b>>8 != 0x20 {
+				t.Fatalf("pixel %d,%d came back as %d,%d,%d, want %d,%d,32",
+					x, y, r>>8, g>>8, b>>8, x, y)
+			}
+		}
 	}
 }
 
