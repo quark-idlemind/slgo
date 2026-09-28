@@ -428,7 +428,9 @@ kept pushing for twelve seconds before calling itself blocked.
   it to x=12). A login inside a Linden sandbox crossed in 4.5 seconds.
   So a child opened at login carries a crossing until the avatar
   teleports within the region, and a child opened on a teleport arrival
-  still carries one after it. Why is not yet known.
+  still carries one after it. Why is not yet known. (Measured again on
+  2026-09-28, a viewer is held at this border too; see
+  [Closed: the border holds a viewer too](#closed-the-border-holds-a-viewer-too).)
 - **What was tried, and did not hold.** The same afternoon, logging on
   a scratch build showed that after such a teleport the neighbour's
   `EstablishAgentCommunication` sometimes comes again every five to
@@ -441,59 +443,62 @@ kept pushing for twelve seconds before calling itself blocked.
   every time, with or without it. Whether a real viewer is held after
   a teleport within the region was not tried.
 
-### Open: the crossing after a teleport within the region
+### Closed: the border holds a viewer too
 
-Parked on 2026-09-27 for a machine that can run a viewer. What is
-established is in the section above: a teleport within the region
-breaks the next walk over a border on the child circuits slgo holds,
-reliably after a jump of 87 metres. A walk to the same spot always
-crosses, and so does a return within seconds of leaving. The one
-question left is whether a real viewer is held the same way.
+Measured on Agni on 2026-09-28, to settle the question the section
+above left: is a real viewer held where slgo is? Firestorm 7.2.4 was
+run alone, with no slgod, on another machine. slgo was `slgod
+-neighbours` built from `abf5b50`, with the scratch `walk` described
+below. Brackenfen is the region whose west edge failed above, and
+Pelmar Field its western neighbour.
 
-**The experiment.** Pick a border that admits the avatar on both
-sides. Two Linden sandboxes side by side do best, since nobody can
-refuse entry there; Sandbox Goguen and Sandbox Newcomb, west of it,
-were used for the sandbox runs above. Then, from a fresh login:
+**Between the sandboxes, neither is held.** Every run started from a
+fresh login at Sandbox Goguen (99, 128), teleported within the region
+87 metres to x=12, and walked west.
 
-1. With Firestorm alone, no slgod, log in about 90 metres from the
-   west border, and teleport within the region, by double-click or
-   the map, to about 12 metres from it. Walk west, holding the arrow
-   key, for fifteen seconds. Note whether the avatar crosses, and how
-   long it takes. Do it three times, and three more times walking to
-   the same spot instead of teleporting, as the control.
-2. With slgo, do the same from the same spots: `slgod -neighbours`,
-   then `slsh tp X Y Z` and `walk`. `walk` refuses a point outside
-   the region and gives up after two seconds of no progress, so the
-   runs above used a scratch build, not committed, with two changes to
-   `agent/walk.go` through `go build -overlay`: `inRegion` widened to
-   -16..272, and `DefaultStallTime` raised to twelve seconds. Then a
-   `walk -- -5 Y` walks west over the border.
+- Firestorm crossed into Sandbox Newcomb 3 times of 3, in 4.6 to 5.3
+  seconds.
+- slgo crossed 3 of 3, in 4.5 to 4.7 seconds.
+- Both crossed all 3 controls, which were a fresh login at 99 and a
+  walk straight over.
+- Firestorm also crossed 3 of 3 when it had arrived by teleport.
 
-**What the answer decides.**
+So this border cannot tell the two apart.
 
-- If Firestorm is held too, it is the grid, and slgo is doing what a
-  viewer does. Write that up here, and close this.
-- If Firestorm crosses and slgo does not, capture what each sends
-  after the teleport within the region and before the crossing, and
-  compare them. For slgo, `slgod -trace` records every packet on
-  every circuit. For Firestorm, use its own message logging, or a
-  viewer attached through slgod, whose circuit slgod records under
-  `-trace` as well. The things to compare first: the `AgentUpdate`s
-  sent to the root after `TeleportLocal` (camera centre, draw
-  distance, flags), anything sent on a child circuit, and seed and
-  event-queue requests made to the neighbour.
+**At Brackenfen's west edge, both are held.** Every run was at ground
+level, walking due west along y=128.
 
-**What was already tried and did not hold.** The instrumented build
-and the two candidate fixes are on the branch `fix-login-children`,
-which is local to the machine that took these measurements and was
-not pushed. Commit 2d4ebca logs what each circuit hears around a
-teleport within the region; 9962ef2 asks a neighbour's seed on each
-`EstablishAgentCommunication`; e87f089 polls the neighbour's own event
-queue; 10c3336 and d70e029 were tried and reverted. Neither kept
-fix made the crossing reliable.
+- **slgo after a fresh login.** At x=40 then a teleport to x=12, it
+  was held 3 times of 3, between x=-1.2 and x=0.8, for 16 to 21
+  seconds. At x=12 walking straight off, it was held once of once;
+  that case crossed on 2026-09-26.
+- **slgo after arriving by teleport** from a sandbox: it crossed into
+  Pelmar Field twice of twice, in 4.7 seconds.
+- **Firestorm after a fresh login at x=12:** held twice of three and
+  crossed once, in 4.9 seconds.
+- **Firestorm after arriving by teleport:** held twice of twice.
 
-A measurement written here follows `CLAUDE.md`: a Linden sandbox may
-be named, and any other region, parcel or avatar may not.
+Each Firestorm hold stopped at x=0 at 3.7 to 3.9 seconds and drifted north
+along the line while the key was held, as if against a wall.
+
+So the hold belongs to that border, not to slgo: a viewer is held
+there too, whether it logged in or arrived, and slgo is doing what a
+viewer does. What at the border does it -- the land, an object on it,
+or the neighbour's handoff -- was not measured. The pattern the
+section above drew, where a login held and a teleport arrival crossed,
+did not survive: this time slgo was held after a login with no
+teleport, and Firestorm was held after a teleport arrival. Inferred:
+it was an intermittent border sampled a few times, and the counts
+here are small enough that it may still be one.
+
+The runs used the scratch `walk` from before, built with `go build
+-overlay` and not committed. Its `inRegion` is widened to -16..272, so
+a point past the edge is a target, and its `DefaultStallTime` is
+twelve seconds.
+
+The candidate fixes on the unpushed branch `fix-login-children`
+answered a problem that turned out not to be slgo's, and none was
+kept.
 
 ### Stage 3 -- the crossing, by promotion
 
