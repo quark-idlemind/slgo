@@ -281,6 +281,31 @@ func TestNoAvatarFreeIsAWaitOnTheDefault(t *testing.T) {
 	}
 }
 
+// TestNoAvatarFreeSaysWhyForEach: the wait on the default is the last
+// thing to fail, and the error names every avatar with its own reason,
+// one line each, not only the default's.
+func TestNoAvatarFreeSaysWhyForEach(t *testing.T) {
+	s, g := newGranting(t, "quark", "example", "spare")
+	g.free["quark"] = 0
+	g.free["example"] = 1
+	g.free["spare"] = 2
+
+	_, err := useAutoOn(context.Background(), Options{}, s, 4)
+	if err == nil {
+		t.Fatal("objects came out of a daemon holding too few free")
+	}
+	lines := strings.Split(err.Error(), "\n")
+	want := []string{"quark: only 0 free", "example: only 1 free", "spare: only 2 free"}
+	if len(lines) != len(want) {
+		t.Fatalf("useAutoOn = %q, want one line for each of %d avatars", err, len(want))
+	}
+	for i := range want {
+		if lines[i] != want[i] {
+			t.Errorf("line %d is %q, want %q", i+1, lines[i], want[i])
+		}
+	}
+}
+
 // TestOneRequestCanBeAnsweredOutOfSeveralAvatars: the whole reason the
 // daemon does the deciding.  Twelve scripts at once is twelve objects
 // from wherever they are, and each avatar's are worn on that avatar's
