@@ -17,8 +17,10 @@ Two runs in one object is the failure this is all built against, and it
 does not look like a failure. Measured: two scripts installed into one
 object under one name means the second upload destroys the first, and
 then **both runs report the survivor's output as their own and both say
-they finished**. A benchmark carries its base reading in the object's
-linkset data as well, so two runs also divide by each other's numbers.
+they finished**. A benchmark then carried its base reading in the
+object's linkset data as well, so two runs also divided by each other's
+numbers; it no longer does (see
+[scripttest.md](scripttest.md#a-benchmark-script-says-one-number)).
 Nothing raises an error. The answer is simply wrong.
 
 ## What a slot is
@@ -395,15 +397,12 @@ too. Neither is a way to make the compiler complain.
   caller that no longer holds it, which would turn an overrun from a
   silent collision into a loud refusal. Described above; not built.
 
-- **`slbench` takes its objects from one avatar**, and that is
-  plumbing rather than measurement: `runner` holds a single session and
-  sends every script through it. What the objects share is the base
-  reading in the measured object's own linkset data, which the spares
-  never touch. Lifting it is a session per object and `UseAutoSpread`.
-  One thing to check when somebody does: Second Life runs different
-  simulator versions on different channels, so two avatars can be in
-  regions with two LSL compilers, and whether that moves a reading is
-  unmeasured.
+- **Whether two simulator versions give two readings.** `slbench`
+  takes its places from every avatar with some free
+  (`session.UseAutoSpread`), and Second Life runs different simulator
+  versions on different channels, so two of them can be in regions with
+  two LSL compilers. Measured once, their readings agreed; see
+  [memory.md](memory.md#what-is-not-measured-here).
 
 - **Where the far end's ceiling actually is.** Thirty uploads in a burst
   is fine and ninety over twice as long is not, but nothing has measured

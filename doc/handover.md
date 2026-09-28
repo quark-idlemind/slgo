@@ -305,9 +305,12 @@ A password minted for one login (`viewerCredentialLife`) has to cover a
 viewer starting up and reaching its login, and that takes far longer
 than it sounds. Measured on the machine this was written on, warm --
 caches full, the viewer having just been running -- "viewer --launch"
-at 18:51:0x reached the daemon's login endpoint at 18:51:46, and a
-second run at 18:55:5x arrived at 18:55:54. Forty-five to fifty seconds,
-at best; a cold first start is slower again. The minute this began as
+reached the daemon's login endpoint 46 seconds after it was started,
+and 50 seconds on a second run four minutes later. (Where the start
+times were first written down they were given only to ten seconds, and
+the second did not fit its arrival; the two figures are the ones the
+same change put in its test.) So fifty seconds at best; a cold first
+start is slower again. The minute this began as
 would have expired mid-startup often enough to look like a broken
 feature rather than a tight window, so it is five.
 
