@@ -25,6 +25,9 @@ rather than a refusal, and the wait ends after a minute saying so.
 That is the usual reason a `cp` seems to hang: it is not the shell
 being slow, it is an item that was never going to be duplicated.
 
+A `cp` interrupted while it waits, whose copy turns up all the same,
+says so with the error and gives the copy's id there.
+
 Nothing here says what an item's permissions are beforehand: `ls -l`
 gives the kind, the date, the id and the path, and `perms` works on an
 object standing in the region rather than on an item in inventory.  The

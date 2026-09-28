@@ -626,6 +626,34 @@ func TestLoggingOutEndsTheStreamsOnIt(t *testing.T) {
 	waitFor(t, 5*time.Second, "the client to be let go", func() bool { return h.ClientCount() == 0 })
 }
 
+// TestClosingTheServerEndsTheStreams: a daemon shutting down logs every
+// session out, and a client attached to one is told so by its stream
+// ending, as for a logout, rather than when the process exits.
+func TestClosingTheServerEndsTheStreams(t *testing.T) {
+	r := newRig(t, nil)
+	c := r.dial(t)
+	defer c.Close()
+
+	r.srv.Close(context.Background())
+	select {
+	case <-c.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream outlived the server closing")
+	}
+	if status.Code(c.Err()) != codes.FailedPrecondition {
+		t.Fatalf("the stream ended with %v, want FailedPrecondition", c.Err())
+	}
+	var told string
+	for n := range c.Notices() {
+		if n.GetKind() == pb.AgentEvent_DISCONNECTED {
+			told = n.GetDetail()
+		}
+	}
+	if !strings.Contains(told, "shutting down") {
+		t.Errorf("the stream ended after the notice %q, which does not say the daemon is shutting down", told)
+	}
+}
+
 // TestRemovingASessionEndsTheStreamsOnIt: a name the server no longer
 // holds may be hosted again by a new login.  A client left on the old
 // stream would be held by a session nothing holds while its calls by

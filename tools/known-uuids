@@ -22,3 +22,4 @@ b1709c8d-ecd3-54a1-4f28-d55ac0840782	ANIM_AGENT_SIT_FEMALE	indra/llcharacter/lla
 a8dee56f-2eae-9e7a-05a2-6fb92b97e21e	ANIM_AGENT_SIT_TO_STAND	indra/llcharacter/llanimationstates.cpp
 2408fe9e-df1d-1d7d-f4ff-1384fa7b350f	ANIM_AGENT_STAND	indra/llcharacter/llanimationstates.cpp
 89556747-24cb-43ed-920b-47caed15465f	TEXTURE_PLYWOOD	indra/newview/app_settings/keywords_lsl_default.xml
+3c115e51-04f4-523c-9fa6-98aff1034730	MAGIC_ID	indra/llinventory/llinventory.cpp

@@ -2067,6 +2067,9 @@ type fakeDaemon struct {
 	host   *pb.HostResponse
 	logout *pb.LogoutResponse
 
+	// hosts is every Host request, in the order they came.
+	hosts []*pb.HostRequest
+
 	// auth answers the login handshake, for a daemon that is dialled
 	// rather than handed a connection, and relay is what to push down
 	// the stream once one is open.  ended hears each stream that ends,
@@ -2171,7 +2174,8 @@ func (d *fakeDaemon) ViewerCredential(context.Context, *pb.ViewerCredentialReque
 	return d.credential, nil
 }
 
-func (d *fakeDaemon) Host(context.Context, *pb.HostRequest) (*pb.HostResponse, error) {
+func (d *fakeDaemon) Host(_ context.Context, req *pb.HostRequest) (*pb.HostResponse, error) {
+	d.hosts = append(d.hosts, req)
 	if d.fail != nil {
 		return nil, d.fail
 	}

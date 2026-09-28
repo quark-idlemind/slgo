@@ -42,7 +42,7 @@ part worth reading before overruling.  `logged out` is somebody
 having asked for it here.  Anything beginning `ended by the grid` is
 the avatar having been thrown off, and the grid's own words follow;
 the commonest cause of that is the avatar being logged in somewhere
-else, which means `-f` would take it back off whoever has it.
+else, which means `login` would take it back off whoever has it.
 
 A login that was refused is a different case.  The daemon remembers
 the refusal and will not try again for a while, and says how long.

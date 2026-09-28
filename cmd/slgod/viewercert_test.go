@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,7 +179,7 @@ func TestTheOperatorsOwnCertificateIsUsedAsGiven(t *testing.T) {
 
 // TestAWildcardAddressCoversLoopbackOnly: bound to every address, there
 // is no one name a viewer would check, so the certificate covers what
-// can be known and no more.
+// can be known and no more, and the log says so at every start.
 func TestAWildcardAddressCoversLoopbackOnly(t *testing.T) {
 	certDir(t)
 	for _, host := range []string{"", "0.0.0.0", "::"} {
@@ -186,7 +187,19 @@ func TestAWildcardAddressCoversLoopbackOnly(t *testing.T) {
 			t.Errorf("certHost(%q) = %q, want the empty string", host, got)
 		}
 	}
-	certFile, _, err := viewerCertFiles("", "", "0.0.0.0", func(string, ...any) {})
+	var said []string
+	logf := func(f string, a ...any) { said = append(said, fmt.Sprintf(f, a...)) }
+	uncovered := func() bool {
+		for _, s := range said {
+			if strings.Contains(s, "covers only 127.0.0.1, ::1, localhost") &&
+				strings.Contains(s, "any other address") {
+				return true
+			}
+		}
+		return false
+	}
+
+	certFile, _, err := viewerCertFiles("", "", "0.0.0.0", logf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,13 +207,29 @@ func TestAWildcardAddressCoversLoopbackOnly(t *testing.T) {
 	if err := cert.VerifyHostname("127.0.0.1"); err != nil {
 		t.Errorf("a wildcard bind produced a certificate that does not cover loopback: %v", err)
 	}
+	if !uncovered() {
+		t.Errorf("a wildcard bind did not say what is left uncovered: %q", said)
+	}
 	// And it is not replaced on the next start just because the bind
-	// address cannot be checked against it.
+	// address cannot be checked against it, and is said of again.
 	first := cert
-	if _, _, err := viewerCertFiles("", "", "0.0.0.0", func(string, ...any) {}); err != nil {
+	said = nil
+	if _, _, err := viewerCertFiles("", "", "0.0.0.0", logf); err != nil {
 		t.Fatal(err)
 	}
 	if !readCert(t, certFile).Equal(first) {
 		t.Error("a wildcard bind replaced the certificate on every start")
+	}
+	if !uncovered() {
+		t.Errorf("a wildcard bind with a kept certificate did not say what is uncovered: %q", said)
+	}
+
+	// Bound to one address, there is nothing uncovered to speak of.
+	said = nil
+	if _, _, err := viewerCertFiles("", "", "127.0.0.1", logf); err != nil {
+		t.Fatal(err)
+	}
+	if uncovered() {
+		t.Errorf("a bind to loopback was said to leave addresses uncovered: %q", said)
 	}
 }

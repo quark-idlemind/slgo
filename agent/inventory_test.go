@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/internal/pick"
+	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -1016,6 +1017,36 @@ func TestAnEntryThatOnlyItsKeyNames(t *testing.T) {
 	}
 	if _, ok := s.Inventory.Item(msg.UUID{}); ok {
 		t.Error("an item with the zero id was taken in")
+	}
+}
+
+// TestAnAISSaleTypeIsAWordOrANumber: the viewer reads sale_type either
+// way (llsaleinfo.cpp:113-122), and which AIS sends has not been seen.
+// A word it does not know is "not", and so is a number written as a
+// word, because the viewer looks every string up as a word.
+func TestAnAISSaleTypeIsAWordOrANumber(t *testing.T) {
+	for _, c := range []struct {
+		value string
+		want  int
+	}{
+		{`<integer>2</integer>`, 2},
+		{`<string>not</string>`, 0},
+		{`<string>orig</string>`, 1},
+		{`<string>copy</string>`, 2},
+		{`<string>cntn</string>`, 3},
+		{`<string>for sale</string>`, 0},
+		{`<string>2</string>`, 0},
+	} {
+		v, err := llsd.Decode(strings.NewReader(`<llsd><map><key>sale_info</key><map>` +
+			`<key>sale_type</key>` + c.value +
+			`<key>sale_price</key><integer>10</integer></map></map></llsd>`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		it := itemFrom(llsd.Map(v))
+		if it.SaleType != c.want || it.SalePrice != 10 {
+			t.Errorf("sale_type %s read as %d at %d, want %d at 10", c.value, it.SaleType, it.SalePrice, c.want)
+		}
 	}
 }
 

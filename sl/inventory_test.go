@@ -675,7 +675,9 @@ const theContentsFile = `	inv_object	0
 			next_owner_mask	00082000
 			creator_id	3ac37e57-7e57-c0de-5607-527da8fa08de
 			owner_id	3ac37e57-7e57-c0de-5607-527da8fa08de
+			last_owner_id	54aa7e57-7e57-c0de-e6bb-c619b61fadd3
 			group_id	00000000-0000-0000-0000-000000000000
+			group_owned	0
 		}
 		asset_id	97c27e57-7e57-c0de-c041-be2c2f8cb586
 		type	lsltext
@@ -714,7 +716,8 @@ func TestTheContentsFileIsBracesOfKeyAndValue(t *testing.T) {
 		it.GroupMask != 0 || it.EveryoneMask != 0x8000 || it.NextOwnerMask != 0x82000 {
 		t.Errorf("masks came out as %+v", it)
 	}
-	if it.CreatorID != testAgentID || it.OwnerID != testAgentID || !it.GroupID.IsZero() {
+	if it.CreatorID != testAgentID || it.OwnerID != testAgentID || !it.GroupID.IsZero() ||
+		it.LastOwnerID != theLastOwner || it.GroupOwned {
 		t.Errorf("identities came out as %+v", it)
 	}
 	if it.Flags != 1 || it.SaleType != "not" || it.SalePrice != 0 {
@@ -732,12 +735,16 @@ func TestTheContentsFileIsBracesOfKeyAndValue(t *testing.T) {
 // item, a shadow id stands in for an asset id that is not there, and
 // stray braces belong to blocks this does not care about.
 func TestTheContentsFileSurvivesWhatItMayHold(t *testing.T) {
-	const file = `
+	file := `
 }
 	inv_item	0
 	{
 		nothing
-		shadow_id	97c27e57-7e57-c0de-c041-be2c2f8cb586
+		permissions 0
+		{
+			group_owned	1
+		}
+		shadow_id	` + shadowOf(theOther).String() + `
 		asset_id	00157e57-7e57-c0de-028f-000000000001
 		item_id	909e7e57-7e57-c0de-177e-107fc4869811
 		name	a name with spaces|
@@ -753,13 +760,27 @@ func TestTheContentsFileSurvivesWhatItMayHold(t *testing.T) {
 		t.Fatalf("read %d items, want only the one with an id: %+v", len(got), got)
 	}
 	// The shadow id came first and wins: the real asset id of a
-	// no-copy item is hidden behind it.
+	// no-copy item is hidden behind it, and decoded as the viewer
+	// decodes it.
 	if got[0].Asset != theOther {
-		t.Errorf("asset = %s, want the shadow id", got[0].Asset)
+		t.Errorf("asset = %s, want %s decoded from the shadow id", got[0].Asset, theOther)
 	}
 	if got[0].Name != "a name with spaces" {
 		t.Errorf("name = %q", got[0].Name)
 	}
+	if !got[0].GroupOwned {
+		t.Error("group_owned 1 read as not group owned")
+	}
+}
+
+// shadowOf is what the simulator writes for an asset id it hides: the id
+// XORed with the viewer's MAGIC_ID (llinventory.cpp:73, 978-984).
+func shadowOf(asset msg.UUID) msg.UUID {
+	pad := msg.MustParseUUID("3c115e51-04f4-523c-9fa6-98aff1034730")
+	for i := range asset {
+		asset[i] ^= pad[i]
+	}
+	return asset
 }
 
 // replyTaskInventory is the simulator naming the file it has written the
@@ -1097,7 +1118,7 @@ func TestRenamingInsideAnObjectSendsTheWholeItemBack(t *testing.T) {
 	it := TaskItem{
 		ID: theChild, Asset: theOther, Name: "a script", Desc: "does something",
 		Type: "lsltext", InvType: "lsltext", Flags: 1, Created: 1700000000,
-		CreatorID: testAgentID, OwnerID: testAgentID,
+		CreatorID: testAgentID, OwnerID: testAgentID, LastOwnerID: theLastOwner, GroupOwned: true,
 		BaseMask: PermAll, OwnerMask: PermAll, GroupMask: PermCopy,
 		EveryoneMask: PermMove, NextOwnerMask: PermTransfer,
 		SaleType: "copy", SalePrice: 5,
@@ -1146,6 +1167,14 @@ func TestRenamingInsideAnObjectSendsTheWholeItemBack(t *testing.T) {
 	if d.CreationDate != 1700000000 || d.Flags != 1 {
 		t.Errorf("date and flags came back as %+v", d)
 	}
+	// The rest as the viewer fills it: the folder is the object, and
+	// the checksum takes in the asset and last owner the message lacks.
+	if d.FolderID != thePrim || !d.GroupOwned {
+		t.Errorf("folder %s, group owned %v; want the object, and true", d.FolderID, d.GroupOwned)
+	}
+	if want := taskItemCRC(d, theOther, theLastOwner); d.CRC != want {
+		t.Errorf("checksum %#x, want %#x", d.CRC, want)
+	}
 
 	// An item whose inv_type the file did not give falls back to its
 	// type rather than going out as zero, which is a texture.
@@ -1161,6 +1190,49 @@ func TestRenamingInsideAnObjectSendsTheWholeItemBack(t *testing.T) {
 	}
 	if got := onlySent[*msg.UpdateTaskInventory](t, f).InventoryData.InvType; got != 10 {
 		t.Errorf("inv type with nothing to go on = %d, want the asset type", got)
+	}
+}
+
+// TestTheChecksumOfAnItemInsideAnObjectIsTheViewers: LLInventoryItem's
+// getCRC32 is a sum, each uuid added as four little-endian words.  One
+// bit apiece, so the sum can be read off: the next-owner mask is not in
+// it, and a type of -1 takes one away.
+func TestTheChecksumOfAnItemInsideAnObjectIsTheViewers(t *testing.T) {
+	d := &msg.UpdateTaskInventory_InventoryData{
+		ItemID:        msg.UUID{0x01},
+		FolderID:      msg.UUID{0x02},
+		CreatorID:     msg.UUID{0x04},
+		OwnerID:       msg.UUID{0x08},
+		GroupID:       msg.UUID{0x20},
+		BaseMask:      0x100,
+		OwnerMask:     0x200,
+		GroupMask:     0x400,
+		EveryoneMask:  0x800,
+		NextOwnerMask: 0x1000,
+		Type:          10,
+		InvType:       10,
+		Flags:         0x10000,
+		SaleType:      2,
+		SalePrice:     5,
+		CreationDate:  0x100000,
+		Name:          []byte("anything\x00"),
+		Description:   []byte("at all\x00"),
+	}
+	asset, lastOwner := msg.UUID{0x40}, msg.UUID{0x10}
+	// 0x7f from the uuids, 0xf00 the masks, 0x14 the types, then the
+	// flags, the price, the sale type times 0x07073096, and the date.
+	const want = 0x7f + 0xf00 + 0x14 + 0x10000 + 5 + 2*0x07073096 + 0x100000
+	if got := taskItemCRC(d, asset, lastOwner); got != want {
+		t.Errorf("checksum %#x, want %#x", got, want)
+	}
+	d.Type, d.InvType = -1, -1
+	if got := taskItemCRC(d, asset, lastOwner); got != want-0x14-2 {
+		t.Errorf("checksum with types of -1 = %#x, want %#x", got, want-0x14-2)
+	}
+	d.Type, d.InvType = 10, 10
+	d.ItemID = msg.UUID{0, 0, 0, 1}
+	if got := taskItemCRC(d, asset, lastOwner); got != want-1+1<<24 {
+		t.Errorf("checksum with the item's fourth byte set = %#x, want %#x", got, want-1+1<<24)
 	}
 }
 
@@ -1440,6 +1512,9 @@ func TestGivingUpWhileWaitingToAskAgain(t *testing.T) {
 
 // theTaskItem is the id an object gives its own copy of an item.
 var theTaskItem = msg.MustParseUUID("a7877e57-7e57-c0de-9b5a-4cabdaeab941")
+
+// theLastOwner is the last owner theContentsFile gives its item.
+var theLastOwner = msg.MustParseUUID("54aa7e57-7e57-c0de-e6bb-c619b61fadd3")
 
 // TestFetchFromObjectWaitsForTheItemItBecame: MoveTaskInventory is
 // answered by nothing, so the item is looked for in the folder it was

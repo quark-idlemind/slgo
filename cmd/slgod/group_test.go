@@ -54,6 +54,24 @@ func TestGroupFlag(t *testing.T) {
 			want:    "Builders",
 		},
 		{
+			name:  "a group name with an = in it is a value, not a name=value",
+			set:   []string{"Art = Life Gallery"},
+			agent: "example",
+			want:  "Art = Life Gallery",
+		},
+		{
+			name:  "and so is one whose left side could not be a profile",
+			set:   []string{"Builders/West=North"},
+			agent: "example",
+			want:  "Builders/West=North",
+		},
+		{
+			name:  "and one named for a profile keeps its =",
+			set:   []string{"example=E=mc2 Society"},
+			agent: "example",
+			want:  "E=mc2 Society",
+		},
+		{
 			name:  "a uuid is a value, not a name=value",
 			set:   []string{"33a57e57-7e57-c0de-da54-ed9b5d7d8f09"},
 			agent: "example",

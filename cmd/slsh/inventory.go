@@ -1010,6 +1010,10 @@ func cmdMkdir(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	}
 	id, err := sh.s.CreateFolder(ctx, parent, names[len(names)-1])
 	if err != nil {
+		if !id.IsZero() {
+			// Given up on, and made all the same.
+			err = fmt.Errorf("%w; the folder was made all the same, as %s", err, id)
+		}
 		return err
 	}
 	fmt.Fprintln(out, id)

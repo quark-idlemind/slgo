@@ -167,6 +167,10 @@ func cmdCopy(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	}
 	copied, err := sh.s.CopyItem(ctx, e.ID, folder, name, 60*time.Second)
 	if err != nil {
+		if copied != nil {
+			// Given up on, and made all the same.
+			err = fmt.Errorf("%w; the copy was made all the same, as %s", err, copied.ID)
+		}
 		return err
 	}
 	fmt.Fprintf(out, "%s\n", copied.ID)

@@ -74,6 +74,16 @@ type GridClient interface {
 	// Stream is the packet channel.  The client sends messages to put on
 	// the circuit and receives the ones it has subscribed to.  Nothing
 	// that is not a grid packet belongs here.
+	//
+	// A stream outlives a session that drops and is re-established under
+	// it; the AgentEvents on it say what happened.  It ends, with
+	// FAILED_PRECONDITION and a message saying why, when the session is
+	// finished with for good: logged out, ended by the grid, no longer
+	// hosted, or logged out by the server shutting down.  Whatever was
+	// queued for the client before that goes out first, the notice saying
+	// why among it.  A client that lets the answers to its own requests
+	// pile up unread has its stream ended with RESOURCE_EXHAUSTED rather
+	// than lose one.
 	Stream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientPacket, ServerPacket], error)
 	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
 	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
@@ -578,6 +588,16 @@ type GridServer interface {
 	// Stream is the packet channel.  The client sends messages to put on
 	// the circuit and receives the ones it has subscribed to.  Nothing
 	// that is not a grid packet belongs here.
+	//
+	// A stream outlives a session that drops and is re-established under
+	// it; the AgentEvents on it say what happened.  It ends, with
+	// FAILED_PRECONDITION and a message saying why, when the session is
+	// finished with for good: logged out, ended by the grid, no longer
+	// hosted, or logged out by the server shutting down.  Whatever was
+	// queued for the client before that goes out first, the notice saying
+	// why among it.  A client that lets the answers to its own requests
+	// pile up unread has its stream ended with RESOURCE_EXHAUSTED rather
+	// than lose one.
 	Stream(grpc.BidiStreamingServer[ClientPacket, ServerPacket]) error
 	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
 	Status(context.Context, *StatusRequest) (*StatusResponse, error)

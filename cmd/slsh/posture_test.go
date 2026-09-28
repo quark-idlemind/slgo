@@ -248,9 +248,9 @@ func TestStandTakesNothingAndSitTakesOneThing(t *testing.T) {
 	if got := x.do(t, "stand up"); !strings.Contains(got, "usage: stand") {
 		t.Errorf("stand with an argument printed %q", got)
 	}
-	// The alias's refusal names stand, the name usageError is given;
-	// its --help names what was typed, as exit's does.
-	if got := x.do(t, "unsit now"); !strings.Contains(got, "usage: stand") {
+	// The alias's refusal names what was typed, as its --help does.
+	if got := x.do(t, "unsit now"); !strings.Contains(got, "usage: unsit") ||
+		!strings.Contains(got, "unsit takes nothing") || strings.Contains(got, "stand") {
 		t.Errorf("unsit with an argument printed %q", got)
 	}
 	if sent := x.grid.Sent(); len(sent) != 0 {

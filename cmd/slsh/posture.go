@@ -172,12 +172,13 @@ func cmdSit(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 // sl.controlUntil for the sequence that measured it.
 func cmdStand(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o postureFlags
-	rest, done, err := subOptions(typedAs(ctx, "stand"), &o, out, args)
+	name := typedAs(ctx, "stand")
+	rest, done, err := subOptions(name, &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(rest) != 0 {
-		return usageError("stand", "stand takes nothing; the simulator knows what this avatar is on")
+		return usageError(name, name+" takes nothing; the simulator knows what this avatar is on")
 	}
 
 	if err := sh.s.Stand(ctx, time.Duration(o.Wait)*time.Second); err != nil {

@@ -2,6 +2,8 @@ package viewer
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -75,6 +77,61 @@ func TestASeedRequestLargerThanAnyIsRefused(t *testing.T) {
 	}
 	if n := asked.Load(); n != 0 {
 		t.Errorf("the simulator was asked %d times on an oversized request's behalf", n)
+	}
+}
+
+// TestASeedAnswerLargerThanAnyIsRefused: the simulator's answer is read
+// only as far as MaxSeedAnswer, and one longer is a 502, as the other
+// failures are, with none of it handed on.
+func TestASeedAnswerLargerThanAnyIsRefused(t *testing.T) {
+	body := string(encode(t, map[string]any{
+		"EventQueueGet": "https://sim.invalid/cap/events",
+		"Padding":       strings.Repeat("x", MaxSeedAnswer),
+	}))
+	status, got, log := askSeed(t, http.StatusOK, body)
+	if status != http.StatusBadGateway {
+		t.Errorf("a %d byte answer gave the viewer %d, want %d", len(body), status, http.StatusBadGateway)
+	}
+	if strings.Contains(got, "/cap/") || strings.Contains(got, "xxxx") {
+		t.Errorf("the viewer was handed some of the oversized answer: %.200s", got)
+	}
+	if !strings.Contains(log, "over") {
+		t.Errorf("the log did not say why: %q", log)
+	}
+}
+
+// TestASeedAnswerThatBreaksOffIsNotQuoted: a read that fails partway is
+// a 502, and its error's text goes to the log, not to the viewer.
+func TestASeedAnswerThatBreaksOffIsNotQuoted(t *testing.T) {
+	real := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100000")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<llsd><map><key>EventQueueGet</key>`))
+		w.(http.Flusher).Flush()
+		panic(http.ErrAbortHandler)
+	}))
+	defer real.Close()
+	var log syncBuffer
+	s := httptest.NewServer(&Seed{
+		Real: real.URL, EventQueue: "x",
+		Logf: func(f string, a ...any) { fmt.Fprintf(&log, f+"\n", a...) },
+	})
+	defer s.Close()
+
+	resp, err := http.Post(s.URL, "application/llsd+xml", strings.NewReader("<llsd><array/></llsd>"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	got, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("an answer that broke off gave the viewer %s, want %d", resp.Status, http.StatusBadGateway)
+	}
+	if strings.Contains(string(got), "EOF") {
+		t.Errorf("the viewer was handed the read error: %q", got)
+	}
+	if !strings.Contains(log.String(), "EOF") {
+		t.Errorf("the log did not get the read error: %q", log.String())
 	}
 }
 

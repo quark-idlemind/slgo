@@ -45,6 +45,30 @@ a second of asking. So the way to have a list is to ask for a bake,
 which is what a viewer does as soon as the outfit folder has loaded,
 and again after every change to it, attachments included.
 
+## A bake after every change to the folder
+
+A viewer asks for a bake after it changes the Current Outfit folder,
+whether the change put an attachment on or took one off. This is read
+from Firestorm's source, not measured:
+
+- Putting one on, the link goes into the folder with a callback that
+  asks for the bake once it is there (`LLRegisterAttachmentCallback`,
+  llattachmentsmgr.cpp:50-58 and 331-339, and the destructor of its
+  parent, llappearancemgr.cpp:568-575).
+- Taking one off, from inventory or from the object in world
+  (llviewermenu.cpp:9442 and 9573), `removeItemsFromAvatar` takes the
+  link out with a callback that runs `updateAppearanceFromCOF` once it
+  has gone (llappearancemgr.cpp:4742-4744 and 543-560), and that asks
+  for the bake (llappearancemgr.cpp:2892-2895).
+
+slsh does the same on all three of its paths: `wear`, `detach`, and a
+`detach` of something only the folder knows about (`detachFromOutfit`
+in `cmd/slsh/wear.go`). That last went without a bake, on the reasoning
+that an attachment is not baked into the avatar. That is true of the
+textures and beside the point: the bake is also what has the simulator
+send the avatar its own list of what is worn, as measured above, and
+`worn` and `dress` check against that list.
+
 ## Putting an outfit back on
 
 The simulator puts most of an avatar's attachments back by itself at

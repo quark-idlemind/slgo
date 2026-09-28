@@ -15,8 +15,10 @@ package scripttest
 // says who a caller is -- over a pipe every caller has the same address.
 // So the id is the proof: a fresh one is minted at every grant and
 // forgotten when the lease ends.  An id from a lease that has been given
-// back names nothing, which is exactly the mistake worth catching, and a
-// caller cannot guess the next one.
+// back names nothing, which is exactly the mistake worth catching.  The
+// ids count up, so a caller could guess the next one; that catches a
+// mistake and would not stop a caller set on cheating, which is all a
+// test backend needs.
 
 import (
 	"context"

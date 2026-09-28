@@ -63,8 +63,13 @@ func TestAPlaceGivenUpOnDeletesWhatItRezzed(t *testing.T) {
 	}
 	x.grid.mu.Unlock()
 
-	if err := x.Do(ctx, `place "Objects/a lamp"`); !errors.Is(err, context.Canceled) {
+	err := x.Do(ctx, `place "Objects/a lamp"`)
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("a place given up on returned %v", err)
+	}
+	// And says so: it was made, and it is gone again.
+	if !strings.Contains(err.Error(), "rezzed all the same") || !strings.Contains(err.Error(), placed.String()) {
+		t.Errorf("a place given up on said %q, which does not say what it rezzed", err)
 	}
 	var deleted []msg.DeRezObject
 	for _, d := range sentOfShell[*msg.DeRezObject](x) {

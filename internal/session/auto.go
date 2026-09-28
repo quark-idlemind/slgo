@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -169,19 +170,36 @@ func useAutoOn(ctx context.Context, o Options, s *sl.Session, n int) (*Auto, err
 		return grantOn(ctx, o, s, g, n, deflt, true)
 	}
 	tried := map[string]bool{}
+	var others []string
 	for _, name := range append([]string{deflt}, names...) {
 		if tried[name] {
 			continue // the default is first and is also in the list
 		}
 		tried[name] = true
-		if a, err := grantOn(ctx, o, s, g, n, name, false); err == nil {
+		a, err := grantOn(ctx, o, s, g, n, name, false)
+		if err == nil {
 			return a, nil
+		}
+		if name != deflt {
+			others = append(others, name+": "+firstLine(err))
 		}
 	}
 
 	fmt.Fprintf(os.Stderr,
 		"no avatar has %d objects free; waiting for them on %s\n", n, deflt)
-	return grantOn(ctx, o, s, g, n, deflt, true)
+	a, err := grantOn(ctx, o, s, g, n, deflt, true)
+	if err != nil {
+		// Each avatar's own reason, one line apiece: the default's is
+		// the wait just given up, and the others' their answers before.
+		return nil, fmt.Errorf("%s: %w\n%s", deflt, err, strings.Join(others, "\n"))
+	}
+	return a, nil
+}
+
+// firstLine is an error's first line, for a list with one line each.
+func firstLine(err error) string {
+	line, _, _ := strings.Cut(err.Error(), "\n")
+	return line
 }
 
 // grantOn asks for n places on one avatar and wears them.
@@ -349,7 +367,9 @@ func wearGrant(ctx context.Context, o Options, asked *sl.Session, g granter, got
 		})
 	}
 	// A grant that could not be worn: the asking session is not closed,
-	// whether or not objects were worn on it.
+	// whether or not objects were worn on it.  What was worn stays worn,
+	// where the pool keeps its objects and where a released grant leaves
+	// them too; the grant goes back dirty, so the next holder clears it.
 	fail := func(name string, err error) ([]*Auto, error) {
 		release(g, got, false)
 		for _, s := range extra {

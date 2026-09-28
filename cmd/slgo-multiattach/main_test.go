@@ -10,11 +10,10 @@ package main
 //
 // What CAN be reached is the two functions that line is built out of:
 // where a taken object lands, and what is on one attachment point.  Both
-// are decisions about what the grid answered, and both are wrong in ways
-// that would make the experiment report the wrong answer rather than
-// fail: a folder read as the root puts the probe somewhere the seed is
-// not, and a point filter that let everything through would count the
-// whole avatar and print YES whatever happened.
+// are decisions about what the grid answered.  A folder read as the root
+// where there is an Objects folder finds no seed in it, and the run stops
+// saying so.  A point filter that let everything through would not stop
+// it: it would count the whole avatar and print YES whatever happened.
 
 import (
 	"bytes"

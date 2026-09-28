@@ -17,7 +17,7 @@ group.  `group` says which is active, and sets it.
 
 A `place` interrupted while it waits for the object to appear, which
 then turns up all the same, puts it in the trash rather than leaving it
-standing with nothing holding on to it.
+standing with nothing holding on to it, and says so with the error.
 
 ## Options
 

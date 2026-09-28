@@ -9,7 +9,9 @@ makes a chain of folders, so a path through a folder that does not
 exist is refused rather than filled in.  A path with no slashes in
 it makes the folder here, in the folder the shell is in.
 
-What it prints is the new folder's id.
+What it prints is the new folder's id.  A `mkdir` interrupted while
+it waits for the folder to show, which was made all the same, says so
+with the error and gives the id there.
 
 ## Nothing stops two folders sharing a name
 

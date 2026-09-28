@@ -250,6 +250,9 @@ func isShortCluster(g string) bool {
 // commands was probably meant, why the count is exact, what to type
 // instead.  They are indented under the line so that the line itself
 // stays the thing the eye lands on.
+//
+// A command known by two names passes typedAs's answer here, as it does
+// to subOptions, so that the refusal names what was typed.
 func usageError(name string, notes ...string) error {
 	c, ok := commands[name]
 	if !ok {

@@ -28,10 +28,11 @@ fifteen.
 
 The region describes an attachment when it goes on, and again at login,
 and never otherwise.  An avatar dressed before this session began can
-therefore be wearing something nothing here has ever heard of, and
-`detach` will say it is not worn.  It is not a denial that the thing is
-on; it is this session not having been told.  `worn` lists what can be
-seen.
+therefore be wearing something nothing here has ever heard of.  If the
+Current Outfit folder names it, `detach` takes it off by that, without
+waiting for a region that never described it; otherwise `detach` will
+say it is not worn.  It is not a denial that the thing is on; it is
+this session not having been told.  `worn` lists what can be seen.
 
 A name that is worn twice is refused with the points and the item ids
 printed, as `worn -l` prints them; an item id is what tells the two
@@ -46,9 +47,10 @@ it says the thing is off, and a wait that runs out is reported as not
 knowing rather than as failing.
 
 Either way its link is taken out of the Current Outfit folder, since a
-link left there puts the thing back on at the next login.  When that
-fails too, the report says both: that the region has not agreed, and
-that the link is still there.
+link left there puts the thing back on at the next login, and a rebake
+is asked for, as `wear` asks for one after every change to the folder.
+When that fails too, the report says both: that the region has not
+agreed, and that the link is still there.
 
 ## Clothing comes off; a body part does not
 
