@@ -337,6 +337,22 @@ func TestBasePaddingTakesIPadOnTrust(t *testing.T) {
 	if got := basePadding(b, &r); got != 985 {
 		t.Errorf("basePadding() with --ipad 985 = %d, want 985", got)
 	}
+	// The base script at the padding and one byte past it, and nothing
+	// else: a search would have read other pads, and more of them.
+	want := map[Cache]bool{{Count: 0, Padding: 985}: true, {Count: 0, Padding: 986}: true}
+	for c := range cache {
+		if !want[c] {
+			t.Errorf("--ipad read the base script at %+v as well, which is a search", c)
+		}
+	}
+	for c := range want {
+		if _, ok := cache[c]; !ok {
+			t.Errorf("--ipad was not confirmed at %+v", c)
+		}
+	}
+	if spentRuns != 2 {
+		t.Errorf("--ipad cost %d runs, want the two that confirm it", spentRuns)
+	}
 }
 
 // TestOneModeReportsTheCodeSize is the whole point of oneMode: hand it a model

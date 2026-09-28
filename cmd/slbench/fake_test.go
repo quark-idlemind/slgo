@@ -107,14 +107,6 @@ type fakeGrid struct {
 	// supply something to sift.
 	commentary string
 
-	// refuseOver and faultOver are Second Life's two size limits, as copy
-	// counts.  They are not the same limit: above faultOver the script
-	// compiles and then collides stack with heap the moment it runs, and
-	// above refuseOver the compiler will not take it at all.  Measured
-	// live 2026-08-03, 256 copies of the reference shape compiled and
-	// then collided, and 512 were refused outright.  Zero means no limit.
-	refuseOver, faultOver int
-
 	// sendErr is a circuit that has gone away, and capErr a capability
 	// that will not answer.
 	sendErr error
@@ -270,13 +262,8 @@ func (f *fakeGrid) serveUpload(t *testing.T) {
 // compile is Second Life's verdict on a script, and -- when it is to be
 // started -- the script running.
 func (f *fakeGrid) compile(id msg.UUID, src string, running bool) string {
-	cnt, _, ok := f.readHarness(src)
-
 	f.mu.Lock()
 	refused := f.refuse[id]
-	if ok && f.refuseOver > 0 && cnt > f.refuseOver {
-		refused = []string{"Internal server compile error"}
-	}
 	f.mu.Unlock()
 
 	if len(refused) > 0 {
@@ -317,9 +304,6 @@ func (f *fakeGrid) run(id msg.UUID, src string) {
 		return
 	}
 	fault, silent := f.fault[id], f.silent[id]
-	if ok && f.faultOver > 0 && cnt > f.faultOver {
-		fault = "Stack-Heap Collision"
-	}
 	mem := f.mem(cnt, pad)
 	o.ran = true
 	name := o.obj.Name
