@@ -345,9 +345,15 @@ func TestDetachFindsWhatTheRegionNeverDescribed(t *testing.T) {
 
 	// By the item id, which is what "worn -l" prints and what somebody
 	// would copy out of it.
+	baked := x.grid.Baked()
 	got := x.do(t, "detach "+hat.String())
 	if !strings.Contains(got, "asked to come off") {
 		t.Errorf("detaching by item id printed %q", got)
+	}
+	// Baked after the folder changed, as a viewer bakes and as a detach
+	// of something the region described does.
+	if n := x.grid.Baked() - baked; n != 1 {
+		t.Errorf("%d bakes asked for after the link came out, want 1", n)
 	}
 	d, ok := lastDetach(x)
 	if !ok {

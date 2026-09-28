@@ -207,6 +207,7 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	// Then baked, as a viewer bakes after every change to the folder.
 	// That is what brings the simulator's own list of what is worn up
 	// to date, and worn and dress check against that list.
+	// Why: doc/outfit.md#a-bake-after-every-change-to-the-folder
 	//
 	// A failure of either is not a failure to wear -- the thing is on
 	// the avatar -- so it is said on the same line rather than
@@ -402,7 +403,9 @@ func cmdDetach(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	waited := sh.waitOff(ctx, a.Item, name, o.Wait)
 	// Out of the folder as well as off the avatar, whether or not the
 	// region has caught up: the request went, and a link left behind
-	// would put the thing back on at the next login.
+	// would put the thing back on at the next login.  Then baked, as a
+	// viewer bakes after taking an attachment's link out.
+	// Why: doc/outfit.md#a-bake-after-every-change-to-the-folder
 	var left string
 	var leftErr error
 	if _, err := sh.s.ForgetWorn(ctx, a.Item); err != nil {
@@ -519,9 +522,11 @@ func (sh *Shell) detachFromOutfit(ctx context.Context, out io.Writer, want strin
 
 	// An object.  Both halves: the request that takes it off the
 	// avatar, and the link that says it should be on at the next
-	// login.  No rebake -- an attachment is not baked into the avatar,
-	// and the folder's new version rides along with whatever asks for
-	// the next one.
+	// login.  Then baked, as cmdDetach and cmdWear bake after the same
+	// change to the folder: a viewer asks for a bake after it takes an
+	// attachment's link out, and that is what brings the simulator's
+	// list of what is worn up to date.
+	// Why: doc/outfit.md#a-bake-after-every-change-to-the-folder
 	if err := sh.s.TakeOff(ctx, l.Item); err != nil {
 		return true, err
 	}
@@ -533,7 +538,12 @@ func (sh *Shell) detachFromOutfit(ctx context.Context, out io.Writer, want strin
 	// object, and this path is reached precisely because the region
 	// never listed it here in the first place, so the wait could only
 	// time out and report not knowing.
-	fmt.Fprintf(out, "%s was asked to come off, and is out of the outfit\n", l.Name)
+	line := fmt.Sprintf("%s was asked to come off, and is out of the outfit", l.Name)
+	if err := sh.s.UpdateAppearance(ctx); err != nil {
+		line += fmt.Sprintf("; the appearance was not rebaked, so the simulator's list "+
+			"of what is worn may still show it: %v", err)
+	}
+	fmt.Fprintln(out, line)
 	return true, nil
 }
 
