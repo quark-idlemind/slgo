@@ -696,8 +696,24 @@ func itemFrom(m map[string]any) *Item {
 		it.NextOwnerMask = uint32(llsd.Int(p, "next_owner_mask"))
 	}
 	if sale := llsd.Map(m["sale_info"]); sale != nil {
-		it.SaleType = int(llsd.Int(sale, "sale_type"))
+		it.SaleType = saleType(sale)
 		it.SalePrice = int(llsd.Int(sale, "sale_price"))
 	}
 	return it
+}
+
+// saleType reads a sale type as the viewer does (llsaleinfo.cpp:113-122):
+// a word is looked up among not, orig, copy and cntn, whose places are
+// the numbers, and one it does not know is "not"; anything else is read
+// as a number.
+func saleType(sale map[string]any) int {
+	if word, ok := sale["sale_type"].(string); ok {
+		for n, known := range []string{"not", "orig", "copy", "cntn"} {
+			if word == known {
+				return n
+			}
+		}
+		return 0
+	}
+	return int(llsd.Int(sale, "sale_type"))
 }
