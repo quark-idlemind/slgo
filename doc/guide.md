@@ -481,19 +481,21 @@ session behind it never had one.
 
     slsh logout example         slgod lets go of it
     ... use it in a viewer ...
-    slsh login -f example       take it back
+    slsh login example          take it back
 
 A logout is remembered. `slgod` will not bring that avatar back on its
 own, so nothing is fighting you for it while you use it elsewhere, and
-bringing it back has to name it and say `-f` -- undoing a deliberate stop
-should be deliberate too.
+bringing it back has to name it -- undoing a deliberate stop should be
+deliberate too. Naming it is enough: `login` always asks with force, and
+its `-f` changes nothing. What slgod refuses is a program asking without
+force, as slbotd does when it reattaches on its own.
 
 You do not strictly have to log out first. Logging in from a viewer makes
 the grid end the daemon's session, and `slgod` treats being thrown off as
 a decision rather than a fault: it says so and stays down. Logging out is
 the tidier way round, and the only one that lets the session end cleanly.
 
-Both refuse to be casual about it. A logout will not take a session that
+A logout refuses to be casual about it. It will not take a session that
 clients are attached to -- it names them instead -- because a benchmark
 mid-run has a script installed and a reading half taken.
 

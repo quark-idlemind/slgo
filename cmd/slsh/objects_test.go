@@ -919,6 +919,22 @@ func TestLoginIsSafeToRepeat(t *testing.T) {
 	}
 }
 
+// TestLoginNeedsNoForce: a person typing the name is the deliberate act
+// slgod's refusal of a stopped session waits for, so login always asks
+// with force, and -f changes nothing.  The handbook once said a login
+// after a logout needed -f.
+func TestLoginNeedsNoForce(t *testing.T) {
+	x, d := newDaemonShell(t)
+	d.host = &pb.HostResponse{Agent: &pb.AgentInfo{
+		AvatarName: "One Resident", Region: "Test Region"}}
+	for _, line := range []string{"login first", "login -f first"} {
+		x.do(t, line)
+		if len(d.hosts) == 0 || !d.hosts[len(d.hosts)-1].GetForce() {
+			t.Errorf("%q did not ask with force: %v", line, d.hosts)
+		}
+	}
+}
+
 // TestLogoutSaysItWillStayOut, since that is the part a person has to
 // know: it does not come back on its own.
 func TestLogoutSaysItWillStayOut(t *testing.T) {
