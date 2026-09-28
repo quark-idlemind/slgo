@@ -367,7 +367,9 @@ func wearGrant(ctx context.Context, o Options, asked *sl.Session, g granter, got
 		})
 	}
 	// A grant that could not be worn: the asking session is not closed,
-	// whether or not objects were worn on it.
+	// whether or not objects were worn on it.  What was worn stays worn,
+	// where the pool keeps its objects and where a released grant leaves
+	// them too; the grant goes back dirty, so the next holder clears it.
 	fail := func(name string, err error) ([]*Auto, error) {
 		release(g, got, false)
 		for _, s := range extra {
