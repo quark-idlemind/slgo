@@ -10,19 +10,22 @@ package main
 // because a fake that answered everything would be a second
 // implementation of the grid and would need tests of its own.
 //
-// What it does not do is inventory.  That arrives over AIS, which is
-// HTTP against a capability, and a fake for it is an httptest server
-// and a folder tree -- worth having in slsh, where the inventory
-// commands are the bulk of the program, and not here, where they are a
-// thin layer over calls sl already tests.  The inventory commands are
-// tested for what this package adds to them: how a path is resolved to
-// one entry, and what is refused.
+// Inventory it does only as far as a listing.  That arrives over AIS,
+// which is HTTP against a capability, and a fake for all of it is an
+// httptest server and a folder tree -- worth having in slsh, where the
+// inventory commands are the bulk of the program, and not here, where
+// they are a thin layer over calls sl already tests.  The inventory
+// commands are tested for what this package adds to them: how a path is
+// resolved to one entry, what is refused, and what is said of something
+// made by a command given up on.  For that last, a test can give the
+// fake folders to list.
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -68,6 +71,22 @@ type fakeGrid struct {
 	// fail, when set for a call's name, is what that call answers
 	// with instead of doing anything.
 	fail map[string]error
+
+	// folders, when a test sets it, is what the inventory capability
+	// lists: each folder's contents, by the folder's id.
+	folders map[msg.UUID][]fakeEntry
+
+	// onSend, when set, is the grid acting on a message sent.  It is
+	// called outside the lock.
+	onSend func(msg.Message)
+}
+
+// fakeEntry is one thing in a folder the fake lists.
+type fakeEntry struct {
+	ID     msg.UUID
+	Name   string
+	Folder bool
+	Type   int
 }
 
 func newFakeGrid() *fakeGrid {
@@ -151,11 +170,16 @@ func (f *fakeGrid) Refresh(context.Context) (*sl.Info, error) { return f.Info(),
 
 func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	if err := f.fail["Send"]; err != nil {
+		f.mu.Unlock()
 		return err
 	}
 	f.sent = append(f.sent, m)
+	onSend := f.onSend
+	f.mu.Unlock()
+	if onSend != nil {
+		onSend(m)
+	}
 	return nil
 }
 
@@ -183,7 +207,11 @@ func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Pres
 	return &p, nil
 }
 
+// Objects fails on a context that is done, as a call to slgod does.
 func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if err := f.fail["Objects"]; err != nil {
@@ -246,10 +274,52 @@ func (f *fakeGrid) Friends(ctx context.Context) ([]sl.Friend, error) { return ni
 
 func (f *fakeGrid) NoteFriend(ctx context.Context, id msg.UUID, online bool) error { return nil }
 
-func (f *fakeGrid) HasCap(name string) bool { return false }
+func (f *fakeGrid) HasCap(name string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return name == agent.InventoryCap && f.folders != nil
+}
 
+// DoCap answers a listing of a folder from folders, one level deep
+// whatever depth was asked for, and fails on a context that is done, as
+// an HTTP request does.
 func (f *fakeGrid) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
-	return nil, fmt.Errorf("the fake grid has no capabilities")
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.folders == nil || r.Cap != agent.InventoryCap {
+		return nil, fmt.Errorf("the fake grid has no capabilities")
+	}
+	path, _, _ := strings.Cut(r.Path, "?")
+	path, ok := strings.CutPrefix(path, "/category/")
+	path, children := strings.CutSuffix(path, "/children")
+	id, err := msg.ParseUUID(path)
+	if !ok || !children || err != nil || (r.Method != "" && r.Method != "GET") {
+		return &agent.CapResponse{Status: 404, Body: []byte("the fake lists folders and does nothing else")}, nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, `<llsd><map><key>category_id</key><string>%s</string>`, id)
+	b.WriteString(`<key>name</key><string>a folder</string><key>version</key><integer>1</integer>`)
+	b.WriteString(`<key>_embedded</key><map><key>categories</key><map>`)
+	for _, e := range f.folders[id] {
+		if e.Folder {
+			fmt.Fprintf(&b, `<key>%s</key><map><key>category_id</key><string>%s</string>`, e.ID, e.ID)
+			fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string><key>name</key><string>%s</string>`, id, e.Name)
+			b.WriteString(`<key>type_default</key><integer>-1</integer><key>version</key><integer>1</integer></map>`)
+		}
+	}
+	b.WriteString(`</map><key>items</key><map>`)
+	for _, e := range f.folders[id] {
+		if !e.Folder {
+			fmt.Fprintf(&b, `<key>%s</key><map><key>item_id</key><string>%s</string>`, e.ID, e.ID)
+			fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string><key>name</key><string>%s</string>`, id, e.Name)
+			fmt.Fprintf(&b, `<key>type</key><integer>%d</integer><key>inv_type</key><integer>%d</integer></map>`, e.Type, e.Type)
+		}
+	}
+	b.WriteString(`</map><key>links</key><map/></map></map></llsd>`)
+	return &agent.CapResponse{Status: 200, Body: []byte(b.String())}, nil
 }
 
 func (f *fakeGrid) Close() error {

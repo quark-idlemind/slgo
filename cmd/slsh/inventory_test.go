@@ -482,6 +482,38 @@ func TestMkdirPrintsTheIdItChose(t *testing.T) {
 	}
 }
 
+// TestAMkdirGivenUpOnSaysWhatItMade: a mkdir interrupted while it waits
+// for the folder to show, whose folder was made all the same, gives its
+// id with the error, so the folder is not left unknown to anyone.
+func TestAMkdirGivenUpOnSaysWhatItMade(t *testing.T) {
+	x := newTestShell(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var made msg.UUID
+	x.grid.onSend = func(m msg.Message) {
+		f, ok := m.(*msg.CreateInventoryFolder)
+		if !ok {
+			return
+		}
+		// Cancelled as the request goes out, so only the last look,
+		// which the cancel does not reach, finds the folder.
+		cancel()
+		x.grid.mu.Lock()
+		defer x.grid.mu.Unlock()
+		made = f.FolderData.FolderID
+		root := findDir(x.grid.inv, f.FolderData.ParentID)
+		root.Dirs = append(root.Dirs, &invDir{ID: made, Name: "given up on"})
+	}
+
+	err := x.Do(ctx, `mkdir "/given up on"`)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("a mkdir given up on returned %v", err)
+	}
+	if !strings.Contains(err.Error(), "made all the same") || !strings.Contains(err.Error(), made.String()) {
+		t.Errorf("a mkdir given up on said %q, which does not give the folder it made, %s", err, made)
+	}
+}
+
 // TestMkdirNeedsSomewhereToPutItAndSomethingToCallIt.
 func TestMkdirNeedsSomewhereToPutItAndSomethingToCallIt(t *testing.T) {
 	x := newTestShell(t)

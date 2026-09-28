@@ -74,7 +74,7 @@ chat:example:2	chat	example	Examples	chat Example Resident
 cp	cp	line		cp PATH NAME\ncopy an inventory item under a new name\nhelp groups: giving inventory\nkeywords: copy duplicate item clone inventory second copy
 cp:intro	cp	intro		`cp` duplicates one inventory item under a new name.  `mv` is the\nother half of the pair: `mv` leaves one item where `cp` leaves two.\n\n    cp probe probe, the second\n\nThe first argument is what to copy -- a path relative to the folder\nthe shell is in, or a uuid -- and the rest of the line is the new\nname, so a name with spaces in it needs no quoting.  A folder is\nrefused; only items are copied.\n\nThe copy lands here, in the folder the shell is in.  There is no\ndestination folder to give: copying something into another folder\nis `cp` and then `mv`.\n\nCopying asks the land nothing.  An avatar that may not rez on this\nparcel cannot make an object in the world, and can still copy one\nit already owns.
 cp:example:1	cp	example		cp probe probe, the second
-cp:section:A no-copy item never appears	cp	section	A no-copy item never appears	The grid makes the copy when it gets round to it, so this waits for\nit to show up in the folder and prints its id when it does.  An\nitem whose permissions forbid copying produces nothing at all\nrather than a refusal, and the wait ends after a minute saying so.\nThat is the usual reason a `cp` seems to hang: it is not the shell\nbeing slow, it is an item that was never going to be duplicated.\n\nNothing here says what an item's permissions are beforehand: `ls -l`\ngives the kind, the date, the id and the path, and `perms` works on an\nobject standing in the region rather than on an item in inventory.  The\ncopy not arriving is how a no-copy item is found out.
+cp:section:A no-copy item never appears	cp	section	A no-copy item never appears	The grid makes the copy when it gets round to it, so this waits for\nit to show up in the folder and prints its id when it does.  An\nitem whose permissions forbid copying produces nothing at all\nrather than a refusal, and the wait ends after a minute saying so.\nThat is the usual reason a `cp` seems to hang: it is not the shell\nbeing slow, it is an item that was never going to be duplicated.\n\nA `cp` interrupted while it waits, whose copy turns up all the same,\nsays so with the error and gives the copy's id there.\n\nNothing here says what an item's permissions are beforehand: `ls -l`\ngives the kind, the date, the id and the path, and `perms` works on an\nobject standing in the region rather than on an item in inventory.  The\ncopy not arriving is how a no-copy item is found out.
 cp:section:Examples	cp	section	Examples	    cp probe probe, the second\n\nInto another folder, which is two steps:\n\n    cp probe spare\n    mv spare Objects/lanterns
 cp:example:2	cp	example	Examples	cp probe spare
 cp:example:3	cp	example	Examples	mv spare Objects/lanterns
@@ -422,7 +422,7 @@ maturity:example:5	maturity	example	Why you would want it	maturity Rating. You m
 maturity:section:Reading it	maturity	section	Reading it	A bare `maturity` asks the grid nothing.  Both numbers arrive in the\nlogin response -- the preference as `agent_region_access`, the ceiling\nas `agent_access_max`, which is how Linden Lab's viewer reads them --\nand the daemon keeps that response and hands the two on with the\navatar's presence, which is where this reads them.\nFor an account shown moderate that may go to adult it prints\n\n    this avatar is shown land rated moderate and below, and this account may go as high as adult\n\nand for one already at its ceiling\n\n    this avatar is shown land rated adult and below, which is as high as this account may go\n\nThose are the lines the command prints and not a transcript: this\nform needs a daemon built with it, and had not been run against the\ngrid when this was written.\n\nA number the login did not carry is said to be missing rather than\nguessed at, and so are both when the daemon is older than this form\nand passes neither on.  Missing is never printed as general.\n\nThe field called `agent_access` is not the preference, though its name\nmakes it look like the one.  It is older than the adult rating, and a\nlogin response from an account shown adult still carries M there.\n\nThe capability `maturity RATING` uses could not have been the reading\nform.  Its only question is "set it to this", and the only rating\nalways safe to ask for is general -- which would quietly *lower* a\npreference somebody had set higher.\n\n### What it does not see\n\nWhat a bare `maturity` prints is the login's, followed by whatever\n`maturity RATING` has been granted since through the same daemon.  A\nchange made anywhere else is not seen until the next login: on the\naccount's web page, or in a viewer attached to the session, whose\nrequest goes to the simulator directly rather than through the daemon.\nNo message a simulator sends to a client carries the preference, and\nthe viewer's own source learns it from its login and from the answer to\nits own request and nowhere else -- which is read from that source\nrather than watched, but it leaves nothing for the daemon to hear.
 maturity:section:The rating is per account, not per session	maturity	section	The rating is per account, not per session	It is remembered by the grid and outlives the session, so setting it\nonce is setting it for good -- an avatar logged out and back in is\nstill shown what it was last granted.  It is not part of the profile\nthis shell keeps and it is not affected by `logout`, `login`, or the\ndaemon being restarted.\n\nSee also: `regions` and `look`, which print the maturity rating of land\nrather than of an avatar, and `tp` for the refusal that sends most\npeople here.
 mkdir	mkdir	line		mkdir PATH\nmake a folder\nhelp groups: inventory\nkeywords: create make new folder directory
-mkdir:intro	mkdir	intro		`mkdir` makes one folder.  `rm` is what takes one away, and takes\neverything inside it at the same time.\n\n    mkdir lanterns\n\nThe argument is a path.  The last name in it is the folder that gets\nmade, and everything before it has to be there already: nothing here\nmakes a chain of folders, so a path through a folder that does not\nexist is refused rather than filled in.  A path with no slashes in\nit makes the folder here, in the folder the shell is in.\n\nWhat it prints is the new folder's id.
+mkdir:intro	mkdir	intro		`mkdir` makes one folder.  `rm` is what takes one away, and takes\neverything inside it at the same time.\n\n    mkdir lanterns\n\nThe argument is a path.  The last name in it is the folder that gets\nmade, and everything before it has to be there already: nothing here\nmakes a chain of folders, so a path through a folder that does not\nexist is refused rather than filled in.  A path with no slashes in\nit makes the folder here, in the folder the shell is in.\n\nWhat it prints is the new folder's id.  A `mkdir` interrupted while\nit waits for the folder to show, which was made all the same, says so\nwith the error and gives the id there.
 mkdir:example:1	mkdir	example		mkdir lanterns
 mkdir:section:Nothing stops two folders sharing a name	mkdir	section	Nothing stops two folders sharing a name	Asking twice makes two folders with one name.  A path through that\nname then means neither of them and is refused, listing both ids;\n`ls -l` prints them too.  Where that has happened by accident, `mv`\ngiven one of the ids renames it, and the ambiguity is gone.
 mkdir:section:What a name may contain	mkdir	section	What a name may contain	Nearly any printable character.  A slash inside a name is written\nwith a backslash in front of it, and a backslash is doubled.  The\ngrid trims a leading or trailing space, so a name cannot begin or\nend with one however carefully it is quoted.
@@ -542,7 +542,7 @@ perms:section:What is printed was read back	perms	section	What is printed was re
 perms:section:Examples	perms	section	Examples	Let anybody who gets it copy and modify it, but not pass it on:\n\n    perms --next cm lantern\n\nTake everything back from everyone but the owner:\n\n    perms --group none --everyone none lantern\n\nSee also: `take` and `place`, `give` for handing an item to somebody,\nand `dump` for reading back what an object's masks actually are.
 perms:example:2	perms	example	Examples	perms --group none --everyone none lantern
 place	place	line		place [--at X,Y,Z] PATH|UUID\nput an inventory object into the world, which is what take undoes\nhelp groups: region\nkeywords: rez put out down object from inventory world ground put back set down
-place:intro	place	intro		`place` takes one object out of inventory and puts it into the\nworld.  It is what take undoes: take brings a rezzed object in, place\nputs one back out, and between them an object can be picked up and set\ndown again.\n\n    place Objects/probe\n\nThe argument is an inventory path, relative to the folder the shell is\nin, or the uuid of an item.  A folder is refused: `place` puts out one\nobject, not the contents of a folder.\n\nThe active group matters more than it looks.  A parcel usually grants\n"create objects" to a group rather than to a person, so an avatar with\nthe wrong group active is refused by the land even where it plainly has\npermission, and the refusal talks about the land rather than about the\ngroup.  `group` says which is active, and sets it.\n\nA `place` interrupted while it waits for the object to appear, which\nthen turns up all the same, puts it in the trash rather than leaving it\nstanding with nothing holding on to it.
+place:intro	place	intro		`place` takes one object out of inventory and puts it into the\nworld.  It is what take undoes: take brings a rezzed object in, place\nputs one back out, and between them an object can be picked up and set\ndown again.\n\n    place Objects/probe\n\nThe argument is an inventory path, relative to the folder the shell is\nin, or the uuid of an item.  A folder is refused: `place` puts out one\nobject, not the contents of a folder.\n\nThe active group matters more than it looks.  A parcel usually grants\n"create objects" to a group rather than to a person, so an avatar with\nthe wrong group active is refused by the land even where it plainly has\npermission, and the refusal talks about the land rather than about the\ngroup.  `group` says which is active, and sets it.\n\nA `place` interrupted while it waits for the object to appear, which\nthen turns up all the same, puts it in the trash rather than leaving it\nstanding with nothing holding on to it, and says so with the error.
 place:example:1	place	example		place Objects/probe
 place:option:--at X,Y,Z	place	option	--at X,Y,Z	Where to put it, in this region.  Without it, a metre east of the\navatar: the avatar's own position with one metre added to X, near\nenough to hand for something that is about to be looked at.  East and\nnot in front -- nothing here asks which way the avatar is facing, so a\nthing put down behind somebody goes down east of them all the same.\n\nTwo or three numbers with commas between them and no spaces.  A pair\nis accepted rather than refused, and the Z that was not given is zero,\nwhich is the bottom of the region and not the height the avatar is\nstanding at.  `rez`'s `--at` is spelt the same and insists on three.
 place:section:One object, and only one	place	section	One object, and only one	`place` takes exactly one argument, and a name with a space in it has\nto be quoted.  Extra words are not a position: `place probe 10 20 30`\nis refused rather than treated as a move.  Moving something already in\nthe world is `move`.
@@ -1190,7 +1190,7 @@ alias	385
 align	368,1
 alik	178,262,164,25,137*2,107
 aliv	454*2
-all	15,9,3,11,7,11,10,8,4,22,1,11,6,4,7,1,6,38,9,22,1,19*2,1,3*2,1,2,27,1,9,23,5,17,21,12,20,4*2,7,2,6*2,7,6,1*2,49,4*2,10*2,6,53*2,7,2*2,11,2,42,10*2,1,10,6,8,5,1,1*4,1,1,2*2,3,1,3,22,1,2*2,2,16,10,1,13,14,13*2,5,2,8,1,16,1,22,11,7,2,11*3,1,7,1*2,6,18,7,12,9,4,11,2*3
+all	15,9,3,11,7,11,10,8*2,4,22,1,11,6,4,7,1,6,38,9,22,1,19*2,1,3*2,1,2,27,1,9,23,5,17,21,12,20,4*2,7,2,6*2,7,6,1*2,22,27,4*2,10*2,6,53*2,7,2*2,11,2,42,10*2,1,10,6,8,5,1,1*4,1,1,2*2,3,1,3,22,1,2*2,2,16,10,1,13,14,13*2,5,2,8,1,16,1,22,11,7,2,11*3,1,7,1*2,6,18,7,12,9,4,11,2*3
 allow	37,50,66,3,58,58,20,124,1*2,111,10*3,67,2,128,161
 allowanc	514,1
 almost	52,64,85,9,338,12,87
@@ -1462,7 +1462,7 @@ control	68*3,229*2,1,63,304
 conversation	62,1*5,3*3,3,187,1*2,6,386,96*2,1,2*3,1*4,1*2
 convert	566
 coordinat	122,279,27,168,4,16*2,159,1,6,5,12,10,67,4
-copy	45*3,7,16,3*3,1*6,2*5,4*2,25,6,3*3,1*2,40,6*2,1,2*7,2,3,2,4,37,16,129,87,27*4,59*2,1,2,6*2,1*2,1,79,3,5,1*3,1*4,2,2*2,3,1,8,20,47,16,5*3,1,2*3,3*2,2*2,1,86,67
+copy	45*3,7,16,3*3,1*6,2*7,4*2,25,6,3*3,1*2,40,6*2,1,2*7,2,3,2,4,37,16,129,87,27*4,59*2,1,2,6*2,1*2,1,79,3,5,1*3,1*4,2,2*2,3,1,8,20,47,16,5*3,1,2*3,3*2,2*2,1,86,67
 corner	405*3,48*2,62,91,193*2
 correctly	292
 cost	15,10,76*2,73,18,78,1,3,22,2,49,23*2,82,11*2,90,6*2,1*2,14,73,37,54,94,37*2
@@ -1471,7 +1471,7 @@ count	5,25,1,2,5,25,17,24,35*3,113*2,1*3,24,29*2,15,9*3,69*2,1*2,1*2,2,2,49*5,39
 counter	631,84,2*2
 coupl	451
 cover	100,297,1*2,1,3,1,402,88
-cp	71,1*4,1,1,1*2,1,2,132,239
+cp	71,1*4,1,1*2,1*2,1,2,132,239
 crash	824
 creat	276,145,41,80,68,51,220
 creator	122
@@ -1620,7 +1620,7 @@ entirely	586,105,57
 entry	78*2,34,27*2,17,23,50*2,188,32*2,190*2,107,3
 equal	661
 eras	388,233
-error	14*2,124,90,19,49,17,1,4,20,48,56,1,9,11*2,75,66,1,8,1*2,29,66,19,67,12,28
+error	14*2,60,64,90,19,49,17,1,4,20,48,36,20,1,9,11*2,75,4,62,1,8,1*2,29,66,19,67,12,28
 esc	22,46,597,1
 escap	63,3*7,2,59,242,18,13*2,262*2,1*2,1,1,3
 estat	326,1,280,199
@@ -1697,7 +1697,7 @@ flip	711
 float	718
 floater	524
 fly	514,1,326
-folder	4*3,3,11*2,27,7,1*2,1*4,2*4,1*4,15*5,2,1,12,4,1,5,1,2*3,3,4,3*2,6,20,2*4,1*2,20,1*2,3*4,3,4,1*2,3,5*3,13*4,9,2*2,4*4,3,38,3,26,16,1*3,49*2,1*4,3,1,1*4,1*2,2,1*4,68*2,1*7,2*2,15*3,1*3,2,1,1*13,19*3,4,75*3,6,16*2,14,1,3,39,1*2,7,1*3,11,6,44,15,26,1*3,3*3,2,2,126,4,1,2*5,20*3,4*3
+folder	4*3,3,11*2,27,7,1*2,1*4,2*4,1*4,15*5,2,1,12,4,1,5,1,2*3,3,4,3*2,6,20,2*4,1*2,20,1*2,3*4,3,4,1*2,3,5*3,13*4,9,2*2,4*4,3,38,3,26,16,1*3,49*2,1*4,3,1,1*4,1*2,2,1*4,68*2,1*8,2*2,15*3,1*3,2,1,1*13,19*3,4,75*3,6,16*2,14,1,3,39,1*2,7,1*3,11,6,44,15,26,1*3,3*3,2,2,126,4,1,2*5,20*3,4*3
 follow	12,2,13,25*3,26*2,38*3,11,2,45*3,27*3,5,4*3,62,17,3,21,34*3,51,18,3,30*2,4*2,1,94*3,47,32,12*2,2,6*3,9,176,41*2
 font	398*2,266*2,2*2,1
 foot	493,1,28
@@ -1742,7 +1742,7 @@ geometry	782
 get	31,3,11*2,7,4,18,53,9,23,32,1*2,1,3,2*3,1,1,1,13,12,40,30,31*2,25,1,3,66,7,27,83,21*2,14,111,10*2,1,3,10*2,18,82,15,17,7,3,2,27*2
 gif	560
 gift	0,79,123,305
-giv	0,15,56,1,2,4,1,10,14,3,4,6,7,42,8,1,10,18*2,1*3,1,4*2,1,1*2,2,24,6,18,6,41,11,9,12,8,137,20,3,4,4*2,13,8,3,13,1,43,7,79,26,18,7,4,11,100,38,9
+giv	0,15,56,1,2*2,4,1,10,14,3,4,6,7,42,8,1,10,18*2,1*3,1,4*2,1,1*2,2,24,6,18,6,41,11,9,12,8,75,62,20,3,4,4*2,13,8,3,13,1,43,7,79,26,18,7,4,11,100,38,9
 given	112,10,21,51,13,50,3,32,14,8,97,13,20,19,3,3,14,46,6,3*2,6,35,26,8,3,6,8,13,56,49,4*2,19,28*2,11,6,30,25,16
 glanc	522
 glob	630
@@ -1819,7 +1819,7 @@ hud	30,1,69,3,1,761,1,2*3,6*2,1,15,1*4,3*2
 hundr	184,149,4*4,116,41,137,21,184,48*2
 hung	665,140
 icon	574,2
-id	45,7*4,4,1,17*2,16,26*4,37*2,7,13*3,1*3,17,5*7,5*4,9*4,79,2*2,1*10,2,2,31,19,1*3,3,2*3,1*4,17,1,10,41,20*2,2*2,19,46,14,25*4,76,3,1,1,1,11,6*4,32,72,4,12,2,126
+id	45,7*4,4,1,17*3,16,26*4,37*2,7,13*3,1*3,17,5*7,5*4,9*4,79,2*2,1*10,2,2,31,19,1*3,3,2*3,1*4,17,1,10,41*2,20*2,2*2,19,46,14,25*4,76,3,1,1,1,11,6*4,32,72,4,12,2,126
 idea	253
 identical	14,26,133,544,49,69
 identically	794
@@ -1855,7 +1855,7 @@ instant	62,1,4,189,10,3,1,24,84,2,369*3
 instead	4,10,31,11,12,48,6,33,5,13,23,111,17,11,9,6,28,33,33*2,25,6,9,9,28,17,24,4,99,20,7,79,24,21,4,42,7,5
 intend	31
 interest	614
-interrupt	65,477,46*3,26,238
+interrupt	65,9,348,120,46*3,26,238
 intersection	782
 introduc	454
 invent	615,282
@@ -1976,7 +1976,7 @@ lt	356,1
 lur	27,346,1*4,1,1,2,1,1,125*2,305
 machin	242,119,7,192,81
 machinery	333
-mad	27,111,122*2,10,23,1*2,4,51*2,68,2,3,41*3,2,4*3,39,1,29,12,3,2,5,35,16,3,3,1*3,26,8,46,8,122,8,44
+mad	27,111,122*2,10,23,1*2,4,51*2,68,2,3*2,41*3,2,4*3,39,1,29,12,3,2,5,35,16,3,3,1*3,26,8,46,8,122,8,44
 magenta	400
 main	153,675*3
 mainland	297*2
@@ -2025,7 +2025,7 @@ miss	40,60*2,1,2,126,119,38*2,33*2,131,4,307,8,11,1
 mistak	259,345,78,137
 mistyp	529
 mix	615
-mkdir	59,19,82,261,1*2,1,3*2,1,22
+mkdir	59,19,82,261,1*3,1,3*2,1,22
 mod	62*2,1*2,2*2,1,1*2,2*2,188*2,6,98,142,56*3,8,1,1,19,60,1,13,83,1*2,2,2
 model	236*2,1,1*4,1,1,1,1*12,1,1*2,1,1
 moderat	327,83,1*3,3,2*2,3*2
@@ -2367,12 +2367,12 @@ saf	310,109,263
 safety	139
 said	25*2,41*3,1,37,8,45,5,52,39,6,18*2,19,2,28,1,34,58,35,15,53,7,2,19,2,54,43*2,16,17,9,28,47,44,58
 sal	521
-sam	1*3,3,2,2,4,13,2,8,3,3*3,4,7,11*2,4,1,12*2,3*2,1,8,9,5,6,4,11,39,7*4,1*2,10,11,6,9,7,5,12,2,6,11*2,24*2,11,2,2*2,2*4,2*2,1,13*2,8,9*3,4,4*2,4,8*2,2,4*2,35,1,10*2,7,5,5*2,1*2,2,3,29,3,2*2,7,17,1,14,16,4,8,8,11,2*2,4,31,3,4*2,20,5,7,11,14,4,14,1,1,3*3,16,7,7,3,12,7*2,20*2,10,1,22,4,19,5*5,1*2,2,4,14,8,7,2*2,14,1,14,2,2,1*4,2*2,4*2,3*3,8,5,5
+sam	1*3,3,2,2,4,13,2,8,3,3*3,4,7,11*2,4,1,6,6*2,3*2,1,8,9,5,6,4,11,39,7*4,1*2,10,11,6,9,7,5,12,2,6,11*2,24*2,11,2,2*2,2*4,2*2,1,13*2,8,9*3,4,4*2,4,8*2,2,4*2,35,1,10*2,7,5,5*2,1*2,2,3*2,29,3,2*2,7,17,1,14,16,4,8,8,11,2*2,4,31,3,4*2,20,5,7,11,14,4,14,1,1,3*3,16,7,7,3,12,7*2,20*2,10,1,22,4,19,5*5,1*2,2,4,14,8,7,2*2,14,1,14,2,2,1*4,2*2,4*2,3*3,8,5,5
 sampl	781
 sat	679*2
 sav	41,4*2,7,61,4,74*2,1,84,187,7,170,1*2,1,1,1,1*2,1,1
 saw	270,395*2,171,23
-say	1*2,3*2,2,1*3,5,2*2,4,4,3*4,2*4,6,1,6,1,1,3*2,9,2*2,1,6,3*2,1,1,1,5*2,9*3,1,3*2,3,1*3,1*2,9,2,3,1,3,8,2,16,3,4,9,1*3,3*2,4,2*2,4,8,4,17,2,8*2,1,6*2,2,2,1*2,5*2,4,2*2,1*2,5,3,1*2,1,3,5,10,2*2,1*2,3,6*2,3,2,3,14,1*3,1,1*2,2,1*2,8,1*2,7*2,1,8,1,14*2,2,8,6*2,8,8*2,1,7,9,7,4,1*2,1*3,1*2,1,5,5,5*2,15,20*2,1,1,1*4,2*2,2,5,12*2,8,7,4*2,2,7,6,1*2,11,1*3,3,4,8,1,4,7,1*4,4,1,4,1*2,26,6,3,1*3,8,1,2,1,6*5,2,2,1*2,9,20*2,1*3,1,1,1,1*3,1,8*2,1,1,1,1,2,7,4*2,3,1,8,1,4,2,1,7*2,3,2,4,2*2,1*3,1,5,4,5*2,2*2,3*3,10,1*3,2,1,14*3,16,12*2,10,1*3,1*3,4,10*2,4*4,3,1*2,4*2,2,2*5,1*2,4,18,9*2,3*3,9,1,3*2,9,1*2
+say	1*2,3*2,2,1*3,5,2*2,4,4,3*4,2*4,6,1,6,1,1,3*2,9,2*2,1,6,3*2,1,1,1,5*3,9*3,1,3*2,3,1*3,1*2,9,2,3,1,3,8,2,16,3,4,9,1*3,3*2,4,2*2,4,8,4,17,2,8*2,1,6*2,2,2,1*2,5*2,4,2*2,1*2,5,3,1*2,1,3,5,10,2*2,1*2,3,6*2,3,2,3,14,1*3,1,1*2,2,1*2,8,1*2,7*2,1,8,1,14*2,2,8,6*2,8,8*2,1,7,9,7,4,1*2,1*3,1*2,1,5,5,5*2,6,9,20*2,1,1,1*4,2*2,2,5,12*2,8,7,4*2,2,7,6,1*2,11,1*3,3,4,8,1,4*2,7,1*4,4,1,4,1*2,26,6,3,1*3,8,1,2,1,6*5,2,2,1*2,9,20*2,1*3,1,1,1,1*3,1,8*2,1,1,1,1,2,7,4*2,3,1,8,1,4,2,1,7*2,3,2,4,2*2,1*3,1,5,4,5*2,2*2,3*3,10,1*3,2,1,14*3,16,12*2,10,1*3,1*3,4,10*2,4*4,3,1*2,4*2,2,2*5,1*2,4,18,9*2,3*3,9,1,3*2,9,1*2
 scal	402*2,27,167*2
 scan	489
 scatter	393
@@ -2427,7 +2427,7 @@ shorten	259*2,535
 shorter	259,7,339,21,168
 shortest	853
 shortly	217,55,212
-show	14*3,27,3,24*2,6,26,74,40,23,33,57,16,4,30,8,20,58,46,15,26*2,4,32*2,63,16,31,23,27,90,23*2,3,35
+show	14*3,27,3,24*2,6,26,74,40,23,33,57,16,4,30,8,20,17,41,46,15,26*2,4,32*2,63,16,31,23,27,90,23*2,3,35
 shown	15,30,23*2,35,71,64,109,41,22,1,5*2,1,2*4,1,404,70
 shrug	318,579
 shuffl	149
@@ -2637,7 +2637,7 @@ truthfully	122
 try	1,13,66,137,42,1,12,41,25,15,91,222*2,16,50,3,106
 tsv	247
 tuesday	795
-turn	56,7,79*2,1,5,1*2,24,1,6,80,31,7,37,12,51,55*2,3*2,18,20,43,5,11,152,6*2,7,5,12,23,96
+turn	56,7,11,68*2,1,5,1*2,24,1,6,80,31,7,37,12,51,55*2,3*2,18,20,43,5,11,152,6*2,7,5,12,23,96
 tweak	666
 twelv	31*2,69
 twenty	103,3,287*2,9,27,24*2
@@ -2683,7 +2683,7 @@ untouch	560,101
 untypeabl	127
 unwear	86
 unwritten	386
-up	14,1*2,12,3*2,1*2,2,1*2,19*2,1,12*2,8,26,3,3,4,2,15,33,5,8,7,16,1,17*3,22,2,4,1,1,1,1,14,12,1,17,2,17*2,1*3,5,3*3,9,8,53,11,2,16,12,13,1,8,1,1,50,19,14,2,4*2,11,2,5*2,5,2*2,7,2,19,11,1,7,1,28,9,1,8*3,2,16*2,3,2,1,10*3,1,1,1,1*3,1,17,1,1,13*2,1*3,4,34,17,6,5,2,27*2,1,11,8,21,4,6,1
+up	14,1*2,12,3*2,1*2,2,1*2,19*2,1,12*2,8*2,26,3,3,4,2,15,33,5,8,7,16,1,17*3,22,2,4,1,1,1,1,14,12,1,17,2,17*2,1*3,5,3*3,9,8,53,11,2,16,12,13,1,8,1,1,50,19,14,2,4*2,11,2,5*2,5,2*2,7,2,19,11,1,7,1,28,9,1,8*3,2,16*2,3,2,1,10*3,1,1,1,1*3,1,17,1,1,13*2,1*3,4,34,17,6,5,2,27*2,1,11,8,21,4,6,1
 updat	122*2,65,404,49,59,82,82,1,15
 upload	38,114,1,39*2,271,96*2,1*2,6,8,66
 upper	868*3
@@ -2721,7 +2721,7 @@ visit	787
 voic	152,1,653
 void	369
 volum	649
-wait	0,1*2,3,1*2,3*2,6,1,2,1,7,2*2,1,3*2,32*2,11*2,5,1*2,4*3,5,2*2,3,2,7*3,1,2*4,1,1,2,11,1,43,23,22,2*2,6,4,6*2,14,10*3,1*5,2,14,1*4,5,13*3,2,2*2,6,2,4,2,6*2,1,68*2,7,41,39,6*2,1*3,11,15,6*2,1*2,1*2,2,25,6,10,3*2,39,9,11,39,22,6*2,1,3,2,9,1,2,2,3,4,3,15,2,5,4,46,5,5*2,1,1,10*4,1,1,2,1,4,4,13*3,1*4,1,1,1,1*6,1,1*3,1,2,11
+wait	0,1*2,3,1*2,3*2,6,1,2,1,7,2*2,1,3*2,32*2,11*3,5,1*2,4*3,5,2*2,3,2,7*3,1,2*4,1,1,2,11,1,43,23,22,2*2,6,4,6*2,14,10*3,1*5,2,14,1*4,5,13*3,2,2*2,6,2,4,2,6*2,1,68*2,7,34,7,39,6*2,1*3,11,15,6*2,1*2,1*2,2,25,6,10,3*2,39,9,11,39,22,6*2,1,3,2,9,1,2,2,3,4,3,15,2,5,4,46,5,5*2,1,1,10*4,1,1,2,1,4,4,13*3,1*4,1,1,1,1*6,1,1*3,1,2,11
 walk	54,2,10,77*2,6*2,1,24,47*3,1*7,2*2,5,65,53,52,18,33*2,1*2,1,2,154,191,11,30*3,1*9,1,1,1,1,1,1*3,1,2*5,1*4,1*3,1*5,1*6,1,1,1,22,1,6,10
 wall	198,1,375,3,273
 wanderer	260
@@ -2747,13 +2747,13 @@ whenever	217
 wher	4,1*2,9*2,11,2*2,14,16,6,3,6,8,7,13,10*3,12,8,23,2,5,7,3,1,3*2,29,3,15,1*2,7,5*3,1,3,4,6,9,9,6,4,1*3,7,3*2,2,1*2,1,1,1,1*3,3*8,1,29*2,4,2,5*2,9*2,6,8*2,9,1,3,3,21,1,2,4,1,10*2,3,5,5*2,3*3,1,1,1,1,1,3*2,13,1,4,5,4,8,15,5,20*2,7,3,17,2,6*2,4*2,1,23*2,4,2,2,10*4,5,5,2,3,2,1,2*2,3,22,8,3,11*2,2*3,1*3,9*2,1,3*4,6,8,5*5,3,10,4,3*2,1,8,1,5,2*3,1*2,2,1*3,1,6,2,1,16,1*2,8,8,6*2,6*3,5*3,7*3,1,2*2,1*3,10,3,1,3,1,8,5*2,8,2,1,2*2,5,7,2,1,5,2,1,1,1*2,3,2*2,4,2,1,2
 wherever	54,46,96,61,20*2,9,107,51,19,193,138,74*2,6
 whichever	63,4,162*2,13,24,31,52,20,134,83,75,146,28
-whil	1,26,7,32,18,19*2,150,17*2,26,17,8,133,49,21,18,44,2*2,26,17,34,17,17*2,1,48,33,13,12,13,1,59,17,1
+whil	1,26,7,32,8,10,19*2,150,17*2,26,17,8,101,32,49,21,18,44,2*2,26,17,34,17,17*2,1,48,33,13,12,13,1,59,17,1
 whit	400,366*2
 who	0,6,2,19,35*2,6,11,4,1,66*2,33*2,1,2,2,14,1,7,4,20,22,1*2,3,1,1,1,2,1,9,52,4,2*4,4,1,1,34,1,6,1,11,1,6*3,2,3,2,48,21,3,2,9*2,4,3,1,3,1,3,6,4,1,10,4*2,9,1,10,1*3,3,3,59,133*2,1*6,1,55*2,22,5,5,17*2,28,1*2,1*3,1,1,2*4
 whoever	1*2,79*2,106,17,19,31,4,2,1,3,6,41,3,9,152,1,15,14,4,45,96,3,153,45*2,30,6,1
 whol	1*4,17*2,13,3,6,1,39*2,26,6,6,11,10,35,10,2,17,14,17,14,5,7*2,6,11*2,16,1,39,4,1,1,8,23,7,11,4,1,6,6,27,52,17,3,14,4,31,36,7,1,8,2,9,10,3,20,33,11,22,4,21,6,19,29,14,8,3,22*2,28,10
 whom	184
-whos	27,7,4,36,36*2,2*2,10,31,7*2,79,3,18,33,14,54,22,16,20,25,19*2,31*2,2,64,44,10,4,38,50*2,18*2,9,33,28,14
+whos	27,7,4,36*2,36*2,2*2,10,31,7*2,79,3,18,33,14,54,22,16,20,25,19*2,31*2,2,64,44,10,4,38,50*2,18*2,9,33,28,14
 wid	291,107*4,254,12,2
 wider	398
 width	31,304*2,17,35,181,98,52*3

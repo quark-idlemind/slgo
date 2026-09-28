@@ -275,6 +275,10 @@ func cmdMkdir(ctx context.Context, r *req, out io.Writer, args []string) error {
 	}
 	id, err := s.CreateFolder(ctx, parent, names[len(names)-1])
 	if err != nil {
+		if !id.IsZero() {
+			// Given up on, and made all the same.
+			err = fmt.Errorf("%w; %s was made all the same, as %s", err, rest[0], id)
+		}
 		return err
 	}
 	fmt.Fprintf(out, "made %s  %s\n", rest[0], id)
@@ -396,6 +400,10 @@ func cmdCp(ctx context.Context, r *req, out io.Writer, args []string) error {
 	}
 	it, err := s.CopyItem(ctx, e.ID, into, name, 60*time.Second)
 	if err != nil {
+		if it != nil {
+			// Given up on, and made all the same.
+			err = fmt.Errorf("%w; it was copied all the same, to %s/%s  %s", err, rest[1], it.Name, it.ID)
+		}
 		return err
 	}
 	fmt.Fprintf(out, "copied to %s/%s  %s\n", rest[1], it.Name, it.ID)
@@ -490,6 +498,10 @@ func cmdPlace(ctx context.Context, r *req, out io.Writer, args []string) error {
 	}
 	obj, err := s.RezFromInventory(ctx, itemOf(e), at, group, 60*time.Second)
 	if err != nil {
+		if obj != nil {
+			// Given up on, and made all the same.
+			err = fmt.Errorf("%w; %s was rezzed all the same, at %.0f, %.0f, %.0f", err, obj.ID, at.X, at.Y, at.Z)
+		}
 		return err
 	}
 	fmt.Fprintf(out, "rezzed %s at %.0f, %.0f, %.0f\n", obj.ID, at.X, at.Y, at.Z)

@@ -166,6 +166,36 @@ func TestCopyDuplicatesAnItemUnderANewName(t *testing.T) {
 	}
 }
 
+// TestACopyGivenUpOnSaysWhatItMade: a cp interrupted while it waits
+// for the copy to show, whose copy was made all the same, gives its id
+// with the error.
+func TestACopyGivenUpOnSaysWhatItMade(t *testing.T) {
+	x := newTestShell(t)
+	copied := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000c1")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	x.grid.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.CopyInventoryItem); !ok {
+			return
+		}
+		// Cancelled as the request goes out, so only the last look,
+		// which the cancel does not reach, finds the copy.
+		cancel()
+		x.grid.mu.Lock()
+		defer x.grid.mu.Unlock()
+		x.grid.inv.Items = append(x.grid.inv.Items,
+			&invItem{ID: copied, Name: "readme again", Type: int(sl.AssetNotecard)})
+	}
+
+	err := x.Do(ctx, "cp readme readme again")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cp given up on returned %v", err)
+	}
+	if !strings.Contains(err.Error(), "made all the same") || !strings.Contains(err.Error(), copied.String()) {
+		t.Errorf("a cp given up on said %q, which does not give the copy it made, %s", err, copied)
+	}
+}
+
 // TestCopyRefusesAFolder: a folder is not an item and the grid does not
 // answer, so the refusal has to come from here or the command hangs for
 // its whole timeout and then blames the item.

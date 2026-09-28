@@ -182,6 +182,8 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 			// Given up on, and made all the same: nobody else has its id.
 			if derr := dropRezzed(ctx, sh.s, obj); derr != nil {
 				err = errors.Join(err, fmt.Errorf("%s, which was rezzed for it, is still there: %w", obj, derr))
+			} else {
+				err = fmt.Errorf("%w; %s was rezzed all the same, and has been deleted into the trash", err, obj)
 			}
 		}
 		return err
