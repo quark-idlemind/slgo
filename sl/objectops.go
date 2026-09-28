@@ -159,7 +159,9 @@ func (w *Session) Create(ctx context.Context, o ObjectJSON) (*Built, error) {
 // not already own a copy of.
 func (w *Session) fillPrim(ctx context.Context, o *Object, pj PrimJSON) error {
 	for _, it := range pj.Inventory {
-		switch it.Type {
+		// Read through the same table dump writes with, so a script
+		// typed the way ls -l shows one ("lsltext") is not passed over.
+		switch jsonTypeOf(it.Type) {
 		case "script":
 			src, err := scriptSource(it)
 			if err != nil {
@@ -175,7 +177,7 @@ func (w *Session) fillPrim(ctx context.Context, o *Object, pj PrimJSON) error {
 			if !res.Compiled && len(res.Errors) > 0 {
 				return fmt.Errorf("%s does not compile: %s", it.Name, strings.Join(res.Errors, "; "))
 			}
-		case "notecard", "":
+		case "notecard":
 			// Nothing here writes a notecard into a prim.
 		}
 	}

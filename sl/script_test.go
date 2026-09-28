@@ -1888,3 +1888,27 @@ func TestInstallScriptDeletesItsCopyInInventory(t *testing.T) {
 		})
 	}
 }
+
+// TestAScriptTypedAsLsShowsItIsInstalled: rez reads a description's
+// item types through dump's table, so "lsltext" -- what ls -l prints
+// for a script -- is installed and not passed over.
+func TestAScriptTypedAsLsShowsItIsInstalled(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptTask", compiles)
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+
+	wait := aside(t, func() (*UploadResult, error) {
+		pj := PrimJSON{Inventory: []InventoryItemJSON{{Name: "a script", Type: "LSLText", Data: "default {}"}}}
+		return nil, w.fillPrim(context.Background(), o, pj)
+	})
+	answerContents(t, f, thePrim, theContentsFile)
+
+	<-up.asked
+	if got := string(<-up.body); got != "\ndefault {}" {
+		t.Errorf("uploaded %q", got)
+	}
+	if _, err := wait(); err != nil {
+		t.Fatalf("fillPrim: %v", err)
+	}
+}
