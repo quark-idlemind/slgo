@@ -86,4 +86,5 @@ Take everything back from everyone but the owner:
     perms --group none --everyone none lantern
 
 See also: `take` and `place`, `give` for handing an item to somebody,
-and `dump` for reading back what an object's masks actually are.
+`dump` for reading back what an object's masks actually are, and
+`dump --item` and `ls -l` for an item's in inventory.

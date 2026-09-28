@@ -228,6 +228,11 @@ type invItem struct {
 	// the whole of what makes an outfit folder different from any
 	// other folder full of names.
 	IsLink bool
+
+	// Masks are the permission masks, base, owner, group, everyone and
+	// next owner, in the order sl.PermsJSON has them.  Nil is an item
+	// its owner may do anything with, and nothing said about the rest.
+	Masks *sl.PermsJSON
 }
 
 // newFakeGrid builds a backend that answers plausibly and reaches
@@ -737,7 +742,19 @@ func invItemsLLSD(b *strings.Builder, d *invDir, key string, links bool) {
 		fmt.Fprintf(b, `<key>created_at</key><integer>%d</integer>`, it.Created)
 		fmt.Fprintf(b, `<key>flags</key><integer>%d</integer>`, it.Flags)
 		b.WriteString(`<key>permissions</key><map>`)
-		b.WriteString(`<key>owner_mask</key><integer>581632</integer>`)
+		if m := it.Masks; m != nil {
+			for _, f := range []struct {
+				key  string
+				mask uint32
+			}{
+				{"base_mask", m.Base}, {"owner_mask", m.Owner}, {"group_mask", m.Group},
+				{"everyone_mask", m.Everyone}, {"next_owner_mask", m.Next},
+			} {
+				fmt.Fprintf(b, `<key>%s</key><integer>%d</integer>`, f.key, f.mask)
+			}
+		} else {
+			b.WriteString(`<key>owner_mask</key><integer>581632</integer>`)
+		}
 		b.WriteString(`</map></map>`)
 	}
 	b.WriteString(`</map>`)

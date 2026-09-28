@@ -15,14 +15,14 @@ run.
 
 **-l**
 
-The columns: kind, when it was acquired, id and path.  Without it,
-one bare path per line.
+The columns: kind, when it was acquired, id, what its owner may do,
+and path.  Without it, one bare path per line.
 
 **-L**
 
 The same columns, with a link shown as the item it points at: its
-kind, its date and its id, under the path where the link was found.
-Implies `-l`.
+kind, its date, its id and its permissions, under the path where the
+link was found.  Implies `-l`.
 
 An outfit folder holds nothing but links, every one named after the
 item at the far end, so `-l` there gives a column of `link` and a
@@ -30,8 +30,8 @@ column of ids that name nothing outside this inventory.  `-L` turns
 the same listing into what is actually worn:
 
     ls -L "/Current Outfit"
-    object     2025-04-14T17:44:09 cfb57e57-...  /Current Outfit/a dress
-    bodypart   2025-04-14T18:01:16 28d37e57-...  /Current Outfit/a shape
+    object     2025-04-14T17:44:09 cfb57e57-...  MC- /Current Outfit/a dress
+    bodypart   2025-04-14T18:01:16 28d37e57-...  MCX /Current Outfit/a shape
 
 That is also the way to see clothing and body parts as against
 attachments, which `worn` cannot show: `worn` lists objects on
@@ -67,26 +67,35 @@ path.
 
 ## The columns
 
-With `-l` a line is kind, when it was acquired, id, path, in that
-order and padded to fixed widths.
+With `-l` a line is kind, when it was acquired, id, what its owner may
+do, and path, in that order and padded to fixed widths.
 
-    notecard   2026-08-03T21:26:43 d8467e57-...  /Notecards/readme
+    notecard   2026-08-03T21:26:43 d8467e57-...  MCX /Notecards/readme
 
 The date is one field, down to the second, with a `T` rather than a
-space, so a listing is four fields and the id stays the third.  Two
+space, so a listing is five fields and the id stays the third.  Two
 items of one name, acquired a minute apart, are told apart by this
 column and by the id.  `rm --newest` and `--oldest` pick between
 them by exactly this number, so a listing is how to see what one of
 those is about to take.
 
-A folder has no date and gets a dash, so the columns after it do not
-move.
+The fourth column is what the owner of the item may do with it: `M`
+modify, `C` copy and `X` transfer, and a `-` in the place of each it
+may not.  A copy-only item is `-C-`, and one that can be neither
+copied nor given away is `M--` or `---`.  It is the owner's mask and
+nobody else's; `dump --item` prints all five, with the next owner's
+among them.  A link's are the link's own, as the viewer reads them --
+what the grid gives a link as masks has not been looked at here --
+and `-L` shows the item's.
+
+A folder has no date and no permissions, and gets a dash for each, so
+the columns after it do not move.
 
 ## Listing an item
 
     ls -l /Scripts/greeter
-    script     2026-08-07T12:06:57 cb567e57-...  /Scripts/greeter
-    script     2026-08-07T11:26:01 e9d97e57-...  /Scripts/greeter
+    script     2026-08-07T12:06:57 cb567e57-...  MCX /Scripts/greeter
+    script     2026-08-07T11:26:01 e9d97e57-...  MCX /Scripts/greeter
 
 Several things of one name, one line each.  The dates are what
 `--newest` and `--oldest` choose by, and the ids are what names one
@@ -133,6 +142,6 @@ leaves `Script` and `Script 1`.
     ls -rt
     ls --in lantern
 
-See also: `cd`, `find`, `cat`, `get`, `rm`, `drop` for putting
-something into the object `--in` lists, and `fetch` for bringing
-something out of it.
+See also: `cd`, `find`, `cat`, `get`, `rm`, `dump --item` for an
+item's whole permissions, `drop` for putting something into the object
+`--in` lists, and `fetch` for bringing something out of it.

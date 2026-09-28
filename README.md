@@ -1087,9 +1087,10 @@ commands, which together are the point:
     $ slsh -f moves
 
 `ls` prints one bare path per line so a listing can be cut up by
-anything; `ls -l` adds the kind, the date and the id. A folder has no
-date, so that column holds a `-` rather than collapsing and moving
-every column after it. Names are not unique -- one folder here holds
+anything; `ls -l` adds the kind, the date, the id and what the owner
+may do -- `M`, `C` and `X` for modify, copy and transfer, a `-` for each
+it may not. A folder has no date and no permissions, so those columns
+hold a `-` rather than collapsing and moving every column after it. Names are not unique -- one folder here holds
 eighteen things of the same name -- so `mv`, `rm` and `cat` take an id
 wherever they take a path, which is what makes a listing of duplicates
 editable into commands that each mean one thing.

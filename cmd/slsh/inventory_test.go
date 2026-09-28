@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -154,7 +155,7 @@ func TestCdWithNoPathGoesToTheRoot(t *testing.T) {
 // TestLsPrintsOnePathPerLineSoAListingIsAScript.
 //
 // That is the whole layout argument: a bare listing is a list of paths
-// an editor can turn into commands, and -l keeps four columns whatever
+// an editor can turn into commands, and -l keeps five columns whatever
 // the flags, so anything reading the id out of the third field goes on
 // working.
 func TestLsPrintsOnePathPerLineSoAListingIsAScript(t *testing.T) {
@@ -165,36 +166,39 @@ func TestLsPrintsOnePathPerLineSoAListingIsAScript(t *testing.T) {
 		t.Errorf("ls printed %q, want %q", got, want)
 	}
 
-	// -l is kind, when it was acquired, id and path, and a folder has no
-	// date to print.
+	// -l is kind, when it was acquired, id, what its owner may do and
+	// path, and a folder has no date and no permissions to print.
 	got = x.do(t, "ls -l")
 	for _, want := range []string{
-		fmt.Sprintf("%-10s %-19s %s /Objects", "folder", "-", testObjects),
-		"notecard   ", testNote.String() + " /readme",
+		fmt.Sprintf("%-10s %-19s %s %-3s /Objects", "folder", "-", testObjects, "-"),
+		"notecard   ", testNote.String() + " MCX /readme",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("ls -l should have a line with %q in it:\n%s", want, got)
 		}
 	}
-	// Four fields, and the second of them is the day AND the time of
+	// Five fields, and the second of them is the day AND the time of
 	// day: two items of one name, acquired a minute apart, are told
 	// apart by that column and by nothing else on the line except the
 	// id.
 	//
-	// At least four, rather than exactly four.  The path is the last
+	// At least five, rather than exactly five.  The path is the last
 	// column and an inventory name may hold a space -- "Current
-	// Outfit" is one every avatar has -- so a line with five words in
-	// it is a path with a space in it and not a fifth column.  What
-	// the layout promises is that the first three fields are the kind,
-	// the date and the id, and that is what is checked.
+	// Outfit" is one every avatar has -- so a line with six words in
+	// it is a path with a space in it and not a sixth column.  What
+	// the layout promises is that the first four fields are the kind,
+	// the date, the id and the permissions, and that is what is checked.
 	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
 		f := strings.Fields(line)
-		if len(f) < 4 {
-			t.Errorf("a long listing line has %d fields, want at least 4: %q", len(f), line)
+		if len(f) < 5 {
+			t.Errorf("a long listing line has %d fields, want at least 5: %q", len(f), line)
 			continue
 		}
 		if _, err := msg.ParseUUID(f[2]); err != nil {
 			t.Errorf("the third field should be the id, got %q in %q", f[2], line)
+		}
+		if f[3] != "-" && len(f[3]) != 3 {
+			t.Errorf("the fourth field should be the permissions, got %q in %q", f[3], line)
 		}
 		if f[1] == "-" {
 			continue // a folder, which has no date
@@ -220,6 +224,125 @@ func TestLsPrintsOnePathPerLineSoAListingIsAScript(t *testing.T) {
 	}
 }
 
+// TestLsSaysWhatTheOwnerMayDo: the fourth column is the owner's mask as
+// M, C and X, a dash for each it lacks, and nobody else's.  Each item's
+// other four masks hold exactly the three bits its owner's lacks, so a
+// column read from the wrong one shows the opposite letters.  A folder
+// has no permissions and shows a dash; a link shows its own, and -L the
+// item's.
+func TestLsSaysWhatTheOwnerMayDo(t *testing.T) {
+	x := newTestShell(t)
+	const three = sl.PermModify | sl.PermCopy | sl.PermTransfer
+	cases := []struct {
+		name  string
+		owner uint32
+		want  string
+	}{
+		{"everything", three | sl.PermMove, "MCX"},
+		{"copy only", sl.PermCopy | sl.PermMove, "-C-"},
+		{"modify only", sl.PermModify, "M--"},
+		{"transfer only", sl.PermTransfer, "--X"},
+		{"nothing", sl.PermMove, "---"},
+	}
+	copyOnly := msg.UUID{0: 2, 15: 0xee}
+	x.grid.mu.Lock()
+	for i, c := range cases {
+		rest := three &^ c.owner
+		x.grid.inv.Items = append(x.grid.inv.Items, &invItem{
+			ID: msg.UUID{0: byte(i + 1), 15: 0xee}, Name: c.name,
+			Type: int(sl.AssetNotecard), Created: 1754000300,
+			Masks: &sl.PermsJSON{Base: rest, Owner: c.owner, Group: rest, Everyone: rest, Next: rest},
+		})
+	}
+	x.grid.inv.Items = append(x.grid.inv.Items, &invItem{
+		ID: msg.UUID{0: 9, 15: 0xee}, Name: "a link", Asset: copyOnly, IsLink: true,
+		Type: int(sl.AssetLink), InvType: int(sl.AssetNotecard),
+		Masks: &sl.PermsJSON{Owner: sl.PermTransfer},
+	})
+	x.grid.mu.Unlock()
+
+	column := func(line string) string {
+		f := strings.Fields(line)
+		if len(f) < 5 {
+			t.Fatalf("a long listing line with %d fields: %q", len(f), line)
+		}
+		return f[3]
+	}
+	for _, c := range cases {
+		if got := column(x.do(t, `ls -l "`+c.name+`"`)); got != c.want {
+			t.Errorf("%s: the column says %q, want %q", c.name, got, c.want)
+		}
+	}
+	for _, line := range strings.Split(strings.TrimRight(x.do(t, "ls -l"), "\n"), "\n") {
+		if strings.HasPrefix(line, "folder ") && column(line) != "-" {
+			t.Errorf("a folder has permissions: %q", line)
+		}
+	}
+	if got := column(x.do(t, `ls -l "a link"`)); got != "--X" {
+		t.Errorf("ls -l of a link says %q, want its own, --X", got)
+	}
+	if got := column(x.do(t, `ls -L "a link"`)); got != "-C-" {
+		t.Errorf("ls -L of a link says %q, want the item's, -C-", got)
+	}
+}
+
+// TestDumpOfAnItemSaysItsMasks: an item's five masks, under the names
+// dump gives an object's, so that "may I transfer this" has an answer
+// for something in inventory too.  Every mask is different, so one
+// written under another's name shows.
+func TestDumpOfAnItemSaysItsMasks(t *testing.T) {
+	x := newTestShell(t)
+	probe := msg.UUID{0: 7, 15: 0xef}
+	masks := sl.PermsJSON{
+		Base:     sl.PermAll,
+		Owner:    sl.PermModify | sl.PermCopy | sl.PermMove,
+		Group:    sl.PermCopy,
+		Everyone: sl.PermMove,
+		Next:     sl.PermModify | sl.PermTransfer,
+	}
+	x.grid.mu.Lock()
+	x.grid.inv.Items = append(x.grid.inv.Items, &invItem{
+		ID: probe, Name: "a probe", Type: int(sl.AssetNotecard), Desc: "what it is for",
+		Created: 1754000300, Masks: &masks,
+	})
+	x.grid.mu.Unlock()
+
+	for _, line := range []string{`dump --item "a probe"`, "dump -i " + probe.String()} {
+		got := x.do(t, line)
+		var ij struct {
+			Name, Type, UUID, Desc string
+			Perms                  sl.PermsJSON
+		}
+		if err := json.Unmarshal([]byte(got), &ij); err != nil {
+			t.Fatalf("%s printed what is not JSON: %v\n%s", line, err, got)
+		}
+		if ij.Perms != masks {
+			t.Errorf("%s: perms = %+v, want %+v", line, ij.Perms, masks)
+		}
+		if ij.Name != "a probe" || ij.Type != "notecard" || ij.UUID != probe.String() || ij.Desc != "what it is for" {
+			t.Errorf("%s described %+v", line, ij)
+		}
+		// The words are the object's: base, owner, group, everyone, next.
+		for _, key := range []string{`"base"`, `"owner"`, `"group"`, `"everyone"`, `"next"`} {
+			if !strings.Contains(got, key) {
+				t.Errorf("%s has no %s:\n%s", line, key, got)
+			}
+		}
+	}
+
+	file := filepath.Join(t.TempDir(), "probe.json")
+	if got := x.do(t, `dump -o `+file+` --item "a probe"`); got != file+": a probe\n" {
+		t.Errorf("dump -o printed %q", got)
+	}
+	if b, err := os.ReadFile(file); err != nil || !strings.Contains(string(b), `"everyone": 524288`) {
+		t.Errorf("the file holds %q, %v", b, err)
+	}
+
+	if got := x.do(t, "dump --item Objects"); !strings.Contains(got, "is a folder") {
+		t.Errorf("dump --item of a folder printed %q", got)
+	}
+}
+
 // TestLsOfAnItemListsEveryOneOfThatName.
 //
 // Names are not unique, so a path can mean four things, and the columns
@@ -239,8 +362,8 @@ func TestLsOfAnItemListsEveryOneOfThatName(t *testing.T) {
 	ids := map[string]bool{}
 	for _, line := range lines {
 		f := strings.Fields(line)
-		if len(f) != 4 || f[3] != "/dup" {
-			t.Errorf("want four fields ending /dup, got %q", line)
+		if len(f) != 5 || f[4] != "/dup" {
+			t.Errorf("want five fields ending /dup, got %q", line)
 			continue
 		}
 		ids[f[2]] = true

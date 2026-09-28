@@ -12,12 +12,13 @@ absolute, and they are paths other commands take.
 **-l**
 
 The columns `ls -l` prints: what kind of thing it is, when it was
-acquired, its id, and the path.  The same row in the same shape, so
-a search and a listing can be read the same way.
+acquired, its id, what its owner may do with it, and the path.  The
+same row in the same shape, so a search and a listing can be read the
+same way.
 
     find -l "a hat"
-    object  2025-01-08T14:02:55  9b457e57-...  /Objects/a hat
-    link    2025-03-04T11:20:08  45557e57-...  /My Outfits/Sunday/a hat
+    object  2025-01-08T14:02:55  9b457e57-...  MC-  /Objects/a hat
+    link    2025-03-04T11:20:08  45557e57-...  MCX  /My Outfits/Sunday/a hat
 
 The columns answer what bare paths cannot.  Names are not unique, so
 a search that turns up four things of one name gives four identical
@@ -35,8 +36,8 @@ editable into commands that take paths.
 **-L**
 
 The same columns, with a link shown as the item it points at: its
-kind, its date and its id, under the path where the link was found.
-Implies `-l`.
+kind, its date, its id and its permissions, under the path where the
+link was found.  Implies `-l`.
 
 An outfit folder holds nothing but links, every one named after the
 item at the far end, so `-l` there gives a column of `link` and a
@@ -44,7 +45,7 @@ column of ids that name nothing outside this inventory.  `-L` turns
 the same listing into what is actually worn:
 
     find -L hat "/Current Outfit"
-    object     2025-04-14T17:44:09 cfb57e57-...  /Current Outfit/a hat
+    object     2025-04-14T17:44:09 cfb57e57-...  MC- /Current Outfit/a hat
 
 That is also the way to see clothing and body parts as against
 attachments, which `worn` cannot show: `worn` lists objects on
