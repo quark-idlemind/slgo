@@ -676,11 +676,9 @@ type Slots struct {
 	// default, for the reason Lock gives.
 	Try bool `protobuf:"varint,3,opt,name=try,proto3" json:"try,omitempty"`
 	// Agent asks for places on one avatar rather than from wherever they
-	// are free.  It is for work whose objects have to have something in
-	// common with each other -- a benchmark compares its readings, and
-	// four objects spread over three avatars may be in three regions --
-	// and for a caller that named an avatar and meant it.  Empty is
-	// anywhere.  A name the daemon does not host, or an avatar that is
+	// are free: for a caller that named an avatar and meant it, or work
+	// that needs its objects in one region, since two avatars may be in
+	// two.  Empty is anywhere.  A name the daemon does not host, or an avatar that is
 	// logged out, is refused at once; one it is still logging in is waited
 	// for.
 	Agent string `protobuf:"bytes,4,opt,name=agent,proto3" json:"agent,omitempty"`
