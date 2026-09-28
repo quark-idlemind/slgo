@@ -463,6 +463,24 @@ func TestEchoHasNoHelpOfItsOwn(t *testing.T) {
 	}
 }
 
+// TestAUsageErrorNamesWhatWasTyped: a command known by two names
+// refuses what it was given in the name it was typed as, as its --help
+// answers in it.  quit takes no usage error to show: it ignores what
+// follows it.
+func TestAUsageErrorNamesWhatWasTyped(t *testing.T) {
+	x := newTestShell(t)
+	for _, c := range []struct{ line, want, other string }{
+		{"unsit now", "usage: unsit", "usage: stand"},
+		{"source", "usage: source", "usage: ."},
+		{". one two", "usage: .", "usage: source"},
+		{"How", "usage: How", "usage: how"},
+	} {
+		if got := x.do(t, c.line); !strings.Contains(got, c.want) || strings.Contains(got, c.other) {
+			t.Errorf("%q printed %q, want %q", c.line, got, c.want)
+		}
+	}
+}
+
 // TestQuitAndExitAreTheSameCommand, and both take --help.
 func TestQuitAndExitAreTheSameCommand(t *testing.T) {
 	if commands["quit"] != commands["exit"] {
@@ -482,7 +500,7 @@ func TestQuitAndExitAreTheSameCommand(t *testing.T) {
 		t.Errorf("exit --help printed %q", got)
 	}
 	// The same for the other commands known by two names.
-	for _, c := range []struct{ typed, other string }{{"unsit", "stand"}, {"source", "."}} {
+	for _, c := range []struct{ typed, other string }{{"unsit", "stand"}, {"source", "."}, {"How", "how"}} {
 		if got := x.do(t, c.typed+" --help"); !strings.Contains(got, "Usage: "+c.typed) ||
 			strings.Contains(got, "Usage: "+c.other+" ") {
 			t.Errorf("%s --help printed %q", c.typed, got)

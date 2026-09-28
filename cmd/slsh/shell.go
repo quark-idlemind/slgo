@@ -572,7 +572,8 @@ type typedAsKey struct{}
 
 // typedAs is the name the running command was typed as, where that is
 // another name for the command called name, and otherwise name: "exit"
-// is quit, and its usage says exit.
+// is quit, and its usage says exit.  A command known by two names gives
+// it to subOptions and to usageError both.
 func typedAs(ctx context.Context, name string) string {
 	if n, ok := ctx.Value(typedAsKey{}).(string); ok && commands[n] == commands[name] {
 		return n
@@ -1018,12 +1019,13 @@ func init() {
 		man: "source",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
-			args, done, err := subOptions(typedAs(ctx, "."), &flags, out, args)
+			name := typedAs(ctx, ".")
+			args, done, err := subOptions(name, &flags, out, args)
 			if err != nil || done {
 				return err
 			}
 			if len(args) != 1 {
-				return usageError(".")
+				return usageError(name)
 			}
 			return sh.Source(ctx, args[0])
 		},

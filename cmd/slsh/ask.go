@@ -102,13 +102,14 @@ const (
 
 func cmdAsk(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o askOptions
-	args, done, err := subOptions(howName, &o, out, args)
+	name := typedAs(ctx, howName)
+	args, done, err := subOptions(name, &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	question := howQuestion(args)
 	if question == "" {
-		return usageError(howName, "how to do what?")
+		return usageError(name, "how to do what?")
 	}
 
 	hints, err := askUserHints(out)
