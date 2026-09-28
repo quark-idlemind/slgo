@@ -236,10 +236,8 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 	timeout := time.Duration(req.GetSeconds()) * time.Second
 	var match func(any) bool
 	if only := req.GetAgent(); only != "" {
-		// One avatar, because these places have to have something in
-		// common with each other: a benchmark compares its objects, so
-		// four spread over three avatars is four readings that cannot
-		// be compared.
+		// A caller that named an avatar gets that avatar's places and
+		// no others.
 		match = func(data any) bool {
 			w, ok := data.(*where)
 			return ok && w.agent == only

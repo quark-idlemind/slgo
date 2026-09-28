@@ -204,6 +204,19 @@ nobody typed and nothing else prints. So `GoTo`'s errors name the
 destination by what the caller calls it -- an inventory name somebody
 typed -- and by the asset id only when the caller has no name for it.
 
+**`CouldntTPCloser` means the avatar is already there.** It is the
+refusal a landmark gets most: the grid will not shorten a trip that
+arrives where it starts. So `GoTo` says the avatar is already standing
+there, rather than passing on the grid's words.
+
+**Two landmarks of one name in one folder could not be told apart.**
+Inventory takes the same name any number of times, and stage 3 made one
+name twice in one folder without a word said. From then on, asking for
+it was refused with advice to give the whole path, which was what had
+just been typed. So where two paths are equal the refusal offers the
+ids, the listing prints an id on the lines that need one, and `--make`
+says when it has just made the second landmark of a name.
+
 ### A landmark can be arrived at and then not stayed at
 
 The case stage 0 could not reach turned up on its own. `Ravensdon

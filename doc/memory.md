@@ -684,8 +684,8 @@ Not covered, and worth knowing:
   these figures were taken before the change either way.
 - **The compile ceiling.** A base script with 9000 bytes of preamble was
   refused with "Internal server compile error", as was a padding of
-  2009. The practical limit is lower than the 62KB `slbench` assumes
-  when estimating a copy count.
+  2009. What limit those hit, and how it relates to the 64KB a Mono
+  script has, was not established.
 - **Why a returned value costs a library call 28 bytes more than a user
   call.** One matched pair, measured once.
 - **Whether any of this is stable.** These are measurements of one grid
